@@ -302,7 +302,7 @@ private fun LapseResults(done: TimelapseState.Done, onNew: () -> Unit) {
         val sample = rec.sampleAt(hour)
         if (sample != null) {
             Text("At ${hoursText(sample.hour)}", style = MaterialTheme.typography.titleMedium, color = c.text)
-            WaterStrip(sample)
+            WaterStrip(waterReadouts(sample.water, sample.lightIntensity * 100.0, 1.0))
             sample.organisms.filter { it.speciesId == sp.speciesId }.forEach { OrganismLine(it) }
         }
     }
@@ -349,26 +349,6 @@ private fun LegendDot(color: Color, label: String) {
         Box(Modifier.size(8.dp).background(color, ReefShapes.pill))
         Text(label, style = MaterialTheme.typography.labelSmall, color = ReefTheme.colors.textSecondary)
     }
-}
-
-@Composable
-private fun WaterStrip(sample: TimelapseSample) {
-    val readouts = waterReadouts(sample.water, sample.lightIntensity * 100.0, 1.0)
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        readouts.forEach { r ->
-            GlassCard(shape = ReefShapes.overlay, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                Column {
-                    Text(r.label, style = MaterialTheme.typography.labelSmall, color = ReefTheme.colors.textSecondary)
-                    Text(r.valueText, style = MaterialTheme.typography.titleMedium, color = statusColor(r.status))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun statusColor(s: Status): Color = with(ReefTheme.colors) {
-    when (s) { Status.GOOD -> goodText; Status.CAUTION -> cautionText; Status.DANGER -> dangerText; Status.UNKNOWN -> text }
 }
 
 @Composable
