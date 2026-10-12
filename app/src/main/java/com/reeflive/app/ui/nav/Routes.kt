@@ -55,6 +55,7 @@ object Routes {
     const val TARGETS = "more/settings/targets"
     const val EXPORT = "more/export"
     const val ABOUT = "more/about"
+    const val UPDATES = "more/settings/updates"
 }
 
 /** The five bottom-bar destinations. */

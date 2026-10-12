@@ -1,5 +1,7 @@
 package com.reeflive.app.ui.nav
 
+import com.reeflive.app.update.UpdateSheetHost
+import com.reeflive.app.update.UpdatesRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -136,6 +138,7 @@ fun ReefRoot(settings: AppSettings, pendingRoute: String?, onRouteConsumed: () -
             )
         }
         quickLog?.let { req -> QuickLogHost(req, onDismiss = { quickLog = null }) }
+        if (settings.onboarded) UpdateSheetHost()
     }
 }
 
@@ -182,4 +185,5 @@ private fun androidx.navigation.NavGraphBuilder.reefGraph(nav: NavHostController
     composable(Routes.TARGETS) { TargetsDestination(nav, back) }
     composable(Routes.EXPORT) { ExportDestination(back) }
     composable(Routes.ABOUT) { AboutDestination(back) }
+    composable(Routes.UPDATES) { UpdatesRoute(back) }
 }

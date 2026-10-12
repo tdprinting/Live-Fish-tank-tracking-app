@@ -79,7 +79,7 @@ private fun Group(title: String, content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     val c = ReefTheme.colors
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -101,7 +101,7 @@ private fun PillsRow(title: String, options: List<String>, selected: Int, onSele
 }
 
 @Composable
-private fun LinkRow(title: String, subtitle: String?, onClick: () -> Unit) {
+internal fun LinkRow(title: String, subtitle: String?, onClick: () -> Unit) {
     val c = ReefTheme.colors
     GlassCard(Modifier.fillMaxWidth().padding(bottom = 8.dp), onClick = onClick, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,6 +132,7 @@ data class SettingsActions(
     val onTargets: () -> Unit = {},
     val onTank: () -> Unit = {},
     val onExport: () -> Unit = {},
+    val onUpdates: () -> Unit = {},
     val onResetSeed: () -> Unit = {},
     val onWipe: () -> Unit = {},
 )
@@ -182,6 +183,8 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
             SectionHeader("Tank & parameters")
             LinkRow("Targets & parameters", "Ranges, favorites, hide/show", actions.onTargets)
             LinkRow("Tank", "Size, volume, coral type", actions.onTank)
+            SectionHeader("App")
+            LinkRow("Updates", "Check for a new version, automatic checks", actions.onUpdates)
             SectionHeader("Data")
             LinkRow("Export & backup", "CSV, JSON backup and restore", actions.onExport)
             GlassCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(16.dp)) {
@@ -198,7 +201,7 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
 }
 
 @Composable
-fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit, onExport: () -> Unit, onWiped: () -> Unit) {
+fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit, onExport: () -> Unit, onWiped: () -> Unit, onUpdates: () -> Unit = {}) {
     val ctx = LocalContext.current
     val g = ctx.appGraph
     val s by g.settings.settings.collectAsStateWithLifecycle(AppSettings())
@@ -234,6 +237,7 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onTargets = onTargets,
             onTank = onTank,
             onExport = onExport,
+            onUpdates = onUpdates,
             onResetSeed = { confirm = 1 },
             onWipe = { confirm = 2 },
         ),
@@ -399,7 +403,7 @@ fun AboutRoute(onBack: () -> Unit) {
                 Text("ReefLive", style = MaterialTheme.typography.headlineMedium, color = c.text)
                 Text("Track your reef. Watch it live.", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
                 Spacer(Modifier.height(8.dp))
-                Text("Version 0.1 · ${g.speciesDb.size} species · offline, no account", style = MaterialTheme.typography.labelMedium, color = c.textTertiary)
+                Text("Version ${g.updates.installedName} · ${g.speciesDb.size} species · offline, no account", style = MaterialTheme.typography.labelMedium, color = c.textTertiary)
             }
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("Your data", style = MaterialTheme.typography.titleSmall, color = c.text)
