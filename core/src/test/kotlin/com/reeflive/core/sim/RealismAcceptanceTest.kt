@@ -153,7 +153,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c03
     /** 06 §5.6 #3: tang 1–3 posed inspections/h, mean inspection 4–10 s, 2–10 min of cleaning per 10 h day. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c03_cleanerServicesTang() {
         val d = day
         val tang = d.sim.org(BrainKind.TANG)
@@ -176,7 +175,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c04
     /** 06 §5.6 #4: no client goes > 90 min by day without at least a tactile pass. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c04_cleanerCooldown() {
         val worst = day.maxGapMin.maxBy { it.value }
         assertTrue("longest gap without a cleaner contact: $worst min (all ${day.maxGapMin})", worst.value <= 90.0)
@@ -185,7 +183,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c05
     /** 06 §5.6 #5: no prepared food → wrasse hunger past 0.6 within 3 days; jolts rise ≥ 3×; trust < 0.4 and fewer poses. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c05_cheatingRespondsToHunger() {
         // hunger climbs on cleaning alone (tank parasites are scarce) — health-only days for speed
         val s0 = tank(hour = 8.0)
@@ -216,7 +213,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c06
     /** 06 §5.6 #6: without the wrasse ≥ 2× the chase bouts (tolerance 1.6–4×; S:Cheney08). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c06_cleanerAsBuffer() {
         var with = 0; var without = 0
         for (seed in 1L..2L) {

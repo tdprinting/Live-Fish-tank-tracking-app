@@ -83,19 +83,25 @@ object PairMatrix {
         if (actor.mateId != null && actor.mateId == t.id) return false
         val kindOk = r.targets.any { k ->
             when (k) {
-                "ANY_FISH" -> t.isFish
+                // the cleaner is "never chased sustainedly because of the cleaning role" (06 §3.1, S:Cheney08);
+                // rows that do target it name it (dottyback, other wrasse)
+                "ANY_FISH" -> t.isFish && t.brainKind != BrainKind.WRASSE
                 else -> t.brainKind.name == k
             }
         }
         if (!kindOk) return false
+        // a cleaner at work is posed for, not attacked (06 §2.2, §2.4, §3.1: never chased sustainedly while cleaning)
+        if (t.brainKind == BrainKind.WRASSE && isCleaning(t)) return false
         return when (r.filter) {
             "notClown" -> t.brainKind != BrainKind.CLOWN && t.brainKind != BrainKind.EEL
             "gobyJuvenile" -> t.brainKind != BrainKind.ENGINEER_GOBY || t.lengthCm < GobyBrain.ADULT_CM
-            "notCleaning" -> (t.brain.current?.name ?: "") != "work"
+            "notCleaning" -> !isCleaning(t)
             "sleeping" -> t.sleeping
             else -> true
         }
     }
+
+    fun isCleaning(t: Organism): Boolean = (t.brain.current?.name ?: "") == "work"
 
     // ------------------------------------------------------------------ rank (06 §3.1, §4.1.5)
     /** Base rank, highest first: clown ♀ > dottyback > lawnmower > tang > hawk > clown ♂ > wrasse > goby > tailspot > cardinal. */
@@ -174,7 +180,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     private class Pending(val row: PairRow, val target: Organism, val latency: Double)
 
     private val entries = HashMap<String, HashMap<String, Entry>>()   // row id → target id → entry
-    private val recent = HashMap<String, ArrayDeque<Double>>()         // row id → bout times (last hour)
+    /** Row id → rate-cap token bucket (refills at the row's current hourly cap, holds [BURST]). */
+    private class Bucket(var tokens: Double, var t: Double)
+    private val buckets = HashMap<String, Bucket>()
     private var scanAt = 0.0
     private var pending: Pending? = null
     private var active: Pending? = null
@@ -260,12 +268,20 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         val o = c.o
         val fam = Social.familiarity(o, t, c.t)
         // hourly cap: new pair → maxRate, familiar → floorRate
-        val cap = r.floorRatePerH + (r.maxRatePerH - r.floorRatePerH) * (1 - fam)
-        val q = recent.getOrPut(r.id) { ArrayDeque() }
-        while (q.isNotEmpty() && c.t - q.first() > 3600) q.removeFirst()
-        if (cap > 0 && q.size >= cap) return 0.0
+        var cap = r.floorRatePerH + (r.maxRatePerH - r.floorRatePerH) * (1 - fam)
+        // tactile damping cuts the bout rate, not only the per-entry odds: a rate-capped holder (the host
+        // clown sees an intruder every few seconds) otherwise ignores the cleaner (S:Cheney08, 06 §3.5)
+        if (o.aggressionDampUntil > c.t) cap *= PairMatrix.AGG_DAMP
+        // a token bucket rather than a sliding hour, so the cap follows the damping as it comes and goes
+        if (cap > 0) {
+            val bk = buckets.getOrPut(r.id) { Bucket(BURST, c.t) }
+            bk.tokens = min(BURST, bk.tokens + max(0.0, c.t - bk.t) * cap / 3600)
+            bk.t = c.t
+            if (bk.tokens < 1) return 0.0
+        }
         var p = r.pEvent * (1 - r.habituation * fam)
-        if (c.t - t.arrivalTime < 86400 && fam < 0.5) p *= r.newcomerMult
+        val newcomer = c.t - t.arrivalTime < 86400 && fam < 0.5
+        if (newcomer) p *= r.newcomerMult
         if (r.sensitise) p *= 1 + min(1.0, max(0.0, ((o.relations[t.id]?.intrusions ?: 1.0) - 1) / 2))
         if (r.hungerScaled) {
             // normalised so an ordinary appetite (hunger ≥ 0.5) gives the sourced 90 % (07 gap 1); well fed → calmer
@@ -276,7 +292,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         if (r.type == "dominance" && ClownQueue.ratio(c.sim) < ClownQueue.STABLE_RATIO) p *= 2.0
         val temper = (o.aggression / o.species.temperament.aggression.coerceAtLeast(0.05)).coerceIn(0.7, 1.3)
         p *= temper * StressModel.aggressionMult(o, o.lastTempC) * c.sim.crowdingMult
-        if (o.aggressionDampUntil > c.t) p *= PairMatrix.AGG_DAMP
+        // tactile damping lowers the odds against known neighbours; a stranger in the first day still draws the
+        // full response (S:Townsend04's 90 % is a field figure, with cleaners present) and is limited by the cap alone
+        if (o.aggressionDampUntil > c.t && !newcomer) p *= PairMatrix.AGG_DAMP
         // a much higher-ranked target is only displayed at (size > residency > history; S:Poulos16)
         if (r.type != "dominance" && PairMatrix.rankEff(t, c.sim) > PairMatrix.rankEff(o, c.sim) + 1.5) p *= 0.3
         return p.coerceIn(0.0, 1.0)
@@ -287,7 +305,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         phase = 0; phaseT = 0.0; nip = false; dart = c.rng.chance(0.2)
         travelled = 0.0; lastPos = c.o.pos
         val a = active ?: run { finished = true; return }
-        recent.getOrPut(a.row.id) { ArrayDeque() }.addLast(c.t)
+        buckets[a.row.id]?.let { it.tokens -= 1 }
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
@@ -371,7 +389,11 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     /** Clears every territory entry (RearrangeRock). */
     fun reset() { entries.clear(); pending = null }
 
-    companion object { const val REROLL_S = 60.0 }
+    companion object {
+        const val REROLL_S = 60.0
+        /** Bouts a row may run back to back before the hourly cap paces it. */
+        const val BURST = 2.0
+    }
 }
 
 /**
