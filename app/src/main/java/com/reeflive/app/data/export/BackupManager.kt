@@ -5,6 +5,8 @@ import com.reeflive.app.data.db.ReefDatabase
 import com.reeflive.app.data.db.toEntity
 import com.reeflive.app.data.db.toModel
 import com.reeflive.app.data.repo.Clock
+import com.reeflive.app.data.repo.ExtrasRepository
+import com.reeflive.core.extras.ReefExtras
 import com.reeflive.core.io.Backup
 import com.reeflive.core.io.BackupCodec
 import java.time.Instant
@@ -12,7 +14,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Full JSON backup/restore of every table and the "Clear all data" wipe (DESIGN §6.7). */
-class BackupManager(private val db: ReefDatabase, private val clock: Clock) {
+class BackupManager(
+    private val db: ReefDatabase,
+    private val clock: Clock,
+    private val extras: ExtrasRepository? = null,
+) {
 
     suspend fun snapshot(): Backup = Backup(
         exportedAt = clock.now(),
@@ -30,6 +36,7 @@ class BackupManager(private val db: ReefDatabase, private val clock: Clock) {
         journal = db.journalDao().allOnce().map { it.toModel() },
         photos = db.journalDao().allPhotos().map { it.toModel() },
         lightSchedules = db.lightDao().all().map { it.toModel() },
+        extras = extras?.data?.value,
     )
 
     suspend fun exportJson(): String = BackupCodec.encode(snapshot())
@@ -54,12 +61,14 @@ class BackupManager(private val db: ReefDatabase, private val clock: Clock) {
             db.journalDao().insertPhotos(b.photos.map { it.toEntity() })
             db.lightDao().upsertAll(b.lightSchedules.map { it.toEntity() })
         }
+        extras?.replaceAll(b.extras ?: ReefExtras())
         return b
     }
 
     /** Deletes every row in every table. */
     suspend fun wipeAll() {
         db.withTransaction { wipeInTransaction() }
+        extras?.replaceAll(ReefExtras())
     }
 
     private suspend fun wipeInTransaction() {

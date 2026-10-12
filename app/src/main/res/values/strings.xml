@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ReefLive</string>
+    <string name="widget_description">Tank health score, key parameters and your next care task</string>
+    <string name="widget_loading">Open ReefLive to load your tank</string>
 </resources>

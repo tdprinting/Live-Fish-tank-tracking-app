@@ -56,6 +56,15 @@ object Routes {
     const val EXPORT = "more/export"
     const val ABOUT = "more/about"
     const val UPDATES = "more/settings/updates"
+    const val INSIGHTS = "more/insights"
+    const val SUPPLIES = "more/supplies"
+    const val FEEDING = "more/feeding"
+    const val TREATMENTS = "more/treatments"
+    const val EMERGENCY = "more/emergency"
+    const val ICP = "more/icp"
+    const val CORALS = "more/corals"
+    const val PAR = "more/par"
+    const val SPENDING = "more/spending"
 }
 
 /** The five bottom-bar destinations. */

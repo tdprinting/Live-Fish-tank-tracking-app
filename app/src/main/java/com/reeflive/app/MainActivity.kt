@@ -24,6 +24,8 @@ import com.reeflive.app.ui.components.LocalHapticsEnabled
 import com.reeflive.app.ui.nav.ReefRoot
 import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.app.widget.ReefWidget
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     /** Route requested by a notification tap ("log/alk", "care"); consumed by the nav host. */
@@ -60,6 +62,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Keep the home-screen widget in step with what was just logged.
+        val ctx = applicationContext
+        appGraph.appScope.launch { runCatching { ReefWidget.refreshAll(ctx) } }
     }
 
     override fun onNewIntent(intent: Intent) {
