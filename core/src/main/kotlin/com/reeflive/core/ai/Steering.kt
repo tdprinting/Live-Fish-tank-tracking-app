@@ -33,7 +33,7 @@ class Steering(private val c: Ctx) {
                 // crawling over rock/glass junctions can dip into the rock SDF: project back onto its surface
                 if (intent.posture !in 3..5) {
                     val d = c.rock.sdf.dist(o.pos)
-                    if (d < 0.05) o.pos += c.rock.sdf.gradient(o.pos).normalized(Vec3.Y) * (0.05 - d)
+                    if (d < 0.05) o.pos = c.rock.sdf.project(o.pos, 0.08, iterations = 24)
                 }
             }
             else -> swim(o, intent, dt)

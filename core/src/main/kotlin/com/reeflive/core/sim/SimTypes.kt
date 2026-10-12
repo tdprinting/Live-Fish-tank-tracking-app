@@ -22,6 +22,26 @@ sealed class Command {
     data class SetPredation(val enabled: Boolean) : Command()
     /** A shadow/hand passing over the tank at [worldPoint] (feather duster retracts, fish glance). */
     data class Shadow(val worldPoint: Vec3) : Command()
+
+    // ---- research 06 §4.2 sandbox controls for realistic change tests ----
+    /**
+     * Move [paramId] from its current value to [target] linearly over [overMin] sim minutes
+     * (0 = a step), then keep it there against the chemistry ([hold]) until [ReleaseParam].
+     * Any [SetParam] id works; "light" and "flow" ramp the light override and pump strength.
+     */
+    data class RampParam(val paramId: String, val target: Double, val overMin: Double = 0.0, val hold: Boolean = true) : Command()
+    /** Stop ramping/holding [paramId]; the chemistry takes over again. */
+    data class ReleaseParam(val paramId: String) : Command()
+    /** Run [command] when the sim clock reaches [atSimSec] (absolute sim seconds). */
+    data class Schedule(val atSimSec: Double, val command: Command) : Command()
+    /** Powerheads off for [durationSec] from [atSimSec] (night-time pump failure scenario). */
+    data class PowerheadFail(val atSimSec: Double, val durationSec: Double) : Command()
+    /** Rearrange the rock: every territory re-anchors and familiarity drops to 0.5 (06 §3.3). */
+    object RearrangeRock : Command()
+    /** Acclimate every animal's setpoints to the current water ([paramId] null = all channels). */
+    data class SetAcclimation(val paramId: String? = null) : Command()
+    /** Photoperiod in hours (lights-on length, centred on the current midday). */
+    data class Photoperiod(val hours: Double) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -67,6 +87,15 @@ sealed class SimEvent {
     data class Gasping(val id: String, override val simTimeSec: Double) : SimEvent()
     data class Fed(val kind: FoodKind, val grams: Double, override val simTimeSec: Double) : SimEvent()
     data class Cleaned(val cleanerId: String, val clientId: String, override val simTimeSec: Double) : SimEvent()
+    /** Research 06 §5.7 events. [displayOnly] = no chase or nip (standoff, dorsal raise). */
+    data class Chase(val actorId: String, val targetId: String, val bout: String, val nip: Boolean, val displayOnly: Boolean, override val simTimeSec: Double) : SimEvent()
+    data class Pose(val clientId: String, val cleanerId: String, override val simTimeSec: Double) : SimEvent()
+    data class Jolt(val cleanerId: String, val clientId: String, val retaliated: Boolean, override val simTimeSec: Double) : SimEvent()
+    /** A lethal roll that Reality mode (predation off) turned into a scare (06 §5.3 reality rule). */
+    data class NearMiss(val predatorId: String, val preyId: String, val bout: String, override val simTimeSec: Double) : SimEvent()
+    data class TerritoryReset(override val simTimeSec: Double) : SimEvent()
+    data class Quiver(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
+    data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -217,6 +246,9 @@ data class RelationInfo(
     val dominance: Float,
     val cleanings: Int,
     val secondsSinceSeen: Float,
+    /** Territory intrusions by the other (24 h half-life) and, toward a cleaner, the client's trust (06 §5.1). */
+    val intrusions: Float = 0f,
+    val cleanerTrust: Float = 0.7f,
 )
 
 /** A mound of sand dug out by a burrowing goby (cone: volume = π r² h / 3, h ≈ 0.45 r). */

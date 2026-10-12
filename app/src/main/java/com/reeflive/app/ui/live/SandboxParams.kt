@@ -15,12 +15,9 @@ import java.util.Locale
  * Adding a parameter = adding a row. Rows whose [SandboxParamDef.simId] is null are shown disabled with
  * [SandboxParamDef.pendingNote] until the simulation supports them.
  *
- * TODO(sim/realism): when that branch lands, add rows for its new sandbox parameters here and flip the
- *  photoperiod / per-pump / spectrum rows below to their new SetParam ids.
+ * How a change is applied (set now, step and hold, ramp, spike) is chosen with [SandboxControlMode].
  */
 object SandboxParams {
-
-    private const val PENDING = "Coming with the next simulation update"
 
     val all: List<SandboxParamDef> = listOf(
         // ---------------------------------------------------------------- Water
@@ -128,37 +125,46 @@ object SandboxParams {
             zones = SliderZones(dangerBelow = 15.0, safeFrom = 60.0, safeTo = 140.0, dangerAbove = null),
             read = { it.flowPct },
         ),
-        // ---- not in the sim on main yet: shown disabled so nothing is silently dead
+        // Photoperiod: the programmed light day stretched about midday (sim clamps 4–16 h).
         SandboxParamDef(
             "photoperiod", "Photoperiod", "Photo", "h", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 24.0, step = 0.5, decimals = 1,
+            min = 4.0, max = 16.0, step = 0.5, decimals = 1,
             zones = SliderZones(dangerBelow = null, safeFrom = 8.0, safeTo = 12.0, dangerAbove = 14.0),
-            simId = null, pendingNote = PENDING, // TODO(sim/realism): photoperiod SetParam id
-            read = { null }, fallback = 10.0,
+            read = { it.photoperiodH }, fallback = 11.0,
+        ),
+        // Individual pumps are on/off in the sim (0 = off, 1 = on); PH-B sits on the left wall, PH-A on the right.
+        SandboxParamDef(
+            "pump_left", "Left powerhead", "Pump L", "", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 1.0, step = 1.0, decimals = 0, simId = "pump.PH-B",
+            caption = { r -> if ((r.pumps["pump_left"] ?: 1.0) >= 0.5) "on" else "off" },
+            read = { it.pumps["pump_left"] }, fallback = 1.0,
         ),
         SandboxParamDef(
-            "pump_left", "Left powerhead", "Pump L", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0,
-            simId = null, pendingNote = PENDING, // TODO(sim/realism): per-pump strength command
-            read = { null }, fallback = 100.0,
+            "pump_right", "Right powerhead", "Pump R", "", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 1.0, step = 1.0, decimals = 0, simId = "pump.PH-A",
+            caption = { r -> if ((r.pumps["pump_right"] ?: 1.0) >= 0.5) "on" else "off" },
+            read = { it.pumps["pump_right"] }, fallback = 1.0,
+        ),
+        // Spectrum: gain on the programmed channel (100 % = as programmed).
+        SandboxParamDef(
+            "spectrum_royal", "Royal blue channel", "Royal", "%", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0, simId = "spectrum.royal",
+            read = { it.gains["royal"]?.times(100.0) }, fallback = 100.0,
         ),
         SandboxParamDef(
-            "pump_right", "Right powerhead", "Pump R", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0,
-            simId = null, pendingNote = PENDING, // TODO(sim/realism): per-pump strength command
-            read = { null }, fallback = 100.0,
-        ),
-        SandboxParamDef(
-            "spectrum_blue", "Royal blue channel", "Blue", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 100.0, step = 1.0, decimals = 0, scale = 100.0,
-            simId = null, pendingNote = PENDING, // TODO(sim/realism): spectrum channel command
-            read = { null }, fallback = 70.0,
+            "spectrum_blue", "Blue channel", "Blue", "%", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0, simId = "spectrum.blue",
+            read = { it.gains["blue"]?.times(100.0) }, fallback = 100.0,
         ),
         SandboxParamDef(
             "spectrum_white", "White channel", "White", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 100.0, step = 1.0, decimals = 0, scale = 100.0,
-            simId = null, pendingNote = PENDING, // TODO(sim/realism): spectrum channel command
-            read = { null }, fallback = 40.0,
+            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0, simId = "spectrum.white",
+            read = { it.gains["white"]?.times(100.0) }, fallback = 100.0,
+        ),
+        SandboxParamDef(
+            "spectrum_violet", "Violet channel", "Violet", "%", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0, simId = "spectrum.violet",
+            read = { it.gains["violet"]?.times(100.0) }, fallback = 100.0,
         ),
     )
 
@@ -173,15 +179,15 @@ enum class SandboxCategory(val label: String) {
 }
 
 /**
- * How a slider change is applied. Only [SET] exists on main.
- * TODO(sim/realism): enable STEP / RAMP / SCHEDULE (flip [available]) and route them in LiveTankScreen's onSet.
- * The panel shows the selector automatically once more than one mode is available.
+ * How a slider change is applied (research 06 §4.2: fish cope with a slow ramp far better than a step).
+ * [SET] changes the value once and lets the chemistry drift; [STEP] jumps and holds it there; [RAMP] moves
+ * there linearly over [rampMin] and holds; [SCHEDULE] is a spike: jump now, return to the old value after an hour.
  */
-enum class SandboxControlMode(val label: String, val available: Boolean) {
+enum class SandboxControlMode(val label: String, val available: Boolean, val rampMin: Double = 0.0) {
     SET("Set now", true),
-    STEP("Step", false),
-    RAMP("Ramp", false),
-    SCHEDULE("Schedule", false),
+    STEP("Step & hold", true),
+    RAMP("Ramp over a day", true, rampMin = 24 * 60.0),
+    SCHEDULE("1-hour spike", true, rampMin = 60.0),
     ;
 
     companion object {
@@ -190,7 +196,16 @@ enum class SandboxControlMode(val label: String, val available: Boolean) {
 }
 
 /** What the panel reads: the water plus light/flow, as shown on the sliders (display units). */
-data class TankReading(val water: WaterState, val lightPct: Double, val flowPct: Double)
+data class TankReading(
+    val water: WaterState,
+    val lightPct: Double,
+    val flowPct: Double,
+    val photoperiodH: Double? = null,
+    /** Pump row id → 1 on / 0 off. */
+    val pumps: Map<String, Double> = emptyMap(),
+    /** Spectrum channel name → gain (1 = as programmed). */
+    val gains: Map<String, Double> = emptyMap(),
+)
 
 /**
  * One sandbox slider row. Values on the slider are display values; the simulation gets `display / scale`

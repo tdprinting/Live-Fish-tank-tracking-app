@@ -262,7 +262,8 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         return (0.15 + 0.6 * ich.coerceAtMost(1.0) + 0.5 * o.parasiteLoad + extra).coerceAtMost(0.85)
     }
     private fun choose(c: Ctx): CleaningStation? =
-        c.p.stations.filter { it.open && it.cleaner !== c.o && (!it.isShrimp || c.o.brainKind != BrainKind.HAWK) }
+        // the wrasse comes to its clients (06 §5.5); fish only seek out its station when infested with ich
+        c.p.stations.filter { it.open && it.cleaner !== c.o && (!it.isShrimp || c.o.brainKind != BrainKind.HAWK) && (it.isShrimp || c.o.disease == Disease.ICH) }
             .maxByOrNull { it.fitness / (1 + it.pos.distanceTo(c.o.pos) / 30) }
     override fun enter(c: Ctx) { station = choose(c) }
     override fun update(c: Ctx, out: SteerIntent) {
@@ -341,7 +342,8 @@ class Flash(val b: SpeciesBrain) : Behavior("flash", "Flashing") {
         val o = c.o
         if (o.disease != Disease.ICH && o.disease != Disease.VELVET) return 0.0
         if (c.t < nextAllowed) return 0.0
-        return (0.3 + o.diseaseStage).coerceAtMost(0.7)
+        // the itch wins over routine behaviour when a flash is due (2–10 /h at ich 0.3, 06 §5.6 #12)
+        return (0.7 + 0.5 * o.diseaseStage).coerceAtMost(0.9)
     }
     override fun enter(c: Ctx) {
         val sp = c.rockSurfacePoint(c.o.pos, 25.0) ?: run { finished = true; return }
@@ -356,7 +358,12 @@ class Flash(val b: SpeciesBrain) : Behavior("flash", "Flashing") {
         } else {
             out.rollExtra = 0.7
             out.seek(stand + (c.o.heading * 3.0), c.o.cruiseSpeed, arrive = 1.0)
-            if (c.t - scrapeAt > 0.5) { finished = true; nextAllowed = c.t + c.rng.range(30.0, 120.0) }
+            if (c.t - scrapeAt > 0.5) {
+                finished = true
+                c.o.counters.add(com.reeflive.core.sim.Counters.K.FLASH, c.t)
+                // ≈ 2 + 15·stage flashes per hour (06 §5.6 #12: 2–10/h at ich 0.3)
+                nextAllowed = c.t + 3600.0 / (2.0 + 15.0 * c.o.diseaseStage) * c.rng.range(0.6, 1.4)
+            }
         }
         if (elapsed > 8) { finished = true; nextAllowed = c.t + 60 }
     }

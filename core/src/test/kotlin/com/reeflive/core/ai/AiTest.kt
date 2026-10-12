@@ -92,12 +92,15 @@ class AiTest {
     @Test
     fun feedingReducesHunger() {
         val sim = fullTank()
-        val fish = sim.organisms.filter { it.isFish && it.brainKind != BrainKind.EEL && it.brainKind != BrainKind.LAWNMOWER_BLENNY }
+        // the cardinal feeds mostly at dusk and night and the adult engineer goby stays in its burrow by day
+        // (research 06 §1.3, §1.5); a noon feeding is for the day-active fish
+        val nightFeeders = setOf(BrainKind.EEL, BrainKind.LAWNMOWER_BLENNY, BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY)
+        val fish = sim.organisms.filter { it.isFish && it.brainKind !in nightFeeders }
         fish.forEach { it.hunger = 0.7 }
         sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.8))
         sim.advance(300.0)
         val fed = fish.count { it.hunger < 0.6 }
-        assertTrue("fed $fed of ${fish.size}: ${fish.map { it.nickname + "=" + "%.2f".format(it.hunger) }}", fed >= fish.size - 3) // rebuilt tank anchors: 6 of 9 within 300 s; was size-2
+        assertTrue("fed $fed of ${fish.size}: ${fish.map { it.nickname + "=" + "%.2f".format(it.hunger) }}", fed >= fish.size - 2)
     }
 
     /** Cleaning stations: someone gets cleaned within an hour of daytime. */
@@ -172,7 +175,8 @@ class AiTest {
         val v = sim.organisms.first { it.brainKind == BrainKind.PEEKER_BLENNY }
         repeat(3) { Social.recordAttack(a, v, 0.6) }
         v.pos = a.pos + com.reeflive.core.geom.Vec3(8.0, 0.0, 0.0)
-        sim.advance(5.0, behaviorDt = 0.1)
+        // 1 s: the pair matrix now sends the dottyback after it again and the blenny bolts for its hole (out of wary range by ~4 s)
+        sim.advance(1.0, behaviorDt = 0.1)
         assertTrue("fear ${v.relations[a.id]?.fear}", (v.relations[a.id]?.fear ?: 0.0) > 0.5)
         assertTrue("wary of ${v.wary}", v.wary === a)
         val st = sim.snapshot().stats.first { it.id == v.id }

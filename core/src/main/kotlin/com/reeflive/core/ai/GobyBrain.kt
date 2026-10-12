@@ -15,6 +15,13 @@ import kotlin.math.sin
  * swimmer (same spline deformation as an eel). Never a predator (SIMULATION §4.5, owner correction).
  */
 class GobyBrain(c: Ctx) : SpeciesBrain(c) {
+    companion object {
+        /** Adult mode from this length (06 §1.5): burrow-bound by day and night (07 gap 3). */
+        const val ADULT_CM = 15.0
+        const val GOBY_MOUTHFUL_CM3 = 0.6
+        /** Chance an adult patrols outside on a given night: [I] ≈5 % (07 gap 3; 06 had 40 %, unsupported). */
+        const val ADULT_NIGHT_PATROL_P = 0.05
+    }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
     val mouth: Vec3 = burrow?.pos ?: Vec3(69.0, 5.0, 23.0)
     val inDir: Vec3 = (burrow?.dir ?: Vec3(0.5, 0.1, -0.85)).normalized()
@@ -25,8 +32,23 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     private val slot = Vec3(c.rng.signed() * 5, c.rng.range(1.5, 6.0), c.rng.signed() * 3)
 
     init {
-        install(InBurrow(), MouthHover(), Excavate(), Feed(this, 18.0, "Picking plankton"),
+        install(InBurrow(), MouthHover(), Excavate(), NightPatrol(), Feed(this, 18.0, "Picking plankton"),
             Flee(this, { _, _ -> outside(1.5) }, "Darting into its burrow"), SurfaceGasp(this))
+    }
+
+    /** Adults (≥ [ADULT_CM]) are burrow-bound; juveniles hover and feed near the mouth by day (06 §1.5, 07 gap 3). */
+    val adult: Boolean get() = o.lengthCm >= ADULT_CM
+    /** Sand mouthfuls spat out (burrow maintenance events, 06 §5.6 #14). */
+    var sandEvents = 0
+    /** Whether tonight is one of the rare nights an adult patrols outside (rolled at lights-off). */
+    var patrolTonight = false
+    private var lastNightRoll = -1e9
+
+    /** Roll the adult night patrol once per night (p = [ADULT_NIGHT_PATROL_P], [I] from 07 gap 3). */
+    fun rollNight(c: Ctx) {
+        if (c.p.lightsOffAt <= lastNightRoll) return
+        lastNightRoll = c.p.lightsOffAt
+        patrolTonight = adult && c.rng.chance(ADULT_NIGHT_PATROL_P)
     }
 
     fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.sandTopCm + 1.0), mouth.z) + outDir * k
@@ -49,6 +71,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             return when {
                 c.p.night -> 0.85
                 o.waryLevel > 0.3 || o.startle > 0.2 -> 0.7
+                adult -> 0.75
                 else -> 0.25 + 0.3 * o.skittishness
             }
         }
@@ -73,7 +96,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Daytime: hover low in a loose group near the mouth, nose into the current, snapping at plankton. */
     inner class MouthHover : Behavior("mouthhover", "Hovering by its burrow") {
         private var nextSnap = 0.0
-        override fun score(c: Ctx): Double = if (c.p.night) 0.0 else 0.55 * (1 - 0.5 * c.o.waryLevel)
+        override fun score(c: Ctx): Double = if (c.p.night || adult) 0.0 else 0.55 * (1 - 0.5 * c.o.waryLevel)
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             val spot = c.safe(outside(6.0) + slot + Vec3(sin(c.t * 0.11 + slot.x) * 2.0, sin(c.t * 0.07) * 1.0, 0.0), 1.0)
@@ -100,7 +123,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         private var dump = Vec3.ZERO
         private var nextAt = 0.0
         override val committed: Boolean get() = phase in 1..2
-        override fun score(c: Ctx): Double = if (c.p.night || c.t < nextAt || c.o.waryLevel > 0.3) 0.0 else 0.72
+        override fun score(c: Ctx): Double = if (c.p.night || c.t < nextAt || c.o.waryLevel > 0.3) 0.0 else if (adult) 0.93 else 0.72
         override fun enter(c: Ctx) {
             phase = 0; timer = 0.0
             val side = (outDir cross Vec3.Y).normalized(Vec3.X) * (c.rng.signed() * 5.0)
@@ -132,7 +155,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                     out.pitchBias = -0.4
                     if (timer > 0.6) {
                         c.sim.depositSand(dump, GOBY_MOUTHFUL_CM3)
-                        nextAt = c.t + c.rng.range(45.0, 300.0)
+                        sandEvents++
+                        // adults: a maintenance trip every 0.7–2 h (≈ 5–15 per day); juveniles dig much more often
+                        nextAt = c.t + if (adult) c.rng.range(2500.0, 7000.0) else c.rng.range(45.0, 300.0)
                         finished = true
                     }
                 }
@@ -140,5 +165,25 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
-    companion object { const val GOBY_MOUTHFUL_CM3 = 0.6 }
+
+    /** The rare adult night out (07 gap 3: ≈ 5 % of nights): a slow circuit within 25 cm of the burrow. */
+    inner class NightPatrol : Behavior("nightpatrol", "Patrolling at night") {
+        private var wp = Vec3.ZERO
+        private var next = 0.0
+        override fun score(c: Ctx): Double {
+            if (!c.p.night) return 0.0
+            rollNight(c)
+            return if (patrolTonight) 0.9 else 0.0
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val o = c.o
+            o.visible = true
+            if (c.t > next || o.pos.distanceTo(wp) < 2) {
+                next = c.t + c.rng.range(8.0, 20.0)
+                wp = c.safe(outside(4.0) + Vec3(c.rng.signed() * 25, c.rng.range(1.0, 8.0), c.rng.signed() * 10), 1.0)
+            }
+            out.seek(wp, o.cruiseSpeed * 0.6, arrive = 2.0)
+            out.ampMul = 0.8
+        }
+    }
 }

@@ -68,15 +68,49 @@ class Organism(
     var acclSg = Double.NaN
     var acclPh = Double.NaN
 
+    // ---- research 06 (SIMULATION §9.10) ----
+    /** Per-channel acute/chronic stress and acclimated setpoints (StressModel). */
+    val stressState = StressModel.State()
+    /** Sim time this animal entered the tank (newcomer priority effects, 06 §3.3). Initial stock: 30 days before start. */
+    var arrivalTime = -30 * 86400.0
+    /** Tactile cleaning calms an aggressor: initiated aggression ×[AGG_DAMP] until this time (06 §5.5, S:Cheney08). */
+    var aggressionDampUntil = -1e9
+    /** Cardinal/tailspot keep closer to cover for 10 min after being chased (06 §5.4). */
+    var timidUntil = -1e9
+    /** A jolted client chases the cleaner until then (06 §5.5). */
+    var retaliateUntil = -1e9
+    /** Client pose reaction requested by a cleaner (06 §5.5): posing until this time for [poseFor]. */
+    var poseUntil = -1e9
+    var poseFor: Organism? = null
+    /** Display-sequence render hooks (06 §5.4): quiver (clown ♂), spine flare (tang), dorsal raise, leg-rock (shrimp). */
+    var quiver = 0.0
+    var spineFlare = 0.0
+    var dorsalRaise = 0.0
+    var legRock = 0.0
+    /** Rolling 1 h observation counters (06 §4.2): see [Counters]. */
+    val counters = Counters()
+    /** Cardinal out of cover under bright light (set by its brain; fin-clamp sign). */
+    var brightExposed = false
+    /** Water temperature at the last chemistry tick (appetite hook). */
+    var lastTempC = 26.0
+    /** Sim time of this animal's last behaviour tick (NaN until the first); used for memory timestamps. */
+    var clock = Double.NaN
+    /** Daytime hover / forage radius multiplier set by its brain (cardinal newcomer and timid states; 06 §5.6 #7). */
+    var hoverRadius = 0.0
+
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
     var startle = 0.0
     var nutritionGreens = 1.0     // 0..1, decays without algae/nori (HLLE input)
     var acceptsPrepared = true    // cleaner wrasse roll (SIMULATION §3.4); lawnmower blenny too
     var lastCleanedAt = -1e9
+    /** Last tactile pass or inspection by a cleaner (06 §5.6 #4: nobody goes > 90 min without one by day). */
+    var lastCleanerContactAt = -1e9
     var parasiteLoad = 0.0        // cosmetic client parasite level (feeds cleaners)
     var satietyUntil = -1e9       // eel 3-day satiety after a kill
     var molting = false
+    /** Sim time the last molt began (molt-window predation, 06 §2.14). */
+    var lastMoltAt = -1e9
     var moltUntil = 0.0
     var nextMoltAt = 0.0
 
@@ -179,4 +213,33 @@ class Organism(
     }
 
     override fun toString() = "$nickname(${species.id})"
+}
+
+/**
+ * Rolling observation counters (research 06 §4.2): event counts in the last hour of sim time,
+ * kept as two half-hour buckets so the window is cheap to maintain. Totals are lifetime counts.
+ */
+class Counters {
+    enum class K { CHASE_GIVEN, CHASE_RECEIVED, POSE, JOLT, FLASH, GASP, FEED, QUIVER, CLEAN_GIVEN, NEAR_MISS }
+    private val cur = IntArray(K.entries.size)
+    private val prev = IntArray(K.entries.size)
+    val total = LongArray(K.entries.size)
+    private var bucketStart = 0.0
+    /** Seconds spent in cover (posture 3/4/6 or hiding) in the current and previous half hour. */
+    private var coverCur = 0.0
+    private var coverPrev = 0.0
+
+    private fun roll(t: Double) {
+        if (t - bucketStart < 1800) return
+        val steps = ((t - bucketStart) / 1800).toInt()
+        if (steps >= 2) { cur.copyInto(prev); prev.fill(0); cur.fill(0); coverPrev = 0.0; coverCur = 0.0 }
+        else { cur.copyInto(prev); cur.fill(0); coverPrev = coverCur; coverCur = 0.0 }
+        bucketStart += steps * 1800.0
+    }
+
+    fun add(k: K, t: Double, n: Int = 1) { roll(t); cur[k.ordinal] += n; total[k.ordinal] += n.toLong() }
+    fun cover(dt: Double, t: Double) { roll(t); coverCur += dt }
+    fun lastHour(k: K, t: Double): Int { roll(t); return cur[k.ordinal] + prev[k.ordinal] }
+    fun coverFraction(t: Double): Double { roll(t); val span = 1800 + (t - bucketStart); return ((coverCur + coverPrev) / span).coerceIn(0.0, 1.0) }
+    fun totalOf(k: K): Long = total[k.ordinal]
 }

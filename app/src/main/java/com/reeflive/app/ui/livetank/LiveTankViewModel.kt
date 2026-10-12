@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.live.SimulationHolder
+import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.nav.LiveFocus
@@ -72,6 +73,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Sandbox light multiplier in % (sim intensity override × 100); 100 = the schedule as is. */
     val lightPct: StateFlow<Double> = _lightPct.asStateFlow()
 
+    private val _extras = MutableStateFlow(DEFAULT_EXTRAS)
+    /** Sandbox values the snapshot doesn't carry, by slider id: photoperiod (h), pumps (1 on / 0 off), spectrum gains. */
+    val extras: StateFlow<Map<String, Double>> = _extras.asStateFlow()
+
     private val _predation = MutableStateFlow(true)
     /** Predation in the sandbox (the fork starts with it on). */
     val predation: StateFlow<Boolean> = _predation.asStateFlow()
@@ -105,7 +110,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
 
     // ---- view state ----
     fun setMode(m: SimMode) {
-        if (m != mode.value) { _lightPct.value = 100.0; _predation.value = true }
+        if (m != mode.value) { _lightPct.value = 100.0; _predation.value = true; _extras.value = DEFAULT_EXTRAS }
         holder.setMode(m)
     }
     fun setSpeed(v: Double) = holder.setSpeed(v)
@@ -122,6 +127,33 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     private inline fun sandbox(block: () -> Unit) { if (mode.value == SimMode.SANDBOX) block() }
 
     fun setParam(paramId: String, value: Double) = sandbox { holder.enqueue(Command.SetParam(paramId, value)) }
+
+    /**
+     * A sandbox slider change applied per [mode] (research 06 §4.2): set once, step and hold, ramp over a day and
+     * hold, or a one-hour spike that returns to [current]. [rowId] keys values the snapshot doesn't carry.
+     */
+    fun applyParam(rowId: String, simId: String, value: Double, current: Double, mode: SandboxControlMode) = sandbox {
+        if (rowId in DEFAULT_EXTRAS) _extras.value = _extras.value + (rowId to (if (rowId.startsWith("pump_")) (if (value >= 0.5) 1.0 else 0.0) else value))
+        if (rowId == "light") _lightPct.value = value * 100.0
+        when (mode) {
+            SandboxControlMode.SET -> holder.enqueue(Command.SetParam(simId, value))
+            SandboxControlMode.STEP -> holder.enqueue(Command.RampParam(simId, value, 0.0, hold = true))
+            SandboxControlMode.RAMP -> holder.enqueue(Command.RampParam(simId, value, mode.rampMin, hold = true))
+            SandboxControlMode.SCHEDULE -> {
+                holder.enqueue(Command.RampParam(simId, value, 0.0, hold = true))
+                holder.enqueue(Command.Schedule(hud.value.simTimeSec + mode.rampMin * 60, Command.RampParam(simId, current, 0.0, hold = false)))
+            }
+        }
+    }
+    fun acclimateAll() = sandbox { holder.enqueue(Command.SetAcclimation(null)) }
+    fun rearrangeRock() = sandbox { holder.enqueue(Command.RearrangeRock) }
+    /** Powerheads fail at the next 23:00 for six hours (the heat × oxygen × night test). */
+    fun pumpFailTonight() = sandbox {
+        val t = hud.value.simTimeSec
+        var at = kotlin.math.floor(t / 86400) * 86400 + 23 * 3600
+        if (at <= t) at += 86400
+        holder.enqueue(Command.PowerheadFail(at, 6 * 3600.0))
+    }
     fun dose(paramId: String, delta: Double) = sandbox { holder.enqueue(Command.Dose(paramId, delta)) }
     fun waterChange(fraction: Double, mix: WaterState = WaterState.FRESH_MIX) = sandbox { holder.enqueue(Command.WaterChange(fraction, mix)) }
     fun setLights(on: Boolean?, intensity: Double? = null) = sandbox { holder.enqueue(Command.Lights(on, intensity)) }
@@ -162,8 +194,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
                 setParam("mg", (w.mg - 80.0).coerceAtLeast(600.0))
                 setParam("algae", (w.algaeHair + 0.15).coerceAtMost(1.0))
             }
-            // TODO(sim/realism): use a ramp (fresh water flooding in over ~30 min) instead of a step.
-            SandboxPreset.SALINITY_CRASH -> setParam("sal", 1.012)
+            // the top-off floods fresh water in over ~30 min, then the sim takes over again
+            SandboxPreset.SALINITY_CRASH -> holder.enqueue(Command.RampParam("sal", 1.012, 30.0, hold = false))
             SandboxPreset.COPPER_OVERDOSE -> setParam("copper", 0.5)
         }
     }
@@ -171,6 +203,12 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Restores the sandbox to the state it was forked from. */
     fun resetSandbox() = sandbox {
         _lightPct.value = 100.0
+        _extras.value = DEFAULT_EXTRAS
+        holder.enqueue(Command.Photoperiod(DEFAULT_EXTRAS.getValue("photoperiod")))
+        for ((id, v) in DEFAULT_EXTRAS) when {
+            id.startsWith("pump_") -> holder.enqueue(Command.SetParam(PUMP_IDS.getValue(id), v))
+            id.startsWith("spectrum_") -> holder.enqueue(Command.SetParam("spectrum." + id.removePrefix("spectrum_"), v))
+        }
         _predation.value = true
         holder.resetSandbox()
         // ResetToReality restores water and livestock; also undo the overrides that live outside them
@@ -182,5 +220,11 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     companion object {
         const val HUD_PERIOD_MS = 100L   // 10 Hz
         const val REAL_SAMPLE_MS = 500L
+        val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")
+        val DEFAULT_EXTRAS: Map<String, Double> = mapOf(
+            "photoperiod" to com.reeflive.core.sim.LightSchedule.DEFAULT_PHOTOPERIOD_H,
+            "pump_left" to 1.0, "pump_right" to 1.0,
+            "spectrum_royal" to 1.0, "spectrum_blue" to 1.0, "spectrum_white" to 1.0, "spectrum_violet" to 1.0,
+        )
     }
 }
