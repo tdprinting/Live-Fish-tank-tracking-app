@@ -600,6 +600,24 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 `AiTest` adds `gobyDigsAndHides` and `victimsRememberAttackers`. `ICH_BASE_PRESSURE` went 0.0004 → 0.0005 to keep the 30 °C ich test above 90 % once heat stress was recalibrated.
 
+**Sally Lightfoot crab** (*Percnon gibbesi*, `BrainKind.SALLY_CRAB`, sheet `brain` "crab" / "sally_lightfoot", model `sally_lightfoot.glb`, default stock id `crab`, 5 cm leg span). Brain `SallyCrabBrain`:
+
+- Hides wedged in a crevice by day: anchor `CREVICE_CRAB`, falling back to `CAVE_SMALL`. Rest posture 4, with the legs peeking out. By night (activity is NOCTURNAL) it roams up to about 25 cm.
+- Moves in a stop-and-go sideways scuttle: `SteerIntent.sideways` turns the body across the travel direction. Each 2 s cycle is a 0.6 s burst at half burst speed, then a pause.
+- `Dart` (score 0.97): when startled, threatened, or a larger fish passes faster than 3 cm/s within 6 cm, it runs back to the crevice at full burst speed (8 BL/s).
+- Grazes hair algae: `grazeRemovalPerMin` 1.2e-6, scaled by size. By day it grazes only within 10 cm of its crevice. In abstract mode it grazes only at night, with a film floor of 0.5.
+- Scavenges food: it is in `SCAVENGERS`, with a 40 cm radius.
+- Rare `NightGrab`: needs predation on, night, a leg span of at least 5 cm and hunger of at least 0.85. It rolls once per sim hour with p = 0.15, and the strike lands with p = 0.3, so a starving crab with prey nearby succeeds about 4.5 % per hour.
+  - Prey: Astrea or Nassarius snails, or a sleeping fish shorter than 0.8 × the crab's leg span.
+  - A missed strike counts as an attack in the victim's social memory.
+- Sensitivities:
+  - Copper uses the invert profile.
+  - Salinity level: opt 1.024–1.026, tol 1.022–1.027, lethal 1.019 / 1.029.
+  - Salinity swings use `CRAB_STEPS`, with an SG step of 0.003 versus 0.004 for other inverts.
+  - Iodine uses `CRUSTACEAN_IODINE` (opt ≥ 0.04, tol ≥ 0.02, lethal < 0.003 mg/L), shared with the shrimps.
+  - It molts every 28–56 days and hides for 24 h. Below 0.02 mg/L iodine, or with low Ca or Mg, 25 % of molts fail.
+- Tuning: adding the crab raised the lawnmower blenny's abstract film floor from 0.35 to 0.4, so it survives the 90-day healthy-tank run.
+
 ### 9.7 Water physics: flow solver, scalar transport, surface, optics (owner request)
 
 **Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–56, z 0–33).

@@ -36,6 +36,7 @@ object DefaultStock {
         LivestockSeed("astraea_tecta", "Astrea 3", 2.6, id = "astrea3"),
         LivestockSeed("asterina_sp", "Asterina #1", 1.0, id = "asterina1"),
         LivestockSeed("asterina_sp", "Asterina #2", 0.8, id = "asterina2"),
+        LivestockSeed("percnon_gibbesi", "Sally", 5.0, id = "crab"),
     )
 
     val corals = listOf(

@@ -521,3 +521,128 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
         o.homePos = p; o.placeAt(p, Vec3.X)
     }
 }
+
+// =====================================================================================
+// Sally Lightfoot crab (Percnon gibbesi): wedged in a rock crevice by day, darts out sideways,
+// grazes hair algae and scavenges; a large, underfed one may rarely grab a sleeping small fish
+// or a snail at night (SIMULATION §9.6).
+// =====================================================================================
+class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
+    val crevice: Anchor? = c.rock.anchors[o.hostAnchor ?: "CREVICE_CRAB"] ?: c.rock.anchors["CREVICE_CRAB"] ?: c.rock.anchors["CAVE_SMALL"]
+    val home: Vec3 = crevice?.pos ?: Vec3(63.0, 12.0, 8.0)
+
+    init {
+        install(HideCrevice(), Graze(), CrabScavenge(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })
+    }
+
+    /** Wedged flat into the crevice; posture 4 lets it sit inside the rock's skin (Steering skips SDF projection). */
+    override fun restSpot(c: Ctx, night: Boolean): Rest = hangPose(c, crevice, home, inverted = false).copy(pos = home, posture = 4)
+
+    /** Stop-and-go sideways scuttle: short bursts with pauses, like the real crab. */
+    private fun scuttle(c: Ctx, out: SteerIntent, target: Vec3, fast: Boolean) {
+        out.crawl = true; out.sideways = true; out.target = target; out.surfaceOffset = surfaceOffset(c); out.arriveRadius = 1.0
+        val cycle = (c.t + o.appendagePhase) % 2.0
+        if (fast || cycle < 0.6) { out.speed = c.o.burstSpeed * (if (fast) 1.0 else 0.5); out.urgency = 0.8 }
+        else { out.speed = 0.0; out.urgency = 0.0 }
+    }
+
+    inner class HideCrevice : Behavior("hide", "Hiding in a crevice") {
+        override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12
+        override fun update(c: Ctx, out: SteerIntent) {
+            val r = restSpot(c, false)
+            if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, r.pos, fast = false); return }
+            out.rest(r, 1.0)
+            c.o.extension = 0.3 + 0.2 * sin(c.t * 0.3 + c.o.appendagePhase)   // legs and eyes peek out
+        }
+    }
+
+    inner class Graze : Behavior("graze", "Grazing hair algae") {
+        private var spot: Pair<Vec3, Vec3>? = null
+        private var next = 0.0
+        private var dur = 30.0
+        override fun score(c: Ctx): Double {
+            val hair = c.sim.water.s.algaeHair
+            val food = hair / (hair + 0.02)
+            // By day it only slips out to rock right next to its crevice.
+            return (0.3 + 0.3 * c.o.hunger) * (0.35 + 0.65 * food) * (0.25 + 0.75 * c.activity)
+        }
+        override fun enter(c: Ctx) {
+            val night = c.activity > 0.5
+            spot = c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
+            dur = c.rng.range(15.0, 45.0)
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val s = spot ?: run { finished = true; return }
+            if (elapsed > dur + 40) { finished = true; return }   // unreachable spot
+            if (c.o.pos.distanceTo(s.first) > 1.5) { scuttle(c, out, s.first, fast = false); return }
+            out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
+            if (c.t > next) {
+                next = c.t + 2
+                c.o.hunger = max(0.0, c.o.hunger - 0.004)
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
+                c.o.mouth = 1.0
+            }
+            c.o.appendagePhase += c.dt * 6   // claw-picking
+            if (elapsed > dur) finished = true
+        }
+    }
+
+    inner class CrabScavenge : Scavenge(this, 40.0, urgentAbove = 0.3, label = "Scavenging") {
+        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.sideways = true }
+    }
+
+    /** Very fast sideways dash back into the crevice when startled or a bigger fish comes close. */
+    inner class Dart : Behavior("dart", "Darting for cover") {
+        override val committed: Boolean get() = elapsed < 3
+        override fun score(c: Ctx): Double {
+            if (threat != null || startledRecently && startleMag > 0.1) return 0.97
+            val big = nearestOther(c, 6.0) { it.isFish && it.lengthCm > 0.8 * c.o.lengthCm && it.vel.length() > 3.0 }
+            return if (big != null) 0.92 else 0.0
+        }
+        override fun enter(c: Ctx) { startleAt = -1e9 }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val r = restSpot(c, false)
+            if (c.o.pos.distanceTo(r.pos) > 1.5) scuttle(c, out, r.pos, fast = true)
+            else { out.rest(r, 1.0); c.o.extension = 0.1 }
+            if (elapsed > 8 && threat == null) finished = true
+        }
+    }
+
+    /** Rare: a large crab that has gone hungry grabs a sleeping small fish or a snail at night. */
+    inner class NightGrab : Behavior("grab", "Grabbing prey") {
+        private var prey: Organism? = null
+        private var nextRoll = 0.0
+        override val committed: Boolean get() = elapsed < 4
+        override val targetVerb: String? get() = "grabbing at"
+        override fun score(c: Ctx): Double {
+            val o = c.o
+            if (!c.sim.predationEnabled || !c.p.night || o.lengthCm < GRAB_MIN_CM || o.hunger < GRAB_HUNGER) return 0.0
+            if (c.t < nextRoll) return if (prey?.alive == true) 0.85 else 0.0
+            nextRoll = c.t + 3600.0
+            prey = null
+            if (!c.rng.chance(GRAB_TRY_PER_HOUR)) return 0.0
+            prey = nearestOther(c, 15.0) { Predation.preyWeight(o, it, true) > 0 }
+            return if (prey != null) 0.85 else 0.0
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val p = prey ?: run { finished = true; return }
+            if (!p.alive) { prey = null; finished = true; return }
+            c.o.focusId = p.id
+            scuttle(c, out, p.pos, fast = true)
+            if (c.o.pos.distanceTo(p.pos) < 1.0 + 0.4 * p.lengthCm) {
+                if (c.rng.chance(GRAB_SUCCESS)) c.sim.eaten(c.o, p) else c.sim.agentOf(p)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 1.0, c.o) }
+                prey = null
+                finished = true
+            }
+            if (elapsed > 20) { prey = null; finished = true }
+        }
+    }
+
+    companion object {
+        /** Leg span (cm) above which a crab may take live prey. */
+        const val GRAB_MIN_CM = 5.0
+        const val GRAB_HUNGER = 0.85
+        const val GRAB_TRY_PER_HOUR = 0.15
+        const val GRAB_SUCCESS = 0.3
+    }
+}

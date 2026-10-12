@@ -190,6 +190,12 @@ object Predation {
                 BrainKind.BRITTLE_STAR -> 0.1
                 else -> 0.0
             }
+            BrainKind.SALLY_CRAB -> when {
+                pred.lengthCm < SallyCrabBrain.GRAB_MIN_CM -> 0.0
+                prey.brainKind == BrainKind.ASTREA || prey.brainKind == BrainKind.NASSARIUS -> 0.6
+                prey.isFish && prey.sleeping && prey.lengthCm < 0.8 * pred.lengthCm -> 0.4
+                else -> 0.0
+            }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0

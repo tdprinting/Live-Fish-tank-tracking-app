@@ -228,7 +228,12 @@ class Steering(private val c: Ctx) {
         o.vel = (p - o.pos) / max(dt, 1e-6)
         o.pos = p
         val nn = envNormal(p)
-        val hd = if (v.lengthSq() > 1e-6) v.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
+        var hd = if (v.lengthSq() > 1e-6) v.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
+        if (it.sideways && v.lengthSq() > 1e-6) {
+            // crab gait: body across the travel direction, keep whichever side is closer to the current heading
+            val side = nn.cross(hd).normalized(o.heading)
+            hd = if (side.dot(o.heading) >= 0) side else side * -1.0
+        }
         o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
         o.up = (it.upOverride ?: nn).normalized(Vec3.Y)
     }

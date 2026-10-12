@@ -176,4 +176,56 @@ class AiTest {
         assertTrue("fear ${v.relations[a.id]?.fear}", (v.relations[a.id]?.fear ?: 0.0) > 0.5)
         assertTrue("wary of ${v.wary}", v.wary === a)
     }
+
+    /** Sally Lightfoot: wedged in its crevice by day, out grazing at night, darts home when startled. */
+    @Test
+    fun sallyCrabHidesByDayAndDarts() {
+        val sim = fullTank()
+        val crab = sim.organisms.first { it.brainKind == BrainKind.SALLY_CRAB }
+        val home = (sim.agentOf(crab)!!.brain as SallyCrabBrain).home
+        var near = 0; var n = 0
+        sim.advance(1800.0, behaviorDt = 0.1) { n++; if (crab.pos.distanceTo(home) < 12.0) near++ }
+        assertTrue("crab near crevice by day ${near}/${n}", near > 0.85 * n)
+        val night = fullTank(hour = 23.0)
+        val c2 = night.organisms.first { it.brainKind == BrainKind.SALLY_CRAB }
+        val h2 = (night.agentOf(c2)!!.brain as SallyCrabBrain).home
+        var far = 0.0; val seen = HashSet<String>()
+        night.advance(3600.0, behaviorDt = 0.1) { far = maxOf(far, c2.pos.distanceTo(h2)); seen += c2.behaviorName }
+        assertTrue("crab never left the crevice at night ($far cm, $seen)", far > 8.0)
+        // startle: it should dash back fast, sideways
+        night.agentOf(c2)!!.let { it.brain.onTap(it.ctx, c2.pos, 1.0) }
+        val d0 = c2.pos.distanceTo(h2); var vmax = 0.0
+        night.advance(4.0, behaviorDt = 0.05) { vmax = maxOf(vmax, c2.vel.length()) }
+        assertTrue("dart speed $vmax cm/s from $d0 cm", d0 < 3.0 || vmax > 15.0)
+    }
+
+    /** A large, starving crab occasionally takes a snail or a sleeping small fish at night. */
+    @Test
+    fun hungryCrabRarelyGrabsPrey() {
+        val sim = fullTank(hour = 22.0)
+        sim.predationEnabled = true
+        val crab = sim.organisms.first { it.brainKind == BrainKind.SALLY_CRAB }
+        crab.lengthCm = 6.5
+        val snail = sim.organisms.first { it.brainKind == BrainKind.ASTREA }
+        val cardinal = sim.organisms.first { it.brainKind == BrainKind.CARDINAL }
+        assertTrue("snail is prey", Predation.preyWeight(crab, snail, true) > 0)
+        cardinal.sleeping = false
+        assertTrue("awake fish is not prey", Predation.preyWeight(crab, cardinal, true) == 0.0)
+        crab.lengthCm = 4.0
+        assertTrue("small crab never hunts", Predation.preyWeight(crab, snail, true) == 0.0)
+        crab.lengthCm = 6.5
+        var hours = 0
+        while (hours < 8 && snail.alive) {
+            snail.pos = crab.pos + Vec3(4.0, 0.0, 0.0)
+            sim.advance(3600.0, behaviorDt = 0.2) { crab.hunger = 0.95 }
+            hours++
+        }
+        val grabs = sim.eventLog.filterIsInstance<com.reeflive.core.sim.SimEvent.Eaten>().filter { it.predatorId == crab.id }
+        // fed crabs never hunt
+        val fed = fullTank(hour = 22.0).also { it.predationEnabled = true }
+        fed.advance(3 * 3600.0, behaviorDt = 0.2)
+        assertTrue("fed crab ate ${fed.eventLog.filterIsInstance<com.reeflive.core.sim.SimEvent.Eaten>()}",
+            fed.eventLog.filterIsInstance<com.reeflive.core.sim.SimEvent.Eaten>().none { e -> fed.organisms.any { it.id == e.predatorId && it.brainKind == BrainKind.SALLY_CRAB } })
+        assertTrue("starving crab tried for 8 nights-hours; grabs ${grabs.size} attempts ${hours}", grabs.size <= 1)
+    }
 }

@@ -364,9 +364,11 @@ class Simulation(
             if (!o.alive || !o.species.grazer) continue
             val diurnal = !o.species.activity.equals("NOCTURNAL", true)
             if (diurnal && !day && o.brainKind != BrainKind.ASTREA) continue
+            if (o.brainKind == BrainKind.SALLY_CRAB && day) continue   // wedged in its crevice by day
             val film = when (o.brainKind) {
                 BrainKind.ASTREA, BrainKind.ASTERINA, BrainKind.HERMIT -> 0.7
-                BrainKind.LAWNMOWER_BLENNY -> 0.35
+                BrainKind.SALLY_CRAB -> 0.5
+                BrainKind.LAWNMOWER_BLENNY -> 0.4
                 else -> 0.15
             }
             val avail = max(aHair, film)
@@ -394,7 +396,7 @@ class Simulation(
     /** Hair-algae units removed per minute of continuous grazing (tuned for a healthy-tank equilibrium hair ≈ 0.03–0.05). */
     fun grazeRemovalPerMin(o: Organism): Double = when (o.brainKind) {
         BrainKind.TANG -> 2e-6; BrainKind.LAWNMOWER_BLENNY -> 3e-6; BrainKind.PEEKER_BLENNY -> 0.5e-6
-        BrainKind.ASTREA -> 1e-6; BrainKind.HERMIT -> 0.5e-6; BrainKind.ASTERINA -> 0.2e-6
+        BrainKind.ASTREA -> 1e-6; BrainKind.HERMIT -> 0.5e-6; BrainKind.SALLY_CRAB -> 1.2e-6; BrainKind.ASTERINA -> 0.2e-6
         else -> 0.5e-6
     } * (o.lengthCm / o.species.typicalAdultCm.coerceAtLeast(0.5)).coerceIn(0.3, 2.0)
 
@@ -406,6 +408,7 @@ class Simulation(
             val (lo, hi, dur) = when (o.brainKind) {
                 BrainKind.BANDED_SHRIMP -> Triple(21.0, 56.0, 36.0)
                 BrainKind.CLEANER_SHRIMP -> Triple(21.0, 42.0, 36.0)
+                BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 else -> continue
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
@@ -698,7 +701,7 @@ class Simulation(
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
         const val CORAL_TAN_PER_COLONY = 2.0
         const val ASTERINA_CAP = 4
-        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP)
+        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }
 }

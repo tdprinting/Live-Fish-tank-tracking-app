@@ -136,6 +136,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     BANDED_SHRIMP(listOf("stenopus"), false),
     CLEANER_SHRIMP(listOf("lysmata"), false),
     HERMIT(listOf("clibanarius", "paguristes", "calcinus"), false),
+    SALLY_CRAB(listOf("percnon"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
@@ -162,7 +163,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "brittle_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
         )
 

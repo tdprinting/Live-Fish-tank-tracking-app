@@ -59,6 +59,9 @@ object HealthModel {
         "sg" to ToleranceRange(1.021, 1.0265, 1.018, 1.028, 1.012, 1.032),
     )
     /** Invertebrates are more sensitive than fish (research 05 §2, §4, §8, §12). */
+    /** mg/L iodide+iodate; NSW ≈ 0.06. Below ~0.02 molts start failing (Simulation.crustaceanMolts). */
+    val CRUSTACEAN_IODINE = ToleranceRange(optLo = 0.04, tolLo = 0.02, lethalLo = 0.003)
+
     private val INVERT_TOL = mapOf(
         "temp" to ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0),
         "nh3Free" to ToleranceRange(optHi = 0.01, tolHi = 0.04, lethalHi = 0.35),
@@ -83,6 +86,8 @@ object HealthModel {
     // shrimp ~0.002 SG/h. Temp swings > 1 °C/h noticeable, 2–3 °C/h stress. pH steps ~0.1 stress corals.
     val FISH_STEPS = ShockSteps(temp = 3.0, sg = 0.008, ph = 0.5)
     val INVERT_STEPS = ShockSteps(temp = 2.0, sg = 0.004, ph = 0.3)
+    /** Sally Lightfoot crab: salinity swings hit it hardest (owner note). */
+    val CRAB_STEPS = ShockSteps(temp = 2.0, sg = 0.003, ph = 0.3)
     val SHOCK_RANGE = ToleranceRange(optHi = 0.4, tolHi = 1.0, lethalHi = 1.9)
     /** Acclimation time constants (minutes): temp 12 h, SG 2 days (inverts 3), pH 8 h. */
     const val ACCL_TAU_TEMP = 720.0
@@ -130,7 +135,7 @@ object HealthModel {
     private fun waterValue(key: String, w: WaterState): Double? = when (key) {
         "temp" -> w.tempC; "sg" -> w.sg; "ph" -> w.ph; "nh3Free", "nh3free" -> w.nh3Free
         "nh3", "nh3Total" -> w.nh3Total; "no2" -> w.no2; "no3" -> w.no3; "do" -> w.doMgL
-        "po4" -> w.po4; "alk" -> w.alk; "ca" -> w.ca; "mg" -> w.mg; "copper" -> w.copper
+        "po4" -> w.po4; "alk" -> w.alk; "ca" -> w.ca; "mg" -> w.mg; "copper" -> w.copper; "i", "iodine" -> w.i
         else -> null
     }
 
@@ -147,6 +152,11 @@ object HealthModel {
                 m["do"] = ToleranceRange(optLo = 5.5, tolLo = 4.5, lethalLo = 3.2)
             }
             BrainKind.EEL -> m["nh3Free"] = ToleranceRange(optHi = 0.03, tolHi = 0.09, lethalHi = 0.8)
+            // Crustaceans need iodine to molt; the Sally Lightfoot also tolerates salinity swings poorly (SIMULATION §9.6).
+            BrainKind.SALLY_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> {
+                m["i"] = CRUSTACEAN_IODINE
+                if (s.brainKind == BrainKind.SALLY_CRAB) m["sg"] = ToleranceRange(1.024, 1.026, 1.022, 1.027, 1.019, 1.029)
+            }
             else -> {}
         }
         return m
@@ -170,7 +180,7 @@ object HealthModel {
         }
         for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, tr)
         if (!o.acclTemp.isNaN()) {
-            val st = if (o.isFish) FISH_STEPS else INVERT_STEPS
+            val st = if (o.isFish) FISH_STEPS else if (o.brainKind == BrainKind.SALLY_CRAB) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)
             add("shockSg", abs(w.sg - o.acclSg) / st.sg, SHOCK_RANGE)
             add("shockPh", abs(w.ph - o.acclPh) / st.ph, SHOCK_RANGE)
@@ -280,7 +290,7 @@ object HealthModel {
     /** Human words for a stress key (death cause, fish card "why"). */
     fun label(key: String): String = when (key) {
         "temp" -> "temperature"; "sg" -> "salinity"; "ph" -> "pH"; "nh3Free" -> "ammonia"; "no2" -> "nitrite"
-        "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "flow" -> "strong flow"
+        "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "i" -> "low iodine"; "flow" -> "strong flow"
         "shockTemp" -> "temperature swing"; "shockSg" -> "salinity swing"; "shockPh" -> "pH swing"
         else -> key
     }

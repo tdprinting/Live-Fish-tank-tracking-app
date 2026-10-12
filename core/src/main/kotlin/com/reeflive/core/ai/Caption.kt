@@ -14,7 +14,7 @@ object Caption {
         "defend" to "driving off", "chase" to "chasing off", "rival" to "chasing", "territory" to "chasing",
         "clean" to "cleaning", "climb" to "cleaning", "visit" to "waiting to be cleaned by", "pounce" to "pouncing on",
         "hunt" to "stalking", "perch" to "watching", "perchhole" to "watching", "hang" to "watching",
-        "rivalry" to "chasing", "keepclear" to "keeping clear of",
+        "rivalry" to "chasing", "grab" to "grabbing at", "keepclear" to "keeping clear of",
     )
     private val WATCHERS = setOf("perch", "perchhole", "hang")
 
