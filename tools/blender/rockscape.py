@@ -1,4 +1,4 @@
-"""Rockscape (ASSETS.md §3): metaball blocking -> voxel remesh -> numpy displacement + pits ->
+"""Rockscape (docs/specs/tank_design.md §2, §4; ASSETS.md §3): metaball blocking -> voxel remesh -> numpy displacement + pits ->
 decimate (40k) -> Smart UV -> Cycles bakes (normal, AO, position) -> numpy albedo/roughness ->
 rockscape.glb + textures + anchors.json.
 
@@ -19,111 +19,159 @@ from common import bpy, w2b
 
 S = P.smoothstep
 TANK = (121.9, 61.0, 33.0)
-SAND_Y = 3.0
+SAND_Y = 3.5  # front-glass sand height; back glass 6.0 (docs/specs/tank_design.md §1.6)
 WATER_Y = 56.0
+ROCK_TRIS = 35000  # spec cap 45k; kept lower for the 140k on-screen budget
+
+
+def sand_base(z):
+    """Base sand slope: 3.5 cm at the front glass (z 33) -> 6.0 cm at the back glass (z 0)."""
+    return 3.5 + 2.5 * (33.0 - np.asarray(z, float)) / 33.0
+
+
+def sand_height(x, z, d_rock):
+    """Sand surface (spec §1.6 without the fBm): slope + mounds against rock feet + lanes + goby spoil.
+    d_rock = horizontal distance to the nearest rock footprint edge (cm)."""
+    x, z, d_rock = np.asarray(x, float), np.asarray(z, float), np.asarray(d_rock, float)
+    h = sand_base(z) + 2.5 * (1 - S(0.0, 10.0, np.maximum(d_rock, 0)))
+    for cx, cz, rx, rz in ((36, 24, 9, 7), (58, 26, 8, 6)):
+        e = ((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2
+        h -= 0.8 * (1 - S(0.6, 1.0, e))
+    e = ((x - 64) / 6.0) ** 2 + ((z - 28.5) / 7.5) ** 2  # burrow spoil fan, elongated toward +z
+    h += 1.5 * (1 - S(0.2, 1.0, e))
+    # keep the burrow mouth open: no rock-foot mound inside the entrance under the R5 lip (66, 25)
+    k = 1 - S(2.5, 5.0, np.hypot(x - 66.0, (z - 25.0) * 1.3))
+    h = h * (1 - k) + (sand_base(z) - 0.4) * k
+    return h
+
 
 # ----------------------------------------------------------------------------
-# Blocking: (name, center, radii, negative) per element, grouped by rock (§3.1 table)
+# Blocking (docs/specs/tank_design.md §2): rock id -> (color zone, [(center, radii, negative), ...]).
+# Radii are (x, y, z) world cm.
 # ----------------------------------------------------------------------------
 ROCKS = {
-    # R1 left back-wall stack (x 11-56, top ~52, z 0-15) with the big cavern under its right overhang
-    "R1": [((19, 10, 7), (10, 10, 7), False), ((21, 22, 7), (10, 9, 7), False), ((24, 33, 7), (11, 8, 7), False),
-           ((27, 44, 6.5), (11, 7, 6), False), ((20, 50, 5), (7, 4, 4.5), False),
-           ((40, 38, 7), (13, 7, 7), False), ((48, 46, 6), (8, 6, 6), False), ((36, 47, 5.5), (7, 5, 5), False),
-           ((12, 30, 5), (4, 12, 4.5), False),
-           # cavern carve (opening x 30-55, y 6-30, back to z ~2)
-           ((42, 15, 10), (10.5, 12, 9.5), True), ((35, 22, 9), (5, 7, 8), True)],
-    # R2 left pillar (x 12-26, top 33, z 15-25), narrowing upward, blenny hole on the front-right face
-    "R2": [((19, 7, 20), (7.5, 7, 5.5), False), ((19.5, 16, 20), (6.5, 7, 5.2), False),
-           ((19, 24, 20), (5.5, 6, 4.6), False), ((18.5, 30, 20), (4.2, 3.5, 3.8), False)],
-    # R3 center pillar (x 44-55, top 29, z 15-26), flattened top
-    "R3": [((49, 7, 21), (6.5, 7, 5.5), False), ((49.5, 16, 21), (5.6, 7, 5), False),
-           ((49, 24, 21), (5, 4.5, 4.4), False)],
-    # R4 center arch / back shelf (x 55-71, top 33, z 0-11) with the opening (x 57-68, y 5-24)
-    "R4": [((57, 12, 5), (4, 11, 5), False), ((69, 12, 5), (4, 11, 5), False), ((63, 28, 5), (10, 6, 5.5), False),
-           ((63, 12, 6), (4.6, 9.5, 9), True),
-           # back-glass rubble band behind the Kenya rock (tank_full.jpg: rock reaches the waterline across the back)
-           ((60, 39, 3.2), (8, 6, 3.2), False), ((72, 45, 3.5), (7, 6.5, 3.5), False), ((55, 31, 3.2), (4, 7, 3.2), False),
-           ((66, 50, 3.0), (5, 3.5, 3.0), False)],
-    # R5 Kenya rock (x 65-80, top 38, z 8-23) + flat overhang slab over the eel den at sand level
-    "R5": [((72, 9, 15), (9, 8.5, 8), False), ((73, 21, 15), (7.5, 9, 6.5), False), ((72, 31, 14), (5.5, 6, 5.5), False),
-           ((69, 8.5, 22), (6.5, 2.6, 4.2), False), ((78, 12, 19), (4, 6, 4), False)],
-    # R6 right arch (x 76-104, top 54, z 0-13) with the arch opening (x 85-95, y 24-38) and the shrimp shelf
-    "R6": [((81, 21, 6), (5.5, 21, 6), False), ((99, 21, 6), (6, 21, 6), False), ((90, 46, 6), (15, 7.5, 6), False),
-           ((92, 52, 5), (8, 3.5, 5), False), ((88, 42, 12), (10, 3.2, 5), False), ((90, 10, 6), (8, 10, 6), False),
-           ((90, 31, 7), (5, 7, 9), True)],
-    # R7 GSP mound (x 95-113, top 24, z 15-30)
-    "R7": [((104, 8, 22), (9.5, 9, 7.5), False), ((103, 16, 21), (7, 7.5, 6), False), ((109, 6, 26), (4, 4, 4), False)],
-    # R8 far-right rubble (x 112-119.5, top 21, z 16-30)
-    "R8": [((116, 7, 23), (4.5, 7, 6), False), ((117, 15, 21), (3.5, 5.5, 4), False), ((114, 4, 28), (3, 2.5, 3), False)],
+    # R0 left foot rock (T1), knobby, pressed against the pillar's left foot
+    "R0": ("Z1", [((10, 6, 20), (4, 5, 5), False), ((11.5, 9, 21), (2.5, 2.5, 2.5), False)]),
+    # R2 left pillar (T2): free-standing, tapers to r 4 at y 26, crown knob overhanging left (leans ~4 deg left)
+    "R2": ("Z1", [((18, 5, 20), (6.5, 5, 6.5), False), ((17.7, 12, 20), (5.6, 6, 5.6), False),
+                  ((17.3, 19, 20), (4.9, 6, 4.9), False), ((16.6, 25, 19.8), (4.2, 5, 4.2), False),
+                  ((15, 31, 19), (5, 4, 4), False)]),
+    # R1a / R1b left back stack (T2-T4) leaning on the back glass; R1b breaks the surface at x 28-34
+    "R1": ("Z2", [((22, 15, 8), (11, 13, 8), False), ((19, 29, 7), (7, 6, 6), False),
+                  ((26, 42, 8), (12, 11, 8), False), ((36, 46, 7), (10, 9, 7), False),
+                  ((31, 54.0, 7.5), (4, 2.0, 4), False)]),
+    # R4 shelf across the top-back (T4-T5), open beneath (x 44-64) through to the black back
+    "R4": ("Z3", [((44, 46, 7), (10, 7, 7), False), ((54, 45, 6), (10, 6, 6), False), ((60, 42, 5), (7, 6, 5), False),
+                  ((54, 40, 9), (4.5, 4, 3), False)]),
+    # R3 centre pillar (T4-T5): pale stub, flat-ish top leaning right
+    "R3": ("Z1b", [((49, 5, 22), (5.8, 5, 5.2), False), ((49.2, 12, 22), (4.8, 6, 4.6), False),
+                   ((49.5, 19, 22), (4.6, 5, 4.4), False), ((50, 26, 22), (5, 3.5, 4), False)]),
+    # R5 Kenya mound (T6) with the flat front lip over the goby burrow
+    "R5": ("Z4", [((71, 10, 18), (9, 8, 8), False), ((74, 18, 15), (7, 6, 6), False), ((70, 20, 21), (6, 2.5, 5), False),
+                  ((67.5, 9, 25), (5, 1.3, 2.5), False), ((73, 6, 22), (5, 4, 4), False)]),
+    # R6 arch: back pier, low ledge + tall roof slab (caps the surface at x 94-98), right column
+    "R6": ("Z5", [((78, 20, 4), (4, 18, 4), False), ((84, 41, 6), (8, 3, 6), False), ((96, 47, 6), (7, 8, 6), False),
+                  ((96, 55, 6), (2.5, 2, 3), False), ((95, 20, 6), (6, 17, 6), False)]),
+    # R9 right back stack (T9)
+    "R9": ("Z6", [((105, 30, 6), (6, 14, 6), False), ((104, 46, 5), (5, 5, 5), False)]),
+    # R7 GSP mound (T9): low wide dome, top 25 at (106, 25, 22)
+    "R7": ("Z7", [((107, 8, 24), (9, 8.1, 9), False), ((106, 17, 22), (7, 8, 7), False)]),
+    # R8 far-right corner rock (T10) + the pink coralline knob on R7's back-top
+    "R8": ("Z8", [((115, 6, 25), (7, 5, 7), False), ((109, 27, 14), (4, 3, 4), False)]),
 }
-# tunnels / holes: chains of negative balls (center, radius)
+# carved openings (negative ellipsoids): black background visible through each from the front camera
+CARVES = [
+    ((34, 18, 6), (10, 11, 9)), ((42, 20, 5), (8, 10, 8)), ((30, 12, 10), (6, 7, 6)),   # CAVE_BIG
+    ((54, 20, 7), (9, 14, 9)), ((60, 22, 4), (5, 12, 5)),                                 # under the R4 shelf
+    ((86, 22, 6), (5, 16, 8)), ((86, 12, 10), (4, 6, 6)),                                 # ARCH
+    ((102, 41, 5), (1.2, 5, 7)),                                                          # slit R9 / R6s
+]
+# tunnels / holes: chains of negative balls (centre, radius)
 TUNNELS = {
-    "eel_den": [((69, 5.5, 23), 4.2), ((71, 5.8, 21), 4.3), ((73, 6, 19), 4.5), ((75, 6.5, 17), 4.5), ((77, 7, 15), 4.5),
-                ((78.5, 7.8, 13), 4.3), ((80, 8.5, 11), 4.2), ((83, 9.5, 8), 4.0), ((86, 9.5, 5), 3.8)],
-    "blenny_hole": [((25.0, 18, 24.0), 2.1), ((23.4, 17.5, 22.0), 2.0), ((21.8, 17, 20.0), 1.9)],
-    "tailspot_hole": [((51.5, 14, 26.0), 1.2), ((51, 14, 24.0), 1.1), ((50.5, 14, 22.0), 1.0)],
-    "crevice_tang": [((36, 25, 7), 2.4), ((33, 26, 5), 2.2)],
+    "goby_burrow": [((66, 4, 25), 3.5), ((68, 4.5, 22.5), 3.5), ((70, 5, 20), 3.5), ((72.5, 5.5, 17.5), 3.5),
+                    ((75, 6, 15), 3.5), ((77, 6.5, 12.5), 3.5), ((79, 7, 10), 3.5), ((81, 7.5, 7.5), 3.3),
+                    ((83, 8, 5), 3.2)],
+    "blenny_hole": [((22 - 0.6 * k, 18 - 0.1 * k, 25 - 0.8 * k), 1.3) for k in (0, 1.5, 3, 4.5, 6)],
+    "blenny_hole_2": [((94, 30 - 0.2 * k, 11 - k), 1.2) for k in (0, 1.25, 2.5, 3.75, 5)],
 }
+DEN_PATH = [[66, 4, 25], [70, 5, 20], [75, 6, 15], [79, 7, 10], [83, 8, 5]]
 
 # ----------------------------------------------------------------------------
-# anchors (§3.4). snap: "surface" = move to the nearest rock point (+ normal from the surface);
-# None = free-water / sand / glass point kept as given.
+# anchors (spec §4). snap: "surface" = nearest rock point within 2.5 cm (+ normal); "sand" = y on the sand;
+# None = free-water / glass point kept as given.
 # ----------------------------------------------------------------------------
 ANCHORS = [
-    ("HOST_KENYA", "HOST", (72, 40, 15), dict(radius=10), None),
-    ("HOST_GSP_RIGHT", "HOST", (104, 14, 24), dict(radius=8), "surface"),
-    ("CAVE_EEL", "CAVE_EEL", (69, 5, 23), dict(dir=[0.5, 0.1, -0.85], species="engineer_goby"), None),
-    # engineer goby: it excavates sand out of the den mouth under the R5 overhang
-    ("SAND_GOBY_DIG", "SAND_ZONE", (65, 0.5, 27), dict(radius=5, species="engineer_goby"), None),
-    ("CAVE_SMALL", "CAVE", (63, 12, 8), {}, None),
-    ("CAVE_BIG", "CAVE", (42, 18, 6), {}, None),
-    ("HOLE_BLENNY", "HOLE", (25, 18, 24), dict(dir=[0.6, 0.2, 0.78], depth=6, radius=1.8, species="lawnmower_blenny"), None),
-    ("HOLE_TAILSPOT", "HOLE", (51.5, 14, 26), dict(dir=[0.15, 0.0, 1.0], depth=5, radius=1.1, species="tailspot_blenny"), None),
-    ("PERCH_1", "PERCH", (19, 33, 20), dict(normal=[0, 1, 0]), "surface"),
-    ("PERCH_2", "PERCH", (49, 29, 21), dict(normal=[0, 1, 0]), "surface"),
-    ("PERCH_3", "PERCH", (92, 54, 8), dict(normal=[0.2, 1, 0.3]), "surface"),
-    ("PERCH_4", "PERCH", (70, 38, 20), dict(normal=[0, 0.8, 0.6]), "surface"),
-    ("PERCH_5", "PERCH", (104, 25, 20), dict(normal=[0, 1, 0.2]), "surface"),
-    ("STATION_CLEANER", "STATION", (62, 20, 15), dict(species="wrasse"), None),
-    ("STATION_SKUNK", "STATION", (66, 22, 16), dict(species="skunk_shrimp"), "surface"),
-    ("SHRIMP_LEDGE", "LEDGE", (88, 38, 15), dict(normal=[0, -1, 0.3]), "surface"),
-    ("CAVE_DOTTYBACK", "CAVE", (90, 31, 9), dict(species="dottyback"), None),
-    ("SLEEP_TANG", "SLEEP", (36, 25, 7), dict(dir=[-0.7, 0.2, -0.7]), None),
-    ("SURFACE_FEED", "FEED", (41, 55, 20), {}, None),
-    ("NORI_CLIP", "FEED", (2, 35, 18), {}, None),
-    ("HOB_OUTFLOW", "FLOW", (71, 55, 1), {}, None),
-    ("GRAZE_1", "GRAZE", (12, 20, 30), {}, "surface"), ("GRAZE_2", "GRAZE", (30, 40, 12), {}, "surface"),
-    ("GRAZE_3", "GRAZE", (44, 8, 27), {}, "surface"), ("GRAZE_4", "GRAZE", (52, 30, 9), {}, "surface"),
-    ("GRAZE_5", "GRAZE", (80, 20, 25), {}, "surface"), ("GRAZE_6", "GRAZE", (96, 45, 6), {}, "surface"),
-    ("GRAZE_7", "GRAZE", (110, 12, 28), {}, "surface"), ("GRAZE_8", "GRAZE", (60, 4, 30), {}, "surface"),
-    ("BRITTLE_HIDE", "HIDE", (35, 4, 10), dict(species="brittle_star"), None),
-    ("DUSTER_BASE", "SESSILE", (85, 3, 21), dict(species="feather_duster"), None),
-    ("SAND_FRONT", "ZONE", (60, 3, 29), dict(box=[8, 25, 115, 32], species="nassarius,hermit"), None),
-    ("coral_kenya_main", "CORAL", (72, 38, 15), dict(normal=[0, 1, 0.2]), "surface"),
-    ("coral_gsp_upper_left", "CORAL", (21, 42, 12), dict(normal=[0.3, 0.6, 0.75]), "surface"),
-    ("coral_gsp_lower_right", "CORAL", (105, 12, 22), dict(normal=[0, 0.7, 0.7]), "surface"),
-    ("coral_zoa_front_center", "CORAL", (71, 4, 28), dict(normal=[0, 1, 0]), None),
-    ("coral_clove_kenya_base", "CORAL", (77, 18, 22), dict(normal=[0.6, 0.5, 0.6]), "surface"),
-    ("coral_shroom_front_left", "CORAL", (53, 3.2, 28), dict(normal=[0, 1, 0]), None),
-    ("coral_macro_back_left", "CORAL", (47, 36, 10), dict(normal=[0.2, 0.5, 0.8]), "surface"),
-    ("coral_organpipe_kenya_base", "CORAL", (68, 37, 14), dict(normal=[-0.3, 0.9, 0.3]), "surface"),
+    ("HOST_ARCH_CLOWNS", "HOST", (88, 24, 20), dict(radius=9, species="clown_orange,clown_darwin"), None),
+    ("HOST_GSP_RIGHT", "HOST", (105, 20, 24), dict(radius=6), None),
+    ("BURROW_GOBY", "CAVE_EEL", (66, 4, 25), dict(dir=[0.55, 0.1, -0.83], species="engineer_goby"), "sand"),
+    ("SAND_GOBY_DIG", "SAND_ZONE", (64, 4, 28), dict(radius=6, species="engineer_goby"), "sand"),
+    ("CAVE_BIG", "CAVE", (36, 14, 6), {}, None),
+    ("CAVE_SHELF", "CAVE", (54, 16, 6), {}, None),
+    ("CAVE_DOTTYBACK", "CAVE", (84, 12, 3), dict(species="dottyback"), None),
+    ("HOLE_BLENNY", "HOLE", (22, 18, 25), dict(dir=[0.6, 0.1, 0.8], depth=6, radius=1.3, species="lawnmower_blenny"), None),
+    ("HOLE_BLENNY_2", "HOLE", (94, 30, 11), dict(dir=[0, 0.2, 1], depth=5, radius=1.2, species="tailspot_blenny"), None),
+    ("PERCH_R3_TOP", "PERCH", (50, 29, 22), dict(normal=[0, 1, 0]), "surface"),
+    ("PERCH_R2_CROWN", "PERCH", (15, 35, 19), dict(normal=[0, 1, 0]), "surface"),
+    ("PERCH_R5_LIP", "PERCH", (70, 24, 21), dict(normal=[0, 1, 0.3]), "surface"),
+    ("PERCH_SHELF", "PERCH", (48, 52, 10), dict(normal=[0, 1, 0.2]), "surface"),
+    ("PERCH_R9", "PERCH", (104, 51, 6), dict(normal=[0, 1, 0]), "surface"),
+    ("PERCH_CORALLINE_LOW", "PERCH", (52, 10, 9), dict(normal=[0, 1, 0.6]), "surface"),
+    ("STATION_CLEANER", "STATION", (40, 14, 20), dict(species="wrasse,skunk_shrimp"), None),
+    ("SHRIMP_LEDGE_L", "LEDGE", (40, 36, 13), dict(normal=[0, -1, 0.3]), "surface"),
+    ("SHRIMP_LEDGE_R", "LEDGE", (95, 38, 11), dict(normal=[0, -1, 0.3]), "surface"),
+    ("HOVER_CARDINAL", "HOVER", (26, 20, 15), dict(radius=6, species="cardinal"), None),
+    ("SLEEP_TANG", "SLEEP", (38, 12, 4), dict(dir=[-0.7, 0.2, -0.7]), None),
+    ("SLEEP_WRASSE", "SLEEP", (47, 4, 18), dict(dir=[0, 0, -1]), "sand"),
+    ("SURFACE_FEED", "FEED", (41, 55, 18), {}, None),
+    ("NORI_CLIP", "FEED", (2, 35, 20), {}, None),
+    ("HOB_OUTFLOW", "FLOW", (72, 55, 1), dict(dir=[0, -0.6, 0.8]), None),
+    ("FLOW_PH_LEFT", "FLOW", (12, 44, 14), dict(dir=[1, -0.1, 0.1]), None),
+    ("FLOW_PH_BACK", "FLOW", (85, 47, 4), dict(dir=[-0.3, -0.3, 0.9]), None),
+    ("FLOW_PH_RIGHT", "FLOW", (111, 44, 10), dict(dir=[-1, -0.1, 0.2]), None),
+    ("GRAZE_1", "GRAZE", (18, 30, 25), {}, "surface"), ("GRAZE_2", "GRAZE", (30, 46, 14), {}, "surface"),
+    ("GRAZE_3", "GRAZE", (44, 20, 27), {}, "surface"), ("GRAZE_4", "GRAZE", (50, 52, 10), {}, "surface"),
+    ("GRAZE_5", "GRAZE", (72, 16, 26), {}, "surface"), ("GRAZE_6", "GRAZE", (96, 46, 10), {}, "surface"),
+    ("GRAZE_7", "GRAZE", (104, 38, 8), {}, "surface"), ("GRAZE_8", "GRAZE", (60, 5, 30), {}, "sand"),
+    ("BRITTLE_HIDE", "HIDE", (36, 6, 8), dict(species="brittle_star"), "sand"),
+    # Sally Lightfoot crab: rock crevice home in the slit between R9 and the R6 roof slab; it scuttles sideways
+    # over the rock and grazes hair algae (GRAZE_*)
+    ("CREVICE_SALLY", "CAVE", (101.5, 40, 9), dict(species="sally_lightfoot", dir=[0, 0, 1], grazes="GRAZE_*"),
+     "surface"),
+    ("DUSTER_BASE", "SESSILE", (86, 5, 21), dict(species="feather_duster"), "sand"),
+    ("SAND_FRONT", "ZONE", (60, 4, 29), dict(box=[8, 25, 115, 32], species="nassarius,hermit"), "sand"),
+    ("coral_kenya_main", "CORAL", (73, 24, 18), dict(normal=[0, 1, 0.2]), "surface"),
+    ("coral_gsp_upper_left", "CORAL", (20, 40, 14), dict(normal=[0.3, 0.5, 0.8]), "surface"),
+    ("coral_gsp_lower_right", "CORAL", (107, 16, 24), dict(normal=[0, 0.7, 0.7]), "surface"),
+    ("coral_zoa_front_center", "CORAL", (66, 4, 28), dict(normal=[0, 1, 0]), "sand"),
+    ("coral_paly_left_foot", "CORAL", (21, 4, 26), dict(normal=[0.2, 1, 0.3]), "sand"),
+    ("coral_clove_kenya_front", "CORAL", (75, 13, 25), dict(normal=[0.3, 0.6, 0.75]), "surface"),
+    ("coral_organpipe_kenya_base", "CORAL", (76, 22, 20), dict(normal=[0.2, 0.9, 0.3]), "surface"),
+    ("coral_shroom_center", "CORAL", (57, 4, 27), dict(normal=[0, 1, 0]), "sand"),
+    ("coral_shroom_small", "CORAL", (112, 28, 12), dict(normal=[0.1, 0.9, 0.4]), "surface"),
+    ("coral_macro_back_left", "CORAL", (36, 42, 12), dict(normal=[0.2, 0.5, 0.8]), "surface"),
+    ("coral_macro_back_left_2", "CORAL", (42, 48, 10), dict(normal=[0, 0.7, 0.7]), "surface"),
+    ("coral_macro_lane", "CORAL", (38, 4, 28), dict(normal=[0, 1, 0]), "sand"),
+    ("coral_macro_right_corner", "CORAL", (118, 7, 27), dict(normal=[0.2, 0.8, 0.5]), "surface"),
+    ("coral_algae_clump_left", "CORAL", (6, 4, 24), dict(normal=[0, 1, 0]), "sand"),
+    ("coral_aiptasia_1", "CORAL", (68, 25, 16), dict(normal=[0, 1, 0]), "surface"),
+    ("coral_aiptasia_2", "CORAL", (31, 30, 13), dict(normal=[0, 1, 0]), "surface"),
+    ("coral_aiptasia_3", "CORAL", (92, 36, 9), dict(normal=[0, 1, 0]), "surface"),
 ]
-ALIASES = [("HOLE_LAWNMOWER", "HOLE_BLENNY", None), ("STATION_SHRIMP", "STATION_SKUNK", None),
-           ("DUSTER_TUBE", "DUSTER_BASE", "TUBE"), ("BRITTLE_HOME", "BRITTLE_HIDE", "CAVE"),
-           ("BURROW_GOBY", "CAVE_EEL", "BURROW")]
-DEN_PATH = [[69, 5, 23], [73, 6, 19], [77, 7, 15], [80, 8.5, 11], [83, 9.5, 8], [86, 9.5, 5]]
+# compatibility names for the simulation track (anchors written before the spec v2 layout)
+ALIASES = [("CAVE_EEL", "BURROW_GOBY", None), ("HOST_KENYA", "HOST_ARCH_CLOWNS", None),
+           ("CAVE_SMALL", "CAVE_SHELF", None), ("HOLE_LAWNMOWER", "HOLE_BLENNY", None),
+           ("HOLE_TAILSPOT", "HOLE_BLENNY_2", None), ("PERCH_1", "PERCH_R2_CROWN", None),
+           ("PERCH_2", "PERCH_R3_TOP", None), ("PERCH_3", "PERCH_R9", None), ("PERCH_4", "PERCH_R5_LIP", None),
+           ("PERCH_5", "PERCH_SHELF", None), ("SHRIMP_LEDGE", "SHRIMP_LEDGE_L", None),
+           ("STATION_SKUNK", "STATION_CLEANER", None), ("STATION_SHRIMP", "STATION_CLEANER", None),
+           ("BRITTLE_HOME", "BRITTLE_HIDE", "CAVE"), ("DUSTER_TUBE", "DUSTER_BASE", "TUBE")]
 
-
-def rock_region_masks(p):
-    """Per-point weights for regional coloring (p: (N,3) world)."""
-    x, y, z = p[:, 0], p[:, 1], p[:, 2]
-    r1_right = S(36, 42, x) * (1 - S(55, 58, x)) * S(26, 32, y) * (z < 18)
-    r6 = S(76, 80, x) * (1 - S(104, 108, x)) * (z < 16)
-    r8 = S(110, 113, x)
-    r3_top = S(42, 44, x) * (1 - S(55, 57, x)) * S(16, 22, y) * (z > 13)
-    r5_front = S(63, 65, x) * (1 - S(80, 82, x)) * S(16, 20, z) * S(4, 8, y)
-    return r1_right, r6, r8, r3_top, r5_front
+# color zones (spec §2.1): fractions (hair algae, brown film, bare, coralline) and the coralline pair
+ZONES = {
+    "Z1": (0.65, 0.15, 0.15, 0.05), "Z1b": (0.45, 0.15, 0.35, 0.05), "Z2": (0.55, 0.10, 0.10, 0.25),
+    "Z3": (0.35, 0.15, 0.40, 0.10), "Z4": (0.50, 0.20, 0.20, 0.10), "Z5": (0.50, 0.15, 0.20, 0.15),
+    "Z6": (0.60, 0.15, 0.20, 0.05), "Z7": (0.30, 0.20, 0.10, 0.40), "Z8": (0.10, 0.20, 0.00, 0.70),
+}
 
 
 # ----------------------------------------------------------------------------
@@ -147,7 +195,7 @@ def metaball_mesh(resolution=0.7):
             e.rotation = (mathutils.Euler((tilt, 0, yaw), 'XYZ')).to_quaternion()
 
     rs = np.random.default_rng(1234)
-    for rock, els in ROCKS.items():
+    for rock, (zone, els) in ROCKS.items():
         for c, r, neg in els:
             add(c, r, neg)
             if neg:
@@ -170,6 +218,8 @@ def metaball_mesh(resolution=0.7):
                 cc = np.array(c) + d * np.array(r) * 0.95
                 m = min(r) * rs.uniform(0.18, 0.3)
                 add(tuple(cc), (m * 1.6, m * 0.5, m), True, 2.0, yaw=rs.uniform(0, math.pi))
+    for c, r in CARVES:
+        add(c, r, True, 2.0)
     for name, chain in TUNNELS.items():
         for c, r in chain:
             add(c, (r, r, r), True, 2.0)
@@ -191,6 +241,8 @@ def clip_below(obj, y_world=0.4):
     geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
     # world y = blender z
     res = bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, y_world), plane_no=(0, 0, 1), clear_inner=True)
+    bmesh.ops.holes_fill(bm, edges=bm.edges[:], sides=0)  # close the cut: every rock is a closed solid
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
     bm.to_mesh(obj.data)
     bm.free()
     obj.data.update()
@@ -217,20 +269,20 @@ def displace(obj, seed=5):
     pw = np.stack([Vb[:, 0], Vb[:, 2], -Vb[:, 1]], -1)  # world
     t = time.time()
     # lumps: Voronoi F1 (6 cm cells) -> bumps 1.5 cm
-    f1, f2 = N.worley3(pw, 6.0, seed)
-    lumps = (1 - np.clip(f1 / 6.0, 0, 1)) - 0.45
+    f1, f2 = N.worley3(pw, 5.0, seed)
+    lumps = (1 - np.clip(f1 / 5.0, 0, 1)) - 0.45
     # cauliflower knobs at 2.5 cm on all rock (stronger on R2/R3 pillars)
     k1, _ = N.worley3(pw, 2.6, seed + 7)
     knobs = (1 - np.clip(k1 / 2.6, 0, 1)) ** 1.5 - 0.3
-    pil = (S(10, 13, pw[:, 0]) * (1 - S(26, 29, pw[:, 0])) + S(42, 44, pw[:, 0]) * (1 - S(55, 57, pw[:, 0]))) \
-        * S(12, 15, pw[:, 2])
+    pil = (S(9, 12, pw[:, 0]) * (1 - S(24, 27, pw[:, 0])) + S(42, 44, pw[:, 0]) * (1 - S(56, 58, pw[:, 0]))) \
+        * S(13, 16, pw[:, 2])
     # pits: fBm 1.5 cm
     fb = N.fbm3(pw, 1.5, 4, seed + 3) - 0.5
     # crackle / pores (F2-F1 at 2 cm)
     c1, c2 = N.worley3(pw, 2.0, seed + 11)
     crack = 1 - S(0.0, 0.25, (c2 - c1) / 2.0)
     strata = (N.fbm3(pw * np.array([1.0, 4.0, 1.0]), 6.0, 3, seed + 13) - 0.5)
-    d = 1.9 * lumps + (0.55 + 0.45 * pil) * 1.0 * knobs + 0.5 * fb * 2 - 0.35 * crack + 1.2 * strata
+    d = 1.2 * 2 * lumps + (0.4 + 0.6 * pil) * 0.9 * knobs + 0.4 * fb * 2 - 0.3 * crack + 0.8 * strata
     # flatten displacement where the rock touches the back glass (keeps the back wall flush)
     d *= S(0.5, 2.0, pw[:, 2])
     Vb = Vb + Nb * d[:, None]
@@ -239,7 +291,7 @@ def displace(obj, seed=5):
     obj.data.update()
 
 
-def pits(obj, count=150, seed=9):
+def pits(obj, count=180, seed=9):
     """Pores: spherical dents pushed in along -normal (the boolean-hole look without booleans)."""
     Vb = C.get_verts(obj)
     Nb = vertex_normals(obj)
@@ -247,7 +299,7 @@ def pits(obj, count=150, seed=9):
     nw = np.stack([Nb[:, 0], Nb[:, 2], -Nb[:, 1]], -1)
     rs = np.random.default_rng(seed)
     w = 0.3 + np.clip(nw[:, 1], 0, 1) + np.clip(nw[:, 2], 0, 1) * 0.8
-    w *= pw[:, 1] > 4.0
+    w *= pw[:, 1] > 6.0
     w = w / w.sum()
     idx = rs.choice(len(Vb), count, p=w)
     from mathutils.kdtree import KDTree
@@ -256,7 +308,7 @@ def pits(obj, count=150, seed=9):
         kd.insert(v, i)
     kd.balance()
     for i in idx:
-        r = rs.uniform(0.6, 1.5)
+        r = rs.uniform(0.5, 1.4)
         depth = r * rs.uniform(0.8, 1.6)
         for (co, j, dist) in kd.find_range(Vb[i], r):
             prof = math.sqrt(max(r * r - dist * dist, 0)) / r
@@ -265,13 +317,20 @@ def pits(obj, count=150, seed=9):
     obj.data.update()
 
 
-def build_high(resolution=0.7, voxel=0.55):
+def build_high(resolution=0.7, voxel=0.6):
     t = time.time()
     o = metaball_mesh(resolution)
     voxel_remesh(o, voxel)
     displace(o)
+    # only the two 1 cm caps break the surface: compress anything above y 56 into 56..57
+    Vb = C.get_verts(o)
+    y = Vb[:, 2]
+    hi = y > 56.0
+    Vb[hi, 2] = 56.0 + 1.0 * np.tanh(y[hi] - 56.0)
+    o.data.vertices.foreach_set("co", Vb.ravel())
+    o.data.update()
     pits(o)
-    clip_below(o, 0.4)
+    clip_below(o, 1.5)  # rock feet sink 1.5+ cm into the sand (sand 3.5-6 cm); nothing below y 1.5
     print(f"[rock] high: {len(o.data.polygons)} faces in {time.time() - t:.1f}s")
     return o
 
@@ -286,6 +345,38 @@ def make_low(high, target=40000):
     md.use_collapse_triangulate = True
     C.apply_modifiers(low)
     C.triangulate(low)
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.01)  # decimation leaves near-coincident vertices
+    bmesh.ops.dissolve_degenerate(bm, dist=0.002, edges=bm.edges)
+    bmesh.ops.holes_fill(bm, edges=bm.edges[:], sides=0)
+    bm.faces.index_update()
+    # drop isolated slivers (faces whose every edge is a boundary edge) left at the y 1.5 cut
+    lone = [f for f in bm.faces if all(len(e.link_faces) == 1 for e in f.edges)]
+    bmesh.ops.delete(bm, geom=lone, context='FACES')
+    # and tiny disconnected shells (e.g. 2-face pillows at the cut)
+    seen, small = set(), []
+    for f0 in bm.faces:
+        if f0.index in seen:
+            continue
+        comp, stack = [], [f0]
+        seen.add(f0.index)
+        while stack:
+            f = stack.pop()
+            comp.append(f)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g.index not in seen:
+                        seen.add(g.index)
+                        stack.append(g)
+        if len(comp) < 20:
+            small += comp
+    bmesh.ops.delete(bm, geom=small, context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    bm.to_mesh(low.data)
+    bm.free()
     me = low.data
     me.polygons.foreach_set("use_smooth", np.ones(len(me.polygons), bool))
     me.update()
@@ -403,44 +494,86 @@ def paint_albedo(maps, size):
     pv = pos[valid]
     nv = nrm[valid]
     aov = ao_up[valid]
-    hx = lambda h: C.hex2rgb(h)[None, :]
-    base_noise = N.fbm3(pv, 8.0, 4, 101)
+    hx = lambda h: C.hex2rgb(h)[None, :]  # noqa: E731
+    x, y, z = pv[:, 0], pv[:, 1], pv[:, 2]
     fine = N.fbm3(pv, 0.8, 3, 102)
-    tan = hx("#D8CBB0") * (0.88 + 0.24 * base_noise[:, None])
-    crev = hx("#8A7C64")
-    col = tan * (1 - (1 - aov[:, None]) * 0.0)
-    cmix = np.clip((1 - aov) * 1.2, 0, 1)[:, None]
-    col = col * (1 - cmix) + crev * cmix
-    up = np.clip(nv[:, 1], 0, 1)
-    # green-brown film on upward/front faces (this tank's rock reads green-brown)
-    film_n = N.fbm3(pv, 4.0, 4, 103)
-    film = np.clip(S(0.35, 0.6, film_n) * (0.35 + 0.65 * S(-0.2, 0.6, nv[:, 1])), 0, 1) * 0.6
-    col = col * (1 - film[:, None]) + (hx("#6E7442") * (0.85 + 0.3 * fine[:, None])) * film[:, None]
-    # darker olive in lower crevices
-    col = col * (1 - 0.35 * (1 - aov[:, None]) * film[:, None])
-    r1_right, r6, r8, r3_top, r5_front = rock_region_masks(pv)
-    # fresh pale rock: R3 upper half, R5 front
-    fresh = np.clip(np.maximum(r3_top, r5_front) * S(0.3, 0.7, N.fbm3(pv, 3.0, 3, 104)), 0, 1)[:, None] * 0.7
-    col = col * (1 - fresh) + hx("#E8E2D4") * fresh
-    # coralline patches (pink / purple), mostly on R1 right half, R6, R8
-    cor_n = N.fbm3(pv, 3.0, 4, 105)
-    region = np.clip(0.25 + 0.75 * np.maximum.reduce([r1_right, r6 * 0.8, r8]), 0, 1)
-    coral_m = S(0.68, 0.74, cor_n * (0.8 + 0.35 * region)) * (0.5 + 0.5 * S(-0.3, 0.3, nv[:, 2]))
-    which = N.value3(pv, 6.0, 106) > 0.35
-    ccol = np.where(which[:, None], hx("#D46A8A"), hx("#7F5CB5"))
-    ccol = np.where((r8 > 0.5)[:, None], np.where(which[:, None], hx("#B5294F"), hx("#7F5CB5")), ccol)
-    col = col * (1 - coral_m[:, None] * 0.9) + ccol * coral_m[:, None] * 0.9
-    # hair algae mask -> alpha (shader scales by uAlgaeBloom); tufts mainly on up-facing upper rock
-    hair = S(0.55, 0.7, N.fbm3(pv, 5.0, 4, 107)) * S(0.0, 0.7, nv[:, 1]) * S(8, 20, pv[:, 1])
-    hair = np.maximum(hair, 0.6 * S(0.6, 0.75, N.fbm3(pv, 2.5, 3, 108)) * S(-0.2, 0.4, nv[:, 2]))
-    # baked-in present-day algae film (the photo shows quite a bit of hair algae on the upper rock)
-    col = col * (1 - 0.35 * hair[:, None]) + hx("#3B5B2E") * 0.35 * hair[:, None]
+    # zone of each texel = the rock element it is deepest inside (normalised ellipsoid distance)
+    names, cents, radii = [], [], []
+    for rock, (zone, els) in ROCKS.items():
+        for c, r, neg in els:
+            if not neg:
+                names.append(zone)
+                cents.append(c)
+                radii.append(r)
+    cents, radii = np.array(cents, float), np.array(radii, float)
+    best = np.full(len(pv), 1e9)
+    zid = np.zeros(len(pv), int)
+    for k in range(len(cents)):
+        dk = np.linalg.norm((pv - cents[k]) / radii[k], axis=1)
+        m = dk < best
+        best[m] = dk[m]
+        zid[m] = k
+    zone = np.array(names)[zid]
+    frac = np.array([ZONES[zz] for zz in zone])  # (n, 4)
+    # Z2: coralline concentrated at x 28-44, y 34-50 (the red/pink haze), less elsewhere on the stack
+    hot = S(26, 30, x) * (1 - S(43, 46, x)) * S(32, 36, y) * (1 - S(49, 52, y)) * (zone == "Z2")
+    frac[:, 3] = np.where(zone == "Z2", 0.12 + 0.48 * hot, frac[:, 3])
+    # Z3: bare pale crest x 36-46 on the shelf top, pink boulder x 50-58 / y 36-44
+    crest = S(35, 37, x) * (1 - S(45, 47, x)) * S(46, 50, y)
+    frac[:, 2] = np.where(zone == "Z3", 0.2 + 0.7 * crest, frac[:, 2])
+    pinkb = S(49, 51, x) * (1 - S(57, 59, x)) * S(35, 37, y) * (1 - S(43, 45, y))
+    frac[:, 3] = np.where(zone == "Z3", 0.04 + 0.8 * pinkb, frac[:, 3])
+    # R6c left face coralline (x 89-91, y 18-30); R6s pale crest
+    r6c = S(88, 89.5, x) * (1 - S(91, 92.5, x)) * S(17, 19, y) * (1 - S(29, 31, y)) * (zone == "Z5")
+    frac[:, 3] = np.maximum(frac[:, 3], 0.9 * r6c)
+    r6crest = S(50, 53, y) * (zone == "Z5") * S(89, 91, x)
+    frac[:, 2] = np.maximum(frac[:, 2], 0.7 * r6crest)
+    # Z7 is mostly under the GSP mat: only the exposed rim reads; Z1b upper half pale
+    frac /= frac.sum(1, keepdims=True)
+    # one blotchy field, rank-transformed to uniform -> exact zone coverage with patchy shapes
+    f = N.fbm3(pv, 3.5, 4, 103) + 0.25 * N.fbm3(pv, 1.2, 2, 113)
+    uq = np.empty(len(f))
+    uq[np.argsort(f)] = np.linspace(0, 1, len(f))
+    cum = np.cumsum(frac, 1)
+    soft = 0.1
+    w_alg = 1 - S(cum[:, 0] - soft, cum[:, 0] + soft, uq)
+    w_brn = S(cum[:, 0] - soft, cum[:, 0] + soft, uq) * (1 - S(cum[:, 1] - soft, cum[:, 1] + soft, uq))
+    w_bare = S(cum[:, 1] - soft, cum[:, 1] + soft, uq) * (1 - S(cum[:, 2] - soft, cum[:, 2] + soft, uq))
+    w_cor = S(cum[:, 2] - soft, cum[:, 2] + soft, uq)
+    # bare rock faces upward (crests); algae hangs everywhere; coralline prefers front / shaded faces
+    shade = np.clip((1 - aov) * 1.4, 0, 1)
+    alg = hx("#5C6B2E") * (1 - shade[:, None]) + hx("#3E4A22") * shade[:, None]
+    alg = alg * (0.85 + 0.3 * fine[:, None])
+    brn = hx("#6E5B3A") * (0.9 + 0.2 * fine[:, None])
+    which = N.value3(pv, 3.0, 106) > 0.8  # mostly tan, a little bleached white
+    bare = np.where(which[:, None], hx("#ECE6D6"), hx("#D9CBB0")) * (0.92 + 0.16 * fine[:, None])
+    bare = bare * 0.8 + hx("#8C8460") * 0.2  # film-dulled
+    pk = N.value3(pv, 4.0, 107) > 0.4
+    cor = np.where(pk[:, None], hx("#C96F8F"), hx("#7A4F9A"))
+    cor = np.where((zone == "Z8")[:, None], np.where(pk[:, None], hx("#B5546F"), hx("#5E2E45")), cor)
+    cor = np.where((r6c > 0.5)[:, None], hx("#C27090"), cor)
+    col = alg * w_alg[:, None] + brn * w_brn[:, None] + bare * w_bare[:, None] + cor * w_cor[:, None]
+    # matted hair algae softens everything: a thin olive film over all but the coralline
+    film = (0.22 + 0.15 * N.fbm3(pv, 1.5, 2, 114)) * (1 - 0.7 * w_cor)
+    col = col * (1 - film[:, None]) + hx("#4E5A2A") * film[:, None]
+    # Z8 base maroon under everything
+    col = np.where((zone == "Z8")[:, None] & (w_bare[:, None] > 0.5), hx("#5E2E45"), col)
+    # cave interiors (z < 8, occluded): dark brown film with shaded purple coralline
+    cave = (1 - S(5, 9, z)) * S(0.25, 0.6, 1 - aov)
+    cv_col = np.where((uq > 0.75)[:, None], hx("#5A3F6B"), np.where((uq < 0.15)[:, None], hx("#3E4A22"), hx("#3A2F22")))
+    col = col * (1 - cave[:, None]) + cv_col * cave[:, None]
+    # AO-driven crevice darkening toward #2B2A1F
+    cr = np.clip((1 - aov) * 1.1 - 0.15, 0, 1)[:, None] * 0.8
+    col = col * (1 - cr) + hx("#2B2A1F") * cr
+    coral_m = w_cor
+    # hair algae mask -> alpha (runtime scales by uAlgaeBloom): algae patches, stronger on up / front faces
+    hair = w_alg * (0.4 + 0.6 * S(-0.3, 0.6, np.maximum(nv[:, 1], nv[:, 2])))
     col *= (0.78 + 0.22 * aov)[:, None]  # runtime multiplies the AO map again: keep the baked share small
     col *= (0.93 + 0.14 * fine)[:, None]
     rgb[valid] = np.clip(col, 0, 1)
     alpha[valid] = np.clip(hair, 0, 1)
     rough = np.full(n, 0.85, np.float32)
-    rough[valid] = 0.85 + 0.1 * (N.fbm3(pv, 2.0, 2, 109) - 0.5) * 2 - 0.1 * coral_m
+    rough[valid] = 0.85 + 0.06 * (N.fbm3(pv, 2.0, 2, 109) - 0.5) * 2 - 0.15 * coral_m
     return rgb.reshape(size, size, 3), alpha.reshape(size, size), rough.reshape(size, size), valid.reshape(size, size)
 
 
@@ -473,8 +606,15 @@ def snap_anchors(low):
     for name, typ, pos, extra, snap in ANCHORS:
         a = {"name": name, "type": typ}
         p = list(pos)
+        if snap == "sand":
+            loc, nrm, idx, dist = bvh.find_nearest(w2b((pos[0], sand_base(pos[2]), pos[2])))
+            dd = dist if loc is not None else 99.0
+            p[1] = round(float(sand_height(pos[0], pos[2], dd)), 2)
+            report.append((name, "sand"))
         if snap == "surface":
             loc, nrm, idx, dist = bvh.find_nearest(w2b(pos))
+            if loc is not None and dist > 2.5:
+                print(f"[rock] WARNING anchor {name} is {dist:.1f} cm from rock")
             if loc is not None:
                 pw = C.b2w(loc)
                 nw = C.b2w(nrm)
@@ -487,7 +627,7 @@ def snap_anchors(low):
         for k, v in extra.items():
             a[k] = v
         out.append(a)
-    out.insert(3, {"name": "den_path", "type": "PATH", "points": DEN_PATH})
+    out.insert(4, {"name": "den_path", "type": "PATH", "points": DEN_PATH})
     # aliases used by the simulation track (core DefaultScape) so it never falls back to its analytic defaults
     by = {a["name"]: a for a in out}
     for alias, src, typ in ALIASES:
@@ -513,7 +653,7 @@ def build(bake=True, albedo_size=2048, verbose=True):
     C.reset_scene()
     t0 = time.time()
     high = build_high()
-    low = make_low(high, 40000)
+    low = make_low(high, ROCK_TRIS)
     smart_uv(low)
     tris = sum(len(p.vertices) - 2 for p in low.data.polygons)
     print(f"[rock] low: {tris} tris")
@@ -544,6 +684,9 @@ def build(bake=True, albedo_size=2048, verbose=True):
     ca = low.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
     ca.data.foreach_set("color", cols.ravel())
     C.set_extras(low, part="rock", anchor="rockscape")
+    import tank as TK
+    yv = C.get_verts(low)[:, 2]
+    print(f"[rock] tris {tris}, non-manifold edges {TK.non_manifold(low)}, y range {yv.min():.2f}..{yv.max():.2f}")
     anchors, rep = snap_anchors(low)
     write_anchors(anchors)
     if verbose:

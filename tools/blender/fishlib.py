@@ -294,8 +294,10 @@ def paired_fin(prof, kind, u, side, length, width, zf=-0.15, out_deg=35, down_de
     return V, F, UV, COL
 
 
-def ribbon_fin(prof, u_dorsal0, u_anal0, h_dorsal, h_anal, n=90, ns=3, slot=None):
-    """Eel: one continuous strip from the dorsal start, around the tail tip, forward to the anal start."""
+def ribbon_fin(prof, u_dorsal0, u_anal0, h_dorsal, h_anal, n=90, ns=3, slot=None, taper=0.0, tip_len=0.9):
+    """Eel-like: one continuous strip from the dorsal start, around the tail tip, forward to the anal start.
+    taper > 0 lowers the fin toward the tail and tip_len (x h_dorsal) sets the point at the tail tip, so the
+    outline converges to a pointed tail."""
     # path parameter: top contour u_dorsal0 -> 1, then bottom 1 -> u_anal0
     nt = int(n * (1 - u_dorsal0) / ((1 - u_dorsal0) + (1 - u_anal0)))
     nb = n - nt
@@ -308,7 +310,9 @@ def ribbon_fin(prof, u_dorsal0, u_anal0, h_dorsal, h_anal, n=90, ns=3, slot=None
     # heights ramp in at the start
     ht = h_dorsal * P.smoothstep(u_dorsal0, u_dorsal0 + 0.08, ut)
     hb = h_anal * P.smoothstep(u_anal0, u_anal0 + 0.08, ub)
-    hs = np.concatenate([ht, [h_dorsal * 0.9], hb])
+    ht = ht * (1 - taper * P.smoothstep(0.7, 0.995, ut))
+    hb = hb * (1 - taper * P.smoothstep(0.7, 0.995, ub))
+    hs = np.concatenate([ht, [h_dorsal * tip_len], hb])
     # outward normal in the x-z plane
     tang = np.gradient(base, axis=0)
     nrm = np.stack([tang[:, 2], np.zeros(len(base)), -tang[:, 0]], -1)

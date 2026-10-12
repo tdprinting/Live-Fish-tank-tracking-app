@@ -1,14 +1,11 @@
-"""Equipment props (ASSETS.md §5): equipment.glb, world coordinates (cm).
+"""Equipment props (docs/specs/tank_design.md §3.2): equipment.glb, world coordinates (cm), every mesh closed.
 
-Nodes (each a direct child of Root, extras.part = "equipment" unless noted):
-  PowerheadA, PowerheadB        (extras.dir = jet direction, extras.jet = nozzle position)
-  FrontPump, FrontPumpBracket
-  Heater, HeaterLED             (HeaterLED part "light": fixed emissive red)
-  Flipper                       (label texture)
-  HoseArc, FeedRing             (clear material)
-  HobBody                       (extras.outflow = HOB_OUTFLOW point)
-  AiPrimeL, AiPrimeR            (puck + gooseneck) and AiPrimeL_Lens/AiPrimeR_Lens (part "emitter": the runtime
-                                 sets their emissive to the current light color)
+Nodes (direct children of Root, extras.part = "equipment" unless noted):
+  PowerheadLeft, PowerheadBack, PowerheadRight  (extras.dir = jet direction, extras.jet = nozzle point)
+  Heater, HeaterLED ("light"), IntakeTube, Flipper (inside + outside halves, label texture),
+  FrontMagnet, FrontMagnetBracket, HoseArc, CableLeft, FeedRing, HobFilter (extras.outflow), Skimmer,
+  AtoBox, AtoLED ("light"), Jar, AiPrimeL/R (puck, heat-sink, gooseneck, clamp, power cable, lens plate) and
+  AiPrimeL_Lens/AiPrimeR_Lens (part "emitter": 4 x 4 LED dots whose emissive the runtime sets to the light color).
 """
 import math
 import os
@@ -90,202 +87,299 @@ FONT = {  # 5x7 bitmap glyphs for the Flipper label
     "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
     "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
     "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
 }
 
 
 def flipper_label(path):
-    """64x128 label: black body, white 'FLIPPER' running bottom-to-top (as printed on the cleaner)."""
-    w, h = 64, 128
-    img = np.full((h, w, 3), 0.06)
-    text = "FLIPPER"
-    s = 2  # pixel scale
-    gw = 6 * s
-    y0 = (h - len(text) * gw) // 2
-    for k, ch in enumerate(text):
-        g = FONT[ch]
-        for r in range(7):
-            for c in range(5):
-                if g[r][c] == "1":
-                    # rotate 90 deg: text reads upward
-                    px = 24 + r * s
-                    py = h - (y0 + k * gw + c * s) - s
-                    img[py:py + s, px:px + s] = 0.95
-    # thin frame + rounded logo dot
-    img[6:9, 8:56] = 0.6
-    img = np.clip(img, 0, 1)
+    """48x160 label for the 6 x 20 cm face: black, white "FLIPPER" and "FLOAT" rotated 90 deg, reading
+    top-to-bottom."""
+    img = np.full((48, 160, 3), 0.06)
+
+    def text(t, x0, y0, sc):
+        for k, ch in enumerate(t):
+            for r in range(7):
+                for c in range(5):
+                    if FONT[ch][r][c] == "1":
+                        x = x0 + k * 6 * sc + c * sc
+                        y = y0 + r * sc
+                        img[y:y + sc, x:x + sc] = 0.95
+    text("FLIPPER", 14, 4, 3)
+    text("FLOAT", 46, 31, 2)
+    img = np.rot90(img, k=-1)  # clockwise: reads top-to-bottom on the upright cleaner
+    C.write_png(path, (np.clip(img, 0, 1) * 255).astype(np.uint8))
+    return path
+
+
+def slot_tex(path):
+    """Filter-cartridge face: dark frame with light slotted media."""
+    img = np.full((128, 64, 3), 0.16)
+    for r in range(6):
+        for c in range(2):
+            img[10 + r * 19:10 + r * 19 + 13, 8 + c * 26:8 + c * 26 + 22] = 0.82
     C.write_png(path, (img * 255).astype(np.uint8))
     return path
 
 
-# ----------------------------------------------------------------------------
-def powerhead(name, root, mount, normal, jet_dir, mats, length=5.0, r=3.0):
-    """Magnet block on the glass (normal = into the water), pump body pointing along jet_dir."""
-    n = unit(normal)
-    d = unit(jet_dir)
-    g = T.WGeo()
-    mount = np.asarray(mount, float)
-    up = np.array([0, 1.0, 0]) if abs(n[1]) < 0.9 else np.array([1.0, 0, 0])
-    V, F = oriented_box(mount + n * 1.0, (4, 4, 2), np.cross(up, n), up)
-    g.add(V, F, mat=0)
-    # stalk from the block to the body
-    a = mount + n * 2.0
-    b = a + n * 1.5 + d * 0.5
-    V, F, uv = cylinder(a, b, 1.0, 8)
-    g.add(V, F, uv, mat=0)
-    # body: cylinder along d, rear end near the stalk
-    c0 = b - d * length * 0.45
-    c1 = b + d * length * 0.55
-    V, F, uv = cylinder(c0, c1, r, 20)
-    g.add(V, F, uv, mat=0)
-    # front grille (slightly proud, dark grey) and the intake ring
-    V, F, uv = disc(c1 + d * 0.05, d, r * 0.82, 20)
-    g.add(V, F, uv, mat=1)
-    V, F, uv = cylinder(c1 - d * 0.6, c1 + d * 0.3, r * 1.04, 20, caps=False)
-    g.add(V, F, uv, mat=0)
-    o = g.obj(name, root, "equipment", mats, smooth=False,
-              extras={"dir": [round(float(x), 3) for x in d], "jet": [round(float(x), 2) for x in c1]})
-    return o
+def tube_path(g, pts, r, sides=8, mat=0, n=None):
+    """Closed (capped) tube through the given points (Catmull-Rom resampled)."""
+    P_ = np.asarray(pts, float)
+    if n:
+        Q = [P_[0] - (P_[1] - P_[0])] + list(P_) + [P_[-1] + (P_[-1] - P_[-2])]
+        out = []
+        for i in range(1, len(Q) - 2):
+            p0, p1, p2, p3 = (np.asarray(q) for q in Q[i - 1:i + 3])
+            for t in np.linspace(0, 1, n, endpoint=False):
+                out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                                  + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+        out.append(P_[-1])
+        P_ = np.array(out)
+    V, F, t, a = G.tube(P_, r, sides, cap_start=True, cap_end=True, up=(0, 1, 0))
+    g.add(V, F, np.c_[a, t], mat=mat)
+
+
+def ribbed(g, p0, p1, r, rings=12, depth=0.15, sides=12, mat=0):
+    """Ribbed cylinder body (12 rings 1.5 mm deep), capped."""
+    p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
+    n = rings * 2 + 1
+    pts = [p0 + (p1 - p0) * k / (n - 1) for k in range(n)]
+    rad = [r - depth * (k % 2) for k in range(n)]
+    V, F, t, a = G.tube(np.array(pts), rad, sides, cap_start=True, cap_end=True, up=(0, 1, 0))
+    g.add(V, F, np.c_[a, t], mat=mat)
+
+
+def box_add(g, lo, hi, mat=0):
+    V, F = T.box(lo, hi)
+    g.add(V, F, T.box_uv(V, lo, hi), mat=mat)
+
+
+def puck(g, pc, size=12.2, h=3.6, n=24, mat=0):
+    """Rounded-square prism (superellipse) centred at pc, closed."""
+    ring = []
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        ca, sa = math.cos(a), math.sin(a)
+        r = size / 2 / (abs(ca) ** 4 + abs(sa) ** 4) ** 0.25
+        ring.append((pc[0] + r * ca, pc[2] + r * sa))
+    ring = np.array(ring)
+    V = np.concatenate([np.c_[ring[:, 0], np.full(n, pc[1] - h / 2), ring[:, 1]],
+                        np.c_[ring[:, 0], np.full(n, pc[1] + h / 2), ring[:, 1]],
+                        [[pc[0], pc[1] + h / 2, pc[2]], [pc[0], pc[1] - h / 2, pc[2]]]])
+    F = [(k, (k + 1) % n, n + (k + 1) % n, n + k) for k in range(n)]
+    F += [(2 * n, n + (k + 1) % n, n + k) for k in range(n)]
+    F += [(2 * n + 1, k, (k + 1) % n) for k in range(n)]
+    g.add(V, F, mat=mat)
 
 
 def build():
     C.reset_scene()
     root = C.empty("Root")
-    C.set_extras(root, units="cm")
+    C.set_extras(root, units="cm", spec="docs/specs/tank_design.md §3.2")
     black = C.material("black_plastic", "#111214", rough=0.5)
     grille = C.material("grille", "#2A2C2F", rough=0.6)
-    grey = C.material("bracket_grey", "#9FA8AD", rough=0.6)
-    clear = C.material("clear", "#E8F2F4", rough=0.1, alpha=0.35, blend=True, double=True)
-    hob = C.material("hob", "#2A2D30", rough=0.55)
-    cap = C.material("cap_grey", "#6B7074", rough=0.4)
+    grey = C.material("bracket_grey", "#9CA59A", rough=0.6)
+    tube_grey = C.material("tube_grey", "#8A8F94", rough=0.4)
+    clear = C.material("clear", "#DDE8E6", rough=0.15, alpha=0.4, blend=True, double=True)
+    ringm = C.material("ring_clear", "#E6EEF0", rough=0.15, alpha=0.5, blend=True, double=True)
+    hob = C.material("hob", "#2A2C30", rough=0.55)
+    cap = C.material("cap_grey", "#8C8F93", rough=0.4)
+    cable = C.material("cable", "#1A1A1A", rough=0.5)
+    puckm = C.material("puck_black", "#141414", rough=0.45)
+    foam = C.material("foam", "#151617", rough=0.95)
+    liquid = C.material("jar_liquid", "#4D4A2E", rough=0.2, alpha=0.85, blend=True)
     led = C.material("led_red", "#FF2A1A", rough=0.3, emissive="#FF2A1A", emissive_strength=4.0)
+    ato_led = C.material("led_ato", "#FF2020", rough=0.3, emissive="#FF2020", emissive_strength=4.0)
     lens = C.material("ai_lens", "#DDE8FF", rough=0.2, emissive="#DDE8FF", emissive_strength=3.0)
-    label_png = flipper_label(os.path.join(C.BUILD, "flipper_label.png"))
-    label = C.material("flipper_label", "#FFFFFF", rough=0.45, image=C.load_image(label_png, name="flipper_label"))
+    label = C.material("flipper_label", "#FFFFFF", rough=0.45,
+                       image=C.load_image(flipper_label(os.path.join(C.BUILD, "flipper_label.png")), name="flipper_label"))
+    slots = C.material("cartridge", "#D0D0D0", rough=0.6,
+                       image=C.load_image(slot_tex(os.path.join(C.BUILD, "cartridge.png")), name="cartridge"))
+    GTH = T.GT
     objs = []
 
-    # PH-A: back glass upper centre-right (SIMULATION §5.3)
-    objs.append(powerhead("PowerheadA", root, (84, 48, 0.0), (0, 0, 1), (-0.6, -0.35, 0.72), [black, grille]))
-    # PH-B: left glass upper
-    objs.append(powerhead("PowerheadB", root, (0.0, 42, 10), (1, 0, 0), (0.95, -0.2, 0.25), [black, grille]))
-
-    # front pump lying on the sand against the front glass, face toward the viewer, + light-grey flat bracket
+    # --- PowerheadLeft: magnet plate on the left glass, ribbed body x 1.5-12.5 along +X, cable up and over the rim
     g = T.WGeo()
-    c = np.array([78.5, 3.0 + 2.6, 30.0])
-    V, F, uv = cylinder(c - (0, 0, 2.8), c + (0, 0, 2.8), 2.5, 20)
-    g.add(V, F, uv, mat=0)
-    V, F, uv = disc(c + (0, 0, 2.85), (0, 0, 1), 2.0, 20)
+    box_add(g, (0.05, 42, 12), (1.5, 46, 16))
+    box_add(g, (-GTH - 1.9, 42, 12), (-GTH - 0.02, 46, 16))  # outer magnet half
+    ribbed(g, (1.5, 44, 14), (12.2, 44, 14), 3.2)
+    V, F, uv = cylinder((12.2, 44, 14), (12.6, 44, 14), 2.6, 16)
     g.add(V, F, uv, mat=1)
-    objs.append(g.obj("FrontPump", root, "equipment", [black, grille]))
-    g = T.WGeo()
-    V, F = oriented_box((73.4, 4.4, 31.8), (5.0, 3.0, 0.5), (1, 0, 0.1), (0, 1, -0.3))
-    g.add(V, F)
-    V, F = oriented_box((75.6, 3.4, 31.0), (1.2, 0.6, 2.6), (1, 0, 0), (0, 1, 0))
-    g.add(V, F)
-    objs.append(g.obj("FrontPumpBracket", root, "equipment", [grey]))
+    tube_path(g, [(4, 47, 14), (2.2, 52, 13.4), (1.2, 58, 12.6), (1.0, 61.0, 12.2), (-1.2, 62.6, 12), (-1.7, 58, 12)],
+              0.35, 6, mat=2, n=4)
+    objs.append(g.obj("PowerheadLeft", root, "equipment", [black, grille, cable],
+                      extras={"dir": [1.0, -0.1, 0.1], "jet": [12.6, 44.0, 14.0]}))
 
-    # heater: vertical on the right glass, suction cups as small discs
+    # --- PowerheadBack: round circulation pump on the back glass (85.5, 47), facing +Z tilted 15 deg down-left
     g = T.WGeo()
-    hx, hz = L - 2.0, 8.5
-    V, F, uv = cylinder((hx, 20.0, hz), (hx, 50.0, hz), 1.5, 16)
-    g.add(V, F, uv, mat=0)
-    V, F, uv = cylinder((hx, 50.0, hz), (hx, 56.5, hz), 1.7, 16)
+    s15 = math.sin(math.radians(15)) / math.sqrt(2)
+    d = unit((-s15, -s15, math.cos(math.radians(15))))
+    base = np.array([85.5, 47.0, 0.05])
+    V, F, uv = cylinder(base, base + d * 4.5, 4.0, 24)
+    g.add(V, F, uv)
+    face = base + d * 4.5
+    V, F, uv = cylinder(face - d * 0.05, face + d * 0.25, 3.3, 24)
     g.add(V, F, uv, mat=1)
-    V, F, uv = cylinder((hx, 56.5, hz), (hx, 64.0, hz), 0.5, 8)  # cable
-    g.add(V, F, uv, mat=0)
-    for y in (24.0, 44.0):
-        V, F, uv = cylinder((hx + 0.6, y, hz), (L - 0.05, y, hz), 1.2, 10, r1=1.6)
+    side = unit(np.cross(d, (0, 1, 0)))
+    up2 = np.cross(side, d)
+    for k in range(12):  # 12 radial slots: raised bars between them
+        a = 2 * math.pi * k / 12
+        rdir = math.cos(a) * side + math.sin(a) * up2
+        V, F = oriented_box(face + d * 0.3 + rdir * 1.9, (2.6, 0.35, 0.2), rdir, np.cross(d, rdir))
+        g.add(V, F)
+    box_add(g, (83.5, 45, -GTH - 2.0), (87.5, 49, -GTH - 0.02))  # outer magnet
+    tube_path(g, [(84.6, 50.5, 2.0), (84.1, 54, 0.6), (84, 60.6, 0.5), (84, 62.4, -1.6), (84, 58, -2.4)], 0.35, 6,
+              mat=2, n=4)
+    objs.append(g.obj("PowerheadBack", root, "equipment", [black, grille, cable],
+                      extras={"dir": [-0.3, -0.3, 0.9], "jet": [round(float(v), 2) for v in face]}))
+
+    # --- PowerheadRight: plate on the right glass, ribbed body x 111-120.5 along -X with a fat foam sleeve
+    g = T.WGeo()
+    L = T.TANK[0]
+    box_add(g, (L - 1.5, 42, 8), (L - 0.05, 46, 12))
+    box_add(g, (L + GTH + 0.02, 42, 8), (L + GTH + 1.9, 46, 12))
+    ribbed(g, (120.4, 44, 10), (111.0, 44, 10), 3.2)
+    V, F, uv = cylinder((111.2, 44, 10), (110.8, 44, 10), 2.6, 16)
+    g.add(V, F, uv, mat=1)
+    ribbed(g, (120.3, 44, 10), (114.3, 44, 10), 3.8, rings=6, depth=0.25, sides=12, mat=3)
+    tube_path(g, [(117, 47.5, 10), (119.8, 52, 10.4), (120.9, 60.5, 10.6), (123.2, 62.6, 10.6), (123.7, 58, 10.6)],
+              0.35, 6, mat=2, n=4)
+    objs.append(g.obj("PowerheadRight", root, "equipment", [black, grille, cable, foam],
+                      extras={"dir": [-1.0, -0.1, 0.2], "jet": [110.8, 44.0, 10.0]}))
+
+    # --- Heater: vertical on the back glass at x 119.5, z 2.5, y 21-52; grey cap with a red LED; 2 suction cups
+    g = T.WGeo()
+    hx, hz = 119.5, 2.5
+    V, F, uv = cylinder((hx, 21, hz), (hx, 49, hz), 1.4, 16)
+    g.add(V, F, uv)
+    V, F, uv = cylinder((hx, 49, hz), (hx, 52, hz), 1.45, 16)
+    g.add(V, F, uv, mat=1)
+    for y in (26.0, 46.0):
+        V, F, uv = cylinder((hx, y, 0.05), (hx, y, 1.3), 1.3, 12, r1=0.6)
         g.add(V, F, uv, mat=2)
+    tube_path(g, [(hx, 52, hz), (hx, 56, 1.6), (hx - 0.5, 60.6, 0.6), (hx - 0.5, 62.4, -1.6), (hx - 0.5, 58, -2.4)],
+              0.3, 6, mat=0, n=4)
     objs.append(g.obj("Heater", root, "equipment", [black, cap, clear], smooth=True))
     g = T.WGeo()
-    V, F = T.box((hx - 1.0, 53.0, hz + 1.55), (hx - 0.4, 53.6, hz + 1.85))
-    g.add(V, F)
+    box_add(g, (hx - 0.1, 50.9, hz + 1.42), (hx + 0.1, 51.1, hz + 1.55))
     objs.append(g.obj("HeaterLED", root, "light", [led]))
 
-    # Flipper magnet cleaner, outside half on the front glass (label faces the viewer)
+    # --- IntakeTube: grey tube down the right end with a black strainer, elbow over the back rim
     g = T.WGeo()
-    lo, hi = np.array([2.5, 15.0, D + 0.6]), np.array([6.5, 24.0, D + 2.6])
-    V, F = T.box(lo, hi)
-    uv = T.box_uv(V, lo, hi)
-    g.add(V, F, uv)
-    objs.append(g.obj("Flipper", root, "equipment", [label]))
+    tube_path(g, [(116.5, 35.5, 5), (116.5, 50, 5), (116.5, 61.5, 5), (116.5, 63.0, 3.6), (116.5, 63.4, 0),
+                  (116.5, 63.0, -3.6), (116.5, 59, -4.2)], 1.3, 10, mat=0, n=3)
+    V, F, uv = cylinder((116.5, 28, 5), (116.5, 36, 5), 2.6, 16)
+    g.add(V, F, uv, mat=1)
+    objs.append(g.obj("IntakeTube", root, "equipment", [tube_grey, black], smooth=True))
 
-    # clear hose arcing from the top-left corner down behind R2 into the R1 cave
-    sdf = T.read_sdf()
-    pts = G.bezier((3.7, 64.0, 16.5), (5.0, 50.0, 18.0), (14.0, 34.0, 16.0), (28.0, 27.0, 12.0), 40)
-    if sdf is not None:
-        dd = sdf(pts[:, 0], pts[:, 1], pts[:, 2])
-        k = np.argmax(dd < 1.0) if (dd < 1.0).any() else len(pts)
-        pts = pts[:max(k, 8)]
-    V, F, t, a = G.tube(pts, 0.6, 10, cap_start=False, cap_end=False, up=(0, 1, 0))
+    # --- Flipper: inner half on the front glass inner face + outer half with the label, 4 felt pads
     g = T.WGeo()
-    g.add(V, F, np.c_[a, t])
+    D = T.TANK[2]
+    box_add(g, (1, 13, 31.0), (7, 33, 32.85))
+    box_add(g, (1, 13, D + GTH + 0.15), (7, 33, 36))
+    for px in (1.6, 5.4):
+        for py in (14, 31):
+            box_add(g, (px, py, 32.85), (px + 1.0, py + 1.0, 33.0), mat=1)
+            box_add(g, (px, py, D + GTH), (px + 1.0, py + 1.0, D + GTH + 0.15), mat=1)
+    objs.append(g.obj("Flipper", root, "equipment", [label, grille]))
+
+    # --- FrontMagnet: black cylinder on the sand facing the viewer + grey-green bracket to its left
+    g = T.WGeo()
+    V, F, uv = cylinder((72, 6.5, 27.5), (72, 6.5, 32.0), 4.2, 24)
+    g.add(V, F, uv)
+    V, F, uv = cylinder((72, 6.5, 31.95), (72, 6.5, 32.1), 3.4, 24)
+    g.add(V, F, uv, mat=1)
+    objs.append(g.obj("FrontMagnet", root, "equipment", [black, grille]))
+    g = T.WGeo()
+    V, F = oriented_box((67.6, 5.0, 31.0), (8.0, 2.0, 3.8), (1, 0.12, 0), (-0.12, 1, 0))
+    g.add(V, F)
+    V, F = oriented_box((63.9, 6.4, 31.0), (1.2, 4.0, 3.8), (1, 0.4, 0), (-0.4, 1, 0))
+    g.add(V, F)
+    objs.append(g.obj("FrontMagnetBracket", root, "equipment", [grey]))
+
+    # --- HoseArc: clear tube through the four spec points, capped
+    g = T.WGeo()
+    tube_path(g, [(8, 36, 16), (13, 48, 14), (22, 54, 12), (30, 50, 10)], 0.8, 10, n=7)
     objs.append(g.obj("HoseArc", root, "equipment", [clear], smooth=True))
 
-    # feeding ring floating at the surface
+    # --- CableLeft: from the Flipper down the left glass along the sand, up the back-left corner and over the rim
     g = T.WGeo()
-    V, F = torus((41.4, 56.0, 19.8), 4.0, 0.3, 28, 6)
-    g.add(V, F)
-    objs.append(g.obj("FeedRing", root, "equipment", [clear], smooth=True))
+    tube_path(g, [(3.5, 13, 31.5), (1.6, 8.5, 29), (1.0, 5.4, 25), (2, 5.0, 20), (1.0, 6.8, 8), (0.8, 8, 1.2),
+                  (0.6, 30, 0.6), (0.6, 60.6, 0.6), (0.6, 62.5, -1.6), (0.6, 58, -2.4)], 0.35, 6, n=4)
+    objs.append(g.obj("CableLeft", root, "equipment", [cable], smooth=True))
 
-    # HOB filter hanging on the back rim (outside the back glass) with its outflow lip and intake tube
+    # --- FeedRing floating at the surface
     g = T.WGeo()
-    V, F = T.box((62.5, 48.0, -11.0), (78.5, 62.0, -1.0))
+    V, F = torus((41, 56.2, 18), 4.5, 0.35, 24, 6)
     g.add(V, F)
-    V, F = T.box((64.0, 57.0, -1.2), (77.0, 58.4, 2.2))  # spillway lip over the glass
-    g.add(V, F)
-    V, F = T.box((63.0, 62.0, -10.5), (78.0, 63.0, -1.5))  # lid
-    g.add(V, F, mat=1)
-    V, F, uv = cylinder((76.0, 61.0, -1.0), (76.0, 61.0, 1.6), 0.9, 10, caps=False)
-    g.add(V, F, uv)
-    V, F, uv = cylinder((76.0, 61.0, 1.6), (76.0, 26.0, 1.6), 0.9, 10)
-    g.add(V, F, uv)
-    objs.append(g.obj("HobBody", root, "equipment", [hob, cap], extras={"outflow": [71.0, 55.0, 1.0]}))
+    objs.append(g.obj("FeedRing", root, "equipment", [ringm], smooth=True))
 
-    # AI Prime HD x2: puck 12 x 12 x 3.5 at 29 cm above the rim, gooseneck from the rear rim
-    for side, x in (("L", 30.5), ("R", 91.4)):
+    # --- HobFilter on the back rim: body + lid, two slotted cartridges, intake tube, outflow spout
+    g = T.WGeo()
+    box_add(g, (60, 58, -12), (84, 74, -1.0))
+    box_add(g, (59.6, 74, -12.4), (84.4, 75, -0.6), mat=1)
+    for cx in (66, 76):
+        box_add(g, (cx - 3.5, 75, -7.75), (cx + 3.5, 89, -6.25), mat=2)
+    tube_path(g, [(82, 40, 2), (82, 60, 2), (82, 62.6, 1.6), (82, 63.6, 0), (82, 63.4, -1.6)], 1.3, 10, n=3)
+    box_add(g, (65, 57.5, -1.0), (79, 58.5, 2.0))
+    objs.append(g.obj("HobFilter", root, "equipment", [hob, black, slots],
+                      extras={"outflow": [72.0, 55.0, 1.0]}))
+
+    # --- Skimmer right of the HOB: body, black pump block, two tall grey tubes
+    g = T.WGeo()
+    box_add(g, (86, 58, -10), (96, 72, -1.0))
+    box_add(g, (87, 52, -9), (95, 58, -2), mat=1)
+    for tx in (89, 93):
+        V, F, uv = cylinder((tx, 62, -6), (tx, 92, -6), 1.6, 12)
+        g.add(V, F, uv, mat=2)
+    objs.append(g.obj("Skimmer", root, "equipment", [hob, black, tube_grey]))
+
+    # --- AtoBox on the top rim (left) with its red LED
+    g = T.WGeo()
+    box_add(g, (16, 61.4, 28), (22, 63.4, 33))
+    objs.append(g.obj("AtoBox", root, "equipment", [black]))
+    g = T.WGeo()
+    box_add(g, (18.85, 63.4, 29.85), (19.15, 63.55, 30.15))
+    objs.append(g.obj("AtoLED", root, "light", [ato_led]))
+
+    # --- Jar on the right rim (optional prop)
+    g = T.WGeo()
+    V, F, uv = cylinder((104, 61.45, 0), (104, 70.95, 0), 4.0, 20)
+    g.add(V, F, uv)
+    V, F, uv = cylinder((104, 61.6, 0), (104, 67.6, 0), 3.75, 20)
+    g.add(V, F, uv, mat=1)
+    objs.append(g.obj("Jar", root, "equipment", [clear, liquid]))
+
+    # --- AI Prime HD x2: puck, heat-sink, gooseneck from a back-rim clamp, power cable; lens + LED dots emitter
+    for side, x in (("L", 32.0), ("R", 91.0)):
         g = T.WGeo()
-        pc = np.array([x, 90.0, 16.5])
-        # rounded-square puck approximated by a 24-sided superellipse prism
-        n = 24
-        ring = []
-        for k in range(n):
-            a = 2 * math.pi * k / n
-            ca, sa = math.cos(a), math.sin(a)
-            r = 6.0 / (abs(ca) ** 4 + abs(sa) ** 4) ** 0.25
-            ring.append((pc[0] + r * ca, pc[2] + r * sa))
-        ring = np.array(ring)
-        V = np.concatenate([np.c_[ring[:, 0], np.full(n, pc[1] - 1.75), ring[:, 1]],
-                            np.c_[ring[:, 0], np.full(n, pc[1] + 1.75), ring[:, 1]],
-                            [[pc[0], pc[1] + 1.75, pc[2]]]])
-        F = [(k, (k + 1) % n, n + (k + 1) % n, n + k) for k in range(n)]
-        F = [f[::-1] for f in F]
-        F += [(2 * n, n + (k + 1) % n, n + k) for k in range(n)]
-        # bottom ring (black) around the lens
-        Vb = np.c_[pc[0] + (ring[:, 0] - pc[0]) * 0.72, np.full(n, pc[1] - 1.75), pc[2] + (ring[:, 1] - pc[2]) * 0.72]
-        b0 = len(V)
-        V = np.concatenate([V, Vb])
-        F += [(k, b0 + k, b0 + (k + 1) % n, (k + 1) % n) for k in range(n)]
-        g.add(V, F)
-        # gooseneck: from a clamp on the rear rim, up and over to the puck's back
-        neck = G.bezier((x, 61.0, -1.5), (x, 82.0, -3.0), (x, 92.0, 2.0), (x, 90.5, 10.6), 24)
-        Vn, Fn, t, a = G.tube(neck, 0.9, 10, cap_start=True, cap_end=False, up=(1, 0, 0))
-        g.add(Vn, Fn, np.c_[a, t])
-        V, F = T.box((x - 2.0, 58.0, -3.5), (x + 2.0, 62.5, 0.3))  # clamp
-        g.add(V, F)
-        o = g.obj(f"AiPrime{side}", root, "equipment", [black])
-        objs.append(o)
+        pc = np.array([x, 101.0, 16.0])
+        puck(g, pc)
+        box_add(g, (x - 4, 102.8, 12), (x + 4, 103.8, 20))
+        V, F, t, a = G.tube(G.bezier((x + 6, 64, -3), (x + 6, 88, -4), (x + 2, 100, 8), (x, 101, 12), 16), 0.9, 8,
+                            cap_start=True, cap_end=True, up=(1, 0, 0))
+        g.add(V, F, np.c_[a, t])
+        box_add(g, (x + 4, 60, -5), (x + 8, 64, -2))
+        tube_path(g, [(x, 103.2, 12), (x, 110, 5), (x + 2, 120, -5.9)], 0.3, 6, n=5)
+        box_add(g, (x - 4, 99.1, 12), (x + 4, 99.2, 20), mat=1)  # white lens plate
+        objs.append(g.obj(f"AiPrime{side}", root, "equipment", [puckm, cap]))
         g = T.WGeo()
-        Vl = np.c_[pc[0] + (ring[:, 0] - pc[0]) * 0.72, np.full(n, pc[1] - 1.78), pc[2] + (ring[:, 1] - pc[2]) * 0.72]
-        V = np.concatenate([[[pc[0], pc[1] - 1.78, pc[2]]], Vl])
-        F = [(0, 1 + k, 1 + (k + 1) % n) for k in range(n)]
-        g.add(V, F, np.c_[0.5 + (V[:, 0] - pc[0]) / 9, 0.5 + (V[:, 2] - pc[2]) / 9])
+        for i in range(4):
+            for j in range(4):
+                cx, cz = x - 2.25 + 1.5 * i, 16 - 2.25 + 1.5 * j
+                box_add(g, (cx - 0.125, 98.95, cz - 0.125), (cx + 0.125, 99.1, cz + 0.125))
         objs.append(g.obj(f"AiPrime{side}_Lens", root, "emitter", [lens],
-                          extras={"lightPos": [x, 88.2, 16.5], "coneDeg": 120}))
+                          extras={"lightPos": [x, 99.0, 16.0], "coneDeg": 110}))
 
+    bad = {}
     for o in objs:
-        if not o.name.endswith("_Lens"):  # the lens is an open disc authored facing down
-            C.recalc_normals(o)
+        C.recalc_normals(o)
+        nm = T.non_manifold(o)
+        if nm:
+            bad[o.name] = nm
         C.triangulate(o)
+    print("[equip] non-manifold edges:", bad or 0)
     path = os.path.join(C.MODELS, "equipment.glb")
     C.export_glb(path, C.all_descendants(root))
     tris = sum(C.tri_count(o) for o in objs)
