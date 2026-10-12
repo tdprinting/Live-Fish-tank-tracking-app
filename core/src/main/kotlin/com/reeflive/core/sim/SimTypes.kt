@@ -105,6 +105,8 @@ data class OrganismPose(
     /** False while hidden (molting deep in rock, fully buried). */
     val visible: Boolean = true,
     val nickname: String = "",
+    /** Model variant from the livestock row (e.g. "darwin_black" clown); the renderer picks `variantModels`. */
+    val variant: String? = null,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
