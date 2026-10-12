@@ -101,8 +101,8 @@ class Organism(
 
     val massG: Double get() = ChemFns.massGrams(lengthCm, species.massCoeff)
     val isFish: Boolean get() = brainKind.isFish
-    /** Collision length: real BL capped so long eels use their body thickness scale (SIMULATION §8.7). */
-    val collisionLength: Double get() = if (brainKind == BrainKind.EEL) lengthCm.coerceAtMost(10.0) else lengthCm
+    /** Collision length: real BL, capped at 6 cm for eels so the clearance follows body girth, not length (SIMULATION §8.7). */
+    val collisionLength: Double get() = if (brainKind == BrainKind.EEL) lengthCm.coerceAtMost(6.0) else lengthCm
     val cruiseSpeed: Double get() = species.locomotion.cruiseBL * lengthCm
     val burstSpeed: Double get() = species.locomotion.burstBL * lengthCm
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */

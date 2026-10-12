@@ -28,7 +28,7 @@ object HealthModel {
     const val STRESS_RISE = 0.08
     const val STRESS_FALL = 0.02
     const val CHRONIC_RATE = 0.0007
-    const val ICH_BASE_PRESSURE = 0.0002
+    const val ICH_BASE_PRESSURE = 0.0004
     const val ICH_GROWTH = 0.0000165
     const val ICH_RECOVERY = 0.0000035
     const val BACT_GROWTH = 0.0002
@@ -107,6 +107,9 @@ object HealthModel {
 
     fun metabolicMult(tempC: Double) = 2.0.pow((tempC - 25) / 10)
 
+    /** Hunger rise per minute while awake (SIMULATION §3.4, tuned). */
+    fun hungerRatePerMin(o: Organism, tempC: Double) = o.species.feedsPerDay / HUNGER_DIVISOR * metabolicMult(tempC)
+
     fun step(o: Organism, w: WaterState, ctx: HealthContext, dtMin: Double, events: MutableList<SimEvent>) {
         if (!o.alive) { updateDeadVisuals(o); return }
         val s = o.species
@@ -137,7 +140,7 @@ object HealthModel {
         o.immunity = o.immunity.coerceIn(0.0, 1.0)
 
         // ---- disease ----
-        val tF = if (w.tempC > 28) 3.0 else if (w.tempC > 26.5) 1.5 else 1.0
+        val tF = if (w.tempC > 28) 4.0 else if (w.tempC > 26.5) 1.5 else 1.0
         val hardInv = (2 * (1 - s.hardiness)).coerceIn(0.2, 2.0)
         val sNh3 = o.envStress["nh3Free"] ?: 0.0
         val sNo2 = o.envStress["no2"] ?: 0.0

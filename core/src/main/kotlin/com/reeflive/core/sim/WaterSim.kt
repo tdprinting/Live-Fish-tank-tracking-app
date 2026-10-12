@@ -295,8 +295,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val FEED_TAN_PER_G = 0.04        // g TAN leached per g food (tune)
         const val FEED_PO4_PER_G = 0.004       // g PO4 per g food, net (tune)
         const val PO4_ADSORB = 0.015           // /h rock & sand adsorption above 0.02 ppm (tune)
-        const val K_AOB = 0.6; const val K_NOB = 0.5; const val KS = 0.05
-        const val MU_AOB = 0.035; const val MU_NOB = 0.025; const val B_DECAY = 0.0005; const val B_MIN = 0.005
+        const val K_AOB = 0.1; const val K_NOB = 0.15; const val KS = 0.05   // ppm/h at B = 1 (tune: cycle timeline §8.2)
+        const val MU_AOB = 0.012; const val MU_NOB = 0.007; const val B_DECAY = 0.0005; const val B_MIN = 0.005
         const val K_RESP = 1.19                // mg O2/L/h per (g^0.8 / L)
         const val DO_PHOTO = 1.1
         const val ALGAE_GROWTH = 0.0025

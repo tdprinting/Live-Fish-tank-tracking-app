@@ -100,13 +100,17 @@ data class ToleranceRange(
     val lethalHi: Double? = null,
 )
 
-enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val floatSeconds: Double) {
-    FLAKE(1.0 / 40, 0.6, 45.0),
-    MYSIS(1.0 / 25, 1.5, 0.0),
-    PELLET(1.0 / 20, 3.0, 0.0),
-    NORI(0.0, 0.0, 0.0),
+/**
+ * Food kinds. [nutrientFactor] converts grams as fed into dry-flake-equivalent grams for the
+ * nitrogen/phosphate load (frozen mysis is ~75 % water, nori and live pods are light). (tune)
+ */
+enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val floatSeconds: Double, val nutrientFactor: Double) {
+    FLAKE(1.0 / 40, 0.6, 45.0, 1.0),
+    MYSIS(1.0 / 25, 1.5, 0.0, 0.3),
+    PELLET(1.0 / 20, 3.0, 0.0, 1.0),
+    NORI(0.0, 0.0, 0.0, 0.3),
     /** Live copepods/"pods" (sandbox, cleaner wrasse rescue: SIMULATION §3.4) and plankton dosing. */
-    PODS(1.0 / 200, 0.3, 0.0);
+    PODS(1.0 / 200, 0.3, 0.0, 0.2);
 
     companion object {
         fun of(s: String): FoodKind = entries.firstOrNull { it.name.equals(s, true) } ?: FLAKE
@@ -157,13 +161,14 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
 
 /** Coral archetypes (SIMULATION §3.6). */
 enum class CoralKind(val genera: List<String>, val demandDkhPerDay: Double, val biomass: Double) {
-    KENYA(listOf("capnella"), 0.02, 0.30),
-    GSP(listOf("briareum", "pachyclavularia"), 0.03, 0.20),
-    ZOA(listOf("zoanthus", "palythoa"), 0.02, 0.10),
-    CLOVE(listOf("clavularia"), 0.01, 0.06),
-    MUSHROOM(listOf("discosoma", "rhodactis", "ricordea"), 0.005, 0.04),
+    // Soft corals take up little carbonate; organ pipe builds a calcite skeleton. (tune: alk ≈ 7 with 10 %/week water changes)
+    KENYA(listOf("capnella"), 0.004, 0.30),
+    GSP(listOf("briareum", "pachyclavularia"), 0.006, 0.20),
+    ZOA(listOf("zoanthus", "palythoa"), 0.003, 0.10),
+    CLOVE(listOf("clavularia"), 0.002, 0.06),
+    MUSHROOM(listOf("discosoma", "rhodactis", "ricordea"), 0.001, 0.04),
     MACRO(listOf("gracilaria", "botryocladia", "chaetomorpha"), 0.0, 0.15),
-    ORGAN_PIPE(listOf("tubipora"), 0.03, 0.08),
+    ORGAN_PIPE(listOf("tubipora"), 0.008, 0.08),
     AIPTASIA(listOf("aiptasia", "exaiptasia"), 0.0, 0.02),
     GENERIC(emptyList(), 0.01, 0.05);
 

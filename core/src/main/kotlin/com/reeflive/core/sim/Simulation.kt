@@ -211,10 +211,10 @@ class Simulation(
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.05 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) }
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
-        w.grazingPerHour = grazeAccum * 60 / CHEM_DT
+        w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
         w.step(CHEM_DT)
         // health
@@ -241,6 +241,7 @@ class Simulation(
         asterinaPopulation()
         corpses(dtMin)
         autoFeed()
+        maintenance()
         if (w.s.algaeHair > 0.35 && simTimeSec - lastAlgaeBloomReport > 86400) {
             lastAlgaeBloomReport = simTimeSec
             pendingEventsSink += SimEvent.AlgaeBloom(w.s.algaeHair, simTimeSec)
@@ -268,33 +269,52 @@ class Simulation(
         o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt
     }
 
-    /** Grazing while the behavior layer is off (abstract mode / health-only runs). */
+    /**
+     * Grazing and passive feeding while the behavior layer is off (abstract mode / health-only runs).
+     * Grazers eat at up to 1.6× their hunger rise rate scaled by food availability: hair algae
+     * (`hair/(hair+0.02)`) or the always-present biofilm for snails, asterina and hermits.
+     */
     private fun abstractGrazing(dtMin: Double) {
         val hair = water.s.algaeHair
+        val aHair = hair / (hair + 0.02)
         val day = LightSchedule.intensity(lightCh) > 0.1
         for (o in organisms) {
             if (!o.alive || !o.species.grazer) continue
-            if (!day && o.brainKind != BrainKind.HERMIT && o.brainKind != BrainKind.ASTERINA) continue
-            if (o.hunger < 0.15) continue
-            val k = clampD(hair / 0.1, 0.25, 1.0)
-            val rate = when (o.brainKind) {
-                BrainKind.TANG -> 0.0010; BrainKind.LAWNMOWER_BLENNY -> 0.0016; BrainKind.PEEKER_BLENNY -> 0.0006
-                BrainKind.ASTREA, BrainKind.HERMIT, BrainKind.ASTERINA -> 0.0012
-                else -> 0.0005
+            val diurnal = !o.species.activity.equals("NOCTURNAL", true)
+            if (diurnal && !day && o.brainKind != BrainKind.ASTREA) continue
+            val film = when (o.brainKind) {
+                BrainKind.ASTREA, BrainKind.ASTERINA, BrainKind.HERMIT -> 0.7
+                BrainKind.LAWNMOWER_BLENNY -> 0.35
+                else -> 0.15
             }
-            o.hunger = max(0.0, o.hunger - rate * k * dtMin)
+            val avail = max(aHair, film)
+            val rise = HealthModel.hungerRatePerMin(o, water.s.tempC)
+            o.hunger = max(0.0, o.hunger - 1.6 * rise * avail * dtMin * (if (diurnal) 1.5 else 1.0))
             o.nutritionGreens = 1.0
-            grazeAccum += 0.0006 * k * dtMin * (o.massG / 5.0).coerceIn(0.1, 2.0)
+            grazeAccum += grazeRemovalPerMin(o) * aHair * dtMin
         }
         // Cleaners earn a little from clients even when nobody is watching.
+        val clients = organisms.count { it.alive && it.isFish && it.brainKind != BrainKind.WRASSE }
         for (o in organisms) {
-            if (!o.alive || o.sleeping) continue
-            if ((o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.CLEANER_SHRIMP) && organisms.count { it.alive && it.isFish && it !== o } > 0)
-                o.hunger = max(0.0, o.hunger - (if (day) 0.0004 else 0.0) * dtMin)
-            if (o.brainKind == BrainKind.FEATHER_DUSTER || o.brainKind == BrainKind.BRITTLE_STAR || o.brainKind == BrainKind.NASSARIUS || o.brainKind == BrainKind.ASTERINA)
-                o.hunger = max(0.0, o.hunger - 0.00025 * (water.s.detritus / 0.3).coerceIn(0.2, 1.5) * dtMin)
+            if (!o.alive) continue
+            val rise = HealthModel.hungerRatePerMin(o, water.s.tempC)
+            when (o.brainKind) {
+                BrainKind.WRASSE, BrainKind.CLEANER_SHRIMP ->
+                    if (day && clients > 0) o.hunger = max(0.0, o.hunger - rise * (0.15 + 0.05 * clients).coerceAtMost(0.6) * 1.5 * dtMin)
+                // filter feeders and detritivores live partly on detritus / bacterioplankton
+                BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.NASSARIUS ->
+                    o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
+                else -> {}
+            }
         }
     }
+
+    /** Hair-algae units removed per minute of continuous grazing (tuned for a healthy-tank equilibrium hair ≈ 0.03–0.05). */
+    fun grazeRemovalPerMin(o: Organism): Double = when (o.brainKind) {
+        BrainKind.TANG -> 2e-6; BrainKind.LAWNMOWER_BLENNY -> 3e-6; BrainKind.PEEKER_BLENNY -> 0.5e-6
+        BrainKind.ASTREA -> 1e-6; BrainKind.HERMIT -> 0.5e-6; BrainKind.ASTERINA -> 0.2e-6
+        else -> 0.5e-6
+    } * (o.lengthCm / o.species.typicalAdultCm.coerceAtLeast(0.5)).coerceIn(0.3, 2.0)
 
     fun addGrazing(amount: Double) { grazeAccum += amount }
 
@@ -362,6 +382,18 @@ class Simulation(
         }
     }
 
+    private var lastWaterChangeDay = -1
+
+    /** Routine water change at 10:00 every [TankConfig.waterChangeEveryDays] days. */
+    private fun maintenance() {
+        val every = config.waterChangeEveryDays
+        if (every <= 0 || config.waterChangeFraction <= 0) return
+        if (dayIndex % every != every - 1 || lastWaterChangeDay == dayIndex) return
+        if (minuteOfDay < 600 || minuteOfDay >= 602) return
+        lastWaterChangeDay = dayIndex
+        water.waterChange(config.waterChangeFraction)
+    }
+
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
         null -> rock.anchors.pos("SURFACE_FEED", Vec3(41.0, 55.0, 20.0)).withY(rock.waterLevelCm - 0.3)
         "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(69.0, 5.0, 23.0)) + Vec3(-2.0, 7.0, 5.0)
@@ -419,7 +451,7 @@ class Simulation(
     }
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
-        water.addFeed(if (kind == FoodKind.NORI) grams * 0.3 else grams)
+        water.addFeed(grams * kind.nutrientFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
@@ -556,7 +588,7 @@ class Simulation(
     companion object {
         const val CHEM_DT = 60.0
         const val ABSTRACT_SPEED = 240.0
-        const val CORPSE_TAN_PER_G = 0.05
+        const val CORPSE_TAN_PER_G = 0.02
         const val ASTERINA_CAP = 4
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)

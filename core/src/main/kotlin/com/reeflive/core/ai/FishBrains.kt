@@ -397,6 +397,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun findThreat(c: Ctx): Organism? = null
 
+    companion object { const val STRIKE_SPEED = 100.0 }
+
     /** In the den with the head out, slow sway, gill/mouth pumping; lunges at food within 8 cm. */
     inner class HeadOut : Behavior("headout", "Head out of den") {
         private var hidden = false
@@ -409,7 +411,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t < o.satietyUntil) return 0.7
             return if (c.p.night) 0.3 + 0.3 * (1 - o.hunger) else 0.65
         }
-        override fun enter(c: Ctx) { approaching = c.o.pos.distanceTo(mouthOut(8.0)) > 4 }
+        override fun enter(c: Ctx) { approaching = !(c.o.posture == 3 || c.o.pos.distanceTo(mouth) < 14) }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             if (approaching) {
@@ -508,15 +510,15 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             val d = to.length()
             if (strikeAt < 0) {
                 out.seek(p.pos, o.cruiseSpeed * 1.3, arrive = 2.0, urgency = 0.5)
-                out.ignoreRock = d < 10
                 val ang = Vec3.angle(o.heading, to)
-                if (d < min(1.5 * o.lengthCm, 14.0) && ang < PI / 6) { strikeAt = c.t; o.mouth = 1.0 }
+                if ((d < min(1.5 * o.lengthCm, 14.0) && ang < PI / 6) || d < 4.0) { strikeAt = c.t; o.mouth = 1.0 }   // close contact: the head whips round
                 if (d > 60 || elapsed > 120) { finished = true; cooldown = c.t + 30 }
             } else {
-                out.seek(p.pos, min(o.burstSpeed, 60.0), arrive = 0.5, urgency = 1.0)
+                // moray strike: a fast lunge (≈ 1 m/s), resolved the moment the jaws reach the prey
+                out.seek(p.pos, STRIKE_SPEED, arrive = 0.2, urgency = 1.0)
                 o.mouth = 1.0
-                if (c.t - strikeAt > 0.4) {
-                    val hit = d < 2.5 + 0.5 * p.lengthCm
+                val hit = d < 2.0 + 0.5 * p.lengthCm
+                if (hit || c.t - strikeAt > 0.4) {
                     if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
                         c.sim.eaten(o, p)
                     } else {
@@ -715,7 +717,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         install(RockGraze(),
             InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0), BlennyRival(this, 12.0, territory),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * 3.0, 1.0) }, "Darting home"), SurfaceGasp(this), VisitCleaner(this))
+            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this), VisitCleaner(this))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
@@ -757,7 +759,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                         nextRasp = c.t + 1.0
                         c.o.hunger = max(0.0, c.o.hunger - 0.006 * (0.5 + 2 * c.sim.water.s.algaeHair).coerceAtMost(1.5))
                         c.o.nutritionGreens = 1.0
-                        c.sim.addGrazing(0.0004)
+                        c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 30)
                         c.o.mouth = 1.0
                     }
                     out.kinHeading = Vec3.rotateAbout(p.heading, p.up!!, 0.15 * sin(c.t * 1.7))
@@ -810,7 +812,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 { c -> if (c.p.night) 0.9 else 0.45 + (if (c.o.health < 0.5) 0.3 else 0.0) },
                 { c -> if (c.p.night) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) }),
             PlanktonDash(), PerchNearHole(), Graze(this, 0.4),
-            Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * 2.5, 1.0) }, "Darting home"), BlennyRival(this, 8.0, holePos), SurfaceGasp(this))
+            Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), BlennyRival(this, 8.0, holePos), SurfaceGasp(this))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = holeRest(c, hole, holePos, if (night) -0.5 else 1.5)

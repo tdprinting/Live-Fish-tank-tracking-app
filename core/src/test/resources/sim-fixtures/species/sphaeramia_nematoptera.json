@@ -1,0 +1,112 @@
+{
+    "id": "sphaeramia_nematoptera",
+    "kind": "FISH",
+    "common": "Pajama cardinalfish",
+    "family": "Apogonidae",
+    "maxLengthCm": 8.0,
+    "typicalAdultCm": 6.0,
+    "growthCmPerYear": 1.5,
+    "lifespanYears": 5.0,
+    "depthRatio": 0.46,
+    "massCoeff": 0.02,
+    "locomotion": {
+        "mode": "LABRIFORM",
+        "cruiseBL": 0.8,
+        "burstBL": 4.0,
+        "tailHzCruise": 2.0,
+        "turnRateDeg": 180.0,
+        "waveLen": 0.9,
+        "ampCruise": 0.03,
+        "ampBurst": 0.08
+    },
+    "zone": {
+        "yMin": 0.3,
+        "yMax": 0.6,
+        "openWater": 0.4,
+        "coverAffinity": 0.6
+    },
+    "activity": "CREPUSCULAR",
+    "schooling": false,
+    "territorialRadius": 0.0,
+    "homeRadiusCm": 25.0,
+    "temperament": {
+        "aggression": 0.0,
+        "boldness": 0.3,
+        "curiosity": 0.2,
+        "skittishness": 0.8
+    },
+    "diet": [
+        "MYSIS",
+        "FLAKE",
+        "PELLET",
+        "PODS"
+    ],
+    "feedsPerDay": 2.0,
+    "grazer": false,
+    "tolerance": {
+        "temp": {
+            "optLo": 24.0,
+            "optHi": 27.0,
+            "tolLo": 22.0,
+            "tolHi": 28.5,
+            "lethalLo": 19.0,
+            "lethalHi": 31.0
+        },
+        "sg": {
+            "optLo": 1.022,
+            "optHi": 1.026,
+            "tolLo": 1.02,
+            "tolHi": 1.027,
+            "lethalLo": 1.016,
+            "lethalHi": 1.03
+        },
+        "ph": {
+            "optLo": 8.0,
+            "optHi": 8.4,
+            "tolLo": 7.9,
+            "tolHi": 8.5,
+            "lethalLo": 7.5,
+            "lethalHi": 8.9
+        },
+        "nh3Free": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.01,
+            "lethalLo": null,
+            "lethalHi": 0.05
+        },
+        "no2": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.15,
+            "lethalLo": null,
+            "lethalHi": 1.0
+        },
+        "no3": {
+            "optLo": null,
+            "optHi": 20.0,
+            "tolLo": null,
+            "tolHi": 35.0,
+            "lethalLo": null,
+            "lethalHi": 80.0
+        },
+        "do": {
+            "optLo": 6.0,
+            "optHi": null,
+            "tolLo": 5.0,
+            "tolHi": null,
+            "lethalLo": 2.5,
+            "lethalHi": null
+        }
+    },
+    "diseaseSusceptibility": {},
+    "hardiness": 0.8,
+    "starvationDays": 21.0,
+    "model": "models/cardinal.glb",
+    "colors": {},
+    "iridescence": 0.1,
+    "brain": null,
+    "buoyantWhenDead": null
+}

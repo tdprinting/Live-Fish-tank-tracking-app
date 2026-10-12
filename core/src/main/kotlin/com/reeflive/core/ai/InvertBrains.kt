@@ -41,6 +41,16 @@ open class Scavenge(val b: SpeciesBrain, val radius: Double, val urgentAbove: Do
     }
 }
 
+/** A random open-sand point (clear of rock by 2 cm) at height [lift] above the sand. */
+fun sandSpot(c: Ctx, xr: ClosedFloatingPointRange<Double>, zr: ClosedFloatingPointRange<Double>, lift: Double): Vec3 {
+    var p = Vec3(c.rng.range(xr.start, xr.endInclusive), c.rock.sandTopCm + lift, c.rng.range(zr.start, zr.endInclusive))
+    for (i in 0 until 30) {
+        if (c.rock.sdf.dist(p) > 2.0) return p
+        p = Vec3(c.rng.range(xr.start, xr.endInclusive), c.rock.sandTopCm + lift, c.rng.range(zr.start, zr.endInclusive))
+    }
+    return p
+}
+
 fun surfaceOffset(c: Ctx) = 0.5 * c.o.species.depthRatio * c.L + 0.2
 
 /** Wander along surfaces around a centre. */
@@ -240,7 +250,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > next) {
                 next = c.t + 2
                 c.o.hunger = max(0.0, c.o.hunger - 0.004)
-                c.sim.addGrazing(0.0002)
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
                 c.o.mouth = 1.0
             }
             c.o.appendagePhase += c.dt * 5
@@ -340,7 +350,7 @@ class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + 1.0
                 val f = c.food.nearest(crown + Vec3(0.0, 1.0, 0.0), 8.0) { !it.settled }
                 if (f != null && c.o.hunger > 0.05) c.bite(f)
-                c.o.hunger = max(0.0, c.o.hunger - 0.00002 * (c.sim.water.s.detritus / 0.3).coerceIn(0.2, 1.5))
+                c.o.hunger = max(0.0, c.o.hunger - 0.8 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) / 60 * (c.sim.water.s.detritus / 0.2).coerceIn(0.3, 1.2))
             }
         }
     }
@@ -376,8 +386,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun initialPlace(c: Ctx) {
-        val x = o.rng.range(10.0, 110.0); val z = o.rng.range(25.0, 31.0)
-        o.homePos = Vec3(x, c.rock.sandTopCm + 0.1, z)
+        o.homePos = sandSpot(c, 10.0..110.0, 24.0..31.0, 0.1)
         buryAt = o.homePos
         o.placeAt(o.homePos, Vec3.X)
     }
@@ -413,7 +422,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
 class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
     var flippedUntil = -1.0
 
-    init { install(GlassGraze(this, 0.00008), Flipped()) }
+    init { install(GlassGraze(this), Flipped()) }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 30.0, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
         else Rest(o.homePos, o.heading, o.up)
@@ -444,7 +453,7 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
 }
 
 /** Slow film/hair grazing over glass and rock (astrea, asterina). */
-class GlassGraze(val b: SpeciesBrain, val grazePerSec: Double) : Behavior("glassgraze", "Grazing") {
+class GlassGraze(val b: SpeciesBrain) : Behavior("glassgraze", "Grazing") {
     private var wp = Vec3.ZERO
     private var next = 0.0
     override fun score(c: Ctx) = 0.5
@@ -461,8 +470,8 @@ class GlassGraze(val b: SpeciesBrain, val grazePerSec: Double) : Behavior("glass
             } else c.rockSurfacePoint(o.pos, 15.0)?.first ?: o.pos
         }
         out.crawl = true; out.target = wp; out.speed = c.o.cruiseSpeed; out.surfaceOffset = surfaceOffset(c)
-        c.sim.addGrazing(grazePerSec * c.dt)
-        if (c.sim.water.s.algaeHair > 0.02) c.o.hunger = max(0.0, c.o.hunger - 0.000015 * c.dt * 60)
+        c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) * c.dt / 60)
+        c.o.hunger = max(0.0, c.o.hunger - 1.6 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * c.dt / 60)
         c.o.nutritionGreens = 1.0
     }
 }
@@ -471,7 +480,7 @@ class GlassGraze(val b: SpeciesBrain, val grazePerSec: Double) : Behavior("glass
 // Asterina starfish: tiny, crawl the glass and rock grazing film
 // =====================================================================================
 class AsterinaBrain(c: Ctx) : SpeciesBrain(c) {
-    init { install(GlassGraze(this, 0.00002), Scavenge(this, 6.0)) }
+    init { install(GlassGraze(this), Scavenge(this, 6.0)) }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = Rest(o.pos, o.heading, o.up)
 
@@ -490,7 +499,7 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
     init { install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.4 }), Scavenge(this, 30.0)) }
     override fun restSpot(c: Ctx, night: Boolean) = Rest(o.homePos, o.heading, o.up)
     override fun initialPlace(c: Ctx) {
-        val p = Vec3(o.rng.range(10.0, 110.0), c.rock.sandTopCm + surfaceOffset(c), o.rng.range(20.0, 30.0))
+        val p = sandSpot(c, 10.0..110.0, 20.0..30.0, surfaceOffset(c))
         o.homePos = p; o.placeAt(p, Vec3.X)
     }
 }

@@ -99,10 +99,15 @@ abstract class SpeciesBrain(val c: Ctx) {
         var bd = Double.MAX_VALUE
         for (n in c.p.neighbors(o.pos, 40.0)) {
             if (n === o || !n.alive) continue
-            val r = Predation.threatRadius(n, o)
+            // night vision: prey notice a predator later in the dark
+            val r = Predation.threatRadius(n, o) * (if (c.p.night && !o.isFish) 0.6 else 1.0)
             if (r <= 0) continue
             val d = n.pos.distanceTo(o.pos)
-            if (d < r && d < bd) { bd = d; best = n }
+            if (d >= r || d >= bd) continue
+            // a predator only alarms when it moves toward me, or when it is very close (SIMULATION §4.4)
+            val closing = n.vel dot (o.pos - n.pos).normalized(Vec3.Y)
+            if (closing < 0.5 && d > 0.5 * r) continue
+            bd = d; best = n
         }
         return best
     }
@@ -215,10 +220,12 @@ fun Ctx.rockSurfacePoint(center: Vec3, radius: Double, minNormalY: Double = -0.2
         val p = center + rng.unitVector() * (radius * rng.nextDouble())
         if (rock.sdf.dist(p) > 12) continue
         val q = rock.sdf.project(p, 0.0)
-        if (kotlin.math.abs(rock.sdf.dist(q)) > 0.4) continue
+        if (kotlin.math.abs(rock.sdf.dist(q)) > 0.15) continue
         val n = rock.sdf.gradient(q)
         if (n.y < minNormalY) continue
         if (!rock.inWater(q, 1.5)) continue
+        // open water in front of the spot (not the inside of a narrow hole or crevice)
+        if (rock.sdf.dist(q + n * 3.0) < 2.4 || rock.sdf.dist(q + n * 1.0) < 0.8) continue
         return q to n
     }
     return null

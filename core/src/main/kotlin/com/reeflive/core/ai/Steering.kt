@@ -31,10 +31,7 @@ class Steering(private val c: Ctx) {
             intent.crawl -> crawl(o, intent, dt)
             else -> swim(o, intent, dt)
         }
-        if (o.brainKind == BrainKind.EEL) {
-            val pl = if (abs(o.heading.y) > 0.87) o.heading.withY(0.87 * kotlin.math.sign(o.heading.y)) else o.heading
-            o.heading = pl.normalized(o.heading)
-        }
+        if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
         o.spline.override = intent.splineOverride
         val sp = o.vel.length()
         val relax = 4.0 * (1 - sp / (0.6 * max(o.cruiseSpeed, 0.5))).coerceIn(0.0, 1.0) + 0.15
@@ -126,7 +123,7 @@ class Steering(private val c: Ctx) {
         }
         if (wantDir != null) o.heading = Vec3.rotateToward(o.heading, wantDir.normalized(o.heading), turnRate * dt)
         val pitchMax = if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
-        if (abs(o.heading.y) > pitchMax) o.heading = Vec3(o.heading.x, pitchMax * kotlin.math.sign(o.heading.y), o.heading.z).normalized(o.heading)
+        if (abs(o.heading.y) > pitchMax) o.heading = clampPitch(o.heading, pitchMax)
 
         // Body constraint: velocity mostly along the heading (fish cannot crab sideways fast)
         val fwd = vRaw dot o.heading
@@ -138,16 +135,19 @@ class Steering(private val c: Ctx) {
         // ---- hard resolve ----
         if (!it.ignoreRock) {
             val minD = 0.45 * Lc
-            val d = rock.sdf.dist(p)
-            if (d < minD) {
+            for (iter in 0 until 4) {
+                val d = rock.sdf.dist(p)
+                if (d >= minD) break
                 val n = rock.sdf.gradient(p)
-                p = p + n * (minD - d)
+                p = p + n * (minD - d + 0.02)
                 val vn = v dot n
                 if (vn < 0) v -= n * (vn * 1.2)
             }
         }
         val gm = if (it.allowGlass) 0.6 else (0.25 * L).coerceIn(0.6, 4.0)
         p = Vec3(p.x.coerceIn(gm, rock.lengthCm - gm), p.y.coerceIn(rock.sandTopCm + max(0.6, 0.2 * L.coerceAtMost(8.0)), rock.waterLevelCm - 0.6), p.z.coerceIn(gm, rock.widthCm - gm))
+        // The glass clamp can push back into rock in a tight gap: then hold position (never penetrate).
+        if (!it.ignoreRock && rock.sdf.dist(p) < 0.34 * Lc && rock.sdf.dist(o.pos) >= rock.sdf.dist(p)) { p = o.pos; v = Vec3.ZERO }
         o.vel = v
         o.pos = p
         val upBase = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
@@ -237,6 +237,13 @@ class Steering(private val c: Ctx) {
         o.appendagePhase += dt * 2 * PI * 0.3
         o.pitchBias = it.pitchBias
     }
+}
+
+/** Limit |heading.y| to [maxY] keeping the horizontal direction (falls back to the X axis when vertical). */
+internal fun clampPitch(h: Vec3, maxY: Double): Vec3 {
+    val hz = Vec3(h.x, 0.0, h.z)
+    val dir = if (hz.length() > 1e-6) hz.normalized() else Vec3.X
+    return dir * sqrt(1 - maxY * maxY) + Vec3(0.0, maxY * kotlin.math.sign(h.y), 0.0)
 }
 
 internal object Symptomatic {

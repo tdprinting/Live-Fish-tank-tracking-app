@@ -60,7 +60,7 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("LABRIFORM", 1.6, 6.0, 5.0, 300.0, 0.8, 0.05, 0.1), zone = Zone(0.1, 0.55, 0.3, 0.6),
                     temperament = Temperament(0.1, 0.8, 0.8, 0.3), diet = listOf("PARASITES", "PODS", "FLAKE", "MYSIS"), feedsPerDay = 3.0,
                     hardiness = 0.5, starvationDays = 28.0, iridescence = 0.5, homeRadiusCm = 30.0, model = "models/wrasse.glb")
-                BrainKind.EEL -> base.copy(common = "Snowflake moray", maxLengthCm = 80.0, typicalAdultCm = 60.0, depthRatio = 0.05, massCoeff = 0.01, activity = "NOCTURNAL",
+                BrainKind.EEL -> base.copy(common = "Snowflake moray", maxLengthCm = 80.0, typicalAdultCm = 60.0, depthRatio = 0.05, massCoeff = 0.0022, activity = "NOCTURNAL",
                     locomotion = Locomotion("ANGUILLIFORM", 0.5, 2.5, 1.0, 120.0, 0.6, 0.06, 0.1), zone = Zone(0.0, 0.35, 0.1, 0.9),
                     temperament = Temperament(0.4, 0.4, 0.5, 0.3), diet = listOf("MYSIS", "PELLET", "MEATY"), feedsPerDay = 0.33,
                     hardiness = 0.85, starvationDays = 60.0, iridescence = 0.05, homeRadiusCm = 50.0, model = "models/eel.glb")

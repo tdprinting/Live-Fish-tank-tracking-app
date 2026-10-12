@@ -180,7 +180,7 @@ open class Graze(val b: SpeciesBrain, val weight: Double = 1.0, label: String = 
                 nextRasp = c.t + 1.5
                 c.o.hunger = max(0.0, c.o.hunger - 0.01)
                 c.o.nutritionGreens = 1.0
-                c.sim.addGrazing(0.0005)
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 20)
                 c.o.mouth = 1.0
             }
             out.pitchBias = 0.17 * sin(2 * PI * (c.t - nextRasp) / 1.5)
@@ -257,7 +257,7 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         val st = choose(c) ?: return 0.0
         if (st.client != null && st.client !== o) return 0.0
         val ich = if (o.disease == Disease.ICH) o.diseaseStage * 3 else 0.0
-        return (0.15 + 0.6 * ich.coerceAtMost(1.0) + 0.3 * o.parasiteLoad + extra).coerceAtMost(0.85)
+        return (0.15 + 0.6 * ich.coerceAtMost(1.0) + 0.5 * o.parasiteLoad + extra).coerceAtMost(0.85)
     }
     private fun choose(c: Ctx): CleaningStation? =
         c.p.stations.filter { it.open && it.cleaner !== c.o && (!it.isShrimp || c.o.brainKind != BrainKind.HAWK) }

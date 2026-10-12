@@ -131,6 +131,9 @@ data class TankConfig(
     val autoFeed: List<FeedTime> = DEFAULT_FEEDING,
     /** Predation can kill livestock (SIMULATION §4.5 eel: ON in sandbox, OFF in reality). */
     val predationEnabled: Boolean = false,
+    /** Routine water change (assumed weekly 10 % until the app passes Tee's logged routine; 0 disables). */
+    val waterChangeEveryDays: Int = 7,
+    val waterChangeFraction: Double = 0.10,
     val seed: Long = 1L,
 ) {
     companion object {
