@@ -11,6 +11,9 @@ import com.reeflive.app.ui.care.CalculatorRoute
 import com.reeflive.app.ui.care.CareRoute
 import com.reeflive.app.ui.care.TaskDetailRoute
 import com.reeflive.app.ui.dashboard.DashboardRoute
+import com.reeflive.app.ui.livestock.LivestockDetailRoute
+import com.reeflive.app.ui.livestock.LivestockEditRoute
+import com.reeflive.app.ui.livestock.LivestockListRoute
 import com.reeflive.app.ui.log.LogRoute
 import com.reeflive.app.ui.log.ParameterDetailRoute
 import com.reeflive.app.ui.log.QuickLogRoute
@@ -64,9 +67,35 @@ fun CareDestination(nav: NavHostController) = CareRoute(
 @Composable fun TaskDestination(taskId: String, onBack: () -> Unit) = TaskDetailRoute(taskId, onBack)
 @Composable fun CalcDestination(calcId: String, onBack: () -> Unit) = CalculatorRoute(calcId, onBack)
 @Composable fun MoreDestination(nav: NavHostController) = Placeholder("More")
-@Composable fun LivestockListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Livestock", onBack)
-@Composable fun LivestockDetailDestination(nav: NavHostController, id: String, onBack: () -> Unit) = Placeholder("Livestock", onBack)
-@Composable fun LivestockEditDestination(id: String, onBack: () -> Unit) = Placeholder("Livestock", onBack)
+@Composable
+fun LivestockListDestination(nav: NavHostController, onBack: () -> Unit) = LivestockListRoute(
+    onBack = onBack,
+    onOpen = { nav.navigate(Routes.livestock(it)) },
+    onAdd = { nav.navigate(Routes.livestockEdit(Routes.NEW)) },
+)
+
+@Composable
+fun LivestockDetailDestination(nav: NavHostController, id: String, onBack: () -> Unit) = LivestockDetailRoute(
+    id = id,
+    onBack = onBack,
+    onEdit = { nav.navigate(Routes.livestockEdit(id)) },
+    onViewLive = {
+        LiveFocus.follow(id)
+        nav.navigateTab(Tab.LIVE)
+    },
+)
+
+@Composable
+fun LivestockEditDestination(nav: NavHostController, id: String, onBack: () -> Unit) = LivestockEditRoute(
+    id = id,
+    onBack = onBack,
+    onSaved = { newId ->
+        if (id == Routes.NEW) {
+            nav.navigate(Routes.livestock(newId)) { popUpTo(Routes.LIVESTOCK) }
+        } else onBack()
+    },
+    onDeleted = { nav.popBackStack(Routes.LIVESTOCK, inclusive = false) },
+)
 @Composable fun EquipmentListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Equipment", onBack)
 @Composable fun EquipmentEditDestination(id: String, onBack: () -> Unit) = Placeholder("Equipment", onBack)
 @Composable fun JournalListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Journal", onBack)

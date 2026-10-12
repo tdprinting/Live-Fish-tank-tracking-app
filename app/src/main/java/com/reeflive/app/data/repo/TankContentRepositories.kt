@@ -46,7 +46,7 @@ class LivestockRepository(
         dao.upsert(l.toEntity())
         if (isNew) {
             val name = species[l.speciesId]?.common ?: l.speciesId
-            events.log(EventType.ADD_LIVESTOCK, "Added ${l.nickname} ($name)", at = l.acquiredAt ?: clock.now())
+            events.log(EventType.ADD_LIVESTOCK, if (l.nickname.isBlank()) "Added $name" else "Added ${l.nickname} ($name)", at = l.acquiredAt ?: clock.now())
         }
     }
 
@@ -55,7 +55,7 @@ class LivestockRepository(
         val now = clock.now()
         dao.upsert(l.copy(status = status, statusChangedAt = now).toEntity())
         if (status != LivestockStatus.ALIVE && l.status == LivestockStatus.ALIVE) {
-            events.log(EventType.REMOVE_LIVESTOCK, "${l.nickname} ${status.label.lowercase()}", at = now)
+            events.log(EventType.REMOVE_LIVESTOCK, "${l.nickname.ifBlank { species[l.speciesId]?.common ?: l.speciesId }} ${status.label.lowercase()}", at = now)
         }
     }
 

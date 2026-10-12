@@ -166,7 +166,7 @@ private fun androidx.navigation.NavGraphBuilder.reefGraph(nav: NavHostController
         LivestockDetailDestination(nav, e.arguments?.getString("id").orEmpty(), back)
     }
     composable(Routes.LIVESTOCK_EDIT, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
-        LivestockEditDestination(e.arguments?.getString("id").orEmpty(), back)
+        LivestockEditDestination(nav, e.arguments?.getString("id").orEmpty(), back)
     }
     composable(Routes.EQUIPMENT) { EquipmentListDestination(nav, back) }
     composable(Routes.EQUIPMENT_EDIT, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->

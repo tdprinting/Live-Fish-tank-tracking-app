@@ -111,6 +111,9 @@ object TimeText {
     }
 
     fun shortDate(ms: Long): String = dayMonth.format(Instant.ofEpochMilli(ms).atZone(zone()))
+
+    /** "Mar 4, 2026" */
+    fun longDate(ms: Long): String = dayMonthYear.format(Instant.ofEpochMilli(ms).atZone(zone()))
     fun clock(ms: Long): String = time.format(Instant.ofEpochMilli(ms).atZone(zone()))
     fun full(ms: Long): String = full.format(Instant.ofEpochMilli(ms).atZone(zone()))
 
