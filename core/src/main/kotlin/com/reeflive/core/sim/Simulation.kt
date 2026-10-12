@@ -75,10 +75,12 @@ class Simulation(
     fun nextFragId(): Int = fragCounter++
     /** Aiptasia controllers (AiptasiaModel). */
     val pests = PestState()
+    /** Running disease treatments (W-4). */
+    val treatments = Treatments()
     val aiptasiaCount: Int get() = corals.count { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
 
     /** Copies pest controllers from another simulation (time-lapse fork). */
-    fun copyPestsFrom(src: Simulation) { pests.copyFrom(src.pests); fragCounter = max(fragCounter, src.fragCounter) }
+    fun copyPestsFrom(src: Simulation) { pests.copyFrom(src.pests); treatments.copyFrom(src.treatments); fragCounter = max(fragCounter, src.fragCounter) }
 
     /** A parameter ramp/hold (06 §4.2): linear from [from] to [to] over [overSec], then held if [hold]. */
     class ParamRamp(val id: String, val from: Double, val to: Double, val startSec: Double, val overSec: Double, val hold: Boolean) {
@@ -396,8 +398,13 @@ class Simulation(
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
         crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
+        expireTreatments()
+        val infectedAll = HashMap<Disease, Double>()
+        for (x in organisms) if (x.alive) x.disease?.let { infectedAll[it] = (infectedAll[it] ?: 0.0) + x.diseaseStage }
         for (o in organisms) {
             val ichOthers = organisms.filter { it !== o && it.alive && it.disease == Disease.ICH }.sumOf { it.diseaseStage }
+            val infected = if (infectedAll.isEmpty()) emptyMap() else
+                infectedAll.mapValues { (d, v) -> if (o.disease == d) v - o.diseaseStage else v }
             val rival = when (o.brainKind) {
                 BrainKind.LAWNMOWER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.PEEKER_BLENNY || it.brainKind == BrainKind.LAWNMOWER_BLENNY) }
                 BrainKind.PEEKER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.LAWNMOWER_BLENNY || it.brainKind == BrainKind.PEEKER_BLENNY) }
@@ -407,6 +414,8 @@ class Simulation(
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
                 organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
             val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess)
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light,
+                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
@@ -685,6 +694,13 @@ class Simulation(
             is Command.Maintain -> water.maintain(c.task)
             is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
             is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
+            is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
+            is Command.StopTreatment -> treatments.active[c.kind]?.let { endTreatment(it) }
+            is Command.Infect -> (organisms.firstOrNull { it.id == c.id } ?: organisms.filter { it.alive && it.isFish }.let { l -> if (l.isEmpty()) null else l[growthRng.nextInt(l.size)] })
+                ?.takeIf { it.alive && it.isFish }?.let { o ->
+                    o.disease = c.disease; o.diseaseStage = c.stage.coerceIn(0.01, 1.0)
+                    emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
+                }
             is Command.AddPestControl -> when (c.controller) {
                 PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
@@ -715,6 +731,55 @@ class Simulation(
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
             is Command.ScrapeGlass -> scrapeGlass(c)
         }
+    }
+
+    /**
+     * Treatments (research 01 §3.8, §4.3). Hyposalinity ramps SG down at 0.002/day to 1.010 and holds it for [days];
+     * copper is ramped to 0.20 ppm over 2 days and held for [days]; UV switches the steriliser on; tank transfer,
+     * formalin and praziquantel act on the fish named (all fish by default) for [days].
+     */
+    private fun startTreatment(kind: TreatmentKind, days: Double, fishIds: Set<String>?) {
+        var total = days
+        when (kind) {
+            TreatmentKind.HYPOSALINITY -> {
+                val downDays = ((water.s.sg - Treatments.HYPO_SG) / Treatments.HYPO_RATE_PER_DAY).coerceAtLeast(0.0)
+                apply(Command.RampParam("sg", Treatments.HYPO_SG, downDays * 1440, hold = true))
+                total = downDays + days
+            }
+            TreatmentKind.COPPER -> {
+                apply(Command.RampParam("copper", Treatments.COPPER_PPM, Treatments.COPPER_RAMP_DAYS * 1440, hold = true))
+                total = Treatments.COPPER_RAMP_DAYS + days
+            }
+            TreatmentKind.UV -> water.uv = true
+            else -> {}
+        }
+        val end = if (total <= 0) Double.POSITIVE_INFINITY else simTimeSec + total * 86400
+        treatments.active[kind] = ActiveTreatment(kind, simTimeSec, end, fishIds)
+    }
+
+    private fun endTreatment(t: ActiveTreatment) {
+        treatments.active.remove(t.kind)
+        when (t.kind) {
+            // back up at 0.002 SG/day to normal, then the chemistry takes over
+            TreatmentKind.HYPOSALINITY -> {
+                val upDays = ((1.025 - water.s.sg) / Treatments.HYPO_RATE_PER_DAY).coerceAtLeast(0.0)
+                apply(Command.RampParam("sg", 1.025, upDays * 1440, hold = false))
+            }
+            // stop dosing and run fresh carbon to strip what is left
+            TreatmentKind.COPPER -> { ramps.remove("copper"); water.setParam("carbon", 1.0) }
+            TreatmentKind.UV -> water.uv = false
+            // the treated fish come back clean
+            TreatmentKind.TANK_TRANSFER -> for (o in organisms) if (o.alive && t.applies(o) && o.disease == Disease.ICH) {
+                pendingEventsSink += SimEvent.Recovered(o.id, Disease.ICH, simTimeSec)
+                o.disease = null; o.diseaseStage = 0.0
+            }
+            else -> {}
+        }
+    }
+
+    private fun expireTreatments() {
+        if (treatments.active.isEmpty()) return
+        for (t in treatments.active.values.toList()) if (simTimeSec >= t.endSec) endTreatment(t)
     }
 
     /** Current value of a rampable parameter. */
@@ -864,7 +929,7 @@ class Simulation(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear()
-        pests.copyFrom(PestState())
+        pests.copyFrom(PestState()); treatments.active.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }

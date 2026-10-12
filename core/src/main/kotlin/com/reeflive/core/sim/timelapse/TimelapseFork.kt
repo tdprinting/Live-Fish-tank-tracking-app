@@ -62,6 +62,8 @@ object TimelapseFork {
             c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
         dst.copyPestsFrom(src)
+        // ramps and holds (a running hyposalinity or copper course) carry over
+        dst.ramps.putAll(src.ramps)
         return dst
     }
 }

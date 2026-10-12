@@ -40,6 +40,8 @@ class Organism(
     var immunity = 1.0
     var health = 1.0
     var disease: Disease? = null
+    /** Separate stream for the W-4 disease onsets so the older ich/bacterial rolls on [rng] keep their sequence. */
+    val diseaseRng = Rng(id.hashCode().toLong() xor 0x51C4L)
     var diseaseStage = 0.0
     var hlle = 0.0
     var condition = 1.0
