@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+gradlew text eol=lf
+*.bat text eol=crlf
+
+*.jar binary
+*.jks binary
+*.keystore binary
+*.glb binary
+*.bin binary
+*.ktx binary
+*.webp binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.blend binary
