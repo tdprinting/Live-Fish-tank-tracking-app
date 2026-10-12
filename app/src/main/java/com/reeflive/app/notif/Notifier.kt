@@ -117,6 +117,24 @@ class Notifier(private val context: Context) {
         NotificationManagerCompat.from(context).notify(taskTag(task.id), ID_TASK, n)
     }
 
+    /** Supplies and treatment-dose reminders (same channel as maintenance tasks). */
+    @SuppressLint("MissingPermission")
+    fun notifyReminder(tag: String, title: String, text: String, route: String) {
+        if (!canNotify()) return
+        val n = NotificationCompat.Builder(context, CH_TASKS)
+            .setSmallIcon(R.drawable.ic_stat_reef)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setColor(0xFF5CE1E6.toInt())
+            .setAutoCancel(true)
+            .setSilent(quietNow())
+            .setContentIntent(openIntent(route, tag.hashCode()))
+            .build()
+        NotificationManagerCompat.from(context).notify("extras:$tag", ID_REMINDER, n)
+    }
+
     fun cancelTask(taskId: String) = NotificationManagerCompat.from(context).cancel(taskTag(taskId), ID_TASK)
 
     companion object {
@@ -127,6 +145,7 @@ class Notifier(private val context: Context) {
         const val EXTRA_ROUTE = "com.reeflive.ROUTE"
         private const val ID_ALERT = 1
         private const val ID_TASK = 2
+        private const val ID_REMINDER = 3
         private const val QUIET_FROM = 22
         private const val QUIET_TO = 7
 

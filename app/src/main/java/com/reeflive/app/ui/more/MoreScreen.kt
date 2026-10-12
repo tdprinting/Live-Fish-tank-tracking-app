@@ -25,6 +25,15 @@ import androidx.compose.material.icons.rounded.Pets
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Emergency
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Medication
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Savings
+import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.Spa
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,12 +55,44 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.app.ui.common.TimeText
+import com.reeflive.app.ui.extras.money
+import com.reeflive.core.extras.ExtrasLogic
+import com.reeflive.core.extras.ParLogic
+import com.reeflive.core.extras.ReefExtras
+import com.reeflive.core.extras.SpendLogic
 import com.reeflive.core.model.LivestockStatus
+import java.time.Instant
+import java.time.ZoneId
 import com.reeflive.core.util.Fmt
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+
+/** The reef-keeping extras tiles (Insights, Supplies, Feeding …) placed after the first four. */
+object MoreExtras {
+    fun tiles(e: ReefExtras, now: Long): List<MoreTile> {
+        val zone = ZoneId.systemDefault()
+        val attention = ExtrasLogic.needsAttention(e.supplies, now).size
+        val active = e.cases.filter { ExtrasLogic.isActive(it) }
+        val due = active.count { ExtrasLogic.doseDue(it, now, zone) }
+        val fedToday = ExtrasLogic.feedingsOn(e.feedings, Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone).size
+        return listOf(
+            MoreTile(Routes.INSIGHTS, "Insights", "Health score · stability", Icons.Rounded.Insights),
+            MoreTile(Routes.EMERGENCY, "Emergency", "Guides · sick fish", Icons.Rounded.Emergency),
+            MoreTile(Routes.FEEDING, "Feeding", "$fedToday of ${e.feedingPlan.feedsPerDay} today", Icons.Rounded.Restaurant),
+            MoreTile(Routes.SUPPLIES, "Supplies", if (attention > 0) "$attention need attention" else "${e.supplies.size} items", Icons.Rounded.Inventory2),
+            MoreTile(Routes.TREATMENTS, "Quarantine & meds", when { due > 0 -> "$due dose due"; active.isNotEmpty() -> "${active.size} active"; else -> "None active" }, Icons.Rounded.Medication),
+            MoreTile(Routes.CORALS, "Coral log", "${e.growth.size} check-ins · ${e.frags.sumOf { it.count }} frags", Icons.Rounded.Spa),
+            MoreTile(Routes.ICP, "ICP tests", e.icp.maxByOrNull { it.at }?.let { "Last ${TimeText.shortDate(it.at)}" } ?: "Trace elements", Icons.Rounded.Science),
+            MoreTile(Routes.PAR, "PAR map", "${ParLogic.latestBySpot(e.par).size} spots", Icons.Rounded.WbSunny),
+            MoreTile(Routes.SPENDING, "Spending", money(SpendLogic.total(e.expenses, SpendLogic.startOfYear(now, zone))) + " this year", Icons.Rounded.Savings),
+        )
+    }
+
+    fun insert(base: List<MoreTile>, e: ReefExtras, now: Long): List<MoreTile> = base.take(4) + tiles(e, now) + base.drop(4)
+}
 
 data class MoreTile(val route: String, val title: String, val detail: String, val icon: ImageVector)
 
@@ -110,7 +151,8 @@ class MoreViewModel(g: AppGraph) : ViewModel() {
                 MoreTile(Routes.ABOUT, "About", "ReefLive", Icons.Rounded.Info),
             ),
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MoreUi())
+    }.combine(g.extras.data) { ui, e -> ui.copy(tiles = MoreExtras.insert(ui.tiles, e, g.clock.now())) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MoreUi())
 }
 
 @Composable
