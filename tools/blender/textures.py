@@ -93,14 +93,24 @@ def sand(size=1024, seed=21):
     cellv = rs.random(2600).astype(np.float32)[ids]
     cellv = P.blur(np.kron(cellv, np.ones((4, 4), np.float32)), 1.3)
     edge = P.blur(np.kron(S(0.0, 1.2, f2 - f1), np.ones((4, 4), np.float32)), 1.3)
-    c1 = C.hex2rgb("#E6DFD0")
-    c2 = C.hex2rgb("#C9BEA6")
+    c1 = C.hex2rgb("#EDE7D9")  # docs/specs/tank_design.md §1.6
+    c2 = C.hex2rgb("#D5CBB4")
     t = np.clip(0.35 * base + 0.45 * cellv + 0.2 * grain, 0, 1)[..., None]
     rgb = c1 * (1 - t) + c2 * t
     rgb *= (0.82 + 0.18 * edge)[..., None]
-    specks = (rs.random((h, w)) > 0.9985).astype(np.float32)
-    specks = np.clip(P.blur(specks, 1.0) * 6, 0, 1)
-    rgb = rgb * (1 - specks[..., None]) + C.hex2rgb("#A89C86") * specks[..., None]
+    specks = (rs.random((h, w)) > 0.996).astype(np.float32)
+    specks = np.clip(P.blur(specks, 1.0) * 6, 0, 1)  # ~2 % dark specks
+    rgb = rgb * (1 - specks[..., None]) + C.hex2rgb("#9A8E78") * specks[..., None]
+    # coral rubble pebbles 3-8 mm (~3.4 px / mm), ~0.6 % coverage, tile-wrapped
+    yy, xx = np.mgrid[0:h, 0:w]
+    peb = np.zeros((h, w), np.float32)
+    for _ in range(26):
+        cx, cy, r = rs.uniform(0, w), rs.uniform(0, h), rs.uniform(5, 13)
+        dx = (xx - cx + w / 2) % w - w / 2
+        dy = (yy - cy + h / 2) % h - h / 2
+        e = np.sqrt((dx / r) ** 2 + (dy / (r * rs.uniform(0.6, 1.0))) ** 2)
+        peb = np.maximum(peb, 1 - S(0.8, 1.0, e))
+    rgb = rgb * (1 - peb[..., None]) + C.hex2rgb("#F2EEE4") * (0.9 + 0.1 * grain[..., None]) * peb[..., None]
     det = S(0.82, 0.84, P.fbm(h, w, 90, 2, seed + 5))
     rgb = rgb * (1 - 0.6 * det[..., None]) + C.hex2rgb("#7A6448") * 0.6 * det[..., None]
     hgt = 0.5 * cellv + 0.5 * edge + 0.2 * grain

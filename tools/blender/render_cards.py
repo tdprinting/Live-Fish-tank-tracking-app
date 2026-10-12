@@ -31,6 +31,7 @@ CARDS = {
     "lysmata_amboinensis": "skunk_shrimp",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
+    "percnon_gibbesi": "sally_lightfoot",
     "ophiocoma_sp": "brittle_star",
     "sabellastarte_sp": "feather_duster",
     "nassarius_sp": "nassarius",
@@ -45,7 +46,7 @@ CARDS = {
     "zoanthus_sp": "zoa",
 }
 TOP = {"brittle_star", "asterina", "mushroom", "zoa"}
-HIGH = {"hermit_blue", "hermit_scarlet", "astrea", "nassarius", "shrimp", "skunk_shrimp", "gsp_mat",
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "shrimp", "skunk_shrimp", "gsp_mat",
         "organ_pipe", "clove"}
 
 

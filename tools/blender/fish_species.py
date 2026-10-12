@@ -322,33 +322,60 @@ def snowflake_mask(w, h, seed, rows=(0.32, 0.58, 0.84), aspect=1.0, density=1.0,
 
 
 def paint_engineer_goby(cv, fl):
-    """Juvenile engineer goby (ref_engineer_goby.jpg): black, yellow-cream wavy vertical bars joined by a broken
-    wavy mid-flank stripe into a maze."""
-    cv.vgrad("#0E0F0C", "#181A14", 0.0, 1.0)
+    """Juvenile engineer goby (ref_engineer_goby.jpg): black, bright yellow-cream wavy vertical bars (slightly
+    S-shaped, slanted) that join pairwise at the top or bottom and through a broken wavy longitudinal line into a
+    maze; yellow lines on the head."""
+    cv.vgrad("#0C0D0A", "#15170F", 0.0, 1.0)
     mucus(cv, 0.03, 41)
-    rs = np.random.default_rng(42)
+    rs = np.random.default_rng(43)
     m = np.zeros_like(cv.u)
-    x = 0.05
-    while x < 0.97:
-        top = rs.uniform(0.85, 0.97)
-        bot = rs.uniform(0.05, 0.2)
-        n = 6
-        pts = [(x + 0.012 * math.sin(k * 1.7 + x * 40) + rs.uniform(-0.004, 0.004), bot + (top - bot) * k / (n - 1))
-               for k in range(n)]
-        if rs.uniform() < 0.35:  # some bars break at the mid stripe
-            pts = pts[:3] if rs.uniform() < 0.5 else pts[3:]
-        m = np.maximum(m, fl.stroke(pts, [0.0075] * len(pts), soft=0.003))
-        x += rs.uniform(0.045, 0.06)
-    x = 0.03
-    while x < 0.95:  # broken wavy mid-flank stripe joins the bars into a maze
-        seg = rs.uniform(0.04, 0.1)
-        xs = np.linspace(x, min(x + seg, 0.98), 6)
-        pts = [(xx, 0.52 + 0.07 * math.sin(xx * 60 + 1.3)) for xx in xs]
-        m = np.maximum(m, fl.stroke(pts, [0.0065] * len(pts), soft=0.003))
-        x += seg + rs.uniform(0.02, 0.06)
-    m = np.maximum(m, fl.stroke([(0.005, 0.6), (0.03, 0.8), (0.06, 0.92)], [0.004] * 3, soft=0.002))
-    m = np.maximum(m, fl.stroke([(0.01, 0.35), (0.04, 0.3), (0.07, 0.4)], [0.0035] * 3, soft=0.002))
-    cv.blend(np.clip(m, 0, 1), "#E4E070")
+    w = 0.0062
+
+    def line(pts, wd=w):
+        return fl.stroke(pts, [wd] * len(pts), soft=0.0028)
+    xs = []
+    x = 0.075
+    while x < 0.965:
+        xs.append(x)
+        x += rs.uniform(0.03, 0.042)
+    tops, bots = [], []
+    for k, x0 in enumerate(xs):
+        ph = rs.uniform(0, 6.28)
+        slant = rs.uniform(0.006, 0.016)
+        top, bot = rs.uniform(0.86, 0.95), rs.uniform(0.06, 0.16)
+        pts = []
+        for t in np.linspace(0, 1, 9):
+            v = bot + (top - bot) * t
+            pts.append((x0 + slant * (t - 0.5) + 0.009 * math.sin(math.pi * 1.6 * t + ph), v))
+        r = rs.uniform()
+        if r < 0.22:      # break at mid-flank
+            m = np.maximum(m, line(pts[:4]))
+            m = np.maximum(m, line(pts[5:]))
+        elif r < 0.32:    # short bar (upper half only)
+            m = np.maximum(m, line(pts[4:]))
+        else:
+            m = np.maximum(m, line(pts))
+        tops.append(pts[-1])
+        bots.append(pts[0])
+    for k in range(len(xs) - 1):  # U / inverted-U joins between neighbours
+        r = rs.uniform()
+        if r < 0.3:
+            a, b = tops[k], tops[k + 1]
+            m = np.maximum(m, line([a, ((a[0] + b[0]) / 2, max(a[1], b[1]) + 0.025), b]))
+        elif r < 0.55:
+            a, b = bots[k], bots[k + 1]
+            m = np.maximum(m, line([a, ((a[0] + b[0]) / 2, min(a[1], b[1]) - 0.02), b]))
+    x = 0.42
+    while x < 0.95:  # broken wavy longitudinal line on the rear half
+        seg = rs.uniform(0.04, 0.09)
+        xx = np.linspace(x, min(x + seg, 0.97), 6)
+        m = np.maximum(m, line([(q, 0.62 + 0.05 * math.sin(q * 70 + 0.8)) for q in xx], 0.0052))
+        x += seg + rs.uniform(0.03, 0.07)
+    # head: lines over the snout, around the eye and on the cheek
+    m = np.maximum(m, line([(0.004, 0.55), (0.02, 0.74), (0.045, 0.9)], 0.005))
+    m = np.maximum(m, line([(0.012, 0.36), (0.035, 0.28), (0.06, 0.36), (0.07, 0.55)], 0.0048))
+    m = np.maximum(m, line([(0.05, 0.68), (0.058, 0.8), (0.052, 0.92)], 0.0045))
+    cv.blend(np.clip(m, 0, 1), "#E8E472")
     dark_mouth(cv, fl, u1=0.03, v0=0.38, v1=0.44, color="#050505", op=0.7)
 
 
@@ -577,12 +604,14 @@ SPECIES = {
         paint=paint_wrasse, fins=fins_wrasse, irid=0.5, rough=0.3, length_cm=7.0,
     ),
     "engineer_goby": dict(
-        # Pholidichthys leucotaenia (juvenile): elongate, compressed, blunt head, continuous dorsal-caudal-anal fin
-        profile=[(0, 0.07, 0.05, 0.0), (0.015, 0.09, 0.062, 0.0), (0.06, 0.10, 0.065, 0.0), (0.3, 0.10, 0.06, 0.0),
-                 (0.7, 0.095, 0.05, 0.0), (0.88, 0.07, 0.035, 0.0), (0.97, 0.035, 0.018, 0.0), (1.0, 0.012, 0.01, 0.0)],
-        body_tris=5500, ring=16, p_exp=0.9, belly_bias=0.06, back_pinch=0.1,
-        ribbon=dict(u_d=0.33, u_a=0.52, h_d=0.045, h_a=0.04),
-        caudal=None,
+        # Pholidichthys leucotaenia (juvenile): eel-like, strongly compressed (width ~0.45 x depth), blunt head,
+        # gradual taper to a pointed tail, continuous dorsal-caudal-anal fin, slightly wavy resting pose
+        profile=[(0, 0.066, 0.042, 0.0), (0.015, 0.085, 0.048, 0.0), (0.06, 0.098, 0.05, 0.0),
+                 (0.3, 0.098, 0.046, 0.0), (0.55, 0.09, 0.04, 0.0), (0.75, 0.072, 0.032, 0.0),
+                 (0.9, 0.045, 0.02, 0.0), (0.97, 0.022, 0.011, 0.0), (1.0, 0.006, 0.005, 0.0)],
+        body_tris=5500, ring=16, p_exp=1.1, belly_bias=0.04, back_pinch=0.18,
+        ribbon=dict(u_d=0.33, u_a=0.52, h_d=0.034, h_a=0.03, taper=0.55, tip_len=1.9),
+        caudal=None, rest_wave=(0.022, 1.35),
         pectoral=dict(u=0.1, length=0.05, width=0.04, zf=-0.2, shape="round"),
         eye=dict(u=0.035, zf=0.4, r=0.014, iris="#2A2A20", ring="#B8B060", outer="#101010", ring_w=0.15),
         paint=paint_engineer_goby, fins=fins_engineer_goby, irid=0.05, rough=0.4, length_cm=20.0, tex=(2048, 256),
@@ -712,7 +741,8 @@ def build_geometry(sid):
         fins.append(("FinCaudal", FL.caudal_fin(prof, 0.985, c["length"], c["span"], c["shape"])))
     if "ribbon" in sp:
         r = sp["ribbon"]
-        fins.append(("FinDorsal", FL.ribbon_fin(prof, r["u_d"], r["u_a"], r["h_d"], r["h_a"])))
+        fins.append(("FinDorsal", FL.ribbon_fin(prof, r["u_d"], r["u_a"], r["h_d"], r["h_a"],
+                                                taper=r.get("taper", 0.0), tip_len=r.get("tip_len", 0.9))))
     if "pectoral" in sp:
         p = sp["pectoral"]
         for side, nm in ((-1, "FinPectoralL"), (1, "FinPectoralR")):
@@ -741,26 +771,13 @@ def build_geometry(sid):
         fb.add(nm, ev, ef, euv, ecol, "eye", ["iris", "pupil"], face_mats=fm,
                extras={"pivot": (lambda c=cen: fb.gltf_point(c))})
 
-    if False:  # (moray jaw, unused) hinged at u 0.085
-        u = np.linspace(0.004, 0.085, 10)
-        ring = 8
-        Vj, Fj = [], []
-        for ui in u:
-            Hh, Ww, zz = prof.H(ui) * 0.9, prof.W(ui) * 1.04, prof.Zc(ui)
-            for k in range(ring):
-                a = math.pi + math.pi * k / (ring - 1)  # lower half: pi..2pi
-                Vj.append((ui - 0.003, Ww * math.cos(a), zz - 0.15 * Hh + Hh * 0.85 * math.sin(a) * 1.05))
-        for a in range(len(u) - 1):
-            for k in range(ring - 1):
-                p0 = a * ring + k
-                Fj.append((p0, p0 + ring, p0 + ring + 1, p0 + 1))
-        Vj = np.array(Vj)
-        UVj = np.stack([Vj[:, 0], np.full(len(Vj), 0.3)], -1)
-        Cj = np.zeros((len(Vj), 4))
-        Cj[:, 3] = Vj[:, 0]
-        hp = (0.085, 0.0, prof.Zc(0.085) - 0.1 * prof.H(0.085))
-        hinge = (lambda: fb.gltf_point(hp))
-        fb.add("JawLower", Vj, Fj, UVj, Cj, "jaw", "body", extras={"hinge": hinge})
+    if sp.get("rest_wave"):  # gentle lateral S in the rest pose (head kept straight)
+        amp, freq = sp["rest_wave"]
+        for k, prt in enumerate(fb.parts):
+            V = np.array(prt[1], float).copy()
+            u = V[:, 0]
+            V[:, 1] += amp * np.sin(2 * math.pi * freq * u - 0.6) * P.smoothstep(0.06, 0.35, u)
+            fb.parts[k] = (prt[0], V) + tuple(prt[2:])
     return sp, prof, fb
 
 

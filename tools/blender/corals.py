@@ -282,6 +282,14 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 MAXD = 5  # depth 5 = the short lobe beside each tip
 
 
+def raw_anchor(name):
+    import rockscape as R
+    for nm, typ, pos, extra, snap in R.ANCHORS:
+        if nm == name:
+            return np.array(pos, float), unit(extra.get("normal", [0, 1, 0]))
+    raise KeyError(name)
+
+
 def kenya(rock, A):
     pos, n = A["coral_kenya_main"]
     rs = RS(11)
@@ -323,7 +331,25 @@ def kenya(rock, A):
                  phase if depth > 0 else c / 5.0)
 
     trunk_dir = unit(0.85 * UP + 0.15 * n)
-    grow(pos - n * 0.8, trunk_dir, 3.5, 2.0, 0, 0.0)
+    grow(pos - n * 0.8, trunk_dir, 4.0, 2.0, 0, 0.0)
+    allp = np.vstack([b[0] for b in branches])
+    lo, hi = allp.min(0), allp.max(0)
+    sy = (48.0 - pos[1]) / (hi[1] - pos[1])
+    crown = allp[allp[:, 1] > pos[1] + 0.35 * (hi[1] - pos[1])]
+    clo, chi = crown.min(0), crown.max(0)
+    sx, sz = 26.0 / (chi[0] - clo[0]), 20.0 / (chi[2] - clo[2])
+    cx, cz = (clo[0] + chi[0]) / 2, (clo[2] + chi[2]) / 2
+    rsc = float(np.clip(((sx + sz) / 2) ** 0.6, 0.8, 1.6))
+    for k, (pts, rad, depth, phase) in enumerate(branches):
+        h = np.clip((pts[:, 1] - pos[1]) / (hi[1] - pos[1]), 0, 1)
+        w = S(0.12, 0.45, h)
+        q = pts.copy()
+        q[:, 1] = pos[1] + (pts[:, 1] - pos[1]) * sy
+        q[:, 0] = pts[:, 0] + w * ((73.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
+        q[:, 2] = pts[:, 2] + w * ((17.0 + (pts[:, 2] - cz) * sz) - pts[:, 2])
+        branches[k] = (q, rad * (1 + (rsc - 1) * (1 - 0.5 * h)), depth, phase)
+    allp = np.vstack([b[0] for b in branches])
+    print("[coral] kenya bbox", np.round(allp.min(0), 1), np.round(allp.max(0), 1))
     g = T.WGeo()
     inst = Instances(12)
     import geomlib as G
@@ -349,34 +375,34 @@ def kenya(rock, A):
                 o = unit(np.cross(tng, rs.normal(0, 1, 3)))
                 if np.dot(o, UP) < -0.3:
                     o = -o
-                inst.add(c + o * r * 0.9, o, rs.uniform(0.8, 1.25), phase=(phase + 0.1 * depth) % 1.0)
+                inst.add(c + o * r * 0.8, o, rs.uniform(0.9, 1.4), phase=(phase + 0.1 * depth) % 1.0)
     # trim to 600 tufts
-    if len(inst) > 1000:
-        keep = np.sort(RS(5).choice(len(inst), 1000, replace=False))
+    if len(inst) > 850:
+        keep = np.sort(RS(5).choice(len(inst), 850, replace=False))
         inst.rows = [inst.rows[i] for i in keep]
     cv = P.Canvas(64, 256)
-    cv.vgrad("#B98E86", "#E8C4BE", 0.0, 1.0, 0.8)
-    cv.blend(S(0.2, 0.6, cv.v) * (1 - S(0.75, 1.0, cv.v)), "#D9A6A0", 0.6)
+    cv.vgrad("#C9A08E", "#E4C2BA", 0.0, 1.0, 0.8)  # tan-pink stalk -> branches #D8A9A0
+    cv.blend(S(0.2, 0.6, cv.v) * (1 - S(0.75, 1.0, cv.v)), "#D8A9A0", 0.7)
     spk = P.fbm(256, 64, 8, 3, 7)
     cv.multiply(0.9 + 0.2 * spk)
     body_m = C.material("kenya_body", rough=0.75, image=tex("kenya_body", cv))
-    pc = P.Canvas(64, 64, "#E2B9B0")
+    pc = P.Canvas(64, 64, "#E6C6BE")
     rr = np.hypot(pc.u - 0.5, pc.v - 0.5)
     pc.blend(1 - S(0.05, 0.2, rr), "#C99A90")
-    pc.blend(S(0.38, 0.5, rr), "#EFD3CB")
+    pc.blend(S(0.38, 0.5, rr), "#EBD3CC")
     polyp_m = C.material("kenya_polyp", rough=0.6, image=tex("kenya_polyp", pc))
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3)
     body = g.obj("Body", root, "body", [body_m], smooth=True)
-    pol = polyp_node("Tufts", root, proto_star(r=0.22, h=0.14), [polyp_m], inst)
+    pol = polyp_node("Tufts", root, proto_star(r=0.6, h=0.32), [polyp_m], inst)
     return root, [body, pol], {"Tufts": (len(inst), 12)}
 
 
 # ----------------------------------------------------------------------------
 # Green star polyps (G1 neon clump, G2 mat)
 # ----------------------------------------------------------------------------
-def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name):
-    pos, n = A[anchor]
+def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name, mat_hex="#5A3F6B", raw=False):
+    pos, n = raw_anchor(anchor) if raw else A[anchor]
     rs = RS(seed)
     # mat grid
     na, nb = int(2 * half[0] / 0.7) + 1, int(2 * half[1] / 0.7) + 1
@@ -430,7 +456,7 @@ def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name
         nn = unit(nn + n * 0.4 + UP * 0.2)
         ph = (np.dot(p, flow) / 25.0 + rs.normal(0, 0.03)) % 1.0
         inst.add(p + nn * 0.08, nn, rs.uniform(0.8, 1.2), phase=ph)
-    mat_cv = P.Canvas(64, 64, "#5A3F6B")
+    mat_cv = P.Canvas(64, 64, mat_hex)
     mat_cv.multiply(0.85 + 0.3 * P.fbm(64, 64, 4, 3, seed))
     mat_m = C.material(name + "_mat", rough=0.8, image=tex(name + "_mat", mat_cv))
     pc = P.Canvas(64, 64, polyp_hex)
@@ -439,7 +465,7 @@ def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name
     pc.rgb = hex2rgb("#4B3A55")[None, None] * (1 - k) + \
         (hex2rgb(polyp_hex)[None, None] * (1 - S(0.5, 0.95, t))[..., None] + hex2rgb(tip_hex)[None, None] * S(0.5, 0.95, t)[..., None]) * k
     # emissive factor = fluorescence color (the runtime scales it by uBlueFraction)
-    pol_m = C.material(name + "_polyp", rough=0.5, image=tex(name + "_polyp", pc), emissive=tip_hex, emissive_strength=0.25)
+    pol_m = C.material(name + "_polyp", rough=0.5, image=tex(name + "_polyp", pc), emissive=tip_hex, emissive_strength=0.12)
     root = C.empty("Root")
     C.set_extras(root, anchor=anchor, species="green_star_polyps", fluorescent=1)
     body = g.obj("Mat", root, "body", [mat_m], smooth=True)
@@ -479,8 +505,8 @@ def rubble(center, radii, seed, segs=14, rings=8, rough=0.35):
 
 def zoa(rock, A):
     pos, n = A["coral_zoa_front_center"]
-    c = np.array([pos[0], 3.4, pos[2]])
-    V, F = rubble(c, (2.6, 1.6, 2.0), 3, segs=20, rings=10)
+    c = np.array([pos[0], pos[1] - 0.2, pos[2]])
+    V, F = rubble(c, (3.0, 1.8, 2.0), 3, segs=20, rings=10)
     g = T.WGeo()
     g.add(V, F, np.c_[(V[:, 0] - c[0]) / 6 + 0.5, (V[:, 2] - c[2]) / 6 + 0.5], (0.2, 0, 0, 1))
     rs = RS(21)
@@ -488,16 +514,16 @@ def zoa(rock, A):
     k = 0
     tries = 0
     placed = []
-    while k < 40 and tries < 4000:
+    while k < 30 and tries < 4000:
         tries += 1
         th = rs.uniform(0, 2 * math.pi)
         ph = rs.uniform(0, 1.15)
-        d = np.array([math.cos(th) * math.sin(ph) * 2.6, math.cos(ph) * 1.6, math.sin(th) * math.sin(ph) * 2.0])
+        d = np.array([math.cos(th) * math.sin(ph) * 3.0, math.cos(ph) * 1.8, math.sin(th) * math.sin(ph) * 2.0])
         p = c + d
         # snap to the actual rubble surface (nearest vertex region)
         j = np.argmin(np.linalg.norm(V - p, axis=1))
         p = V[j]
-        if p[1] < 3.45 or any(np.linalg.norm(p - q) < 0.62 for q in placed):
+        if p[1] < c[1] + 0.05 or any(np.linalg.norm(p - q) < 0.62 for q in placed):
             continue
         placed.append(p)
         nn = unit(p - c + UP * 0.8)
@@ -553,6 +579,21 @@ def zoa(rock, A):
     rm = C.material("zoa_rubble", rough=0.9, image=tex("zoa_rubble", rock_cv))
     mA = ptex("zoa_polyp_orange", "#7A5A3A", "#E0792A", "#E0792A", "#5FBF5A")
     mB = ptex("zoa_polyp_brown", "#5A4030", "#6B4A2E", "#6B4A2E", "#E8DDC0")
+    mC = ptex("paly_polyp_brown", "#5A4030", "#7A5A36", "#7A5A36", "#D8C8A0")
+    # paly colony (C4b): 20 brown polyps at R2's right foot + a 10-polyp orange patch at (24, 5, 25)
+    instC, instD = Instances(24), Instances(25)
+    for cen, cnt, inst_, rad in ((A["coral_paly_left_foot"][0], 20, instC, 2.2), (np.array([24.0, 5.0, 25.0]), 10, instD, 1.4)):
+        placed, tries = [], 0
+        while len(placed) < cnt and tries < 3000:
+            tries += 1
+            q = cen + np.array([rs.uniform(-rad, rad), rs.uniform(0, 2.0), rs.uniform(-rad, rad)])
+            hit, hn, dist = rock.nearest(q)
+            if dist > 1.5 or hn[1] < -0.2 or any(np.linalg.norm(hit - x) < 0.6 for x in placed):
+                if hn is not None and hn[1] > 0.0 and dist <= 3.0 and q[1] < cen[1] + 0.5:
+                    pass
+                continue
+            placed.append(hit)
+            inst_.add(hit + hn * 0.05, unit(hn + UP * 0.6), rs.uniform(0.8, 1.1))
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_zoa_front_center", species="zoanthids")
     body = g.obj("Rubble", root, "body", [rm], smooth=True)
@@ -560,8 +601,11 @@ def zoa(rock, A):
     pr = proto()
     a = polyp_node("PolypsOrange", root, pr, [mA], instA)
     b = polyp_node("PolypsBrown", root, pr, [mB], instB)
+    c_ = polyp_node("PalyBrown", root, pr, [mC], instC, extras={"anchor": "coral_paly_left_foot"})
+    d_ = polyp_node("PalyOrange", root, pr, [mA], instD, extras={"anchor": "coral_paly_left_foot"})
     nt = len(pr[1]) + sum(1 for f in pr[1] if len(f) == 4)
-    return root, [body, a, b], {"PolypsOrange": (len(instA), nt), "PolypsBrown": (len(instB), nt)}
+    return root, [body, a, b, c_, d_], {"PolypsOrange": (len(instA), nt), "PolypsBrown": (len(instB), nt),
+                                        "PalyBrown": (len(instC), nt), "PalyOrange": (len(instD), nt)}
 
 
 # ----------------------------------------------------------------------------
@@ -569,18 +613,18 @@ def zoa(rock, A):
 # ----------------------------------------------------------------------------
 def clove(rock, A):
     import geomlib as G
-    pos, n = A["coral_clove_kenya_base"]
+    pos, n = A["coral_clove_kenya_front"]
     rs = RS(31)
     g = T.WGeo()
     inst = Instances(32)
     t1 = unit(np.cross(UP, n))
     t2 = np.cross(n, t1)
     for tuft in range(3):
-        cen = pos + t1 * (tuft - 1) * 3.2 + t2 * rs.uniform(-1.5, 1.5)
+        cen = pos + t1 * (tuft - 1) * 2.6 + t2 * rs.uniform(-1.2, 1.2)
         hit, nn, _ = rock.nearest(cen)
         # stolon network: 5 short runners from the tuft centre, laid on the rock
-        for s in range(5):
-            ang = 2 * math.pi * s / 5 + rs.uniform(-0.3, 0.3)
+        for s in range(4):
+            ang = 2 * math.pi * s / 4 + rs.uniform(-0.3, 0.3)
             pts = []
             for k in range(6):
                 q = hit + (t1 * math.cos(ang) + t2 * math.sin(ang)) * k * 0.45
@@ -589,22 +633,22 @@ def clove(rock, A):
             pts = np.array(pts)
             V, F, tv, av = G.tube(pts, 0.12, 4, cap_start=False, cap_end=True, up=(0, 1, 0))
             g.add(V, F, np.c_[av * 0.5, tv * 0.3], (0.8, tuft / 3, 0, 1))
-            for k in range(1, 6):
+            for k in range(2, 5):
                 if rs.uniform() < 0.95:
                     h, hn, _ = rock.nearest(pts[k])
                     inst.add(h + hn * 0.1, unit(hn + n * 0.6 + UP * 0.3), rs.uniform(0.8, 1.2),
                              phase=(tuft / 3 + rs.normal(0, 0.05)) % 1)
-        for _ in range(5):
+        for _ in range(2):
             q = hit + t1 * rs.normal(0, 0.6) + t2 * rs.normal(0, 0.6)
             h, hn, _ = rock.nearest(q)
             inst.add(h + hn * 0.1, unit(hn + n * 0.6 + UP * 0.3), rs.uniform(0.9, 1.3), phase=tuft / 3)
     cv = P.Canvas(64, 64, "#6E6A3C")
     st = C.material("clove_stolon", rough=0.85, image=tex("clove_stolon", cv))
-    fc = feather_canvas("#6E6A3C", "#8A8650", "#B4B88A", "#9FA66A", "#D8D8B8", seed=3)
+    fc = feather_canvas("#8A7A66", "#A8957F", "#B8A38E", "#CBBBA6", "#E0D6C6", seed=3)
     pm = C.material("clove_polyp", rough=0.6, image=tex("clove_polyp", fc, alpha=True), image_alpha=True,
                     double=True, clip=True)
     root = C.empty("Root")
-    C.set_extras(root, anchor="coral_clove_kenya_base", species="clove_polyps")
+    C.set_extras(root, anchor="coral_clove_kenya_front", species="clove_polyps")
     body = g.obj("Stolons", root, "body", [st], smooth=True)
     pr = proto_feather_quads(8, 0.35, 0.09, 0.8, 62, 0.11, 4, 0.35)
     pol = polyp_node("Polyps", root, pr, [pm], inst, extras={"alphaTest": 0.5})
@@ -615,22 +659,23 @@ def clove(rock, A):
 # ----------------------------------------------------------------------------
 # Mushroom (C5)
 # ----------------------------------------------------------------------------
-def mushroom(rock, A):
-    pos, n = A["coral_shroom_front_left"]
-    c = np.array([pos[0], 3.0, pos[2]])
-    V, F, UV, COL = [], [], [], []
-    rings, segs = 7, 40
-    V.append(c + UP * 0.9)
+def shroom_disc(c, n, radius, seed):
+    """Ruffled corallimorph disc (radius cm) on a short stalk, oriented to normal n."""
+    rs = RS(seed)
+    V, UV, COL, F = [], [], [], []
+    rings, segs = 6, 32
+    V.append((0, 0.36 * radius, 0))
     UV.append((0.5, 0.5))
     COL.append((0, 0, 0.3, 1))
+    ph = rs.uniform(0, 6)
     for i in range(1, rings + 1):
         t = i / rings
         for k in range(segs):
             a = 2 * math.pi * k / segs
-            r = 2.5 * t
-            ruffle = 0.3 * t ** 3 * math.sin(8 * a + 0.7) + 0.1 * t ** 2 * math.sin(13 * a)
-            y = 0.9 - 0.45 * t ** 2 + ruffle + 0.05 * math.sin(a * 5 + t * 9) * t
-            V.append(c + np.array([r * math.cos(a), y, r * 0.9 * math.sin(a)]))
+            r = radius * t
+            ruffle = radius * (0.12 * t ** 3 * math.sin(8 * a + ph) + 0.04 * t ** 2 * math.sin(13 * a))
+            y = radius * (0.36 - 0.18 * t ** 2) + ruffle
+            V.append((r * math.cos(a), y, r * 0.9 * math.sin(a)))
             UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
             COL.append((0.8 * t, 0, t, 1))
     for k in range(segs):
@@ -639,31 +684,50 @@ def mushroom(rock, A):
         b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
         for k in range(segs):
             F.append((b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k))
-    # underside skirt and short stalk
     b = len(V)
     for k in range(segs):
         a = 2 * math.pi * k / segs
-        V.append(c + np.array([0.7 * math.cos(a), 0.0, 0.63 * math.sin(a)]))
+        V.append((0.28 * radius * math.cos(a), 0.0, 0.25 * radius * math.sin(a)))
         UV.append((0.5 + 0.1 * math.cos(a), 0.5 + 0.1 * math.sin(a)))
         COL.append((0, 0, 0, 1))
     outer = 1 + (rings - 1) * segs
     for k in range(segs):
         F.append((outer + k, outer + (k + 1) % segs, b + (k + 1) % segs, b + k))
-    cv = P.Canvas(256, 256, "#4FD17A")
+    V = np.array(V, float)
+    q = q_from_up(unit(n), rs.uniform(0, 6.28))
+    V = np.array([q_rotate(q, v) for v in V]) + np.asarray(c, float)
+    return V, F, np.array(UV), np.array(COL)
+
+
+def shroom_tex(name, base, rim, plug, stripe, spot):
+    cv = P.Canvas(256, 256, base)
     rr = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
-    cv.blend(S(0.7, 0.98, rr), "#2D7F8F")
-    cv.blend(1 - S(0.04, 0.1, rr), "#2A6A50")
+    cv.blend(S(0.7, 0.98, rr), rim)
+    cv.blend(1 - S(0.06, 0.14, rr), plug)
     ang = np.arctan2(cv.v - 0.5, cv.u - 0.5)
-    cv.blend(0.25 * (0.5 + 0.5 * np.cos(ang * 36)) * S(0.15, 0.6, rr), "#3AA868")
+    cv.blend(0.25 * (0.5 + 0.5 * np.cos(ang * 36)) * S(0.15, 0.6, rr), stripe)
     spots = (P.fbm(256, 256, 24, 2, 4) > 0.62) * S(0.2, 0.8, rr)
-    cv.blend(spots * 0.6, "#8BF0A8")
-    m = C.material("mushroom", rough=0.5, image=tex("mushroom", cv), emissive="#4FD17A", emissive_strength=0.0,
-                   double=True)
+    cv.blend(spots * 0.5, spot)
+    return tex(name, cv)
+
+
+def mushroom(rock, A):
+    pos, n = A["coral_shroom_center"]
     g = T.WGeo()
-    g.add(np.array(V), F, np.array(UV), np.array(COL))
+    V, F, UV, COL = shroom_disc(pos - UP * 0.1, (0, 1, 0), 1.75, 61)
+    g.add(V, F, UV, COL, mat=0)
+    pos2, n2 = A["coral_shroom_small"]
+    V, F, UV, COL = shroom_disc(pos2 - unit(n2) * 0.1, n2, 1.25, 62)
+    g.add(V, F, UV, COL, mat=1)
+    m1 = C.material("mushroom", rough=0.5, image=shroom_tex("mushroom", "#5DBD5E", "#2D7F6F", "#C8B48A", "#3AA868",
+                                                            "#8BF0A8"), emissive="#5DBD5E", emissive_strength=0.0,
+                    double=True)
+    m2 = C.material("mushroom_small", rough=0.5, image=shroom_tex("mushroom_small", "#8B3A4A", "#5E2434", "#B07A60",
+                                                                  "#7A2E3E", "#B05A6A"), double=True)
     root = C.empty("Root")
-    C.set_extras(root, anchor="coral_shroom_front_left", species="mushroom", fluorescent=0.5)
-    body = g.obj("Body", root, "body", [m], smooth=True)
+    C.set_extras(root, anchor="coral_shroom_center", species="mushroom", fluorescent=0.5)
+    body = g.obj("Body", root, "body", [m1, m2], smooth=True, extras={"anchors": ["coral_shroom_center",
+                                                                                    "coral_shroom_small"]})
     return root, [body], {}
 
 
@@ -672,16 +736,19 @@ def mushroom(rock, A):
 # ----------------------------------------------------------------------------
 def macro_red(rock, A):
     import geomlib as G
-    pos, n = A["coral_macro_back_left"]
     rs = RS(41)
     g = T.WGeo()
-    t1 = unit(np.cross(UP, n))
-    for tuft in range(3):
-        base_q = pos + t1 * (tuft - 1) * 4.0 + UP * rs.uniform(-2, 2)
-        base, bn, _ = rock.nearest(base_q)
-        for br in range(19):
+    tufts = (("coral_macro_back_left", 10.0), ("coral_macro_back_left_2", 7.0), ("coral_macro_lane", 5.0),
+             ("coral_macro_right_corner", 6.0))
+    for tuft, (aname, size) in enumerate(tufts):
+        pos, n = A[aname]
+        if aname == "coral_macro_lane":  # on the sand
+            base, bn = pos, UP
+        else:
+            base, bn, _ = rock.nearest(pos)
+        for br in range(int(round(size * 1.9))):
             d = unit(UP * 0.8 + bn * 0.6 + rs.normal(0, 0.45, 3))
-            L = rs.uniform(4, 10)
+            L = rs.uniform(0.4, 1.0) * size
             pts = []
             p = base + rs.normal(0, 0.4, 3)
             dd = d
@@ -706,11 +773,12 @@ def macro_red(rock, A):
                 w = (k0 / 6) + tv * 0.4
                 g.add(V, F, np.c_[av, 0.4 + tv * 0.6], np.c_[np.ones(len(V)), np.full(len(V), (tuft / 3) % 1), np.clip(w, 0, 1), np.ones(len(V))])
     cv = P.Canvas(16, 128)
-    cv.vgrad("#7A1F3A", "#B5294F", 0, 1, 0.8)
+    cv.vgrad("#7A1F3A", "#C23B5E", 0, 1, 0.8)
     cv.blend(S(0.85, 1.0, cv.v), "#D0506A", 0.5)
     m = C.material("macro_red", rough=0.6, image=tex("macro_red", cv))
     root = C.empty("Root")
-    C.set_extras(root, anchor="coral_macro_back_left", species="red_macroalgae")
+    C.set_extras(root, anchor="coral_macro_back_left", species="red_macroalgae",
+                 anchors=[t[0] for t in tufts])
     body = g.obj("Body", root, "body", [m], smooth=True)
     return root, [body], {}
 
@@ -790,9 +858,22 @@ def organ_pipe(rock, A):
 def algae_tufts(rock, A):
     rs = RS(61)
     g = T.WGeo()
+    spots = []
     for name in sorted(k for k in A if k.startswith("GRAZE_")):
         pos, n = A[name]
         hit, nn, _ = rock.nearest(pos)
+        spots.append((hit, nn))
+    # crests: top surfaces found by vertical rays on a jittered 4 cm grid, Poisson-thinned to 5 cm
+    for x in np.arange(3, 120, 4.0):
+        for z in np.arange(2, 32, 4.0):
+            q = np.array([x + rs.uniform(-1.5, 1.5), 60.0, z + rs.uniform(-1.5, 1.5)])
+            hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
+            if hit is None or nn[1] < 0.6 or hit[1] < 9 or hit[1] > 55:
+                continue
+            if all(np.linalg.norm(hit - h) > 5.0 for h, _ in spots):
+                spots.append((hit, nn))
+    print(f"[coral] hair tufts: {len(spots)}")
+    for hit, nn in spots:
         nn = unit(nn + UP * 0.3)
         for c in range(3):  # three crossed cards
             ang = math.pi * c / 3 + rs.uniform(0, 0.4)
@@ -823,15 +904,74 @@ def algae_tufts(rock, A):
     root = C.empty("Root")
     C.set_extras(root, anchor="GRAZE_*", species="hair_algae", scaleBy="uAlgaeBloom")
     body = g.obj("Cards", root, "card", [m], smooth=False, extras={"alphaTest": 0.4})
+    # AlgaeClumpLeft: loose 7 x 4 cm green hair-algae ball on the sand at the left foot
+    pos, _ = A["coral_algae_clump_left"]
+    g2 = T.WGeo()
+    for c in range(16):
+        ang = math.pi * c / 8 + rs.uniform(0, 0.3)
+        tilt = rs.uniform(-0.5, 0.5)
+        dirn = unit(np.array([math.cos(ang) * 0.5, 1.0, math.sin(ang) * 0.3 + tilt]))
+        side = unit(np.cross(dirn, [math.sin(ang), 0.1, -math.cos(ang)]))
+        w, h = rs.uniform(3.0, 4.2), rs.uniform(2.4, 3.6)
+        p0 = pos + np.array([rs.uniform(-1.8, 1.8), -0.2, rs.uniform(-1.0, 1.0)])
+        V = [p0 - side * w / 2, p0 + side * w / 2, p0 + side * w / 2 + dirn * h, p0 - side * w / 2 + dirn * h]
+        g2.add(np.array(V), [(0, 1, 2, 3)], np.array([(0, 0), (1, 0), (1, 1), (0, 1)]),
+               np.array([(0, 0, 0, 1), (0, 0, 0, 1), (0, 0, 1, 1), (0, 0, 1, 1)]))
+    cv2 = P.Canvas(128, 128, "#7FA23A", 0.0)
+    cv2.rgb = np.where(a[..., None] > 0, col * (hex2rgb("#7FA23A") / hex2rgb("#3B5B2E"))[None, None],
+                       hex2rgb("#7FA23A")[None, None]).astype(np.float32)
+    cv2.rgb = np.clip(cv2.rgb, 0, 1)
+    cv2.a = a.astype(np.float32)
+    m2 = C.material("algae_clump", rough=0.75, image=tex("algae_clump", cv2, alpha=True), image_alpha=True,
+                    double=True, clip=True)
+    clump = g2.obj("ClumpLeft", root, "card", [m2], smooth=False,
+                   extras={"alphaTest": 0.4, "anchor": "coral_algae_clump_left"})
+    return root, [body, clump], {}
+
+
+# ----------------------------------------------------------------------------
+# Aiptasia x3 (1.5 cm brown pest anemones)
+# ----------------------------------------------------------------------------
+def aiptasia(rock, A):
+    import geomlib as G
+    rs = RS(71)
+    g = T.WGeo()
+    names = ("coral_aiptasia_1", "coral_aiptasia_2", "coral_aiptasia_3")
+    for k, nm in enumerate(names):
+        pos, _ = A[nm]
+        hit, nn, _ = rock.nearest(pos)
+        nn = unit(nn + UP * 0.5)
+        top = hit + nn * 1.0
+        V, F, tv, av = G.tube(np.array([hit - nn * 0.1, hit + nn * 0.5, top]), [0.18, 0.22, 0.3], 6,
+                              cap_start=True, cap_end=True, up=(1, 0, 0))
+        g.add(V, F, np.c_[av * 0.5, tv * 0.5], (0.3, k / 3, 0, 1))
+        t1 = unit(np.cross(nn, [0.3, 0.1, 0.9]))
+        t2 = np.cross(nn, t1)
+        for j in range(14):
+            ang = 2 * math.pi * j / 14
+            dirn = unit(nn * 0.55 + (t1 * math.cos(ang) + t2 * math.sin(ang)))
+            base = top + dirn * 0.18
+            tip = base + dirn * rs.uniform(0.55, 0.75) + nn * 0.1
+            V, F = G.cone(base, tip, 0.05, 3)
+            g.add(V, F, np.c_[np.full(len(V), 0.75), np.r_[np.zeros(3), 1.0][:len(V)] if len(V) == 4 else np.full(len(V), 0.8)],
+                  (0.3, k / 3, 1, 1))
+    cv = P.Canvas(32, 64)
+    cv.vgrad("#5E4630", "#9C8466", 0, 1, 0.8)
+    m = C.material("aiptasia", rough=0.6, image=tex("aiptasia", cv), alpha=0.9, blend=True)
+    root = C.empty("Root")
+    C.set_extras(root, anchor="coral_aiptasia_1", species="aiptasia", anchors=list(names))
+    body = g.obj("Body", root, "body", [m], smooth=True)
     return root, [body], {}
 
 
 BUILDERS = {
     "kenya": kenya,
-    "gsp_neon": lambda r, A: gsp(r, A, "coral_gsp_upper_left", 7.0, (7.0, 5.0), 0.26, 1000, "#B8FF3A", "#7DFF4F", 71, "gsp_neon"),
-    "gsp_mat": lambda r, A: gsp(r, A, "coral_gsp_lower_right", 9.0, (11.0, 8.0), 0.30, 1600, "#3FD17A", "#7DFF4F", 81, "gsp_mat"),
+    "gsp_neon": lambda r, A: gsp(r, A, "coral_gsp_upper_left", 6.0, (5.0, 4.0), 0.26, 900, "#C4FF3C", "#C4FF3C", 71,
+                                 "gsp_neon"),
+    "gsp_mat": lambda r, A: gsp(r, A, "coral_gsp_lower_right", 9.0, (8.0, 9.5), 0.32, 1600, "#59D64A", "#7DFF4F", 81,
+                                "gsp_mat", mat_hex="#4E3860", raw=True),
     "zoa": zoa, "clove": clove, "mushroom": mushroom, "macro_red": macro_red, "organ_pipe": organ_pipe,
-    "algae_tufts": algae_tufts,
+    "algae_tufts": algae_tufts, "aiptasia": aiptasia,
 }
 
 
