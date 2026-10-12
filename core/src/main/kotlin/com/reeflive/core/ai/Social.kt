@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * What one individual remembers about another (SIMULATION §4.9). All values 0..1 except
+ * What one individual remembers about another (SIMULATION §9.6). All values 0..1 except
  * [dominance] (−1 = it dominates me, +1 = I dominate it). Fear and grudge fade with half-lives of
  * hours; familiarity builds over days of shared space ("dear enemy": familiar neighbours are chased less).
  */

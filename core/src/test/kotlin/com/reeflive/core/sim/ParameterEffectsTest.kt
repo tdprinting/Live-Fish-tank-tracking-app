@@ -3,7 +3,7 @@ package com.reeflive.core.sim
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Sandbox parameter scenarios calibrated against research 05 (SIMULATION §9.4). */
+/** Sandbox parameter scenarios calibrated against research 05 (SIMULATION §9.6). */
 class ParameterEffectsTest {
     private fun stocked(seed: Long = 3L) = TestTank.sim(DefaultStock.all, seed = seed).also { sim ->
         sim.organisms.filter { it.brainKind == BrainKind.WRASSE }.forEach { it.acceptsPrepared = true }

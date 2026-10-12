@@ -74,7 +74,7 @@ object HealthModel {
     private val FISH_COPPER = ToleranceRange(optHi = 0.05, tolHi = 0.25, lethalHi = 0.5)
 
     /**
-     * Rate-of-change shock (SIMULATION §3.3b): the animal is acclimated to an exponentially lagged
+     * Rate-of-change shock (SIMULATION §9.6): the animal is acclimated to an exponentially lagged
      * value; the gap |current − acclimated| in units of a "safe step" drives stress through
      * [SHOCK_RANGE] (0.4 step = noticeable, 1 step = tolerable limit, 2.5 steps = lethal).
      */

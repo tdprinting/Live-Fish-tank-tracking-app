@@ -11,7 +11,7 @@ import kotlin.math.sin
  * toward the target (0 = tolerance). Pairs listed in [handledBySpecies] are driven by the species
  * brains' own territory behaviors (DefendHost, ChaseIntruder, BlennyRival, Territorial); the rest
  * use the generic [Rivalry] behavior below. Values are the research's qualitative codes mapped to
- * numbers: moderate A/C/T/H = 0.5–0.6, low = 0.15–0.25 (est., tunable, SIMULATION §9.4).
+ * numbers: moderate A/C/T/H = 0.5–0.6, low = 0.15–0.25 (est., tunable, SIMULATION §9.6).
  */
 object Interactions {
     private val M: Map<Pair<BrainKind, BrainKind>, Double> = buildMap {

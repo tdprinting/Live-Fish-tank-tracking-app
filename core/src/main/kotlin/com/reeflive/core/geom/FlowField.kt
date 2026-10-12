@@ -45,6 +45,9 @@ class FlowField(
     var strength: Double = 1.0
         set(v) { field = v.coerceIn(0.0, 2.0); gridValid = false }
 
+    /** When set (Live Tank), velocities come from the Navier–Stokes solver instead of the analytic jets (§9.7). */
+    @Volatile var fluid: FluidSim? = null
+
     /** Speed of a single jet at point p (no shadowing). Exposed for tests (§8.9). */
     fun jetVelocity(j: Powerhead, p: Vec3): Vec3 {
         val rel = p - j.pos
@@ -70,6 +73,7 @@ class FlowField(
 
     /** Full-fidelity velocity at p and sim time t. */
     fun velocity(p: Vec3, t: Double = 0.0): Vec3 {
+        fluid?.let { return it.velocity(p) }
         var v = Vec3.ZERO
         var any = false
         val pulse = 1.0 + pulseAmp * sin(2 * PI * t / 20.0)
@@ -103,6 +107,7 @@ class FlowField(
 
     /** Trilinear lookup in a 4 cm grid (built lazily, invalidated when jets change). */
     fun velocityFast(p: Vec3): Vec3 {
+        fluid?.let { return it.velocity(p) }
         if (!gridValid) synchronized(this) { if (!gridValid) buildGrid() }
         val g = grid
         val fx = (p.x / cell).coerceIn(0.0, gx - 1.001); val fy = (p.y / cell).coerceIn(0.0, gy - 1.001); val fz = (p.z / cell).coerceIn(0.0, gz - 1.001)

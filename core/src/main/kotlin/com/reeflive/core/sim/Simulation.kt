@@ -9,6 +9,7 @@ import com.reeflive.core.geom.FlowField
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -79,6 +80,63 @@ class Simulation(
 
     @Volatile var latest: SimSnapshot = SimSnapshot.EMPTY; private set
 
+    // ---- water physics (SIMULATION §9.7): optional Navier–Stokes flow + surface waves ----
+    var fluid: com.reeflive.core.geom.FluidSim? = null; private set
+    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm)
+    private var fluidAcc = 0.0
+    private var lastFlowGridAt = -1e9
+    private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
+    /** Parameter id the fluid's dose tracer currently represents. */
+    var doseTracerParam: String? = null; private set
+    val heaterPos = Vec3(rock.lengthCm - 1.5, 30.0, 8.0)
+
+    /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
+    fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
+        val f = com.reeflive.core.geom.FluidSim(rock.lengthCm, rock.widthCm, rock.sandTopCm, rock.waterLevelCm, quality,
+            solidAt = { p -> rock.sdf.dist(p) < 0.0 })
+        f.strength = water.flowStrength; f.powerheadsOn = water.s.flowOn
+        repeat(200) { f.step(0.1, water.heaterOutputW, heaterPos) }
+        fluid = f
+        flow.fluid = f
+    }
+
+    fun disableFluid() { fluid = null; flow.fluid = null }
+
+    /** Fluid + surface step at ~15 Hz of wall time (called from [stepWall]). */
+    private fun stepWater(dtWall: Double) {
+        fluidAcc += dtWall
+        if (fluidAcc < 1.0 / 15) return
+        val dt = min(fluidAcc * max(speed, 0.0), 0.1)
+        fluidAcc = 0.0
+        if (dt <= 0) return
+        fluid?.let { f ->
+            for (p in food.particles) if (!p.eaten) f.addScent(p.pos, 0.02)
+            f.step(dt, water.heaterOutputW, heaterPos)
+        }
+        surface.agitation = if (water.s.flowOn) water.flowStrength else 0.0
+        surface.step(dt)
+    }
+
+    /** Water at a point: the tank mean plus the local temperature / dose anomaly from the flow solver. */
+    fun localWater(p: Vec3): WaterState {
+        val f = fluid ?: return water.s
+        val dT = f.tempAnomaly(p)
+        val dd = f.doseExcess(p)
+        if (abs(dT) < 0.05 && abs(dd) < 1e-4) return water.s
+        val w = water.s.copy(tempC = water.s.tempC + dT)
+        doseTracerParam?.let { id -> w.get(id)?.let { base -> applyParam(w, id, base + dd) } }
+        return w
+    }
+
+    private fun applyParam(w: WaterState, id: String, v: Double) {
+        when (id.lowercase()) {
+            "alk" -> w.alk = v; "ca" -> w.ca = v; "mg" -> w.mg = v; "po4" -> w.po4 = v; "no3" -> w.no3 = v
+            "k" -> w.k = v; "sr" -> w.sr = v; "i" -> w.i = v; "copper", "cu" -> w.copper = v
+            "nh3", "nh3total", "tan" -> { w.nh3Total = v; w.nh3Free = ChemFns.freeNh3(v, w.ph, w.tempC) }
+            "no2" -> w.no2 = v
+        }
+    }
+
     val abstractMode: Boolean get() = !forceFullBehavior && speed > ABSTRACT_SPEED
     val dayIndex: Int get() = floor(simTimeSec / 86400).toInt()
     val minuteOfDay: Double get() = (simTimeSec / 60) % 1440
@@ -90,6 +148,7 @@ class Simulation(
     fun stepWall(dtWall: Double) {
         drainCommands()
         val simDt = speed * dtWall
+        stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, 0.5)
         advanceInternal(simDt, dtB)
@@ -241,7 +300,7 @@ class Simulation(
                 else -> false
             }
             val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength)
-            HealthModel.step(o, w.s, ctx, dtMin, pendingEventsSink)
+            HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
         for (c in corals) {
@@ -443,7 +502,11 @@ class Simulation(
             }
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
-            is Command.Dose -> water.dose(c.paramId, c.delta)
+            is Command.Dose -> {
+                water.dose(c.paramId, c.delta)
+                // the dose enters at the HOB return and spreads through the flow before it is well mixed
+                fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(71.0, 54.0, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
+            }
             is Command.Lights -> { lights.forcedOn = c.on; c.overrideIntensity?.let { lights.intensityOverride = it } }
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
             is Command.Powerheads -> setFlow(c.on)
@@ -479,10 +542,12 @@ class Simulation(
         flow.strength = k.coerceAtLeast(0.05)
         water.flowStrength = k
         setFlow(k > 0.02)
+        fluid?.let { it.strength = k; it.powerheadsOn = k > 0.02 }
     }
     val flowStrength: Double get() = if (water.s.flowOn) water.flowStrength else 0.0
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
+        surface.impulse(at.x, at.z, 0.08, 2.5)
         water.addFeed(grams * kind.nutrientFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
@@ -514,6 +579,7 @@ class Simulation(
     }
 
     fun tapGlass(point: Vec3) {
+        surface.impulse(point.x, point.z.coerceIn(0.0, rock.widthCm), 0.03, 3.0)
         val night = perception.night
         perception.taps += Tap(point, simTimeSec, night)
         for (o in organisms) {
@@ -606,6 +672,12 @@ class Simulation(
             moltShells = moltShells.map { it.first },
             sandPiles = FloatArray(sandPiles.size * 4).also { a -> sandPiles.forEachIndexed { i, p -> a[i * 4] = p.pos.x.toFloat(); a[i * 4 + 1] = p.pos.z.toFloat(); a[i * 4 + 2] = p.radius.toFloat(); a[i * 4 + 3] = p.height.toFloat() } },
             flowStrength = flowStrength.toFloat(),
+            surfaceHeights = surface.heights.copyOf(),
+            surfaceDims = intArrayOf(surface.sx, surface.sz),
+            flowGrid = fluid?.let { f ->
+                if (simTimeSec - lastFlowGridAt > 0.25 * max(speed, 1.0) || flowGridCache == null) { lastFlowGridAt = simTimeSec; flowGridCache = f.snapshotGrid() }
+                flowGridCache
+            },
             noriRemaining = food.nori?.remaining?.toFloat() ?: 0f,
         )
     }

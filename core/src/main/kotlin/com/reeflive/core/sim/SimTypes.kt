@@ -151,6 +151,11 @@ data class SimSnapshot(
     val sandPiles: FloatArray = FloatArray(0),
     /** Sandbox pump strength (0..2). */
     val flowStrength: Float = 1f,
+    /** Water-surface heightfield (cm, sx × sz, x fastest) and its dims (SIMULATION §9.7). */
+    val surfaceHeights: FloatArray = FloatArray(0),
+    val surfaceDims: IntArray = IntArray(2),
+    /** Flow solver velocities (cell centres) when the Navier–Stokes flow is on; refreshed ~4×/s. */
+    val flowGrid: com.reeflive.core.geom.FlowGrid? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

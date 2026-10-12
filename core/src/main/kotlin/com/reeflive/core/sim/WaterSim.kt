@@ -31,6 +31,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     var heaterStuckOn = false
     var heaterSetC = config.heaterSetC
     private var heaterPowered = false
+    /** Heater output right now (W), for the flow solver's heater plume. */
+    val heaterOutputW: Double get() = if (heaterPowered) config.heaterWatts else 0.0
     var ato = config.atoEnabled
     /** Manual top-off cadence (days) when ATO is off; 0 disables. */
     var manualTopOffDays = 3

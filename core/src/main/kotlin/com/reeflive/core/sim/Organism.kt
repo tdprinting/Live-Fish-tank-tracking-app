@@ -54,7 +54,7 @@ class Organism(
     /** How far past the worst lethal bound (in tolerance spans) the last chem tick was. */
     var lethalOvershoot = 0.0
 
-    // ---- social memory (SIMULATION §4.9) ----
+    // ---- social memory (SIMULATION §9.6) ----
     val relations: MutableMap<String, com.reeflive.core.ai.Relation> = HashMap()
     /** Individual this animal is currently wary of (refreshed by Social.perceive) and how much. */
     var wary: Organism? = null
@@ -63,7 +63,7 @@ class Organism(
     var focusId: String? = null
     /** Per-individual utility noise amplitude (temperament seed): some individuals are more capricious. */
     val whim: Double = 0.025 + 0.03 * rng.nextDouble()
-    /** Acclimated temperature / SG / pH (rate-of-change shock, SIMULATION §3.3b); NaN until the first chem tick. */
+    /** Acclimated temperature / SG / pH (rate-of-change shock, SIMULATION §9.6); NaN until the first chem tick. */
     var acclTemp = Double.NaN
     var acclSg = Double.NaN
     var acclPh = Double.NaN

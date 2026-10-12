@@ -429,7 +429,7 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 This section records what the `:core` implementation actually does where it differs from, or adds to, §1–§8. Code: `core/src/main/kotlin/com/reeflive/core/{geom,sim,ai}`; tests: `core/src/test/kotlin/com/reeflive/core/{geom,sim,ai}`; species fixtures used by the tests: `core/src/test/resources/sim-fixtures/species/*.json` (Track A owns the production sheets in `core/src/main/resources/species/`; `SpeciesCatalog.fallback` supplies archetype sheets for any id without one).
 
 ### 9.1 Livestock (coordinator update)
-Fish: 2 ocellaris clowns (female + male), juvenile blue tang, pajama cardinal, cleaner wrasse, **engineer goby** (*Pholidichthys leucotaenia*, owner correction: not a snowflake eel, see §9.7), Falco hawkfish, **lawnmower blenny** (*Salarias fasciatus*), **tailspot blenny** (*Ecsenius stigmatura*), **indigo dottyback** (*Pseudochromis*). Inverts: banded coral shrimp, **skunk cleaner shrimp**, 3 hermit crabs, **black brittle star**, **brown feather duster**, 3 nassarius, 3 astrea, 2 asterina. Corals: Kenya tree, 2× GSP, zoas, clove, mushrooms, red macro, and **organ pipe coral** (*Tubipora musica*) at the Kenya base (replacing the aiptasia placeholder; `CoralKind.ORGAN_PIPE`). Seeds: `sim/Presets.kt` `DefaultStock`.
+Fish: 2 ocellaris clowns (female + male), juvenile blue tang, pajama cardinal, cleaner wrasse, **engineer goby** (*Pholidichthys leucotaenia*, owner correction: not a snowflake eel, see §9.6), Falco hawkfish, **lawnmower blenny** (*Salarias fasciatus*), **tailspot blenny** (*Ecsenius stigmatura*), **indigo dottyback** (*Pseudochromis*). Inverts: banded coral shrimp, **skunk cleaner shrimp**, 3 hermit crabs, **black brittle star**, **brown feather duster**, 3 nassarius, 3 astrea, 2 asterina. Corals: Kenya tree, 2× GSP, zoas, clove, mushrooms, red macro, and **organ pipe coral** (*Tubipora musica*) at the Kenya base (replacing the aiptasia placeholder; `CoralKind.ORGAN_PIPE`). Seeds: `sim/Presets.kt` `DefaultStock`.
 
 ### 9.2 Brains (all utility AI, `ai/FishBrains.kt`, `ai/InvertBrains.kt`)
 Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a fresh feed), NibbleNori, Graze, Flee (flinch for startle ≤ 0.35, else 10–40 s × skittishness to cover), Sleep, VisitCleaner, GlassCurious, SurfaceGasp, Flash. Threats come from `Predation.threatRadius` and only alarm when the predator is closing (> 0.5 cm/s toward the animal) or within half the radius; invertebrates notice predators at 0.6× range at night.
@@ -496,7 +496,7 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 - `TankConfig`: `autoFeed`, `predationEnabled`, `waterChangeEveryDays`, `waterChangeFraction`, `seed`.
 - Anchors added for the new livestock (Track B: please add them to `anchors.json`; defaults are merged in when missing): `coral_organpipe_kenya_base`, `HOLE_LAWNMOWER` (30, 10, 11; dir 0.3, 0.1, 0.95; depth 7), `STATION_SHRIMP` (50, 18, 26), `DUSTER_TUBE` (15, 3, 27), `BRITTLE_HOME` (95, 4, 15), `CAVE_DOTTYBACK` (42, 18, 6). The HOB outflow is at x = 71 (ASSETS) rather than 61.
 
-### 9.7 Owner corrections and the realism pass (research 05)
+### 9.6 Owner corrections and the realism pass (research 05)
 
 **Engineer goby, not an eel.** Tee's "eel" is a juvenile **engineer goby** (*Pholidichthys leucotaenia*, black/yellow stripes, `engineer_goby.glb`). `BrainKind.ENGINEER_GOBY` (genus `pholidichthys`; sheet `brain: "goby"` is aliased) drives `GobyBrain` (`ai/GobyBrain.kt`):
 - Burrow under the R5 rock at sand level (anchor `BURROW_GOBY`, falling back to `CAVE_EEL` / `den_path`); the body trails down the tunnel spline (posture 3, same anguilliform spline deformation as the eel).
@@ -600,5 +600,57 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 `AiTest` adds `gobyDigsAndHides` and `victimsRememberAttackers`. `ICH_BASE_PRESSURE` went 0.0004 → 0.0005 to keep the 30 °C ich test above 90 % once heat stress was recalibrated.
 
-### 9.6 SimRunner
+### 9.7 Water physics: flow solver, scalar transport, surface, optics (owner request)
+
+**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–56, z 0–33).
+
+| `FluidQuality` | grid | cell | projection iterations |
+|---|---|---|---|
+| LOW | 32 × 14 × 9 | 3.8 cm | 30 |
+| MEDIUM | 48 × 21 × 13 | 2.54 cm | 45 |
+| HIGH | 64 × 28 × 18 | 1.9 cm | 60 |
+
+- **Step**, with dt ≤ 0.1 s:
+  1. Pump forcing.
+  2. Heater source and Boussinesq buoyancy (β·g = 2.6e-4 K⁻¹ × 981 = 0.255 cm/s² per °C).
+  3. Vorticity confinement (ε 0.35).
+  4. Eddy viscosity (0.5 cm²/s; molecular 0.01 is far below grid scale).
+  5. Semi-Lagrangian advection.
+  6. Pressure projection by red–black Gauss–Seidel SOR (ω 1.75), warm-started, mean pressure removed.
+- **Boundaries**: rock cells (SDF < 0 at the centre) are solid. Glass, sand and the surface are free-slip walls.
+- **Pumps** (`Pump.defaults`, est. ratings): PH-A 850 gph through a 3.2 cm nozzle, PH-B 600 gph through 2.8 cm, and the HOB at 200 gph.
+  - Nozzle exit speed `v0 = Q/(π d²/4)`, about 111 cm/s for PH-A.
+  - The grid jet keeps the momentum flux: `v_cell = v0 √(A_noz/h²)`, capped at 100 cm/s. Face velocities within 1.1 cells of the nozzle relax toward it (rate 12/s).
+  - The HOB is a mass source at its return plus an equal sink at the intake, so the projection solves ∇·u = s.
+- **Runtime and coupling**:
+  - Runs on the sim thread at about 15 Hz of wall time: `Simulation.enableFluid(quality)`, after a 20 s spin-up.
+  - `FlowField.fluid` routes every `velocityFast` query to it. That covers food and detritus drift, coral sway and flow speed, fish station-holding, swimming effort and corpses.
+  - The renderer gets a cell-centred `FlowGrid` copy about 4×/s for particle advection.
+  - Pump strength and on/off map to `strength` / `powerheadsOn`.
+  - Tests use the analytic field unless they enable the solver.
+- **Measured** (JVM): LOW is about 4 ms/step and MEDIUM about 14 ms. After spin-up the relative divergence is < 0.02 (`FluidTest`). It stays stable for 150 s with the heater on, with peak speed < 160 cm/s. No GLES 3.1 compute path yet; the CPU solver is the only path.
+
+**Scalar transport** (same grid, cell centres): temperature anomaly (°C), a dose tracer (in the last dosed parameter's units) and food scent. Each is advected semi-Lagrangian and diffused (κ 0.5 cm²/s).
+- The advection loss is restored, so the total is conserved. The mean is removed, so the well-mixed value stays in `WaterSim`.
+- Anomalies relax with τ 30 min; scent with τ 2 min.
+- The heater adds `P·dt/(ρ c V)` to its cells while it is powered.
+- A dose enters 2 cm below / 4 cm in front of the HOB return and is removed uniformly from the mean.
+- `Simulation.localWater(p)` = tank mean + local anomalies. The health tick uses it per animal while the solver is on, so a fish sitting in a fresh dose plume or by a stuck heater feels it first.
+
+**Surface** (`geom/WaterSurface.kt`): 96 × 26 heightfield (1.27 cm) obeying the damped wave equation `h_tt = c²∇²h − γ h_t`.
+- c = 23 cm/s, the gravity–capillary minimum. γ = 1.2/s. Leapfrog substeps keep c·dt/dx ≤ 0.5. Glass edges reflect, and the mean level is kept at 0 (volume conserved).
+- Sources:
+  - HOB return splashing: 25 impulses/s of 0.05–0.1 cm.
+  - Pump agitation: 12/s × strength.
+  - Food landing: 0.08 cm.
+  - Glass taps: 0.03 cm.
+- Published as `SimSnapshot.surfaceHeights` / `surfaceDims`. The renderer refracts the key lights through its normals for caustics and the view from below.
+
+**Optics** (renderer, `assets/shaders`):
+- Snell refraction n = 1.34 (seawater) / 1.0 (air) / 1.52 (glass).
+- Schlick Fresnel, F0 = 0.02 water–air and 0.04 glass.
+- Total internal reflection above the critical angle asin(1/1.34) = 48.3°.
+- Beer–Lambert spectral attenuation of seawater along the view path, per cm (R, G, B) = (0.0045, 0.0009, 0.0006) absorption + 0.0004 scattering. Red is lost fastest, so the far glass and deep shadow read blue-green. In-scatter takes the light colour × (0.05, 0.22, 0.32).
+
+### 9.8 SimRunner
 `./gradlew -PcoreOnly :core:simRunner` prints a 24 h scenario (each hour 2 min of full 20 Hz behavior plus abstract time, and 12-min windows around the 09:30 and 17:30 feeds) with every animal's behavior mix, hunger, stress and the water state. `--args="long 90"` runs 90 days of health/chemistry with a daily log; `--args="preset ich_outbreak 14"` runs a preset.
