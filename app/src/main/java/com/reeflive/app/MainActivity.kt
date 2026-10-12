@@ -1,97 +1,69 @@
 package com.reeflive.app
 
+import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.reeflive.app.ui.theme.Abyss
-import com.reeflive.app.ui.theme.ReefGradients
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.reeflive.app.data.repo.AppSettings
+import com.reeflive.app.data.repo.ThemeMode
+import com.reeflive.app.notif.Notifier
+import com.reeflive.app.ui.components.LocalHapticsEnabled
+import com.reeflive.app.ui.nav.ReefRoot
 import com.reeflive.app.ui.theme.ReefLiveTheme
-import com.reeflive.core.ReefLiveCore
+import com.reeflive.app.ui.theme.ReefTheme
 
 class MainActivity : ComponentActivity() {
+    /** Route requested by a notification tap ("log/alk", "care"); consumed by the nav host. */
+    private val pendingRoute = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) pendingRoute.value = intent?.getStringExtra(Notifier.EXTRA_ROUTE)
+        val graph = appGraph
         setContent {
-            ReefLiveTheme {
-                HelloReefScreen()
+            val settings by graph.settings.settings.collectAsStateWithLifecycle(AppSettings())
+            val dark = when (settings.theme) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+            }
+            LaunchedEffect(dark) {
+                val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            ReefLiveTheme(darkTheme = dark, reduceMotion = settings.reduceMotion) {
+                CompositionLocalProvider(LocalHapticsEnabled provides settings.haptics) {
+                    if (!settings.loaded) {
+                        // DataStore answers in a few ms; show the bare gradient meanwhile.
+                        Box(Modifier.fillMaxSize().background(ReefTheme.colors.bgBrush))
+                    } else {
+                        ReefRoot(
+                            settings = settings,
+                            pendingRoute = pendingRoute.value,
+                            onRouteConsumed = { pendingRoute.value = null },
+                        )
+                    }
+                }
             }
         }
     }
-}
 
-/** M0 placeholder screen: Abyss gradient background with a glass card. */
-@Composable
-fun HelloReefScreen(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(ReefGradients.bgAbyss)
-            .safeDrawingPadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(24.dp)
-                .background(Abyss.glass, RoundedCornerShape(20.dp))
-                .border(1.dp, Abyss.glassBorder, RoundedCornerShape(20.dp))
-                .padding(horizontal = 28.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = ReefLiveCore.greeting(),
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Abyss.foam,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .background(Abyss.coral, CircleShape),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "${ReefLiveCore.NAME} is coming alive",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Abyss.mist,
-                )
-            }
-            Text(
-                text = "Milestone 0",
-                style = MaterialTheme.typography.labelSmall,
-                color = Abyss.kelp,
-            )
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(Notifier.EXTRA_ROUTE)?.let { pendingRoute.value = it }
     }
-}
-
-@Preview(showBackground = true, widthDp = 360, heightDp = 640)
-@Composable
-private fun HelloReefPreview() {
-    ReefLiveTheme { HelloReefScreen() }
 }
