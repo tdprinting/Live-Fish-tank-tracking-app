@@ -530,11 +530,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         /**
          * Linear albedo multipliers by GLB material name, for coral colours the baked textures get wrong under
          * the tank light (no re-export needed). Kenya: the pale pink-cream texture (≈ #D7AEA2) read as bleached
-         * white; × this it is the tan / pink-brown of the photos (body ≈ #AC7C68, polyps ≈ #C0917F).
+         * white; × this it is the tan / pink-brown of the photos (body ≈ #AC7C68, polyps ≈ #C0917F). Zoa orange:
+         * the #E0792A disc read yellow under the blue-heavy light; deepened to ≈ #E0671D.
          */
         val CORAL_TINT: Map<String, FloatArray> = mapOf(
             "kenya_body" to floatArrayOf(0.62f, 0.48f, 0.38f),
             "kenya_polyp" to floatArrayOf(0.66f, 0.50f, 0.40f),
+            "zoa_polyp_orange" to floatArrayOf(1.0f, 0.70f, 0.55f),
         )
     }
 }
