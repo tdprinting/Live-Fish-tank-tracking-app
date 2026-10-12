@@ -7,7 +7,7 @@
 Order: fishlib self-test -> textures -> fish -> inverts -> rockscape (+anchors) -> rock SDF -> tank
 (needs the SDF for sand mounds) -> corals (need the rock) -> equipment -> species cards -> validate.
 Prints per-asset triangle counts, fails (exit 1) if any asset is > 15 % over its budget, and prints the
-rendered-triangle estimate at High (tools/validate_glb.py).
+rendered-triangle estimates at High (<= 220k) and Medium (<= 140k, LOD1 files + halved instances) (tools/validate_glb.py).
 """
 import argparse
 import os

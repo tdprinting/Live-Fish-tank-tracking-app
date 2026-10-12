@@ -58,8 +58,12 @@ class GlbLoaderTest {
         // quaternion moved after pos+scale and stays unit length
         val q = buf.copyOfRange(4, 8)
         assertEquals(1f, kotlin.math.sqrt(q.sumOf { (it * it).toDouble() }).toFloat(), 1e-3f)
-        val half = Mesh.polypInstances(load("gsp_mat.glb").nodes.first { it.part == "polyp" }.instances()!!, 10, 0.5f)
-        assertEquals(800 * Mesh.INSTANCE_FLOATS, half.size)
+        val gsp = load("gsp_mat.glb").nodes.first { it.part == "polyp" }.instances()!!
+        val gspCount = gsp.size / 10
+        assertTrue("gsp_mat has a polyp table: $gspCount", gspCount >= 1000)
+        // density 0.5 keeps every 2nd polyp (indices 0, 2, 4, ...)
+        val half = Mesh.polypInstances(gsp, 10, 0.5f)
+        assertEquals((gspCount + 1) / 2 * Mesh.INSTANCE_FLOATS, half.size)
         assertEquals("coral_zoa_front_center", m.rootString("anchor"))
     }
 

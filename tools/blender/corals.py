@@ -279,7 +279,10 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 # ----------------------------------------------------------------------------
 # Kenya tree (C1)
 # ----------------------------------------------------------------------------
-MAXD = 5  # depth 5 = the short lobe beside each tip
+MAXD = 6  # depth 6 = the short lobe beside each tip (HQ: one more generation of thin branchlets than v1's 5)
+KENYA_TUFTS = 1500       # LOD0 polyp tufts (10 tris each); the photo's crown is a fuzz of polyps on every branchlet
+KENYA_TUFTS_LOD1 = 700
+KENYA_LOD1_RATIO = 0.42  # body decimation for kenya_lod1.glb
 
 
 def raw_anchor(name):
@@ -298,24 +301,25 @@ def kenya(rock, A):
     def grow(p0, d, length, r0, depth, phase):
         """Fleshy Capnella branching: short thick trunk, 5 primaries fanning out, lobed tips."""
         pts, rad = [], []
-        bend = unit(rs.normal(0, 1, 3)) * 0.3
-        k = 4 if depth <= 2 else (3 if depth < MAXD else 2)
+        bend = unit(rs.normal(0, 1, 3)) * (0.3 if depth < 4 else 0.5)
+        k = 4 if depth <= 2 else (3 if depth < MAXD - 1 else 2)
         p = np.array(p0, float)
         dd = unit(d)
         for i in range(k + 1):
             t = i / k
             pts.append(p.copy())
-            # fleshy: little taper, tips end in a swollen polyp-covered club
+            # fleshy: little taper on the thick limbs, thin branchlets taper to a swollen polyp-covered club
             club = 1.0 + (0.25 * math.sin(math.pi * t) if depth >= MAXD - 1 else 0.0)
-            rad.append(r0 * (1 - 0.22 * t) * club)
+            taper = 0.22 if depth < 4 else 0.4
+            rad.append(r0 * (1 - taper * t) * club)
             dd = unit(dd + bend / k + UP * 0.08 / k)
             p = p + dd * length / k
         branches.append((np.array(pts), np.array(rad), depth, phase))
         if depth >= MAXD:
             return
-        nchild = {0: 5, 1: 3, 2: 3, 3: 2}.get(depth, 1)
+        nchild = {0: 5, 1: 3, 2: 3, 3: 3, 4: 2}.get(depth, 1)
         if depth == MAXD - 1:
-            nchild = 1  # one short lobe beside each tip
+            nchild = 1 if rs.uniform() < 0.5 else 0  # a short lobe beside half of the tips
         for c in range(nchild):
             ang = (2 * math.pi * c / nchild) + rs.uniform(-0.35, 0.35)
             if depth == 0:
@@ -327,7 +331,7 @@ def kenya(rock, A):
             cd = unit(dd * math.cos(spread) + (t1 * math.cos(ang) + t2 * math.sin(ang)) * math.sin(spread) + UP * 0.25)
             j = len(pts) - 1 if c == 0 or depth < 1 else rs.integers(len(pts) // 2, len(pts))
             lf = {0: 1.5, MAXD - 1: 0.35}.get(depth, rs.uniform(0.62, 0.78))
-            grow(pts[j], cd, length * lf, rad[j] * (0.62 if depth == 0 else 0.82), depth + 1,
+            grow(pts[j], cd, length * lf, rad[j] * (0.62 if depth == 0 else (0.82 if depth < 3 else 0.7)), depth + 1,
                  phase if depth > 0 else c / 5.0)
 
     trunk_dir = unit(0.85 * UP + 0.15 * n)
@@ -353,18 +357,19 @@ def kenya(rock, A):
     g = T.WGeo()
     inst = Instances(12)
     import geomlib as G
-    sides = {0: 10, 1: 8, 2: 7, 3: 6, 4: 5, 5: 4}
+    sides = {0: 10, 1: 8, 2: 7, 3: 6, 4: 4, 5: 3, 6: 3}
     ymin = pos[1]
     ymax = max(b[0][:, 1].max() for b in branches)
+    print(f"[coral] kenya branches {len(branches)} (per depth {[sum(1 for b in branches if b[2] == d) for d in range(MAXD + 1)]})")
     for pts, rad, depth, phase in branches:
         V, F, tv, av = G.tube(pts, rad, sides[depth], cap_start=depth == 0, cap_end=depth >= MAXD - 1, up=(0, 0, 1))
         hgt = np.clip((V[:, 1] - ymin) / (ymax - ymin), 0, 1)
         thin = np.full(len(V), 1 - np.interp(rad.mean(), [0.2, 2.0], [0.1, 0.9]))  # thin branches: translucent
         col = np.c_[thin, np.full(len(V), phase), np.clip((depth + tv) / (MAXD + 1.0), 0, 1) ** 1.3, np.ones(len(V))]
         g.add(V, F, np.c_[av, hgt], col)
-        # polyp tufts, denser toward the outer branches
+        # polyp tufts, denser toward the outer branchlets (every tip carries several)
         if depth >= 1:
-            m = {1: 1, 2: 3, 3: 6, 4: 9, 5: 4}[depth]
+            m = {1: 1, 2: 2, 3: 3, 4: 4, 5: 3, 6: 2}[depth]
             for _ in range(m):
                 t = rs.uniform(0.3, 1.0) ** 0.5
                 i = min(int(t * (len(pts) - 1)), len(pts) - 2)
@@ -375,33 +380,47 @@ def kenya(rock, A):
                 o = unit(np.cross(tng, rs.normal(0, 1, 3)))
                 if np.dot(o, UP) < -0.3:
                     o = -o
-                inst.add(c + o * r * 0.8, o, rs.uniform(0.9, 1.4), phase=(phase + 0.1 * depth) % 1.0)
-    # trim to 790 tufts (keeps the High on-screen estimate under 140k with the crab added)
-    if len(inst) > 790:
-        keep = np.sort(RS(5).choice(len(inst), 790, replace=False))
+                inst.add(c + o * r * 0.7, o, rs.uniform(1.0, 1.5), phase=(phase + 0.1 * depth) % 1.0)
+    print(f"[coral] kenya tufts generated {len(inst)}")
+    if len(inst) > KENYA_TUFTS:
+        keep = np.sort(RS(5).choice(len(inst), KENYA_TUFTS, replace=False))
         inst.rows = [inst.rows[i] for i in keep]
+    inst1 = Instances(12)
+    inst1.rows = [inst.rows[i] for i in np.sort(RS(6).choice(len(inst), min(KENYA_TUFTS_LOD1, len(inst)), replace=False))]
     cv = P.Canvas(64, 256)
     cv.vgrad("#C9A08E", "#E4C2BA", 0.0, 1.0, 0.8)  # tan-pink stalk -> branches #D8A9A0
     cv.blend(S(0.2, 0.6, cv.v) * (1 - S(0.75, 1.0, cv.v)), "#D8A9A0", 0.7)
     spk = P.fbm(256, 64, 8, 3, 7)
     cv.multiply(0.9 + 0.2 * spk)
     body_m = C.material("kenya_body", rough=0.75, image=tex("kenya_body", cv))
-    pc = P.Canvas(64, 64, "#E6C6BE")
+    pc = P.Canvas(64, 64, "#E9C2BC")
     rr = np.hypot(pc.u - 0.5, pc.v - 0.5)
     pc.blend(1 - S(0.05, 0.2, rr), "#C99A90")
     pc.blend(S(0.38, 0.5, rr), "#EBD3CC")
     polyp_m = C.material("kenya_polyp", rough=0.6, image=tex("kenya_polyp", pc))
+    # tuft prototype: a short stalk quad + 8 splayed single-triangle tentacles (10 tris); seen in the mass they
+    # read as the fuzzy polyp coat of tank_right.jpg rather than the flat 8-point stars of v1 (0.85 cm tentacles)
+    proto = proto_feather(8, 0.25, 0.1, 0.85, 66, 0.1, 1)
+    ntri = len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3)
     body = g.obj("Body", root, "body", [body_m], smooth=True)
-    pol = polyp_node("Tufts", root, proto_star(r=0.6, h=0.32), [polyp_m], inst)
-    return root, [body, pol], {"Tufts": (len(inst), 12)}
+    pol = polyp_node("Tufts", root, proto, [polyp_m], inst)
+    # LOD1 (Medium / far): decimated body, fewer tufts, same materials
+    root1 = C.empty("Root")
+    C.set_extras(root1, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3, lod=1)
+    body1 = g.obj("Body", root1, "body", [body_m], smooth=True)
+    C.decimate(body1, KENYA_LOD1_RATIO)
+    pol1 = polyp_node("Tufts", root1, proto, [polyp_m], inst1)
+    lod1 = (root1, [body1, pol1], {"Tufts": (len(inst1), ntri)})
+    return root, [body, pol], {"Tufts": (len(inst), ntri)}, lod1
 
 
 # ----------------------------------------------------------------------------
 # Green star polyps (G1 neon clump, G2 mat)
 # ----------------------------------------------------------------------------
-def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name, mat_hex="#5A3F6B", raw=False):
+def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name, mat_hex="#5A3F6B", raw=False,
+        tent=0.6):
     pos, n = raw_anchor(anchor) if raw else A[anchor]
     rs = RS(seed)
     # mat grid
@@ -482,7 +501,8 @@ def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name
         bmesh.ops.reverse_faces(bm, faces=bm.faces)
         bm.to_mesh(me)
         bm.free()
-    proto = proto_feather(8, 0.15, 0.06, 0.42, 58, 0.04, 1)
+    # longer, slightly wider tentacles than v1 (0.42): the neon clump reads as a shaggy pom-pom in tank_left.jpg
+    proto = proto_feather(8, 0.18, 0.06, tent, 60, 0.05, 1)
     pol = polyp_node("Polyps", root, proto, [pol_m], inst)
     return root, [body, pol], {"Polyps": (len(inst), len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4))}
 
@@ -506,7 +526,7 @@ def rubble(center, radii, seed, segs=14, rings=8, rough=0.35):
 def zoa(rock, A):
     pos, n = A["coral_zoa_front_center"]
     c = np.array([pos[0], pos[1] - 0.2, pos[2]])
-    V, F = rubble(c, (3.0, 1.8, 2.0), 3, segs=20, rings=10)
+    V, F = rubble(c, (3.2, 1.9, 2.2), 3, segs=24, rings=12)
     g = T.WGeo()
     g.add(V, F, np.c_[(V[:, 0] - c[0]) / 6 + 0.5, (V[:, 2] - c[2]) / 6 + 0.5], (0.2, 0, 0, 1))
     rs = RS(21)
@@ -514,16 +534,16 @@ def zoa(rock, A):
     k = 0
     tries = 0
     placed = []
-    while k < 30 and tries < 4000:
+    while k < 44 and tries < 6000:  # tank_right.jpg: the colony is a tight carpet of ~40 heads
         tries += 1
         th = rs.uniform(0, 2 * math.pi)
         ph = rs.uniform(0, 1.15)
-        d = np.array([math.cos(th) * math.sin(ph) * 3.0, math.cos(ph) * 1.8, math.sin(th) * math.sin(ph) * 2.0])
+        d = np.array([math.cos(th) * math.sin(ph) * 3.2, math.cos(ph) * 1.9, math.sin(th) * math.sin(ph) * 2.2])
         p = c + d
         # snap to the actual rubble surface (nearest vertex region)
         j = np.argmin(np.linalg.norm(V - p, axis=1))
         p = V[j]
-        if p[1] < c[1] + 0.05 or any(np.linalg.norm(p - q) < 0.62 for q in placed):
+        if p[1] < c[1] + 0.05 or any(np.linalg.norm(p - q) < 0.56 for q in placed):
             continue
         placed.append(p)
         nn = unit(p - c + UP * 0.8)
@@ -622,9 +642,10 @@ def clove(rock, A):
     for tuft in range(3):
         cen = pos + t1 * (tuft - 1) * 2.6 + t2 * rs.uniform(-1.2, 1.2)
         hit, nn, _ = rock.nearest(cen)
-        # stolon network: 5 short runners from the tuft centre, laid on the rock
-        for s in range(4):
-            ang = 2 * math.pi * s / 4 + rs.uniform(-0.3, 0.3)
+        # stolon network: 5 short runners from the tuft centre, laid on the rock, a polyp at nearly every node
+        # (spec: ~40 stalks per colony; the photo shows a dense, wispy patch)
+        for s in range(5):
+            ang = 2 * math.pi * s / 5 + rs.uniform(-0.3, 0.3)
             pts = []
             for k in range(6):
                 q = hit + (t1 * math.cos(ang) + t2 * math.sin(ang)) * k * 0.45
@@ -633,8 +654,8 @@ def clove(rock, A):
             pts = np.array(pts)
             V, F, tv, av = G.tube(pts, 0.12, 4, cap_start=False, cap_end=True, up=(0, 1, 0))
             g.add(V, F, np.c_[av * 0.5, tv * 0.3], (0.8, tuft / 3, 0, 1))
-            for k in range(2, 5):
-                if rs.uniform() < 0.95:
+            for k in range(1, 6):
+                if rs.uniform() < 0.9:
                     h, hn, _ = rock.nearest(pts[k])
                     inst.add(h + hn * 0.1, unit(hn + n * 0.6 + UP * 0.3), rs.uniform(0.8, 1.2),
                              phase=(tuft / 3 + rs.normal(0, 0.05)) % 1)
@@ -966,10 +987,10 @@ def aiptasia(rock, A):
 
 BUILDERS = {
     "kenya": kenya,
-    "gsp_neon": lambda r, A: gsp(r, A, "coral_gsp_upper_left", 6.0, (5.0, 4.0), 0.26, 900, "#C4FF3C", "#C4FF3C", 71,
-                                 "gsp_neon"),
-    "gsp_mat": lambda r, A: gsp(r, A, "coral_gsp_lower_right", 9.0, (8.0, 9.5), 0.32, 1600, "#59D64A", "#7DFF4F", 81,
-                                "gsp_mat", mat_hex="#4E3860", raw=True),
+    "gsp_neon": lambda r, A: gsp(r, A, "coral_gsp_upper_left", 6.0, (5.0, 4.0), 0.24, 1200, "#C4FF3C", "#C4FF3C", 71,
+                                 "gsp_neon", tent=0.65),
+    "gsp_mat": lambda r, A: gsp(r, A, "coral_gsp_lower_right", 9.0, (8.0, 9.5), 0.28, 2200, "#59D64A", "#7DFF4F", 81,
+                                "gsp_mat", mat_hex="#4E3860", raw=True, tent=0.55),
     "zoa": zoa, "clove": clove, "mushroom": mushroom, "macro_red": macro_red, "organ_pipe": organ_pipe,
     "algae_tufts": algae_tufts, "aiptasia": aiptasia,
 }
@@ -984,16 +1005,32 @@ def build(ids=None):
     for cid in ids or BUILDERS:
         for o in list(bpy.data.objects):
             bpy.data.objects.remove(o, do_unlink=True)
-        root, objs, inst = BUILDERS[cid](rock, A)
-        for o in objs:
-            C.triangulate(o)
-        path = os.path.join(C.MODELS, cid + ".glb")
-        C.export_glb(path, C.all_descendants(root))
-        tris = sum(C.tri_count(o) for o in objs)
-        itri = sum(nc * nt for nc, nt in inst.values())
-        print(f"[coral] {cid}.glb: {tris} mesh tris, instances {dict((k, v[0]) for k, v in inst.items())} "
-              f"(+{itri} instanced tris), {os.path.getsize(path) / 1024:.0f} KB")
-        out[cid] = (tris, inst)
+        res = BUILDERS[cid](rock, A)
+        root, objs, inst = res[:3]
+        variants = [(cid, root, objs, inst)]
+        if len(res) > 3:  # optional LOD1 (root, objs, inst) -> <cid>_lod1.glb
+            variants.append((cid + "_lod1",) + tuple(res[3]))
+        for vi, (name, root_, objs_, inst_) in enumerate(variants):
+            if vi == 1:  # free the base names for the LOD1 nodes (Blender suffixes duplicates with .001)
+                for o in variants[0][2] + [variants[0][1]]:
+                    o.name = o.name + "_lod0"
+                    if o.data is not None:
+                        o.data.name = o.name
+                for o in objs_ + [root_]:
+                    o.name = o.name.split(".")[0]
+                    if o.data is not None:  # mesh datablocks too (Body.001 -> Body) so glTF mesh names match
+                        o.data.name = o.name
+                # GlbLoader / validate_glb.py expect the scene root to be exactly `Root` (never `Root.001`)
+                assert root_.name == "Root", f"{name}: LOD1 root exported as {root_.name!r}"
+            for o in objs_:
+                C.triangulate(o)
+            path = os.path.join(C.MODELS, name + ".glb")
+            C.export_glb(path, C.all_descendants(root_))
+            tris = sum(C.tri_count(o) for o in objs_)
+            itri = sum(nc * nt for nc, nt in inst_.values())
+            print(f"[coral] {name}.glb: {tris} mesh tris, instances {dict((k, v[0]) for k, v in inst_.items())} "
+                  f"(+{itri} instanced tris), {os.path.getsize(path) / 1024:.0f} KB")
+            out[name] = (tris, inst_)
     return out
 
 
