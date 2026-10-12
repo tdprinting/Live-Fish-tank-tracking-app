@@ -14,7 +14,9 @@ object TimelapseFork {
     fun of(src: Simulation): Simulation {
         val seeds = src.organisms.filter { it.alive }.map {
             LivestockSeed(it.species.id, it.nickname, it.lengthCm, it.role, it.placement, it.id, it.variant)
-        } + src.corals.map { LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id) }
+        } + src.corals.map {
+            LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id, offset = it.offset.takeIf { o -> o != com.reeflive.core.geom.Vec3.ZERO })
+        }
         val lights = LightSchedule(src.lights.points).also {
             it.forcedOn = src.lights.forcedOn; it.intensityOverride = src.lights.intensityOverride
             it.photoperiodHours = src.lights.photoperiodHours; src.lights.gains.copyInto(it.gains)

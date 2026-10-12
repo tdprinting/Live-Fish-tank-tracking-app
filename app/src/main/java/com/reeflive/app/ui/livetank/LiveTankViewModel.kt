@@ -176,6 +176,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun setSize(id: String, sizeCm: Double) = sandbox { holder.enqueue(Command.SetSize(id, sizeCm)) }
     fun addOrganism(speciesId: String, sizeCm: Double, nickname: String, role: String? = null) =
         sandbox { holder.enqueue(Command.AddOrganism(speciesId, sizeCm, nickname, role)) }
+    /** Sandbox stocking test: [count] of [speciesId] at once (core caps it; corals settle on free rock or sand). */
+    fun addMany(speciesId: String, count: Int) = sandbox { holder.enqueue(Command.AddMany(speciesId, count)) }
     fun removeOrganism(id: String) = sandbox {
         holder.enqueue(Command.RemoveOrganism(id))
         if (_selectedOrganismId.value == id) select(null)

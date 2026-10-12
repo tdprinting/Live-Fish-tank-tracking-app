@@ -309,17 +309,36 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val used = HashSet<String>()
         for (c in s.corals) {
             val candidates = registry.coralModels(c.speciesId).mapNotNull { store.model(it) }
-            val m = candidates.firstOrNull { it.rootAnchor != null && it.rootAnchor == c.anchor }
-                ?: candidates.firstOrNull { it.path !in used } ?: continue
+            val anchored = candidates.firstOrNull { it.rootAnchor != null && it.rootAnchor == c.anchor }
+            if (c.isCopy) {
+                // sandbox copy (Command.AddMany): the anchored model again, moved to the new spot
+                val copy = anchored ?: candidates.firstOrNull() ?: continue
+                out += copy to c
+                continue
+            }
+            val m = anchored ?: candidates.firstOrNull { it.path !in used } ?: continue
             if (used.add(m.path)) out += m to c
         }
         return out
     }
 
+    /** Translation for the coral copy being drawn, and scratch for its part matrices. */
+    private val coralShift = M.identity()
+    private val coralModel = FloatArray(16)
+
+    /** A copy keeps only the clump around its home anchor (zoa and mushroom models hold two clumps). */
+    private fun nearHome(part: DrawPart, c: CoralPose): Boolean {
+        val dx = part.center[0] - c.homeX; val dy = part.center[1] - c.homeY; val dz = part.center[2] - c.homeZ
+        return dx * dx + dy * dy + dz * dz < COPY_RADIUS_CM * COPY_RADIUS_CM
+    }
+
     private fun coralUniforms(p: ShaderProgram, m: GpuModel, c: CoralPose?, defaultExtension: Float = 1f) {
         val b = m.bounds
         val height = (b[4] - b[1]).coerceAtLeast(1f)
-        p.set3f("uBase", (b[0] + b[3]) * 0.5f, b[1], (b[2] + b[5]) * 0.5f)
+        val ox = c?.offsetX ?: 0f; val oy = c?.offsetY ?: 0f; val oz = c?.offsetZ ?: 0f
+        // a copy grows from its own spot (the moved home anchor), not from the centre of the whole model
+        if (c != null && c.isCopy) p.set3f("uBase", c.homeX + ox, c.homeY + oy, c.homeZ + oz)
+        else p.set3f("uBase", (b[0] + b[3]) * 0.5f, b[1], (b[2] + b[5]) * 0.5f)
         p.set1f("uHeight", height)
         p.set1f("uExtension", c?.extension ?: defaultExtension)
         p.set1f("uPhase", c?.swayPhase ?: 0f)
@@ -327,7 +346,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uBrown", c?.brown ?: 0f)
         val flow = c?.flow ?: 8f
         val v = FloatArray(3)
-        ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f, b[4], (b[2] + b[5]) * 0.5f, 0f, v)
+        ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f + ox, b[4] + oy, (b[2] + b[5]) * 0.5f + oz, 0f, v)
         val l = sqrt(v[0] * v[0] + v[2] * v[2])
         if (l > 1e-3f) p.set3f("uSwayDir", v[0] / l, 0f, v[2] / l) else p.set3f("uSwayDir", 0.95f, 0f, 0.3f)
         p.set1f("uSwayAmp", 0.08f * minOf(height, 25f) * (flow / 12f).coerceIn(0.15f, 1.5f))
@@ -336,16 +355,23 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private fun drawCoral(m: GpuModel, c: CoralPose?, progs: Programs, s: SimSnapshot?, polyps: Boolean) {
         val w = white ?: return
+        val copy = c != null && c.isCopy
+        if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
         for (part in m.parts) {
             val isPolyp = part.kind == MaterialKind.POLYP
             if (isPolyp != polyps) continue
+            if (c != null && copy && !nearHome(part, c)) continue
             val p = when (part.kind) {
                 MaterialKind.POLYP -> progs.polyp
                 MaterialKind.CARD -> progs.card
                 else -> progs.softCoral
             }
             p.use()
-            p.setMat4("uModel", if (isPolyp) IDENTITY else part.node.world)
+            p.setMat4("uModel", when {
+                !copy -> if (isPolyp) IDENTITY else part.node.world
+                isPolyp -> coralShift
+                else -> M.mul(coralShift, part.node.world, coralModel)
+            })
             part.material.apply(p, w, alphaTestOverride = part.node.float("alphaTest") ?: if (part.material.src.blended) 0.3f else null)
             CORAL_TINT[part.material.src.name]?.let { t ->
                 val bc = part.material.src.baseColor
@@ -527,6 +553,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val SAND_NORMAL = "textures/sand_normal.png"
         val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, ROCK_NORMAL, ROCK_ROUGH_AO, SAND_NORMAL)
         val IDENTITY = M.identity()
+        /** Parts of a coral model within this distance of its home anchor make up one colony (sandbox copies). */
+        const val COPY_RADIUS_CM = 25f
 
         /**
          * Linear albedo multipliers by GLB material name, for coral colours the baked textures get wrong under

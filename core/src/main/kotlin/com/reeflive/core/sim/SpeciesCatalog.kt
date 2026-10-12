@@ -13,8 +13,20 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
     fun has(id: String) = map.containsKey(id)
     fun all(): Collection<SimSpecies> = map.values
 
+    private val synthesized = HashSet<String>()
+
     /** The sheet for [id], or a synthesized fallback (never null). */
-    operator fun get(id: String): SimSpecies = map[id] ?: fallback(id).also { map[id] = it }
+    operator fun get(id: String): SimSpecies = map[id] ?: fallback(id).also { map[id] = it; synthesized += id }
+
+    /**
+     * Makes sure the real sheet for [id] is loaded (from `species/<id>.json` on the classpath) when it is missing or
+     * was synthesized; the sandbox can add any species, not only the ones the tank was built with.
+     */
+    fun ensure(id: String, prefix: String = "species/", loader: ClassLoader? = SpeciesCatalog::class.java.classLoader) {
+        if (map.containsKey(id) && id !in synthesized) return
+        val text = runCatching { loader?.getResourceAsStream("$prefix$id.json")?.bufferedReader()?.use { it.readText() } }.getOrNull() ?: return
+        runCatching { SimSpecies.parse(text) }.getOrNull()?.let { put(it); synthesized -= id }
+    }
 
     companion object {
         /** Loads `species/<id>.json` resources for [ids] from the classpath (missing ones skipped). */

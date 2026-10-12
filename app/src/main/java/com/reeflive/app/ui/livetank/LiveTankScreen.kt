@@ -57,6 +57,7 @@ import com.reeflive.app.ui.live.SandboxPanelState
 import com.reeflive.app.ui.live.SandboxParamDef
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.SelectedAnimalUi
+import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.toFishCardState
@@ -158,6 +159,8 @@ fun LiveTankScreen(
         readouts = waterReadouts(hud.water, hud.lightIntensity * 100.0, hud.flowStrength.toDouble()),
     )
 
+    val speciesDb = context.appGraph.speciesDb
+    val stockCards = remember(speciesDb) { StockUi.catalogCards { id -> speciesDb[id]?.colors ?: emptyMap() } }
     val panel = SandboxPanelState(
         now = TankReading(
             hud.water, lightPct = lightPct, flowPct = hud.flowStrength * 100.0,
@@ -177,6 +180,13 @@ fun LiveTankScreen(
             AddableSpecies(id, list.first().common, list.map { it.lengthCm.toDouble() }.sorted()[list.size / 2])
         }.take(6),
         predation = predation,
+        stock = StockUi(
+            cards = stockCards,
+            counts = hud.stats.filter { it.alive }.groupingBy { it.speciesId }.eachCount() +
+                hud.corals.groupingBy { it.speciesId }.eachCount(),
+            animals = hud.stats.count { it.alive },
+            corals = hud.corals.size,
+        ),
         timelapseStatus = when (val l = lapseState) {
             TimelapseState.Idle -> null
             is TimelapseState.Running -> "Running · ${(l.progress.fraction * 100).toInt()} %"
@@ -219,6 +229,7 @@ fun LiveTankScreen(
         onRearrangeRock = { tick(); vm.rearrangeRock() },
         onPumpFailTonight = { tick(); vm.pumpFailTonight() },
         onTimelapse = { lapse = true },
+        onAddMany = { id, n -> tick(); vm.addMany(id, n) },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
         when {

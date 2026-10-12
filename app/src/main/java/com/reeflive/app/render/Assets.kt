@@ -12,7 +12,14 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /** One drawable node of a model: mesh + material + its GLB node. */
-class DrawPart(val node: GlbNode, val mesh: Mesh, val material: Material, val kind: MaterialKind) {
+class DrawPart(
+    val node: GlbNode,
+    val mesh: Mesh,
+    val material: Material,
+    val kind: MaterialKind,
+    /** World-space centre of this part (polyps: mean instance position), for drawing one clump of a coral model. */
+    val center: FloatArray = FloatArray(3),
+) {
     val part: String get() = node.part
     /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
     val finKind: Float = node.name.lowercase().let { n ->
@@ -143,10 +150,23 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
                 val kind = if (organism) organismKind(node.part) else MaterialKind.forPart(node.part, src.blended)
                 if (kind == MaterialKind.UNLIT_HIDDEN) continue
                 val mat = Material(kind, src, texByImage[src.baseColorImage])
-                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind)
+                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table))
             }
         }
         return GpuModel(p.path, glb, parts, texByImage.values.toList())
+    }
+
+    private fun partCenter(node: GlbNode, prim: GlbPrimitive, table: FloatArray?): FloatArray {
+        val out = FloatArray(3)
+        val stride = node.instanceStride
+        if (table != null && stride >= 3 && table.size >= stride) {
+            val n = table.size / stride
+            for (i in 0 until n) for (k in 0 until 3) out[k] += table[i * stride + k]
+            for (k in 0 until 3) out[k] /= n.toFloat()
+            return out
+        }
+        M.transformPoint(node.world, (prim.bmin[0] + prim.bmax[0]) * 0.5f, (prim.bmin[1] + prim.bmax[1]) * 0.5f, (prim.bmin[2] + prim.bmax[2]) * 0.5f, out)
+        return out
     }
 
     private fun organismKind(part: String) = when (part) {
