@@ -376,9 +376,9 @@ def kenya(rock, A):
                 if np.dot(o, UP) < -0.3:
                     o = -o
                 inst.add(c + o * r * 0.8, o, rs.uniform(0.9, 1.4), phase=(phase + 0.1 * depth) % 1.0)
-    # trim to 600 tufts
-    if len(inst) > 850:
-        keep = np.sort(RS(5).choice(len(inst), 850, replace=False))
+    # trim to 790 tufts (keeps the High on-screen estimate under 140k with the crab added)
+    if len(inst) > 790:
+        keep = np.sort(RS(5).choice(len(inst), 790, replace=False))
         inst.rows = [inst.rows[i] for i in keep]
     cv = P.Canvas(64, 256)
     cv.vgrad("#C9A08E", "#E4C2BA", 0.0, 1.0, 0.8)  # tan-pink stalk -> branches #D8A9A0

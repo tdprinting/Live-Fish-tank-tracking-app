@@ -329,15 +329,15 @@ def paint_engineer_goby(cv, fl):
     mucus(cv, 0.03, 41)
     rs = np.random.default_rng(43)
     m = np.zeros_like(cv.u)
-    w = 0.0062
+    w = 0.0092  # bold bars ~1/4 of their spacing, as in the photo
 
     def line(pts, wd=w):
-        return fl.stroke(pts, [wd] * len(pts), soft=0.0028)
+        return fl.stroke(pts, [wd] * len(pts), soft=0.003)
     xs = []
     x = 0.075
     while x < 0.965:
         xs.append(x)
-        x += rs.uniform(0.03, 0.042)
+        x += rs.uniform(0.038, 0.05)
     tops, bots = [], []
     for k, x0 in enumerate(xs):
         ph = rs.uniform(0, 6.28)
@@ -369,18 +369,25 @@ def paint_engineer_goby(cv, fl):
     while x < 0.95:  # broken wavy longitudinal line on the rear half
         seg = rs.uniform(0.04, 0.09)
         xx = np.linspace(x, min(x + seg, 0.97), 6)
-        m = np.maximum(m, line([(q, 0.62 + 0.05 * math.sin(q * 70 + 0.8)) for q in xx], 0.0052))
+        m = np.maximum(m, line([(q, 0.62 + 0.05 * math.sin(q * 70 + 0.8)) for q in xx], 0.0075))
         x += seg + rs.uniform(0.03, 0.07)
     # head: lines over the snout, around the eye and on the cheek
-    m = np.maximum(m, line([(0.004, 0.55), (0.02, 0.74), (0.045, 0.9)], 0.005))
-    m = np.maximum(m, line([(0.012, 0.36), (0.035, 0.28), (0.06, 0.36), (0.07, 0.55)], 0.0048))
-    m = np.maximum(m, line([(0.05, 0.68), (0.058, 0.8), (0.052, 0.92)], 0.0045))
+    m = np.maximum(m, line([(0.004, 0.55), (0.02, 0.74), (0.045, 0.9)], 0.007))
+    m = np.maximum(m, line([(0.012, 0.36), (0.035, 0.28), (0.06, 0.36), (0.07, 0.55)], 0.0068))
+    m = np.maximum(m, line([(0.05, 0.68), (0.058, 0.8), (0.052, 0.92)], 0.0065))
     cv.blend(np.clip(m, 0, 1), "#E8E472")
     dark_mouth(cv, fl, u1=0.03, v0=0.38, v1=0.44, color="#050505", op=0.7)
 
 
 def fins_engineer_goby(cv):
-    FL.paint_fin_slot(cv, 6, base="#141510", alpha=0.95, rays=0, margin="#B8B460", margin_w=0.06, edge_fade=0.1)
+    def bars(T, Sx, rgb, a):
+        # the body bars run up into the fin base as short yellow ticks (photo), fading toward the margin
+        ph = np.abs(((T * 18 + 0.15 * np.sin(T * 40)) % 1.0) - 0.5)
+        m = (1 - S(0.07, 0.13, ph)) * (1 - S(0.4, 0.75, Sx))
+        return rgb * (1 - m[..., None]) + hex2rgb("#E8E472") * m[..., None], a
+    FL.paint_fin_slot(cv, 6, base="#141510", alpha=0.95, rays=0, margin="#B8B460", margin_w=0.06, edge_fade=0.1,
+                      spots=bars)
+    FL.paint_fin_slot(cv, 5, base="#1A1A16", alpha=0.75, rays=4, ray_color="#0A0A08")
     FL.paint_fin_slot(cv, 4, base="#1A1A16", alpha=0.7, rays=8, ray_color="#0A0A08")
 
 
@@ -606,13 +613,17 @@ SPECIES = {
     "engineer_goby": dict(
         # Pholidichthys leucotaenia (juvenile): eel-like, strongly compressed (width ~0.45 x depth), blunt head,
         # gradual taper to a pointed tail, continuous dorsal-caudal-anal fin, slightly wavy resting pose
-        profile=[(0, 0.066, 0.042, 0.0), (0.015, 0.085, 0.048, 0.0), (0.06, 0.098, 0.05, 0.0),
-                 (0.3, 0.098, 0.046, 0.0), (0.55, 0.09, 0.04, 0.0), (0.75, 0.072, 0.032, 0.0),
-                 (0.9, 0.045, 0.02, 0.0), (0.97, 0.022, 0.011, 0.0), (1.0, 0.006, 0.005, 0.0)],
-        body_tris=5500, ring=16, p_exp=1.1, belly_bias=0.04, back_pinch=0.18,
-        ribbon=dict(u_d=0.33, u_a=0.52, h_d=0.034, h_a=0.03, taper=0.55, tip_len=1.9),
+        # tapered: rounded blunt snout, deepest just behind the head (~0.3), long steady taper and lateral
+        # compression over the rear 60 % to a narrow tail (ref_engineer_goby.jpg)
+        profile=[(0, 0.03, 0.026, -0.004), (0.012, 0.058, 0.04, -0.002), (0.04, 0.08, 0.05, 0.0),
+                 (0.1, 0.092, 0.052, 0.0), (0.3, 0.1, 0.05, 0.0), (0.45, 0.094, 0.043, 0.0),
+                 (0.62, 0.08, 0.034, 0.0), (0.78, 0.06, 0.024, 0.0), (0.9, 0.038, 0.015, 0.0),
+                 (0.97, 0.018, 0.008, 0.0), (1.0, 0.005, 0.004, 0.0)],
+        body_tris=5500, ring=16, p_exp=1.0, belly_bias=0.04, back_pinch=0.22,
+        ribbon=dict(u_d=0.28, u_a=0.5, h_d=0.042, h_a=0.036, taper=0.35, tip_len=1.6),
         caudal=None, rest_wave=(0.022, 1.35),
-        pectoral=dict(u=0.1, length=0.05, width=0.04, zf=-0.2, shape="round"),
+        pectoral=dict(u=0.1, length=0.07, width=0.05, zf=-0.2, shape="round"),
+        pelvic=dict(u=0.08, length=0.03),
         eye=dict(u=0.035, zf=0.4, r=0.014, iris="#2A2A20", ring="#B8B060", outer="#101010", ring_w=0.15),
         paint=paint_engineer_goby, fins=fins_engineer_goby, irid=0.05, rough=0.4, length_cm=20.0, tex=(2048, 256),
         gill=(0.08, 0.4, 0.03, 0.25),
