@@ -133,3 +133,42 @@ class InvertEcologyTest {
         assertTrue("blue $blue vs scarlet $scarlet", blue > scarlet)
     }
 }
+
+class AsterinaOrganPipeTest {
+    private fun star(i: Int) = LivestockSeed("asterina_sp", "Asterina #$i", 1.0, id = "ast$i")
+    private val organPipe = LivestockSeed("tubipora_musica", "Organ pipe", placement = "coral_organpipe_kenya_base", id = "organpipe")
+
+    private fun tissueAfter(stars: Int, days: Double): Pair<Double, Simulation> {
+        val s = TestTank.sim(listOf(organPipe) + (1..stars).map(::star), seed = 6L)
+        s.advanceAbstract(days * 86400)
+        return s.corals.first { it.id == "organpipe" }.tissue to s
+    }
+
+    @Test
+    fun highPopulationGrazesOrganPipe() {
+        val (low, _) = tissueAfter(2, 5.0)
+        val (high, s) = tissueAfter(Simulation.ASTERINA_CAP, 5.0)
+        assertTrue("2 stars leave tissue alone: $low", low > 0.95)
+        assertTrue("capped population damages it: high=$high low=$low", high < low - 0.1)
+        assertTrue(s.invertEcology.asterinaBitten > 0.1)
+    }
+
+    @Test
+    fun grazingRetractsThePolypsAndColonyCanDie() {
+        val s = TestTank.sim(listOf(organPipe) + (1..4).map(::star), seed = 6L)
+        s.advanceAbstract(2 * 3600.0)
+        val c = s.corals.first { it.id == "organpipe" }
+        assertTrue("disturbed while grazed: ${c.disturb}", c.disturb >= 0.4)
+        s.advanceAbstract(40 * 86400.0)
+        assertTrue("stripped after weeks: ${c.tissue}", c.tissue < 0.2)
+    }
+
+    @Test
+    fun otherCoralsAreLeftAlone() {
+        val kenya = LivestockSeed("capnella_sp", "Kenya", placement = "coral_kenya", id = "kenya")
+        val s = TestTank.sim(listOf(organPipe, kenya) + (1..4).map(::star), seed = 6L)
+        s.advanceAbstract(5 * 86400.0)
+        val k = s.corals.first { it.id == "kenya" }
+        assertTrue("kenya ${k.tissue}", k.tissue > 0.9)
+    }
+}

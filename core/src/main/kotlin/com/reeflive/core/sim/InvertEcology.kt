@@ -60,6 +60,31 @@ class InvertEcology(private val sim: Simulation) {
     fun step(dtMin: Double) {
         val t = sim.simTimeSec
         hermitStep(dtMin, t)
+        asterinaStep(dtMin)
+    }
+
+    // ============================================================== asterina vs organ pipe (B-5)
+    /** Colony tissue the asterina stars have grazed off organ pipe coral in total (UI / tests). */
+    var asterinaBitten = 0.0; private set
+
+    /**
+     * Asterina stars nibble organ pipe polyps once their population is high (research 04 §11, matrix
+     * M risk): at [Simulation.ASTERINA_CAP] stars or more every organ pipe colony loses tissue through
+     * the normal [Coral] tissue/[Coral.disturb] mechanism (the polyps retract while grazed). Below
+     * the cap that [Simulation] itself enforces, they only graze film.
+     */
+    private fun asterinaStep(dtMin: Double) {
+        val stars = sim.organisms.count { it.alive && it.brainKind == BrainKind.ASTERINA }
+        if (stars < Simulation.ASTERINA_CAP) return
+        for (c in sim.corals) {
+            if (c.kind != CoralKind.ORGAN_PIPE || c.tissue <= 0.0) continue
+            val before = c.tissue
+            c.tissue = max(0.0, before - ASTERINA_TISSUE_PER_STAR_MIN * stars * dtMin)
+            c.disturb = max(c.disturb, 0.5)
+            val eaten = before - c.tissue
+            asterinaBitten += eaten
+            sim.water.addDetritusTanGrams(eaten * c.kind.biomass * Simulation.CORAL_TAN_PER_COLONY)
+        }
     }
 
     private fun hermitStep(dtMin: Double, t: Double) {
@@ -158,6 +183,8 @@ class InvertEcology(private val sim: Simulation) {
         const val FIGHT_PER_MIN = 0.0015
         /** Per minute, an outgrown hermit with no spare takes a snail's shell: moderate risk (04 §14), ≈ 0.2/day. */
         const val SNAIL_KILL_PER_MIN = 0.00015
+        /** Tissue fraction one star removes per minute once the population is high; 4 stars ≈ 17 days to bare skeleton net of regrowth (moderate risk, est.). */
+        const val ASTERINA_TISSUE_PER_STAR_MIN = 0.000015
         private val SNAILS = setOf(BrainKind.ASTREA, BrainKind.NASSARIUS)
     }
 }
