@@ -7,6 +7,12 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import com.reeflive.app.ui.components.EmptyState
 import com.reeflive.app.ui.components.ScreenHeader
+import com.reeflive.app.ui.dashboard.DashboardRoute
+import com.reeflive.app.ui.log.LogRoute
+import com.reeflive.app.ui.log.ParameterDetailRoute
+import com.reeflive.app.ui.log.QuickLogRoute
+import com.reeflive.app.ui.log.TestSessionRoute
+import com.reeflive.app.ui.more.ExportRoute
 
 /*
  * Route → screen wiring. Each destination builds its ViewModel via [reefViewModel] and hands plain state
@@ -21,10 +27,30 @@ private fun Placeholder(title: String, onBack: (() -> Unit)? = null) {
     }
 }
 
-@Composable fun DashboardDestination(nav: NavHostController) = Placeholder("Reef")
-@Composable fun LogDestination(nav: NavHostController) = Placeholder("Log")
-@Composable fun ParamDestination(nav: NavHostController, paramId: String, onBack: () -> Unit) = Placeholder(paramId, onBack)
-@Composable fun SessionDestination(sessionId: String, onBack: () -> Unit) = Placeholder("Test", onBack)
+@Composable
+fun DashboardDestination(nav: NavHostController) {
+    val log = LocalQuickLog.current
+    DashboardRoute(
+        onOpenParam = { nav.navigate(Routes.param(it)) },
+        onLogParam = { log(listOf(it)) },
+        onOpenTask = { nav.navigate(Routes.task(it)) },
+        onOpenCare = { nav.navigateTab(Tab.CARE) },
+        onOpenLive = { nav.navigateTab(Tab.LIVE) },
+        onOpenMore = { nav.navigateTab(Tab.MORE) },
+    )
+}
+
+@Composable
+fun LogDestination(nav: NavHostController) =
+    LogRoute(onOpenParam = { nav.navigate(Routes.param(it)) }, onOpenSession = { nav.navigate(Routes.session(it)) })
+
+@Composable
+fun ParamDestination(nav: NavHostController, paramId: String, onBack: () -> Unit) {
+    val log = LocalQuickLog.current
+    ParameterDetailRoute(paramId, onBack = onBack, onOpenSession = { nav.navigate(Routes.session(it)) }, onLog = { log(listOf(it)) })
+}
+
+@Composable fun SessionDestination(sessionId: String, onBack: () -> Unit) = TestSessionRoute(sessionId, onBack)
 @Composable fun CareDestination(nav: NavHostController) = Placeholder("Care")
 @Composable fun TaskDestination(taskId: String, onBack: () -> Unit) = Placeholder("Task", onBack)
 @Composable fun CalcDestination(calcId: String, onBack: () -> Unit) = Placeholder("Calculator", onBack)
@@ -40,7 +66,7 @@ private fun Placeholder(title: String, onBack: (() -> Unit)? = null) {
 @Composable fun TankDestination(onBack: () -> Unit) = Placeholder("Tank", onBack)
 @Composable fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Settings", onBack)
 @Composable fun TargetsDestination(onBack: () -> Unit) = Placeholder("Targets", onBack)
-@Composable fun ExportDestination(onBack: () -> Unit) = Placeholder("Export", onBack)
+@Composable fun ExportDestination(onBack: () -> Unit) = ExportRoute(onBack)
 @Composable fun AboutDestination(onBack: () -> Unit) = Placeholder("About", onBack)
 
-@Composable fun QuickLogHost(request: QuickLogRequest, onDismiss: () -> Unit) = Unit
+@Composable fun QuickLogHost(request: QuickLogRequest, onDismiss: () -> Unit) = QuickLogRoute(request.paramIds, onDismiss)
