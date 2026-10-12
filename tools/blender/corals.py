@@ -1014,8 +1014,14 @@ def build(ids=None):
             if vi == 1:  # free the base names for the LOD1 nodes (Blender suffixes duplicates with .001)
                 for o in variants[0][2] + [variants[0][1]]:
                     o.name = o.name + "_lod0"
+                    if o.data is not None:
+                        o.data.name = o.name
                 for o in objs_ + [root_]:
                     o.name = o.name.split(".")[0]
+                    if o.data is not None:  # mesh datablocks too (Body.001 -> Body) so glTF mesh names match
+                        o.data.name = o.name
+                # GlbLoader / validate_glb.py expect the scene root to be exactly `Root` (never `Root.001`)
+                assert root_.name == "Root", f"{name}: LOD1 root exported as {root_.name!r}"
             for o in objs_:
                 C.triangulate(o)
             path = os.path.join(C.MODELS, name + ".glb")

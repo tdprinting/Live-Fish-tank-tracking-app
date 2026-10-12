@@ -185,6 +185,18 @@ def check_glb(path, errors, warnings, report):
             errors.append(f"{name}: contains {k}")
     if j.get("extensionsRequired"):
         errors.append(f"{name}: extensionsRequired {j['extensionsRequired']}")
+    # GlbLoader reads rootExtras from the single scene root; generators name it `Root` (the rockscape's root is its
+    # `Rock` mesh). A Blender duplicate suffix (`Root.001`) means a LOD1 export picked up the wrong name.
+    scenes = j.get("scenes") or [{}]
+    roots = scenes[j.get("scene", 0)].get("nodes", [])
+    if len(roots) != 1:
+        errors.append(f"{name}: {len(roots)} scene roots (expected 1)")
+    else:
+        rname = j["nodes"][roots[0]].get("name")
+        if rname != ("Rock" if base == "rockscape" else "Root"):
+            errors.append(f"{name}: scene root is named {rname!r}")
+    if name.endswith("_lod1") and base not in FISH and j["nodes"][roots[0]].get("extras", {}).get("lod") != 1:
+        errors.append(f"{name}: root extras.lod != 1")
     total = 0
     body_tris = 0
     wms = world_matrices(g)
