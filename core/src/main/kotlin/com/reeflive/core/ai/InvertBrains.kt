@@ -5,6 +5,7 @@ import com.reeflive.core.sim.Anchor
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
+import com.reeflive.core.sim.SimEvent
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
@@ -116,14 +117,42 @@ fun hangPose(c: Ctx, a: Anchor?, fallback: Vec3, inverted: Boolean): Rest {
 // Banded coral shrimp (Stenopus hispidus): hangs under ledges, antennae, scavenges, molts
 // =====================================================================================
 class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
-    val ledge: Anchor? = c.rock.anchors[o.hostAnchor ?: "SHRIMP_LEDGE"] ?: c.rock.anchors["SHRIMP_LEDGE"]
+    companion object { const val KEEP_APART_CM = 30.0 }
+    private val requested: Anchor? = c.rock.anchors[o.hostAnchor ?: "SHRIMP_LEDGE"] ?: c.rock.anchors["SHRIMP_LEDGE"]
+    var ledge: Anchor? = requested; private set
+    private var nextLedgeCheck = 0.0
     fun hang(c: Ctx) = hangPose(c, ledge, Vec3(88.0, 35.0, 15.0), inverted = true)
+
+    /**
+     * Banded and skunk shrimp keep apart (06 §2.14, §5.6 #15): with a skunk cleaner in the tank the
+     * banded shrimp takes the ledge farthest from it when its own is within [KEEP_APART_CM].
+     */
+    fun chooseLedge(c: Ctx) {
+        val skunks = c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.CLEANER_SHRIMP }.map { it.homePos.takeIf { h -> h != Vec3.ZERO } ?: it.pos }
+        if (skunks.isEmpty()) { ledge = requested; return }
+        fun sep(a: Anchor) = skunks.minOf { it.distanceTo(a.pos) }
+        val req = requested ?: return
+        if (sep(req) >= KEEP_APART_CM) { ledge = req; return }
+        ledge = c.rock.anchors.ofType("LEDGE").maxByOrNull { sep(it) }?.takeIf { sep(it) > sep(req) } ?: req
+    }
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        if (c.t >= nextLedgeCheck) { nextLedgeCheck = c.t + 600; chooseLedge(c) }
+    }
+
+    override fun abstractPose(c: Ctx, out: SteerIntent) {
+        if (c.t >= nextLedgeCheck) { nextLedgeCheck = c.t + 600; chooseLedge(c) }
+        super.abstractPose(c, out)
+    }
 
     init {
         install(Hang(), Scavenge(this, 30.0, urgentAbove = 0.4, settledOnly = false), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = hang(c)
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "ledge") ledge?.pos ?: hang(c).pos else super.anchorPos(c, anchor)
 
     inner class Hang : Behavior("hang", "Hanging under the ledge") {
         private var shuffle = Vec3.ZERO
@@ -183,6 +212,45 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean) = sit(c)
 
+    /** Approach statistics (06 §5.6 #16): approaches, leg-rocks and cleans offered, for predators and others. */
+    class ApproachStats { var approaches = 0; var rocks = 0; var cleans = 0 }
+    val predatorStats = ApproachStats()
+    companion object { const val APPROACH_CM = 10.0 }
+    val otherStats = ApproachStats()
+    private val near = HashSet<String>()
+    private var rockUntil = -1e9
+
+    /** Hawk and dottyback count as predators of a cleaner shrimp (S:Caves19 signalling context). */
+    fun isPredator(f: Organism) = f.brainKind == BrainKind.HAWK || f.brainKind == BrainKind.DOTTYBACK || f.brainKind == BrainKind.EEL
+
+    /**
+     * A fish arriving within [APPROACH_CM] of the station: rock the legs (predators 0.51, others 0.12;
+     * S:Caves19 51 % vs 12 %) and offer a cleaning (predators 0.28, others 0.51; 06 §5.3).
+     */
+    private fun approaches(c: Ctx) {
+        if (!station.open) return
+        val inside = HashSet<String>()
+        for (f in c.p.neighbors(station.pos, APPROACH_CM + 4)) {
+            if (!f.isFish || !f.alive || f.pos.distanceTo(station.pos) > APPROACH_CM) continue
+            inside += f.id
+            if (!near.add(f.id)) continue
+            val pred = isPredator(f)
+            val st = if (pred) predatorStats else otherStats
+            st.approaches++
+            if (c.rng.chance(if (pred) 0.51 else 0.12)) {
+                st.rocks++
+                rockUntil = c.t + c.rng.range(1.0, 3.0)
+                c.sim.emit(SimEvent.LegRock(c.o.id, f.id, c.sim.simTimeSec))
+            }
+            if (station.client == null && c.rng.chance(if (pred) 0.28 else 0.51)) {
+                st.cleans++
+                station.client = f; station.clientReady = true
+                f.poseFor = c.o; f.poseUntil = c.t + 25.0
+            }
+        }
+        near.retainAll { id -> id in inside || c.sim.organisms.any { it.id == id && it.alive && it.pos.distanceTo(station.pos) < APPROACH_CM + 4 } }
+    }
+
     inner class Station : Behavior("station", "Advertising at station") {
         override fun score(c: Ctx) = 0.5
         override fun update(c: Ctx, out: SteerIntent) {
@@ -195,7 +263,11 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             val client = c.p.neighbors(station.pos, 30.0).any { it.isFish && it.alive && it.brainKind != BrainKind.EEL }
             station.advertising = client
             if (client) out.rollExtra = 0.3 * sin(2 * PI * 1.2 * c.t)    // rocks side to side
-            c.o.appendagePhase += c.dt * (if (client) 4.0 else 1.0)
+            approaches(c)
+            val rocking = c.t < rockUntil
+            c.o.legRock = if (rocking) 1.0 else max(0.0, c.o.legRock - c.dt * 2)
+            // leg-rocking: forelegs at 4 Hz (S:Caves19)
+            c.o.appendagePhase += c.dt * (if (rocking) 8.0 * PI else if (client) 4.0 else 1.0)
         }
     }
 
@@ -217,7 +289,8 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             out.posture = 1
             c.o.mouth = 0.5 + 0.5 * sin(2 * PI * 2 * c.t)
             c.o.appendagePhase += c.dt * 6
-            if (elapsed > dur) { finishClean(c, cl, isShrimp = true); station.release(); finished = true }
+            cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
+            if (elapsed > dur) { finishClean(c, cl, isShrimp = true); cl.poseUntil = c.t; station.release(); finished = true }
         }
     }
 }
@@ -244,8 +317,9 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = 0.3 + 0.3 * c.o.hunger
         override fun enter(c: Ctx) { spot = c.rockSurfacePoint(c.o.pos, 12.0, minNormalY = 0.0) }
         override fun update(c: Ctx, out: SteerIntent) {
-            val s = spot ?: run { finished = true; return }
+            // stay on the surface even on the frame it gives up (a hermit never floats free of the rock)
             out.crawl = true; out.surfaceOffset = surfaceOffset(c)
+            val s = spot ?: run { finished = true; return }
             if (c.o.pos.distanceTo(s.first) > 1.5) { out.target = s.first; out.speed = c.o.cruiseSpeed; return }
             if (c.t > next) {
                 next = c.t + 2

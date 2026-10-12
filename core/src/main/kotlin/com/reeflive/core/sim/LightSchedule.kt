@@ -18,10 +18,31 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
     var forcedOn: Boolean? = null
     /** Optional intensity multiplier override (sandbox slider). */
     var intensityOverride: Double? = null
+    /**
+     * Sandbox photoperiod in hours (null = the programmed schedule). The schedule is stretched or
+     * squeezed about its midday so ramps keep their shape (06 §4.2).
+     */
+    var photoperiodHours: Double? = null
+    /** Per-channel gain (sandbox spectrum sliders), 0..2 each. */
+    val gains = DoubleArray(CHANNELS) { 1.0 }
+
+    /** Set one channel's gain by name (white, blue, royal, red, green, violet, uv, moon) or index. */
+    fun setGain(channel: String, value: Double) {
+        val i = CHANNEL_NAMES.indexOf(channel.lowercase()).takeIf { it >= 0 } ?: channel.toIntOrNull() ?: return
+        if (i in 0 until CHANNELS) gains[i] = value.coerceIn(0.0, 2.0)
+    }
 
     private fun minuteOf(simTimeSec: Double): Double {
-        val m = (simTimeSec / 60.0) % 1440.0
-        return if (m < 0) m + 1440 else m
+        var m = (simTimeSec / 60.0) % 1440.0
+        if (m < 0) m += 1440
+        val ph = photoperiodHours ?: return m
+        // stretch about the schedule's midday: programmed time = mid + (t − mid) × default / requested
+        var d = m - MIDDAY_MIN
+        if (d > 720) d -= 1440
+        if (d < -720) d += 1440
+        val k = DEFAULT_PHOTOPERIOD_H / ph.coerceIn(4.0, 16.0)
+        val prog = (MIDDAY_MIN + (d * k).coerceIn(-719.0, 719.0)) % 1440.0
+        return if (prog < 0) prog + 1440 else prog
     }
 
     fun channels(simTimeSec: Double, out: DoubleArray = DoubleArray(CHANNELS)): DoubleArray {
@@ -45,6 +66,7 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
             peak.channels.copyInto(out)
         }
         intensityOverride?.let { k -> for (c in 0 until CHANNELS) out[c] = (out[c] * k).coerceIn(0.0, 1.0) }
+        for (c in 0 until CHANNELS) if (gains[c] != 1.0) out[c] = (out[c] * gains[c]).coerceIn(0.0, 1.0)
         return out
     }
 
@@ -69,6 +91,11 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
     companion object {
         const val CHANNELS = 8
         const val LIGHTS_ON = 0.05
+        val CHANNEL_NAMES = listOf("white", "blue", "royal", "red", "green", "violet", "uv", "moon")
+        /** Lights-on length of [DEFAULT_POINTS] (08:30–19:45 above [LIGHTS_ON] is ~11 h; ~10 h at full ramp). */
+        const val DEFAULT_PHOTOPERIOD_H = 11.0
+        /** Midday of the default schedule (14:15) in minutes. */
+        const val MIDDAY_MIN = 14 * 60.0 + 15
         /** Diode-count weights (4,4,4,1,1,1,1,1)/16. */
         val WEIGHTS = doubleArrayOf(4.0, 4.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0).map { it / 16 }.toDoubleArray()
 

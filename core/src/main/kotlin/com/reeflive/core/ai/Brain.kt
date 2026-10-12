@@ -6,6 +6,7 @@ import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
+import com.reeflive.core.sim.Symptom
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -41,11 +42,36 @@ abstract class SpeciesBrain(val c: Ctx) {
     private var eyeTarget = 0.0
     private var eyeNext = 0.0
     private var lastLightsOnSeen = -1e9
+    /** Set by a dominant clown's approach (06 §5.4 QUIVER_YIELD); read by [Yield]. */
+    var yieldUntil = -1e9
+    var yieldTo: Organism? = null
+    var yieldBackS = 1.0
+
+    /** World position of a matrix anchor (host, cave, hole, perch, station, ...) for this animal, or null. */
+    open fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "body") o.pos else o.homePos
+
+    /** A dominant clown approached: the subordinate quivers 1–3 s, then backs off 0.5–2 BL (S:Colleye12). */
+    open fun onDominated(c: Ctx, by: Organism) {
+        yieldTo = by
+        val quiver = c.rng.range(1.0, 3.0)
+        yieldBackS = c.rng.range(0.5, 2.0)
+        yieldUntil = c.t + quiver + yieldBackS
+        o.counters.add(com.reeflive.core.sim.Counters.K.QUIVER, c.t)
+        c.sim.emit(com.reeflive.core.sim.SimEvent.Quiver(o.id, by.id, c.sim.simTimeSec))
+    }
 
     protected fun install(vararg behaviors: Behavior) {
         // Shared layers for every brain: matrix-driven rivalry (research 05 §17) and the sick/moribund behavior.
         val extra = buildList {
-            if (o.isFish || o.brainKind == BrainKind.BANDED_SHRIMP) add(Rivalry(this@SpeciesBrain))
+            // research 06 pair matrix (territory triggers + display bouts); the generic rivalry only for animals without rows
+            val pairRows = PairMatrix.rows.filter { r ->
+                r.type != "predation" && r.type != "defensive" &&
+                    (r.actor == o.brainKind.name || o.brainKind == BrainKind.CLOWN && r.actor.startsWith("CLOWN_"))
+            }
+            if (pairRows.isNotEmpty()) add(PairBouts(this@SpeciesBrain, pairRows))
+            else if (o.isFish && o.brainKind != BrainKind.ENGINEER_GOBY && o.brainKind != BrainKind.CARDINAL) add(Rivalry(this@SpeciesBrain))
+            if (o.brainKind == BrainKind.CLOWN) add(Yield(this@SpeciesBrain))
+            if (o.isFish) add(PoseForCleaner(this@SpeciesBrain))
             if (o.isFish) add(KeepClear(this@SpeciesBrain))
             add(Unwell(this@SpeciesBrain))
         }
@@ -56,7 +82,10 @@ abstract class SpeciesBrain(val c: Ctx) {
     open fun preTick(c: Ctx) {
         val dt = c.dt
         o.sleeping = false
+        o.clock = c.t
         o.mouth *= exp(-dt * 5)
+        o.spineFlare *= exp(-dt * 3)
+        if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
         threatCheck -= dt
@@ -127,8 +156,10 @@ abstract class SpeciesBrain(val c: Ctx) {
     /** Initial placement and home (called once by [SpeciesBrains.create]). */
     open fun initialPlace(c: Ctx) {
         val r = restSpot(c, false)
-        o.homePos = r.pos
-        o.placeAt(r.pos, r.heading)
+        // a rest spot from an older anchor set can sit just inside the rebuilt rock: start on its surface
+        val pos = if (c.rock.sdf.dist(r.pos) < 0.0) c.rock.sdf.project(r.pos, 0.2) else r.pos
+        o.homePos = pos
+        o.placeAt(pos, r.heading)
         o.up = (r.up ?: Vec3.Y).rejectFrom(o.heading).normalized(Vec3.Y)
     }
 }
@@ -271,6 +302,7 @@ fun Ctx.bite(f: FoodParticle) {
     if (f.eaten) return
     food.consume(f)
     o.eat(f.grams * o.species.dietMatch(f.kind).coerceAtLeast(0.5))
+    o.counters.add(com.reeflive.core.sim.Counters.K.FEED, t)
     o.mouth = 1.0
 }
 

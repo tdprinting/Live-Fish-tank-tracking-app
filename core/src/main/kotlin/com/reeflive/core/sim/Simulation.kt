@@ -47,12 +47,35 @@ class Simulation(
     var speed: Double = 1.0
         set(v) { field = v.coerceIn(0.0, 1000.0) }
     var predationEnabled: Boolean = config.predationEnabled
+    /** Σ BL² / footprint (06 §3.4) and its aggression multiplier, refreshed every chemistry tick. */
+    var crowding: Double = com.reeflive.core.ai.PairMatrix.CROWDING_BASE; private set
+    var crowdingMult: Double = 1.0; private set
+    /**
+     * Sandbox toggle: banded shrimp may kill a freshly molted skunk cleaner (06 §2.14). Off by default:
+     * cross-species kills are unsourced (07 gap 4); the conspecific molt-window rule stays on.
+     */
+    var crossSpeciesShrimpKills = false
+    /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
+    var nightPlanktonPerHour = 60.0
+    private var planktonAcc = 0.0
+    private var lastNightRollDay = Int.MIN_VALUE
     /** Run the behavior layer at full fidelity regardless of speed (tests / SimRunner). */
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
     var behaviorEnabled = true
 
     private val commands = ConcurrentLinkedQueue<Command>()
+
+    /** A parameter ramp/hold (06 §4.2): linear from [from] to [to] over [overSec], then held if [hold]. */
+    class ParamRamp(val id: String, val from: Double, val to: Double, val startSec: Double, val overSec: Double, val hold: Boolean) {
+        fun value(t: Double): Double = if (overSec <= 0) to else from + (to - from) * ((t - startSec) / overSec).coerceIn(0.0, 1.0)
+        fun done(t: Double) = t >= startSec + overSec
+    }
+    /** Active ramps by parameter id (lower case). */
+    val ramps = LinkedHashMap<String, ParamRamp>()
+    /** Commands waiting for their sim time ([Command.Schedule]), sorted by time. */
+    private val scheduled = ArrayList<Pair<Double, Command>>()
+    val scheduledCount: Int get() = scheduled.size
     private val pendingEvents = ArrayList<SimEvent>()
     val eventLog = ArrayDeque<SimEvent>()
     private var chemAccum = 0.0
@@ -196,9 +219,11 @@ class Simulation(
     // ============================================================== core loop
     private fun advanceInternal(simDt: Double, dtB: Double) {
         simTimeSec += simDt
+        while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
         val useBehavior = behaviorEnabled && simDt <= 1.0 + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, 0.5))
+        if (useBehavior && !abstractMode) nightPlankton(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         chemAccum += simDt
@@ -207,6 +232,64 @@ class Simulation(
             chemTick()
         }
         tickCount++
+    }
+
+    /** Demersal zooplankton rises from the rock after dark (S:Marnane02 context); pods drift and expire. */
+    private fun nightPlankton(dt: Double) {
+        if (perception.light >= 0.3 || nightPlanktonPerHour <= 0) { planktonAcc = 0.0; return }
+        planktonAcc += dt * nightPlanktonPerHour / 3600
+        while (planktonAcc >= 1) {
+            planktonAcc -= 1
+            if (food.particles.count { !it.eaten && it.kind == FoodKind.PODS } > 40) continue
+            val p = Vec3(rng.range(8.0, rock.lengthCm - 8), rng.range(rock.sandTopCm + 8, rock.waterLevelCm - 10), rng.range(6.0, rock.widthCm - 6))
+            if (!rock.inWater(p, 2.0) || rock.sdf.dist(p) < 1.5) continue
+            food.spawn(FoodKind.PODS, 0.003, p, simTimeSec)
+        }
+    }
+
+    /**
+     * Once per night (02:00) the rare opportunistic predation rolls of the matrix's perNight rows
+     * (06 §2.19, §5.3): a big Sally Lightfoot and sleeping small fish or snails, a banded shrimp and a
+     * freshly molted skunk cleaner. Lethal outcomes are sandbox-only; Reality turns them into a
+     * [SimEvent.NearMiss] and a stress spike (06 §5.3 reality rule).
+     */
+    private fun nightRolls() {
+        val day = dayIndex
+        if (minuteOfDay < 120 || minuteOfDay >= 121 || lastNightRollDay == day) return
+        lastNightRollDay = day
+        for (r in com.reeflive.core.ai.PairMatrix.rows) {
+            if (!r.perNight) continue
+            for (a in organisms.toList()) {
+                if (!a.alive || a.brainKind.name != r.actor || a.lengthCm < r.minActorCm) continue
+                // the crab is an opportunist: only a hungry one tries (vendor statement, 07 gap 5)
+                if (a.brainKind == BrainKind.SALLY_CRAB && a.hunger < 0.5) continue
+                for (t in organisms.toList()) {
+                    if (t === a || !t.alive || !r.targets.contains(t.brainKind.name)) continue
+                    if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL")) continue
+                    var p = r.pEvent
+                    if (r.moltWindowH > 0) {
+                        val cross = a.brainKind != t.brainKind
+                        if (cross && !crossSpeciesShrimpKills) continue
+                        if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) continue
+                        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) continue
+                    }
+                    if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
+                    if (!rng.chance(p)) continue
+                    nightPredation(a, t, r.bout)
+                }
+            }
+        }
+    }
+
+    /** A lethal roll: eaten in Sandbox (predation on), a near miss and a stress spike in Reality. */
+    fun nightPredation(predator: Organism, prey: Organism, bout: String) {
+        if (predationEnabled) eaten(predator, prey)
+        else {
+            prey.counters.add(Counters.K.NEAR_MISS, simTimeSec)
+            StressModel.addSocial(prey, 0.8)
+            prey.startle = max(prey.startle, 0.8)
+            emit(SimEvent.NearMiss(predator.id, prey.id, bout, simTimeSec))
+        }
     }
 
     private fun updateLights() {
@@ -288,9 +371,11 @@ class Simulation(
         w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
         w.step(CHEM_DT)
+        applyRamps()
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
+        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         for (o in organisms) {
             val ichOthers = organisms.filter { it !== o && it.alive && it.disease == Disease.ICH }.sumOf { it.diseaseStage }
             val rival = when (o.brainKind) {
@@ -299,7 +384,7 @@ class Simulation(
                 BrainKind.DOTTYBACK, BrainKind.TANG, BrainKind.EEL -> organisms.any { it !== o && it.alive && it.brainKind == o.brainKind }
                 else -> false
             }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength)
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
@@ -312,6 +397,12 @@ class Simulation(
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
         }
         crustaceanMolts(dtMin)
+        nightRolls()
+        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
+        if (!behaviorEnabled || abstractMode) {
+            val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
+            for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+        }
         asterinaPopulation()
         corpses(dtMin)
         autoFeed()
@@ -413,7 +504,7 @@ class Simulation(
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
             if (!o.molting && simTimeSec >= o.nextMoltAt) {
-                o.molting = true; o.moltUntil = simTimeSec + dur * 3600
+                o.molting = true; o.moltUntil = simTimeSec + dur * 3600; o.lastMoltAt = simTimeSec
                 val shellPos = rock.clampToWater(o.pos.withY(rock.sandTopCm + 0.3) + Vec3(rng.signed() * 4, 0.0, 4.0), 2.0).withY(rock.sandTopCm + 0.3)
                 moltShells += shellPos to simTimeSec
                 emit(SimEvent.Molted(o.id, simTimeSec))
@@ -496,13 +587,24 @@ class Simulation(
 
     private fun apply(c: Command) {
         when (c) {
-            is Command.SetParam -> when (c.paramId.lowercase()) {
-                "light" -> lights.intensityOverride = c.value.coerceIn(0.0, 1.5)
-                "roomtemp" -> { config = config.copy(roomC = c.value); water = rebuildWater() }
-                "flow" -> setFlowStrength(c.value)
-                "speed" -> speed = c.value
-                else -> water.setParam(c.paramId, c.value)
+            is Command.SetParam -> { ramps.remove(c.paramId.lowercase()); setParam(c.paramId, c.value) }
+            is Command.RampParam -> {
+                val from = paramValue(c.paramId) ?: c.target
+                ramps[c.paramId.lowercase()] = ParamRamp(c.paramId, from, c.target, simTimeSec, max(0.0, c.overMin) * 60, c.hold)
+                if (c.overMin <= 0) setParam(c.paramId, c.target)
             }
+            is Command.ReleaseParam -> ramps.remove(c.paramId.lowercase())
+            is Command.Schedule -> {
+                if (c.atSimSec <= simTimeSec) apply(c.command)
+                else { val i = scheduled.indexOfFirst { it.first > c.atSimSec }.let { if (it < 0) scheduled.size else it }; scheduled.add(i, c.atSimSec to c.command) }
+            }
+            is Command.PowerheadFail -> {
+                apply(Command.Schedule(c.atSimSec, Command.Powerheads(false)))
+                apply(Command.Schedule(c.atSimSec + c.durationSec, Command.Powerheads(true)))
+            }
+            is Command.RearrangeRock -> rearrangeRock()
+            is Command.SetAcclimation -> for (o in organisms) if (o.alive) StressModel.acclimate(o, water.s, lightIntensity, flowStrength, c.paramId)
+            is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -514,6 +616,8 @@ class Simulation(
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
             is Command.Powerheads -> setFlow(c.on)
             is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role)).let { o ->
+                // a newcomer: nobody knows it yet (06 §3.3 priority effects)
+                o.arrivalTime = simTimeSec; o.clock = simTimeSec
                 // new arrivals enter at the surface like a release from the acclimation cup
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
@@ -525,6 +629,57 @@ class Simulation(
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
         }
+    }
+
+    /** Current value of a rampable parameter. */
+    fun paramValue(id: String): Double? = when (id.lowercase()) {
+        "light" -> lights.intensityOverride ?: 1.0
+        "flow" -> water.flowStrength
+        "photoperiod" -> lights.photoperiodHours ?: LightSchedule.DEFAULT_PHOTOPERIOD_H
+        "roomtemp" -> config.roomC
+        else -> water.s.get(id)
+    }
+
+    private fun applyRamps() {
+        if (ramps.isEmpty()) return
+        val it = ramps.values.iterator()
+        while (it.hasNext()) {
+            val r = it.next()
+            val active = !r.done(simTimeSec - CHEM_DT)
+            if (active || r.hold) setParam(r.id, r.value(simTimeSec))
+            if (!active && !r.hold) it.remove()
+        }
+    }
+
+    private fun setParam(id: String, value: Double) {
+        val k = id.lowercase()
+        when {
+            k == "light" -> lights.intensityOverride = value.coerceIn(0.0, 1.5)
+            k == "roomtemp" -> { config = config.copy(roomC = value); water = rebuildWater() }
+            k == "flow" -> setFlowStrength(value)
+            k == "speed" -> speed = value
+            k == "photoperiod" -> lights.photoperiodHours = value.coerceIn(4.0, 16.0)
+            k.startsWith("spectrum.") -> lights.setGain(k.removePrefix("spectrum."), value)
+            k.startsWith("pump.") -> setPump(id.substring(5), value > 0.5)
+            else -> water.setParam(id, value)
+        }
+    }
+
+    /** Switch one pump (by name, case-insensitive) on or off in both flow models. */
+    fun setPump(name: String, on: Boolean) {
+        flow.jets = flow.jets.map { if (it.name.equals(name, true)) it.copy(on = on) else it }
+        fluid?.let { f -> f.pumps = f.pumps.map { if (it.name.equals(name, true)) it.copy(on = on) else it } }
+    }
+
+    val pumpNames: List<String> get() = flow.jets.map { it.name }
+
+    /** Rock rearrangement (06 §3.3): territories re-anchor, familiarity falls to 0.5, intrusion memory clears. */
+    private fun rearrangeRock() {
+        for (o in organisms) {
+            for (r in o.relations.values) { r.familiarity = min(r.familiarity, 0.5); r.intrusions = 0.0 }
+            agents[o]?.brain?.utility?.behaviors?.forEach { (it as? com.reeflive.core.ai.PairBouts)?.reset() }
+        }
+        emit(SimEvent.TerritoryReset(simTimeSec))
     }
 
     private fun rebuildWater(): WaterSim {
@@ -589,8 +744,11 @@ class Simulation(
             if (!o.alive) continue
             val d = o.pos.distanceTo(point)
             if (d > 30) continue
-            val s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0)
+            var s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0) * StressModel.skittishMult(o)
+            // a wrasse in its mucus cocoon needs twice the disturbance to wake (06 §5.5)
+            if (o.sleeping && o.brainKind == BrainKind.WRASSE) s *= 0.5
             o.startle = max(o.startle, s)
+            StressModel.addSocial(o, TAP_SOCIAL * s)
             agents[o]?.brain?.onTap(agents[o]!!.ctx, point, s)
         }
     }
@@ -704,6 +862,8 @@ class Simulation(
 
     companion object {
         const val CHEM_DT = 60.0
+        /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
+        const val TAP_SOCIAL = 0.35
         const val ABSTRACT_SPEED = 240.0
         const val CORPSE_TAN_PER_G = 0.02
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */

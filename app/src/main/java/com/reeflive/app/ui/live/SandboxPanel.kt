@@ -127,6 +127,9 @@ data class SandboxActions(
     val onRemove: (id: String) -> Unit = {},
     val onAdd: (AddableSpecies) -> Unit = {},
     val onReset: () -> Unit = {},
+    val onAcclimateAll: () -> Unit = {},
+    val onRearrangeRock: () -> Unit = {},
+    val onPumpFailTonight: () -> Unit = {},
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */
@@ -372,12 +375,23 @@ private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReefButton("Heater fails", { actions.onHeater(false) }, kind = ButtonKind.DESTRUCTIVE, compact = true)
         ReefButton("Heater fixed", { actions.onHeater(true) }, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Pumps fail 23:00–05:00", actions.onPumpFailTonight, kind = ButtonKind.DESTRUCTIVE, compact = true)
         ReefChip(
             text = if (state.predation) "Predation on" else "Predation off",
             selected = state.predation,
             onClick = { actions.onPredation(!state.predation) },
             modifier = Modifier.semantics { stateDescription = if (state.predation) "On" else "Off" },
         )
+    }
+
+    SubHeader("Change tests")
+    Text(
+        "Fish adjust to slow changes over days; sudden jumps stress them. Use the Step / Ramp / Spike selector on the sliders.",
+        style = MaterialTheme.typography.bodyMedium, color = ReefTheme.colors.textSecondary,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ReefButton("Acclimate all to now", actions.onAcclimateAll, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Rearrange rock", actions.onRearrangeRock, kind = ButtonKind.TONAL, compact = true)
     }
 
     SubHeader("Livestock")

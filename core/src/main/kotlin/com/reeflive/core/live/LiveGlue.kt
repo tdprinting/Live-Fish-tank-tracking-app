@@ -130,7 +130,8 @@ data class LivePeek(
             is SimEvent.Gasping -> "${e.id} is gasping"
             is SimEvent.Eaten -> "${e.preyId} was eaten by ${e.predatorId}"
             is SimEvent.Fed -> "Fed ${e.grams} g"
-            is SimEvent.Cleaned -> null
+            is SimEvent.NearMiss -> "${e.preyId} had a close call with ${e.predatorId}"
+            else -> null   // Cleaned, Chase, Pose, Jolt, TerritoryReset, Quiver, LegRock: too frequent for the peek
         }
 
         /** The latest describable event of a batch. */

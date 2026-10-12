@@ -103,6 +103,7 @@ fun LiveTankScreen(
     val real by vm.real.collectAsStateWithLifecycle()
     val lightPct by vm.lightPct.collectAsStateWithLifecycle()
     val predation by vm.predation.collectAsStateWithLifecycle()
+    val extras by vm.extras.collectAsStateWithLifecycle()
 
     var expanded by rememberSaveable { mutableStateOf(true) }
     var category by rememberSaveable { mutableStateOf(SandboxCategory.WATER) }
@@ -120,7 +121,12 @@ fun LiveTankScreen(
     )
 
     val panel = SandboxPanelState(
-        now = TankReading(hud.water, lightPct = lightPct, flowPct = hud.flowStrength * 100.0),
+        now = TankReading(
+            hud.water, lightPct = lightPct, flowPct = hud.flowStrength * 100.0,
+            photoperiodH = extras["photoperiod"],
+            pumps = extras.filterKeys { it.startsWith("pump_") },
+            gains = extras.filterKeys { it.startsWith("spectrum_") }.mapKeys { it.key.removePrefix("spectrum_") },
+        ),
         real = real,
         category = category,
         expanded = expanded,
@@ -136,11 +142,8 @@ fun LiveTankScreen(
     )
 
     val onSet: (SandboxParamDef, Double) -> Unit = { def, v ->
-        // TODO(sim/realism): branch on controlMode here (STEP / RAMP / SCHEDULE) once the sim supports them.
-        when (def.id) {
-            "light" -> vm.setLightPct(v)
-            else -> def.simId?.let { vm.setParam(it, v / def.scale) }
-        }
+        val now = panel.now
+        def.simId?.let { id -> vm.applyParam(def.id, id, v / def.scale, def.valueIn(now) / def.scale, controlMode) }
     }
     val actions = SandboxActions(
         onSet = onSet,
@@ -166,6 +169,9 @@ fun LiveTankScreen(
         onRemove = { vm.removeOrganism(it) },
         onAdd = { a -> vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
         onReset = { vm.resetSandbox(); preset = null },
+        onAcclimateAll = vm::acclimateAll,
+        onRearrangeRock = vm::rearrangeRock,
+        onPumpFailTonight = vm::pumpFailTonight,
     )
     val onModeChange: (HudMode) -> Unit = { m ->
         when {
