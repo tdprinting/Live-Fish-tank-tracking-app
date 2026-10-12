@@ -188,6 +188,25 @@ object HealthModel {
         return m
     }
 
+    /** Most a warm-acclimated animal's comfort band can move up (06 §4.1.1: "partial to +3 °C in resilient species"). */
+    const val THERMAL_ACCL_MAX = 3.0
+
+    /**
+     * Thermal acclimation of the tolerance curve (research 06 §4.1.1, S:Dabruzzi21): the optimum and
+     * tolerance bounds follow the 06 temperature setpoint above the species optimum, by at most
+     * [THERMAL_ACCL_MAX] and never past the lethal bound. The setpoint itself is capped by
+     * [StressModel.thermalCeiling], so cardinal- and tang-type species (ceiling ≤ optimum) do not
+     * acclimate at all, while clowns, blennies and the dottyback settle at 29–30 °C over days.
+     */
+    fun acclimatedTemp(o: Organism, tr: ToleranceRange): ToleranceRange {
+        val a = o.stressState.setpoint[StressModel.Ch.TEMP.ordinal]
+        val optHi = tr.optHi ?: return tr
+        if (a.isNaN() || a <= optHi) return tr
+        val lethal = tr.lethalHi ?: Double.MAX_VALUE
+        val shift = min(a - optHi, THERMAL_ACCL_MAX)
+        return tr.copy(optHi = min(optHi + shift, lethal - 2.0).coerceAtLeast(optHi), tolHi = tr.tolHi?.let { min(it + shift, lethal - 1.0).coerceAtLeast(it) })
+    }
+
     /** Environmental stress S_env and per-parameter parts; also sets [Organism.lethalExposure] / [Organism.lethalOvershoot]. */
     fun envStress(o: Organism, w: WaterState, flowStrength: Double = 1.0, hypo: Boolean = false): Double {
         var prod = 1.0
@@ -204,7 +223,7 @@ object HealthModel {
                 tr.lethalLo?.let { ll -> if (v <= ll) over = max(over, (ll - v) / max((tr.tolLo ?: tr.optLo ?: ll * 1.1) - ll, 1e-6)) }
             }
         }
-        for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else tr)
+        for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else if (k == "temp") acclimatedTemp(o, tr) else tr)
         if (!o.acclTemp.isNaN()) {
             val st = if (o.isFish) FISH_STEPS else if (o.brainKind == BrainKind.SALLY_CRAB) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)

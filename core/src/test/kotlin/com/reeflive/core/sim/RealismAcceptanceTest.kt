@@ -47,6 +47,14 @@ class RealismAcceptanceTest {
 
     private fun stockWithout(vararg ids: String) = DefaultStock.all.filter { it.id !in ids }
 
+    /**
+     * The 06 heat checks (#22, #25) are about the stress filters and the aggression rule in a tank with
+     * no parasite introduced (S:Warren16, S:Dabruzzi21 ran parasite-free). HealthModel seeds ich
+     * spontaneously above 28 °C (SIMULATION §3.4), which would kill the stock before day 60 and
+     * confound the measurement, so these runs clear it.
+     */
+    private fun Simulation.noIch() { for (o in organisms) if (o.disease == Disease.ICH) { o.disease = null; o.diseaseStage = 0.0 } }
+
     private fun chases(ev: List<SimEvent>) = ev.filterIsInstance<SimEvent.Chase>().filter { it.bout != "QUIVER_YIELD" }
 
     // ------------------------------------------------------------------ shared healthy day (c03, c04, c12, c13)
@@ -597,7 +605,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c22
     /** 06 §5.6 #22: 26 → 29 °C as a 3 h step vs a 7-day ramp; acclimation after 14 days; the cardinal fails to acclimate. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c22_rampVersusStep() {
         fun run(overMin: Double): Map<BrainKind, DoubleArray> {
             val sim = tank(hour = 8.0)
@@ -609,6 +616,7 @@ class RealismAcceptanceTest {
             val peak = HashMap<BrainKind, Double>()
             repeat(14 * 24) {
                 sim.advanceAbstract(3600.0)
+                sim.noIch()
                 for (o in sim.organisms) if (o.alive && o.isFish) peak.merge(o.brainKind, o.stressState.fast(StressModel.Ch.TEMP), ::maxOf)
             }
             return sim.organisms.filter { it.alive && it.isFish }.associate {
@@ -692,7 +700,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c25
     /** 06 §5.6 #25: at 31 °C aggression is ≥ 1.2× baseline in days 1–4 and ≤ 0.7× by day 60 (S:Warren16). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c25_biphasicHeatAggression() {
         val stock = listOf(TestTank.seed("clown_f"), TestTank.seed("clown_m"), TestTank.seed("dottyback"), TestTank.seed("lawnmower"))
         val sim = TestTank.sim(stock, seed = 1L, startHour = 8.0)
@@ -701,8 +708,8 @@ class RealismAcceptanceTest {
         val base = mult()
         sim.enqueue(Command.RampParam("temp", 31.0, 0.0))
         val early = ArrayList<Double>()
-        repeat(4) { sim.advanceAbstract(86400.0); early += mult() }
-        repeat(56) { sim.advanceAbstract(86400.0) }
+        repeat(4) { repeat(24) { sim.advanceAbstract(3600.0); sim.noIch() }; early += mult() }
+        repeat(56) { repeat(24) { sim.advanceAbstract(3600.0); sim.noIch() } }
         val late = mult()
         assertTrue("days 1–4 ${early.average() / base}", early.average() >= 1.2 * base)
         assertTrue("day 60 ${late / base}", late <= 0.7 * base)
