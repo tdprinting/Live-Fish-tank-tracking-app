@@ -39,7 +39,8 @@ jobs:
         run: ./gradlew :core:test --stacktrace
 
       - name: App unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: |
+          ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/out.txt 2>&1 || { grep -E '^e: |FAILED|Exception' /tmp/out.txt | head -25 | while read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
 
       - name: Build APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
