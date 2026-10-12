@@ -26,13 +26,20 @@ void main() {
     float F = fresnelSchlick(ndv, 0.04);
     vec3 R = reflect(-V, N);
     vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.6;
+    // A pane seen from inside the tank (the side, back and bottom panes looked at through the water while the
+    // camera is out front) mirrors the lit water by total internal reflection, not the room: without this the
+    // grazing side panes picked up the pale room walls at Fresnel ~1 and read as beige/pink panels.
+    vec3 Ng = normalize(vNormal);
+    vec3 Nout = Ng * (dot(Ng, vWorld - uTank.xyz * 0.5) < 0.0 ? -1.0 : 1.0);
+    bool fromInside = dot(Nout, uCamPos.xyz - vWorld) < 0.0;
+    if (fromInside) env = uFog.rgb * 1.2 + uAmbientB.rgb * 0.5;
     // highlights of the two fixtures in the pane
     for (int i = 0; i < 2; i++) {
         vec3 L = normalize(uLightPos[i].xyz - vWorld);
         env += uLightColor[i].rgb * pow(max(dot(R, L), 0.0), 400.0) * 3.0;
     }
     vec3 tint = vec3(0.878, 0.973, 0.941) * 0.05 * (0.2 + lightIntensity());
-    float a = clamp(F * 0.6 + 0.02, 0.0, 1.0);
+    float a = clamp(F * (fromInside ? 0.35 : 0.6) + 0.02, 0.0, 1.0);
     // edge darkening where the glass is seen nearly edge-on (thickness)
     a += (1.0 - ndv) * (1.0 - ndv) * 0.08;
     vec3 col = tonemap(env * F + tint);
