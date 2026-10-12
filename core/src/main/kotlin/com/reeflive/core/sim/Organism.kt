@@ -155,10 +155,16 @@ class Organism(
         )
     }
 
-    fun stats(caption: String = behaviorName): OrganismStats = OrganismStats(
+    fun stats(
+        caption: String = behaviorName,
+        intent: String = behaviorName.replaceFirstChar { it.lowercase() },
+        intentTargetId: String? = focusId,
+        relations: List<RelationInfo> = emptyList(),
+    ): OrganismStats = OrganismStats(
         id, nickname, species.id, species.common, health.toFloat(), hunger.toFloat(), stress.toFloat(), mood,
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
+        intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
     )
 
     fun temperamentTags(): List<String> = buildList {

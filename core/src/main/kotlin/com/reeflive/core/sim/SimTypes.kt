@@ -188,6 +188,33 @@ data class OrganismStats(
     /** Per-parameter stress parts for the Advanced inspector (keys: HealthModel.label). */
     val envStress: Map<String, Double> = emptyMap(),
     val cause: String? = null,
+    /** Current intent without the name, e.g. "eyeing the skunk cleaner shrimp" (Track C). */
+    val intent: String = "",
+    /** Animal the intent is about (focusId, or the nearest likely target). */
+    val intentTargetId: String? = null,
+    /** Social memory, most salient first (at most 5): who it fears, chases, is chased by, knows. */
+    val relations: List<RelationInfo> = emptyList(),
+    /** The animal it is currently keeping clear of, if any. */
+    val waryOfId: String? = null,
+)
+
+/**
+ * One remembered relationship for the FishCard and follow mode (ai/Social.kt). Values are 0..1
+ * except [cleanings] (count). [label] is a short human phrase: "Afraid of", "Chased by", "Chases",
+ * "Dominates", "Cleaning partner", "Knows".
+ */
+data class RelationInfo(
+    val otherId: String,
+    val otherName: String,
+    val otherCommon: String,
+    val label: String,
+    val familiarity: Float,
+    val fear: Float,
+    val harassedBy: Float,
+    val harassed: Float,
+    val dominance: Float,
+    val cleanings: Int,
+    val secondsSinceSeen: Float,
 )
 
 /** A mound of sand dug out by a burrowing goby (cone: volume = π r² h / 3, h ≈ 0.45 r). */
