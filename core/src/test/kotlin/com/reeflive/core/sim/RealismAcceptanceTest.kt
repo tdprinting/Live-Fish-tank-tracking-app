@@ -276,7 +276,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c09
     /** 06 §5.6 #9: lawnmower chases a new tailspot on ≥ 60 % of entries (day 1) and ≥ 35 % (day 14); the tailspot moves ≥ 50 cm away by day 3 and stays in its hole ≥ 40 % of daylight. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c09_blennyWar() {
         val sim = tank(stockWithout("tailspot"), hour = 10.0)
         sim.enqueue(Command.AddOrganism("ecsenius_stigmatura", 5.5, "Newspot"))

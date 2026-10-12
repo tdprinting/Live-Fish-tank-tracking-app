@@ -1430,7 +1430,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4),
+            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(),
             Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
@@ -1475,8 +1475,43 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     var excursions = 0; private set
     var returns = 0; private set
 
-    /** DESIGN ESTIMATE (research 10 §7: "does not establish that the tailspot must move exactly 50 cm away"). */
-    companion object { @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0 }
+    companion object {
+        /** DESIGN ESTIMATE (research 10 §7: "does not establish that the tailspot must move exactly 50 cm away"). */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
+        /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
+        const val PROSPECT_S = 86400.0
+    }
+
+    /**
+     * Newcomer prospecting (06 §3.3, §2.7, §5.6 #9): for its first day a new tailspot has no settled
+     * range and samples every hole and grazing patch, the lawnmower's included; the lawnmower's chases
+     * (and the 10 min hide that follows each) are what teach it to keep to the far hole. [I]
+     */
+    inner class Prospect : Behavior("prospect", "Exploring its new tank") {
+        private var site = Vec3.ZERO
+        private var stand = Vec3.ZERO
+        private var stay = 30.0
+        private var arrived = -1.0
+        override fun score(c: Ctx): Double {
+            if (c.p.night || c.t - c.o.arrivalTime > PROSPECT_S) return 0.0
+            return 0.55
+        }
+        override fun enter(c: Ctx) {
+            val sites = (c.rock.anchors.ofType("HOLE") + c.rock.anchors.ofType("GRAZE")).map { it.pos }.filter { it.distanceTo(holePos) > 15 }
+            if (sites.isEmpty()) { finished = true; return }
+            site = sites[c.rng.nextInt(sites.size)]
+            val sp = c.rockSurfacePoint(site, 6.0)
+            stand = sp?.let { (p, n) -> c.safe(p + n * (c.clearance + 0.5), c.clearance * 0.8) } ?: c.safe(site, c.clearance)
+            stay = c.rng.range(20.0, 60.0)
+            arrived = -1.0
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            out.seek(stand, c.o.cruiseSpeed * 1.2, arrive = 2.0)
+            if (arrived < 0 && c.o.pos.distanceTo(stand) < 3.0) arrived = c.t
+            if (arrived >= 0) { out.hover = true; out.pectoral = 1.0 }
+            if (arrived >= 0 && c.t - arrived > stay || elapsed > stay + 40) finished = true
+        }
+    }
 
     /** Dart up into the water column to snap plankton or a drifting particle, then back. */
     inner class PlanktonDash : Behavior("dash", "Darting for plankton") {
