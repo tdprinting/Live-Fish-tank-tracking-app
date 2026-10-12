@@ -1,6 +1,12 @@
 package com.reeflive.app.data.repo
 
+import com.reeflive.core.extras.Expense
+import com.reeflive.core.extras.ExpenseCategory
 import com.reeflive.core.extras.Feeding
+import com.reeflive.core.extras.FragEntry
+import com.reeflive.core.extras.GrowthEntry
+import com.reeflive.core.extras.IcpResult
+import com.reeflive.core.extras.ParReading
 import com.reeflive.core.extras.FeedingPlan
 import com.reeflive.core.extras.ReefExtras
 import com.reeflive.core.extras.Supply
@@ -92,6 +98,32 @@ class ExtrasRepository(private val file: File, private val scope: CoroutineScope
         update { e -> e.copy(cases = e.cases.map { if (it.id == id) it.copy(doses = it.doses.dropLast(1)) else it }) }
     suspend fun endCase(id: String, outcome: String, at: Long = clock.now()) =
         update { e -> e.copy(cases = e.cases.map { if (it.id == id) it.copy(endedAt = at, outcome = outcome) else it }) }
+
+    /** Restock: adds [amount] to the shelf and, when a cost is given, logs it as a supplies expense. */
+    suspend fun restock(id: String, amount: Double, cost: Double?, at: Long = clock.now()) = update { e ->
+        val s = e.supplies.firstOrNull { it.id == id } ?: return@update e
+        val supplies = e.supplies.map { if (it.id == id) it.copy(quantity = it.quantity + amount, cost = cost ?: it.cost, boughtAt = at) else it }
+        val expenses = if (cost != null && cost > 0) e.expenses + Expense(newId(), at, s.name, cost, ExpenseCategory.SUPPLIES) else e.expenses
+        e.copy(supplies = supplies, expenses = expenses)
+    }
+
+    // ---------------------------------------------------------- spending, ICP, corals, PAR
+    suspend fun saveExpense(x: Expense) = update { e -> e.copy(expenses = e.expenses.filterNot { it.id == x.id } + x) }
+    suspend fun deleteExpense(id: String) = update { e -> e.copy(expenses = e.expenses.filterNot { it.id == id }) }
+    suspend fun saveIcp(x: IcpResult) = update { e -> e.copy(icp = e.icp.filterNot { it.id == x.id } + x) }
+    suspend fun deleteIcp(id: String) = update { e -> e.copy(icp = e.icp.filterNot { it.id == id }) }
+    suspend fun saveGrowth(x: GrowthEntry) = update { e -> e.copy(growth = e.growth.filterNot { it.id == x.id } + x) }
+    suspend fun deleteGrowth(id: String) = update { e -> e.copy(growth = e.growth.filterNot { it.id == id }) }
+    suspend fun saveFrag(x: FragEntry) = update { e -> e.copy(frags = e.frags.filterNot { it.id == x.id } + x) }
+    suspend fun deleteFrag(id: String) = update { e -> e.copy(frags = e.frags.filterNot { it.id == id }) }
+    suspend fun savePar(x: ParReading) = update { e -> e.copy(par = e.par.filterNot { it.id == x.id } + x) }
+    suspend fun deletePar(id: String) = update { e -> e.copy(par = e.par.filterNot { it.id == id }) }
+
+    /** Current data, waiting for the first file read (for workers and widgets). */
+    suspend fun snapshot(): ReefExtras = lock.withLock {
+        ensureLoaded()
+        _data.value
+    }
 
     companion object {
         const val FILE_NAME = "extras.json"

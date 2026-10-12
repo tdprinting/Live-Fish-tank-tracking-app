@@ -69,6 +69,37 @@ data class TreatmentCase(
     val notes: String = "",
 )
 
+@Serializable
+enum class ExpenseCategory(val label: String) {
+    LIVESTOCK("Livestock"), CORALS("Corals"), EQUIPMENT("Equipment"), SUPPLIES("Supplies"),
+    FOOD("Food"), TESTING("Testing"), ELECTRICITY("Electricity"), OTHER("Other"),
+}
+
+@Serializable
+data class Expense(val id: String, val at: Long, val item: String, val amount: Double, val category: ExpenseCategory = ExpenseCategory.OTHER, val note: String = "")
+
+/** One lab (ICP-OES) result set; values are in the unit given per element. */
+@Serializable
+data class IcpValue(val element: String, val value: Double, val unit: String = "")
+
+@Serializable
+data class IcpResult(val id: String, val at: Long, val lab: String = "", val values: List<IcpValue> = emptyList(), val notes: String = "")
+
+/** A coral growth check-in: photo and/or size for one coral (livestock id). */
+@Serializable
+data class GrowthEntry(val id: String, val livestockId: String, val at: Long, val photoPath: String? = null, val sizeCm: Double? = null, val note: String = "")
+
+@Serializable
+enum class FragFate(val label: String) { KEPT("Kept in tank"), GIVEN("Given away"), TRADED("Traded"), SOLD("Sold"), LOST("Didn't make it") }
+
+/** Frags cut from a mother colony (livestock id). */
+@Serializable
+data class FragEntry(val id: String, val livestockId: String, val at: Long, val count: Int = 1, val fate: FragFate = FragFate.KEPT, val price: Double? = null, val note: String = "")
+
+/** A PAR meter reading at a named spot (e.g. "Kenya tree top", "sand front left"). */
+@Serializable
+data class ParReading(val id: String, val spot: String, val at: Long, val par: Double, val lightPercent: Int? = null, val note: String = "")
+
 /** Everything kept outside Room (versioned JSON file; see ExtrasStore in the app). */
 @Serializable
 data class ReefExtras(
@@ -77,6 +108,11 @@ data class ReefExtras(
     val feedings: List<Feeding> = emptyList(),
     val feedingPlan: FeedingPlan = FeedingPlan(),
     val cases: List<TreatmentCase> = emptyList(),
+    val expenses: List<Expense> = emptyList(),
+    val icp: List<IcpResult> = emptyList(),
+    val growth: List<GrowthEntry> = emptyList(),
+    val frags: List<FragEntry> = emptyList(),
+    val par: List<ParReading> = emptyList(),
 ) {
     companion object {
         val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
