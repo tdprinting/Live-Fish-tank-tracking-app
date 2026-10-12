@@ -1,0 +1,106 @@
+{
+  "id": "ophiocoma_sp",
+  "kind": "INVERT",
+  "common": "Black brittle star",
+  "scientific": "Ophiocoma sp. (likely O. echinata)",
+  "family": "Ophiocomidae",
+  "maxLengthCm": 30,
+  "typicalAdultCm": 20,
+  "lifespanYears": 3,
+  "depthRatio": 0.1,
+  "massCoeff": 0.004,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.04,
+    "burstBL": 0.3,
+    "tailHzCruise": 0,
+    "turnRateDeg": 90,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.5,
+    "openWater": 0.0,
+    "coverAffinity": 0.95
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 30,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.2,
+    "curiosity": 0.3,
+    "skittishness": 0.7
+  },
+  "diet": [
+    "DETRITUS",
+    "MYSIS",
+    "PLANKTON"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.8,
+  "starvationDays": 60,
+  "model": "models/brittle_star.glb",
+  "colors": {
+    "primary": "#1A1A1A",
+    "secondary": "#3B3B3B"
+  },
+  "brain": "brittle_star",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Scavenger: detritus and small particles passed to the mouth by the arms.",
+  "temperamentSummary": "Hides under rock by day; arms appear at feeding time and at night.",
+  "careNotes": [
+    "Species not confirmed (black-disc Ophiocoma).",
+    "Lost arms regrow."
+  ]
+}
