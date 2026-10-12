@@ -70,8 +70,13 @@ void main() {
     vec3 Lk;
     vec3 rad = fixtureLight(0, vWorld, Lk) + fixtureLight(1, vWorld, Lk);
     col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0));
-    // rim light
-    col += pow(1.0 - ndv, 2.5) * 0.25 * (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5;
+    // Fish were nearly invisible against the rock and the blue water. A soft camera-side fill lets the body
+    // pattern read in the shade, and a stronger rim (light colour plus a little of the fish's own colour)
+    // separates the silhouette from the background. Both follow the light, so night stays dark.
+    vec3 lightSum = (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5;
+    col += albedo * 0.10 * (0.15 + lightIntensity());
+    float rim = pow(1.0 - ndv, 2.2);
+    col += rim * (0.40 * lightSum + 0.30 * albedo * lightIntensity());
     alpha = 1.0;
 #endif
     col = applyWater(col, vWorld);
