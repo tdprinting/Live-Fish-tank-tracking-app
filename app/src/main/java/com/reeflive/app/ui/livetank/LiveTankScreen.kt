@@ -49,6 +49,7 @@ import com.reeflive.app.ui.live.SandboxParamDef
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.SelectedAnimalUi
 import com.reeflive.app.ui.live.TankReading
+import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.toFollowState
 import com.reeflive.app.ui.live.waterReadouts
@@ -58,6 +59,7 @@ import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
+import com.reeflive.core.sim.timelapse.TimelapseState
 
 private fun LiveQuality.toRender() = when (this) {
     LiveQuality.LOW -> RenderQuality.LOW
@@ -103,6 +105,8 @@ fun LiveTankScreen(
     val real by vm.real.collectAsStateWithLifecycle()
     val lightPct by vm.lightPct.collectAsStateWithLifecycle()
     val predation by vm.predation.collectAsStateWithLifecycle()
+    val lapseState by vm.timelapse.collectAsStateWithLifecycle()
+    var lapse by rememberSaveable { mutableStateOf(false) }
 
     var expanded by rememberSaveable { mutableStateOf(true) }
     var category by rememberSaveable { mutableStateOf(SandboxCategory.WATER) }
@@ -133,6 +137,12 @@ fun LiveTankScreen(
             AddableSpecies(id, list.first().common, list.map { it.lengthCm.toDouble() }.sorted()[list.size / 2])
         }.take(6),
         predation = predation,
+        timelapseStatus = when (val l = lapseState) {
+            TimelapseState.Idle -> null
+            is TimelapseState.Running -> "Running · ${(l.progress.fraction * 100).toInt()} %"
+            is TimelapseState.Done -> if (l.cancelled) "Stopped early · partial results" else "Results ready"
+            is TimelapseState.Failed -> "Failed: ${l.message}"
+        },
     )
 
     val onSet: (SandboxParamDef, Double) -> Unit = { def, v ->
@@ -166,6 +176,7 @@ fun LiveTankScreen(
         onRemove = { vm.removeOrganism(it) },
         onAdd = { a -> vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
         onReset = { vm.resetSandbox(); preset = null },
+        onTimelapse = { lapse = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
         when {
@@ -209,6 +220,13 @@ fun LiveTankScreen(
                     SandboxDock(panel, actions, dockModifier, side = false, bottomClearance = clearance)
                 }
             }
+        }
+        if (lapse && sandbox) {
+            TimelapseSheet(
+                state = lapseState, water = hud.water,
+                onStart = vm::startTimelapse, onCancel = vm::cancelTimelapse, onNew = vm::clearTimelapse,
+                onDismiss = { lapse = false },
+            )
         }
     }
 }

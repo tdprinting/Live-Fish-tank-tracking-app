@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.PowerOff
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.Timelapse
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Icon
@@ -105,6 +106,8 @@ data class SandboxPanelState(
     val selected: SelectedAnimalUi? = null,
     val addable: List<AddableSpecies> = emptyList(),
     val predation: Boolean = true,
+    /** Time-lapse status line for the Events tab ("Running 42 %", "Results ready"); null when idle. */
+    val timelapseStatus: String? = null,
 )
 
 /** Everything the dock can ask for. */
@@ -127,6 +130,8 @@ data class SandboxActions(
     val onRemove: (id: String) -> Unit = {},
     val onAdd: (AddableSpecies) -> Unit = {},
     val onReset: () -> Unit = {},
+    /** Opens the time-lapse sheet (set up a run, or see the progress / report of the current one). */
+    val onTimelapse: () -> Unit = {},
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */
@@ -347,6 +352,20 @@ private fun presetIcon(p: SandboxPreset): ImageVector = when (p) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
+    SubHeader("Time-lapse")
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ReefButton(
+            if (state.timelapseStatus == null) "Run a time-lapse" else "Open time-lapse",
+            actions.onTimelapse, kind = ButtonKind.TONAL, icon = Icons.Rounded.Timelapse, compact = true,
+        )
+        Text(
+            state.timelapseStatus ?: "Test a change over days or weeks without touching this sandbox.",
+            style = MaterialTheme.typography.labelMedium,
+            color = ReefTheme.colors.textSecondary,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
     SubHeader("Scenarios")
     SandboxPreset.values().toList().chunked(2).forEach { pair ->
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
