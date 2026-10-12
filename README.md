@@ -39,6 +39,29 @@ The releases are public, so no account or token is needed. *Settings > Updates >
 optional GitHub access token field, only for a private fork: create a fine-grained token limited to
 the repository with **Contents: Read-only**.
 
+## Reef-keeping extras (More tab)
+
+- **Insights**: tank health score (parameters in range, 30-day stability, testing recency, tasks on time),
+  stability per parameter, most stable week, alkalinity swing, NO3:PO4 and Mg:Ca ratios.
+- **Emergency**: offline step-by-step guides (power outage, ammonia spike, overheating, cold, bleaching,
+  salinity, missing fish) and a sick-fish symptom checker.
+- **Feeding**: one-tap feeding log per food, daily plan and streak.
+- **Supplies**: salt, food, RO/DI, filter media, reagents and meds with low-stock and expiry warnings; restocks
+  with a price go to Spending.
+- **Quarantine & meds**: courses (copper, prazi, hyposalinity, tank transfer…) with livestock, dose, day X of N
+  and a dose log.
+- **Coral log**: growth photos and sizes per coral over time, plus a frag log.
+- **ICP tests**: paste or type lab results; trace elements flagged against reference ranges and compared with
+  your home kits.
+- **PAR map**: PAR readings per spot with coral light bands.
+- **Spending**: expenses by month, year and category, including livestock prices.
+- **Home-screen widget**: health score, key parameters and the next care task.
+- Daily reminders for low supplies and due treatment doses (with the daily parameter check).
+
+These are stored in `files/extras.json` (versioned JSON, written atomically) rather than new Room tables, so the
+Room schema stays at version 1 and every update stays upgrade-safe. They are included in JSON backups and
+removed by "Clear all data".
+
 ## Build it yourself
 
 Requirements: JDK 17 or newer. The Android app also needs the Android SDK (platform 35).
