@@ -76,7 +76,7 @@ class Camera {
     /** Two-finger drag in pixels: moves the orbit target in the view plane (ignored while following). */
     fun pan(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
         if (followId != null) return
-        val worldPerPx = 2f * distance * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) / max(viewHeightPx, 1f)
+        val worldPerPx = 2f * effectiveDistance * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) / max(viewHeightPx, 1f)
         // camera right = (cos yaw, 0, -sin yaw); up ≈ world Y
         target[0] = (target[0] - dxPx * worldPerPx * cos(yaw)).coerceIn(0f, TANK[0])
         target[2] = (target[2] + dxPx * worldPerPx * sin(yaw)).coerceIn(0f, TANK[2])
@@ -120,10 +120,14 @@ class Camera {
 
     private fun orbitEye(out: FloatArray) {
         val cp = cos(pitch)
-        out[0] = target[0] + distance * sin(yaw) * cp
-        out[1] = target[1] + distance * sin(pitch)
-        out[2] = target[2] + distance * cos(yaw) * cp
+        val d = effectiveDistance
+        out[0] = target[0] + d * sin(yaw) * cp
+        out[1] = target[1] + d * sin(pitch)
+        out[2] = target[2] + d * cos(yaw) * cp
     }
+
+    /** Orbit distance after fitting the tank to the viewport ([fitDistance]); user zoom scales it. */
+    val effectiveDistance: Float get() = distance * fitDistance(aspect) / DEFAULT_DISTANCE
 
     /** Desired follow eye/aim for [rig]: profile view from the front-glass side, ~3 body lengths away. */
     internal fun followTarget(rig: FishRig, sdf: Sdf?, eyeOut: FloatArray, aimOut: FloatArray) {
@@ -171,7 +175,7 @@ class Camera {
         for (i in 0 until 3) target[i] = target[i].coerceIn(0f, TANK[i])
         val dx = eye[0] - target[0]; val dy = eye[1] - target[1]; val dz = eye[2] - target[2]
         val d = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1f)
-        distance = d.coerceIn(MIN_DISTANCE, MAX_DISTANCE)
+        distance = (d * DEFAULT_DISTANCE / fitDistance(aspect)).coerceIn(MIN_DISTANCE, MAX_DISTANCE)
         pitch = kotlin.math.asin((dy / d).coerceIn(-1f, 1f)).coerceIn(MIN_PITCH, MAX_PITCH)
         yaw = atan2(dx, dz).coerceIn(-MAX_YAW, MAX_YAW)
     }
@@ -211,6 +215,20 @@ class Camera {
         const val MIN_FOLLOW = 7f
         const val MAX_FOLLOW = 45f
         const val CLEARANCE = 1.5f
+
+        /**
+         * Default orbit distance that makes the whole front glass fill the viewport of [aspect] (w / h): close in
+         * for short, wide viewports (landscape, or the tank area above the docked sandbox panel) so the tank is as
+         * large as possible, never further out than [DEFAULT_DISTANCE] (tall portrait keeps today's framing).
+         */
+        fun fitDistance(aspect: Float): Float {
+            val tanHalf = kotlin.math.tan(Math.toRadians(50.0 / 2.0)).toFloat()
+            val front = TANK[2] - DEFAULT_TARGET[2]          // front glass is this much nearer than the target
+            val byHeight = TANK[1] * 1.04f / (2f * tanHalf)
+            val byWidth = TANK[0] * 1.04f / (2f * tanHalf * max(aspect, 0.1f))
+            return (front + max(byHeight, byWidth)).coerceIn(MIN_FIT_DISTANCE, DEFAULT_DISTANCE)
+        }
+        const val MIN_FIT_DISTANCE = 80f
 
         private fun dist(a: FloatArray, b: FloatArray): Float {
             val dx = a[0] - b[0]; val dy = a[1] - b[1]; val dz = a[2] - b[2]
