@@ -83,6 +83,8 @@ sealed class Command {
     data class StopTreatment(val kind: TreatmentKind) : Command()
     /** Sandbox: infect fish [id] (null = a random fish) with [disease] at [stage]. */
     data class Infect(val id: String?, val disease: Disease, val stage: Double = 0.05) : Command()
+    /** A microfauna action (research 10): dose pods, phyto or rotifers, seed live rock, treat flatworms; [amount] scales the bottle. */
+    data class Micro(val action: MicroAction, val amount: Double = 1.0) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -276,6 +278,8 @@ data class SimSnapshot(
     val algae: AlgaeCover = AlgaeCover.EMPTY,
     /** Egg clutches on the rock (clown nest, coverage B-1); empty when none. */
     val eggClutches: List<EggClutchPose> = emptyList(),
+    /** Pods, plankton and the other microfauna (research 10) for the microscope view and its readout. */
+    val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

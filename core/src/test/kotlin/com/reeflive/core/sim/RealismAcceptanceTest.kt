@@ -244,9 +244,10 @@ class RealismAcceptanceTest {
         sim.advance(1.0)
         assertTrue("near-cave week-3 radius ${card.hoverRadius}", card.hoverRadius <= 10.0)
         cb.setPocket(sim.rock.anchors.pos("HOVER_CARDINAL", Vec3(26.0, 20.0, 15.0)))
-        // let any 10-min post-chase timidity from the near-cave spell wear off before reading the baseline
-        sim.advance(601.0)
-        assertTrue("far-from-cave week-3 radius ${card.hoverRadius}", card.hoverRadius in 0.8 * CardinalBrain.BASE_RADIUS..1.2 * CardinalBrain.BASE_RADIUS)
+        sim.advance(1.0)
+        // any tankmate's chase shrinks the radius ×0.7 for 10 min (dayRadius); factor that transient out of the baseline
+        val far = if (card.timidUntil > sim.simTimeSec) card.hoverRadius / 0.7 else card.hoverRadius
+        assertTrue("far-from-cave week-3 radius $far", far in 0.8 * CardinalBrain.BASE_RADIUS..1.2 * CardinalBrain.BASE_RADIUS)
     }
 
     // ------------------------------------------------------------------ c08

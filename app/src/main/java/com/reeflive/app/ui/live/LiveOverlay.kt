@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,8 @@ fun LiveOverlay(
     /** Clean-glass mode for the [CleanGlassButton]; null hides the button. */
     cleaning: Boolean? = null,
     onToggleCleaning: () -> Unit = {},
+    /** Opens the microscope view; null hides the button. */
+    onMicro: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -77,9 +80,10 @@ fun LiveOverlay(
             }
             if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
-            // under the strip at the right edge: the top row has no room for it on a phone
-            if (soundOn != null || cleaning != null) {
+            // under the strip at the right edge: the top row has no room for them on a phone
+            if (soundOn != null || cleaning != null || onMicro != null) {
                 Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onMicro != null) MicroButton(onMicro)
                     if (cleaning != null) CleanGlassButton(cleaning, onToggleCleaning)
                     if (soundOn != null) SoundButton(soundOn, onToggleSound)
                 }
@@ -124,6 +128,25 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
                     .padding(horizontal = 16.dp, vertical = 11.dp),
             )
         }
+    }
+}
+
+/** Glass pill that opens the microscope (pods and plankton up close). */
+@Composable
+fun MicroButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = ReefTheme.colors
+    Row(
+        modifier
+            .heightIn(min = 44.dp)
+            .clip(ReefShapes.pill)
+            .background(c.glass)
+            .clickable(role = Role.Button, onClickLabel = "Open the microscope") { onClick() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = c.text, modifier = Modifier.size(18.dp))
+        Text("Micro", style = MaterialTheme.typography.labelLarge, color = c.text)
     }
 }
 

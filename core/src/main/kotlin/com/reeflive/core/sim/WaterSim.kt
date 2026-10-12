@@ -13,6 +13,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     val s: WaterState = initial.copy(volumeL = initial.volumeL.takeIf { it > 0 } ?: config.systemLiters)
     /** Algae groups, their nutrient uptake, grazing and die-back (research 09 Part A). */
     val algae = AlgaeModel(config)
+    /** Pods, plankton and the other microfauna (research 10 Part 2). */
+    val micro = MicrofaunaModel(config)
 
     // ---- external drivers (set by Simulation before each step) ----
     var lightIntensity = 0.0
@@ -99,6 +101,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         filtration(h)
         macroalgae(h)
         algae(h)
+        microfauna(h)
         gases(h)
         s.nh3Free = ChemFns.freeNh3(s.nh3Total, s.ph, s.tempC)
         s.lightPar = lightIntensity
@@ -339,6 +342,15 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         oxygenDemandPerHour += algae.o2DemandPerHour
     }
 
+    /** Microfauna populations (research 10); their dead biomass decomposes in the detritus pool. */
+    private fun microfauna(h: Double) {
+        micro.step(s, h, lightIntensity, flowEff, algae)
+        if (micro.deadWetG > 0) {
+            addDetritusTanGrams(micro.deadWetG * MICRO_TAN_PER_WET_G)
+            micro.deadWetG = 0.0
+        }
+    }
+
     private fun clampAll() {
         s.nh3Total = max(0.0, s.nh3Total); s.no2 = max(0.0, s.no2); s.no3 = max(0.0, s.no3)
         s.alk = max(0.0, s.alk); s.ca = max(0.0, s.ca); s.mg = max(0.0, s.mg); s.detritus = max(0.0, s.detritus)
@@ -376,6 +388,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.silicate = m(s.silicate, mix.silicate)
         s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo)
         s.detritus *= (1 - f)
+        micro.waterChange(f)
         val after = nitrogenInSystemMg() - pendingFeedTan * N_TAN * s.volumeL
         val mixN = (mix.nh3Total * N_TAN + mix.no2 * N_NO2 + mix.no3 * N_NO3) * f * s.volumeL
         nInputMg += mixN
@@ -486,6 +499,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             val ex = sat - thr
             return if (ex <= 0) 0.0 else 0.02 * min(ex / 0.2, 3.0)
         }
+        /** g TAN-equivalent per g wet microfauna that dies (same as a fish corpse, Simulation.CORPSE_TAN_PER_G). */
+        const val MICRO_TAN_PER_WET_G = 0.02
 
         // Tuned constants (see SIMULATION §2 "Tuned constants")
         const val K_LOSS = 9.0                 // W/°C
