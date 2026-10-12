@@ -314,11 +314,15 @@ class GlassCurious(val b: SpeciesBrain) : Behavior("glass", "Curious at the glas
     }
 }
 
-/** Low DO / heat: hover at the surface near the HOB outflow (score 0.95). */
+/**
+ * Low DO: hover at the surface near the HOB outflow (score 0.95). Surfacing is an oxygen behaviour, not a
+ * heat one (research 08 §3): it needs low O2 saturation and a fish still able to swim (heat stage ≤ GASPING).
+ */
 class SurfaceGasp(val b: SpeciesBrain) : Behavior("gasp", "Gasping at the surface") {
     private var lastEvent = -1e9
     override fun score(c: Ctx): Double {
         val o = c.o
+        if (!com.reeflive.core.sim.HeatModel.surfaceAllowed(o, c.sim.water.s)) return 0.0
         val sDo = o.envStress["do"] ?: 0.0
         return if (sDo > 0.5 || o.gillRate > 2.4 || Symptom.GASPING in o.symptoms) 0.95 else 0.0
     }

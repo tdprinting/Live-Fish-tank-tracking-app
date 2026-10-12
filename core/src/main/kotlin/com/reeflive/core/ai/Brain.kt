@@ -74,6 +74,7 @@ abstract class SpeciesBrain(val c: Ctx) {
             if (o.isFish) add(PoseForCleaner(this@SpeciesBrain))
             if (o.isFish) add(KeepClear(this@SpeciesBrain))
             add(Unwell(this@SpeciesBrain))
+            add(HeatResponse(this@SpeciesBrain))
         }
         utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility

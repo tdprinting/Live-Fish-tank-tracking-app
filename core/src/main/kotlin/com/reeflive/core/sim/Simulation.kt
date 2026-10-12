@@ -331,7 +331,8 @@ class Simulation(
             a.ctx.p = perception; a.ctx.dt = dt
             if (!o.alive) { deadPhysics(o, dt); continue }
             a.intent.reset()
-            a.brain.abstractPose(a.ctx, a.intent)
+            // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
+            if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
             if (!a.intent.kinematic) a.intent.place(a.intent.target ?: o.homePos, o.heading)
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
@@ -605,7 +606,10 @@ class Simulation(
                 apply(Command.Schedule(c.atSimSec + c.durationSec, Command.Powerheads(true)))
             }
             is Command.RearrangeRock -> rearrangeRock()
-            is Command.SetAcclimation -> for (o in organisms) if (o.alive) StressModel.acclimate(o, water.s, lightIntensity, flowStrength, c.paramId)
+            is Command.SetAcclimation -> for (o in organisms) if (o.alive) {
+                StressModel.acclimate(o, water.s, lightIntensity, flowStrength, c.paramId)
+                if (c.paramId == null || c.paramId.equals("temp", true)) HeatModel.acclimate(o, water.s.tempC)
+            }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)

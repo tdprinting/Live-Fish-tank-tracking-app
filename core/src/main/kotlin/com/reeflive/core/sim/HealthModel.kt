@@ -109,7 +109,7 @@ object HealthModel {
     fun appetite(o: Organism): Double {
         val st = ((o.stress - 0.55) / 0.35).coerceIn(0.0, 1.0)
         return (1 - 0.85 * st) * (if (o.health < 0.25) 0.2 else 1.0) * (if (o.disease != null && o.diseaseStage > 0.6) 0.4 else 1.0) *
-            StressModel.appetite(o, o.lastTempC)
+            StressModel.appetite(o, o.lastTempC) * HeatModel.appetiteMult(o)
     }
 
     /** Tolerance curve (SIMULATION §3.3): returns s in 0..1 and whether the lethal bound is crossed. */
@@ -212,6 +212,8 @@ object HealthModel {
         val sEnvTol = envStress(o, w, ctx.flowStrength)
         // research 06 §4.1: per-channel acute/chronic stress against acclimated setpoints
         val sEnvNew = StressModel.update(o, w, StressModel.Env(ctx.light, ctx.flowStrength), dtMin)
+        // research 08: the acute heat sequence (agitation → LOE → death) runs beside the chronic path
+        if (HeatModel.step(o, w, ctx.simTimeSec, dtMin, events)) return
         val sEnv = max(sEnvTol, sEnvNew)
         // ---- other stress sources (decay per minute) ----
         o.socialStress = max(0.0, o.socialStress - 0.1 * dtMin)
@@ -320,6 +322,23 @@ object HealthModel {
         o.desat = 0.8; o.eyeCloud = 1.0; o.finClamp = 1.0; o.gill = 0.0; o.amp = 0.0
     }
 
+    /** Visible heat-stage signs (research 08 §2, §7.2): erratic darting, bottom-sitting with clamped fins, LOE. */
+    private fun heatSigns(o: Organism, sym: MutableSet<Symptom>) {
+        val st = o.heat.stage
+        if (st < HeatModel.Stage.AGITATED) return
+        val k = o.brainKind
+        when {
+            HeatModel.isSnail(k) -> if (st >= HeatModel.Stage.LETHARGIC) sym += Symptom.DETACHED
+            st == HeatModel.Stage.AGITATED -> if (o.isFish && !HeatModel.hidesLow(k)) sym += Symptom.ERRATIC
+            st == HeatModel.Stage.GASPING -> { sym += Symptom.RAPID_GILLS; o.gill = 1.0 }
+            st == HeatModel.Stage.LETHARGIC -> {
+                sym += Symptom.LETHARGY; sym += Symptom.RAPID_GILLS
+                if (o.isFish) { sym += Symptom.ON_BOTTOM; sym += Symptom.CLAMPED_FINS; o.finClamp = max(o.finClamp, 0.8); o.gill = 1.0 }
+            }
+            else -> { sym += Symptom.LOSS_OF_EQUILIBRIUM; sym += Symptom.LETHARGY; o.gill = max(o.gill, 0.8) }
+        }
+    }
+
     /** Symptom → render uniforms mapping (SIMULATION §3.5). */
     fun updateSymptoms(o: Organism, w: WaterState, ctx: HealthContext, events: MutableList<SimEvent>) {
         val sym = o.symptoms
@@ -364,6 +383,7 @@ object HealthModel {
         o.thin = if (o.condition < 0.7) { sym += Symptom.THIN; ((0.7 - o.condition) / 0.3).coerceIn(0.0, 1.0) } else 0.0
         if (o.health < 0.3) { sym += Symptom.LETHARGY; desat += 0.3 }
         if (o.molting) sym += Symptom.MOLTING
+        heatSigns(o, sym)
         o.desat = desat.coerceIn(0.0, 1.0)
         o.mood = when {
             o.sleeping -> Mood.SLEEPING
