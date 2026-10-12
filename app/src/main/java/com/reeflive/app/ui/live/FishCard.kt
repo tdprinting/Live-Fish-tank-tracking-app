@@ -145,7 +145,7 @@ private fun RelationshipRow(r: RelationshipUi) {
             Box(Modifier.padding(start = (56f * start).dp).width((56f * half).dp).fillMaxHeight().background(tone))
         }
         Spacer(Modifier.width(8.dp))
-        StatusPill(tonePill, label = r.kind.label)
+        StatusPill(tonePill, label = r.labelOverride ?: r.kind.label)
     }
 }
 
