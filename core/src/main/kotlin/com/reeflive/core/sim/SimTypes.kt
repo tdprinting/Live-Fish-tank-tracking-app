@@ -42,6 +42,8 @@ sealed class Command {
     data class SetAcclimation(val paramId: String? = null) : Command()
     /** Photoperiod in hours (lights-on length, centred on the current midday). */
     data class Photoperiod(val hours: Double) : Command()
+    /** Sandbox: drop [count] spare empty shells for the hermits ([sizeCm] 0 = sized for the largest hermit, with room to grow). */
+    data class AddSpareShells(val count: Int = 1, val sizeCm: Double = 0.0) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */

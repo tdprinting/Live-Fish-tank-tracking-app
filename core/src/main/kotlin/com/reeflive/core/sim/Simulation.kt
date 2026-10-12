@@ -43,6 +43,8 @@ class Simulation(
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
     val repro = Reproduction(this)
+    /** Hermit shells, asterina-vs-organ-pipe and feather-duster crown cycle (research 04). */
+    val invertEcology = InvertEcology(this)
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -415,6 +417,7 @@ class Simulation(
             for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
         }
         asterinaPopulation()
+        invertEcology.step(dtMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
@@ -650,6 +653,7 @@ class Simulation(
                 if (c.paramId == null || c.paramId.equals("temp", true)) HeatModel.acclimate(o, water.s.tempC)
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
+            is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -807,7 +811,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
