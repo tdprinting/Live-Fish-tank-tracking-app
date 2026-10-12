@@ -357,7 +357,12 @@ class Flash(val b: SpeciesBrain) : Behavior("flash", "Flashing") {
         } else {
             out.rollExtra = 0.7
             out.seek(stand + (c.o.heading * 3.0), c.o.cruiseSpeed, arrive = 1.0)
-            if (c.t - scrapeAt > 0.5) { finished = true; nextAllowed = c.t + c.rng.range(30.0, 120.0) }
+            if (c.t - scrapeAt > 0.5) {
+                finished = true
+                c.o.counters.add(com.reeflive.core.sim.Counters.K.FLASH, c.t)
+                // ≈ 2 + 15·stage flashes per hour (06 §5.6 #12: 2–10/h at ich 0.3)
+                nextAllowed = c.t + 3600.0 / (2.0 + 15.0 * c.o.diseaseStage) * c.rng.range(0.6, 1.4)
+            }
         }
         if (elapsed > 8) { finished = true; nextAllowed = c.t + 60 }
     }

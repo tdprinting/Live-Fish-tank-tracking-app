@@ -300,6 +300,7 @@ fun Ctx.bite(f: FoodParticle) {
     if (f.eaten) return
     food.consume(f)
     o.eat(f.grams * o.species.dietMatch(f.kind).coerceAtLeast(0.5))
+    o.counters.add(com.reeflive.core.sim.Counters.K.FEED, t)
     o.mouth = 1.0
 }
 

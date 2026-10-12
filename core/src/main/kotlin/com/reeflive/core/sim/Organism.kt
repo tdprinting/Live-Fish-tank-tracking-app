@@ -109,6 +109,8 @@ class Organism(
     var parasiteLoad = 0.0        // cosmetic client parasite level (feeds cleaners)
     var satietyUntil = -1e9       // eel 3-day satiety after a kill
     var molting = false
+    /** Sim time the last molt began (molt-window predation, 06 §2.14). */
+    var lastMoltAt = -1e9
     var moltUntil = 0.0
     var nextMoltAt = 0.0
 

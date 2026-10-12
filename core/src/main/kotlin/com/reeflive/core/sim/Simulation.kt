@@ -50,6 +50,15 @@ class Simulation(
     /** Σ BL² / footprint (06 §3.4) and its aggression multiplier, refreshed every chemistry tick. */
     var crowding: Double = com.reeflive.core.ai.PairMatrix.CROWDING_BASE; private set
     var crowdingMult: Double = 1.0; private set
+    /**
+     * Sandbox toggle: banded shrimp may kill a freshly molted skunk cleaner (06 §2.14). Off by default:
+     * cross-species kills are unsourced (07 gap 4); the conspecific molt-window rule stays on.
+     */
+    var crossSpeciesShrimpKills = false
+    /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
+    var nightPlanktonPerHour = 60.0
+    private var planktonAcc = 0.0
+    private var lastNightRollDay = Int.MIN_VALUE
     /** Run the behavior layer at full fidelity regardless of speed (tests / SimRunner). */
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
@@ -214,6 +223,7 @@ class Simulation(
         updateLights()
         val useBehavior = behaviorEnabled && simDt <= 1.0 + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, 0.5))
+        if (useBehavior && !abstractMode) nightPlankton(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         chemAccum += simDt
@@ -222,6 +232,64 @@ class Simulation(
             chemTick()
         }
         tickCount++
+    }
+
+    /** Demersal zooplankton rises from the rock after dark (S:Marnane02 context); pods drift and expire. */
+    private fun nightPlankton(dt: Double) {
+        if (perception.light >= 0.3 || nightPlanktonPerHour <= 0) { planktonAcc = 0.0; return }
+        planktonAcc += dt * nightPlanktonPerHour / 3600
+        while (planktonAcc >= 1) {
+            planktonAcc -= 1
+            if (food.particles.count { !it.eaten && it.kind == FoodKind.PODS } > 40) continue
+            val p = Vec3(rng.range(8.0, rock.lengthCm - 8), rng.range(rock.sandTopCm + 8, rock.waterLevelCm - 10), rng.range(6.0, rock.widthCm - 6))
+            if (!rock.inWater(p, 2.0) || rock.sdf.dist(p) < 1.5) continue
+            food.spawn(FoodKind.PODS, 0.003, p, simTimeSec)
+        }
+    }
+
+    /**
+     * Once per night (02:00) the rare opportunistic predation rolls of the matrix's perNight rows
+     * (06 §2.19, §5.3): a big Sally Lightfoot and sleeping small fish or snails, a banded shrimp and a
+     * freshly molted skunk cleaner. Lethal outcomes are sandbox-only; Reality turns them into a
+     * [SimEvent.NearMiss] and a stress spike (06 §5.3 reality rule).
+     */
+    private fun nightRolls() {
+        val day = dayIndex
+        if (minuteOfDay < 120 || minuteOfDay >= 121 || lastNightRollDay == day) return
+        lastNightRollDay = day
+        for (r in com.reeflive.core.ai.PairMatrix.rows) {
+            if (!r.perNight) continue
+            for (a in organisms.toList()) {
+                if (!a.alive || a.brainKind.name != r.actor || a.lengthCm < r.minActorCm) continue
+                // the crab is an opportunist: only a hungry one tries (vendor statement, 07 gap 5)
+                if (a.brainKind == BrainKind.SALLY_CRAB && a.hunger < 0.5) continue
+                for (t in organisms.toList()) {
+                    if (t === a || !t.alive || !r.targets.contains(t.brainKind.name)) continue
+                    if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL")) continue
+                    var p = r.pEvent
+                    if (r.moltWindowH > 0) {
+                        val cross = a.brainKind != t.brainKind
+                        if (cross && !crossSpeciesShrimpKills) continue
+                        if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) continue
+                        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) continue
+                    }
+                    if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
+                    if (!rng.chance(p)) continue
+                    nightPredation(a, t, r.bout)
+                }
+            }
+        }
+    }
+
+    /** A lethal roll: eaten in Sandbox (predation on), a near miss and a stress spike in Reality. */
+    fun nightPredation(predator: Organism, prey: Organism, bout: String) {
+        if (predationEnabled) eaten(predator, prey)
+        else {
+            prey.counters.add(Counters.K.NEAR_MISS, simTimeSec)
+            StressModel.addSocial(prey, 0.8)
+            prey.startle = max(prey.startle, 0.8)
+            emit(SimEvent.NearMiss(predator.id, prey.id, bout, simTimeSec))
+        }
     }
 
     private fun updateLights() {
@@ -329,6 +397,12 @@ class Simulation(
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
         }
         crustaceanMolts(dtMin)
+        nightRolls()
+        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
+        if (!behaviorEnabled || abstractMode) {
+            val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
+            for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+        }
         asterinaPopulation()
         corpses(dtMin)
         autoFeed()
@@ -430,7 +504,7 @@ class Simulation(
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
             if (!o.molting && simTimeSec >= o.nextMoltAt) {
-                o.molting = true; o.moltUntil = simTimeSec + dur * 3600
+                o.molting = true; o.moltUntil = simTimeSec + dur * 3600; o.lastMoltAt = simTimeSec
                 val shellPos = rock.clampToWater(o.pos.withY(rock.sandTopCm + 0.3) + Vec3(rng.signed() * 4, 0.0, 4.0), 2.0).withY(rock.sandTopCm + 0.3)
                 moltShells += shellPos to simTimeSec
                 emit(SimEvent.Molted(o.id, simTimeSec))
@@ -670,7 +744,9 @@ class Simulation(
             if (!o.alive) continue
             val d = o.pos.distanceTo(point)
             if (d > 30) continue
-            val s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0)
+            var s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0) * StressModel.skittishMult(o)
+            // a wrasse in its mucus cocoon needs twice the disturbance to wake (06 §5.5)
+            if (o.sleeping && o.brainKind == BrainKind.WRASSE) s *= 0.5
             o.startle = max(o.startle, s)
             StressModel.addSocial(o, TAP_SOCIAL * s)
             agents[o]?.brain?.onTap(agents[o]!!.ctx, point, s)

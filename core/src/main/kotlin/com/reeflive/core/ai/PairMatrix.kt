@@ -164,7 +164,11 @@ object ClownQueue {
  *     × crowding × cleaner damping × rank, capped at the row's hourly rate (max → floor with familiarity).
  */
 class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout", "Displaying") {
-    private class Entry(val since: Double) { var nextRoll = 0.0; var bouts = 0 }
+    private class Entry(val since: Double, val linger: Double) { var nextRoll = 0.0; var bouts = 0 }
+    /** Per-row observation counters (acceptance tests, stress inspector): entries, entries with ≥ 1 bout, bouts, entry→charge latencies. */
+    class RowStats { var entries = 0; var entriesWithBout = 0; var bouts = 0; val latencies = ArrayList<Double>() }
+    val stats = HashMap<String, RowStats>()
+    fun statsOf(rowId: String): RowStats = stats.getOrPut(rowId) { RowStats() }
     private class Pending(val row: PairRow, val target: Organism, val latency: Double)
 
     private val entries = HashMap<String, HashMap<String, Entry>>()   // row id → target id → entry
@@ -215,19 +219,23 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 inside += t.id
                 val e = map.getOrPut(t.id) {
                     if (r.sensitise || r.type == "aggression" || r.type == "perch") Social.recordIntrusion(o, t, c.t)
-                    Entry(c.t)
+                    statsOf(r.id).entries++
+                    // host-defence sensitisation shortens the stare as well as the display (S:Fleming24: latency −60–76 %)
+                    Entry(c.t, r.lingerS * sensitisation(r, o, t))
                 }
-                if (pending == null && active == null && c.t - e.since >= r.lingerS && c.t >= e.nextRoll) {
+                if (pending == null && active == null && c.t - e.since >= e.linger && c.t >= e.nextRoll) {
                     e.nextRoll = c.t + REROLL_S
                     val p = probability(c, r, t)
                     if (c.rng.chance(p)) {
-                        val intr = o.relations[t.id]?.intrusions ?: 1.0
                         val lat = when {
-                            r.sensitise -> 1.5 * (1 - 0.35 * min(2.0, max(0.0, intr - 1)))
+                            r.sensitise -> 1.5 * sensitisation(r, o, t)
                             r.bout.startsWith("LATERAL") && Social.familiarity(o, t, c.t) < 0.2 -> 0.1   // newcomer: attack at once
                             else -> 0.6
                         }
                         pending = Pending(r, t, lat)
+                        val st = statsOf(r.id)
+                        if (e.bouts == 0) { st.entriesWithBout++; st.latencies += c.t - e.since + lat }
+                        st.bouts++
                         e.bouts++
                         if (r.sensitise) e.nextRoll = c.t + 4.0
                     }
@@ -236,6 +244,13 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             // forget targets that left the zone (with a 3 cm margin)
             map.keys.removeAll { id -> id !in inside && sim.organisms.firstOrNull { it.id == id }?.let { it.pos.distanceTo(a) > radius + 3 || !it.alive } != false }
         }
+    }
+
+    /** Latency factor after repeated intrusions: 1 → 0.3 by the third entry (sensitising rows only). */
+    fun sensitisation(r: PairRow, o: Organism, t: Organism): Double {
+        if (!r.sensitise) return 1.0
+        val intr = o.relations[t.id]?.intrusions ?: 1.0
+        return 1 - 0.35 * min(2.0, max(0.0, intr - 1))
     }
 
     /** Per-entry probability with every modifier of 06 §3–§4. */
@@ -251,7 +266,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         if (c.t - t.arrivalTime < 86400 && fam < 0.5) p *= r.newcomerMult
         if (r.sensitise) p *= 1 + min(1.0, max(0.0, ((o.relations[t.id]?.intrusions ?: 1.0) - 1) / 2))
         if (r.hungerScaled) {
-            p *= 0.5 + 0.5 * o.hunger
+            // normalised so an ordinary appetite (hunger ≥ 0.5) gives the sourced 90 % (07 gap 1); well fed → calmer
+            p *= ((0.5 + 0.5 * o.hunger) / 0.75).coerceAtMost(1.0)
             if (o.hunger < 0.3 && c.sim.water.s.algaeHair >= 0.6) p *= 0.7   // well fed blenny is calmer (06 §4 table)
         }
         if (r.sizeTerm == "tang") p *= max(0.0, 1.5 - t.lengthCm / o.lengthCm.coerceAtLeast(0.5))
@@ -336,7 +352,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 c.sim.agentOf(t)?.let { it.brain.onAttacked(it.ctx, o.pos, if (nip) 0.6 else 0.35, o) }
             }
             if (r.stressToTarget > 0) {
-                StressModel.addSocial(t, r.stressToTarget * 4 * received)
+                StressModel.addSocial(t, r.stressToTarget * 2 * received)
                 t.socialStress += r.stressToTarget * received
             }
             if (t.brainKind == BrainKind.CARDINAL || t.brainKind == BrainKind.PEEKER_BLENNY) t.timidUntil = c.t + 600

@@ -54,6 +54,8 @@ object StressModel {
     const val HEAT_SLOW_TAU = 20 * 1440.0
     /** Low-pH boldness filter (S:Munday14). */
     const val LOWPH_TAU = 2 * 1440.0
+    /** DO stress starts below this multiple of DO_crit(T). */
+    const val DO_ONSET = 1.4
 
     /** Per-animal state; arrays indexed by [Ch.ordinal]. */
     class State {
@@ -109,7 +111,8 @@ object StressModel {
     /** Critical dissolved O2 (mg/L) at temperature [t]: 3.0 fish / 4.0 crustaceans at 29 °C (06 §4.1.4). */
     fun doCrit(kind: BrainKind, isFish: Boolean, t: Double): Double {
         val base = if (isFish) 3.0 else 4.0
-        return base * max(0.4, 1 + doCritSlope(kind) * (t - 29))
+        // only warming raises it: below 29 °C the critical level stays at its 29 °C value (no extrapolation down)
+        return base * max(1.0, 1 + doCritSlope(kind) * (t - 29))
     }
 
     /**
@@ -164,7 +167,8 @@ object StressModel {
             val dev = when (c) {
                 Ch.NH3 -> value * sn * soft / c.w
                 Ch.NO2 -> value * sn / c.w
-                Ch.DO -> max(0.0, (1.3 * s.doCrit - value) / (0.6 * s.doCrit)) * sn
+                // onset at DO_ONSET × DO_crit, saturating 0.6 × DO_crit lower (tuned to 06 §5.6 #18 and #23 together)
+                Ch.DO -> max(0.0, (DO_ONSET * s.doCrit - value) / (0.6 * s.doCrit)) * sn
                 Ch.SOCIAL -> value
                 // only brighter-than-acclimated light (or flow loss) is a stressor
                 Ch.LIGHT -> max(0.0, value - s.setpoint[i]) * sn / c.w
@@ -242,7 +246,7 @@ object StressModel {
     fun aggressionMult(o: Organism, tempC: Double): Double {
         val s = o.stressState
         val acute = ((tempC - 27.5) / 3.5).coerceIn(0.0, 1.0) * (1 - s.heatSlow)
-        val heat = (1 + 0.35 * acute) * (1 - 0.5 * s.heatSlow)
+        val heat = (1 + 0.45 * acute) * (1 - 0.5 * s.heatSlow)
         val lethargy = if (sEnvNoHeat(o) > 0.5) 0.5 else 1.0
         return heat * lethargy * (1 - 0.4 * s.fast(Ch.NH3)) * (1 - 0.5 * s.fast(Ch.DO))
     }
@@ -275,7 +279,7 @@ object StressModel {
         val s = o.stressState
         val cold = if (tempC < s.setpoint[Ch.TEMP.ordinal].let { if (it.isNaN()) tempC else it }) s.fast(Ch.TEMP) else 0.0
         val card = if (o.brainKind == BrainKind.CARDINAL && brightExposed) 0.6 else 0.0
-        return (0.8 * max(s.slow(Ch.NH3) * 0.6, s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * o.ich + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
+        return (0.8 * max(s.slow(Ch.NH3) * 0.6, 0.7 * s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * o.ich + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
     }
 
     /** The channel contributing most right now (UI "why"); null when calm. */
