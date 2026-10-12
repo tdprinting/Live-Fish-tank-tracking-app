@@ -468,7 +468,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c16
     /** 06 §5.6 #16: leg-rocking on ≥ 40 % of hawk/dottyback approaches and ≤ 20 % of tang/clown; cleans ≤ 35 % vs ≥ 40 %. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c16_skunkCleanerSignalling() {
         val stock = listOf(TestTank.seed("skunk"), TestTank.seed("hawk"), TestTank.seed("dottyback"), TestTank.seed("tang"), TestTank.seed("clown_m"))
         val sim = TestTank.sim(stock, seed = 4L, startHour = 11.0)
