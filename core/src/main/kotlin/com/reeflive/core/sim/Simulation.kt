@@ -47,6 +47,9 @@ class Simulation(
     var speed: Double = 1.0
         set(v) { field = v.coerceIn(0.0, 1000.0) }
     var predationEnabled: Boolean = config.predationEnabled
+    /** Σ BL² / footprint (06 §3.4) and its aggression multiplier, refreshed every chemistry tick. */
+    var crowding: Double = com.reeflive.core.ai.PairMatrix.CROWDING_BASE; private set
+    var crowdingMult: Double = 1.0; private set
     /** Run the behavior layer at full fidelity regardless of speed (tests / SimRunner). */
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
@@ -291,6 +294,7 @@ class Simulation(
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
+        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         for (o in organisms) {
             val ichOthers = organisms.filter { it !== o && it.alive && it.disease == Disease.ICH }.sumOf { it.diseaseStage }
             val rival = when (o.brainKind) {
@@ -299,7 +303,7 @@ class Simulation(
                 BrainKind.DOTTYBACK, BrainKind.TANG, BrainKind.EEL -> organisms.any { it !== o && it.alive && it.brainKind == o.brainKind }
                 else -> false
             }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength)
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }

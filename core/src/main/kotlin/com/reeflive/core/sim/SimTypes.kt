@@ -67,6 +67,15 @@ sealed class SimEvent {
     data class Gasping(val id: String, override val simTimeSec: Double) : SimEvent()
     data class Fed(val kind: FoodKind, val grams: Double, override val simTimeSec: Double) : SimEvent()
     data class Cleaned(val cleanerId: String, val clientId: String, override val simTimeSec: Double) : SimEvent()
+    /** Research 06 §5.7 events. [displayOnly] = no chase or nip (standoff, dorsal raise). */
+    data class Chase(val actorId: String, val targetId: String, val bout: String, val nip: Boolean, val displayOnly: Boolean, override val simTimeSec: Double) : SimEvent()
+    data class Pose(val clientId: String, val cleanerId: String, override val simTimeSec: Double) : SimEvent()
+    data class Jolt(val cleanerId: String, val clientId: String, val retaliated: Boolean, override val simTimeSec: Double) : SimEvent()
+    /** A lethal roll that Reality mode (predation off) turned into a scare (06 §5.3 reality rule). */
+    data class NearMiss(val predatorId: String, val preyId: String, val bout: String, override val simTimeSec: Double) : SimEvent()
+    data class TerritoryReset(override val simTimeSec: Double) : SimEvent()
+    data class Quiver(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
+    data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -217,6 +226,9 @@ data class RelationInfo(
     val dominance: Float,
     val cleanings: Int,
     val secondsSinceSeen: Float,
+    /** Territory intrusions by the other (24 h half-life) and, toward a cleaner, the client's trust (06 §5.1). */
+    val intrusions: Float = 0f,
+    val cleanerTrust: Float = 0.7f,
 )
 
 /** A mound of sand dug out by a burrowing goby (cone: volume = π r² h / 3, h ≈ 0.45 r). */

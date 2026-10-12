@@ -30,10 +30,12 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     init {
-        install(HoverHost(), NestleHost(), DefendHost(), ClownFeed(), GlassCurious(this),
+        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this),
             Flee(this, { c, _ -> c.safe(host(c) + Vec3(0.0, 2.0, 0.0), 1.5) }, "Darting into the host"),
             VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this))
     }
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "host") host(c) else super.anchorPos(c, anchor)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val h = host(c)
@@ -280,6 +282,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             Flee(this, { c, from -> c.coverPoint(from) }, "Fleeing"),
             Cocoon(), SurfaceGasp(this), Flash(this), GlassCurious(this))
     }
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "station") stationPos else super.anchorPos(c, anchor)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         if (!night) return Rest(stationPos, Vec3.Z)
@@ -543,7 +547,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
 
     init {
-        install(PerchHop(), Pounce(), ChaseIntruder(),
+        install(PerchHop(), Pounce(),
             Flee(this, { c, from -> c.coverPoint(from, 20.0) }, "Ducking behind rock"), SurfaceGasp(this), VisitCleaner(this))
     }
 
@@ -554,6 +558,8 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     fun lowestSheltered(): Anchor = perches.minBy { it.pos.y }
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "perch") current.pos else super.anchorPos(c, anchor)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = perchPose(if (night) lowestSheltered() else current)
 
@@ -717,9 +723,11 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(RockGraze(),
             InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
-            BenthicFeed(this, 35.0), BlennyRival(this, 12.0, territory),
+            BenthicFeed(this, 35.0),
             Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this), VisitCleaner(this))
     }
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
         if (night) holeRest(c, hole, territory, -0.5)
@@ -813,10 +821,12 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 { c -> if (c.p.night) 0.9 else 0.45 + (if (c.o.health < 0.5) 0.3 else 0.0) },
                 { c -> if (c.p.night) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) }),
             PlanktonDash(), PerchNearHole(), Graze(this, 0.4),
-            Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), BlennyRival(this, 8.0, holePos), SurfaceGasp(this))
+            Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = holeRest(c, hole, holePos, if (night) -0.5 else 1.5)
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole") holePos else super.anchorPos(c, anchor)
 
     override fun initialPlace(c: Ctx) {
         super.initialPlace(c)
@@ -893,12 +903,14 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
     val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
 
     init {
-        install(CaveDart(), DottyFeed(), Territorial(),
+        install(CaveDart(), DottyFeed(),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             Sleep(this, "Resting in its cave"), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = Rest(caveSafe, Vec3.Z)
+
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "cave") cave else super.anchorPos(c, anchor)
 
     inner class DottyFeed : Feed(this@DottybackBrain, 50.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = 0.1

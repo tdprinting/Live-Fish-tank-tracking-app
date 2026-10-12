@@ -21,6 +21,11 @@ class Relation(val otherId: String) {
     var lastCleanedAt = -1e9
     var cleanings = 0
     var lastSeenAt = -1e9
+    /** Halo intrusions by the other into my territory (+1 each, half-life 24 h; host-defence sensitisation, 06 §5.1). */
+    var intrusions = 0.0
+    /** Client's trust in this cleaner: +0.05 per honest inspection, −0.2 per jolt, relaxes to 0.7 over ~6 h (S:Pinto11). */
+    var cleanerTrust = 0.7
+    var lastInteractionAt = -1e9
 }
 
 /** Perception of others and relationship memory (research 05 §17; owner request: socially aware, non-repetitive). */
@@ -42,6 +47,7 @@ object Social {
                     other.id, other.nickname, other.species.common, labelOf(r),
                     r.familiarity.toFloat(), r.fear.toFloat(), r.harassedBy.toFloat(), r.harassed.toFloat(), r.dominance.toFloat(),
                     r.cleanings, if (r.lastSeenAt < -1e8) -1f else (now - r.lastSeenAt).toFloat().coerceAtLeast(0f),
+                    r.intrusions.toFloat(), r.cleanerTrust.toFloat(),
                 )
             }.toList()
     }
@@ -61,11 +67,36 @@ object Social {
     }
 
     const val PERCEIVE_INTERVAL = 1.0          // s between full scans per animal
-    const val FAMILIARITY_PER_HOUR = 0.02      // within 30 cm; saturates after ~2 days together
-    const val FEAR_HALF_LIFE_S = 3 * 3600.0
+    /** Co-resident familiarity growth: 0.15/day, baseline aggression by ~day 7 (06 §3.3). */
+    const val FAMILIARITY_PER_DAY = 0.15
+    /** Threat memory: +0.3 per chase received, half-life 6 h (06 §5.1). */
+    const val FEAR_HALF_LIFE_S = 6 * 3600.0
+    const val INTRUSION_HALF_LIFE_S = 24 * 3600.0
+    const val TRUST_BASE = 0.7
+    const val TRUST_TAU_S = 6 * 3600.0
     const val GRUDGE_HALF_LIFE_S = 6 * 3600.0
 
-    fun rel(o: Organism, other: Organism): Relation = o.relations.getOrPut(other.id) { Relation(other.id) }
+    /**
+     * Memory of [other], created on first use. A new record starts from the time the two have shared
+     * the tank (0.15/day), so the initial stock already knows each other and a newcomer starts at 0.
+     */
+    fun rel(o: Organism, other: Organism, now: Double = Double.NaN): Relation = o.relations.getOrPut(other.id) {
+        Relation(other.id).also { r ->
+            val t = if (now.isNaN()) max(o.arrivalTime, other.arrivalTime) + 30 * 86400.0 else now
+            val days = (t - max(o.arrivalTime, other.arrivalTime)) / 86400.0
+            r.familiarity = (FAMILIARITY_PER_DAY * days).coerceIn(0.0, 1.0)
+        }
+    }
+
+    /** Familiarity with [other] right now (0 for an unknown newcomer). */
+    fun familiarity(o: Organism, other: Organism, now: Double): Double =
+        o.relations[other.id]?.familiarity ?: (FAMILIARITY_PER_DAY * (now - max(o.arrivalTime, other.arrivalTime)) / 86400.0).coerceIn(0.0, 1.0)
+
+    fun recordIntrusion(holder: Organism, intruder: Organism, now: Double) {
+        val r = rel(holder, intruder, now)
+        r.intrusions += 1.0
+        r.lastInteractionAt = now
+    }
 
     /**
      * Full scan of every other living animal: identity, species, size, distance, state. Updates
@@ -75,19 +106,21 @@ object Social {
         val o = c.o
         val fearK = exp(-dt * 0.693 / FEAR_HALF_LIFE_S)
         val grudgeK = exp(-dt * 0.693 / GRUDGE_HALF_LIFE_S)
+        val intrK = exp(-dt * 0.693 / INTRUSION_HALF_LIFE_S)
+        val trustK = 1 - exp(-dt / TRUST_TAU_S)
+        val famGain = FAMILIARITY_PER_DAY * dt / 86400.0
         var wary: Organism? = null
         var waryScore = 0.0
         for (n in c.sim.organisms) {
             if (n === o || !n.alive) continue
             val d = n.pos.distanceTo(o.pos)
-            val r = o.relations[n.id]
-            if (d < 30.0 && n.visible) {
-                val rr = r ?: rel(o, n)
-                rr.familiarity = min(1.0, rr.familiarity + FAMILIARITY_PER_HOUR * dt / 3600 * (1 - rr.familiarity))
-                rr.lastSeenAt = c.t
-            }
+            val r = o.relations[n.id] ?: if (d < 30.0 && n.visible) rel(o, n, c.t) else null
             if (r != null) {
-                r.fear *= fearK; r.harassedBy *= grudgeK; r.harassed *= grudgeK
+                // co-residents become familiar at 0.15/day whether or not they meet (06 §3.3)
+                r.familiarity = min(1.0, r.familiarity + famGain)
+                if (d < 30.0 && n.visible) r.lastSeenAt = c.t
+                r.fear *= fearK; r.harassedBy *= grudgeK; r.harassed *= grudgeK; r.intrusions *= intrK
+                r.cleanerTrust += (TRUST_BASE - r.cleanerTrust) * trustK
             }
             // Wariness toward a specific individual: remembered fear, plus a prior for a much larger aggressive fish.
             if (n.isFish && n.visible && d < 2.5 * c.L + 15) {
@@ -103,7 +136,7 @@ object Social {
     /** Called whenever [attacker] chases/nips [victim] (any behavior). */
     fun recordAttack(attacker: Organism, victim: Organism, mag: Double) {
         val v = rel(victim, attacker)
-        v.fear = min(1.0, v.fear + 0.25 * mag + 0.1)
+        v.fear = min(1.0, v.fear + 0.3 * mag.coerceIn(0.3, 1.0) / 0.6)
         v.harassedBy = min(1.0, v.harassedBy + 0.3)
         v.dominance = max(-1.0, v.dominance - 0.15)
         val a = rel(attacker, victim)

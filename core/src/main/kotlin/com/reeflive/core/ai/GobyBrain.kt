@@ -15,6 +15,13 @@ import kotlin.math.sin
  * swimmer (same spline deformation as an eel). Never a predator (SIMULATION §4.5, owner correction).
  */
 class GobyBrain(c: Ctx) : SpeciesBrain(c) {
+    companion object {
+        /** Adult mode from this length (06 §1.5): burrow-bound by day and night (07 gap 3). */
+        const val ADULT_CM = 15.0
+        const val GOBY_MOUTHFUL_CM3 = 0.6
+        /** Chance an adult patrols outside on a given night: [I] ≈5 % (07 gap 3; 06 had 40 %, unsupported). */
+        const val ADULT_NIGHT_PATROL_P = 0.05
+    }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
     val mouth: Vec3 = burrow?.pos ?: Vec3(69.0, 5.0, 23.0)
     val inDir: Vec3 = (burrow?.dir ?: Vec3(0.5, 0.1, -0.85)).normalized()
@@ -140,5 +147,4 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
-    companion object { const val GOBY_MOUTHFUL_CM3 = 0.6 }
 }

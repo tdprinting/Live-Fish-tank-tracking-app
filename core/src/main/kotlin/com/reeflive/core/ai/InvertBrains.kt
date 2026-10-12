@@ -125,6 +125,8 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean) = hang(c)
 
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "ledge") ledge?.pos ?: hang(c).pos else super.anchorPos(c, anchor)
+
     inner class Hang : Behavior("hang", "Hanging under the ledge") {
         private var shuffle = Vec3.ZERO
         private var next = 0.0

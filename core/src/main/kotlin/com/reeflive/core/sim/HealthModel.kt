@@ -18,6 +18,8 @@ data class HealthContext(
     val night: Boolean = false,
     /** Sandbox pump strength (FlowField.strength, 0..2; 1 = Tee's powerheads). */
     val flowStrength: Double = 1.0,
+    /** Light intensity 0..1.5 (stress light channel). */
+    val light: Double = 0.5,
 )
 
 /**
@@ -106,7 +108,8 @@ object HealthModel {
     /** Appetite multiplier: stressed or failing animals stop eating (a classic early sign). */
     fun appetite(o: Organism): Double {
         val st = ((o.stress - 0.55) / 0.35).coerceIn(0.0, 1.0)
-        return (1 - 0.85 * st) * (if (o.health < 0.25) 0.2 else 1.0) * (if (o.disease != null && o.diseaseStage > 0.6) 0.4 else 1.0)
+        return (1 - 0.85 * st) * (if (o.health < 0.25) 0.2 else 1.0) * (if (o.disease != null && o.diseaseStage > 0.6) 0.4 else 1.0) *
+            StressModel.appetite(o, o.lastTempC)
     }
 
     /** Tolerance curve (SIMULATION §3.3): returns s in 0..1 and whether the lethal bound is crossed. */
@@ -205,7 +208,11 @@ object HealthModel {
         if (!o.alive) { updateDeadVisuals(o); return }
         val s = o.species
         updateAcclimation(o, w, dtMin)
-        val sEnv = envStress(o, w, ctx.flowStrength)
+        o.lastTempC = w.tempC
+        val sEnvTol = envStress(o, w, ctx.flowStrength)
+        // research 06 §4.1: per-channel acute/chronic stress against acclimated setpoints
+        val sEnvNew = StressModel.update(o, w, StressModel.Env(ctx.light, ctx.flowStrength), dtMin)
+        val sEnv = max(sEnvTol, sEnvNew)
         // ---- other stress sources (decay per minute) ----
         o.socialStress = max(0.0, o.socialStress - 0.1 * dtMin)
         o.startle = max(0.0, o.startle - 0.2 * dtMin)
@@ -318,24 +325,30 @@ object HealthModel {
         val hadGasp = Symptom.GASPING in sym
         sym.clear()
         var desat = 0.0
+        val ss = o.stressState
         if (o.stress > 0.35) { sym += Symptom.COLOR_FADE; desat = (o.stress - 0.35) / 0.65 * 0.6 }
-        o.finClamp = if (o.stress > 0.5) { sym += Symptom.CLAMPED_FINS; ((o.stress - 0.5) * 2).coerceAtMost(1.0) } else 0.0
-        // Sign order (research 05 §4): rapid gills → gasping → hiding → off food → clamped fins → lying low.
-        val sDo = o.envStress["do"] ?: 0.0
-        val sTempHi = if (w.tempC > 26) (o.envStress["temp"] ?: 0.0) else 0.0
-        val sNh3 = o.envStress["nh3Free"] ?: 0.0
-        val sNo2 = o.envStress["no2"] ?: 0.0
-        val sv = maxOf(sDo, sTempHi, sNh3, sNo2 * 0.8)
-        if (sv > 0.3) {
-            sym += Symptom.RAPID_GILLS
-            o.gillRate = 1.5 + 3 * sv; o.gill = 0.6
-        } else { o.gillRate = 1.0; o.gill = 0.3 }
-        if (o.isFish && (w.doMgL < 4 || sNh3 > 0.55 || sTempHi > 0.6 || sDo > 0.5)) {
+        // colour loss from chronic load (06 §4.1.3)
+        desat += 0.4 * StressModel.CHANNELS.maxOf { ss.slow(it) * it.weight }
+        val clampOld = if (o.stress > 0.5) ((o.stress - 0.5) * 2).coerceAtMost(1.0) else 0.0
+        o.finClamp = maxOf(clampOld, StressModel.finClamp(o, w.tempC, o.brightExposed && ctx.light > 0.6))
+        if (o.finClamp > 0.3) sym += Symptom.CLAMPED_FINS
+        // Signs are driven by the responsible channel (06 §4.1.3): heat/O2 → breathing first, ammonia → clamp and hide.
+        val hz = StressModel.gillHz(o, w.tempC)
+        o.gillRate = hz
+        o.gill = (0.3 + 0.25 * (hz - 1)).coerceIn(0.3, 1.0)
+        if (hz > 1.7) sym += Symptom.RAPID_GILLS
+        val doFast = ss.fast(StressModel.Ch.DO)
+        val column = StressModel.isColumnFish(o.brainKind, ctx.night)
+        val gasp = o.isFish && (w.doMgL < 2.0 || (column && (doFast > 0.5 || w.nh3Free >= 0.25)) || (!column && doFast > 0.9))
+        if (gasp) {
             sym += Symptom.GASPING; o.gill = 1.0
-            if (!hadGasp) events += SimEvent.Gasping(o.id, ctx.simTimeSec)
+            if (!hadGasp) { events += SimEvent.Gasping(o.id, ctx.simTimeSec); o.counters.add(Counters.K.GASP, ctx.simTimeSec) }
         }
+        // benthic fish in hypoxia or any animal under heavy load go to cover instead (S:Yu23)
+        if (o.isFish && !column && doFast > 0.5 || ss.sEnv > 0.5) sym += Symptom.HIDING
         if (o.stress > 0.65) { sym += Symptom.HIDING; sym += Symptom.LETHARGY }
         // prolonged ammonia clouds the eyes; clears slowly once water is good
+        val sNh3 = o.envStress["nh3Free"] ?: 0.0
         o.eyeCloud = (o.eyeCloud + (if (sNh3 > 0.5) 0.0005 else -0.0002)).coerceIn(0.0, 0.7)
         o.ich = 0.0
         when (o.disease) {
