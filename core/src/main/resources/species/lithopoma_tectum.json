@@ -1,0 +1,103 @@
+{
+  "id": "lithopoma_tectum",
+  "kind": "INVERT",
+  "common": "Astrea snail",
+  "scientific": "Lithopoma tectum",
+  "family": "Turbinidae",
+  "maxLengthCm": 6,
+  "typicalAdultCm": 3.5,
+  "lifespanYears": 4,
+  "depthRatio": 0.8,
+  "massCoeff": 0.04,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.02,
+    "burstBL": 0.05,
+    "tailHzCruise": 0,
+    "turnRateDeg": 60,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 1.0,
+    "openWater": 0.0,
+    "coverAffinity": 0.3
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 60,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.5,
+    "curiosity": 0.1,
+    "skittishness": 0.3
+  },
+  "diet": [
+    "ALGAE",
+    "DIATOMS",
+    "CYANO"
+  ],
+  "feedsPerDay": 6,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 24,
+      "tolLo": 22,
+      "tolHi": 27,
+      "lethalLo": 18,
+      "lethalHi": 28
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 21,
+  "model": "models/astrea.glb",
+  "colors": {
+    "primary": "#C4522B",
+    "secondary": "#F2EFE6",
+    "accent": "#6E6B2E"
+  },
+  "brain": "snail_grazer",
+  "minTankGallons": 5,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Herbivore: film algae, diatoms, cyano, hair algae.",
+  "temperamentSummary": "Glass and rock grazer; cannot right itself easily when flipped.",
+  "careNotes": [
+    "Flip upside-down snails back over — hermits eat stranded ones.",
+    "Prefers the cooler side (22–24 °C optimal)."
+  ]
+}

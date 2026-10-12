@@ -23,20 +23,20 @@ Acceptance:
 - APK installs and shows the placeholder screen.
 
 ## M1 — Core domain (Track A; 3 days)
-- `units`, `params` (all 4 reef-type tables), `status` (StatusEngine, Trend, InsightEngine), `chem` (Ammonia, Oxygen, Dosing, WaterChange, SaltMix, Evaporation), `io` (CSV, JSON backup), `seed` (Tee's tank JSON + models), `species` (all 17 species JSON sheets).
+- `units`, `params` (all 4 reef-type tables), `status` (StatusEngine, Trend, InsightEngine), `chem` (Ammonia, Oxygen, Dosing, WaterChange, SaltMix, Evaporation), `io` (CSV, JSON backup), `seed` (Tee's tank JSON + models), `species` (all 25 species JSON sheets — Tee's confirmed list, see 04_more_species.md).
 Acceptance (unit tests, all in `:core`):
 - Conversion round trips within 1e-9; SG 1.025 → 33.3 ppt; 8 dKH → 2.856 meq/L → 143.2 ppm.
 - StatusEngine table test: 24 cases incl. fast-change and stale.
 - Ammonia worked example (f = 0.0825 ± 0.001 at 25 °C/pH 8.2).
 - Dosing: 60 gal +10 ppm Ca → 6.3 g CaCl2 anhydrous ± 0.1; +1 dKH → 6.8 g NaHCO3 ± 0.1.
-- Seed parses; species DB loads 17 sheets with tolerance tables validated (optLo ≤ optHi ≤ tolHi ≤ lethalHi).
+- Seed parses; species DB loads 25 sheets with tolerance tables validated (optLo ≤ optHi ≤ tolHi ≤ lethalHi).
 
 ## M2 — Data layer + theme + navigation (Track A; 3 days)
 - Room entities/DAOs/migrations (schema v1 exported to `app/schemas`), repositories, DataStore settings, `SeedInstaller`, manual DI `AppGraph`.
 - Theme: all tokens, fonts bundled (Outfit, Inter), `GlassCard`, `CausticBackground`, `StatusPill`, bottom bar, NavGraph with 5 empty tabs.
 Acceptance:
 - Fresh install → onboarding → Dashboard shows the caustic background and glass cards in dark theme; light theme switches live.
-- Seed installs: Livestock list shows 17 entries, Equipment 8, Tasks 12.
+- Seed installs: Livestock list shows 27 entries (group entries carry a quantity), Equipment 8, Tasks 12.
 - Reduce-motion toggle freezes the background.
 
 ## M3 — Logging, dashboard, charts, alerts (Track A; 5 days)

@@ -1,0 +1,116 @@
+{
+  "id": "echidna_nebulosa",
+  "kind": "FISH",
+  "common": "Snowflake moray eel",
+  "scientific": "Echidna nebulosa",
+  "family": "Muraenidae",
+  "maxLengthCm": 80,
+  "typicalAdultCm": 60,
+  "growthCmPerYear": 8,
+  "lifespanYears": 12,
+  "depthRatio": 0.08,
+  "massCoeff": 0.006,
+  "locomotion": {
+    "mode": "ANGUILLIFORM",
+    "cruiseBL": 0.5,
+    "burstBL": 2.5,
+    "tailHzCruise": 1.0,
+    "turnRateDeg": 180,
+    "waveLen": 0.6,
+    "ampCruise": 0.06,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.35,
+    "openWater": 0.1,
+    "coverAffinity": 0.9
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.5,
+    "boldness": 0.5,
+    "curiosity": 0.4,
+    "skittishness": 0.3
+  },
+  "diet": [
+    "MYSIS",
+    "PELLET",
+    "SHRIMP",
+    "CRAB",
+    "FISH"
+  ],
+  "feedsPerDay": 0.5,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 26,
+      "tolLo": 20,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.022,
+      "optHi": 1.024,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.027
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 60
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.9,
+  "starvationDays": 60,
+  "size": {
+    "lod0Tris": 6000
+  },
+  "model": "models/eel.glb",
+  "colors": {
+    "primary": "#F2EEE0",
+    "secondary": "#1A1A1A",
+    "accent": "#F2D21A"
+  },
+  "iridescence": 0.05,
+  "brain": "eel",
+  "minTankGallons": 75,
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Carnivore: shrimp, crab, fish, frozen meaty foods two to three times a week.",
+  "temperamentSummary": "Den-dweller; hunts the floor at night. Escape artist — keep a tight lid.",
+  "careNotes": [
+    "Adult size 24–32 in — needs 75 gal+ (130 gal suggested).",
+    "Main predator here: shrimp, hermits, cardinals and blennies are at risk."
+  ]
+}

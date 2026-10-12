@@ -1,0 +1,113 @@
+{
+  "id": "lysmata_amboinensis",
+  "kind": "INVERT",
+  "common": "Skunk cleaner shrimp",
+  "scientific": "Lysmata amboinensis",
+  "family": "Lysmatidae",
+  "maxLengthCm": 8,
+  "typicalAdultCm": 6.5,
+  "growthCmPerYear": 2,
+  "lifespanYears": 2.5,
+  "depthRatio": 0.2,
+  "massCoeff": 0.01,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 8,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.05,
+    "yMax": 0.6,
+    "openWater": 0.05,
+    "coverAffinity": 0.85
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 20,
+  "temperament": {
+    "aggression": 0.05,
+    "boldness": 0.7,
+    "curiosity": 0.8,
+    "skittishness": 0.4
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "PELLET",
+    "FLAKE",
+    "PARASITES"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.7,
+  "starvationDays": 30,
+  "size": {
+    "lod0Tris": 3000
+  },
+  "model": "models/shrimp_skunk.glb",
+  "colors": {
+    "primary": "#E9D8C6",
+    "secondary": "#C62B2B",
+    "accent": "#F4F4F0"
+  },
+  "brain": "shrimp_cleaner",
+  "minTankGallons": 20,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Opportunistic omnivore; once-daily mysis or pellets plus cleaning.",
+  "temperamentSummary": "Peaceful cleaner; runs a station and will clean a still hand.",
+  "careNotes": [
+    "Molts every 3–6 weeks and hides for 1–2 days afterwards.",
+    "Hawkfish and eel are real threats."
+  ]
+}
