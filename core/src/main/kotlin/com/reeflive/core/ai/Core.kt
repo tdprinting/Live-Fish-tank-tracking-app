@@ -143,7 +143,9 @@ class Ctx(val sim: Simulation, val o: Organism) {
  * Utility behavior (SIMULATION §4.1 layer 2): [score] 0..1, small state machine via
  * [enter]/[update]/[exit]. [finished] lets the brain switch even without the hysteresis margin.
  */
-abstract class Behavior(val name: String, val label: String) {
+abstract class Behavior(val name: String, label: String) {
+    /** UI label; open so a behavior can describe its current phase (heat stages). */
+    open val label: String = label
     /** Verb phrase used in captions when the behavior has a focus organism ("chasing", "cleaning"…). */
     open val targetVerb: String? get() = null
     var finished = false

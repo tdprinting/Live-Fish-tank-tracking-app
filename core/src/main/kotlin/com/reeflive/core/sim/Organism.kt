@@ -71,6 +71,8 @@ class Organism(
     // ---- research 06 (SIMULATION §9.10) ----
     /** Per-channel acute/chronic stress and acclimated setpoints (StressModel). */
     val stressState = StressModel.State()
+    /** Acute heat damage and stage (research 08, HeatModel). */
+    val heat = HeatModel.State()
     /** Sim time this animal entered the tank (newcomer priority effects, 06 §3.3). Initial stock: 30 days before start. */
     var arrivalTime = -30 * 86400.0
     /** Tactile cleaning calms an aggressor: initiated aggression ×[AGG_DAMP] until this time (06 §5.5, S:Cheney08). */
@@ -147,7 +149,13 @@ class Organism(
 
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic && brainKind != BrainKind.BRITTLE_STAR)
     lateinit var brain: UtilityBrain
-    val behaviorName: String get() = if (!alive) "Dead" else if (::brain.isInitialized) brain.currentLabel else ""
+    /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
+    val behaviorName: String get() = when {
+        !alive -> "Dead"
+        heat.stage >= HeatModel.Stage.LETHARGIC -> HeatModel.label(this)
+        ::brain.isInitialized -> brain.currentLabel
+        else -> ""
+    }
 
     val massG: Double get() = ChemFns.massGrams(lengthCm, species.massCoeff)
     val isFish: Boolean get() = brainKind.isFish

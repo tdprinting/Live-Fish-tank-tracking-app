@@ -69,6 +69,11 @@ enum class Symptom(val label: String) {
     FLASHING("Flashing"),
     LESIONS("Lesions"),
     MOLTING("Molting"),
+    /** Research 08 heat stages. */
+    ERRATIC("Darting erratically"),
+    ON_BOTTOM("Resting on the bottom"),
+    LOSS_OF_EQUILIBRIUM("Loss of equilibrium"),
+    DETACHED("Lost its grip"),
     DEAD("Dead"),
 }
 
@@ -155,6 +160,8 @@ data class CoralPose(
     val anchor: String = "",
     val flow: Float = 0f,
     val tissue: Float = 1f,
+    /** Bare skeleton exposed by acute heat necrosis (research 08 §5), 0..1. */
+    val skeleton: Float = 0f,
 )
 
 /** Everything the renderer and HUD need for one frame (ARCHITECTURE §8.8). */

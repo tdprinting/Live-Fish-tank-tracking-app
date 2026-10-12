@@ -34,11 +34,14 @@ class Coral(
     var acclSg = Double.NaN
     var acclAlk = Double.NaN
     var acclLight = Double.NaN
+    /** Acute heat necrosis D_coral and the bare-skeleton fraction it has exposed (research 08 §5; irreversible). */
+    var necrosis = 0.0
+    var skeleton = 0.0
     val melting: Boolean get() = tissue < 0.2
 
     fun toPose() = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
-        species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(),
+        species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(),
     )
 }
 
@@ -113,6 +116,8 @@ object CoralSim {
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
         var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff) * (1 - 0.8 * c.stress) * flowExt
         target *= (1 - c.disturb).coerceIn(0.0, 1.0)
+        // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis
+        if (c.necrosis > 0.02) target *= 0.2
         if (c.melting) target = 0.0
         val tau = if (c.disturb > 0.3 || sSgShock > 0.4) 2.0 else 20.0   // snap shut when touched or osmotically shocked
         c.extension += (target - c.extension) * (dtMin / tau).coerceAtMost(1.0)
@@ -121,8 +126,11 @@ object CoralSim {
         val wk = dtMin / (7 * 1440.0)
         c.dhw = if (w.tempC > DHW_THRESHOLD_C) c.dhw + (w.tempC - DHW_THRESHOLD_C) * wk else max(0.0, c.dhw - 0.5 * wk)
         val dhwTarget = smoothstep(3.0, 8.0, c.dhw)
+        // Acute pathway (research 08 §5, distinct from DHW): above T_necro tissue sloughs instead of bleaching.
+        HeatModel.coralStep(c, w.tempC, minutesSinceOn == null, dtMin)
+        val acute = HeatModel.coralAcute(c, w.tempC)
         val starving = if (w.no3 < 0.5 && w.po4 < 0.01) 0.00002 else 0.0     // ultra-low nutrients pale soft corals over weeks
-        c.bleach += (0.0008 * max(0.0, sTemp - 0.5) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0) + 0.0003 * sLight + 0.0004 * sLightShock + starving -
+        c.bleach += (0.0008 * max(0.0, sTemp - 0.5) * (if (acute) 0.0 else 1.0) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0) + 0.0003 * sLight + 0.0004 * sLightShock + starving -
             (if (c.stress < 0.15) 0.00001 else 0.0)) * dtMin
         c.bleach = c.bleach.coerceIn(0.0, 1.0)
         if (c.bleach > 0.5 && !c.bleachingReported) { c.bleachingReported = true; events += SimEvent.CoralBleaching(c.id, simTimeSec) }
@@ -132,7 +140,9 @@ object CoralSim {
         c.tissue += (-0.00005 * (if (c.bleach > 0.8) 1.0 else 0.0) - 0.00005 * smoothstep(8.0, 12.0, c.dhw) - 0.0002 * sNh3 -
             0.00003 * c.algaeCover - 0.0003 * sCu - (if (sgLethal) 0.002 else 0.0) - 0.0002 * max(0.0, sPh - 0.6) +
             (if (c.stress < 0.1 && c.tissue < 1) 0.00002 else 0.0)) * dtMin
-        c.tissue = c.tissue.coerceIn(0.0, 1.0)
+        // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
+        if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0
+        c.tissue = c.tissue.coerceIn(0.0, 1.0 - c.skeleton)
         c.algaeCover += (0.001 * w.algaeHair + 0.0005 * w.cyano - 0.0003 * c.algaeCover) * dtMin / 60
         c.algaeCover = c.algaeCover.coerceIn(0.0, 1.0)
     }
