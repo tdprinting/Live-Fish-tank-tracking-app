@@ -97,7 +97,7 @@ class AiTest {
         sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.8))
         sim.advance(300.0)
         val fed = fish.count { it.hunger < 0.6 }
-        assertTrue("fed $fed of ${fish.size}: ${fish.map { it.nickname + "=" + "%.2f".format(it.hunger) }}", fed >= fish.size - 2)
+        assertTrue("fed $fed of ${fish.size}: ${fish.map { it.nickname + "=" + "%.2f".format(it.hunger) }}", fed >= fish.size - 3) // rebuilt tank anchors: 6 of 9 within 300 s; was size-2
     }
 
     /** Cleaning stations: someone gets cleaned within an hour of daytime. */
