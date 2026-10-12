@@ -167,14 +167,24 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.po4 = max(0.0, s.po4 + d)
     }
 
+    /**
+     * Ca / alk / Mg coupling (research 01 §2.1, 05 §10). Corals and abiotic precipitation both remove CaCO3, so Ca
+     * falls by [CA_PER_DKH] ppm for every dKH of alkalinity used. Corals slow down when Ca or alk run low. Abiotic
+     * precipitation starts when the Ca × alk product passes a threshold that Mg sets: Mg in range holds it off,
+     * low Mg (< 1200 ppm) lets normal water precipitate. Strontium is taken up with the skeleton (Sr/Ca ≈ 9 mmol/mol).
+     */
     private fun carbonate(h: Double) {
-        val demand = coralDemandDkhPerDay / 24 * h
-        var precip = if (s.alk > 11 && s.ca > 460) 0.02 * h else 0.0
-        if (s.mg < 1150) precip *= 2
+        val demand = coralDemandDkhPerDay / 24 * h * calcificationFactor(s)
+        val precip = precipitationDkhPerHour(s) * h
+        precipDkhPerDay = precip / h.coerceAtLeast(1e-9) * 24
         s.alk -= demand + precip
-        s.ca -= demand * CA_PER_DKH + precip * 7.0
-        s.mg -= demand * 0.1
+        s.ca -= (demand + precip) * CA_PER_DKH
+        s.mg -= demand * 0.1 + precip * MG_PER_DKH_PRECIP
+        s.sr = max(0.0, s.sr - demand * CA_PER_DKH * SR_PER_CA)
     }
+
+    /** Abiotic CaCO3 precipitation in the last step, dKH/day (white crust on heaters and pumps, cloudy water). */
+    var precipDkhPerDay = 0.0; private set
 
     private fun gases(h: Double) {
         val v = s.volumeL
@@ -312,6 +322,30 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val NO2_PER_NH3 = 46.0 / 17.0
         const val NO3_PER_NO2 = 62.0 / 46.0
         const val CA_PER_DKH = 7.14
+        /** Mg carried down with abiotic (high-Mg) carbonate, ppm per dKH precipitated (est.). */
+        const val MG_PER_DKH_PRECIP = 1.0
+        /** Sr taken up per ppm Ca in coral aragonite (Sr/Ca ≈ 9 mmol/mol → 0.02 by mass, est.). */
+        const val SR_PER_CA = 0.02
+
+        /**
+         * Calcification slows when Ca or alk run low (05 §10: Ca < 350 strong loss; 05 §9: alk < 6 tissue stress).
+         * 1 in the normal band, 0 at Ca 200 ppm or alk 3 dKH.
+         */
+        fun calcificationFactor(w: WaterState): Double =
+            ((w.ca - 200) / 150).coerceIn(0.0, 1.0) * ((w.alk - 3) / 2.5).coerceIn(0.0, 1.0)
+
+        /**
+         * Abiotic precipitation, dKH/h. Saturation proxy = (Ca/420)(alk/8.5)(pH factor); it precipitates above a
+         * threshold of 1.0 at Mg 1200, 1.4 at Mg ≥ 1350 and 0.6 at Mg ≤ 1050 (01 §2.1, 05 §10: "Mg below 1200:
+         * alkalinity and calcium precipitate"; alk > 12 or Ca > 480: precipitation risk). 0.02 dKH/h per 0.2 excess.
+         */
+        fun precipitationDkhPerHour(w: WaterState): Double {
+            val phF = (1 + (w.ph - 8.2)).coerceIn(0.5, 1.5)
+            val sat = (w.ca / 420.0) * (w.alk / 8.5) * phF
+            val thr = 1.0 + 0.4 * ((w.mg - 1200) / 150).coerceIn(-1.0, 1.0)
+            val ex = sat - thr
+            return if (ex <= 0) 0.0 else 0.02 * min(ex / 0.2, 3.0)
+        }
 
         // Tuned constants (see SIMULATION §2 "Tuned constants")
         const val K_LOSS = 9.0                 // W/°C

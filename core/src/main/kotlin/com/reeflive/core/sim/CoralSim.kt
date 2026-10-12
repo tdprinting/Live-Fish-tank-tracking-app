@@ -100,6 +100,9 @@ object CoralSim {
         val (sNh3, _) = HealthModel.stressOf(w.nh3Free, ToleranceRange(optHi = 0.02, tolHi = 0.1, lethalHi = 0.6))
         val (sPo4, _) = HealthModel.stressOf(w.po4, ToleranceRange(optHi = 0.1, tolHi = 0.3, lethalHi = 1.0))
         val (sCu, _) = HealthModel.stressOf(w.copper, ToleranceRange(optHi = 0.02, tolHi = 0.1, lethalHi = 0.3))
+        // research 01 §1.1 / 05 §13: potassium out of 340-460 ppm stresses corals; low strontium (< 6) only mildly (skeletal element)
+        val (sK, _) = HealthModel.stressOf(w.k, HealthModel.POTASSIUM)
+        val (sSr, _) = HealthModel.stressOf(w.sr, HealthModel.STRONTIUM)
         val sLight = if (minutesSinceOn == null) 0.0 else when {
             lightIntensity > p.lightHi -> ((lightIntensity - p.lightHi) / 0.15).coerceIn(0.0, 1.0)
             lightIntensity < p.lightLo && lightIntensity > 0.05 -> ((p.lightLo - lightIntensity) / p.lightLo).coerceIn(0.0, 1.0) * 0.5
@@ -111,7 +114,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2)
         var prod = 1.0
         for (s in parts) prod *= (1 - s)
         c.stress = 1 - prod

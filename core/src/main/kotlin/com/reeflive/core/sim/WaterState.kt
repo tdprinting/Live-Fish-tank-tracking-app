@@ -51,6 +51,15 @@ data class WaterState(
     var co2Index: Double = 1.0,
     var nh3Free: Double = 0.0,
     var gfoActive: Boolean = false,
+    /**
+     * Dissolved organic carbon, mg/L (research 01 §3.5: skimmer, carbon and sock remove organics before they
+     * mineralise). Mature reef tanks sit around 1-3 (est.); fresh salt mix ~0.3.
+     */
+    var doc: Double = 1.5,
+    /** Soft-coral allelochemicals in the water (Kenya terpenoids, zoa/paly toxins; research 03 D), index 0..; 1 = noticeable. */
+    var allelo: Double = 0.0,
+    /** Refugium macroalgae (Chaetomorpha) biomass index; 0 = no refugium (research 01 §3.5). */
+    var chaeto: Double = 0.0,
 ) {
     /** Salinity in ppt (ARCHITECTURE §4.1 table, linear in SG near seawater). */
     val ppt: Double get() = ChemFns.sgToPpt(sg)
@@ -82,6 +91,10 @@ data class WaterState(
         "bubble" -> bubble
         "silicate", "si" -> silicate
         "light" -> lightPar
+        "macro" -> macro
+        "chaeto" -> chaeto
+        "doc" -> doc
+        "allelo" -> allelo
         else -> null
     }
 
@@ -92,7 +105,7 @@ data class WaterState(
         /** Freshly mixed salt water used by water changes (SIMULATION §2.2). */
         val FRESH_MIX = WaterState(
             tempC = 25.0, sg = 1.025, ph = 8.2, alk = 8.5, ca = 430.0, mg = 1320.0, nh3Total = 0.0, no2 = 0.0, no3 = 0.0,
-            po4 = 0.0, doMgL = 6.6, k = 400.0, sr = 8.0, i = 0.06, detritus = 0.0,
+            po4 = 0.0, doMgL = 6.6, k = 400.0, sr = 8.0, i = 0.06, detritus = 0.0, doc = 0.3,
         )
     }
 }

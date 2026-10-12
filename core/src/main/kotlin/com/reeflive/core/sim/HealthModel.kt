@@ -68,6 +68,11 @@ object HealthModel {
     /** mg/L iodide+iodate; NSW ≈ 0.06. Below ~0.02 molts start failing (Simulation.crustaceanMolts). */
     val CRUSTACEAN_IODINE = ToleranceRange(optLo = 0.04, tolLo = 0.02, lethalLo = 0.003)
 
+    /** Potassium band for inverts and corals (01 §1.1 acceptable 360-440, danger < 340 / > 460; lethal est.). */
+    val POTASSIUM = ToleranceRange(optLo = 360.0, optHi = 440.0, tolLo = 340.0, tolHi = 460.0, lethalLo = 200.0, lethalHi = 700.0)
+    /** Strontium (01 §1.1: 8-10 ideal, 7-11 acceptable, danger < 6); a skeletal element, so it limits growth more than health. */
+    val STRONTIUM = ToleranceRange(optLo = 7.0, tolLo = 6.0, lethalLo = 1.0)
+
     private val INVERT_TOL = mapOf(
         "temp" to ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0),
         "nh3Free" to ToleranceRange(optHi = 0.01, tolHi = 0.04, lethalHi = 0.35),
@@ -78,6 +83,8 @@ object HealthModel {
         "sg" to ToleranceRange(1.023, 1.026, 1.021, 1.0275, 1.018, 1.030),
         "mg" to ToleranceRange(optLo = 1200.0, tolLo = 1050.0, lethalLo = 800.0),
         "ca" to ToleranceRange(optLo = 380.0, tolLo = 330.0, lethalLo = 200.0),
+        // research 01 §1.1: K acceptable 360-440 ppm, danger < 340 or > 460 ("balances ion transport", 05 §13); lethal bounds est.
+        "k" to POTASSIUM,
     )
     private val INVERT_COPPER = ToleranceRange(optHi = 0.005, tolHi = 0.03, lethalHi = 0.1)
     private val FISH_COPPER = ToleranceRange(optHi = 0.05, tolHi = 0.25, lethalHi = 0.5)
@@ -143,6 +150,7 @@ object HealthModel {
         "temp" -> w.tempC; "sg" -> w.sg; "ph" -> w.ph; "nh3Free", "nh3free" -> w.nh3Free
         "nh3", "nh3Total" -> w.nh3Total; "no2" -> w.no2; "no3" -> w.no3; "do" -> w.doMgL
         "po4" -> w.po4; "alk" -> w.alk; "ca" -> w.ca; "mg" -> w.mg; "copper" -> w.copper; "i", "iodine" -> w.i
+        "k" -> w.k; "sr" -> w.sr
         else -> null
     }
 
@@ -304,6 +312,7 @@ object HealthModel {
     fun label(key: String): String = when (key) {
         "temp" -> "temperature"; "sg" -> "salinity"; "ph" -> "pH"; "nh3Free" -> "ammonia"; "no2" -> "nitrite"
         "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "i" -> "low iodine"; "flow" -> "flow change"
+        "k" -> "potassium"; "sr" -> "strontium"; "ca" -> "calcium"
         "light" -> "bright light"; "social" -> "harassment"
         "shockTemp" -> "temperature swing"; "shockSg" -> "salinity swing"; "shockPh" -> "pH swing"
         else -> key
