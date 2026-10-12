@@ -35,26 +35,37 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
+      # versionCode grows with every run so each APK installs as an upgrade (same applicationId + committed key).
+      # The in-app updater reads "versionCode: N" from the release body (fallback: tag run number + 100).
+      - name: Version
+        id: ver
+        run: |
+          name="0.1.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          echo "code=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${name}" >> "$GITHUB_OUTPUT"
+
       - name: Core unit tests
         run: ./gradlew :core:test --stacktrace
 
       - name: App unit tests
-        run: |
-          ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/out.txt 2>&1 || { grep -E '^e: |FAILED|Exception' /tmp/out.txt | head -25 | while read -r l; do echo "::error::${l:0:400}"; done; exit 1; }
+        run: ./gradlew :app:testDebugUnitTest -PversionCode=${{ steps.ver.outputs.code }} -PversionName=${{ steps.ver.outputs.name }} --stacktrace
 
       - name: Build APKs
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
-
-      - name: Version
-        id: ver
-        run: echo "tag=v0.1.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+        run: |
+          ./gradlew :app:assembleDebug :app:assembleRelease \
+            -PversionCode=${{ steps.ver.outputs.code }} -PversionName=${{ steps.ver.outputs.name }} --stacktrace
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/reeflive.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/reeflive-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: reeflive-apks-${{ steps.ver.outputs.tag }}
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/app-release.apk
+            dist/reeflive.apk
+            dist/reeflive-debug.apk
+            app/schemas/
           if-no-files-found: error
 
       - name: Release (main only)
@@ -64,7 +75,12 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ReefLive ${{ steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
+          body: |
+            versionCode: ${{ steps.ver.outputs.code }}
+
+            Install `reeflive.apk` (or update from inside the app: Settings → Updates). It installs over the previous version and keeps your data.
           generate_release_notes: true
+          make_latest: true
           files: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/app-release.apk
+            dist/reeflive.apk
+            dist/reeflive-debug.apk
