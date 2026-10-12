@@ -1,15 +1,10 @@
 package com.reeflive.core.live
 
-import com.reeflive.core.model.Livestock
-import com.reeflive.core.model.LightSchedule as DbLightSchedule
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.FoodKind
-import com.reeflive.core.sim.LightSchedule
-import com.reeflive.core.sim.LivestockSeed
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.SimEvent
 import com.reeflive.core.sim.SimSnapshot
-import com.reeflive.core.sim.WaterState
 
 /** Pure glue between app data (repositories) and the simulation (ARCHITECTURE §5.2 / §9, PLAN C3). */
 
@@ -24,7 +19,7 @@ object FastForward {
         (elapsedWallMs.coerceAtLeast(0L) / 1000.0 * speed.coerceAtLeast(0.0)).coerceAtMost(capSec)
 }
 
-/** Reality initialisation: latest logged values / alive livestock / active light schedule -> sim inputs. */
+/** Reality pick-up: latest logged values / alive livestock / active light schedule -> sim inputs. */
 object RealityInit {
     /** Logged parameter id -> sim parameter id accepted by [Command.SetParam]. */
     private val PARAM_MAP = mapOf(
@@ -38,57 +33,11 @@ object RealityInit {
         return sim to if (paramId == "temp") (baseValue - 32.0) * 5.0 / 9.0 else baseValue
     }
 
-    fun waterFrom(latest: Map<String, Double>, base: WaterState = WaterState()): WaterState {
-        val w = base.copy()
-        for ((id, v) in latest) {
-            val (sim, value) = simValue(id, v) ?: continue
-            when (sim) {
-                "temp" -> w.tempC = value
-                "sg" -> w.sg = value
-                "alk" -> w.alk = value
-                "ca" -> w.ca = value
-                "mg" -> w.mg = value
-                "ph" -> w.ph = value
-                "no3" -> w.no3 = value
-                "po4" -> w.po4 = value
-                "nh3" -> w.nh3Total = value
-                "no2" -> w.no2 = value
-                "k" -> w.k = value
-                "sr" -> w.sr = value
-                "i" -> w.i = value
-                "do" -> w.doMgL = value
-            }
-        }
-        return w
-    }
-
     /** SetParam commands for values that differ from [previous] (reality pick-up of a newly logged measurement). */
     fun changedCommands(previous: Map<String, Double>, latest: Map<String, Double>): List<Command> =
         latest.mapNotNull { (id, v) ->
             if (previous[id] == v) null else simValue(id, v)?.let { (sim, value) -> Command.SetParam(sim, value) }
         }
-
-    const val MAX_GROUP = 8
-
-    /** Alive livestock -> sim seeds. Group entries (quantity > 1) expand; the first keeps the livestock id. */
-    fun seedsFrom(alive: List<Livestock>): List<LivestockSeed> = alive.flatMap { l ->
-        val n = l.quantity.coerceIn(1, MAX_GROUP)
-        (0 until n).map { i ->
-            LivestockSeed(
-                speciesId = l.speciesId,
-                nickname = if (n > 1) "${l.nickname} ${i + 1}" else l.nickname,
-                sizeCm = l.sizeCm ?: 0.0,
-                role = l.role,
-                placement = l.placement,
-                id = if (i == 0) l.id else "${l.id}#${i + 1}",
-                variant = l.variant,
-            )
-        }
-    }
-
-    fun lightsFrom(s: DbLightSchedule?): LightSchedule =
-        if (s == null || s.points.isEmpty()) LightSchedule()
-        else LightSchedule(s.points.map { LightSchedule.LightPoint(it.minuteOfDay, it.channels.toDoubleArray()) })
 }
 
 /** One step of a scenario: [atSimSec] sim seconds after the scenario started. */

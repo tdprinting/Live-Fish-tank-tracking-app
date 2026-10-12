@@ -1,6 +1,5 @@
 package com.reeflive.core.live
 
-import com.reeflive.core.model.Livestock
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.SimEvent
 import org.junit.Assert.assertEquals
@@ -59,26 +58,12 @@ class LiveGlueTest {
         assertEquals(86_400.0, FastForward.simSeconds(600_000, speed = 1000.0), 0.0)
     }
 
-    @Test fun loggedTemperatureConvertsFahrenheitToCelsius() {
-        val w = RealityInit.waterFrom(mapOf("temp" to 78.8, "sal" to 1.026, "no3" to 12.0, "orp" to 350.0))
-        assertEquals(26.0, w.tempC, 1e-9)
-        assertEquals(1.026, w.sg, 0.0)
-        assertEquals(12.0, w.no3, 0.0)
-    }
-
     @Test fun changedCommandsOnlyForNewValues() {
         val cmds = RealityInit.changedCommands(mapOf("temp" to 78.0, "no3" to 5.0), mapOf("temp" to 86.0, "no3" to 5.0, "orp" to 1.0))
         assertEquals(1, cmds.size)
         val c = cmds[0] as Command.SetParam
         assertEquals("temp", c.paramId)
         assertEquals(30.0, c.value, 1e-9)
-    }
-
-    @Test fun seedsExpandGroupsAndKeepIds() {
-        val l = Livestock("a", "t", "amphiprion_ocellaris", "Nemo", quantity = 2)
-        val seeds = RealityInit.seedsFrom(listOf(l, l.copy(id = "b", speciesId = "x", nickname = "Solo", quantity = 1)))
-        assertEquals(listOf("a", "a#2", "b"), seeds.map { it.id })
-        assertEquals("Solo", seeds[2].nickname)
     }
 
     @Test fun peekDescribesEvents() {

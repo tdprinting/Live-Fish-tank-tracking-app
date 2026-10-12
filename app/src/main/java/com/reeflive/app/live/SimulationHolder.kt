@@ -14,6 +14,7 @@ import com.reeflive.core.model.LightSchedule as DbLightSchedule
 import com.reeflive.core.model.Livestock
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.LivestockSeed
+import com.reeflive.core.sim.Reality
 import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.Simulation
@@ -190,15 +191,15 @@ class SimulationHolder(
 
     private fun buildReality(carryWater: WaterState?, carryTime: Double?) {
         ensureAssets()
-        val water = carryWater?.copy() ?: RealityInit.waterFrom(latestValues)
+        val water = carryWater?.copy() ?: Reality.waterFrom(latestValues)
         val sim = Simulation(
             config = TankConfig(),
             species = species!!,
             rock = rock!!,
             startTimeSec = carryTime ?: localSecondsOfDay(),
             initialWater = water,
-            livestock = RealityInit.seedsFrom(alive),
-            lights = RealityInit.lightsFrom(schedule),
+            livestock = Reality.seedsFrom(alive),
+            lights = Reality.lightsFrom(schedule),
         )
         sim.speed = 1.0
         appliedValues = latestValues
