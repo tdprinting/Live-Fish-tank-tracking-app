@@ -141,6 +141,8 @@ data class OrganismPose(
     val nickname: String = "",
     /** Model variant from the livestock row (e.g. "darwin_black" clown); the renderer picks `variantModels`. */
     val variant: String? = null,
+    /** Cardinal male with eggs in his mouth: draw the throat distended (coverage B-2). */
+    val mouthbrooding: Boolean = false,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
@@ -242,6 +244,8 @@ data class OrganismStats(
     val waryOfId: String? = null,
     /** "Female", "Male", "Changing sex" or "" (coverage B-1/B-3). */
     val sex: String = "",
+    /** Carrying eggs in the mouth (cardinal male; he does not eat meanwhile, coverage B-2). */
+    val mouthbrooding: Boolean = false,
 )
 
 /**

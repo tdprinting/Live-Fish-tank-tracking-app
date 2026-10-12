@@ -105,6 +105,8 @@ class Organism(
     var sexFemale: Boolean? = null
     /** 0..1 progress of a sex change in progress (clown male to female, wrasse female to male). */
     var sexChange = 0.0
+    /** A cardinal male carrying eggs in his mouth: does not eat, throat distended (B-2). */
+    var mouthbrooding = false
 
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
@@ -200,7 +202,7 @@ class Organism(
             thin.toFloat(), eyeCloud.toFloat(), alive, lengthCm.toFloat(),
             brain = brainKind.name, posture = posture, eyeYaw = eyeYaw.toFloat(), mouth = mouth.toFloat(),
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
-            variant = variant,
+            variant = variant, mouthbrooding = mouthbrooding,
         )
     }
 
@@ -214,7 +216,7 @@ class Organism(
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
-        sex = sexLabel(),
+        sex = sexLabel(), mouthbrooding = mouthbrooding,
     )
 
     /** "Female", "Male", "Changing sex" or "" when the sheet gives no sex. */

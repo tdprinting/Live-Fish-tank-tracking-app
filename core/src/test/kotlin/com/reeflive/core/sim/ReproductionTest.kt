@@ -132,4 +132,60 @@ class ReproductionTest {
         assertEquals(false, sim.organisms.first { it.id == "clown_m" }.sexFemale)
         assertEquals(0.0, sim.organisms.first { it.id == "clown_m" }.sexChange, 0.0)
     }
+
+    // ---------------------------------------------------------------- B-2 cardinal mouthbrooding
+
+    private fun cardinals(sizeF: Double = 5.5, sizeM: Double = 6.0) = listOf(
+        LivestockSeed("sphaeramia_nematoptera", "Pajama", sizeM, id = "card_m"),
+        LivestockSeed("sphaeramia_nematoptera", "Pajama2", sizeF, id = "card_f"),
+    )
+
+    @Test
+    fun cardinalMaleBroodsAboutAWeekThenReleases() {
+        val sim = TestTank.sim(cardinals(), seed = 4)
+        val male = sim.organisms.first { it.id == "card_m" }
+        days(sim, 20) { male.mouthbrooding }
+        assertTrue("male never brooded", male.mouthbrooding)
+        assertFalse(sim.organisms.first { it.id == "card_f" }.mouthbrooding)
+        assertTrue(sim.snapshot().stats.first { it.id == "card_m" }.mouthbrooding)
+        assertTrue(sim.snapshot().organisms.first { it.id == "card_m" }.mouthbrooding)
+        val start = sim.simTimeSec
+        days(sim, 15) { !male.mouthbrooding }
+        val d = (sim.simTimeSec - start) / 86400.0
+        assertFalse(male.mouthbrooding)
+        assertEquals(1, sim.repro.hatchedBroods)
+        assertTrue("brooded ${"%.1f".format(d)} d", d in 5.5..9.0)
+        assertFalse(sim.snapshot().stats.first { it.id == "card_m" }.mouthbrooding)
+    }
+
+    @Test
+    fun brooderDoesNotEat() {
+        val sim = TestTank.sim(cardinals(), seed = 4)
+        val male = sim.organisms.first { it.id == "card_m" }
+        days(sim, 20) { male.mouthbrooding }
+        assertTrue(male.mouthbrooding)
+        // hunger is capped, and mysis at night go to the female only
+        male.hunger = 0.55
+        sim.advance(60.0)
+        sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.5))
+        val fedBefore = male.counters.totalOf(Counters.K.FEED)
+        sim.advance(900.0, behaviorDt = 0.1) { male.hunger = 0.55 }
+        assertEquals(fedBefore, male.counters.totalOf(Counters.K.FEED))
+        sim.advanceAbstract(3 * 86400.0)
+        assertTrue("hunger capped ${male.hunger}", male.hunger <= Reproduction.BROOD_MAX_HUNGER + 0.05)
+    }
+
+    @Test
+    fun stressedBrooderLosesTheBroodAndLoneCardinalNeverBroods() {
+        val sim = TestTank.sim(cardinals(), seed = 4)
+        val male = sim.organisms.first { it.id == "card_m" }
+        days(sim, 20) { male.mouthbrooding }
+        male.stress = 0.9
+        sim.advanceAbstract(120.0)
+        assertFalse(male.mouthbrooding)
+        assertEquals(1, sim.repro.lostBroods)
+        val lone = TestTank.sim(listOf(cardinals().first()), seed = 4)
+        days(lone, 20)
+        assertFalse(lone.organisms.single().mouthbrooding)
+    }
 }

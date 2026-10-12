@@ -294,7 +294,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     inner class NocturnalForage : Behavior("dusk", "Night foraging") {
         private var wp = Vec3.ZERO
         private var next = 0.0
-        override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT) 0.55 else 0.0
+        override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT && !c.o.mouthbrooding) 0.55 else 0.0
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             if (c.t > next || o.pos.distanceTo(wp) < c.L) {
@@ -313,7 +313,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     /** By day faster tankmates leave it little (×0.4 unless the food drifts within 10 cm); dusk/night ×1.5 (06 §3.2). */
     inner class CardinalFeed : Feed(this@CardinalBrain, 60.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = if (f.kind == FoodKind.MYSIS || f.kind == FoodKind.PODS) 0.1 else 0.0
-        override fun accept(c: Ctx, f: FoodParticle) = !f.settled && !f.onSurface
+        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
             c.p.light < FORAGE_LIGHT -> 1.5
             f.pos.distanceTo(c.o.pos) <= 10.0 -> 1.0

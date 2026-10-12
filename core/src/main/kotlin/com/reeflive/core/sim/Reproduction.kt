@@ -54,6 +54,7 @@ class Reproduction(private val sim: Simulation) {
         val now = sim.simTimeSec
         clownSexChange(dtSec)
         clownBreeding(now, dtSec)
+        cardinalBreeding(now, dtSec)
     }
 
     // ============================================================== clown sex and sex change
@@ -158,7 +159,57 @@ class Reproduction(private val sim: Simulation) {
         }
     }
 
+    // ============================================================== cardinal mouthbrooding (B-2)
+
+    private var cardReadiness = 0.0
+    private var cardCooldownUntil = 0.0
+    private var brooder: Organism? = null
+    private var broodEndAt = 0.0
+    /** Broods released at hatching / lost (male stressed or died). Larvae drift off; there is no rearing. */
+    var hatchedBroods = 0; private set
+    var lostBroods = 0; private set
+
+    private fun cardinals() = sim.organisms.filter { it.alive && it.brainKind == BrainKind.CARDINAL }
+
+    /** Sex from the sheet role, else the larger of a pair is the male (males have the bigger mouth, research 02 §3C). */
+    private fun resolveCardinalSex(cl: List<Organism>) {
+        if (cl.size < 2) return
+        val big = cl.maxBy { it.lengthCm }
+        for (o in cl) if (o.sexFemale == null) o.sexFemale = if (o.role != null) o.role.equals("FEMALE", true) else o !== big
+    }
+
+    private fun cardinalBreeding(now: Double, dt: Double) {
+        val cl = cardinals()
+        resolveCardinalSex(cl)
+        val b = brooder
+        if (b != null) {
+            if (!b.alive || b !in sim.organisms) { b.mouthbrooding = false; brooder = null; lostBroods++; return }
+            b.hunger = minOf(b.hunger, BROOD_MAX_HUNGER)       // he does not eat while brooding
+            if (b.stress > BROOD_ABANDON_STRESS) {              // a stressed male swallows the eggs
+                b.mouthbrooding = false; brooder = null; lostBroods++; cardCooldownUntil = now + 5 * 86400.0
+            } else if (now >= broodEndAt && sim.perception.night) {
+                b.mouthbrooding = false; brooder = null; hatchedBroods++
+                cardCooldownUntil = now + rng.range(COOLDOWN_DAYS_MIN, COOLDOWN_DAYS_MAX) * 86400.0
+            }
+            return
+        }
+        val f = cl.filter { it.sexFemale == true }.maxByOrNull { it.lengthCm }
+        val m = cl.filter { it.sexFemale == false }.maxByOrNull { it.lengthCm }
+        if (f == null || m == null) { cardReadiness = maxOf(0.0, cardReadiness - dt / 86400.0); return }
+        val ok = fit(f, CARDINAL_MATURE_CM, now) && fit(m, CARDINAL_MATURE_CM, now) && inRange(sim.water.s)
+        cardReadiness = (cardReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
+        if (cardReadiness >= 1.0 && now >= cardCooldownUntil && sim.perception.night) {
+            m.mouthbrooding = true; brooder = m; cardReadiness = 0.0
+            broodEndAt = now + rng.range(BROOD_DAYS_MIN, BROOD_DAYS_MAX) * 86400.0
+        }
+    }
+
     companion object {
+        const val CARDINAL_MATURE_CM = 5.0
+        const val BROOD_DAYS_MIN = 6.0
+        const val BROOD_DAYS_MAX = 8.0
+        const val BROOD_MAX_HUNGER = 0.6
+        const val BROOD_ABANDON_STRESS = 0.8
         const val CLOWN = "CLOWN"
         const val SEX_CHANGE_DAYS = 28.0
         const val READY_DAYS = 7.0
