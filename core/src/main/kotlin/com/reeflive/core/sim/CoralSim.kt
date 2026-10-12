@@ -57,6 +57,8 @@ class Coral(
     /** Present when the tank was loaded (its neighbours' pressure then is its acclimated baseline). */
     var established = false
     var baseline: Pair<Double, Double>? = null
+    /** Last time a disturbance fragmented this aiptasia polyp (AiptasiaModel). */
+    var lastFragAt = -1e9
 
     fun toPose() = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),

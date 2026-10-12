@@ -72,6 +72,13 @@ class Simulation(
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
     private var fragCounter = 1
+    fun nextFragId(): Int = fragCounter++
+    /** Aiptasia controllers (AiptasiaModel). */
+    val pests = PestState()
+    val aiptasiaCount: Int get() = corals.count { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
+
+    /** Copies pest controllers from another simulation (time-lapse fork). */
+    fun copyPestsFrom(src: Simulation) { pests.copyFrom(src.pests); fragCounter = max(fragCounter, src.fragCounter) }
 
     /** A parameter ramp/hold (06 §4.2): linear from [from] to [to] over [overSec], then held if [hold]. */
     class ParamRamp(val id: String, val from: Double, val to: Double, val startSec: Double, val overSec: Double, val hold: Boolean) {
@@ -405,6 +412,7 @@ class Simulation(
             if (o.alive) growth(o, dtMin)
         }
         coralGrowth(dtMin)
+        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             val tissueBefore = c.tissue
@@ -449,7 +457,7 @@ class Simulation(
         val born = ArrayList<Coral>()
         val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
         for (c in corals) {
-            CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${fragCounter++}" }?.let { born += it }
+            CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${nextFragId()}" }?.let { born += it }
         }
         for (f in born) {
             corals += f
@@ -667,7 +675,7 @@ class Simulation(
                 apply(Command.Schedule(c.atSimSec, Command.Powerheads(false)))
                 apply(Command.Schedule(c.atSimSec + c.durationSec, Command.Powerheads(true)))
             }
-            is Command.RearrangeRock -> rearrangeRock()
+            is Command.RearrangeRock -> { rearrangeRock(); AiptasiaModel.rockMoved(this) }
             is Command.SetAcclimation -> for (o in organisms) if (o.alive) {
                 StressModel.acclimate(o, water.s, lightIntensity, flowStrength, c.paramId)
                 if (c.paramId == null || c.paramId.equals("temp", true)) HeatModel.acclimate(o, water.s.tempC)
@@ -675,6 +683,12 @@ class Simulation(
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
             is Command.Maintain -> water.maintain(c.task)
+            is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
+            is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
+            is Command.AddPestControl -> when (c.controller) {
+                PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
+                PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
+            }
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -849,6 +863,8 @@ class Simulation(
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear()
+        pests.copyFrom(PestState())
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }

@@ -65,6 +65,14 @@ sealed class Command {
     //      "skimmer", "sock", "carbon", "refugium", "uv" (1 = on, 0 = off). ----
     /** One-off maintenance: change the filter sock, replace the carbon, harvest the macroalgae. */
     data class Maintain(val task: MaintenanceTask) : Command()
+
+    // ---- pests (coverage gap C-4) ----
+    /** Sandbox add-pest: [count] aiptasia on the aiptasia anchors (then as lacerates). */
+    data class AddAiptasia(val count: Int = 1) : Command()
+    /** Remove up to [count] aiptasia, biggest first: injected ([chemical]) or scraped; both can leave fragments. */
+    data class RemoveAiptasia(val count: Int = 1, val chemical: Boolean = true) : Command()
+    /** Add aiptasia controllers (peppermint shrimp, Berghia nudibranchs). */
+    data class AddPestControl(val controller: PestController, val count: Int = 1) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */

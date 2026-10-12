@@ -61,6 +61,7 @@ object TimelapseFork {
             c.acclSg = s.acclSg; c.acclAlk = s.acclAlk; c.acclLight = s.acclLight; c.algaeCover = s.algaeCover
             c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
+        dst.copyPestsFrom(src)
         return dst
     }
 }
