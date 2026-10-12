@@ -876,6 +876,7 @@ class Simulation(
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
+            dayPhase = lights.phaseLabel(simTimeSec),
             stats = statsAll(),
             tick = tickCount,
             abstractMode = abstractMode,

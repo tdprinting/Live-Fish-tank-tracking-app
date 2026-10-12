@@ -178,6 +178,8 @@ data class SimSnapshot(
     /** Track C additions for the HUD. */
     val speed: Double = 1.0,
     val lightIntensity: Float = 0f,
+    /** Light-schedule phase for the HUD clock: Night, Dawn, Day or Dusk. */
+    val dayPhase: String = "Day",
     val stats: List<OrganismStats> = emptyList(),
     val tick: Long = 0,
     val abstractMode: Boolean = false,
