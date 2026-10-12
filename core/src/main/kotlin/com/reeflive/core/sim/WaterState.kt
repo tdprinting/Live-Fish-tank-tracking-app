@@ -26,12 +26,23 @@ data class WaterState(
     var i: Double = 0.06,
     var copper: Double = 0.0,
     var volumeL: Double = 227.0,
+    /** Hair-algae cover on rock (0..0.9). Algae covers are headline values of [AlgaeModel] (research 09 A6). */
     var algaeHair: Double = 0.06,
     var macro: Double = 0.3,
+    /** Cyanobacteria (red slime) cover on sand and rock (0..1). */
     var cyano: Double = 0.0,
-    /** Brown diatom film on sand/glass (0..1), coralline coverage on rock (0..1) (research 05 §14). */
+    /** Brown diatom film on the sand (0..1), coralline coverage on rock (0..0.9) (research 05 §14, 09 A6). */
     var diatoms: Double = 0.0,
     var coralline: Double = 0.4,
+    /** Dinoflagellate film on sand and rock, green film (GSA) on the glass, bubble algae on rock (0..1; research 09 A1). */
+    var dinos: Double = 0.0,
+    var film: Double = 0.0,
+    var bubble: Double = 0.0,
+    /** Silicate, ppm SiO2 (RO water 0.05-0.1), and leaching from new sand/rock in ppm/day (half-life 14 d; 09 A2). */
+    var silicate: Double = 0.1,
+    var siLeach: Double = 0.0,
+    /** Microbial diversity 0..1: rises over the first ~6 months, knocked back by copper; gates dinos (09 A2). */
+    var microbes: Double = 1.0,
     var bacteriaAob: Double = 1.0,
     var bacteriaNob: Double = 1.0,
     var detritus: Double = 0.2,
@@ -66,6 +77,10 @@ data class WaterState(
         "cyano" -> cyano
         "diatoms" -> diatoms
         "coralline" -> coralline
+        "dinos" -> dinos
+        "film" -> film
+        "bubble" -> bubble
+        "silicate", "si" -> silicate
         "light" -> lightPar
         else -> null
     }

@@ -70,7 +70,9 @@ object Presets {
         "new_tank_cycle", "New tank cycle",
         // fishless cycle: ghost-feed 0.3 g of flake a day into a tank with 2 % of a mature bacterial bed
         config = TankConfig(autoFeed = listOf(FeedTime(9 * 60 + 30, FoodKind.FLAKE, 0.3))),
-        water = WaterState(bacteriaAob = 0.02, bacteriaNob = 0.02, no3 = 0.0, po4 = 0.0, detritus = 0.0, algaeHair = 0.01),
+        // dry rock and sand: silicate leaches out (research 09 A2) and drives the first diatom bloom; no coralline yet
+        water = WaterState(bacteriaAob = 0.02, bacteriaNob = 0.02, no3 = 0.0, po4 = 0.0, detritus = 0.0, algaeHair = 0.01,
+            coralline = 0.0, silicate = 2.0, siLeach = 0.1, microbes = 0.0),
         livestock = emptyList(),
     )
 
