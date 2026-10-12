@@ -42,6 +42,7 @@ import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
 import com.reeflive.app.ui.live.AddableSpecies
+import com.reeflive.app.ui.live.DayPhase
 import com.reeflive.app.ui.live.FishCard
 import com.reeflive.app.ui.live.FishSummary
 import com.reeflive.app.ui.live.FollowOverlay
@@ -153,6 +154,7 @@ fun LiveTankScreen(
         mode = if (sandbox) HudMode.SANDBOX else HudMode.WATCH,
         speed = speed,
         simTimeSec = hud.simTimeSec,
+        dayPhase = DayPhase.entries.firstOrNull { it.label == hud.dayPhase } ?: DayPhase.DAY,
         readouts = waterReadouts(hud.water, hud.lightIntensity * 100.0, hud.flowStrength.toDouble()),
     )
 

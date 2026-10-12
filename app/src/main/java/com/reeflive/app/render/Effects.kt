@@ -56,7 +56,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
             det[i * 3 + 2] += v[2] * strength * 0.3f * dt
             if (det[i * 3 + 1] < Camera.SAND_Y + 0.2f || !inWater(det, i)) { respawn(det, i); det[i * 3 + 1] = Camera.WATER_Y - 2f - rnd.nextFloat() * 30f }
         }
-        // HOB return (equipment.glb `outflow` (71, 55, 1)): bubbles plunge, slow down, then rise
+        // HOB return (equipment.glb `outflow` (72, 55, 2.3)): bubbles plunge, slow down, then rise
         bubbleAcc += dt * 8f
         while (bubbleAcc >= 1f && bubbles < MAX_BUBBLES) {
             bubbleAcc -= 1f
@@ -120,7 +120,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val DETRITUS = 40
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
-        val HOB = floatArrayOf(71f, 55f, 1.5f)
+        val HOB = floatArrayOf(72f, 55f, 2.3f)
         /** Linear colours by FoodKind ordinal: flake #C8A060, mysis #E8D8C0, pellet, nori #2E4A1A, pods. */
         val FOOD_COLORS = arrayOf(
             floatArrayOf(0.578f, 0.352f, 0.117f), floatArrayOf(0.807f, 0.687f, 0.527f), floatArrayOf(0.40f, 0.20f, 0.08f),
