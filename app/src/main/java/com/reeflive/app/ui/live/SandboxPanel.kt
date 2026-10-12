@@ -108,6 +108,8 @@ data class SandboxPanelState(
     val predation: Boolean = true,
     /** Time-lapse status line for the Events tab ("Running 42 %", "Results ready"); null when idle. */
     val timelapseStatus: String? = null,
+    /** "Add life" gallery: every species with a model, and how many of each are in the sandbox. */
+    val stock: StockUi = StockUi(),
 )
 
 /** Everything the dock can ask for. */
@@ -135,6 +137,8 @@ data class SandboxActions(
     val onPumpFailTonight: () -> Unit = {},
     /** Opens the time-lapse sheet (set up a run, or see the progress / report of the current one). */
     val onTimelapse: () -> Unit = {},
+    /** "Add life" gallery: add [count] of a species to the sandbox. */
+    val onAddMany: (speciesId: String, count: Int) -> Unit = { _, _ -> },
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */
@@ -207,8 +211,11 @@ fun SandboxDock(
                     .padding(top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                if (state.category == SandboxCategory.EVENTS) EventsContent(state, actions)
-                else ParamsContent(state, actions)
+                when (state.category) {
+                    SandboxCategory.EVENTS -> EventsContent(state, actions)
+                    SandboxCategory.STOCK -> StockGallery(state.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
+                    else -> ParamsContent(state, actions)
+                }
                 Spacer(Modifier.height(bottomClearance))
             }
         } else {
@@ -425,6 +432,7 @@ private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
         )
         ReefButton("Remove ${sel.name}", { actions.onRemove(sel.id) }, kind = ButtonKind.DESTRUCTIVE, icon = Icons.Rounded.DeleteOutline, compact = true)
     }
+    ReefButton("Add more life…", { actions.onCategory(SandboxCategory.STOCK) }, kind = ButtonKind.TONAL, compact = true)
     if (state.addable.isNotEmpty()) {
         Text("Add another", style = MaterialTheme.typography.labelMedium, color = ReefTheme.colors.textSecondary)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

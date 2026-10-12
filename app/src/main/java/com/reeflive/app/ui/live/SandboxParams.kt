@@ -177,7 +177,7 @@ object SandboxParams {
 
 /** Panel tabs. [EVENTS] holds the scenario presets and one-off actions instead of sliders. */
 enum class SandboxCategory(val label: String) {
-    WATER("Water"), CHEMISTRY("Chemistry"), NUTRIENTS("Nutrients"), LIGHT_FLOW("Light & Flow"), EVENTS("Events"),
+    WATER("Water"), CHEMISTRY("Chemistry"), NUTRIENTS("Nutrients"), LIGHT_FLOW("Light & Flow"), STOCK("Add life"), EVENTS("Events"),
 }
 
 /**

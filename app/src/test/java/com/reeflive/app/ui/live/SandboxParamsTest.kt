@@ -43,8 +43,8 @@ class SandboxParamsTest {
         assertEquals(Status.DANGER, z.status(33.5))
     }
 
-    @Test fun everyTabExceptEventsHasRows() {
-        SandboxCategory.values().filter { it != SandboxCategory.EVENTS }.forEach {
+    @Test fun everySliderTabHasRows() {
+        SandboxCategory.values().filter { it != SandboxCategory.EVENTS && it != SandboxCategory.STOCK }.forEach {
             assertTrue(it.name, SandboxParams.inCategory(it).any { d -> d.supported })
         }
     }
