@@ -47,6 +47,8 @@ class Organism(
     var condition = 1.0
     var alive = true
     var deadSince: Double? = null
+    /** g of TAN-equivalent this carcass has leached into the water so far (bounded by its N content; see Simulation.corpses). */
+    var carcassTanReleasedG = 0.0
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()

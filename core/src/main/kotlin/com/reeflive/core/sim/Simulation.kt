@@ -10,6 +10,7 @@ import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -621,10 +622,27 @@ class Simulation(
             val o = it.next()
             val since = o.deadSince ?: continue
             val age = simTimeSec - since
-            if (age < 24 * 3600) water.addDetritusTanGrams(o.massG * CORPSE_TAN_PER_G * dtMin / (24 * 60))
+            val dt = carcassRelease(o, age, dtMin)
+            if (dt > 0) { o.carcassTanReleasedG += dt; water.addDetritusTanGrams(dt) }
             if (age > 48 * 3600) { removed += o; it.remove() }
         }
         removed.forEach { agents.remove(it) }
+    }
+
+    /**
+     * g TAN-equivalent a carcass [age] s dead leaches in the next [dtMin]. The pool is the body's own nitrogen
+     * (wet mass × [CARCASS_N_FRACTION], as TAN), so a kill can never release more N than the fish held; after a
+     * [CARCASS_LAG_H] autolysis lag it leaches first-order at [CARCASS_LEACH_PER_H] (faster when warm) until the keeper
+     * or the clean-up crew removes the body at 48 h, taking the rest with it. The grams go in as detritus, spread over
+     * the whole system volume by [WaterSim.addDetritusTanGrams].
+     */
+    private fun carcassRelease(o: Organism, ageSec: Double, dtMin: Double): Double {
+        val hours = ageSec / 3600
+        if (hours < CARCASS_LAG_H) return 0.0
+        val pool = carcassTanPoolG(o) - o.carcassTanReleasedG
+        if (pool <= 0) return 0.0
+        val k = CARCASS_LEACH_PER_H * HealthModel.metabolicMult(water.s.tempC)
+        return pool * (1 - exp(-k * dtMin / 60))
     }
 
     private val lastAutoFeedDay = HashMap<Int, Int>()
@@ -1045,7 +1063,13 @@ class Simulation(
         const val ABSTRACT_SPEED = 240.0
         /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
         const val MAX_BEHAVIOR_DT = 0.5
-        const val CORPSE_TAN_PER_G = 0.02
+        /** Nitrogen as a fraction of fish wet mass (~18 % protein × 16 % N ≈ 2-3 %). */
+        const val CARCASS_N_FRACTION = 0.025
+        /** Hours before a carcass starts leaching (autolysis), and the leach rate of what N is left (est.). */
+        const val CARCASS_LAG_H = 4.0
+        const val CARCASS_LEACH_PER_H = 0.02
+        /** Total TAN-equivalent grams a carcass of [o] can ever release: its N content. */
+        fun carcassTanPoolG(o: Organism) = o.massG * CARCASS_N_FRACTION * 17.0 / 14.0
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
         const val CORAL_TAN_PER_COLONY = 2.0
         const val ASTERINA_CAP = 4
