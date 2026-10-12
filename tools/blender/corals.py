@@ -279,7 +279,7 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 # ----------------------------------------------------------------------------
 # Kenya tree (C1)
 # ----------------------------------------------------------------------------
-MAXD = 5
+MAXD = 5  # depth 5 = the short lobe beside each tip
 
 
 def kenya(rock, A):
@@ -288,52 +288,59 @@ def kenya(rock, A):
     branches = []  # (points, radii, depth, phase)
 
     def grow(p0, d, length, r0, depth, phase):
-        # gently drooping, curved branch
+        """Fleshy Capnella branching: short thick trunk, 5 primaries fanning out, lobed tips."""
         pts, rad = [], []
-        bend = unit(rs.normal(0, 1, 3)) * 0.25
-        k = 5 if depth <= 2 else 3
+        bend = unit(rs.normal(0, 1, 3)) * 0.3
+        k = 4 if depth <= 2 else (3 if depth < MAXD else 2)
         p = np.array(p0, float)
         dd = unit(d)
         for i in range(k + 1):
             t = i / k
             pts.append(p.copy())
-            rad.append(r0 * (1 - 0.35 * t))
-            dd = unit(dd + bend / k + UP * 0.06 / k)
+            # fleshy: little taper, tips end in a swollen polyp-covered club
+            club = 1.0 + (0.25 * math.sin(math.pi * t) if depth >= MAXD - 1 else 0.0)
+            rad.append(r0 * (1 - 0.22 * t) * club)
+            dd = unit(dd + bend / k + UP * 0.08 / k)
             p = p + dd * length / k
         branches.append((np.array(pts), np.array(rad), depth, phase))
         if depth >= MAXD:
             return
-        nchild = 3 if depth <= 1 else (rs.integers(2, 4) if depth == 2 else 2)
+        nchild = {0: 5, 1: 3, 2: 3, 3: 2}.get(depth, 1)
+        if depth == MAXD - 1:
+            nchild = 1  # one short lobe beside each tip
         for c in range(nchild):
-            ang = (2 * math.pi * c / nchild) + rs.uniform(-0.4, 0.4)
-            spread = math.radians(58 if depth == 0 else rs.uniform(30, 50))
+            ang = (2 * math.pi * c / nchild) + rs.uniform(-0.35, 0.35)
+            if depth == 0:
+                spread = math.radians(rs.uniform(38, 62))
+            else:
+                spread = math.radians(rs.uniform(25, 45))
             t1 = unit(np.cross(dd, UP if abs(dd[1]) < 0.95 else np.array([1.0, 0, 0])))
             t2 = np.cross(dd, t1)
-            cd = unit(dd * math.cos(spread) + (t1 * math.cos(ang) + t2 * math.sin(ang)) * math.sin(spread) + UP * 0.35)
-            # children sprout along the outer half of the parent too (antler-like Capnella branching)
-            j = len(pts) - 1 if c == 0 or depth < 2 else rs.integers(len(pts) // 2, len(pts))
-            grow(pts[j], cd, length * rs.uniform(0.62, 0.75) * (1.85 if depth == 0 else 1.0), rad[j] * 0.78, depth + 1,
-                 phase if depth > 0 else c / 3.0)
+            cd = unit(dd * math.cos(spread) + (t1 * math.cos(ang) + t2 * math.sin(ang)) * math.sin(spread) + UP * 0.25)
+            j = len(pts) - 1 if c == 0 or depth < 1 else rs.integers(len(pts) // 2, len(pts))
+            lf = {0: 1.5, MAXD - 1: 0.35}.get(depth, rs.uniform(0.62, 0.78))
+            grow(pts[j], cd, length * lf, rad[j] * (0.62 if depth == 0 else 0.82), depth + 1,
+                 phase if depth > 0 else c / 5.0)
 
-    trunk_dir = unit(0.8 * UP + 0.2 * n)
-    grow(pos - n * 0.8, trunk_dir, 4.5, 1.6, 0, 0.0)
+    trunk_dir = unit(0.85 * UP + 0.15 * n)
+    grow(pos - n * 0.8, trunk_dir, 3.5, 2.0, 0, 0.0)
     g = T.WGeo()
     inst = Instances(12)
     import geomlib as G
-    sides = {0: 9, 1: 8, 2: 7, 3: 5, 4: 4, 5: 4}
+    sides = {0: 10, 1: 8, 2: 7, 3: 6, 4: 5, 5: 4}
     ymin = pos[1]
     ymax = max(b[0][:, 1].max() for b in branches)
     for pts, rad, depth, phase in branches:
-        V, F, tv, av = G.tube(pts, rad, sides[depth], cap_start=depth == 0, cap_end=depth >= 4, up=(0, 0, 1))
+        V, F, tv, av = G.tube(pts, rad, sides[depth], cap_start=depth == 0, cap_end=depth >= MAXD - 1, up=(0, 0, 1))
         hgt = np.clip((V[:, 1] - ymin) / (ymax - ymin), 0, 1)
-        thin = np.full(len(V), 1 - np.interp(rad.mean(), [0.15, 1.6], [0.1, 0.9]))  # thin branches: translucent
+        thin = np.full(len(V), 1 - np.interp(rad.mean(), [0.2, 2.0], [0.1, 0.9]))  # thin branches: translucent
         col = np.c_[thin, np.full(len(V), phase), np.clip((depth + tv) / (MAXD + 1.0), 0, 1) ** 1.3, np.ones(len(V))]
         g.add(V, F, np.c_[av, hgt], col)
         # polyp tufts, denser toward the outer branches
         if depth >= 1:
-            m = {1: 4, 2: 8, 3: 9, 4: 8, 5: 7}[depth]
+            m = {1: 1, 2: 3, 3: 6, 4: 9, 5: 4}[depth]
             for _ in range(m):
-                t = rs.uniform(0.35, 1.0) ** 0.6
+                t = rs.uniform(0.3, 1.0) ** 0.5
                 i = min(int(t * (len(pts) - 1)), len(pts) - 2)
                 f = t * (len(pts) - 1) - i
                 c = pts[i] * (1 - f) + pts[i + 1] * f
