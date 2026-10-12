@@ -30,13 +30,15 @@ data class AppSettings(
     val tileOrder: List<String> = emptyList(),
     val glassBlur: Boolean = true,
     val notifications: Boolean = true,
+    /** Display units chosen for other parameters (e.g. no3 → ppm NO3-N, po4 → ppb). */
+    val paramUnits: Map<String, ParamUnit> = emptyMap(),
 ) {
     /** Preferred display unit for a parameter whose base unit is [base]. */
     fun displayUnitFor(paramId: String, base: ParamUnit): ParamUnit = when (paramId) {
         "temp" -> tempUnit
         "sal" -> salUnit
         "alk" -> alkUnit
-        else -> base
+        else -> paramUnits[paramId] ?: base
     }
 }
 
@@ -55,6 +57,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val tileOrder = stringPreferencesKey("tileOrderJson")
         val glassBlur = booleanPreferencesKey("glassBlur")
         val notifications = booleanPreferencesKey("notifications")
+        val paramUnits = stringPreferencesKey("paramUnits")
     }
 
     private fun unit(name: String?, default: ParamUnit) = ParamUnit.entries.firstOrNull { it.name == name } ?: default
@@ -75,10 +78,31 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             tileOrder = p[K.tileOrder]?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
             glassBlur = p[K.glassBlur] ?: true,
             notifications = p[K.notifications] ?: true,
+            paramUnits = parseUnits(p[K.paramUnits]),
         )
     }
 
+    private fun parseUnits(s: String?): Map<String, ParamUnit> = s.orEmpty().split(',').mapNotNull { pair ->
+        val id = pair.substringBefore('=', "").trim()
+        val u = ParamUnit.entries.firstOrNull { it.name == pair.substringAfter('=', "").trim() }
+        if (id.isEmpty() || u == null) null else id to u
+    }.toMap()
+
     suspend fun current(): AppSettings = settings.first()
+
+    /** Sets the display unit for any parameter (temp/sal/alk use their dedicated keys). */
+    suspend fun setParamUnit(paramId: String, unit: ParamUnit) {
+        when (paramId) {
+            "temp" -> setTempUnit(unit)
+            "sal" -> setSalUnit(unit)
+            "alk" -> setAlkUnit(unit)
+            else -> store.edit { p ->
+                val m = parseUnits(p[K.paramUnits]).toMutableMap()
+                m[paramId] = unit
+                p[K.paramUnits] = m.entries.joinToString(",") { "${it.key}=${it.value.name}" }
+            }
+        }
+    }
 
     suspend fun setOnboarded(v: Boolean) = store.edit { it[K.onboarded] = v }
     suspend fun setTheme(v: ThemeMode) = store.edit { it[K.theme] = v.name }

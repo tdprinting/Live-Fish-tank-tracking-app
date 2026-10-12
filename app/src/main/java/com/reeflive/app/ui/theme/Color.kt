@@ -189,6 +189,14 @@ val LocalReefColors = staticCompositionLocalOf { AbyssColors }
 /** Channel swatch colors for the light-schedule chart (UI_STYLE §9.3), in LightChannel order. */
 fun channelColor(argb: Long): Color = Color(argb.toInt())
 
+/** Illustration colors for the painted Live Tank peek card. */
+object PeekPalette {
+    val rock = Color(0xFF3A3F4A)
+    val clown = Color(0xFFFF7A1A)
+    val tang = Color(0xFF2B5FD9)
+    val pale = Color(0xFFF4F0E8)
+}
+
 /** Parses "#RRGGBB" / "#AARRGGBB" from species data (not for UI tokens). */
 fun parseHexColor(hex: String?): Color? {
     val h = hex?.trim()?.removePrefix("#") ?: return null
