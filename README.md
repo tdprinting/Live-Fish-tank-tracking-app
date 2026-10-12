@@ -39,6 +39,15 @@ The releases are public, so no account or token is needed. *Settings > Updates >
 optional GitHub access token field, only for a private fork: create a fine-grained token limited to
 the repository with **Contents: Read-only**.
 
+## Live Tank (coming in the next release)
+
+A 3D recreation of your own tank, planned for the next release:
+
+- **Watch mode**: follow the tank as it runs.
+- **Sandbox**: adjust water-parameter controls and try scenarios.
+- **Close-up follow mode**: track a single fish or coral up close.
+- **Time-lapse test**: fast-forward the tank to see how it changes over time.
+
 ## Reef-keeping extras (More tab)
 
 - **Insights**: tank health score (parameters in range, 30-day stability, testing recency, tasks on time),
