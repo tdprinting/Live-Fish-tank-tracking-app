@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""ReefLive GLB validator (stdlib only: json + struct).
+
+Checks every app/src/main/assets/models/*.glb against the asset contract (docs/ASSETS.md §0):
+  * GLB magic/version/chunks, JSON parses, only supported features (no skins/animations/
+    required extensions, no Draco), triangle-list primitives
+  * every mesh primitive has POSITION, NORMAL, TEXCOORD_0, COLOR_0 (VEC4)
+  * every mesh node has extras.part from the allowed set
+  * per-asset triangle budgets (+15% tolerance like build_all)
+  * fish: COLOR_0.a runs 0 at the snout (max x) -> 1 at the tail (min x), COLOR_0.b in [0,1] on fins,
+    unit length (x extent ~1.0)
+  * instance tables (extras.instances) are multiples of 10 floats
+Also checks assets/sim/anchors.json names and rock_sdf.bin header/size.
+Usage: python3 tools/validate_glb.py [files...]   (exit code 1 on failure)
+"""
+import glob
+import json
+import math
+import os
+import struct
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+MODELS = os.path.join(ROOT, "app", "src", "main", "assets", "models")
+SIM = os.path.join(ROOT, "app", "src", "main", "assets", "sim")
+ASSETS = os.path.join(ROOT, "app", "src", "main", "assets")
+
+PARTS = {"body", "fin", "eye", "jaw", "polyp", "antenna", "shell", "leg", "glass", "backglass", "water",
+         "sand", "rim", "rock", "equipment", "light", "emitter", "stand", "tube", "card"}
+
+COMP = {5120: ("b", 1), 5121: ("B", 1), 5122: ("h", 2), 5123: ("H", 2), 5125: ("I", 4), 5126: ("f", 4)}
+NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
+
+# triangle budgets for LOD0 files: (total max, body max) ; None = not checked
+FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish",
+        "lawnmower_blenny", "tailspot_blenny", "dottyback"]
+BUDGET = {
+    "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
+    "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
+    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "brittle_star": 1800,
+    "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
+    "tank": 3500, "rockscape": 40000, "equipment": 6000,
+    "kenya": 9000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
+    "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 400,
+}
+LOD1_BUDGET = {"engineer_goby": 2100}  # anguilliform: 96 stations need more rings than the 1.7k LOD1 cap
+# how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
+SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
+BODY_BUDGET = {"engineer_goby": 5600}
+
+
+class Glb:
+    def __init__(self, path):
+        self.path = path
+        with open(path, "rb") as f:
+            data = f.read()
+        magic, ver, length = struct.unpack("<III", data[:12])
+        if magic != 0x46546C67:
+            raise ValueError("bad GLB magic")
+        if ver != 2:
+            raise ValueError("GLB version %d" % ver)
+        if length != len(data):
+            raise ValueError("length mismatch")
+        clen, ctype = struct.unpack("<II", data[12:20])
+        if ctype != 0x4E4F534A:
+            raise ValueError("first chunk not JSON")
+        self.json = json.loads(data[20:20 + clen].decode("utf-8"))
+        off = 20 + clen
+        self.bin = b""
+        if off < len(data):
+            blen, btype = struct.unpack("<II", data[off:off + 8])
+            if btype != 0x004E4942:
+                raise ValueError("second chunk not BIN")
+            self.bin = data[off + 8:off + 8 + blen]
+
+    def accessor(self, idx):
+        a = self.json["accessors"][idx]
+        bv = self.json["bufferViews"][a["bufferView"]]
+        fmt, size = COMP[a["componentType"]]
+        n = NCOMP[a["type"]]
+        stride = bv.get("byteStride", size * n)
+        base = bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+        out = []
+        for i in range(a["count"]):
+            vals = struct.unpack_from("<" + fmt * n, self.bin, base + i * stride)
+            if a.get("normalized"):
+                mx = {"B": 255.0, "H": 65535.0, "b": 127.0, "h": 32767.0}[fmt]
+                vals = tuple(v / mx for v in vals)
+            out.append(vals)
+        return out
+
+    def mesh_nodes(self):
+        for i, n in enumerate(self.json.get("nodes", [])):
+            if "mesh" in n:
+                yield i, n
+
+    def tri_count(self, mesh_idx):
+        t = 0
+        for p in self.json["meshes"][mesh_idx]["primitives"]:
+            if "indices" in p:
+                t += self.json["accessors"][p["indices"]]["count"] // 3
+            else:
+                t += self.json["accessors"][p["attributes"]["POSITION"]]["count"] // 3
+        return t
+
+
+def world_matrices(g):
+    """node index -> 4x4 world matrix (row-major lists); handles TRS only."""
+    nodes = g.json.get("nodes", [])
+    parent = {}
+    for i, n in enumerate(nodes):
+        for c in n.get("children", []):
+            parent[c] = i
+
+    def local(n):
+        if "matrix" in n:
+            m = n["matrix"]
+            return [[m[c * 4 + r] for c in range(4)] for r in range(4)]
+        t = n.get("translation", [0, 0, 0])
+        q = n.get("rotation", [0, 0, 0, 1])
+        s = n.get("scale", [1, 1, 1])
+        x, y, z, w = q
+        R = [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+             [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+             [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]]
+        return [[R[r][0] * s[0], R[r][1] * s[1], R[r][2] * s[2], t[r]] for r in range(3)] + [[0, 0, 0, 1]]
+
+    def mul(a, b):
+        return [[sum(a[r][k] * b[k][c] for k in range(4)) for c in range(4)] for r in range(4)]
+
+    cache = {}
+
+    def wm(i):
+        if i in cache:
+            return cache[i]
+        m = local(nodes[i])
+        if i in parent:
+            m = mul(wm(parent[i]), m)
+        cache[i] = m
+        return m
+    return {i: wm(i) for i in range(len(nodes))}
+
+
+def xf(m, p):
+    return tuple(m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3] for r in range(3))
+
+
+def check_glb(path, errors, warnings, report):
+    name = os.path.splitext(os.path.basename(path))[0]
+    base = name[:-5] if name.endswith("_lod1") else name
+    try:
+        g = Glb(path)
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"{name}: {e}")
+        return
+    j = g.json
+    for k in ("skins", "animations"):
+        if j.get(k):
+            errors.append(f"{name}: contains {k}")
+    if j.get("extensionsRequired"):
+        errors.append(f"{name}: extensionsRequired {j['extensionsRequired']}")
+    total = 0
+    body_tris = 0
+    wms = world_matrices(g)
+    xs_a = []
+    fin_b_bad = 0
+    for ni, n in g.mesh_nodes():
+        ex = n.get("extras", {})
+        part = ex.get("part")
+        if part not in PARTS:
+            errors.append(f"{name}: node '{n.get('name')}' has extras.part={part!r}")
+        mi = n["mesh"]
+        tris = g.tri_count(mi)
+        total += tris
+        if part == "body":
+            body_tris += tris
+        for p in j["meshes"][mi]["primitives"]:
+            if p.get("mode", 4) != 4:
+                errors.append(f"{name}: primitive mode {p.get('mode')} (triangles only)")
+            at = p["attributes"]
+            for req in ("POSITION", "NORMAL", "TEXCOORD_0", "COLOR_0"):
+                if req not in at:
+                    errors.append(f"{name}: node '{n.get('name')}' missing {req}")
+            if "COLOR_0" in at and j["accessors"][at["COLOR_0"]]["type"] != "VEC4":
+                errors.append(f"{name}: COLOR_0 is not VEC4")
+            if base in FISH and "COLOR_0" in at and part in ("body", "fin"):
+                pos = g.accessor(at["POSITION"])
+                col = g.accessor(at["COLOR_0"])
+                m = wms[ni]
+                if part == "body":
+                    for P_, c in zip(pos, col):
+                        xs_a.append((xf(m, P_)[0], c[3]))
+                else:
+                    fin_b_bad += sum(1 for c in col if not (-1e-3 <= c[2] <= 1.001))
+        inst = ex.get("instances")
+        if inst is not None:
+            stride = ex.get("instanceStride", 10)
+            if len(inst) % stride:
+                errors.append(f"{name}: instances length {len(inst)} not a multiple of {stride}")
+            else:
+                cnt = len(inst) // stride
+                report.setdefault("instances", {})[f"{name}/{n.get('name')}"] = (cnt, tris, cnt * tris)
+    if base in FISH and xs_a:
+        xs_a.sort()
+        xmin, a_tail = xs_a[0]
+        xmax, a_snout = xs_a[-1]
+        if not (a_snout < 0.08 and a_tail > 0.75):
+            errors.append(f"{name}: COLOR_0.a not 0 (snout,+x) -> 1 (tail,-x): snout {a_snout:.3f} tail {a_tail:.3f}")
+        # monotonic in bins
+        bins = {}
+        for x, a in xs_a:
+            bins.setdefault(round(x * 10), []).append(a)
+        means = [sum(v) / len(v) for k, v in sorted(bins.items())]
+        if any(means[i] < means[i + 1] - 0.02 for i in range(len(means) - 1)):
+            errors.append(f"{name}: COLOR_0.a is not monotonic along -X")
+        if fin_b_bad:
+            errors.append(f"{name}: {fin_b_bad} fin vertices with COLOR_0.b outside [0,1]")
+        # whole fish extent (all mesh nodes)
+    if base in FISH:
+        lo, hi = 1e9, -1e9
+        for ni, n in g.mesh_nodes():
+            for p in j["meshes"][n["mesh"]]["primitives"]:
+                a = j["accessors"][p["attributes"]["POSITION"]]
+                # bounds via accessor min/max (nodes are untransformed children of Root)
+                lo = min(lo, a["min"][0] + wms[ni][0][3])
+                hi = max(hi, a["max"][0] + wms[ni][0][3])
+        if abs((hi - lo) - 1.0) > 0.03 or hi < 0.45:
+            errors.append(f"{name}: fish x extent {lo:.3f}..{hi:.3f} (expected unit length facing +X)")
+    budget = BUDGET.get(base)
+    if name.endswith("_lod1"):
+        cap = LOD1_BUDGET.get(base, 1700)
+        if base in FISH and total > cap:
+            errors.append(f"{name}: LOD1 {total} tris > {cap}")
+    elif budget is not None and total > budget * 1.15:
+        errors.append(f"{name}: {total} tris > budget {budget} (+15%)")
+    if base in FISH and not name.endswith("_lod1"):
+        bb = BODY_BUDGET.get(base, 4500)
+        if body_tris > bb:
+            errors.append(f"{name}: body {body_tris} tris > {bb}")
+    report.setdefault("files", []).append((name, os.path.getsize(path), total, body_tris))
+
+
+ANCHOR_NAMES = [
+    "HOST_KENYA", "HOST_GSP_RIGHT", "CAVE_EEL", "den_path", "CAVE_SMALL", "CAVE_BIG", "HOLE_BLENNY",
+    "PERCH_1", "PERCH_2", "PERCH_3", "PERCH_4", "PERCH_5", "STATION_CLEANER", "SHRIMP_LEDGE", "SLEEP_TANG",
+    "SURFACE_FEED", "NORI_CLIP", "HOB_OUTFLOW"] + [f"GRAZE_{i}" for i in range(1, 9)] + [
+    "coral_kenya_main", "coral_gsp_upper_left", "coral_gsp_lower_right", "coral_zoa_front_center",
+    "coral_clove_kenya_base", "coral_shroom_front_left", "coral_macro_back_left", "coral_organpipe_kenya_base",
+    "HOLE_TAILSPOT", "HOLE_LAWNMOWER", "STATION_SKUNK", "STATION_SHRIMP", "CAVE_DOTTYBACK", "BRITTLE_HIDE",
+    "BRITTLE_HOME", "DUSTER_BASE", "DUSTER_TUBE", "SAND_FRONT", "BURROW_GOBY", "SAND_GOBY_DIG"]
+
+
+def check_sim(errors, report):
+    ap = os.path.join(SIM, "anchors.json")
+    if not os.path.exists(ap):
+        errors.append("anchors.json missing")
+    else:
+        a = json.load(open(ap))
+        names = {x["name"] for x in a["anchors"]}
+        for n in ANCHOR_NAMES:
+            if n not in names:
+                errors.append(f"anchors.json: missing {n}")
+        report["anchors"] = len(names)
+    sp = os.path.join(SIM, "rock_sdf.bin")
+    if not os.path.exists(sp):
+        errors.append("rock_sdf.bin missing")
+    else:
+        with open(sp, "rb") as f:
+            d = f.read()
+        if d[:4] != b"RSDF":
+            errors.append("rock_sdf.bin: bad magic")
+        else:
+            nx, ny, nz = struct.unpack("<III", d[4:16])
+            ox, oy, oz, cell = struct.unpack("<ffff", d[16:32])
+            n = nx * ny * nz
+            exp = 32 + n * 2 + n
+            if len(d) != exp:
+                errors.append(f"rock_sdf.bin: size {len(d)} != {exp}")
+            report["sdf"] = (nx, ny, nz, cell, len(d))
+
+
+def high_estimate(report):
+    """Triangles on screen in the default full-tank view at High quality: every scene GLB once, mobile inverts
+    times SCENE_COUNTS, every polyp instance table, and fish at LOD1 (the default camera is > 60 cm from every
+    fish, ARCHITECTURE §LOD). `fish_lod0` is the all-LOD0 worst case for reference."""
+    meshes = fish0 = fish1 = 0
+    for name, size, tris, body in report.get("files", []):
+        if name.endswith("_lod1"):
+            if name[:-5] in FISH:
+                fish1 += tris
+            continue
+        if name in FISH:
+            fish0 += tris
+        else:
+            meshes += tris * SCENE_COUNTS.get(name, 1)
+    inst = sum(v[2] for v in report.get("instances", {}).values())
+    # instance prototypes are already counted once in `meshes`; the table draws them `cnt` times
+    inst -= sum(v[1] for v in report.get("instances", {}).values())
+    return {"meshes": meshes, "instances": inst, "fish": fish1, "fish_lod0": fish0,
+            "total": meshes + inst + fish1, "worst": meshes + inst + fish0}
+
+
+def main(argv):
+    files = argv or sorted(glob.glob(os.path.join(MODELS, "*.glb")))
+    errors, warnings, report = [], [], {}
+    for f in files:
+        check_glb(f, errors, warnings, report)
+    if not argv:
+        check_sim(errors, report)
+    tot_bytes = 0
+    print(f"{'asset':28s} {'bytes':>10s} {'tris':>7s} {'body':>6s}")
+    for name, size, tris, body in report.get("files", []):
+        tot_bytes += size
+        print(f"{name:28s} {size:10d} {tris:7d} {body:6d}")
+    for k, (cnt, tris, tot) in sorted(report.get("instances", {}).items()):
+        print(f"  instances {k}: {cnt} x {tris} tris = {tot}")
+    if "anchors" in report:
+        print(f"anchors: {report['anchors']}")
+    if "sdf" in report:
+        print("rock_sdf.bin: %dx%dx%d cell %.2f cm, %d bytes" % report["sdf"])
+    print(f"GLB total: {tot_bytes / 1e6:.2f} MB in {len(report.get('files', []))} files")
+    if not argv:
+        est = high_estimate(report)
+        print(f"rendered-triangle estimate at High, default view: {est['total']} "
+              f"(meshes {est['meshes']}, polyp instances {est['instances']}, fish LOD1 {est['fish']}); "
+              f"all fish at LOD0: {est['worst']}")
+        if est["total"] > 140000:
+            errors.append(f"High triangle estimate {est['total']} > 140000")
+        size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ASSETS) for f in fs)
+        print(f"app/src/main/assets total: {size / 1e6:.2f} MB")
+        if size > 35e6:
+            errors.append(f"assets {size / 1e6:.1f} MB > 35 MB")
+    for w in warnings:
+        print("WARN", w)
+    for e in errors:
+        print("FAIL", e)
+    print("OK" if not errors else f"{len(errors)} error(s)")
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
