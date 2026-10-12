@@ -393,6 +393,7 @@ class Simulation(
             }
             val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
+            if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
         for (c in corals) {
@@ -657,7 +658,7 @@ class Simulation(
             is Command.Lights -> { lights.forcedOn = c.on; c.overrideIntensity?.let { lights.intensityOverride = it } }
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
             is Command.Powerheads -> setFlow(c.on)
-            is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role)).let { o ->
+            is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role, ageYears = c.ageYears)).let { o ->
                 // a newcomer: nobody knows it yet (06 §3.3 priority effects)
                 o.arrivalTime = simTimeSec; o.clock = simTimeSec
                 // new arrivals enter at the surface like a release from the acclimation cup
@@ -824,6 +825,7 @@ class Simulation(
         val size = if (seed.sizeCm > 0) seed.sizeCm else sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm)
         val o = Organism(id, sp, size, seed.nickname, seed.role, rng.fork(id.hashCode().toLong()), seed.placement, seed.variant)
         o.hunger = 0.25 + rng.nextDouble() * 0.2
+        o.ageSec = LifeCycle.initialAgeSec(o, seed.ageYears)
         if (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.LAWNMOWER_BLENNY) o.acceptsPrepared = rng.chance(0.7)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }

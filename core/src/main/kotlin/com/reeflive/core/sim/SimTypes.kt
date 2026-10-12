@@ -11,7 +11,7 @@ sealed class Command {
     data class Lights(val on: Boolean?, val overrideIntensity: Double? = null) : Command()
     data class Heater(val working: Boolean, val setC: Double? = null, val stuckOn: Boolean = false) : Command()
     data class Powerheads(val on: Boolean) : Command()
-    data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null) : Command()
+    data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
     data class SetSpeed(val speed: Double) : Command()
@@ -53,6 +53,8 @@ data class LivestockSeed(
     val placement: String? = null,      // anchor name (corals, clown host, etc.)
     val id: String = "",
     val variant: String? = null,
+    /** Starting age in years; null = derived from size (LifeCycle.initialAgeSec). */
+    val ageYears: Double? = null,
 )
 
 enum class Disease { ICH, VELVET, HLLE, BACTERIAL }
@@ -246,6 +248,8 @@ data class OrganismStats(
     val sex: String = "",
     /** Carrying eggs in the mouth (cardinal male; he does not eat meanwhile, coverage B-2). */
     val mouthbrooding: Boolean = false,
+    /** Chronological age in years (LifeCycle). */
+    val ageYears: Float = 0f,
 )
 
 /**
