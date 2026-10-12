@@ -194,6 +194,8 @@ data class SimSnapshot(
     val surfaceDims: IntArray = IntArray(2),
     /** Flow solver velocities (cell centres) when the Navier–Stokes flow is on; refreshed ~4×/s. */
     val flowGrid: com.reeflive.core.geom.FlowGrid? = null,
+    /** Per-surface cover of every algae group for the A6 visual cues (research 09); headline covers are on [water]. */
+    val algae: AlgaeCover = AlgaeCover.EMPTY,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

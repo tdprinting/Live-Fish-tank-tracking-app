@@ -23,7 +23,7 @@ object SandboxParams {
         // ---------------------------------------------------------------- Water
         SandboxParamDef(
             "temp", "Temperature", "Temp", "°C", SandboxCategory.WATER,
-            min = 15.0, max = 40.0, step = 0.1, decimals = 1,
+            min = 10.0, max = 40.0, step = 0.1, decimals = 1,
             zones = SliderZones(dangerBelow = 18.0, safeFrom = 23.0, safeTo = 30.0, dangerAbove = 33.0),
             read = { it.water.tempC },
         ),
@@ -100,9 +100,11 @@ object SandboxParams {
             zones = SliderZones(dangerBelow = null, safeFrom = 0.02, safeTo = 0.15, dangerAbove = 0.6),
             read = { it.water.po4 },
         ),
+        // Hair-algae cover on the rock; the sim's AlgaeModel re-seeds its hair biomass from this and grows it from there.
+        // Rock cover tops out at 90 % (research 09 A6 cover limit), so the slider does too.
         SandboxParamDef(
             "algae", "Hair algae cover", "Algae", "%", SandboxCategory.NUTRIENTS,
-            min = 0.0, max = 100.0, step = 1.0, decimals = 0, scale = 100.0,
+            min = 0.0, max = 90.0, step = 1.0, decimals = 0, scale = 100.0,
             zones = SliderZones(dangerBelow = null, safeFrom = 0.0, safeTo = 20.0, dangerAbove = 60.0),
             read = { it.water.algaeHair * 100.0 },
         ),

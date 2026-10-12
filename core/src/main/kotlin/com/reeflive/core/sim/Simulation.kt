@@ -373,6 +373,7 @@ class Simulation(
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
         w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
+        w.algae.grazers = algaeGrazers()
         w.step(CHEM_DT)
         applyRamps()
         // health
@@ -400,6 +401,7 @@ class Simulation(
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
         }
         crustaceanMolts(dtMin)
+        dinoToxin(dtMin)
         nightRolls()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
         if (!behaviorEnabled || abstractMode) {
@@ -496,6 +498,36 @@ class Simulation(
 
     fun addGrazing(amount: Double) { grazeAccum += amount }
 
+    /** Grazers present for the algae model (research 09 A4); size scales intake with body area. Dying animals stop grazing. */
+    private fun algaeGrazers(): List<AlgaeGrazer> {
+        val out = ArrayList<AlgaeGrazer>()
+        for (o in organisms) {
+            if (!o.alive) continue
+            val t = GrazerType.of(o) ?: continue
+            val size = (o.lengthCm / t.refCm).let { it * it }.coerceIn(0.3, 2.5)
+            out += AlgaeGrazer(t, size * o.health.coerceIn(0.0, 1.0))
+        }
+        return out
+    }
+
+    /**
+     * Dinoflagellate toxins (research 09 A3): while dino cover on rock exceeds 30 %, snails and hermits take a
+     * 2 %/day mortality hazard.
+     */
+    private fun dinoToxin(dtMin: Double) {
+        val a = water.algae
+        val rock = (a.cover(AlgaeGroup.DINOS, AlgaeSurface.ROCK_TOP) * a.area[AlgaeSurface.ROCK_TOP.ordinal] +
+            a.cover(AlgaeGroup.DINOS, AlgaeSurface.ROCK_SHADE) * a.area[AlgaeSurface.ROCK_SHADE.ordinal]) /
+            (a.area[AlgaeSurface.ROCK_TOP.ordinal] + a.area[AlgaeSurface.ROCK_SHADE.ordinal])
+        if (rock <= 0.3) return
+        for (o in organisms.toList()) {
+            if (!o.alive) continue
+            if (o.brainKind != BrainKind.ASTREA && o.brainKind != BrainKind.HERMIT && o.brainKind != BrainKind.NASSARIUS &&
+                GrazerType.of(o) != GrazerType.TROCHUS) continue
+            if (rng.chance(0.02 * dtMin / 1440.0)) HealthModel.kill(o, "dinoflagellate toxin", simTimeSec, pendingEventsSink)
+        }
+    }
+
     private fun crustaceanMolts(dtMin: Double) {
         for (o in organisms) {
             if (!o.alive) continue
@@ -571,6 +603,7 @@ class Simulation(
         if (minuteOfDay < 600 || minuteOfDay >= 602) return
         lastWaterChangeDay = dayIndex
         water.waterChange(config.waterChangeFraction)
+        water.algae.wipeGlass()   // the glass gets wiped on water-change day (research 09 A2: GSA wiped every 3-7 d)
     }
 
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
@@ -691,6 +724,7 @@ class Simulation(
     private fun rebuildWater(): WaterSim {
         val old = water
         return WaterSim(config, old.s.copy()).also { nw ->
+            nw.algae.copyFrom(old.algae)
             nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
@@ -838,6 +872,7 @@ class Simulation(
             corals = corals.map { it.toPose() },
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
+            algae = water.algae.snapshot(),
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
