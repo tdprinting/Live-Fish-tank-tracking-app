@@ -27,12 +27,21 @@ object AlgaeVisuals {
         AlgaeGroup.DINOS to AlgaeSurface.ROCK_SHADE, AlgaeGroup.BUBBLE to AlgaeSurface.ROCK_SHADE,
     )
 
-    /** Writes [FLOATS] covers (each clamped to 0..1, NaN → 0) into [out] at [offset]. */
+    /**
+     * Writes [FLOATS] covers (each clamped to 0..1, NaN → 0) into [out] at [offset]. Once the Flipper has scraped the
+     * front glass the glass slots carry the cover of untouched glass ([AlgaeCover.glassBase]); glass.frag thins it
+     * with the scrape mask texture, so the stripes look clean and the rest of the film looks as it did.
+     */
     fun pack(cover: AlgaeCover, out: FloatArray, offset: Int) {
+        val base = cover.glassBase
         for (i in 0 until FLOATS) {
             val (g, s) = LAYOUT[i]
             val idx = g.ordinal * AlgaeCover.SURFACES + s.ordinal
-            val v = if (idx < cover.cover.size) cover.cover[idx] else 0f
+            val v = when {
+                s == AlgaeSurface.GLASS && base != null && g.ordinal < base.size -> base[g.ordinal]
+                idx < cover.cover.size -> cover.cover[idx]
+                else -> 0f
+            }
             out[offset + i] = if (v.isNaN()) 0f else v.coerceIn(0f, 1f)
         }
     }

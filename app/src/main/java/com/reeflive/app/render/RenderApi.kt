@@ -26,7 +26,10 @@
  *   `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
  * - `setQuality(RenderQuality)`: HIGH (4x MSAA FBO + bloom + light shafts), MEDIUM (2x MSAA, shafts),
  *   LOW (no MSAA, no shafts, no normal maps, half particles, textures ≤ 512²). Fish beyond 60 cm use LOD1.
- * - `resetCamera()`, `listener = TankViewListener` (pick / tap glass / long press / follow lost; main thread).
+ * - `resetCamera()`, `listener = TankViewListener` (pick / tap glass / long press / follow lost / scrape; main thread).
+ * - `setCleaning(Boolean)`: clean-glass mode. The camera squares up to the front glass, one-finger drags slide the
+ *   Flipper (equipment.glb node `Flipper`) over the pane instead of orbiting, and every slide is reported as a
+ *   [GlassStroke]. Scraped stripes show through the `GlassMask` texture from the snapshot ([AlgaeVisuals]).
  * - `stats: StateFlow<RenderStats>`: fps, draw calls, triangles, GL errors, load progress (drives [DebugHud]).
  *
  * ## Conventions
@@ -72,6 +75,23 @@ interface TankViewListener {
     fun onLongPress(worldPoint: Vec3) {}
     /** The followed organism is gone from the snapshot (removed, eaten); the camera returned to orbit. */
     fun onFollowLost(id: String) {}
+    /** Clean-glass mode: the Flipper slid along [stroke] on the front glass (sent every ~[GlassStroke.MIN_CM] of travel). */
+    fun onScrape(stroke: GlassStroke) {}
+}
+
+/**
+ * One slide of the Flipper's pad centre over the front glass, in tank cm: x from the tank's left end, y from the tank
+ * floor (feeds `Command.ScrapeGlass`). The pad is [FLIPPER_W] × [FLIPPER_H] cm, as modelled in equipment.glb.
+ */
+data class GlassStroke(val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
+    val lengthCm: Float get() = kotlin.math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0))
+
+    companion object {
+        const val FLIPPER_W = 6f
+        const val FLIPPER_H = 20f
+        /** Travel (cm) gathered into one stroke before it is reported. */
+        const val MIN_CM = 0.6f
+    }
 }
 
 /** Frame statistics for the [DebugHud]. */

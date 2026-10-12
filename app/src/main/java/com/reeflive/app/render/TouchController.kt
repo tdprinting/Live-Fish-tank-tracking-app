@@ -7,7 +7,8 @@ import android.view.ScaleGestureDetector
 
 /**
  * Gestures (ARCHITECTURE §8.2): 1-finger orbit, 2-finger pan + pinch zoom, tap (pick), double tap
- * (tap the glass), long press (drop food). Runs on the UI thread and only accumulates into
+ * (tap the glass), long press (drop food). In clean-glass mode ([CameraInput.cleaning]) the first finger slides the
+ * Flipper instead and the other gestures are off. Runs on the UI thread and only accumulates into
  * [CameraInput]; the GL thread consumes it once per frame.
  */
 class TouchController(context: Context, private val input: CameraInput) {
@@ -44,6 +45,13 @@ class TouchController(context: Context, private val input: CameraInput) {
     })
 
     fun onTouchEvent(ev: MotionEvent): Boolean {
+        if (input.cleaning) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> input.scrapeTouch(ev.getX(0), ev.getY(0), true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> input.scrapeTouch(ev.getX(0), ev.getY(0), false)
+            }
+            return true
+        }
         when (ev.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> multi = true
             MotionEvent.ACTION_DOWN -> multi = false
@@ -63,6 +71,20 @@ class CameraInput {
     private var panX = 0f; private var panY = 0f
     private var zoom = 1f
     private val taps = ArrayList<Tap>()
+
+    /** Clean-glass mode: set from the UI thread, read by [TouchController] and the GL thread. */
+    @Volatile var cleaning = false
+    private var scrapeX = 0f; private var scrapeY = 0f; private var scrapeDown = false
+
+    /** Clean-glass mode: where the finger is and whether it is on the screen. */
+    @Synchronized fun scrapeTouch(x: Float, y: Float, down: Boolean) { scrapeX = x; scrapeY = y; scrapeDown = down }
+
+    /** GL thread: the finger position (px) while it is down, else null. */
+    @Synchronized fun scrapePointer(out: FloatArray): Boolean {
+        if (!scrapeDown) return false
+        out[0] = scrapeX; out[1] = scrapeY
+        return true
+    }
 
     @Synchronized fun orbit(dx: Float, dy: Float) { orbitX += dx; orbitY += dy }
     @Synchronized fun pan(dx: Float, dy: Float) { panX += dx; panY += dy }

@@ -54,6 +54,13 @@ class Camera {
         followId = null
     }
 
+    /** Square-on, level view of the whole front glass (clean-glass mode); stops any follow. */
+    fun faceGlass() {
+        followId = null
+        target[0] = TANK[0] / 2; target[1] = (SAND_Y + WATER_Y) / 2; target[2] = DEFAULT_TARGET[2]
+        yaw = 0f; pitch = 0f; distance = DEFAULT_DISTANCE
+    }
+
     /** Starts (id != null) or stops following. Stopping keeps the current view and resumes orbiting around it. */
     fun follow(id: String?) {
         if (id == followId) return

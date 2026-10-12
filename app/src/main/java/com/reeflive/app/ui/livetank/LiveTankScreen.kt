@@ -38,10 +38,12 @@ import com.reeflive.app.appGraph
 import com.reeflive.app.audio.TankAudio
 import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
+import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
 import com.reeflive.app.ui.live.AddableSpecies
+import com.reeflive.app.ui.live.CleanGlassHint
 import com.reeflive.app.ui.live.DayPhase
 import com.reeflive.app.ui.live.FishCard
 import com.reeflive.app.ui.live.FishSummary
@@ -150,6 +152,18 @@ fun LiveTankScreen(
     val sandbox = mode == SimMode.SANDBOX
 
     BackHandler(enabled = sandbox && expanded) { expanded = false }
+    // clean-glass mode (both modes): drag the Flipper over the front glass; Back or "Done" leaves it
+    var cleaning by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = cleaning) { cleaning = false }
+    val toggleCleaning: () -> Unit = {
+        tick()
+        if (!cleaning) vm.select(null)
+        cleaning = !cleaning
+    }
+    val onScrape: (GlassStroke) -> Unit = { s ->
+        vm.scrapeGlass(s)
+        audio.scrape(s.lengthCm)
+    }
 
     val hudState = HudState(
         mode = if (sandbox) HudMode.SANDBOX else HudMode.WATCH,
@@ -248,7 +262,7 @@ fun LiveTankScreen(
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
                 TankArea(
-                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound,
+                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound, cleaning, toggleCleaning, onScrape,
                     Modifier.weight(1f).fillMaxHeight(), bottomPad = BottomBarClearance,
                 )
                 if (sandbox) {
@@ -265,7 +279,7 @@ fun LiveTankScreen(
             val animated by animateDpAsState(dockHeight, ReefMotion.tween(reduce), label = "dock")
             Column(Modifier.fillMaxSize()) {
                 TankArea(
-                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound,
+                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound, cleaning, toggleCleaning, onScrape,
                     Modifier.weight(1f).fillMaxWidth(), bottomPad = if (sandbox) 8.dp else BottomBarClearance,
                 )
                 if (sandbox) {
@@ -295,6 +309,9 @@ private fun TankArea(
     quality: LiveQuality,
     soundOn: Boolean,
     onToggleSound: () -> Unit,
+    cleaning: Boolean,
+    onToggleCleaning: () -> Unit,
+    onScrape: (GlassStroke) -> Unit,
     modifier: Modifier,
     bottomPad: Dp,
 ) {
@@ -302,11 +319,13 @@ private fun TankArea(
         TankView(
             snapshots = vm.snapshots,
             modifier = Modifier.fillMaxSize(),
-            followId = followId,
+            followId = if (cleaning) null else followId,
             quality = quality.toRender(),
             onPick = vm::select,
             onTapGlass = vm::tapGlass,
             onFollowLost = { vm.follow(null) },
+            cleaning = cleaning,
+            onScrape = onScrape,
         )
         Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad)) {
             LiveOverlay(
@@ -316,9 +335,13 @@ private fun TankArea(
                 showSpeed = false,   // speed lives in the sandbox dock (reality always runs at 1x)
                 soundOn = soundOn,
                 onToggleSound = onToggleSound,
+                cleaning = cleaning,
+                onToggleCleaning = onToggleCleaning,
             )
             val st = stats
-            if (followId != null && st != null) {
+            if (cleaning) {
+                CleanGlassHint(Modifier.align(Alignment.BottomCenter).padding(16.dp))
+            } else if (followId != null && st != null) {
                 val ids = vm.hud.value.stats.map { it.id }
                 val i = ids.indexOf(st.id).coerceAtLeast(0)
                 fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }

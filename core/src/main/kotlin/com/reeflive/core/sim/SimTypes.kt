@@ -50,6 +50,16 @@ sealed class Command {
      * surface, inverts start at their usual spots, corals settle on free rock or sand. [sizeCm] 0 = typical adult.
      */
     data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0) : Command()
+
+    /**
+     * The owner slides the Flipper magnet scraper over [pane] from (x0, y0) to (x1, y1), in cm along the pane (x from
+     * the tank's left end, y from the tank floor); the [widthCm] × [heightCm] pad clears the film it sweeps
+     * ([AlgaeModel.scrapeGlass]). Allowed in Reality too: it is what the owner does to the real glass.
+     */
+    data class ScrapeGlass(
+        val pane: GlassPane, val x0: Double, val y0: Double, val x1: Double, val y1: Double,
+        val widthCm: Double = 6.0, val heightCm: Double = widthCm,
+    ) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */

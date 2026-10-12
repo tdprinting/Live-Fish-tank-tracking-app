@@ -38,13 +38,15 @@ fun TankView(
     onTapGlass: (Vec3) -> Unit = {},
     onLongPress: (Vec3) -> Unit = {},
     onFollowLost: (String) -> Unit = {},
+    cleaning: Boolean = false,
+    onScrape: (GlassStroke) -> Unit = {},
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape,
     )
 }
 
@@ -65,8 +67,12 @@ fun TankView(
     onLongPress: (Vec3) -> Unit = {},
     onFollowLost: (String) -> Unit = {},
     demoWhenEmpty: Boolean = true,
+    /** Clean-glass mode: the camera faces the front glass and one-finger drags slide the Flipper ([onScrape]). */
+    cleaning: Boolean = false,
+    onScrape: (GlassStroke) -> Unit = {},
 ) {
     val pick by rememberUpdatedState(onPick)
+    val scrape by rememberUpdatedState(onScrape)
     val glass by rememberUpdatedState(onTapGlass)
     val press by rememberUpdatedState(onLongPress)
     val lost by rememberUpdatedState(onFollowLost)
@@ -77,6 +83,7 @@ fun TankView(
             override fun onTapGlass(worldPoint: Vec3) = glass(worldPoint)
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFollowLost(id: String) = lost(id)
+            override fun onScrape(stroke: GlassStroke) = scrape(stroke)
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -97,6 +104,7 @@ fun TankView(
                     v.setQuality(quality)
                     v.follow(followId)
                     v.demoWhenEmpty = demoWhenEmpty
+                    v.setCleaning(cleaning)
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

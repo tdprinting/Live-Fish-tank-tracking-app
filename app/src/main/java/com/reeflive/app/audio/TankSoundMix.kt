@@ -75,6 +75,12 @@ object TankSoundMix {
         else -> null
     }
 
+    /** Shortest gap between two Flipper scrape swishes (the 0.32 s sample overlaps a little, so a drag sounds continuous). */
+    const val SCRAPE_GAP_MS = 220L
+
+    /** Gain of a Flipper scrape swish for a reported stroke of [cm] (longer, quicker strokes are louder); 0 when still. */
+    fun scrapeGain(cm: Float): Float = if (cm <= 0.05f) 0f else 0.45f * (cm / 1.5f).coerceIn(0.4f, 1f)
+
     /** How many pellet-drop ticks follow a feeding plop (more grams, more pellets; 2..5). */
     fun pelletCount(grams: Double): Int = (2 + grams * 2).toInt().coerceIn(2, 5)
 

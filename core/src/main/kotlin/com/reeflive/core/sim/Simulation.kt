@@ -678,6 +678,7 @@ class Simulation(
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
+            is Command.ScrapeGlass -> scrapeGlass(c)
         }
     }
 
@@ -804,6 +805,19 @@ class Simulation(
         }
     }
 
+    private var lastScrapeStir = -1e9
+
+    /** A Flipper stroke on the glass: clears the film it sweeps; nearby fish and corals react as to a passing hand. */
+    private fun scrapeGlass(c: Command.ScrapeGlass) {
+        when (c.pane) {
+            GlassPane.FRONT -> water.algae.scrapeGlass(water.s, c.x0, c.y0, c.x1, c.y1, c.widthCm, c.heightCm)
+        }
+        if (simTimeSec - lastScrapeStir >= SCRAPE_STIR_SEC) {
+            lastScrapeStir = simTimeSec
+            shadow(Vec3(c.x1, c.y1, rock.widthCm - 2.0))
+        }
+    }
+
     private fun shadow(point: Vec3) {
         for (o in organisms) if (o.alive && o.pos.distanceTo(point) < 40) agents[o]?.brain?.onShadow(agents[o]!!.ctx, point)
         for (c in corals) if (c.pos.distanceTo(point) < 15) c.disturb = 0.6
@@ -927,6 +941,8 @@ class Simulation(
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
         const val CORAL_TAN_PER_COLONY = 2.0
         const val ASTERINA_CAP = 4
+        /** Shortest sim time between the startles a dragged Flipper causes (one per stroke, not per frame). */
+        const val SCRAPE_STIR_SEC = 1.0
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }

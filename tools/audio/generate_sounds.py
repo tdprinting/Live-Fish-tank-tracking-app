@@ -10,13 +10,15 @@ Ambience loops (played with loop = -1 in SoundPool):
   tank_hob_loop      HOB filter waterfall: bright fluttering noise and small droplets
   tank_bubbles_loop  sparse, quiet bubble pops
 One-shots:
-  tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime
+  tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime, tank_glass_scrape
 
 Loops are rendered a crossfade-length longer than the loop and the tail is blended into the head with an
 equal-power crossfade, so the loop point has no click. The script checks the loop-point jump afterwards.
 
   python3 tools/audio/generate_sounds.py            # writes the files
   python3 tools/audio/generate_sounds.py --wav      # force WAV output
+  python3 tools/audio/generate_sounds.py --only tank_glass_scrape   # rewrite one file (all are still synthesised
+                                                                    # in order, so the output matches a full run)
 """
 import os
 import shutil
@@ -240,6 +242,17 @@ def alert_chime():
     return normalize(fade_edges(x, 0.002, 0.25), 0.8)
 
 
+def glass_scrape():
+    """The Flipper's felt pad sliding over algae-filmed glass: a soft, slightly squeaky swish with stick-slip judder."""
+    n = int(0.32 * SR)
+    t = t_axis(n)
+    swish = spectral_noise(n, 700, 4200, tilt=-0.3)
+    judder = 1 + 0.45 * np.sin(2 * np.pi * 38 * t + 1.3 * np.sin(2 * np.pi * 5 * t))
+    squeak = 0.12 * np.sin(2 * np.pi * (1450 + 120 * t / t[-1]) * t)
+    env = np.clip(t / 0.035, 0, 1) * np.clip((t[-1] - t) / 0.12, 0, 1)
+    return normalize(fade_edges((swish * judder + squeak) * env, 0.003, 0.03), 0.55)
+
+
 SOUNDS = {
     "tank_flow_loop": (flow_loop, True),
     "tank_hum_loop": (hum_loop, True),
@@ -250,6 +263,7 @@ SOUNDS = {
     "tank_shrimp_click": (shrimp_click, False),
     "tank_ui_tick": (ui_tick, False),
     "tank_alert_chime": (alert_chime, False),
+    "tank_glass_scrape": (glass_scrape, False),
 }
 
 
@@ -284,10 +298,11 @@ def vorbis_encoder():
 def main():
     global SR
     force_wav = "--wav" in sys.argv
+    only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else set(SOUNDS)
     enc = None if force_wav else vorbis_encoder()
     os.makedirs(OUT, exist_ok=True)
     for ext in (".ogg", ".wav"):
-        for name in SOUNDS:
+        for name in only:
             p = os.path.join(OUT, name + ext)
             if os.path.exists(p):
                 os.remove(p)
@@ -296,6 +311,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         for name, (fn, is_loop) in SOUNDS.items():
             x = fn()
+            if name not in only:
+                total += sum(os.path.getsize(os.path.join(OUT, name + e)) for e in (".ogg", ".wav")
+                             if os.path.exists(os.path.join(OUT, name + e)))
+                continue
             if is_loop:
                 r = loop_seam_ratio(x)
                 assert r < 1.5, f"{name}: loop seam jump {r:.2f}x the typical step"
