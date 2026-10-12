@@ -1,0 +1,460 @@
+[
+ {
+  "a": "amphiprion_ocellaris",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Clowns visit the cleaning station"
+ },
+ {
+  "a": "amphiprion_ocellaris",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Peaceful; the goby stays near its burrow"
+ },
+ {
+  "a": "amphiprion_ocellaris",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Hawkfish rarely bothers clowns"
+ },
+ {
+  "a": "paracanthurus_hepatus",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Tang visits the cleaning station"
+ },
+ {
+  "a": "paracanthurus_hepatus",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "No conflict; both peaceful"
+ },
+ {
+  "a": "paracanthurus_hepatus",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "No real conflict"
+ },
+ {
+  "a": "sphaeramia_nematoptera",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Peaceful tankmates"
+ },
+ {
+  "a": "sphaeramia_nematoptera",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish may eat small cardinals",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "sphaeramia_nematoptera",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "Banded shrimp can pick at a resting cardinal"
+ },
+ {
+  "a": "labroides_dimidiatus",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Wrasse cleans the goby"
+ },
+ {
+  "a": "labroides_dimidiatus",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish chases the wrasse near its perch",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "labroides_dimidiatus",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "Wrasse may pick at shrimp antennae"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "salarias_fasciatus",
+  "risk": "L",
+  "note": "Both bottom-dwellers; plenty of rock for each"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "ecsenius_stigmatura",
+  "risk": "L",
+  "note": "Both use holes; usually ignore each other"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "Shrimp may share the goby's tunnels"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "cirrhitichthys_falco",
+  "b": "salarias_fasciatus",
+  "risk": "M",
+  "note": "Perch competition; hawkfish may chase blennies",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "cirrhitichthys_falco",
+  "b": "ecsenius_stigmatura",
+  "risk": "M",
+  "note": "Perch competition; hawkfish may chase blennies",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "cirrhitichthys_falco",
+  "b": "stenopus_hispidus",
+  "risk": "M",
+  "note": "Hawkfish may prey on small shrimp",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "ecsenius_stigmatura",
+  "risk": "H",
+  "note": "Blennies fight over rock territory"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "salarias_fasciatus",
+  "risk": "H",
+  "note": "One lawnmower blenny per tank"
+ },
+ {
+  "a": "ecsenius_stigmatura",
+  "b": "ecsenius_stigmatura",
+  "risk": "H",
+  "note": "One tailspot blenny per tank unless a bonded pair"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "pseudochromis_indigo",
+  "risk": "H",
+  "note": "Keep one dottyback"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "salarias_fasciatus",
+  "risk": "M",
+  "note": "Dottyback may chase blennies from its ledge",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "ecsenius_stigmatura",
+  "risk": "M",
+  "note": "Dottyback may chase blennies from its ledge",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Dottyback may bully a small cardinal",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Two ledge predators compete for rock"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Clowns may chase the dottyback near the host",
+  "threat": "amphiprion_ocellaris"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Dottyback may posture; the goby retreats"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "cirrhitichthys_falco",
+  "risk": "MH",
+  "note": "Hawkfish treat shrimp as food",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Shrimp cleans the goby"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "labroides_dimidiatus",
+  "risk": "M",
+  "note": "Two cleaners split the clients"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "stenopus_hispidus",
+  "risk": "M",
+  "note": "Banded shrimp may bully the cleaner shrimp",
+  "threat": "stenopus_hispidus"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "clibanarius_tricolor",
+  "risk": "L",
+  "note": "Hermits may take a freshly molted shrimp",
+  "threat": "clibanarius_tricolor"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "paguristes_cadenati",
+  "risk": "L",
+  "note": "Hermits may take a freshly molted shrimp",
+  "threat": "paguristes_cadenati"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "sabellastarte_sp",
+  "risk": "M",
+  "note": "Shrimp may pick at the feather duster crown",
+  "threat": "lysmata_amboinensis"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "paguristes_cadenati",
+  "risk": "M",
+  "note": "Shell competition between hermits"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "clibanarius_tricolor",
+  "risk": "M",
+  "note": "Shell fights"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "nassarius_sp",
+  "risk": "M",
+  "note": "Hermits may kill small nassarius",
+  "threat": "clibanarius_tricolor"
+ },
+ {
+  "a": "paguristes_cadenati",
+  "b": "nassarius_sp",
+  "risk": "M",
+  "note": "Hermits may kill small nassarius",
+  "threat": "paguristes_cadenati"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "lithopoma_tectum",
+  "risk": "H",
+  "note": "Hermits eat flipped astrea snails",
+  "threat": "clibanarius_tricolor"
+ },
+ {
+  "a": "paguristes_cadenati",
+  "b": "lithopoma_tectum",
+  "risk": "H",
+  "note": "Hermits eat flipped astrea snails",
+  "threat": "paguristes_cadenati"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Digging can bury hermits briefly"
+ },
+ {
+  "a": "paguristes_cadenati",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Digging can bury hermits briefly"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish may pick at hermits",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "paguristes_cadenati",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish may pick at hermits",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "clibanarius_tricolor",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse may pick at hermits",
+  "threat": "labroides_dimidiatus"
+ },
+ {
+  "a": "ophiocoma_sp",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Both hide under rock; no conflict"
+ },
+ {
+  "a": "ophiocoma_sp",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Hawkfish may nip arms",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "ophiocoma_sp",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse may nip arms",
+  "threat": "labroides_dimidiatus"
+ },
+ {
+  "a": "sabellastarte_sp",
+  "b": "labroides_dimidiatus",
+  "risk": "H",
+  "note": "Wrasses pick at feather duster crowns",
+  "threat": "labroides_dimidiatus"
+ },
+ {
+  "a": "sabellastarte_sp",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish may pick at the crown",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "sabellastarte_sp",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Tang may nip the crown",
+  "threat": "paracanthurus_hepatus"
+ },
+ {
+  "a": "sabellastarte_sp",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Digging may unsettle the tube at its base"
+ },
+ {
+  "a": "sabellastarte_sp",
+  "b": "stenopus_hispidus",
+  "risk": "M",
+  "note": "Shrimp may pick at the crown",
+  "threat": "stenopus_hispidus"
+ },
+ {
+  "a": "nassarius_sp",
+  "b": "labroides_dimidiatus",
+  "risk": "M",
+  "note": "Wrasse may eat small nassarius",
+  "threat": "labroides_dimidiatus"
+ },
+ {
+  "a": "nassarius_sp",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Hawkfish may pick at snails",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "lithopoma_tectum",
+  "b": "stenopus_hispidus",
+  "risk": "M",
+  "note": "Banded shrimp can attack astrea",
+  "threat": "stenopus_hispidus"
+ },
+ {
+  "a": "lithopoma_tectum",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Competes for algae"
+ },
+ {
+  "a": "asterina_sp",
+  "b": "tubipora_musica",
+  "risk": "M",
+  "note": "Some Asterina eat coral polyps",
+  "threat": "asterina_sp"
+ },
+ {
+  "a": "asterina_sp",
+  "b": "asterina_sp",
+  "risk": "M",
+  "note": "Population grows by splitting"
+ },
+ {
+  "a": "tubipora_musica",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Tang may nip polyps",
+  "threat": "paracanthurus_hepatus"
+ },
+ {
+  "a": "zoanthus_sp",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Tang may nip zoanthids",
+  "threat": "paracanthurus_hepatus"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Competes for algae"
+ },
+ {
+  "a": "ecsenius_stigmatura",
+  "b": "zoanthus_sp",
+  "risk": "L",
+  "note": "A hungry tailspot may nip polyps",
+  "threat": "ecsenius_stigmatura"
+ },
+ {
+  "a": "briareum_sp",
+  "b": "capnella_sp",
+  "risk": "L",
+  "note": "GSP can overgrow the Kenya base",
+  "threat": "briareum_sp"
+ },
+ {
+  "a": "lysmata_amboinensis",
+  "b": "percnon_gibbesi",
+  "risk": "M",
+  "note": "Crab may attack a freshly molted shrimp",
+  "threat": "percnon_gibbesi"
+ },
+ {
+  "a": "stenopus_hispidus",
+  "b": "percnon_gibbesi",
+  "risk": "M",
+  "note": "Banded shrimp and crab contest ledges; molts are at risk",
+  "threat": "percnon_gibbesi"
+ },
+ {
+  "a": "zoanthus_sp",
+  "b": "percnon_gibbesi",
+  "risk": "L",
+  "note": "A hungry crab may pick at zoanthids",
+  "threat": "percnon_gibbesi"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "percnon_gibbesi",
+  "risk": "L",
+  "note": "Both graze the same algae"
+ }
+]

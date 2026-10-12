@@ -160,7 +160,7 @@ All screens use the glass-over-caustics background (UI_STYLE §4). Spacing grid 
 Pages (horizontal pager, 4 pages, "Skip" top-right):
 1. **Welcome** — full-bleed animated caustic background, app name in Display font, one line: "Track it. Watch it live." Button: Get started.
 2. **Your tank** — Pre-filled card: "Tee's Reef · 60 gal · 48 x 13 x 24 in · soft coral". Fields: name, length/width/height (in or cm, unit toggle), display volume (auto-computed, editable), sump volume (default 0), coral type (FOWLR / Soft / LPS / SPS → picks default targets). Button: Looks right.
-3. **Your livestock** — list of pre-seeded livestock cards with a checkbox each (2 clownfish, blue tang, pajama cardinal, cleaner wrasse, snowflake eel, banded coral shrimp, Falco hawkfish (assumed — badge "verify"), Ecsenius blenny (assumed — badge "verify"), corals: Kenya tree, GSP x2, zoanthids, clove polyps, green mushroom, red macroalgae). Uncheck to remove; "+ Add" to add from species DB. Button: Continue.
+3. **Your livestock** — list of pre-seeded livestock cards with a checkbox each (Tee's confirmed list, Oct 2026: fish — 2 ocellaris clowns (orange + dark), juvenile blue tang, pajama cardinal, cleaner wrasse, snowflake eel, Falco hawkfish, lawnmower blenny, tailspot blenny, indigo dottyback; inverts — coral banded shrimp, skunk cleaner shrimp, blue-leg hermits ×2, scarlet hermit, black brittle star (species "verify"), brown feather duster ("verify"), nassarius ×3, astrea ×3, asterina ×3; corals — Kenya tree, GSP ×2, zoanthids, clove polyps, green mushroom, organ pipe coral, red macroalgae). Uncheck to remove; "+ Add" to add from species DB. Button: Continue.
 4. **Reminders & units** — units (°F/°C, SG/ppt, dKH/meq), notification permission request (Android 13+), default reminder time (08:00). Button: Dive in.
 
 Completing onboarding sets `DataStore.onboarded = true` and inserts seed data. Re-run from Settings → "Reset to Tee's tank seed".
@@ -317,25 +317,8 @@ Channels: `reef_alerts_danger` (IMPORTANCE_HIGH, vibrate), `reef_alerts_caution`
 {
   "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 33.0, "heightCm": 61.0,
            "displayGallons": 60, "sumpGallons": 0, "reefType": "SOFT", "sandDepthCm": 3.0},
-  "livestock": [
-    {"speciesId": "amphiprion_ocellaris", "nickname": "Orange", "variant": "classic", "sizeCm": 7.0, "role": "FEMALE"},
-    {"speciesId": "amphiprion_ocellaris", "nickname": "Darwin", "variant": "darwin_black", "sizeCm": 5.5, "role": "MALE"},
-    {"speciesId": "paracanthurus_hepatus", "nickname": "Blue", "sizeCm": 6.5, "lifeStage": "JUVENILE"},
-    {"speciesId": "sphaeramia_nematoptera", "nickname": "PJ", "sizeCm": 5.0},
-    {"speciesId": "labroides_dimidiatus", "nickname": "Cleaner", "sizeCm": 7.0},
-    {"speciesId": "echidna_nebulosa", "nickname": "Snowflake", "sizeCm": 35.0},
-    {"speciesId": "stenopus_hispidus", "nickname": "Bandit", "sizeCm": 5.0},
-    {"speciesId": "cirrhitichthys_falco", "nickname": "Hawk", "sizeCm": 5.0, "verified": false},
-    {"speciesId": "ecsenius_bicolor", "nickname": "Blenny", "sizeCm": 5.0, "verified": false},
-    {"speciesId": "capnella_sp", "nickname": "Kenya tree", "placement": "kenya_main"},
-    {"speciesId": "briareum_sp", "nickname": "Neon GSP", "placement": "gsp_upper_left"},
-    {"speciesId": "briareum_sp", "nickname": "GSP mat", "placement": "gsp_lower_right"},
-    {"speciesId": "zoanthus_sp", "nickname": "Zoas", "placement": "zoa_front_center"},
-    {"speciesId": "clavularia_sp", "nickname": "Cloves", "placement": "clove_kenya_base"},
-    {"speciesId": "discosoma_sp", "nickname": "Green shroom", "placement": "shroom_front_left"},
-    {"speciesId": "gracilaria_sp", "nickname": "Red macro", "placement": "macro_back_left"},
-    {"speciesId": "aiptasia_sp", "nickname": "Aiptasia?", "placement": "aiptasia_kenya_base", "verified": false}
-  ],
+  "livestock": [ … 27 entries, see core/src/main/resources/seed/tee_tank.json (updated to Tee's confirmed list; species research in research/04_more_species.md; the "aiptasia" at the Kenya base is organ pipe coral) … ],
+
   "equipment": [
     {"type": "LIGHT", "name": "AI Prime HD (left)", "serviceDays": 30},
     {"type": "LIGHT", "name": "AI Prime HD (right)", "serviceDays": 30},

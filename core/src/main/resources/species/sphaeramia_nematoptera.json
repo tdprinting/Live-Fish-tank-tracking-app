@@ -1,0 +1,117 @@
+{
+  "id": "sphaeramia_nematoptera",
+  "kind": "FISH",
+  "common": "Pajama cardinalfish",
+  "scientific": "Sphaeramia nematoptera",
+  "family": "Apogonidae",
+  "maxLengthCm": 8,
+  "typicalAdultCm": 7,
+  "growthCmPerYear": 2,
+  "lifespanYears": 4,
+  "depthRatio": 0.55,
+  "massCoeff": 0.024,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.6,
+    "burstBL": 4,
+    "tailHzCruise": 2,
+    "turnRateDeg": 180,
+    "waveLen": 1.0,
+    "ampCruise": 0.03,
+    "ampBurst": 0.08
+  },
+  "zone": {
+    "yMin": 0.3,
+    "yMax": 0.6,
+    "openWater": 0.4,
+    "coverAffinity": 0.6
+  },
+  "activity": "CREPUSCULAR",
+  "schooling": true,
+  "homeRadiusCm": 25,
+  "temperament": {
+    "aggression": 0.05,
+    "boldness": 0.3,
+    "curiosity": 0.2,
+    "skittishness": 0.7
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "FLAKE",
+    "PELLET"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 28,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.022,
+      "optHi": 1.026,
+      "tolLo": 1.02,
+      "tolHi": 1.027,
+      "lethalLo": 1.018,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.3,
+    "VELVET": 0.3,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.85,
+  "starvationDays": 21,
+  "size": {
+    "lod0Tris": 3500
+  },
+  "model": "models/cardinal.glb",
+  "colors": {
+    "primary": "#E8C840",
+    "secondary": "#7A1F1F",
+    "accent": "#F2E6C0"
+  },
+  "iridescence": 0.15,
+  "brain": "cardinal",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Meaty: mysis, amphipods, brine; flake or pellets occasionally.",
+  "temperamentSummary": "Shy hoverer, most active at dawn and dusk.",
+  "careNotes": [
+    "Male mouthbroods the eggs."
+  ]
+}

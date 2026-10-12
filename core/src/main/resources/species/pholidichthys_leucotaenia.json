@@ -1,0 +1,115 @@
+{
+  "id": "pholidichthys_leucotaenia",
+  "kind": "FISH",
+  "common": "Engineer goby",
+  "scientific": "Pholidichthys leucotaenia",
+  "family": "Pholidichthyidae",
+  "maxLengthCm": 50,
+  "typicalAdultCm": 35,
+  "growthCmPerYear": 6,
+  "lifespanYears": 15,
+  "depthRatio": 0.12,
+  "massCoeff": 0.008,
+  "locomotion": {
+    "mode": "ANGUILLIFORM",
+    "cruiseBL": 0.6,
+    "burstBL": 3.0,
+    "tailHzCruise": 1.4,
+    "turnRateDeg": 200,
+    "waveLen": 0.7,
+    "ampCruise": 0.05,
+    "ampBurst": 0.09
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.4,
+    "openWater": 0.25,
+    "coverAffinity": 0.8
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 30,
+  "temperament": {
+    "aggression": 0.05,
+    "boldness": 0.35,
+    "curiosity": 0.4,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "MYSIS",
+    "PELLET",
+    "FLAKE"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 26,
+      "tolLo": 20,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.022,
+      "optHi": 1.024,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.027
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 60
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "BACTERIAL": 0.2
+  },
+  "hardiness": 0.9,
+  "starvationDays": 30,
+  "size": {
+    "lod0Tris": 5000
+  },
+  "model": "models/engineer_goby.glb",
+  "colors": {
+    "primary": "#141414",
+    "secondary": "#F2C81A",
+    "accent": "#F7E9A8"
+  },
+  "iridescence": 0.05,
+  "brain": "goby",
+  "minTankGallons": 100,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Omnivore: mysis, pellets and flake once or twice a day.",
+  "temperamentSummary": "Peaceful burrower. Digs tunnels under the rockwork and hides in them at night; juveniles hover near the burrow by day.",
+  "careNotes": [
+    "Grows slowly to 12–20 in (30–50 cm) over several years — plan for 100 gal+ once adult.",
+    "Moves a lot of sand: set rockwork on the glass, not on the sandbed, and keep corals off the sand near its burrow.",
+    "Juveniles wear black and yellow stripes; adults fade to a darker, blotchier pattern."
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "id": "labroides_dimidiatus",
+  "kind": "FISH",
+  "common": "Bluestreak cleaner wrasse",
+  "scientific": "Labroides dimidiatus",
+  "family": "Labridae",
+  "maxLengthCm": 11,
+  "typicalAdultCm": 10,
+  "growthCmPerYear": 3,
+  "lifespanYears": 3,
+  "depthRatio": 0.22,
+  "massCoeff": 0.015,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 1.6,
+    "burstBL": 6,
+    "tailHzCruise": 4,
+    "turnRateDeg": 320,
+    "waveLen": 0.8,
+    "ampCruise": 0.05,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.1,
+    "yMax": 0.5,
+    "openWater": 0.3,
+    "coverAffinity": 0.6
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 35,
+  "temperament": {
+    "aggression": 0.1,
+    "boldness": 0.8,
+    "curiosity": 0.8,
+    "skittishness": 0.3
+  },
+  "diet": [
+    "PARASITES",
+    "MYSIS",
+    "BRINE",
+    "FLAKE"
+  ],
+  "feedsPerDay": 3,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 26,
+      "tolLo": 21,
+      "tolHi": 27,
+      "lethalLo": 18,
+      "lethalHi": 28
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 10,
+      "tolHi": 20,
+      "lethalHi": 40
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.3,
+    "BACTERIAL": 0.4
+  },
+  "hardiness": 0.4,
+  "starvationDays": 35,
+  "size": {
+    "lod0Tris": 3500
+  },
+  "model": "models/wrasse.glb",
+  "colors": {
+    "primary": "#3A7BD5",
+    "secondary": "#111111",
+    "accent": "#F2E8C8"
+  },
+  "iridescence": 0.5,
+  "brain": "wrasse",
+  "minTankGallons": 60,
+  "careLevel": "Expert",
+  "reefSafe": "Yes",
+  "dietSummary": "Cleans parasites; must learn to take mysis and flake or it starves.",
+  "temperamentSummary": "Busy, bold, runs a cleaning station under the arch.",
+  "careNotes": [
+    "Starvation is the main way they die in home tanks (2–8 weeks).",
+    "Watch body condition: a thin belly is the first warning."
+  ]
+}

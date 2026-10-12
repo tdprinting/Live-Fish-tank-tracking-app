@@ -1,0 +1,121 @@
+{
+  "id": "stenopus_hispidus",
+  "kind": "INVERT",
+  "common": "Coral banded shrimp",
+  "scientific": "Stenopus hispidus",
+  "family": "Stenopodidae",
+  "maxLengthCm": 6.3,
+  "typicalAdultCm": 5.5,
+  "growthCmPerYear": 1.5,
+  "lifespanYears": 3,
+  "depthRatio": 0.25,
+  "massCoeff": 0.01,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 8,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.05,
+    "yMax": 0.5,
+    "openWater": 0.0,
+    "coverAffinity": 0.95
+  },
+  "activity": "NOCTURNAL",
+  "territorialRadius": 10,
+  "homeRadiusCm": 20,
+  "temperament": {
+    "aggression": 0.4,
+    "boldness": 0.5,
+    "curiosity": 0.4,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "MYSIS",
+    "FLAKE",
+    "MEATY",
+    "DETRITUS"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 26,
+      "tolLo": 21,
+      "tolHi": 27,
+      "lethalLo": 18,
+      "lethalHi": 28
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 10,
+      "tolHi": 20,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 12.0,
+      "tolLo": 7.0,
+      "tolHi": 12.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 40,
+  "size": {
+    "lod0Tris": 3000
+  },
+  "model": "models/shrimp.glb",
+  "colors": {
+    "primary": "#F4F0E8",
+    "secondary": "#C8282C"
+  },
+  "brain": "shrimp_banded",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "onePerTank": true,
+  "dietSummary": "Scavenger: mysis, flake and meaty scraps; picks settled food at night.",
+  "temperamentSummary": "Hangs under ledges; can bully other shrimp.",
+  "careNotes": [
+    "Molts every few weeks; stable Ca/Mg and iodine help.",
+    "Intolerant of high nitrate and copper."
+  ]
+}

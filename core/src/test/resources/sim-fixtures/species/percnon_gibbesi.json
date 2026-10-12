@@ -1,0 +1,45 @@
+{
+    "id": "percnon_gibbesi",
+    "kind": "INVERT",
+    "common": "Sally Lightfoot crab",
+    "family": "Percnidae",
+    "maxLengthCm": 7.0,
+    "typicalAdultCm": 5.0,
+    "growthCmPerYear": 1.5,
+    "lifespanYears": 3.0,
+    "depthRatio": 0.25,
+    "massCoeff": 0.03,
+    "locomotion": {
+        "mode": "WALKING",
+        "cruiseBL": 0.6,
+        "burstBL": 8.0,
+        "tailHzCruise": 0.0,
+        "turnRateDeg": 360.0
+    },
+    "zone": {
+        "yMin": 0.0,
+        "yMax": 0.7,
+        "openWater": 0.0,
+        "coverAffinity": 0.95
+    },
+    "activity": "NOCTURNAL",
+    "homeRadiusCm": 40.0,
+    "temperament": {
+        "aggression": 0.1,
+        "boldness": 0.2,
+        "curiosity": 0.4,
+        "skittishness": 0.95
+    },
+    "diet": ["ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"],
+    "feedsPerDay": 2.0,
+    "grazer": true,
+    "tolerance": {
+        "temp": { "optLo": 24.0, "optHi": 27.0, "tolLo": 22.5, "tolHi": 29.0, "lethalLo": 18.0, "lethalHi": 32.0 },
+        "sg": { "optLo": 1.024, "optHi": 1.026, "tolLo": 1.022, "tolHi": 1.027, "lethalLo": 1.019, "lethalHi": 1.029 },
+        "i": { "optLo": 0.04, "tolLo": 0.02, "lethalLo": 0.003 }
+    },
+    "hardiness": 0.6,
+    "starvationDays": 30.0,
+    "model": "models/sally_lightfoot.glb",
+    "brain": "SALLY_CRAB"
+}

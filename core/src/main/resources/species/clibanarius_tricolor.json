@@ -1,0 +1,108 @@
+{
+  "id": "clibanarius_tricolor",
+  "kind": "INVERT",
+  "common": "Blue-leg hermit crab",
+  "scientific": "Clibanarius tricolor",
+  "family": "Diogenidae",
+  "maxLengthCm": 2,
+  "typicalAdultCm": 1.8,
+  "lifespanYears": 2,
+  "depthRatio": 0.6,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 0.6,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.4,
+    "openWater": 0.0,
+    "coverAffinity": 0.7
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 30,
+  "temperament": {
+    "aggression": 0.3,
+    "boldness": 0.5,
+    "curiosity": 0.5,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "DETRITUS",
+    "ALGAE",
+    "CYANO",
+    "FLAKE"
+  ],
+  "feedsPerDay": 2,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 40,
+  "model": "models/hermit_blue.glb",
+  "colors": {
+    "primary": "#3A6FD0",
+    "secondary": "#C8282C",
+    "accent": "#E0A07A"
+  },
+  "brain": "hermit",
+  "minTankGallons": 5,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Detritivore: algae, cyano, leftovers; sifts sand.",
+  "temperamentSummary": "Clean-up crew; shell fights with other hermits; may attack snails.",
+  "careNotes": [
+    "Keep spare shells so they leave the snails alone."
+  ]
+}

@@ -1,0 +1,109 @@
+{
+    "id": "astraea_tecta",
+    "kind": "INVERT",
+    "common": "Astrea snail",
+    "family": "Turbinidae",
+    "maxLengthCm": 4.0,
+    "typicalAdultCm": 8.0,
+    "growthCmPerYear": 0.0,
+    "lifespanYears": 5.0,
+    "depthRatio": 0.7,
+    "massCoeff": 0.15,
+    "locomotion": {
+        "mode": "CRAWLING",
+        "cruiseBL": 0.02,
+        "burstBL": 0.05,
+        "tailHzCruise": 0.0,
+        "turnRateDeg": 30.0,
+        "waveLen": 0.9,
+        "ampCruise": 0.04,
+        "ampBurst": 0.09
+    },
+    "zone": {
+        "yMin": 0.1,
+        "yMax": 0.8,
+        "openWater": 0.5,
+        "coverAffinity": 0.4
+    },
+    "activity": "DIURNAL",
+    "schooling": false,
+    "territorialRadius": 0.0,
+    "homeRadiusCm": 60.0,
+    "temperament": {
+        "aggression": 0.2,
+        "boldness": 0.5,
+        "curiosity": 0.5,
+        "skittishness": 0.5
+    },
+    "diet": [
+        "ALGAE"
+    ],
+    "feedsPerDay": 4.0,
+    "grazer": true,
+    "tolerance": {
+        "temp": {
+            "optLo": 24.0,
+            "optHi": 27.0,
+            "tolLo": 22.0,
+            "tolHi": 28.5,
+            "lethalLo": 19.0,
+            "lethalHi": 31.0
+        },
+        "sg": {
+            "optLo": 1.022,
+            "optHi": 1.026,
+            "tolLo": 1.02,
+            "tolHi": 1.027,
+            "lethalLo": 1.016,
+            "lethalHi": 1.03
+        },
+        "ph": {
+            "optLo": 8.0,
+            "optHi": 8.4,
+            "tolLo": 7.9,
+            "tolHi": 8.5,
+            "lethalLo": 7.5,
+            "lethalHi": 8.9
+        },
+        "nh3Free": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.01,
+            "lethalLo": null,
+            "lethalHi": 0.05
+        },
+        "no2": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.15,
+            "lethalLo": null,
+            "lethalHi": 1.0
+        },
+        "no3": {
+            "optLo": null,
+            "optHi": 20.0,
+            "tolLo": null,
+            "tolHi": 35.0,
+            "lethalLo": null,
+            "lethalHi": 80.0
+        },
+        "do": {
+            "optLo": 6.0,
+            "optHi": null,
+            "tolLo": 5.0,
+            "tolHi": null,
+            "lethalLo": 2.5,
+            "lethalHi": null
+        }
+    },
+    "diseaseSusceptibility": {},
+    "hardiness": 0.8,
+    "starvationDays": 21.0,
+    "model": "models/astrea.glb",
+    "colors": {},
+    "iridescence": 0.1,
+    "brain": null,
+    "buoyantWhenDead": null
+}
