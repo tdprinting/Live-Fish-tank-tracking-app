@@ -18,7 +18,12 @@ import com.reeflive.app.ui.log.LogRoute
 import com.reeflive.app.ui.log.ParameterDetailRoute
 import com.reeflive.app.ui.log.QuickLogRoute
 import com.reeflive.app.ui.log.TestSessionRoute
+import com.reeflive.app.ui.more.EquipmentEditRoute
+import com.reeflive.app.ui.more.EquipmentListRoute
 import com.reeflive.app.ui.more.ExportRoute
+import com.reeflive.app.ui.more.JournalEditRoute
+import com.reeflive.app.ui.more.JournalListRoute
+import com.reeflive.app.ui.more.MoreRoute
 
 /*
  * Route → screen wiring. Each destination builds its ViewModel via [reefViewModel] and hands plain state
@@ -66,7 +71,7 @@ fun CareDestination(nav: NavHostController) = CareRoute(
 
 @Composable fun TaskDestination(taskId: String, onBack: () -> Unit) = TaskDetailRoute(taskId, onBack)
 @Composable fun CalcDestination(calcId: String, onBack: () -> Unit) = CalculatorRoute(calcId, onBack)
-@Composable fun MoreDestination(nav: NavHostController) = Placeholder("More")
+@Composable fun MoreDestination(nav: NavHostController) = MoreRoute(onOpen = { nav.navigate(it) })
 @Composable
 fun LivestockListDestination(nav: NavHostController, onBack: () -> Unit) = LivestockListRoute(
     onBack = onBack,
@@ -96,10 +101,14 @@ fun LivestockEditDestination(nav: NavHostController, id: String, onBack: () -> U
     },
     onDeleted = { nav.popBackStack(Routes.LIVESTOCK, inclusive = false) },
 )
-@Composable fun EquipmentListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Equipment", onBack)
-@Composable fun EquipmentEditDestination(id: String, onBack: () -> Unit) = Placeholder("Equipment", onBack)
-@Composable fun JournalListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Journal", onBack)
-@Composable fun JournalEditDestination(id: String, onBack: () -> Unit) = Placeholder("Journal", onBack)
+@Composable
+fun EquipmentListDestination(nav: NavHostController, onBack: () -> Unit) =
+    EquipmentListRoute(onBack, onOpen = { nav.navigate(Routes.equipment(it)) }, onAdd = { nav.navigate(Routes.equipment(Routes.NEW)) })
+@Composable fun EquipmentEditDestination(id: String, onBack: () -> Unit) = EquipmentEditRoute(id, onBack)
+@Composable
+fun JournalListDestination(nav: NavHostController, onBack: () -> Unit) =
+    JournalListRoute(onBack, onOpen = { nav.navigate(Routes.journal(it)) }, onAdd = { nav.navigate(Routes.journal(Routes.NEW)) })
+@Composable fun JournalEditDestination(id: String, onBack: () -> Unit) = JournalEditRoute(id, onBack)
 @Composable fun LightsDestination(onBack: () -> Unit) = Placeholder("Light schedule", onBack)
 @Composable fun TankDestination(onBack: () -> Unit) = Placeholder("Tank", onBack)
 @Composable fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Settings", onBack)

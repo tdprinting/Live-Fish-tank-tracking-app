@@ -76,14 +76,15 @@ class EquipmentRepository(private val dao: EquipmentDao, private val tasks: Task
 
     /**
      * Saves equipment. A service interval creates or updates a linked care task ("Service <name>");
-     * clearing the interval deactivates it.
+     * clearing the interval deactivates it. Returns the saved item (with its task link).
      */
-    suspend fun save(e: Equipment) {
+    suspend fun save(e: Equipment): Equipment {
         var item = e
         val interval = e.serviceIntervalDays
         val linked = e.taskId?.let { tasks.taskOnce(it) }
         if (interval != null && interval > 0) {
-            val task = linked?.copy(intervalDays = interval, weekdaysMask = null, active = true, equipmentId = e.id)
+            val title = if (linked == null || linked.title.startsWith("Service ")) "Service ${e.name}" else linked.title
+            val task = linked?.copy(title = title, intervalDays = interval, weekdaysMask = null, active = true, equipmentId = e.id)
                 ?: CareTask(
                     id = Ids.new(), tankId = TANK_ID, title = "Service ${e.name}", intervalDays = interval,
                     equipmentId = e.id, createdAt = clock.now(),
@@ -94,6 +95,7 @@ class EquipmentRepository(private val dao: EquipmentDao, private val tasks: Task
             tasks.save(linked.copy(active = false))
         }
         dao.upsert(item.toEntity())
+        return item
     }
 
     suspend fun markServiced(e: Equipment) = dao.upsert(e.copy(lastServicedAt = clock.now()).toEntity())
@@ -114,16 +116,25 @@ class JournalRepository(private val db: ReefDatabase, private val dao: JournalDa
 
     fun photos(): Flow<List<Photo>> = dao.photos().map { l -> l.map { it.toModel() } }
 
-    /** Saves an entry with photos already copied into app storage; also logs a NOTE event for chart markers. */
-    suspend fun save(entry: JournalEntry, photos: List<Photo>, isNew: Boolean) {
+    /**
+     * Saves an entry with photos already copied into app storage; also logs a NOTE event for chart markers.
+     * Photos previously attached but missing from [photos] are detached; their paths are returned for deletion.
+     */
+    suspend fun save(entry: JournalEntry, photos: List<Photo>, isNew: Boolean): List<String> {
+        val keep = photos.map { it.id }.toSet()
+        var removed: List<String> = emptyList()
         db.withTransaction {
             dao.upsert(entry.toEntity())
+            val gone = dao.photosFor(entry.id).filter { it.id !in keep }
+            gone.forEach { dao.deletePhoto(it) }
+            removed = gone.map { it.path }
             dao.insertPhotos(photos.map { it.copy(journalId = entry.id).toEntity() })
         }
         if (isNew) {
             val title = entry.text.lineSequence().firstOrNull().orEmpty().take(60).ifBlank { "Journal entry" }
             events.log(EventType.NOTE, title, at = entry.at, journalId = entry.id)
         }
+        return removed
     }
 
     /** Deletes an entry; returns photo paths so the caller can remove the files. */
@@ -133,6 +144,7 @@ class JournalRepository(private val db: ReefDatabase, private val dao: JournalDa
             photos.forEach { dao.deletePhoto(it) }
             dao.delete(id)
         }
+        events.ofTypesSince(listOf(EventType.NOTE), 0L).filter { it.journalId == id }.forEach { events.delete(it.id) }
         return photos.map { it.path }
     }
 }
