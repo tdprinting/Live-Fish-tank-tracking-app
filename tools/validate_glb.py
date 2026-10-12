@@ -32,21 +32,21 @@ COMP = {5120: ("b", 1), 5121: ("B", 1), 5122: ("h", 2), 5123: ("H", 2), 5125: ("
 NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
 
 # triangle budgets for LOD0 files: (total max, body max) ; None = not checked
-FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "eel", "hawkfish",
+FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish",
         "lawnmower_blenny", "tailspot_blenny", "dottyback"]
 BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
-    "eel": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
+    "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
     "tank": 3500, "rockscape": 40000, "equipment": 6000,
     "kenya": 9000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 400,
 }
-LOD1_BUDGET = {"eel": 2100}  # anguilliform: 96 stations need more rings than the 1.7k LOD1 cap
+LOD1_BUDGET = {"engineer_goby": 2100}  # anguilliform: 96 stations need more rings than the 1.7k LOD1 cap
 # how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
 SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
-BODY_BUDGET = {"eel": 5600}
+BODY_BUDGET = {"engineer_goby": 5600}
 
 
 class Glb:
@@ -247,7 +247,7 @@ ANCHOR_NAMES = [
     "coral_kenya_main", "coral_gsp_upper_left", "coral_gsp_lower_right", "coral_zoa_front_center",
     "coral_clove_kenya_base", "coral_shroom_front_left", "coral_macro_back_left", "coral_organpipe_kenya_base",
     "HOLE_TAILSPOT", "HOLE_LAWNMOWER", "STATION_SKUNK", "STATION_SHRIMP", "CAVE_DOTTYBACK", "BRITTLE_HIDE",
-    "BRITTLE_HOME", "DUSTER_BASE", "DUSTER_TUBE", "SAND_FRONT"]
+    "BRITTLE_HOME", "DUSTER_BASE", "DUSTER_TUBE", "SAND_FRONT", "BURROW_GOBY", "SAND_GOBY_DIG"]
 
 
 def check_sim(errors, report):
