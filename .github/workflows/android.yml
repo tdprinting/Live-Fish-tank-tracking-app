@@ -48,8 +48,11 @@ jobs:
       - name: Core unit tests
         run: ./gradlew :core:test --stacktrace
 
+      # Room writes app/schemas as a side effect of KSP, which Gradle does not track as an output. On branch
+      # runs (read-only cache) KSP can be restored FROM-CACHE without writing the schema, failing
+      # DatabaseUpgradeSafetyTest. Force KSP to run so the exported schema always exists.
       - name: App unit tests
-        run: ./gradlew :app:testDebugUnitTest -PversionCode=${{ steps.ver.outputs.code }} -PversionName=${{ steps.ver.outputs.name }} --stacktrace
+        run: ./gradlew :app:kspDebugKotlin --rerun && ./gradlew :app:testDebugUnitTest -PversionCode=${{ steps.ver.outputs.code }} -PversionName=${{ steps.ver.outputs.name }} --stacktrace
 
       - name: Annotate unit test failures
         if: failure()
