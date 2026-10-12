@@ -93,7 +93,7 @@
   "size": {
     "lod0Tris": 3000
   },
-  "model": "models/shrimp_skunk.glb",
+  "model": "models/skunk_shrimp.glb",
   "colors": {
     "primary": "#E9D8C6",
     "secondary": "#C62B2B",

@@ -57,7 +57,8 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_gsp.glb",
+  "model": "models/gsp_mat.glb",
+  "variantModels": {"neon": "models/gsp_neon.glb"},
   "colors": {
     "primary": "#7DFF4F",
     "secondary": "#7A4E9C"

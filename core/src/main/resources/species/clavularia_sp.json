@@ -57,7 +57,7 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_clove.glb",
+  "model": "models/clove.glb",
   "colors": {
     "primary": "#F0B0C8",
     "secondary": "#3A6FD8"

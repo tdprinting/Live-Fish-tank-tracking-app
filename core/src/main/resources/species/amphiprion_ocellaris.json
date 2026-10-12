@@ -100,7 +100,8 @@
   "size": {
     "lod0Tris": 4000
   },
-  "model": "models/clown.glb",
+  "model": "models/clown_orange.glb",
+  "variantModels": {"darwin_black": "models/clown_darwin.glb"},
   "colors": {
     "primary": "#FF7A1A",
     "secondary": "#FFFFFF",

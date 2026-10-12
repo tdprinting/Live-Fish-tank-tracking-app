@@ -82,6 +82,8 @@ data class SpeciesSheet(
     val starvationDays: Double = 21.0,
     val size: SizeInfo = SizeInfo(),
     val model: String? = null,
+    /** Variant-specific models keyed by [com.reeflive.core.model.Livestock.variant] (e.g. darwin_black clown, neon GSP). */
+    val variantModels: Map<String, String> = emptyMap(),
     val colors: Map<String, String> = emptyMap(),
     val iridescence: Double = 0.0,
     /** Species brain / behaviour id used by the simulation (e.g. "clown", "tang", "hermit"). */
@@ -98,6 +100,12 @@ data class SpeciesSheet(
     val coral: CoralInfo? = null,
 ) {
     val isFish: Boolean get() = kind == SpeciesKind.FISH
+
+    /** GLB asset path for an organism of this species with [variant], falling back to [model]. */
+    fun modelFor(variant: String?): String? = variant?.let { variantModels[it] } ?: model
+
+    /** Species card illustration drawable name (res/drawable-nodpi/species_<id>.webp). */
+    val cardDrawable: String get() = "species_$id"
     val isSessile: Boolean get() = kind == SpeciesKind.CORAL || kind == SpeciesKind.ALGAE || locomotion?.mode == "SESSILE"
 
     /** Group label for the livestock list sections. */

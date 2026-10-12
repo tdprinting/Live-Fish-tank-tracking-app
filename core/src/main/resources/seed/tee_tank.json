@@ -22,7 +22,7 @@
     {"speciesId": "lithopoma_tectum", "nickname": "Astreas", "sizeCm": 3.0, "quantity": 3},
     {"speciesId": "asterina_sp", "nickname": "Asterinas", "sizeCm": 1.0, "quantity": 3, "notes": "Hitchhikers; population grows by splitting."},
     {"speciesId": "capnella_sp", "nickname": "Kenya tree", "placement": "kenya_main"},
-    {"speciesId": "briareum_sp", "nickname": "Neon GSP", "placement": "gsp_upper_left"},
+    {"speciesId": "briareum_sp", "nickname": "Neon GSP", "variant": "neon", "placement": "gsp_upper_left"},
     {"speciesId": "briareum_sp", "nickname": "GSP mat", "placement": "gsp_lower_right"},
     {"speciesId": "zoanthus_sp", "nickname": "Zoas", "placement": "zoa_front_center"},
     {"speciesId": "clavularia_sp", "nickname": "Cloves", "placement": "clove_kenya_base"},

@@ -36,6 +36,26 @@ class SpeciesDbTest {
     }
 
     @Test
+    fun modelsMatchShippedAssets() {
+        // File names from the asset track (app/src/main/assets/models, ASSETS §5).
+        val shipped = setOf(
+            "algae_tufts", "asterina", "astrea", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
+            "dottyback", "eel", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
+            "kenya", "lawnmower_blenny", "macro_red", "mushroom", "nassarius", "organ_pipe", "shrimp", "skunk_shrimp",
+            "tailspot_blenny", "tang", "wrasse", "zoa",
+        ).map { "models/$it.glb" }.toSet()
+        for (s in db.all) {
+            val all = listOfNotNull(s.model) + s.variantModels.values
+            assertTrue("${s.id} has a model", all.isNotEmpty())
+            for (m in all) assertTrue("${s.id} -> $m is shipped", m in shipped)
+        }
+        assertEquals("models/clown_darwin.glb", db.require("amphiprion_ocellaris").modelFor("darwin_black"))
+        assertEquals("models/clown_orange.glb", db.require("amphiprion_ocellaris").modelFor("classic"))
+        assertEquals("models/gsp_neon.glb", db.require("briareum_sp").modelFor("neon"))
+        assertEquals("species_amphiprion_ocellaris", db.require("amphiprion_ocellaris").cardDrawable)
+    }
+
+    @Test
     fun seedSpeciesAllExist() {
         val seed = SeedData.loadFile()
         for (l in seed.livestock) assertNotNull("species ${l.speciesId}", db[l.speciesId])

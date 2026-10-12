@@ -89,7 +89,7 @@
   },
   "hardiness": 0.85,
   "starvationDays": 40,
-  "model": "models/hermit_blueleg.glb",
+  "model": "models/hermit_blue.glb",
   "colors": {
     "primary": "#3A6FD0",
     "secondary": "#C8282C",

@@ -57,7 +57,7 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_zoa.glb",
+  "model": "models/zoa.glb",
   "colors": {
     "primary": "#E0792A",
     "secondary": "#5FBF5A",

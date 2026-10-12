@@ -101,7 +101,7 @@
   "size": {
     "lod0Tris": 3000
   },
-  "model": "models/shrimp_banded.glb",
+  "model": "models/shrimp.glb",
   "colors": {
     "primary": "#F4F0E8",
     "secondary": "#C8282C"

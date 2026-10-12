@@ -57,7 +57,7 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_organpipe.glb",
+  "model": "models/organ_pipe.glb",
   "colors": {
     "primary": "#9A2A2A",
     "secondary": "#B8C97A",

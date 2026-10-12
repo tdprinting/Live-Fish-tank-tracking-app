@@ -1,6 +1,7 @@
 package com.reeflive.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -75,6 +79,17 @@ fun SpeciesAvatar(
     var m = modifier.size(size).clip(CircleShape).background(bg)
     m = if (ring != null) m.border(2.dp, ring, CircleShape) else m.border(1.dp, c.glassBorder, CircleShape)
     if (contentDescription != null) m = m.semantics { this.contentDescription = contentDescription }
+    // Species card illustration from the asset track (res/drawable-nodpi/species_<id>.webp) when bundled;
+    // otherwise the procedural silhouette below.
+    val ctx = LocalContext.current
+    @Suppress("DiscouragedApi")
+    val cardRes = remember(speciesId) { runCatching { ctx.resources.getIdentifier("species_$speciesId", "drawable", ctx.packageName) }.getOrDefault(0) }
+    if (cardRes != 0) {
+        Box(m) {
+            Image(painterResource(cardRes), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        return
+    }
     Box(m) {
         Canvas(Modifier.fillMaxSize()) {
             // soft light from above

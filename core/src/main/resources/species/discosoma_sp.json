@@ -57,7 +57,7 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_mushroom.glb",
+  "model": "models/mushroom.glb",
   "colors": {
     "primary": "#3FA7D6",
     "secondary": "#2D7F8F"

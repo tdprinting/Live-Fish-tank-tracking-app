@@ -57,7 +57,7 @@
       "lethalHi": 0.5
     }
   },
-  "model": "models/coral_kenya.glb",
+  "model": "models/kenya.glb",
   "colors": {
     "primary": "#E8DCC4",
     "secondary": "#8A6A4F",
