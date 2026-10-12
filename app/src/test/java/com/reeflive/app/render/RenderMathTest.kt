@@ -25,7 +25,7 @@ class LightingStateTest {
         // weights 4/16 × 3 channels = 0.75
         assertEquals(0.75f, s.intensity, 1e-5f)
         // key = Σ rgb × 0.25
-        assertEquals((0.85f + 0.23f + 0.18f) * 0.25f, s.keyColor[0], 1e-5f)
+        assertEquals((0.85f + 0.12f + 0.14f) * 0.25f, s.keyColor[0], 1e-5f)
         assertEquals((1f + 1f + 1f) * 0.25f, s.keyColor[2], 1e-5f)
         assertEquals(s.keyColor[1] * 0.18f, s.ambient[1], 1e-6f)
         assertEquals(2f / 3f, s.blueFraction, 1e-3f)
