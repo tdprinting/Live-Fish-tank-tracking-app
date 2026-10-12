@@ -121,3 +121,75 @@ fun DateTimeDialog(initial: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit,
         )
     }
 }
+
+/** Hour and minute only (task reminder time, notification time). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeOfDayDialog(hour: Int, minute: Int, onPick: (Int, Int) -> Unit, onDismiss: () -> Unit, title: String = "Reminder time") {
+    val c = ReefTheme.colors
+    val tState = rememberTimePickerState(initialHour = hour.coerceIn(0, 23), initialMinute = minute.coerceIn(0, 59), is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.sheet,
+        shape = ReefShapes.dialog,
+        title = { Text(title, style = MaterialTheme.typography.headlineSmall, color = c.text) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                TimePicker(
+                    state = tState,
+                    colors = TimePickerDefaults.colors(
+                        clockDialColor = c.glass,
+                        selectorColor = c.primary,
+                        containerColor = c.sheet,
+                        clockDialSelectedContentColor = c.bgDeep,
+                        clockDialUnselectedContentColor = c.text,
+                        timeSelectorSelectedContainerColor = c.primary.copy(alpha = 0.3f),
+                        timeSelectorUnselectedContainerColor = c.glass,
+                        timeSelectorSelectedContentColor = c.text,
+                        timeSelectorUnselectedContentColor = c.textSecondary,
+                    ),
+                )
+            }
+        },
+        confirmButton = { ReefButton("Set", { onPick(tState.hour, tState.minute) }, compact = true) },
+        dismissButton = { ReefButton("Cancel", onDismiss, kind = ButtonKind.OUTLINED, compact = true) },
+    )
+}
+
+/** Date only, returned as local midday in the device zone (acquired / installed dates). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateDialog(initial: Long?, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
+    val c = ReefTheme.colors
+    val zone = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(initial ?: System.currentTimeMillis()).atZone(zone).toLocalDate()
+    val state = rememberDatePickerState(initialSelectedDateMillis = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+    val colors = DatePickerDefaults.colors(
+        containerColor = c.sheet,
+        titleContentColor = c.textSecondary,
+        headlineContentColor = c.text,
+        weekdayContentColor = c.textSecondary,
+        dayContentColor = c.text,
+        selectedDayContainerColor = c.primary,
+        selectedDayContentColor = c.bgDeep,
+        todayContentColor = c.primaryBright,
+        todayDateBorderColor = c.primaryBright,
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        colors = colors,
+        shape = ReefShapes.dialog,
+        confirmButton = {
+            ReefButton("Set", {
+                val ms = state.selectedDateMillis
+                if (ms != null) {
+                    val d = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
+                    onPick(d.atTime(12, 0).atZone(zone).toInstant().toEpochMilli())
+                } else onDismiss()
+            }, compact = true)
+        },
+        dismissButton = { ReefButton("Cancel", onDismiss, kind = ButtonKind.OUTLINED, compact = true) },
+    ) {
+        DatePicker(state = state, colors = colors, showModeToggle = false)
+    }
+}

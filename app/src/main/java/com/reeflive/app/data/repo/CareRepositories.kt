@@ -103,14 +103,20 @@ class TaskRepository(
         dao.insertCompletion(c.toEntity())
         if (t.snoozedUntil != null) dao.upsert(t.copy(snoozedUntil = null))
         if (t.title.contains("water change", ignoreCase = true)) {
-            val gallons = amount?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: 6.0
             val system = tanks.get()?.systemGallons ?: 0.0
+            val gallons = amount?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: if (system > 0) system * 0.1 else 6.0
             events.logWaterChange(gallons, if (system > 0) (gallons / system).coerceIn(0.0, 1.0) else 0.0, at = at)
         }
         return c
     }
 
-    suspend fun undoCompletion(c: TaskCompletion) = dao.deleteCompletion(c.id)
+    /** Removes a completion and the water-change event it logged, if any. */
+    suspend fun undoCompletion(c: TaskCompletion) {
+        dao.deleteCompletion(c.id)
+        events.ofTypesSince(listOf(EventType.WATER_CHANGE), c.completedAt)
+            .filter { it.at == c.completedAt }
+            .forEach { events.delete(it.id) }
+    }
 
     suspend fun snooze(taskId: String, untilMs: Long) {
         val t = dao.taskOnce(taskId) ?: return

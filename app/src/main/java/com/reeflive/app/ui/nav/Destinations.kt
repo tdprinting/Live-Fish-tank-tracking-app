@@ -7,6 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import com.reeflive.app.ui.components.EmptyState
 import com.reeflive.app.ui.components.ScreenHeader
+import com.reeflive.app.ui.care.CalculatorRoute
+import com.reeflive.app.ui.care.CareRoute
+import com.reeflive.app.ui.care.TaskDetailRoute
 import com.reeflive.app.ui.dashboard.DashboardRoute
 import com.reeflive.app.ui.log.LogRoute
 import com.reeflive.app.ui.log.ParameterDetailRoute
@@ -51,9 +54,15 @@ fun ParamDestination(nav: NavHostController, paramId: String, onBack: () -> Unit
 }
 
 @Composable fun SessionDestination(sessionId: String, onBack: () -> Unit) = TestSessionRoute(sessionId, onBack)
-@Composable fun CareDestination(nav: NavHostController) = Placeholder("Care")
-@Composable fun TaskDestination(taskId: String, onBack: () -> Unit) = Placeholder("Task", onBack)
-@Composable fun CalcDestination(calcId: String, onBack: () -> Unit) = Placeholder("Calculator", onBack)
+@Composable
+fun CareDestination(nav: NavHostController) = CareRoute(
+    onOpenTask = { nav.navigate(Routes.task(it)) },
+    onNewTask = { nav.navigate(Routes.task(Routes.NEW)) },
+    onOpenCalc = { nav.navigate(Routes.calc(it.id)) },
+)
+
+@Composable fun TaskDestination(taskId: String, onBack: () -> Unit) = TaskDetailRoute(taskId, onBack)
+@Composable fun CalcDestination(calcId: String, onBack: () -> Unit) = CalculatorRoute(calcId, onBack)
 @Composable fun MoreDestination(nav: NavHostController) = Placeholder("More")
 @Composable fun LivestockListDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Livestock", onBack)
 @Composable fun LivestockDetailDestination(nav: NavHostController, id: String, onBack: () -> Unit) = Placeholder("Livestock", onBack)

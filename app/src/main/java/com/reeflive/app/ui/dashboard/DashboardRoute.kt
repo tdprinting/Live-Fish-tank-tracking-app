@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.reeflive.app.di.AppGraph
+import com.reeflive.app.ui.care.TaskOps
 import com.reeflive.app.ui.components.LocalSnackbar
 import com.reeflive.app.ui.components.rememberHaptics
 import com.reeflive.app.ui.nav.reefViewModel
@@ -61,19 +62,11 @@ class DashboardViewModel(private val g: AppGraph) : ViewModel() {
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUi())
 
     fun complete(taskId: String, onDone: (TaskCompletion?) -> Unit) {
-        viewModelScope.launch {
-            val c = g.tasks.complete(taskId)
-            g.tasks.taskOnce(taskId)?.let { g.reminders.schedule(it, g.tasks.lastCompletedAt(taskId)) }
-            g.notifier.cancelTask(taskId)
-            onDone(c)
-        }
+        viewModelScope.launch { onDone(TaskOps.complete(g, taskId)) }
     }
 
     fun undo(c: TaskCompletion) {
-        viewModelScope.launch {
-            g.tasks.undoCompletion(c)
-            g.tasks.taskOnce(c.taskId)?.let { g.reminders.schedule(it, g.tasks.lastCompletedAt(c.taskId)) }
-        }
+        viewModelScope.launch { TaskOps.undo(g, c) }
     }
 
     fun dismissAlert(id: String) {
