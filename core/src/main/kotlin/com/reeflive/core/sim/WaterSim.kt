@@ -458,7 +458,6 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "ato" -> ato = value > 0.5
             "bacteria" -> { s.bacteriaAob = value.coerceIn(B_MIN, 1.0); s.bacteriaNob = value.coerceIn(B_MIN, 1.0) }
             "heaterstuck" -> heaterStuckOn = value > 0.5
-            "refugium", "chaeto" -> micro.refugiumL = value.coerceIn(0.0, 20.0)
             "roomtemp" -> {} // handled by Simulation (config copy)
         }
         if (id.equals("ph", true)) s.ph = value

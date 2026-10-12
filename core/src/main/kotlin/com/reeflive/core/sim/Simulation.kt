@@ -589,6 +589,8 @@ class Simulation(
             }
         }
         m.smallPolyps = small; m.zoaPolyps = zoa; m.mushrooms = shroom; m.displayMacroL = macro
+        // pod habitat in the sump: the refugium chaeto biomass index read as litres of loose chaeto
+        m.refugiumL = water.s.chaeto
     }
 
     /**
