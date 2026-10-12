@@ -346,6 +346,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.use()
             p.setMat4("uModel", if (isPolyp) IDENTITY else part.node.world)
             part.material.apply(p, w, alphaTestOverride = part.node.float("alphaTest") ?: if (part.material.src.blended) 0.3f else null)
+            CORAL_TINT[part.material.src.name]?.let { t ->
+                val bc = part.material.src.baseColor
+                p.set4f("uBaseColor", bc[0] * t[0], bc[1] * t[1], bc[2] * t[2], bc.getOrElse(3) { 1f })
+            }
             coralUniforms(p, m, c)
             if (isPolyp) p.set1f("uSwayAmp", 0.25f * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
@@ -522,5 +526,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val SAND_NORMAL = "textures/sand_normal.png"
         val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, ROCK_NORMAL, ROCK_ROUGH_AO, SAND_NORMAL)
         val IDENTITY = M.identity()
+
+        /**
+         * Linear albedo multipliers by GLB material name, for coral colours the baked textures get wrong under
+         * the tank light (no re-export needed). Kenya: the pale pink-cream texture (≈ #D7AEA2) read as bleached
+         * white; × this it is the tan / pink-brown of the photos (body ≈ #AC7C68, polyps ≈ #C0917F). Zoa orange:
+         * the #E0792A disc read yellow under the blue-heavy light; deepened to ≈ #E0671D.
+         */
+        val CORAL_TINT: Map<String, FloatArray> = mapOf(
+            "kenya_body" to floatArrayOf(0.62f, 0.48f, 0.38f),
+            "kenya_polyp" to floatArrayOf(0.66f, 0.50f, 0.40f),
+            "zoa_polyp_orange" to floatArrayOf(1.0f, 0.70f, 0.55f),
+        )
     }
 }

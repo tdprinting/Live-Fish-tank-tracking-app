@@ -27,8 +27,10 @@ class LightingState private constructor(
     companion object {
         val CHANNEL_RGB: Array<FloatArray> = arrayOf(
             floatArrayOf(0.85f, 0.93f, 1.0f),  // white
-            floatArrayOf(0.23f, 0.63f, 1.0f),  // blue
-            floatArrayOf(0.18f, 0.36f, 1.0f),  // royal
+            // blue / royal carry less red than the UI swatches (core LightSchedule): with 0.23 / 0.18 red the blue-heavy
+            // schedules lit the sand and water periwinkle-violet instead of the photos' clean blue
+            floatArrayOf(0.12f, 0.60f, 1.0f),  // blue
+            floatArrayOf(0.14f, 0.34f, 1.0f),  // royal
             floatArrayOf(1.0f, 0.3f, 0.3f),    // red
             floatArrayOf(0.3f, 1.0f, 0.54f),   // green
             floatArrayOf(0.42f, 0.24f, 1.0f),  // violet

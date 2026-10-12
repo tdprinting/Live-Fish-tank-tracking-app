@@ -61,8 +61,11 @@ class FishRig(val id: String) {
         eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
         alive = b.alive; visible = b.visible; posture = b.posture
+        limitBend(spine, frames, MAX_BEND_PER_SEGMENT, MAX_BEND_TOTAL, bendScratch)
         touched = true
     }
+
+    private val bendScratch = FloatArray(64)
 
     /** Distance from a point to the head (cm), for LOD selection. */
     fun distanceTo(x: Float, y: Float, z: Float): Float {
@@ -83,6 +86,101 @@ class FishRig(val id: String) {
 
         /** The pose's model variant (darwin_black clown, …) when the core exposes one. */
         fun variantOf(p: OrganismPose): String? = p.variant
+
+        /**
+         * Largest yaw the renderer feeds the skinning shader between neighbouring spine stations (rad per BL/15).
+         * The body trail can fold into a hairpin on a sharp turn; at 0.42 rad the bend radius stays ≥ 0.16 BL,
+         * wider than a fish's half-thickness plus a folded pectoral, so the body cannot pass through itself.
+         */
+        const val MAX_BEND_PER_SEGMENT = 0.42f
+        /** Total head-to-tail bend (rad); a C-start or a U-shaped den path still fits, a spiral does not. */
+        const val MAX_BEND_TOTAL = 3.1416f
+
+        /**
+         * Caps the bend of a stride-4 [spine] (16 stations, head first) in place: walking head → tail, each segment
+         * keeps its length but turns at most [maxPerSeg] from the previous one and at most [maxTotal] in all. The
+         * head segment and the head position are kept, so picking and the sim's head stay put. Frames whose
+         * station tangent changed are rotated by the same swing, which keeps their roll. Returns true if anything
+         * moved. [scratch] (≥ 64 floats) receives a copy of the original spine.
+         */
+        fun limitBend(spine: FloatArray, frames: FloatArray, maxPerSeg: Float, maxTotal: Float, scratch: FloatArray): Boolean {
+            spine.copyInto(scratch, 0, 0, 64)
+            val old = scratch
+            // previous segment direction (head → station 1)
+            var px = old[4] - old[0]; var py = old[5] - old[1]; var pz = old[6] - old[2]
+            val pl = sqrt(px * px + py * py + pz * pz)
+            if (pl < 1e-6f) return false
+            px /= pl; py /= pl; pz /= pl
+            var budget = maxTotal
+            var changed = false
+            for (i in 1 until 15) {
+                var dx = old[(i + 1) * 4] - old[i * 4]; var dy = old[(i + 1) * 4 + 1] - old[i * 4 + 1]; var dz = old[(i + 1) * 4 + 2] - old[i * 4 + 2]
+                val len = sqrt(dx * dx + dy * dy + dz * dz)
+                if (len < 1e-6f) {
+                    // coincident points: continue straight
+                    spine[(i + 1) * 4] = spine[i * 4]; spine[(i + 1) * 4 + 1] = spine[i * 4 + 1]; spine[(i + 1) * 4 + 2] = spine[i * 4 + 2]
+                    continue
+                }
+                dx /= len; dy /= len; dz /= len
+                val c = (px * dx + py * dy + pz * dz).coerceIn(-1f, 1f)
+                val ang = kotlin.math.acos(c)
+                val allowed = minOf(maxPerSeg, budget.coerceAtLeast(0f))
+                if (ang > allowed + 1e-4f) {
+                    // rotate the previous direction toward this one by `allowed`, in their common plane
+                    var qx = dx - px * c; var qy = dy - py * c; var qz = dz - pz * c
+                    var ql = sqrt(qx * qx + qy * qy + qz * qz)
+                    if (ql < 1e-5f) {
+                        // exact reversal: bend about world up (a yaw), or about X if the body is vertical
+                        qx = -pz; qy = 0f; qz = px
+                        ql = sqrt(qx * qx + qz * qz)
+                        if (ql < 1e-5f) { qx = 0f; qy = -pz; qz = py; ql = sqrt(qy * qy + qz * qz).coerceAtLeast(1e-6f) }
+                    }
+                    qx /= ql; qy /= ql; qz /= ql
+                    val ca = kotlin.math.cos(allowed); val sa = kotlin.math.sin(allowed)
+                    dx = px * ca + qx * sa; dy = py * ca + qy * sa; dz = pz * ca + qz * sa
+                    budget -= allowed
+                    changed = true
+                } else {
+                    budget -= ang
+                }
+                spine[(i + 1) * 4] = spine[i * 4] + dx * len
+                spine[(i + 1) * 4 + 1] = spine[i * 4 + 1] + dy * len
+                spine[(i + 1) * 4 + 2] = spine[i * 4 + 2] + dz * len
+                px = dx; py = dy; pz = dz
+            }
+            if (!changed) return false
+            for (i in 0 until 16) {
+                // station tangent as the sim computes it (central difference, one-sided at the ends), old vs new
+                val a = if (i == 0) 0 else i - 1; val b = if (i == 15) 15 else i + 1
+                var ox = old[a * 4] - old[b * 4]; var oy = old[a * 4 + 1] - old[b * 4 + 1]; var oz = old[a * 4 + 2] - old[b * 4 + 2]
+                var nx = spine[a * 4] - spine[b * 4]; var ny = spine[a * 4 + 1] - spine[b * 4 + 1]; var nz = spine[a * 4 + 2] - spine[b * 4 + 2]
+                val ol = sqrt(ox * ox + oy * oy + oz * oz); val nl = sqrt(nx * nx + ny * ny + nz * nz)
+                if (ol < 1e-6f || nl < 1e-6f) continue
+                ox /= ol; oy /= ol; oz /= ol; nx /= nl; ny /= nl; nz /= nl
+                val d = ox * nx + oy * ny + oz * nz
+                if (d > 0.99999f) continue
+                // r = rotation taking old → new: (old × new, 1 + old·new), normalized
+                var rx = oy * nz - oz * ny; var ry = oz * nx - ox * nz; var rz = ox * ny - oy * nx; var rw = 1f + d
+                if (rw < 1e-5f) {
+                    // opposite tangents: half-turn about an axis perpendicular to the old tangent
+                    rx = -oz; ry = 0f; rz = ox; rw = 0f
+                    if (rx * rx + rz * rz < 1e-8f) { rx = 1f; ry = 0f; rz = 0f }
+                }
+                val rl = sqrt(rx * rx + ry * ry + rz * rz + rw * rw)
+                rx /= rl; ry /= rl; rz /= rl; rw /= rl
+                val k = i * 4
+                val qx = frames[k]; val qy = frames[k + 1]; val qz = frames[k + 2]; val qw = frames[k + 3]
+                // frames[i] = r * q (Hamilton, xyzw; same as core Quat.times)
+                var fx = rw * qx + rx * qw + ry * qz - rz * qy
+                var fy = rw * qy - rx * qz + ry * qw + rz * qx
+                var fz = rw * qz + rx * qy - ry * qx + rz * qw
+                var fw = rw * qw - rx * qx - ry * qy - rz * qz
+                val fl = sqrt(fx * fx + fy * fy + fz * fz + fw * fw).coerceAtLeast(1e-6f)
+                fx /= fl; fy /= fl; fz /= fl; fw /= fl
+                frames[k] = fx; frames[k + 1] = fy; frames[k + 2] = fz; frames[k + 3] = fw
+            }
+            return true
+        }
     }
 }
 
