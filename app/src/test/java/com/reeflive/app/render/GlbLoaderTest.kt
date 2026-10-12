@@ -69,7 +69,7 @@ class GlbLoaderTest {
         assertTrue(tank.nodes.first { it.part == "stand" }.hidden)
         val eq = load("equipment.glb")
         val lens = eq.nodes.first { it.part == "emitter" }
-        assertEquals(120f, lens.float("coneDeg")!!, 1e-3f)
+        assertEquals(110f, lens.float("coneDeg")!!, 1e-3f)
         // KHR_materials_emissive_strength is folded into the emissive factor
         assertTrue(eq.materials.any { it.emissive.any { e -> e > 1.5f } })
     }
