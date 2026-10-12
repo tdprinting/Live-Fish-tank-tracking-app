@@ -127,6 +127,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     CARDINAL(listOf("sphaeramia", "pterapogon", "apogon"), true),
     WRASSE(listOf("labroides"), true),
     EEL(listOf("echidna", "gymnothorax", "gymnomuraena"), true),
+    ENGINEER_GOBY(listOf("pholidichthys"), true),
     HAWK(listOf("cirrhitichthys", "neocirrhites", "oxycirrhites", "paracirrhites"), true),
     LAWNMOWER_BLENNY(listOf("salarias"), true),
     PEEKER_BLENNY(listOf("ecsenius", "meiacanthus"), true),
@@ -148,9 +149,21 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
 
     companion object {
         fun resolve(s: SimSpecies): BrainKind {
-            s.brain?.let { b -> entries.firstOrNull { it.name.equals(b, true) }?.let { return it } }
+            s.brain?.let { b ->
+                entries.firstOrNull { it.name.equals(b, true) }?.let { return it }
+                ALIASES[b.lowercase()]?.let { return it }
+            }
             return byId(s.id) ?: if (s.kind.equals("FISH", true)) GENERIC_FISH else GENERIC_INVERT
         }
+
+        /** Track A sheet `brain` strings that differ from the enum names; unknown strings fall back to genus/kind. */
+        private val ALIASES = mapOf(
+            "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
+            "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
+            "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "brittle_star" to BRITTLE_STAR,
+            "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
+        )
 
         fun byId(id: String): BrainKind? {
             val genus = id.lowercase().substringBefore('_').substringBefore('-')

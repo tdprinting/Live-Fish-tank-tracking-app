@@ -37,12 +37,19 @@ abstract class SpeciesBrain(val c: Ctx) {
     /** The nearest predator within its threat radius (refreshed 4×/s). */
     var threat: Organism? = null
     private var threatCheck = 0.0
+    private var perceiveIn = 0.0
     private var eyeTarget = 0.0
     private var eyeNext = 0.0
     private var lastLightsOnSeen = -1e9
 
     protected fun install(vararg behaviors: Behavior) {
-        utility = UtilityBrain(behaviors.toList())
+        // Shared layers for every brain: matrix-driven rivalry (research 05 §17) and the sick/moribund behavior.
+        val extra = buildList {
+            if (o.isFish || o.brainKind == BrainKind.BANDED_SHRIMP) add(Rivalry(this@SpeciesBrain))
+            if (o.isFish) add(KeepClear(this@SpeciesBrain))
+            add(Unwell(this@SpeciesBrain))
+        }
+        utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility
     }
 
@@ -53,6 +60,8 @@ abstract class SpeciesBrain(val c: Ctx) {
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
         threatCheck -= dt
+        perceiveIn -= dt
+        if (perceiveIn <= 0) { Social.perceive(c, Social.PERCEIVE_INTERVAL - perceiveIn); perceiveIn = Social.PERCEIVE_INTERVAL * (0.8 + 0.4 * c.rng.nextDouble()) }
         if (threatCheck <= 0) { threatCheck = 0.25; threat = findThreat(c) }
         // eye glances
         if (c.t > eyeNext) { eyeTarget = c.rng.signed() * 0.35; eyeNext = c.t + c.rng.range(0.6, 3.0) }
@@ -89,7 +98,8 @@ abstract class SpeciesBrain(val c: Ctx) {
     }
 
     /** Hit by an attack (eel strike, hawk pounce, territorial charge) that it survived. */
-    open fun onAttacked(c: Ctx, from: Vec3, mag: Double) {
+    open fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: Organism? = null) {
+        if (by != null) Social.recordAttack(by, o, mag)
         startleAt = c.t; startleFrom = from; startleMag = max(0.5, mag)
         o.startle = max(o.startle, 0.3 * mag)
     }

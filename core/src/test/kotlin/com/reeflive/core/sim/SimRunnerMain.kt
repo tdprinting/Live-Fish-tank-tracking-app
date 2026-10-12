@@ -37,7 +37,7 @@ private fun long(days: Int, p: Preset) {
         repeat(24) { sim.advanceAbstract(3600.0) }
         println("${clock(sim.simTimeSec)}  ${waterLine(sim.water.s)}")
         val notable = sim.organisms.filter { it.health < 0.95 || it.hunger > 0.6 || it.stress > 0.2 || it.disease != null || !it.alive }
-        for (o in notable) println("    %-12s h %.2f hunger %.2f stress %.2f imm %.2f %s %s".format(o.nickname, o.health, o.hunger, o.stress, o.immunity,
+        for (o in notable) println("    %-12s h %.2f hunger %.2f stress %.2f imm %.2f cond %.2f %s %s %s".format(o.nickname, o.health, o.hunger, o.stress, o.immunity, o.condition, o.envStress.entries.joinToString(",") { "${it.key}=%.2f".format(it.value) },
             o.disease?.let { "$it %.2f".format(o.diseaseStage) } ?: "", if (o.alive) "" else "DEAD (${o.deathCause})"))
         for (e in sim.eventLog) if (seen.add(e)) println("    event: $e")
         for (c in sim.corals) if (c.bleach > 0.2 || c.tissue < 0.9) println("    coral %s ext %.2f bleach %.2f tissue %.2f".format(c.nickname, c.extension, c.bleach, c.tissue))

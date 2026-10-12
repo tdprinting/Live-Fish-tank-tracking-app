@@ -60,6 +60,18 @@ class Simulation(
     private var grazeAccum = 0.0
     private var idCounter = 1
     val moltShells = ArrayList<Pair<Vec3, Double>>()   // position, born at
+    /** Sand piles spat out by burrowing gobies: position on the sand and volume (cm³). */
+    val sandPiles = ArrayList<SandPile>()
+
+    /** A goby drops a mouthful of sand at [at]; nearby piles merge (max 8 piles). */
+    fun depositSand(at: Vec3, cm3: Double) {
+        val p = sandPiles.firstOrNull { it.pos.distanceTo(at) < 3.0 }
+        if (p != null) p.volume += cm3
+        else {
+            if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
+            sandPiles += SandPile(Vec3(at.x, rock.sandTopCm, at.z), cm3)
+        }
+    }
     private val lightCh = DoubleArray(LightSchedule.CHANNELS)
     private var cachedSinceOn: Double? = null
     private var cachedUntilOff: Double? = null
@@ -228,13 +240,16 @@ class Simulation(
                 BrainKind.DOTTYBACK, BrainKind.TANG, BrainKind.EEL -> organisms.any { it !== o && it.alive && it.brainKind == o.brainKind }
                 else -> false
             }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night)
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength)
             HealthModel.step(o, w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
-            CoralSim.step(c, w.s, light, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink)
+            val tissueBefore = c.tissue
+            CoralSim.step(c, w.s, light, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
+            // Dying coral tissue decomposes (die-off cascade, research 05 §11)
+            if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
         }
         crustaceanMolts(dtMin)
@@ -247,6 +262,14 @@ class Simulation(
             pendingEventsSink += SimEvent.AlgaeBloom(w.s.algaeHair, simTimeSec)
         }
         moltShells.removeAll { simTimeSec - it.second > 24 * 3600 }
+        // piles slump and spread over ~4 days (faster in strong flow); abstract mode digs at the day rate
+        val slump = Math.exp(-dtMin / (4 * 1440.0) * (0.5 + 0.5 * flowStrength))
+        sandPiles.forEach { it.volume *= slump }
+        sandPiles.removeAll { it.volume < 0.2 }
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.ENGINEER_GOBY) {
+            val b = agents[o]?.brain as? com.reeflive.core.ai.GobyBrain ?: continue
+            if (rng.chance(dtMin / 3.0)) depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+        }
         flushEvents()
     }
 
@@ -414,7 +437,7 @@ class Simulation(
             is Command.SetParam -> when (c.paramId.lowercase()) {
                 "light" -> lights.intensityOverride = c.value.coerceIn(0.0, 1.5)
                 "roomtemp" -> { config = config.copy(roomC = c.value); water = rebuildWater() }
-                "flow" -> setFlow(c.value > 0.5)
+                "flow" -> setFlowStrength(c.value)
                 "speed" -> speed = c.value
                 else -> water.setParam(c.paramId, c.value)
             }
@@ -441,7 +464,7 @@ class Simulation(
     private fun rebuildWater(): WaterSim {
         val old = water
         return WaterSim(config, old.s.copy()).also { nw ->
-            nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
+            nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
 
@@ -449,6 +472,15 @@ class Simulation(
         flow.powerheadsOn = on
         water.s.flowOn = on
     }
+
+    /** Sandbox pump strength 0..2 (0 = pumps off, 1 = Tee's setup). */
+    fun setFlowStrength(v: Double) {
+        val k = v.coerceIn(0.0, 2.0)
+        flow.strength = k.coerceAtLeast(0.05)
+        water.flowStrength = k
+        setFlow(k > 0.02)
+    }
+    val flowStrength: Double get() = if (water.s.flowOn) water.flowStrength else 0.0
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
         water.addFeed(grams * kind.nutrientFactor)
@@ -502,7 +534,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
@@ -568,10 +600,12 @@ class Simulation(
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
-            stats = organisms.map { it.stats() },
+            stats = organisms.map { it.stats(com.reeflive.core.ai.Caption.of(it, this)) },
             tick = tickCount,
             abstractMode = abstractMode,
             moltShells = moltShells.map { it.first },
+            sandPiles = FloatArray(sandPiles.size * 4).also { a -> sandPiles.forEachIndexed { i, p -> a[i * 4] = p.pos.x.toFloat(); a[i * 4 + 1] = p.pos.z.toFloat(); a[i * 4 + 2] = p.radius.toFloat(); a[i * 4 + 3] = p.height.toFloat() } },
+            flowStrength = flowStrength.toFloat(),
             noriRemaining = food.nori?.remaining?.toFloat() ?: 0f,
         )
     }
@@ -589,6 +623,8 @@ class Simulation(
         const val CHEM_DT = 60.0
         const val ABSTRACT_SPEED = 240.0
         const val CORPSE_TAN_PER_G = 0.02
+        /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
+        const val CORAL_TAN_PER_COLONY = 2.0
         const val ASTERINA_CAP = 4
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)

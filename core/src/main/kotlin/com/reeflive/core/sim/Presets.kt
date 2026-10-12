@@ -12,7 +12,8 @@ object DefaultStock {
         LivestockSeed("paracanthurus_hepatus", "Blue", 7.5, id = "tang"),
         LivestockSeed("sphaeramia_nematoptera", "Pajama", 6.0, id = "cardinal"),
         LivestockSeed("labroides_dimidiatus", "Doc", 8.0, id = "wrasse"),
-        LivestockSeed("echidna_nebulosa", "Snowflake", 45.0, id = "eel"),
+        // Owner correction: the "eel" is a juvenile engineer goby (black/yellow stripes), not a moray.
+        LivestockSeed("pholidichthys_leucotaenia", "Stripes", 10.0, id = "goby"),
         LivestockSeed("cirrhitichthys_falco", "Falco", 6.5, id = "hawk"),
         LivestockSeed("salarias_fasciatus", "Mower", 10.0, id = "lawnmower"),
         LivestockSeed("ecsenius_stigmatura", "Peeker", 5.5, id = "tailspot"),

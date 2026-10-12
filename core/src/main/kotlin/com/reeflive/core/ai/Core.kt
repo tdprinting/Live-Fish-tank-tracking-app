@@ -142,6 +142,8 @@ class Ctx(val sim: Simulation, val o: Organism) {
  * [enter]/[update]/[exit]. [finished] lets the brain switch even without the hysteresis margin.
  */
 abstract class Behavior(val name: String, val label: String) {
+    /** Verb phrase used in captions when the behavior has a focus organism ("chasing", "cleaning"…). */
+    open val targetVerb: String? get() = null
     var finished = false
     var elapsed = 0.0
     var enteredAt = 0.0
@@ -159,6 +161,8 @@ class UtilityBrain(val behaviors: List<Behavior>) {
     val currentLabel: String get() = current?.label ?: ""
     val hysteresis = 0.12
     private var lastScores = DoubleArray(behaviors.size)
+    /** Ornstein–Uhlenbeck noise per behavior (τ 20 s, amplitude = the individual's whim). */
+    private val noise = DoubleArray(behaviors.size)
 
     fun scores(): Map<String, Double> = behaviors.mapIndexed { i, b -> b.name to lastScores[i] }.toMap()
 
@@ -166,8 +170,13 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         var best: Behavior? = null
         var bestScore = -1.0
         var curScore = -1.0
+        val k = c.dt / NOISE_TAU
+        val amp = c.o.whim * kotlin.math.sqrt(2 * k)
         for ((i, b) in behaviors.withIndex()) {
-            val s = if (b === current && !b.finished) b.score(c) else b.score(c)
+            noise[i] += -noise[i] * k + amp * c.rng.gaussian()
+            val raw = b.score(c)
+            // stochastic utility: only nudges ordinary scores; urgent ones (≥ 0.95) and zeros stay exact
+            val s = if (raw > 0.0 && raw < 0.95) (raw + noise[i]).coerceIn(0.01, 0.94) else raw
             lastScores[i] = s
             if (b === current) curScore = s
             if (s > bestScore) { bestScore = s; best = b }
@@ -182,6 +191,7 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         }
         if (switch && best != null && (best !== cur || cur.finished)) {
             cur?.exit(c)
+            c.o.focusId = null
             best.finished = false
             best.elapsed = 0.0
             best.enteredAt = c.t
@@ -197,4 +207,6 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         current = b
         b.enter(c)
     }
+
+    companion object { const val NOISE_TAU = 20.0 }
 }

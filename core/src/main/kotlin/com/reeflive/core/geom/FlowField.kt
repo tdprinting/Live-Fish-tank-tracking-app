@@ -41,6 +41,10 @@ class FlowField(
     var powerheadsOn: Boolean = true
         set(v) { field = v; gridValid = false }
 
+    /** Sandbox pump strength multiplier on the powerhead jets (0 = off … 2 = double), HOB unaffected. */
+    var strength: Double = 1.0
+        set(v) { field = v.coerceIn(0.0, 2.0); gridValid = false }
+
     /** Speed of a single jet at point p (no shadowing). Exposed for tests (§8.9). */
     fun jetVelocity(j: Powerhead, p: Vec3): Vec3 {
         val rel = p - j.pos
@@ -73,9 +77,9 @@ class FlowField(
             if (!j.on) continue
             if (isPowerhead(j) && !powerheadsOn) continue
             any = any || isPowerhead(j)
-            v += jetVelocity(j, p) * (if (isPowerhead(j)) pulse else 1.0)
+            v += jetVelocity(j, p) * (if (isPowerhead(j)) pulse * strength else 1.0)
         }
-        v += globalCirculation(p) * (if (any) 1.0 else 0.2)
+        v += globalCirculation(p) * (if (any) strength.coerceAtLeast(0.2) else 0.2)
         val shadow = (sdf.dist(p) / 8.0).coerceIn(0.15, 1.0)
         return v * shadow
     }

@@ -147,6 +147,10 @@ data class SimSnapshot(
     val moltShells: List<Vec3> = emptyList(),
     /** Nori sheet remaining on the clip (0 = none). */
     val noriRemaining: Float = 0f,
+    /** Goby sand piles: x, z, radius, height (cm) per pile. */
+    val sandPiles: FloatArray = FloatArray(0),
+    /** Sandbox pump strength (0..2). */
+    val flowStrength: Float = 1f,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
@@ -173,4 +177,16 @@ data class OrganismStats(
     val alive: Boolean,
     val lengthCm: Float,
     val temperamentTags: List<String>,
+    /** Follow-mode caption, e.g. "Falco hawkfish eyeing the skunk cleaner shrimp" (Track C). */
+    val caption: String = "",
+    val focusId: String? = null,
+    /** Per-parameter stress parts for the Advanced inspector (keys: HealthModel.label). */
+    val envStress: Map<String, Double> = emptyMap(),
+    val cause: String? = null,
 )
+
+/** A mound of sand dug out by a burrowing goby (cone: volume = π r² h / 3, h ≈ 0.45 r). */
+class SandPile(val pos: com.reeflive.core.geom.Vec3, var volume: Double) {
+    val radius: Double get() = Math.cbrt(volume * 3 / (Math.PI * 0.45))
+    val height: Double get() = 0.45 * radius
+}

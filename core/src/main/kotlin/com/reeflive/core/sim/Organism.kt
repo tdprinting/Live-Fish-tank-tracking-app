@@ -51,6 +51,22 @@ class Organism(
     /** Per-parameter environmental stress contributions from the last chem tick (UI "why"). */
     val envStress: MutableMap<String, Double> = LinkedHashMap()
     var lethalExposure = false
+    /** How far past the worst lethal bound (in tolerance spans) the last chem tick was. */
+    var lethalOvershoot = 0.0
+
+    // ---- social memory (SIMULATION §4.9) ----
+    val relations: MutableMap<String, com.reeflive.core.ai.Relation> = HashMap()
+    /** Individual this animal is currently wary of (refreshed by Social.perceive) and how much. */
+    var wary: Organism? = null
+    var waryLevel = 0.0
+    /** Id of the organism the current behavior is about (chase target, cleaning client, prey…); null = none. */
+    var focusId: String? = null
+    /** Per-individual utility noise amplitude (temperament seed): some individuals are more capricious. */
+    val whim: Double = 0.025 + 0.03 * rng.nextDouble()
+    /** Acclimated temperature / SG / pH (rate-of-change shock, SIMULATION §3.3b); NaN until the first chem tick. */
+    var acclTemp = Double.NaN
+    var acclSg = Double.NaN
+    var acclPh = Double.NaN
 
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
@@ -102,7 +118,7 @@ class Organism(
     val massG: Double get() = ChemFns.massGrams(lengthCm, species.massCoeff)
     val isFish: Boolean get() = brainKind.isFish
     /** Collision length: real BL, capped at 6 cm for eels so the clearance follows body girth, not length (SIMULATION §8.7). */
-    val collisionLength: Double get() = if (brainKind == BrainKind.EEL) lengthCm.coerceAtMost(6.0) else lengthCm
+    val collisionLength: Double get() = when (brainKind) { BrainKind.EEL -> lengthCm.coerceAtMost(6.0); BrainKind.ENGINEER_GOBY -> lengthCm.coerceAtMost(3.0); else -> lengthCm }
     val cruiseSpeed: Double get() = species.locomotion.cruiseBL * lengthCm
     val burstSpeed: Double get() = species.locomotion.burstBL * lengthCm
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */
@@ -139,9 +155,10 @@ class Organism(
         )
     }
 
-    fun stats(): OrganismStats = OrganismStats(
+    fun stats(caption: String = behaviorName): OrganismStats = OrganismStats(
         id, nickname, species.id, species.common, health.toFloat(), hunger.toFloat(), stress.toFloat(), mood,
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
+        caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
     )
 
     fun temperamentTags(): List<String> = buildList {

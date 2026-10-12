@@ -12,6 +12,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AiTest {
+    /** The moray brain is kept for other tanks; Tee's "eel" is an engineer goby (see gobyDigsAndHides). */
+    private val MORAY = com.reeflive.core.sim.LivestockSeed("echidna_nebulosa", "Snowflake", 45.0, id = "eel")
+
     private fun fullTank(seed: Long = 1L, hour: Double = 12.0) = TestTank.sim(DefaultStock.all, seed = seed, startHour = hour)
 
     /** SIMULATION §8.6: over 10 min, 95 % of samples within 3 BL of the host anchor. */
@@ -62,7 +65,7 @@ class AiTest {
         var eaten = 0
         val seeds = 1L..20L
         for (seed in seeds) {
-            val sim = TestTank.sim(listOf(TestTank.seed("eel"), TestTank.seed("banded")), seed = seed, startHour = 23.0)
+            val sim = TestTank.sim(listOf(MORAY, TestTank.seed("banded")), seed = seed, startHour = 23.0)
             sim.predationEnabled = true
             val eel = sim.organisms.first { it.brainKind == BrainKind.EEL }
             val shrimp = sim.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
@@ -79,7 +82,7 @@ class AiTest {
     /** Reality mode never kills by predation (SIMULATION §4.5). */
     @Test
     fun noPredationInRealityMode() {
-        val sim = TestTank.sim(listOf(TestTank.seed("eel"), TestTank.seed("banded")), startHour = 23.0)
+        val sim = TestTank.sim(listOf(MORAY, TestTank.seed("banded")), startHour = 23.0)
         sim.organisms.first { it.brainKind == BrainKind.EEL }.hunger = 0.95
         sim.advance(1800.0, behaviorDt = 0.1)
         assertTrue(sim.eventLog.none { it is SimEvent.Eaten })
@@ -143,5 +146,34 @@ class AiTest {
         }
         val pose = sim.snapshot().organisms.first()
         assertTrue(pose.spine.all { it.isFinite() } && pose.frames.all { it.isFinite() })
+    }
+
+    /** Engineer goby: digs sand piles by day near its burrow, never strays far, withdraws out of sight at night. */
+    @Test
+    fun gobyDigsAndHides() {
+        val sim = fullTank()
+        val goby = sim.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }
+        val mouth = (sim.agentOf(goby)!!.brain as GobyBrain).mouth
+        var maxDist = 0.0
+        sim.advance(3600.0, behaviorDt = 0.1) { maxDist = maxOf(maxDist, goby.pos.distanceTo(mouth)) }
+        assertTrue("no sand piles after an hour", sim.sandPiles.isNotEmpty())
+        assertTrue("goby strayed $maxDist cm from its burrow", maxDist < 30.0)
+        val night = fullTank(hour = 22.5)
+        night.advance(300.0, behaviorDt = 0.1)
+        val g = night.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }
+        assertTrue("goby at night: ${g.behaviorName} posture ${g.posture} visible ${g.visible}", g.posture == 3 && !g.visible)
+    }
+
+    /** Relationship memory: a fish that was chased fears its attacker and keeps clear of it. */
+    @Test
+    fun victimsRememberAttackers() {
+        val sim = fullTank()
+        val a = sim.organisms.first { it.brainKind == BrainKind.DOTTYBACK }
+        val v = sim.organisms.first { it.brainKind == BrainKind.PEEKER_BLENNY }
+        repeat(3) { Social.recordAttack(a, v, 0.6) }
+        v.pos = a.pos + com.reeflive.core.geom.Vec3(8.0, 0.0, 0.0)
+        sim.advance(5.0, behaviorDt = 0.1)
+        assertTrue("fear ${v.relations[a.id]?.fear}", (v.relations[a.id]?.fear ?: 0.0) > 0.5)
+        assertTrue("wary of ${v.wary}", v.wary === a)
     }
 }

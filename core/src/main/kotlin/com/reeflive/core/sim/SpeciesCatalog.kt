@@ -64,6 +64,10 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("ANGUILLIFORM", 0.5, 2.5, 1.0, 120.0, 0.6, 0.06, 0.1), zone = Zone(0.0, 0.35, 0.1, 0.9),
                     temperament = Temperament(0.4, 0.4, 0.5, 0.3), diet = listOf("MYSIS", "PELLET", "MEATY"), feedsPerDay = 0.33,
                     hardiness = 0.85, starvationDays = 60.0, iridescence = 0.05, homeRadiusCm = 50.0, model = "models/eel.glb")
+                BrainKind.ENGINEER_GOBY -> base.copy(common = "Engineer goby", maxLengthCm = 30.0, typicalAdultCm = 20.0, depthRatio = 0.08, massCoeff = 0.004,
+                    locomotion = Locomotion("ANGUILLIFORM", 0.8, 4.0, 1.6, 160.0, 0.7, 0.06, 0.1), zone = Zone(0.0, 0.25, 0.2, 0.9),
+                    temperament = Temperament(0.05, 0.25, 0.4, 0.75), diet = listOf("PODS", "MYSIS", "FLAKE", "PELLET"), feedsPerDay = 3.0,
+                    hardiness = 0.85, homeRadiusCm = 15.0, iridescence = 0.05, model = "models/engineer_goby.glb")
                 BrainKind.HAWK -> base.copy(common = "Falco hawkfish", maxLengthCm = 7.0, depthRatio = 0.4,
                     locomotion = Locomotion("LABRIFORM", 0.4, 3.0, 2.0, 200.0, 0.9, 0.03, 0.08), zone = Zone(0.05, 0.6, 0.1, 0.8),
                     temperament = Temperament(0.5, 0.7, 0.5, 0.3), diet = listOf("MYSIS", "PELLET", "FLAKE"), hardiness = 0.6, homeRadiusCm = 40.0, model = "models/hawkfish.glb")

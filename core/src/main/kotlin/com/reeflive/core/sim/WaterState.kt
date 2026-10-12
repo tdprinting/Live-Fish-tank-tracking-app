@@ -29,6 +29,9 @@ data class WaterState(
     var algaeHair: Double = 0.06,
     var macro: Double = 0.3,
     var cyano: Double = 0.0,
+    /** Brown diatom film on sand/glass (0..1), coralline coverage on rock (0..1) (research 05 §14). */
+    var diatoms: Double = 0.0,
+    var coralline: Double = 0.4,
     var bacteriaAob: Double = 1.0,
     var bacteriaNob: Double = 1.0,
     var detritus: Double = 0.2,
@@ -60,6 +63,9 @@ data class WaterState(
         "i" -> i
         "copper", "cu" -> copper
         "algae", "algaehair" -> algaeHair
+        "cyano" -> cyano
+        "diatoms" -> diatoms
+        "coralline" -> coralline
         "light" -> lightPar
         else -> null
     }

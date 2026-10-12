@@ -429,7 +429,7 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 This section records what the `:core` implementation actually does where it differs from, or adds to, §1–§8. Code: `core/src/main/kotlin/com/reeflive/core/{geom,sim,ai}`; tests: `core/src/test/kotlin/com/reeflive/core/{geom,sim,ai}`; species fixtures used by the tests: `core/src/test/resources/sim-fixtures/species/*.json` (Track A owns the production sheets in `core/src/main/resources/species/`; `SpeciesCatalog.fallback` supplies archetype sheets for any id without one).
 
 ### 9.1 Livestock (coordinator update)
-Fish: 2 ocellaris clowns (female + male), juvenile blue tang, pajama cardinal, cleaner wrasse, snowflake eel, Falco hawkfish, **lawnmower blenny** (*Salarias fasciatus*), **tailspot blenny** (*Ecsenius stigmatura*), **indigo dottyback** (*Pseudochromis*). Inverts: banded coral shrimp, **skunk cleaner shrimp**, 3 hermit crabs, **black brittle star**, **brown feather duster**, 3 nassarius, 3 astrea, 2 asterina. Corals: Kenya tree, 2× GSP, zoas, clove, mushrooms, red macro, and **organ pipe coral** (*Tubipora musica*) at the Kenya base (replacing the aiptasia placeholder; `CoralKind.ORGAN_PIPE`). Seeds: `sim/Presets.kt` `DefaultStock`.
+Fish: 2 ocellaris clowns (female + male), juvenile blue tang, pajama cardinal, cleaner wrasse, **engineer goby** (*Pholidichthys leucotaenia*, owner correction: not a snowflake eel, see §9.7), Falco hawkfish, **lawnmower blenny** (*Salarias fasciatus*), **tailspot blenny** (*Ecsenius stigmatura*), **indigo dottyback** (*Pseudochromis*). Inverts: banded coral shrimp, **skunk cleaner shrimp**, 3 hermit crabs, **black brittle star**, **brown feather duster**, 3 nassarius, 3 astrea, 2 asterina. Corals: Kenya tree, 2× GSP, zoas, clove, mushrooms, red macro, and **organ pipe coral** (*Tubipora musica*) at the Kenya base (replacing the aiptasia placeholder; `CoralKind.ORGAN_PIPE`). Seeds: `sim/Presets.kt` `DefaultStock`.
 
 ### 9.2 Brains (all utility AI, `ai/FishBrains.kt`, `ai/InvertBrains.kt`)
 Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a fresh feed), NibbleNori, Graze, Flee (flinch for startle ≤ 0.35, else 10–40 s × skittishness to cover), Sleep, VisitCleaner, GlassCurious, SurfaceGasp, Flash. Threats come from `Predation.threatRadius` and only alarm when the predator is closing (> 0.5 cm/s toward the animal) or within half the radius; invertebrates notice predators at 0.6× range at night.
@@ -495,6 +495,110 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 - `Command`: `Heater.stuckOn`, `AddOrganism.role`, `SetSize`, `SetPredation`, `Shadow`.
 - `TankConfig`: `autoFeed`, `predationEnabled`, `waterChangeEveryDays`, `waterChangeFraction`, `seed`.
 - Anchors added for the new livestock (Track B: please add them to `anchors.json`; defaults are merged in when missing): `coral_organpipe_kenya_base`, `HOLE_LAWNMOWER` (30, 10, 11; dir 0.3, 0.1, 0.95; depth 7), `STATION_SHRIMP` (50, 18, 26), `DUSTER_TUBE` (15, 3, 27), `BRITTLE_HOME` (95, 4, 15), `CAVE_DOTTYBACK` (42, 18, 6). The HOB outflow is at x = 71 (ASSETS) rather than 61.
+
+### 9.7 Owner corrections and the realism pass (research 05)
+
+**Engineer goby, not an eel.** Tee's "eel" is a juvenile **engineer goby** (*Pholidichthys leucotaenia*, black/yellow stripes, `engineer_goby.glb`). `BrainKind.ENGINEER_GOBY` (genus `pholidichthys`; sheet `brain: "goby"` is aliased) drives `GobyBrain` (`ai/GobyBrain.kt`):
+- Burrow under the R5 rock at sand level (anchor `BURROW_GOBY`, falling back to `CAVE_EEL` / `den_path`); the body trails down the tunnel spline (posture 3, same anguilliform spline deformation as the eel).
+- By day it hovers in a loose group 2–9 cm off the mouth, picking plankton (`MouthHover`, `Feed` r 18 cm). It also makes excavation trips (`Excavate`, every 45–300 s): into the burrow for 4–8 s, out with a mouthful (`mouth` = 1), then it spits 0.6 cm³ onto a sand pile 4–9 cm from the mouth.
+- `Simulation.sandPiles` holds up to 8 piles. A pile slumps with τ = 4 days, faster in strong flow. Abstract mode deposits at the day rate. Exported as `SimSnapshot.sandPiles` (x, z, radius, height).
+- At night it stays deep in the tunnel, invisible. Shy: startles or fear send it to the mouth.
+- Never a predator. The moray brain (`EelBrain`) is kept for other tanks only. Its tests use an explicit moray seed.
+- Fish collision length is capped at 3 cm, so clearance follows girth.
+- `K_EXCRETION` was retuned 0.0074 → 0.016 because removing the 200 g moray cut fish biomass ~3×. Nitrate still rises 2–5 ppm/week.
+
+**Dottyback** (striped indigo hybrid): its `Territorial` behavior now also briefly chases any smaller fish within 10 cm of its cave.
+
+**Calibrated tolerance profiles** (`HealthModel`).
+- Group profiles take precedence over sheet tolerances, which in v1 are generic copies.
+- Units: NH3 is ppm NH3 = 1.214 × NH3-N; NO2 is ppm NO2⁻ = 3.28 × NO2-N. Format is opt / tol / lethal.
+
+| key | fish | inverts |
+|---|---|---|
+| temp °C | 23.5–28.5 / 22–30.5 / 17–33 (tang, cardinal lethal 32.5, tol 30) | 24–28 / 22.5–29.5 / 18–32 |
+| NH3 free | ≤0.02 / 0.06 / 0.6 (eel-type 0.8) | ≤0.01 / 0.04 / 0.35 |
+| NO2 | ≤0.3 / 1.6 / 3.3 | ≤0.15 / 0.8 / 2.0 |
+| NO3 | ≤30 / 60 / 200 | ≤20 / 50 / 120 |
+| DO mg/L | ≥5.0 / 4.0 / 3.0 (tang, cardinal 5.5 / 4.5 / 3.2) | ≥5.5 / 4.5 / 3.5 |
+| pH | 7.85–8.45 / 7.65–8.6 / 7.4–8.9 | 7.9–8.4 / 7.75–8.55 / 7.5–8.8 |
+| SG | 1.021–1.0265 / 1.018–1.028 / 1.012–1.032 | 1.023–1.026 / 1.021–1.0275 / 1.018–1.030 |
+| Mg, Ca | — | Mg ≥1200 / 1050 / 800; Ca ≥380 / 330 / 200 |
+| Cu | ≤0.05 / 0.25 / 0.5 | ≤0.005 / 0.03 / 0.1 |
+
+**Rate-of-change shock.**
+- Each animal has acclimated temp, SG and pH values. They lag the water with τ 12 h, 2 days (inverts 3 days) and 8 h respectively.
+- `|now − acclimated| / step` feeds the tolerance curve opt 0.4 / tol 1.0 / lethal 1.9 (keys `shockTemp`, `shockSg`, `shockPh`).
+- Steps: fish temp 3 °C, SG 0.008, pH 0.5. Inverts: 2 °C, 0.004, 0.3.
+- These follow research 05: fish shrug off 0.003–0.005 SG/h, and 0.015+ is lethal. Shrimp tolerate about 0.002 SG/h.
+- Lethal health loss is `K_LETHAL × (1 + min(4, overshoot))`, so death comes in about 8–30 h.
+
+**Flow stress** (key `flow`): weak swimmers (cruise < 1.2 BL/s) are stressed above pump strength 1.25; all fish above 1.7. Morays and gobies are exempt.
+
+**Signs** follow research 05 §4:
+1. Rapid gills (max of DO, temperature, NH3 and NO2 stress > 0.3).
+2. Gasping (fish: DO < 4, NH3 stress > 0.55, heat > 0.6). `SurfaceGasp` takes over.
+3. Hiding and lethargy (stress > 0.65): the new `Unwell` behavior keeps them low near cover.
+4. Appetite loss: `HealthModel.appetite` scales `Feed`, and the fish refuses food below 0.3.
+5. Clamped fins.
+6. Moribund: health < 0.2 or stress > 0.88. Fish lie on the sand and roll; inverts stop moving.
+
+Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
+
+**Cascades.**
+- Decomposition consumes O2: detritus decay × 20 mg O2 per mg TAN, plus nitrification (3.4 per TAN, 0.35 per NO2).
+- Dying coral tissue becomes detritus: `CORAL_TAN_PER_COLONY` 2 g TAN × biomass.
+- Pump strength above 1 adds detritus export.
+
+**Water and algae** (`WaterSim`).
+- Pump strength 0–2 (`SetParam("flow", v)`, where 0 means pumps off) scales the powerhead jets (`FlowField.strength`), O2 transfer (kLa × (0.3 + 0.7 s)), skimmer NO3 export, pump heat and cyano washout.
+- **Cyano**: grows with light × (PO4, detritus, low N:P < 30) × low flow, ×1.5 above 29 °C.
+- **Diatoms**: grow in a new tank (immature bacteria) or with high nutrients, under moderate light. They fade over weeks.
+- **Coralline**: grows under moderate light when Ca ≥ 350, alk ≥ 6, Mg ≥ 1150, pH ≥ 7.75 and PO4 is low. It recedes when any of those is off.
+- Photoperiod acts through light hours, since all growth terms scale with intensity.
+
+**Corals** (`CoralSim`).
+- Temperature bands shifted to the 30–31 °C tank bleaching trigger.
+- NOAA DHW accumulator: degree-weeks above 29 °C. Bleaching tends toward smoothstep(3, 8 DHW) over ~3 days, and tissue is lost past 8 DHW. Recovery runs at 0.00001/min (~70 days).
+- Salinity shock: step 0.004 SG, lethal at 2 steps. This closes polyps fast and costs tissue at 0.002/min, so death comes in hours.
+- pH: 7.9–8.4 / 7.7–8.55 / 7.3–8.9. An alkalinity swing has a 2 dKH step.
+- Light-jump shock against a 3-week acclimated level causes retraction, then paling.
+- Extension × (0.5 + 0.5 smoothstep(0.05, 0.6, pump strength)). Kenya retracts above strength 1.5.
+- Ultra-low nutrients (NO3 < 0.5, PO4 < 0.01) pale soft corals.
+
+**Social layer** (`ai/Interactions.kt`, `ai/Social.kt`).
+- Every 1 s each animal scans every other living animal (identity, species, size, distance, state). It keeps a `Relation` per individual:
+  - Familiarity: +0.02/h within 30 cm.
+  - Fear: half-life 3 h.
+  - Harassed-by / harassed: half-life 6 h.
+  - Dominance in ±1.
+  - Cleaning history.
+- `onAttacked(..., by)` and `finishClean` write to it.
+- Research 05 §17 matrix (`Interactions.aggression`):
+  - Moderate 0.5–0.7: tang–tang, wrasse–wrasse, hawk–hawk, dottyback–dottyback, blennies.
+  - Low 0.1–0.35: clown pair hierarchy, cardinals, hawk→dottyback, dottyback→clown and →hawk, banded→cleaner shrimp.
+  - High: banded–banded 0.8.
+- The generic `Rivalry` behavior handles pairs that the species behaviors don't. Only the dominant conspecific chases (female clown, then the larger fish, then the bolder one). The cooldown is 900 s ÷ drive.
+- `Social.chaseDrive` lowers the drive for familiar neighbours ("dear enemy") and raises it for recent provokers. It drops to 0 against a dominant fish.
+- `KeepClear` makes a fish avoid the individual it fears. That is either a remembered attacker or a much larger aggressive fish it hasn't met before.
+
+**Non-repetition.**
+- Every utility score below 0.95 gets per-behavior Ornstein–Uhlenbeck noise: τ 20 s, amplitude = the individual's `whim` (0.025–0.055, drawn at birth). This comes on top of the ±15 % temperament jitter and the 0.12 hysteresis.
+
+**Captions** (`ai/Caption.kt`, `OrganismStats.caption`).
+- Built from the species name, the behavior's verb and its focus (`Organism.focusId`, or the nearest plausible partner). Examples:
+  - "Falco hawkfish watching the skunk cleaner shrimp"
+  - "Bluestreak cleaner wrasse cleaning the blue tang"
+  - "Engineer goby · moving sand out of its burrow"
+
+**Acceptance tests** (`ParameterEffectsTest`):
+- 31 °C for 2 days: fish show rapid gills and stress but all survive. Corals are stressed. Fish recover within 4 days at 25.5 °C.
+- SG 1.025 → 1.018 over 1 h and held 2 days: fish stress > 0.4 with no fish deaths, and at least one shrimp dies.
+- NH3 at 0.25 NH3-N for 24 h: gill signs, no deaths. At 1.0 NH3-N, at least half the fish and half the inverts die within 3 days.
+- A die-off left in the tank: TAN peaks above 0.3 and DO dips.
+- Pumps off for 12 h: DO drops. Strength 2 stresses the cardinal.
+- Lights forced on with PO4 0.2 for 14 days: more than 1.3× the hair algae plus cyano of the normal schedule.
+
+`AiTest` adds `gobyDigsAndHides` and `victimsRememberAttackers`. `ICH_BASE_PRESSURE` went 0.0004 → 0.0005 to keep the 30 °C ich test above 90 % once heat stress was recalibrated.
 
 ### 9.6 SimRunner
 `./gradlew -PcoreOnly :core:simRunner` prints a 24 h scenario (each hour 2 min of full 20 Hz behavior plus abstract time, and 12-min windows around the 09:30 and 17:30 feeds) with every animal's behavior mix, hunger, stress and the water state. `--args="long 90"` runs 90 days of health/chemistry with a daily log; `--args="preset ich_outbreak 14"` runs a preset.

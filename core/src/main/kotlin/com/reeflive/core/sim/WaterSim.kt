@@ -20,6 +20,11 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     var coralBiomass = 0.9
     /** Hair-algae removal by grazers in the last interval, as hair units per hour. */
     var grazingPerHour = 0.0
+    /** Sandbox pump strength (0..2, 1 = normal); only counts while `s.flowOn`. */
+    var flowStrength = 1.0
+    private val flowEff: Double get() = if (s.flowOn) flowStrength else 0.0
+    /** O2 demand from decomposition + nitrification in the last step (mg/L per hour). */
+    var oxygenDemandPerHour = 0.0; private set
 
     // ---- equipment ----
     var heaterWorking = true
@@ -70,7 +75,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         }
         val heater = if (heaterPowered) config.heaterWatts else 0.0
         val lightHeat = LIGHT_W_PER_FIXTURE * lightIntensity * 2
-        val pumpHeat = if (s.flowOn) PUMP_W else 0.0
+        val pumpHeat = PUMP_W * flowEff
         val loss = K_LOSS * (t - config.roomC)
         val evapCool = evapLitersPerHour() * 1000 * 0.63 * EVAP_HEAT_FRACTION
         val dTdt = (heater + lightHeat + pumpHeat - loss - evapCool) * 3600 / (s.volumeL * 4186)
@@ -125,8 +130,14 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         val n2 = min(K_NOB * s.bacteriaNob * s.no2 / (s.no2 + KS) * tF * h, s.no2)
         s.no2 -= n2
         s.no3 += n2 * NO3_PER_NO2
+        // O2 consumed by decomposition (BOD ≈ 20 mg O2 per mg TAN-equivalent) and nitrification (research 05 §11)
+        oxygenDemandPerHour = (detritusDecay * BOD_PER_TAN + n1 * 3.4 + n2 * 0.35) / h.coerceAtLeast(1e-9)
+        // Stronger flow keeps detritus suspended for the filter/skimmer (research 05 §16)
+        val detExport = s.detritus * 0.004 * (min(flowEff, 2.0) - 1.0).coerceAtLeast(0.0) * h   // only extra pump strength adds export
+        s.detritus -= detExport
+        nExportMg += detExport * N_TAN * v
         // Export: corals, algae, skimmer
-        val export = min((0.004 * coralBiomass + 0.02 * s.algaeHair + 0.01 * s.macro + (if (s.flowOn) 0.0015 * s.no3 else 0.0)) * h, s.no3)
+        val export = min((0.004 * coralBiomass + 0.02 * s.algaeHair + 0.01 * s.macro + 0.0015 * s.no3 * min(flowEff, 1.2)) * h, s.no3)
         s.no3 -= export
         nExportMg += export * N_NO3 * v
         // Bacteria: logistic growth on substrate, slow die-off without it
@@ -160,16 +171,16 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
 
     private fun gases(h: Double) {
         val v = s.volumeL
-        val resp = K_RESP * bioMassIndex / v + 0.1 * s.bacteriaAob + 0.05 * s.algaeHair
+        val resp = K_RESP * bioMassIndex / v + 0.1 * s.bacteriaAob + 0.05 * s.algaeHair + 0.05 * s.cyano + oxygenDemandPerHour
         val photo = lightIntensity * (coralBiomass + s.algaeHair + 0.5 * s.macro)
-        val gasEx = if (s.flowOn) 1.0 else 0.4
+        val gasEx = if (s.flowOn) (0.4 + 0.6 * min(flowStrength, 1.5)) else 0.4
         // CO2 index → pH (tune: ~0.2 day/night swing at alk 8.5)
         s.co2Index += (CO2_RESP * resp - CO2_PHOTO * photo - CO2_EXCH * (s.co2Index - 1) * gasEx) * h
         s.co2Index = s.co2Index.coerceIn(0.2, 4.0)
         s.ph = 8.15 + 0.045 * (s.alk - 8.5) - 0.35 * (s.co2Index - 1)
         // Dissolved oxygen
         val sat = ChemFns.oxygenSaturation(s.tempC, s.ppt)
-        val kla = if (s.flowOn) 1.8 else 0.25
+        val kla = if (s.flowOn) 1.8 * (0.3 + 0.7 * min(flowStrength, 1.5)) else 0.25
         s.doMgL += (kla * (sat - s.doMgL) + photo * DO_PHOTO - resp) * h
         s.doMgL = s.doMgL.coerceIn(0.0, sat * 1.3)
     }
@@ -178,8 +189,29 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         val g = clamp01((s.po4 - 0.03) / 0.12) * 0.6 + clamp01((s.no3 - 5) / 20) * 0.4
         s.algaeHair += (ALGAE_GROWTH * lightIntensity * g * (1 - s.algaeHair) - grazingPerHour - 0.0004 * s.algaeHair - 0.002 * s.algaeHair * (1 - g)) * h
         s.algaeHair = s.algaeHair.coerceIn(0.0, 1.0)
-        s.cyano += (0.002 * (if (s.flowOn) 0.2 else 1.0) * clamp01(s.detritus / 5) * (1 - s.cyano) - 0.0008 * s.cyano) * h
+        // Light dose drives every phototroph; photoperiod enters through the hours of light per day (research 05 §14).
+        val light = lightIntensity
+        val nP = clamp01((s.po4 - 0.03) / 0.12)
+        val nN = clamp01((s.no3 - 5) / 20)
+        val lowFlow = clamp01(1.2 - 0.9 * flowEff)                 // 1 at no flow, 0.3 at normal, 0 at strong
+        val warm = if (s.tempC > 29) 1.5 else 1.0
+        val lowNtoP = if (s.po4 > 0.05 && s.no3 / s.po4 < 30) 1.0 else 0.0   // low N with high P favors cyano (ppm ratio, research 05 §7)
+        // Cyanobacteria: low flow + high nutrients/detritus + light, warm water; washed out by good flow.
+        val cyG = CYANO_GROWTH * (0.25 + light) * (0.45 * nP + 0.35 * clamp01(s.detritus / 4) + 0.2 * lowNtoP) * (0.2 + lowFlow) * warm
+        s.cyano += (cyG * (1 - s.cyano) - (0.0008 + 0.004 * (1 - lowFlow) * (1 - nP)) * s.cyano) * h
         s.cyano = s.cyano.coerceIn(0.0, 1.0)
+        // Diatoms: new-tank silicate (proxy: immature bacteria) or high nutrients, moderate light; fade over weeks.
+        val newTank = clamp01(1 - min(s.bacteriaAob, s.bacteriaNob) * 1.25)
+        val diG = DIATOM_GROWTH * clamp01(light * 1.6) * (0.6 * newTank + 0.4 * max(nN, nP))
+        s.diatoms += (diG * (1 - s.diatoms) - 0.0015 * s.diatoms - 0.01 * s.diatoms * (1 - newTank) * (1 - max(nN, nP))) * h
+        s.diatoms = s.diatoms.coerceIn(0.0, 1.0)
+        // Coralline: moderate light, Ca/alk/Mg in range, low phosphate, pH ≥ 7.9; recedes when any is off.
+        val modLight = clamp01(light / 0.3) * clamp01((1.3 - light) / 0.4)
+        val chem = clamp01((s.ca - 350) / 50) * clamp01((s.alk - 6) / 1.5) * clamp01((s.mg - 1150) / 100) * clamp01((s.ph - 7.75) / 0.2)
+        val coG = CORALLINE_GROWTH * modLight * chem * (1 - 0.8 * nP)
+        val coLoss = 0.0004 * (1 - chem) + 0.0002 * nP + 0.0003 * s.algaeHair
+        s.coralline += (coG * (1 - s.coralline) - coLoss * s.coralline) * h
+        s.coralline = s.coralline.coerceIn(0.0, 1.0)
     }
 
     private fun clamp01(v: Double) = v.coerceIn(0.0, 1.0)
@@ -279,6 +311,10 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
 
     companion object {
         // Stoichiometric N fractions (mass of N per mass of species)
+        const val BOD_PER_TAN = 20.0
+        const val CYANO_GROWTH = 0.004
+        const val DIATOM_GROWTH = 0.006
+        const val CORALLINE_GROWTH = 0.0006
         const val N_TAN = 14.0 / 17.0
         const val N_NO2 = 14.0 / 46.0
         const val N_NO3 = 14.0 / 62.0
@@ -291,7 +327,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val LIGHT_W_PER_FIXTURE = 8.0    // W reaching the water per AI Prime at full power (tune)
         const val PUMP_W = 15.0
         const val EVAP_HEAT_FRACTION = 0.25    // share of latent heat drawn from the water (tune)
-        const val K_EXCRETION = 0.0074         // mg TAN/h per g^0.8 (tune: basal excretion)
+        const val K_EXCRETION = 0.016          // mg TAN/h per g^0.8 (retuned after the moray → engineer goby correction cut biomass)
         const val FEED_TAN_PER_G = 0.04        // g TAN leached per g food (tune)
         const val FEED_PO4_PER_G = 0.004       // g PO4 per g food, net (tune)
         const val PO4_ADSORB = 0.015           // /h rock & sand adsorption above 0.02 ppm (tune)

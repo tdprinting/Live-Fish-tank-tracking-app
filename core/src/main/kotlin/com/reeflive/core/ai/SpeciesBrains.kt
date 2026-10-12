@@ -11,6 +11,7 @@ object SpeciesBrains {
             BrainKind.CARDINAL -> CardinalBrain(c)
             BrainKind.WRASSE -> WrasseBrain(c)
             BrainKind.EEL -> EelBrain(c)
+            BrainKind.ENGINEER_GOBY -> GobyBrain(c)
             BrainKind.HAWK -> HawkBrain(c)
             BrainKind.LAWNMOWER_BLENNY -> LawnmowerBlennyBrain(c)
             BrainKind.PEEKER_BLENNY -> PeekerBlennyBrain(c)

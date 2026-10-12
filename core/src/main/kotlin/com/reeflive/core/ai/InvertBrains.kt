@@ -394,8 +394,17 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Buried : Behavior("buried", "Buried, siphon up") {
         private var sink = 0.0
         override fun score(c: Ctx) = 0.45
-        override fun enter(c: Ctx) { buryAt = c.o.pos; sink = 0.0 }
+        override fun enter(c: Ctx) {
+            val p = c.o.pos
+            // only bury in open sand; a snail up on the rock walks back down to its sand patch first
+            buryAt = if (p.y < c.rock.sandTopCm + 1.5 && c.rock.sdf.dist(p) > 2.0) p else o.homePos
+            sink = 0.0
+        }
         override fun update(c: Ctx, out: SteerIntent) {
+            if (sink == 0.0 && c.o.pos.distanceTo(buryAt) > 2.0) {
+                out.crawl = true; out.target = buryAt; out.speed = c.o.cruiseSpeed; out.surfaceOffset = surfaceOffset(c)
+                return
+            }
             sink = min(1.0, sink + c.dt / 3)
             val r = restSpot(c, c.p.night)
             out.rest(if (sink < 1) r.copy(posture = 0) else r, 1.0)
@@ -428,8 +437,14 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
         else Rest(o.homePos, o.heading, o.up)
 
     override fun initialPlace(c: Ctx) {
-        val onFront = o.rng.chance(0.5)
-        val p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+        var onFront = o.rng.chance(0.5)
+        var p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+        // never start where rock leans on the back pane
+        var tries = 0
+        while (c.rock.sdf.dist(p) < 2.0 && tries++ < 20) {
+            onFront = onFront || tries > 10
+            p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+        }
         o.homePos = p
         o.placeAt(p, Vec3.Y)
         o.up = if (onFront) Vec3(0.0, 0.0, -1.0) else Vec3.Z
@@ -466,7 +481,10 @@ class GlassGraze(val b: SpeciesBrain) : Behavior("glassgraze", "Grazing") {
             val onGlass = o.pos.z < 1.5 || o.pos.z > r.widthCm - 1.5 || o.pos.x < 1.5 || o.pos.x > r.lengthCm - 1.5
             wp = if (onGlass || c.rng.chance(0.3)) {
                 val z = if (o.pos.z > r.widthCm / 2) r.widthCm - 0.3 else 0.3
-                Vec3((o.pos.x + c.rng.signed() * 15).coerceIn(3.0, r.lengthCm - 3), (o.pos.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 2, r.waterLevelCm - 4), z)
+                // glass spots where rock leans on the pane are not reachable: keep only open glass
+                (0 until 8).asSequence().map {
+                    Vec3((o.pos.x + c.rng.signed() * 15).coerceIn(3.0, r.lengthCm - 3), (o.pos.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 2, r.waterLevelCm - 4), z)
+                }.firstOrNull { p -> r.sdf.dist(p) > 2.0 && r.sdf.dist((p + o.pos) * 0.5) > 1.0 } ?: (c.rockSurfacePoint(o.pos, 15.0)?.first ?: o.pos)
             } else c.rockSurfacePoint(o.pos, 15.0)?.first ?: o.pos
         }
         out.crawl = true; out.target = wp; out.speed = c.o.cruiseSpeed; out.surfaceOffset = surfaceOffset(c)

@@ -119,7 +119,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                     nipped = true
                     c.o.mouth = 1.0
                     i.socialStress += 0.03
-                    if (i.lengthCm < 1.8 * c.L) c.sim.agentOf(i)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4) }
+                    if (i.lengthCm < 1.8 * c.L) c.sim.agentOf(i)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4, c.o) }
                 }
             } else {
                 out.seek(c.safe(host(c) + Vec3(0.0, 3.0, 0.0), 1.2), c.o.cruiseSpeed, arrive = c.L)
@@ -365,6 +365,7 @@ fun finishClean(c: Ctx, client: Organism, isShrimp: Boolean) {
     client.parasiteLoad = 0.0
     if (ich) client.diseaseStage = max(0.0, client.diseaseStage - 0.02)
     c.o.hunger = max(0.0, c.o.hunger - (if (ich) 0.08 else 0.02) * (if (isShrimp) 0.8 else 1.0) - 0.03 * client.parasiteLoad)
+    Social.recordCleaning(c.o, client, c.t)
     c.sim.emit(SimEvent.Cleaned(c.o.id, client.id, c.sim.simTimeSec))
 }
 
@@ -668,7 +669,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val w = who ?: run { finished = true; return }
             out.seek(w.pos, c.o.burstSpeed * 0.6, arrive = 1.0, urgency = 0.75)
-            if (c.o.pos.distanceTo(w.pos) < c.L * 0.8) { c.sim.agentOf(w)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4) }; w.socialStress += 0.02; finished = true }
+            if (c.o.pos.distanceTo(w.pos) < c.L * 0.8) { c.sim.agentOf(w)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4, c.o) }; w.socialStress += 0.02; finished = true }
             if (elapsed > 1.0) finished = true
         }
     }
@@ -790,7 +791,7 @@ class BlennyRival(val b: SpeciesBrain, val radius: Double, val centre: Vec3) : B
         val r = rival ?: run { finished = true; return }
         out.seek(r.pos, c.o.burstSpeed * 0.5, arrive = 1.0, urgency = 0.75)
         if (c.o.pos.distanceTo(r.pos) < 0.6 * c.L + 0.5 * r.lengthCm) {
-            c.sim.agentOf(r)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.45) }
+            c.sim.agentOf(r)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.45, c.o) }
             r.socialStress += 0.03
             finished = true
         }
@@ -935,7 +936,8 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
                     BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> n.pos.distanceTo(cave) < 15
                     BrainKind.CARDINAL -> n.pos.distanceTo(cave) < 6
                     BrainKind.DOTTYBACK -> true
-                    else -> false
+                    // striped indigo hybrid: semi-aggressive, briefly chases smaller fish near its cave
+                    else -> n.isFish && n.lengthCm < c.L && n.pos.distanceTo(cave) < 10
                 }
             }
             return if (who != null) 0.5 + 0.4 * c.o.aggression else 0.0
@@ -944,7 +946,7 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
             val w = who ?: run { finished = true; return }
             out.seek(w.pos, c.o.burstSpeed * 0.55, arrive = 1.0, urgency = 0.75)
             if (c.o.pos.distanceTo(w.pos) < 0.6 * c.L + 0.5 * w.lengthCm) {
-                c.sim.agentOf(w)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4) }
+                c.sim.agentOf(w)?.let { it.brain.onAttacked(it.ctx, c.o.pos, 0.4, c.o) }
                 w.socialStress += 0.03
                 finished = true
             }

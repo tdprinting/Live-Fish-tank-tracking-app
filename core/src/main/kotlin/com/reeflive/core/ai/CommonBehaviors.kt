@@ -91,7 +91,9 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         val act = max(c.activity, 0.4)
         var s = 0.5 + 0.5 * o.hunger * match * act + bonus(c, f)
         if (c.t - b.foodAlertAt < 30 && o.hunger > 0.2) s = max(s, 0.62)
-        return (s * scoreMul(c, f)).coerceAtMost(0.93)
+        val app = com.reeflive.core.sim.HealthModel.appetite(o)
+        if (app < 0.3) return 0.0
+        return (s * scoreMul(c, f) * app).coerceAtMost(0.93)
     }
 
     override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0 }
