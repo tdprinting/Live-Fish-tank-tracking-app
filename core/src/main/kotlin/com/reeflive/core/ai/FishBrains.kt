@@ -146,10 +146,12 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
 // Blue tang (TangBrain)
 // =====================================================================================
 class TangBrain(c: Ctx) : SpeciesBrain(c) {
+    /** Coral bites so far (C-3; each disturbs the colony briefly). */
+    var coralNips = 0
     fun sleepAnchor(c: Ctx): Anchor? = c.rock.anchors["SLEEP_TANG"]
 
     init {
-        install(Patrol(), Graze(this, 1.5), NibbleNori(this, 1.2), TangFeed(),
+        install(Patrol(), Graze(this, 1.5), NibbleNori(this, 1.2), TangFeed(), NipCorals(this),
             Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(36.0, 25.0, 9.0)) }, "Darting to cover"),
             TangSleep(), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
     }

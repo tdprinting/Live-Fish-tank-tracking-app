@@ -218,4 +218,40 @@ class ReproductionTest {
         assertEquals(0.0, w.sexChange, 0.0)
         assertTrue(w.sexFemale != false)
     }
+
+    // ---------------------------------------------------------------- C-3 tang nips soft corals
+
+    @Test
+    fun tangOccasionallyNipsZoasAndSoftCoralsButNotMushrooms() {
+        val stock = listOf(TestTank.seed("tang"), TestTank.seed("zoa"), TestTank.seed("kenya"), TestTank.seed("shroom"))
+        val sim = TestTank.sim(stock, seed = 9, startHour = 11.0)
+        val tang = sim.agentOf(sim.organisms.single())!!.brain as TangBrain
+        val zoa = sim.corals.first { it.id == "zoa" }
+        val kenya = sim.corals.first { it.id == "kenya" }
+        val shroom = sim.corals.first { it.id == "shroom" }
+        var zoaPeak = 0.0; var shroomPeak = 0.0; var saw = false
+        val first = sim.simTimeSec
+        sim.advance(3 * 3600.0, behaviorDt = 0.2) {
+            zoaPeak = maxOf(zoaPeak, zoa.disturb, kenya.disturb); shroomPeak = maxOf(shroomPeak, shroom.disturb)
+            if (sim.organisms.single().behaviorName == "Nipping at the coral") saw = true
+        }
+        assertTrue("nips ${tang.coralNips}", tang.coralNips in 2..60)
+        assertTrue("behaviour shown", saw)
+        assertTrue("zoa or kenya disturbed $zoaPeak", zoaPeak > 0.2)
+        assertEquals("mushrooms are left alone", 0.0, shroomPeak, 0.0)
+        // minor: no tissue loss from the nips
+        assertTrue(zoa.tissue > 0.95 && kenya.tissue > 0.95)
+        assertTrue(sim.simTimeSec - first > 3 * 3600 - 1)
+    }
+
+    @Test
+    fun noNipsWithoutTangAndNoneAtNight() {
+        val sim = TestTank.sim(listOf(TestTank.seed("zoa"), TestTank.seed("clown_f")), seed = 9, startHour = 11.0)
+        var peak = 0.0
+        sim.advance(3600.0, behaviorDt = 0.2) { peak = maxOf(peak, sim.corals.single().disturb) }
+        assertEquals(0.0, peak, 0.0)
+        val night = TestTank.sim(listOf(TestTank.seed("tang"), TestTank.seed("zoa")), seed = 9, startHour = 23.0)
+        night.advance(3600.0, behaviorDt = 0.2)
+        assertEquals(0, (night.agentOf(night.organisms.single())!!.brain as TangBrain).coralNips)
+    }
 }
