@@ -41,11 +41,29 @@ class Coral(
     var skeleton = 0.0
     val melting: Boolean get() = tissue < 0.2
 
+    // ---- growth and competition (CoralGrowth; coverage gaps C-1, C-2) ----
+    /** Colony linear size relative to the placed colony (1 = as placed; mats: √(area / starting area)). */
+    var size = 1.0
+    /** Encrusting colonies: share of the rock surface they can reach that the mat now covers (0..1); trees: size share of max. */
+    var cover = 0.0
+    /** Mat radius along the rock surface, cm (encrusting colonies; 0 until the first growth step). */
+    var radiusCm = 0.0
+    var patch: SurfacePatch? = null
+    /** Geodesic distance along this mat's rock to other colonies (positions never move). */
+    val geoCache = HashMap<String, Double>()
+    /** Chemical/sting pressure from neighbours (0..1) and the fraction smothered by an overgrowing mat. */
+    var neighborStress = 0.0
+    var overgrown = 0.0
+    /** Present when the tank was loaded (its neighbours' pressure then is its acclimated baseline). */
+    var established = false
+    var baseline: Pair<Double, Double>? = null
+
     fun toPose() = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
         species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(),
         offsetX = offset.x.toFloat(), offsetY = offset.y.toFloat(), offsetZ = offset.z.toFloat(),
         homeX = (pos.x - offset.x).toFloat(), homeY = (pos.y - offset.y).toFloat(), homeZ = (pos.z - offset.z).toFloat(),
+        species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(), size.toFloat(), cover.toFloat(),
     )
 }
 
@@ -81,6 +99,9 @@ object CoralSim {
     val SG_SHOCK = ToleranceRange(optHi = 0.4, tolHi = 1.0, lethalHi = 2.0)   // in units of 0.004 SG
     const val SG_STEP = 0.004
     const val ALK_STEP = 2.0
+    /** Ca and Mg bands for the mild soft-coral stress (03 C1 row "Low/unstable calcium/magnesium"; 05 §10 bands). */
+    val CA_SOFT = ToleranceRange(optLo = 380.0, tolLo = 330.0, lethalLo = 200.0)
+    val MG_SOFT = ToleranceRange(optLo = 1200.0, tolLo = 1050.0, lethalLo = 800.0)
 
     fun step(
         c: Coral, w: WaterState, lightIntensity: Double, minutesSinceOn: Double?, minutesUntilOff: Double?,
@@ -103,6 +124,10 @@ object CoralSim {
         // research 01 §1.1 / 05 §13: potassium out of 340-460 ppm stresses corals; low strontium (< 6) only mildly (skeletal element)
         val (sK, _) = HealthModel.stressOf(w.k, HealthModel.POTASSIUM)
         val (sSr, _) = HealthModel.stressOf(w.sr, HealthModel.STRONTIUM)
+        // research 03 C1: low/unstable Ca or Mg mildly stresses soft corals (they "don't need it but benefit"); calcifiers more (05 §10)
+        val (sCa, _) = HealthModel.stressOf(w.ca, CA_SOFT)
+        val (sMg, _) = HealthModel.stressOf(w.mg, MG_SOFT)
+        val caMgWeight = if (c.kind == CoralKind.ORGAN_PIPE) 0.8 else if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else 0.3
         val sLight = if (minutesSinceOn == null) 0.0 else when {
             lightIntensity > p.lightHi -> ((lightIntensity - p.lightHi) / 0.15).coerceIn(0.0, 1.0)
             lightIntensity < p.lightLo && lightIntensity > 0.05 -> ((p.lightLo - lightIntensity) / p.lightLo).coerceIn(0.0, 1.0) * 0.5
@@ -114,7 +139,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress)
         var prod = 1.0
         for (s in parts) prod *= (1 - s)
         c.stress = 1 - prod
@@ -122,7 +147,7 @@ object CoralSim {
         c.disturb = max(0.0, c.disturb - 0.25 * dtMin)
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
         var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff) * (1 - 0.8 * c.stress) * flowExt
-        target *= (1 - c.disturb).coerceIn(0.0, 1.0)
+        target *= (1 - c.disturb).coerceIn(0.0, 1.0) * (1 - c.overgrown)
         // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis
         if (c.necrosis > 0.02) target *= 0.2
         if (c.melting) target = 0.0
@@ -145,7 +170,8 @@ object CoralSim {
         c.brown += (0.0002 * ((w.po4 - 0.1) / 0.2).coerceIn(0.0, 1.0) + 0.0001 * ((w.no3 - 25) / 25).coerceIn(0.0, 1.0) - 0.00003) * dtMin
         c.brown = c.brown.coerceIn(0.0, 1.0)
         c.tissue += (-0.00005 * (if (c.bleach > 0.8) 1.0 else 0.0) - 0.00005 * smoothstep(8.0, 12.0, c.dhw) - 0.0002 * sNh3 -
-            0.00003 * c.algaeCover - 0.0003 * sCu - (if (sgLethal) 0.002 else 0.0) - 0.0002 * max(0.0, sPh - 0.6) +
+            0.00003 * c.algaeCover - 0.0003 * sCu - (if (sgLethal) 0.002 else 0.0) - 0.0002 * max(0.0, sPh - 0.6) -
+            0.00002 * c.neighborStress - 0.00003 * c.overgrown +
             (if (c.stress < 0.1 && c.tissue < 1) 0.00002 else 0.0)) * dtMin
         // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
         if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0

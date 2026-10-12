@@ -17,6 +17,7 @@ object TimelapseFork {
         } + src.corals.map {
             LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id, offset = it.offset.takeIf { o -> o != com.reeflive.core.geom.Vec3.ZERO })
         }
+        } + src.corals.filter { it.anchor.isNotBlank() }.map { LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id) }
         val lights = LightSchedule(src.lights.points).also {
             it.forcedOn = src.lights.forcedOn; it.intensityOverride = src.lights.intensityOverride
             it.photoperiodHours = src.lights.photoperiodHours; src.lights.gains.copyInto(it.gains)
@@ -51,11 +52,14 @@ object TimelapseFork {
             b.socialInput = a.socialInput; b.heatSlow = a.heatSlow; b.lowPh = a.lowPh; b.sEnv = a.sEnv
             o.arrivalTime = s.arrivalTime
         }
+        // dropped Kenya branches and aiptasia lacerates have no anchor: copy them where they sit
+        for (s in src.corals) if (s.anchor.isBlank()) dst.corals += com.reeflive.core.sim.Coral(s.id, s.species, s.nickname, "", s.pos, s.normal, s.swayPhase)
         val srcCorals = src.corals.associateBy { it.id }
         for (c in dst.corals) {
             val s = srcCorals[c.id] ?: continue
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw
             c.acclSg = s.acclSg; c.acclAlk = s.acclAlk; c.acclLight = s.acclLight; c.algaeCover = s.algaeCover
+            c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
         return dst
     }

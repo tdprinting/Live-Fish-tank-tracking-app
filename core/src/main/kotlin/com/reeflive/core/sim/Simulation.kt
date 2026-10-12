@@ -69,6 +69,9 @@ class Simulation(
     var behaviorEnabled = true
 
     private val commands = ConcurrentLinkedQueue<Command>()
+    /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
+    val growthRng = Rng(seed xor 0x6C0A1L)
+    private var fragCounter = 1
 
     /** A parameter ramp/hold (06 §4.2): linear from [from] to [to] over [overSec], then held if [hold]. */
     class ParamRamp(val id: String, val from: Double, val to: Double, val startSec: Double, val overSec: Double, val hold: Boolean) {
@@ -373,8 +376,9 @@ class Simulation(
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
-        w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
+        w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
+        w.alleloSourcePerHour = CoralGrowth.alleloSource(corals)
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
         w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
@@ -400,6 +404,7 @@ class Simulation(
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
+        coralGrowth(dtMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             val tissueBefore = c.tissue
@@ -435,6 +440,21 @@ class Simulation(
             if (rng.chance(dtMin / 3.0)) depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
         }
         flushEvents()
+    }
+
+    /** Colony growth, Kenya branch drops and neighbour competition (CoralGrowth; coverage gaps C-1, C-2). */
+    private fun coralGrowth(dtMin: Double) {
+        if (corals.isEmpty()) return
+        CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
+        val born = ArrayList<Coral>()
+        val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
+        for (c in corals) {
+            CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${fragCounter++}" }?.let { born += it }
+        }
+        for (f in born) {
+            corals += f
+            pendingEventsSink += SimEvent.CoralSpawned(f.id.substringBefore('~'), f.id, simTimeSec)
+        }
     }
 
     /** Collects events from the health/coral models; flushed to the log once per tick. */
@@ -832,6 +852,7 @@ class Simulation(
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
     }
 
     // ============================================================== organisms
@@ -926,6 +947,7 @@ class Simulation(
     // Initialised last so every property above exists before livestock is added.
     init {
         livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
         updateLights()
         lastLight = perception.light
         perception.rebuild()
