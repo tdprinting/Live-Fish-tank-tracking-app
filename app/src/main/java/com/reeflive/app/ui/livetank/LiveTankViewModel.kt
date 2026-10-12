@@ -15,6 +15,7 @@ import com.reeflive.core.live.Scenario
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.GlassPane
+import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.WaterState
@@ -195,6 +196,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         if (_selectedOrganismId.value == id) select(null)
     }
     fun runScenario(s: Scenario) = sandbox { holder.runScenario(s) }
+    /** Pod / phyto doses and pest treatments from the microscope (research 10). */
+    fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }
 
     /**
      * One-tap what-if presets. Power outage and overfeeding reuse the core scenarios; the rest are built from commands

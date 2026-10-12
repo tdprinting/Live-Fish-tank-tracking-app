@@ -2,6 +2,7 @@ package com.reeflive.app.ui.livetank
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -51,6 +52,7 @@ import com.reeflive.app.ui.live.FollowOverlay
 import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveOverlay
+import com.reeflive.app.ui.live.MicroscopeView
 import com.reeflive.app.ui.live.SandboxActions
 import com.reeflive.app.ui.live.SandboxCategory
 import com.reeflive.app.ui.live.SandboxControlMode
@@ -315,6 +317,8 @@ private fun TankArea(
     modifier: Modifier,
     bottomPad: Dp,
 ) {
+    var micro by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = micro) { micro = false }
     Box(modifier) {
         TankView(
             snapshots = vm.snapshots,
@@ -337,6 +341,7 @@ private fun TankArea(
                 onToggleSound = onToggleSound,
                 cleaning = cleaning,
                 onToggleCleaning = onToggleCleaning,
+                onMicro = { micro = true },
             )
             val st = stats
             if (cleaning) {
@@ -351,6 +356,17 @@ private fun TankArea(
                     FishCard(st.toFishCardState(), onFollow = { vm.follow(st.id) }, onClose = { vm.select(null) })
                 }
             }
+        }
+        if (micro) {
+            // the microscope covers the tank view; doses and treatments only in the sandbox
+            val hud by vm.hud.collectAsStateWithLifecycle()
+            MicroscopeView(
+                state = hud.microfauna,
+                simTimeSec = hud.simTimeSec,
+                onClose = { micro = false },
+                modifier = Modifier.fillMaxSize().background(ReefTheme.colors.bg).statusBarsPadding().padding(bottom = bottomPad),
+                onAction = if (hudState.mode == HudMode.SANDBOX) vm::micro else null,
+            )
         }
     }
 }
