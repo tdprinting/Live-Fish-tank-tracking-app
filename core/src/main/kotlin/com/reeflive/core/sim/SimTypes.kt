@@ -198,6 +198,8 @@ data class SimSnapshot(
     val flowGrid: com.reeflive.core.geom.FlowGrid? = null,
     /** Per-surface cover of every algae group for the A6 visual cues (research 09); headline covers are on [water]. */
     val algae: AlgaeCover = AlgaeCover.EMPTY,
+    /** Egg clutches on the rock (clown nest, coverage B-1); empty when none. */
+    val eggClutches: List<EggClutchPose> = emptyList(),
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
@@ -238,6 +240,22 @@ data class OrganismStats(
     val relations: List<RelationInfo> = emptyList(),
     /** The animal it is currently keeping clear of, if any. */
     val waryOfId: String? = null,
+    /** "Female", "Male", "Changing sex" or "" (coverage B-1/B-3). */
+    val sex: String = "",
+)
+
+/**
+ * An egg clutch for the renderer (coverage B-1): world position and the rock normal it sits on,
+ * age in days against [hatchDays] (eggs darken and show eyes as [ageDays] nears it), the tending male.
+ */
+data class EggClutchPose(
+    val id: String,
+    val kind: String,
+    val pos: Vec3,
+    val normal: Vec3 = Vec3.Y,
+    val ageDays: Float = 0f,
+    val hatchDays: Float = 9f,
+    val tenderId: String? = null,
 )
 
 /**

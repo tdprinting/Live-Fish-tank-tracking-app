@@ -41,6 +41,8 @@ class Simulation(
     val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
     val food = FoodSystem(rock, flow, rng.fork(7))
     val perception = Perception(this)
+    /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
+    val repro = Reproduction(this)
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -367,6 +369,7 @@ class Simulation(
         var bio = 0.0
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
+        repro.step(CHEM_DT)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) }
@@ -873,6 +876,7 @@ class Simulation(
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
             algae = water.algae.snapshot(),
+            eggClutches = repro.poses(),
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),

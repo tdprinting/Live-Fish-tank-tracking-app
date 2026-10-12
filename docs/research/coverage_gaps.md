@@ -47,7 +47,7 @@ Line refs are compendium lines. "Code" paths are repo-relative; `core/` = `core/
 
 | ID | Research ref | Specified | Status | Where | Size |
 |---|---|---|---|---|---|
-| B-1 | 02 §1C L505-520, 1F L540-548 | Clown pair: spawn, tend/fan eggs, female dominates, protandrous sex change | partial: `ClownBrain` has partner/female role; no spawning, eggs, fanning, or sex change on loss of female | `core/ai/FishBrains.kt` (ClownBrain), `core/sim/Simulation.kt`, new egg renderer | M |
+| B-1 | 02 §1C L505-520, 1F L540-548 | Clown pair: spawn, tend/fan eggs, female dominates, protandrous sex change | done: `sim/Reproduction.kt` (spawn readiness, site clean, lay, 8-10 d night hatch, larvae vanish, untended loss, protandrous change over 28 d); `ReproBehaviors.kt` (clean site, lay, fan); `SimSnapshot.eggClutches` for the renderer (egg drawing still TODO in app) | `core/ai/FishBrains.kt` (ClownBrain), `core/sim/Simulation.kt`, new egg renderer | M |
 | B-2 | 02 §3C L693 | Cardinal male mouthbrooding, eggs hatch ~1 week | missing (only a note string in `sphaeramia_nematoptera.json`) | `core/ai/FishBrains.kt` (CardinalBrain), `FishRig` mouth pose | S-M |
 | B-3 | 02 §4C L773-774 | Wrasse harem sex change (largest becomes male) | missing (single wrasse in tank, so low visible impact) | `FishBrains.kt` (WrasseBrain) | S |
 | B-4 | 04 §5-6 (L1971-2123), §15 L2630-2643 item 1 | Hermits swap shells, spare shells, shell fights over Astrea/Nassarius | missing: `HermitBrain` has retreat only; no shell inventory or swap; Astrea not a shell source | `core/ai/InvertBrains.kt` (HermitBrain), `core/sim/SimTypes.kt`, hermit GLB shell variants | M |

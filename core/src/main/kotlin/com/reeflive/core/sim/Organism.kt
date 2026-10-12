@@ -100,6 +100,12 @@ class Organism(
     /** Daytime hover / forage radius multiplier set by its brain (cardinal newcomer and timid states; 06 §5.6 #7). */
     var hoverRadius = 0.0
 
+    // ---- reproduction (coverage B-1..B-3; driven by sim/Reproduction.kt) ----
+    /** Explicit sex once resolved: true = female, false = male, null = unresolved (see [sexLabel]). Sex change flips it. */
+    var sexFemale: Boolean? = null
+    /** 0..1 progress of a sex change in progress (clown male to female, wrasse female to male). */
+    var sexChange = 0.0
+
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
     var startle = 0.0
@@ -208,7 +214,18 @@ class Organism(
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
+        sex = sexLabel(),
     )
+
+    /** "Female", "Male", "Changing sex" or "" when the sheet gives no sex. */
+    fun sexLabel(): String = when {
+        sexChange > 0.0 -> "Changing sex"
+        sexFemale == true -> "Female"
+        sexFemale == false -> "Male"
+        role.equals("FEMALE", true) -> "Female"
+        role.equals("MALE", true) -> "Male"
+        else -> ""
+    }
 
     fun temperamentTags(): List<String> = buildList {
         if (boldness > 0.6) add("Bold") else if (boldness < 0.35) add("Shy")

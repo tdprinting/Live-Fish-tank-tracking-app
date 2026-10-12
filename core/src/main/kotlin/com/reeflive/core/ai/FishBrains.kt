@@ -27,15 +27,10 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     private val hostName = o.hostAnchor ?: "HOST_KENYA"
     fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, Vec3(72.0, 40.0, 15.0))
     fun partner(c: Ctx): Organism? = c.sim.organisms.firstOrNull { it !== o && it.alive && it.brainKind == BrainKind.CLOWN }
-    fun isFemale(c: Ctx): Boolean {
-        val p = partner(c) ?: return true
-        o.role?.let { return it.equals("FEMALE", true) }
-        p.role?.let { return !it.equals("FEMALE", true) }
-        return o.lengthCm >= p.lengthCm
-    }
+    fun isFemale(c: Ctx): Boolean = c.sim.repro.clownIsFemale(o)
 
     init {
-        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this),
+        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this), CleanNestSite(this), LayEggs(this), TendEggs(this),
             Flee(this, { c, _ -> c.safe(host(c) + Vec3(0.0, 2.0, 0.0), 1.5) }, "Darting into the host"),
             VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this))
     }
