@@ -434,7 +434,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c15
     /** 06 §5.6 #15: banded and skunk shrimp ≥ 25 cm apart; a night molt next to the banded shrimp → ~5 % kills (sandbox toggle, 07 gap 4). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c15_shrimpPolitics() {
         val sim = tank(hour = 12.0)
         val cbs = sim.org(BrainKind.BANDED_SHRIMP)

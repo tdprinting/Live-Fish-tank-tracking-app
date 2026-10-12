@@ -271,6 +271,8 @@ class Simulation(
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         if (useBehavior && !abstractMode) coralCatch(simDt)
+        // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
+        nightRolls()
         chemAccum += simDt
         while (chemAccum >= CHEM_DT) {
             chemAccum -= CHEM_DT
@@ -487,7 +489,6 @@ class Simulation(
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
         flatwormToxin()
-        nightRolls()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
         if (!behaviorEnabled || abstractMode) {
             val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
