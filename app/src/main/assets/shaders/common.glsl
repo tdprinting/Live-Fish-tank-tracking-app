@@ -17,6 +17,11 @@ layout(std140) uniform Frame {
     vec4 uAbsorb;        // rgb Beer-Lambert absorption (1/cm), w scattering (1/cm)
     vec4 uTank;          // xyz interior size (cm), w unused
     vec4 uSurfaceDims;   // xy heightfield size, z 1 when heights are present, w unused
+    // Algae cover 0..1 per surface (AlgaeCover, research 09 A6); packed by AlgaeVisuals.kt.
+    vec4 uAlgaeGlass;    // x green film, y diatoms, z cyano, w dinos
+    vec4 uAlgaeSand;     // x diatoms, y cyano, z dinos, w hair
+    vec4 uAlgaeTop;      // rock tops: x hair, y cyano, z dinos, w bubble
+    vec4 uAlgaeShade;    // shaded rock: x coralline, y cyano, z dinos, w bubble
 };
 
 #define uTime uCamPos.w
@@ -55,6 +60,42 @@ float hash12(vec2 p) {
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
+
+float hash13(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+// Smooth 3D value noise in 0..1.
+float vnoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    float a = mix(mix(hash13(i), hash13(i + vec3(1.0, 0.0, 0.0)), u.x),
+                  mix(hash13(i + vec3(0.0, 1.0, 0.0)), hash13(i + vec3(1.0, 1.0, 0.0)), u.x), u.y);
+    float b = mix(mix(hash13(i + vec3(0.0, 0.0, 1.0)), hash13(i + vec3(1.0, 0.0, 1.0)), u.x),
+                  mix(hash13(i + vec3(0.0, 1.0, 1.0)), hash13(i + vec3(1.0, 1.0, 1.0)), u.x), u.y);
+    return mix(a, b, u.z);
+}
+
+// Three-octave value noise, mean ~0.5, sd ~0.12.
+float fbm3(vec3 p) {
+    return vnoise(p) * 0.5 + vnoise(p * 2.03 + 17.1) * 0.3 + vnoise(p * 4.11 + 41.7) * 0.2;
+}
+
+// Patchy algae mask: about `cover` of the surface area lies inside a patch (fbm3 value n is remapped to
+// ~uniform with a logistic approximation of its CDF, then thresholded at 1 - cover with soft edges).
+float algaePatch(float n, float cover) {
+    float c = clamp(cover, 0.0, 1.0);
+    if (c < 0.001) return 0.0;
+    float u = 1.0 / (1.0 + exp(-14.5 * (n - 0.5)));
+    float t = 1.0 - c;
+    return max(smoothstep(t - 0.04, t + 0.04, u), smoothstep(0.85, 1.0, c));
+}
+
+// Opacity inside a patch: thin film at low cover, dense mat at bloom levels.
+float algaeDensity(float cover) { return mix(0.45, 0.92, smoothstep(0.0, 0.5, cover)); }
 
 // Length of the segment a->b that lies inside the water volume (box 0..tank, below the surface).
 float waterPath(vec3 a, vec3 b) {

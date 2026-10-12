@@ -4,6 +4,8 @@
 // Rock and sand PBR-lite (ARCHITECTURE §8.4 item 1): Lambert + GGX, normal map via a derivative
 // cotangent frame (the GLBs carry no tangents), caustics, hair-algae bloom, Beer-Lambert + fog.
 // SAND: tiled detail normal and the front-glass green film (COLOR_0.r).
+// Algae cover (research 09 A6) from the Frame UBO as patchy world-space noise masks: sand gets diatom dust,
+// red cyano mats and khaki dino strands; rock tops hair turf, cyano and dinos; shaded rock coralline crust.
 
 in vec3 vWorld;
 in vec3 vNormal;
@@ -33,6 +35,28 @@ vec3 perturb(vec3 N, vec3 p, vec2 uv, vec3 tn) {
     return normalize(tbn * tn);
 }
 
+const vec3 ALG_HAIR = vec3(0.043, 0.105, 0.027);   // #3B5B2E
+const vec3 ALG_DIATOM = vec3(0.26, 0.13, 0.03);    // tan / golden brown
+const vec3 ALG_CYANO = vec3(0.16, 0.012, 0.016);   // burgundy red slime
+const vec3 ALG_DINO = vec3(0.24, 0.16, 0.06);      // khaki brown snot
+const vec3 ALG_BUBBLE = vec3(0.02, 0.07, 0.03);    // glossy dark green
+const vec3 ALG_CORAL_PINK = vec3(0.45, 0.10, 0.32);
+const vec3 ALG_CORAL_PURPLE = vec3(0.20, 0.05, 0.27);
+
+// Mats shared by sand and rock: cyano (slimy red, O2 bubbles by day) then dinos (stringy, lift at night).
+// Covers are 0..1; n is an fbm3 value (cyano takes the low end, dinos the high end, so they sit apart);
+// albedo and roughness are updated in place.
+void slimeMats(vec3 p, float n, float cyano, float dinos, inout vec3 albedo, inout float rough) {
+    float cy = algaePatch(1.0 - n, cyano) * algaeDensity(cyano);
+    albedo = mix(albedo, ALG_CYANO, cy);
+    float bub = step(0.94, hash13(floor(p * 2.5))) * cy * (1.0 - uNight) * clamp(lightIntensity() * 2.0, 0.0, 1.0);
+    albedo = mix(albedo, vec3(0.55, 0.6, 0.6), bub * 0.6);
+    float strand = 1.0 - abs(2.0 * vnoise(p * vec3(0.8, 0.12, 0.8)) - 1.0);
+    float di = algaePatch(n, dinos) * algaeDensity(dinos) * mix(0.55, 1.0, strand) * mix(1.0, 0.5, uNight);
+    albedo = mix(albedo, ALG_DINO, di);
+    rough = mix(rough, 0.3, clamp(max(cy, di), 0.0, 1.0));
+}
+
 void main() {
     vec4 tex = uHasTexture > 0.5 ? texture(uAlbedo, vUv) : vec4(1.0);
     vec3 albedo = toLinear(tex.rgb) * uBaseColor.rgb;
@@ -42,14 +66,46 @@ void main() {
     float ao = 1.0;
 #ifdef SAND
     albedo = mix(albedo, vec3(0.27, 0.35, 0.12), clamp(vColor.r, 0.0, 1.0) * 0.55);
+    if (dot(uAlgaeSand, vec4(1.0)) > 0.001) {
+        vec3 sp = vWorld * 0.07;
+        float n1 = fbm3(sp);
+        float n2 = fbm3(sp * 1.7 + vec3(31.0, 7.0, 13.0));
+        // diatoms: powdery brown dust, plus a faint even haze at high cover
+        float dia = algaePatch(n2, uAlgaeSand.x) * algaeDensity(uAlgaeSand.x) * 0.8 + uAlgaeSand.x * 0.2;
+        albedo = mix(albedo, ALG_DIATOM, clamp(dia, 0.0, 1.0));
+        // stray hair tufts (sand is a poor substrate)
+        albedo = mix(albedo, ALG_HAIR, algaePatch(n1, uAlgaeSand.w) * 0.6);
+        slimeMats(vWorld, n1, uAlgaeSand.y, uAlgaeSand.z, albedo, rough);
+    }
 #else
     vec2 ra = texture(uRoughAo, vUv).rg;
     rough = mix(uRoughness, ra.r, 0.7);
     ao = mix(1.0, ra.g, 0.85);
-    // hair algae (albedo alpha mask) blooms toward #3B5B2E on up-facing rock
-    float hair = tex.a;
-    float bloom = uAlgaeBloom * smoothstep(0.1, 0.7, N.y);
-    albedo = mix(albedo, vec3(0.043, 0.105, 0.027), clamp(bloom * (0.25 + 0.75 * hair), 0.0, 1.0));
+    float hair = tex.a; // baked hair-algae mask in the albedo alpha
+    float top = smoothstep(0.1, 0.7, N.y);
+    vec4 cv = mix(uAlgaeShade, uAlgaeTop, top);
+    float hairC = max(uAlgaeTop.x, uAlgaeBloom) * top;
+    float coralC = uAlgaeShade.x * mix(1.0, 0.25, top);
+    if (hairC + coralC + cv.y + cv.z + cv.w > 0.001) {
+        vec3 rp = vWorld * 0.09;
+        float n1 = fbm3(rp);
+        float n2 = fbm3(rp * 1.9 + vec3(5.0, 23.0, 11.0));
+        // coralline: pink/purple matte crust with pale growth margins
+        float cr = algaePatch(n2, coralC);
+        float edge = cr * (1.0 - smoothstep(0.35, 0.9, cr));
+        vec3 crust = mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, smoothstep(0.35, 0.65, n1));
+        albedo = mix(albedo, crust, cr * algaeDensity(coralC));
+        albedo = mix(albedo, vec3(0.6, 0.5, 0.58), edge * 0.35);
+        rough = mix(rough, 0.9, cr);
+        // hair turf toward #3B5B2E on up-facing rock, hugging the baked hair mask
+        float ht = algaePatch(n1 + (hair - 0.5) * 0.12, hairC) * algaeDensity(hairC) * (0.6 + 0.4 * hair);
+        albedo = mix(albedo, ALG_HAIR, clamp(ht + hairC * 0.25 * hair, 0.0, 1.0));
+        // bubble algae: a glossy dark-green tint in small clustered spots (no geometry)
+        float bb = algaePatch(0.5 + (vnoise(vWorld * 0.6) - 0.5) * 0.63, cv.w) * algaeDensity(cv.w);
+        albedo = mix(albedo, ALG_BUBBLE, bb);
+        rough = mix(rough, 0.15, bb);
+        slimeMats(vWorld, n1, cv.y, cv.z, albedo, rough);
+    }
 #endif
     if (uNormalStrength > 0.0) {
         vec3 tn = texture(uNormalMap, vUv * uDetailScale).xyz * 2.0 - 1.0;

@@ -3,6 +3,8 @@
 #include "lighting.glsl"
 // Front/side glass (ARCHITECTURE §8.4 item 7): Schlick Fresnel (F0 0.04 glass, SIMULATION §9.7) reflecting
 // the room environment (equirect room_env.png) and the fixture glow; premultiplied output (rendered last).
+// Algae on the inner face (research 09 A6): green film haze and diatom dust, densest diatoms, cyano and dinos
+// along the sand line; drawn behind the reflection and only below the water line.
 
 in vec3 vWorld;
 in vec3 vNormal;
@@ -43,5 +45,33 @@ void main() {
     // edge darkening where the glass is seen nearly edge-on (thickness)
     a += (1.0 - ndv) * (1.0 - ndv) * 0.08;
     vec3 col = tonemap(env * F + tint);
+    if (dot(uAlgaeGlass, vec4(1.0)) > 0.001) {
+        a = clamp(a, 0.0, 1.0);
+        float y = vWorld.y;
+        float wet = 1.0 - smoothstep(uWaterLevel - 1.0, uWaterLevel + 0.5, y);
+        float nearSand = 1.0 - smoothstep(uParams2.w, uParams2.w + 18.0, y);
+        float sandLine = 1.0 - smoothstep(uParams2.w, uParams2.w + 6.0, y);
+        float n1 = fbm3(vWorld * 0.12);
+        float n2 = fbm3(vWorld * 0.21 + vec3(13.0, 3.0, 29.0));
+        float film = uAlgaeGlass.x;
+        float dia = uAlgaeGlass.y * mix(0.45, 1.0, nearSand);
+        float fm = algaePatch(n1, film) * algaeDensity(film) * 0.7 + film * 0.3;
+        float dm = algaePatch(n2, dia) * algaeDensity(dia) * 0.6 + dia * 0.2;
+        float cm = algaePatch(1.0 - n1, uAlgaeGlass.z * sandLine) * 0.8;
+        float km = algaePatch(n2, uAlgaeGlass.w * sandLine) * 0.6;
+        vec3 alb = vec3(0.10, 0.26, 0.035);                                // green film
+        alb = mix(alb, vec3(0.26, 0.13, 0.03), dm / max(fm + dm, 1e-3));    // diatom brown
+        float m = clamp(fm + dm, 0.0, 1.0);
+        alb = mix(alb, vec3(0.16, 0.012, 0.016), cm);                     // cyano red
+        alb = mix(alb, vec3(0.24, 0.16, 0.06), km);                       // dino khaki
+        m = clamp(max(m, max(cm, km)), 0.0, 0.75) * wet;
+        // lit from inside the tank: the film faces the water, translucent (wrapped Lambert)
+        vec3 Nin = -Nout;
+        vec3 ac = tonemap(applyWater(shadeLit(alb, Nin, V, vWorld, 0.8, 1.0, 0.04, 0.8, 0.2), vWorld));
+        // straight-alpha "over": reflection layer (col, a) in front of the algae layer (ac, m)
+        float outA = a + m * (1.0 - a);
+        col = (col * a + ac * m * (1.0 - a)) / max(outA, 1e-4);
+        a = outA;
+    }
     fragColor = vec4(col, a);
 }
