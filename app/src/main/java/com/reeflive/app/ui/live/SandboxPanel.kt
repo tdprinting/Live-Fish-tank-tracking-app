@@ -48,6 +48,7 @@ import com.reeflive.app.ui.theme.statusText
 import com.reeflive.core.status.Status
 import java.util.Locale
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 /** Sandbox bottom sheet: wraps [SandboxPanelContent] in a [ReefSheet]. */
 @Composable
 fun SandboxPanel(
