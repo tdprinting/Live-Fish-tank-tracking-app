@@ -297,7 +297,8 @@ object HealthModel {
     /** Human words for a stress key (death cause, fish card "why"). */
     fun label(key: String): String = when (key) {
         "temp" -> "temperature"; "sg" -> "salinity"; "ph" -> "pH"; "nh3Free" -> "ammonia"; "no2" -> "nitrite"
-        "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "i" -> "low iodine"; "flow" -> "strong flow"
+        "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "i" -> "low iodine"; "flow" -> "flow change"
+        "light" -> "bright light"; "social" -> "harassment"
         "shockTemp" -> "temperature swing"; "shockSg" -> "salinity swing"; "shockPh" -> "pH swing"
         else -> key
     }
