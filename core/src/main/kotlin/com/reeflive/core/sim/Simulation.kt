@@ -10,6 +10,7 @@ import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -69,6 +70,20 @@ class Simulation(
     var behaviorEnabled = true
 
     private val commands = ConcurrentLinkedQueue<Command>()
+    /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
+    val growthRng = Rng(seed xor 0x6C0A1L)
+    private var fragCounter = 1
+    fun nextFragId(): Int = fragCounter++
+    /** Aiptasia controllers (AiptasiaModel). */
+    val pests = PestState()
+    /** Running disease treatments (W-4). */
+    val treatments = Treatments()
+    /** New-tank cycle checkpoints, when a cycle is being tracked (Presets.newTankCycle; W-5). */
+    var cycle: CycleTracker? = null
+    val aiptasiaCount: Int get() = corals.count { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
+
+    /** Copies pest controllers from another simulation (time-lapse fork). */
+    fun copyPestsFrom(src: Simulation) { pests.copyFrom(src.pests); treatments.copyFrom(src.treatments); fragCounter = max(fragCounter, src.fragCounter) }
 
     /** A parameter ramp/hold (06 §4.2): linear from [from] to [to] over [overSec], then held if [hold]. */
     class ParamRamp(val id: String, val from: Double, val to: Double, val startSec: Double, val overSec: Double, val hold: Boolean) {
@@ -373,20 +388,27 @@ class Simulation(
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
-        w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
+        w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
+        w.alleloSourcePerHour = CoralGrowth.alleloSource(corals)
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
         w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
         w.algae.grazers = algaeGrazers()
         w.step(CHEM_DT)
         applyRamps()
+        cycle?.update(w.s, simTimeSec)
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
         crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
+        expireTreatments()
+        val infectedAll = HashMap<Disease, Double>()
+        for (x in organisms) if (x.alive) x.disease?.let { infectedAll[it] = (infectedAll[it] ?: 0.0) + x.diseaseStage }
         for (o in organisms) {
             val ichOthers = organisms.filter { it !== o && it.alive && it.disease == Disease.ICH }.sumOf { it.diseaseStage }
+            val infected = if (infectedAll.isEmpty()) emptyMap() else
+                infectedAll.mapValues { (d, v) -> if (o.disease == d) v - o.diseaseStage else v }
             val rival = when (o.brainKind) {
                 BrainKind.LAWNMOWER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.PEEKER_BLENNY || it.brainKind == BrainKind.LAWNMOWER_BLENNY) }
                 BrainKind.PEEKER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.LAWNMOWER_BLENNY || it.brainKind == BrainKind.PEEKER_BLENNY) }
@@ -395,15 +417,18 @@ class Simulation(
             }
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
                 organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess)
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess,
+                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
+        coralGrowth(dtMin)
+        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             val tissueBefore = c.tissue
-            CoralSim.step(c, w.s, light, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
+            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
@@ -435,6 +460,21 @@ class Simulation(
             if (rng.chance(dtMin / 3.0)) depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
         }
         flushEvents()
+    }
+
+    /** Colony growth, Kenya branch drops and neighbour competition (CoralGrowth; coverage gaps C-1, C-2). */
+    private fun coralGrowth(dtMin: Double) {
+        if (corals.isEmpty()) return
+        CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
+        val born = ArrayList<Coral>()
+        val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
+        for (c in corals) {
+            CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${nextFragId()}" }?.let { born += it }
+        }
+        for (f in born) {
+            corals += f
+            pendingEventsSink += SimEvent.CoralSpawned(f.id.substringBefore('~'), f.id, simTimeSec)
+        }
     }
 
     /** Collects events from the health/coral models; flushed to the log once per tick. */
@@ -581,10 +621,27 @@ class Simulation(
             val o = it.next()
             val since = o.deadSince ?: continue
             val age = simTimeSec - since
-            if (age < 24 * 3600) water.addDetritusTanGrams(o.massG * CORPSE_TAN_PER_G * dtMin / (24 * 60))
+            val dt = carcassRelease(o, age, dtMin)
+            if (dt > 0) { o.carcassTanReleasedG += dt; water.addDetritusTanGrams(dt) }
             if (age > 48 * 3600) { removed += o; it.remove() }
         }
         removed.forEach { agents.remove(it) }
+    }
+
+    /**
+     * g TAN-equivalent a carcass [age] s dead leaches in the next [dtMin]. The pool is the body's own nitrogen
+     * (wet mass × [CARCASS_N_FRACTION], as TAN), so a kill can never release more N than the fish held; after a
+     * [CARCASS_LAG_H] autolysis lag it leaches first-order at [CARCASS_LEACH_PER_H] (faster when warm) until the keeper
+     * or the clean-up crew removes the body at 48 h, taking the rest with it. The grams go in as detritus, spread over
+     * the whole system volume by [WaterSim.addDetritusTanGrams].
+     */
+    private fun carcassRelease(o: Organism, ageSec: Double, dtMin: Double): Double {
+        val hours = ageSec / 3600
+        if (hours < CARCASS_LAG_H) return 0.0
+        val pool = carcassTanPoolG(o) - o.carcassTanReleasedG
+        if (pool <= 0) return 0.0
+        val k = CARCASS_LEACH_PER_H * HealthModel.metabolicMult(water.s.tempC)
+        return pool * (1 - exp(-k * dtMin / 60))
     }
 
     private val lastAutoFeedDay = HashMap<Int, Int>()
@@ -647,13 +704,27 @@ class Simulation(
                 apply(Command.Schedule(c.atSimSec, Command.Powerheads(false)))
                 apply(Command.Schedule(c.atSimSec + c.durationSec, Command.Powerheads(true)))
             }
-            is Command.RearrangeRock -> rearrangeRock()
+            is Command.RearrangeRock -> { rearrangeRock(); AiptasiaModel.rockMoved(this) }
             is Command.SetAcclimation -> for (o in organisms) if (o.alive) {
                 StressModel.acclimate(o, water.s, lightIntensity, flowStrength, c.paramId)
                 if (c.paramId == null || c.paramId.equals("temp", true)) HeatModel.acclimate(o, water.s.tempC)
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
+            is Command.Maintain -> water.maintain(c.task)
+            is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
+            is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
+            is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
+            is Command.StopTreatment -> treatments.active[c.kind]?.let { endTreatment(it) }
+            is Command.Infect -> (organisms.firstOrNull { it.id == c.id } ?: organisms.filter { it.alive && it.isFish }.let { l -> if (l.isEmpty()) null else l[growthRng.nextInt(l.size)] })
+                ?.takeIf { it.alive && it.isFish }?.let { o ->
+                    o.disease = c.disease; o.diseaseStage = c.stage.coerceIn(0.01, 1.0)
+                    emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
+                }
+            is Command.AddPestControl -> when (c.controller) {
+                PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
+                PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
+            }
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -680,6 +751,55 @@ class Simulation(
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
             is Command.ScrapeGlass -> scrapeGlass(c)
         }
+    }
+
+    /**
+     * Treatments (research 01 §3.8, §4.3). Hyposalinity ramps SG down at 0.002/day to 1.010 and holds it for [days];
+     * copper is ramped to 0.20 ppm over 2 days and held for [days]; UV switches the steriliser on; tank transfer,
+     * formalin and praziquantel act on the fish named (all fish by default) for [days].
+     */
+    private fun startTreatment(kind: TreatmentKind, days: Double, fishIds: Set<String>?) {
+        var total = days
+        when (kind) {
+            TreatmentKind.HYPOSALINITY -> {
+                val downDays = ((water.s.sg - Treatments.HYPO_SG) / Treatments.HYPO_RATE_PER_DAY).coerceAtLeast(0.0)
+                apply(Command.RampParam("sg", Treatments.HYPO_SG, downDays * 1440, hold = true))
+                total = downDays + days
+            }
+            TreatmentKind.COPPER -> {
+                apply(Command.RampParam("copper", Treatments.COPPER_PPM, Treatments.COPPER_RAMP_DAYS * 1440, hold = true))
+                total = Treatments.COPPER_RAMP_DAYS + days
+            }
+            TreatmentKind.UV -> water.uv = true
+            else -> {}
+        }
+        val end = if (total <= 0) Double.POSITIVE_INFINITY else simTimeSec + total * 86400
+        treatments.active[kind] = ActiveTreatment(kind, simTimeSec, end, fishIds)
+    }
+
+    private fun endTreatment(t: ActiveTreatment) {
+        treatments.active.remove(t.kind)
+        when (t.kind) {
+            // back up at 0.002 SG/day to normal, then the chemistry takes over
+            TreatmentKind.HYPOSALINITY -> {
+                val upDays = ((1.025 - water.s.sg) / Treatments.HYPO_RATE_PER_DAY).coerceAtLeast(0.0)
+                apply(Command.RampParam("sg", 1.025, upDays * 1440, hold = false))
+            }
+            // stop dosing and run fresh carbon to strip what is left
+            TreatmentKind.COPPER -> { ramps.remove("copper"); water.setParam("carbon", 1.0) }
+            TreatmentKind.UV -> water.uv = false
+            // the treated fish come back clean
+            TreatmentKind.TANK_TRANSFER -> for (o in organisms) if (o.alive && t.applies(o) && o.disease == Disease.ICH) {
+                pendingEventsSink += SimEvent.Recovered(o.id, Disease.ICH, simTimeSec)
+                o.disease = null; o.diseaseStage = 0.0
+            }
+            else -> {}
+        }
+    }
+
+    private fun expireTreatments() {
+        if (treatments.active.isEmpty()) return
+        for (t in treatments.active.values.toList()) if (simTimeSec >= t.endSec) endTreatment(t)
     }
 
     /** Current value of a rampable parameter. */
@@ -737,6 +857,7 @@ class Simulation(
         val old = water
         return WaterSim(config, old.s.copy()).also { nw ->
             nw.algae.copyFrom(old.algae)
+            nw.copyEquipmentFrom(old)
             nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
@@ -827,9 +948,11 @@ class Simulation(
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
+        pests.copyFrom(PestState()); treatments.active.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
     }
 
     // ============================================================== organisms
@@ -924,6 +1047,7 @@ class Simulation(
     // Initialised last so every property above exists before livestock is added.
     init {
         livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
         updateLights()
         lastLight = perception.light
         perception.rebuild()
@@ -937,7 +1061,13 @@ class Simulation(
         const val ABSTRACT_SPEED = 240.0
         /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
         const val MAX_BEHAVIOR_DT = 0.5
-        const val CORPSE_TAN_PER_G = 0.02
+        /** Nitrogen as a fraction of fish wet mass (~18 % protein × 16 % N ≈ 2-3 %). */
+        const val CARCASS_N_FRACTION = 0.025
+        /** Hours before a carcass starts leaching (autolysis), and the leach rate of what N is left (est.). */
+        const val CARCASS_LAG_H = 4.0
+        const val CARCASS_LEACH_PER_H = 0.02
+        /** Total TAN-equivalent grams a carcass of [o] can ever release: its N content. */
+        fun carcassTanPoolG(o: Organism) = o.massG * CARCASS_N_FRACTION * 17.0 / 14.0
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
         const val CORAL_TAN_PER_COLONY = 2.0
         const val ASTERINA_CAP = 4

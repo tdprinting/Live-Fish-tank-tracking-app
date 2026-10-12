@@ -43,6 +43,38 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     var manualTopOffDays = 3
     private var hoursSinceTopOff = 0.0
 
+    // ---- filtration and export equipment (research 01 §3.5; coverage gap W-6) ----
+    /** Protein skimmer: strips DOC and organics before they mineralise and adds aeration. On in Tee's tank. */
+    var skimmer = true
+    /** Filter sock: traps detritus; left in past ~2-3 days it rots and releases NH3/PO4 back (01 §3.5). */
+    var filterSock = false
+    /** Activated carbon: adsorbs DOC, soft-coral allelochemicals and some copper; exhausted over 2-4 weeks. */
+    var carbon = false
+    /** Chaetomorpha refugium on a reverse light cycle: grows on NO3/PO4 and exports them at harvest. */
+    var refugium = false
+        set(v) { field = v; if (v && s.chaeto <= 0.0) s.chaeto = CHAETO_START; if (!v) s.chaeto = 0.0 }
+    /** UV steriliser on the return: kills free-swimming parasite stages (01 §4.3 ich: theronts). Used by the treatments. */
+    var uv = false
+    /** Auto-maintenance cadence in days (0 = never): sock swap, carbon swap, refugium harvest (01 §3.5). */
+    var sockChangeDays = 3.0
+    var carbonChangeDays = 21.0
+    var refugiumHarvestDays = 45.0
+    /** The display red macro is trimmed back to 70 % of this index when it outgrows it (0 = never trim). */
+    var macroTrimAbove = 0.6
+    var sockAgeH = 0.0; private set
+    var carbonAgeH = 0.0; private set
+    var refugiumAgeH = 0.0; private set
+    /** Detritus held in the sock (ppm TAN-equivalent of the tank volume). */
+    var sockLoad = 0.0; private set
+    /** Allelochemical release by the soft corals this hour (index/h), set by Simulation from colony sizes (03 D). */
+    var alleloSourcePerHour = 0.0
+    /** Fraction of the light reaching the corals through DOC-yellowed water (1 = clear; carbon clears it). */
+    val clarity: Double get() = 1 - 0.2 * ((s.doc - 3.0) / 5.0).coerceIn(0.0, 1.0)
+    /** Carbon adsorption efficiency: fresh 1, exhausted after ~3 weeks (01 §3.5 change every 2-4 weeks). */
+    val carbonEfficiency: Double get() = if (carbon) exp(-carbonAgeH / (24 * 14.0)) else 0.0
+    /** NO3 taken up by the display macro and the refugium in the last step, ppm/day. */
+    var macroUptakePerDay = 0.0; private set
+
     // ---- pending inputs ----
     private var pendingFeedTan = 0.0   // ppm TAN still to be released from food (first order, τ = 2 h)
     private var pendingFeedPo4 = 0.0
@@ -64,6 +96,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         nitrogen(h)
         phosphate(h)
         carbonate(h)
+        filtration(h)
+        macroalgae(h)
         algae(h)
         gases(h)
         s.nh3Free = ChemFns.freeNh3(s.nh3Total, s.ph, s.tempC)
@@ -115,6 +149,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.sg = 1 + salt / v1
         s.alk *= k; s.ca *= k; s.mg *= k; s.k *= k; s.sr *= k; s.i *= k; s.copper *= k
         s.nh3Total *= k; s.no2 *= k; s.no3 *= k; s.po4 *= k; s.detritus *= k; s.silicate *= k
+        s.doc *= k; s.allelo *= k; sockLoad *= k
         pendingFeedTan *= k; pendingFeedPo4 *= k
         s.volumeL = v1
     }
@@ -140,11 +175,12 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         // O2 consumed by decomposition (BOD ≈ 20 mg O2 per mg TAN-equivalent) and nitrification (research 05 §11)
         oxygenDemandPerHour = (detritusDecay * BOD_PER_TAN + n1 * 3.4 + n2 * 0.35) / h.coerceAtLeast(1e-9)
         // Stronger flow keeps detritus suspended for the filter/skimmer (research 05 §16)
-        val detExport = s.detritus * 0.004 * (min(flowEff, 2.0) - 1.0).coerceAtLeast(0.0) * h   // only extra pump strength adds export
+        val detExport = if (!skimmer && !filterSock) 0.0 else
+            s.detritus * 0.004 * (min(flowEff, 2.0) - 1.0).coerceAtLeast(0.0) * h   // only extra pump strength adds export
         s.detritus -= detExport
         nExportMg += detExport * N_TAN * v
-        // Export: corals, refugium macro, skimmer (algae uptake is stoichiometric in AlgaeModel)
-        val export = min((0.004 * coralBiomass + 0.01 * s.macro + 0.0015 * s.no3 * min(flowEff, 1.2)) * h, s.no3)
+        // Export: corals and the skimmer's organics removal (macroalgae and algae uptake are stoichiometric: macroalgae(), AlgaeModel)
+        val export = min((0.004 * coralBiomass + (if (skimmer) 0.0015 * s.no3 * min(flowEff, 1.2) else 0.0)) * h, s.no3)
         s.no3 -= export
         nExportMg += export * N_NO3 * v
         // Bacteria: logistic growth on substrate, slow die-off without it
@@ -167,14 +203,24 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.po4 = max(0.0, s.po4 + d)
     }
 
+    /**
+     * Ca / alk / Mg coupling (research 01 §2.1, 05 §10). Corals and abiotic precipitation both remove CaCO3, so Ca
+     * falls by [CA_PER_DKH] ppm for every dKH of alkalinity used. Corals slow down when Ca or alk run low. Abiotic
+     * precipitation starts when the Ca × alk product passes a threshold that Mg sets: Mg in range holds it off,
+     * low Mg (< 1200 ppm) lets normal water precipitate. Strontium is taken up with the skeleton (Sr/Ca ≈ 9 mmol/mol).
+     */
     private fun carbonate(h: Double) {
-        val demand = coralDemandDkhPerDay / 24 * h
-        var precip = if (s.alk > 11 && s.ca > 460) 0.02 * h else 0.0
-        if (s.mg < 1150) precip *= 2
+        val demand = coralDemandDkhPerDay / 24 * h * calcificationFactor(s)
+        val precip = precipitationDkhPerHour(s) * h
+        precipDkhPerDay = precip / h.coerceAtLeast(1e-9) * 24
         s.alk -= demand + precip
-        s.ca -= demand * CA_PER_DKH + precip * 7.0
-        s.mg -= demand * 0.1
+        s.ca -= (demand + precip) * CA_PER_DKH
+        s.mg -= demand * 0.1 + precip * MG_PER_DKH_PRECIP
+        s.sr = max(0.0, s.sr - demand * CA_PER_DKH * SR_PER_CA)
     }
+
+    /** Abiotic CaCO3 precipitation in the last step, dKH/day (white crust on heaters and pumps, cloudy water). */
+    var precipDkhPerDay = 0.0; private set
 
     private fun gases(h: Double) {
         val v = s.volumeL
@@ -187,10 +233,103 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.ph = 8.15 + 0.045 * (s.alk - 8.5) - 0.35 * (s.co2Index - 1)
         // Dissolved oxygen
         val sat = ChemFns.oxygenSaturation(s.tempC, s.ppt)
-        val kla = if (s.flowOn) 1.8 * (0.3 + 0.7 * min(flowStrength, 1.5)) else 0.25
+        val kla = (if (s.flowOn) 1.8 * (0.3 + 0.7 * min(flowStrength, 1.5)) else 0.25) * (if (skimmer) 1.0 else 0.85)
         s.doMgL += (kla * (sat - s.doMgL) + photo * DO_PHOTO - resp) * h
         s.doMgL = s.doMgL.coerceIn(0.0, sat * 1.3)
     }
+
+    /**
+     * Filter sock, skimmer, carbon and DOC (research 01 §3.5). DOC comes from food and photosynthetic exudate and
+     * leaves by bacterial breakdown, the skimmer and carbon. A sock captures detritus (export) until it is older than
+     * ~2 days, then rots and releases NH3/PO4. Excess DOC (above a mature tank's ~2 mg/L, already inside K_RESP)
+     * costs oxygen and yellows the water ([clarity]).
+     */
+    private fun filtration(h: Double) {
+        val v = s.volumeL
+        sockAgeH += h; carbonAgeH += h; refugiumAgeH += h
+        if (filterSock) {
+            val cap = s.detritus * SOCK_CAPTURE * min(flowEff, 1.5) * h
+            s.detritus -= cap; sockLoad += cap
+            nExportMg += cap * N_TAN * v
+            val rel = sockLoad * SOCK_ROT * smooth(48.0, 120.0, sockAgeH) * h
+            sockLoad -= rel
+            s.nh3Total += rel; s.po4 += rel * 0.04
+            nInputMg += rel * N_TAN * v
+            if (sockChangeDays > 0 && sockAgeH >= sockChangeDays * 24) changeSock()
+        }
+        if (carbon && carbonChangeDays > 0 && carbonAgeH >= carbonChangeDays * 24) carbonAgeH = 0.0
+        val ce = carbonEfficiency
+        val docIn = DOC_EXUDATE * lightIntensity * coralBiomass * h
+        val docOut = s.doc * (DOC_DECAY + (if (skimmer) DOC_SKIM * min(flowEff, 1.2).coerceAtLeast(0.3) else 0.0) + DOC_CARBON * ce) * h
+        s.doc = max(0.0, s.doc + docIn - min(docOut, s.doc))
+        oxygenDemandPerHour += (s.doc - 2.0).coerceAtLeast(0.0) * DOC_DECAY * 2.67   // mg O2 per mg C respired
+        val aOut = s.allelo * (ALLELO_DECAY + (if (skimmer) 0.01 else 0.0) + 0.1 * ce) * h
+        s.allelo = max(0.0, s.allelo + alleloSourcePerHour * h - min(aOut, s.allelo))
+        if (ce > 0) s.copper = max(0.0, s.copper - s.copper * 0.01 * ce * h)
+    }
+
+    /** Carries the equipment state over to a rebuilt or forked water model. */
+    fun copyEquipmentFrom(o: WaterSim) {
+        skimmer = o.skimmer; filterSock = o.filterSock; carbon = o.carbon; uv = o.uv
+        refugium = o.refugium; s.chaeto = o.s.chaeto
+        sockChangeDays = o.sockChangeDays; carbonChangeDays = o.carbonChangeDays; refugiumHarvestDays = o.refugiumHarvestDays
+        macroTrimAbove = o.macroTrimAbove
+        sockAgeH = o.sockAgeH; carbonAgeH = o.carbonAgeH; refugiumAgeH = o.refugiumAgeH; sockLoad = o.sockLoad
+        alleloSourcePerHour = o.alleloSourcePerHour
+    }
+
+    fun changeSock() { sockLoad = 0.0; sockAgeH = 0.0 }
+
+    /**
+     * Red macroalgae in the display and Chaetomorpha in the refugium (research 03 A1, C1; 01 §3.5). Logistic growth on
+     * light and the scarcer of NO3/PO4 (Liebig); uptake is stoichiometric (macroalgal N:P ≈ 30:1 molar, 19.6 g NO3 per g PO4) and is
+     * the export, removed for good when the algae are harvested or trimmed. Light above ~1.0 bleaches the red macro.
+     */
+    private fun macroalgae(h: Double) {
+        val v = s.volumeL
+        val nut = min(s.no3 / (s.no3 + 1.0), s.po4 / (s.po4 + 0.005))
+        val fl = lightIntensity / (lightIntensity + 0.3)
+        val gM = MACRO_MU * s.macro * (1 - s.macro / MACRO_CAP).coerceAtLeast(0.0) * fl * nut * h
+        val bleach = MACRO_BLEACH * ((lightIntensity - 1.0) / 0.3).coerceIn(0.0, 1.0) + MACRO_DECAY
+        val lM = s.macro * bleach * h
+        var gC = 0.0; var lC = 0.0
+        if (refugium) {
+            gC = MACRO_MU * s.chaeto * (1 - s.chaeto / CHAETO_CAP).coerceAtLeast(0.0) * REFUGIUM_LIGHT * nut * h
+            lC = s.chaeto * MACRO_DECAY * h
+        }
+        var uptake = (gM + gC) * MACRO_YIELD
+        val scale = if (uptake > 0) min(1.0, min(s.no3 / uptake, s.po4 * PO4_REDFIELD / uptake)) else 1.0
+        uptake *= scale
+        s.macro += gM * scale - lM
+        s.chaeto += gC * scale - lC
+        s.no3 -= uptake; s.po4 = max(0.0, s.po4 - uptake / PO4_REDFIELD)
+        nExportMg += uptake * N_NO3 * v
+        // shed or bleached tissue rots in the tank
+        val lostN = (lM + lC) * MACRO_YIELD * N_NO3
+        s.detritus += lostN / N_TAN
+        nInputMg += lostN * v
+        macroUptakePerDay = uptake / h.coerceAtLeast(1e-9) * 24
+        if (macroTrimAbove > 0 && s.macro > macroTrimAbove) s.macro = macroTrimAbove * 0.7
+        if (refugium && refugiumHarvestDays > 0 && refugiumAgeH >= refugiumHarvestDays * 24) harvestMacro()
+    }
+
+    /** Harvest: half the refugium chaeto and the display macro trimmed by a third (their nutrients leave with them). */
+    fun harvestMacro() {
+        s.chaeto *= 0.5
+        s.macro *= 0.67
+        refugiumAgeH = 0.0
+    }
+
+    /** One-off maintenance (sandbox buttons, routine schedule). */
+    fun maintain(task: MaintenanceTask) {
+        when (task) {
+            MaintenanceTask.CHANGE_SOCK -> changeSock()
+            MaintenanceTask.REPLACE_CARBON -> carbonAgeH = 0.0
+            MaintenanceTask.HARVEST_MACRO -> harvestMacro()
+        }
+    }
+
+    private fun smooth(a: Double, b: Double, x: Double): Double { val t = ((x - a) / (b - a)).coerceIn(0.0, 1.0); return t * t * (3 - 2 * t) }
 
     /** Algae growth and uptake (research 09 Part A); its decay adds to the oxygen demand used by [gases]. */
     private fun algae(h: Double) {
@@ -211,6 +350,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
 
     /** Food added to the tank: its N/P leaches over ~6 h (τ = 2 h). */
     fun addFeed(grams: Double) {
+        s.doc += grams * DOC_PER_G * 1000 / s.volumeL
         val tan = grams * FEED_TAN_PER_G * 1000 / s.volumeL
         pendingFeedTan += tan
         nInputMg += tan * N_TAN * s.volumeL
@@ -234,6 +374,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.nh3Total = m(s.nh3Total, mix.nh3Total); s.no2 = m(s.no2, mix.no2); s.no3 = m(s.no3, mix.no3); s.po4 = m(s.po4, mix.po4)
         s.k = m(s.k, mix.k); s.sr = m(s.sr, mix.sr); s.i = m(s.i, mix.i); s.copper = m(s.copper, mix.copper); s.doMgL = m(s.doMgL, mix.doMgL)
         s.silicate = m(s.silicate, mix.silicate)
+        s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo)
         s.detritus *= (1 - f)
         val after = nitrogenInSystemMg() - pendingFeedTan * N_TAN * s.volumeL
         val mixN = (mix.nh3Total * N_TAN + mix.no2 * N_NO2 + mix.no3 * N_NO3) * f * s.volumeL
@@ -291,7 +432,16 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "silicate", "si" -> s.silicate = max(0.0, value)
             "glasswipe" -> if (value > 0) algae.wipeGlass(value.coerceIn(0.0, 1.0))
             "detritus" -> { nInputMg += (value - s.detritus) * N_TAN * v; s.detritus = value }
-            "gfo" -> s.gfoActive = value > 0.5
+"gfo" -> s.gfoActive = value > 0.5
+            "skimmer" -> skimmer = value > 0.5
+            "sock", "filtersock" -> filterSock = value > 0.5
+            "carbon" -> { if (value > 0.5 && !carbon) carbonAgeH = 0.0; carbon = value > 0.5 }
+            "refugium" -> refugium = value > 0.5
+            "uv" -> uv = value > 0.5
+            "macro" -> s.macro = value.coerceIn(0.0, MACRO_CAP)
+            "chaeto" -> s.chaeto = value.coerceIn(0.0, CHAETO_CAP)
+            "doc" -> s.doc = max(0.0, value)
+            "allelo" -> s.allelo = max(0.0, value)
             "ato" -> ato = value > 0.5
             "bacteria" -> { s.bacteriaAob = value.coerceIn(B_MIN, 1.0); s.bacteriaNob = value.coerceIn(B_MIN, 1.0) }
             "heaterstuck" -> heaterStuckOn = value > 0.5
@@ -312,6 +462,30 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val NO2_PER_NH3 = 46.0 / 17.0
         const val NO3_PER_NO2 = 62.0 / 46.0
         const val CA_PER_DKH = 7.14
+        /** Mg carried down with abiotic (high-Mg) carbonate, ppm per dKH precipitated (est.). */
+        const val MG_PER_DKH_PRECIP = 1.0
+        /** Sr taken up per ppm Ca in coral aragonite (Sr/Ca ≈ 9 mmol/mol → 0.02 by mass, est.). */
+        const val SR_PER_CA = 0.02
+
+        /**
+         * Calcification slows when Ca or alk run low (05 §10: Ca < 350 strong loss; 05 §9: alk < 6 tissue stress).
+         * 1 in the normal band, 0 at Ca 200 ppm or alk 3 dKH.
+         */
+        fun calcificationFactor(w: WaterState): Double =
+            ((w.ca - 200) / 150).coerceIn(0.0, 1.0) * ((w.alk - 3) / 2.5).coerceIn(0.0, 1.0)
+
+        /**
+         * Abiotic precipitation, dKH/h. Saturation proxy = (Ca/420)(alk/8.5)(pH factor); it precipitates above a
+         * threshold of 1.0 at Mg 1200, 1.4 at Mg ≥ 1350 and 0.6 at Mg ≤ 1050 (01 §2.1, 05 §10: "Mg below 1200:
+         * alkalinity and calcium precipitate"; alk > 12 or Ca > 480: precipitation risk). 0.02 dKH/h per 0.2 excess.
+         */
+        fun precipitationDkhPerHour(w: WaterState): Double {
+            val phF = (1 + (w.ph - 8.2)).coerceIn(0.5, 1.5)
+            val sat = (w.ca / 420.0) * (w.alk / 8.5) * phF
+            val thr = 1.0 + 0.4 * ((w.mg - 1200) / 150).coerceIn(-1.0, 1.0)
+            val ex = sat - thr
+            return if (ex <= 0) 0.0 else 0.02 * min(ex / 0.2, 3.0)
+        }
 
         // Tuned constants (see SIMULATION §2 "Tuned constants")
         const val K_LOSS = 9.0                 // W/°C
@@ -327,6 +501,24 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val MU_AOB = 0.012; const val MU_NOB = 0.007; const val B_DECAY = 0.0005; const val B_MIN = 0.005
         const val K_RESP = 1.19                // mg O2/L/h per (g^0.8 / L)
         const val DO_PHOTO = 1.1
+        // Equipment / DOC / macroalgae (W-6, C-7; est. unless noted)
+        const val SOCK_CAPTURE = 0.03          // /h of suspended detritus caught at normal flow (tank turns over through it)
+        const val SOCK_ROT = 0.02              // /h of the sock's load released once it is older than ~2-5 days
+        const val DOC_PER_G = 0.04             // g DOC leached per g food
+        const val DOC_EXUDATE = 0.004          // mg/L/h per (light × coral biomass)
+        const val DOC_DECAY = 0.01             // /h bacterial breakdown (τ ≈ 4 days)
+        const val DOC_SKIM = 0.02              // /h skimmer removal at normal flow
+        const val DOC_CARBON = 0.08            // /h fresh carbon
+        const val ALLELO_DECAY = 0.02          // /h breakdown of terpenoids in water (τ ≈ 2 days)
+        const val MACRO_MU = 0.1 / 24          // /h max specific growth (refugium chaeto doubles in ~2-3 weeks)
+        const val MACRO_CAP = 1.0
+        const val CHAETO_CAP = 2.0
+        const val CHAETO_START = 0.3
+        const val REFUGIUM_LIGHT = 0.6         // light-limitation factor of a reverse-cycle refugium light
+        const val MACRO_YIELD = 14.0           // ppm NO3 per unit biomass index
+        const val MACRO_BLEACH = 0.15 / 24     // /h loss at full over-light (03 C1 too much light: bleaching)
+        const val MACRO_DECAY = 0.001 / 24     // /h shedding
+        const val PO4_REDFIELD = 19.6          // g NO3 per g PO4 taken up (macroalgae N:P ≈ 30:1 molar, above Redfield 16:1; est.)
         const val CO2_RESP = 0.06; const val CO2_PHOTO = 0.10; const val CO2_EXCH = 0.08
     }
 }

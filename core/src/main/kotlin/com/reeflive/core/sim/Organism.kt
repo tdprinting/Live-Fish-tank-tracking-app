@@ -40,11 +40,15 @@ class Organism(
     var immunity = 1.0
     var health = 1.0
     var disease: Disease? = null
+    /** Separate stream for the W-4 disease onsets so the older ich/bacterial rolls on [rng] keep their sequence. */
+    val diseaseRng = Rng(id.hashCode().toLong() xor 0x51C4L)
     var diseaseStage = 0.0
     var hlle = 0.0
     var condition = 1.0
     var alive = true
     var deadSince: Double? = null
+    /** g of TAN-equivalent this carcass has leached into the water so far (bounded by its N content; see Simulation.corpses). */
+    var carcassTanReleasedG = 0.0
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()

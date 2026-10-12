@@ -14,7 +14,7 @@ object TimelapseFork {
     fun of(src: Simulation): Simulation {
         val seeds = src.organisms.filter { it.alive }.map {
             LivestockSeed(it.species.id, it.nickname, it.lengthCm, it.role, it.placement, it.id, it.variant)
-        } + src.corals.map {
+        } + src.corals.filter { it.anchor.isNotBlank() }.map {
             LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id, offset = it.offset.takeIf { o -> o != com.reeflive.core.geom.Vec3.ZERO })
         }
         val lights = LightSchedule(src.lights.points).also {
@@ -36,6 +36,7 @@ object TimelapseFork {
         dst.water.flowStrength = w.flowStrength; dst.water.heaterWorking = w.heaterWorking
         dst.water.heaterStuckOn = w.heaterStuckOn; dst.water.heaterSetC = w.heaterSetC; dst.water.ato = w.ato
         dst.water.algae.copyFrom(w.algae)
+        dst.water.copyEquipmentFrom(w)
         val srcOrgs = src.organisms.associateBy { it.id }
         for (o in dst.organisms) {
             val s = srcOrgs[o.id] ?: continue
@@ -50,12 +51,18 @@ object TimelapseFork {
             b.socialInput = a.socialInput; b.heatSlow = a.heatSlow; b.lowPh = a.lowPh; b.sEnv = a.sEnv
             o.arrivalTime = s.arrivalTime
         }
+        // dropped Kenya branches and aiptasia lacerates have no anchor: copy them where they sit
+        for (s in src.corals) if (s.anchor.isBlank()) dst.corals += com.reeflive.core.sim.Coral(s.id, s.species, s.nickname, "", s.pos, s.normal, s.swayPhase)
         val srcCorals = src.corals.associateBy { it.id }
         for (c in dst.corals) {
             val s = srcCorals[c.id] ?: continue
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw
             c.acclSg = s.acclSg; c.acclAlk = s.acclAlk; c.acclLight = s.acclLight; c.algaeCover = s.algaeCover
+            c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
+        dst.copyPestsFrom(src)
+        // ramps and holds (a running hyposalinity or copper course) carry over
+        dst.ramps.putAll(src.ramps)
         return dst
     }
 }

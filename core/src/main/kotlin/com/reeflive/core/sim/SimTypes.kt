@@ -60,6 +60,29 @@ sealed class Command {
         val pane: GlassPane, val x0: Double, val y0: Double, val x1: Double, val y1: Double,
         val widthCm: Double = 6.0, val heightCm: Double = widthCm,
     ) : Command()
+
+    // ---- equipment and maintenance (coverage gap W-6). Equipment toggles are SetParam ids:
+    //      "skimmer", "sock", "carbon", "refugium", "uv" (1 = on, 0 = off). ----
+    /** One-off maintenance: change the filter sock, replace the carbon, harvest the macroalgae. */
+    data class Maintain(val task: MaintenanceTask) : Command()
+
+    // ---- pests (coverage gap C-4) ----
+    /** Sandbox add-pest: [count] aiptasia on the aiptasia anchors (then as lacerates). */
+    data class AddAiptasia(val count: Int = 1) : Command()
+    /** Remove up to [count] aiptasia, biggest first: injected ([chemical]) or scraped; both can leave fragments. */
+    data class RemoveAiptasia(val count: Int = 1, val chemical: Boolean = true) : Command()
+    /** Add aiptasia controllers (peppermint shrimp, Berghia nudibranchs). */
+    data class AddPestControl(val controller: PestController, val count: Int = 1) : Command()
+
+    // ---- disease treatments (coverage gap W-4) ----
+    /**
+     * Start a treatment for [days] (null = the kind's default; UV with 0 runs until stopped). [fishIds] limits
+     * tank transfer / baths to those fish (null = every fish). Hyposalinity and copper change the display water.
+     */
+    data class StartTreatment(val kind: TreatmentKind, val days: Double? = null, val fishIds: List<String>? = null) : Command()
+    data class StopTreatment(val kind: TreatmentKind) : Command()
+    /** Sandbox: infect fish [id] (null = a random fish) with [disease] at [stage]. */
+    data class Infect(val id: String?, val disease: Disease, val stage: Double = 0.05) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -77,7 +100,14 @@ data class LivestockSeed(
     val offset: Vec3? = null,
 )
 
-enum class Disease { ICH, VELVET, HLLE, BACTERIAL }
+/** Routine maintenance jobs (research 01 §3.5). */
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO }
+
+/**
+ * Fish diseases (research 01 §4.3). BROOKLYNELLA, URONEMA and FLUKES were added for the treatment model (W-4);
+ * code that switches over this enum must handle them.
+ */
+enum class Disease { ICH, VELVET, HLLE, BACTERIAL, BROOKLYNELLA, URONEMA, FLUKES }
 
 enum class Symptom(val label: String) {
     COLOR_FADE("Faded color"),
@@ -97,6 +127,8 @@ enum class Symptom(val label: String) {
     LOSS_OF_EQUILIBRIUM("Loss of equilibrium"),
     DETACHED("Lost its grip"),
     DEAD("Dead"),
+    /** Brooklynella: heavy mucus coat (01 §4.3). */
+    MUCUS("Heavy mucus"),
 }
 
 enum class Mood(val label: String) { CALM("Calm"), ALERT("Alert"), HUNGRY("Hungry"), STRESSED("Stressed"), SICK("Sick"), SLEEPING("Sleeping"), DEAD("Dead") }
@@ -123,6 +155,8 @@ sealed class SimEvent {
     data class TerritoryReset(override val simTimeSec: Double) : SimEvent()
     data class Quiver(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
+    /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
+    data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -196,6 +230,12 @@ data class CoralPose(
     val homeX: Float = 0f,
     val homeY: Float = 0f,
     val homeZ: Float = 0f,
+    /**
+     * Colony growth (CoralGrowth, research 03 C2): linear size relative to the placed colony (renderer instance
+     * scale; 1 = as modelled) and, for encrusting mats, the share of their reachable rock now covered (polyp density).
+     */
+    val size: Float = 1f,
+    val cover: Float = 0f,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }

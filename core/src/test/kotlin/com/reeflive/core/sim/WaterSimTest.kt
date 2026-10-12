@@ -44,6 +44,25 @@ class WaterSimTest {
         assertTrue("TAN ${s.nh3Total} NO2 ${s.no2} at day 45", s.nh3Total < 0.1 && s.no2 < 0.1)
     }
 
+    /**
+     * Research 01 §3.9 checkpoints on the new-tank preset: ammonia, then a nitrite peak, then nitrite falling with
+     * nitrate rising; cycled (3 days of 0 ammonia and 0 nitrite while ghost-feeding) after 4-8 weeks.
+     */
+    @Test
+    fun cycleCheckpoints() {
+        val sim = Presets.create(Presets.newTankCycle, TestTank.catalog, TestTank.rock)
+        val c = sim.cycle!!
+        sim.advanceAbstract(70 * 86400.0)
+        val r = c.reachedDay
+        println("W-5 stages reached on days ${r.joinToString { "%.1f".format(it) }}; NH3 peak ${"%.2f".format(c.nh3Peak)} day ${"%.1f".format(c.nh3PeakDay)}, NO2 peak ${"%.2f".format(c.no2Peak)} day ${"%.1f".format(c.no2PeakDay)}; NO3 ${"%.1f".format(sim.water.s.no3)}")
+        assertEquals(CycleTracker.Stage.CYCLED, c.stage)
+        assertTrue("NH3 peaks before NO2", c.nh3PeakDay < c.no2PeakDay)
+        assertTrue("stages in order", r[1] < r[2] && r[2] < r[3])
+        assertTrue("nitrite stage within days 7-28: ${r[1]}", r[1] in 4.0..28.0)
+        assertTrue("cycled within 3-8 weeks: ${c.cycledDay}", c.cycledDay!! in 21.0..56.0)
+        assertTrue("nitrate accumulated: ${sim.water.s.no3}", sim.water.s.no3 > 0.5)
+    }
+
     /** SIMULATION §2.10: an established tank with no feeding keeps TAN and NO2 < 0.01 ppm for 30 days. */
     @Test
     fun establishedTankStaysClean() {

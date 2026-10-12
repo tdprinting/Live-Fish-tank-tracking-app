@@ -22,6 +22,12 @@ data class HealthContext(
     val light: Double = 0.5,
     /** This animal is a second (or later) blenny in the tank: chronically harassed by the resident (research 04 §15 item 2). */
     val blennyExcess: Boolean = false,
+    /** Σ stage of other fish per disease (velvet, Brooklynella, Uronema and flukes spread fish to fish too). */
+    val infected: Map<Disease, Double> = emptyMap(),
+    /** Treatment effects on this fish per disease (Treatments.modsFor). */
+    val mods: Map<Disease, DiseaseMods> = emptyMap(),
+    /** A slow hyposalinity course is running: fish SG tolerance follows the treatment band. */
+    val hypo: Boolean = false,
 )
 
 /**
@@ -38,6 +44,11 @@ object HealthModel {
     const val ICH_BASE_PRESSURE = 0.0005
     const val ICH_GROWTH = 0.0000165
     const val ICH_RECOVERY = 0.0000035
+    /** Progression relative to ich (01 §4.3): velvet kills in days, Brooklynella and Uronema faster, flukes slowly (est.). */
+    const val VELVET_GROWTH = 5 * ICH_GROWTH
+    const val BROOK_GROWTH = 6 * ICH_GROWTH
+    const val URONEMA_GROWTH = 6 * ICH_GROWTH
+    const val FLUKE_GROWTH = 1 * ICH_GROWTH
     const val BACT_GROWTH = 0.0002
     const val BACT_RECOVERY = 0.00008
     const val K_STRESS = 0.00016
@@ -68,6 +79,11 @@ object HealthModel {
     /** mg/L iodide+iodate; NSW ≈ 0.06. Below ~0.02 molts start failing (Simulation.crustaceanMolts). */
     val CRUSTACEAN_IODINE = ToleranceRange(optLo = 0.04, tolLo = 0.02, lethalLo = 0.003)
 
+    /** Potassium band for inverts and corals (01 §1.1 acceptable 360-440, danger < 340 / > 460; lethal est.). */
+    val POTASSIUM = ToleranceRange(optLo = 360.0, optHi = 440.0, tolLo = 340.0, tolHi = 460.0, lethalLo = 200.0, lethalHi = 700.0)
+    /** Strontium (01 §1.1: 8-10 ideal, 7-11 acceptable, danger < 6); a skeletal element, so it limits growth more than health. */
+    val STRONTIUM = ToleranceRange(optLo = 7.0, tolLo = 6.0, lethalLo = 1.0)
+
     private val INVERT_TOL = mapOf(
         "temp" to ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0),
         "nh3Free" to ToleranceRange(optHi = 0.01, tolHi = 0.04, lethalHi = 0.35),
@@ -78,6 +94,8 @@ object HealthModel {
         "sg" to ToleranceRange(1.023, 1.026, 1.021, 1.0275, 1.018, 1.030),
         "mg" to ToleranceRange(optLo = 1200.0, tolLo = 1050.0, lethalLo = 800.0),
         "ca" to ToleranceRange(optLo = 380.0, tolLo = 330.0, lethalLo = 200.0),
+        // research 01 §1.1: K acceptable 360-440 ppm, danger < 340 or > 460 ("balances ion transport", 05 §13); lethal bounds est.
+        "k" to POTASSIUM,
     )
     private val INVERT_COPPER = ToleranceRange(optHi = 0.005, tolHi = 0.03, lethalHi = 0.1)
     private val FISH_COPPER = ToleranceRange(optHi = 0.05, tolHi = 0.25, lethalHi = 0.5)
@@ -143,6 +161,7 @@ object HealthModel {
         "temp" -> w.tempC; "sg" -> w.sg; "ph" -> w.ph; "nh3Free", "nh3free" -> w.nh3Free
         "nh3", "nh3Total" -> w.nh3Total; "no2" -> w.no2; "no3" -> w.no3; "do" -> w.doMgL
         "po4" -> w.po4; "alk" -> w.alk; "ca" -> w.ca; "mg" -> w.mg; "copper" -> w.copper; "i", "iodine" -> w.i
+        "k" -> w.k; "sr" -> w.sr
         else -> null
     }
 
@@ -170,7 +189,7 @@ object HealthModel {
     }
 
     /** Environmental stress S_env and per-parameter parts; also sets [Organism.lethalExposure] / [Organism.lethalOvershoot]. */
-    fun envStress(o: Organism, w: WaterState, flowStrength: Double = 1.0): Double {
+    fun envStress(o: Organism, w: WaterState, flowStrength: Double = 1.0, hypo: Boolean = false): Double {
         var prod = 1.0
         var lethal = false
         var over = 0.0
@@ -185,7 +204,7 @@ object HealthModel {
                 tr.lethalLo?.let { ll -> if (v <= ll) over = max(over, (ll - v) / max((tr.tolLo ?: tr.optLo ?: ll * 1.1) - ll, 1e-6)) }
             }
         }
-        for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, tr)
+        for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else tr)
         if (!o.acclTemp.isNaN()) {
             val st = if (o.isFish) FISH_STEPS else if (o.brainKind == BrainKind.SALLY_CRAB) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)
@@ -213,7 +232,7 @@ object HealthModel {
         val s = o.species
         updateAcclimation(o, w, dtMin)
         o.lastTempC = w.tempC
-        val sEnvTol = envStress(o, w, ctx.flowStrength)
+        val sEnvTol = envStress(o, w, ctx.flowStrength, ctx.hypo)
         // research 06 §4.1: per-channel acute/chronic stress against acclimated setpoints
         val sEnvNew = StressModel.update(o, w, StressModel.Env(ctx.light, ctx.flowStrength), dtMin)
         // research 08: the acute heat sequence (agitation → LOE → death) runs beside the chronic path
@@ -251,7 +270,9 @@ object HealthModel {
         val sNo2 = o.envStress["no2"] ?: 0.0
         if (o.disease == null) {
             val ichSus = s.diseaseSusceptibility["ICH"] ?: if (o.isFish) 0.3 else 0.0
-            val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum) * ichSus * sq(1 - o.immunity) * hardInv * LifeCycle.susceptibility(o)
+            val ichMods = ctx.mods[Disease.ICH]
+            val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum * (ichMods?.transmission ?: 1.0)) * ichSus * sq(1 - o.immunity) * hardInv *
+                (ichMods?.onset ?: 1.0) * LifeCycle.susceptibility(o)
             val pBact = if (sNh3 + sNo2 > 0.3) 0.0005 * (sNh3 + sNo2) * (1 - o.immunity) else 0.0
             val hlleSus = s.diseaseSusceptibility["HLLE"] ?: 0.0
             when {
@@ -259,20 +280,39 @@ object HealthModel {
                 o.rng.chance(pBact * dtMin) -> onset(o, Disease.BACTERIAL, 0.05, ctx, events)
                 hlleSus > 0 && o.nutritionGreens < 0.2 && o.rng.chance(0.0002 * hlleSus * dtMin) -> onset(o, Disease.HLLE, 0.05, ctx, events)
             }
+            if (o.disease == null && o.isFish) parasiteOnset(o, ctx, tF, hardInv, dtMin, events)
         } else {
-            val d = when (o.disease!!) {
-                Disease.ICH -> ICH_GROWTH * (1 - o.immunity) * tF - ICH_RECOVERY * o.immunity
-                Disease.VELVET -> 2 * ICH_GROWTH * (1 - o.immunity) * tF - ICH_RECOVERY * o.immunity
-                Disease.BACTERIAL -> BACT_GROWTH * (sNh3 + sNo2) - BACT_RECOVERY * o.immunity
-                Disease.HLLE -> 0.00005 * (if (o.nutritionGreens < 0.3) 1.0 else 0.0) - 0.00002
+            val dz = o.disease!!
+            val mod = ctx.mods[dz]
+            val g = when (dz) {
+                Disease.ICH -> ICH_GROWTH * (1 - o.immunity) * tF
+                // these progress even in a fit fish (01 §4.3 "high mortality", "fast progression"); immunity only slows them
+                Disease.VELVET -> VELVET_GROWTH * (0.5 + 0.5 * (1 - o.immunity)) * tF
+                Disease.BROOKLYNELLA -> BROOK_GROWTH * (0.5 + 0.5 * (1 - o.immunity)) * tF
+                Disease.URONEMA -> URONEMA_GROWTH * (0.5 + 0.5 * (1 - o.immunity)) * tF
+                Disease.FLUKES -> FLUKE_GROWTH * (1 - o.immunity)
+                Disease.BACTERIAL -> BACT_GROWTH * (sNh3 + sNo2)
+                Disease.HLLE -> 0.00005 * (if (o.nutritionGreens < 0.3) 1.0 else 0.0)
             }
+            val rec = when (dz) {
+                Disease.BACTERIAL -> BACT_RECOVERY * o.immunity
+                Disease.HLLE -> 0.00002
+                else -> ICH_RECOVERY * o.immunity
+            }
+            val d = g * (mod?.growth ?: 1.0) - rec - (mod?.clearPerMin ?: 0.0)
             o.diseaseStage = (o.diseaseStage + d * dtMin).coerceAtMost(1.0)
             if (o.diseaseStage <= 0) {
                 events += SimEvent.Recovered(o.id, o.disease!!, ctx.simTimeSec)
                 o.disease = null; o.diseaseStage = 0.0
             }
         }
-        val stage = if (o.disease == Disease.HLLE) o.diseaseStage * 0.2 else o.diseaseStage
+        val stage = o.diseaseStage * when (o.disease) {
+            Disease.HLLE -> 0.2
+            Disease.FLUKES -> 0.5
+            // velvet, Brooklynella and Uronema kill fast (01 §4.3: "high mortality", "rapid decline")
+            Disease.VELVET, Disease.BROOKLYNELLA, Disease.URONEMA -> 1.4
+            else -> 1.0
+        }
 
         // ---- health ----
         val overshoot = o.lethalOvershoot
@@ -286,6 +326,42 @@ object HealthModel {
             return
         }
         updateSymptoms(o, w, ctx, events)
+    }
+
+    /**
+     * Velvet, Brooklynella, Uronema and flukes (research 01 §4.3; W-4). They arrive with a new fish (or [Command.Infect])
+     * and do not appear on their own in an established tank: onset needs an infected tankmate, then is scaled by low
+     * immunity and stress like ich, and is rolled on [Organism.diseaseRng]. A fast temperature swing
+     * (05 §1: a 2-3 °C/h drop) triggers velvet. Susceptibility keys in the sheets override the defaults.
+     */
+    private fun parasiteOnset(o: Organism, ctx: HealthContext, tF: Double, hardInv: Double, dtMin: Double, events: MutableList<SimEvent>) {
+        val imm = sq(1 - o.immunity)
+        if (imm < 1e-6) return
+        val s = o.species
+        val swing = if ((o.envStress["shockTemp"] ?: 0.0) > 0.3) 5.0 else 1.0
+        for (d in PARASITES) {
+            val sus = s.diseaseSusceptibility[d.name] ?: defaultSusceptibility(o, d)
+            if (sus <= 0) continue
+            val mod = ctx.mods[d]
+            val others = (ctx.infected[d] ?: 0.0) * (mod?.transmission ?: 1.0)
+            if (others <= 0) continue
+            var p = PARASITE_BASE.getValue(d) * sus * imm * hardInv * 4 * others * (mod?.onset ?: 1.0)
+            if (d != Disease.FLUKES) p *= tF
+            if (d == Disease.VELVET) p *= swing
+            if (o.diseaseRng.chance(p * dtMin)) { onset(o, d, 0.05, ctx, events); return }
+        }
+    }
+
+    private val PARASITES = listOf(Disease.VELVET, Disease.BROOKLYNELLA, Disease.URONEMA, Disease.FLUKES)
+    private val PARASITE_BASE = mapOf(Disease.VELVET to 0.0001, Disease.BROOKLYNELLA to 0.00008, Disease.URONEMA to 0.00005, Disease.FLUKES to 0.0001)
+
+    /** Brooklynella is the "clownfish disease"; flukes favour tangs and wrasses (K). */
+    private fun defaultSusceptibility(o: Organism, d: Disease): Double = when (d) {
+        Disease.VELVET -> 0.2
+        Disease.BROOKLYNELLA -> if (o.brainKind == BrainKind.CLOWN) 1.0 else 0.1
+        Disease.URONEMA -> 0.1
+        Disease.FLUKES -> if (o.brainKind == BrainKind.TANG || o.brainKind == BrainKind.WRASSE) 0.4 else 0.15
+        else -> 0.0
     }
 
     private fun onset(o: Organism, d: Disease, stage: Double, ctx: HealthContext, events: MutableList<SimEvent>) {
@@ -304,6 +380,7 @@ object HealthModel {
     fun label(key: String): String = when (key) {
         "temp" -> "temperature"; "sg" -> "salinity"; "ph" -> "pH"; "nh3Free" -> "ammonia"; "no2" -> "nitrite"
         "no3" -> "nitrate"; "do" -> "low oxygen"; "mg" -> "magnesium"; "copper" -> "copper"; "i" -> "low iodine"; "flow" -> "flow change"
+        "k" -> "potassium"; "sr" -> "strontium"; "ca" -> "calcium"
         "light" -> "bright light"; "social" -> "harassment"
         "shockTemp" -> "temperature swing"; "shockSg" -> "salinity swing"; "shockPh" -> "pH swing"
         else -> key
@@ -379,7 +456,18 @@ object HealthModel {
             Disease.ICH, Disease.VELVET -> {
                 if (o.diseaseStage > 0.15) { sym += Symptom.WHITE_SPOTS; sym += Symptom.FLASHING; o.ich = o.diseaseStage }
                 if (o.diseaseStage > 0.5) { sym += Symptom.LETHARGY; sym += Symptom.HIDING }
+                // velvet: gold dust, clamped fins, rapid breathing (01 §4.3)
+                if (o.disease == Disease.VELVET && o.diseaseStage > 0.15) { sym += Symptom.RAPID_GILLS; sym += Symptom.CLAMPED_FINS; o.finClamp = max(o.finClamp, 0.6) }
             }
+            Disease.BROOKLYNELLA -> if (o.diseaseStage > 0.15) {
+                sym += Symptom.MUCUS; sym += Symptom.CLAMPED_FINS; sym += Symptom.RAPID_GILLS; o.finClamp = max(o.finClamp, 0.6); o.gill = 1.0
+                if (o.diseaseStage > 0.5) sym += Symptom.GASPING
+            }
+            Disease.URONEMA -> if (o.diseaseStage > 0.15) {
+                sym += Symptom.ERRATIC; sym += Symptom.LESIONS
+                if (o.diseaseStage > 0.4) sym += Symptom.LETHARGY
+            }
+            Disease.FLUKES -> if (o.diseaseStage > 0.15) { sym += Symptom.FLASHING; sym += Symptom.RAPID_GILLS }
             Disease.HLLE -> if (o.diseaseStage > 0.2) sym += Symptom.LESIONS
             Disease.BACTERIAL -> if (o.diseaseStage > 0.3) { sym += Symptom.LESIONS; sym += Symptom.LETHARGY }
             null -> {}

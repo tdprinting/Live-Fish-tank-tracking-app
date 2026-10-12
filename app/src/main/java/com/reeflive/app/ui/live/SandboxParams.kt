@@ -65,6 +65,19 @@ object SandboxParams {
             zones = SliderZones(dangerBelow = 1050.0, safeFrom = 1200.0, safeTo = 1600.0, dangerAbove = 2200.0),
             read = { it.water.mg },
         ),
+        // Potassium and strontium (research 01 §1.1: K 360-440 acceptable, danger < 340 / > 460; Sr 7-11, danger < 6).
+        SandboxParamDef(
+            "k", "Potassium", "K", "ppm", SandboxCategory.CHEMISTRY,
+            min = 100.0, max = 800.0, step = 5.0, decimals = 0,
+            zones = SliderZones(dangerBelow = 340.0, safeFrom = 360.0, safeTo = 440.0, dangerAbove = 460.0),
+            read = { it.water.k },
+        ),
+        SandboxParamDef(
+            "sr", "Strontium", "Sr", "ppm", SandboxCategory.CHEMISTRY,
+            min = 0.0, max = 30.0, step = 0.5, decimals = 1,
+            zones = SliderZones(dangerBelow = 6.0, safeFrom = 7.0, safeTo = 11.0, dangerAbove = 15.0),
+            read = { it.water.sr },
+        ),
         SandboxParamDef(
             "copper", "Copper", "Cu", "ppm", SandboxCategory.CHEMISTRY,
             min = 0.0, max = 2.0, step = 0.005, decimals = 3, curve = 2.0,

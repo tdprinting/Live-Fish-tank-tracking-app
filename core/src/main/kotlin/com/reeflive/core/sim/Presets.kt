@@ -74,6 +74,8 @@ object Presets {
         water = WaterState(bacteriaAob = 0.02, bacteriaNob = 0.02, no3 = 0.0, po4 = 0.0, detritus = 0.0, algaeHair = 0.01,
             coralline = 0.0, silicate = 2.0, siLeach = 0.1, microbes = 0.0),
         livestock = emptyList(),
+        // research 01 §3.9 checkpoints: ammonia, nitrite peak, nitrite falling, cycled after 3 days of 0/0
+        setup = { sim -> sim.cycle = CycleTracker(sim.simTimeSec) },
     )
 
     val heaterFailureSummer = Preset(

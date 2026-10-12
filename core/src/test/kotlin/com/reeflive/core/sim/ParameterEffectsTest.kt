@@ -90,7 +90,8 @@ class ParameterEffectsTest {
             peakTan = maxOf(peakTan, sim.water.s.nh3Total)
             minDo = minOf(minDo, sim.water.s.doMgL)
         }
-        assertTrue("TAN peak $peakTan after die-off", peakTan > 0.3)
+        // carcasses now leach their own N over ~2 days after a short lag (Simulation.carcassRelease), not 66 % in 24 h
+        assertTrue("TAN peak $peakTan after die-off", peakTan > 0.2)
         assertTrue("DO did not dip: $minDo vs $doBefore", minDo < doBefore - 0.2)
     }
 
