@@ -126,6 +126,7 @@ internal fun hoursText(h: Double): String {
 // ---------------------------------------------------------------- sheet
 
 /** Time-lapse bottom sheet: setup, progress, then results (chart + scrubber + water strip + report). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TimelapseSheet(
     state: TimelapseState,
