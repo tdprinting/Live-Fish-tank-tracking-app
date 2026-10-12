@@ -1,6 +1,7 @@
 package com.reeflive.app.render
 
 import android.opengl.GLES30
+import com.reeflive.core.sim.AlgaeCover
 
 /** Material variants (ARCHITECTURE §8.2); the GLB `extras.part` picks one ([forPart]). */
 enum class MaterialKind {
@@ -87,7 +88,7 @@ class FrameUniforms {
         GLES30.glBindBuffer(GLES30.GL_UNIFORM_BUFFER, 0); Gl.check("glBindBuffer(0)")
     }
 
-    fun fill(cam: Camera, timeSec: Float, light: LightingState, quality: RenderQuality, algaeBloom: Float, flow: Float, hasSurface: Boolean, surfaceW: Int, surfaceH: Int) {
+    fun fill(cam: Camera, timeSec: Float, light: LightingState, quality: RenderQuality, algaeBloom: Float, flow: Float, hasSurface: Boolean, surfaceW: Int, surfaceH: Int, algae: AlgaeCover = AlgaeCover.EMPTY) {
         val d = data
         cam.view.copyInto(d, 0); cam.proj.copyInto(d, 16); cam.viewProj.copyInto(d, 32)
         d[48] = cam.eye[0]; d[49] = cam.eye[1]; d[50] = cam.eye[2]; d[51] = timeSec
@@ -105,6 +106,7 @@ class FrameUniforms {
         d[84] = ABSORB[0]; d[85] = ABSORB[1]; d[86] = ABSORB[2]; d[87] = SCATTER
         d[88] = Camera.TANK[0]; d[89] = Camera.TANK[1]; d[90] = Camera.TANK[2]; d[91] = 0f
         d[92] = surfaceW.toFloat(); d[93] = surfaceH.toFloat(); d[94] = if (hasSurface) 1f else 0f; d[95] = 0f
+        AlgaeVisuals.pack(algae, d, ALGAE_OFFSET) // uAlgaeGlass, uAlgaeSand, uAlgaeTop, uAlgaeShade (96..111)
         buffer.position(0); buffer.put(d); buffer.position(0)
         GLES30.glBindBuffer(GLES30.GL_UNIFORM_BUFFER, ubo); Gl.check("glBindBuffer(UBO)")
         GLES30.glBufferSubData(GLES30.GL_UNIFORM_BUFFER, 0, FLOATS * 4, buffer); Gl.check("glBufferSubData(UBO)")
@@ -114,7 +116,9 @@ class FrameUniforms {
     fun release() = Gl.deleteBuffer(ubo)
 
     companion object {
-        const val FLOATS = 96
+        /** std140: 3 mat4 (48 floats) + 12 vec4 (48) + 4 algae vec4 (16). */
+        const val ALGAE_OFFSET = 96
+        const val FLOATS = ALGAE_OFFSET + AlgaeVisuals.FLOATS
         const val FOG_DENSITY = 0.004f
         const val WATER_LEVEL = 56f
         const val SAND_TOP = 3f

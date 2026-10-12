@@ -9,6 +9,7 @@ import android.util.Log
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.SdfGrid
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.AlgaeCover
 import com.reeflive.core.sim.CoralPose
 import com.reeflive.core.sim.SimSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,7 +158,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         updateSurface(cur)
         val fu = frame ?: return
         val progs = programs ?: return
-        fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1])
+        fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
         bindShared()
         particles.ambientCount = quality.particles
         particles.step(dt, time, cur)
