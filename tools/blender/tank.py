@@ -208,6 +208,56 @@ def sand_geo():
     return g
 
 
+def pebble(center, radii, segs=7, rings=4, rot=None):
+    """Closed UV-sphere pebble (single pole vertices, so bmesh sees it as manifold)."""
+    V = [(0.0, 1.0, 0.0)]
+    for i in range(1, rings):
+        th = math.pi * i / rings
+        for k in range(segs):
+            ph = 2 * math.pi * k / segs
+            V.append((math.sin(th) * math.cos(ph), math.cos(th), math.sin(th) * math.sin(ph)))
+    V.append((0.0, -1.0, 0.0))
+    V = np.array(V) * np.asarray(radii, float)
+    if rot is not None:
+        V = V @ np.asarray(rot).T
+    V = V + np.asarray(center, float)
+    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
+    for i in range(rings - 2):
+        a, b = 1 + i * segs, 1 + (i + 1) * segs
+        F += [(a + k, a + (k + 1) % segs, b + (k + 1) % segs, b + k) for k in range(segs)]
+    last = 1 + (rings - 2) * segs
+    F += [(last + k, last + (k + 1) % segs, len(V) - 1) for k in range(segs)]
+    return V, F
+
+
+def rubble_geo(seed=23, count=44):
+    """Coral rubble pebbles 1-3 cm on the sand, banked within ~9 cm of the rock feet and in the lanes (the photos
+    show bits of rubble all along the rock bases). Half-buried; sand material (they are bleached aragonite)."""
+    import rockscape as R
+    rs = np.random.default_rng(seed)
+    sdf = read_sdf()
+    g = WGeo()
+    placed = 0
+    tries = 0
+    while placed < count and tries < 4000:
+        tries += 1
+        x, z = rs.uniform(4, 118), rs.uniform(3, 31)
+        d = float(np.minimum.reduce([sdf(x, y, z) for y in (4.0, 5.5, 7.0)])) if sdf is not None else 99.0
+        if d < 1.2 or (d > 9.0 and rs.uniform() > 0.12):
+            continue
+        if (abs(x - 66) < 7 and z > 23) or (abs(x - 72) < 6 and z > 26):  # burrow mouth / front magnet / zoa
+            continue
+        h = float(R.sand_height(x, z, d))
+        r = rs.uniform(0.45, 1.4)
+        radii = (r * rs.uniform(0.8, 1.4), r * rs.uniform(0.5, 0.8), r * rs.uniform(0.8, 1.2))
+        a = rs.uniform(0, math.pi)
+        rot = np.array([[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]])
+        V, F = pebble((x, h - radii[1] * 0.35, z), radii, rot=rot)
+        g.add(V, F, np.c_[V[:, 0] / 30.475 * 3, 1 - V[:, 2] / 30.475 * 3])
+        placed += 1
+    return g
+
+
 def seams_geo():
     """Silicone quarter-round fillets (r 2.5 mm, 8 segments) at the 4 vertical inner corners and 4 bottom edges,
     overlapping the glass by 0.3 mm."""
@@ -363,6 +413,7 @@ def build():
     objs.append(gb.obj("RimBrace", root, "rim", [rim]))
     objs.append(gbot.obj("RimBottom", root, "rim", [rim]))
     objs.append(sand_geo().obj("Sand", root, "sand", [sand], smooth=True))
+    objs.append(rubble_geo().obj("Rubble", root, "sand", [sand], smooth=True))
     objs.append(boxes(((0, 0, 0), (L, WATER_Y, D))).obj(
         "WaterVolume", root, "water", [wvol],
         extras={"hidden": True, "volume": {"absorption": "#2E8A78", "densityPerCm": 0.045, "ior": 1.333}}))

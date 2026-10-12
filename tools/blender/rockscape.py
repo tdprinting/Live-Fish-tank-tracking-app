@@ -21,7 +21,8 @@ S = P.smoothstep
 TANK = (121.9, 61.0, 33.0)
 SAND_Y = 3.5  # front-glass sand height; back glass 6.0 (docs/specs/tank_design.md §1.6)
 WATER_Y = 56.0
-ROCK_TRIS = 35000  # spec cap 45k; kept lower for the 140k on-screen budget
+ROCK_TRIS = 60000       # LOD0 (High); docs/ASSETS.md §3 "HQ" budget 62k
+ROCK_TRIS_LOD1 = 30000  # rockscape_lod1.glb (Medium / far camera), decimated from the UV'd LOD0 so the maps still fit
 
 
 def sand_base(z):
@@ -200,8 +201,9 @@ def metaball_mesh(resolution=0.7):
             add(c, r, neg)
             if neg:
                 continue
-            # break the smooth metaball silhouette: flattened sub-rocks ("plates") stuck on the surface
-            for _ in range(5):
+            # break the smooth metaball silhouette: flattened sub-rocks ("plates") stuck on the surface, plus two
+            # wide flat ledges per element (the photo's live rock is stacked slabs with overhangs, not blobs)
+            for pk in range(7):
                 a = rs.uniform(0, 2 * math.pi)
                 el = rs.uniform(-0.5, 0.9)
                 d = np.array([math.cos(a) * math.cos(el), math.sin(el), math.sin(a) * math.cos(el)])
@@ -209,8 +211,13 @@ def metaball_mesh(resolution=0.7):
                     d[2] = -d[2]
                 cc = np.array(c) + d * np.array(r) * rs.uniform(0.6, 0.85)
                 m = min(r) * rs.uniform(0.35, 0.6)
-                rr = (m * rs.uniform(1.0, 1.6), m * rs.uniform(0.45, 0.7), m * rs.uniform(0.9, 1.3))
-                add(tuple(cc), rr, False, 2.0, yaw=rs.uniform(0, math.pi), tilt=rs.uniform(-0.3, 0.3))
+                if pk < 2:  # ledge: wide, thin, nearly horizontal
+                    rr = (m * rs.uniform(1.4, 2.0), m * rs.uniform(0.28, 0.4), m * rs.uniform(1.1, 1.5))
+                    tilt = rs.uniform(-0.12, 0.12)
+                else:
+                    rr = (m * rs.uniform(1.0, 1.6), m * rs.uniform(0.45, 0.7), m * rs.uniform(0.9, 1.3))
+                    tilt = rs.uniform(-0.3, 0.3)
+                add(tuple(cc), rr, False, 2.0, yaw=rs.uniform(0, math.pi), tilt=tilt)
             # small crevices
             for _ in range(2):
                 a = rs.uniform(0, 2 * math.pi)
@@ -276,13 +283,19 @@ def displace(obj, seed=5):
     knobs = (1 - np.clip(k1 / 2.6, 0, 1)) ** 1.5 - 0.3
     pil = (S(9, 12, pw[:, 0]) * (1 - S(24, 27, pw[:, 0])) + S(42, 44, pw[:, 0]) * (1 - S(56, 58, pw[:, 0]))) \
         * S(13, 16, pw[:, 2])
-    # pits: fBm 1.5 cm
+    # pits: fBm 1.5 cm, plus fine 0.6 cm grain (the porous skeletal texture of live rock)
     fb = N.fbm3(pw, 1.5, 4, seed + 3) - 0.5
-    # crackle / pores (F2-F1 at 2 cm)
+    grain = N.fbm3(pw, 0.6, 2, seed + 17) - 0.5
+    # crackle / pores (F2-F1 at 2 cm) and a finer 1 cm pore network
     c1, c2 = N.worley3(pw, 2.0, seed + 11)
     crack = 1 - S(0.0, 0.25, (c2 - c1) / 2.0)
+    p1, p2 = N.worley3(pw, 1.0, seed + 19)
+    fine_pores = (1 - S(0.0, 0.2, (p2 - p1) / 1.0)) * (N.value3(pw, 4.0, seed + 23) > 0.45)
+    # horizontal strata / ledges: flattened fBm bands plus a sharp step every ~7 cm
     strata = (N.fbm3(pw * np.array([1.0, 4.0, 1.0]), 6.0, 3, seed + 13) - 0.5)
-    d = 1.2 * 2 * lumps + (0.4 + 0.6 * pil) * 0.9 * knobs + 0.4 * fb * 2 - 0.3 * crack + 0.8 * strata
+    ledge = S(0.55, 0.7, N.value3(pw * np.array([0.25, 1.0, 0.25]), 7.0, seed + 29)) * 0.8
+    d = 1.2 * 2 * lumps + (0.4 + 0.6 * pil) * 0.9 * knobs + 0.4 * fb * 2 + 0.3 * grain - 0.3 * crack \
+        - 0.35 * fine_pores + 0.8 * strata + ledge
     # flatten displacement where the rock touches the back glass (keeps the back wall flush)
     d *= S(0.5, 2.0, pw[:, 2])
     Vb = Vb + Nb * d[:, None]
@@ -291,8 +304,9 @@ def displace(obj, seed=5):
     obj.data.update()
 
 
-def pits(obj, count=180, seed=9):
-    """Pores: spherical dents pushed in along -normal (the boolean-hole look without booleans)."""
+def pits(obj, count=560, big=40, seed=9):
+    """Pores: spherical dents pushed in along -normal (the boolean-hole look without booleans).
+    `count` small pores r 0.35-1.1 cm (the sponge-like holes all over live rock) + `big` holes r 1.4-2.3 cm."""
     Vb = C.get_verts(obj)
     Nb = vertex_normals(obj)
     pw = np.stack([Vb[:, 0], Vb[:, 2], -Vb[:, 1]], -1)
@@ -301,15 +315,19 @@ def pits(obj, count=180, seed=9):
     w = 0.3 + np.clip(nw[:, 1], 0, 1) + np.clip(nw[:, 2], 0, 1) * 0.8
     w *= pw[:, 1] > 6.0
     w = w / w.sum()
-    idx = rs.choice(len(Vb), count, p=w)
+    idx = rs.choice(len(Vb), count + big, p=w)
     from mathutils.kdtree import KDTree
     kd = KDTree(len(Vb))
     for i, v in enumerate(Vb):
         kd.insert(v, i)
     kd.balance()
-    for i in idx:
-        r = rs.uniform(0.5, 1.4)
-        depth = r * rs.uniform(0.8, 1.6)
+    for k, i in enumerate(idx):
+        if k < big:
+            r = rs.uniform(1.4, 2.3)
+            depth = r * rs.uniform(0.7, 1.1)
+        else:
+            r = rs.uniform(0.35, 1.1)
+            depth = r * rs.uniform(0.9, 1.6)
         for (co, j, dist) in kd.find_range(Vb[i], r):
             prof = math.sqrt(max(r * r - dist * dist, 0)) / r
             Vb[j] = Vb[j] - Nb[i] * depth * prof
@@ -317,7 +335,7 @@ def pits(obj, count=180, seed=9):
     obj.data.update()
 
 
-def build_high(resolution=0.7, voxel=0.6):
+def build_high(resolution=0.6, voxel=0.5):
     t = time.time()
     o = metaball_mesh(resolution)
     voxel_remesh(o, voxel)
@@ -327,17 +345,30 @@ def build_high(resolution=0.7, voxel=0.6):
     y = Vb[:, 2]
     hi = y > 56.0
     Vb[hi, 2] = 56.0 + 1.0 * np.tanh(y[hi] - 56.0)
+    # nothing through the glass: soft-squash x into 0.4..121.5 and z (blender -y) into 0.4..32.6
+    x = Vb[:, 0]
+    Vb[x > 121.5, 0] = 121.5 + 0.3 * np.tanh((x[x > 121.5] - 121.5) / 0.3)
+    Vb[x < 0.4, 0] = 0.4 - 0.3 * np.tanh((0.4 - x[x < 0.4]) / 0.3)
+    zf = -Vb[:, 1]  # world z
+    far = zf > 32.6
+    Vb[far, 1] = -(32.6 + 0.3 * np.tanh((zf[far] - 32.6) / 0.3))
     o.data.vertices.foreach_set("co", Vb.ravel())
     o.data.update()
     pits(o)
+    # pits move neighbours along -n of the pit centre: undersides can push vertices up, so re-cap at 57
+    Vb = C.get_verts(o)
+    y = Vb[:, 2]
+    Vb[y > 57.0, 2] = 57.0
+    o.data.vertices.foreach_set("co", Vb.ravel())
+    o.data.update()
     clip_below(o, 1.5)  # rock feet sink 1.5+ cm into the sand (sand 3.5-6 cm); nothing below y 1.5
     print(f"[rock] high: {len(o.data.polygons)} faces in {time.time() - t:.1f}s")
     return o
 
 
-def make_low(high, target=40000):
+def make_low(high, target=40000, name="Rock"):
     me = high.data.copy()
-    low = bpy.data.objects.new("Rock", me)
+    low = bpy.data.objects.new(name, me)
     C.link(low)
     tris = sum(len(p.vertices) - 2 for p in me.polygons)
     md = low.modifiers.new("dec", 'DECIMATE')
@@ -345,6 +376,12 @@ def make_low(high, target=40000):
     md.use_collapse_triangulate = True
     C.apply_modifiers(low)
     C.triangulate(low)
+    clean_closed(low)
+    return low
+
+
+def clean_closed(low):
+    """Weld / dissolve / hole-fill after decimation so the rock stays one closed shell (validator: 0 open edges)."""
     import bmesh
     bm = bmesh.new()
     bm.from_mesh(low.data)
@@ -383,6 +420,20 @@ def make_low(high, target=40000):
     return low
 
 
+def make_lod1(low, target):
+    """LOD1 from the UV-mapped LOD0 (collapse decimation keeps the UV layout, so the baked maps still apply)."""
+    me = low.data.copy()
+    lod = bpy.data.objects.new("Rock", me)
+    C.link(lod)
+    tris = sum(len(p.vertices) - 2 for p in me.polygons)
+    md = lod.modifiers.new("dec", 'DECIMATE')
+    md.ratio = min(1.0, target / tris * 0.98)
+    md.use_collapse_triangulate = True
+    C.apply_modifiers(lod)
+    clean_closed(lod)
+    return lod
+
+
 def smart_uv(obj):
     for o in bpy.context.view_layer.objects:
         o.select_set(False)
@@ -390,7 +441,7 @@ def smart_uv(obj):
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.002)
+    bpy.ops.uv.smart_project(angle_limit=math.radians(80), island_margin=0.001)  # fewer, larger islands
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
@@ -459,10 +510,10 @@ def bake_maps(high, low, size_albedo=2048, size_maps=1024, ao_samples=24):
     bpy.ops.object.bake(type='AO', margin=8)
     out["ao"] = img_to_np(img)[..., 0].copy()
     print(f"[rock] bake ao {time.time() - t:.1f}s")
-    # tangent-space normal from the high mesh
+    # tangent-space normal from the high mesh (albedo resolution: the pores live here, not in the 60k mesh)
     high.hide_render = False
     s.cycles.samples = 1
-    img = _bake_image("rock_normal", size_maps)
+    img = _bake_image("rock_normal", size_albedo)
     _bake_material(low, img)
     high.select_set(True)
     low.select_set(True)
@@ -531,7 +582,7 @@ def paint_albedo(maps, size):
     # Z7 is mostly under the GSP mat: only the exposed rim reads; Z1b upper half pale
     frac /= frac.sum(1, keepdims=True)
     # one blotchy field, rank-transformed to uniform -> exact zone coverage with patchy shapes
-    f = N.fbm3(pv, 3.5, 4, 103) + 0.25 * N.fbm3(pv, 1.2, 2, 113)
+    f = N.fbm3(pv, 2.4, 4, 103) + 0.35 * N.fbm3(pv, 0.9, 2, 113)  # 2-3 cm patches with ragged 1 cm edges
     uq = np.empty(len(f))
     uq[np.argsort(f)] = np.linspace(0, 1, len(f))
     cum = np.cumsum(frac, 1)
@@ -540,40 +591,53 @@ def paint_albedo(maps, size):
     w_brn = S(cum[:, 0] - soft, cum[:, 0] + soft, uq) * (1 - S(cum[:, 1] - soft, cum[:, 1] + soft, uq))
     w_bare = S(cum[:, 1] - soft, cum[:, 1] + soft, uq) * (1 - S(cum[:, 2] - soft, cum[:, 2] + soft, uq))
     w_cor = S(cum[:, 2] - soft, cum[:, 2] + soft, uq)
-    # bare rock faces upward (crests); algae hangs everywhere; coralline prefers front / shaded faces
+    # Palette matched to the photos under the blue-heavy AI Prime light (tank_full / tank_left / tank_right):
+    # the turf algae reads khaki-olive to brown, not green; bare rock is tan / cream with pale crests; coralline is
+    # a muted mauve-purple with a few pink patches; every pore is a dark dot.
     shade = np.clip((1 - aov) * 1.4, 0, 1)
-    alg = hx("#5C6B2E") * (1 - shade[:, None]) + hx("#3E4A22") * shade[:, None]
+    turf_var = N.value3(pv, 2.2, 116)  # olive vs brown turf patches
+    alg_lit = hx("#8A8450") * (1 - turf_var[:, None]) + hx("#7A6A40") * turf_var[:, None]
+    alg = alg_lit * (1 - shade[:, None]) + hx("#4E4A2A") * shade[:, None]
     alg = alg * (0.85 + 0.3 * fine[:, None])
-    brn = hx("#6E5B3A") * (0.9 + 0.2 * fine[:, None])
+    brn = hx("#8E7850") * (0.9 + 0.2 * fine[:, None])
     which = N.value3(pv, 3.0, 106) > 0.8  # mostly tan, a little bleached white
-    bare = np.where(which[:, None], hx("#ECE6D6"), hx("#D9CBB0")) * (0.92 + 0.16 * fine[:, None])
-    bare = bare * 0.8 + hx("#8C8460") * 0.2  # film-dulled
-    pk = N.value3(pv, 4.0, 107) > 0.4
-    cor = np.where(pk[:, None], hx("#C96F8F"), hx("#7A4F9A"))
-    cor = np.where((zone == "Z8")[:, None], np.where(pk[:, None], hx("#B5546F"), hx("#5E2E45")), cor)
+    bare = np.where(which[:, None], hx("#E8E1CD"), hx("#CFC2A4")) * (0.92 + 0.16 * fine[:, None])
+    bare = bare * 0.88 + hx("#A89E74") * 0.12  # film-dulled
+    pk = N.value3(pv, 2.5, 107) > 0.55
+    cor = np.where(pk[:, None], hx("#B07592"), hx("#6E4E80"))
+    cor = np.where((zone == "Z8")[:, None], np.where(pk[:, None], hx("#A8506A"), hx("#5E2E45")), cor)
     cor = np.where((r6c > 0.5)[:, None], hx("#C27090"), cor)
     col = alg * w_alg[:, None] + brn * w_brn[:, None] + bare * w_bare[:, None] + cor * w_cor[:, None]
-    # matted hair algae softens everything: a thin olive film over all but the coralline
-    film = (0.22 + 0.15 * N.fbm3(pv, 1.5, 2, 114)) * (1 - 0.7 * w_cor)
-    col = col * (1 - film[:, None]) + hx("#4E5A2A") * film[:, None]
+    # matted turf softens everything: a thin khaki film over all but the coralline
+    film = (0.14 + 0.12 * N.fbm3(pv, 1.5, 2, 114)) * (1 - 0.7 * w_cor)
+    col = col * (1 - film[:, None]) + hx("#6E6A3C") * film[:, None]
+    # pale encrusting specks (sponge / tube-worm dots) 1.5 %
+    speck = S(0.78, 0.84, N.value3(pv, 0.45, 118)) * (1 - w_cor)
+    col = col * (1 - 0.6 * speck[:, None]) + hx("#E9E4D4") * 0.6 * speck[:, None]
     # Z8 base maroon under everything
     col = np.where((zone == "Z8")[:, None] & (w_bare[:, None] > 0.5), hx("#5E2E45"), col)
     # cave interiors (z < 8, occluded): dark brown film with shaded purple coralline
     cave = (1 - S(5, 9, z)) * S(0.25, 0.6, 1 - aov)
-    cv_col = np.where((uq > 0.75)[:, None], hx("#5A3F6B"), np.where((uq < 0.15)[:, None], hx("#3E4A22"), hx("#3A2F22")))
+    cv_col = np.where((uq > 0.75)[:, None], hx("#5A3F6B"), np.where((uq < 0.15)[:, None], hx("#3E3A20"), hx("#3A2F22")))
     col = col * (1 - cave[:, None]) + cv_col * cave[:, None]
+    # pores: the same 1 cm Worley network as the displacement, dark inside each cell wall; plus the 2 cm crackle
+    p1, p2 = N.worley3(pv, 1.0, 5 + 19)
+    pores = (1 - S(0.0, 0.2, (p2 - p1) / 1.0)) * (N.value3(pv, 4.0, 5 + 23) > 0.45)
+    c1, c2 = N.worley3(pv, 2.0, 5 + 11)
+    pores = np.maximum(pores, 0.6 * (1 - S(0.0, 0.22, (c2 - c1) / 2.0)))
+    col = col * (1 - 0.45 * pores[:, None]) + hx("#2A2819") * 0.45 * pores[:, None]
     # AO-driven crevice darkening toward #2B2A1F
-    cr = np.clip((1 - aov) * 1.1 - 0.15, 0, 1)[:, None] * 0.8
+    cr = np.clip((1 - aov) * 1.1 - 0.15, 0, 1)[:, None] * 0.65
     col = col * (1 - cr) + hx("#2B2A1F") * cr
     coral_m = w_cor
     # hair algae mask -> alpha (runtime scales by uAlgaeBloom): algae patches, stronger on up / front faces
     hair = w_alg * (0.4 + 0.6 * S(-0.3, 0.6, np.maximum(nv[:, 1], nv[:, 2])))
-    col *= (0.78 + 0.22 * aov)[:, None]  # runtime multiplies the AO map again: keep the baked share small
+    col *= (0.84 + 0.16 * aov)[:, None]  # runtime multiplies the AO map again: keep the baked share small
     col *= (0.93 + 0.14 * fine)[:, None]
     rgb[valid] = np.clip(col, 0, 1)
     alpha[valid] = np.clip(hair, 0, 1)
     rough = np.full(n, 0.85, np.float32)
-    rough[valid] = 0.85 + 0.06 * (N.fbm3(pv, 2.0, 2, 109) - 0.5) * 2 - 0.15 * coral_m
+    rough[valid] = 0.85 + 0.06 * (N.fbm3(pv, 2.0, 2, 109) - 0.5) * 2 - 0.15 * coral_m - 0.1 * speck + 0.05 * pores
     return rgb.reshape(size, size, 3), alpha.reshape(size, size), rough.reshape(size, size), valid.reshape(size, size)
 
 
@@ -663,36 +727,53 @@ def build(bake=True, albedo_size=2048, verbose=True):
         rgb = dilate(rgb, valid, 8)
         alpha = dilate(alpha, valid, 8)
         from textures import quantize
-        albedo = np.concatenate([quantize(rgb, 6, 1), (np.clip(alpha, 0, 1) * 255).astype(np.uint8)[..., None]], -1)
+        albedo = np.concatenate([quantize(rgb, 8, 1), (quantize(alpha[..., None], 8, 2))], -1)
         apath = os.path.join(C.BUILD, "rock_albedo.png")
         C.write_png(apath, albedo)
         nmap = maps["normal"]
-        C.write_png(os.path.join(C.TEXTURES, "rock_normal.png"), quantize(nmap, 3, 2))
+        C.write_png(os.path.join(C.TEXTURES, "rock_normal.png"), quantize(nmap, 6, 2))  # step 6: the 2048 map with pore detail compresses poorly
         f = albedo_size // 1024
         rough_s = rough.reshape(1024, f, 1024, f).mean(axis=(1, 3))
         ra = np.stack([rough_s, maps["ao"], np.zeros_like(rough_s)], -1)
         C.write_png(os.path.join(C.TEXTURES, "rock_rough_ao.png"), quantize(ra, 2, 3))
         img = C.load_image(apath, name="rock_albedo")
         mat = C.material("rock", rough=0.85, image=img)
+        # LOD1 carries a half-resolution copy of the albedo (self-contained GLB, like the fish LOD1s)
+        a1 = quantize(albedo.reshape(albedo_size // 2, 2, albedo_size // 2, 2, 4).mean(axis=(1, 3)) / 255.0, 12, 3)
+        apath1 = os.path.join(C.BUILD, "rock_albedo_lod1.png")
+        C.write_png(apath1, a1)
+        mat1 = C.material("rock", rough=0.85, image=C.load_image(apath1, name="rock_albedo"))
     else:
         mat = C.material("rock", color="#B8AA90", rough=0.85)
-    low.data.materials.clear()
-    low.data.materials.append(mat)
-    nv = len(low.data.vertices)
-    cols = np.zeros((nv, 4), np.float32)
-    cols[:, 3] = 1.0
-    ca = low.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
-    ca.data.foreach_set("color", cols.ravel())
-    C.set_extras(low, part="rock", anchor="rockscape")
+        mat1 = mat
     import tank as TK
-    yv = C.get_verts(low)[:, 2]
-    print(f"[rock] tris {tris}, non-manifold edges {TK.non_manifold(low)}, y range {yv.min():.2f}..{yv.max():.2f}")
+    high.hide_set(True)
+    lod1 = make_lod1(low, ROCK_TRIS_LOD1)
+    for o, m, lod in ((low, mat, 0), (lod1, mat1, 1)):
+        o.data.materials.clear()
+        o.data.materials.append(m)
+        nv = len(o.data.vertices)
+        cols = np.zeros((nv, 4), np.float32)
+        cols[:, 3] = 1.0
+        ca = o.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
+        ca.data.foreach_set("color", cols.ravel())
+        C.set_extras(o, part="rock", anchor="rockscape", lod=lod)
+        t_ = sum(len(p.vertices) - 2 for p in o.data.polygons)
+        yv = C.get_verts(o)[:, 2]
+        print(f"[rock] lod{lod}: tris {t_}, non-manifold edges {TK.non_manifold(o)}, y range {yv.min():.2f}..{yv.max():.2f}")
     anchors, rep = snap_anchors(low)
     write_anchors(anchors)
     if verbose:
         print("[rock] anchor snap distances (cm):", rep)
-    high.hide_set(True)
+    # both files carry a single node named "Rock" (the runtime swaps files, not nodes)
+    lod1.name = "Rock_lod1"
+    low.name = "Rock"
     C.export_glb(os.path.join(C.MODELS, "rockscape.glb"), [low])
+    low.name = "Rock_lod0"
+    lod1.name = "Rock"
+    C.export_glb(os.path.join(C.MODELS, "rockscape_lod1.glb"), [lod1])
+    lod1.name = "Rock_lod1"
+    low.name = "Rock"
     print(f"[rock] done in {time.time() - t0:.0f}s")
     return low, high
 

@@ -113,7 +113,9 @@ def sand(size=1024, seed=21):
     rgb = rgb * (1 - peb[..., None]) + C.hex2rgb("#F2EEE4") * (0.9 + 0.1 * grain[..., None]) * peb[..., None]
     det = S(0.82, 0.84, P.fbm(h, w, 90, 2, seed + 5))
     rgb = rgb * (1 - 0.6 * det[..., None]) + C.hex2rgb("#7A6448") * 0.6 * det[..., None]
-    hgt = 0.5 * cellv + 0.5 * edge + 0.2 * grain
+    # height for the normal map: grain cells + sharp cell edges + fine grain, over soft 2 cm ripples / hoof-prints
+    ripple = P.fbm(h, w, 12, 2, seed + 9)
+    hgt = 0.5 * cellv + 0.5 * edge + 0.2 * grain + 0.6 * ripple
     return rgb, hgt
 
 
@@ -134,8 +136,9 @@ def build_all(verbose=True):
     out["room_env.png"] = C.write_png(os.path.join(C.TEXTURES, "room_env.png"), room_env())
     rgb, hgt = sand()
     out["sand_albedo.png"] = C.write_png(os.path.join(C.BUILD, "sand_albedo.png"), quantize(rgb, 3))
-    n = height_to_normal(P.blur(hgt, 0.7)[::2, ::2], 2.5)
-    out["sand_normal.png"] = C.write_png(os.path.join(C.TEXTURES, "sand_normal.png"), quantize(n, 2))
+    # full 1024 (was 512): one texel = 0.3 mm, so single grains survive; strength 4 (was 2.5)
+    n = height_to_normal(P.blur(hgt, 0.6), 4.0)
+    out["sand_normal.png"] = C.write_png(os.path.join(C.TEXTURES, "sand_normal.png"), quantize(n, 4))
     if verbose:
         for k, v in out.items():
             print(f"[tex] {k}: {os.path.getsize(v)} bytes")

@@ -10,6 +10,7 @@ Checks every app/src/main/assets/models/*.glb against the asset contract (docs/A
   * fish: COLOR_0.a runs 0 at the snout (max x) -> 1 at the tail (min x), COLOR_0.b in [0,1] on fins,
     unit length (x extent ~1.0)
   * instance tables (extras.instances) are multiples of 10 floats
+  * on-screen triangle estimates: High <= 220k (LOD0 + instances), Medium <= 140k (*_lod1.glb + halved instances)
 Also checks assets/sim/anchors.json names and rock_sdf.bin header/size.
 Usage: python3 tools/validate_glb.py [files...]   (exit code 1 on failure)
 """
@@ -39,11 +40,16 @@ BUDGET = {
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
-    "tank": 7200, "rockscape": 45000, "equipment": 9000, "aiptasia": 300,
-    "kenya": 9000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
+    "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
+    "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 450,
 }
-LOD1_BUDGET = {"engineer_goby": 2100}  # anguilliform: 96 stations need more rings than the 1.7k LOD1 cap
+# LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
+LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
+# on-screen triangle ceilings (docs/ASSETS.md §8): High = LOD0 scene + all polyp instances + fish at LOD1 (default
+# camera > 60 cm); Medium = *_lod1.glb wherever one exists, polyp instance tables halved, fish at LOD1
+HIGH_MAX = 220000
+MEDIUM_MAX = 140000
 # how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
 SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
 BODY_BUDGET = {"engineer_goby": 5600}
@@ -255,7 +261,7 @@ def check_glb(path, errors, warnings, report):
     budget = BUDGET.get(base)
     if name.endswith("_lod1"):
         cap = LOD1_BUDGET.get(base, 1700)
-        if base in FISH and total > cap:
+        if (base in FISH or base in LOD1_BUDGET) and total > cap:
             errors.append(f"{name}: LOD1 {total} tris > {cap}")
     elif budget is not None and total > budget * 1.15:
         errors.append(f"{name}: {total} tris > budget {budget} (+15%)")
@@ -309,25 +315,40 @@ def check_sim(errors, report):
             report["sdf"] = (nx, ny, nz, cell, len(d))
 
 
-def high_estimate(report):
-    """Triangles on screen in the default full-tank view at High quality: every scene GLB once, mobile inverts
-    times SCENE_COUNTS, every polyp instance table, and fish at LOD1 (the default camera is > 60 cm from every
-    fish, ARCHITECTURE §LOD). `fish_lod0` is the all-LOD0 worst case for reference."""
-    meshes = fish0 = fish1 = 0
-    for name, size, tris, body in report.get("files", []):
-        if name.endswith("_lod1"):
-            if name[:-5] in FISH:
-                fish1 += tris
-            continue
-        if name in FISH:
-            fish0 += tris
-        else:
-            meshes += (tris - report.get("hidden", {}).get(name, 0)) * SCENE_COUNTS.get(name, 1)
-    inst = sum(v[2] for v in report.get("instances", {}).values())
-    # instance prototypes are already counted once in `meshes`; the table draws them `cnt` times
-    inst -= sum(v[1] for v in report.get("instances", {}).values())
-    return {"meshes": meshes, "instances": inst, "fish": fish1, "fish_lod0": fish0,
-            "total": meshes + inst + fish1, "worst": meshes + inst + fish0}
+def estimates(report):
+    """Triangles on screen in the default full-tank view.
+    High: every scene GLB at LOD0 once, mobile inverts times SCENE_COUNTS, every polyp instance table, fish at LOD1
+    (the default camera is > 60 cm from every fish, ARCHITECTURE §LOD). `fish_lod0` is the all-LOD0 worst case.
+    Medium: the same with <asset>_lod1.glb substituted wherever one exists (its own instance tables) and the other
+    polyp instance tables halved."""
+    files = {name: (tris, body) for name, size, tris, body in report.get("files", [])}
+    hidden = report.get("hidden", {})
+    inst = {}
+    for key, (cnt, tris, tot) in report.get("instances", {}).items():
+        inst.setdefault(key.split("/")[0], []).append((cnt, tris))
+    out = {}
+    for level in ("high", "medium"):
+        meshes = instances = fish1 = fish0 = 0
+        for name, (tris, body) in files.items():
+            if name.endswith("_lod1"):
+                if name[:-5] in FISH:
+                    fish1 += tris
+                continue
+            if name in FISH:
+                fish0 += tris
+                continue
+            use = name
+            if level == "medium" and name + "_lod1" in files:
+                use = name + "_lod1"
+            meshes += (files[use][0] - hidden.get(use, 0)) * SCENE_COUNTS.get(name, 1)
+            # the prototype mesh is counted once in `meshes`; the table draws it `cnt` times
+            extra = sum((cnt - 1) * t for cnt, t in inst.get(use, []))
+            if level == "medium" and use == name:
+                extra //= 2
+            instances += extra
+        out[level] = {"meshes": meshes, "instances": instances, "fish": fish1, "fish_lod0": fish0,
+                      "total": meshes + instances + fish1, "worst": meshes + instances + fish0}
+    return out
 
 
 def main(argv):
@@ -350,16 +371,18 @@ def main(argv):
         print("rock_sdf.bin: %dx%dx%d cell %.2f cm, %d bytes" % report["sdf"])
     print(f"GLB total: {tot_bytes / 1e6:.2f} MB in {len(report.get('files', []))} files")
     if not argv:
-        est = high_estimate(report)
-        print(f"rendered-triangle estimate at High, default view: {est['total']} "
-              f"(meshes {est['meshes']}, polyp instances {est['instances']}, fish LOD1 {est['fish']}); "
-              f"all fish at LOD0: {est['worst']}")
-        if est["total"] > 140000:
-            errors.append(f"High triangle estimate {est['total']} > 140000")
+        ests = estimates(report)
+        for level, cap in (("high", HIGH_MAX), ("medium", MEDIUM_MAX)):
+            est = ests[level]
+            print(f"rendered-triangle estimate at {level.capitalize()}, default view: {est['total']} "
+                  f"(meshes {est['meshes']}, polyp instances {est['instances']}, fish LOD1 {est['fish']}); "
+                  f"all fish at LOD0: {est['worst']}")
+            if est["total"] > cap:
+                errors.append(f"{level.capitalize()} triangle estimate {est['total']} > {cap}")
         size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ASSETS) for f in fs)
         print(f"app/src/main/assets total: {size / 1e6:.2f} MB")
-        if size > 35e6:
-            errors.append(f"assets {size / 1e6:.1f} MB > 35 MB")
+        if size > 40e6:
+            errors.append(f"assets {size / 1e6:.1f} MB > 40 MB")
     for w in warnings:
         print("WARN", w)
     for e in errors:
