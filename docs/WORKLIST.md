@@ -13,8 +13,6 @@
 - Time-lapse issues (see above, plus the realism rebase conflicts in OrganismStats, StressModel, PairMatrix, TimelapseTest)
 
 ## Models / rendering
-- Equipment floats above the tank (lights, pump block, reservoir); mount it, add detail
-- Flipper label panel sticks out past the tank's left edge
 - Fish clip into their own bodies on sharp turns: clamp the vertex-shader body bend (swim wave + turn curvature), cap yaw rate, keep fins from passing through the body
 - Cleaner shrimp animation broken
 - Oversaturated palette (violet water, neon rock, noisy coralline); match the photos

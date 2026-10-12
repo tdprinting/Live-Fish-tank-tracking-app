@@ -20,6 +20,18 @@ fun straightRig(id: String, x: Float, y: Float, z: Float, bl: Float): FishRig {
 }
 
 class LightingStateTest {
+    @Test fun fixturesHangOverTheTank() {
+        // AI Prime lens centres (equipment.glb AiPrimeL/R_Lens `lightPos`): pucks 29 cm over the 61.4 cm rim
+        assertEquals(2, LightingState.LIGHT_POS.size)
+        assertEquals(32f, LightingState.LIGHT_POS[0][0], 1e-4f)
+        assertEquals(91f, LightingState.LIGHT_POS[1][0], 1e-4f)
+        for (p in LightingState.LIGHT_POS) {
+            assertEquals(90f, p[1], 1e-4f)
+            assertEquals(16f, p[2], 1e-4f)
+            assertTrue(p[0] in 0f..Camera.TANK[0] && p[2] in 0f..Camera.TANK[2])
+        }
+    }
+
     @Test fun fullWhiteAndBlues() {
         val s = LightingState.from(floatArrayOf(1f, 1f, 1f, 0f, 0f, 0f, 0f, 0f))
         // weights 4/16 × 3 channels = 0.75
