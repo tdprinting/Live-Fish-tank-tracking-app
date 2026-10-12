@@ -152,6 +152,7 @@ class Organism(
             thin.toFloat(), eyeCloud.toFloat(), alive, lengthCm.toFloat(),
             brain = brainKind.name, posture = posture, eyeYaw = eyeYaw.toFloat(), mouth = mouth.toFloat(),
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
+            variant = variant,
         )
     }
 
