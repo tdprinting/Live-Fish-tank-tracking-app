@@ -29,6 +29,8 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -42,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,6 +73,7 @@ import com.reeflive.core.params.ParameterDef
 import com.reeflive.core.units.ParamUnit
 import com.reeflive.core.util.Fmt
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------- Shared rows
 
@@ -114,6 +119,24 @@ internal fun LinkRow(title: String, subtitle: String?, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun VolumeRow(volume: Float, onChange: (Float) -> Unit) {
+    val c = ReefTheme.colors
+    // local value while dragging; DataStore is written once the drag ends
+    var v by remember(volume) { mutableStateOf(volume) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Volume", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, modifier = Modifier.width(64.dp))
+        Slider(
+            value = v,
+            onValueChange = { v = it },
+            onValueChangeFinished = { onChange(v) },
+            modifier = Modifier.weight(1f).semantics { contentDescription = "Tank sounds volume" },
+            colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.glass),
+        )
+        Text("${(v * 100).roundToInt()}%", style = ReefTheme.numbers.label, color = c.textSecondary, modifier = Modifier.width(44.dp))
+    }
+}
+
 // ---------------------------------------------------------------- Settings
 
 data class SettingsActions(
@@ -126,6 +149,8 @@ data class SettingsActions(
     val onHaptics: (Boolean) -> Unit = {},
     val onGlassBlur: (Boolean) -> Unit = {},
     val onLiveQuality: (LiveQuality) -> Unit = {},
+    val onTankSounds: (Boolean) -> Unit = {},
+    val onTankVolume: (Float) -> Unit = {},
     val onNotifications: (Boolean) -> Unit = {},
     val onReminderTime: () -> Unit = {},
     val onRequestPermission: () -> Unit = {},
@@ -179,6 +204,8 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
             }
             Group("Live Tank") {
                 PillsRow("Quality", listOf("Low", "Medium", "High"), s.liveQuality.ordinal) { actions.onLiveQuality(LiveQuality.entries[it]) }
+                SwitchRow("Tank sounds", "Water flow, pumps, feeding and alerts", s.tankSounds, actions.onTankSounds)
+                if (s.tankSounds) VolumeRow(s.tankVolume, actions.onTankVolume)
             }
             SectionHeader("Tank & parameters")
             LinkRow("Targets & parameters", "Ranges, favorites, hide/show", actions.onTargets)
@@ -228,6 +255,8 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onHaptics = { go { g.settings.setHaptics(it) } },
             onGlassBlur = { go { g.settings.setGlassBlur(it) } },
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
+            onTankSounds = { go { g.settings.setTankSounds(it) } },
+            onTankVolume = { go { g.settings.setTankVolume(it) } },
             onNotifications = { on ->
                 go { g.settings.setNotifications(on) }
                 if (on && !permission && Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)

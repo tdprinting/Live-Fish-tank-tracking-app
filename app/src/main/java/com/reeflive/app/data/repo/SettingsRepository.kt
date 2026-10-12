@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.reeflive.core.units.ParamUnit
@@ -32,6 +33,9 @@ data class AppSettings(
     val notifications: Boolean = true,
     /** Display units chosen for other parameters (e.g. no3 → ppm NO3-N, po4 → ppb). */
     val paramUnits: Map<String, ParamUnit> = emptyMap(),
+    /** Live Tank ambience and event sounds, and their volume (0..1). */
+    val tankSounds: Boolean = true,
+    val tankVolume: Float = DEFAULT_TANK_VOLUME,
 ) {
     /** Preferred display unit for a parameter whose base unit is [base]. */
     fun displayUnitFor(paramId: String, base: ParamUnit): ParamUnit = when (paramId) {
@@ -39,6 +43,10 @@ data class AppSettings(
         "sal" -> salUnit
         "alk" -> alkUnit
         else -> paramUnits[paramId] ?: base
+    }
+
+    companion object {
+        const val DEFAULT_TANK_VOLUME = 0.6f
     }
 }
 
@@ -58,6 +66,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val glassBlur = booleanPreferencesKey("glassBlur")
         val notifications = booleanPreferencesKey("notifications")
         val paramUnits = stringPreferencesKey("paramUnits")
+        val tankSounds = booleanPreferencesKey("tankSounds")
+        val tankVolume = floatPreferencesKey("tankVolume")
     }
 
     private fun unit(name: String?, default: ParamUnit) = ParamUnit.entries.firstOrNull { it.name == name } ?: default
@@ -79,6 +89,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             glassBlur = p[K.glassBlur] ?: true,
             notifications = p[K.notifications] ?: true,
             paramUnits = parseUnits(p[K.paramUnits]),
+            tankSounds = p[K.tankSounds] ?: true,
+            tankVolume = (p[K.tankVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
         )
     }
 
@@ -117,4 +129,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setTileOrder(ids: List<String>) = store.edit { it[K.tileOrder] = ids.joinToString(",") }
     suspend fun setGlassBlur(v: Boolean) = store.edit { it[K.glassBlur] = v }
     suspend fun setNotifications(v: Boolean) = store.edit { it[K.notifications] = v }
+    suspend fun setTankSounds(v: Boolean) = store.edit { it[K.tankSounds] = v }
+    suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
 }
