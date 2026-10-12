@@ -82,7 +82,13 @@ object Social {
      */
     fun rel(o: Organism, other: Organism, now: Double = Double.NaN): Relation = o.relations.getOrPut(other.id) {
         Relation(other.id).also { r ->
-            val t = if (now.isNaN()) max(o.arrivalTime, other.arrivalTime) + 30 * 86400.0 else now
+            // without an explicit time use the animals' own clocks (set every behaviour tick); never-ticked: 30 days on
+            val clock = max(o.clock, other.clock)
+            val t = when {
+                !now.isNaN() -> now
+                !clock.isNaN() -> clock
+                else -> max(o.arrivalTime, other.arrivalTime) + 30 * 86400.0
+            }
             val days = (t - max(o.arrivalTime, other.arrivalTime)) / 86400.0
             r.familiarity = (FAMILIARITY_PER_DAY * days).coerceIn(0.0, 1.0)
         }

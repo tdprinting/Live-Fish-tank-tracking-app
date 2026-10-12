@@ -22,6 +22,26 @@ sealed class Command {
     data class SetPredation(val enabled: Boolean) : Command()
     /** A shadow/hand passing over the tank at [worldPoint] (feather duster retracts, fish glance). */
     data class Shadow(val worldPoint: Vec3) : Command()
+
+    // ---- research 06 §4.2 sandbox controls for realistic change tests ----
+    /**
+     * Move [paramId] from its current value to [target] linearly over [overMin] sim minutes
+     * (0 = a step), then keep it there against the chemistry ([hold]) until [ReleaseParam].
+     * Any [SetParam] id works; "light" and "flow" ramp the light override and pump strength.
+     */
+    data class RampParam(val paramId: String, val target: Double, val overMin: Double = 0.0, val hold: Boolean = true) : Command()
+    /** Stop ramping/holding [paramId]; the chemistry takes over again. */
+    data class ReleaseParam(val paramId: String) : Command()
+    /** Run [command] when the sim clock reaches [atSimSec] (absolute sim seconds). */
+    data class Schedule(val atSimSec: Double, val command: Command) : Command()
+    /** Powerheads off for [durationSec] from [atSimSec] (night-time pump failure scenario). */
+    data class PowerheadFail(val atSimSec: Double, val durationSec: Double) : Command()
+    /** Rearrange the rock: every territory re-anchors and familiarity drops to 0.5 (06 §3.3). */
+    object RearrangeRock : Command()
+    /** Acclimate every animal's setpoints to the current water ([paramId] null = all channels). */
+    data class SetAcclimation(val paramId: String? = null) : Command()
+    /** Photoperiod in hours (lights-on length, centred on the current midday). */
+    data class Photoperiod(val hours: Double) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */

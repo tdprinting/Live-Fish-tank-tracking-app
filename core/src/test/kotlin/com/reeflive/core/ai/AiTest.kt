@@ -172,7 +172,8 @@ class AiTest {
         val v = sim.organisms.first { it.brainKind == BrainKind.PEEKER_BLENNY }
         repeat(3) { Social.recordAttack(a, v, 0.6) }
         v.pos = a.pos + com.reeflive.core.geom.Vec3(8.0, 0.0, 0.0)
-        sim.advance(5.0, behaviorDt = 0.1)
+        // 1 s: the pair matrix now sends the dottyback after it again and the blenny bolts for its hole (out of wary range by ~4 s)
+        sim.advance(1.0, behaviorDt = 0.1)
         assertTrue("fear ${v.relations[a.id]?.fear}", (v.relations[a.id]?.fear ?: 0.0) > 0.5)
         assertTrue("wary of ${v.wary}", v.wary === a)
         val st = sim.snapshot().stats.first { it.id == v.id }

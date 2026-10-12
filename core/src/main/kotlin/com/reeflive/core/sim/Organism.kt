@@ -93,6 +93,10 @@ class Organism(
     var brightExposed = false
     /** Water temperature at the last chemistry tick (appetite hook). */
     var lastTempC = 26.0
+    /** Sim time of this animal's last behaviour tick (NaN until the first); used for memory timestamps. */
+    var clock = Double.NaN
+    /** Daytime hover / forage radius multiplier set by its brain (cardinal newcomer and timid states; 06 §5.6 #7). */
+    var hoverRadius = 0.0
 
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
@@ -100,6 +104,8 @@ class Organism(
     var nutritionGreens = 1.0     // 0..1, decays without algae/nori (HLLE input)
     var acceptsPrepared = true    // cleaner wrasse roll (SIMULATION §3.4); lawnmower blenny too
     var lastCleanedAt = -1e9
+    /** Last tactile pass or inspection by a cleaner (06 §5.6 #4: nobody goes > 90 min without one by day). */
+    var lastCleanerContactAt = -1e9
     var parasiteLoad = 0.0        // cosmetic client parasite level (feeds cleaners)
     var satietyUntil = -1e9       // eel 3-day satiety after a kill
     var molting = false

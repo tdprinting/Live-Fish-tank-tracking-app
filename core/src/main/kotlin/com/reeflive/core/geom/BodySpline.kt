@@ -62,6 +62,9 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             acc += trail[i].distanceTo(trail[i - 1])
             if (acc > length * 1.25) { keep = i + 1; break }
         }
+        // Hovering fish can pile up near-coincident points that never reach 1.25 BL of arclength; cap the
+        // trail (20 points cover 1.25 BL) so the relax loop stays O(1) per tick.
+        keep = minOf(keep, MAX_TRAIL)
         while (trail.size > keep) trail.removeAt(trail.size - 1)
     }
 
@@ -118,5 +121,8 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     /** Current trail as head→tail polyline (for tests/debug). */
     fun trailSnapshot(): List<Vec3> = listOf(head) + trail
 
-    companion object { const val POINTS = 16 }
+    companion object {
+        const val POINTS = 16
+        const val MAX_TRAIL = 48
+    }
 }

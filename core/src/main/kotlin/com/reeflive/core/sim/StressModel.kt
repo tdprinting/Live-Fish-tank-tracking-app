@@ -164,7 +164,7 @@ object StressModel {
             val dev = when (c) {
                 Ch.NH3 -> value * sn * soft / c.w
                 Ch.NO2 -> value * sn / c.w
-                Ch.DO -> (1.3 * s.doCrit - value) / (0.6 * s.doCrit) * sn
+                Ch.DO -> max(0.0, (1.3 * s.doCrit - value) / (0.6 * s.doCrit)) * sn
                 Ch.SOCIAL -> value
                 // only brighter-than-acclimated light (or flow loss) is a stressor
                 Ch.LIGHT -> max(0.0, value - s.setpoint[i]) * sn / c.w
@@ -183,7 +183,8 @@ object StressModel {
             val sl = s.slow[i]
             s.slow[i] = sl + (target - sl) * f(dtMin, if (target > sl) c.tauSlowRise else c.tauSlowFall)
             // setpoint
-            if (c.tauAccl > 0) {
+            // light: darkness is not "dimmer light" (only the lit part of the day re-acclimates)
+            if (c.tauAccl > 0 && !(c == Ch.LIGHT && value < 0.3)) {
                 // light: the setpoint tracks the daily peak (brighter acclimates in ~2 d, dimmer is forgotten over 30 d)
                 val tau = if (c == Ch.LIGHT && value < s.setpoint[i]) 30 * 1440.0 else c.tauAccl
                 var a = s.setpoint[i] + (value - s.setpoint[i]) * f(dtMin, tau)

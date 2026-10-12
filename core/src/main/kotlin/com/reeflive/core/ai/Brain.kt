@@ -6,6 +6,7 @@ import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
+import com.reeflive.core.sim.Symptom
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -81,7 +82,10 @@ abstract class SpeciesBrain(val c: Ctx) {
     open fun preTick(c: Ctx) {
         val dt = c.dt
         o.sleeping = false
+        o.clock = c.t
         o.mouth *= exp(-dt * 5)
+        o.spineFlare *= exp(-dt * 3)
+        if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
         threatCheck -= dt

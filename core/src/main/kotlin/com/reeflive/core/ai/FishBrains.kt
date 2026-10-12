@@ -8,6 +8,11 @@ import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
 import com.reeflive.core.sim.SimEvent
+import com.reeflive.core.sim.Counters
+import com.reeflive.core.sim.StressModel
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -278,7 +283,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         c.p.stations += station
-        install(RunStation(), Clean(), Surf(), Feed(this, 70.0),
+        install(RunStation(), Work(), Surf(), Feed(this, 70.0),
             Flee(this, { c, from -> c.coverPoint(from) }, "Fleeing"),
             Cocoon(), SurfaceGasp(this), Flash(this), GlassCurious(this))
     }
@@ -295,7 +300,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
     inner class RunStation : Behavior("station", "Running cleaning station") {
         private var nextDance = 0.0
         private var danceUntil = -1.0
-        override fun score(c: Ctx) = 0.2 + 0.3 * c.activity + 0.2 * c.o.hunger
+        override fun score(c: Ctx) = 0.2 + 0.3 * c.activity + 0.2 * c.o.hunger + (if (c.t < stationBias) 0.3 else 0.0)
         override fun update(c: Ctx, out: SteerIntent) {
             out.seek(stationPos + Vec3(sin(c.t * 0.5) * 1.5, sin(c.t * 0.31), 0.0), c.o.cruiseSpeed * 0.5, arrive = 2.0)
             out.hover = true; out.faceDir = Vec3.Z
@@ -306,31 +311,186 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
-    /** Pick parasites along the client's body (8–20 s), then return. */
-    inner class Clean : Behavior("clean", "Cleaning a client") {
-        private var dur = 12.0
-        override val committed: Boolean get() = elapsed < dur
+    /**
+     * The cleaning loop (research 06 §5.5): choose a client, approach to 1 BL, tactile dance for
+     * high-ranked or hungry clients (calms their aggression for 20 min), ask for a pose, inspect for a
+     * lognormal 2–20 s, cheat (a mucus bite → client jolts) at 0.04/s, 0.17/s when hungry.
+     */
+    inner class Work : Behavior("work", "Cleaning a client") {
+        private var client: Organism? = null
+        private var candidate: Organism? = null
+        private var phase = 0
+        private var phaseT = 0.0
+        private var inspectS = 6.7
+        private var danceS = 1.5
+        private var nextScan = 0.0
+        private var cheatAcc = 0.0
+        override val targetVerb: String get() = if (phase == 3) "inspecting" else "approaching"
+        override val committed: Boolean get() = client != null && phase in 1..3
+
         override fun score(c: Ctx): Double {
-            val cl = station.client ?: return 0.0
-            return if (station.clientReady && cl.alive && cl.pos.distanceTo(c.o.pos) < 30) 0.9 else 0.0
+            val o = c.o
+            if (c.p.night || o.sleeping || c.activity < 0.3 || o.health < 0.35) return 0.0
+            if (c.t < restUntil) return 0.0
+            if (c.t >= nextScan) { nextScan = c.t + 1.0; candidate = choose(c) }
+            val cand = candidate ?: return 0.0
+            if (!cand.alive) { candidate = null; return 0.0 }
+            return 0.55 + 0.25 * o.hunger
         }
-        override fun enter(c: Ctx) { dur = c.rng.range(8.0, 20.0) }
+
+        /** Client weight w = BL² × (1 + 3·ich + 0.5·posing) × (1 − 0.5·threat), plus overdue and buffer terms. */
+        fun choose(c: Ctx): Organism? {
+            val o = c.o
+            var best: Organism? = null
+            var bw = 0.0
+            for (f in c.sim.organisms) {
+                if (f === o || !f.alive || !f.isFish || !f.visible || f.sleeping || f.brainKind == BrainKind.WRASSE || f.brainKind == BrainKind.EEL) continue
+                if (c.t - f.lastCleanerContactAt < CLIENT_COOLDOWN_S) continue
+                val d = f.pos.distanceTo(o.pos)
+                val overdue = c.t - f.lastCleanerContactAt > OVERDUE_S
+                val atStation = station.client === f && station.clientReady
+                if (d > SEARCH_CM && !overdue && !atStation) continue
+                val ich = if (f.disease == Disease.ICH) f.diseaseStage else 0.0
+                val threat = o.relations[f.id]?.fear ?: 0.0
+                var w = (f.lengthCm / 7.0).let { it * it } * (1 + 3 * ich + (if (atStation) 0.5 else 0.0)) * (1 - 0.5 * threat)
+                // calming the tank: aggressors whose tactile damping has expired are worth a visit (06 §3.5)
+                if (PairMatrix.baseRank(f, c.sim) >= TACTILE_RANK && f.aggressionDampUntil < c.t) w *= 2.0
+                if (overdue) w *= 3.0
+                w /= 1 + d / SEARCH_CM
+                if (w > bw) { bw = w; best = f }
+            }
+            return best
+        }
+
+        override fun enter(c: Ctx) {
+            client = candidate; candidate = null
+            phase = 0; phaseT = 0.0; cheatAcc = 0.0
+            // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96)
+            val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
+            val mu = ln(6.7) - sigma2 / 2
+            inspectS = exp(mu + sqrt(sigma2) * c.rng.gaussian()).coerceIn(2.0, 20.0)
+            danceS = c.rng.range(1.0, 2.0)
+            if (client == null) finished = true
+        }
+
         override fun update(c: Ctx, out: SteerIntent) {
-            val cl = station.client
-            if (cl == null || !cl.alive) { finished = true; return }
-            val k = ((elapsed / dur) * 4).toInt().coerceAtMost(3) / 4.0
-            val side = (cl.heading cross cl.up).normalized(Vec3.Z) * (if (((elapsed / dur) * 8).toInt() % 2 == 0) 1.0 else -1.0)
-            val skin = cl.pos - cl.heading * (cl.lengthCm * (k - 0.3)) + side * (cl.lengthCm * cl.species.depthRatio * 0.35 + 1.0 + 0.3 * c.L)
-            out.seek(skin, c.o.cruiseSpeed * 1.2, arrive = 1.0)
-            out.faceDir = (cl.pos - c.o.pos).normalized(c.o.heading)
-            out.separation = 0.0; out.hover = true
-            c.o.mouth = 0.5 + 0.5 * sin(2 * PI * 1.5 * c.t)
-            if (elapsed > dur) {
-                finishClean(c, cl, isShrimp = false)
-                finished = true
+            val o = c.o
+            val cl = client ?: run { finished = true; return }
+            if (!cl.alive || !cl.visible || cl.sleeping) { done(c, cl, false); return }
+            o.focusId = cl.id
+            phaseT += c.dt
+            val toC = (cl.pos - o.pos).normalized(o.heading)
+            out.separation = 0.0
+            when (phase) {
+                // approach to 1 BL at 1.8 BL/s
+                0 -> {
+                    out.seek(c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm)), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
+                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5) {
+                        phase = if (PairMatrix.baseRank(cl, c.sim) >= TACTILE_RANK || cl.hunger > 0.6) 1 else 2
+                        phaseT = 0.0
+                    }
+                    if (phaseT > 30) done(c, cl, false)
+                }
+                // tactile dance: pitch ±20° at 2 Hz within 15 cm, stroking with the pelvic fins
+                1 -> {
+                    out.hover = true; out.faceDir = toC
+                    out.pitchBias = 0.35 * sin(2 * PI * 2 * c.t); out.ampMul = 1.6
+                    out.seek(c.safe(cl.pos + cl.up * (0.3 * cl.lengthCm + 1)), o.cruiseSpeed, arrive = 0.8)
+                    if (phaseT >= danceS) {
+                        cl.aggressionDampUntil = c.t + PairMatrix.AGG_DAMP_S
+                        cl.lastCleanerContactAt = c.t
+                        phase = 2; phaseT = 0.0
+                    }
+                }
+                // ask for a pose: p = 0.3 + 0.6·trust (S:Grutter94)
+                2 -> {
+                    cl.lastCleanerContactAt = c.t
+                    val trust = Social.rel(cl, o, c.t).cleanerTrust
+                    if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0))) { done(c, cl, false); return }
+                    cl.poseFor = o; cl.poseUntil = c.t + inspectS + 1.0
+                    cl.counters.add(Counters.K.POSE, c.t)
+                    c.sim.emit(SimEvent.Pose(cl.id, o.id, c.sim.simTimeSec))
+                    phase = 3; phaseT = 0.0
+                }
+                // inspect along a 4-point spine path, nibbling at 1.5 Hz
+                else -> {
+                    val k = ((phaseT / inspectS) * 4).toInt().coerceAtMost(3) / 4.0
+                    val side = (cl.heading cross cl.up).normalized(Vec3.Z) * (if (((phaseT / inspectS) * 8).toInt() % 2 == 0) 1.0 else -1.0)
+                    val skin = cl.pos - cl.heading * (cl.lengthCm * (k - 0.3)) + side * (cl.lengthCm * cl.species.depthRatio * 0.35 + 1.0 + 0.3 * c.L)
+                    out.seek(skin, o.cruiseSpeed * 1.2, arrive = 1.0)
+                    out.faceDir = toC; out.hover = true
+                    o.mouth = 0.5 + 0.5 * sin(2 * PI * 1.5 * c.t)
+                    cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
+                    val ich = cl.disease == Disease.ICH
+                    // honest gleaning feeds in proportion to what is there (a tank has few parasites)
+                    o.hunger = max(0.0, o.hunger - c.dt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
+                    // cheating: 0.04/s baseline → 0.17/s when hungry (S:Pinto11)
+                    cheatAcc += c.dt
+                    while (cheatAcc >= 1.0) {
+                        cheatAcc -= 1.0
+                        if (c.rng.chance(cheatRate(o))) { jolt(c, cl); return }
+                    }
+                    if (phaseT >= inspectS) {
+                        val r = Social.rel(cl, o, c.t)
+                        r.cleanerTrust = min(1.0, r.cleanerTrust + 0.05)
+                        finishClean(c, cl, isShrimp = false, feed = false)
+                        done(c, cl, true)
+                    }
+                }
             }
         }
-        override fun exit(c: Ctx) { if (finished) station.release() }
+
+        private fun jolt(c: Ctx, cl: Organism) {
+            val o = c.o
+            val r = Social.rel(cl, o, c.t)
+            r.cleanerTrust = max(0.0, r.cleanerTrust - 0.2)
+            o.hunger = max(0.0, o.hunger - 0.01)   // the mucus bite is what it wanted
+            cl.poseUntil = c.t
+            // the client leaves (0.7) or, as a resident, chases the cheater 1–2 BL (0.3; S:Bshary01)
+            val chase = c.rng.chance(0.3)
+            if (chase) cl.retaliateUntil = c.t + c.rng.range(0.8, 1.6)
+            cl.counters.add(Counters.K.JOLT, c.t)
+            StressModel.addSocial(cl, 0.05)
+            c.sim.emit(SimEvent.Jolt(o.id, cl.id, chase, c.sim.simTimeSec))
+            done(c, cl, false)
+        }
+
+        private fun done(c: Ctx, cl: Organism, served: Boolean) {
+            if (cl.poseFor === c.o) cl.poseUntil = min(cl.poseUntil, c.t)
+            if (station.client === cl) station.release()
+            client = null; finished = true
+            if (served) c.o.counters.add(Counters.K.CLEAN_GIVEN, c.t)
+            // pause between bouts (few clients, scarce parasites); half the time back to the station
+            restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S) * (1.2 - 0.6 * c.o.hunger)
+            stationBias = if (c.rng.chance(0.5)) c.t + 60 else -1.0
+        }
+
+        override fun exit(c: Ctx) {
+            client?.let { if (it.poseFor === c.o) it.poseUntil = min(it.poseUntil, c.t) }
+            if (client != null) restUntil = c.t + 10.0
+            client = null
+        }
+    }
+
+    /** Pause until then between bouts; after a bout the wrasse goes back to its station half the time (06 §5.5). */
+    var restUntil = 0.0
+    var stationBias = -1.0
+
+    companion object {
+        /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
+        const val CLIENT_COOLDOWN_S = 60.0
+        /** Search radius for clients (06 §5.5). */
+        const val SEARCH_CM = 40.0
+        /** A client not touched for this long is sought anywhere in the tank (06 §5.6 #4: ≤ 90 min). */
+        const val OVERDUE_S = 45 * 60.0
+        /** Base rank from which a client gets the tactile dance first (hawk = 6; S:Grutter04, S:Cheney08). */
+        const val TACTILE_RANK = 6.0
+        /** Honest gleaning: hunger −0.002/s at full parasite load. */
+        const val HONEST_YIELD_PER_S = 0.002
+        const val REST_MIN_S = 15.0
+        const val REST_MAX_S = 75.0
+        /** Cheating per second of inspection: 0.04 baseline → 0.17 when hunger > 0.6 (S:Pinto11). */
+        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.17 else 0.04
     }
 
     /** Between clients: zip along the rock face in the lower-mid zone. */
@@ -363,12 +523,14 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 }
 
 /** Shared end-of-cleaning bookkeeping for wrasse and skunk shrimp (SIMULATION §4.5, 04 §13C). */
-fun finishClean(c: Ctx, client: Organism, isShrimp: Boolean) {
+fun finishClean(c: Ctx, client: Organism, isShrimp: Boolean, feed: Boolean = true) {
     val ich = client.disease == Disease.ICH
     client.lastCleanedAt = c.t
+    client.lastCleanerContactAt = c.t
+    val load = client.parasiteLoad
     client.parasiteLoad = 0.0
     if (ich) client.diseaseStage = max(0.0, client.diseaseStage - 0.02)
-    c.o.hunger = max(0.0, c.o.hunger - (if (ich) 0.08 else 0.02) * (if (isShrimp) 0.8 else 1.0) - 0.03 * client.parasiteLoad)
+    if (feed) c.o.hunger = max(0.0, c.o.hunger - (if (ich) 0.08 else 0.02) * (if (isShrimp) 0.8 else 1.0) - 0.03 * load)
     Social.recordCleaning(c.o, client, c.t)
     c.sim.emit(SimEvent.Cleaned(c.o.id, client.id, c.sim.simTimeSec))
 }
