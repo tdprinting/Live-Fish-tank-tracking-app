@@ -188,4 +188,34 @@ class ReproductionTest {
         days(lone, 20)
         assertFalse(lone.organisms.single().mouthbrooding)
     }
+
+    // ---------------------------------------------------------------- B-3 wrasse harem
+
+    private fun wrasses(vararg sizes: Double) = sizes.mapIndexed { i, cm ->
+        LivestockSeed("labroides_dimidiatus", "Doc$i", cm, id = "w$i")
+    }
+
+    @Test
+    fun largestWrasseBecomesMaleWhenThereIsMoreThanOne() {
+        val sim = TestTank.sim(wrasses(7.0, 9.0, 6.0), seed = 2)
+        days(sim, 20)
+        val ws = sim.organisms.associateBy { it.id }
+        assertEquals(false, ws["w1"]!!.sexFemale)
+        assertEquals("Male", ws["w1"]!!.sexLabel())
+        assertTrue(ws["w0"]!!.sexFemale != false && ws["w2"]!!.sexFemale != false)
+        // the male dies: the next largest takes over
+        ws["w1"]!!.alive = false; sim.removeOrganism(ws["w1"]!!)
+        days(sim, 20)
+        assertEquals(false, ws["w0"]!!.sexFemale)
+        assertTrue(ws["w2"]!!.sexFemale != false)
+    }
+
+    @Test
+    fun aSingleWrasseKeepsItsSex() {
+        val sim = TestTank.sim(wrasses(8.0), seed = 2)
+        days(sim, 40)
+        val w = sim.organisms.single()
+        assertEquals(0.0, w.sexChange, 0.0)
+        assertTrue(w.sexFemale != false)
+    }
 }

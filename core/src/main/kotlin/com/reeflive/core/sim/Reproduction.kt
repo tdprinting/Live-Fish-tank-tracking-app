@@ -55,6 +55,23 @@ class Reproduction(private val sim: Simulation) {
         clownSexChange(dtSec)
         clownBreeding(now, dtSec)
         cardinalBreeding(now, dtSec)
+        wrasseHarem(dtSec)
+    }
+
+    // ============================================================== wrasse harem (B-3)
+
+    /**
+     * Cleaner wrasse are protogynous: all start female, and with more than one present the largest becomes
+     * the male over [WRASSE_CHANGE_DAYS] (research 02 §4C). A single wrasse stays as it is; if the male
+     * goes, the next largest takes over.
+     */
+    private fun wrasseHarem(dtSec: Double) {
+        val w = sim.organisms.filter { it.alive && it.brainKind == BrainKind.WRASSE }
+        if (w.size < 2 || w.any { it.sexFemale == false }) { for (o in w) if (o.sexFemale != false) o.sexChange = maxOf(0.0, o.sexChange - dtSec / (WRASSE_CHANGE_DAYS * 86400.0)); return }
+        val big = w.maxBy { it.lengthCm }
+        for (o in w) if (o !== big) o.sexChange = 0.0
+        big.sexChange += dtSec / (WRASSE_CHANGE_DAYS * 86400.0)
+        if (big.sexChange >= 1.0) { big.sexChange = 0.0; big.sexFemale = false }
     }
 
     // ============================================================== clown sex and sex change
@@ -205,6 +222,7 @@ class Reproduction(private val sim: Simulation) {
     }
 
     companion object {
+        const val WRASSE_CHANGE_DAYS = 14.0
         const val CARDINAL_MATURE_CM = 5.0
         const val BROOD_DAYS_MIN = 6.0
         const val BROOD_DAYS_MAX = 8.0
