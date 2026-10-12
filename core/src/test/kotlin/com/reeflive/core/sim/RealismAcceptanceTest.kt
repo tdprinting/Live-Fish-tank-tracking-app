@@ -667,7 +667,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c24
     /** 06 §5.6 #24: one tap peaks within 1–4 h and is < 10 % by 24 h; three taps an hour apart ≥ 2× the peak. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c24_acuteStressEnvelope() {
         fun peak(taps: Int): Triple<Double, Double, Double> {
             val sim = tank(stock = listOf(TestTank.seed("clown_m")), hour = 12.0)
@@ -728,10 +727,10 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c27
     /** 06 §5.6 #27: after a 6 h free-NH₃ 0.3 spike and a 50 % water change: gasping ends < 1 h, appetite ≥ 80 % < 3 d, finClamp < 0.2 < 2 d, S_slow_NH3 < 0.1 only after ≥ 7 d. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c27_recoveryOrdering() {
         val sim = tank(hour = 8.0)
-        val frac = sim.water.s.nh3Free / sim.water.s.nh3Total.coerceAtLeast(1e-6)
+        // free-NH3 fraction at this pH/temperature (the fresh tank has no TAN to take a ratio of)
+        val frac = ChemFns.freeNh3(1.0, sim.water.s.ph, sim.water.s.tempC)
         sim.enqueue(Command.RampParam("tan", 0.3 / frac, 0.0, hold = true))
         sim.advanceAbstract(6 * 3600.0)
         val clown = sim.organisms.first { it.brainKind == BrainKind.CLOWN }

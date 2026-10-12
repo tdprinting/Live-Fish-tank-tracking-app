@@ -16,7 +16,7 @@ import kotlin.math.pow
  *     dev   = (value − A) × sens / w             (DO: distance below 1.3 × DO_crit(T))
  *     drive = smoothstep(0, 1, |dev|)^k
  *     fast  → drive with τ_rise while rising, → 0 with τ_fall otherwise
- *     slow  → max(fast, chronic) with τ_slowRise / τ_slowFall
+ *     slow  → max(slowGain × fast, chronic) with τ_slowRise / τ_slowFall
  *     A     → value with τ_accl, clamped to the species' acclimation range
  *     S_env = 1 − Π (1 − weight × max(fast, slow))
  *
@@ -33,12 +33,16 @@ object StressModel {
         val key: String, val label: String, val w: Double, val k: Double,
         val tauRise: Double, val tauFall: Double, val tauSlowRise: Double, val tauSlowFall: Double, val tauAccl: Double,
         val weight: Double,
+        /** Share of S_fast that becomes chronic load (S_slow's target is slowGain × S_fast). */
+        val slowGain: Double = 1.0,
     ) {
         // 06 §4.1.1 table. τ_accl temp 3 d (not 7 d) so that the §5.6 #22 ramp/step pair holds; see SIMULATION §9.10.
         TEMP("temp", "temperature", 4.0, 2.0, 60.0, 720.0, 3 * 1440.0, 3 * 1440.0, 3 * 1440.0, 1.0),
         SAL("sal", "salinity", 0.006, 2.0, 120.0, 1440.0, 8 * 1440.0, 8 * 1440.0, 2 * 1440.0, 1.0),
         PH("ph", "pH", 0.5, 2.0, 240.0, 1440.0, 14 * 1440.0, 14 * 1440.0, 14 * 1440.0, 0.8),
-        NH3("nh3", "ammonia", 0.15, 1.0, 30.0, 2880.0, 12 * 60.0, 6 * 1440.0, 0.0, 1.0),
+        // NH3: S_slow is gill damage. 06 §4.1.6 has it linger 1–2 weeks after a spike while clamping
+        // (0.8·S_slow) eases in 1–2 days, so an acute spike leaves only ~1/3 of S_fast as chronic load.
+        NH3("nh3", "ammonia", 0.15, 1.0, 30.0, 2880.0, 12 * 60.0, 7 * 1440.0, 0.0, 1.0, slowGain = 0.35),
         NO2("no2", "nitrite", 2.0, 2.0, 120.0, 4320.0, 7 * 1440.0, 7 * 1440.0, 0.0, 0.8),
         DO("do", "low oxygen", 1.0, 1.0, 5.0, 60.0, 1440.0, 1440.0, 0.0, 1.0),
         LIGHT("light", "light", 0.6, 2.0, 1.0, 10.0, 2 * 1440.0, 2 * 1440.0, 2 * 1440.0, 0.3),
@@ -48,8 +52,12 @@ object StressModel {
     val CHANNELS = Ch.entries
     const val N = 9
 
-    /** τ of the acute-input reservoir for chases/taps (cortisol envelope peaks ~1 h, gone by ~24 h; S:Mathew23). */
-    const val SOCIAL_INPUT_TAU = 60.0
+    /**
+     * τ of the acute-input reservoir for chases/taps. With τ_rise 1 h this puts the S_social peak
+     * ~1.4 h after a single event and leaves < 10 % of it at 24 h (S:Mathew23: elevated from 10 min,
+     * maximal ~4 h, baseline by 24 h); repeated events an hour apart stack (06 §5.6 #24).
+     */
+    const val SOCIAL_INPUT_TAU = 120.0
     /** Chronic heat exposure filter (biphasic heat aggression, S:Warren16): τ 20 d. */
     const val HEAT_SLOW_TAU = 20 * 1440.0
     /** Low-pH boldness filter (S:Munday14). */
@@ -180,10 +188,12 @@ object StressModel {
                 val ceil = thermalCeiling(kind, fish)
                 chronic = smoothstep((value - ceil) / 2.0)
             }
-            val drive = smoothstep(abs(dev)).pow(c.k)
+            // the social channel is the cortisol envelope itself: linear in the reservoir so small
+            // events (a glass tap) still show and repeated ones add up (06 §4.1.1, S:Mathew23)
+            val drive = if (c == Ch.SOCIAL) dev.coerceIn(0.0, 1.0) else smoothstep(abs(dev)).pow(c.k)
             val fast = s.fast[i]
             s.fast[i] = if (drive > fast) fast + (drive - fast) * f(dtMin, c.tauRise) else fast + (drive - fast) * f(dtMin, c.tauFall)
-            val target = max(s.fast[i], chronic)
+            val target = max(s.fast[i] * c.slowGain, chronic)
             val sl = s.slow[i]
             s.slow[i] = sl + (target - sl) * f(dtMin, if (target > sl) c.tauSlowRise else c.tauSlowFall)
             // setpoint
@@ -279,7 +289,7 @@ object StressModel {
         val s = o.stressState
         val cold = if (tempC < s.setpoint[Ch.TEMP.ordinal].let { if (it.isNaN()) tempC else it }) s.fast(Ch.TEMP) else 0.0
         val card = if (o.brainKind == BrainKind.CARDINAL && brightExposed) 0.6 else 0.0
-        return (0.8 * max(s.slow(Ch.NH3) * 0.6, 0.7 * s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * o.ich + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
+        return (0.8 * max(s.slow(Ch.NH3), 0.5 * s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * o.ich + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
     }
 
     /** The channel contributing most right now (UI "why"); null when calm. */
