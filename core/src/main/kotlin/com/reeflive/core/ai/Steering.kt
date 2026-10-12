@@ -28,7 +28,14 @@ class Steering(private val c: Ctx) {
         o.posture = intent.posture
         when {
             intent.kinematic -> kinematic(o, intent, dt)
-            intent.crawl -> crawl(o, intent, dt)
+            intent.crawl -> {
+                crawl(o, intent, dt)
+                // crawling over rock/glass junctions can dip into the rock SDF: project back onto its surface
+                if (intent.posture !in 3..5) {
+                    val d = c.rock.sdf.dist(o.pos)
+                    if (d < 0.05) o.pos += c.rock.sdf.gradient(o.pos).normalized(Vec3.Y) * (0.05 - d)
+                }
+            }
             else -> swim(o, intent, dt)
         }
         if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
@@ -173,7 +180,13 @@ class Steering(private val c: Ctx) {
     private fun kinematic(o: Organism, it: SteerIntent, dt: Double) {
         val target = it.kinPos ?: o.pos
         val k = 1 - exp(-it.kinRate * dt)
-        val np = o.pos.lerp(target, k)
+        var np = o.pos.lerp(target, k)
+        // surface postures (perched, hanging, grabbing on rock) must stay on the surface, never inside it;
+        // dens/holes/burrows (3), cocoons (4) and buried animals (5) are allowed in by design
+        if (it.posture !in 3..5) {
+            val d = c.rock.sdf.dist(np)
+            if (d < 0.1) np += c.rock.sdf.gradient(np).normalized(Vec3.Y) * (0.1 - d)
+        }
         o.vel = (np - o.pos) / max(dt, 1e-6)
         o.pos = np
         it.kinHeading?.let { h -> o.heading = Vec3.rotateToward(o.heading, h.normalized(o.heading), Math.toRadians(240.0) * dt) }
