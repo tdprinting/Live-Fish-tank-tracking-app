@@ -101,7 +101,7 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("SESSILE", 0.0, 0.0, 0.0, 0.0), diet = listOf("PODS", "PLANKTON"), feedsPerDay = 2.0, hardiness = 0.5,
                     starvationDays = 40.0, model = "models/feather_duster.glb")
                 BrainKind.NASSARIUS -> base.copy(kind = "INVERT", common = "Nassarius snail", maxLengthCm = 2.0, depthRatio = 0.6, massCoeff = 0.15, activity = "NOCTURNAL",
-                    locomotion = Locomotion("CRAWLING", 0.15, 0.6, 0.0, 90.0), diet = listOf("MYSIS", "PELLET", "FLAKE", "DETRITUS"), feedsPerDay = 0.5,
+                    locomotion = Locomotion("CRAWLING", 0.15, 0.6, 0.0, 90.0), diet = listOf("MYSIS", "PRAWN", "PELLET", "FLAKE", "DETRITUS"), feedsPerDay = 0.5,
                     hardiness = 0.85, starvationDays = 21.0, homeRadiusCm = 60.0, model = "models/nassarius.glb")
                 BrainKind.ASTREA -> base.copy(kind = "INVERT", common = "Astrea snail", maxLengthCm = 4.0, depthRatio = 0.7, massCoeff = 0.15,
                     locomotion = Locomotion("CRAWLING", 0.02, 0.05, 0.0, 30.0), diet = listOf("ALGAE"), grazer = true, feedsPerDay = 4.0,

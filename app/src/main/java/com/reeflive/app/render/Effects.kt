@@ -121,10 +121,11 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
         val HOB = floatArrayOf(72f, 55f, 2.3f)
-        /** Linear colours by FoodKind ordinal: flake #C8A060, mysis #E8D8C0, pellet, nori #2E4A1A, pods. */
+        /** Linear colours by FoodKind ordinal: flake #C8A060, mysis #E8D8C0, pellet, nori #2E4A1A, pods, raw prawn #D88A7A, plankton #5A8A3A. */
         val FOOD_COLORS = arrayOf(
             floatArrayOf(0.578f, 0.352f, 0.117f), floatArrayOf(0.807f, 0.687f, 0.527f), floatArrayOf(0.40f, 0.20f, 0.08f),
             floatArrayOf(0.027f, 0.068f, 0.010f), floatArrayOf(0.75f, 0.72f, 0.65f),
+            floatArrayOf(0.69f, 0.25f, 0.195f), floatArrayOf(0.10f, 0.25f, 0.04f),
         )
 
         /** Flow velocity (cm/s) at a point: trilinear in the solver grid, or an analytic slow gyre. */

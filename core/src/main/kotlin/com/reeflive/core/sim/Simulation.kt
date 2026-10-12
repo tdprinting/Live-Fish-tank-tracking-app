@@ -763,14 +763,14 @@ class Simulation(
     private fun abstractFeed(kind: FoodKind, grams: Double, at: Vec3) {
         var left = if (kind == FoodKind.NORI) 1.0 else grams
         val eaters = organisms.filter { o ->
-            o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind == FoodKind.PODS) &&
+            o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
-                !(o.brainKind == BrainKind.FEATHER_DUSTER && kind != FoodKind.PODS)
-        }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 }
+                !(o.brainKind == BrainKind.FEATHER_DUSTER && !kind.suspended)
+        }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind)) }
         for (o in eaters) {
             if (left <= 0) break
             if (kind == FoodKind.NORI) { o.hunger = max(0.0, o.hunger - 0.4); o.nutritionGreens = 1.0; continue }
-            val want = o.mealGrams * (o.hunger / 0.8) * o.species.dietMatch(kind)
+            val want = o.mealGrams * (o.hunger / 0.8) * o.species.foodPreference(kind)
             val g = min(want, left)
             o.eat(g); left -= g
         }
