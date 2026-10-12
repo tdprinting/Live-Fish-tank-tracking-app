@@ -58,8 +58,19 @@ class AlgaeGrazer(val type: GrazerType, val units: Double)
 /**
  * Per-surface algae cover for the renderer (research 09 A6): `cover[g * SURFACES + s]` in 0..1 for every
  * [AlgaeGroup] g and [AlgaeSurface] s, and `vigor[g]` (0..1, the group's nutrient state; low = pale, starving).
+ *
+ * The front glass is spatial ([GlassMask]): [glassMask] is its [GlassMask.W] × [GlassMask.H] density grid (null while
+ * the pane is untouched) and [glassBase] the cover per group on glass the scraper has not touched; the glass entries
+ * of [cover] are the mean over all glass (scraped stripes included).
  */
-class AlgaeCover(val cover: FloatArray, val vigor: FloatArray) {
+class AlgaeCover(
+    val cover: FloatArray,
+    val vigor: FloatArray,
+    val glassBase: FloatArray? = null,
+    val glassMask: FloatArray? = null,
+    /** [GlassMask.version] of [glassMask], so the renderer re-uploads only when it changed. */
+    val glassMaskVersion: Int = 0,
+) {
     fun cover(g: AlgaeGroup, s: AlgaeSurface): Float = cover[g.ordinal * SURFACES + s.ordinal]
 
     companion object {
@@ -100,6 +111,12 @@ class AlgaeModel(config: TankConfig) {
 
     /** Biomass, g DW, [g * ns + s]. */
     val biomass = DoubleArray(ng * ns)
+    /** Where the glass film is on the front pane (Flipper stripes); glass biomass is spread over the glass by it. */
+    val glassMask = GlassMask(config.lengthCm, config.sandTopCm, config.waterLevelCm)
+    /** Share of the wetted glass area that is the front pane. */
+    val frontShare = config.lengthCm / (2 * (config.lengthCm + config.widthCm))
+    /** Net specific growth (per day) of each group on the glass in the last step: the stripe regrowth rate. */
+    private val glassNet = DoubleArray(ng)
     /** Internal nutrient store per group (A3 clamp: f_nut ≥ store, decays over days of starvation). */
     private val store = DoubleArray(ng) { 1.0 }
     /** Dead algal tissue awaiting remineralisation (A5): labile pool (mg N, mg P, g DW)... */
@@ -166,10 +183,27 @@ class AlgaeModel(config: TankConfig) {
         return if (a > 0) c / a else 0.0
     }
 
-    fun snapshot(): AlgaeCover = AlgaeCover(
-        FloatArray(ng * ns) { coverOf(it / ns, it % ns).toFloat() },
-        FloatArray(ng) { fNut[it].toFloat() },
-    )
+    fun snapshot(): AlgaeCover {
+        val mask = glassMask.export()
+        return AlgaeCover(
+            FloatArray(ng * ns) { coverOf(it / ns, it % ns).toFloat() },
+            FloatArray(ng) { fNut[it].toFloat() },
+            glassBase = if (mask == null) null else FloatArray(ng) { glassBaseCover(it).toFloat() },
+            glassMask = mask,
+            glassMaskVersion = glassMask.version,
+        )
+    }
+
+    /** Glass area weight of the film: the share of the glass still carrying it at the pane-uniform density. */
+    private fun glassWeight(): Double = (frontShare * glassMask.mean + 1 - frontShare).coerceAtLeast(1e-3)
+
+    /** Cover of group [g] on glass the scraper has not touched (the biomass sits on [glassWeight] of the area). */
+    fun glassBaseCover(g: Int): Double {
+        val gl = AlgaeSurface.GLASS.ordinal
+        val cmax = P[g].cmax[gl]
+        if (cmax <= 0) return 0.0
+        return cmax * (1 - exp(-biomass[g * ns + gl] / (area[gl] * glassWeight() * P[g].bHalf)))
+    }
 
     // ============================================================== edits
     /** Set a group's cover on its headline surfaces (sandbox slider, presets); other surfaces keep a seed. */
@@ -182,6 +216,7 @@ class AlgaeModel(config: TankConfig) {
             val frac = (value.coerceAtLeast(0.0) / cmax).coerceIn(0.0, 0.98)
             biomass[gi * ns + si] = max(seedOf(gi, si), -area[si] * P[gi].bHalf * ln(1 - frac))
         }
+        if (AlgaeSurface.GLASS in HEADLINE[gi]) glassMask.fill()
         written[gi] = headline(g)
     }
 
@@ -197,11 +232,40 @@ class AlgaeModel(config: TankConfig) {
 
     /** Owner wipes the glass: every film on the glass loses [fraction] of its biomass (exported, not left to rot). */
     fun wipeGlass(fraction: Double = 0.9) {
+        glassMask.fill()
         val gl = AlgaeSurface.GLASS.ordinal
         for (g in listOf(AlgaeGroup.FILM, AlgaeGroup.DIATOMS, AlgaeGroup.CYANO, AlgaeGroup.DINOS)) {
             val i = g.ordinal * ns + gl
             biomass[i] = max(seedOf(g.ordinal, gl), biomass[i] * (1 - fraction))
         }
+    }
+
+    /**
+     * The owner drags the Flipper over the front glass from (x0, y0) to (x1, y1) (cm from the left end and from the
+     * tank floor): the [widthCm] × [heightCm] pad leaves [SCRAPE_LEFT] of the film it passes over ([GlassMask.scrape]).
+     * Every glass group loses the biomass that sat under the swept cells; [SCRAPE_TO_DEAD] of it sinks as detritus
+     * into the dead pool (remineralises to ammonia and phosphate), the rest is picked off by fish and the filter.
+     * Headline covers in [s] are updated at once. Returns the g DW scraped off.
+     */
+    fun scrapeGlass(s: WaterState, x0: Double, y0: Double, x1: Double, y1: Double, widthCm: Double, heightCm: Double): Double {
+        syncFromState(s)
+        val before = glassWeight()
+        val drop = glassMask.scrape(x0, y0, x1, y1, widthCm / 2, heightCm / 2, SCRAPE_LEFT)
+        if (drop <= 0) return 0.0
+        // biomass under the swept cells: density B / (A · weight) over frontShare · A · drop of the glass
+        val k = (frontShare * drop / before).coerceIn(0.0, 1.0)
+        val gl = AlgaeSurface.GLASS.ordinal
+        var total = 0.0
+        for (gi in 0 until ng) {
+            val i = gi * ns + gl
+            val m = min(biomass[i] * k, max(0.0, biomass[i] - seedOf(gi, gl)))
+            if (m <= 0) continue
+            biomass[i] -= m
+            toDead(gi, m * SCRAPE_TO_DEAD)
+            total += m
+        }
+        writeBack(s)
+        return total
     }
 
     /** Kill [grams] DW of a group outright (die-off scenario): the tissue goes to the dead pool. */
@@ -220,6 +284,7 @@ class AlgaeModel(config: TankConfig) {
     fun copyFrom(o: AlgaeModel) {
         o.biomass.copyInto(biomass); o.store.copyInto(store); o.written.copyInto(written)
         o.flowOverride.copyInto(flowOverride); o.active.copyInto(active)
+        glassMask.copyFrom(o.glassMask); o.glassNet.copyInto(glassNet)
         deadN = o.deadN; deadP = o.deadP; deadDw = o.deadDw; darkH = o.darkH; docOverride = o.docOverride
         oldN = o.oldN; oldP = o.oldP; oldDw = o.oldDw
         initialized = o.initialized
@@ -336,6 +401,7 @@ class AlgaeModel(config: TankConfig) {
         var nDemand = 0.0; var pDemand = 0.0; var siDemand = 0.0
         growthPerDay.fill(0.0); grazedPerDay.fill(0.0); deathPerDay.fill(0.0)
         val cover = DoubleArray(ng * ns) { coverOf(it / ns, it % ns) }
+        glassNet.fill(0.0)
         for (si in 0 until ns) {
             val par = light * PAR_AT_FULL[si]
             val vel = flowOverride[si].takeUnless { it.isNaN() } ?: max(0.5, BASE_FLOW[si] * flowEff)
@@ -360,6 +426,7 @@ class AlgaeModel(config: TankConfig) {
                 var d = dBase[gi]
                 if (gi == AlgaeGroup.CYANO.ordinal) d += 0.2 * ((vel - 10) / 5).coerceIn(0.0, 1.0)     // flow raised: mats lift off
                 if (gi == AlgaeGroup.HAIR.ordinal) d += 0.3 * ((vel - 40) / 20).coerceIn(0.0, 1.0)    // tears off
+                if (si == AlgaeSurface.GLASS.ordinal) glassNet[gi] = max(0.0, rate - d)
                 val die = min(b, d * b * days)
                 val eaten = min(graze[i], max(0.0, b - die))
                 biomass[i] = b + grow - die - eaten
@@ -408,6 +475,14 @@ class AlgaeModel(config: TankConfig) {
         if (s.siLeach > 1e-6) {
             s.silicate += s.siLeach * days
             s.siLeach *= exp(-days * ln(2.0) / 14.0)
+        }
+
+        // ---- scraped stripes on the front glass grow back at the glass film's net rate (cover-weighted) ----
+        if (!glassMask.isFull) {
+            var wSum = 0.0; var rSum = 0.0
+            val gl = AlgaeSurface.GLASS.ordinal
+            for (gi in 0 until ng) { val c = cover[gi * ns + gl]; wSum += c; rSum += c * glassNet[gi] }
+            glassMask.regrow(if (wSum > 1e-6) rSum / wSum else glassNet[AlgaeGroup.FILM.ordinal], days)
         }
 
         // ---- hidden seed pools: every group can come back ----
@@ -507,6 +582,10 @@ class AlgaeModel(config: TankConfig) {
         const val COMP_HALF_G = 1.0
         const val CYANO_DOC_BASE = 0.4
         const val CYANO_DOC_GAIN = 1.2
+        /** Film a Flipper pass leaves on the glass it slides over (felt pad: one pass takes ~90 %, est.). */
+        const val SCRAPE_LEFT = 0.1
+        /** Share of scraped film that settles as detritus; the rest is eaten by fish or caught by the filter (est.). */
+        const val SCRAPE_TO_DEAD = 0.5
 
         private fun d(vararg v: Double) = v
 
