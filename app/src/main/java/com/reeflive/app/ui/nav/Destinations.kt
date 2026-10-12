@@ -1,12 +1,7 @@
 package com.reeflive.app.ui.nav
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
-import com.reeflive.app.ui.components.EmptyState
-import com.reeflive.app.ui.components.ScreenHeader
 import com.reeflive.app.ui.care.CalculatorRoute
 import com.reeflive.app.ui.care.CareRoute
 import com.reeflive.app.ui.care.TaskDetailRoute
@@ -24,19 +19,16 @@ import com.reeflive.app.ui.more.ExportRoute
 import com.reeflive.app.ui.more.JournalEditRoute
 import com.reeflive.app.ui.more.JournalListRoute
 import com.reeflive.app.ui.more.MoreRoute
+import com.reeflive.app.ui.more.AboutRoute
+import com.reeflive.app.ui.more.LightScheduleRoute
+import com.reeflive.app.ui.more.SettingsRoute
+import com.reeflive.app.ui.more.TankSettingsRoute
+import com.reeflive.app.ui.more.TargetsRoute
 
 /*
  * Route → screen wiring. Each destination builds its ViewModel via [reefViewModel] and hands plain state
- * to a stateless *Content composable. Screens land milestone by milestone; until then a calm placeholder.
+ * to a stateless *Content composable.
  */
-
-@Composable
-private fun Placeholder(title: String, onBack: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader(title, onBack = onBack)
-        EmptyState("Coming up next", "This part of ReefLive is still being built.")
-    }
-}
 
 @Composable
 fun DashboardDestination(nav: NavHostController) {
@@ -109,11 +101,23 @@ fun EquipmentListDestination(nav: NavHostController, onBack: () -> Unit) =
 fun JournalListDestination(nav: NavHostController, onBack: () -> Unit) =
     JournalListRoute(onBack, onOpen = { nav.navigate(Routes.journal(it)) }, onAdd = { nav.navigate(Routes.journal(Routes.NEW)) })
 @Composable fun JournalEditDestination(id: String, onBack: () -> Unit) = JournalEditRoute(id, onBack)
-@Composable fun LightsDestination(onBack: () -> Unit) = Placeholder("Light schedule", onBack)
-@Composable fun TankDestination(onBack: () -> Unit) = Placeholder("Tank", onBack)
-@Composable fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = Placeholder("Settings", onBack)
-@Composable fun TargetsDestination(onBack: () -> Unit) = Placeholder("Targets", onBack)
+@Composable fun LightsDestination(onBack: () -> Unit) = LightScheduleRoute(onBack)
+@Composable fun TankDestination(onBack: () -> Unit) = TankSettingsRoute(onBack)
+@Composable
+fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = SettingsRoute(
+    onBack = onBack,
+    onTargets = { nav.navigate(Routes.TARGETS) },
+    onTank = { nav.navigate(Routes.TANK) },
+    onExport = { nav.navigate(Routes.EXPORT) },
+    onWiped = {
+        nav.navigate(Routes.ONBOARDING) {
+            popUpTo(Routes.DASHBOARD) { inclusive = true }
+            launchSingleTop = true
+        }
+    },
+)
+@Composable fun TargetsDestination(nav: NavHostController, onBack: () -> Unit) = TargetsRoute(onBack, onOpenParam = { nav.navigate(Routes.param(it)) })
 @Composable fun ExportDestination(onBack: () -> Unit) = ExportRoute(onBack)
-@Composable fun AboutDestination(onBack: () -> Unit) = Placeholder("About", onBack)
+@Composable fun AboutDestination(onBack: () -> Unit) = AboutRoute(onBack)
 
 @Composable fun QuickLogHost(request: QuickLogRequest, onDismiss: () -> Unit) = QuickLogRoute(request.paramIds, onDismiss)

@@ -315,42 +315,51 @@ private fun TankPage(form: TankForm, onChange: (TankForm) -> Unit) {
             Text(form.summary, style = MaterialTheme.typography.titleMedium, color = c.text)
         }
         Spacer(Modifier.height(16.dp))
-        ReefTextField(form.name, { onChange(form.copy(name = it)) }, label = "Name", modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Dimensions", style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.weight(1f))
-            SegmentedPills(listOf("in", "cm"), if (form.inches) 0 else 1, { onChange(form.withInches(it == 0)) }, Modifier.width(120.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        val unit = if (form.inches) "in" else "cm"
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReefTextField(form.length, { onChange(form.copy(length = it).recomputed()) }, Modifier.weight(1f), label = "Length", numeric = true, suffix = { UnitText(unit) })
-            ReefTextField(form.width, { onChange(form.copy(width = it).recomputed()) }, Modifier.weight(1f), label = "Width", numeric = true, suffix = { UnitText(unit) })
-            ReefTextField(form.height, { onChange(form.copy(height = it).recomputed()) }, Modifier.weight(1f), label = "Height", numeric = true, suffix = { UnitText(unit) })
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReefTextField(form.volume, { onChange(form.copy(volume = it, volumeEdited = true)) }, Modifier.weight(1f), label = "Display volume", numeric = true, suffix = { UnitText("gal") })
-            ReefTextField(form.sump, { onChange(form.copy(sump = it)) }, Modifier.weight(1f), label = "Sump", numeric = true, suffix = { UnitText("gal") })
-        }
-        form.grossGallons?.let { g ->
-            Spacer(Modifier.height(6.dp))
+        TankFormFields(form, onChange)
+    }
+}
+
+/** Tank name, dimensions, volumes and reef type — shared by onboarding and Tank settings. */
+@Composable
+fun TankFormFields(form: TankForm, onChange: (TankForm) -> Unit) {
+    val c = ReefTheme.colors
+    Column {
+            ReefTextField(form.name, { onChange(form.copy(name = it)) }, label = "Name", modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Glass volume ≈ ${Fmt.trim(g, 0)} gal", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.weight(1f))
-                if (form.volumeEdited) TextAction("Use it", onClick = { onChange(form.copy(volumeEdited = false).recomputed()) })
+                Text("Dimensions", style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.weight(1f))
+                SegmentedPills(listOf("in", "cm"), if (form.inches) 0 else 1, { onChange(form.withInches(it == 0)) }, Modifier.width(120.dp))
             }
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("Coral type", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-        Spacer(Modifier.height(8.dp))
-        SegmentedPills(
-            ReefType.entries.map { if (it == ReefType.SOFT) "Soft" else it.label },
-            ReefType.entries.indexOf(form.reefType),
-            { onChange(form.copy(reefType = ReefType.entries[it])) },
-            Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(6.dp))
-        Text("Picks the default target ranges. You can fine-tune them later.", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
+            Spacer(Modifier.height(8.dp))
+            val unit = if (form.inches) "in" else "cm"
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReefTextField(form.length, { onChange(form.copy(length = it).recomputed()) }, Modifier.weight(1f), label = "Length", numeric = true, suffix = { UnitText(unit) })
+                ReefTextField(form.width, { onChange(form.copy(width = it).recomputed()) }, Modifier.weight(1f), label = "Width", numeric = true, suffix = { UnitText(unit) })
+                ReefTextField(form.height, { onChange(form.copy(height = it).recomputed()) }, Modifier.weight(1f), label = "Height", numeric = true, suffix = { UnitText(unit) })
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReefTextField(form.volume, { onChange(form.copy(volume = it, volumeEdited = true)) }, Modifier.weight(1f), label = "Display volume", numeric = true, suffix = { UnitText("gal") })
+                ReefTextField(form.sump, { onChange(form.copy(sump = it)) }, Modifier.weight(1f), label = "Sump", numeric = true, suffix = { UnitText("gal") })
+            }
+            form.grossGallons?.let { g ->
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Glass volume ≈ ${Fmt.trim(g, 0)} gal", style = MaterialTheme.typography.bodySmall, color = c.textTertiary, modifier = Modifier.weight(1f))
+                    if (form.volumeEdited) TextAction("Use it", onClick = { onChange(form.copy(volumeEdited = false).recomputed()) })
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Coral type", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+            Spacer(Modifier.height(8.dp))
+            SegmentedPills(
+                ReefType.entries.map { if (it == ReefType.SOFT) "Soft" else it.label },
+                ReefType.entries.indexOf(form.reefType),
+                { onChange(form.copy(reefType = ReefType.entries[it])) },
+                Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("Picks the default target ranges. You can fine-tune them later.", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
     }
 }
 

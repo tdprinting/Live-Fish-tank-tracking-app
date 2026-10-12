@@ -179,7 +179,7 @@ private fun androidx.navigation.NavGraphBuilder.reefGraph(nav: NavHostController
     composable(Routes.LIGHTS) { LightsDestination(back) }
     composable(Routes.TANK) { TankDestination(back) }
     composable(Routes.SETTINGS) { SettingsDestination(nav, back) }
-    composable(Routes.TARGETS) { TargetsDestination(back) }
+    composable(Routes.TARGETS) { TargetsDestination(nav, back) }
     composable(Routes.EXPORT) { ExportDestination(back) }
     composable(Routes.ABOUT) { AboutDestination(back) }
 }
