@@ -65,7 +65,9 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
         }
 
         /** Resolves includes and injects defines (pure; unit-testable). */
-        fun preprocess(src: String, defines: Map<String, String>, source: (String) -> String, depth: Int = 0): String {
+        fun preprocess(src: String, defines: Map<String, String>, source: (String) -> String): String = preprocessAt(src, defines, source, 0)
+
+        private fun preprocessAt(src: String, defines: Map<String, String>, source: (String) -> String, depth: Int): String {
             require(depth < 8) { "include depth" }
             val sb = StringBuilder()
             var versionSeen = false
@@ -79,7 +81,7 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
                     }
                     t.startsWith("#include") -> {
                         val file = t.substringAfter('"').substringBefore('"')
-                        sb.append(preprocess(source(file), emptyMap(), source, depth + 1)).append('\n')
+                        sb.append(preprocessAt(source(file), emptyMap(), source, depth + 1)).append('\n')
                     }
                     else -> sb.append(line).append('\n')
                 }
