@@ -120,7 +120,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val DETRITUS = 40
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
-        val HOB = floatArrayOf(71f, 55f, 1.5f)
+        val HOB = floatArrayOf(72f, 55f, 2.3f)
         /** Linear colours by FoodKind ordinal: flake #C8A060, mysis #E8D8C0, pellet, nori #2E4A1A, pods. */
         val FOOD_COLORS = arrayOf(
             floatArrayOf(0.578f, 0.352f, 0.117f), floatArrayOf(0.807f, 0.687f, 0.527f), floatArrayOf(0.40f, 0.20f, 0.08f),
