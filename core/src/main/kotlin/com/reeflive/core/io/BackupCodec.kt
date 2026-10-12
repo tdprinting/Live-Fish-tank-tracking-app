@@ -36,6 +36,8 @@ data class Backup(
     val journal: List<JournalEntry> = emptyList(),
     val photos: List<Photo> = emptyList(),
     val lightSchedules: List<LightSchedule> = emptyList(),
+    /** Supplies, feeding log and treatments (kept outside Room). Absent in older backups. */
+    val extras: com.reeflive.core.extras.ReefExtras? = null,
 ) {
     companion object {
         const val VERSION = 1
