@@ -13,6 +13,8 @@ import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.WaterState
+import com.reeflive.core.sim.timelapse.TimelapseSpec
+import com.reeflive.core.sim.timelapse.TimelapseState
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,6 +60,12 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val selectedStats: StateFlow<OrganismStats?> = combine(hud, _selectedOrganismId) { s, id ->
         id?.let { sel -> s.stats.firstOrNull { it.id == sel } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Time-lapse state: idle / running with progress / done with the recording and report. */
+    val timelapse: StateFlow<TimelapseState> = holder.timelapse
+    fun startTimelapse(spec: TimelapseSpec) = holder.startTimelapse(spec)
+    fun cancelTimelapse() = holder.cancelTimelapse()
+    fun clearTimelapse() = holder.clearTimelapse()
 
     /** Summary for the Dashboard peek (fish count, any sick fish, last event). */
     val peek: StateFlow<LivePeek> = holder.peek

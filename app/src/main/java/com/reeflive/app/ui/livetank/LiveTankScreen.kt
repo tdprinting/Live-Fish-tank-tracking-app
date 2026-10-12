@@ -3,6 +3,7 @@ package com.reeflive.app.ui.livetank
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +34,7 @@ import com.reeflive.app.ui.live.SandboxActions
 import com.reeflive.app.ui.live.SandboxPanel
 import com.reeflive.app.ui.live.SandboxScenario
 import com.reeflive.app.ui.live.SandboxState
+import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.toFollowState
 import com.reeflive.app.ui.live.waterReadouts
@@ -70,6 +72,8 @@ fun LiveTankScreen(
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
     var sheet by remember { mutableStateOf(false) }
+    var lapse by remember { mutableStateOf(false) }
+    val lapseState by vm.timelapse.collectAsStateWithLifecycle()
     var advanced by remember { mutableStateOf(false) }
 
     val lightPct = hud.lightIntensity * 100.0
@@ -118,12 +122,20 @@ fun LiveTankScreen(
                 FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
             } else {
                 Column(Modifier.align(Alignment.BottomCenter).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (mode == SimMode.SANDBOX) {
-                        ReefButton("Sandbox", { sheet = true }, Modifier.fillMaxWidth(), kind = ButtonKind.TONAL)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (mode == SimMode.SANDBOX) ReefButton("Sandbox", { sheet = true }, Modifier.weight(1f), kind = ButtonKind.TONAL)
+                        ReefButton("Time-lapse", { lapse = true }, Modifier.weight(1f), kind = ButtonKind.TONAL)
                     }
                     if (st != null) FishCard(st.toFishCardState(), onFollow = { vm.follow(st.id) }, onClose = { vm.select(null) })
                 }
             }
+        }
+        if (lapse) {
+            TimelapseSheet(
+                state = lapseState, water = hud.water,
+                onStart = vm::startTimelapse, onCancel = vm::cancelTimelapse, onNew = vm::clearTimelapse,
+                onDismiss = { lapse = false },
+            )
         }
         if (sheet && mode == SimMode.SANDBOX) {
             SandboxPanel(
