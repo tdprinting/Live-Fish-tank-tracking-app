@@ -31,6 +31,12 @@ class Camera {
     private var followPitch = 0.12f
     private var followZoom = 1f
     private var followFresh = true
+    /**
+     * Smoothed profile heading around the followed fish (critically damped). Headings are wrapped to (−π, π] with
+     * 0 = in front (+Z) and kept in the front band, and the spring moves linearly between them, so a flank change
+     * always swings the camera round through the front glass, never behind the fish.
+     */
+    private val followHeading = YawSpring(FOLLOW_YAW_OMEGA, shortestArc = false)
 
     // ---- outputs (valid after update) ----
     val eye = FloatArray(3)
@@ -51,7 +57,7 @@ class Camera {
     /** Starts (id != null) or stops following. Stopping keeps the current view and resumes orbiting around it. */
     fun follow(id: String?) {
         if (id == followId) return
-        if (id == null) releaseFollow() else { followId = id; followYaw = 0f; followPitch = 0.12f; followZoom = 1f; followFresh = true }
+        if (id == null) releaseFollow() else { followId = id; followYaw = 0f; followPitch = 0.12f; followZoom = 1f; followFresh = true; followHeading.reset() }
     }
 
     /** One-finger drag in pixels. In follow mode it swings the camera around the fish. */
@@ -97,7 +103,7 @@ class Camera {
             releaseFollow(); onFollowLost(fid)
         }
         if (followId != null && rig != null) {
-            followTarget(rig, sdf, desiredEye, desiredAim)
+            followTarget(rig, sdf, desiredEye, desiredAim, dt.coerceIn(0f, 0.1f))
             rate = if (followFresh) 2.5f else 5f
         } else {
             orbitEye(desiredEye); desiredAim[0] = target[0]; desiredAim[1] = target[1]; desiredAim[2] = target[2]
@@ -130,7 +136,7 @@ class Camera {
     val effectiveDistance: Float get() = distance * fitDistance(aspect) / DEFAULT_DISTANCE
 
     /** Desired follow eye/aim for [rig]: profile view from the front-glass side, ~3 body lengths away. */
-    internal fun followTarget(rig: FishRig, sdf: Sdf?, eyeOut: FloatArray, aimOut: FloatArray) {
+    internal fun followTarget(rig: FishRig, sdf: Sdf?, eyeOut: FloatArray, aimOut: FloatArray, dt: Float = 0f) {
         val bl = rig.scale
         val s = rig.spine
         // forward = head − a point 1/3 down the body
@@ -139,13 +145,32 @@ class Camera {
         if (fl < 1e-4f) { fx = 1f; fy = 0f; fz = 0f } else { fx /= fl; fy /= fl; fz /= fl }
         // aim at mid-body (spine index 6 ≈ 0.4 BL behind the head)
         aimOut[0] = s[24]; aimOut[1] = s[25]; aimOut[2] = s[26]
-        // horizontal side vector, chosen toward the viewer (+Z) so the default view is through the front glass
+        // horizontal side vector (either flank); a fish heading straight up/down keeps the last heading
         var sx = -fz; var sz = fx
         val sl = sqrt(sx * sx + sz * sz)
-        if (sl < 1e-3f) { sx = 0f; sz = 1f } else { sx /= sl; sz /= sl }
-        if (sz < 0f) { sx = -sx; sz = -sz }
+        val profile: Float
+        if (sl < 1e-3f) {
+            profile = if (followHeading.initialized) followHeading.value else 0f
+        } else {
+            sx /= sl; sz /= sl
+            // Keep the flank the camera is already on (no 180° flip each time the fish turns through
+            // facing the glass); only cross over once it would look in from well behind (through the
+            // back glass / rock). A fresh follow starts on the viewer's (+Z) side.
+            val a = atan2(sx, sz)
+            val b = wrapAngle(a + PI.toFloat())
+            profile = if (!followHeading.initialized) {
+                if (sz >= 0f) a else b
+            } else {
+                val cur = followHeading.target
+                var pick = if (kotlin.math.abs(a - cur) <= kotlin.math.abs(b - cur)) a else b
+                if (cos(pick) < -FLANK_SWITCH_COS) pick = if (pick == a) b else a
+                pick
+            }
+        }
+        // Smooth the heading with a critically damped spring so turns swing the camera instead of stepping it.
+        val heading = if (!followHeading.initialized || dt <= 0f) followHeading.snap(profile) else followHeading.step(profile, dt)
         // profile direction, then the user's swing (one-finger drag)
-        val base = atan2(sx, sz) + followYaw
+        val base = heading + followYaw
         val d = (bl * 3.2f).coerceIn(MIN_FOLLOW, MAX_FOLLOW) * followZoom
         val cp = cos(followPitch)
         var ex = aimOut[0] + d * sin(base) * cp
@@ -215,6 +240,19 @@ class Camera {
         const val MIN_FOLLOW = 7f
         const val MAX_FOLLOW = 45f
         const val CLEARANCE = 1.5f
+        /** Follow-heading spring stiffness (rad/s); critically damped, settles in ≈ 4.7 / ω ≈ 1.3 s. */
+        const val FOLLOW_YAW_OMEGA = 3.5f
+        /** Cross to the other flank once the kept one would view from behind by more than this (cos of the angle off +Z). */
+        const val FLANK_SWITCH_COS = 0.35f
+
+        /** Wraps an angle in radians to (−π, π]. */
+        fun wrapAngle(a: Float): Float {
+            val twoPi = (2.0 * PI).toFloat()
+            var r = a % twoPi
+            if (r > PI.toFloat()) r -= twoPi
+            if (r <= -PI.toFloat()) r += twoPi
+            return r
+        }
 
         /**
          * Default orbit distance that makes the whole front glass fill the viewport of [aspect] (w / h): close in
@@ -259,5 +297,41 @@ class Camera {
                 p[0] += (g.x * push).toFloat(); p[1] += (g.y * push).toFloat(); p[2] += (g.z * push).toFloat()
             }
         }
+    }
+}
+
+/**
+ * Critically damped spring on an angle (radians), stable for any dt (exact solution of the damped ODE); from rest
+ * it never overshoots. Targets and [value] are wrapped to (−π, π]. With [shortestArc] the spring takes the short
+ * way across the ±π seam; without it, it moves linearly inside (−π, π] (never crossing ±π), which the follow
+ * camera uses so its heading always swings through the front (0).
+ */
+class YawSpring(val omega: Float, val shortestArc: Boolean = true) {
+    var value = 0f; private set
+    var velocity = 0f; private set
+    /** The last target, wrapped. */
+    var target = 0f; private set
+    var initialized = false; private set
+
+    fun reset() { initialized = false; value = 0f; velocity = 0f; target = 0f }
+
+    fun snap(angle: Float): Float {
+        value = Camera.wrapAngle(angle); target = value; velocity = 0f; initialized = true
+        return value
+    }
+
+    fun step(angle: Float, dt: Float): Float {
+        if (!initialized) return snap(angle)
+        target = Camera.wrapAngle(angle)
+        if (dt <= 0f) return value
+        // x = offset from the target along the shortest arc; closed-form critically damped update
+        val x0 = if (shortestArc) Camera.wrapAngle(value - target) else value - target
+        val w = omega
+        val e = exp(-w * dt)
+        val c = velocity + w * x0
+        val x1 = (x0 + c * dt) * e
+        velocity = (c - w * (x0 + c * dt)) * e
+        value = if (shortestArc) Camera.wrapAngle(target + x1) else (target + x1).coerceIn(-PI.toFloat(), PI.toFloat())
+        return value
     }
 }

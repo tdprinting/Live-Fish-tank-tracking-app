@@ -144,6 +144,51 @@ class CameraTest {
         assertNull(cam.followId)
     }
 
+    @Test fun yawSpringTakesTheShortArcWithoutOvershoot() {
+        val s = YawSpring(Camera.FOLLOW_YAW_OMEGA)
+        s.snap(3.0f)
+        // target just across the ±π seam: the short way is +0.28 rad, never back through 0
+        var prevDist = abs(Camera.wrapAngle(s.value - (-3.0f)))
+        repeat(240) {
+            val v = s.step(-3.0f, 1f / 60f)
+            assertTrue("stays near the seam: $v", abs(v) > 2.9f)
+            val d = abs(Camera.wrapAngle(v - (-3.0f)))
+            assertTrue("monotone approach (no overshoot)", d <= prevDist + 1e-5f)
+            prevDist = d
+        }
+        assertEquals(0f, Camera.wrapAngle(s.value - (-3.0f)), 1e-3f)
+        assertEquals(0f, Camera.wrapAngle(7f - (7f - 2f * Math.PI.toFloat())), 1e-5f)
+    }
+
+    @Test fun followCameraDoesNotJumpWhenTheFishTurnsTowardTheGlass() {
+        val cam = Camera()
+        val rig = straightRig("f", 60f, 30f, 16f, 8f)
+        // heading θ in the XZ plane: 0 = +X, π/2 = +Z (toward the viewer), π = −X
+        fun aimAt(theta: Float) {
+            val dx = kotlin.math.cos(theta); val dz = kotlin.math.sin(theta)
+            for (i in 0 until 16) {
+                val t = 4f - i * 8f / 15f
+                rig.spine[i * 4] = 60f + dx * t; rig.spine[i * 4 + 1] = 30f; rig.spine[i * 4 + 2] = 16f + dz * t
+            }
+        }
+        aimAt(0f)
+        cam.follow("f")
+        repeat(240) { cam.update(1f / 60f, 1080, 1920, null, { rig }) { } }
+        assertTrue("starts on the viewer's side", cam.eye[2] > 16f)
+        var maxStep = 0f
+        var prev = cam.eye.copyOf()
+        // a quick U-turn through facing the front glass (0.5 s), then hold
+        for (f in 0 until 300) {
+            aimAt((Math.PI * minOf(f / 30.0, 1.0)).toFloat())
+            cam.update(1f / 60f, 1080, 1920, null, { rig }) { }
+            val dx = cam.eye[0] - prev[0]; val dy = cam.eye[1] - prev[1]; val dz = cam.eye[2] - prev[2]
+            maxStep = maxOf(maxStep, sqrt(dx * dx + dy * dy + dz * dz))
+            prev = cam.eye.copyOf()
+        }
+        assertTrue("ends on the viewer's side: ${cam.eye[2]}", cam.eye[2] > 16f)
+        assertTrue("smooth: max step $maxStep cm/frame", maxStep < 1.5f)
+    }
+
     @Test fun rayThroughCentreLooksAtTarget() {
         val cam = Camera()
         cam.update(0.016f, 1000, 1000, null, { null }) { }
