@@ -1,0 +1,301 @@
+package com.reeflive.app.live
+
+import android.content.res.AssetManager
+import com.reeflive.app.data.repo.Clock
+import com.reeflive.app.data.repo.LightScheduleRepository
+import com.reeflive.app.data.repo.LivestockRepository
+import com.reeflive.app.data.repo.MeasurementRepository
+import com.reeflive.core.live.FastForward
+import com.reeflive.core.live.LivePeek
+import com.reeflive.core.live.RealityInit
+import com.reeflive.core.live.Scenario
+import com.reeflive.core.live.ScenarioQueue
+import com.reeflive.core.model.LightSchedule as DbLightSchedule
+import com.reeflive.core.model.Livestock
+import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.LivestockSeed
+import com.reeflive.core.sim.RockData
+import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.Simulation
+import com.reeflive.core.sim.SpeciesCatalog
+import com.reeflive.core.sim.TankConfig
+import com.reeflive.core.sim.WaterState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.util.concurrent.Executors
+
+enum class SimMode { REALITY, SANDBOX }
+
+/**
+ * Owns the [Simulation] on a dedicated "sim" thread (ARCHITECTURE §9) and glues it to the app data.
+ *
+ * - REALITY: initialised from the latest logged values, alive livestock and the active light schedule; runs 1x;
+ *   a newly logged measurement is applied as a `SetParam` as soon as the repository flow emits (well under 2 s).
+ * - SANDBOX: a forked copy of reality's current state with a speed multiplier; [resetSandbox] restores the fork.
+ * - [onForeground]/[onBackground]: the loop only runs while the Live tab is RESUMED. Returning fast-forwards the
+ *   reality sim by the elapsed wall time, capped at 24 h of sim ([FastForward]).
+ *
+ * All simulation state is confined to the sim thread; the public API is safe to call from any thread.
+ */
+class SimulationHolder(
+    private val measurements: MeasurementRepository,
+    private val livestock: LivestockRepository,
+    private val lights: LightScheduleRepository,
+    private val assets: AssetManager?,
+    private val clock: Clock = Clock.SYSTEM,
+) {
+    private val executor = Executors.newSingleThreadExecutor { Thread(it, "sim").apply { isDaemon = true } }
+    private val scope = CoroutineScope(SupervisorJob() + executor.asCoroutineDispatcher())
+
+    private val _snapshots = MutableStateFlow(SimSnapshot.EMPTY)
+    /** Latest snapshot at ~20 Hz while running (renderer / HUD). */
+    val snapshots: StateFlow<SimSnapshot> = _snapshots.asStateFlow()
+
+    private val _mode = MutableStateFlow(SimMode.REALITY)
+    val mode: StateFlow<SimMode> = _mode.asStateFlow()
+
+    private val _speed = MutableStateFlow(1.0)
+    /** Sandbox speed multiplier (1..1000). Reality always runs at 1x. */
+    val speed: StateFlow<Double> = _speed.asStateFlow()
+
+    private val _peek = MutableStateFlow(LivePeek())
+    /** Dashboard peek summary; follows the reality sim (kept up to date even while the tab is away). */
+    val peek: StateFlow<LivePeek> = _peek.asStateFlow()
+
+    private val _running = MutableStateFlow(false)
+    val running: StateFlow<Boolean> = _running.asStateFlow()
+
+    // ---- confined to the sim thread ----
+    private var species: SpeciesCatalog? = null
+    private var rock: RockData? = null
+    private var reality: Simulation? = null
+    private var sandbox: Simulation? = null
+    private var fork: Fork? = null
+    private var lastWallMs = HashMap<Simulation, Long>()
+    private val scenarios = ScenarioQueue()
+    private var tickJob: Job? = null
+    private var foreground = false
+    private var lastEvent: String? = null
+
+    private var latestValues: Map<String, Double> = emptyMap()
+    private var alive: List<Livestock> = emptyList()
+    private var schedule: DbLightSchedule? = null
+    private var appliedValues: Map<String, Double> = emptyMap()
+    private var structureKey: Pair<List<Livestock>, DbLightSchedule?>? = null
+
+    private class Fork(val water: WaterState, val seeds: List<LivestockSeed>)
+
+    private val active: Simulation? get() = if (_mode.value == SimMode.SANDBOX) sandbox ?: reality else reality
+
+    init {
+        scope.launch {
+            combine(measurements.latestValues(), livestock.alive(), lights.active()) { v, a, l -> Triple(v, a, l) }
+                .collect { (v, a, l) -> onInputs(v, a, l) }
+        }
+    }
+
+    // ============================================================== public API (any thread)
+    fun enqueue(cmd: Command) { scope.launch { active?.enqueue(cmd) } }
+
+    fun setMode(m: SimMode) { scope.launch { switchMode(m) } }
+
+    fun setSpeed(speed: Double) {
+        val s = speed.coerceIn(1.0, 1000.0)
+        _speed.value = s
+        scope.launch { sandbox?.speed = s }
+    }
+
+    /** Restores the sandbox to the state it was forked from. */
+    fun resetSandbox() {
+        scope.launch {
+            val f = fork ?: return@launch
+            scenarios.clear()
+            sandbox?.enqueue(Command.ResetToReality(f.water.copy(), f.seeds))
+        }
+    }
+
+    fun runScenario(s: Scenario) {
+        scope.launch {
+            val sim = active ?: return@launch
+            if (_mode.value != SimMode.SANDBOX) return@launch
+            scenarios.schedule(sim.simTimeSec, s.steps())
+        }
+    }
+
+    /** The Live tab reached RESUMED. */
+    fun onForeground() {
+        scope.launch {
+            foreground = true
+            startLoop()
+        }
+    }
+
+    /** The Live tab left RESUMED. Stops ticking; the reality sim catches up on the next [onForeground]. */
+    fun onBackground() {
+        scope.launch {
+            foreground = false
+            tickJob?.cancel(); tickJob = null
+            _running.value = false
+        }
+    }
+
+    // ============================================================== sim thread
+    private fun nowMs() = clock.now()
+
+    private fun onInputs(v: Map<String, Double>, a: List<Livestock>, l: DbLightSchedule?) {
+        latestValues = v; alive = a; schedule = l
+        val key = a to l
+        val sim = reality
+        if (sim == null || key != structureKey) {
+            structureKey = key
+            buildReality(carryWater = sim?.water?.s, carryTime = sim?.simTimeSec)
+            return
+        }
+        // a newly logged measurement: apply the changed values to the reality sim right away
+        RealityInit.changedCommands(appliedValues, v).forEach { sim.enqueue(it) }
+        appliedValues = v
+        if (!_running.value) { sim.stepWall(0.0); publish(sim) }   // flush the commands so a paused tab shows them too
+    }
+
+    private fun ensureAssets() {
+        if (species == null) {
+            species = SpeciesCatalog.fromClasspath(alive.map { it.speciesId }.plus(com.reeflive.core.sim.DefaultStock.all.map { it.speciesId }).distinct())
+        } else {
+            val ids = alive.map { it.speciesId }.filterNot { species!!.has(it) }.distinct()
+            if (ids.isNotEmpty()) SpeciesCatalog.fromClasspath(ids).all().forEach { species!!.put(it) }
+        }
+        if (rock == null) {
+            rock = runCatching {
+                val am = assets ?: error("no assets")
+                RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() })
+            }.getOrElse { RockData.defaultTank() }
+        }
+    }
+
+    private fun localSecondsOfDay(): Double {
+        val t = Instant.ofEpochMilli(nowMs()).atZone(ZoneId.systemDefault()).toLocalTime()
+        return t.toSecondOfDay() + t.nano / 1e9
+    }
+
+    private fun buildReality(carryWater: WaterState?, carryTime: Double?) {
+        ensureAssets()
+        val water = carryWater?.copy() ?: RealityInit.waterFrom(latestValues)
+        val sim = Simulation(
+            config = TankConfig(),
+            species = species!!,
+            rock = rock!!,
+            startTimeSec = carryTime ?: localSecondsOfDay(),
+            initialWater = water,
+            livestock = RealityInit.seedsFrom(alive),
+            lights = RealityInit.lightsFrom(schedule),
+        )
+        sim.speed = 1.0
+        appliedValues = latestValues
+        reality?.let { lastWallMs.remove(it) }
+        reality = sim
+        lastWallMs[sim] = nowMs()
+        if (carryWater != null) RealityInit.changedCommands(emptyMap(), latestValues).forEach { sim.enqueue(it) }
+        sim.stepWall(0.0)
+        publish(sim)
+        if (foreground && tickJob == null) startLoop()
+    }
+
+    private fun switchMode(m: SimMode) {
+        if (_mode.value == m && (m == SimMode.REALITY || sandbox != null)) return
+        val real = reality
+        if (m == SimMode.SANDBOX) {
+            if (real == null) { _mode.value = m; return }
+            val sb = forkSandbox(real)
+            sandbox = sb
+            _mode.value = m
+            publish(sb)
+        } else {
+            _mode.value = m
+            sandbox = null; fork = null; scenarios.clear()
+            real?.let { catchUp(it); publish(it) }
+        }
+    }
+
+    private fun forkSandbox(real: Simulation): Simulation {
+        val seeds = real.organisms.filter { it.alive }.map {
+            LivestockSeed(it.species.id, it.nickname, it.lengthCm, it.role, it.placement, it.id, it.variant)
+        } + real.corals.map { LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id) }
+        val water = real.water.s.copy()
+        fork = Fork(water.copy(), seeds)
+        val sb = Simulation(
+            config = real.config.copy(predationEnabled = true),
+            species = species!!,
+            rock = rock!!,
+            seed = real.config.seed + 17,
+            startTimeSec = real.simTimeSec,
+            initialWater = water,
+            livestock = seeds,
+            lights = com.reeflive.core.sim.LightSchedule(real.lights.points),
+        )
+        sb.speed = _speed.value
+        lastWallMs[sb] = nowMs()
+        return sb
+    }
+
+    /** Skip [sim] forward by the wall time since it last ran (reality only; capped at 24 h of sim). */
+    private fun catchUp(sim: Simulation) {
+        val now = nowMs()
+        val last = lastWallMs[sim] ?: now
+        lastWallMs[sim] = now
+        val secs = FastForward.simSeconds(now - last, speed = 1.0)
+        if (secs >= FastForward.MIN_SIM_SEC) sim.advanceAbstract(secs)
+        else sim.stepWall(0.0)
+        publish(sim)
+    }
+
+    private fun startLoop() {
+        if (tickJob != null) return
+        active?.let { if (it === reality) catchUp(it) }
+        active?.let { publish(it) }
+        _running.value = true
+        tickJob = scope.launch {
+            var last = System.nanoTime()
+            while (isActive) {
+                val sim = active
+                val t0 = System.nanoTime()
+                val dt = ((t0 - last) / 1e9).coerceIn(0.0, 0.1)
+                last = t0
+                if (sim != null) {
+                    scenarios.due(sim.simTimeSec).forEach { sim.enqueue(it) }
+                    sim.stepWall(dt)
+                    lastWallMs[sim] = nowMs()
+                    publish(sim)
+                }
+                val spent = (System.nanoTime() - t0) / 1_000_000
+                delay((TICK_MS - spent).coerceAtLeast(1))
+            }
+        }
+    }
+
+    private fun publish(sim: Simulation) {
+        if (sim === active) _snapshots.value = sim.latest
+        if (sim === reality) publishPeek(sim)
+    }
+
+    private fun publishPeek(sim: Simulation) {
+        if (sim !== reality) return
+        val snap = sim.latest
+        LivePeek.lastDescribed(snap.events)?.let { lastEvent = it }
+        _peek.value = LivePeek.from(snap, lastEvent)
+    }
+
+    companion object {
+        const val TICK_MS = 50L   // 20 Hz (SIMULATION §1.2)
+    }
+}
