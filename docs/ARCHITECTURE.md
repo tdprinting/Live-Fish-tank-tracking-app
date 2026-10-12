@@ -39,7 +39,7 @@ include(":core")
 if (!providers.gradleProperty("coreOnly").isPresent) include(":app")
 ```
 
-Local dev: `./gradlew -PcoreOnly :core:test`. CI: full build. The root `build.gradle.kts` declares **no** plugins with `apply false` for Android (declaring them forces resolution from Google Maven). The Kotlin JVM plugin is declared only in `core/build.gradle.kts`, the Android plugins only in `app/build.gradle.kts`.
+Local dev: `./gradlew -PcoreOnly :core:test`. CI: full build. The root `build.gradle.kts` declares **no** plugins with `apply false` for Android (declaring them forces resolution from Google Maven). As implemented in M0: the root `buildscript {}` puts the plugin artifacts (`libs.gradleplugin.*`) on one shared classpath, adding AGP, the Compose compiler plugin and KSP (and the `google()` repo) only when `-PcoreOnly` is absent. Modules apply plugins by id without a version (`id(libs.plugins.x.get().pluginId)`). This keeps the core-only build off Google Maven while loading the Kotlin Gradle plugin once, in a classloader that can see AGP (per-subproject `alias(...)` would load KGP twice, which Kotlin flags as unsupported).
 
 ---
 

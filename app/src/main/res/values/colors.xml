@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only for the launcher icon and pre-Compose window background. UI uses ui/theme/Color.kt. -->
+    <color name="abyss1">#FF061327</color>
+    <color name="lagoon_bright">#FF5CE1E6</color>
+    <color name="coral">#FFFF7A59</color>
+</resources>
