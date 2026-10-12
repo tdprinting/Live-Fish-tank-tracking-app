@@ -77,6 +77,8 @@ class Simulation(
     val pests = PestState()
     /** Running disease treatments (W-4). */
     val treatments = Treatments()
+    /** New-tank cycle checkpoints, when a cycle is being tracked (Presets.newTankCycle; W-5). */
+    var cycle: CycleTracker? = null
     val aiptasiaCount: Int get() = corals.count { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
 
     /** Copies pest controllers from another simulation (time-lapse fork). */
@@ -394,6 +396,7 @@ class Simulation(
         w.algae.grazers = algaeGrazers()
         w.step(CHEM_DT)
         applyRamps()
+        cycle?.update(w.s, simTimeSec)
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
