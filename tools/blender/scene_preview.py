@@ -219,8 +219,8 @@ def build_scene(samples, w, h, view):
     # AI Prime HD x2 (spec §5): blue-heavy 16k look = blue #8FA9FF (85 %) + warm white #FFF1DC (15 %) per puck,
     # cone 110 deg, blend 0.4; projected caustics; faint violet wall-bounce fill; warm room light for the stand/wall
     for x in (32.0, 91.0):
-        caustic_spot((x, 98.8, 16), 300000, C.lin("#8FA9FF"))
-        caustic_spot((x, 98.8, 16), 53000, C.lin("#FFF1DC"), caustics=False)
+        caustic_spot((x, 89.8, 16), 300000, C.lin("#8FA9FF"))
+        caustic_spot((x, 89.8, 16), 53000, C.lin("#FFF1DC"), caustics=False)
     # the pucks' lens optics are collimated: two narrow high spots stand in for that so the sand (80 % luminance in
     # the photo) is not starved by inverse-square falloff from the puck height
     for x in (32.0, 91.0):

@@ -40,8 +40,8 @@ class LightingState private constructor(
         /** Diode counts (4,4,4,1,1,1,1,1)/16. */
         val WEIGHTS = floatArrayOf(4f, 4f, 4f, 1f, 1f, 1f, 1f, 1f).map { it / 16f }.toFloatArray()
 
-        /** Fixture positions (cm) and cone (ARCHITECTURE §8.5; equipment.glb `lightPos`). */
-        val LIGHT_POS: Array<FloatArray> = arrayOf(floatArrayOf(30.5f, 90f, 16.5f), floatArrayOf(91.4f, 90f, 16.5f))
+        /** Fixture lens centres (cm) and cone (ARCHITECTURE §8.5); must equal equipment.glb `AiPrimeL/R_Lens` `lightPos`. */
+        val LIGHT_POS: Array<FloatArray> = arrayOf(floatArrayOf(32f, 90f, 16f), floatArrayOf(91f, 90f, 16f))
         const val CONE_DEG = 120f
         private val FOG_TINT = floatArrayOf(0x0E / 255f, 0x3B / 255f, 0x5A / 255f)
         private val FOG_FLOOR = floatArrayOf(0x02 / 255f, 0x06 / 255f, 0x0C / 255f)

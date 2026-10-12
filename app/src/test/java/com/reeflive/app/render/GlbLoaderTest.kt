@@ -74,6 +74,13 @@ class GlbLoaderTest {
         val eq = load("equipment.glb")
         val lens = eq.nodes.first { it.part == "emitter" }
         assertEquals(110f, lens.float("coneDeg")!!, 1e-3f)
+        // the shader's point lights sit at the modelled lens centres
+        val lenses = eq.nodes.filter { it.part == "emitter" }.sortedBy { it.vec3("lightPos")!![0] }
+        assertEquals(LightingState.LIGHT_POS.size, lenses.size)
+        for ((i, l) in lenses.withIndex()) {
+            val p = l.vec3("lightPos")!!
+            for (k in 0 until 3) assertEquals(LightingState.LIGHT_POS[i][k], p[k], 1e-3f)
+        }
         // KHR_materials_emissive_strength is folded into the emissive factor
         assertTrue(eq.materials.any { it.emissive.any { e -> e > 1.5f } })
     }

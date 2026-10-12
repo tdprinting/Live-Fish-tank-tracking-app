@@ -229,7 +229,7 @@ def build():
         V, F = oriented_box(face + d * 0.3 + rdir * 1.9, (2.6, 0.35, 0.2), rdir, np.cross(d, rdir))
         g.add(V, F)
     box_add(g, (83.5, 45, -GTH - 2.0), (87.5, 49, -GTH - 0.02))  # outer magnet
-    tube_path(g, [(84.6, 50.5, 2.0), (84.1, 54, 0.6), (84, 60.6, 0.5), (84, 62.4, -1.6), (84, 58, -2.4)], 0.35, 6,
+    tube_path(g, [(84.6, 50.5, 2.0), (84.8, 54, 0.6), (85, 60.6, 0.5), (85, 62.4, -1.6), (85, 58, -2.4)], 0.35, 6,
               mat=2, n=4)
     objs.append(g.obj("PowerheadBack", root, "equipment", [black, grille, cable],
                       extras={"dir": [-0.3, -0.3, 0.9], "jet": [round(float(v), 2) for v in face]}))
@@ -273,15 +273,18 @@ def build():
     g.add(V, F, uv, mat=1)
     objs.append(g.obj("IntakeTube", root, "equipment", [tube_grey, black], smooth=True))
 
-    # --- Flipper: inner half on the front glass inner face + outer half with the label, 4 felt pads
+    # --- Flipper: inner half on the front glass inner face + outer (label) half on the outer face, each sitting on
+    # 1 mm felt pads that touch the glass, so the halves are flush on either side of the pane. x 2-8 (1 cm in from
+    # the spec's x 1-7) and a 1.3 cm outer half keep the label inside the tank's left edge from the default orbit.
     g = T.WGeo()
     D = T.TANK[2]
-    box_add(g, (1, 13, 31.0), (7, 33, 32.85))
-    box_add(g, (1, 13, D + GTH + 0.15), (7, 33, 36))
-    for px in (1.6, 5.4):
+    FX0, FX1 = 2.0, 8.0
+    box_add(g, (FX0, 13, 31.4), (FX1, 33, 32.9))
+    box_add(g, (FX0, 13, D + GTH + 0.1), (FX1, 33, D + GTH + 1.4))
+    for px in (FX0 + 0.6, FX1 - 1.6):
         for py in (14, 31):
-            box_add(g, (px, py, 32.85), (px + 1.0, py + 1.0, 33.0), mat=1)
-            box_add(g, (px, py, D + GTH), (px + 1.0, py + 1.0, D + GTH + 0.15), mat=1)
+            box_add(g, (px, py, 32.9), (px + 1.0, py + 1.0, 33.0), mat=1)
+            box_add(g, (px, py, D + GTH), (px + 1.0, py + 1.0, D + GTH + 0.1), mat=1)
     objs.append(g.obj("Flipper", root, "equipment", [label, grille]))
 
     # --- FrontMagnet: black cylinder on the sand facing the viewer + grey-green bracket to its left
@@ -305,7 +308,7 @@ def build():
 
     # --- CableLeft: from the Flipper down the left glass along the sand, up the back-left corner and over the rim
     g = T.WGeo()
-    tube_path(g, [(3.5, 13, 31.5), (1.6, 8.5, 29), (1.0, 5.4, 25), (2, 5.0, 20), (1.0, 6.8, 8), (0.8, 8, 1.2),
+    tube_path(g, [(4.5, 13, 31.9), (2.0, 8.5, 29), (1.0, 5.4, 25), (2, 5.0, 20), (1.0, 6.8, 8), (0.8, 8, 1.2),
                   (0.6, 30, 0.6), (0.6, 60.6, 0.6), (0.6, 62.5, -1.6), (0.6, 58, -2.4)], 0.35, 6, n=4)
     objs.append(g.obj("CableLeft", root, "equipment", [cable], smooth=True))
 
@@ -315,24 +318,55 @@ def build():
     g.add(V, F)
     objs.append(g.obj("FeedRing", root, "equipment", [ringm], smooth=True))
 
-    # --- HobFilter on the back rim: body + lid, two slotted cartridges, intake tube, outflow spout
-    g = T.WGeo()
-    box_add(g, (60, 58, -12), (84, 74, -1.0))
-    box_add(g, (59.6, 74, -12.4), (84.4, 75, -0.6), mat=1)
-    for cx in (66, 76):
-        box_add(g, (cx - 3.5, 75, -7.75), (cx + 3.5, 89, -6.25), mat=2)
-    tube_path(g, [(82, 40, 2), (82, 60, 2), (82, 62.6, 1.6), (82, 63.6, 0), (82, 63.4, -1.6)], 1.3, 10, n=3)
-    box_add(g, (65, 57.5, -1.0), (79, 58.5, 2.0))
-    objs.append(g.obj("HobFilter", root, "equipment", [hob, black, slots],
-                      extras={"outflow": [72.0, 55.0, 1.0]}))
+    # Back rim (tank.py rim_geos): skirt outer face z -1.035 from y 57.6 to the lip top y 61.4; the lip runs inward
+    # to z 1.765 with its underside at y 60.9; below the skirt the back glass outer face is at z -0.635.
+    RIM_Y, LIP_UND, SKIRT_BOT = 61.4, 60.9, 57.6
+    SKIRT_Z, LIP_Z, GLASS_Z = -GTH - 0.4, -GTH + 2.4, -GTH
 
-    # --- Skimmer right of the HOB: body, black pump block, two tall grey tubes
+    def bumper(g, x, y, mat):
+        """Rubber leveler pad bridging the skirt-to-glass step so a hang-on body touches the glass."""
+        V, F, uv = cylinder((x, y, SKIRT_Z - 0.02), (x, y, GLASS_Z), 0.8, 10)
+        g.add(V, F, uv, mat=mat)
+
+    # --- HobFilter hung on the back rim: body flush against the skirt (rubber levelers on the glass below it), lid,
+    # two slotted cartridges, a spillway that rides over the lip and drops its spout 1 cm into the water, and the
+    # intake tube with a strainer coming back over the rim into the body
     g = T.WGeo()
-    box_add(g, (86, 58, -10), (96, 72, -1.0))
-    box_add(g, (87, 52, -9), (95, 58, -2), mat=1)
+    box_add(g, (60, 48, -11), (84, 66, SKIRT_Z))
+    box_add(g, (59.6, 66, -11.4), (84.4, 67, SKIRT_Z))
+    for cx in (66, 76):
+        box_add(g, (cx - 3.5, 67, -7.75), (cx + 3.5, 81, -6.25), mat=2)
+    box_add(g, (65, RIM_Y, SKIRT_Z), (79, RIM_Y + 0.6, 2.6))           # spill tray resting on the lip
+    for sx in (65, 78.4):
+        box_add(g, (sx + 0.05, RIM_Y + 0.6, SKIRT_Z), (sx + 0.55, RIM_Y + 1.8, 2.6))  # tray side walls
+    box_add(g, (65.1, 55.0, 2.0), (78.9, RIM_Y + 0.55, 2.6))                # spout lip into the water
+    for bx in (63, 81):
+        bumper(g, bx, 51, 1)
+    tube_path(g, [(82, 40, 3.2), (82, 60, 3.2), (82, 62.8, 2.6), (82, 63.8, 0.6), (82, 63.4, -1.6), (82, 61, -3)],
+              1.3, 10, n=3)
+    V, F, uv = cylinder((82, 35, 3.2), (82, 40.5, 3.2), 1.7, 12)
+    g.add(V, F, uv, mat=1)
+    objs.append(g.obj("HobFilter", root, "equipment", [hob, black, slots],
+                      extras={"outflow": [72.0, 55.0, 2.3]}))
+
+    # --- Skimmer right of the HOB, hung on the back rim: reaction body flush against the skirt with levelers on the
+    # glass, pump block bolted under it, lid with two tall grey riser tubes, hanger saddle over the lip with the
+    # intake leg dropping into the water
+    g = T.WGeo()
+    box_add(g, (86, 46, -9), (96, 70, SKIRT_Z))
+    box_add(g, (85.6, 70, -9.4), (96.4, 71, SKIRT_Z))
+    box_add(g, (87, 40, -8), (95, 46, -2.2), mat=1)
+    box_add(g, (87.5, RIM_Y, SKIRT_Z), (94.5, RIM_Y + 0.8, 2.6), mat=1)    # hanger saddle on the lip
+    box_add(g, (87.6, 57.0, 2.0), (94.4, RIM_Y, 2.6), mat=1)              # saddle front leg inside the glass
+    V, F, uv = cylinder((91, 46, 3.4), (91, 58, 3.4), 1.0, 10)
+    g.add(V, F, uv, mat=1)                                                 # intake leg into the water
+    for bx in (88, 94):
+        bumper(g, bx, 49, 1)
     for tx in (89, 93):
-        V, F, uv = cylinder((tx, 62, -6), (tx, 92, -6), 1.6, 12)
+        V, F, uv = cylinder((tx, 71, -6), (tx, 92, -6), 1.6, 12)
         g.add(V, F, uv, mat=2)
+        V, F, uv = cylinder((tx, 71, -6), (tx, 72.5, -6), 1.9, 12)
+        g.add(V, F, uv, mat=1)                                             # tube collars
     objs.append(g.obj("Skimmer", root, "equipment", [hob, black, tube_grey]))
 
     # --- AtoBox on the top rim (left) with its red LED
@@ -343,34 +377,54 @@ def build():
     box_add(g, (18.85, 63.4, 29.85), (19.15, 63.55, 30.15))
     objs.append(g.obj("AtoLED", root, "light", [ato_led]))
 
-    # --- Jar on the right rim (optional prop)
+    # --- Jar on the right rim (optional prop), right of the AiPrimeR clamp
     g = T.WGeo()
-    V, F, uv = cylinder((104, 61.45, 0), (104, 70.95, 0), 4.0, 20)
+    V, F, uv = cylinder((106.5, 61.45, 0), (106.5, 70.95, 0), 4.0, 20)
     g.add(V, F, uv)
-    V, F, uv = cylinder((104, 61.6, 0), (104, 67.6, 0), 3.75, 20)
+    V, F, uv = cylinder((106.5, 61.6, 0), (106.5, 67.6, 0), 3.75, 20)
     g.add(V, F, uv, mat=1)
     objs.append(g.obj("Jar", root, "equipment", [clear, liquid]))
 
-    # --- AI Prime HD x2: puck, heat-sink, gooseneck from a back-rim clamp, power cable; lens + LED dots emitter
-    for side, x in (("L", 32.0), ("R", 91.0)):
+    # --- AI Prime HD x2: puck (lens at y 90, LightingState.LIGHT_POS), heat-sink, gooseneck from a C-clamp gripping
+    # the back rim (top plate on the lip, back leg down the skirt with a thumb screw, front jaw under the lip with
+    # a thumb knob), power cable running down the arm and behind the tank; lens + LED dots emitter
+    PY = 92.0           # puck centre; bottom face y 90.2, lens plate 90.1-90.2, LED dots from y 89.95
+    for side, x, cx in (("L", 32.0, 38.0), ("R", 91.0, 98.5)):
         g = T.WGeo()
-        pc = np.array([x, 101.0, 16.0])
+        pc = np.array([x, PY, 16.0])
         puck(g, pc)
-        box_add(g, (x - 4, 102.8, 12), (x + 4, 103.8, 20))
-        V, F, t, a = G.tube(G.bezier((x + 6, 64, -3), (x + 6, 88, -4), (x + 2, 100, 8), (x, 101, 12), 16), 0.9, 8,
+        box_add(g, (x - 4, PY + 1.8, 12), (x + 4, PY + 2.8, 20))              # heat-sink
+        box_add(g, (x - 1.3, PY - 1.0, 9.0), (x + 1.3, PY + 1.0, 10.6))        # arm socket on the puck's rear edge
+        V, F, t, a = G.tube(G.bezier((cx, RIM_Y + 0.9, 0.2), (cx, 84, 0.2), (x, PY, 1.0), (x, PY, 9.4), 16), 0.8, 8,
                             cap_start=True, cap_end=True, up=(1, 0, 0))
         g.add(V, F, np.c_[a, t])
-        box_add(g, (x + 4, 60, -5), (x + 8, 64, -2))
-        tube_path(g, [(x, 103.2, 12), (x, 110, 5), (x + 2, 120, -5.9)], 0.3, 6, n=5)
-        box_add(g, (x - 4, 99.1, 12), (x + 4, 99.2, 20), mat=1)  # white lens plate
-        objs.append(g.obj(f"AiPrime{side}", root, "equipment", [puckm, cap]))
+        V, F, uv = cylinder((cx, RIM_Y + 0.9, 0.2), (cx, RIM_Y + 2.6, 0.2), 1.2, 12)
+        g.add(V, F, uv)                                                        # arm base collar
+        # C-clamp around the back rim, touching the lip top, skirt and lip underside
+        box_add(g, (cx - 1.9, RIM_Y, -1.9), (cx + 1.9, RIM_Y + 0.9, 2.6))      # top plate on the lip
+        box_add(g, (cx - 1.85, 57.0, -1.9), (cx + 1.85, RIM_Y, SKIRT_Z))         # back leg on the skirt
+        box_add(g, (cx - 1.85, 59.6, 2.0), (cx + 1.85, RIM_Y, 2.6))              # front leg inside the tank
+        box_add(g, (cx - 1.8, 59.6, 0.2), (cx + 1.8, 60.2, 2.0))               # jaw foot under the lip
+        V, F, uv = cylinder((cx, 60.2, 1.1), (cx, LIP_UND, 1.1), 0.3, 8)
+        g.add(V, F, uv, mat=1)                                                 # jaw screw pressing the lip
+        V, F, uv = cylinder((cx, 58.6, 1.1), (cx, 59.6, 1.1), 0.9, 12)
+        g.add(V, F, uv, mat=1)                                                 # jaw thumb knob
+        V, F, uv = cylinder((cx, 58.2, -1.9), (cx, 58.2, -3.0), 0.3, 8)
+        g.add(V, F, uv, mat=1)                                                 # back thumb screw
+        V, F, uv = cylinder((cx, 58.2, -3.0), (cx, 58.2, -3.7), 0.9, 12)
+        g.add(V, F, uv, mat=1)                                                 # back thumb knob
+        # power cable: out of the puck's rear, along the arm, behind the clamp and down the back of the tank
+        tube_path(g, [(x + 1.6, PY + 1.0, 10.2), (x + 1.9, PY + 0.6, 5), (cx + 1.6, 82, 1.4), (cx + 2.3, 70, 0.4),
+                      (cx + 2.3, 63.2, -1.8), (cx + 2.3, 58, -2.6), (cx + 2.3, 46, -2.6)], 0.3, 6, mat=2, n=4)
+        box_add(g, (x - 4, PY - 1.9, 12), (x + 4, PY - 1.8, 20), mat=1)        # white lens plate
+        objs.append(g.obj(f"AiPrime{side}", root, "equipment", [puckm, cap, cable]))
         g = T.WGeo()
         for i in range(4):
             for j in range(4):
-                cx, cz = x - 2.25 + 1.5 * i, 16 - 2.25 + 1.5 * j
-                box_add(g, (cx - 0.125, 98.95, cz - 0.125), (cx + 0.125, 99.1, cz + 0.125))
+                lx, lz = x - 2.25 + 1.5 * i, 16 - 2.25 + 1.5 * j
+                box_add(g, (lx - 0.125, PY - 2.05, lz - 0.125), (lx + 0.125, PY - 1.9, lz + 0.125))
         objs.append(g.obj(f"AiPrime{side}_Lens", root, "emitter", [lens],
-                          extras={"lightPos": [x, 99.0, 16.0], "coneDeg": 110}))
+                          extras={"lightPos": [x, PY - 2.0, 16.0], "coneDeg": 110}))
 
     bad = {}
     for o in objs:
