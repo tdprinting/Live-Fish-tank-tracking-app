@@ -491,7 +491,17 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 ### 9.5 Contract extensions (backward compatible, all defaulted)
 - `OrganismPose`: `brain`, `posture`, `eyeYaw`, `mouth`, `appendagePhase`, `extension`, `visible`, `nickname`.
 - `CoralPose`: `speciesId`, `anchor`, `flow`, `tissue`.
-- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`.
+- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`, `sandPiles`, `flowStrength`, `surfaceHeights`/`surfaceDims`, `flowGrid`.
+- `OrganismStats` (FishCard, follow mode):
+  - `caption`, `focusId`, `envStress` and `cause`.
+  - `intent`: the caption without the name, e.g. "eyeing the skunk cleaner shrimp".
+  - `intentTargetId`.
+  - `relations`: a list of `RelationInfo`, the five most salient social memories. Each has `label`, one of "Afraid of", "Chased by", "Chases", "Dominates", "Defers to", "Cleaning partner", "Wary of" or "Knows", plus `familiarity`, `fear`, `harassedBy`, `harassed`, `dominance`, `cleanings` and `secondsSinceSeen`.
+  - `waryOfId`: the animal it is keeping clear of right now.
+- `sim/Reality`: maps the tracker's data into the sim.
+  - `waterFrom(latestValues)` converts Track A base units (°F, SG).
+  - `seedsFrom(livestock)`: group rows expand to `id`, `id#2`, and so on. The first organism keeps the livestock id, so `LiveFocus.followId` matches it. `livestockIdOf` reverses the mapping.
+  - `lightsFrom(schedule)`.
 - `Command`: `Heater.stuckOn`, `AddOrganism.role`, `SetSize`, `SetPredation`, `Shadow`.
 - `TankConfig`: `autoFeed`, `predationEnabled`, `waterChangeEveryDays`, `waterChangeFraction`, `seed`.
 - Anchors added for the new livestock (Track B: please add them to `anchors.json`; defaults are merged in when missing): `coral_organpipe_kenya_base`, `HOLE_LAWNMOWER` (30, 10, 11; dir 0.3, 0.1, 0.95; depth 7), `STATION_SHRIMP` (50, 18, 26), `DUSTER_TUBE` (15, 3, 27), `BRITTLE_HOME` (95, 4, 15), `CAVE_DOTTYBACK` (42, 18, 6). The HOB outflow is at x = 71 (ASSETS) rather than 61.

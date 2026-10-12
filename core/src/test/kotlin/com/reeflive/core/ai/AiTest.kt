@@ -175,6 +175,11 @@ class AiTest {
         sim.advance(5.0, behaviorDt = 0.1)
         assertTrue("fear ${v.relations[a.id]?.fear}", (v.relations[a.id]?.fear ?: 0.0) > 0.5)
         assertTrue("wary of ${v.wary}", v.wary === a)
+        val st = sim.snapshot().stats.first { it.id == v.id }
+        val rel = st.relations.firstOrNull()
+        assertTrue("relations ${st.relations}", rel != null && rel.otherId == a.id && rel.label in setOf("Afraid of", "Chased by"))
+        assertTrue("waryOfId ${st.waryOfId}", st.waryOfId == a.id)
+        assertTrue("every animal has an intent", sim.snapshot().stats.all { it.intent.isNotBlank() })
     }
 
     /** Sally Lightfoot: wedged in its crevice by day, out grazing at night, darts home when startled. */

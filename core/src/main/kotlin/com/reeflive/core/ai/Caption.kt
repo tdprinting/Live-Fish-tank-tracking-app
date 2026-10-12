@@ -18,18 +18,24 @@ object Caption {
     )
     private val WATCHERS = setOf("perch", "perchhole", "hang")
 
-    fun of(o: Organism, sim: Simulation): String {
+    /** Caption plus its parts: [intent] is the phrase without the name ("eyeing the skunk cleaner shrimp"). */
+    data class Described(val caption: String, val intent: String, val targetId: String?)
+
+    fun of(o: Organism, sim: Simulation): String = describe(o, sim).caption
+
+    fun describe(o: Organism, sim: Simulation): Described {
         val name = o.species.common.ifBlank { o.nickname }
-        if (!o.alive) return "$name (dead)"
+        if (!o.alive) return Described("$name (dead)", "dead", null)
         val b = runCatching { o.brain.current }.getOrNull()
         val label = b?.label ?: o.behaviorName
+        val lower = label.replaceFirstChar { it.lowercase() }
         val verb = b?.targetVerb ?: VERBS[b?.name]
         if (verb != null) {
             val target = o.focusId?.let { id -> sim.organisms.firstOrNull { it.id == id && it.alive } } ?: guessTarget(o, sim, b?.name)
-            if (target != null) return "$name $verb ${refer(o, target)}"
-            if (b?.name in WATCHERS) return "$name ${label.replaceFirstChar { it.lowercase() }}"
+            if (target != null) { val i = "$verb ${refer(o, target)}"; return Described("$name $i", i, target.id) }
+            if (b?.name in WATCHERS) return Described("$name $lower", lower, null)
         }
-        return "$name · ${label.replaceFirstChar { it.lowercase() }}"
+        return Described("$name · $lower", lower, null)
     }
 
     private fun refer(o: Organism, t: Organism): String {

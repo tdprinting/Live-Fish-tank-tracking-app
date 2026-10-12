@@ -109,6 +109,7 @@ fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = SettingsRo
     onTargets = { nav.navigate(Routes.TARGETS) },
     onTank = { nav.navigate(Routes.TANK) },
     onExport = { nav.navigate(Routes.EXPORT) },
+    onUpdates = { nav.navigate(Routes.UPDATES) },
     onWiped = {
         nav.navigate(Routes.ONBOARDING) {
             popUpTo(Routes.DASHBOARD) { inclusive = true }

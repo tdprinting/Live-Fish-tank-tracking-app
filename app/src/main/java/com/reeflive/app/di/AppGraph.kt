@@ -23,6 +23,7 @@ import com.reeflive.app.data.repo.TaskRepository
 import com.reeflive.app.data.seed.SeedInstaller
 import com.reeflive.app.live.SimulationHolder
 import com.reeflive.app.notif.Notifier
+import com.reeflive.app.update.UpdateManager
 import com.reeflive.app.work.AlertEvaluator
 import com.reeflive.app.work.ReminderScheduler
 import com.reeflive.core.species.SpeciesDb
@@ -63,4 +64,5 @@ class AppGraph(val app: Application) {
     val notifier: Notifier by lazy { Notifier(app) }
     val alertEvaluator: AlertEvaluator by lazy { AlertEvaluator(measurements, targets, alerts, settings, notifier, clock) }
     val reminders: ReminderScheduler by lazy { ReminderScheduler(app, tasks, settings, clock) }
+    val updates: UpdateManager by lazy { UpdateManager(app, appScope) }
 }

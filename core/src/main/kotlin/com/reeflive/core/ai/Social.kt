@@ -25,6 +25,41 @@ class Relation(val otherId: String) {
 
 /** Perception of others and relationship memory (research 05 §17; owner request: socially aware, non-repetitive). */
 object Social {
+    /**
+     * The [max] most salient relationships of [o] for the FishCard / follow mode. Others that died
+     * or left the tank are skipped; weak memories (salience < 0.08) are left out.
+     */
+    fun summarize(o: Organism, byId: Map<String, Organism>, now: Double, max: Int = 5): List<com.reeflive.core.sim.RelationInfo> {
+        if (o.relations.isEmpty()) return emptyList()
+        return o.relations.values.asSequence()
+            .mapNotNull { r -> byId[r.otherId]?.takeIf { it.alive }?.let { r to it } }
+            .map { (r, other) -> Triple(r, other, salience(r)) }
+            .filter { it.third >= 0.08 }
+            .sortedByDescending { it.third }
+            .take(max)
+            .map { (r, other, _) ->
+                com.reeflive.core.sim.RelationInfo(
+                    other.id, other.nickname, other.species.common, labelOf(r),
+                    r.familiarity.toFloat(), r.fear.toFloat(), r.harassedBy.toFloat(), r.harassed.toFloat(), r.dominance.toFloat(),
+                    r.cleanings, if (r.lastSeenAt < -1e8) -1f else (now - r.lastSeenAt).toFloat().coerceAtLeast(0f),
+                )
+            }.toList()
+    }
+
+    fun salience(r: Relation): Double =
+        r.fear + r.harassedBy + r.harassed + 0.5 * kotlin.math.abs(r.dominance) + 0.3 * r.familiarity + 0.1 * min(r.cleanings, 5)
+
+    fun labelOf(r: Relation): String = when {
+        r.fear > 0.5 -> "Afraid of"
+        r.harassedBy > 0.3 && r.harassedBy >= r.harassed -> "Chased by"
+        r.harassed > 0.3 -> "Chases"
+        r.dominance > 0.3 -> "Dominates"
+        r.dominance < -0.3 -> "Defers to"
+        r.cleanings > 0 -> "Cleaning partner"
+        r.fear > 0.2 -> "Wary of"
+        else -> "Knows"
+    }
+
     const val PERCEIVE_INTERVAL = 1.0          // s between full scans per animal
     const val FAMILIARITY_PER_HOUR = 0.02      // within 30 cm; saturates after ~2 days together
     const val FEAR_HALF_LIFE_S = 3 * 3600.0

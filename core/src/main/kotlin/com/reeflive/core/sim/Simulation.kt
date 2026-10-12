@@ -655,6 +655,14 @@ class Simulation(
     val minutesSinceLightsOn: Double? get() = cachedSinceOn
 
     // ============================================================== snapshot
+    private fun statsAll(): List<OrganismStats> {
+        val byId = organisms.associateBy { it.id }
+        return organisms.map { o ->
+            val d = com.reeflive.core.ai.Caption.describe(o, this)
+            o.stats(d.caption, d.intent, d.targetId ?: o.focusId, com.reeflive.core.ai.Social.summarize(o, byId, simTimeSec))
+        }
+    }
+
     fun snapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
@@ -669,7 +677,7 @@ class Simulation(
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
-            stats = organisms.map { it.stats(com.reeflive.core.ai.Caption.of(it, this)) },
+            stats = statsAll(),
             tick = tickCount,
             abstractMode = abstractMode,
             moltShells = moltShells.map { it.first },
