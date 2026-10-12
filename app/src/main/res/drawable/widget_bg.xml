@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Abyss glass: deep-ocean gradient with a faint cyan rim. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="270" android:startColor="#F00E3446" android:endColor="#F005141E" />
+    <corners android:radius="24dp" />
+    <stroke android:width="1dp" android:color="#405CE1E6" />
+</shape>

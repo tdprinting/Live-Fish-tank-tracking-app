@@ -1,0 +1,35 @@
+diff --git a/core/src/main/kotlin/com/reeflive/core/sim/Simulation.kt b/core/src/main/kotlin/com/reeflive/core/sim/Simulation.kt
+index e5b61b6..b656cec 100644
+--- a/core/src/main/kotlin/com/reeflive/core/sim/Simulation.kt
++++ b/core/src/main/kotlin/com/reeflive/core/sim/Simulation.kt
+@@ -150,7 +150,7 @@ class Simulation(
+         val simDt = speed * dtWall
+         stepWater(dtWall)
+         if (simDt <= 0) { latest = snapshot(); return }
+-        val dtB = min(simDt, 0.5)
++        val dtB = min(simDt, MAX_BEHAVIOR_DT)
+         advanceInternal(simDt, dtB)
+         latest = snapshot()
+     }
+@@ -197,8 +197,10 @@ class Simulation(
+     private fun advanceInternal(simDt: Double, dtB: Double) {
+         simTimeSec += simDt
+         updateLights()
+-        val useBehavior = behaviorEnabled && simDt <= 1.0 + 1e-9
+-        if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, 0.5))
++        // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
++        // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
++        val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
++        if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
+         food.step(min(simDt, 1.0), simTimeSec)
+         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
+         chemAccum += simDt
+@@ -705,6 +707,8 @@ class Simulation(
+     companion object {
+         const val CHEM_DT = 60.0
+         const val ABSTRACT_SPEED = 240.0
++        /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
++        const val MAX_BEHAVIOR_DT = 0.5
+         const val CORPSE_TAN_PER_G = 0.02
+         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
+         const val CORAL_TAN_PER_COLONY = 2.0

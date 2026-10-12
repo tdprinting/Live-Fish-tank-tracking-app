@@ -1,6 +1,15 @@
 package com.reeflive.app.ui.nav
 
 import com.reeflive.app.update.UpdateSheetHost
+import com.reeflive.app.ui.extras.CoralsRoute
+import com.reeflive.app.ui.extras.EmergencyRoute
+import com.reeflive.app.ui.extras.FeedingRoute
+import com.reeflive.app.ui.extras.IcpRoute
+import com.reeflive.app.ui.extras.InsightsRoute
+import com.reeflive.app.ui.extras.ParRoute
+import com.reeflive.app.ui.extras.SpendingRoute
+import com.reeflive.app.ui.extras.SuppliesRoute
+import com.reeflive.app.ui.extras.TreatmentsRoute
 import com.reeflive.app.update.UpdatesRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -186,4 +195,13 @@ private fun androidx.navigation.NavGraphBuilder.reefGraph(nav: NavHostController
     composable(Routes.EXPORT) { ExportDestination(back) }
     composable(Routes.ABOUT) { AboutDestination(back) }
     composable(Routes.UPDATES) { UpdatesRoute(back) }
+    composable(Routes.INSIGHTS) { InsightsRoute(back) }
+    composable(Routes.SUPPLIES) { SuppliesRoute(back) }
+    composable(Routes.FEEDING) { FeedingRoute(back) }
+    composable(Routes.TREATMENTS) { TreatmentsRoute(back) }
+    composable(Routes.EMERGENCY) { EmergencyRoute(back) }
+    composable(Routes.ICP) { IcpRoute(back) }
+    composable(Routes.CORALS) { CoralsRoute(back) }
+    composable(Routes.PAR) { ParRoute(back) }
+    composable(Routes.SPENDING) { SpendingRoute(back) }
 }

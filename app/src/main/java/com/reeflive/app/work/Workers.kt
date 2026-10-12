@@ -17,7 +17,9 @@ import com.reeflive.app.data.repo.SettingsRepository
 import com.reeflive.app.data.repo.TaskRepository
 import com.reeflive.core.care.TaskSchedule
 import com.reeflive.core.model.CareTask
+import com.reeflive.app.widget.ReefWidget
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
@@ -29,7 +31,15 @@ import java.util.concurrent.TimeUnit
 class AlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         return try {
-            applicationContext.appGraph.alertEvaluator.runNow()
+            val g = applicationContext.appGraph
+            g.alertEvaluator.runNow()
+            runCatching {
+                if (g.settings.settings.first().notifications) {
+                    ExtrasReminders.build(g.extras.snapshot(), g.clock.now(), ZoneId.systemDefault())
+                        .forEach { g.notifier.notifyReminder(it.tag, it.title, it.text, it.route) }
+                }
+            }
+            runCatching { ReefWidget.refreshAll(applicationContext) }
             Result.success()
         } catch (e: CancellationException) {
             throw e

@@ -1,20 +1,30 @@
 package com.reeflive.app.ui.livetank
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -23,23 +33,31 @@ import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
-import com.reeflive.app.ui.components.ButtonKind
-import com.reeflive.app.ui.components.ReefButton
+import com.reeflive.app.ui.live.AddableSpecies
 import com.reeflive.app.ui.live.FishCard
+import com.reeflive.app.ui.live.FishSummary
 import com.reeflive.app.ui.live.FollowOverlay
 import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveOverlay
 import com.reeflive.app.ui.live.SandboxActions
-import com.reeflive.app.ui.live.SandboxPanel
-import com.reeflive.app.ui.live.SandboxScenario
-import com.reeflive.app.ui.live.SandboxState
-import com.reeflive.app.ui.live.TimelapseSheet
+import com.reeflive.app.ui.live.SandboxCategory
+import com.reeflive.app.ui.live.SandboxControlMode
+import com.reeflive.app.ui.live.SandboxDock
+import com.reeflive.app.ui.live.SandboxPanelState
+import com.reeflive.app.ui.live.SandboxParamDef
+import com.reeflive.app.ui.live.SandboxPreset
+import com.reeflive.app.ui.live.SelectedAnimalUi
+import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.toFollowState
 import com.reeflive.app.ui.live.waterReadouts
 import com.reeflive.app.ui.nav.reefViewModel
-import com.reeflive.core.live.Scenario
+import com.reeflive.app.ui.theme.ReefMotion
+import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.Mood
+import com.reeflive.core.sim.OrganismStats
 
 private fun LiveQuality.toRender() = when (this) {
     LiveQuality.LOW -> RenderQuality.LOW
@@ -47,16 +65,27 @@ private fun LiveQuality.toRender() = when (this) {
     LiveQuality.HIGH -> RenderQuality.HIGH
 }
 
-private fun SandboxScenario.toCore() = when (this) {
-    SandboxScenario.HEAT_WAVE -> Scenario.HEAT_WAVE
-    SandboxScenario.NITRATE_SPIKE -> Scenario.NITRATE_SPIKE
-    SandboxScenario.SALINITY_SWING -> Scenario.SALINITY_SWING
-    SandboxScenario.POWER_OUTAGE -> Scenario.POWER_OUTAGE
-    SandboxScenario.ALGAE_BLOOM -> Scenario.ALGAE_BLOOM
-    SandboxScenario.OVERFEEDING -> Scenario.OVERFEEDING
+/** Height of the floating bottom bar area (64 dp pill + 16 dp margin) plus a little air. */
+private val NavClearance = 88.dp
+
+/** Point on the front glass, centre, for the "Tap glass" action (tank cm: 122 × 61 × 33). */
+private val FrontGlassCentre = Vec3(61.0, 30.0, 33.0)
+
+private fun summarize(stats: List<OrganismStats>): FishSummary {
+    val alive = stats.filter { it.alive }
+    return FishSummary(
+        alive = alive.size,
+        stressed = alive.count { it.stress > 0.6f || it.mood == Mood.STRESSED },
+        sick = alive.count { it.disease != null || it.mood == Mood.SICK },
+        dead = stats.count { !it.alive },
+    )
 }
 
-/** Live Tank: GL [TankView] with the HUD, sandbox sheet, fish card and follow overlay on top. Sim runs only while RESUMED. */
+/**
+ * Live Tank: GL [TankView] with the HUD on top and, in Sandbox mode, the [SandboxDock] docked inline: under the tank in
+ * portrait (the tank view shrinks to the space above it), beside it in landscape. The Watch / Sandbox toggle opens and
+ * closes the dock; tapping Sandbox again collapses / expands it. Sim runs only while RESUMED.
+ */
 @Composable
 fun LiveTankScreen(
     modifier: Modifier = Modifier,
@@ -71,34 +100,132 @@ fun LiveTankScreen(
     val quality by vm.quality.collectAsStateWithLifecycle()
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
-    var sheet by remember { mutableStateOf(false) }
-    var lapse by remember { mutableStateOf(false) }
-    val lapseState by vm.timelapse.collectAsStateWithLifecycle()
-    var advanced by remember { mutableStateOf(false) }
+    val real by vm.real.collectAsStateWithLifecycle()
+    val lightPct by vm.lightPct.collectAsStateWithLifecycle()
+    val predation by vm.predation.collectAsStateWithLifecycle()
 
-    val lightPct = hud.lightIntensity * 100.0
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    var category by rememberSaveable { mutableStateOf(SandboxCategory.WATER) }
+    var preset by rememberSaveable { mutableStateOf<SandboxPreset?>(null) }
+    var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
+    val sandbox = mode == SimMode.SANDBOX
+
+    BackHandler(enabled = sandbox && expanded) { expanded = false }
+
     val hudState = HudState(
-        mode = if (mode == SimMode.SANDBOX) HudMode.SANDBOX else HudMode.WATCH,
+        mode = if (sandbox) HudMode.SANDBOX else HudMode.WATCH,
         speed = speed,
         simTimeSec = hud.simTimeSec,
-        readouts = waterReadouts(hud.water, lightPct, hud.flowStrength.toDouble()),
-    )
-    val actions = SandboxActions(
-        onSetParam = { id, v ->
-            when (id) {
-                "light" -> vm.setLights(v > 0.0, v / 100.0)
-                "flow" -> vm.setPowerheads(v > 0.05)
-                "photoperiod", "algae" -> Unit // no ViewModel/Command equivalent yet
-                else -> vm.setParam(id, v)
-            }
-        },
-        onFeed = { vm.feed() },
-        onScenario = { vm.runScenario(it.toCore()) },
-        onReset = { vm.resetSandbox() },
-        onToggleAdvanced = { advanced = it },
+        readouts = waterReadouts(hud.water, hud.lightIntensity * 100.0, hud.flowStrength.toDouble()),
     )
 
-    Box(modifier.fillMaxSize()) {
+    val panel = SandboxPanelState(
+        now = TankReading(hud.water, lightPct = lightPct, flowPct = hud.flowStrength * 100.0),
+        real = real,
+        category = category,
+        expanded = expanded,
+        speed = speed,
+        controlMode = controlMode,
+        activePreset = preset,
+        fish = summarize(hud.stats),
+        selected = stats?.takeIf { it.alive }?.let { SelectedAnimalUi(it.id, it.nickname.ifBlank { it.common }, it.lengthCm.toDouble()) },
+        addable = hud.stats.filter { it.alive }.groupBy { it.speciesId }.map { (id, list) ->
+            AddableSpecies(id, list.first().common, list.map { it.lengthCm.toDouble() }.sorted()[list.size / 2])
+        }.take(6),
+        predation = predation,
+    )
+
+    val onSet: (SandboxParamDef, Double) -> Unit = { def, v ->
+        // TODO(sim/realism): branch on controlMode here (STEP / RAMP / SCHEDULE) once the sim supports them.
+        when (def.id) {
+            "light" -> vm.setLightPct(v)
+            else -> def.simId?.let { vm.setParam(it, v / def.scale) }
+        }
+    }
+    val actions = SandboxActions(
+        onSet = onSet,
+        onCategory = { category = it },
+        onToggleExpanded = { expanded = !expanded },
+        onSpeed = vm::setSpeed,
+        onControlMode = { controlMode = it },
+        onPreset = { p ->
+            vm.runPreset(p)
+            preset = p
+            category = p.focus      // jump to the sliders that will move, so the effect is visible
+            expanded = true
+        },
+        onDismissPreset = { preset = null },
+        onFeed = { vm.feed() },
+        onTapGlass = { vm.tapGlass(FrontGlassCentre) },
+        onWaterChange = { vm.waterChange(it) },
+        onDose = { id, d -> vm.dose(id, d) },
+        onHeater = { vm.setHeater(working = it) },
+        onLights = { vm.setLights(it) },
+        onPredation = vm::setPredation,
+        onResize = { id, cm -> vm.setSize(id, cm) },
+        onRemove = { vm.removeOrganism(it) },
+        onAdd = { a -> vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
+        onReset = { vm.resetSandbox(); preset = null },
+    )
+    val onModeChange: (HudMode) -> Unit = { m ->
+        when {
+            m == HudMode.SANDBOX && sandbox -> expanded = !expanded
+            m == HudMode.SANDBOX -> { expanded = true; preset = null; vm.setMode(SimMode.SANDBOX) }
+            else -> { preset = null; vm.setMode(SimMode.REALITY) }
+        }
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val landscape = maxWidth > maxHeight
+        val sideWidth = (maxWidth * 0.42f).coerceIn(300.dp, 440.dp)
+        val dockHeight = (maxHeight * 0.55f).coerceAtLeast(minOf(320.dp, maxHeight * 0.7f))
+        val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val clearance = NavClearance + navInset
+        if (landscape) {
+            Row(Modifier.fillMaxSize()) {
+                TankArea(
+                    vm, hudState, onModeChange, followId, stats, quality,
+                    Modifier.weight(1f).fillMaxHeight(), bottomPad = BottomBarClearance,
+                )
+                if (sandbox) {
+                    SandboxDock(
+                        panel, actions,
+                        Modifier.width(sideWidth).fillMaxHeight().statusBarsPadding(),
+                        side = true, bottomClearance = clearance,
+                    )
+                }
+            }
+        } else {
+            val reduce = ReefTheme.reduceMotion
+            // the dock takes a bit over half the height; the tank view gets the rest (never less than 30 %)
+            val animated by animateDpAsState(dockHeight, ReefMotion.tween(reduce), label = "dock")
+            Column(Modifier.fillMaxSize()) {
+                TankArea(
+                    vm, hudState, onModeChange, followId, stats, quality,
+                    Modifier.weight(1f).fillMaxWidth(), bottomPad = if (sandbox) 8.dp else BottomBarClearance,
+                )
+                if (sandbox) {
+                    val dockModifier = if (expanded) Modifier.fillMaxWidth().height(animated) else Modifier.fillMaxWidth()
+                    SandboxDock(panel, actions, dockModifier, side = false, bottomClearance = clearance)
+                }
+            }
+        }
+    }
+}
+
+/** The 3D tank with the HUD, follow overlay and fish card layered on top. */
+@Composable
+private fun TankArea(
+    vm: LiveTankViewModel,
+    hudState: HudState,
+    onModeChange: (HudMode) -> Unit,
+    followId: String?,
+    stats: OrganismStats?,
+    quality: LiveQuality,
+    modifier: Modifier,
+    bottomPad: Dp,
+) {
+    Box(modifier) {
         TankView(
             snapshots = vm.snapshots,
             modifier = Modifier.fillMaxSize(),
@@ -108,42 +235,24 @@ fun LiveTankScreen(
             onTapGlass = vm::tapGlass,
             onFollowLost = { vm.follow(null) },
         )
-        Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = BottomBarClearance)) {
+        Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad)) {
             LiveOverlay(
                 state = hudState,
-                onModeChange = { vm.setMode(if (it == HudMode.SANDBOX) SimMode.SANDBOX else SimMode.REALITY) },
+                onModeChange = onModeChange,
                 onSpeedChange = vm::setSpeed,
+                showSpeed = false,   // speed lives in the sandbox dock (reality always runs at 1x)
             )
             val st = stats
             if (followId != null && st != null) {
-                val ids = hud.stats.map { it.id }
+                val ids = vm.hud.value.stats.map { it.id }
                 val i = ids.indexOf(st.id).coerceAtLeast(0)
                 fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
                 FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
-            } else {
+            } else if (st != null) {
                 Column(Modifier.align(Alignment.BottomCenter).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (mode == SimMode.SANDBOX) ReefButton("Sandbox", { sheet = true }, Modifier.weight(1f), kind = ButtonKind.TONAL)
-                        ReefButton("Time-lapse", { lapse = true }, Modifier.weight(1f), kind = ButtonKind.TONAL)
-                    }
-                    if (st != null) FishCard(st.toFishCardState(), onFollow = { vm.follow(st.id) }, onClose = { vm.select(null) })
+                    FishCard(st.toFishCardState(), onFollow = { vm.follow(st.id) }, onClose = { vm.select(null) })
                 }
             }
-        }
-        if (lapse) {
-            TimelapseSheet(
-                state = lapseState, water = hud.water,
-                onStart = vm::startTimelapse, onCancel = vm::cancelTimelapse, onNew = vm::clearTimelapse,
-                onDismiss = { lapse = false },
-            )
-        }
-        if (sheet && mode == SimMode.SANDBOX) {
-            SandboxPanel(
-                state = SandboxState.from(hud.water, hud.lightIntensity.toDouble(), 12.0, hud.flowStrength.toDouble())
-                    .copy(advancedExpanded = advanced),
-                actions = actions,
-                onDismiss = { sheet = false },
-            )
         }
     }
 }
