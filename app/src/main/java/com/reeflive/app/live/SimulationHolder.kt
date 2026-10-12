@@ -21,6 +21,12 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.WaterState
+import com.reeflive.core.sim.timelapse.CancelToken
+import com.reeflive.core.sim.timelapse.TimelapseFork
+import com.reeflive.core.sim.timelapse.TimelapseRun
+import com.reeflive.core.sim.timelapse.TimelapseSpec
+import com.reeflive.core.sim.timelapse.TimelapseState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -73,6 +79,12 @@ class SimulationHolder(
     private val _peek = MutableStateFlow(LivePeek())
     /** Dashboard peek summary; follows the reality sim (kept up to date even while the tab is away). */
     val peek: StateFlow<LivePeek> = _peek.asStateFlow()
+
+    private val _timelapse = MutableStateFlow<TimelapseState>(TimelapseState.Idle)
+    /** Time-lapse of the active sim (idle / running with progress / done with recording and report). */
+    val timelapse: StateFlow<TimelapseState> = _timelapse.asStateFlow()
+    private val timelapseScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var timelapseCancel: CancelToken? = null
 
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
@@ -132,6 +144,45 @@ class SimulationHolder(
             if (_mode.value != SimMode.SANDBOX) return@launch
             scenarios.schedule(sim.simTimeSec, s.steps())
         }
+    }
+
+    /**
+     * Forks the active sim (on the sim thread, once) and runs [spec] on a background dispatcher so the live sim
+     * keeps ticking. Replaces a run already in flight.
+     */
+    fun startTimelapse(spec: TimelapseSpec) {
+        timelapseCancel?.cancel()
+        val token = CancelToken()
+        timelapseCancel = token
+        _timelapse.value = TimelapseState.Running(spec, com.reeflive.core.sim.timelapse.TimelapseProgress(0f, 0.0, spec.durationHours, 0))
+        scope.launch {
+            val fork = try {
+                val src = active ?: error("The tank is not ready yet")
+                TimelapseFork.of(src)
+            } catch (e: Exception) {
+                if (timelapseCancel === token) _timelapse.value = TimelapseState.Failed(e.message ?: "Could not start")
+                return@launch
+            }
+            timelapseScope.launch {
+                try {
+                    val res = TimelapseRun(fork, spec).run(token) { p ->
+                        if (timelapseCancel === token) _timelapse.value = TimelapseState.Running(spec, p)
+                    }
+                    if (timelapseCancel === token) _timelapse.value = TimelapseState.Done(spec, res.recording, res.report, res.cancelled)
+                } catch (e: Exception) {
+                    if (timelapseCancel === token) _timelapse.value = TimelapseState.Failed(e.message ?: "Time-lapse failed")
+                }
+            }
+        }
+    }
+
+    /** Stops a running time-lapse; the partial recording is kept as a result. */
+    fun cancelTimelapse() { timelapseCancel?.cancel() }
+
+    /** Back to idle (closes the results). Cancels a run in flight and drops its result. */
+    fun clearTimelapse() {
+        timelapseCancel?.cancel(); timelapseCancel = null
+        _timelapse.value = TimelapseState.Idle
     }
 
     /** The Live tab reached RESUMED. */
