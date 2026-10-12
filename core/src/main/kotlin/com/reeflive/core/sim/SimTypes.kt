@@ -11,7 +11,7 @@ sealed class Command {
     data class Lights(val on: Boolean?, val overrideIntensity: Double? = null) : Command()
     data class Heater(val working: Boolean, val setC: Double? = null, val stuckOn: Boolean = false) : Command()
     data class Powerheads(val on: Boolean) : Command()
-    data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null) : Command()
+    data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
     data class SetSpeed(val speed: Double) : Command()
@@ -42,6 +42,8 @@ sealed class Command {
     data class SetAcclimation(val paramId: String? = null) : Command()
     /** Photoperiod in hours (lights-on length, centred on the current midday). */
     data class Photoperiod(val hours: Double) : Command()
+    /** Sandbox: drop [count] spare empty shells for the hermits ([sizeCm] 0 = sized for the largest hermit, with room to grow). */
+    data class AddSpareShells(val count: Int = 1, val sizeCm: Double = 0.0) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -53,6 +55,8 @@ data class LivestockSeed(
     val placement: String? = null,      // anchor name (corals, clown host, etc.)
     val id: String = "",
     val variant: String? = null,
+    /** Starting age in years; null = derived from size (LifeCycle.initialAgeSec). */
+    val ageYears: Double? = null,
 )
 
 enum class Disease { ICH, VELVET, HLLE, BACTERIAL }
@@ -141,6 +145,8 @@ data class OrganismPose(
     val nickname: String = "",
     /** Model variant from the livestock row (e.g. "darwin_black" clown); the renderer picks `variantModels`. */
     val variant: String? = null,
+    /** Cardinal male with eggs in his mouth: draw the throat distended (coverage B-2). */
+    val mouthbrooding: Boolean = false,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
@@ -198,6 +204,8 @@ data class SimSnapshot(
     val flowGrid: com.reeflive.core.geom.FlowGrid? = null,
     /** Per-surface cover of every algae group for the A6 visual cues (research 09); headline covers are on [water]. */
     val algae: AlgaeCover = AlgaeCover.EMPTY,
+    /** Egg clutches on the rock (clown nest, coverage B-1); empty when none. */
+    val eggClutches: List<EggClutchPose> = emptyList(),
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
@@ -238,6 +246,26 @@ data class OrganismStats(
     val relations: List<RelationInfo> = emptyList(),
     /** The animal it is currently keeping clear of, if any. */
     val waryOfId: String? = null,
+    /** "Female", "Male", "Changing sex" or "" (coverage B-1/B-3). */
+    val sex: String = "",
+    /** Carrying eggs in the mouth (cardinal male; he does not eat meanwhile, coverage B-2). */
+    val mouthbrooding: Boolean = false,
+    /** Chronological age in years (LifeCycle). */
+    val ageYears: Float = 0f,
+)
+
+/**
+ * An egg clutch for the renderer (coverage B-1): world position and the rock normal it sits on,
+ * age in days against [hatchDays] (eggs darken and show eyes as [ageDays] nears it), the tending male.
+ */
+data class EggClutchPose(
+    val id: String,
+    val kind: String,
+    val pos: Vec3,
+    val normal: Vec3 = Vec3.Y,
+    val ageDays: Float = 0f,
+    val hatchDays: Float = 9f,
+    val tenderId: String? = null,
 )
 
 /**

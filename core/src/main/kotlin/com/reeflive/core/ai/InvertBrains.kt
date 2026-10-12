@@ -302,7 +302,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 28.0) else g[o.rng.nextInt(g.size)].pos }
 
     init {
-        install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat())
+        install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
@@ -417,7 +417,8 @@ class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = 0.5
         override fun update(c: Ctx, out: SteerIntent) {
             out.rest(restSpot(c, false), 3.0)
-            c.o.extension = min(1.0, c.o.extension + c.dt / 10)
+            // a lost crown regrows over 1-2 months (B-6): the fan opens only as far as the regrowth allows
+            c.o.extension = min(c.sim.invertEcology.crownOf(c.o), c.o.extension + c.dt / 10)
             c.o.posture = 0
             c.o.appendagePhase += c.dt * 0.8
             if (c.t > next && c.o.extension > 0.7) {

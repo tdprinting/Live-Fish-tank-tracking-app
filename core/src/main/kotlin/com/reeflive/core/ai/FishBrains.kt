@@ -27,15 +27,10 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     private val hostName = o.hostAnchor ?: "HOST_KENYA"
     fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, Vec3(72.0, 40.0, 15.0))
     fun partner(c: Ctx): Organism? = c.sim.organisms.firstOrNull { it !== o && it.alive && it.brainKind == BrainKind.CLOWN }
-    fun isFemale(c: Ctx): Boolean {
-        val p = partner(c) ?: return true
-        o.role?.let { return it.equals("FEMALE", true) }
-        p.role?.let { return !it.equals("FEMALE", true) }
-        return o.lengthCm >= p.lengthCm
-    }
+    fun isFemale(c: Ctx): Boolean = c.sim.repro.clownIsFemale(o)
 
     init {
-        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this),
+        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this), CleanNestSite(this), LayEggs(this), TendEggs(this),
             Flee(this, { c, _ -> c.safe(host(c) + Vec3(0.0, 2.0, 0.0), 1.5) }, "Darting into the host"),
             VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this))
     }
@@ -151,10 +146,12 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
 // Blue tang (TangBrain)
 // =====================================================================================
 class TangBrain(c: Ctx) : SpeciesBrain(c) {
+    /** Coral bites so far (C-3; each disturbs the colony briefly). */
+    var coralNips = 0
     fun sleepAnchor(c: Ctx): Anchor? = c.rock.anchors["SLEEP_TANG"]
 
     init {
-        install(Patrol(), Graze(this, 1.5), NibbleNori(this, 1.2), TangFeed(),
+        install(Patrol(), Graze(this, 1.5), NibbleNori(this, 1.2), TangFeed(), NipCorals(this),
             Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(36.0, 25.0, 9.0)) }, "Darting to cover"),
             TangSleep(), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
     }
@@ -299,7 +296,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     inner class NocturnalForage : Behavior("dusk", "Night foraging") {
         private var wp = Vec3.ZERO
         private var next = 0.0
-        override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT) 0.55 else 0.0
+        override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT && !c.o.mouthbrooding) 0.55 else 0.0
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             if (c.t > next || o.pos.distanceTo(wp) < c.L) {
@@ -318,7 +315,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     /** By day faster tankmates leave it little (×0.4 unless the food drifts within 10 cm); dusk/night ×1.5 (06 §3.2). */
     inner class CardinalFeed : Feed(this@CardinalBrain, 60.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = if (f.kind == FoodKind.MYSIS || f.kind == FoodKind.PODS) 0.1 else 0.0
-        override fun accept(c: Ctx, f: FoodParticle) = !f.settled && !f.onSurface
+        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
             c.p.light < FORAGE_LIGHT -> 1.5
             f.pos.distanceTo(c.o.pos) <= 10.0 -> 1.0

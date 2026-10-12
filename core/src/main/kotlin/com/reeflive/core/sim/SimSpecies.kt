@@ -48,7 +48,20 @@ data class SimSpecies(
     val coralKind: CoralKind get() = CoralKind.resolve(id)
 
     fun eats(food: FoodKind): Boolean = diet.any { it.equals(food.name, ignoreCase = true) } ||
-        (food == FoodKind.PODS && diet.any { it.equals("PODS", true) || it.equals("PARASITES", true) })
+        (food == FoodKind.PODS && diet.any { it.equals("PODS", true) || it.equals("PARASITES", true) }) ||
+        (food == FoodKind.PRAWN && diet.any { it.equals("MEATY", true) }) ||
+        (food == FoodKind.PLANKTON && diet.any { it.equals("PHYTOPLANKTON", true) || it.equals("ZOOPLANKTON", true) })
+
+    /**
+     * How well this species does on [food] (research 04 §15 item 9): [dietMatch] scaled by a
+     * species-specific preference, e.g. Nassarius on raw prawn or a cleaner shrimp on mysis.
+     */
+    fun foodPreference(food: FoodKind): Double = dietMatch(food) * when {
+        food == FoodKind.PRAWN && brainKind == BrainKind.NASSARIUS -> 1.5
+        food == FoodKind.MYSIS && brainKind == BrainKind.CLEANER_SHRIMP -> 1.3
+        food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
+        else -> 1.0
+    }
 
     fun dietMatch(food: FoodKind): Double = when {
         eats(food) -> 1.0
@@ -111,7 +124,14 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
     PELLET(1.0 / 20, 3.0, 0.0, 1.0),
     NORI(0.0, 0.0, 0.0, 0.3),
     /** Live copepods/"pods" (sandbox, cleaner wrasse rescue: SIMULATION §3.4) and plankton dosing. */
-    PODS(1.0 / 200, 0.3, 0.0, 0.2);
+    PODS(1.0 / 200, 0.3, 0.0, 0.2),
+    /** Raw prawn chunk for Nassarius and other scavengers (research 04 §15 item 9, [GS-NAS]); sinks fast. */
+    PRAWN(1.0 / 10, 4.0, 0.0, 0.4),
+    /** Plankton / phytoplankton dosed near a feather duster's crown ([TFH-SI]); a drifting cloud that does not settle. */
+    PLANKTON(1.0 / 400, 0.1, 0.0, 0.15);
+
+    /** Drifting live/suspended foods (pods, plankton): advected by the flow, never settle on rock or sand. */
+    val suspended: Boolean get() = this == PODS || this == PLANKTON
 
     companion object {
         fun of(s: String): FoodKind = entries.firstOrNull { it.name.equals(s, true) } ?: FLAKE

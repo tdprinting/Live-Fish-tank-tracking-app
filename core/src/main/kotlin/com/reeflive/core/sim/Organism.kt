@@ -75,6 +75,11 @@ class Organism(
     val heat = HeatModel.State()
     /** Sim time this animal entered the tank (newcomer priority effects, 06 §3.3). Initial stock: 30 days before start. */
     var arrivalTime = -30 * 86400.0
+    /** Chronological age in sim seconds (LifeCycle, B-8); advances only in sim time. */
+    var ageSec = 0.0
+    /** Extra physiological ageing from chronic stress / a cramped tank, in seconds (LifeCycle). */
+    var agingDebtSec = 0.0
+    val ageYears: Double get() = ageSec / LifeCycle.SEC_PER_YEAR
     /** Tactile cleaning calms an aggressor: initiated aggression ×[AGG_DAMP] until this time (06 §5.5, S:Cheney08). */
     var aggressionDampUntil = -1e9
     /** Cardinal/tailspot keep closer to cover for 10 min after being chased (06 §5.4). */
@@ -99,6 +104,14 @@ class Organism(
     var clock = Double.NaN
     /** Daytime hover / forage radius multiplier set by its brain (cardinal newcomer and timid states; 06 §5.6 #7). */
     var hoverRadius = 0.0
+
+    // ---- reproduction (coverage B-1..B-3; driven by sim/Reproduction.kt) ----
+    /** Explicit sex once resolved: true = female, false = male, null = unresolved (see [sexLabel]). Sex change flips it. */
+    var sexFemale: Boolean? = null
+    /** 0..1 progress of a sex change in progress (clown male to female, wrasse female to male). */
+    var sexChange = 0.0
+    /** A cardinal male carrying eggs in his mouth: does not eat, throat distended (B-2). */
+    var mouthbrooding = false
 
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0
@@ -194,7 +207,7 @@ class Organism(
             thin.toFloat(), eyeCloud.toFloat(), alive, lengthCm.toFloat(),
             brain = brainKind.name, posture = posture, eyeYaw = eyeYaw.toFloat(), mouth = mouth.toFloat(),
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
-            variant = variant,
+            variant = variant, mouthbrooding = mouthbrooding,
         )
     }
 
@@ -208,7 +221,19 @@ class Organism(
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
+        sex = sexLabel(), mouthbrooding = mouthbrooding,
+        ageYears = ageYears.toFloat(),
     )
+
+    /** "Female", "Male", "Changing sex" or "" when the sheet gives no sex. */
+    fun sexLabel(): String = when {
+        sexChange > 0.0 -> "Changing sex"
+        sexFemale == true -> "Female"
+        sexFemale == false -> "Male"
+        role.equals("FEMALE", true) -> "Female"
+        role.equals("MALE", true) -> "Male"
+        else -> ""
+    }
 
     fun temperamentTags(): List<String> = buildList {
         if (boldness > 0.6) add("Bold") else if (boldness < 0.35) add("Shy")

@@ -52,7 +52,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
         val count = minOf((grams / kind.gramsPerParticle).toInt().coerceAtLeast(1), MAX - particles.size).coerceAtLeast(0)
         val surface = at.y >= rock.waterLevelCm - 2
         for (i in 0 until count) {
-            val spread = if (kind == FoodKind.PODS) 6.0 else 2.5
+            val spread = if (kind.suspended) 6.0 else 2.5
             var p = at + Vec3(rng.gaussian() * spread, if (surface) 0.0 else rng.gaussian() * 1.0, rng.gaussian() * spread)
             p = rock.clampToWater(p, 0.5)
             if (surface) p = p.withY(rock.waterLevelCm - 0.3)
@@ -70,7 +70,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             val f = it.next()
             if (f.eaten) { it.remove(); continue }
             val age = t - f.bornAt
-            val life = if (f.kind == FoodKind.PODS) 1800.0 else 1200.0
+            val life = if (f.kind.suspended) 1800.0 else 1200.0
             if (age > life) {
                 expiredGrams += f.grams
                 it.remove(); continue
@@ -79,13 +79,13 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             val w = flow.velocityFast(f.pos)
             val floating = f.kind == FoodKind.FLAKE && age < f.kind.floatSeconds && f.pos.y > rock.waterLevelCm - 1
             val sink = if (floating) 0.0 else f.kind.sinkCmS
-            val target = if (floating) Vec3(w.x, 0.0, w.z) else w * (if (f.kind == FoodKind.PODS) 1.0 else 0.7) + Vec3(0.0, -sink, 0.0)
+            val target = if (floating) Vec3(w.x, 0.0, w.z) else w * (if (f.kind.suspended) 1.0 else 0.7) + Vec3(0.0, -sink, 0.0)
             val k = (2.0 * dt).coerceAtMost(1.0)
-            f.vel = f.vel + (target - f.vel) * k + (if (f.kind == FoodKind.PODS) rng.unitVector() * (1.2 * dt) else Vec3.ZERO)
+            f.vel = f.vel + (target - f.vel) * k + (if (f.kind.suspended) rng.unitVector() * (1.2 * dt) else Vec3.ZERO)
             var p = f.pos + f.vel * dt
             if (floating) p = p.withY(rock.waterLevelCm - 0.3)
             p = rock.clampToWater(p, 0.3)
-            if (f.kind != FoodKind.PODS) {
+            if (!f.kind.suspended) {
                 if (rock.sdf.dist(p) < 0.3) {
                     p = rock.sdf.project(p, 0.3); f.settled = true; f.vel = Vec3.ZERO
                 } else if (p.y <= rock.sandTopCm + 0.35) {

@@ -41,6 +41,10 @@ class Simulation(
     val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
     val food = FoodSystem(rock, flow, rng.fork(7))
     val perception = Perception(this)
+    /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
+    val repro = Reproduction(this)
+    /** Hermit shells, asterina-vs-organ-pipe and feather-duster crown cycle (research 04). */
+    val invertEcology = InvertEcology(this)
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -367,6 +371,7 @@ class Simulation(
         var bio = 0.0
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
+        repro.step(CHEM_DT)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) }
@@ -388,8 +393,11 @@ class Simulation(
                 BrainKind.DOTTYBACK, BrainKind.TANG, BrainKind.EEL -> organisms.any { it !== o && it.alive && it.brainKind == o.brainKind }
                 else -> false
             }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light)
+            val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
+                organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
+            if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
         }
         for (c in corals) {
@@ -409,6 +417,7 @@ class Simulation(
             for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
         }
         asterinaPopulation()
+        invertEcology.step(dtMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
@@ -644,6 +653,7 @@ class Simulation(
                 if (c.paramId == null || c.paramId.equals("temp", true)) HeatModel.acclimate(o, water.s.tempC)
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
+            is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -654,7 +664,7 @@ class Simulation(
             is Command.Lights -> { lights.forcedOn = c.on; c.overrideIntensity?.let { lights.intensityOverride = it } }
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
             is Command.Powerheads -> setFlow(c.on)
-            is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role)).let { o ->
+            is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role, ageYears = c.ageYears)).let { o ->
                 // a newcomer: nobody knows it yet (06 §3.3 priority effects)
                 o.arrivalTime = simTimeSec; o.clock = simTimeSec
                 // new arrivals enter at the surface like a release from the acclimation cup
@@ -757,14 +767,14 @@ class Simulation(
     private fun abstractFeed(kind: FoodKind, grams: Double, at: Vec3) {
         var left = if (kind == FoodKind.NORI) 1.0 else grams
         val eaters = organisms.filter { o ->
-            o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind == FoodKind.PODS) &&
+            o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
-                !(o.brainKind == BrainKind.FEATHER_DUSTER && kind != FoodKind.PODS)
-        }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 }
+                !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
+        }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind)) }
         for (o in eaters) {
             if (left <= 0) break
             if (kind == FoodKind.NORI) { o.hunger = max(0.0, o.hunger - 0.4); o.nutritionGreens = 1.0; continue }
-            val want = o.mealGrams * (o.hunger / 0.8) * o.species.dietMatch(kind)
+            val want = o.mealGrams * (o.hunger / 0.8) * o.species.foodPreference(kind)
             val g = min(want, left)
             o.eat(g); left -= g
         }
@@ -801,7 +811,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
@@ -821,6 +831,7 @@ class Simulation(
         val size = if (seed.sizeCm > 0) seed.sizeCm else sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm)
         val o = Organism(id, sp, size, seed.nickname, seed.role, rng.fork(id.hashCode().toLong()), seed.placement, seed.variant)
         o.hunger = 0.25 + rng.nextDouble() * 0.2
+        o.ageSec = LifeCycle.initialAgeSec(o, seed.ageYears)
         if (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.LAWNMOWER_BLENNY) o.acceptsPrepared = rng.chance(0.7)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
@@ -873,6 +884,7 @@ class Simulation(
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
             algae = water.algae.snapshot(),
+            eggClutches = repro.poses(),
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),

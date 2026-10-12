@@ -284,12 +284,12 @@ fun Ctx.anchorOf(name: String): Anchor? = rock.anchors[name]
 /** Standoff point in front of an anchor along its normal (or straight up). */
 fun Ctx.standoff(a: Anchor, d: Double): Vec3 = a.pos + (a.normal ?: Vec3.Y).normalized(Vec3.Y) * d
 
-fun Ctx.isPrepared(f: FoodParticle) = f.kind != FoodKind.PODS
+fun Ctx.isPrepared(f: FoodParticle) = !f.kind.suspended
 
 /** Nearest diet-matching food this animal accepts within [radius], optionally with a line-of-sight check. */
 fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
     val f = food.nearest(o.pos, radius) { f ->
-        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind == FoodKind.PODS) && extra(f)
+        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f)
     } ?: return null
     if (los && !rock.sdf.segmentClear(o.pos, f.pos, 0.2)) {
         // try the second nearest without LOS cost explosion: accept if near
@@ -302,7 +302,7 @@ fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> B
 fun Ctx.bite(f: FoodParticle) {
     if (f.eaten) return
     food.consume(f)
-    o.eat(f.grams * o.species.dietMatch(f.kind).coerceAtLeast(0.5))
+    o.eat(f.grams * o.species.foodPreference(f.kind).coerceAtLeast(0.5))
     o.counters.add(com.reeflive.core.sim.Counters.K.FEED, t)
     o.mouth = 1.0
 }

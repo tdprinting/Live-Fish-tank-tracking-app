@@ -20,6 +20,8 @@ data class HealthContext(
     val flowStrength: Double = 1.0,
     /** Light intensity 0..1.5 (stress light channel). */
     val light: Double = 0.5,
+    /** This animal is a second (or later) blenny in the tank: chronically harassed by the resident (research 04 §15 item 2). */
+    val blennyExcess: Boolean = false,
 )
 
 /**
@@ -44,6 +46,8 @@ object HealthModel {
     const val K_LETHAL = 0.0004
     const val K_STARVE = 0.003
     const val HUNGER_DIVISOR = 1440.0 * 1.4
+    /** Extra stress target on the second blenny in a tank under 400 L (B-10); with chronic decay it fades colour and drains immunity. */
+    const val BLENNY_EXCESS_STRESS = 0.10
 
     /**
      * Calibrated group profiles (research 05 §18; NH3 in ppm NH3 = 1.214 × NH3-N, NO2 in ppm NO2⁻ = 3.28 × NO2-N).
@@ -223,7 +227,7 @@ object HealthModel {
         if (o.brainKind == BrainKind.EEL && o.lengthCm > 50) sSpace = 0.05
         val sDark = if (o.brainKind == BrainKind.WRASSE && !ctx.clientsAvailable) 0.05 else 0.0
         val sHunger = 0.3 * max(0.0, o.hunger - 0.6)
-        val sRival = if (ctx.rivalPresent) 0.05 else 0.0
+        val sRival = (if (ctx.rivalPresent) 0.05 else 0.0) + (if (ctx.blennyExcess) BLENNY_EXCESS_STRESS else 0.0)
         val target = min(1.0, sEnv + o.socialStress.coerceAtMost(0.25) + sSpace + o.startle.coerceAtMost(0.45) + sDark + sHunger + sRival)
         // ---- dynamics ----
         val k = if (target > o.stress) STRESS_RISE else STRESS_FALL
@@ -247,7 +251,7 @@ object HealthModel {
         val sNo2 = o.envStress["no2"] ?: 0.0
         if (o.disease == null) {
             val ichSus = s.diseaseSusceptibility["ICH"] ?: if (o.isFish) 0.3 else 0.0
-            val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum) * ichSus * sq(1 - o.immunity) * hardInv
+            val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum) * ichSus * sq(1 - o.immunity) * hardInv * LifeCycle.susceptibility(o)
             val pBact = if (sNh3 + sNo2 > 0.3) 0.0005 * (sNh3 + sNo2) * (1 - o.immunity) else 0.0
             val hlleSus = s.diseaseSusceptibility["HLLE"] ?: 0.0
             when {
