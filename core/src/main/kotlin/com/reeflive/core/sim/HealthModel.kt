@@ -270,10 +270,9 @@ object HealthModel {
         val sNo2 = o.envStress["no2"] ?: 0.0
         if (o.disease == null) {
             val ichSus = s.diseaseSusceptibility["ICH"] ?: if (o.isFish) 0.3 else 0.0
-            val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum) * ichSus * sq(1 - o.immunity) * hardInv * LifeCycle.susceptibility(o)
             val ichMods = ctx.mods[Disease.ICH]
             val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum * (ichMods?.transmission ?: 1.0)) * ichSus * sq(1 - o.immunity) * hardInv *
-                (ichMods?.onset ?: 1.0)
+                (ichMods?.onset ?: 1.0) * LifeCycle.susceptibility(o)
             val pBact = if (sNh3 + sNo2 > 0.3) 0.0005 * (sNh3 + sNo2) * (1 - o.immunity) else 0.0
             val hlleSus = s.diseaseSusceptibility["HLLE"] ?: 0.0
             when {

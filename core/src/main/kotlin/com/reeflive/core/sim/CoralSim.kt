@@ -65,7 +65,7 @@ class Coral(
         species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(),
         offsetX = offset.x.toFloat(), offsetY = offset.y.toFloat(), offsetZ = offset.z.toFloat(),
         homeX = (pos.x - offset.x).toFloat(), homeY = (pos.y - offset.y).toFloat(), homeZ = (pos.z - offset.z).toFloat(),
-        species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(), size.toFloat(), cover.toFloat(),
+        size = size.toFloat(), cover = cover.toFloat(),
     )
 }
 

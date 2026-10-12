@@ -230,15 +230,15 @@ data class CoralPose(
     val homeX: Float = 0f,
     val homeY: Float = 0f,
     val homeZ: Float = 0f,
-) {
-    val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
-}
+    /**
      * Colony growth (CoralGrowth, research 03 C2): linear size relative to the placed colony (renderer instance
      * scale; 1 = as modelled) and, for encrusting mats, the share of their reachable rock now covered (polyp density).
      */
     val size: Float = 1f,
     val cover: Float = 0f,
-)
+) {
+    val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
+}
 
 /** Everything the renderer and HUD need for one frame (ARCHITECTURE §8.8). */
 data class SimSnapshot(

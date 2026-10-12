@@ -244,7 +244,8 @@ class RealismAcceptanceTest {
         sim.advance(1.0)
         assertTrue("near-cave week-3 radius ${card.hoverRadius}", card.hoverRadius <= 10.0)
         cb.setPocket(sim.rock.anchors.pos("HOVER_CARDINAL", Vec3(26.0, 20.0, 15.0)))
-        sim.advance(1.0)
+        // let any 10-min post-chase timidity from the near-cave spell wear off before reading the baseline
+        sim.advance(601.0)
         assertTrue("far-from-cave week-3 radius ${card.hoverRadius}", card.hoverRadius in 0.8 * CardinalBrain.BASE_RADIUS..1.2 * CardinalBrain.BASE_RADIUS)
     }
 
