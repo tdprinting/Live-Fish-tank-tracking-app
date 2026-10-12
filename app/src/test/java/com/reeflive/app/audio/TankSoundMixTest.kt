@@ -12,6 +12,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TankSoundMixTest {
+    @Test fun scrapeIsQuietWhenStillAndLouderForLongerStrokes() {
+        assertEquals(0f, TankSoundMix.scrapeGain(0f))
+        val short = TankSoundMix.scrapeGain(0.6f)
+        val long = TankSoundMix.scrapeGain(3f)
+        assertTrue(short > 0f && short < long && long <= 1f)
+    }
+
     private fun day(flow: Float = 1f, share: Float = 1f, power: Boolean = true, light: Float = 1f, vol: Float = 1f) =
         TankSoundMix.ambience(flow, share, power, light, vol)
 

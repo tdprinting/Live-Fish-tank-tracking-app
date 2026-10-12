@@ -37,6 +37,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
     @Volatile private var resetRequested = false
+    @Volatile private var cleaningRequest = false
     val input = CameraInput()
 
     private val _stats = MutableStateFlow(RenderStats(quality = initialQuality))
@@ -58,6 +59,19 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var surfaceTex: Texture? = null
     private var surfaceDims = IntArray(2)
     private var lastSurfaceSnap: SimSnapshot? = null
+    /** Front-glass film mask (GlassMask, R16F) while the Flipper has scraped it; white 1×1 is bound otherwise. */
+    private var glassMaskTex: Texture? = null
+    private var glassMaskData: FloatArray? = null
+    private var glassMaskOn = false
+
+    // ---- clean-glass mode (GL thread) ----
+    private var cleaning = false
+    /** Flipper pad centre on the front glass (tank cm), where it is drawn; starts at its modelled seat. */
+    private val flipper = floatArrayOf(FLIPPER_REST_X, FLIPPER_REST_Y)
+    private val strokeFrom = floatArrayOf(FLIPPER_REST_X, FLIPPER_REST_Y)
+    private val pointer = FloatArray(2)
+    private val flipperModel = FloatArray(16)
+    private val shift = M.identity()
     private var store = AssetStore(assets, initialQuality)
     private val registry = ModelRegistry()
     private val interp = SnapshotInterpolator()
@@ -84,6 +98,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
 
+    /** Clean-glass mode on/off (any thread): drags slide the Flipper; the camera squares up to the front glass. */
+    fun setCleaning(on: Boolean) {
+        if (input.cleaning == on) return
+        input.cleaning = on
+        if (!on) input.scrapeTouch(0f, 0f, false)
+        cleaningRequest = on
+    }
+
     // ------------------------------------------------------------------ GLSurfaceView.Renderer
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -104,6 +126,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         neutralRough = Texture.solid(217, 255, 0)
         zero = Texture.floatR(1, 1).also { Texture.updateFloatR(it, floatArrayOf(0f)) }
         surfaceTex = null; surfaceDims = IntArray(2); lastSurfaceSnap = null
+        glassMaskTex = null; glassMaskData = null; glassMaskOn = false
         val (v, i) = Placeholder.spindle()
         placeholder = Mesh.create(v, i)
         post = if (quality.bloom) runCatching { PostFx(source, quality.msaa) }.onFailure { Log.e(Gl.TAG, "PostFx", it) }.getOrNull() else null
@@ -120,8 +143,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.release(); particlesGl = null
         shafts?.release(); shafts = null
         placeholder?.release(); placeholder = null
-        listOf(white, flatNormal, neutralRough, zero, surfaceTex).forEach { it?.release() }
-        white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null
+        listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
+        white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
         store.onContextLost(quality)
     }
@@ -153,9 +176,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val taps = input.drain(camera, height.toFloat())
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         for (t in taps) handleTap(t, rigs)
+        if (cleaning) dragFlipper(dt)
 
         // 3. per-frame uniforms + shared textures
         updateSurface(cur)
+        updateGlassMask(cur)
         val fu = frame ?: return
         val progs = programs ?: return
         fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
@@ -208,6 +233,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyRequests() {
         if (followDirty) { followDirty = false; camera.follow(followRequest) }
         if (resetRequested) { resetRequested = false; camera.reset() }
+        val clean = cleaningRequest
+        if (clean != cleaning) {
+            cleaning = clean
+            if (clean) camera.faceGlass() else camera.reset()
+            strokeFrom[0] = flipper[0]; strokeFrom[1] = flipper[1]
+        }
         val q = requestedQuality
         if (q != quality) {
             quality = q
@@ -228,6 +259,56 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         (store.texture(ROOM_ENV) ?: w).bind(6)
         (store.texture(WATER_N1) ?: flatNormal ?: w).bind(7)
         (store.texture(WATER_N2) ?: flatNormal ?: w).bind(8)
+        (glassMaskTex?.takeIf { glassMaskOn } ?: w).bind(GLASS_MASK_UNIT)
+    }
+
+    /** Uploads the front-glass film mask when the snapshot carries a new one (the core shares an array per version). */
+    private fun updateGlassMask(s: SimSnapshot?) {
+        val mask = s?.algae?.glassMask
+        if (mask == null || mask.size < GLASS_MASK_W * GLASS_MASK_H) { glassMaskOn = false; return }
+        glassMaskOn = true
+        if (mask === glassMaskData && glassMaskTex != null) return
+        val t = glassMaskTex ?: Texture.floatR(GLASS_MASK_W, GLASS_MASK_H).also { glassMaskTex = it }
+        Texture.updateFloatR(t, mask)
+        glassMaskData = mask
+    }
+
+    // ------------------------------------------------------------------ clean-glass mode
+
+    /**
+     * The Flipper glides after the finger over the front glass (ray ∩ glass plane, clamped so the pad stays on the
+     * wetted pane) and every [GlassStroke.MIN_CM] of travel is reported to the listener as a stroke to scrape.
+     */
+    private fun dragFlipper(dt: Float) {
+        if (!input.scrapePointer(pointer)) {
+            // finger lifted: report the last bit of travel
+            if (strokeFrom[0] != flipper[0] || strokeFrom[1] != flipper[1]) reportStroke()
+            return
+        }
+        val dir = FloatArray(3)
+        camera.ray(pointer[0], pointer[1], width, height, dir)
+        val t = Picker.rayPlaneZ(camera.eye, dir, Camera.TANK[2]) ?: return
+        val hx = (camera.eye[0] + dir[0] * t).coerceIn(FLIPPER_HALF_W + 0.2f, Camera.TANK[0] - FLIPPER_HALF_W - 0.2f)
+        val hy = (camera.eye[1] + dir[1] * t).coerceIn(Camera.SAND_Y + FLIPPER_HALF_H + 0.2f, Camera.WATER_Y - FLIPPER_HALF_H + 1f)
+        // a magnet pad slides, it does not teleport: quick glide toward the finger (scrapes along the way)
+        val a = 1f - kotlin.math.exp(-FLIPPER_FOLLOW * dt)
+        flipper[0] += (hx - flipper[0]) * a
+        flipper[1] += (hy - flipper[1]) * a
+        val dx = flipper[0] - strokeFrom[0]; val dy = flipper[1] - strokeFrom[1]
+        if (dx * dx + dy * dy >= GlassStroke.MIN_CM * GlassStroke.MIN_CM) reportStroke()
+    }
+
+    private fun reportStroke() {
+        val s = GlassStroke(strokeFrom[0], strokeFrom[1], flipper[0], flipper[1])
+        strokeFrom[0] = flipper[0]; strokeFrom[1] = flipper[1]
+        val l = listener
+        main.post { l?.onScrape(s) }
+    }
+
+    /** The Flipper node's model matrix: its modelled pose shifted to the current pad position on the glass. */
+    private fun flipperMatrix(world: FloatArray): FloatArray {
+        shift[12] = flipper[0] - FLIPPER_REST_X; shift[13] = flipper[1] - FLIPPER_REST_Y
+        return M.mul(shift, world, flipperModel)
     }
 
     private fun updateSurface(s: SimSnapshot?) {
@@ -259,7 +340,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else -> progs.generic
             }
             p.use()
-            p.setMat4("uModel", part.node.world)
+            p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
             part.material.apply(p, w)
             when (part.kind) {
                 MaterialKind.ROCK -> {
@@ -538,6 +619,18 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
         const val ALGAE = "models/algae_tufts.glb"
+        /** equipment.glb node of the Flipper magnet scraper (both halves), seated at x 2–8, y 13–33 on the front glass. */
+        const val FLIPPER_NODE = "Flipper"
+        const val FLIPPER_REST_X = 5f
+        const val FLIPPER_REST_Y = 23f
+        const val FLIPPER_HALF_W = GlassStroke.FLIPPER_W / 2
+        const val FLIPPER_HALF_H = GlassStroke.FLIPPER_H / 2
+        /** Glide rate (1/s) of the pad toward the finger. */
+        const val FLIPPER_FOLLOW = 18f
+        /** Texture unit of `uGlassMask` ([ShaderProgram.SAMPLER_UNITS]) and the core GlassMask grid. */
+        const val GLASS_MASK_UNIT = 11
+        const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
+        const val GLASS_MASK_H = com.reeflive.core.sim.GlassMask.H
         val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE)
         val DEMO_CORALS = listOf(
             "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",

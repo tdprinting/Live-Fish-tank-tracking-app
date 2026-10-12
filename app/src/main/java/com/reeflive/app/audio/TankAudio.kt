@@ -54,6 +54,8 @@ class TankAudio(context: Context) {
         Cue.TICK to pool.load(context, R.raw.tank_ui_tick, 1),
         Cue.ALERT to pool.load(context, R.raw.tank_alert_chime, 1),
     )
+    private val scrapeId = pool.load(context, R.raw.tank_glass_scrape, 1)
+    private var lastScrapeMs = 0L
 
     /** Loop sound id → playing stream id (absent = not playing). */
     private val loopStreams = HashMap<Int, Int>()
@@ -116,6 +118,17 @@ class TankAudio(context: Context) {
     /** Soft tick for sandbox actions (rate-limited, so a dragged slider does not machine-gun). */
     fun uiTick() {
         if (active()) play(Cue.TICK, rate = 1f, gain = 0.6f)
+    }
+
+    /** Clean-glass mode: the Flipper slid [cm] over the glass. A soft felt-on-glass swish, rate-limited. */
+    fun scrape(cm: Float) {
+        if (!active() || scrapeId !in loaded) return
+        val gain = TankSoundMix.scrapeGain(cm)
+        val now = SystemClock.uptimeMillis()
+        if (gain <= 0f || now - lastScrapeMs < TankSoundMix.SCRAPE_GAP_MS) return
+        lastScrapeMs = now
+        val v = (volume * gain).coerceIn(0f, 1f)
+        pool.play(scrapeId, v, v, 1, 0, 0.9f + Random.nextFloat() * 0.2f)
     }
 
     fun release() {

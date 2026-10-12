@@ -65,6 +65,9 @@ fun LiveOverlay(
     /** Tank sounds on/off for the quick mute button; null hides the button. */
     soundOn: Boolean? = null,
     onToggleSound: () -> Unit = {},
+    /** Clean-glass mode for the [CleanGlassButton]; null hides the button. */
+    cleaning: Boolean? = null,
+    onToggleCleaning: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -75,7 +78,12 @@ fun LiveOverlay(
             if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
             // under the strip at the right edge: the top row has no room for it on a phone
-            if (soundOn != null) SoundButton(soundOn, onToggleSound, Modifier.align(Alignment.End))
+            if (soundOn != null || cleaning != null) {
+                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (cleaning != null) CleanGlassButton(cleaning, onToggleCleaning)
+                    if (soundOn != null) SoundButton(soundOn, onToggleSound)
+                }
+            }
         }
         AnimatedVisibility(
             visible = state.toast != null,

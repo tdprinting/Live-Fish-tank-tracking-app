@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.live.SimulationHolder
+import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
@@ -13,6 +14,7 @@ import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.Scenario
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.GlassPane
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.WaterState
@@ -130,6 +132,16 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null) = holder.enqueue(Command.Feed(kind, grams, at))
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
+    /**
+     * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner
+     * does to the real tank, and Reality's algae are simulated from the logged water anyway, so its glass cover drops.
+     */
+    fun scrapeGlass(s: GlassStroke) = holder.enqueue(
+        Command.ScrapeGlass(
+            GlassPane.FRONT, s.x0.toDouble(), s.y0.toDouble(), s.x1.toDouble(), s.y1.toDouble(),
+            GlassStroke.FLIPPER_W.toDouble(), GlassStroke.FLIPPER_H.toDouble(),
+        ),
+    )
 
     // ---- sandbox actions (ignored in REALITY mode) ----
     private inline fun sandbox(block: () -> Unit) { if (mode.value == SimMode.SANDBOX) block() }

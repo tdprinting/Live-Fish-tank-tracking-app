@@ -50,6 +50,20 @@ class AlgaeVisualsTest {
         assertTrue(out.all { it == 0f })
     }
 
+    /** After a Flipper scrape the glass slots carry the untouched-glass cover; other surfaces keep the mean cover. */
+    @Test fun scrapedGlassPacksTheUntouchedCover() {
+        val base = cover(
+            Triple(AlgaeGroup.FILM, AlgaeSurface.GLASS, 0.30f),
+            Triple(AlgaeGroup.DIATOMS, AlgaeSurface.SAND, 0.21f),
+        )
+        val glassBase = FloatArray(AlgaeCover.GROUPS).also { it[AlgaeGroup.FILM.ordinal] = 0.4f; it[AlgaeGroup.DIATOMS.ordinal] = 0.05f }
+        val c = AlgaeCover(base.cover, base.vigor, glassBase = glassBase, glassMask = FloatArray(64 * 32) { 0.5f }, glassMaskVersion = 3)
+        val out = FloatArray(AlgaeVisuals.FLOATS)
+        AlgaeVisuals.pack(c, out, 0)
+        assertEquals(0.4f, out[0], 0f); assertEquals(0.05f, out[1], 0f)   // glass film, diatoms from glassBase
+        assertEquals(0.21f, out[4], 0f)                                     // sand diatoms unchanged
+    }
+
     /** The Kotlin packing must match the std140 `Frame` block in common.glsl (all members are vec4/mat4). */
     @Test fun frameBlockMatchesShaderLayout() {
         val src = File("src/main/assets/shaders/common.glsl").readText()
