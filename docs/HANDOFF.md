@@ -28,7 +28,16 @@ Repo: https://github.com/tdprinting/Live-Fish-tank-tracking-app (public). Every 
 - Research 06 (interactions) and 07 (gap sources) are **not yet in the repo**. They live in Tee's `ReefLive_research_compendium.md` (lines 3057–3905). Ask Tee to upload it, then commit them as `docs/research/06_interactions_analysis.md` and `07_gap_sources.md`.
 
 ## Branch status at end of session
-MERGE_STATUS_PLACEHOLDER
+| Branch | State | What the next AI does |
+|---|---|---|
+| `ui/sandbox-inline` | **Merged** (PR #10) | Done. TODO hooks listed in Next steps §2. |
+| `assets/tank-hq` | main merged in, models regenerated, validators pass. CI fix 9975c3c pushed; CI dispatched | If green: open PR, merge. Fish-all-LOD0 budgets are over (High +127 tris, Medium +15.6k); default views are within budget. |
+| `sim/realism` | Builds; 14/29 acceptance checks pass, 15 `@Ignore`d as WIP. Last CI (run 48) failed; a fix was in progress | Get CI green (likely the schema/KSP cache issue below: cherry-pick 9975c3c), merge, then tune the ignored checks. |
+| `sim/timelapse` | Merging main (incl. PR #10) into it was in progress; it may have unresolved conflicts or a partial push | Finish `git merge origin/main` (take main's LiveTankScreen/ViewModel/SimulationHolder, re-apply only the time-lapse API and entry button, putting the entry in the sandbox dock). Get CI green and merge **after** sim/realism, adapting to its OrganismStats/StressModel/PairMatrix changes. |
+| `sim/algae-heat` | Empty (no commits) | Delete it and start fresh from main per Next steps §3. |
+| `claude/kind-meitner-5vcgxn` | Docs only (this file, research 08/09, coverage gaps, worklist) | Merged with this handoff. |
+
+**Known CI trap:** branch runs use a read-only Gradle cache. When a branch doesn't change app Kotlin sources, KSP is restored from cache and Room never writes `app/schemas/.../1.json`, so `DatabaseUpgradeSafetyTest.schemaJsonForEveryVersion` fails. Fix (commit 9975c3c on assets/tank-hq; it reaches main when that branch merges): android.yml runs `./gradlew :app:kspDebugKotlin --rerun` before the app tests. Committing `app/schemas/.../1.json` is the permanent fix.
 
 ## Next steps, in priority order
 1. **sim/realism follow-up:** un-ignore and tune the 15 `@Ignore`d checks in `RealismAcceptanceTest` (c02–06, 08, 09, 11, 15, 16, 20, 22, 24, 25, 27). Per-check notes are in the next section. Also: shorten slow checks (c20, c06, c12, c08; the file takes ~5.5 min), delete the scratch test in `core/src/test/.../debug/` if it got committed, and tighten `AiTest.feedingReducesHunger` (currently 6 of 9 fed). Not implemented from 06: feeding displacement by rank (§3.2), tang `blueDeepen`, CBS/hermit claw display, hermit shell fights, coral sign hooks, territory re-anchoring after `RearrangeRock`. Write up SIMULATION.md §9.10.
