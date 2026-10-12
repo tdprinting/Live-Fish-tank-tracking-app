@@ -42,6 +42,8 @@ import com.reeflive.app.ui.components.ButtonKind
 import com.reeflive.app.ui.components.ReefButton
 import com.reeflive.app.ui.components.ReefChip
 import com.reeflive.app.ui.components.ReefSheet
+import com.reeflive.app.ui.components.ReefSlider
+import com.reeflive.app.ui.components.ReefSliderSpec
 import com.reeflive.app.ui.components.StatusPill
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
@@ -66,21 +68,23 @@ import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------- setup model
 
-/** A parameter you can time-lapse: slider range comes from the sandbox spec, widened where "super high" is the point. */
-internal data class LapseParam(val id: String, val spec: SandboxSliderSpec)
+/** A parameter you can time-lapse: slider range and zones come from the sandbox rows, capped where the tail is useless. */
+internal data class LapseParam(val id: String, val spec: ReefSliderSpec)
+
+private fun sandboxSpec(rowId: String): ReefSliderSpec = SandboxParams.byId(rowId)!!.spec
 
 internal object LapseParams {
     val all: List<LapseParam> = listOf(
-        LapseParam("sg", SandboxSpecs.salinity.copy(id = "sg", min = 1.010, max = 1.045)),
-        LapseParam("temp", SandboxSpecs.temp.copy(min = 18.0, max = 36.0)),
-        LapseParam("no3", SandboxSpecs.nitrate.copy(max = 200.0)),
-        LapseParam("po4", SandboxSpecs.phosphate.copy(max = 3.0)),
-        LapseParam("alk", SandboxSpecs.alk.copy(min = 2.0, max = 20.0)),
-        LapseParam("ca", SandboxSpecs.calcium),
-        LapseParam("mg", SandboxSpecs.magnesium),
-        LapseParam("ph", SandboxSpecs.ph),
-        LapseParam("nh3", SandboxSpecs.ammonia.copy(max = 2.0)),
-        LapseParam("do", SandboxSpecs.oxygen),
+        LapseParam("sg", sandboxSpec("sal").copy(min = 1.010)),
+        LapseParam("temp", sandboxSpec("temp").copy(min = 18.0, max = 36.0)),
+        LapseParam("no3", sandboxSpec("no3").copy(max = 200.0)),
+        LapseParam("po4", sandboxSpec("po4").copy(max = 3.0)),
+        LapseParam("alk", sandboxSpec("alk").copy(min = 2.0, max = 20.0)),
+        LapseParam("ca", sandboxSpec("ca")),
+        LapseParam("mg", sandboxSpec("mg")),
+        LapseParam("ph", sandboxSpec("ph")),
+        LapseParam("nh3", sandboxSpec("nh3").copy(max = 2.0)),
+        LapseParam("do", sandboxSpec("do")),
     )
     fun byId(id: String) = all.first { it.id == id }
 }
@@ -215,7 +219,7 @@ private fun LapseSetup(water: WaterState, onStart: (TimelapseSpec) -> Unit) {
         "Now " + (now?.let { fmtLapse(it, p.spec.decimals) } ?: "?") + (if (p.spec.unit.isEmpty()) "" else " ${p.spec.unit}"),
         style = MaterialTheme.typography.labelMedium, color = c.textSecondary,
     )
-    BandSlider(p.spec.copy(label = "Target"), target.coerceIn(p.spec.min, p.spec.max)) { target = it; presetLabel = "" }
+    ReefSlider(p.spec.copy(label = "Target"), target.coerceIn(p.spec.min, p.spec.max), { target = it; presetLabel = "" })
 
     SubHeader("How")
     ChipRow {
