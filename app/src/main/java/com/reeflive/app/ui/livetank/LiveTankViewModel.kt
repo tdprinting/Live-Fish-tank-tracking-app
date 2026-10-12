@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.live.SimulationHolder
+import com.reeflive.app.ui.live.SandboxPreset
+import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.nav.LiveFocus
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.live.LivePeek
@@ -59,10 +61,32 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         id?.let { sel -> s.stats.firstOrNull { it.id == sel } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    private val _real = MutableStateFlow<TankReading?>(null)
+    /**
+     * The real tank as last seen while in Watch mode (reality runs at 1x, so it barely moves during a sandbox session).
+     * Drives the "your tank" markers on the sandbox sliders without touching the holder API.
+     */
+    val real: StateFlow<TankReading?> = _real.asStateFlow()
+
+    private val _lightPct = MutableStateFlow(100.0)
+    /** Sandbox light multiplier in % (sim intensity override × 100); 100 = the schedule as is. */
+    val lightPct: StateFlow<Double> = _lightPct.asStateFlow()
+
+    private val _predation = MutableStateFlow(true)
+    /** Predation in the sandbox (the fork starts with it on). */
+    val predation: StateFlow<Boolean> = _predation.asStateFlow()
+
     /** Summary for the Dashboard peek (fish count, any sick fish, last event). */
     val peek: StateFlow<LivePeek> = holder.peek
 
     init {
+        viewModelScope.launch {
+            holder.snapshots.sample(REAL_SAMPLE_MS).collect { snap ->
+                if (holder.mode.value == SimMode.REALITY && snap !== SimSnapshot.EMPTY) {
+                    _real.value = TankReading(snap.water, lightPct = 100.0, flowPct = snap.flowStrength * 100.0)
+                }
+            }
+        }
         viewModelScope.launch {
             LiveFocus.followId.collect { pending ->
                 if (pending != null) {
@@ -81,6 +105,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
 
     // ---- view state ----
     fun setMode(m: SimMode) {
+        if (m != mode.value) { _lightPct.value = 100.0; _predation.value = true }
         holder.setMode(m)
     }
     fun setSpeed(v: Double) = holder.setSpeed(v)
@@ -102,7 +127,12 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun setLights(on: Boolean?, intensity: Double? = null) = sandbox { holder.enqueue(Command.Lights(on, intensity)) }
     fun setHeater(working: Boolean, setC: Double? = null, stuckOn: Boolean = false) = sandbox { holder.enqueue(Command.Heater(working, setC, stuckOn)) }
     fun setPowerheads(on: Boolean) = sandbox { holder.enqueue(Command.Powerheads(on)) }
-    fun setPredation(enabled: Boolean) = sandbox { holder.enqueue(Command.SetPredation(enabled)) }
+    fun setPredation(enabled: Boolean) = sandbox { _predation.value = enabled; holder.enqueue(Command.SetPredation(enabled)) }
+    /** Light multiplier slider, in % (0..150). */
+    fun setLightPct(pct: Double) = sandbox {
+        _lightPct.value = pct
+        holder.enqueue(Command.SetParam("light", pct / 100.0))
+    }
     fun setSize(id: String, sizeCm: Double) = sandbox { holder.enqueue(Command.SetSize(id, sizeCm)) }
     fun addOrganism(speciesId: String, sizeCm: Double, nickname: String, role: String? = null) =
         sandbox { holder.enqueue(Command.AddOrganism(speciesId, sizeCm, nickname, role)) }
@@ -112,10 +142,45 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
     fun runScenario(s: Scenario) = sandbox { holder.runScenario(s) }
 
+    /**
+     * One-tap what-if presets. Power outage and overfeeding reuse the core scenarios; the rest are built from commands
+     * the sim already supports.
+     */
+    fun runPreset(p: SandboxPreset) = sandbox {
+        val w = hud.value.water
+        when (p) {
+            SandboxPreset.HEATER_STUCK -> setHeater(working = true, stuckOn = true)
+            SandboxPreset.POWER_OUTAGE -> runScenario(Scenario.POWER_OUTAGE)
+            SandboxPreset.OVERFEEDING -> runScenario(Scenario.OVERFEEDING)
+            // TODO(sim/realism): replace with "skip routine water changes" once the sim exposes the water-change
+            //  schedule; for now jump straight to roughly two months of build-up.
+            SandboxPreset.MISSED_WATER_CHANGES -> {
+                setParam("no3", w.no3 + 40.0)
+                setParam("po4", w.po4 + 0.3)
+                setParam("alk", (w.alk - 1.5).coerceAtLeast(0.0))
+                setParam("ca", (w.ca - 40.0).coerceAtLeast(100.0))
+                setParam("mg", (w.mg - 80.0).coerceAtLeast(600.0))
+                setParam("algae", (w.algaeHair + 0.15).coerceAtMost(1.0))
+            }
+            // TODO(sim/realism): use a ramp (fresh water flooding in over ~30 min) instead of a step.
+            SandboxPreset.SALINITY_CRASH -> setParam("sal", 1.012)
+            SandboxPreset.COPPER_OVERDOSE -> setParam("copper", 0.5)
+        }
+    }
+
     /** Restores the sandbox to the state it was forked from. */
-    fun resetSandbox() = sandbox { holder.resetSandbox() }
+    fun resetSandbox() = sandbox {
+        _lightPct.value = 100.0
+        _predation.value = true
+        holder.resetSandbox()
+        // ResetToReality restores water and livestock; also undo the overrides that live outside them
+        holder.enqueue(Command.Lights(on = null, overrideIntensity = 1.0))
+        holder.enqueue(Command.Heater(working = true, stuckOn = false))
+        holder.enqueue(Command.SetPredation(true))
+    }
 
     companion object {
         const val HUD_PERIOD_MS = 100L   // 10 Hz
+        const val REAL_SAMPLE_MS = 500L
     }
 }
