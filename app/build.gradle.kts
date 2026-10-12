@@ -8,6 +8,11 @@ plugins {
     id(libs.plugins.ksp.get().pluginId)
 }
 
+// CI passes -PversionCode=<run number + 100> and -PversionName=0.1.<date>.<run> so every build installs as an
+// upgrade over the previous one. Local builds default to 1 / 0.1.0.
+val reefVersionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+val reefVersionName = (findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "0.1.0"
+
 android {
     namespace = "com.reeflive.app"
     compileSdk = 35
@@ -16,8 +21,10 @@ android {
         applicationId = "com.reeflive"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Same applicationId and signing key for debug and release: never change them, or updates stop
+        // installing over the old app (Android would require an uninstall, which deletes the data).
+        versionCode = reefVersionCode
+        versionName = reefVersionName
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -55,6 +62,11 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+
+    // Exported Room schemas (app/schemas) are the reference for migration tests; never use destructive fallback.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
 
     androidResources {
