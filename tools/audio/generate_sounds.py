@@ -134,12 +134,12 @@ def hum_loop():
     m = n + f
     t = t_axis(m)
     x = np.zeros(m)
-    # 120 Hz magnet hum plus harmonics so small phone speakers still carry it
-    for h, a in [(1, 1.0), (2, 0.55), (3, 0.30), (4, 0.18), (5, 0.08)]:
-        x += a * np.sin(2 * np.pi * 120 * h * t + rng.uniform(0, 2 * np.pi))
+    # soft pump rumble: mostly broadband water through the impeller with a faint 120 Hz tone;
+    # the old harmonic stack read as an electrical buzz on phone speakers
+    x += 0.15 * np.sin(2 * np.pi * 120 * t + rng.uniform(0, 2 * np.pi))
+    x += spectral_noise(m, 60, 500, tilt=-1.2)
     x *= 1 + 0.06 * np.sin(2 * np.pi * 0.5 * t)  # slow beat
-    x += 0.25 * spectral_noise(m, 80, 900, tilt=-0.8)  # impeller / water through the pipe
-    return normalize(make_loop(x, n), 0.6)
+    return normalize(make_loop(x, n), 0.45)
 
 
 def hob_loop():

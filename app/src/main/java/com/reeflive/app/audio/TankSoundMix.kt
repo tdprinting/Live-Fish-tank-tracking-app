@@ -29,7 +29,7 @@ object TankSoundMix {
     const val DAY_LIGHT = 0.5f
 
     private const val FLOW_BASE = 0.45f
-    private const val HUM_BASE = 0.22f
+    private const val HUM_BASE = 0.08f
     private const val HOB_BASE = 0.40f
     private const val BUBBLES_BASE = 0.30f
 
