@@ -37,16 +37,36 @@ FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_
 BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
-    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "brittle_star": 1800,
+    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
-    "tank": 3500, "rockscape": 40000, "equipment": 6000,
+    "tank": 7200, "rockscape": 45000, "equipment": 9000, "aiptasia": 300,
     "kenya": 9000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
-    "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 400,
+    "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 450,
 }
 LOD1_BUDGET = {"engineer_goby": 2100}  # anguilliform: 96 stations need more rings than the 1.7k LOD1 cap
 # how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
 SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
 BODY_BUDGET = {"engineer_goby": 5600}
+# docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
+CLOSED = {"tank", "equipment", "rockscape"}
+OPEN_OK = {"WaterSurface"}
+
+
+def open_edges(g, mi, m):
+    """Edges not shared by exactly two triangles, after welding positions (glTF splits vertices at seams)."""
+    edges = {}
+    for p in g.json["meshes"][mi]["primitives"]:
+        pos = g.accessor(p["attributes"]["POSITION"])
+        key = [tuple(round(c, 3) for c in xf(m, P_)) for P_ in pos]
+        idx = [i[0] for i in g.accessor(p["indices"])] if "indices" in p else list(range(len(pos)))
+        for t in range(0, len(idx), 3):
+            a, b, c = (key[i] for i in idx[t:t + 3])
+            for e in ((a, b), (b, c), (c, a)):
+                if e[0] == e[1]:
+                    continue
+                k = (min(e), max(e))
+                edges[k] = edges.get(k, 0) + 1
+    return sum(1 for v in edges.values() if v != 2)
 
 
 class Glb:
@@ -172,6 +192,12 @@ def check_glb(path, errors, warnings, report):
         mi = n["mesh"]
         tris = g.tri_count(mi)
         total += tris
+        if ex.get("hidden"):
+            report.setdefault("hidden", {})[name] = report.get("hidden", {}).get(name, 0) + tris
+        if base in CLOSED and n.get("name") not in OPEN_OK:
+            ne = open_edges(g, mi, wms[ni])
+            if ne:
+                errors.append(f"{name}: node '{n.get('name')}' has {ne} non-manifold edges")
         if part == "body":
             body_tris += tris
         for p in j["meshes"][mi]["primitives"]:
@@ -240,14 +266,18 @@ def check_glb(path, errors, warnings, report):
     report.setdefault("files", []).append((name, os.path.getsize(path), total, body_tris))
 
 
-ANCHOR_NAMES = [
-    "HOST_KENYA", "HOST_GSP_RIGHT", "CAVE_EEL", "den_path", "CAVE_SMALL", "CAVE_BIG", "HOLE_BLENNY",
-    "PERCH_1", "PERCH_2", "PERCH_3", "PERCH_4", "PERCH_5", "STATION_CLEANER", "SHRIMP_LEDGE", "SLEEP_TANG",
-    "SURFACE_FEED", "NORI_CLIP", "HOB_OUTFLOW"] + [f"GRAZE_{i}" for i in range(1, 9)] + [
+ANCHOR_NAMES = [  # docs/specs/tank_design.md §4 + species anchors + compatibility aliases
+    "HOST_ARCH_CLOWNS", "HOST_GSP_RIGHT", "BURROW_GOBY", "den_path", "CAVE_BIG", "CAVE_SHELF", "CAVE_DOTTYBACK",
+    "HOLE_BLENNY", "HOLE_BLENNY_2", "PERCH_R3_TOP", "PERCH_R2_CROWN", "PERCH_R5_LIP", "PERCH_SHELF", "PERCH_R9",
+    "PERCH_CORALLINE_LOW", "STATION_CLEANER", "SHRIMP_LEDGE_L", "SHRIMP_LEDGE_R", "HOVER_CARDINAL", "SLEEP_TANG",
+    "SLEEP_WRASSE", "SURFACE_FEED", "NORI_CLIP", "HOB_OUTFLOW", "FLOW_PH_LEFT", "FLOW_PH_BACK", "FLOW_PH_RIGHT"] + [
+    f"GRAZE_{i}" for i in range(1, 9)] + [
     "coral_kenya_main", "coral_gsp_upper_left", "coral_gsp_lower_right", "coral_zoa_front_center",
-    "coral_clove_kenya_base", "coral_shroom_front_left", "coral_macro_back_left", "coral_organpipe_kenya_base",
-    "HOLE_TAILSPOT", "HOLE_LAWNMOWER", "STATION_SKUNK", "STATION_SHRIMP", "CAVE_DOTTYBACK", "BRITTLE_HIDE",
-    "BRITTLE_HOME", "DUSTER_BASE", "DUSTER_TUBE", "SAND_FRONT", "BURROW_GOBY", "SAND_GOBY_DIG"]
+    "coral_paly_left_foot", "coral_clove_kenya_front", "coral_organpipe_kenya_base", "coral_shroom_center",
+    "coral_macro_back_left", "coral_macro_right_corner",
+    "SAND_GOBY_DIG", "BRITTLE_HIDE", "DUSTER_BASE", "SAND_FRONT", "CREVICE_SALLY",
+    "CAVE_EEL", "HOST_KENYA", "CAVE_SMALL", "HOLE_LAWNMOWER", "HOLE_TAILSPOT", "PERCH_1", "PERCH_2", "PERCH_3",
+    "PERCH_4", "PERCH_5", "SHRIMP_LEDGE", "STATION_SKUNK", "STATION_SHRIMP", "BRITTLE_HOME", "DUSTER_TUBE"]
 
 
 def check_sim(errors, report):
@@ -292,7 +322,7 @@ def high_estimate(report):
         if name in FISH:
             fish0 += tris
         else:
-            meshes += tris * SCENE_COUNTS.get(name, 1)
+            meshes += (tris - report.get("hidden", {}).get(name, 0)) * SCENE_COUNTS.get(name, 1)
     inst = sum(v[2] for v in report.get("instances", {}).values())
     # instance prototypes are already counted once in `meshes`; the table draws them `cnt` times
     inst -= sum(v[1] for v in report.get("instances", {}).values())

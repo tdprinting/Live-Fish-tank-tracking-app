@@ -1,0 +1,117 @@
+{
+    "id": "paracanthurus_hepatus",
+    "kind": "FISH",
+    "common": "Blue tang",
+    "family": "Acanthuridae",
+    "maxLengthCm": 31.0,
+    "typicalAdultCm": 25.0,
+    "growthCmPerYear": 5.0,
+    "lifespanYears": 15.0,
+    "depthRatio": 0.52,
+    "massCoeff": 0.025,
+    "locomotion": {
+        "mode": "LABRIFORM",
+        "cruiseBL": 1.5,
+        "burstBL": 7.0,
+        "tailHzCruise": 4.0,
+        "turnRateDeg": 240.0,
+        "waveLen": 0.9,
+        "ampCruise": 0.04,
+        "ampBurst": 0.09
+    },
+    "zone": {
+        "yMin": 0.25,
+        "yMax": 0.95,
+        "openWater": 0.8,
+        "coverAffinity": 0.3
+    },
+    "activity": "DIURNAL",
+    "schooling": false,
+    "territorialRadius": 0.0,
+    "homeRadiusCm": 60.0,
+    "temperament": {
+        "aggression": 0.3,
+        "boldness": 0.6,
+        "curiosity": 0.7,
+        "skittishness": 0.5
+    },
+    "diet": [
+        "ALGAE",
+        "NORI",
+        "MYSIS",
+        "FLAKE",
+        "PELLET"
+    ],
+    "feedsPerDay": 4.0,
+    "grazer": true,
+    "tolerance": {
+        "temp": {
+            "optLo": 24.0,
+            "optHi": 27.0,
+            "tolLo": 22.0,
+            "tolHi": 28.5,
+            "lethalLo": 19.0,
+            "lethalHi": 31.0
+        },
+        "sg": {
+            "optLo": 1.022,
+            "optHi": 1.026,
+            "tolLo": 1.02,
+            "tolHi": 1.027,
+            "lethalLo": 1.016,
+            "lethalHi": 1.03
+        },
+        "ph": {
+            "optLo": 8.0,
+            "optHi": 8.4,
+            "tolLo": 7.9,
+            "tolHi": 8.5,
+            "lethalLo": 7.5,
+            "lethalHi": 8.9
+        },
+        "nh3Free": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.01,
+            "lethalLo": null,
+            "lethalHi": 0.05
+        },
+        "no2": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.15,
+            "lethalLo": null,
+            "lethalHi": 1.0
+        },
+        "no3": {
+            "optLo": null,
+            "optHi": 20.0,
+            "tolLo": null,
+            "tolHi": 35.0,
+            "lethalLo": null,
+            "lethalHi": 80.0
+        },
+        "do": {
+            "optLo": 6.0,
+            "optHi": null,
+            "tolLo": 5.0,
+            "tolHi": null,
+            "lethalLo": 2.5,
+            "lethalHi": null
+        }
+    },
+    "diseaseSusceptibility": {
+        "ICH": 1.0,
+        "HLLE": 0.6,
+        "BACTERIAL": 0.4
+    },
+    "hardiness": 0.45,
+    "starvationDays": 21.0,
+    "model": "models/tang.glb",
+    "colors": {},
+    "iridescence": 0.35,
+    "brain": null,
+    "buoyantWhenDead": null
+}

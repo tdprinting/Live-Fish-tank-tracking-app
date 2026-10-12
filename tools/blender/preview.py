@@ -2,7 +2,8 @@
 
   python tools/blender/preview.py --fish all          -> docs/preview/fish.png (contact sheet)
   python tools/blender/preview.py --fish tang         -> build/blender/preview_tang.png
-  python tools/blender/preview.py --scene             -> docs/preview/scene.png
+  python tools/blender/preview.py --scene [--view all] [--size 1600x1200] [--samples 64]
+                                                      -> docs/preview/scene.png (+ scene_<view>.png)
 """
 import argparse
 import math
@@ -17,7 +18,7 @@ from common import bpy  # noqa: E402
 
 FISH_SHEET = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "hawkfish", "lawnmower_blenny",
               "tailspot_blenny", "dottyback", "engineer_goby"]
-INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "brittle_star", "feather_duster",
+INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "sally_lightfoot", "brittle_star", "feather_duster",
                 "nassarius", "astrea", "asterina"]
 
 
@@ -127,7 +128,7 @@ def render_fish(sid, w=640, h=380, samples=48):
     ctr = (lo + hi) / 2
     ext = hi - lo
     top_view = sid in ("brittle_star", "asterina")
-    elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "astrea", "nassarius", "feather_duster",
+    elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
                             "shrimp", "skunk_shrimp") else 0.16
     if top_view:
         elev = 1.6
@@ -163,6 +164,8 @@ def main(argv):
     ap.add_argument("--fish", default=None)
     ap.add_argument("--scene", action="store_true")
     ap.add_argument("--samples", type=int, default=None)
+    ap.add_argument("--view", default="front", help="front|left34|right34|top|left_end|right_end|all")
+    ap.add_argument("--size", default="1600x1200")
     a = ap.parse_args(argv)
     if a.fish:
         if a.fish == "all":
@@ -174,7 +177,10 @@ def main(argv):
                 print(os.path.join(C.BUILD, f"preview_{sid}.png"))
     if a.scene:
         import scene_preview
-        scene_preview.render_scene(samples=a.samples)
+        w, h = (int(v) for v in a.size.split("x"))
+        views = list(scene_preview.VIEWS) if a.view == "all" else a.view.split(",")
+        for v in views:
+            scene_preview.render_scene(samples=a.samples, w=w, h=h, view=v)
 
 
 if __name__ == "__main__":

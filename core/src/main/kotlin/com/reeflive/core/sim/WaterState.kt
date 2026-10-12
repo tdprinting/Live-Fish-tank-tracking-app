@@ -1,0 +1,155 @@
+package com.reeflive.core.sim
+
+import com.reeflive.core.geom.Powerhead
+import com.reeflive.core.geom.FlowField
+import kotlin.math.pow
+
+/**
+ * Simulated water state (SIMULATION §2). Units: °C, SG, pH, dKH, ppm, mg/L, litres.
+ * `nh3Total` is total ammonia nitrogen expressed as ppm NH3 (TAN); `detritus` is in ppm
+ * TAN-equivalents of decomposable organics. Mutable inside [WaterSim]; snapshots use [copy].
+ */
+data class WaterState(
+    var tempC: Double = 25.5,
+    var sg: Double = 1.025,
+    var ph: Double = 8.2,
+    var alk: Double = 8.5,
+    var ca: Double = 420.0,
+    var mg: Double = 1300.0,
+    var nh3Total: Double = 0.0,
+    var no2: Double = 0.0,
+    var no3: Double = 5.0,
+    var po4: Double = 0.04,
+    var doMgL: Double = 6.5,
+    var k: Double = 400.0,
+    var sr: Double = 8.0,
+    var i: Double = 0.06,
+    var copper: Double = 0.0,
+    var volumeL: Double = 227.0,
+    var algaeHair: Double = 0.06,
+    var macro: Double = 0.3,
+    var cyano: Double = 0.0,
+    /** Brown diatom film on sand/glass (0..1), coralline coverage on rock (0..1) (research 05 §14). */
+    var diatoms: Double = 0.0,
+    var coralline: Double = 0.4,
+    var bacteriaAob: Double = 1.0,
+    var bacteriaNob: Double = 1.0,
+    var detritus: Double = 0.2,
+    var lightPar: Double = 0.0,
+    var flowOn: Boolean = true,
+    var co2Index: Double = 1.0,
+    var nh3Free: Double = 0.0,
+    var gfoActive: Boolean = false,
+) {
+    /** Salinity in ppt (ARCHITECTURE §4.1 table, linear in SG near seawater). */
+    val ppt: Double get() = ChemFns.sgToPpt(sg)
+
+    /** Generic parameter accessor by id (SetParam, HealthModel tolerance keys, HUD). */
+    fun get(id: String): Double? = when (id.lowercase()) {
+        "temp", "tempc" -> tempC
+        "sg", "sal" -> sg
+        "ph" -> ph
+        "alk" -> alk
+        "ca" -> ca
+        "mg" -> mg
+        "nh3", "nh3total", "tan" -> nh3Total
+        "nh3free" -> nh3Free
+        "no2" -> no2
+        "no3" -> no3
+        "po4" -> po4
+        "do", "domgl" -> doMgL
+        "k" -> k
+        "sr" -> sr
+        "i" -> i
+        "copper", "cu" -> copper
+        "algae", "algaehair" -> algaeHair
+        "cyano" -> cyano
+        "diatoms" -> diatoms
+        "coralline" -> coralline
+        "light" -> lightPar
+        else -> null
+    }
+
+    companion object {
+        /** Ideal mid-points used when reality mode has no logged value (SIMULATION §1.3). */
+        fun idealDefaults() = WaterState()
+
+        /** Freshly mixed salt water used by water changes (SIMULATION §2.2). */
+        val FRESH_MIX = WaterState(
+            tempC = 25.0, sg = 1.025, ph = 8.2, alk = 8.5, ca = 430.0, mg = 1320.0, nh3Total = 0.0, no2 = 0.0, no3 = 0.0,
+            po4 = 0.0, doMgL = 6.6, k = 400.0, sr = 8.0, i = 0.06, detritus = 0.0,
+        )
+    }
+}
+
+/** Small chemistry helpers. Track A's `chem` package has the canonical versions; these are kept
+ *  internal to the sim so Track C does not depend on Track A's in-flight code. Same formulas. */
+object ChemFns {
+    /** Emerson: pKa = 0.09018 + 2729.92/T(K); f = 1/(1 + 10^(pKa − pH)). */
+    fun freeNh3Fraction(ph: Double, tempC: Double): Double {
+        val pKa = 0.09018 + 2729.92 / (tempC + 273.15)
+        return 1.0 / (1.0 + 10.0.pow(pKa - ph))
+    }
+
+    fun freeNh3(tan: Double, ph: Double, tempC: Double) = tan * freeNh3Fraction(ph, tempC)
+
+    private val satT = doubleArrayOf(20.0, 22.0, 24.0, 25.0, 26.0, 28.0, 30.0)
+    private val satV = doubleArrayOf(7.4, 7.1, 6.8, 6.6, 6.5, 6.2, 5.9)
+
+    /** DO saturation (mg/L), ARCHITECTURE §4.4 table at 35 ppt, +0.05 mg/L per ppt below 35. */
+    fun oxygenSaturation(tempC: Double, ppt: Double): Double {
+        val base = when {
+            tempC <= satT.first() -> satV.first() + (satT.first() - tempC) * 0.2
+            tempC >= satT.last() -> satV.last() - (tempC - satT.last()) * 0.2
+            else -> {
+                var i = 0
+                while (tempC > satT[i + 1]) i++
+                val t = (tempC - satT[i]) / (satT[i + 1] - satT[i])
+                satV[i] + (satV[i + 1] - satV[i]) * t
+            }
+        }
+        return (base + (35.0 - ppt).coerceAtLeast(0.0) * 0.05).coerceAtLeast(0.5)
+    }
+
+    /** SG→ppt via the ARCHITECTURE §4.1 table (1.020→26.7 … 1.030→39.8, linear). */
+    fun sgToPpt(sg: Double): Double = 26.7 + (sg - 1.020) * (39.8 - 26.7) / 0.010
+
+    fun massGrams(lengthCm: Double, massCoeff: Double) = massCoeff * lengthCm.pow(3)
+}
+
+/** Scheduled feeding (reality mode / healthy-tank tests): minute of day, food, grams, optional anchor. */
+data class FeedTime(val minuteOfDay: Int, val kind: FoodKind, val grams: Double, val anchor: String? = null, val everyDays: Int = 1)
+
+data class TankConfig(
+    val lengthCm: Double = 121.9,
+    val widthCm: Double = 33.0,
+    val heightCm: Double = 61.0,
+    val waterLevelCm: Double = 56.0,
+    val sandTopCm: Double = 3.0,
+    val systemLiters: Double = 227.0,
+    val heaterSetC: Double = 25.5,
+    val heaterWatts: Double = 200.0,
+    val roomC: Double = 22.0,
+    val evapLitersPerDay: Double = 3.0,
+    val atoEnabled: Boolean = false,
+    val powerheads: List<Powerhead> = FlowField.defaultJets(),
+    /** Automatic feeding schedule (empty = only manual Feed commands). */
+    val autoFeed: List<FeedTime> = DEFAULT_FEEDING,
+    /** Predation can kill livestock (SIMULATION §4.5 eel: ON in sandbox, OFF in reality). */
+    val predationEnabled: Boolean = false,
+    /** Routine water change (assumed weekly 10 % until the app passes Tee's logged routine; 0 disables). */
+    val waterChangeEveryDays: Int = 7,
+    val waterChangeFraction: Double = 0.10,
+    val seed: Long = 1L,
+) {
+    companion object {
+        /** Tee-style routine: flake in the morning, mysis in the evening, eel target-fed every 3rd day,
+         *  plankton for the feather duster every other day. */
+        val DEFAULT_FEEDING = listOf(
+            FeedTime(9 * 60 + 30, FoodKind.FLAKE, 0.35),
+            FeedTime(17 * 60 + 30, FoodKind.MYSIS, 0.6),
+            FeedTime(17 * 60 + 35, FoodKind.MYSIS, 1.2, anchor = "CAVE_EEL", everyDays = 3),
+            FeedTime(17 * 60 + 40, FoodKind.PODS, 0.3, anchor = "DUSTER_TUBE", everyDays = 2),
+        )
+    }
+}

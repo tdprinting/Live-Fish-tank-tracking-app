@@ -1,4 +1,5 @@
-"""Invertebrates (ASSETS.md §2.8-2.17): shrimp, hermit crabs, brittle star, snails, asterina, feather duster.
+"""Invertebrates (ASSETS.md §2.8-2.18): shrimp, hermit crabs, Sally Lightfoot crab, brittle star, snails,
+asterina, feather duster.
 
 Mobile inverts are modeled at unit length facing +X (Blender Z up) like the fish; `extras.lengthCm` on Root
 is the default scale. The feather duster is sessile and modeled in centimeters (origin at its base),
@@ -689,6 +690,109 @@ def build_feather_duster():
     return finish(root, [tube_o, crown_o], os.path.join(C.MODELS, "feather_duster.glb"), 1200)
 
 
+# ----------------------------------------------------------------------------
+# Sally Lightfoot crab (Percnon gibbesi): flat, nearly round maroon carapace with a green-yellow mid stripe and
+# radiating lines; long flattened banded legs with yellow-gold spots and joint rings; small claws.
+# Unit: carapace width 1.0 (= lengthCm 5), facing +X (it walks sideways along +-Y), sits on z = 0.
+# ----------------------------------------------------------------------------
+def build_sally_lightfoot():
+    C.reset_scene()
+    at = Atlas(512, 512, 2)
+
+    def leg(cv):
+        cv.vgrad("#4A0E18", "#6E1A24")  # across the leg (flattened top/bottom)
+        u = cv.u
+        for j in (0.34, 0.67, 0.93):     # gold rings at the joints
+            cv.blend(1 - S(0.008, 0.02, np.abs(u - j)), "#E0B030")
+        rs = np.random.default_rng(5)
+        for _ in range(26):              # yellow-gold spots on each segment
+            cu, cvv = rs.uniform(0.04, 0.96), rs.uniform(0.2, 0.8)
+            r = rs.uniform(0.012, 0.022)
+            cv.blend(1 - S(r * 0.6, r, np.hypot((u - cu) * 2.0, cv.v - cvv) * 0.5), "#E8C040")
+        cv.blend(S(0.95, 1.0, u), "#2A0A0E")  # dark tips
+
+    def cara(cv):
+        # square region u 0.25..0.75 holds the top view: px across the body (x, front = 1), py side to side
+        px = np.clip((cv.u - 0.25) / 0.5, 0, 1)
+        py = cv.v
+        X, Y = (px - 0.5) * 2, (py - 0.5) * 2
+        r = np.hypot(X, Y)
+        cv.vgrad("#5A1220", "#5A1220")
+        cv.blend(np.clip(0.5 + 0.5 * X, 0, 1) * 0.4, "#7E2230")
+        cv.blend(S(0.75, 1.0, r), "#3A0A12", 0.7)
+        cv.blend((1 - S(0.025, 0.05, np.abs(Y))) * (1 - S(0.85, 0.95, np.abs(X))), "#B8D040")  # mid stripe
+        ang = np.arctan2(Y, X)
+        lines = (1 - S(0.05, 0.12, np.abs(((ang / (2 * np.pi) * 14) % 1.0) - 0.5))) \
+            * S(0.25, 0.4, r) * (1 - S(0.85, 0.95, r))
+        cv.blend(np.clip(lines, 0, 1) * 0.85, "#A8C840")                  # radiating lines
+        cv.blend((1 - S(0.02, 0.05, np.abs(r - 0.55))) * 0.3, "#C0D050")   # faint ring
+    at.paint_strip(0, leg)
+    at.paint_strip(1, cara)
+    tex = os.path.join(C.BUILD, "sally_lightfoot_atlas.png")
+    at.cv.save(tex)
+    mat = C.material("sally_lightfoot_mat", rough=0.45, image=C.load_image(tex, name="sally_lightfoot"))
+    meye = C.material("sally_lightfoot_eye", color="#0A0A0A", rough=0.1)
+    root = make_root("Root", dict(species="sally_lightfoot", lengthCm=5.0,
+                                  unit="carapace width 1.0, crab faces +X and walks sideways (+-Y)",
+                                  iridescence=0.05, roughness=0.45, gait="sideways", grazes="hair_algae"))
+    # carapace: flattened, nearly round dome
+    gb = G.Geo()
+    Vb, Fb = G.ellipsoid((0, 0, 0.17), (0.46, 0.5, 0.1), 18, 8)
+    Vb[:, 2] = np.maximum(Vb[:, 2], 0.11)
+    x0, y0, x1, y1 = at.rect(1)
+    uvb = np.stack([(0.25 + 0.5 * (Vb[:, 0] / 0.92 + 0.5)) * (x1 - x0) / at.w,
+                    1 - (y0 + (Vb[:, 1] / 1.0 + 0.5) * (y1 - y0)) / at.h], -1)
+    gb.add(Vb, Fb, uvb, [(0, 0, 0, 0)] * len(Vb))
+    body_o = geo_obj("Body", gb, root, "shell", [mat])
+    # 4 pairs of long, flattened walking legs
+    gl = G.Geo()
+    k = 0
+    for i, (bx, sweep) in enumerate(((0.24, 0.55), (0.08, 0.2), (-0.1, -0.2), (-0.26, -0.55))):
+        for side in (1, -1):
+            b = np.array([bx, side * 0.4, 0.15])
+            out = np.array([sweep, side * 1.0, 0.0])
+            out /= np.linalg.norm(out)
+            L = 1.05 if i in (1, 2) else 0.92
+            pts = smooth_path([b, b + out * 0.42 * L + [0, 0, 0.26], b + out * 0.85 * L + [0, 0, 0.12],
+                               b + out * 1.1 * L + [0.0, 0, -0.14]], 9)
+            Vt, Ft, tv, av = G.tube(pts, np.linspace(0.08, 0.035, 9), 6, squash=0.5, up=(0, 0, 1))
+            gl.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)),
+                                                        np.full(len(Vt), k / 7), tv], -1))
+            k += 1
+    geo_obj("Legs", gl, root, "leg", [mat], extras={"count": k})
+    # small claws at the front
+    gc = G.Geo()
+    for side in (1, -1):
+        b = np.array([0.36, side * 0.2, 0.14])
+        pts = smooth_path([b, b + [0.12, side * 0.1, 0.04], b + [0.2, side * 0.04, 0.02]], 5)
+        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.04, 0.035, 5), 6, cap_end=False)
+        gc.add(Vt, Ft, at.uv(0, tv * 0.5, av), [(0, 0, 0.5 + 0.5 * side, 0.5)] * len(Vt))
+        Vc, Fc = G.ellipsoid(pts[-1] + np.array([0.06, -side * 0.01, 0.0]), (0.07, 0.04, 0.03), 8, 5)
+        gc.add(Vc, Fc, at.uv(0, np.full(len(Vc), 0.5)), [(0, 0, 0.5 + 0.5 * side, 1.0)] * len(Vc))
+    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True})
+    ge = G.Geo()
+    for side in (1, -1):
+        b = np.array([0.4, side * 0.13, 0.2])
+        tip = b + np.array([0.05, side * 0.02, 0.06])
+        Vt, Ft, tv, av = G.tube([b, tip], [0.025, 0.022], 6, cap_end=False)
+        ge.add(Vt, Ft, at.uv(0, tv * 0.3, av), [(0, 0, 0, 0)] * len(Vt), mat=0)
+        Ve, Fe = G.ellipsoid(tip, (0.03, 0.03, 0.03), 8, 5)
+        ge.add(Ve, Fe, None, [(0, 0, 0, 0)] * len(Ve), mat=1)
+    geo_obj("Eyes", ge, root, "eye", [mat, meye])
+    objs = [o for o in C.all_descendants(root) if o.type == 'MESH']
+    # unit = carapace width (x extent of the body 0.92 -> 1.0); feet on z = 0
+    allv = np.vstack([C.get_verts(o) for o in objs])
+    zmin = allv[:, 2].min()
+    for o in objs:
+        V = C.get_verts(o)
+        V[:, 2] -= zmin
+        V /= 0.92
+        o.data.vertices.foreach_set("co", V.ravel())
+        o.data.update()
+    C.recalc_normals(body_o)
+    return finish(root, objs, os.path.join(C.MODELS, "sally_lightfoot.glb"), 1600)
+
+
 INVERT_BUILDERS = {
     "shrimp": lambda: build_shrimp("banded"),
     "skunk_shrimp": lambda: build_shrimp("skunk"),
@@ -699,4 +803,5 @@ INVERT_BUILDERS = {
     "astrea": build_astrea,
     "asterina": build_asterina,
     "feather_duster": build_feather_duster,
+    "sally_lightfoot": build_sally_lightfoot,
 }

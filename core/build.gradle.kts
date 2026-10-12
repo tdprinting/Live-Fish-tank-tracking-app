@@ -29,3 +29,11 @@ dependencies {
 tasks.test {
     testLogging { events("passed", "skipped", "failed") }
 }
+
+// Track C: headless simulation runner for tuning (prints a 24 h scenario or a long health run).
+tasks.register<JavaExec>("simRunner") {
+    group = "verification"
+    description = "Runs the headless ReefLive simulation scenario (Track C tuning tool)."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.reeflive.core.sim.SimRunnerMainKt")
+}

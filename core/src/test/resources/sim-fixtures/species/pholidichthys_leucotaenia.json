@@ -1,0 +1,112 @@
+{
+    "id": "pholidichthys_leucotaenia",
+    "kind": "FISH",
+    "common": "Engineer goby",
+    "family": "Pholidichthyidae",
+    "maxLengthCm": 30.0,
+    "typicalAdultCm": 20.0,
+    "growthCmPerYear": 5.0,
+    "lifespanYears": 8.0,
+    "depthRatio": 0.08,
+    "massCoeff": 0.004,
+    "locomotion": {
+        "mode": "ANGUILLIFORM",
+        "cruiseBL": 0.8,
+        "burstBL": 4.0,
+        "tailHzCruise": 1.6,
+        "turnRateDeg": 160.0,
+        "waveLen": 0.7,
+        "ampCruise": 0.06,
+        "ampBurst": 0.1
+    },
+    "zone": {
+        "yMin": 0.0,
+        "yMax": 0.25,
+        "openWater": 0.2,
+        "coverAffinity": 0.9
+    },
+    "activity": "DIURNAL",
+    "schooling": true,
+    "territorialRadius": 0.0,
+    "homeRadiusCm": 15.0,
+    "temperament": {
+        "aggression": 0.05,
+        "boldness": 0.25,
+        "curiosity": 0.4,
+        "skittishness": 0.75
+    },
+    "diet": [
+        "PODS",
+        "MYSIS",
+        "FLAKE",
+        "PELLET"
+    ],
+    "feedsPerDay": 3.0,
+    "grazer": false,
+    "tolerance": {
+        "temp": {
+            "optLo": 24.0,
+            "optHi": 27.0,
+            "tolLo": 22.0,
+            "tolHi": 28.5,
+            "lethalLo": 19.0,
+            "lethalHi": 31.0
+        },
+        "sg": {
+            "optLo": 1.022,
+            "optHi": 1.026,
+            "tolLo": 1.02,
+            "tolHi": 1.027,
+            "lethalLo": 1.016,
+            "lethalHi": 1.03
+        },
+        "ph": {
+            "optLo": 8.0,
+            "optHi": 8.4,
+            "tolLo": 7.9,
+            "tolHi": 8.5,
+            "lethalLo": 7.5,
+            "lethalHi": 8.9
+        },
+        "nh3Free": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.01,
+            "lethalLo": null,
+            "lethalHi": 0.05
+        },
+        "no2": {
+            "optLo": null,
+            "optHi": 0.0,
+            "tolLo": null,
+            "tolHi": 0.15,
+            "lethalLo": null,
+            "lethalHi": 1.0
+        },
+        "no3": {
+            "optLo": null,
+            "optHi": 20.0,
+            "tolLo": null,
+            "tolHi": 35.0,
+            "lethalLo": null,
+            "lethalHi": 80.0
+        },
+        "do": {
+            "optLo": 6.0,
+            "optHi": null,
+            "tolLo": 5.0,
+            "tolHi": null,
+            "lethalLo": 2.5,
+            "lethalHi": null
+        }
+    },
+    "diseaseSusceptibility": {},
+    "hardiness": 0.85,
+    "starvationDays": 60.0,
+    "model": "models/engineer_goby.glb",
+    "colors": {},
+    "iridescence": 0.05,
+    "brain": "ENGINEER_GOBY",
+    "buoyantWhenDead": null
+}

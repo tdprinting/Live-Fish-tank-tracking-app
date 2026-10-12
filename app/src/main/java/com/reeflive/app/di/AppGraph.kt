@@ -22,6 +22,7 @@ import com.reeflive.app.data.repo.TankRepository
 import com.reeflive.app.data.repo.TargetsRepository
 import com.reeflive.app.data.repo.TaskRepository
 import com.reeflive.app.data.seed.SeedInstaller
+import com.reeflive.app.live.SimulationHolder
 import com.reeflive.app.notif.Notifier
 import com.reeflive.app.update.UpdateManager
 import com.reeflive.app.work.AlertEvaluator
@@ -54,6 +55,8 @@ class AppGraph(val app: Application) {
     val equipment: EquipmentRepository by lazy { EquipmentRepository(db.equipmentDao(), tasks, clock) }
     val journal: JournalRepository by lazy { JournalRepository(db, db.journalDao(), events) }
     val lights: LightScheduleRepository by lazy { LightScheduleRepository(db.lightDao(), events) }
+
+    val simulationHolder: SimulationHolder by lazy { SimulationHolder(measurements, livestock, lights, assets = app.assets, clock = clock) }
 
     val seedInstaller: SeedInstaller by lazy { SeedInstaller(db, clock) }
     val extras: ExtrasRepository by lazy { ExtrasRepository(java.io.File(app.filesDir, ExtrasRepository.FILE_NAME), appScope, clock) }
