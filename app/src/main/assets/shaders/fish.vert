@@ -19,6 +19,9 @@ uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
 
+// Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
+const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
+
 out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUv;
@@ -105,17 +108,33 @@ void main() {
         local.z += 0.03 * hinge * cos(uSwim.w * 2.0 * PI + hinge * 3.0);
     }
 
-    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (0.1 + 0.9 u^2)
-    float A = uSwim.y * (0.1 + 0.9 * u * u);
-    float arg = 2.0 * PI * (u * uSwim.z - uSwim.x);
+    // Fins carry the u of their base, so a fin that trails back (pectorals, pelvics, long dorsal/anal rays) was
+    // skinned rigidly to its base station and cut into the body on sharp bends and big tail beats. Re-station
+    // fin vertices at the spine coordinate they actually lie over, so they follow the same bend and wave as
+    // the body beneath them (the caudal fin keeps its overhang past u = 1).
+    float uw = u;
+    if (part > 0.5 && part < 1.5) {
+        uw = clamp(u - local.x, 0.0, 1.0);
+        local.x += uw - u;
+    }
+
+    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (0.1 + 0.9 u^2). The amplitude is
+    // capped and faded while the body is strongly curved (head vs tail heading) so the wave cannot fold the tail
+    // back into the body on a tight turn.
+    vec3 fwdHead = qrot(uFrame[0], vec3(1.0, 0.0, 0.0));
+    vec3 fwdTail = qrot(uFrame[15], vec3(1.0, 0.0, 0.0));
+    float bendFade = mix(0.35, 1.0, smoothstep(-0.2, 0.85, dot(fwdHead, fwdTail)));
+    float amp = min(uSwim.y, MAX_WAVE_AMP) * bendFade;
+    float A = amp * (0.1 + 0.9 * uw * uw);
+    float arg = 2.0 * PI * (uw * uSwim.z - uSwim.x);
     local.z += A * sin(arg);
     // slope dz/du tilts the normal (cheap analytic correction instead of a finite difference)
-    float dzdu = uSwim.y * (1.8 * u) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
+    float dzdu = amp * (1.8 * uw) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
     n = normalize(vec3(n.x - dzdu * n.z, n.y, n.z));
 
     vec3 sp;
     vec4 q;
-    sampleSpine(u, sp, q);
+    sampleSpine(uw, sp, q);
     vec3 world = sp + qrot(q, local * uScale);
     vWorld = world;
     vNormal = normalize(qrot(q, n));

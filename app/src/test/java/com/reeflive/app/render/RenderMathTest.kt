@@ -108,6 +108,62 @@ class FishRigTest {
         assertEquals(1f, qlen, 1e-4f)
     }
 
+    @Test fun hairpinSpineIsUnbentToTheCap() {
+        // head at x 60 facing +X; the trail runs back 4 stations, then folds straight back past the head (a U-turn)
+        val spine = FloatArray(64)
+        val frames = FloatArray(64)
+        val seg = 8f / 15f
+        for (i in 0 until 16) {
+            val x = if (i <= 4) 60f - i * seg else 60f - 4 * seg + (i - 4) * seg
+            val z = if (i <= 4) 16f else 16.3f
+            spine[i * 4] = x; spine[i * 4 + 1] = 30f; spine[i * 4 + 2] = z
+        }
+        // frames as the sim builds them: model +X along the station tangent (a pure yaw here), up = +Y
+        for (i in 0 until 16) {
+            val a = if (i == 0) 0 else i - 1; val b = if (i == 15) 15 else i + 1
+            val th = kotlin.math.atan2(-(spine[a * 4 + 2] - spine[b * 4 + 2]), spine[a * 4] - spine[b * 4])
+            frames[i * 4 + 1] = kotlin.math.sin(th / 2f); frames[i * 4 + 3] = kotlin.math.cos(th / 2f)
+        }
+        val oldLen = FloatArray(15) { k -> dist(spine, k, k + 1) }
+        val moved = FishRig.limitBend(spine, frames, FishRig.MAX_BEND_PER_SEGMENT, FishRig.MAX_BEND_TOTAL, FloatArray(64))
+        assertTrue(moved)
+        assertEquals(60f, spine[0], 1e-6f); assertEquals(16f, spine[2], 1e-6f)
+        var total = 0f
+        for (k in 1 until 15) {
+            assertEquals("segment $k keeps its length", oldLen[k], dist(spine, k, k + 1), 1e-3f)
+            val ax = spine[k * 4] - spine[(k - 1) * 4]; val az = spine[k * 4 + 2] - spine[(k - 1) * 4 + 2]; val ay = spine[k * 4 + 1] - spine[(k - 1) * 4 + 1]
+            val bx = spine[(k + 1) * 4] - spine[k * 4]; val bz = spine[(k + 1) * 4 + 2] - spine[k * 4 + 2]; val by = spine[(k + 1) * 4 + 1] - spine[k * 4 + 1]
+            val c = (ax * bx + ay * by + az * bz) / (sqrt(ax * ax + ay * ay + az * az) * sqrt(bx * bx + by * by + bz * bz))
+            val ang = kotlin.math.acos(c.coerceIn(-1f, 1f))
+            assertTrue("segment $k bend $ang", ang <= FishRig.MAX_BEND_PER_SEGMENT + 1e-3f)
+            total += ang
+        }
+        assertTrue("total bend $total", total <= FishRig.MAX_BEND_TOTAL + 1e-2f)
+        // the tail station no longer lies on top of the head: the fold is opened into a curve
+        assertTrue("tail clear of the head", dist(spine, 0, 15) > 8f * 0.25f)
+        // frames follow the new tangents and stay unit
+        for (k in 1 until 15) {
+            val q = floatArrayOf(frames[k * 4], frames[k * 4 + 1], frames[k * 4 + 2], frames[k * 4 + 3])
+            val fwd = rot(q, floatArrayOf(1f, 0f, 0f))
+            val dx = spine[(k - 1) * 4] - spine[(k + 1) * 4]; val dy = spine[(k - 1) * 4 + 1] - spine[(k + 1) * 4 + 1]; val dz = spine[(k - 1) * 4 + 2] - spine[(k + 1) * 4 + 2]
+            val l = sqrt(dx * dx + dy * dy + dz * dz)
+            assertEquals("frame $k along the spine", 1f, (fwd[0] * dx + fwd[1] * dy + fwd[2] * dz) / l, 2e-2f)
+            val up = rot(q, floatArrayOf(0f, 1f, 0f))
+            assertTrue("roll kept: frame $k up ${up[1]}", up[1] > 0.95f)
+        }
+    }
+
+    @Test fun gentleCurveIsUntouched() {
+        val p = DemoSnapshots.circlePose("a", "x", 10f, 3f, 61f, 30f, 16f, 20f, 0.4f)
+        val rig = FishRig("a").also { it.set(null, p, 1f) }
+        for (k in 0 until 16) assertEquals(p.spine[k * 3], rig.spine[k * 4], 1e-4f)
+    }
+
+    private fun dist(s: FloatArray, a: Int, b: Int): Float {
+        val dx = s[a * 4] - s[b * 4]; val dy = s[a * 4 + 1] - s[b * 4 + 1]; val dz = s[a * 4 + 2] - s[b * 4 + 2]
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+
     @Test fun phaseWraps() {
         assertEquals(999.95f, FishRig.lerpPhase(999.9f, 0f, 0.5f), 1e-3f)
     }
