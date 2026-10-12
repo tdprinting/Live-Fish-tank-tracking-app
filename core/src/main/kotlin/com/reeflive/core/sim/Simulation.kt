@@ -769,7 +769,7 @@ class Simulation(
         val eaters = organisms.filter { o ->
             o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
-                !(o.brainKind == BrainKind.FEATHER_DUSTER && !kind.suspended)
+                !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
         }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind)) }
         for (o in eaters) {
             if (left <= 0) break

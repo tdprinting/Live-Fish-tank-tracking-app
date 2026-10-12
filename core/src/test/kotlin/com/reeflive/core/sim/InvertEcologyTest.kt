@@ -172,3 +172,78 @@ class AsterinaOrganPipeTest {
         assertTrue("kenya ${k.tissue}", k.tissue > 0.9)
     }
 }
+
+class DusterCrownTest {
+    private val duster = LivestockSeed("sabellastarte_sp", "Duster", 8.0, id = "duster")
+    private fun sim(seed: Long = 8L) = TestTank.sim(listOf(duster), seed = seed).also { it.advanceAbstract(120.0) }
+
+    @Test
+    fun longRetractionLosesTheCrownAndItRegrowsInOneToTwoMonths() {
+        val s = sim()
+        val d = s.organisms.first()
+        val e = s.invertEcology
+        assertEquals(1.0, e.crownOf(d), 0.0)
+        // retracted for hours on end
+        repeat(400) { d.extension = 0.0; e.step(1.0) }
+        val st = e.dusters.getValue("duster")
+        assertEquals(0.0, st.crown, 0.01)
+        assertEquals(1, st.timesLost)
+        val days = st.regrowMin / 1440.0
+        assertTrue("regrow $days days in 30..60", days in 30.0..60.0)
+        // 25 days later: partially back; fan capped by the regrowth
+        fun days(n: Int) = repeat(n) { d.hunger = 0.2; s.advanceAbstract(86400.0) }   // well fed, so health stays up
+        days(25)
+        val mid = e.crownOf(d)
+        assertTrue("partial crown at 25 days: $mid", mid > 0.2 && mid < 0.95)
+        assertTrue(d.extension <= mid + 1e-9)
+        // after 61 days it is whole again
+        days(36)
+        assertEquals("health ${d.health}", 1.0, e.crownOf(d), 1e-9)
+        assertEquals(1, st.timesLost)
+        assertTrue("fan reopened: ${d.extension}", d.extension > 0.9)
+    }
+
+    @Test
+    fun brieflyFlinchingKeepsTheCrown() {
+        val s = sim()
+        val d = s.organisms.first()
+        repeat(2000) { i -> d.extension = if (i % 10 < 2) 0.0 else 1.0; s.invertEcology.step(1.0) }
+        assertEquals(1.0, s.invertEcology.crownOf(d), 0.0)
+    }
+
+    @Test
+    fun noRegrowthWhileUnwell() {
+        val s = sim()
+        val d = s.organisms.first()
+        s.invertEcology.loseCrown(d)
+        d.health = 0.4
+        repeat(60 * 24 * 10) { d.health = 0.4; s.invertEcology.step(1.0) }
+        assertEquals(0.0, s.invertEcology.crownOf(d), 1e-9)
+        d.health = 1.0
+        repeat(60 * 24 * 10) { d.health = 1.0; s.invertEcology.step(1.0) }
+        assertTrue(s.invertEcology.crownOf(d) > 0.1)
+    }
+
+    @Test
+    fun crownLimitsFilterFeedingBehaviour() {
+        val s = sim()
+        val d = s.organisms.first()
+        s.invertEcology.loseCrown(d)
+        s.advance(60.0)
+        assertTrue("fan stays shut without a crown: ${d.extension}", d.extension < 0.05)
+        // a full crown opens again
+        val s2 = sim(9L)
+        s2.advance(60.0)
+        assertTrue(s2.organisms.first().extension > 0.5)
+    }
+
+    @Test
+    fun abstractPlanktonFeedingNeedsACrown() {
+        val s = sim(); val d = s.organisms.first()
+        s.behaviorEnabled = false
+        s.invertEcology.loseCrown(d)
+        d.hunger = 0.9
+        s.enqueue(Command.Feed(FoodKind.PLANKTON, 0.2)); s.advanceAbstract(5.0)
+        assertEquals(0.9, d.hunger, 1e-9)
+    }
+}

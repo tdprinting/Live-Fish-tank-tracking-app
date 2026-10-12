@@ -417,7 +417,8 @@ class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = 0.5
         override fun update(c: Ctx, out: SteerIntent) {
             out.rest(restSpot(c, false), 3.0)
-            c.o.extension = min(1.0, c.o.extension + c.dt / 10)
+            // a lost crown regrows over 1-2 months (B-6): the fan opens only as far as the regrowth allows
+            c.o.extension = min(c.sim.invertEcology.crownOf(c.o), c.o.extension + c.dt / 10)
             c.o.posture = 0
             c.o.appendagePhase += c.dt * 0.8
             if (c.t > next && c.o.extension > 0.7) {

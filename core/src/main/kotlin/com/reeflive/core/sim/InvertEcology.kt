@@ -55,12 +55,60 @@ class InvertEcology(private val sim: Simulation) {
     /** Fight/steal aggressiveness by genus: blue-leg hermits fight conspecifics a lot, scarlet hermits rarely (04 §5-6). */
     private fun pushiness(o: Organism) = if (o.species.id.startsWith("paguristes")) 0.25 else 1.0
 
-    fun reset() { spareShells.clear(); hermits.clear(); harvested.clear(); duster.clear() }
+    fun reset() { spareShells.clear(); hermits.clear(); harvested.clear(); dusters.clear(); asterinaBitten = 0.0 }
 
     fun step(dtMin: Double) {
         val t = sim.simTimeSec
         hermitStep(dtMin, t)
         asterinaStep(dtMin)
+        dusterStep(dtMin)
+    }
+
+    // ============================================================== feather duster crown (B-6)
+    /**
+     * A feather duster's crown (research 04 §6 [TFH-SI]): [crown] 1 = full fan, 0 = bare tube. A lost
+     * crown regrows over [regrowMin] (1-2 months) while the worm is healthy; it stalls when it is not.
+     */
+    class DusterCrown {
+        var crown = 1.0
+        var regrowMin = 45.0 * 1440
+        /** Net minutes spent retracted (builds while pulled in, drains at half rate while open). */
+        var retractedMin = 0.0
+        var lostAt = Double.NaN
+        var timesLost = 0
+    }
+
+    val dusters = HashMap<String, DusterCrown>()
+
+    /** Crown size 0..1 for the brain/pose; 1 for anything that is not a tracked duster. */
+    fun crownOf(o: Organism): Double = dusters[o.id]?.crown ?: 1.0
+
+    /** The crown is lost (disturbance, poor water or a sandbox call): bare tube until it regrows 30-60 days later. */
+    fun loseCrown(o: Organism) {
+        val st = dusters.getOrPut(o.id) { DusterCrown() }
+        st.crown = 0.0; st.retractedMin = 0.0; st.lostAt = sim.simTimeSec; st.timesLost++
+        st.regrowMin = rng.range(REGROW_DAYS_MIN, REGROW_DAYS_MAX) * 1440.0
+        o.extension = 0.0
+    }
+
+    private fun dusterStep(dtMin: Double) {
+        val live = sim.organisms.filter { it.alive && it.brainKind == BrainKind.FEATHER_DUSTER }
+        dusters.keys.retainAll(live.map { it.id }.toSet())
+        for (d in live) {
+            val st = dusters.getOrPut(d.id) { DusterCrown() }
+            if (st.crown >= 1.0) {
+                st.retractedMin = max(0.0, st.retractedMin + if (d.extension < 0.2) dtMin else -0.5 * dtMin)
+                val sick = d.health < 0.5 && rng.chance(dtMin / (2 * 1440.0))   // poor water sheds the crown
+                if (st.retractedMin >= LOSS_RETRACTED_MIN || sick) loseCrown(d)
+            } else {
+                if (d.health > 0.5) {
+                    st.crown = min(1.0, st.crown + dtMin / st.regrowMin)
+                    if (st.crown >= 1.0) { st.retractedMin = 0.0; d.extension = 1.0 }   // fully regrown: the fan opens again
+                }
+                else if (d.health < 0.3) st.crown = max(0.0, st.crown - dtMin / (14 * 1440.0))   // a shrinking regrowth: death may follow
+            }
+            if (st.crown < 1.0) d.extension = min(d.extension, st.crown)
+        }
     }
 
     // ============================================================== asterina vs organ pipe (B-5)
@@ -170,9 +218,6 @@ class InvertEcology(private val sim: Simulation) {
         shellSwaps++
     }
 
-    // placeholder for the feather duster state (filled in by the crown model)
-    private val duster = HashMap<String, Unit>()
-
     companion object {
         const val MAX_SPARES = 30
         /** Below this need/shell ratio a hermit is comfortable; above it it starts looking for a bigger shell. */
@@ -185,6 +230,10 @@ class InvertEcology(private val sim: Simulation) {
         const val SNAIL_KILL_PER_MIN = 0.00015
         /** Tissue fraction one star removes per minute once the population is high; 4 stars ≈ 17 days to bare skeleton net of regrowth (moderate risk, est.). */
         const val ASTERINA_TISSUE_PER_STAR_MIN = 0.000015
+        /** About 6 h net retracted (flinching nearly all the time) and the crown is shed. */
+        const val LOSS_RETRACTED_MIN = 360.0
+        const val REGROW_DAYS_MIN = 30.0
+        const val REGROW_DAYS_MAX = 60.0
         private val SNAILS = setOf(BrainKind.ASTREA, BrainKind.NASSARIUS)
     }
 }
