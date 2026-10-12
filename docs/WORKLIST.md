@@ -3,8 +3,7 @@
 ## Sim
 - Heat-death spasm animation missing (research 08; SIMULATION §10)
 - Extreme sandbox ranges for every parameter (research 09 part B)
-- Check NO3 79 / PO4 0.22 red at sandbox start: are those defaults or logged readings?
-- Clock said "Day" at 18:00 with light at 50%; check against the photoperiod schedule
+- NO3 79 / PO4 0.22 at sandbox start are not defaults (WaterState defaults are NO3 5.0, PO4 0.04). The sandbox forks the Reality sim's current water (`SimulationHolder.forkSandbox`), built from the latest logged values (`Reality.waterFrom`) but carrying simulated state across rebuilds. Check the logged rows on device; NO3 79 may be a NO3 vs NO3-N unit mix-up.
 
 ## Behaviour / camera
 - Fish snap to fixed spots and don't react to time-speed changes (AI not ticking at higher speeds / during time-lapse?)
