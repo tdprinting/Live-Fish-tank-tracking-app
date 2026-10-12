@@ -626,7 +626,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx): Double {
             val o = c.o
             if (o.hunger < 0.15) return 0.0
-            val r = if (o.hunger > 0.3 || c.t - foodAlertAt < 60) 25.0 else 15.0
+            val r = if (c.t - foodAlertAt < 90) 40.0 else if (o.hunger > 0.3) 25.0 else 15.0
             f = c.findFood(r) { Vec3.angle(o.heading, it.pos - o.pos) < 1.9 || it.pos.distanceTo(o.pos) < 8 }
             if (f != null) return 0.75
             if (c.sim.predationEnabled && o.hunger > 0.5) {
@@ -738,7 +738,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = (0.3 + 0.3 * c.o.hunger + 0.1) * c.activity + 0.05
         override fun enter(c: Ctx) { pick(c) }
         private fun pick(c: Ctx) {
-            val centre = if (c.o.pos.distanceTo(territory) > 35) territory else c.o.pos
+            val centre = if (c.o.pos.distanceTo(territory) > 20) territory else c.o.pos
             val sp = c.rockSurfacePoint(centre, c.rng.range(5.0, 15.0), minNormalY = 0.0)
             perch = sp?.let { perchOn(it.first, it.second) }
             state = 1
@@ -830,9 +830,9 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         private var back = false
         override fun score(c: Ctx): Double {
             if (c.p.night) return 0.0
-            f = c.findFood(30.0) { !it.settled }
+            f = c.findFood(45.0) { !it.settled }
             if (f != null && c.o.hunger > 0.12) return 0.8
-            return if (c.t > next && c.o.hunger > 0.2) 0.55 else 0.0
+            return if (c.t > next && c.o.hunger > 0.2) 0.5 + 0.35 * c.o.hunger else 0.0
         }
         override fun enter(c: Ctx) {
             back = false

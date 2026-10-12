@@ -120,7 +120,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     fun hang(c: Ctx) = hangPose(c, ledge, Vec3(88.0, 35.0, 15.0), inverted = true)
 
     init {
-        install(Hang(), Scavenge(this, 30.0), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos })
+        install(Hang(), Scavenge(this, 30.0, urgentAbove = 0.4, settledOnly = false), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = hang(c)
@@ -360,7 +360,7 @@ class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
         override val committed: Boolean get() = elapsed < dur
         override fun score(c: Ctx): Double {
             if (startledRecently || c.t - shadowAt < 0.6) return 0.95
-            val touch = c.p.neighbors(crown, 6.0).any { it !== c.o && it.isFish && it.pos.distanceTo(crown) < 3 + 0.3 * it.lengthCm }
+            val touch = c.p.neighbors(crown, 6.0).any { it !== c.o && it.isFish && it.pos.distanceTo(crown) < 3 + 0.3 * it.collisionLength }
             return if (touch) 0.95 else 0.0
         }
         override fun enter(c: Ctx) { dur = c.rng.range(20.0, 60.0); startleAt = -1e9; shadowAt = -1e9 }
