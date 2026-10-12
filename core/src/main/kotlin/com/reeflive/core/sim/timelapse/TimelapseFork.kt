@@ -36,6 +36,7 @@ object TimelapseFork {
         dst.water.flowStrength = w.flowStrength; dst.water.heaterWorking = w.heaterWorking
         dst.water.heaterStuckOn = w.heaterStuckOn; dst.water.heaterSetC = w.heaterSetC; dst.water.ato = w.ato
         dst.water.algae.copyFrom(w.algae)
+        dst.water.copyEquipmentFrom(w)
         val srcOrgs = src.organisms.associateBy { it.id }
         for (o in dst.organisms) {
             val s = srcOrgs[o.id] ?: continue

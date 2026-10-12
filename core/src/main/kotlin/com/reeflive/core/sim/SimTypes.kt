@@ -60,6 +60,11 @@ sealed class Command {
         val pane: GlassPane, val x0: Double, val y0: Double, val x1: Double, val y1: Double,
         val widthCm: Double = 6.0, val heightCm: Double = widthCm,
     ) : Command()
+
+    // ---- equipment and maintenance (coverage gap W-6). Equipment toggles are SetParam ids:
+    //      "skimmer", "sock", "carbon", "refugium", "uv" (1 = on, 0 = off). ----
+    /** One-off maintenance: change the filter sock, replace the carbon, harvest the macroalgae. */
+    data class Maintain(val task: MaintenanceTask) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -76,6 +81,9 @@ data class LivestockSeed(
     /** Corals: where this colony sits relative to its [placement] anchor (a sandbox copy of an anchored model). */
     val offset: Vec3? = null,
 )
+
+/** Routine maintenance jobs (research 01 §3.5). */
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO }
 
 enum class Disease { ICH, VELVET, HLLE, BACTERIAL }
 

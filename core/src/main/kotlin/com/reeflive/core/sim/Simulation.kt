@@ -403,7 +403,7 @@ class Simulation(
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             val tissueBefore = c.tissue
-            CoralSim.step(c, w.s, light, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
+            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
@@ -654,6 +654,7 @@ class Simulation(
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
+            is Command.Maintain -> water.maintain(c.task)
             is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
@@ -737,6 +738,7 @@ class Simulation(
         val old = water
         return WaterSim(config, old.s.copy()).also { nw ->
             nw.algae.copyFrom(old.algae)
+            nw.copyEquipmentFrom(old)
             nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
