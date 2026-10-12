@@ -53,8 +53,8 @@ class SandboxParamsTest {
         val r = TankReading(WaterState(algaeHair = 0.25), lightPct = 80.0, flowPct = 100.0)
         assertEquals(25.0, SandboxParams.byId("algae")!!.valueIn(r), 1e-9)
         assertEquals(80.0, SandboxParams.byId("light")!!.valueIn(r), 1e-9)
-        // unsupported rows fall back to their default
-        assertEquals(10.0, SandboxParams.byId("photoperiod")!!.valueIn(r), 1e-9)
+        // photoperiod reads the sim's light schedule (default 11 h)
+        assertEquals(11.0, SandboxParams.byId("photoperiod")!!.valueIn(r), 1e-9)
     }
 }
 
