@@ -173,7 +173,7 @@ class Simulation(
         val simDt = speed * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
-        val dtB = min(simDt, 0.5)
+        val dtB = min(simDt, MAX_BEHAVIOR_DT)
         advanceInternal(simDt, dtB)
         latest = snapshot()
     }
@@ -221,8 +221,10 @@ class Simulation(
         simTimeSec += simDt
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
-        val useBehavior = behaviorEnabled && simDt <= 1.0 + 1e-9
-        if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, 0.5))
+        // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
+        // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
+        val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
+        if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
@@ -865,6 +867,8 @@ class Simulation(
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35
         const val ABSTRACT_SPEED = 240.0
+        /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
+        const val MAX_BEHAVIOR_DT = 0.5
         const val CORPSE_TAN_PER_G = 0.02
         /** g TAN-equivalent released by a full colony's tissue per unit CoralKind.biomass. */
         const val CORAL_TAN_PER_COLONY = 2.0
