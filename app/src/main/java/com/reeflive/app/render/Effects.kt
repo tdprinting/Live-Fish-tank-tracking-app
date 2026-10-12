@@ -56,7 +56,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
             det[i * 3 + 2] += v[2] * strength * 0.3f * dt
             if (det[i * 3 + 1] < Camera.SAND_Y + 0.2f || !inWater(det, i)) { respawn(det, i); det[i * 3 + 1] = Camera.WATER_Y - 2f - rnd.nextFloat() * 30f }
         }
-        // HOB return (equipment.glb `outflow` (71, 55, 1)): bubbles plunge, slow down, then rise
+        // HOB return (equipment.glb `outflow` (72, 55, 2.3)): bubbles plunge, slow down, then rise
         bubbleAcc += dt * 8f
         while (bubbleAcc >= 1f && bubbles < MAX_BUBBLES) {
             bubbleAcc -= 1f
