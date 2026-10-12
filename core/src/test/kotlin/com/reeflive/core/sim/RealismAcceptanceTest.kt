@@ -332,7 +332,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c11
     /** 06 §5.6 #11: hawk perched ≥ 75 % of daylight; 5–20 hops/h; never strikes a fish ≥ 0.5 its length; ≤ 1 charge/h at the wrasse. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c11_hawkfishEconomy() {
         val sim = tank(hour = 10.5)
         val hawk = sim.org(BrainKind.HAWK)
