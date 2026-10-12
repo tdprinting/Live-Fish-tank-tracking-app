@@ -43,7 +43,8 @@ data class SimSpecies(
     val buoyantWhenDead: Boolean? = null,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
-    val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true)
+    /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
+    val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true)
     val coralKind: CoralKind get() = CoralKind.resolve(id)
 
     fun eats(food: FoodKind): Boolean = diet.any { it.equals(food.name, ignoreCase = true) } ||
