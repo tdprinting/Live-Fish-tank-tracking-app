@@ -36,12 +36,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** Silhouette family for the procedural species art. */
-enum class AvatarShape { FISH, EEL, SHRIMP, STAR, SHELL, CRAB, DUSTER, CORAL, ALGAE }
+enum class AvatarShape { FISH, ELONGATED, SHRIMP, STAR, SHELL, CRAB, DUSTER, CORAL, ALGAE }
 
 fun avatarShapeFor(speciesId: String, kind: SpeciesKind?): AvatarShape {
     val id = speciesId.lowercase()
     return when {
-        id.startsWith("echidna") -> AvatarShape.EEL
+        id.startsWith("pholidichthys") -> AvatarShape.ELONGATED
         id.startsWith("stenopus") || id.startsWith("lysmata") -> AvatarShape.SHRIMP
         id.startsWith("ophiocoma") || id.startsWith("asterina") -> AvatarShape.STAR
         id.startsWith("nassarius") || id.startsWith("lithopoma") -> AvatarShape.SHELL
@@ -96,7 +96,7 @@ fun SpeciesAvatar(
             drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.14f), Color.Transparent), center = Offset(this.size.width * 0.35f, this.size.height * 0.2f), radius = this.size.minDimension * 0.7f))
             when (shape) {
                 AvatarShape.FISH -> drawFish(primary, secondary, accent)
-                AvatarShape.EEL -> drawEel(primary, secondary, accent)
+                AvatarShape.ELONGATED -> drawElongated(primary, secondary, accent)
                 AvatarShape.SHRIMP -> drawShrimp(primary, secondary)
                 AvatarShape.STAR -> drawStar(primary, secondary)
                 AvatarShape.SHELL -> drawShell(primary, secondary)
@@ -137,7 +137,7 @@ private fun DrawScope.drawFish(body: Color, band: Color, eye: Color) {
     drawCircle(eye, radius = bh * 0.07f, center = Offset(cx - bw * 0.3f, cy - bh * 0.1f))
 }
 
-private fun DrawScope.drawEel(body: Color, spots: Color, dots: Color) {
+private fun DrawScope.drawElongated(body: Color, spots: Color, dots: Color) {
     val w = size.width
     val h = size.height
     val p = Path().apply {

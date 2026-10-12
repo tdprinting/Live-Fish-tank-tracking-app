@@ -7,10 +7,9 @@
  },
  {
   "a": "amphiprion_ocellaris",
-  "b": "echidna_nebulosa",
-  "risk": "M",
-  "note": "Eel may strike clowns near the floor at night",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Peaceful; the goby stays near its burrow"
  },
  {
   "a": "amphiprion_ocellaris",
@@ -26,9 +25,9 @@
  },
  {
   "a": "paracanthurus_hepatus",
-  "b": "echidna_nebulosa",
+  "b": "pholidichthys_leucotaenia",
   "risk": "L",
-  "note": "Tang is too large and fast for the eel"
+  "note": "No conflict; both peaceful"
  },
  {
   "a": "paracanthurus_hepatus",
@@ -38,10 +37,9 @@
  },
  {
   "a": "sphaeramia_nematoptera",
-  "b": "echidna_nebulosa",
-  "risk": "H",
-  "note": "Eel hunts cardinals at night",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Peaceful tankmates"
  },
  {
   "a": "sphaeramia_nematoptera",
@@ -58,10 +56,9 @@
  },
  {
   "a": "labroides_dimidiatus",
-  "b": "echidna_nebulosa",
-  "risk": "H",
-  "note": "Eel is a long-term threat to the wrasse",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Wrasse cleans the goby"
  },
  {
   "a": "labroides_dimidiatus",
@@ -77,28 +74,25 @@
   "note": "Wrasse may pick at shrimp antennae"
  },
  {
-  "a": "echidna_nebulosa",
+  "a": "pholidichthys_leucotaenia",
   "b": "salarias_fasciatus",
-  "risk": "MH",
-  "note": "Eel may take a blenny from its hole",
-  "threat": "echidna_nebulosa"
+  "risk": "L",
+  "note": "Both bottom-dwellers; plenty of rock for each"
  },
  {
-  "a": "echidna_nebulosa",
+  "a": "pholidichthys_leucotaenia",
   "b": "ecsenius_stigmatura",
-  "risk": "MH",
-  "note": "Eel may take a blenny from its hole",
-  "threat": "echidna_nebulosa"
+  "risk": "L",
+  "note": "Both use holes; usually ignore each other"
  },
  {
-  "a": "echidna_nebulosa",
+  "a": "pholidichthys_leucotaenia",
   "b": "stenopus_hispidus",
-  "risk": "H",
-  "note": "Eels eat shrimp",
-  "threat": "echidna_nebulosa"
+  "risk": "L",
+  "note": "Shrimp may share the goby's tunnels"
  },
  {
-  "a": "echidna_nebulosa",
+  "a": "pholidichthys_leucotaenia",
   "b": "cirrhitichthys_falco",
   "risk": "L",
   "note": "Little overlap"
@@ -184,9 +178,9 @@
  },
  {
   "a": "pseudochromis_indigo",
-  "b": "echidna_nebulosa",
+  "b": "pholidichthys_leucotaenia",
   "risk": "L",
-  "note": "Dottyback avoids the eel den"
+  "note": "Dottyback may posture; the goby retreats"
  },
  {
   "a": "lysmata_amboinensis",
@@ -197,10 +191,9 @@
  },
  {
   "a": "lysmata_amboinensis",
-  "b": "echidna_nebulosa",
-  "risk": "H",
-  "note": "Eels eat shrimp",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Shrimp cleans the goby"
  },
  {
   "a": "lysmata_amboinensis",
@@ -278,17 +271,15 @@
  },
  {
   "a": "clibanarius_tricolor",
-  "b": "echidna_nebulosa",
-  "risk": "H",
-  "note": "Eels eat crabs",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Digging can bury hermits briefly"
  },
  {
   "a": "paguristes_cadenati",
-  "b": "echidna_nebulosa",
-  "risk": "H",
-  "note": "Eels eat crabs",
-  "threat": "echidna_nebulosa"
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Digging can bury hermits briefly"
  },
  {
   "a": "clibanarius_tricolor",
@@ -313,10 +304,9 @@
  },
  {
   "a": "ophiocoma_sp",
-  "b": "echidna_nebulosa",
+  "b": "pholidichthys_leucotaenia",
   "risk": "L",
-  "note": "Eel may eat a slow brittle star",
-  "threat": "echidna_nebulosa"
+  "note": "Both hide under rock; no conflict"
  },
  {
   "a": "ophiocoma_sp",
@@ -355,10 +345,9 @@
  },
  {
   "a": "sabellastarte_sp",
-  "b": "echidna_nebulosa",
+  "b": "pholidichthys_leucotaenia",
   "risk": "L",
-  "note": "Eel may strike the crown",
-  "threat": "echidna_nebulosa"
+  "note": "Digging may unsettle the tube at its base"
  },
  {
   "a": "sabellastarte_sp",

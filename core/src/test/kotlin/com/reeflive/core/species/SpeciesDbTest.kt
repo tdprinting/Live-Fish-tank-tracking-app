@@ -4,6 +4,7 @@ import com.reeflive.core.seed.SeedData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,7 +41,7 @@ class SpeciesDbTest {
         // File names from the asset track (app/src/main/assets/models, ASSETS §5).
         val shipped = setOf(
             "algae_tufts", "asterina", "astrea", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
-            "dottyback", "eel", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
+            "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
             "kenya", "lawnmower_blenny", "macro_red", "mushroom", "nassarius", "organ_pipe", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "tang", "wrasse", "zoa",
         ).map { "models/$it.glb" }.toSet()
@@ -62,9 +63,26 @@ class SpeciesDbTest {
     }
 
     @Test
-    fun tankSizeWarningsForTangAndEelOnly() {
+    fun tankSizeWarningsForTangAndEngineerGobyOnly() {
         val outgrow = db.all.filter { db.outgrowsTank(it.id, 60.0) }.map { it.id }.toSet()
-        assertEquals(setOf("paracanthurus_hepatus", "echidna_nebulosa"), outgrow)
+        assertEquals(setOf("paracanthurus_hepatus", "pholidichthys_leucotaenia"), outgrow)
+        assertNull(db["echidna_nebulosa"])
+    }
+
+    @Test
+    fun engineerGobyIsPeacefulBurrower() {
+        val goby = db.require("pholidichthys_leucotaenia")
+        assertEquals("models/engineer_goby.glb", goby.model)
+        assertEquals("species_pholidichthys_leucotaenia", goby.cardDrawable)
+        assertTrue(goby.careNotes.none { it.contains("predator", ignoreCase = true) })
+        for (other in db.all) {
+            val e = db.interactions.entry("pholidichthys_leucotaenia", other.id) ?: continue
+            assertNull("${other.id}: goby is not a threat", e.threat)
+            assertTrue("${other.id}: ${e.risk}", db.interactions.risk("pholidichthys_leucotaenia", other.id).level <= Risk.LOW.level)
+        }
+        val seed = SeedData.loadFile()
+        assertTrue(seed.livestock.any { it.speciesId == "pholidichthys_leucotaenia" })
+        assertTrue(seed.livestock.none { it.speciesId == "echidna_nebulosa" })
     }
 
     @Test
@@ -81,8 +99,9 @@ class SpeciesDbTest {
     fun interactionMatrixIsSymmetric() {
         val m = db.interactions
         assertTrue(m.size > 40)
-        assertEquals(Risk.HIGH, m.risk("echidna_nebulosa", "sphaeramia_nematoptera"))
-        assertEquals(Risk.HIGH, m.risk("sphaeramia_nematoptera", "echidna_nebulosa"))
+        assertEquals(Risk.LOW, m.risk("pholidichthys_leucotaenia", "sphaeramia_nematoptera"))
+        assertEquals(Risk.LOW, m.risk("sphaeramia_nematoptera", "pholidichthys_leucotaenia"))
+        assertEquals(Risk.HIGH, m.risk("ecsenius_stigmatura", "salarias_fasciatus"))
         assertEquals(Risk.HIGH, m.risk("salarias_fasciatus", "ecsenius_stigmatura"))
         assertEquals(Risk.MODERATE_HIGH, m.risk("lysmata_amboinensis", "cirrhitichthys_falco"))
         assertEquals(Risk.NONE, m.risk("amphiprion_ocellaris", "paracanthurus_hepatus"))
