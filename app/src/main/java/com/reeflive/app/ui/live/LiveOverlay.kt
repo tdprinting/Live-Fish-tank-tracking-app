@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.WbTwilight
@@ -49,7 +51,7 @@ import com.reeflive.app.ui.theme.statusText
 import com.reeflive.core.status.Status
 
 /**
- * Live Tank HUD (stateless). Lays out top-to-bottom: mode toggle + clock, speed chips, water strip,
+ * Live Tank HUD (stateless). Lays out top-to-bottom: mode toggle + clock, speed chips, water strip, sound button,
  * and an events toast pinned to the bottom. Empty space is left untouched so the GL view shows through.
  */
 @Composable
@@ -60,6 +62,9 @@ fun LiveOverlay(
     modifier: Modifier = Modifier,
     onToastDismiss: (Long) -> Unit = {},
     showSpeed: Boolean = true,
+    /** Tank sounds on/off for the quick mute button; null hides the button. */
+    soundOn: Boolean? = null,
+    onToggleSound: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -69,6 +74,8 @@ fun LiveOverlay(
             }
             if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
+            // under the strip at the right edge: the top row has no room for it on a phone
+            if (soundOn != null) SoundButton(soundOn, onToggleSound, Modifier.align(Alignment.End))
         }
         AnimatedVisibility(
             visible = state.toast != null,
@@ -109,6 +116,27 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
                     .padding(horizontal = 16.dp, vertical = 11.dp),
             )
         }
+    }
+}
+
+/** Round glass mute / unmute button for the tank sounds. */
+@Composable
+fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val c = ReefTheme.colors
+    Box(
+        modifier
+            .size(44.dp)
+            .clip(ReefShapes.pill)
+            .background(c.glass)
+            .clickable(role = Role.Switch, onClickLabel = if (on) "Mute tank sounds" else "Unmute tank sounds") { onToggle() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (on) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
+            contentDescription = if (on) "Tank sounds on" else "Tank sounds off",
+            tint = if (on) c.text else c.textSecondary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -216,7 +244,7 @@ internal val previewHud = HudState(
 @Preview(name = "HUD · Abyss", widthDp = 393, heightDp = 400, showBackground = true)
 @Composable
 private fun LiveOverlayDarkPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud, {}, {}) }
+    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud, {}, {}, soundOn = true) }
 }
 
 @Preview(name = "HUD · Lagoon", widthDp = 393, heightDp = 400, showBackground = true)

@@ -20,6 +20,11 @@ import kotlin.random.Random
  * frees the pool when the screen leaves composition.
  */
 class TankAudio(context: Context) {
+    private val main = Handler(Looper.getMainLooper())
+    private val loaded = HashSet<Int>()
+    private val limiter = CueLimiter()
+
+    // the listener is set before any load; SoundPool reports completions on this (main) thread's looper
     private val pool: SoundPool = SoundPool.Builder()
         .setMaxStreams(MAX_STREAMS)
         .setAudioAttributes(
@@ -29,9 +34,14 @@ class TankAudio(context: Context) {
                 .build(),
         )
         .build()
-    private val main = Handler(Looper.getMainLooper())
-    private val loaded = HashSet<Int>()
-    private val limiter = CueLimiter()
+        .also { p ->
+            p.setOnLoadCompleteListener { _, sampleId, status ->
+                if (status == 0 && !released) {
+                    loaded += sampleId
+                    syncLoops()
+                }
+            }
+        }
 
     private val flowId = pool.load(context, R.raw.tank_flow_loop, 1)
     private val humId = pool.load(context, R.raw.tank_hum_loop, 1)
@@ -58,15 +68,6 @@ class TankAudio(context: Context) {
     private var released = false
     private var lastSnapshot: SimSnapshot? = null
     private var loeIds: Set<String>? = null
-
-    init {
-        pool.setOnLoadCompleteListener { _, sampleId, status ->
-            if (status == 0) {
-                loaded += sampleId
-                syncLoops()
-            }
-        }
-    }
 
     /** User setting (Settings > Live Tank > Tank sounds, or the HUD mute button). */
     fun setUserSettings(enabled: Boolean, volume: Float) {
@@ -95,6 +96,8 @@ class TankAudio(context: Context) {
      */
     fun onSnapshot(snap: SimSnapshot, powerheadShare: Float) {
         if (released || snap === lastSnapshot || snap === SimSnapshot.EMPTY) return
+        // the first snapshot is the one a StateFlow replays to a new collector: its events were already heard
+        val first = lastSnapshot == null
         lastSnapshot = snap
         target = TankSoundMix.ambience(snap.flowStrength, powerheadShare, snap.water.flowOn, snap.lightIntensity, volume)
         syncLoops()
@@ -102,7 +105,7 @@ class TankAudio(context: Context) {
         val loe = TankSoundMix.loeIds(snap.stats)
         val newLoe = loeIds?.let { prev -> loe.any { it !in prev } } ?: false
         loeIds = loe
-        if (!active()) return
+        if (first || !active()) return
         if (newLoe) play(Cue.ALERT)
         for (e in snap.events) {
             val cue = TankSoundMix.cueFor(e) ?: continue

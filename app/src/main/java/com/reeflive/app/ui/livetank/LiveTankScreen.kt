@@ -18,17 +18,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.reeflive.app.appGraph
+import com.reeflive.app.audio.TankAudio
+import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankView
@@ -60,6 +68,7 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
+import kotlinx.coroutines.launch
 
 private fun LiveQuality.toRender() = when (this) {
     LiveQuality.LOW -> RenderQuality.LOW
@@ -83,6 +92,12 @@ private fun summarize(stats: List<OrganismStats>): FishSummary {
     )
 }
 
+/** Share (0..1) of the sandbox powerhead toggles that are on; Watch mode keeps them all on. */
+private fun powerheadShare(extras: Map<String, Double>): Float {
+    val ids = LiveTankViewModel.PUMP_IDS.keys
+    return ids.count { (extras[it] ?: 1.0) >= 0.5 }.toFloat() / ids.size.coerceAtLeast(1)
+}
+
 /**
  * Live Tank: GL [TankView] with the HUD on top and, in Sandbox mode, the [SandboxDock] docked inline: under the tank in
  * portrait (the tank view shrinks to the space above it), beside it in landscape. The Watch / Sandbox toggle opens and
@@ -94,8 +109,25 @@ fun LiveTankScreen(
     onOpenLivestock: (String) -> Unit = {},
 ) {
     val vm = reefViewModel { LiveTankViewModel(it.simulationHolder) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.onPause() }
+    val context = LocalContext.current
+    val settingsRepo = context.appGraph.settings
+    val settings by settingsRepo.settings.collectAsStateWithLifecycle(AppSettings())
+    val scope = rememberCoroutineScope()
+    // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
+    val audio = remember { TankAudio(context.applicationContext) }
+    DisposableEffect(audio) { onDispose { audio.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume(); audio.onResume() }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.onPause(); audio.onPause() }
+    LaunchedEffect(settings.loaded, settings.tankSounds, settings.tankVolume) {
+        if (settings.loaded) audio.setUserSettings(settings.tankSounds, settings.tankVolume)
+    }
+    LaunchedEffect(audio) {
+        // full-rate snapshots: the 10 Hz HUD flow would drop events
+        vm.snapshots.collect { snap -> audio.onSnapshot(snap, powerheadShare(vm.extras.value)) }
+    }
+    val soundOn = settings.tankSounds
+    val toggleSound: () -> Unit = { scope.launch { settingsRepo.setTankSounds(!soundOn) } }
+    val tick: () -> Unit = audio::uiTick
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
@@ -154,14 +186,16 @@ fun LiveTankScreen(
     val onSet: (SandboxParamDef, Double) -> Unit = { def, v ->
         val now = panel.now
         def.simId?.let { id -> vm.applyParam(def.id, id, v / def.scale, def.valueIn(now) / def.scale, controlMode) }
+        if (def.max - def.min <= def.step) tick()   // on/off rows (pumps) click; dragged sliders stay quiet
     }
     val actions = SandboxActions(
         onSet = onSet,
         onCategory = { category = it },
         onToggleExpanded = { expanded = !expanded },
-        onSpeed = vm::setSpeed,
+        onSpeed = { tick(); vm.setSpeed(it) },
         onControlMode = { controlMode = it },
         onPreset = { p ->
+            tick()
             vm.runPreset(p)
             preset = p
             category = p.focus      // jump to the sliders that will move, so the effect is visible
@@ -169,19 +203,19 @@ fun LiveTankScreen(
         },
         onDismissPreset = { preset = null },
         onFeed = { vm.feed() },
-        onTapGlass = { vm.tapGlass(FrontGlassCentre) },
-        onWaterChange = { vm.waterChange(it) },
-        onDose = { id, d -> vm.dose(id, d) },
-        onHeater = { vm.setHeater(working = it) },
-        onLights = { vm.setLights(it) },
-        onPredation = vm::setPredation,
+        onTapGlass = { tick(); vm.tapGlass(FrontGlassCentre) },
+        onWaterChange = { tick(); vm.waterChange(it) },
+        onDose = { id, d -> tick(); vm.dose(id, d) },
+        onHeater = { tick(); vm.setHeater(working = it) },
+        onLights = { tick(); vm.setLights(it) },
+        onPredation = { tick(); vm.setPredation(it) },
         onResize = { id, cm -> vm.setSize(id, cm) },
-        onRemove = { vm.removeOrganism(it) },
-        onAdd = { a -> vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
-        onReset = { vm.resetSandbox(); preset = null },
-        onAcclimateAll = vm::acclimateAll,
-        onRearrangeRock = vm::rearrangeRock,
-        onPumpFailTonight = vm::pumpFailTonight,
+        onRemove = { tick(); vm.removeOrganism(it) },
+        onAdd = { a -> tick(); vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
+        onReset = { tick(); vm.resetSandbox(); preset = null },
+        onAcclimateAll = { tick(); vm.acclimateAll() },
+        onRearrangeRock = { tick(); vm.rearrangeRock() },
+        onPumpFailTonight = { tick(); vm.pumpFailTonight() },
         onTimelapse = { lapse = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
@@ -201,7 +235,7 @@ fun LiveTankScreen(
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
                 TankArea(
-                    vm, hudState, onModeChange, followId, stats, quality,
+                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound,
                     Modifier.weight(1f).fillMaxHeight(), bottomPad = BottomBarClearance,
                 )
                 if (sandbox) {
@@ -218,7 +252,7 @@ fun LiveTankScreen(
             val animated by animateDpAsState(dockHeight, ReefMotion.tween(reduce), label = "dock")
             Column(Modifier.fillMaxSize()) {
                 TankArea(
-                    vm, hudState, onModeChange, followId, stats, quality,
+                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound,
                     Modifier.weight(1f).fillMaxWidth(), bottomPad = if (sandbox) 8.dp else BottomBarClearance,
                 )
                 if (sandbox) {
@@ -246,6 +280,8 @@ private fun TankArea(
     followId: String?,
     stats: OrganismStats?,
     quality: LiveQuality,
+    soundOn: Boolean,
+    onToggleSound: () -> Unit,
     modifier: Modifier,
     bottomPad: Dp,
 ) {
@@ -265,6 +301,8 @@ private fun TankArea(
                 onModeChange = onModeChange,
                 onSpeedChange = vm::setSpeed,
                 showSpeed = false,   // speed lives in the sandbox dock (reality always runs at 1x)
+                soundOn = soundOn,
+                onToggleSound = onToggleSound,
             )
             val st = stats
             if (followId != null && st != null) {
