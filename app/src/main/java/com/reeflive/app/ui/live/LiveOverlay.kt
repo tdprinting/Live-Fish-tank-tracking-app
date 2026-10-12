@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ fun LiveOverlay(
     onSpeedChange: (Double) -> Unit,
     modifier: Modifier = Modifier,
     onToastDismiss: (Long) -> Unit = {},
+    showSpeed: Boolean = true,
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -65,7 +67,7 @@ fun LiveOverlay(
                 ModeToggle(state.mode, onModeChange)
                 ClockPill(state.simTimeSec, state.dayPhase)
             }
-            SpeedChips(state.speeds, state.speed, onSpeedChange)
+            if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
         }
         AnimatedVisibility(
@@ -79,7 +81,11 @@ fun LiveOverlay(
     }
 }
 
-/** Watch / Sandbox segmented pill. */
+/**
+ * Watch / Sandbox segmented pill. Selecting Sandbox opens the inline sandbox panel; tapping Sandbox again while it is
+ * selected collapses / expands it (the screen decides, [onModeChange] fires on every tap). Sandbox shows coral text
+ * to signal "not real" (UI_STYLE §10).
+ */
 @Composable
 fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
@@ -89,16 +95,18 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
     ) {
         HudMode.values().forEach { m ->
             val sel = m == mode
+            val selColor = if (m == HudMode.SANDBOX) c.coral else c.primaryBright
             Text(
                 m.label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (sel) c.primaryBright else c.textSecondary,
+                color = if (sel) selColor else c.textSecondary,
                 modifier = Modifier
-                    .heightIn(min = 36.dp)
+                    .heightIn(min = 44.dp)
+                    .semantics { selected = sel }
                     .clip(ReefShapes.pill)
-                    .background(if (sel) c.primary.copy(alpha = 0.28f) else c.glass.copy(alpha = 0f))
+                    .background(if (sel) selColor.copy(alpha = 0.22f) else c.glass.copy(alpha = 0f))
                     .clickable(role = Role.Tab) { onModeChange(m) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
             )
         }
     }

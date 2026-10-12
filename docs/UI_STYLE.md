@@ -249,6 +249,8 @@ Stacked area, 8 channel colors (UI_STYLE §1.4 `lightArc` colors: white `#DDEEFF
 - Overlays are glass at 70% opacity, 14 dp radius, 12 dp padding, no caustic background (the 3D view is the background).
 - Speed chip: pill with `fast_forward` icon; active speed in `lagoonBright`.
 - Mode toggle: segmented pill; Sandbox selected shows `coral` text to signal "not real".
+- Sandbox dock: no pop-up sheet. Selecting Sandbox docks the controls inline (portrait: collapsible panel under the tank, 55 % of the height, the tank view shrinks above it; landscape: 42 % wide column beside the tank). Tapping Sandbox again collapses it to header + speed; Watch closes it. Tabs: Water / Chemistry / Nutrients / Light & Flow / Events (scenario presets and one-off actions). Ranges and zones live in one table, `ui/live/SandboxParams.kt`.
+- `ReefSlider` (`ui/components/ReefSlider.kt`): label + "Your tank" reference line, value pill (status icon, tap to type an exact value), −/+ 40 dp steppers with hold-to-repeat, 48 dp custom track with safe/caution/danger segments (status fills), a `foam` reference marker, a `coral` bar from the reference to the thumb, haptic tick on zone change (stronger on entering danger), reset to the reference. Optional `curve` stretches the low end of wide ranges.
 - Loading: a `lagoonBright` thin progress arc inside a dark glass circle while assets load; text "Filling the tank…".
 
 ---
