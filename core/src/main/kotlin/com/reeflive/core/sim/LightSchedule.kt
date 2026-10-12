@@ -72,6 +72,20 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
 
     fun intensity(simTimeSec: Double): Double = intensity(channels(simTimeSec))
 
+    /**
+     * HUD phase label from the schedule: "Night" when dark, "Dawn" while intensity ramps up,
+     * "Dusk" while it ramps down (the default ramp-down starts at 18:00), otherwise "Day".
+     */
+    fun phaseLabel(simTimeSec: Double): String {
+        if (intensity(simTimeSec) < LIGHTS_ON) return "Night"
+        val slope = intensity(simTimeSec + 60.0) - intensity(simTimeSec - 60.0)
+        return when {
+            slope > 1e-6 -> "Dawn"
+            slope < -1e-6 -> "Dusk"
+            else -> "Day"
+        }
+    }
+
     /** Minutes since intensity last rose above [LIGHTS_ON] (scans back up to 24 h), or null if dark now. */
     fun minutesSinceLightsOn(simTimeSec: Double): Double? {
         if (intensity(simTimeSec) < LIGHTS_ON) return null
