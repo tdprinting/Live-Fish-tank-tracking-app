@@ -27,7 +27,19 @@ MERGE_STATUS_PLACEHOLDER
 ## Next steps, in priority order
 1. **sim/realism follow-up:** un-ignore and tune the 15 `@Ignore`d checks in `RealismAcceptanceTest` (c02–06, 08, 09, 11, 15, 16, 20, 22, 24, 25, 27). Per-check notes are in the next section. Also: shorten slow checks (c20, c06, c12, c08; the file takes ~5.5 min), delete the scratch test in `core/src/test/.../debug/` if it got committed, and tighten `AiTest.feedingReducesHunger` (currently 6 of 9 fed). Not implemented from 06: feeding displacement by rank (§3.2), tang `blueDeepen`, CBS/hermit claw display, hermit shell fights, coral sign hooks, territory re-anchoring after `RearrangeRock`. Write up SIMULATION.md §9.10.
 2. **Wire realism sandbox commands into the new sandbox UI:** `RampParam`, `ReleaseParam`, `Schedule`, `PowerheadFail`, `RearrangeRock`, `SetAcclimation`, `Photoperiod`, `pump.<name>`, `spectrum.<channel>`. The UI hooks are marked `TODO(sim/realism)`: `SandboxControlMode` in `SandboxParams.kt` (enable Ramp/Schedule and the selector appears), the per-mode branch in the `LiveTankScreen.kt` slider handler, the disabled photoperiod/pump/spectrum rows, light as absolute PAR 0–1500, flow up to 100× turnover (sim caps at 2×), `runPreset` "missed water changes" (disable routine changes) and "salinity crash" (ramp, not step).
-3. **sim/algae-heat:** finish research 09 Part A (algae) and 08 (extreme heat), then add renderer coverage for algae. Owner complaint to fix: at catastrophic heat every fish swims to the top. They must go lethargic, lose equilibrium and die in species order; they should only surface when O2 is low.
+3. **Algae + extreme heat (research 09 Part A, 08). Nothing implemented yet.** Branch `sim/algae-heat` exists but has no commits; restart it from main. Design notes from the investigation:
+   - **Root cause of "everyone swims to the top":** `ai/CommonBehaviors.kt` `SurfaceGasp.score` returns 0.95 when `gillRate > 2.4`, and `StressModel.gillHz` crosses that from heat alone near 36 °C. Gate it on `O2_sat < 20 % + 1.5 %·(T−28)` and the agitated/gasping stages only (08 §3).
+   - **Heat:** add a new `sim/HeatModel.kt` (damage accumulator, stages agitated → gasping → lethargic on bottom → loss of equilibrium → spasms → death, recovery, delayed mortality). It needs only small hooks in `HealthModel.step`, `SurfaceGasp`, a new bottom/lethargy behaviour, and `CoralSim` for acute sloughing. `CoralKind` lacks Acropora/Pocillopora/LPS, and check 6 needs them; adding them is safe because the app doesn't use `CoralKind`.
+   - **Algae:** add `sim/AlgaeModel.kt` owned by `WaterSim`, replacing `WaterSim.algae()` and the hair-algae export terms. Keep filling `algaeHair`, `cyano`, `diatoms` and `coralline` as cover fractions. Also needed:
+     - a silicate field in `WaterState`
+     - `Simulation.rebuildWater()` must carry the algae state across a water rebuild
+     - coverage passed to the renderer as a new defaulted field at the end of `SimSnapshot`
+     - the algae slider in `LiveTankScreen.kt` wired to the `SetParam("algae")` that core already accepts
+   - **Spec fixes needed:**
+     - 09 check 2 expects PO4 to fall 0.3–0.4 ppm from a 0.2 ppm start, which is impossible. Assert instead that PO4 reaches its floor and is reported as the limiting nutrient.
+     - 09 check 6 (PO4 ≥ 0.5 after a die-off) needs WaterSim's flat 0.015/h PO4 removal to become saturating.
+   - **Watch existing tests:** `WaterSimTest.nitrateRisesWithFeeding` (2–5.5 ppm/week) and the N mass balance. Book algal N uptake as export and decay as input.
+   - Then render algae coverage per surface (09 rendering section).
 4. **Owner-reported bugs** (from a video; full list in `docs/WORKLIST.md`):
    - Follow camera stutters when fish turn (smooth the yaw).
    - Fish fold into their own bodies on sharp turns (clamp swim-wave + turn bend, cap yaw rate).
