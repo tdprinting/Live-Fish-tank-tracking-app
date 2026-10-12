@@ -15,6 +15,8 @@ class Coral(
     val pos: Vec3,
     val normal: Vec3,
     swaySeed: Double,
+    /** Sandbox copy: offset of this colony from its home anchor (the anchored model is drawn moved by it). */
+    val offset: Vec3 = Vec3.ZERO,
 ) {
     val kind: CoralKind = species.coralKind
     var extension = 0.8
@@ -42,6 +44,8 @@ class Coral(
     fun toPose() = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
         species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(),
+        offsetX = offset.x.toFloat(), offsetY = offset.y.toFloat(), offsetZ = offset.z.toFloat(),
+        homeX = (pos.x - offset.x).toFloat(), homeY = (pos.y - offset.y).toFloat(), homeZ = (pos.z - offset.z).toFloat(),
     )
 }
 

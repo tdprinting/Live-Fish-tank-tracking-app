@@ -677,6 +677,7 @@ class Simulation(
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
+            is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
         }
     }
 
@@ -824,8 +825,9 @@ class Simulation(
         if (sp.isCoral) {
             val a = seed.placement?.let { rock.anchors[it] ?: rock.anchors["coral_$it"] }
                 ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
-            val pos = a?.pos ?: Vec3(60.0, 10.0, 20.0)
-            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, a?.normal ?: Vec3.Y, rng.nextDouble() * 6.28)
+            val pos = (a?.pos ?: Vec3(60.0, 10.0, 20.0)) + (seed.offset ?: Vec3.ZERO)
+            val normal = if (seed.offset != null) Vec3.Y else a?.normal ?: Vec3.Y
+            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, normal, rng.nextDouble() * 6.28, seed.offset ?: Vec3.ZERO)
             return Organism(id, sp, 1.0, seed.nickname, null, rng.fork(id.hashCode().toLong()))   // placeholder (not added)
         }
         val size = if (seed.sizeCm > 0) seed.sizeCm else sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm)

@@ -44,6 +44,12 @@ sealed class Command {
     data class Photoperiod(val hours: Double) : Command()
     /** Sandbox: drop [count] spare empty shells for the hermits ([sizeCm] 0 = sized for the largest hermit, with room to grow). */
     data class AddSpareShells(val count: Int = 1, val sizeCm: Double = 0.0) : Command()
+
+    /**
+     * Sandbox stocking test: add [count] of [speciesId] at once ([Stocking]). Fish are released spread along the
+     * surface, inverts start at their usual spots, corals settle on free rock or sand. [sizeCm] 0 = typical adult.
+     */
+    data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -57,6 +63,8 @@ data class LivestockSeed(
     val variant: String? = null,
     /** Starting age in years; null = derived from size (LifeCycle.initialAgeSec). */
     val ageYears: Double? = null,
+    /** Corals: where this colony sits relative to its [placement] anchor (a sandbox copy of an anchored model). */
+    val offset: Vec3? = null,
 )
 
 enum class Disease { ICH, VELVET, HLLE, BACTERIAL }
@@ -168,7 +176,19 @@ data class CoralPose(
     val tissue: Float = 1f,
     /** Bare skeleton exposed by acute heat necrosis (research 08 §5), 0..1. */
     val skeleton: Float = 0f,
-)
+    /**
+     * Sandbox copies ([Command.AddMany]): the anchored model is drawn moved by this offset (cm), keeping only the
+     * parts near its home anchor at [homeX]/[homeY]/[homeZ]. All zero for the tank's own colonies.
+     */
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val offsetZ: Float = 0f,
+    val homeX: Float = 0f,
+    val homeY: Float = 0f,
+    val homeZ: Float = 0f,
+) {
+    val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
+}
 
 /** Everything the renderer and HUD need for one frame (ARCHITECTURE §8.8). */
 data class SimSnapshot(
