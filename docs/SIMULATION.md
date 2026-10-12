@@ -742,3 +742,104 @@ Fast-forwards a copy of the live tank under a scripted change and reports how ea
 - **UI**: `ui/live/TimelapseSheet.kt`, `SimulationHolder`, entry point in the sandbox dock.
 
 Tests: `core/src/test/.../sim/timelapse/TimelapseTest.kt` (runs headless on a `TestTank` fork).
+## 13. Microfauna: pods, plankton and the microscope view (research 10)
+`sim/MicrofaunaModel.kt` holds the small animals of `docs/research/10_microfauna.md` as aggregate populations. It lives in `WaterSim` next to the algae model (`water.micro`), steps from the chemistry tick in 15-min chunks, and costs nothing at 1x.
+
+**Groups** (`MicroGroup`): harpacticoids, Tigger pods (calanoids), cyclopoids, gammarid and caprellid amphipods, mysids, ostracods, isopods, rotifers, ciliates, phytoplankton, bristleworms, micro-snails, spaghetti worms, forams and red flatworms. Caprellids, mysids and flatworms are absent until added. A new tank on dry rock (`dryRock()`, the `new_tank_cycle` preset) has only ciliates and phyto.
+
+**Habitats** (`MicroHabitat`), in individuals:
+- `ROCK`: the algae model's rock area (1.2 × footprint) plus 3,000 cm² per litre of display macroalgae.
+- `SAND`: the footprint.
+- `GLASS`: the lower 8 cm band the pods use.
+- `CHAETO`: 3,000 cm² of filament per litre of sump refugium (`SetParam("refugium", L)`). Fish cannot reach it.
+- `COLUMN`: per litre.
+
+Capacities are the §3.2 densities with the §3.1 refuge factor folded in, times `(0.3 + 0.7 f_food)`. Column grazers (calanoids, rotifers) take their capacity from recent phyto (a 6-day memory that jumps with a dose), so eggs laid in a bloom still grow up after the cells are gone.
+
+**Dynamics** per group and habitat (§3.1):
+- Growth is `r_max · exp(−((T − Topt)/w)²) · f_food`.
+  - `f_food = F/(Ks + F)`. F comes from the algae film and diatom biomass, 10 % of the hair, a 2.5 g m⁻² biofilm × microbial maturity, and 3 g m⁻² per ppm of detritus.
+  - Phyto, ciliates, nauplii and DOC feed the groups that eat them.
+- Copepods, amphipods and mysids carry a juvenile pool.
+  - Births go to juveniles, which mature after `0.6 G(T)`. Calanoid copepodites count as adults earlier (`0.45 G`).
+  - The birth rate solves Euler–Lotka for two stages, so growth with full food at 27 °C is exactly `r_max`.
+- Background mortality, flushing for column plankton (0.1 d⁻¹), the §4 parameter tiers and predation remove animals.
+- Animals spill between habitats toward equal fill (0.3 d⁻¹).
+- A group that has once reached 20 % of K keeps a hidden rock seed. It never hits zero unless a toxin kills it (copper, medication), and then it is gone until re-seeded.
+
+**Diel exposure**: §2.2 day/night fractions with a 0.4 h lag. The column fraction moves with it.
+
+**Predators** (`PodPredator`, from the live animals each chem tick): the §2.6 weight matrix, multi-prey Holling II on encounters.
+- Encounters are `weight × (exposed × access + hidden × pore access) × N`.
+- Handling is in harpacticoid equivalents: a gammarid is 10, a bristleworm 50.
+- Fish take juveniles at 0.2. Half-saturation is 20,000 pod-eq for fed generalists, 10,000 for the cardinal (night only), and 800 for a mandarin / dragonet (2,000 a day, picks into the pores).
+- Corals use the §3.4 per-polyp Holling on the column density, with `c_max` 1/h and D½ 2/mL; adult copepods escape × 0.5.
+  - Polyps per colony (est.): GSP 500, Kenya 100, clove 150, organ pipe 200, zoas 50 at 0.3/h.
+  - Polyps only count while extended.
+  - More than 0.5 prey per polyp in a day sets `coralFed` for 3 days.
+
+**Water parameters** (§4):
+- Heat: none below `T_lethal − 2`, then 20 → 50 %/d up to `T_lethal`, then steeper. Breeding stops 2 °C below `T_lethal`.
+- Salinity: no effect between 28 and 38 ppt; slower growth from 20 to 28 ppt. Harpacticoids die at up to 50 %/d below ~22 ppt, mysids faster.
+- Copper: copepods stop breeding at 0.02 ppm. 0.15 ppm clears every crustacean, worm and snail in 3 days. Residual leaching keeps r × 0.5 for 60 days after the copper is gone (§4 says 30; §6.3 #6 re-seeds on day 30).
+- Low DO, pH, ammonia and nitrate tiers as written in §4.
+- Fenbendazole and praziquantel run for 3 days.
+
+**Feedback into the tank**:
+- Dead microfauna go to detritus at 0.02 g TAN per g wet, through `addDetritusTanGrams`, so the nitrogen balance holds.
+- Harpacticoids (0.005 mg DW/day) and micro-snails graze the diatom and green film (`AlgaeModel.podGrazeGPerDay`, at most 5 %/day of the palatable film).
+- A water change removes that fraction of the column plankton.
+- Killing more than 1,000 flatworms dumps their mass into detritus and holds a 0.3 social-stress input on every fish for 48 h.
+- Phyto does not draw nitrogen from the water. A full dose is about 14 mg N, or 0.06 ppm NO3.
+
+**Sandbox actions** (`Command.Micro(MicroAction, amount)`):
+
+| Action | Effect |
+|---|---|
+| Tisbe bottle | 3,500 harpacticoids |
+| Tigger bottle | 2,000 calanoids, 9 per L |
+| Phyto | 2 × 10⁵ cells/mL |
+| Rotifers | 5 per mL |
+| Amphipods | 100 |
+| Mysids | 50 |
+| Live rock | 2 % of K of the rock groups |
+| Flatworm frag | 5 flatworms |
+| Flatworm treatment | Flatworms killed, toxin released |
+| Fenbendazole, praziquantel | Course starts |
+
+**Snapshot**: `SimSnapshot.microfauna` (`MicrofaunaState`), cached between steps. It carries:
+- per-group totals, juvenile ratio, egg-sac (breeding) index, exposure, trend and presence;
+- `visible[group × scene]`, the expected animals in view per cm² of rock, glass or sand or per mL of water right now. Glass at night includes half of the rock population's emergence.
+- phyto cells/mL;
+- the torch estimate (pods per 100 cm² of glass at lights-out + 1 h);
+- the pod budget (copepods born vs eaten per day);
+- coral capture and the toxin flag.
+
+`TimelapseFork` and `rebuildWater` copy the whole model.
+
+**Microscope** (`sim/MicroView.kt`, used by the app's Micro view):
+- Zooms 1x / 10x / 40x have fields of 510 / 5 / 0.3 cm² and focus volumes of 2,500 / 25 / 0.3 mL.
+- A group renders only if it spans at least 2 px of a 1080 px field. It is left out if it is bigger than 60 % of the field.
+- Each group gets one Poisson draw from the expected count, capped at 300 sprites in total; the remainder shows as shimmer.
+- Copepod nauplii appear at 10x and 40x only when juveniles exceed 20 % of adults.
+- Phyto shows as a green haze, linear in log10(cells/mL) from 10³ to 10⁶, plus up to 60 Tetraselmis-size cells at 40x.
+- Sampling uses a fixed seed per scene, zoom and hour.
+
+**As built in Tee's tank** (`TestTank`, 60 days): about 14,000 harpacticoids (60 % of K), 1,300 cyclopoids, 950 amphipods, 3,000 ostracods, 85 bristleworms, 135 micro-snails, about 25 ciliates per mL and 100 phyto cells per mL. The torch test gives about 150 pods per 100 cm² of glass.
+
+**Tests**: `MicrofaunaModelTest` implements the eleven §6.3 checks plus a Simulation/time-lapse integration test. Interpretations:
+- **#1**: runs the mandarin on top of Tee's stock. "Exposed glass" means the night glass count.
+- **#2**: measures adult calanoids.
+- **#9**: uses a 20 per mL rotifer dose, the §5.2 dosed density. 20 per L of copepods cannot reach 500 captures a day with the §3.4 rates.
+- **#10**: "saturation" means at least 90 % of 20 per cm².
+
+**Tuned away from the research numbers** (est. values, to meet §6.3 together):
+
+| Parameter | Research value | Used |
+|---|---|---|
+| Harpacticoid film Ks | 1 g m⁻² | 5 g m⁻² |
+| Calanoid r_max | 0.45 d⁻¹ | 0.6 d⁻¹ (121 eggs per female lifetime supports it) |
+| Calanoid capacity | 5 per L at 10⁴ cells/mL | Hill curve: about 10 per L at 5 × 10⁴, 130 per L at 2 × 10⁵ |
+| Amphipod `T_lethal` | 34 °C | 36 °C, so §6.3 #7's 30-60 % loss at 35 °C holds |
+| Cyclopoid `T_lethal` | 36 °C | 37 °C |
+| Phyto clearance by benthic filter feeders | — | 1.8 d⁻¹ on top of 0.3 d⁻¹ export, so a dose clears in about 2 days |

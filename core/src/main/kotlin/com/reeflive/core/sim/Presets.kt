@@ -75,7 +75,8 @@ object Presets {
             coralline = 0.0, silicate = 2.0, siLeach = 0.1, microbes = 0.0),
         livestock = emptyList(),
         // research 01 §3.9 checkpoints: ammonia, nitrite peak, nitrite falling, cycled after 3 days of 0/0
-        setup = { sim -> sim.cycle = CycleTracker(sim.simTimeSec) },
+        // dry rock: no pods or worms until live rock or a bottle seeds them (research 10 §3.3)
+        setup = { sim -> sim.cycle = CycleTracker(sim.simTimeSec); sim.water.micro.dryRock() },
     )
 
     val heaterFailureSummer = Preset(

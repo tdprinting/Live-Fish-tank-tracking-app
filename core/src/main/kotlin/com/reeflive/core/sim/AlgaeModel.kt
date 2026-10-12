@@ -141,6 +141,8 @@ class AlgaeModel(config: TankConfig) {
     var docOverride: Double? = null
     /** Groups switched off (sandbox / tests): held at zero biomass, no uptake. */
     val active = BooleanArray(ng) { true }
+    /** Film grazed by copepods and micro-snails, g DW per day ([MicrofaunaModel], research 10 §3.1 food feedback). */
+    var podGrazeGPerDay = 0.0
 
     // ---- outputs of the last step ----
     /** mg N taken from / returned to the water in the last step (WaterSim nitrogen accounting). */
@@ -388,6 +390,16 @@ class AlgaeModel(config: TankConfig) {
                 graze[gi * ns + si] += cap * a * palatable[gi * ns + si] / denom * taste[gi * ns + si]
             }
         }
+        // pods and micro-snails crop the diatom and green film (research 10 §3.1), spread by palatable biomass, at most
+        // 5 %/day of it (harpacticoids remove 3-11 % of microalgal biomass per day, HARP-G)
+        if (podGrazeGPerDay > 0) {
+            var film = 0.0
+            for (g in POD_FOOD) for (si in 0 until ns) film += palatable[g.ordinal * ns + si]
+            if (film > 0) {
+                val k = min(podGrazeGPerDay * days, POD_GRAZE_MAX * film * days) / film
+                for (g in POD_FOOD) for (si in 0 until ns) graze[g.ordinal * ns + si] += k * palatable[g.ordinal * ns + si]
+            }
+        }
         for (si in 0 until ns) {
             // grazing never exceeds ~3 g DW m-2 d-1 of surface (HUM20 cap), nor the palatable stock
             var tot = 0.0
@@ -630,6 +642,9 @@ class AlgaeModel(config: TankConfig) {
         /** Cover in crevices that grazers cannot reach. */
         val REFUGE_COVER = doubleArrayOf(0.01, 0.01, 0.03, 0.01, 0.01, 0.01, 0.0)
         val COMPETITORS = listOf(AlgaeGroup.DIATOMS, AlgaeGroup.FILM, AlgaeGroup.HAIR, AlgaeGroup.CYANO)
+        /** Film groups the pods graze, and the most of that film they take per day. */
+        val POD_FOOD = listOf(AlgaeGroup.DIATOMS, AlgaeGroup.FILM)
+        const val POD_GRAZE_MAX = 0.05
 
         /** Carbonate factor for coralline (KUF08): 1.0 at pH 8.2 / 8 dKH, 0.5 at 7.9, 0.1 at 7.7; Ca, alk and Mg in range. */
         fun corallineCarbonate(s: WaterState): Double =

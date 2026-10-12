@@ -395,6 +395,7 @@ class Simulation(
         w.grazingPerHour = grazeAccum * 3600 / CHEM_DT
         grazeAccum = 0.0
         w.algae.grazers = algaeGrazers()
+        microDrivers()
         w.step(CHEM_DT)
         applyRamps()
         cycle?.update(w.s, simTimeSec)
@@ -435,6 +436,7 @@ class Simulation(
         }
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
+        flatwormToxin()
         nightRolls()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
         if (!behaviorEnabled || abstractMode) {
@@ -557,6 +559,45 @@ class Simulation(
             out += AlgaeGrazer(t, size * o.health.coerceIn(0.0, 1.0))
         }
         return out
+    }
+
+    /**
+     * Pod predators, plankton-catching polyps and display macroalgae for the microfauna model (research 10 §2.6, §3.4).
+     * Polyps per colony are estimates (a GSP mat ~500, research 10 §6.3 #9); retracted polyps catch nothing.
+     */
+    private fun microDrivers() {
+        val m = water.micro
+        val preds = ArrayList<MicroPredator>()
+        for (o in organisms) {
+            if (!o.alive) continue
+            val t = PodPredator.of(o) ?: continue
+            preds += MicroPredator(t, o.health.coerceIn(0.0, 1.0))
+        }
+        m.predators = preds
+        var small = 0.0; var zoa = 0.0; var shroom = 0.0; var macro = 0.0
+        for (c in corals) {
+            val open = c.tissue * c.extension.coerceIn(0.1, 1.0)
+            when (c.kind) {
+                CoralKind.GSP -> small += 500 * open
+                CoralKind.CLOVE -> small += 150 * open
+                CoralKind.KENYA -> small += 100 * open
+                CoralKind.ORGAN_PIPE -> small += 200 * open
+                CoralKind.ZOA -> zoa += 50 * open
+                CoralKind.MUSHROOM -> shroom += 5 * open
+                CoralKind.MACRO -> macro += 0.5 * c.tissue
+                else -> {}
+            }
+        }
+        m.smallPolyps = small; m.zoaPolyps = zoa; m.mushrooms = shroom; m.displayMacroL = macro
+    }
+
+    /**
+     * A mass flatworm kill releases toxin (research 10 §3.3, §6.3 #10): fish carry a steady social-stress input
+     * (twice the calm baseline) for 48 h.
+     */
+    private fun flatwormToxin() {
+        if (water.micro.toxinHours <= 0) return
+        for (o in organisms) if (o.alive && o.isFish && o.stressState.socialInput < TOXIN_SOCIAL) StressModel.addSocial(o, TOXIN_SOCIAL - o.stressState.socialInput)
     }
 
     /**
@@ -750,6 +791,7 @@ class Simulation(
             is Command.Shadow -> shadow(c.worldPoint)
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
             is Command.ScrapeGlass -> scrapeGlass(c)
+            is Command.Micro -> water.micro.apply(c.action, c.amount, water.s)
         }
     }
 
@@ -858,6 +900,7 @@ class Simulation(
         return WaterSim(config, old.s.copy()).also { nw ->
             nw.algae.copyFrom(old.algae)
             nw.copyEquipmentFrom(old)
+            nw.micro.copyFrom(old.micro)
             nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
@@ -1024,6 +1067,7 @@ class Simulation(
             algaeBloom = water.s.algaeHair.toFloat(),
             algae = water.algae.snapshot(),
             eggClutches = repro.poses(),
+            microfauna = water.micro.snapshot(),
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
@@ -1073,6 +1117,8 @@ class Simulation(
         const val ASTERINA_CAP = 4
         /** Shortest sim time between the startles a dragged Flipper causes (one per stroke, not per frame). */
         const val SCRAPE_STIR_SEC = 1.0
+        /** Social-stress input held on every fish while flatworm toxin is in the water. */
+        const val TOXIN_SOCIAL = 0.3
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }

@@ -5,8 +5,8 @@ import com.reeflive.core.sim.LivestockSeed
 import com.reeflive.core.sim.Simulation
 
 /**
- * Copies a running [Simulation] into an independent one (water, equipment, livestock and their health
- * state, corals, lights). Behaviour positions and floating food are not carried over: a time-lapse
+ * Copies a running [Simulation] into an independent one (water, equipment, algae and microfauna, livestock and their
+ * health state, corals, lights). Behaviour positions and floating food are not carried over: a time-lapse
  * runs the abstract layer, where animals are parked at their behaviour's home spots anyway.
  * Call on the thread that owns [src].
  */
@@ -37,6 +37,7 @@ object TimelapseFork {
         dst.water.heaterStuckOn = w.heaterStuckOn; dst.water.heaterSetC = w.heaterSetC; dst.water.ato = w.ato
         dst.water.algae.copyFrom(w.algae)
         dst.water.copyEquipmentFrom(w)
+        dst.water.micro.copyFrom(w.micro)
         val srcOrgs = src.organisms.associateBy { it.id }
         for (o in dst.organisms) {
             val s = srcOrgs[o.id] ?: continue
