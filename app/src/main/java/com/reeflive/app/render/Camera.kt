@@ -168,7 +168,7 @@ class Camera {
             }
         }
         // Smooth the heading with a critically damped spring so turns swing the camera instead of stepping it.
-        val heading = if (!followHeading.initialized || dt <= 0f) followHeading.snap(profile) else followHeading.step(profile, dt)
+        val heading = if (!followHeading.initialized) followHeading.snap(profile) else followHeading.step(profile, dt)
         // profile direction, then the user's swing (one-finger drag)
         val base = heading + followYaw
         val d = (bl * 3.2f).coerceIn(MIN_FOLLOW, MAX_FOLLOW) * followZoom
