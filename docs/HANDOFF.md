@@ -1,5 +1,11 @@
 # ReefLive handoff (2026-10-12, session 2)
 
+## Start here (next AI)
+1. Read this file, then `docs/WORKLIST.md` (owner-reported bugs) and `docs/research/coverage_gaps.md`.
+2. `git fetch origin` and check the **Branch status** table below. Any branch still marked unmerged comes first: get it green and merge it.
+3. Then work the **Next steps** in order. Use one branch per item, open a PR, and merge when CI is green.
+4. The owner tests on a phone (APK auto-updates from `main`) and reports bugs with screen recordings. To review a video, use ffmpeg to make a 1 fps contact sheet: `ffmpeg -i in.mov -vf "fps=1,scale=640:-1,tile=4x3" -frames:v 1 sheet.jpg`.
+
 Repo: https://github.com/tdprinting/Live-Fish-tank-tracking-app (public). Every push to `main` builds an APK release and the app updates itself, so only merge green, compiling work.
 
 ## Working rules (from Tee)
