@@ -22,7 +22,7 @@ CARDS = {
     "paracanthurus_hepatus": "tang",
     "sphaeramia_nematoptera": "cardinal",
     "labroides_dimidiatus": "wrasse",
-    "echidna_nebulosa": "eel",
+    "pholidichthys_leucotaenia": "engineer_goby",
     "cirrhitichthys_falco": "hawkfish",
     "salarias_fasciatus": "lawnmower_blenny",
     "ecsenius_stigmatura": "tailspot_blenny",

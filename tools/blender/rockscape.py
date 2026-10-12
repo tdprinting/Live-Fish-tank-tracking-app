@@ -73,7 +73,9 @@ TUNNELS = {
 ANCHORS = [
     ("HOST_KENYA", "HOST", (72, 40, 15), dict(radius=10), None),
     ("HOST_GSP_RIGHT", "HOST", (104, 14, 24), dict(radius=8), "surface"),
-    ("CAVE_EEL", "CAVE_EEL", (69, 5, 23), dict(dir=[0.5, 0.1, -0.85]), None),
+    ("CAVE_EEL", "CAVE_EEL", (69, 5, 23), dict(dir=[0.5, 0.1, -0.85], species="engineer_goby"), None),
+    # engineer goby: it excavates sand out of the den mouth under the R5 overhang
+    ("SAND_GOBY_DIG", "SAND_ZONE", (65, 0.5, 27), dict(radius=5, species="engineer_goby"), None),
     ("CAVE_SMALL", "CAVE", (63, 12, 8), {}, None),
     ("CAVE_BIG", "CAVE", (42, 18, 6), {}, None),
     ("HOLE_BLENNY", "HOLE", (25, 18, 24), dict(dir=[0.6, 0.2, 0.78], depth=6, radius=1.8, species="lawnmower_blenny"), None),
@@ -108,7 +110,8 @@ ANCHORS = [
     ("coral_organpipe_kenya_base", "CORAL", (68, 37, 14), dict(normal=[-0.3, 0.9, 0.3]), "surface"),
 ]
 ALIASES = [("HOLE_LAWNMOWER", "HOLE_BLENNY", None), ("STATION_SHRIMP", "STATION_SKUNK", None),
-           ("DUSTER_TUBE", "DUSTER_BASE", "TUBE"), ("BRITTLE_HOME", "BRITTLE_HIDE", "CAVE")]
+           ("DUSTER_TUBE", "DUSTER_BASE", "TUBE"), ("BRITTLE_HOME", "BRITTLE_HIDE", "CAVE"),
+           ("BURROW_GOBY", "CAVE_EEL", "BURROW")]
 DEN_PATH = [[69, 5, 23], [73, 6, 19], [77, 7, 15], [80, 8.5, 11], [83, 9.5, 8], [86, 9.5, 5]]
 
 

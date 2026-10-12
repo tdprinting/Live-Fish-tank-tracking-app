@@ -15,7 +15,7 @@ FISH_POSES = [
     ("tang", 6.5, (100, 40, 16), 200, 0), ("cardinal", 5.0, (29, 16, 23), 200, 0),
     ("wrasse", 7.0, (64, 18, 21), 10, -8), ("hawkfish", 5.0, (49, 30, 21), 200, 0),
     ("lawnmower_blenny", 10.0, (27, 18, 25.5), 30, 5), ("tailspot_blenny", 5.5, (53, 14, 27.5), 70, 10),
-    ("dottyback", 6.5, (93, 30, 12), 180, 0), ("eel", 35.0, None, 0, 0),
+    ("dottyback", 6.5, (93, 30, 12), 180, 0), ("engineer_goby", 20.0, None, 0, 0),
 ]
 INVERT_POSES = [
     ("shrimp", 5.0, (88, 36, 16), 200), ("skunk_shrimp", 6.0, (66, 22, 18), 300),
@@ -37,7 +37,7 @@ def place(objs, scale, pos, yaw_deg, pitch_deg=0.0):
 def eel_in_den(objs):
     """Bend the eel along the den path with the head out of the den (preview only)."""
     import mathutils
-    L = 35.0
+    L = 20.0
     roots = [o for o in objs if o.parent is None]
     for r in roots:
         r.scale = (L, L, L)
@@ -87,7 +87,7 @@ def render_scene(samples=None, w=1280, h=720, out=None):
         if not os.path.exists(p):
             continue
         objs = PV.import_glb(p)
-        if sid == "eel":
+        if sid == "engineer_goby":
             eel_in_den(objs)
         else:
             place(objs, L, pos, yaw, pitch)

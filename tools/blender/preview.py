@@ -16,7 +16,7 @@ import common as C  # noqa: E402
 from common import bpy  # noqa: E402
 
 FISH_SHEET = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "hawkfish", "lawnmower_blenny",
-              "tailspot_blenny", "dottyback", "eel"]
+              "tailspot_blenny", "dottyback", "engineer_goby"]
 INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "brittle_star", "feather_duster",
                 "nassarius", "astrea", "asterina"]
 

@@ -204,11 +204,11 @@ def paint_cardinal(cv, fl):
     # band tilts: further back at the top
     slant = (v - 0.5) * -0.03  # band runs from the first dorsal (top) down to the pelvics (slightly forward)
     b0, b1 = 0.345 + slant, 0.455 + slant
-    cv.vgrad("#E6E8E6", "#F1F0EA", 0.0, 1.0)  # silvery white rear
-    cv.blend(P.value_noise(cv.h, cv.w, 40, 20, 23) * 0.5, "#D8DEE2", 0.5)
+    cv.vgrad("#F2E2DE", "#EAD6D2", 0.0, 1.0)  # silvery white rear
+    cv.blend(P.value_noise(cv.h, cv.w, 40, 20, 23) * 0.5, "#E8D0CC", 0.5)
     head = 1 - S(b0 - 0.01, b0 + 0.005, u)
     hc = P.Canvas(cv.w, cv.h)
-    hc.vgrad("#C8B070", "#B9A04E", 0.0, 1.0)  # yellow-olive to tan head
+    hc.vgrad("#D6BC4A", "#A89A3C", 0.0, 1.0)  # yellow-olive to tan head
     cv.rgb = cv.rgb * (1 - head[..., None]) + hc.rgb * head[..., None]
     # yellow stronger on the snout and nape, white cheek
     cv.blend(head * (1 - S(0.05, 0.25, u)) * S(0.4, 0.7, v), "#D4BC48", 0.5)
@@ -219,31 +219,31 @@ def paint_cardinal(cv, fl):
     # black band with a dark scale mesh
     band = P.band(u, b0, b1, 0.004) * S(0.02, 0.08, v) * (1 - S(0.97, 1.0, v))
     net = P.hex_net(cv, 15, 1.6)
-    bandc = (1 - net[..., None]) * hex2rgb("#2A221C") + net[..., None] * hex2rgb("#120E0C")
+    bandc = (1 - net[..., None]) * hex2rgb("#5A5246") + net[..., None] * hex2rgb("#0E0C0A")
     cv.rgb = cv.rgb * (1 - band[..., None]) + bandc * band[..., None]
     # reddish-brown spots on the rear body
     rs = np.random.default_rng(7)
-    m, _ = fl.spots(rs, 60, 0.012, 0.018, 0.033, (0.49, 0.9, 0.08, 0.97),
+    m, _ = fl.spots(rs, 60, 0.012, 0.018, 0.033, (0.49, 0.97, 0.08, 0.97),
                     weight_fn=lambda uu, vv: 0.35 + 0.65 * S(0.1, 0.4, vv))
     # second flank pass with a different seed gives a different arrangement on the far side
     # (both flanks share UVs, so one set is used)
-    cv.blend(m, "#D9532A")
+    cv.blend(m, "#9A3E2C")
     # dark edge of the lips
     dark_mouth(cv, fl, u1=0.03, v0=0.62, v1=0.7, color="#8C7A30", op=0.6)
 
 
 def fins_cardinal(cv):
-    grey = "#C9C6C2"
-    FL.paint_fin_slot(cv, 0, base="#B8AC70", alpha=0.6, rays=7, ray_color="#4A4028", spine_count=7,
-                      tip_color="#2A2620", tip_from=0.6)
+    grey = "#E4E2DE"
+    FL.paint_fin_slot(cv, 0, base="#D8B840", alpha=0.85, rays=7, ray_color="#9A7A20", spine_count=7,
+                      margin="#E0702A", margin_w=0.14)
     FL.paint_fin_slot(cv, 1, base=grey, alpha=0.5, rays=10, ray_color="#8A8580", margin="#E8E8E8",
                       margin_w=0.06, base_fn=lambda T, Sx, rgb: rgb * (1 - 0.4 * (1 - S(0.0, 0.4, Sx)))[..., None])
     FL.paint_fin_slot(cv, 2, base=grey, alpha=0.5, rays=10, ray_color="#8A8580", margin="#E8E8E8", margin_w=0.06)
     FL.paint_fin_slot(cv, 3, base="#B8B4B0", alpha=0.55, rays=18, ray_color="#6E6A66", margin="#DDDDDD",
                       margin_w=0.05)
     FL.paint_fin_slot(cv, 4, base=grey, alpha=0.35, rays=12, ray_color="#A8A49F")
-    FL.paint_fin_slot(cv, 5, base="#1E1814", alpha=0.95, rays=6, ray_color="#0A0806", margin="#3A2A20",
-                      margin_w=0.1)
+    FL.paint_fin_slot(cv, 5, base="#E8A830", alpha=0.92, rays=6, ray_color="#C07A20", margin="#D0302A",
+                      margin_w=0.14)
 
 
 def paint_wrasse(cv, fl):
@@ -321,82 +321,69 @@ def snowflake_mask(w, h, seed, rows=(0.32, 0.58, 0.84), aspect=1.0, density=1.0,
     return m, centers
 
 
-def paint_eel(cv, fl):
-    u, v = cv.u, cv.v
-    cv.vgrad("#E8E8E0", "#F2F2EE", 0.0, 1.0)
-    mucus(cv, 0.05, 41)
-    # blotches: 3 rows on the flank, the lowest row weaker; belly nearly spotless
-    m, centers = snowflake_mask(cv.w, cv.h, 42, rows=(0.36, 0.78), aspect=1.35, scale_u=1.6)
-    # sparse dark freckles between the blotches
-    fr = S(0.8, 0.83, P.fbm(cv.h, cv.w, 120, 2, 48)) * S(0.25, 0.4, v)
-    m = np.maximum(m, fr)
-    belly = S(0.12, 0.28, v)
-    m = m * belly
-    # head (u < 0.1) darker with fine speckle
-    head = 1 - S(0.07, 0.12, u)
-    speck = S(0.55, 0.62, P.fbm(cv.h, cv.w, 200, 2, 43)) * S(0.3, 0.6, v)
-    m = np.maximum(m, head * speck)
-    cv.blend(head * S(0.45, 0.9, v), "#4A4A44", 0.6)
-    cv.blend(m, "#111111")
-    # yellow dots inside / on the edge of blotches
-    rs = np.random.default_rng(44)
-    dots = np.zeros_like(u)
-    for (x, cvv, su, sv) in centers:
-        if cvv < 0.25:
-            continue
-        for _ in range(rs.integers(2, 5)):
-            du = rs.uniform(-0.6, 0.6) * su
-            dv = rs.uniform(-0.6, 0.6) * sv
-            dots = np.maximum(dots, fl.disc(x + du, cvv + dv, rs.uniform(0.005, 0.009), 0.0015))
-    cv.blend(dots, "#E8C52E")
-    # tail tip darker band
-    cv.blend(S(0.97, 1.0, u), "#2A2A28", 0.6)
-    # mouth line
-    dark_mouth(cv, fl, u1=0.08, v0=0.38, v1=0.44, color="#1A1210", op=0.7)
+def paint_engineer_goby(cv, fl):
+    """Juvenile engineer goby (ref_engineer_goby.jpg): black, yellow-cream wavy vertical bars joined by a broken
+    wavy mid-flank stripe into a maze."""
+    cv.vgrad("#0E0F0C", "#181A14", 0.0, 1.0)
+    mucus(cv, 0.03, 41)
+    rs = np.random.default_rng(42)
+    m = np.zeros_like(cv.u)
+    x = 0.05
+    while x < 0.97:
+        top = rs.uniform(0.85, 0.97)
+        bot = rs.uniform(0.05, 0.2)
+        n = 6
+        pts = [(x + 0.012 * math.sin(k * 1.7 + x * 40) + rs.uniform(-0.004, 0.004), bot + (top - bot) * k / (n - 1))
+               for k in range(n)]
+        if rs.uniform() < 0.35:  # some bars break at the mid stripe
+            pts = pts[:3] if rs.uniform() < 0.5 else pts[3:]
+        m = np.maximum(m, fl.stroke(pts, [0.0075] * len(pts), soft=0.003))
+        x += rs.uniform(0.045, 0.06)
+    x = 0.03
+    while x < 0.95:  # broken wavy mid-flank stripe joins the bars into a maze
+        seg = rs.uniform(0.04, 0.1)
+        xs = np.linspace(x, min(x + seg, 0.98), 6)
+        pts = [(xx, 0.52 + 0.07 * math.sin(xx * 60 + 1.3)) for xx in xs]
+        m = np.maximum(m, fl.stroke(pts, [0.0065] * len(pts), soft=0.003))
+        x += seg + rs.uniform(0.02, 0.06)
+    m = np.maximum(m, fl.stroke([(0.005, 0.6), (0.03, 0.8), (0.06, 0.92)], [0.004] * 3, soft=0.002))
+    m = np.maximum(m, fl.stroke([(0.01, 0.35), (0.04, 0.3), (0.07, 0.4)], [0.0035] * 3, soft=0.002))
+    cv.blend(np.clip(m, 0, 1), "#E4E070")
+    dark_mouth(cv, fl, u1=0.03, v0=0.38, v1=0.44, color="#050505", op=0.7)
 
 
-def fins_eel(cv):
-    # ribbon: cream with dark blotches continuing
-    def ribbon(T, Sx, rgb):
-        h, w = T.shape
-        n = P.fbm(h, w, 40, 3, 47)
-        blot = S(0.5, 0.56, n)
-        return rgb * (1 - blot[..., None]) + hex2rgb("#151515") * blot[..., None]
-    FL.paint_fin_slot(cv, 6, base="#EDEDE6", alpha=0.95, rays=0, base_fn=ribbon, edge_fade=0.15)
+def fins_engineer_goby(cv):
+    FL.paint_fin_slot(cv, 6, base="#141510", alpha=0.95, rays=0, margin="#B8B460", margin_w=0.06, edge_fade=0.1)
+    FL.paint_fin_slot(cv, 4, base="#1A1A16", alpha=0.7, rays=8, ray_color="#0A0A08")
 
 
 def paint_hawkfish(cv, fl):
+    """Falco hawkfish (ref_hawkfish.jpg): white body densely spotted orange-red, densest on the back and head."""
     u, v = cv.u, cv.v
-    cv.vgrad("#F0C8C0", "#F4E3D6", 0.0, 0.7)
-    mucus(cv, 0.04, 51)
-    scales_overlay(cv, 12, 0.06)
+    cv.vgrad("#F4ECE6", "#FAF6F2", 0.0, 0.6)
+    mucus(cv, 0.03, 51)
+    scales_overlay(cv, 12, 0.05)
     rs = np.random.default_rng(52)
-    rag = P.fbm(cv.h, cv.w, 40, 3, 53)
-    bars = np.zeros_like(u)
-    for i, bc in enumerate((0.18, 0.34, 0.50, 0.66, 0.82)):
-        band = fl.stroke([(bc - 0.01, 1.0), (bc, 0.7), (bc + 0.01, 0.45), (bc + 0.02, 0.22)],
-                         [0.03, 0.036, 0.032, 0.018], soft=0.012)
-        rag_m = band * (0.6 + 0.8 * (rag - 0.5))
-        bars = np.maximum(bars, S(0.35, 0.5, rag_m))
-    # saddles: darkest along the back, fading toward the belly
-    cv.blend(bars * S(0.05, 0.55, v) ** 1.5, "#A8503A", 0.9)
-    cv.blend(bars * S(0.55, 0.95, v), "#6E2414", 0.85)
-    # scattered dark spots on the upper body
-    m, _ = fl.spots(rs, 30, 0.008, 0.011, 0.03, (0.12, 0.9, 0.6, 0.98))
-    cv.blend(m, "#7A2E1C")
-    # red-brown radial lines through the eye (eye at u~0.1, v~0.72)
+    dens = lambda uu, vv: 0.15 + 0.85 * S(0.25, 0.85, vv) * (1 - 0.5 * S(0.5, 0.95, uu))  # noqa: E731
+    # irregular blotches that coalesce on the upper back
+    blot = S(0.52, 0.6, P.fbm(cv.h, cv.w, 34, 3, 53) * (0.7 + 0.5 * S(0.45, 0.95, v)) * (1.05 - 0.35 * u))
+    cv.blend(blot * S(0.3, 0.6, v), "#D8562C", 0.85)
+    m, _ = fl.spots(rs, 120, 0.006, 0.011, 0.016, (0.02, 0.93, 0.18, 0.99), weight_fn=dens)
+    cv.blend(m, "#E0602E")
+    m3, _ = fl.spots(rs, 40, 0.004, 0.007, 0.012, (0.05, 0.9, 0.55, 0.99))
+    cv.blend(m3, "#C23C1C")
+    # red around the eye and a red-orange stripe from behind the eye toward the gill
     eu, ev = 0.10, 0.72
-    # two short reddish bands radiating back and down from the eye
-    for (du, dv) in ((0.075, -0.16), (0.04, -0.3)):
-        cv.blend(fl.stroke([(eu + 0.01, ev - 0.02), (eu + du, ev + dv)], [0.014, 0.01], soft=0.004), "#A23A22", 1.0)
-    # spots on the head/cheek
-    m2, _ = fl.spots(rs, 22, 0.005, 0.008, 0.016, (0.01, 0.18, 0.45, 0.98))
-    cv.blend(m2, "#A3412A", 0.9)
-    dark_mouth(cv, fl, u1=0.03, v0=0.38, v1=0.46, color="#9A4A3A", op=0.6)
+    cv.blend(fl.disc(eu, ev, 0.05, 0.01), "#D8401E", 0.7)
+    cv.blend(fl.stroke([(eu + 0.02, ev - 0.04), (eu + 0.08, ev - 0.12), (eu + 0.12, ev - 0.2)], [0.012, 0.011, 0.007],
+                       soft=0.004), "#E0481E", 1.0)
+    m2, _ = fl.spots(rs, 26, 0.005, 0.008, 0.012, (0.0, 0.2, 0.4, 0.99))
+    cv.blend(m2, "#D24A22", 0.95)
+    dark_mouth(cv, fl, u1=0.03, v0=0.38, v1=0.46, color="#C0502E", op=0.5)
 
 
 def fins_hawkfish(cv):
-    def spotted(T, Sx, rgb, a, n=10, rows=4, color="#9A3E28"):
+    def spotted(T, Sx, rgb, a, n=10, rows=4, color="#E0602E"):
         ph = np.abs(((T * n) % 1.0) - 0.5)
         rw = np.abs(((Sx * rows) % 1.0) - 0.5)
         m = (1 - S(0.15, 0.3, ph)) * (1 - S(0.12, 0.3, rw)) * (Sx < 0.9)
@@ -406,12 +393,14 @@ def fins_hawkfish(cv):
     FL.paint_fin_slot(cv, 2, base="#F2E2D2", alpha=0.55, rays=9, ray_color="#C08060",
                       spots=lambda T, Sx, rgb, a: spotted(T, Sx, rgb, a, 9, 3))
 
-    def caudal_bars(T, Sx, rgb, a):
-        m = (1 - S(0.08, 0.16, np.abs(((Sx * 3) % 1.0) - 0.5))) * (Sx < 0.85)
-        return rgb * (1 - m[..., None]) + hex2rgb("#A04A30") * m[..., None], np.maximum(a, 0.8 * m)
-    FL.paint_fin_slot(cv, 3, base="#F2E2D2", alpha=0.6, rays=14, ray_color="#C08060", spots=caudal_bars)
+    def caudal_spots(T, Sx, rgb, a):
+        rgb, a = spotted(T, Sx, rgb, a, 12, 5, "#E0602E")
+        blue = (1 - S(0.12, 0.25, np.abs(((T * 12 + 0.5) % 1.0) - 0.5))) * \
+            (1 - S(0.1, 0.25, np.abs(((Sx * 5 + 0.5) % 1.0) - 0.5))) * (Sx > 0.25) * (Sx < 0.9)
+        return rgb * (1 - blue[..., None]) + hex2rgb("#5E9AD8") * blue[..., None], np.maximum(a, 0.85 * blue)
+    FL.paint_fin_slot(cv, 3, base="#F4EEEA", alpha=0.55, rays=14, ray_color="#E0B0A0", spots=caudal_spots)
     FL.paint_fin_slot(cv, 4, base="#F4D8CC", alpha=0.7, rays=14, ray_color="#B85A40",
-                      spots=lambda T, Sx, rgb, a: spotted(T, Sx, rgb, a, 14, 3, "#B04A34"))
+                      spots=lambda T, Sx, rgb, a: spotted(T, Sx, rgb, a, 14, 3, "#E0602E"))
     FL.paint_fin_slot(cv, 5, base="#F4E0D6", alpha=0.6, rays=5, ray_color="#C08060")
 
 
@@ -496,25 +485,33 @@ def fins_tailspot(cv):
 
 
 def paint_dottyback(cv, fl):
-    """Indigo dottyback (P. fridmani x sankeyi): uniform deep indigo-violet, dark line snout->eye."""
+    """Dottyback (ref_dottyback.jpg): lavender-blue, broad black lateral stripe snout->tail through the eye,
+    thin dark stripe along the dorsal base, pale blue-white lines between, white-blue belly."""
     u, v = cv.u, cv.v
-    cv.vgrad("#33238E", "#3F2CA8", 0.0, 1.0, 0.9)
-    cv.blend(P.value_noise(cv.h, cv.w, 30, 12, 92), "#5B3FD0", 0.35)
-    mucus(cv, 0.04, 91)
-    scales_overlay(cv, 10, 0.06)
-    cv.blend((1 - S(0.0, 0.3, v)), "#33248A", 0.4)
-    # thin dark line from the snout through the eye (eye at u 0.08, v ~0.65)
-    cv.blend(fl.stroke([(0.0, 0.58), (0.08, 0.65), (0.14, 0.67)], [0.01, 0.012, 0.007], soft=0.003), "#120A30", 1.0)
-    dark_mouth(cv, fl, u1=0.02, v0=0.5, v1=0.56, color="#1A1040", op=0.7)
+    cv.vgrad("#DCE6FF", "#8E9EEA", 0.0, 0.75)
+    mucus(cv, 0.03, 91)
+    scales_overlay(cv, 10, 0.05)
+    c = 0.62 - 0.04 * u
+    hw = 0.085 - 0.03 * u
+    cv.blend(1 - S(hw - 0.012, hw + 0.012, np.abs(v - c)), "#0C0C18", 0.95)
+    cv.blend(1 - S(0.012, 0.03, np.abs(v - (c + hw + 0.05))), "#E4ECFF", 0.85)
+    cv.blend(1 - S(0.015, 0.03, np.abs(v - 0.93)), "#141428", 0.9)
+    cv.blend(1 - S(0.2, 0.42, v), "#EEF2FF", 0.7)
+    dark_mouth(cv, fl, u1=0.02, v0=0.5, v1=0.56, color="#101020", op=0.7)
 
 
 def fins_dottyback(cv):
-    edge = "#8F7CFF"
-    FL.paint_fin_slot(cv, 0, base="#5040C0", alpha=0.85, rays=30, ray_color="#3A2C98", margin=edge, margin_w=0.06)
-    FL.paint_fin_slot(cv, 2, base="#5040C0", alpha=0.85, rays=20, ray_color="#3A2C98", margin=edge, margin_w=0.06)
-    FL.paint_fin_slot(cv, 3, base="#5444C8", alpha=0.85, rays=16, ray_color="#3A2C98", margin=edge, margin_w=0.05)
-    FL.paint_fin_slot(cv, 4, base="#6050D0", alpha=0.4, rays=12, ray_color="#4030A0")
-    FL.paint_fin_slot(cv, 5, base="#5040C0", alpha=0.8, rays=4, ray_color="#3A2C98", margin=edge, margin_w=0.08)
+    edge = "#6A90F0"
+    FL.paint_fin_slot(cv, 0, base="#1A1C34", alpha=0.85, rays=30, ray_color="#101020", margin=edge, margin_w=0.12)
+    FL.paint_fin_slot(cv, 2, base="#1A1C34", alpha=0.85, rays=20, ray_color="#101020", margin=edge, margin_w=0.12)
+
+    def dark_center(T, Sx, rgb, a):
+        m = 1 - S(0.18, 0.4, np.abs(T - 0.5))
+        return rgb * (1 - m[..., None]) + hex2rgb("#0E0E1C") * m[..., None], a
+    FL.paint_fin_slot(cv, 3, base="#7A8CE0", alpha=0.85, rays=16, ray_color="#4A5AB0", margin=edge, margin_w=0.06,
+                      spots=dark_center)
+    FL.paint_fin_slot(cv, 4, base="#A8B8F0", alpha=0.35, rays=12, ray_color="#7080C0")
+    FL.paint_fin_slot(cv, 5, base="#C8D4FF", alpha=0.6, rays=4, ray_color="#8090D0")
 
 
 # ----------------------------------------------------------------------------
@@ -579,15 +576,17 @@ SPECIES = {
         eye=dict(u=0.07, zf=0.25, r=0.032, iris="#7A8EA0", ring="#101010", outer="#101010", ring_w=0.1),
         paint=paint_wrasse, fins=fins_wrasse, irid=0.5, rough=0.3, length_cm=7.0,
     ),
-    "eel": dict(
-        profile=[(0, 0.028, 0.026, 0.0), (0.03, 0.06, 0.055, 0.0), (0.08, 0.075, 0.064, 0.0), (0.2, 0.072, 0.062, 0.0),
-                 (0.5, 0.07, 0.06, 0.0), (0.8, 0.06, 0.05, 0.0), (0.95, 0.038, 0.03, 0.0), (1.0, 0.012, 0.012, 0.0)],
-        body_tris=5500, ring=16, p_exp=1.0, belly_bias=0.08, back_pinch=0.05, head_flatten=0.1,
-        ribbon=dict(u_d=0.12, u_a=0.55, h_d=0.028, h_a=0.022),
+    "engineer_goby": dict(
+        # Pholidichthys leucotaenia (juvenile): elongate, compressed, blunt head, continuous dorsal-caudal-anal fin
+        profile=[(0, 0.07, 0.05, 0.0), (0.015, 0.09, 0.062, 0.0), (0.06, 0.10, 0.065, 0.0), (0.3, 0.10, 0.06, 0.0),
+                 (0.7, 0.095, 0.05, 0.0), (0.88, 0.07, 0.035, 0.0), (0.97, 0.035, 0.018, 0.0), (1.0, 0.012, 0.01, 0.0)],
+        body_tris=5500, ring=16, p_exp=0.9, belly_bias=0.06, back_pinch=0.1,
+        ribbon=dict(u_d=0.33, u_a=0.52, h_d=0.045, h_a=0.04),
         caudal=None,
-        eye=dict(u=0.045, zf=0.55, r=0.015, iris="#E8C52E", ring="#202020", outer="#101010", ring_w=0.15),
-        paint=paint_eel, fins=fins_eel, irid=0.05, rough=0.45, length_cm=35.0, tex=(2048, 256),
-        gill=(0.1, 0.4, 0.03, 0.25),
+        pectoral=dict(u=0.1, length=0.05, width=0.04, zf=-0.2, shape="round"),
+        eye=dict(u=0.035, zf=0.4, r=0.014, iris="#2A2A20", ring="#B8B060", outer="#101010", ring_w=0.15),
+        paint=paint_engineer_goby, fins=fins_engineer_goby, irid=0.05, rough=0.4, length_cm=20.0, tex=(2048, 256),
+        gill=(0.08, 0.4, 0.03, 0.25),
     ),
     "hawkfish": dict(
         profile=[(0, 0.045, 0.035, -0.03), (0.06, 0.17, 0.09, -0.02), (0.16, 0.29, 0.13, -0.005), (0.3, 0.345, 0.14, 0.0),
@@ -638,7 +637,7 @@ SPECIES = {
         dorsal=dict(u0=0.20, u1=0.92, h=[(0.20, 0.02), (0.23, 0.06), (0.5, 0.07), (0.8, 0.085), (0.9, 0.07), (0.92, 0.02)],
                     rake=25, n=30),
         anal=dict(u0=0.46, u1=0.92, h=[(0.46, 0.02), (0.5, 0.06), (0.8, 0.08), (0.9, 0.065), (0.92, 0.02)], rake=28, n=20),
-        caudal=dict(length=0.2, span=0.2, shape="rounded"),
+        caudal=dict(length=0.26, span=0.15, shape="rounded"),
         pectoral=dict(u=0.24, length=0.14, width=0.09, zf=-0.1, shape="round"),
         pelvic=dict(u=0.28, length=0.10),
         eye=dict(u=0.08, zf=0.3, r=0.045, iris="#20204A", ring="#5B63C8", outer="#202060", ring_w=0.12),
@@ -649,7 +648,7 @@ SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin
                                fins=lambda cv: fins_clown(cv, darwin=True),
                                eye=dict(u=0.11, zf=0.33, r=0.045, iris="#E8E2D2", ring="#F26B1D", outer="#E05A15"))
 
-FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "eel", "hawkfish", "lawnmower_blenny",
+FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
             "tailspot_blenny", "dottyback"]
 
 
@@ -742,7 +741,7 @@ def build_geometry(sid):
         fb.add(nm, ev, ef, euv, ecol, "eye", ["iris", "pupil"], face_mats=fm,
                extras={"pivot": (lambda c=cen: fb.gltf_point(c))})
 
-    if sid == "eel":  # lower jaw hinged at u 0.085
+    if False:  # (moray jaw, unused) hinged at u 0.085
         u = np.linspace(0.004, 0.085, 10)
         ring = 8
         Vj, Fj = [], []
@@ -822,7 +821,7 @@ def build_fish(sid, lod1=True, verbose=True):
                 C.decimate(o, 0.4)
             elif p == "eye":
                 C.decimate(o, 0.6)
-        cap = 2000 if sid == "eel" else 1650
+        cap = 2000 if sid == "engineer_goby" else 1650
         over = sum(C.tri_count(o) for o in objs.values()) - cap
         if over > 0:  # trim the remainder from the body
             body = [o for o in objs.values() if o["part"] == "body"][0]
