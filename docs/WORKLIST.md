@@ -1,24 +1,16 @@
-# ReefLive work list (after merging realism → timelapse → tank-hq)
+# ReefLive work list (open items)
 
 ## Sim
-- Catastrophic heat: lethargy, loss of equilibrium, death by species instead of everyone at the surface (research 08_extreme_heat.md)
+- Heat-death spasm animation missing (research 08; SIMULATION §10)
 - Extreme sandbox ranges for every parameter (research 09 part B)
-- Proper algae growth model and rendering (research 09 part A); wire the algae sandbox control
 - Check NO3 79 / PO4 0.22 red at sandbox start: are those defaults or logged readings?
 - Clock said "Day" at 18:00 with light at 50%; check against the photoperiod schedule
 
 ## Behaviour / camera
-- Follow camera stutters when fish turn; smooth the heading (critically damped yaw)
 - Fish snap to fixed spots and don't react to time-speed changes (AI not ticking at higher speeds / during time-lapse?)
-- Time-lapse issues (see above, plus the realism rebase conflicts in OrganismStats, StressModel, PairMatrix, TimelapseTest)
 
 ## Models / rendering
-- Fish clip into their own bodies on sharp turns: clamp the vertex-shader body bend (swim wave + turn curvature), cap yaw rate, keep fins from passing through the body
 - Cleaner shrimp animation broken
-- Oversaturated palette (violet water, neon rock, noisy coralline); match the photos
-- Kenya tree reads as bleached white; should be tan/pink-brown
-- Zoanthids read as yellow speckle
-- Beige/pink side panels at the tank edges
 - Fish nearly invisible: contrast/rim light, closer default camera
 
 ## UI

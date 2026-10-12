@@ -682,3 +682,63 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 ### 9.8 SimRunner
 `./gradlew -PcoreOnly :core:simRunner` prints a 24 h scenario (each hour 2 min of full 20 Hz behavior plus abstract time, and 12-min windows around the 09:30 and 17:30 feeds) with every animal's behavior mix, hunger, stress and the water state. `--args="long 90"` runs 90 days of health/chemistry with a daily log; `--args="preset ich_outbreak 14"` runs a preset.
+
+## 10. Catastrophic heat (`HeatModel`, `ai/HeatBehaviors.kt`)
+Research: `docs/research/08_extreme_heat.md` (§2 stages, §6 recovery, §7 model). Runs on the chemistry tick beside the chronic tolerance path. Per animal it keeps a damage value `D` (0..1), the stage, the episode's peak stage, a long-term acclimation temperature, a dT/dt filter and a 24 h hourly window for slow-creep detection.
+
+Equations (constants in `HeatModel`):
+- `t_death(T) = anchor × 10^(−slope × (T − 36))`, floor 3 min. `D += dt / t_death(T − refuge − ΔCTmax)` while `T − refuge > T_ag`.
+- LOE dwell: `D += dt / t_LOE` while `T − refuge ≥ CTmax − 1.5`, with `t_LOE = loeMin × 10^(−0.5 × (T − refuge − (CTmax − 1.5)))`, floor 1 min. This term is an addition to 08 §7.1, which alone cannot give the 10–40 min LOE window on a 1 °C/h ramp.
+- Recovery: `D × exp(−dt / 24 h)` once `T < T_ag`.
+- Stage thresholds on `D`: AGITATED 0.05, GASPING 0.25, LETHARGIC 0.50, LOE 0.85. Stage = max(thermal stage from `T − CTmax`, stage from `D`). Stages rise at once and step down one stage at a time, holding 30 min at AGITATED and 2 h otherwise.
+- `CTmax` = profile CTmax + acclimation (+0.4 °C per °C above 26 °C, cap +2, τ 7 d; shrimp do not acclimate) + heat hardening (+0.5 °C for 7 d after a LETHARGIC episode) − slow-creep penalty (1 °C). `T_ag = CTmax − 4` and does not move.
+- Acute spikes: dT/dt filtered with τ 10 min; ≥ 5 °C/h counts as a spike, ≥ 0.3 °C/h sustained as creep.
+- Delayed mortality: a per-profile roll at each peak stage (`pLethargic` default 0.10, `pLoe` default 0.35).
+- Surface seeking is an oxygen behaviour only (`HeatModel.surfaceAllowed`): the ASR threshold is `20 % + 1.5 %·(T − 28)` of saturation, and absolute DO ≤ 3 mg/L lets any fish surface.
+
+Profiles (CTmax, t_death anchor at 36 °C, slope; `T_ag = CTmax − 4`):
+
+| Group | CTmax °C | t_death anchor (min) | slope |
+|---|---|---|---|
+| Cleaner shrimp | 35.0 | 20 | 1.2 |
+| Turbo/Astraea snail | 35.0 | 20 | 1.0 |
+| Cardinalfish | 36.0 | 30 | 1.0 |
+| Tang, clownfish, cleaner wrasse, Sally Lightfoot | 36.5 | 60–120 | 1.0 |
+| Dottyback, hawkfish, moray (est.) | 37.5 | 480 | 0.9 |
+| Engineer goby, blenny, hermit crab | 38.0–38.5 | 2160 | 0.9 |
+| Nerite/cerith snail | 39.0 | 7200 | 0.9 |
+
+Behaviour (`ai/HeatBehaviors.kt`, installed on every brain): agitated fish dart, gasping fish hold at the surface, lethargic fish sit on the bottom, LOE fish drift. Crabs (hermit, Sally) climb out when agitated. Blennies and gobies hide low instead of darting. Snails detach at CTmax, re-attach 50/50, and are dead if not back on their foot after 12 h. Acute coral sloughing is in `CoralSim`. Not yet built: the heat-death spasm animation.
+
+Source: `core/.../sim/HeatModel.kt`, `core/.../ai/HeatBehaviors.kt`, `core/.../sim/CoralSim.kt`. Tests: `core/src/test/.../sim/HeatModelTest.kt`.
+
+## 11. Algae (`AlgaeModel`, `render/AlgaeVisuals.kt`)
+Research: `docs/research/09_algae_and_extremes.md` Part A (A0–A7). `AlgaeModel` is owned by `WaterSim` and replaces the old `WaterSim.algae()` growth term. Seven groups (diatoms, GSA film, hair, cyano, dinos, bubble, coralline) grow on four surfaces (glass, sand, rock top, rock shade). Each (group, surface) cell keeps a biomass.
+
+Growth: `μ = μmax × f_nut × f_T × f_pH × f_sal × f_Cu`.
+- `f_nut` is the Liebig minimum of Monod terms for N (`NO3 + NH3 + NO2` as NO3-eq), P (PO4) and, for diatoms, silicate (`K_Si = 0.14 ppm SiO2`), with an internal store that rises fast and decays while starving.
+- `f_T` is a Gaussian about each group's optimum; `f_sal` and `f_pH` are linear ramps, and `f_Cu = 1 / (1 + Cu / 0.5)`.
+- Light enters per surface through `PAR_AT_FULL` (glass 180, sand 130, rock top 380, shade 100 µmol m⁻² s⁻¹ at full intensity). `DAY_GAIN = 2.4` makes `μmax` the daily rate under a ~10 h day.
+
+Die-back: `d = d_basal + starvation (f < 0.1) + blackout (dark > 14 h) + heat + copper + chemistry`. Chemistry terms include pH and carbonate for coralline.
+
+Cover: `Cover_s = Cmax × (1 − exp(−B / (area × b_half)))` per surface. `AlgaeCover` carries `cover[group, surface]` and a per-group `vigor` (low = pale) to the renderer through `SimSnapshot.algae`.
+
+Decay and grazing: labile decay 0.2 /d, refractory 0.025 /d, 15 % of decaying tissue turns refractory, O2 demand 1.4 g per g DW. Grazers are `GrazerType` rows (g DW/day per reference animal, preference per group, access per surface), capped at 3 g m⁻² d⁻¹, with half of grazed tissue egested to detritus.
+
+Coupling: headline covers are mirrored into `WaterState` (`algaeHair`, `diatoms`, `cyano`, `dinos`, `film`, `bubble`, `coralline`). A value written from outside re-seeds that group's biomass on the next step. The sandbox algae control sets hair cover (`SandboxParams`).
+
+Rendering: `AlgaeVisuals` packs the 16 floats into four `vec4`s of the `Frame` UBO (glass, sand, rock top, rock shade). Its layout must match `assets/shaders/common.glsl`, and `AlgaeVisualsTest` checks the offsets. `rock.frag` and `glass.frag` draw patchy world-space fbm masks with thresholds set so the covered area tracks the cover fraction.
+
+Source: `core/.../sim/AlgaeModel.kt`, `app/.../render/AlgaeVisuals.kt`, `assets/shaders/{common.glsl,rock.frag,glass.frag}`. Tests: `core/src/test/.../sim/AlgaeModelTest.kt`, `app/.../render/AlgaeVisualsTest.kt`.
+
+## 12. Time-lapse engine (`sim/timelapse/`)
+Fast-forwards a copy of the live tank under a scripted change and reports how each animal coped. The live simulation is not touched.
+
+- **Spec** (`TimelapseSpec`): `durationHours`, `sampleEveryHours` (auto), `chunkMinutes` (30), and a list of changes. `Step` sets a parameter once. `Ramp` moves it linearly over `overHours` from the current value by default. `Schedule` applies (hour, value) points, optionally repeating every N hours. `Do` enqueues any `Command`.
+- **Fork** (`TimelapseFork.of`): copies water, equipment, livestock with health state, corals and lights. Behaviour positions and floating food are not copied, because the abstract layer parks animals at their home spots.
+- **Run** (`TimelapseRun`): calls `Simulation.advanceAbstract` in chunks, with the behaviour layer off and 60 s chemistry and health steps. Changes are delivered as ordinary commands, and ramps are re-applied each chunk. A `CancelToken` stops the run and keeps the partial recording.
+- **Recorder and report** (`TimelapseRecorder`, `TimelapseReport`): samples per-animal stats and events. Each animal gets a verdict, worst last: Coped < Stressed < Got sick < Died. The report groups these per species.
+- **UI**: `ui/live/TimelapseSheet.kt`, `SimulationHolder`, entry point in the sandbox dock.
+
+Tests: `core/src/test/.../sim/timelapse/TimelapseTest.kt` (runs headless on a `TestTank` fork).
