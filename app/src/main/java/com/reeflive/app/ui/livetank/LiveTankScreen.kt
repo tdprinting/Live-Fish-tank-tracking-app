@@ -177,6 +177,8 @@ fun LiveTankScreen(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
+        val sideWidth = (maxWidth * 0.42f).coerceIn(300.dp, 440.dp)
+        val dockHeight = (maxHeight * 0.55f).coerceAtLeast(minOf(320.dp, maxHeight * 0.7f))
         val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val clearance = NavClearance + navInset
         if (landscape) {
@@ -188,7 +190,7 @@ fun LiveTankScreen(
                 if (sandbox) {
                     SandboxDock(
                         panel, actions,
-                        Modifier.width((maxWidth * 0.42f).coerceIn(300.dp, 440.dp)).fillMaxHeight().statusBarsPadding(),
+                        Modifier.width(sideWidth).fillMaxHeight().statusBarsPadding(),
                         side = true, bottomClearance = clearance,
                     )
                 }
@@ -196,7 +198,6 @@ fun LiveTankScreen(
         } else {
             val reduce = ReefTheme.reduceMotion
             // the dock takes a bit over half the height; the tank view gets the rest (never less than 30 %)
-            val dockHeight = (maxHeight * 0.55f).coerceAtLeast(minOf(320.dp, maxHeight * 0.7f))
             val animated by animateDpAsState(dockHeight, ReefMotion.tween(reduce), label = "dock")
             Column(Modifier.fillMaxSize()) {
                 TankArea(
