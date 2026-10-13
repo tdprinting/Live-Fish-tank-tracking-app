@@ -39,7 +39,7 @@ BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800,
-    "shrimp": 4800, "skunk_shrimp": 4800, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
+    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
     "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,

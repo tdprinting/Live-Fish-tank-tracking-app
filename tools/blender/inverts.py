@@ -247,12 +247,12 @@ def build_shrimp(kind="banded"):
                 # held forward and up under the head, chela tips near the mouth (white in Lysmata's front pair)
                 L = 1.0 if li == 0 else 1.25
                 pts = leg_path(base, base + [0.06 * L, side * 0.09, 0.0], base + [0.14 * L, side * 0.12, -0.06],
-                               base + [0.2 * L, side * 0.1, -0.14], 9)
+                               base + [0.2 * L, side * 0.1, -0.14], 7)
             else:
                 pts = leg_path(base, base + [0.03, side * 0.16, 0.05], base + [-0.02, side * 0.24, -0.08],
-                               base + [-0.06, side * 0.27, -0.2], 9)
+                               base + [-0.06, side * 0.27, -0.2], 7)
             # Lysmata's front legs are white (the rocking signal, Caves 2019)
-            limb(gl, pts, np.linspace(0.012, 0.005, 9), 5, cls, li, 2 if banded or cls == PICK else 1, x)
+            limb(gl, pts, np.linspace(0.012, 0.005, 7), 5, cls, li, 2 if banded or cls == PICK else 1, x)
     # third maxillipeds: short leg-like palps in front of P1 (Lysmata picks with them; Stenopus grooms
     # its antennules with their brush, Bauer 1981)
     for side in (1, -1):
@@ -322,11 +322,11 @@ def build_shrimp(kind="banded"):
         else:
             ctrl = [head, head + [0.15, side * 0.05, 0.05], head + [0.3, side * 0.12, 0.08],
                     head + [0.42, side * 0.2, 0.06]]
-        pts = G.bezier(*ctrl, 24)
+        pts = G.bezier(*ctrl, 16)
         # rescale to the requested length
         ln = np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1))
         pts = head + (pts - head) * (L / ln)
-        limb(ga, pts, np.linspace(0.006, 0.0015, 24), 4, cls, pair, 2, head[0], cap_end=False)
+        limb(ga, pts, np.linspace(0.006, 0.0015, 16), 4, cls, pair, 2, head[0], cap_end=False)
     geo_obj("Antennae", ga, root, "antenna", [mshell], extras={"count": len(ants)})
 
     # --- eyes on stalks ---------------------------------------------------------------------
@@ -365,7 +365,7 @@ def build_shrimp(kind="banded"):
         C.set_cols(o, cols)
     for o in (body, eyes):
         C.recalc_normals(o)
-    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 4800)
+    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 4200)
 
 
 # ----------------------------------------------------------------------------
