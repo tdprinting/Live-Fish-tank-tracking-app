@@ -82,7 +82,7 @@ import kotlin.math.sin
 /** What Hermie is saying and how he feels; [react] makes him hop and talk. */
 @Stable
 class HermieState {
-    var line by mutableStateOf<String?>("Hi, I'm Hermie! Tap a bubble to play with the tank.")
+    var line by mutableStateOf<String?>(LiveTips.HELLO)
         private set
     var mood by mutableStateOf(HermieMood.HAPPY)
         private set
@@ -107,25 +107,13 @@ class HermieState {
     }
 
     companion object {
-        val WatchTips = listOf(
-            "Tap Feed and pick a food. Watch it go in!",
-            "Tap a fish to meet it. Double tap to follow it around.",
-            "Tap empty water to hide the buttons, tap again to bring them back.",
-            "Want to break things? Switch to Pretend at the top. Your real tank stays safe.",
-            "Clean lets you scrape algae off the glass with your finger.",
-        )
-        val SandboxTips = listOf(
-            "This is a pretend tank. Nothing here changes your real one.",
-            "Try Trouble, then speed up time in More to see what happens.",
-            "Every card has a More button with the grown-up sliders.",
-            "Tap the tank while something animates to skip it.",
-            "Made a mess? More has a big Reset button.",
-        )
+        val WatchTips = LiveTips.hermieWatch
+        val SandboxTips = LiveTips.hermieSandbox
     }
 }
 
 /**
- * Hermie's pill: the animated crab in a candy bubble and, after each reaction, his speech bubble for ~5 s.
+ * Hermie's pill: the animated crab in a candy bubble and, after each reaction, his speech bubble for ~7 s.
  * Tapping him gives the next tip; the small × hides him (bring him back from More).
  */
 @Composable
@@ -141,7 +129,7 @@ fun HermiePill(state: HermieState, sandbox: Boolean, onDismiss: () -> Unit, modi
             hop.snapTo(0f)
             hop.animateTo(1f, tween(if (state.mood == HermieMood.WORRIED) 600 else 420))
         }
-        delay(5200)
+        delay(TALK_MS)
         talking = false
     }
     val interaction = remember { MutableInteractionSource() }
@@ -183,6 +171,9 @@ fun HermiePill(state: HermieState, sandbox: Boolean, onDismiss: () -> Unit, modi
         CloseDot(onDismiss, "Hide Hermie")
     }
 }
+
+/** How long Hermie's speech bubble stays open: long enough for a slow reader. */
+private const val TALK_MS = 7000L
 
 /** A 32 dp × in a navy disc (inside a 44 dp touch target). */
 @Composable

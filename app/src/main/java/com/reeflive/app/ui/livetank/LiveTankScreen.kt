@@ -37,6 +37,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,6 +65,7 @@ import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
+import com.reeflive.app.render.SupplyShelfControl
 import com.reeflive.app.render.TankProjection
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
@@ -74,6 +80,8 @@ import com.reeflive.app.ui.live.DayPhase
 import com.reeflive.app.ui.live.FishCard
 import com.reeflive.app.ui.live.FishSummary
 import com.reeflive.app.ui.live.FollowOverlay
+import com.reeflive.app.ui.live.GaugeDial
+import com.reeflive.app.ui.live.GaugeReadings
 import com.reeflive.app.ui.live.FxPoint
 import com.reeflive.app.ui.live.HappyMeterPill
 import com.reeflive.app.ui.live.HermieMood
@@ -87,6 +95,7 @@ import com.reeflive.app.ui.live.LiveMenu
 import com.reeflive.app.ui.live.LivePill
 import com.reeflive.app.ui.live.LiveReactions
 import com.reeflive.app.ui.live.LiveTheme
+import com.reeflive.app.ui.live.LiveTaps
 import com.reeflive.app.ui.live.LiveTools
 import com.reeflive.app.ui.live.MicroscopeView
 import com.reeflive.app.ui.live.ModeToggle
@@ -101,10 +110,18 @@ import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.SandboxTipsCard
 import com.reeflive.app.ui.live.SelectedAnimalUi
+import com.reeflive.app.ui.live.ShelfPick
+import com.reeflive.app.ui.live.ShelfRow
+import com.reeflive.app.ui.live.SupplyCarryLayer
+import com.reeflive.app.ui.live.SupplyItem
+import com.reeflive.app.ui.live.SupplyShelfOverlay
+import com.reeflive.app.ui.live.TankGauge
+import com.reeflive.app.ui.live.TankGaugeLayer
 import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.live.TimelapseSheet
+import com.reeflive.app.ui.live.WaterTap
 import com.reeflive.app.ui.live.liveSpec
 import com.reeflive.app.ui.live.tankHappiness
 import com.reeflive.app.ui.live.toFishCardState
@@ -115,10 +132,13 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun LiveQuality.toRender() = when (this) {
@@ -162,7 +182,8 @@ private val DockTucked = 72.dp
  * portrait, and its cards are compact glass that close on their own. Every action plays a short picture in the tank
  * ([ActionFxLayer], projected through the camera) and sends its command when the picture reaches the water; a tap on
  * the tank skips the picture (the command is sent at once). Hermie and the happy meter sit as small pills at the top.
- * Tapping empty water hides every control so only the tank shows. Sim runs only while RESUMED.
+ * More → "Hide buttons" hides every control so only the tank shows; a tap on the water brings them back, and a tap on
+ * the water never hides anything (UI_STYLE §10.8). Sim runs only while RESUMED.
  */
 @Composable
 fun LiveTankScreen(
@@ -218,23 +239,52 @@ fun LiveTankScreen(
     var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
     val sandbox = mode == SimMode.SANDBOX
 
-    // every overlay control hidden, only the tank (tap empty water or "Show buttons" to undo)
+    // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
+    // "Show buttons" pill or Back undo it
     var chromeHidden by rememberSaveable { mutableStateOf(false) }
-    // first-time tips (remembered in settings), and again from More → Tips
+    // first-time tips, one card for Watch and one for Sandbox (each remembered in settings), and again from
+    // More → "What can I do?"
     var tipsAsked by rememberSaveable { mutableStateOf(false) }
-    val showTips = sandbox && !chromeHidden && (tipsAsked || (settings.loaded && !settings.sandboxHintSeen))
+    val hintSeen = if (sandbox) settings.sandboxHintSeen else settings.watchHintSeen
+    val showTips = !chromeHidden && (tipsAsked || (settings.loaded && !hintSeen))
     val dismissTips: () -> Unit = {
         tipsAsked = false
-        if (!settings.sandboxHintSeen) scope.launch { settingsRepo.setSandboxHintSeen(true) }
+        if (sandbox && !settings.sandboxHintSeen) scope.launch { settingsRepo.setSandboxHintSeen(true) }
+        if (!sandbox && !settings.watchHintSeen) scope.launch { settingsRepo.setWatchHintSeen(true) }
     }
     var ask by remember { mutableStateOf<ConfirmAsk?>(null) }
 
+    // Back undoes whatever is on top (the handler registered last wins): the tips card, a picked fish's card (follow
+    // mode has its own Back in FollowOverlay), an open menu card, hidden buttons, then the modes below
+    BackHandler(enabled = showTips) { dismissTips() }
+    BackHandler(enabled = stats != null && followId == null) { vm.select(null) }
     BackHandler(enabled = open != null) { open = null }
     BackHandler(enabled = chromeHidden) { chromeHidden = false }
     BackHandler(enabled = micro) { micro = false }
     // clean-glass mode (both modes): drag the Flipper over the front glass; Back or "Done" leaves it
     var cleaning by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = cleaning) { cleaning = false }
+
+    // Supplies mode (UI_STYLE §10.6): the camera looks at the 3D supply shelf beside the tank; a picked prop is then
+    // carried back into the tank view and used where it is let go
+    val shelf = remember { SupplyShelfControl() }
+    var supplies by rememberSaveable { mutableStateOf(false) }
+    var shelfPick by remember { mutableStateOf<ShelfPick?>(null) }
+    var testKit by remember { mutableStateOf(false) }
+    var carry by remember { mutableStateOf<SupplyItem?>(null) }
+    var pickSerial by remember { mutableIntStateOf(0) }
+    val pickJob = remember { arrayOfNulls<Job>(1) }
+    BackHandler(enabled = supplies) { supplies = false }
+    BackHandler(enabled = carry != null) { carry = null; supplies = true }
+    // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
+    var heaterSet by rememberSaveable { mutableDoubleStateOf(HEATER_DEFAULT_C) }
+    var heaterWorking by rememberSaveable { mutableStateOf(true) }
+    var dial by remember { mutableStateOf<TankGauge?>(null) }
+    val reduceMotion = ReefTheme.reduceMotion
+    SideEffect {
+        shelf.locked = SupplyItem.lockedIds(sandbox)
+        shelf.setOpen(supplies, reduceMotion)
+    }
 
     /** Plays [r]'s picture, Hermie says his line, and [run] sends the command when the picture reaches the water. */
     fun cue(r: Reaction, run: (() -> Unit)? = null) {
@@ -263,14 +313,26 @@ fun LiveTankScreen(
     }
     // a tap that only skipped a picture should not also hide the controls
     val skippedAt = remember { LongArray(1) }
-    // a tap on empty water with nothing selected shows / hides the controls; otherwise it selects as before
+    // a tap on a fish picks it (and brings hidden buttons back so its card can show); a tap on empty water only ever
+    // undoes something (LiveTaps): it never hides the buttons, and it never drops a fish that is being followed
     val onPick: (String?) -> Unit = { id ->
-        val justSkipped = SystemClock.uptimeMillis() - skippedAt[0] < SKIP_PICK_GUARD_MS
-        when {
-            id == null && justSkipped -> Unit
-            id == null && open != null -> open = null
-            id == null && !cleaning && vm.selectedOrganismId.value == null && vm.followId.value == null -> chromeHidden = !chromeHidden
-            else -> vm.select(id)
+        if (id != null) {
+            chromeHidden = false
+            vm.select(id)
+        } else {
+            val tap = LiveTaps.emptyWater(
+                justSkipped = SystemClock.uptimeMillis() - skippedAt[0] < SKIP_PICK_GUARD_MS,
+                controlsHidden = chromeHidden,
+                following = vm.followId.value != null,
+                cardOpen = open != null,
+                fishPicked = vm.selectedOrganismId.value != null,
+            )
+            when (tap) {
+                WaterTap.NOTHING -> Unit
+                WaterTap.SHOW_CONTROLS -> chromeHidden = false
+                WaterTap.CLOSE_CARD -> open = null
+                WaterTap.DESELECT -> vm.select(null)
+            }
         }
     }
     // the two-finger tap on the glass (sent at once: it is the finger itself)
@@ -360,8 +422,9 @@ fun LiveTankScreen(
         },
         onHeater = { working ->
             tick()
+            heaterWorking = working
             cue(LiveReactions.heater(working)) { vm.setHeater(working = working) }
-            if (!working) offerUndo("The heater broke. The water will slowly cool.") { cue(LiveReactions.heater(true)) { vm.setHeater(working = true) } }
+            if (!working) offerUndo("The heater broke. The water will slowly cool.") { heaterWorking = true; cue(LiveReactions.heater(true)) { vm.setHeater(working = true) } }
         },
         onLights = { on -> tick(); cue(LiveReactions.lights(on)) { vm.setLights(on) } },
         onPredation = { on -> tick(); cue(LiveReactions.predation(on)) { vm.setPredation(on) } },
@@ -384,16 +447,16 @@ fun LiveTankScreen(
                 "Reset the sandbox?",
                 "Everything you changed here goes back to match your real tank: the water, the animals, the equipment and any what-ifs.",
                 "Reset tank",
-            ) { tick(); preset = null; cue(LiveReactions.reset()) { vm.resetSandbox() } }
+            ) { tick(); preset = null; heaterSet = HEATER_DEFAULT_C; heaterWorking = true; cue(LiveReactions.reset()) { vm.resetSandbox() } }
         },
         onAcclimateAll = { tick(); cue(LiveReactions.acclimate()) { vm.acclimateAll() } },
         onRearrangeRock = { tick(); cue(LiveReactions.rocks()) { vm.rearrangeRock() } },
         onPumpFailTonight = { tick(); cue(LiveReactions.pumpsTonight()) { vm.pumpFailTonight() } },
         onTimelapse = { echo(LiveReactions.timelapse()); lapse = true },
-        onAddMany = { id, n ->
+        onAddMany = { id, n, size ->
             tick()
             val card = stockCards.firstOrNull { it.speciesId == id }
-            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n) }
+            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
         },
         onAddAiptasia = {
             tick()
@@ -418,17 +481,22 @@ fun LiveTankScreen(
         onMaintain = { t -> tick(); cue(LiveReactions.maintain(t)) { vm.maintain(t) } },
         onAddSpareShells = { tick(); cue(LiveReactions.shells()) { vm.addSpareShells() } },
         onMicro = { a -> tick(); cue(LiveReactions.micro(a)) { vm.micro(a) } },
-        onHelp = { tick(); tipsAsked = true },
+        onHelp = { tick(); open = null; vm.select(null); tipsAsked = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
-        when {
-            m == HudMode.SANDBOX && sandbox -> railShown = !railShown
-            m == HudMode.SANDBOX -> {
-                railShown = true; chromeHidden = false; preset = null; vm.setMode(SimMode.SANDBOX)
+        val toSandbox = m == HudMode.SANDBOX
+        // tapping the side that is already picked never hides anything: it only brings the menu back out
+        railShown = true; chromeHidden = false
+        if (toSandbox != sandbox) {
+            heaterSet = HEATER_DEFAULT_C; heaterWorking = true
+            preset = null; open = null; tipsAsked = false; lapse = false
+            // a sandbox-only prop in the hand cannot be used in the real tank
+            if (carry?.locked(toSandbox) == true) carry = null
+            if (toSandbox) {
+                vm.setMode(SimMode.SANDBOX)
                 if (hermieOn) hermie.say("This is the pretend tank. Try anything, your real tank is safe!", HermieMood.EXCITED)
-            }
-            else -> {
-                preset = null; open = null; vm.setMode(SimMode.REALITY)
+            } else {
+                vm.setMode(SimMode.REALITY)
                 if (hermieOn) hermie.say("Back to your real tank. Just watch and feed.", HermieMood.HAPPY)
             }
         }
@@ -441,7 +509,7 @@ fun LiveTankScreen(
         onHide = { tick(); chromeHidden = true },
         onHelp = {
             tick()
-            if (sandbox) tipsAsked = true else { hermieOn = true; hermie.nextTip(false) }
+            open = null; vm.select(null); tipsAsked = true
         },
         cleaning = cleaning,
         onCleanGlass = toggleCleaning,
@@ -452,6 +520,12 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        onSupplies = {
+            tick()
+            open = null; vm.select(null); vm.follow(null); cleaning = false
+            carry = null; shelfPick = null; testKit = false
+            supplies = true
+        },
         onHeatWave = {
             tick()
             SandboxParams.byId("temp")?.let { def ->
@@ -464,6 +538,77 @@ fun LiveTankScreen(
     // a picked fish closes the menu card so its own card has the room
     LaunchedEffect(stats?.id) { if (stats != null) open = null }
 
+    // a prop tapped on the shelf: its label pops up; a usable one is then carried back to the tank
+    val onShelfPick: (String, Float, Float, Float) -> Unit = { id, x, y, z ->
+        val item = SupplyItem.byId(id)
+        if (item != null && supplies && carry == null) {
+            tick()
+            val px = FloatArray(3)
+            val at = if (projection.project(x, y + 3f, z, px)) Offset(px[0], px[1]) else null
+            val locked = item.locked(sandbox)
+            pickSerial++
+            shelfPick = ShelfPick(item, at, locked, pickSerial)
+            pickJob[0]?.cancel()
+            when {
+                locked -> if (hermieOn) hermie.say("${item.label} is for the pretend tank. Switch to Sandbox to try it!", HermieMood.SURPRISED)
+                item.staysOnShelf -> {
+                    testKit = true
+                    if (hermieOn) hermie.say("Test time! Here is how the water is doing.", HermieMood.HAPPY)
+                }
+                else -> pickJob[0] = scope.launch {
+                    delay(if (reduceMotion) SHELF_LABEL_REDUCED_MS else SHELF_LABEL_MS)
+                    supplies = false; shelfPick = null; testKit = false
+                    // wait for the camera to arrive back at the tank (a cut with Reduce Motion)
+                    if (!reduceMotion) delay(SHELF_TRAVEL_MS)
+                    carry = item
+                }
+            }
+            Unit
+        }
+    }
+    val latestShelfPick by rememberUpdatedState(onShelfPick)
+    DisposableEffect(shelf) {
+        shelf.onPick = { id, x, y, z -> latestShelfPick(id, x, y, z) }
+        onDispose { shelf.onPick = null }
+    }
+    // the carried prop let go over the tank: food drops in there, the knocker knocks there, the rest do their thing
+    val onCarryDrop: (SupplyItem, Float, Float) -> Unit = { item, gx, gy ->
+        carry = null
+        val k = item.food
+        when {
+            k != null && k != FoodKind.NORI -> {
+                val fx = gx.coerceIn(4f, 118f)
+                tick()
+                cue(LiveReactions.feed(k, FxPoint(fx, SURFACE_Y, FEED_Z))) { vm.feed(k, k.typicalDoseGrams, Vec3(fx.toDouble(), SURFACE_Y.toDouble(), FEED_Z.toDouble())) }
+            }
+            item == SupplyItem.KNOCKER -> {
+                val p = Vec3(gx.coerceIn(1f, 121f).toDouble(), gy.coerceIn(3f, 56f).toDouble(), FrontGlassCentre.z)
+                tick()
+                cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
+            }
+            else -> item.use(actions, tools)
+        }
+    }
+    val onCarryBack: (SupplyItem) -> Unit = { carry = null; tick(); supplies = true }
+    val gauges = GaugeReadings(
+        tempC = hud.water.tempC,
+        sg = hud.water.sg,
+        lightPct = hud.lightIntensity * 100.0,
+        flowPct = hud.flowStrength * 100.0,
+        heaterSetC = heaterSet,
+        heaterWorking = heaterWorking,
+    )
+    val applyGauge: (TankGauge, Double) -> Unit = { g, v ->
+        if (g == TankGauge.HEATER) {
+            val old = heaterSet
+            heaterSet = v; heaterWorking = true
+            tick()
+            cue(LiveReactions.param("temp", old, v) ?: LiveReactions.heater(true)) { vm.setHeater(working = true, setC = v) }
+        } else {
+            g.paramId?.let { SandboxParams.byId(it) }?.let { def -> actions.onSet(def, v) }
+        }
+    }
+
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
         val reduce = ReefTheme.reduceMotion
@@ -473,7 +618,7 @@ fun LiveTankScreen(
         val besideBar = landscape && maxWidth >= BottomBarMaxWidth + (s.railWidth + 32.dp) * 2
         val menuBottom = if (besideBar) navInset + 8.dp else NavClearance + navInset
         val following = followId != null && stats != null && !cleaning
-        val menuUp = !chromeHidden && !micro && !cleaning && !following
+        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null
         // what the HUD keeps clear of: the rail on the left (landscape) or the dock above the bar (portrait)
         val hudStart = if (landscape && menuUp) s.railWidth + 4.dp else 0.dp
         val hudBottom = when {
@@ -482,18 +627,25 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, followId, quality, cleaning, onScrape, onPick, onTankTap, micro,
+            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning) toggleCleaning() }, onPick, onTankTap, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
             bottomPad = BottomBarClearance,
+            shelf = shelf,
+        )
+        TankGaugeLayer(
+            visible = !chromeHidden && !micro && !supplies && carry == null && !cleaning,
+            projection = projection,
+            r = gauges,
+            onDial = if (sandbox) ({ g: TankGauge -> tick(); dial = g }) else null,
         )
         HudLayer(
             vm, hudState, onModeChange, followId, stats, cleaning, toggleCleaning, landscape,
             hidden = chromeHidden || micro,
             hermie = hermie, hermieOn = hermieOn, onHermieOff = { hermieOn = false },
             happy = happy, meterOn = meterOn, onMeterOff = { meterOn = false },
-            showTips = showTips && open == null, onDismissTips = dismissTips,
+            showTips = showTips && open == null && !supplies && carry == null, onDismissTips = dismissTips,
             start = hudStart, bottom = hudBottom,
         )
         AnimatedVisibility(
@@ -514,6 +666,18 @@ fun LiveTankScreen(
                 cardBottomClearance = NavClearance + navInset,
             )
         }
+        SupplyShelfOverlay(
+            visible = supplies,
+            pick = shelfPick,
+            readouts = hudState.readouts,
+            showReadouts = testKit,
+            onRow = { r: ShelfRow -> tick(); shelf.focusRow(r.ordinal) },
+            onClose = { tick(); pickJob[0]?.cancel(); supplies = false; shelfPick = null; testKit = false },
+            bottomClearance = NavClearance + navInset,
+        )
+        carry?.let { item ->
+            SupplyCarryLayer(item, projection, onCarryDrop, onCarryBack, bottomClearance = NavClearance + navInset)
+        }
         // the only control left while everything is hidden
         AnimatedVisibility(
             visible = chromeHidden,
@@ -531,6 +695,13 @@ fun LiveTankScreen(
             )
         }
     }
+    dial?.let { g ->
+        val start = when (g) {
+            TankGauge.HEATER -> heaterSet
+            else -> g.paramId?.let { SandboxParams.byId(it) }?.valueIn(panel.now) ?: g.lo
+        }
+        GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
+    }
     ask?.let { a ->
         LiveDialog(
             title = a.title,
@@ -542,6 +713,16 @@ fun LiveTankScreen(
         )
     }
 }
+
+/** The sim's default heater set point (WaterState.heaterSetC default). */
+private const val HEATER_DEFAULT_C = 25.5
+/** Supplies: how long a picked prop's label shows before the camera glides back, and the glide (Camera.SHELF_TRAVEL_S). */
+private const val SHELF_LABEL_MS = 700L
+private const val SHELF_LABEL_REDUCED_MS = 300L
+private const val SHELF_TRAVEL_MS = 1000L
+/** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
+private const val SURFACE_Y = 55.7f
+private const val FEED_Z = 20f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
 private const val SKIP_PICK_GUARD_MS = 700L
@@ -560,6 +741,11 @@ private fun Modifier.skipFxOnTap(fx: ActionFxState, onSkipped: () -> Unit): Modi
     }
 }
 
+/** Makes this layer a touch target of its own, so overlapping siblings drawn under it (the GL tank) get no touches. */
+private fun Modifier.blockTouchesBelow(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope { while (true) awaitPointerEvent() }
+}
+
 /** The 3D tank, the action pictures drawn over it through the camera, and the microscope. */
 @Composable
 private fun TankArea(
@@ -570,6 +756,7 @@ private fun TankArea(
     quality: LiveQuality,
     cleaning: Boolean,
     onScrape: (GlassStroke) -> Unit,
+    onFlipperTap: () -> Unit,
     onPick: (String?) -> Unit,
     onTapGlass: (Vec3) -> Unit,
     micro: Boolean,
@@ -577,6 +764,7 @@ private fun TankArea(
     onMicroAction: ((MicroAction) -> Unit)?,
     onSkip: () -> Unit,
     bottomPad: Dp,
+    shelf: SupplyShelfControl,
 ) {
     Box(Modifier.fillMaxSize()) {
         TankView(
@@ -590,16 +778,19 @@ private fun TankArea(
             onFollow = vm::follow,
             cleaning = cleaning,
             onScrape = onScrape,
+            onFlipperTap = onFlipperTap,
             projection = projection,
+            shelf = shelf,
         )
         AnimatedVisibility(
             visible = micro,
             enter = fadeIn(liveSpec(ReefTheme.reduceMotion)),
             exit = fadeOut(liveSpec(ReefTheme.reduceMotion, ReefMotion.FAST)),
         ) {
-            // the microscope covers the tank view; doses and treatments only in the sandbox
+            // the microscope covers the tank view; doses and treatments only in the sandbox. It takes every touch, so
+            // nothing reaches the hidden tank under it (a tap there used to pick fish, knock the glass or start cleaning)
             val hud by vm.hud.collectAsStateWithLifecycle()
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().blockTouchesBelow()) {
                 MicroscopeView(
                     state = hud.microfauna,
                     simTimeSec = hud.simTimeSec,
@@ -707,7 +898,8 @@ private fun HudLayer(
         if (st != null) lastCard = st
         val following = followId != null && st != null && !cleaning
         if (following && st != null) {
-            val ids = vm.hud.value.stats.map { it.id }
+            // only living animals: stepping onto a dead one would lose the follow at once
+            val ids = vm.hud.value.stats.filter { it.alive }.map { it.id }
             val i = ids.indexOf(st.id).coerceAtLeast(0)
             fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
             FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
@@ -744,7 +936,7 @@ private fun HudLayer(
             enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 } + scaleIn(liveSpec(reduce), initialScale = 0.92f),
             exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
         ) {
-            SandboxTipsCard(onDismiss = onDismissTips)
+            SandboxTipsCard(onDismiss = onDismissTips, sandbox = sandbox)
         }
     }
 }

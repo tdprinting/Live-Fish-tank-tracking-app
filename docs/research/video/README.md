@@ -25,7 +25,7 @@ the reviewed, code-mapped change list from the 2026-10-13 pass.
 | Microfauna (more kinds) | [catalog of extra cryptic fauna](microfauna_catalog.md) |
 | Host coral | [green hairy mushroom, the clowns' host](coral_hairy_mushroom.md) |
 | Sand | [how animals move and stir sand](sand_bioturbation.md) |
-| Tee's tank | [night clips, lights off](tee_tank_night.md) |
+| Tee's tank | [night clips, lights off](tee_tank_night.md) · [day clips and full photo](tee_tank_day.md) |
 
 ## Headline findings for Opus
 - Juvenile blue tang "plays dead" on its side when startled and rests that way at night; add a roll-to-side pose.

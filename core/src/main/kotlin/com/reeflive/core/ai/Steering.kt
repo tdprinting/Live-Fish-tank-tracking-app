@@ -278,7 +278,12 @@ class Steering(private val c: Ctx) {
             if (stopGoT % cycle > mp.stopGoMoveS) dir = Vec3.ZERO
             if (stopGoT > 1e6) stopGoT -= cycle * kotlin.math.floor(1e6 / cycle)
         }
-        val v = dir
+        var v = dir
+        o.limbRig?.let { lr ->
+            // the rig reads the intended travel (lead arm, leading legs); a brittle star's disc moves in pulses
+            lr.travel = dir
+            if (it.armGait > 0) v = dir * lr.pulse
+        }
         var p = o.pos + v * dt
         // re-attach to the surface at the requested offset
         val d = r.envDist(p)
@@ -299,13 +304,14 @@ class Steering(private val c: Ctx) {
             val side = nn.cross(hd).normalized(o.heading)
             hd = if (side.dot(o.heading) >= 0) side else side * -1.0
         }
-        if (it.armGait > 0 && v.lengthSq() > 1e-6) {
-            // lead-arm switching: snap to the arm direction nearest the travel direction (a whole-arm step looks identical)
-            val h0 = o.heading.rejectFrom(nn).normalized(hd)
-            val step = 2 * PI / it.armGait
-            val sgn = if (((h0 cross hd) dot nn) >= 0) 1.0 else -1.0
-            val k = kotlin.math.round(Vec3.angle(h0, hd) * sgn / step)
-            o.heading = Vec3.rotateAbout(h0, nn, k * step).normalized(o.heading)
+        if (it.armGait > 0) {
+            // radial crawler: the disc never turns (Astley 2012). It only stays tangent to the surface; the limb rig
+            // picks whichever arm points along the travel as the new centre arm
+            // carry the heading over a change of surface by the smallest rotation (parallel transport), never a yaw
+            val axis = o.up cross nn
+            val sa = axis.length()
+            val h = if (sa > 1e-6) Vec3.rotateAbout(o.heading, axis / sa, kotlin.math.atan2(sa, o.up dot nn)) else o.heading
+            o.heading = h.rejectFrom(nn).normalized(hd)
         } else o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
         o.up = (it.upOverride ?: nn).normalized(Vec3.Y)
     }
@@ -411,6 +417,7 @@ class Steering(private val c: Ctx) {
                 else -> 0.35
             }
         } else {
+            o.limbRig?.step(o, dt, speed)
             val frac = ((speed - cruise) / max(o.burstSpeed - cruise, 0.1)).coerceIn(0.0, 1.0)
             o.tailHz = loc.tailHzCruise * (speed / cruise).coerceIn(0.3, 2.2) * it.tailMul
             o.amp = lerp(loc.ampCruise, loc.ampBurst, frac) * it.ampMul * (if (speed < 0.4 * cruise) 0.5 else 1.0)

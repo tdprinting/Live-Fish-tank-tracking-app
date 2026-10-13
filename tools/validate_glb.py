@@ -50,9 +50,13 @@ BUDGET = {
     "mushroom_hairy": 1500,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     "reef_details": 2000,
+    # the supply shelf beside the tank (tools/blender/supplies.py; 28 props + rack)
+    "supply_shelf": 10500,
 }
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
 LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
+# scene assets outside the default view: the supply shelf is drawn only in Supplies mode (SupplyShelf.kt)
+OFF_VIEW = {"supply_shelf"}
 # on-screen triangle ceilings (docs/ASSETS.md §8): High = LOD0 scene + all polyp instances + fish at LOD1 (default
 # camera > 60 cm); Medium = *_lod1.glb wherever one exists, polyp instance tables halved, fish at LOD1
 # +2k each (2026-10): the owner's diamond goby and leopard wrasse joined the default tank (two more fish at LOD1)
@@ -363,6 +367,8 @@ def estimates(report):
                 continue
             if name.startswith("micro_"):
                 continue  # covered by the MICRO_TRIS_* draw budget below
+            if name in OFF_VIEW:
+                continue  # drawn only while the camera looks away from the tank
             use = name
             if level == "medium" and name + "_lod1" in files:
                 use = name + "_lod1"

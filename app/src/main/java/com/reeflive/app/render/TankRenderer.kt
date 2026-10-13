@@ -36,6 +36,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var demoWhenEmpty = true
     /** Receives the camera matrices after every update, for Compose overlays (null = nobody listening). */
     @Volatile var projection: TankProjection? = null
+    /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
+    @Volatile var shelf: SupplyShelfControl? = null
+    private val shelfScene = SupplyShelfScene()
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -57,6 +60,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var sandFx: SandFx? = null
     private var sandClouds: SandCloudRenderer? = null
     private var shafts: LightShafts? = null
+    /** Real-time shadows from the fixtures (ShadowMap.kt); its depth pass runs before the scene, see [renderShadowMap]. */
+    private var shadowMap: ShadowMap? = null
     /** Marine snow and the follow lens (camera / lighting work, kept apart from the scene drawing). */
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
@@ -134,6 +139,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl = ParticleRenderer()
         sandFx = SandFx(); sandClouds = SandCloudRenderer()
         shafts = LightShafts()
+        shadowMap = ShadowMap(quality)
         white = Texture.solid(255, 255, 255)
         flatNormal = Texture.solid(128, 128, 255)
         neutralRough = Texture.solid(217, 255, 0)
@@ -157,6 +163,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.release(); particlesGl = null
         sandFx?.release(); sandFx = null; sandClouds?.release(); sandClouds = null
         shafts?.release(); shafts = null
+        shadowMap?.release(); shadowMap = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
@@ -179,6 +186,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         drawCalls = 0; triangles = 0
 
         applyRequests()
+        applyShelf(dt)
         store.pump(2)
 
         // 1. snapshot + rigs
@@ -207,8 +215,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val progs = programs ?: return
         fu.setEffects(quality)
         fu.setCasters(rigs, quality.shadowCasters, camera.eye[0], camera.eye[1], camera.eye[2])
+        shadowMap?.fill(fu.data, FrameUniforms.SHADOW_OFFSET)
         fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
         bindShared()
+        shadowMap?.let { renderShadowMap(it, fu, progs, rigs, cur) }
         particles.ambientCount = quality.particles
         particles.step(dt, time, cur)
 
@@ -227,8 +237,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
         details?.let { drawStatic(it, progs, light, opaque = true) }
+        drawShelf(progs)
         // corals: soft bodies then polyps
         val corals = coralModels(cur)
+        updateWake(rigs, dt)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = false)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = true)
         // fish bodies, inverts
@@ -244,7 +256,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
         for (r in sorted) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
-        // transparent: shafts, particles, water surface, blended equipment, glass
+        // transparent: back glass, then water (first when the eye is under the surface, so the underside never
+        // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
+        Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GENERIC) }
+        val waterFirst = camera.eye[1] < Camera.WATER_Y
+        if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         if (quality.shafts && light.intensity > 0.03f) {
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             shafts?.let { it.draw(progs.shafts); drawCalls++; triangles += it.triangles }
@@ -253,10 +270,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
-        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
+        if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
 
         if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
@@ -309,6 +329,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         (store.texture(WATER_N1) ?: flatNormal ?: w).bind(7)
         (store.texture(WATER_N2) ?: flatNormal ?: w).bind(8)
         (glassMaskTex?.takeIf { glassMaskOn } ?: w).bind(GLASS_MASK_UNIT)
+        shadowMap?.bind()
     }
 
     /** Uploads the front-glass film mask when the snapshot carries a new one (the core shares an array per version). */
@@ -391,6 +412,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.use()
             p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
             part.material.apply(p, w)
+            p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
             when (part.kind) {
                 MaterialKind.ROCK -> {
                     (if (quality.normalMaps) store.texture(ROCK_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
@@ -444,8 +466,81 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uBrown", 0f)
         p.set3f("uSwayDir", 1f, 0f, 0f)
         p.set1f("uSwayAmp", 0f)
+        p.set1f("uSwayMode", 0f)
+        p.set4f("uWake", 0f, 0f, 0f, 0f)
         p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
     }
+
+    // ------------------------------------------------------------------ shadow map (ShadowMap.kt)
+
+    /**
+     * Depth pass from the fixtures into [sm]: rock, in-water equipment and opaque reef details, coral bodies, and on
+     * High the fish (their own skinning, LOD1 when shipped). The casters' vertex shaders run unchanged while the Frame
+     * UBO's `uViewProj` holds [ShadowMap.matrix]; the camera matrix is restored afterwards. Self-contained: it binds
+     * its own target and leaves the scene target / viewport to the normal frame code that follows.
+     */
+    private fun renderShadowMap(sm: ShadowMap, fu: FrameUniforms, progs: Programs, rigs: Collection<FishRig>, cur: SimSnapshot?) {
+        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0)
+        if (!sm.needsUpdate(signature)) return
+        fu.overrideViewProj(sm.matrix)
+        sm.begin()
+        val p = progs.shadow
+        p.use()
+        for (key in SHADOW_STATIC) {
+            val m = store.model(key) ?: continue
+            for (part in m.parts) {
+                if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part)) continue
+                p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        val pc = progs.shadowCoral
+        pc.use()
+        store.model(DETAILS)?.let { m ->
+            for (part in m.parts) {
+                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
+                pc.setMat4("uModel", part.node.world)
+                staticCoralUniforms(pc, part)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        for ((m, c) in coralModels(cur)) {
+            val copy = c != null && c.isCopy
+            if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
+            for (part in m.parts) {
+                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
+                if (c != null && copy && !nearHome(part, c)) continue
+                pc.setMat4("uModel", if (copy) M.mul(coralShift, part.node.world, coralModel) else part.node.world)
+                coralUniforms(pc, m, c)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        if (sm.dynamic) {
+            val pf = progs.shadowFish
+            pf.use()
+            for (r in rigs) {
+                if (!r.visible) continue
+                val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant) ?: continue
+                val lod1 = ModelRegistry.lod1(path)
+                val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
+                fishUniforms(pf, r, m.rigid)
+                for (part in m.parts) {
+                    if (part.kind != MaterialKind.FISH_SKIN) continue
+                    val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
+                    pf.set1f("uPart", code)
+                    pf.set4f("uShape", r.thin, code, r.eyeYaw, part.finKind)
+                    pf.set3fv("uEyePivot", part.eyePivot)
+                    part.mesh.draw(); drawCalls++
+                }
+            }
+        }
+        sm.end()
+        fu.overrideViewProj(null)
+        sm.bind()
+    }
+
+    private fun castsShadow(part: DrawPart): Boolean =
+        !part.material.src.blended && part.material.alphaCutoff <= 0f && part.center[1] < ShadowMap.CASTER_MAX_Y
 
     // ------------------------------------------------------------------ corals
 
@@ -494,7 +589,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     private fun coralUniforms(p: ShaderProgram, m: GpuModel, c: CoralPose?, defaultExtension: Float = 1f) {
-        val b = m.bounds
+        // branching trees (Kenya, extras.swayMode = 1): smaller, measured sway in treeSway (common.glsl) + fish ripple,
+        // about the real colony base (bodyBounds: m.bounds also spans the polyp prototype at the origin)
+        val tree = isTree(m)
+        val b = if (tree) m.bodyBounds else m.bounds
         val height = (b[4] - b[1]).coerceAtLeast(1f)
         val ox = c?.offsetX ?: 0f; val oy = c?.offsetY ?: 0f; val oz = c?.offsetZ ?: 0f
         // a copy grows from its own spot (the moved home anchor), not from the centre of the whole model
@@ -510,8 +608,53 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f + ox, b[4] + oy, (b[2] + b[5]) * 0.5f + oz, 0f, v)
         val l = sqrt(v[0] * v[0] + v[2] * v[2])
         if (l > 1e-3f) p.set3f("uSwayDir", v[0] / l, 0f, v[2] / l) else p.set3f("uSwayDir", 0.95f, 0f, 0.3f)
-        p.set1f("uSwayAmp", 0.08f * minOf(height, 25f) * (flow / 12f).coerceIn(0.15f, 1.5f))
+        val amp = (if (tree) TREE_SWAY else 0.08f) * minOf(height, 25f) * (flow / 12f).coerceIn(0.15f, 1.5f)
+        p.set1f("uSwayAmp", amp)
+        p.set1f("uBodySwayAmp", amp)
+        p.set1f("uSwayMode", if (tree) 1f else 0f)
+        if (tree) setWake(p, b, ox, oy, oz) else p.set4f("uWake", 0f, 0f, 0f, 0f)
         p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
+    }
+
+    private fun isTree(m: GpuModel): Boolean = m.parts.any { it.node.float("swayMode") == 1f }
+
+    /** Head position and speed (cm/s) of every organism this frame, for the tree-coral fish ripple. */
+    private val wakeHeads = HashMap<String, FloatArray>()
+    private val wakeSeen = HashSet<String>()
+
+    private fun updateWake(rigs: Collection<FishRig>, dt: Float) {
+        wakeSeen.clear()
+        for (r in rigs) {
+            val x = r.headX(); val y = r.headY(); val z = r.headZ()
+            val h = wakeHeads.getOrPut(r.id) { floatArrayOf(x, y, z, 0f, 0f) }
+            val dx = x - h[0]; val dy = y - h[1]; val dz = z - h[2]
+            val speed = if (dt > 1e-4f) sqrt(dx * dx + dy * dy + dz * dz) / dt else 0f
+            h[0] = x; h[1] = y; h[2] = z
+            h[3] = h[3] + (speed - h[3]) * 0.3f                       // smoothed: snapshot interpolation is steppy
+            h[4] = if (r.alive && r.visible) 1f else 0f
+            wakeSeen.add(r.id)
+        }
+        wakeHeads.keys.retainAll(wakeSeen)
+    }
+
+    /**
+     * uWake for a tree coral: the nearest organism head within [WAKE_RANGE_CM] of the colony's bounds (moved by the
+     * copy offset), strength = proximity × speed (a fish swimming past ripples the branches it brushes; one resting
+     * in the crown barely does).
+     */
+    private fun setWake(p: ShaderProgram, b: FloatArray, ox: Float, oy: Float, oz: Float) {
+        var best = 0f; var bx = 0f; var by = 0f; var bz = 0f
+        for (h in wakeHeads.values) {
+            if (h[4] < 0.5f) continue
+            val dx = maxOf(b[0] + ox - h[0], 0f, h[0] - (b[3] + ox))
+            val dy = maxOf(b[1] + oy - h[1], 0f, h[1] - (b[4] + oy))
+            val dz = maxOf(b[2] + oz - h[2], 0f, h[2] - (b[5] + oz))
+            val d = sqrt(dx * dx + dy * dy + dz * dz)
+            if (d >= WAKE_RANGE_CM) continue
+            val s = (1f - d / WAKE_RANGE_CM) * (0.15f + 0.85f * (h[3] / WAKE_SPEED_CM_S).coerceIn(0f, 1f))
+            if (s > best) { best = s; bx = h[0]; by = h[1]; bz = h[2] }
+        }
+        p.set4f("uWake", bx, by, bz, best)
     }
 
     private fun drawCoral(m: GpuModel, c: CoralPose?, progs: Programs, s: SimSnapshot?, polyps: Boolean) {
@@ -539,7 +682,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 p.set4f("uBaseColor", bc[0] * t[0], bc[1] * t[1], bc[2] * t[2], bc.getOrElse(3) { 1f })
             }
             coralUniforms(p, m, c)
-            if (isPolyp) p.set1f("uSwayAmp", 0.25f * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
+            if (isPolyp) p.set1f("uSwayAmp", (if (isTree(m)) TREE_FLUTTER else 0.25f) * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
         }
     }
@@ -575,13 +718,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 p.setMat4("uModel", tmpModel)
                 part.material.apply(p, w, alphaTestOverride = 0.3f)
                 p.set1f("uExtension", r.extension); p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.4f)
+                p.set1f("uSwayMode", 0f)
                 p.set1f("uBleach", 0f); p.set1f("uBrown", 0f)
                 part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
                 continue
             }
             val p = if (isFin) progs.fin else progs.fish
             p.use()
-            fishUniforms(p, r, m.rigid)
+            fishUniforms(p, r, m.rigid, m.limbPivots)
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
@@ -616,7 +760,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         out[12] = r.spine[0]; out[13] = r.spine[1]; out[14] = r.spine[2]
     }
 
-    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean) {
+    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean, limbPivots: FloatArray? = null) {
         p.set4fv("uSpine", r.spine, 16)
         p.set4fv("uFrame", r.frames, 16)
         p.set1f("uScale", r.scale)
@@ -624,8 +768,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
-        // shrimp limbs: x stride phase (cycles, wrapped), y stepping amount, z rock / claw signal, w antenna grooming
-        p.set4f("uLimb", r.walkPhase - kotlin.math.floor(r.walkPhase), r.walkAmt, r.limbSignal, r.groom)
+        // shrimp picking / feeding strokes (mouth)
         p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat)
         p.set1f("uIchSpots", r.ich)
@@ -633,17 +776,59 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uDead", if (r.alive) 0f else 1f)
         p.set1f("uRigid", if (rigid) 1f else 0f)
         if (rigid) { rigidModel(r, tmpModel); p.setMat4("uModel", tmpModel) } else p.setMat4("uModel", IDENTITY)
+        // limb pose from the core LimbRig (SIMULATION §19): every entry the sim sent goes to uLimb[]; shrimp send one
+        // (x stride phase, y stepping, z rock / claw signal, w grooming), crawlers ten. Crawler models with pivots are
+        // posed about them (uLimbOn); everything else reads uLimb[0] only, zeroed when the pose carries no limbs.
+        if (r.limbCount > 0) p.set4fv("uLimb", r.limbs, r.limbCount) else p.set4f("uLimb", 0f, 0f, 0f, 0f)
+        val limbsOn = !rigid && limbPivots != null && r.limbCount >= 10
+        p.set1f("uLimbOn", if (limbsOn) 1f else 0f)
+        if (limbsOn) p.set4fv("uLimbPivot", limbPivots!!, 10)
+    }
+
+    // ------------------------------------------------------------------ supply shelf (SupplyShelf.kt)
+
+    /** Open / row requests from the UI, the shelf model (loaded once a shelf is attached) and the props' lift. */
+    private fun applyShelf(dt: Float) {
+        val c = shelf
+        shelfScene.apply(c, camera)
+        if (c != null) store.model(SupplyShelfLayout.MODEL)
+        shelfScene.update(dt)
+    }
+
+    /** The shelf stands outside the default view: drawn only while the camera is there or on its way. */
+    private fun drawShelf(progs: Programs) {
+        if (camera.shelfMix <= 0f) return
+        val m = store.model(SupplyShelfLayout.MODEL) ?: return
+        val w = white ?: return
+        drawCalls += shelfScene.draw(m, progs.generic, w, shelf?.locked ?: emptySet())
+        triangles += m.triangles
+    }
+
+    /** In Supplies mode a tap (or double tap) picks the prop under the finger; the other gestures do nothing. */
+    private fun shelfTap(t: CameraInput.Tap) {
+        if (t.kind != CameraInput.TapKind.PICK && t.kind != CameraInput.TapKind.ZOOM) return
+        val m = store.model(SupplyShelfLayout.MODEL) ?: return
+        shelfScene.bind(m)
+        val dir = FloatArray(3)
+        camera.ray(t.x, t.y, width, height, dir)
+        val top = FloatArray(3)
+        val id = shelfScene.pick(camera.eye, dir, top) ?: return
+        val cb = shelf?.onPick ?: return
+        main.post { cb(id, top[0], top[1], top[2]) }
     }
 
     // ------------------------------------------------------------------ taps
 
     private fun handleTap(t: CameraInput.Tap, rigs: Collection<FishRig>) {
+        if (camera.shelfOn) { shelfTap(t); return }
         val dir = FloatArray(3)
         camera.ray(t.x, t.y, width, height, dir)
         val o = camera.eye.copyOf()
         val l = listener
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
+                // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
+                if (!cleaning && camera.followId == null && hitsFlipper(o, dir)) { main.post { l?.onFlipperTap() }; return }
                 val id = Picker.pick(o, dir, rigs)
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
@@ -670,6 +855,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onLongPress(p) }
             }
         }
+    }
+
+    /** True when the ray meets the glass plane within a finger-friendly margin of the Flipper pad. */
+    private fun hitsFlipper(o: FloatArray, d: FloatArray): Boolean {
+        val t = Picker.rayPlaneZ(o, d, Camera.TANK[2]) ?: return false
+        val x = o[0] + d[0] * t; val y = o[1] + d[1] * t
+        return kotlin.math.abs(x - flipper[0]) <= FLIPPER_HALF_W + 2f && kotlin.math.abs(y - flipper[1]) <= FLIPPER_HALF_H + 2f
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */
@@ -735,6 +927,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
         const val GLASS_MASK_H = com.reeflive.core.sim.GlassMask.H
         val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE, DETAILS)
+        /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
+        val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
             "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",
@@ -753,14 +947,23 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val COPY_RADIUS_CM = 25f
 
         /**
+         * Tree-coral motion (Kenya, extras.swayMode = 1), from Tee's clip (research/video/coral_kenya.md [H],
+         * 2026-10-13): tip sway amplitude per cm of colony height at flow 12 (≤ ±3 % of height was seen, so 0.035
+         * at full flow and ≈ 0.023 at the tank's usual 8), the sprigs' fringe flutter (cm at the sprig tip), and the
+         * fish ripple: reach from the colony bounds and the speed that gives full strength.
+         */
+        const val TREE_SWAY = 0.035f
+        const val TREE_FLUTTER = 0.12f
+        const val WAKE_RANGE_CM = 6f
+        const val WAKE_SPEED_CM_S = 10f
+
+        /**
          * Linear albedo multipliers by GLB material name, for coral colours the baked textures get wrong under
-         * the tank light (no re-export needed). Kenya: the pale pink-cream texture (≈ #D7AEA2) read as bleached
-         * white; × this it is the tan / pink-brown of the photos (body ≈ #AC7C68, polyps ≈ #C0917F). Zoa orange:
-         * the #E0792A disc read yellow under the blue-heavy light; deepened to ≈ #E0671D.
+         * the tank light (no re-export needed). Zoa orange: the #E0792A disc read yellow under the blue-heavy light;
+         * deepened to ≈ #E0671D. (Kenya's tint went with the 2026-10-13 rebuild: its textures now carry the clip's
+         * pinkish tan directly, body ≈ #A27D70 with cream #C9B3A8 stalk and #D8C4BC tips.)
          */
         val CORAL_TINT: Map<String, FloatArray> = mapOf(
-            "kenya_body" to floatArrayOf(0.62f, 0.48f, 0.38f),
-            "kenya_polyp" to floatArrayOf(0.66f, 0.50f, 0.40f),
             "zoa_polyp_orange" to floatArrayOf(1.0f, 0.70f, 0.55f),
         )
     }

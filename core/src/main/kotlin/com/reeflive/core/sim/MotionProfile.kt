@@ -159,8 +159,9 @@ object MotionProfiles {
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
-        // arms row sideways, stroke ~2 s per cycle (Astley 2012), 2–5 cm/s, food rush up to 8 cm/s [M][L]
-        BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 3.0, walkBurstCmS = 7.0, rowHz = 0.5, rowSweep = 0.35),
+        // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
+        // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
+        BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
         // foot gliding 0.5–1 cm/s; the food rush races at 3–5 cm/s [M][L]
         BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.7, walkBurstCmS = 4.0),
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 0.8),

@@ -47,6 +47,8 @@ class GlbNode(
     fun instances(): FloatArray? = (extras["instances"] as? JsonArray)?.let { a -> FloatArray(a.size) { (a[it] as JsonPrimitive).doubleOrNull?.toFloat() ?: 0f } }
     val instanceStride: Int get() = (extras["instanceStride"] as? JsonPrimitive)?.intOrNull ?: 10
     fun float(key: String): Float? = (extras[key] as? JsonPrimitive)?.doubleOrNull?.toFloat()
+    /** A flat float array (`extras.limbPivots`, …) or null. */
+    fun floats(key: String): FloatArray? = (extras[key] as? JsonArray)?.let { a -> FloatArray(a.size) { (a[it] as? JsonPrimitive)?.doubleOrNull?.toFloat() ?: 0f } }
     fun vec3(key: String): FloatArray? = (extras[key] as? JsonArray)?.takeIf { it.size >= 3 }?.let { a -> FloatArray(3) { (a[it] as JsonPrimitive).doubleOrNull?.toFloat() ?: 0f } }
 }
 

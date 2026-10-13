@@ -275,11 +275,19 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         val st = choose(c) ?: return 0.0
         if (st.client != null && st.client !== o) return 0.0
         val ich = if (o.disease == Disease.ICH) o.diseaseStage * 3 else 0.0
-        return (0.15 + 0.6 * ich.coerceAtMost(1.0) + 0.5 * o.parasiteLoad + extra).coerceAtMost(0.85)
+        // a client the wrasse has not reached for a long time (e.g. one wedged in a crevice) solicits it
+        val neglected = if (overdue(c)) 0.5 else 0.0
+        return (0.15 + 0.6 * ich.coerceAtMost(1.0) + 0.5 * o.parasiteLoad + neglected + extra).coerceAtMost(0.85)
+    }
+    private var firstSeen = Double.NaN
+    /** Not touched by a cleaner for [WrasseBrain.OVERDUE_S] (a fish never cleaned counts from when it was first simulated). */
+    private fun overdue(c: Ctx): Boolean {
+        if (firstSeen.isNaN()) firstSeen = c.t
+        return c.t - maxOf(c.o.lastCleanerContactAt, firstSeen) > WrasseBrain.OVERDUE_S
     }
     private fun choose(c: Ctx): CleaningStation? =
         // the wrasse comes to its clients (06 §5.5); fish only seek out its station when infested with ich
-        c.p.stations.filter { it.open && it.cleaner !== c.o && (!it.isShrimp || c.o.brainKind != BrainKind.HAWK) && (it.isShrimp || c.o.disease == Disease.ICH) }
+        c.p.stations.filter { it.open && it.cleaner !== c.o && (!it.isShrimp || c.o.brainKind != BrainKind.HAWK) && (it.isShrimp || c.o.disease == Disease.ICH || overdue(c)) }
             .maxByOrNull { it.fitness / (1 + it.pos.distanceTo(c.o.pos) / 30) }
     override fun enter(c: Ctx) { station = choose(c) }
     override fun update(c: Ctx, out: SteerIntent) {
