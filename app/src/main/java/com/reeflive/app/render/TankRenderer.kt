@@ -658,6 +658,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val l = listener
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
+                // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
+                if (!cleaning && camera.followId == null && hitsFlipper(o, dir)) { main.post { l?.onFlipperTap() }; return }
                 val id = Picker.pick(o, dir, rigs)
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
@@ -684,6 +686,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onLongPress(p) }
             }
         }
+    }
+
+    /** True when the ray meets the glass plane within a finger-friendly margin of the Flipper pad. */
+    private fun hitsFlipper(o: FloatArray, d: FloatArray): Boolean {
+        val t = Picker.rayPlaneZ(o, d, Camera.TANK[2]) ?: return false
+        val x = o[0] + d[0] * t; val y = o[1] + d[1] * t
+        return kotlin.math.abs(x - flipper[0]) <= FLIPPER_HALF_W + 2f && kotlin.math.abs(y - flipper[1]) <= FLIPPER_HALF_H + 2f
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */
