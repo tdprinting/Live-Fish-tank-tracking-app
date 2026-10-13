@@ -2,7 +2,7 @@
 
 Sim source: `core/src/main/kotlin/com/reeflive/core/sim/AlgaeModel.kt` (`AlgaeGroup`: DIATOMS, FILM, HAIR, CYANO, DINOS, BUBBLE, CORALLINE). Surfaces used in tests: GLASS, SAND, ROCK_TOP, ROCK_SHADE.
 
-**Scope note:** No video footage was watched. YouTube results are titles and blurbs only. Several web pages were search snippets, not opened. Every claim is tagged **[M]** (stated by a source) or **[L]** (inferred). Nothing is **[H]**. FILM and CORALLINE have no source found; all their values are **[L]**. Numbers are not given by any source for these algae, so speed and growth figures are **[L]**.
+**Scope note:** No footage was watched this pass. Commons has no reef-tank nuisance-algae or Caulerpa/Halimeda clips (searches returned nothing relevant) and the Commons hosts were rate-limited (HTTP 429), so no [M]/[L] value here was upgraded to [H]. YouTube rows stay queued for hand review. Tags: **[M]** source-stated, **[L]** inferred. FILM and CORALLINE remain all-[L].
 
 ## Sources
 | # | Page | URL | What it supports |

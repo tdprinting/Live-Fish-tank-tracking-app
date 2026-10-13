@@ -11,8 +11,9 @@ Sim hook: `BrainKind.HERMIT` · Adult size: 1-3 cm body, shells 1.5-4 cm · Tank
 | S1 | TFH Magazine | https://tfhmagazine.com/articles/saltwater/clibanarius-tricolor | shell battles |
 | S2 | Fishprofiles | https://fishprofiles.com/profiles/crustaceans/Clibanarius_tricolor/ | snail attack, shell stealing |
 | S3 | Wikipedia | https://en.wikipedia.org/wiki/Clibanarius_tricolor | species facts |
+| M1 | Clibanarius erythropus, Asinara Is. (abstract read) | https://iris.uniss.it/handle/11388/134355 | slow locomotion 0.7 cm/min |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -35,6 +36,9 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Social / interactions | fight each other for shells (loser damaged/dead); may attack snails to steal shells | Nassarius/Astrea snails at risk; hermit rams snail, pulls it out | [S1][S2][M] |
 | Parameters | copper intolerant | | [S3][M] |
 | Distinctive tells | shell-testing, shell fight, drags shell | | [S1][M] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Congener C. erythropus locomotion is slow, 0.7 cm/min, in every tidal phase, so encounters with empty shells/conspecifics are rare [M1]. Use as lower bound for C. tricolor idle drift; active crawling still [L]. No diel data in the abstract; no C. tricolor-specific source found.
 
 ## Priority fixes for Opus
 1. Stop-go walking with shell drag and retract-on-startle.

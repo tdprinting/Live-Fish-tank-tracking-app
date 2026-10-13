@@ -12,17 +12,19 @@ Sim hook: `CoralKind.GSP` · Adult size: mat 5–20 cm across [L] · Tank count:
 | V5 | YouTube: Green Star Polyps morning timelapse, Fluval Evo 13.5 | https://www.youtube.com/watch?v=INtG1P0l2Ys | Snippet: polyps open in the morning, like blooms [M] |
 | V6 | YouTube: Green Star Polyp colony at 1 sec intervals | https://www.youtube.com/watch?v=neuWLCX73ew | Snippet: 1 s interval timelapse of colony; sand-cloudy water [M] |
 | V7 | YouTube: Green Star Polyps blooming in time-lapse | https://www.youtube.com/watch?v=1ODIu7EB_Lc | Title only, not viewed [M] |
+| V8 | Reef2Reef/ReefCentral/Reefs.com GSP threads (via search) | https://www.reef2reef.com/threads/new-green-star-polyp.131840/ | Anecdotes: fully out ~30–60 min after lights on, retract several hours before lights off or most nights; disturbance closes it for minutes; moved colonies closed for days to ~3–4 weeks |
+| V9 | PLOS ONE, Favia fragum circadian study | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3089635/ | Stony coral on light:dark cycle shows daily tentacle expansion/contraction; rhythm weakens in constant dark (analogy only) |
 
-Video search (youtube.com only) found several hobbyist timelapses (V5, V6). No footage was viewed; claims are from snippets. No study of Briareum extension timing was found.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Polyp/tissue motion | Polyps extend as small stars; full retraction when disturbed | Each polyp pops open/shut as one unit | V1 [M] |
 | Sway in flow | Moderate–strong flow preferred; no sway data | Tentacles ripple with flow, ~0.5–1 Hz at moderate flow | [L] |
-| Open/close vs lights | Opens in good light/current; V2 anecdote of weeks to open | Open over ~20–40 min after lights on, close over ~20–40 min after lights off | [L] |
+| Open/close vs lights | Out within ~30–60 min of lights on; some colonies retract most nights (V8) | Open over ~30–60 min after lights on; mostly closed at night | V8 [M] (forum anecdote) |
 | Retraction on touch | Full retraction when disturbed | Snap closed in ~1 s | V1 [M] |
-| Recovery after touch | No source | Re-open over ~5–10 min | [L] |
+| Recovery after touch | Closes for 'a few minutes' after disturbance (V8) | Re-open over ~3–10 min | V8 [M] / [L] |
 | Feeding response | No source | Tentacles curl slightly toward food; mouth not visible | [L] |
 | Colour under blue light | No source | Green tone only, no strong fluorescence modelled | [L] |
 | Growth / spread | Forms a mat by encrusting and budding (general) | Slow edge spread over weeks | [L] |
@@ -32,7 +34,7 @@ Video search (youtube.com only) found several hobbyist timelapses (V5, V6). No f
 | Aspect | Observation | Suggested rule / numbers | Cite |
 |---|---|---|---|
 | Zone & territory | Encrusting mat on rock | Stays on rock surface, low to mid | [L] |
-| Day / night routine | No source | Mostly open in light, partly closed at night | [L] |
+| Day / night routine | Many colonies retract at night, reopen after lights on (V8); one opened only under moonlight | Mostly open in light, closed at night | V8 [M] |
 | Feeding | No source | Passive; slight tentacle motion | [L] |
 | Social / interactions | No source | Spreads and can overgrow nearby colonies slowly | [L] |
 | Reaction to parameters | Tolerates wide light range; likes flow | Low flow gives half-closed polyps (V2) | V1, V2 [M] |

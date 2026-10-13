@@ -11,8 +11,9 @@ Sim hook: `BrainKind.FEATHER_DUSTER` · Adult size: crown 5-10 cm, tube 10-20 cm
 | S1 | TFH Sabellastarte fallax | https://www.tfhmagazine.com/articles/saltwater/sabellastarte-fallax | care |
 | S2 | Fishkeeper giant feather duster | https://www.fishkeeper.co.uk/fish/marine/miscellaneous-invertebrates/giant-feather-duster-worm | care |
 | S3 | Reefs.com featherdusters | https://reefs.com/?p=209095 | startle/feeding |
+| M1 | Wikipedia Sabellastarte spectabilis (read) | https://en.wikipedia.org/wiki/Sabellastarte_spectabilis | size, colour, anatomy |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -32,6 +33,9 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Social | harassing fish (triggers, wrasses, angels, butterflies) cause retraction | retract when fish within 5 cm moving fast | [S1][M] |
 | Parameters | poor water, frequent disturbance, hunger: crown lost, regrown 1-2 months | | [S1][M] |
 | Tells | instant vanish, slow return | | [M] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Body to ~80 mm long x 10-12 mm wide; tube tough, leathery, mud-covered [M1]. Body buff with purple specks; radioles banded dark and pale brown; two long palps; four-lobed collar [M1]. Radioles lack stylodes and eyespots [M1], so a crown-eye shadow reflex is not documented for this species; retraction latency stays [L]. Filter feeder using ciliary currents; sequential hermaphrodite with external fertilisation [M1].
 
 ## Priority fixes for Opus
 1. Instant retract on fish dart or shadow, slow reopening.

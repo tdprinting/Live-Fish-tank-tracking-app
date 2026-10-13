@@ -11,8 +11,9 @@ Sim hook: `BrainKind.BRITTLE_STAR` · Adult size: disc 2-3 cm, arms 10-15 cm · 
 | S1 | LiveAquaria echinoderm article | https://www.liveaquaria.com/article/190/?aid=190 | brittle star care |
 | S2 | Fishkeeper | https://www.fishkeeper.co.uk/fish/marine/miscellaneous-invertebrates/brittle-star | care |
 | S3 | Frontiers in Zoology 2023 | https://frontiersinzoology.biomedcentral.com/articles/10.1186/s12983-023-00495-y | arm biomechanics |
+| M1 | Effect of arm loss on escape speed, BIOS 85(4) 2014 (abstract read) | https://bioone.org/journals/bios/volume-85/issue-4/0005-3155-85.4.187/Effect-of-arm-loss-on-escape-speed-of-two-epibenthic/10.1893/0005-3155-85.4.187.full | Ophiocoma echinata, Ophioderma appressum |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -34,6 +35,9 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Feeding | scavenges leftovers, meaty food; rushes food | rush at 5-8 cm/s toward scent | [S2][M] |
 | Social | some species trap fish (green brittle) | black: scavenger | [S1][M] |
 | Tells | snaking arms, tips probing from hole | | [S3][M] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Escape speed rises with body size; arm loss did not change speed in O. echinata or Ophioderma appressum; animals in a lit arena ran for shelter under rocks [M1]. No cm/s numbers in the abstract, so speeds stay [L]. Use size-scaled speed and shelter-seeking from light.
 
 ## Priority fixes for Opus
 1. Rowing arm gait, not rigid legs.

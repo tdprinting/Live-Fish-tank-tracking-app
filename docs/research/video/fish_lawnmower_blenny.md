@@ -8,8 +8,9 @@ Sim hook: `BrainKind.LAWNMOWER_BLENNY` · Adult size: ~12-14 cm [L] · Tank coun
 | S1 | Quality Marine | https://www.qualitymarine.com/news/the-curious-case-of-the-lawnmower-blenny/ | algae only ~15% of diet |
 | S2 | Aquariadise | https://aquariadise.com/lawnmower-blenny/ | hops rock to rock grazing |
 | S3 | Gensou care guide | https://gensou.sg/lawnmower-blenny-care-guide/ | territories on rubble |
+| C1 | Commons (not yet watched) | https://commons.wikimedia.org/wiki/File:Salarias_fasciatus_-_2016_8_29.webm | S. fasciatus clip, download blocked by 429 |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: 2026-10-13 footage pass: no rows upgraded to [H]. Wikimedia Commons search found no usable clip for this species (or only a related one), and Commons/upload.wikimedia.org returned HTTP 429 (Retry-After 600 s, still blocked after ~25 min), so nothing was downloaded or watched. YouTube V# rows remain queued for hand review. Page-based claims are [M]; numbers are [L] estimates. Commons does list File:Salarias fasciatus - 2016 8 29.webm (2.1 MB, the one usable candidate); retry it first next pass to count pectoral/tail Hz and bite rate.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |

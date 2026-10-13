@@ -11,16 +11,17 @@ Sim hook: `CoralKind.ORGAN_PIPE` · Adult size: colony 30–60 cm [L] · Tank co
 | V4 | Archived circadian paper (T. musica) | https://archive.org/download/biostor-9372/biostor-9372.pdf | Expansion/contraction tracked in light, then 60 h darkness, with zooplankton added. Results not read: verify |
 | V5 | YouTube: Organpipe coral extending polyps (Heron Island, 300x) | https://www.youtube.com/watch?v=bmRIJ_rrrZQ | Snippet: 2 h timelapse sped up 300x; polyp extension [M] |
 | V6 | YouTube: Organ Pipe Coral care tips | https://www.youtube.com/watch?v=AHWmIX-CSOg | Care overview; flow and feeding [M] |
+| V7 | Wikipedia, Organ pipe coral | https://en.wikipedia.org/wiki/Organ_pipe_coral | Tentacles extended by day, swiftly withdrawn on disturbance; retraction spreads as a wave across the colony from the touched point (electrical and mechanical stimulation) |
 
-Video search (youtube.com only) found one polyp-extension timelapse (V5). Not viewed; claims are from snippets. V4 diel pattern still unverified.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
-| Polyp/tissue motion | Each polyp emerges from a tube; tentacles extend or retract (V1) | Tentacles fan out from tubes; tubes stay still | V1 [M] |
+| Polyp/tissue motion | Tentacles extended by day and when feeding; withdrawn when disturbed (V7) | Tentacles fan out from tubes; tubes stay still | V1, V7 [M] |
 | Sway in flow | Some sources say steady one-way flow stresses it (general) | Tentacles sway a little, ~0.2–0.5 Hz [L] | [L] |
 | Open/close vs lights | Usually extended by day (V2) | Extend over ~20–40 min after lights on; retract over ~20–40 min after lights off [L] | V2 [M] / [L] |
-| Retraction on touch | Swift withdrawal (V1, V2) | Polyps retract in ~1 s | V1, V2 [M] |
+| Retraction on touch | Swift withdrawal; wave of retraction spreads away from the disturbed spot (V7); latency in seconds not found | Retract in ~1–2 s at touch point, wave spreads across colony over several s | V7 [M] / [L] |
 | Recovery after touch | No source | Re-extend over ~5–15 min | [L] |
 | Feeding response | Extended when feeding (V1, V3) | Tentacles spread wide when feeding | V1, V3 [M] |
 | Colour under blue light | No source | White-pale retracted tips (V1 photo site description) | [L] |

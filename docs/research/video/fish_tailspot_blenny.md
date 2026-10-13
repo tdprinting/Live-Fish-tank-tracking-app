@@ -8,8 +8,9 @@ Sim hook: `BrainKind.PEEKER_BLENNY` · Adult size: ~6-7.5 cm · Tank count: 1
 | S1 | Top Shelf Aquatics | https://topshelfaquatics.com/pages/saltwater-fish/tailspot-blenny | darts in/out of crevices, perches to observe |
 | S2 | Gensou | https://gensou.sg/?p=30499 | inquisitive, comes to glass |
 | S3 | Build Your Aquarium | https://www.buildyouraquarium.com/tailspot-blenny/ | care sheet; plays dead |
+| S4 | Wikipedia E. stigmatura | https://en.wikipedia.org/wiki/Ecsenius_stigmatura | coppery body, blackish spot at tail base, bright pink under eye when threatened, ~6 cm |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: 2026-10-13 footage pass: no rows upgraded to [H]. Wikimedia Commons search found no usable clip for this species (or only a related one), and Commons/upload.wikimedia.org returned HTTP 429 (Retry-After 600 s, still blocked after ~25 min), so nothing was downloaded or watched. YouTube V# rows remain queued for hand review. Page-based claims are [M]; numbers are [L] estimates. Commons has no Ecsenius video.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -21,7 +22,7 @@ NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, 
 | Posture | head poking from hole, body in | | [L] |
 | Idle | peek 5-20 s | | [L] |
 | Turning | head swivel | | [L] |
-| Colour | tail spot | | |
+| Colour | coppery body, blackish spot at tail-fin base; pink/bright colour under eye flares when threatened | | [S4] [M] |
 
 ## Behaviour spec (for the AI)
 | Aspect | Observation | Suggested rule / numbers | Cite |

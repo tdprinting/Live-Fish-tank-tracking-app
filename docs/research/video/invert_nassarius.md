@@ -11,8 +11,9 @@ Sim hook: `BrainKind.NASSARIUS` · Adult size: 2-3 cm shell · Tank count: 3-6
 | S1 | LiveAquaria Super Tongan | https://www.liveaquaria.com/products/super-tongan-nassarius-snail | feeding rush |
 | S2 | Wikipedia Nassarius | https://en.wikipedia.org/wiki/Nassarius | biology |
 | S3 | Reef Exclusive | https://reefexclusive.com/products/nassarius-snail | burrow/siphon |
+| M1 | Starvation and foraging in N. conoidalis / N. siquijorensis (abstract read) | https://scholars.hkbu.edu.hk/en/publications/effects-of-starvation-on-the-physiology-and-foraging-behaviour-of-3/ | 1-3 cm/min toward food |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -33,6 +34,9 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Social | hermits attack/steal shells | | [S1][M] |
 | Parameters | sensitive to nitrate, copper | | [S1][M] |
 | Tells | lone siphon in sand; sudden group emergence | | [M] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Food-directed crawl speed 1-3 cm/min (0.02-0.05 cm/s); starved snails 0.18-1.30 cm/min faster; nearer bait gives more arrivals [M1]. CORRECTS 'food rush 3-5 cm/s' which is ~100x too fast; use ~0.03 cm/s (up to ~0.07 cm/s when starved). A 30 cm approach then takes ~10-30 min, not 10-60 s. Burial time stays [L].
 
 ## Priority fixes for Opus
 1. Buried with siphon visible.

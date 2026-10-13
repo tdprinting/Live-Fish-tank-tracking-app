@@ -11,8 +11,9 @@ Sim hook: `BrainKind.SALLY_CRAB` · Adult size: 5-6 cm carapace, 10+ cm leg span
 | S1 | Top Shelf Aquatics | https://topshelfaquatics.com/pages/saltwater-invertebrates/sally-lightfoot-crab | algae eater, rock/hiding |
 | S2 | Live Aquaria | https://www.liveaquaria.com/products/sally-lightfoot-crab | care |
 | S3 | Kraken Corals | https://krakencorals.co.uk/livestock/sally-lightfoot-crab.html | care |
+| M1 | Wikipedia Percnon gibbesi (read) | https://en.wikipedia.org/wiki/Percnon_gibbesi | size, legs, diet, habitat |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -35,6 +36,9 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Social | may eat small fish/snails/inverts if underfed | | [S1][M] |
 | Parameters | - | | |
 | Tells | flat spidery shape, skittish sideways dash | | [L] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Carapace ~30 mm wide; legs show yellow rings at joints; each walking-leg pair carries spines along the leading edge [M1]. Strictly herbivorous (grazes algae); lives among boulders [M1]. Deudero et al. 2005 (MEPS 285:151) reportedly finds day-active with dusk peak, but I could only see a search snippet (page returned 401), so treat as unverified. No speed source found; speed stays [L].
 
 ## Priority fixes for Opus
 1. Sideways skittering with fast dash to crevice.

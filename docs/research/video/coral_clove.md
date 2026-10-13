@@ -10,15 +10,16 @@ Sim hook: `CoralKind.CLOVE` · Adult size: colony 5–10 cm across [L] · Tank c
 | V3 | ReefCentral thread (ID/care) | https://www.nano-reef.com/forums/topic/418699-what-did-i-get-on-this-piece-of-rock/ | Colony can open up over time after purchase; forum ID thread |
 | V4 | YouTube: Reef Lapse, 4K timelapse of clove polyps opening | https://www.youtube.com/watch?v=nHLFRPOp0xY | Snippet: 4K timelapse of clove polyps opening on flats; posted years ago [M] |
 | V5 | YouTube: Coral Spotlight, clove polyps | https://www.youtube.com/watch?v=TJF1kL8z2Nc | Title only; care overview [M] |
+| V6 | PLOS ONE, Favia fragum circadian study | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3089635/ | Daily tentacle expansion/contraction on light:dark cycle (analogy only) |
 
-Video search (youtube.com only) found one clove polyp opening timelapse (V4). Not viewed; claims are from snippets. No Clavularia-specific timing source was found.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Polyp/tissue motion | Polyps stand on a shared stolon; can be closed or open | Each polyp a small stalk with a tuft of tentacles | V1 [M] |
 | Sway in flow | Flow affects polyp activity (V2 analogy) | Polyps sway gently, ~0.3–0.8 Hz [L] | V2 [M] / [L] |
-| Open/close vs lights | Circadian open/close (V2 analogy) | Open over ~20–40 min after lights on; close over ~20–40 min after lights off | V2 [M] / [L] |
+| Open/close vs lights | Light-entrained expansion/contraction in other corals (V6) | Open over ~20–40 min after lights on; close over ~20–40 min after lights off | V6 [M] (analogy) / [L] |
 | Retraction on touch | No source | Polyps pull in over ~1 s | [L] |
 | Recovery after touch | No source | Re-open over ~5–10 min | [L] |
 | Feeding response | No source | Tentacles spread slightly during feeding | [L] |

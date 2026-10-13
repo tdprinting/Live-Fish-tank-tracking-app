@@ -12,15 +12,17 @@ Sim hook: `CoralKind.KENYA` · Adult size: 30–60 cm colony [L] · Tank count: 
 | V5 | YouTube: Kenya Tree Coral (Capnella imbricata) | https://www.youtube.com/watch?v=Ucia-UzNFtc | Snippet: colony in view; hobbyist clip [M] |
 | V6 | YouTube Short: Close Up Ep. 1, Kenya tree | https://www.youtube.com/shorts/rUfCPIlaTvU | Snippet: polyps seen opening and closing [M] |
 | V7 | YouTube: Kenya Tree Coral in the water flow | https://www.youtube.com/watch?v=PJMnC7Y97xg | Snippet: colony in flow; title only, not viewed [M] |
+| V8 | WetWebMedia / hobbyist report (via search) | https://wetwebmedia.com/nephbehfaqs.htm | Nephtheid behaviour FAQ: colony opened daily in quarantine, stayed closed in high flow after move (anecdote) |
+| V9 | PLOS ONE, Favia fragum circadian study | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3089635/ | Stony coral on light:dark cycle shows daily tentacle expansion/contraction; rhythm weakens in constant dark (analogy only) |
 
-Video search (youtube.com only) found hobbyist clips of polyps opening and closing (V6). No footage was viewed; claims are from snippets. Sources conflict on retraction.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Polyp/tissue motion | Sources conflict: non-retractable (V2, V3) vs retracts when agitated (V4) | Slow tissue swell and partial pull-in, not full polyp vanish | V2–V4 [M] |
-| Sway in flow | Moderate–strong flow preferred; no sway measurements | Branch sway small amplitude, ~0.1–0.3 Hz | [L] |
-| Open/close vs lights | No source | Gradual change over 30–60 min after lights on/off | [L] |
+| Sway in flow | Natural habitat is deeper slopes with stronger currents (V2); newly moved colony stayed closed in high flow (V8) | Branch sway small amplitude, ~0.1–0.3 Hz; closed/limp if flow too hard | V2 [M], V8 [M] / [L] |
+| Open/close vs lights | Diel tentacle expansion/contraction is documented in other corals (V9); none for Capnella | Gradual change over 30–60 min after lights on/off | V9 [M] (analogy) / [L] |
 | Retraction on touch | Partial pull-in if V4 correct | Retract in 1–3 s | V4 [M] / [L] |
 | Recovery after touch | No source | Re-extend over 5–15 min | [L] |
 | Feeding response | No source | Slow polyp fan-out over 1–2 min | [L] |
