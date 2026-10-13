@@ -96,4 +96,33 @@ class ResearchGapsTest {
         val trio = kills(3, molted = true)
         assertTrue("a third skunk just molted: $trio / 150 nights (row p 0.06 per roller)", trio in 4..40)
     }
+
+    /** Gap 5: a hungry Sally Lightfoot takes at most one snail a night, never a fish ≥ 0.8 of its span, never when fed. */
+    @Test
+    fun gap5_sallyLightfootIsAnOpportunist() {
+        fun run(hunger: Double, crabCm: Double): Pair<Int, Int> {
+            var snails = 0; var fish = 0
+            for (seed in 1L..60L) {
+                val stock = listOf(TestTank.seed("crab")) + List(8) { TestTank.seed("astrea1").copy(id = "astrea$it") } + listOf(TestTank.seed("tailspot"))
+                val s = TestTank.sim(stock, seed = seed, startHour = 1.0 + 59.5 / 60)
+                s.predationEnabled = true
+                val crab = s.org(BrainKind.SALLY_CRAB)
+                crab.lengthCm = crabCm
+                for ((i, o) in s.organisms.withIndex()) if (o !== crab) o.pos = crab.pos + Vec3(4.0 + i, 0.0, 2.0)
+                val kinds = s.organisms.associate { it.id to it.brainKind }
+                s.advance(40.0, behaviorDt = 0.5) { crab.hunger = hunger }
+                val eaten = s.eventLog.filterIsInstance<SimEvent.Eaten>().filter { it.predatorId == crab.id }
+                assertTrue("one prey per night at most", eaten.size <= 1)
+                snails += eaten.count { kinds[it.preyId] == BrainKind.ASTREA }
+                fish += eaten.count { kinds[it.preyId]?.isFish == true }
+            }
+            return snails to fish
+        }
+        val fed = run(0.2, 6.5)
+        assertEquals("a fed crab never hunts", 0 to 0, fed)
+        val hungry = run(0.95, 6.5)
+        assertTrue("hungry crab snails ${hungry.first} / 60 nights (row p 0.05)", hungry.first in 1..12)
+        // tailspot 5.5 cm is not under 0.8 × 6.5 cm: size-gated out
+        assertEquals("no fish at or above 0.8 × leg span", 0, hungry.second)
+    }
 }
