@@ -36,6 +36,8 @@ object Stocking {
         StockEntry("salarias_fasciatus", StockGroup.FISH, "Lawnmower blenny", 11.0),
         StockEntry("ecsenius_stigmatura", StockGroup.FISH, "Tailspot blenny", 5.5),
         StockEntry("pseudochromis_indigo", StockGroup.FISH, "Indigo dottyback", 6.5),
+        // not in the owner's tank: a sandbox option to see a sand sifter at work (research 16)
+        StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),

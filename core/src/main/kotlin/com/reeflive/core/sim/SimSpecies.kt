@@ -162,6 +162,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     NASSARIUS(listOf("nassarius"), false),
     ASTREA(listOf("lithopoma", "astraea", "astrea"), false),
     ASTERINA(listOf("asterina", "aquilonastra"), false),
+    /** Sand-sifting sleeper gobies (diamond goby, *Valenciennea puellaris*; research 16). Sandbox only. */
+    DIAMOND_GOBY(listOf("valenciennea"), true),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -185,6 +187,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
             "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
+            "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
         )
 
         fun byId(id: String): BrainKind? {

@@ -369,6 +369,20 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         pendingFeedPo4 += grams * FEED_PO4_PER_G * 1000 / s.volumeL
     }
 
+    /**
+     * Detritus stirred off the sand bed and kept in suspension reaches the filtration (SIMULATION §16.4): [fraction] of
+     * the detritus pool goes into the filter sock (it can rot there like any sock load) or out with the skimmate.
+     * Nothing happens without a sock or skimmer: the cloud just settles again.
+     */
+    fun captureResuspended(fraction: Double) {
+        if (fraction <= 0 || (!filterSock && !skimmer)) return
+        val cap = s.detritus * fraction.coerceIn(0.0, 0.05)
+        if (cap <= 0) return
+        s.detritus -= cap
+        if (filterSock) sockLoad += cap
+        nExportMg += cap * N_TAN * s.volumeL
+    }
+
     /** Uneaten food / corpses become detritus (grams of TAN-equivalent organics). */
     fun addDetritusTanGrams(gramsTan: Double) {
         val ppm = gramsTan * 1000 / s.volumeL

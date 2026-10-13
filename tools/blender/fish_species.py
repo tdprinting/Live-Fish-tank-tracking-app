@@ -612,6 +612,66 @@ def fins_dottyback(cv):
     FL.paint_fin_slot(cv, 5, base="#E0E6FF", alpha=0.6, rays=4, ray_color="#8090D0")
 
 
+def paint_diamond_goby(cv, fl):
+    """Diamond goby, Valenciennea puellaris (research 16; Fishes of Australia 177): pearly white-silver body with a
+    faint pink-grey back, rows of orange dashes and spots along the flank (a bold row low on the side), a few small
+    blue-edged spots between them, a pale blue-spotted cheek stripe from the mouth under the eye to the gill cover."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F2F4F2", "#E2E4E6", 0.0, 1.0)
+    cv.blend(S(0.7, 1.0, v), "#C9C4C6", 0.35)          # slightly darker back
+    cv.blend(1 - S(0.1, 0.35, v), "#FAFBFB", 0.6)      # bright belly
+    mucus(cv, 0.03, 161)
+    scales_overlay(cv, 9, 0.05)
+    rs = np.random.default_rng(162)
+    # the bold lower row: orange dashes, slightly elongated along the body
+    lower = np.zeros_like(u)
+    x = 0.2
+    while x < 0.9:
+        vv = 0.3 + 0.02 * math.sin(x * 23)
+        lower = np.maximum(lower, fl.stroke([(x, vv), (x + rs.uniform(0.012, 0.022), vv + 0.005)], [0.0075, 0.0075],
+                                            soft=0.003))
+        x += rs.uniform(0.04, 0.06)
+    cv.blend(lower, "#E87A2A", 0.95)
+    # scattered orange spots over the upper and middle flank
+    m, _ = fl.spots(rs, 55, 0.005, 0.008, 0.02, (0.16, 0.94, 0.38, 0.92),
+                    weight_fn=lambda uu, vv: 0.5 + 0.5 * S(0.4, 0.8, vv))
+    cv.blend(m, "#EE8A3A", 0.85)
+    # a few small blue spots with a darker rim between the orange
+    b, pts = fl.spots(rs, 18, 0.0035, 0.005, 0.03, (0.2, 0.9, 0.36, 0.8))
+    ring = np.zeros_like(u)
+    for (pu, pv, r) in pts:
+        ring = np.maximum(ring, fl.disc(pu, pv, r + 0.0025) - fl.disc(pu, pv, r))
+    cv.blend(ring, "#2E5A9A", 0.7)
+    cv.blend(b, "#4FA8E8", 0.95)
+    # cheek: pale blue band from the corner of the mouth under the eye to the gill cover, dotted brighter blue
+    cheek = fl.stroke([(0.01, 0.46), (0.05, 0.5), (0.1, 0.52), (0.16, 0.5)], [0.012, 0.016, 0.016, 0.01], soft=0.006)
+    cv.blend(cheek, "#9CC8EE", 0.75)
+    cd, _ = fl.spots(rs, 14, 0.003, 0.0045, 0.008, (0.015, 0.16, 0.43, 0.57))
+    cv.blend(cd * cheek, "#3E8FE0", 1.0)
+    # blue dashes over the snout and above the eye
+    cv.blend(fl.stroke([(0.012, 0.62), (0.04, 0.68)], [0.004, 0.004], soft=0.003), "#5AA8EC", 0.8)
+    cv.blend(fl.stroke([(0.07, 0.8), (0.11, 0.84)], [0.004, 0.003], soft=0.003), "#5AA8EC", 0.7)
+    dark_mouth(cv, fl, u1=0.025, v0=0.4, v1=0.46, color="#B88A80", op=0.5)
+
+
+def fins_diamond_goby(cv):
+    def orange_spots(T, Sx, rgb, a, n=8, rows=3):
+        ph = np.abs(((T * n) % 1.0) - 0.5)
+        rw = np.abs(((Sx * rows + 0.3) % 1.0) - 0.5)
+        m = (1 - S(0.15, 0.3, ph)) * (1 - S(0.12, 0.28, rw)) * (Sx < 0.85)
+        return rgb * (1 - m[..., None]) + hex2rgb("#E8862E") * m[..., None], np.maximum(a, 0.85 * m)
+    FL.paint_fin_slot(cv, 0, base="#EEF0F2", alpha=0.55, rays=6, ray_color="#C8C8CC", spine_count=6,
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 6, 3), margin="#5AA8EC", margin_w=0.1)
+    FL.paint_fin_slot(cv, 1, base="#EEF0F2", alpha=0.5, rays=12, ray_color="#C8C8CC",
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 10, 3), margin="#5AA8EC", margin_w=0.08)
+    FL.paint_fin_slot(cv, 2, base="#F2F2F4", alpha=0.45, rays=12, ray_color="#D0D0D4", margin="#7FBCEF",
+                      margin_w=0.1)
+    FL.paint_fin_slot(cv, 3, base="#ECEEF0", alpha=0.55, rays=14, ray_color="#C8CCD0",
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 12, 4), margin="#E8EEF4", margin_w=0.05)
+    FL.paint_fin_slot(cv, 4, base="#F2F2F2", alpha=0.3, rays=14, ray_color="#D8D8D8")
+    FL.paint_fin_slot(cv, 5, base="#F4F4F4", alpha=0.4, rays=5, ray_color="#D8D8D8")
+
+
 # ----------------------------------------------------------------------------
 SPECIES = {
     "clown_orange": dict(
@@ -752,6 +812,24 @@ SPECIES = {
         eye=dict(u=0.08, zf=0.3, r=0.045, iris="#20204A", ring="#5B63C8", outer="#202060", ring_w=0.12),
         paint=paint_dottyback, fins=fins_dottyback, irid=0.3, rough=0.32, length_cm=6.5,
     ),
+    "diamond_goby": dict(
+        # Valenciennea puellaris (research 16): elongate sleeper goby, depth ~0.2 L, slightly compressed, blunt
+        # rounded head with high-set eyes and a wide mouth, two separate dorsal fins, long anal, rounded-lanceolate tail
+        profile=[(0, 0.05, 0.05, -0.02), (0.04, 0.13, 0.10, -0.01), (0.1, 0.18, 0.125, 0.0), (0.22, 0.2, 0.13, 0.0),
+                 (0.4, 0.195, 0.12, 0.0), (0.58, 0.17, 0.1, 0.0), (0.74, 0.13, 0.075, 0.0), (0.86, 0.095, 0.05, 0.0),
+                 (1.0, 0.075, 0.03, 0.0)],
+        body_tris=3200, ring=28, p_exp=0.95, belly_bias=0.08,
+        dorsal=dict(u0=0.25, u1=0.4, h=[(0.25, 0.03), (0.27, 0.13), (0.31, 0.14), (0.36, 0.1), (0.4, 0.02)],
+                    rake=28, n=7),
+        dorsal2=dict(u0=0.46, u1=0.82, h=[(0.46, 0.03), (0.49, 0.1), (0.7, 0.1), (0.8, 0.08), (0.82, 0.02)],
+                     rake=24, n=14),
+        anal=dict(u0=0.5, u1=0.82, h=[(0.5, 0.03), (0.53, 0.085), (0.78, 0.08), (0.82, 0.02)], rake=26, n=13),
+        caudal=dict(length=0.2, span=0.17, shape="rounded"),
+        pectoral=dict(u=0.24, length=0.15, width=0.1, zf=-0.15, shape="round"),
+        pelvic=dict(u=0.25, length=0.1),
+        eye=dict(u=0.075, zf=0.42, r=0.034, iris="#C8D0D8", ring="#E87A2A", outer="#5AA8EC", ring_w=0.14),
+        paint=paint_diamond_goby, fins=fins_diamond_goby, irid=0.3, rough=0.32, length_cm=12.0,
+    ),
 }
 SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin,
                                fins=lambda cv: fins_clown(cv, darwin=True),
@@ -759,7 +837,7 @@ SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin
                                         ring_w=0.07, pupil=0.4))
 
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
-            "tailspot_blenny", "dottyback"]
+            "tailspot_blenny", "dottyback", "diamond_goby"]
 
 
 # ----------------------------------------------------------------------------

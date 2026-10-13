@@ -280,6 +280,10 @@ data class SimSnapshot(
     val eggClutches: List<EggClutchPose> = emptyList(),
     /** Pods, plankton and the other microfauna (research 10) for the microscope view and its readout. */
     val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
+    /** Dynamic sand bed grid (SIMULATION §16); refreshed ≤ 4×/s and shared until it changes. Null = flat, untouched sand. */
+    val sandGrid: SandGridSnapshot? = null,
+    /** Suspended sand / detritus particles: x, y, z (cm) and `Grain.ordinal + age fraction` per particle. */
+    val sandClouds: FloatArray = FloatArray(0),
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

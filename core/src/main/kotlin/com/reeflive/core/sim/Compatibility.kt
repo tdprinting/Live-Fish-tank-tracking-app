@@ -15,6 +15,9 @@ object Compatibility {
     /** Small-tank reef (the owner's 60 gal ≈ 227 L): above this volume the one-blenny rule relaxes (research 04: 400 L+). */
     const val BLENNY_FREE_VOLUME_L = 400.0
 
+    /** Sand-bed volume under which a sand-sifting goby runs out of sand fauna (research 16: 55 gal ≈ 208 L minimum). */
+    const val SAND_SIFTER_MIN_L = 200.0
+
     fun isBlenny(k: BrainKind?) = k == BrainKind.LAWNMOWER_BLENNY || k == BrainKind.PEEKER_BLENNY
 
     /**
@@ -38,6 +41,21 @@ object Compatibility {
         if ((kind == BrainKind.TANG || kind == BrainKind.EEL) && others.any { it == kind }) {
             out += CompatibilityWarning("conspecific_cap", CompatibilityWarning.Severity.WARN,
                 "A second ${if (kind == BrainKind.TANG) "tang" else "moray"} will be harassed and chronically stressed in this tank.")
+        }
+        if (kind == BrainKind.DIAMOND_GOBY) {
+            // research 16: sand sifters strip the sand fauna; unpaired adults fight; low corals get sanded
+            if (volumeL > 0 && volumeL < SAND_SIFTER_MIN_L) {
+                out += CompatibilityWarning("sand_sifter_tank_size", CompatibilityWarning.Severity.WARN,
+                    "A diamond goby sifts a small sand bed clean of pods within weeks and then starves unless it takes sinking food. Plan on about 200 L of mature live sand.")
+            } else {
+                out += CompatibilityWarning("sand_sifter_food", CompatibilityWarning.Severity.INFO,
+                    "Lives on the pods and worms in the sand. It needs a mature sand bed and target feeding, and it will drop sand on corals placed low.")
+            }
+            val n = others.count { it == BrainKind.DIAMOND_GOBY }
+            if (n >= 2 && n % 2 == 0) {   // every one already has a mate
+                out += CompatibilityWarning("diamond_goby_pair", CompatibilityWarning.Severity.WARN,
+                    "Diamond gobies live in mated pairs; an extra one will be chased off the sand.")
+            }
         }
         val minV = LifeCycle.minVolumeL(kind)
         if (minV > 0 && volumeL > 0 && volumeL < minV) {

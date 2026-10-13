@@ -118,8 +118,18 @@ class Simulation(
     /** Sand piles spat out by burrowing gobies: position on the sand and volume (cm³). */
     val sandPiles = ArrayList<SandPile>()
 
-    /** A goby drops a mouthful of sand at [at]; nearby piles merge (max 8 piles). */
+    /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
+    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
+    /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
+    val sandWork = SandWork(sand, rock)
+    private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
+    private var lastSandGridAt = -1e9
+    private var sandGridCache: SandGridSnapshot? = null
+
+    /** A goby drops a mouthful of sand at [at]; nearby piles merge (max 8 piles). The sand bed gets the mound and a puff. */
     fun depositSand(at: Vec3, cm3: Double) {
+        sand.deposit(at.x, at.z, cm3, 2.0)
+        sand.puff(at.x, sand.surfaceY(at.x, at.z) + 0.6, at.z, 6, 4.0)
         val p = sandPiles.firstOrNull { it.pos.distanceTo(at) < 3.0 }
         if (p != null) p.volume += cm3
         else {
@@ -257,6 +267,7 @@ class Simulation(
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         if (useBehavior && !abstractMode) nightPlankton(simDt)
+        if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         chemAccum += simDt
@@ -356,6 +367,7 @@ class Simulation(
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
         }
+        sandWork.step(organisms)
     }
 
     private fun abstractPlacement(dt: Double) {
@@ -475,8 +487,16 @@ class Simulation(
         sandPiles.removeAll { it.volume < 0.2 }
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.ENGINEER_GOBY) {
             val b = agents[o]?.brain as? com.reeflive.core.ai.GobyBrain ?: continue
-            if (rng.chance(dtMin / 3.0)) depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+            if (rng.chance(dtMin / 3.0)) {
+                val pit = b.digPoint
+                sand.dig(pit.x, pit.z, com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3, 1.5)
+                depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+            }
         }
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
+            (agents[o]?.brain as? com.reeflive.core.ai.DiamondGobyBrain)?.abstractSift(dtMin)
+        }
+        sandTick(dtMin)
         flushEvents()
     }
 
@@ -737,6 +757,19 @@ class Simulation(
         "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(69.0, 5.0, 23.0)) + Vec3(-2.0, 7.0, 5.0)
         "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0)) + Vec3(2.0, 12.0, 1.0)
         else -> rock.anchors.pos(anchor, Vec3(41.0, 50.0, 20.0))
+    }
+
+    /**
+     * Sand bed upkeep once per chemistry tick (SIMULATION §16): slumping and flow smoothing, freshness fading, detritus
+     * settling from the column, and fines that stayed suspended reaching the filter sock or skimmer.
+     */
+    private fun sandTick(dtMin: Double) {
+        sand.relax(dtMin, flowStrength, water.s.detritus)
+        val up = sand.resuspendedPending
+        if (up > 0) {
+            water.captureResuspended((up * RESUSPEND_CAPTURE_PER_LOAD).coerceAtMost(RESUSPEND_CAPTURE_MAX_PER_MIN * dtMin))
+            sand.resuspendedPending = 0.0
+        }
     }
 
     // ============================================================== commands
@@ -1013,7 +1046,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset(); shrimpBreeding.reset()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset()
         pests.copyFrom(PestState()); treatments.active.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1038,6 +1071,8 @@ class Simulation(
         o.hunger = 0.25 + rng.nextDouble() * 0.2
         o.ageSec = LifeCycle.initialAgeSec(o, seed.ageYears)
         if (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.LAWNMOWER_BLENNY) o.acceptsPrepared = rng.chance(0.7)
+        // research 16: many diamond gobies never take prepared food and live off the sand fauna alone
+        if (o.brainKind == BrainKind.DIAMOND_GOBY) o.acceptsPrepared = rng.chance(0.6)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)
@@ -1108,6 +1143,11 @@ class Simulation(
                 flowGridCache
             },
             noriRemaining = food.nori?.remaining?.toFloat() ?: 0f,
+            sandGrid = run {
+                if (simTimeSec - lastSandGridAt > 0.25 * max(speed, 1.0) || sandGridCache == null) { lastSandGridAt = simTimeSec; sandGridCache = sand.gridSnapshot() }
+                sandGridCache
+            },
+            sandClouds = sand.cloudArray(),
         )
     }
 
@@ -1142,6 +1182,12 @@ class Simulation(
         const val SCRAPE_STIR_SEC = 1.0
         /** Social-stress input held on every fish while flatworm toxin is in the water. */
         const val TOXIN_SOCIAL = 0.3
+        /**
+         * Detritus kept in suspension by stirring reaches the sock/skimmer: share of the column's detritus pool captured
+         * per unit of suspended load that timed out ([SandBed.resuspendedPending]), capped per minute (DESIGN ESTIMATE).
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val RESUSPEND_CAPTURE_PER_LOAD = 0.005
+        const val RESUSPEND_CAPTURE_MAX_PER_MIN = 0.0002
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }

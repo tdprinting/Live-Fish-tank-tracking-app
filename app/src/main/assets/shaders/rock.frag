@@ -20,6 +20,12 @@ uniform float uHasTexture;
 uniform float uRoughness;
 uniform float uNormalStrength; // 0 disables the normal map (Low quality)
 uniform float uDetailScale;    // normal-map uv multiplier
+#ifdef SAND
+// Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus.
+uniform sampler2D uSandMap;
+uniform float uSandOn;
+uniform vec2 uSandExtent;
+#endif
 
 out vec4 fragColor;
 
@@ -66,6 +72,27 @@ void main() {
     float ao = 1.0;
 #ifdef SAND
     albedo = mix(albedo, vec3(0.27, 0.35, 0.12), clamp(vColor.r, 0.0, 1.0) * 0.55);
+    if (uSandOn > 0.5) {
+        vec2 ext = max(uSandExtent, vec2(1.0));
+        vec2 suv = clamp(vWorld.xz / ext, 0.0, 1.0);
+        vec4 sm = texture(uSandMap, suv);
+        vec2 ts = vec2(textureSize(uSandMap, 0));
+        vec2 cell = ext / ts;
+        vec2 du = vec2(1.0 / ts.x, 0.0);
+        vec2 dv = vec2(0.0, 1.0 / ts.y);
+        float hx = (texture(uSandMap, suv + du).r - texture(uSandMap, suv - du).r) / (2.0 * cell.x);
+        float hz = (texture(uSandMap, suv + dv).r - texture(uSandMap, suv - dv).r) / (2.0 * cell.y);
+        // slope of the displaced surface (the mesh normal is the flat bed's)
+        N = normalize(N + vec3(-hx, 0.0, -hz) * step(0.5, N.y));
+        // freshly turned sand: the damp, darker layer from below, speckled, a little glossier
+        float wet = clamp(sm.g, 0.0, 1.0);
+        float speck = hash13(floor(vWorld * 6.0));
+        albedo *= mix(1.0, 0.66 + 0.1 * speck, wet);
+        rough = mix(rough, rough * 0.65, wet);
+        // mulm collects as a brown film; sifted patches come up clean and bright
+        albedo = mix(albedo, vec3(0.16, 0.11, 0.06), smoothstep(0.35, 1.5, sm.b) * 0.45);
+        albedo *= mix(1.06, 1.0, smoothstep(0.0, 0.2, sm.b));
+    }
     if (dot(uAlgaeSand, vec4(1.0)) > 0.001) {
         vec3 sp = vWorld * 0.07;
         float n1 = fbm3(sp);

@@ -94,6 +94,16 @@ object EvidenceLedger {
         EvidenceEntry("sabellastarte_sp", "retraction / crown loss / tube abandonment", "separate states", S, "11 §8"),
         EvidenceEntry("sabellastarte_sp", "crown regrowth", "30–60 d", D, "11 §8 'no regeneration clock'"),
         EvidenceEntry("sabellastarte_sp", "tube abandonment after 3 days crownless and unwell", "rule", D, "11 §8"),
+        // ------------------------------------------------------------ sand bed and the diamond goby (research 16)
+        EvidenceEntry("sand", "grain settling velocity", "Ferguson & Church 2004 (C1 18, C2 1.0)", S, "16 §3 Ferguson & Church 2004", "time for a puff to clear"),
+        EvidenceEntry("sand", "aquarium aragonite grain sizes", "0.25-2 mm (oolite to special grade)", S, "16 §3 CaribSea grade sheet"),
+        EvidenceEntry("sand", "detritus floc settling", "≈ 0.3 cm/s", A, "16 §3 Alldredge & Gotschalk 1988 (marine snow)"),
+        EvidenceEntry("sand", "smoothing diffusivity and freshness fade", "D 1e-5 + 4e-5·flow² cm²/s; 6 h", D, "16 §3", "how long a pit or trail stays visible"),
+        EvidenceEntry("valenciennea_puellaris", "sifts mouthfuls of sand through the gills", "behaviour", S, "16 §1 Wikipedia Valenciennea, fishprofiles"),
+        EvidenceEntry("valenciennea_puellaris", "monogamous pairs in shallow burrows under rubble", "behaviour", S, "16 §1 FishBase, Fishes of Australia"),
+        EvidenceEntry("valenciennea_puellaris", "starves on a young or small sand bed", "prey index", S, "16 §2 aquariadise (direction); rates D"),
+        EvidenceEntry("valenciennea_puellaris", "sand on low corals", "puff within 7 cm, coral < 8 cm over the sand", S, "16 §2 aquariadise, aquariumsource (direction); distances D"),
+        EvidenceEntry("valenciennea_puellaris", "DiamondGobyBrain.SIFT_YIELD_MIN", "0.3 min per mouthful at prey index 1", D, "16 §4", "condition over 3 weeks on a young vs mature bed"),
     )
 
     fun of(speciesId: String): List<EvidenceEntry> = entries.filter { it.speciesId == speciesId }

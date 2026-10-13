@@ -894,3 +894,115 @@ Snail predation by the crab and hermit snail-shell theft still need `predationEn
 New: `ai/BehaviourDetailTest.kt` (23 tests: evidence labels, sheet lengths, colour forms, banded visit rate / light / intermolt / pairing, Lysmata fertility, skunk tap and night cleaning, wrasse encounters, tang column feeding, cardinal ramp, hawk strike outcomes, lawnmower matrix, tailspot excursions, hermit size rule, crab scenario and scavenging, nassarius latency and bouts, astrea righting, asterina CRW, brittle arm feeding, duster states).
 
 Changed: `AsterinaOrganPipeTest` now turns on `asterina_coral` explicitly, because research 11 §7 contradicts the default-on premise, and it adds `corallivoryIsOffByDefault`. `RealismAcceptanceTest` is unchanged.
+
+## 16. Dynamic sand bed and the diamond goby (`sim/SandBed.kt`, `ai/DiamondGobyBrain.kt`, `render/SandVisuals.kt`)
+
+Sources: [research 16, diamond goby](research/16_diamond_goby.md). The sand used to be a static mesh with no state. It is now a coarse grid that the animals change, and the renderer shows those changes.
+
+### 16.1 The grid
+
+`SandBed` is 64 × 24 cells over the 121.9 × 33 cm floor (≈ 1.9 × 1.4 cm). Each cell holds three values:
+
+- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound).
+- **freshness**: 0…1. Turned sand is the damp, darker layer from below. It fades with τ = 6 h.
+- **detritus**: a mulm index of 0…1.5. It starts at 0.25 and relaxes over 2 days toward the water-column detritus (less in strong flow).
+
+The bed's surface is `baseY(z) + height`, where `baseY` follows the visual bed: 3.5 cm at the front glass and 6 cm at the back. Edits conserve sand:
+
+- `dig` and `deposit` move volume.
+- `plough` cuts a mass-conserving furrow with berms. A groove narrower than half a cell is widened to that width and kept at the same volume.
+- `freshen` only turns the surface.
+- `sift` removes a fraction of the detritus.
+
+`relax` runs once per chemistry tick:
+
+- Slopes steeper than the angle of repose (tan 0.62, ≈ 32°) slump.
+- Diffusion grows with pump flow (`D = 1e-5 + 4e-5·f²` cm²/s), so strong flow erases ripples and trails within hours, while a still bed keeps a pit for days.
+
+All of this uses its own `Rng`, so the behaviour random streams and the existing tests are unchanged.
+
+### 16.2 Who moves sand
+
+`SandWork.step` runs after every behaviour tick. It only reads what the animals actually did: their positions and postures. It never changes their behaviour.
+
+| Animal | What it does to the bed |
+|---|---|
+| Nassarius | Ploughs a trail every 0.6 cm crawled on sand (0.1 cm deep). Burying or emerging (posture 5) leaves a crater with a spoil ring and a small puff. |
+| Hermits, Sally Lightfoot | Scratch: freshen plus a faint furrow every cm walked, and a puff every 12 marks. |
+| Brittle star | A shallow, wide furrow where its arms drag. |
+| Engineer goby | Each mouthful is dug at the burrow mouth (`GobyBrain.digPoint`, anchor `SAND_GOBY_DIG`) and spat out as a mound (`depositSand`). In abstract mode this happens at the day rate. |
+| Diamond goby | Scoops pits at its feeding stations, puffs sand and fines out of its gills, digs its burrow, and sifts detritus away (§16.5). |
+| Pump flow | Smooths the bed (§16.1). |
+
+Teleports (more than 6 cm in one tick) are ignored.
+
+### 16.3 Suspended clouds
+
+`SandBed.puff` throws up to 160 pooled particles of four grain classes. The mix depends on how much detritus the cell holds. They settle at the Ferguson & Church (2004) velocity for aragonite in seawater (2.93 / 1.023 g/cm³, ν = 0.95e-6 m²/s):
+
+| Grain | Diameter | Settling speed |
+|---|---|---|
+| Sand | 0.5 mm | ≈ 7.8 cm/s |
+| Fine | 0.2 mm | ≈ 2.7 cm/s |
+| Silt | 63 µm | ≈ 0.35 cm/s |
+| Detritus floc | 0.3 mm, 1.10 g/cm³ | ≈ 0.3 cm/s (inside the 16–368 m/day marine-snow range) |
+
+Particle motion:
+
+- The jet relaxes in 0.25 s.
+- Particles then drift with 0.6 × the local flow, plus turbulent vertical diffusion that grows with flow speed.
+- A particle that reaches the bed re-joins its cell: sand adds height and detritus adds load.
+
+The resulting timing: a goby's puff 5 cm up drops its sand in ≈ 1–2 s, while the haze of silt and mulm takes 10–60 s (longer in strong flow). Particles left up after 240 s count as resuspended.
+
+### 16.4 Coupling to chemistry
+
+Detritus that stays in suspension can reach the filtration. Once per chemistry tick, `WaterSim.captureResuspended` takes a small, capped fraction of the column detritus (≤ 0.02 % per minute, ≤ 5 % per call) into the filter sock load and nitrogen export. It does this only when a sock or skimmer is running. Sifting itself only moves the bed's own mulm index. Food for the sifter comes through the existing microfauna pathway (§16.5), so nitrogen bookkeeping is unchanged.
+
+### 16.5 Diamond goby (*Valenciennea puellaris*, sandbox only)
+
+The diamond goby is not in the owner's tank. It is in the stocking gallery (`Stocking.CATALOG`) and the sandbox "Add life" list. Its sheet is `species/valenciennea_puellaris.json`: max 16 cm, typical 12 cm, minimum 55 gal, reef safe "with caution". The model is `models/diamond_goby.glb` (+ LOD1).
+
+**Brain** (`DiamondGobyBrain`):
+
+- **Sift.** The main daytime behaviour, in four phases:
+  - travel to a station on open sand within 35 cm of the burrow;
+  - scoop: head down for 0.6 s, digging 0.35 cm³ and sifting the cell's detritus;
+  - chew: 1.5–3.5 s with flared gills;
+  - expel: a puff out of the gills, the sand dropped beside the pit, any coral within 7 cm and less than 8 cm above the bed dusted (it retracts; `coralsDusted`, `SandBed.coralDustings`).
+
+  Each station gets 3–8 mouthfuls, then the goby hops 8–25 cm to the next one.
+- **DigBurrow.** Every 30–90 minutes by day it carries 3–6 loads out of a burrow under a rock overhang and dumps them as a mound.
+- **InBurrow.** At night it hides in the burrow (invisible) and flees there when scared.
+- **BottomFeed.** If it accepts prepared food (60 % do), it takes food that has sunk to the sand.
+- **Pairs.** A second diamond goby pairs with an unpaired one. The pair shares the burrow and forages within 14 cm of each other.
+
+**Food.** `MicrofaunaModel.sandPreyIndex()` is the SAND-habitat pod biomass, weighted by the new `PodPredator.SAND_SIFTER` row (1,500 pod-eq a day, sand access 1, hidden 0.25). It is 1 for a mature bed at its starting population and 0 for dry rock. Each mouthful offsets `SIFT_YIELD_MIN × index` minutes of hunger rise. In abstract mode the relief is `ABSTRACT_RELIEF × index` per daylight minute. On a 227 L bed with no refugium and no prepared food, the goby itself draws the sand fauna down. It holds condition for about 10 days, then starts to thin. On a sterile bed it is thin within the fortnight. Compatibility:
+
+- `sand_sifter_tank_size` (WARN below 200 L), otherwise `sand_sifter_food` (INFO);
+- `diamond_goby_pair` (WARN when adding a third, fifth, … one).
+
+### 16.6 Snapshot and renderer
+
+`SimSnapshot.sandGrid` (`SandGridSnapshot`: dims, cell size, height/fresh/detritus arrays, version) is rebuilt at most every 0.25 s × speed. It is shared until the bed changes. `SimSnapshot.sandClouds` holds the live cloud particles at stride 4 (x, y, z, kind + age/60).
+
+In the app:
+
+- `SandFx` packs the grid into a 64 × 24 RGBA16F texture on sampler unit 13 (`uSandMap`). It uploads only on a version change, at most 5×/s.
+- `static.vert` (`SAND`) lifts the top vertices of the sand by the height.
+- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, and brightens freshly sifted patches.
+- `SandCloudRenderer` draws each cloud particle as three jittered points with the particles program. Sand is a pale burst, silt a faint spreading haze, detritus brown flecks.
+
+The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
+
+### 16.7 Tests
+
+`sim/SandBedTest.kt`:
+
+- settling speeds against Ferguson & Church;
+- clouds settle (coarse sand < 3.5 s, everything 10–60 s, sand conserved);
+- flow keeps detritus up longer;
+- relax smooths faster in strong flow and freshness fades;
+- nassarius trails and burial craters, both direct and fed in a live run;
+- the engineer goby's pit and mound;
+- the diamond goby: catalogue and compatibility, sifting (mouthfuls, puffs, stations, sifted load, level bed), pair burrow, dusting of low corals, decline without sand fauna, and the prey index on a sterile bed.
