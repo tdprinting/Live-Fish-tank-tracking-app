@@ -796,7 +796,19 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
+        input.instantTaps = camera.shelfOn
         if (c != null) store.model(SupplyShelfLayout.MODEL)
+        // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
+        val req = c?.takePickRequest()
+        if (c != null && req != null && camera.shelfOn) {
+            val m = store.model(SupplyShelfLayout.MODEL)
+            val cb = c.onPick
+            if (m != null && cb != null) {
+                shelfScene.bind(m)
+                val top = FloatArray(3)
+                if (shelfScene.pickId(req, top)) main.post { cb(req, top[0], top[1], top[2]) }
+            }
+        }
         shelfScene.update(dt)
     }
 

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -160,6 +161,8 @@ private fun LiveQuality.toRender() = when (this) {
 
 /** Height of the floating bottom bar area (64 dp pill + 16 dp margin) plus a little air. */
 private val NavClearance = 88.dp
+/** Height of the HUD's two top rows (mode / clock, then Hermie and the meter): the in-tank gauges stay below it. */
+private val GaugeTopClearance = 112.dp
 
 /** Point on the front glass, centre, for the "Tap glass" action (tank cm: 122 × 61 × 33). */
 private val FrontGlassCentre = Vec3(61.0, 30.0, 33.0)
@@ -294,6 +297,9 @@ fun LiveTankScreen(
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
+    // "Tap a supply, then drag it to the tank" until the first supply lands in the tank (remembered in settings)
+    var supplyHintDone by remember { mutableStateOf(false) }
+    val showSupplyHint = settings.loaded && !settings.supplyHintSeen && !supplyHintDone
     BackHandler(enabled = supplies) { supplies = false }
     BackHandler(enabled = carry != null) { carry = null; supplies = true }
     // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
@@ -667,6 +673,10 @@ fun LiveTankScreen(
     // the carried prop let go over the tank: food drops in there, the knocker knocks there, the rest do their thing
     val onCarryDrop: (SupplyItem, Float, Float) -> Unit = { item, gx, gy ->
         carry = null
+        if (!supplyHintDone) {
+            supplyHintDone = true
+            if (!settings.supplyHintSeen) scope.launch { settingsRepo.setSupplyHintSeen(true) }
+        }
         val k = item.food
         when {
             k != null && k != FoodKind.NORI -> {
@@ -683,6 +693,7 @@ fun LiveTankScreen(
         }
     }
     val onCarryBack: (SupplyItem) -> Unit = { carry = null; tick(); supplies = true }
+    val onCarryCancel: () -> Unit = { carry = null; tick() }
     val gauges = GaugeReadings(
         tempC = hud.water.tempC,
         sg = hud.water.sg,
@@ -732,6 +743,10 @@ fun LiveTankScreen(
             projection = projection,
             r = gauges,
             onDial = if (sandbox) ({ g: TankGauge -> tick(); dial = g }) else null,
+            // keep clear of the HUD's two top rows, the dock / bottom bar and the landscape rail
+            safeTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + GaugeTopClearance,
+            safeBottom = hudBottom,
+            safeStart = hudStart,
         )
         // what is happening right now, where everyone looks first: under the top pills, clear of the rail
         if (!micro) {
@@ -752,7 +767,8 @@ fun LiveTankScreen(
         }
         HudLayer(
             vm, hudState, onModeChange, followId, stats, cleaning, toggleCleaning, landscape,
-            hidden = chromeHidden || micro,
+            // landscape is short: on the shelf the HUD would cover the top row's props, so it steps aside there
+            hidden = chromeHidden || micro || (supplies && landscape),
             hermie = hermie, hermieOn = hermieOn, onHermieOff = { hermieOn = false },
             happy = happy, meterOn = meterOn, onMeterOff = { meterOn = false },
             showTips = showTips && open == null && !supplies && carry == null, onDismissTips = dismissTips,
@@ -781,12 +797,17 @@ fun LiveTankScreen(
             pick = shelfPick,
             readouts = hudState.readouts,
             showReadouts = testKit,
+            projection = projection,
+            locked = SupplyItem.lockedIds(sandbox),
+            showHint = showSupplyHint,
+            landscape = landscape,
+            onTag = { item: SupplyItem -> shelf.pick(item.id) },
             onRow = { r: ShelfRow -> tick(); shelf.focusRow(r.ordinal) },
             onClose = { tick(); pickJob[0]?.cancel(); supplies = false; shelfPick = null; testKit = false },
             bottomClearance = NavClearance + navInset,
         )
         carry?.let { item ->
-            SupplyCarryLayer(item, projection, onCarryDrop, onCarryBack, bottomClearance = NavClearance + navInset)
+            SupplyCarryLayer(item, projection, onCarryDrop, onCarryBack, onCarryCancel, bottomClearance = NavClearance + navInset)
         }
         // the only control left while everything is hidden
         AnimatedVisibility(

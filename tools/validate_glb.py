@@ -50,8 +50,8 @@ BUDGET = {
     "mushroom_hairy": 1500,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     "reef_details": 2000,
-    # the supply shelf beside the tank (tools/blender/supplies.py; 28 props + rack)
-    "supply_shelf": 10500,
+    # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
+    "supply_shelf": 18000,
 }
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
 LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
