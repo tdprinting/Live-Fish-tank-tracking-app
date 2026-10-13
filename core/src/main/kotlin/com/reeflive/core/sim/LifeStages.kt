@@ -1,8 +1,6 @@
 package com.reeflive.core.sim
 
 import kotlinx.serialization.Serializable
-import java.util.Collections
-import java.util.WeakHashMap
 
 /**
  * Life stages and sex roles (docs/research/life_stages.md). Each fish species sheet carries a `lifeStages` block
@@ -273,16 +271,7 @@ object SexRoles {
     }
 }
 
-/**
- * Carries each snapshot's [LifeForm]s to the renderer and UI without changing the [SimSnapshot] class (SimTypes.kt
- * is owned by another change right now). TODO(life-stages): move into `OrganismPose.lifeForm` once SimTypes is free.
- * Snapshots are keyed weakly by identity, so nothing outlives the frame that uses it.
- */
+/** Each snapshot's [LifeForm]s by organism id ([SimSnapshot.lifeForms]); empty for snapshots the sim did not build. */
 object LifeFormChannel {
-    private val map: MutableMap<SimSnapshot, Map<String, LifeForm>> = Collections.synchronizedMap(WeakHashMap())
-
-    fun attach(s: SimSnapshot, forms: Map<String, LifeForm>) { map[s] = forms }
-
-    /** Forms by organism id for [s]; empty for snapshots the sim did not build (demo snapshots). */
-    fun of(s: SimSnapshot?): Map<String, LifeForm> = s?.let { map[it] } ?: emptyMap()
+    fun of(s: SimSnapshot?): Map<String, LifeForm> = s?.lifeForms ?: emptyMap()
 }

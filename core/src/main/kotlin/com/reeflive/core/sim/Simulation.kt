@@ -1167,10 +1167,9 @@ class Simulation(
         }
     }
 
-    fun snapshot(): SimSnapshot = buildSnapshot().also { s ->
-        // life stage and sex per organism for the renderer / fish card (LifeStages.kt; side channel until SimTypes is free)
-        LifeFormChannel.attach(s, organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
-    }
+    // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
+    fun snapshot(): SimSnapshot =
+        buildSnapshot().copy(lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
 
     private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()
