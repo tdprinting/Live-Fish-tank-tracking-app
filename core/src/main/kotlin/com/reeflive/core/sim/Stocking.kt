@@ -7,6 +7,18 @@ import kotlin.math.min
 /** Gallery groups of the sandbox "Add life" tab. */
 enum class StockGroup(val label: String) { FISH("Fish"), INVERTS("Inverts"), CORALS("Corals") }
 
+/**
+ * Size of the animals one "Add life" tap releases. Shops sell most reef fish as juveniles, so that is the default:
+ * a juvenile blue tang is ~5-8 cm, not the 25 cm adult. Fraction of the species' typical adult length, floored so
+ * tiny species still read on screen (never above the adult size).
+ */
+enum class StockSize(val label: String, val fraction: Double, val floorCm: Double) {
+    JUVENILE("Juvenile", 0.3, 3.0), YOUNG("Young", 0.6, 4.0), ADULT("Adult", 1.0, 0.0);
+
+    /** Length in cm for a species whose typical adult is [adultCm]. */
+    fun lengthCm(adultCm: Double): Double = max(adultCm * fraction, min(floorCm, adultCm))
+}
+
 /** One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. */
 data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double)
 
@@ -96,10 +108,12 @@ object Stocking {
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
 
     /** Adds up to [count] of [speciesId]; returns how many were added (caps: per add and whole tank). */
-    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0): Int {
+    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
         sim.species.ensure(speciesId)
         val sp = sim.species[speciesId]
-        return if (sp.isCoral) addCorals(sim, sp, count) else addAnimals(sim, sp, count, sizeCm)
+        if (sp.isCoral) return addCorals(sim, sp, count)
+        val cm = if (sizeCm > 0) sizeCm else size.lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
+        return addAnimals(sim, sp, count, cm)
     }
 
     private fun nextNumber(existing: Int, i: Int) = existing + i + 1

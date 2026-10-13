@@ -48,9 +48,10 @@ sealed class Command {
 
     /**
      * Sandbox stocking test: add [count] of [speciesId] at once ([Stocking]). Fish are released spread along the
-     * surface, inverts start at their usual spots, corals settle on free rock or sand. [sizeCm] 0 = typical adult.
+     * surface, inverts start at their usual spots, corals settle on free rock or sand. [sizeCm] > 0 sets the length outright;
+     * otherwise [size] picks it (juveniles by default, as shops sell them).
      */
-    data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0) : Command()
+    data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE) : Command()
 
     /**
      * The owner slides the Flipper magnet scraper over [pane] from (x0, y0) to (x1, y1), in cm along the pane (x from

@@ -80,6 +80,7 @@ import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
@@ -151,7 +152,7 @@ data class SandboxActions(
     /** Opens the time-lapse sheet (set up a run, or see the progress / report of the current one). */
     val onTimelapse: () -> Unit = {},
     /** "Add life" gallery: add [count] of a species to the sandbox. */
-    val onAddMany: (speciesId: String, count: Int) -> Unit = { _, _ -> },
+    val onAddMany: (speciesId: String, count: Int, size: StockSize) -> Unit = { _, _, _ -> },
     /** "Pests & treatments" tab. */
     val onAddAiptasia: () -> Unit = {},
     val onRemoveAiptasia: () -> Unit = {},

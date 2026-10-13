@@ -390,10 +390,10 @@ fun LiveTankScreen(
         onRearrangeRock = { tick(); cue(LiveReactions.rocks()) { vm.rearrangeRock() } },
         onPumpFailTonight = { tick(); cue(LiveReactions.pumpsTonight()) { vm.pumpFailTonight() } },
         onTimelapse = { echo(LiveReactions.timelapse()); lapse = true },
-        onAddMany = { id, n ->
+        onAddMany = { id, n, size ->
             tick()
             val card = stockCards.firstOrNull { it.speciesId == id }
-            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n) }
+            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
         },
         onAddAiptasia = {
             tick()
