@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reeflive.app.ui.components.ButtonKind
 import com.reeflive.app.ui.components.Glyph
 import com.reeflive.app.ui.components.GlyphBadge
@@ -82,6 +83,7 @@ import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
+import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
@@ -110,9 +112,6 @@ data class SandboxPanelState(
     val now: TankReading? = null,
     /** The real tank, for the slider markers. */
     val real: TankReading? = null,
-    val category: SandboxCategory = SandboxCategory.WATER,
-    /** Portrait: the body is showing (false = only the header and the tabs peek out). */
-    val expanded: Boolean = true,
     val speed: Double = 1.0,
     val speeds: List<Double> = listOf(1.0, 60.0, 240.0, 1000.0),
     val controlMode: SandboxControlMode = SandboxControlMode.SET,
@@ -130,8 +129,6 @@ data class SandboxPanelState(
 /** Everything the dock can ask for. */
 data class SandboxActions(
     val onSet: (SandboxParamDef, Double) -> Unit = { _, _ -> },
-    val onCategory: (SandboxCategory) -> Unit = {},
-    val onToggleExpanded: () -> Unit = {},
     val onSpeed: (Double) -> Unit = {},
     val onControlMode: (SandboxControlMode) -> Unit = {},
     val onPreset: (SandboxPreset) -> Unit = {},
@@ -164,6 +161,8 @@ data class SandboxActions(
     val onInfect: (Disease) -> Unit = {},
     val onMaintain: (MaintenanceTask) -> Unit = {},
     val onAddSpareShells: () -> Unit = {},
+    /** Pods, phyto and pest treatments (the microscope's actions, also on the Add life card). */
+    val onMicro: (MicroAction) -> Unit = {},
     /** Shows the sandbox tips again. */
     val onHelp: () -> Unit = {},
 )
@@ -182,214 +181,10 @@ private val doseChips = listOf(
 /** A big one-tap button for the "Quick changes" rows. */
 private data class Quick(val label: String, val glyph: ReefGlyph, val onClick: () -> Unit)
 
-/** The four foods the Events tab offers; the Waste & food tab has the whole shelf. */
-private val favouriteFoods = listOf(FoodKind.FLAKE, FoodKind.MYSIS, FoodKind.NORI, FoodKind.PELLET)
-
-// ---------------------------------------------------------------- dock
-
-/**
- * Sandbox controls. Portrait: a see-through glass panel floating over the bottom of the tank; collapsed it is only the
- * header and the tab row, expanded the body adds [bodyHeight] (the screen keeps the whole panel to about 40 % of the
- * height). Landscape ([side] = true): a full-height column beside the tank. [bottomClearance] keeps the content clear
- * of the floating bottom navigation.
- */
-@Composable
-fun SandboxDock(
-    state: SandboxPanelState,
-    actions: SandboxActions,
-    modifier: Modifier = Modifier,
-    side: Boolean = false,
-    bottomClearance: Dp = 0.dp,
-    bodyHeight: Dp? = null,
-) {
-    val c = ReefTheme.colors
-    val reduce = ReefTheme.reduceMotion
-    val shape = if (side) RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp) else ReefShapes.sheet
-    // kept here (not in the body) so the scroll position survives the body tucking away while the tank is dragged
-    val scroll = rememberScrollState()
-    LaunchedEffect(state.category) { scroll.scrollTo(0) }
-    Column(
-        modifier
-            .clip(shape)
-            // portrait floats over the tank, so it is a little see-through
-            .background(if (side) c.sheet else c.sheet.copy(alpha = c.sheet.alpha * 0.84f))
-            .border(1.dp, c.glassBorder, shape),
-    ) {
-        DockHeader(state, actions, collapsible = !side)
-        CategoryTabs(state.category, actions.onCategory)
-        if (side) {
-            DockBody(state, actions, scroll, Modifier.weight(1f), endPadding = bottomClearance)
-        } else {
-            AnimatedVisibility(
-                visible = state.expanded,
-                enter = fadeIn(liveSpec(reduce)) + expandVertically(liveSpec(reduce)),
-                exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + shrinkVertically(liveSpec(reduce)),
-            ) {
-                DockBody(
-                    state, actions, scroll,
-                    if (bodyHeight != null) Modifier.height(bodyHeight) else Modifier.heightIn(max = 320.dp),
-                    endPadding = 16.dp,
-                )
-            }
-            Spacer(Modifier.height(bottomClearance))
-        }
-    }
-}
-
-/** Handle + title row. Portrait: tap or drag it to tuck the panel away / bring it back. */
-@Composable
-private fun DockHeader(state: SandboxPanelState, actions: SandboxActions, collapsible: Boolean) {
-    val c = ReefTheme.colors
-    val reduce = ReefTheme.reduceMotion
-    var m = Modifier.fillMaxWidth()
-    if (collapsible) {
-        val expanded by rememberUpdatedState(state.expanded)
-        val toggle by rememberUpdatedState(actions.onToggleExpanded)
-        m = m
-            .pointerInput(Unit) {
-                var dy = 0f
-                val threshold = 24.dp.toPx()
-                detectVerticalDragGestures(
-                    onDragStart = { dy = 0f },
-                    onDragEnd = { if ((dy > threshold && expanded) || (dy < -threshold && !expanded)) toggle() },
-                    onVerticalDrag = { change, amount -> change.consume(); dy += amount },
-                )
-            }
-            .clickable(
-                onClickLabel = if (state.expanded) "Tuck the sandbox controls away" else "Show the sandbox controls",
-                onClick = actions.onToggleExpanded,
-            )
-    }
-    Column(m.padding(start = 8.dp, end = 8.dp, top = if (collapsible) 6.dp else 10.dp)) {
-        if (collapsible) {
-            // the grab handle (UI_STYLE §6.7)
-            Box(
-                Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 36.dp, height = 4.dp)
-                    .clip(ReefShapes.pill)
-                    .background(c.textTertiary),
-            )
-        }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (collapsible) {
-                val turn by animateFloatAsState(if (state.expanded) 180f else 0f, ReefMotion.spring(reduce), label = "chevron")
-                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    Glyph(ReefGlyphs.chevronUp, tint = c.textSecondary, modifier = Modifier.graphicsLayer { rotationZ = turn })
-                }
-            } else Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Glyph(ReefGlyphs.bucket, size = 18.dp, tint = c.coral, accent = c.coralSoft)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Sandbox", style = MaterialTheme.typography.titleMedium, color = c.coral, modifier = Modifier.semantics { heading() })
-                }
-                val tone by animateColorAsState(
-                    if (state.fish.worried) c.cautionText else c.textSecondary, ReefMotion.tween(reduce), label = "fishTone",
-                )
-                Text(
-                    "Pretend tank · " + state.fish.text,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = tone,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            RoundIconButton(ReefGlyphs.help, "Sandbox tips", actions.onHelp)
-        }
-    }
-}
-
-/** Tab row: glyph + plain-words label. Tapping a tab while the panel is tucked away opens it (the screen decides). */
-@Composable
-private fun CategoryTabs(selected: SandboxCategory, onSelect: (SandboxCategory) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(top = 2.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SandboxFriendly.tabs.forEach { cat ->
-            val sel = cat == selected
-            val c = ReefTheme.colors
-            val reduce = ReefTheme.reduceMotion
-            // the selected tab's glyph grows a touch, so the eye lands on it
-            val grow by animateFloatAsState(if (sel) 1.15f else 1f, ReefMotion.bouncy(reduce), label = "tabGlyph")
-            ReefChip(
-                text = SandboxFriendly.tabLabel(cat),
-                selected = sel,
-                onClick = { onSelect(cat) },
-                modifier = Modifier
-                    .heightIn(min = 44.dp)
-                    .semantics { role = Role.Tab; this.selected = sel },
-                leading = {
-                    Glyph(
-                        SandboxFriendly.tabGlyph(cat), size = 20.dp,
-                        tint = if (sel) c.primaryBright else c.textSecondary,
-                        accent = if (sel) c.coralSoft else c.textTertiary,
-                        modifier = Modifier.graphicsLayer { scaleX = grow; scaleY = grow },
-                    )
-                },
-            )
-        }
-    }
-}
-
-/** The scrolling body: speed, then the tab's content (crossfading on tab change), then the big Reset button. */
-@Composable
-private fun DockBody(state: SandboxPanelState, actions: SandboxActions, scroll: ScrollState, modifier: Modifier, endPadding: Dp) {
-    val reduce = ReefTheme.reduceMotion
-    Column(
-        modifier
-            .fillMaxWidth()
-            .verticalScroll(scroll)
-            .padding(horizontal = 16.dp)
-            .padding(top = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        SpeedSelector(state, actions)
-        val modes = SandboxControlMode.enabled
-        if (modes.size > 1 && state.category in SliderTabs) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("How sliders change things", style = MaterialTheme.typography.labelMedium, color = ReefTheme.colors.textSecondary)
-                SegmentedPills(
-                    options = modes.map { it.label },
-                    selected = modes.indexOf(state.controlMode).coerceAtLeast(0),
-                    onSelect = { actions.onControlMode(modes[it]) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-        AnimatedVisibility(
-            state.activePreset != null,
-            enter = fadeIn(liveSpec(reduce)) + expandVertically(liveSpec(reduce)),
-            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + shrinkVertically(liveSpec(reduce)),
-        ) {
-            state.activePreset?.let { PresetBanner(it, actions.onDismissPreset) }
-        }
-        Crossfade(targetState = state.category, animationSpec = liveSpec(reduce, ReefMotion.FAST, crossfade = true), label = "sandboxTab") { cat ->
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                TabIntro(cat)
-                when (cat) {
-                    SandboxCategory.EVENTS -> EventsContent(state, actions)
-                    SandboxCategory.PESTS -> PestsContent(state, actions)
-                    SandboxCategory.STOCK -> StockGallery(state.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
-                    else -> ParamsContent(state, actions, cat)
-                }
-                ResetTankButton(actions.onReset)
-            }
-        }
-        Spacer(Modifier.height(endPadding))
-    }
-}
-
-/** Tabs whose sliders the Step / Ramp / Spike selector applies to. */
-private val SliderTabs = setOf(SandboxCategory.WATER, SandboxCategory.CHEMISTRY, SandboxCategory.NUTRIENTS, SandboxCategory.LIGHT_FLOW)
+// ---------------------------------------------------------------- shared top bits
 
 @Composable
-private fun SpeedSelector(state: SandboxPanelState, actions: SandboxActions) {
+internal fun SpeedSelector(state: SandboxPanelState, actions: SandboxActions) {
     val c = ReefTheme.colors
     val reduce = ReefTheme.reduceMotion
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -414,46 +209,19 @@ private fun SpeedSelector(state: SandboxPanelState, actions: SandboxActions) {
 }
 
 @Composable
-private fun TabIntro(cat: SandboxCategory) {
-    val c = ReefTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        GlyphBadge(SandboxFriendly.tabGlyph(cat), c.coralSoft, accent = c.coral)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(SandboxFriendly.tabLabel(cat), style = MaterialTheme.typography.titleMedium, color = c.text, modifier = Modifier.semantics { heading() })
-            Text(SandboxFriendly.tabHelp(cat), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
-        }
-    }
-}
-
-/** Full-width Reset at the end of every tab; the screen asks before it wipes anything. */
-@Composable
-private fun ResetTankButton(onReset: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        ReefButton("Reset tank", onReset, Modifier.fillMaxWidth(), kind = ButtonKind.OUTLINED, glyph = ReefGlyphs.reset)
-        Text(
-            "Puts the sandbox back to match your real tank. Your real tank never changes here.",
-            style = MaterialTheme.typography.labelSmall,
-            color = ReefTheme.colors.textTertiary,
-        )
-    }
-}
-
-@Composable
 private fun PresetBanner(p: SandboxPreset, onDismiss: () -> Unit) {
-    val c = ReefTheme.colors
-    GlassCard(
+    val s = LiveTheme.style
+    LivePanel(
         modifier = Modifier.fillMaxWidth(),
-        shape = ReefShapes.tile,
-        tint = c.coral,
+        tint = s.tone(LiveCategory.TROUBLE),
         contentPadding = PaddingValues(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Glyph(SandboxFriendly.presetGlyph(p), size = 24.dp, tint = c.coral, accent = c.coralSoft)
+            Glyph(SandboxFriendly.presetGlyph(p), size = 26.dp, tint = s.label, accent = s.tone(LiveCategory.TROUBLE))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("${p.label} is happening", style = MaterialTheme.typography.labelLarge, color = c.text)
-                Text(p.hint, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                Text("${p.label} is happening", style = s.buttonText, color = s.label)
+                Text(p.hint, style = MaterialTheme.typography.labelMedium, color = s.labelDim)
             }
             RoundIconButton(ReefGlyphs.close, "Dismiss", onDismiss)
         }
@@ -528,7 +296,7 @@ private fun SubHeader(text: String, glyph: ReefGlyph? = null) {
             Glyph(glyph, size = 22.dp, tint = c.coralSoft, accent = c.coral)
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = MaterialTheme.typography.titleMedium, color = c.textSecondary, modifier = Modifier.semantics { heading() })
+        Text(text, style = LiveTheme.style.titleText.copy(fontSize = 16.sp), color = LiveTheme.style.label, modifier = Modifier.semantics { heading() })
     }
 }
 
@@ -597,14 +365,14 @@ private fun QuickRow(title: String, items: List<Quick>) {
 // ---------------------------------------------------------------- parameter tabs
 
 @Composable
-private fun ParamsContent(state: SandboxPanelState, actions: SandboxActions, cat: SandboxCategory) {
+internal fun ParamsContent(state: SandboxPanelState, actions: SandboxActions, cat: SandboxCategory, quick: Boolean = false) {
     val defs = SandboxParams.inCategory(cat)
     val (live, pending) = defs.partition { it.supported }
     fun bump(id: String, delta: Double) {
         val def = SandboxParams.byId(id) ?: return
         actions.onSet(def, def.spec.snap(def.valueIn(state.now) + delta))
     }
-    when (cat) {
+    if (quick) when (cat) {
         SandboxCategory.WATER -> QuickRow(
             "Quick changes",
             listOf(
@@ -702,106 +470,51 @@ private fun LightsRow(state: SandboxPanelState, onLights: (Boolean?) -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------- pests tab
+// ---------------------------------------------------------------- "More" pages (grown-up controls)
 
-/** "Bugs & medicine": one-tap actions first, then the equipment and scenario switches. */
-@OptIn(ExperimentalLayoutApi::class)
+/** How sliders apply their change (set / step / ramp / spike), above every slider page. */
 @Composable
-private fun PestsContent(state: SandboxPanelState, actions: SandboxActions) {
-    val c = ReefTheme.colors
-    SubHeader("Pest anemones (aiptasia)", ReefGlyphs.pestAnemone)
-    Helper("Weedy little anemones that sting corals. Peppermint shrimp and Berghia sea slugs eat them.")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ReefButton("Add one", actions.onAddAiptasia, kind = ButtonKind.TONAL, glyph = ReefGlyphs.plus)
-        ReefButton("Remove one", actions.onRemoveAiptasia, kind = ButtonKind.OUTLINED, glyph = ReefGlyphs.minus)
-        ReefButton("Add peppermint shrimp", { actions.onAddPestControl(PestController.PEPPERMINT_SHRIMP) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.shrimp)
-        ReefButton("Add Berghia slugs", { actions.onAddPestControl(PestController.BERGHIA) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.slug)
+internal fun ControlModeSelector(state: SandboxPanelState, actions: SandboxActions) {
+    val modes = SandboxControlMode.enabled
+    if (modes.size <= 1) return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("How sliders change things", style = MaterialTheme.typography.labelMedium, color = LiveTheme.style.labelDim)
+        SegmentedPills(
+            options = modes.map { it.label },
+            selected = modes.indexOf(state.controlMode).coerceAtLeast(0),
+            onSelect = { actions.onControlMode(modes[it]) },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
-
-    SubHeader("Medicine", ReefGlyphs.bottle)
-    Helper("Start gives every fish the treatment for its usual length. UV runs until you stop it.")
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        TreatmentKind.values().forEach { k ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Glyph(SandboxFriendly.treatmentGlyph(k), size = 24.dp, tint = c.textSecondary)
-                Spacer(Modifier.width(10.dp))
-                Text(k.label, style = MaterialTheme.typography.titleSmall, color = c.text, modifier = Modifier.weight(1f), maxLines = 2)
-                ReefButton("Start", { actions.onStartTreatment(k) }, kind = ButtonKind.TONAL)
-                Spacer(Modifier.width(8.dp))
-                ReefButton("Stop", { actions.onStopTreatment(k) }, kind = ButtonKind.OUTLINED)
-            }
-        }
-    }
-
-    SubHeader("Make a fish sick (test)", ReefGlyphs.flask)
-    Helper("A random fish catches it, so you can practise spotting and treating it. You will be asked first.")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Disease.values().forEach { d ->
-            ReefChip(SandboxFriendly.diseaseLabel(d), selected = false, onClick = { actions.onInfect(d) }, modifier = Modifier.heightIn(min = 48.dp))
-        }
-    }
-
-    SubHeader("Cleaning jobs", ReefGlyphs.sock)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ReefButton("Change filter sock", { actions.onMaintain(MaintenanceTask.CHANGE_SOCK) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.sock)
-        ReefButton("Fresh carbon", { actions.onMaintain(MaintenanceTask.REPLACE_CARBON) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.carbon)
-        ReefButton("Trim algae garden", { actions.onMaintain(MaintenanceTask.HARVEST_MACRO) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.refugium)
-        ReefButton("Add spare shells", actions.onAddSpareShells, kind = ButtonKind.TONAL, glyph = ReefGlyphs.shell)
-    }
-
-    SubHeader("Equipment & test switches")
-    ParamsContent(state, actions, SandboxCategory.PESTS)
 }
 
-// ---------------------------------------------------------------- events tab
+/** Water card, More: every water, mineral and waste slider. */
+@Composable
+internal fun WaterMore(state: SandboxPanelState, actions: SandboxActions) {
+    ControlModeSelector(state, actions)
+    SubHeader("Water", ReefGlyphs.droplet)
+    ParamsContent(state, actions, SandboxCategory.WATER)
+    SubHeader("Minerals", ReefGlyphs.flask)
+    ParamsContent(state, actions, SandboxCategory.CHEMISTRY)
+    SubHeader("Waste & algae food", ReefGlyphs.crumbs)
+    ParamsContent(state, actions, SandboxCategory.NUTRIENTS)
+    ExtraDoses(actions)
+}
 
+/** One-tap doses of waste nutrients (the minerals have big tiles on the card). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
-    val c = ReefTheme.colors
-    SubHeader("What if...?", ReefGlyphs.whatIf)
-    Helper("Tap one to make it happen in the sandbox, then speed up time to watch.")
-    SandboxPreset.values().toList().chunked(2).forEach { pair ->
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            pair.forEach { p -> PresetCard(p, active = p == state.activePreset, Modifier.weight(1f)) { actions.onPreset(p) } }
-            if (pair.size == 1) Spacer(Modifier.weight(1f))
-        }
-    }
-
-    SubHeader("Do something", ReefGlyphs.touch)
-    Text("Drop in a snack (the whole shelf is under Waste & food):", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-    FoodTray(onFeed = actions.onFeed, kinds = favouriteFoods, compact = true)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ReefButton("Tap the glass", actions.onTapGlass, kind = ButtonKind.TONAL, glyph = ReefGlyphs.touch)
-        ReefButton("Small water change (10%)", { actions.onWaterChange(0.10) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.waveSparkle)
-        ReefButton("Big water change (25%)", { actions.onWaterChange(0.25) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.waveSparkle)
-    }
-
-    SubHeader("Fast-forward test", ReefGlyphs.timelapse)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ReefButton(
-            if (state.timelapseStatus == null) "Run a time-lapse" else "Open time-lapse",
-            actions.onTimelapse, kind = ButtonKind.TONAL, glyph = ReefGlyphs.timelapse,
-        )
-        Text(
-            state.timelapseStatus ?: "See days or weeks of change in a few seconds, without touching this sandbox.",
-            style = MaterialTheme.typography.labelMedium,
-            color = c.textSecondary,
-            modifier = Modifier.weight(1f),
-        )
-    }
-
-    SubHeader("Add minerals or waste", ReefGlyphs.flask)
+private fun ExtraDoses(actions: SandboxActions) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         doseChips.forEach { d -> ReefChip(d.label, selected = false, onClick = { actions.onDose(d.paramId, d.delta) }, modifier = Modifier.heightIn(min = 48.dp)) }
     }
+}
 
-    SubHeader("Break or fix things", ReefGlyphs.plugOff)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ReefButton("Heater breaks", { actions.onHeater(false) }, kind = ButtonKind.DESTRUCTIVE, glyph = ReefGlyphs.plugOff)
-        ReefButton("Fix the heater", { actions.onHeater(true) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.flame)
-        ReefButton("Pumps stop tonight (23:00–05:00)", actions.onPumpFailTonight, kind = ButtonKind.DESTRUCTIVE, glyph = ReefGlyphs.powerhead)
-    }
+/** Light & flow card, More: lamp and pump sliders, colour channels, predation and the test switches. */
+@Composable
+internal fun LightMore(state: SandboxPanelState, actions: SandboxActions) {
+    ControlModeSelector(state, actions)
+    ParamsContent(state, actions, SandboxCategory.LIGHT_FLOW)
     SwitchRow(
         title = "Fish can eat each other",
         on = state.predation,
@@ -810,14 +523,15 @@ private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
         explain = "Big hunters may eat small fish and shrimp. Turn it off to keep everyone safe while you test.",
         glyph = ReefGlyphs.fish,
     )
+    SubHeader("Test ideas")
+    SandboxParams.inCategory(SandboxCategory.PESTS).filter { it.id.startsWith("sc_") }.forEach { ParamRow(it, state, actions) }
+}
 
-    SubHeader("Slow vs sudden changes")
-    Helper("Fish get used to slow changes over days; sudden jumps stress them. Pick Step, Ramp or Spike above the sliders.")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ReefButton("Let fish get used to now", actions.onAcclimateAll, kind = ButtonKind.TONAL, glyph = ReefGlyphs.heart)
-        ReefButton("Move the rocks", actions.onRearrangeRock, kind = ButtonKind.TONAL, glyph = ReefGlyphs.rocks)
-    }
-
+/** Add life card, More: the selected animal (size, take out) and quick "another one" chips. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LifeMore(state: SandboxPanelState, actions: SandboxActions) {
+    val c = ReefTheme.colors
     SubHeader("One animal", ReefGlyphs.fish)
     val sel = state.selected
     if (sel == null) {
@@ -831,64 +545,120 @@ private fun EventsContent(state: SandboxPanelState, actions: SandboxActions) {
         )
         ReefButton("Take out ${sel.name}", { actions.onRemove(sel.id) }, kind = ButtonKind.DESTRUCTIVE, glyph = ReefGlyphs.trash)
     }
-    ReefButton("Add more life", { actions.onCategory(SandboxCategory.STOCK) }, kind = ButtonKind.TONAL, glyph = ReefGlyphs.plus)
     if (state.addable.isNotEmpty()) {
-        Text("Add another", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+        Text("Another one of these", style = MaterialTheme.typography.labelMedium, color = LiveTheme.style.labelDim)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.addable.forEach { a -> ReefChip("+ ${a.name}", selected = false, onClick = { actions.onAdd(a) }, modifier = Modifier.heightIn(min = 48.dp)) }
         }
     }
+    SubHeader("More tiny life", ReefGlyphs.microscope)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(MicroAction.DOSE_TIGRIOPUS, MicroAction.DOSE_TIGGER, MicroAction.DOSE_ROTIFERS, MicroAction.DOSE_AMPHIPODS, MicroAction.DOSE_MYSIDS, MicroAction.LIVE_ROCK).forEach { m ->
+            ReefChip(m.label, selected = false, onClick = { actions.onMicro(m) }, modifier = Modifier.heightIn(min = 48.dp))
+        }
+    }
+}
+
+/** Clean card, More: every medicine with Start / Stop, and the pest treatments. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun CleanMore(actions: SandboxActions) {
+    val c = ReefTheme.colors
+    SubHeader("Medicine", ReefGlyphs.bottle)
+    Helper("Start gives every fish the treatment for its usual length. UV runs until you stop it.")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TreatmentKind.values().forEach { k ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Glyph(SandboxFriendly.treatmentGlyph(k), size = 24.dp, tint = c.textSecondary)
+                Spacer(Modifier.width(10.dp))
+                Text(k.label, style = MaterialTheme.typography.titleSmall, color = LiveTheme.style.label, modifier = Modifier.weight(1f), maxLines = 2)
+                ReefButton("Start", { actions.onStartTreatment(k) }, kind = ButtonKind.TONAL)
+                Spacer(Modifier.width(8.dp))
+                ReefButton("Stop", { actions.onStopTreatment(k) }, kind = ButtonKind.OUTLINED)
+            }
+        }
+    }
+    SubHeader("Bug treatments", ReefGlyphs.flask)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(MicroAction.TREAT_FLATWORMS, MicroAction.TREAT_FENBENDAZOLE, MicroAction.TREAT_PRAZIQUANTEL).forEach { m ->
+            ReefChip(m.label, selected = false, onClick = { actions.onMicro(m) }, modifier = Modifier.heightIn(min = 48.dp))
+        }
+        ReefButton("Remove a pest anemone", actions.onRemoveAiptasia, kind = ButtonKind.OUTLINED, glyph = ReefGlyphs.minus)
+    }
+}
+
+/** Trouble card, More: what each what-if does, and every disease. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun TroubleMore(state: SandboxPanelState, actions: SandboxActions) {
+    state.activePreset?.let { PresetBanner(it, actions.onDismissPreset) }
+    Helper("Tap one to make it happen in the sandbox, then speed up time to watch.")
+    SandboxPreset.values().toList().chunked(2).forEach { pair ->
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            pair.forEach { p -> PresetCard(p, active = p == state.activePreset, Modifier.weight(1f)) { actions.onPreset(p) } }
+            if (pair.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+    SubHeader("Make a fish sick (test)", ReefGlyphs.flask)
+    Helper("A random fish catches it, so you can practise spotting and treating it. You will be asked first.")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Disease.values().forEach { d ->
+            ReefChip(SandboxFriendly.diseaseLabel(d), selected = false, onClick = { actions.onInfect(d) }, modifier = Modifier.heightIn(min = 48.dp))
+        }
+    }
+    SubHeader("Slow vs sudden changes")
+    Helper("Fish get used to slow changes over days; sudden jumps stress them. Pick Step, Ramp or Spike above the sliders.")
 }
 
 @Composable
 private fun PresetCard(p: SandboxPreset, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val c = ReefTheme.colors
-    GlassCard(
+    val s = LiveTheme.style
+    LivePanel(
         modifier = modifier.fillMaxHeight().semantics { role = Role.Button; stateDescription = if (active) "Happening now" else "" },
-        shape = ReefShapes.tile,
-        tint = if (active) c.coral else null,
+        tint = if (active) s.tone(LiveCategory.TROUBLE) else null,
         contentPadding = PaddingValues(12.dp),
         onClick = onClick,
     ) {
-        GlyphBadge(SandboxFriendly.presetGlyph(p), if (active) c.coral else c.coralSoft, accent = if (active) c.coralSoft else c.coral)
+        GlyphBadge(SandboxFriendly.presetGlyph(p), s.tone(LiveCategory.TROUBLE), accent = Color.White)
         Spacer(Modifier.height(8.dp))
-        Text(p.label, style = MaterialTheme.typography.labelLarge, color = c.text)
-        Text(p.blurb, style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+        Text(p.label, style = s.buttonText, color = s.label)
+        Text(p.blurb, style = MaterialTheme.typography.labelSmall, color = s.labelDim)
     }
 }
 
 // ---------------------------------------------------------------- first-time tips
 
 /**
- * Short first-time tips for the sandbox, floating over the tank. Shown once (remembered in settings) and again from the
- * (?) button in the panel header.
+ * First-time tips for the pretend tank, told by Hermie on a live panel. Shown once (remembered in settings) and again
+ * from More → Tips.
  */
 @Composable
 fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    val c = ReefTheme.colors
-    GlassCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = ReefShapes.tile,
-        tint = c.coral,
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-    ) {
-        Text("This is your pretend tank", style = MaterialTheme.typography.titleSmall, color = c.text, modifier = Modifier.semantics { heading() })
+    val s = LiveTheme.style
+    val reduce = ReefTheme.reduceMotion
+    val hop = remember { androidx.compose.animation.core.Animatable(0f) }
+    LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            HermieArt(HermieMood.EXCITED, hop, reduce, Modifier.size(56.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("This is your pretend tank!", style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
+        }
         Spacer(Modifier.height(6.dp))
         listOf(
-            ReefGlyphs.touch to "Pick a tab, then slide or tap to change things. Your real tank never changes.",
-            ReefGlyphs.chevronUp to "Tap or drag the panel's handle to tuck it away. It also tucks away while you swipe the tank.",
+            ReefGlyphs.touch to "Tap a big bubble, then a tile. Watch it happen in the tank. Your real tank never changes.",
+            ReefGlyphs.whatIf to "Trouble breaks things on purpose. Speed up time in More to see what happens.",
             ReefGlyphs.eye to "Tap empty water to hide every button. Tap again to bring them back.",
-            ReefGlyphs.feedTin to "Tap the food tin to open the food tray and drop a snack in.",
-            ReefGlyphs.reset to "Made a mess? Reset tank puts it all back.",
+            ReefGlyphs.sparkleTip to "Each card has a More button with the grown-up sliders.",
+            ReefGlyphs.reset to "Made a mess? More has a big Reset button.",
         ).forEach { (glyph, text) ->
             Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                Glyph(glyph, size = 20.dp, tint = c.coralSoft, accent = c.coral)
+                Glyph(glyph, size = 20.dp, tint = s.label, accent = Candy.orange)
                 Spacer(Modifier.width(10.dp))
-                Text(text, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                Text(text, style = MaterialTheme.typography.bodySmall, color = s.labelDim)
             }
         }
         Spacer(Modifier.height(8.dp))
-        ReefButton("Got it", onDismiss, Modifier.align(Alignment.End), kind = ButtonKind.CORAL)
+        LivePill("Got it", onDismiss, Modifier.align(Alignment.End), tone = Candy.orange)
     }
 }
 
@@ -896,31 +666,29 @@ fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
 
 private val previewReading = TankReading(WaterState(tempC = 29.4, no3 = 32.0, po4 = 0.21), lightPct = 100.0, flowPct = 100.0)
 private val previewReal = TankReading(WaterState(), lightPct = 100.0, flowPct = 100.0)
-private val previewPanel = SandboxPanelState(
+internal val previewPanel = SandboxPanelState(
     now = previewReading, real = previewReal, speed = 240.0,
     fish = FishSummary(alive = 7, stressed = 2), activePreset = SandboxPreset.HEATER_STUCK,
 )
 
-@Preview(name = "Sandbox dock · Abyss · 1.3x", widthDp = 393, heightDp = 520, showBackground = true, fontScale = 1.3f)
+@Preview(name = "Water · More · Abyss · 1.3x", widthDp = 360, heightDp = 900, showBackground = true, fontScale = 1.3f)
 @Composable
-private fun SandboxDockPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { SandboxDock(previewPanel, SandboxActions(), Modifier.fillMaxWidth(), bodyHeight = 360.dp) }
-}
-
-@Preview(name = "Sandbox dock · Events · Lagoon", widthDp = 393, heightDp = 700, showBackground = true)
-@Composable
-private fun SandboxEventsPreview() = ReefLiveTheme(darkTheme = false, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) {
-        SandboxDock(
-            previewPanel.copy(category = SandboxCategory.EVENTS, selected = SelectedAnimalUi("f1", "Pixel", 6.5),
-                addable = listOf(AddableSpecies("ocellaris", "Ocellaris clownfish", 6.0))),
-            SandboxActions(), Modifier.fillMaxWidth(), bodyHeight = 560.dp,
-        )
+private fun WaterMorePreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
+    Column(Modifier.background(ReefTheme.colors.bg).padding(12.dp).livePanel(LiveTheme.style).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        WaterMore(previewPanel, SandboxActions())
     }
 }
 
-@Preview(name = "Sandbox dock · collapsed", widthDp = 393, heightDp = 200, showBackground = true)
+@Preview(name = "Trouble · More · Lagoon", widthDp = 360, heightDp = 800, showBackground = true)
 @Composable
-private fun SandboxCollapsedPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { SandboxDock(previewPanel.copy(expanded = false), SandboxActions(), Modifier.fillMaxWidth()) }
+private fun TroubleMorePreview() = ReefLiveTheme(darkTheme = false, reduceMotion = true) {
+    Column(Modifier.background(ReefTheme.colors.bg).padding(12.dp).livePanel(LiveTheme.style).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TroubleMore(previewPanel, SandboxActions())
+    }
+}
+
+@Preview(name = "Tips", widthDp = 360, heightDp = 360, showBackground = true)
+@Composable
+private fun TipsPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
+    Box(Modifier.background(ReefTheme.colors.bg).padding(12.dp)) { SandboxTipsCard(onDismiss = {}) }
 }

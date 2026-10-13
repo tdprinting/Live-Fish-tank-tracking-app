@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,15 +54,16 @@ fun FishCard(
     modifier: Modifier = Modifier,
 ) {
     val c = ReefTheme.colors
-    GlassCard(modifier.fillMaxWidth()) {
+    val s = LiveTheme.style
+    LivePanel(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(state.name, style = MaterialTheme.typography.headlineSmall, color = c.text, maxLines = 1)
+                Text(state.name, style = s.titleText, color = s.label, maxLines = 1)
                 Text(state.speciesName, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, maxLines = 1)
             }
             StatusPill(moodStatus(state), label = state.mood)
             Spacer(Modifier.width(4.dp))
-            GlassIconButton(Icons.Rounded.Close, "Close fish card", onClose)
+            CloseDot(onClose, "Close fish card")
         }
         Spacer(Modifier.height(10.dp))
         Text(state.behavior, style = MaterialTheme.typography.bodyMedium, color = c.text)
@@ -87,7 +89,10 @@ fun FishCard(
             }
         }
         Spacer(Modifier.height(14.dp))
-        ReefButton("Follow", onFollow, Modifier.fillMaxWidth(), kind = ButtonKind.FILLED, icon = Icons.Rounded.CenterFocusStrong, enabled = state.alive)
+        LivePill(
+            "Follow", if (state.alive) onFollow else null, Modifier.fillMaxWidth(), tone = Candy.cyan, selected = state.alive,
+            leading = { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, tint = s.onCandy) },
+        )
     }
 }
 

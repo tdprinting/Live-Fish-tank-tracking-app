@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -125,26 +126,26 @@ fun MicroscopeView(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Microscope", style = MaterialTheme.typography.titleMedium, color = c.text)
+                Text("Microscope", style = LiveTheme.style.titleText, color = LiveTheme.style.label)
                 Text(
                     "${zoom.label} · ${fieldLabel(zoom)} field · " +
                         (if (zoom == MicroZoom.X40) "bright-field lamp" else if (state.night) "night, torch" else "day"),
                     style = MaterialTheme.typography.labelMedium, color = c.textSecondary,
                 )
             }
-            GlassIconButton(Icons.Rounded.Close, "Close microscope", onClose)
+            CloseDot(onClose, "Close microscope")
         }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MicroScene.entries.forEach { s -> ReefChip(text = s.label, selected = s == scene, onClick = { scene = s }) }
+            MicroScene.entries.forEach { s -> LivePill(s.label, { scene = s }, tone = Candy.cyan, selected = s == scene, role = Role.Tab) }
             Spacer(Modifier.width(4.dp))
-            MicroZoom.entries.forEach { z -> ReefChip(text = z.label, selected = z == zoom, onClick = { zoom = z }, accent = c.coral) }
+            MicroZoom.entries.forEach { z -> LivePill(z.label, { zoom = z }, tone = Candy.orange, selected = z == zoom, role = Role.Tab) }
         }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().weight(1f).clip(ReefShapes.card).border(1.dp, c.glassBorder, ReefShapes.card),
+            Modifier.fillMaxWidth().weight(1f).clip(ReefShapes.card).border(LiveTheme.style.outlineWidth, LiveTheme.style.outline, ReefShapes.card),
         ) {
             // keep the field's area at the §5.2 value whatever the view's shape, so counts per field stay honest
             val aspect = if (maxWidth.value > 0f) (maxHeight / maxWidth).coerceIn(0.2f, 4f) else NOMINAL_ASPECT
@@ -180,7 +181,7 @@ fun MicroscopeView(
         MicroLegend(state, counts, zoom, Modifier.fillMaxWidth())
         onAction?.let { act ->
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MicroAction.entries.forEach { a -> ReefChip(text = a.label, selected = false, onClick = { act(a) }, accent = c.coral) }
+                MicroAction.entries.forEach { a -> LivePill(a.label, { act(a) }, tone = Candy.green) }
             }
         }
     }
@@ -190,7 +191,7 @@ fun MicroscopeView(
 @Composable
 private fun MicroLegend(state: MicrofaunaState, counts: List<MicroCount>, zoom: MicroZoom, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    GlassCard(modifier, contentPadding = PaddingValues(12.dp)) {
+    LivePanel(modifier, contentPadding = PaddingValues(12.dp)) {
         Column(Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val groups = MicroGroup.entries
                 .filter { it != MicroGroup.PHYTO && state.present[it.ordinal] && state.total(it) >= 1.0 }

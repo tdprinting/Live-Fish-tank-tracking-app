@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,9 @@ import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 
+/** Widest the floating bar gets (wide / landscape screens centre it). */
+val BottomBarMaxWidth = 560.dp
+
 /**
  * Floating glass pill navigation (UI_STYLE §6.1): 64 dp tall, 16 dp from the edges. The active item gets a
  * filled icon in lagoonBright on a lagoon @ 20 % pill plus its label; labels of inactive items stay hidden.
@@ -63,10 +67,12 @@ fun BottomBar(
             else listOf(Color.White.copy(alpha = 0.86f), c.bgMid.copy(alpha = 0.9f)),
         )
     }
-    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+    // capped at BottomBarMaxWidth and centred, so in landscape the Live tank's side rail can run down beside it
+    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp), contentAlignment = Alignment.Center) {
         val narrow = maxWidth < 344.dp
         Row(
             Modifier
+                .widthIn(max = BottomBarMaxWidth)
                 .fillMaxWidth()
                 .height(64.dp)
                 .shadow(18.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)

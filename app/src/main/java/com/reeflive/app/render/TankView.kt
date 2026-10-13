@@ -42,13 +42,15 @@ fun TankView(
     onScrape: (GlassStroke) -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
+    /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
+    projection: TankProjection? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow, projection = projection,
     )
 }
 
@@ -74,6 +76,7 @@ fun TankView(
     onScrape: (GlassStroke) -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
+    projection: TankProjection? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -103,6 +106,7 @@ fun TankView(
                     TankGlView(ctx, quality).also { v ->
                         v.listener = listener
                         v.setSnapshotProvider { currentProvider() }
+                        v.projection = projection
                         view = v
                     }
                 },
@@ -111,6 +115,7 @@ fun TankView(
                     v.follow(followId)
                     v.demoWhenEmpty = demoWhenEmpty
                     v.setCleaning(cleaning)
+                    v.projection = projection
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )
