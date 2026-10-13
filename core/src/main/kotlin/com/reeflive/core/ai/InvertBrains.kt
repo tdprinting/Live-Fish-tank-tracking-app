@@ -3,6 +3,8 @@ package com.reeflive.core.ai
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.Anchor
 import com.reeflive.core.sim.BrainKind
+import com.reeflive.core.sim.BrittleArms
+import com.reeflive.core.sim.CrabLegs
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
 import com.reeflive.core.sim.SimEvent
@@ -483,90 +485,214 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 }
 
 // =====================================================================================
-// Black brittle star: hides under rock by day (arms poke out), roams at night, races to food
+// Black brittle star (Ophiocoma erinaceus, research 17 §2): under rock by day with 1–3 arm tips out, rows out at night
+// or on a food scent (arms snake out first, then the disc), loops food in along an arm, runs for shelter when
+// disturbed, sheds an arm tip when bitten and regrows it. The disc never turns: BrittleArms reassigns the lead arm.
 // =====================================================================================
 class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(95.0, 4.0, 15.0))
+    /** The five-arm gait rig (sim/LimbRig.kt); the behaviours only say which arms reach where. */
+    val arms: BrittleArms = o.limbRig as BrittleArms
+    /** Arm tips this individual leaves out of its hide by day (1–3; research 17 §2.3). */
+    val tipsOut: Int = 1 + Math.floorMod(o.id.hashCode(), 3)
 
     init {
         install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract())
     }
 
-    /** Lead-arm switches while travelling (coordinated arm roles; research 11 §4). */
-    var leadArmSwitches = 0; private set
-    /** Food items pulled in along an arm while the disc stayed sheltered. */
+    /** Centre-arm reassignments while travelling (coordinated arm roles; Astley 2012). */
+    val leadArmSwitches: Int get() = arms.leadSwitches
+    /** Food items looped by an arm and passed to the mouth while the disc stayed put. */
     var armFeeds = 0; private set
-    private var lastHeading = Vec3.ZERO
+    /** Emergences where the arms were already out (mean reach > 0.75) before the disc left the hide. */
+    var armsFirstEmergences = 0; private set
+    var emergences = 0; private set
+    /** Arms shed to an attacker (autotomy). */
+    var autotomies = 0; private set
+    private var mouthDir: Vec3? = null
 
     override fun preTick(c: Ctx) {
         super.preTick(c)
-        if (lastHeading != Vec3.ZERO && Vec3.angle(lastHeading, o.heading) > 0.9) leadArmSwitches++
-        lastHeading = o.heading
+        arms.regrow(c.dt, o.lengthCm)
+    }
+
+    /** The disc keeps whatever heading it has (a brittle star has no front to turn). */
+    private fun flatHeading() = o.heading.horizontal().normalized(Vec3.X)
+
+    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.sandTopCm + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
+
+    /** The open side of the hide (most clearance, a little toward the front glass), where the day arm tips poke out. */
+    fun caveMouth(c: Ctx): Vec3 = mouthDir ?: run {
+        val r = restSpot(c, false).pos
+        var best = Vec3.Z
+        var bs = -1e9
+        for (i in 0 until 16) {
+            val a = 2 * PI * i / 16
+            val d = Vec3(kotlin.math.cos(a), 0.0, kotlin.math.sin(a))
+            val s = c.rock.sdf.dist(r + d * (0.4 * c.L)) + c.rock.sdf.dist(r + d * (0.2 * c.L)) + 0.3 * d.z
+            if (s > bs) { bs = s; best = d }
+        }
+        best.also { mouthDir = it }
     }
 
     inner class Roam : CrawlWander(this, { home }, 40.0, { c -> 0.55 * c.activity }, "Roaming") {
-        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.armGait = ARMS }
+        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.armGait = ARMS; arms.snake = 0.15 }
     }
-
-    /**
-     * Disc stays under the rock while one arm reaches out for food within [ARM_REACH] × length and passes it back to
-     * the mouth over 3–8 s (research 11 §4: an extended arm can be feeding, not travel).
-     */
-    inner class ArmFeed : Behavior("armfeed", "Reaching an arm out for food") {
-        private var f: FoodParticle? = null
-        private var pull = 5.0
-        override fun score(c: Ctx): Double {
-            if (c.o.hunger < 0.1) return 0.0
-            f = c.food.nearest(c.o.pos, ARM_REACH * c.L) { it.settled || it.pos.y < c.rock.sandTopCm + 3 }
-            return if (f != null) 0.9 else 0.0
-        }
-        override fun enter(c: Ctx) { pull = c.rng.range(3.0, 8.0) }
-        override fun update(c: Ctx, out: SteerIntent) {
-            val ff = f
-            if (ff == null || ff.eaten) { finished = true; return }
-            out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 1.0)   // the disc does not move
-            c.o.extension = 1.0
-            c.o.focusId = null
-            c.o.appendagePhase += c.dt * 1.5
-            if (elapsed > pull) { c.bite(ff); armFeeds++; finished = true }
-        }
-    }
-
-    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.sandTopCm + 0.4, home.z), Vec3.X, Vec3.Y, posture = 3)
 
     inner class HideUnder : Behavior("hide", "Hiding under rock") {
         override fun score(c: Ctx) = 0.65 * (1 - c.activity) + 0.1
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
             if (c.o.pos.distanceTo(r.pos) > 2.5) {
-                out.crawl = true; out.target = r.pos; out.speed = c.o.cruiseSpeed * 1.5; out.surfaceOffset = 0.4
+                out.crawl = true; out.armGait = ARMS; out.target = r.pos; out.speed = c.o.cruiseSpeed * 1.5; out.surfaceOffset = 0.4
                 c.o.extension = 1.0
                 return
             }
             out.rest(r, 1.0)
+            // disc wedged under the rock, 1–3 arm tips out of the mouth of the hide, sweeping slowly (research 17 §2.3)
+            arms.outArms = tipsOut; arms.outDir = caveMouth(c); arms.snake = 0.25
             c.o.extension = 0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)
         }
     }
 
-    inner class RaceToFood : Scavenge(this, 50.0, urgentAbove = 0.0, label = "Racing to food") {
-        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.armGait = ARMS; c.o.extension = 1.0 }
+    /**
+     * Arm feeding (research 17 §2.4): the disc stays put while the arm nearest the item reaches out, loops its tip
+     * round it and passes it back along the arm to the mouth (Chartok 1983: a particle moved 10 cm along an arm in
+     * 8–15 s). The food item itself rides the arm, so the renderer shows it travelling in.
+     */
+    inner class ArmFeed : Behavior("armfeed", "Looping food in with an arm") {
+        private var f: FoodParticle? = null
+        private var arm = -1
+        private var start = Vec3.ZERO
+        private var reachS = 2.0
+        private var carryS = 5.0
+        override val committed: Boolean get() = arm >= 0 && elapsed < reachS + carryS
+        override fun score(c: Ctx): Double {
+            if (c.o.hunger < 0.1) return 0.0
+            f = c.food.nearest(c.o.pos, ARM_REACH * c.L) { (it.settled || it.pos.y < c.rock.sandTopCm + 3) && (it.claimedBy == null || it.claimedBy == c.o.id) }
+            return if (f != null) 0.9 else 0.0
+        }
+        override fun enter(c: Ctx) { arm = -1 }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val ff = f
+            if (ff == null || ff.eaten) { finished = true; return }
+            out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 1.0)   // the disc does not move
+            c.o.extension = 1.0
+            c.o.focusId = null
+            if (arm < 0) {
+                arm = arms.nearestArm(c.o, ff.pos - c.o.pos)
+                start = ff.pos
+                val d = ff.pos.distanceTo(c.o.pos)
+                reachS = c.rng.range(1.5, 3.0) * (0.5 + d / (ARM_REACH * c.L))
+                carryS = c.rng.range(8.0, 15.0) * maxOf(d, 2.0) / 10.0
+            }
+            arms.feedArm = arm
+            arms.feedAt = start
+            arms.outDir = start - c.o.pos
+            if (elapsed < reachS) {
+                arms.feedLoop = com.reeflive.core.geom.smoothstep(0.4 * reachS, reachS, elapsed)
+                return
+            }
+            arms.feedLoop = 1.0
+            // held in the loop and passed mouthward along the arm
+            ff.claimedBy = c.o.id; ff.settled = true; ff.vel = Vec3.ZERO
+            val prog = ((elapsed - reachS) / carryS).coerceIn(0.0, 1.0)
+            ff.pos = start.lerp(c.o.pos + c.o.up * 0.3, prog)
+            if (prog >= 1.0) { c.bite(ff); armFeeds++; arm = -1; finished = true }
+        }
+        override fun exit(c: Ctx) { f?.let { if (!it.eaten && it.claimedBy == c.o.id) it.claimedBy = null }; arm = -1 }
+    }
+
+    /**
+     * Food rush on a scent (research 17 §2.4): the scent reaches it after [SCENT_DELAY_S] + distance / [SCENT_CM_S]
+     * (Chartok 1983: O. anaglyptica active about 2 min after food went in). From the hide the arms snake out toward
+     * the food first and the disc follows a few seconds later; then it rows over at burst speed.
+     */
+    inner class RaceToFood : Behavior("scavenge", "Racing to food") {
+        private var f: FoodParticle? = null
+        private var emergeUntil = 0.0
+        private var counted = true
+        private var lastSeen = 0.0
+        private fun smelt(c: Ctx, p: FoodParticle) = (p.settled || p.pos.y < c.rock.sandTopCm + 6) &&
+            c.t - p.bornAt > SCENT_DELAY_S + p.pos.distanceTo(c.o.pos) / SCENT_CM_S
+        override fun score(c: Ctx): Double {
+            if (c.o.hunger < 0.12) return 0.0
+            f = c.findFood(50.0, los = false) { smelt(c, it) }
+            return if (f != null) 0.55 + 0.35 * c.o.hunger else 0.0
+        }
+        override fun enter(c: Ctx) {
+            lastSeen = c.t
+            val hidden = c.o.posture == 3 || c.o.pos.distanceTo(restSpot(c, false).pos) < 3.0
+            emergeUntil = if (hidden) c.t + c.rng.range(5.0, 10.0) else c.t
+            counted = !hidden
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            var ff = f
+            if (ff == null || ff.eaten) { ff = c.findFood(50.0, los = false) { smelt(c, it) }; f = ff }
+            if (ff == null) { if (c.t - lastSeen > 3) finished = true; return }
+            lastSeen = c.t
+            arms.outDir = ff.pos - c.o.pos
+            if (c.t < emergeUntil) {
+                // arms first: the disc stays in the hide while all five arms snake out toward the scent
+                out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 1.0)
+                arms.snake = 1.0
+                return
+            }
+            if (!counted) { counted = true; emergences++; if (arms.meanReach > 0.75) armsFirstEmergences++ }
+            out.crawl = true; out.armGait = ARMS
+            out.target = ff.pos; out.speed = c.o.burstSpeed; out.urgency = 0.8; out.arriveRadius = 1.0
+            out.surfaceOffset = surfaceOffset(c)
+            arms.snake = 0.3
+            c.o.extension = 1.0
+            // within an arm's reach the arm takes over (ArmFeed)
+            if (c.o.pos.distanceTo(ff.pos) < 0.8 * ARM_REACH * c.L) finished = true
+        }
+    }
+
+    /**
+     * Disturbed (tap, attack, a predator close): every arm whips in, then, if it is out in the open, it rows back to
+     * its hide at burst speed (BIOS 2014: brittle stars in a lit arena ran for shelter under rocks).
+     */
+    inner class Retract : Behavior("retract", "Pulling arms in and fleeing") {
+        private var run = false
+        override val committed: Boolean get() = elapsed < 1.2 || run
+        override fun score(c: Ctx) = if (startledRecently || threat != null) 0.9 else 0.0
+        override fun enter(c: Ctx) { startleAt = -1e9; run = c.o.pos.distanceTo(restSpot(c, false).pos) > 4.0 }
+        override fun update(c: Ctx, out: SteerIntent) {
+            if (elapsed < 1.2 || !run) {
+                out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 1.0)
+                arms.withdraw = true
+                c.o.extension = max(0.1, c.o.extension - c.dt * 2)
+                if (!run && elapsed > 5) finished = true
+                return
+            }
+            val r = restSpot(c, false)
+            out.crawl = true; out.armGait = ARMS; out.target = r.pos; out.speed = c.o.burstSpeed; out.urgency = 0.9
+            out.arriveRadius = 1.0; out.surfaceOffset = 0.4
+            c.o.extension = 0.6
+            if (c.o.pos.distanceTo(r.pos) < 2.5 || elapsed > 90) { run = false; finished = true }
+        }
+        override fun exit(c: Ctx) { run = false }
+    }
+
+    /** Bitten: the arm nearest the attacker may break off distally (autotomy, research 17 §2.6) and regrows slowly. */
+    override fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: Organism?) {
+        super.onAttacked(c, from, mag, by)
+        if (mag >= 0.5 && c.rng.chance(AUTOTOMY_P)) {
+            arms.shed(arms.nearestArm(o, from - o.pos), c.rng.range(0.3, 0.7))
+            autotomies++
+        }
     }
 
     companion object {
         const val ARMS = 5
-        /** Arm reach as a fraction of total span (length is tip-to-tip; DESIGN ESTIMATE). */
+        /** Arm reach as a fraction of total span (disc radius + arm; research 17 §2.1: arms ≈ 4 disc diameters). */
         const val ARM_REACH = 0.45
-    }
-
-    inner class Retract : Behavior("retract", "Pulling arms in") {
-        override val committed: Boolean get() = elapsed < 5
-        override fun score(c: Ctx) = if (startledRecently || threat != null) 0.9 else 0.0
-        override fun enter(c: Ctx) { startleAt = -1e9 }
-        override fun update(c: Ctx, out: SteerIntent) {
-            out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 1.0)
-            c.o.extension = max(0.1, c.o.extension - c.dt * 2)
-            if (elapsed > 5) finished = true
-        }
+        /** Scent lag before a food rush: a fixed delay plus a slow plume (s, cm/s) [L]. */
+        const val SCENT_DELAY_S = 15.0
+        const val SCENT_CM_S = 0.5
+        /** Chance a survived bite costs an arm tip [L]; up to 47 % of wild O. echinata carry missing or regrowing arms [M]. */
+        const val AUTOTOMY_P = 0.5
     }
 }
 
@@ -948,9 +1074,11 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
 }
 
 // =====================================================================================
-// Sally Lightfoot crab (Percnon gibbesi): wedged in a rock crevice by day, darts out sideways,
-// grazes hair algae and scavenges; a large, underfed one may rarely grab a sleeping small fish
-// or a snail at night (SIMULATION §9.6).
+// Sally Lightfoot crab (Percnon gibbesi, research 17 §3): flattened into a rock crevice by day, out at dusk and night
+// on rock and glass, scuttling sideways on an alternating-tetrapod gait; mostly scrapes film and tears hair algae with
+// quick alternating claw strokes and scavenges; dashes back into its crevice at the slightest disturbance, extra shy
+// while its new shell hardens after a molt; a large, underfed one may rarely grab a sleeping small fish or a snail at
+// night (SIMULATION §9.6).
 // =====================================================================================
 class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     val crevice: Anchor? = c.rock.anchors[o.hostAnchor ?: "CREVICE_CRAB"] ?: c.rock.anchors["CREVICE_CRAB"] ?: c.rock.anchors["CAVE_SMALL"]
@@ -959,6 +1087,17 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })
     }
+
+    /** Legs and chelae (sim/LimbRig.kt): the behaviours say when the claws pick and when it presses flat. */
+    val legs: CrabLegs = o.limbRig as CrabLegs
+    /** Seconds spent grazing, for tests and the research note (research 17 §3.3: plant material is the bulk). */
+    var grazeSeconds = 0.0; private set
+    /** Dashes back to the crevice after a startle. */
+    var darts = 0; private set
+    private var lastDartAt = -1e9
+
+    /** Soft after a molt: hides more and grazes only next to its crevice for two days (research 17 §3.5) [L]. */
+    fun softShell(c: Ctx) = !c.o.molting && c.t - c.o.lastMoltAt < SOFT_SHELL_S
 
     /** Wedged flat into the crevice; posture 4 lets it sit inside the rock's skin (Steering skips SDF projection). */
     override fun restSpot(c: Ctx, night: Boolean): Rest = hangPose(c, crevice, home, inverted = false).copy(pos = home, posture = 4)
@@ -972,11 +1111,15 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     inner class HideCrevice : Behavior("hide", "Hiding in a crevice") {
-        override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12
+        // after a dash home it stays pressed in for a minute or so before venturing out again
+        override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12 + (if (softShell(c)) 0.35 else 0.0) + (if (c.t - lastDartAt < WARY_S) 0.4 else 0.0)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
             if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, r.pos, fast = false); return }
             out.rest(r, 1.0)
+            legs.tucked = true
+            // pressed flat in the crevice, now and then picking at the film just inside it
+            if (sin(c.t * 0.21 + c.o.appendagePhase) > 0.6) legs.pick = 0.4
             c.o.extension = 0.3 + 0.2 * sin(c.t * 0.3 + c.o.appendagePhase)   // legs and eyes peek out
         }
     }
@@ -986,50 +1129,92 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         private var next = 0.0
         private var dur = 30.0
         override fun score(c: Ctx): Double {
-            val hair = c.sim.water.s.algaeHair
-            val food = hair / (hair + 0.02)
+            val w = c.sim.water.s
+            // hair algae and the film on rock and glass (research 17 §3.3: scrapes biofilm, tears off algae)
+            val algae = w.algaeHair + 0.5 * w.film + 0.3 * w.diatoms
+            val food = algae / (algae + 0.02)
             // By day it only slips out to rock right next to its crevice.
-            return (0.3 + 0.3 * c.o.hunger) * (0.35 + 0.65 * food) * (0.25 + 0.75 * c.activity)
+            return (0.3 + 0.3 * c.o.hunger) * (0.35 + 0.65 * food) * (0.25 + 0.75 * c.activity) * (if (softShell(c)) 0.5 else 1.0)
         }
         override fun enter(c: Ctx) {
-            val night = c.activity > 0.5
-            spot = c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
+            val night = c.activity > 0.5 && !softShell(c)
+            // out at night it sometimes climbs the glass to scrape the film there
+            spot = (if (night && c.rng.chance(GLASS_GRAZE_P)) glassSpot(c) else null)
+                ?: c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
             dur = c.rng.range(15.0, 45.0)
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val s = spot ?: run { finished = true; return }
             if (elapsed > dur + 40) { finished = true; return }   // unreachable spot
             if (c.o.pos.distanceTo(s.first) > 1.5) { scuttle(c, out, s.first, fast = false); return }
-            out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
+            out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c); out.allowGlass = true
             if (c.t > next) {
                 next = c.t + 2
                 c.o.hunger = max(0.0, c.o.hunger - 0.004)
                 c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
                 c.o.mouth = 1.0
+                // shuffles a step or two sideways along the patch between bites
+                spot = s.copy(first = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2))
             }
-            c.o.appendagePhase += c.dt * 6   // claw-picking
+            legs.pick = 1.0      // quick alternating claw strokes to the mouth
+            grazeSeconds += c.dt
+            c.o.appendagePhase += c.dt * 6
             if (elapsed > dur) finished = true
         }
     }
 
-    inner class CrabScavenge : Scavenge(this, 40.0, urgentAbove = 0.3, label = "Scavenging") {
-        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.sideways = true }
+    /** An open-glass point on the back or side pane near the crevice (film algae; it climbs vertical glass). */
+    private fun glassSpot(c: Ctx): Pair<Vec3, Vec3>? {
+        val r = c.rock
+        for (i in 0 until 8) {
+            val back = c.rng.chance(0.7)
+            val p = if (back) Vec3((home.x + c.rng.signed() * 20).coerceIn(3.0, r.lengthCm - 3), (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), 0.3)
+                else Vec3(if (home.x > r.lengthCm / 2) r.lengthCm - 0.3 else 0.3, (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), (home.z + c.rng.signed() * 8).coerceIn(2.0, r.widthCm - 2))
+            if (r.sdf.dist(p) > 2.5) return p to (if (back) Vec3.Z else if (p.x > 1) Vec3.X * -1.0 else Vec3.X)
+        }
+        return null
     }
 
-    /** Very fast sideways dash back into the crevice when startled or a bigger fish comes close. */
+    inner class CrabScavenge : Scavenge(this, 40.0, urgentAbove = 0.3, label = "Scavenging") {
+        override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.sideways = true; legs.pick = 0.6 }
+    }
+
+    /**
+     * Very fast sideways dash back into the crevice when startled or a bigger fish comes close (research 17 §3.4:
+     * "retreat to shelter at the slightest disturbance"). It keeps going until it is in; if the rock blocks the
+     * straight line it side-steps over it for a moment and tries again.
+     */
     inner class Dart : Behavior("dart", "Darting for cover") {
-        override val committed: Boolean get() = elapsed < 3
+        private var arrived = false
+        private var bestD = 1e9
+        private var stuckT = 0.0
+        private var detour: Vec3? = null
+        private var detourUntil = 0.0
+        override val committed: Boolean get() = elapsed < MIN_HIDE_S || (!arrived && elapsed < 15)
         override fun score(c: Ctx): Double {
             if (threat != null || startledRecently && startleMag > 0.1) return 0.97
             val big = nearestOther(c, 6.0) { it.isFish && it.lengthCm > 0.8 * c.o.lengthCm && it.vel.length() > 3.0 }
             return if (big != null) 0.92 else 0.0
         }
-        override fun enter(c: Ctx) { startleAt = -1e9 }
+        override fun enter(c: Ctx) { startleAt = -1e9; darts++; arrived = false; bestD = 1e9; stuckT = 0.0; detour = null }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
-            if (c.o.pos.distanceTo(r.pos) > 1.5) scuttle(c, out, r.pos, fast = true)
-            else { out.rest(r, 1.0); c.o.extension = 0.1 }
-            if (elapsed > 8 && threat == null) finished = true
+            val d = c.o.pos.distanceTo(r.pos)
+            if (arrived || d <= 1.5) {
+                arrived = true
+                out.rest(r, 1.0); c.o.extension = 0.1; legs.tucked = true
+                if (elapsed > MIN_HIDE_S && threat == null) { finished = true; lastDartAt = c.t }
+                return
+            }
+            if (d < bestD - 0.3) { bestD = d; stuckT = 0.0 } else stuckT += c.dt
+            if (stuckT > 0.8 && detour == null) {
+                val side = c.rng.unitVector().rejectFrom(c.o.up).normalized(c.o.heading)
+                detour = c.o.pos + (side + c.o.up * 0.6) * 6.0
+                detourUntil = c.t + 1.2; stuckT = 0.0; bestD = d
+            }
+            val dt = detour
+            val tgt = if (dt != null && c.t < detourUntil) dt else { detour = null; r.pos }
+            scuttle(c, out, tgt, fast = true)
         }
     }
 
@@ -1056,6 +1241,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.o.pos.distanceTo(b.pos) > 2.0) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
             c.o.appendagePhase += c.dt * 6
+            legs.pick = 1.0
             if (c.t > next) { next = c.t + 3; carcassBites++; c.o.hunger = max(0.0, c.o.hunger - 0.01); c.o.mouth = 1.0 }
             if (elapsed > 60 || c.o.hunger < 0.15) finished = true
         }
@@ -1098,5 +1284,12 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val GRAB_HUNGER = 0.85
         const val GRAB_TRY_PER_HOUR = 0.15
         const val GRAB_SUCCESS = 0.3
+        /** Two days soft after a molt [L]. */
+        const val SOFT_SHELL_S = 48 * 3600.0
+        /** Share of night grazing bouts spent on the glass film [L]. */
+        const val GLASS_GRAZE_P = 0.15
+        /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
+        const val MIN_HIDE_S = 8.0
+        const val WARY_S = 60.0
     }
 }

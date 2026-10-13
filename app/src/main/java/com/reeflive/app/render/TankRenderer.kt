@@ -244,7 +244,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
         for (r in sorted) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
-        // transparent: shafts, particles, water surface, blended equipment, glass
+        // transparent: back glass, then water (first when the eye is under the surface, so the underside never
+        // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
+        Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GENERIC) }
+        val waterFirst = camera.eye[1] < Camera.WATER_Y
+        if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         if (quality.shafts && light.intensity > 0.03f) {
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             shafts?.let { it.draw(progs.shafts); drawCalls++; triangles += it.triangles }
@@ -253,10 +258,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
-        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
+        if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
 
         if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
@@ -581,7 +589,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             val p = if (isFin) progs.fin else progs.fish
             p.use()
-            fishUniforms(p, r, m.rigid)
+            fishUniforms(p, r, m.rigid, m.limbPivots)
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
@@ -616,7 +624,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         out[12] = r.spine[0]; out[13] = r.spine[1]; out[14] = r.spine[2]
     }
 
-    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean) {
+    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean, limbPivots: FloatArray? = null) {
         p.set4fv("uSpine", r.spine, 16)
         p.set4fv("uFrame", r.frames, 16)
         p.set1f("uScale", r.scale)
@@ -624,8 +632,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
-        // shrimp limbs: x stride phase (cycles, wrapped), y stepping amount, z rock / claw signal, w antenna grooming
-        p.set4f("uLimb", r.walkPhase - kotlin.math.floor(r.walkPhase), r.walkAmt, r.limbSignal, r.groom)
+        // shrimp picking / feeding strokes (mouth)
         p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat)
         p.set1f("uIchSpots", r.ich)
@@ -633,6 +640,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uDead", if (r.alive) 0f else 1f)
         p.set1f("uRigid", if (rigid) 1f else 0f)
         if (rigid) { rigidModel(r, tmpModel); p.setMat4("uModel", tmpModel) } else p.setMat4("uModel", IDENTITY)
+        // limb pose from the core LimbRig (SIMULATION §19): every entry the sim sent goes to uLimb[]; shrimp send one
+        // (x stride phase, y stepping, z rock / claw signal, w grooming), crawlers ten. Crawler models with pivots are
+        // posed about them (uLimbOn); everything else reads uLimb[0] only, zeroed when the pose carries no limbs.
+        if (r.limbCount > 0) p.set4fv("uLimb", r.limbs, r.limbCount) else p.set4f("uLimb", 0f, 0f, 0f, 0f)
+        val limbsOn = !rigid && limbPivots != null && r.limbCount >= 10
+        p.set1f("uLimbOn", if (limbsOn) 1f else 0f)
+        if (limbsOn) p.set4fv("uLimbPivot", limbPivots!!, 10)
     }
 
     // ------------------------------------------------------------------ taps
@@ -644,6 +658,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val l = listener
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
+                // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
+                if (!cleaning && camera.followId == null && hitsFlipper(o, dir)) { main.post { l?.onFlipperTap() }; return }
                 val id = Picker.pick(o, dir, rigs)
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
@@ -670,6 +686,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onLongPress(p) }
             }
         }
+    }
+
+    /** True when the ray meets the glass plane within a finger-friendly margin of the Flipper pad. */
+    private fun hitsFlipper(o: FloatArray, d: FloatArray): Boolean {
+        val t = Picker.rayPlaneZ(o, d, Camera.TANK[2]) ?: return false
+        val x = o[0] + d[0] * t; val y = o[1] + d[1] * t
+        return kotlin.math.abs(x - flipper[0]) <= FLIPPER_HALF_W + 2f && kotlin.math.abs(y - flipper[1]) <= FLIPPER_HALF_H + 2f
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */

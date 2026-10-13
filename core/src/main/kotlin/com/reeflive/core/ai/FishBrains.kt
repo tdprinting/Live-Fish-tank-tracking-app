@@ -623,7 +623,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     w *= 1 + min(AGGRESSOR_WEIGHT, f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t).toDouble())
                 // clients come due again as time passes; an overdue one outranks everyone (06 §5.6 #4)
                 w *= 1 + min(c.t - f.lastCleanerContactAt, OVERDUE_S) / DUE_S
-                if (overdue) w *= OVERDUE_WEIGHT
+                // ... and the longer it has been neglected the harder it solicits (an unserved client must not starve behind the big ones)
+                if (overdue) w *= OVERDUE_WEIGHT * (1 + (c.t - f.lastCleanerContactAt - OVERDUE_S) / DUE_S)
                 // infested clients seek the cleaner out and are served first (06 §5.7: ich visits at ×3 weight; S:Grutter99)
                 if (ich > 0.05) w *= 3.0
                 w /= 1 + d / SEARCH_CM
@@ -658,7 +659,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 0 -> {
                     val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
                     out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
-                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5) {
+                    // a client wedged in a crevice is worked from the mouth: arriving at the (rock-clamped) approach point counts
+                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0)) {
                         phase = if (wantsTactile(cl, c)) 1 else 2
                         if (phase == 1) encounters.advertised++
                         phaseT = 0.0
@@ -685,7 +687,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     // the other contacts stay brief passes ("tang 1–3 full poses/h plus several brief passes", 06 §5.5)
                     val sincePose = c.t - (lastPoseAt[cl.id] ?: -1e9)
                     val ichS = if (cl.disease == Disease.ICH) cl.diseaseStage else 0.0
-                    val need = (sincePose / POSE_REFRACT_S + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
+                    val keen = (sincePose / POSE_REFRACT_S).coerceAtMost(1.0)
+                    val need = (keen * keen + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
                     if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0) * need)) { encounters.refused++; done(c, cl, false); return }
                     encounters.accepted++
                     lastPoseAt[cl.id] = c.t
@@ -786,15 +789,15 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val DANCE_BOB_CM = 0.8
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
         const val CLIENT_COOLDOWN_S = 60.0
-        /** A client's keenness to pose recovers linearly over this long after its last full pose [I]. */
-        const val POSE_REFRACT_S = 2000.0
+        /** A client's keenness to pose recovers (quadratically: it saturates, so poses come at a steady pace) over this long after its last full pose [I]. */
+        const val POSE_REFRACT_S = 2250.0
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
         /**
          * A client not touched for this long gets a higher weight and is sought anywhere in the tank (06 §5.6 #4). A DESIGN
          * ESTIMATE that biases choice only: research 10 §4 finds no visit guarantee, and a client can still refuse.
          */
-        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §4") const val OVERDUE_S = 45 * 60.0
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §4") const val OVERDUE_S = 30 * 60.0
         /** Base rank from which a client gets the tactile dance first (hawk = 6; S:Grutter04, S:Cheney08). */
         const val TACTILE_RANK = 6.0
         /** An aggressor whose tactile damping has lapsed (or lapses within this many s) is worth up to 1 + this much more (06 §3.5). */
@@ -845,7 +848,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = 0.85 * (1 - c.activity)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
-            if (c.o.pos.distanceTo(r.pos) > 4) { out.seek(r.pos, c.o.cruiseSpeed, arrive = 2.0); return }
+            // the cave-mouth steering keeps the fish 4.5-7 cm off the spot, so settle from within 8 cm
+            if (c.o.pos.distanceTo(r.pos) > 8) { out.seek(r.pos, c.o.cruiseSpeed, arrive = 2.0); return }
             out.rest(r, 1.5)
             c.o.sleeping = true
         }
@@ -923,11 +927,11 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             }
             val sway = sin(2 * PI * 0.2 * c.t) * 2.0
             val side = (outDir cross Vec3.Y).normalized(Vec3.X)
-            var head = mouthOut(if (hidden) 0.5 else outK) + side * sway
+            var head = c.rock.clampToWater(mouthOut(if (hidden) 0.5 else outK) + side * sway, 2.5)
             // lunge at particles sinking within 8 cm of the head
             val f = if (o.hunger > 0.1) c.food.nearest(head, 8.0) { o.species.dietMatch(it.kind) > 0 } else null
             if (f != null) {
-                head = mouthOut(1.0) + (f.pos - mouthOut(1.0)).clampLength(14.0)
+                head = c.rock.clampToWater(mouthOut(1.0) + (f.pos - mouthOut(1.0)).clampLength(14.0), 2.5)
                 if (o.pos.distanceTo(f.pos) < 1.8 && c.t > nextBite) { c.bite(f); nextBite = c.t + 0.8 }
             }
             val heading = (head - mouth).normalized(outDir)

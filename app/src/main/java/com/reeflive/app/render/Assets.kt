@@ -27,6 +27,8 @@ class DrawPart(
     }
     val eyePivot: FloatArray = node.vec3("pivot") ?: floatArrayOf(0.4f, 0.05f, 0f)
     val identityWorld: Boolean = M.isIdentity(node.world)
+    /** Limb pivots for the crawler limb rig (`extras.limbPivots`: 10 × vec4, model space xyz + rest length), or null. */
+    val limbPivots: FloatArray? = node.floats("limbPivots")?.takeIf { it.size >= 40 }
 }
 
 /** A GLB uploaded to GL. */
@@ -35,6 +37,8 @@ class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, p
     val rootAnchor: String? = glb.rootString("anchor")
     /** Organism models in cm (feather duster) are placed rigidly instead of spline-skinned. */
     val rigid: Boolean = glb.rootString("unit")?.startsWith("centimeters") == true
+    /** Limb pivots of a limb-rigged crawler (brittle star, Sally Lightfoot; SIMULATION §19), or null. */
+    val limbPivots: FloatArray? = parts.firstNotNullOfOrNull { it.limbPivots }
 
     /** Bounds over all non-polyp parts in world space: min xyz, max xyz. */
     val bounds: FloatArray = FloatArray(6).also { b ->
