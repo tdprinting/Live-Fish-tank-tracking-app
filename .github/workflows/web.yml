@@ -40,6 +40,7 @@ jobs:
           if-no-files-found: error
 
       # Published at https://<owner>.github.io/<repo>/ (Settings → Pages → source: gh-pages branch).
+      # Runs on every push to main, the same pushes that publish the APK, so the web app always matches Android.
       - name: Publish to GitHub Pages (main only)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4

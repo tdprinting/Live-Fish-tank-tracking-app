@@ -21,6 +21,9 @@ There is no second copy of the sim, the shaders or the models.
   `TankRenderer` every animation frame and turns pointer events into `MotionEvent`s for the shared `TouchController`.
 - Excluded from the web build: `core/care`, `core/extras`, `core/io` (they use `java.time`; the web tracker keeps its own
   simple log) and the Android-only views (`TankGlView`, `TankView`, `DebugHud`).
+- Updates: every push to `main` (the same pushes that release the APK) rebuilds and republishes the web app; the
+  service worker loads new code on the next launch.
+- Graphics default to HIGH (bloom, light shafts, 4x MSAA, full device pixel ratio up to 3x); Speed → Picture quality lowers it.
 - Parameter readings are stored in the browser (`localStorage`) and can be exported/imported as JSON. New readings are
   pushed into the live tank with the same `RealityInit` mapping the Android app uses.
 - It is a PWA: `manifest.webmanifest` + `sw.js` let Safari "Add to Home Screen" and run it full screen and offline.

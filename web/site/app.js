@@ -22,7 +22,8 @@ function showTab(name) {
 }
 
 // ---------------------------------------------------------------- live tank
-const quality = store.get('reeflive.quality', /iPhone|iPod|Android/.test(navigator.userAgent) ? 'LOW' : 'MEDIUM');
+// Highest quality by default (bloom, light shafts, 4x MSAA, full Retina resolution); lower it under Speed if a device struggles.
+let quality = store.get('reeflive.quality', 'HIGH');
 
 function startLive() {
   if (started) return;
@@ -122,7 +123,7 @@ const SHEETS = {
   time: () => `<h3>Speed</h3><div class="options">${[[0, '⏸️', 'Pause'], [1, '▶️', 'Real time'], [10, '⏩', '10×'], [60, '⏭️', '1 min/s'], [600, '🚀', '10 min/s']]
     .map(([k, i, n]) => `<button class="opt ${sim.speed === k ? 'on' : ''}" data-speed="${k}"><span class="ico">${i}</span>${n}</button>`).join('')}</div>
     <h3 style="margin-top:14px">Picture quality</h3><div class="options">${['LOW', 'MEDIUM', 'HIGH']
-    .map((q) => `<button class="opt ${quality === q || store.get('reeflive.quality') === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</div>`,
+    .map((q) => `<button class="opt ${quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</div>`,
   events: () => `<h3>What if…</h3><div class="options">${live.scenarios().split('\n').map((l) => l.split('\t'))
     .map(([k, n]) => `<button class="opt" data-scenario="${k}"><span class="ico">${SCEN_ICONS[k] || '🌊'}</span>${n}</button>`).join('')}</div>
     <p class="muted">These only change the simulation, never your logged readings.</p>`,
@@ -156,7 +157,7 @@ $('sheet').addEventListener('click', (e) => {
   else if (d.wc) live.waterChange(Number(d.wc));
   else if ('resetWater' in d) { Object.assign(sim, { temp: null, sg: null, no3: null, po4: null }); applyLatestReadings(true); }
   else if (d.speed) { sim.speed = Number(d.speed); live.setSpeed(sim.speed); }
-  else if (d.quality) { store.set('reeflive.quality', d.quality); live.setQuality(d.quality); }
+  else if (d.quality) { quality = d.quality; store.set('reeflive.quality', quality); live.setQuality(quality); }
   else if (d.scenario) live.scenario(d.scenario);
   flash(b);
   if (openSheet && !d.feed && !d.scenario && !d.wc) $('sheet').innerHTML = SHEETS[openSheet]();

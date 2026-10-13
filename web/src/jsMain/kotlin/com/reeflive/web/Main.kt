@@ -100,7 +100,8 @@ object ReefLive {
                 val gl = cnv.getContext("webgl2", js("({antialias: true, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance'})"))
                     ?: throw IllegalStateException("This browser has no WebGL 2")
                 GLES30.gl = gl
-                val q = runCatching { RenderQuality.valueOf(quality.uppercase()) }.getOrDefault(RenderQuality.MEDIUM)
+                val q = runCatching { RenderQuality.valueOf(quality.uppercase()) }.getOrDefault(RenderQuality.HIGH)
+                current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
                 r.demoWhenEmpty = false
@@ -129,6 +130,15 @@ object ReefLive {
         }
     }
 
+    private var current = RenderQuality.HIGH
+
+    /** HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. */
+    private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
+        RenderQuality.HIGH -> 3.0
+        RenderQuality.MEDIUM -> 2.0
+        RenderQuality.LOW -> 1.5
+    })
+
     private fun status(text: String) { emit("onStatus", text) }
 
     private fun emit(event: String, arg: Any?) {
@@ -139,7 +149,7 @@ object ReefLive {
 
     private fun resize() {
         val c = canvas ?: return
-        val dpr = min(window.devicePixelRatio, 2.0)
+        val dpr = pixelRatio()
         val w = (c.clientWidth * dpr).toInt().coerceAtLeast(1)
         val h = (c.clientHeight * dpr).toInt().coerceAtLeast(1)
         if (c.width != w || c.height != h) { c.width = w; c.height = h }
@@ -161,7 +171,7 @@ object ReefLive {
             if (steps == 3) simAcc = 0.0
         }
         val c = canvas
-        if (c != null && (c.width != (c.clientWidth * min(window.devicePixelRatio, 2.0)).toInt())) resize()
+        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt())) resize()
         renderer?.onDrawFrame(null)
         window.requestAnimationFrame(::frame)
     }
@@ -257,7 +267,12 @@ object ReefLive {
     fun setSpeed(speed: Double) { sim?.speed = speed }
     fun follow(id: String?) { renderer?.follow(id) }
     fun resetCamera() { renderer?.resetCamera() }
-    fun setQuality(q: String) { runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull()?.let { renderer?.setQuality(it) } }
+    fun setQuality(q: String) {
+        val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
+        current = v
+        renderer?.setQuality(v)
+        resize()
+    }
 
     fun scenario(name: String) {
         val s = sim ?: return
