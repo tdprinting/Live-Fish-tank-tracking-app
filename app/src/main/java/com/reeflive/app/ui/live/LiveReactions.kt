@@ -1,6 +1,7 @@
 package com.reeflive.app.ui.live
 
 import androidx.compose.ui.graphics.Color
+import com.reeflive.app.render.BurstKind
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
@@ -14,8 +15,11 @@ import java.util.Locale
 /** How Hermie looks while he says something. */
 enum class HermieMood { HAPPY, EXCITED, WORRIED, SURPRISED, SLEEPY }
 
-/** What one user action shows in the tank ([fx]) and what Hermie says about it. */
-class Reaction(val fx: TankFx, val say: String, val mood: HermieMood = HermieMood.HAPPY)
+/**
+ * What one user action shows in the tank ([fx]: the picture over the water), what Hermie says about it, and the
+ * [feedback]: the banner line, the live readout it changes and the 3D bursts in the tank itself.
+ */
+class Reaction(val fx: TankFx, val say: String, val mood: HermieMood = HermieMood.HAPPY, val feedback: Feedback = Feedback.from(fx))
 
 /**
  * The one table from user actions to their in-tank picture and Hermie's line (UI_STYLE §10.2). Pure data: no Compose
@@ -38,6 +42,7 @@ object LiveReactions {
     fun feed(k: FoodKind) = Reaction(
         TankFx(FxKind.FEED, if (k == FoodKind.NORI) FxSpots.NORI else FxSpots.FEED, food = k, caption = k.label),
         when (feedTool(k)) {
+            FeedTool.PINCH -> "A pinch by the return. Watch the current carry it across!"
             FeedTool.SHAKER -> "Shake shake! ${k.label} for everyone."
             FeedTool.CUBE -> "A frozen ${k.label.lowercase(Locale.US)} cube. It thaws as it sinks."
             FeedTool.CLIP -> "Nori on the clip. The grazers will love it."
@@ -59,7 +64,20 @@ object LiveReactions {
             "no3", "po4" -> "That is waste. Algae will like it more than the fish."
             else -> "In it goes."
         }
-        return Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = tint, caption = label), say)
+        val effect = when (paramId) {
+            "alk" -> "dKH rising: coral skeletons grow"
+            "ca" -> "Calcium rising"
+            "mg" -> "Magnesium rising"
+            "k", "sr" -> "Trace level rising"
+            "no3" -> "Nitrate rising: algae food"
+            "po4" -> "Phosphate rising: algae food"
+            "copper" -> "Copper rising: deadly for shrimp and corals"
+            else -> "Spreading through the tank"
+        }
+        return Reaction(
+            TankFx(FxKind.DOSE, FxSpots.DOSE, tint = tint, caption = label), say,
+            feedback = Feedback("Dosing $label", effect, listOf(Feedback.burst(BurstKind.DYE, FxSpots.DOSE, tint)), watch = paramId.takeIf { SandboxParams.byId(it) != null }, durationMs = 3200),
+        )
     }
 
     fun waterChange(fraction: Double) = Reaction(
@@ -101,11 +119,28 @@ object LiveReactions {
         return if (rowId.startsWith("sc_")) {
             Reaction(TankFx(FxKind.SPARKLE, FxSpots.CENTRE, glyph = glyph, caption = "$name: ${if (on) "on" else "off"}", tint = if (on) Color(0xFFFF5C6C) else Color(0xFF8EE66B)), if (on) "A test idea is switched on. Watch closely." else "Test idea switched off.", HermieMood.SURPRISED)
         } else {
+            val short = name.substringBefore(" (")
+            val (effect, burst) = deviceEffect(rowId, on)
+            val fx = TankFx(if (on) FxKind.DEVICE_ON else FxKind.DEVICE_OFF, FxSpots.SUMP, glyph = glyph, caption = "$short ${if (on) "on" else "off"}")
             Reaction(
-                TankFx(if (on) FxKind.DEVICE_ON else FxKind.DEVICE_OFF, FxSpots.SUMP, glyph = glyph, caption = "${name.substringBefore(" (")} ${if (on) "on" else "off"}"),
-                if (on) "${name.substringBefore(" (")} is on and working." else "${name.substringBefore(" (")} is off.",
+                fx,
+                if (on) "$short is on and working." else "$short is off.",
                 if (on) HermieMood.HAPPY else HermieMood.SURPRISED,
+                feedback = Feedback.from(fx).withEffect(effect).let { fb -> if (burst != null) Feedback(fb.title, fb.effect, listOf(burst), null, fb.durationMs) else fb },
             )
+        }
+    }
+
+    /** What switching an equipment row does to the water, and its burst at the return (null = the default sparkle). */
+    private fun deviceEffect(rowId: String, on: Boolean): Pair<String, com.reeflive.app.render.TankBurst?> {
+        val at = FxSpots.DOSE
+        return when (rowId) {
+            "eq_skimmer" -> if (on) "Fine bubbles pull waste out as foam" to Feedback.burst(BurstKind.MICROBUBBLES, at) else "Waste builds up a little faster" to null
+            "eq_sock" -> if (on) "Catches the floating muck" to Feedback.burst(BurstKind.SUCTION, at) else "Muck stays in the water longer" to null
+            "eq_carbon" -> if (on) "Soaks up yellow tint and smells: the water clears" to Feedback.burst(BurstKind.CLARITY, at) else "Yellow tint can build up again" to null
+            "eq_refugium" -> if (on) "The algae garden soaks up nitrate and phosphate" to Feedback.burst(BurstKind.CLARITY, at, Color(0xFF8EE66B)) else "Nutrients are no longer taken up there" to null
+            "eq_uv" -> if (on) "Zaps germs and algae spores floating past" to Feedback.burst(BurstKind.UV_GLOW, at) else "Germs in the water are not zapped" to null
+            else -> (if (on) "Running" else "Stopped") to null
         }
     }
 
@@ -114,6 +149,20 @@ object LiveReactions {
      * one picture, not one per step.
      */
     fun param(rowId: String, old: Double, new: Double): Reaction? {
+        val r = paramPicture(rowId, old, new) ?: return null
+        val watched = rowId.takeIf { !it.startsWith("eq_") && !it.startsWith("sc_") && !it.startsWith("pump_") && SandboxParams.byId(it) != null }
+        val fb = r.feedback.withWatch(watched ?: r.feedback.watch).let { fb ->
+            when {
+                rowId == "flow" -> fb.withEffect(if (new >= old) "Stronger flow: the pump jets reach further" else "Gentler flow: the jets shorten")
+                rowId.startsWith("spectrum") -> fb.plus(listOf(Feedback.burst(BurstKind.LIGHT_MOTES, FxSpots.LIGHT, amount = 0.5f))).withEffect("The light colour shifts")
+                rowId == "photoperiod" -> fb.withEffect("Longer or shorter days from now on")
+                else -> fb
+            }
+        }
+        return Reaction(r.fx, r.say, r.mood, fb)
+    }
+
+    private fun paramPicture(rowId: String, old: Double, new: Double): Reaction? {
         val up = new >= old
         val key = "param:$rowId"
         return when (rowId) {
@@ -138,13 +187,25 @@ object LiveReactions {
     fun preset(p: SandboxPreset): Reaction = when (p) {
         SandboxPreset.HEATER_STUCK -> Reaction(TankFx(FxKind.HEATER_STUCK, FxSpots.HEATER, caption = "Heater stuck on"), "The heater won't switch off! It keeps getting hotter.", HermieMood.WORRIED)
         SandboxPreset.POWER_OUTAGE -> Reaction(TankFx(FxKind.POWER_OUT, FxSpots.LIGHT, caption = "Power cut for 4 hours"), "Power cut! No pumps, no heater, no lights.", HermieMood.SURPRISED)
-        SandboxPreset.OVERFEEDING -> Reaction(TankFx(FxKind.FEED, FxSpots.FEED, food = FoodKind.PELLET, caption = "Way too much food"), "That is a LOT of food. Leftovers turn into waste.", HermieMood.WORRIED)
-        SandboxPreset.MISSED_WATER_CHANGES -> Reaction(TankFx(FxKind.ALERT, FxSpots.CENTRE, glyph = ReefGlyphs.calendarX, tint = Color(0xFF9C7A4A), caption = "Two months, no water change"), "Nobody changed the water for ages. Yuck.", HermieMood.WORRIED)
-        SandboxPreset.SALINITY_CRASH -> Reaction(TankFx(FxKind.SALT_DOWN, FxSpots.SURFACE, caption = "Salt crash"), "Too much fresh water! The salt is dropping fast.", HermieMood.SURPRISED)
-        SandboxPreset.COPPER_OVERDOSE -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = "Copper overdose"), "Too much copper. Shrimp and corals hate it!", HermieMood.WORRIED)
+        SandboxPreset.OVERFEEDING -> Reaction(
+            TankFx(FxKind.FEED, FxSpots.FEED, food = FoodKind.PELLET, caption = "Way too much food"), "That is a LOT of food. Leftovers turn into waste.", HermieMood.WORRIED,
+            Feedback("Way too much food", "Six big feedings in half an hour: leftovers rot into ammonia", listOf(Feedback.burst(BurstKind.SPLASH, FxSpots.FEED, amount = 3f)), watch = "nh3", durationMs = 3600),
+        )
+        SandboxPreset.MISSED_WATER_CHANGES -> Reaction(
+            TankFx(FxKind.ALERT, FxSpots.CENTRE, glyph = ReefGlyphs.calendarX, tint = Color(0xFF9C7A4A), caption = "Two months, no water change"), "Nobody changed the water for ages. Yuck.", HermieMood.WORRIED,
+            Feedback("Two months, no water change", "Nutrients pile up, minerals run low, algae spreads", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.CENTRE, waste), Feedback.burst(BurstKind.SILT, FxSpots.SAND, waste)), watch = "no3", durationMs = 3000),
+        )
+        SandboxPreset.SALINITY_CRASH -> Reaction(TankFx(FxKind.SALT_DOWN, FxSpots.SURFACE, caption = "Salt crash"), "Too much fresh water! The salt is dropping fast.", HermieMood.SURPRISED).let {
+            Reaction(it.fx, it.say, it.mood, it.feedback.plus(listOf(Feedback.burst(BurstKind.FRESH, FxSpots.SURFACE, amount = 1.5f))).withEffect("The top-off floods fresh water in for half an hour"))
+        }
+        SandboxPreset.COPPER_OVERDOSE -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = "Copper overdose"), "Too much copper. Shrimp and corals hate it!", HermieMood.WORRIED).let {
+            Reaction(it.fx, it.say, it.mood, it.feedback.withWatch("copper").withEffect("Copper floods in: deadly for shrimp and corals"))
+        }
     }
 
-    fun heatWave() = Reaction(TankFx(FxKind.THERMO_UP, FxSpots.THERMO, caption = "Heat wave"), "A heat wave! Warm water holds less air.", HermieMood.WORRIED)
+    fun heatWave() = Reaction(TankFx(FxKind.THERMO_UP, FxSpots.THERMO, caption = "Heat wave"), "A heat wave! Warm water holds less air.", HermieMood.WORRIED).let {
+        Reaction(it.fx, it.say, it.mood, it.feedback.withEffect("Warming 3 °C over the next day: less oxygen in warm water"))
+    }
 
     fun infect(d: Disease) = Reaction(TankFx(FxKind.ALERT, FxSpots.CENTRE, caption = SandboxFriendly.diseaseLabel(d)), "Oh no, a fish caught ${SandboxFriendly.diseaseLabel(d).lowercase(Locale.US)}. Can you spot it?", HermieMood.WORRIED)
 
@@ -158,13 +219,20 @@ object LiveReactions {
 
     fun treatment(k: TreatmentKind, start: Boolean): Reaction {
         val name = k.label
-        if (!start) return Reaction(TankFx(FxKind.SPARKLE, FxSpots.DOSE, glyph = SandboxFriendly.treatmentGlyph(k), caption = "Stopped $name"), "$name stopped.")
+        if (!start) return Reaction(
+            TankFx(FxKind.SPARKLE, FxSpots.DOSE, glyph = SandboxFriendly.treatmentGlyph(k), caption = "Stopped $name"), "$name stopped.",
+            feedback = Feedback("Stopped $name", "The treatment ends; the water recovers", listOf(Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE))),
+        )
         return when (k) {
-            TreatmentKind.UV -> toggle("eq_uv", true).let { Reaction(it.fx, "UV on: it zaps germs floating in the water.") }
+            TreatmentKind.UV -> toggle("eq_uv", true).let { Reaction(it.fx, "UV on: it zaps germs floating in the water.", it.mood, it.feedback) }
             TreatmentKind.HYPOSALINITY -> Reaction(TankFx(FxKind.SALT_DOWN, FxSpots.SURFACE, caption = name), "Less salt for a few weeks: ich can't stand it.")
             TreatmentKind.TANK_TRANSFER -> Reaction(TankFx(FxKind.NET, FxSpots.CENTRE, caption = name), "Moving the fish to clean tanks, again and again.")
-            TreatmentKind.COPPER -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = name), "Copper medicine. Careful: it hurts inverts.", HermieMood.WORRIED)
-            else -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = medicine, caption = name), "Medicine time. Get well soon, fishies.")
+            TreatmentKind.COPPER -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = name), "Copper medicine. Careful: it hurts inverts.", HermieMood.WORRIED).let {
+                Reaction(it.fx, it.say, it.mood, it.feedback.withWatch("copper").withEffect("Copper ramps up over two days, then holds"))
+            }
+            else -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = medicine, caption = name), "Medicine time. Get well soon, fishies.").let {
+                Reaction(it.fx, it.say, it.mood, it.feedback.withEffect("Medicine spreading through the tank"))
+            }
         }
     }
 
@@ -175,17 +243,33 @@ object LiveReactions {
             MicroAction.TREAT_FLATWORMS, MicroAction.TREAT_FENBENDAZOLE, MicroAction.TREAT_PRAZIQUANTEL -> medicine
             else -> pods
         }
+        val podsFb = Feedback(a.label, "Tiny pods hop off toward the rock to hide and breed", listOf(Feedback.burst(BurstKind.PODS, FxSpots.FEED)), durationMs = 3000)
+        val fb = when (a) {
+            MicroAction.DOSE_TISBE, MicroAction.DOSE_TIGGER, MicroAction.DOSE_TIGRIOPUS -> podsFb
+            MicroAction.DOSE_AMPHIPODS, MicroAction.DOSE_MYSIDS -> Feedback(a.label, "Released at the surface; they scurry into the rock", listOf(Feedback.burst(BurstKind.PODS, FxSpots.RELEASE, amount = 1.3f), Feedback.burst(BurstKind.BUBBLES, FxSpots.RELEASE, pods, 0.5f)), durationMs = 3000)
+            MicroAction.DOSE_PHYTO -> Feedback(a.label, "A green haze drifts through the flow: food for pods and filter feeders", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.FEED, phyto)), durationMs = 3000)
+            MicroAction.DOSE_ROTIFERS -> Feedback(a.label, "A faint cloud of rotifers for corals and tiny mouths", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.FEED, Color(0xFFE9F3FF), 0.7f)), durationMs = 3000)
+            MicroAction.LIVE_ROCK -> Feedback(a.label, "New rock settles in a puff of silt, full of tiny critters", listOf(Feedback.burst(BurstKind.SILT, FxSpots.ROCK)), durationMs = 3000)
+            MicroAction.FLATWORM_FRAG -> Feedback(a.label, "Hitchhikers on a new frag: watch the rock", listOf(Feedback.burst(BurstKind.SILT, FxSpots.ROCK, amount = 0.4f)), durationMs = 3000)
+            else -> Feedback(a.label, "Medicine spreading through the tank", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.FEED, medicine)), durationMs = 3000)
+        }
         return when (a) {
             MicroAction.LIVE_ROCK -> Reaction(TankFx(FxKind.ROCKS, FxSpots.ROCK, caption = a.label), "New live rock, full of tiny critters.")
             MicroAction.FLATWORM_FRAG -> Reaction(TankFx(FxKind.ALERT, FxSpots.ROCK, glyph = ReefGlyphs.slug, caption = a.label), "Hitchhikers! Flatworms came in on a frag.", HermieMood.SURPRISED)
             MicroAction.DOSE_AMPHIPODS, MicroAction.DOSE_MYSIDS -> Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, glyph = ReefGlyphs.shrimp, tint = pods, caption = a.label), "Little critters for the clean-up crew.", HermieMood.EXCITED)
             else -> Reaction(TankFx(FxKind.PIPETTE, FxSpots.FEED, tint = tint, caption = a.label), if (tint == medicine) "A careful dose of medicine." else "Tiny food for tiny life!")
-        }
+        }.let { Reaction(it.fx, it.say, it.mood, fb) }
     }
 
     fun maintain(t: MaintenanceTask) = when (t) {
-        MaintenanceTask.CHANGE_SOCK -> Reaction(TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Fresh filter sock"), "Dirty sock out, clean sock in!")
-        MaintenanceTask.REPLACE_CARBON -> Reaction(TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.carbon, caption = "Fresh carbon"), "New carbon soaks up yellow and smells.")
+        MaintenanceTask.CHANGE_SOCK -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Fresh filter sock"), "Dirty sock out, clean sock in!",
+            feedback = Feedback("Fresh filter sock", "A clean sock pulls floating muck out again", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.DOSE))),
+        )
+        MaintenanceTask.REPLACE_CARBON -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.carbon, caption = "Fresh carbon"), "New carbon soaks up yellow and smells.",
+            feedback = Feedback("Fresh carbon", "New carbon clears the yellow tint", listOf(Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE))),
+        )
         MaintenanceTask.HARVEST_MACRO -> Reaction(TankFx(FxKind.SNIP, FxSpots.SUMP, glyph = ReefGlyphs.refugium, caption = "Algae garden trimmed"), "Snip snip! Trimming takes waste out of the water.")
     }
 
@@ -219,5 +303,7 @@ object LiveReactions {
 
     fun reset() = Reaction(TankFx(FxKind.RESET, FxSpots.CENTRE, caption = "Back to your real tank"), "Whoosh! Everything is back like your real tank.", HermieMood.EXCITED)
     fun timelapse() = Reaction(TankFx(FxKind.TIMELAPSE, FxSpots.CENTRE, caption = "Time-lapse"), "Let's see the future!", HermieMood.EXCITED)
-    fun cleanGlass(on: Boolean) = Reaction(TankFx(FxKind.SPARKLE, FxSpots.GLASS, glyph = ReefGlyphs.flipper, tint = Color(0xFF8EE66B), caption = if (on) "Slide to clean the glass" else "Glass cleaning done"), if (on) "Rub the glass with the scraper. Squeaky clean!" else "Sparkly glass!", HermieMood.HAPPY)
+    fun cleanGlass(on: Boolean) = Reaction(TankFx(FxKind.SPARKLE, FxSpots.GLASS, glyph = ReefGlyphs.flipper, tint = Color(0xFF8EE66B), caption = if (on) "Slide to clean the glass" else "Glass cleaning done"), if (on) "Rub the glass with the scraper. Squeaky clean!" else "Sparkly glass!", HermieMood.HAPPY).let {
+        Reaction(it.fx, it.say, it.mood, it.feedback.withEffect(if (on) "Drag on the front glass: the scraper wipes the algae film off" else "Clear glass: a better view"))
+    }
 }

@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,12 +61,22 @@ import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
+import com.reeflive.app.render.TankBursts
 import com.reeflive.app.render.TankProjection
+import com.reeflive.app.render.ViewLight
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
 import com.reeflive.app.ui.components.LocalSnackbar
+import com.reeflive.app.ui.live.ActionBanner
+import com.reeflive.app.ui.live.ActionBannerState
 import com.reeflive.app.ui.live.ActionFxLayer
+import com.reeflive.app.ui.live.Feedback
+import com.reeflive.app.ui.live.FxKind
 import com.reeflive.app.ui.live.ActionFxState
+import com.reeflive.app.ui.live.FastForwardBadge
+import com.reeflive.app.ui.live.TorchOverlay
+import com.reeflive.app.ui.live.TorchState
+import com.reeflive.app.ui.live.trackTorch
 import com.reeflive.app.ui.live.AddableSpecies
 import com.reeflive.app.ui.live.Candy
 import com.reeflive.app.ui.live.CleanGlassHint
@@ -115,10 +126,12 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun LiveQuality.toRender() = when (this) {
@@ -178,6 +191,9 @@ fun LiveTankScreen(
     // in-tank action pictures, the camera projection they are drawn through, and Hermie
     val fx = remember { ActionFxState() }
     val projection = remember { TankProjection() }
+    // in-tank 3D feedback (dye plumes, bubbles, pump jets) and the banner naming what is happening
+    val bursts = remember { TankBursts() }
+    val banner = remember { ActionBannerState() }
     val hermie = remember { HermieState() }
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
     val audio = remember { TankAudio(context.applicationContext) }
@@ -216,6 +232,12 @@ fun LiveTankScreen(
     var micro by rememberSaveable { mutableStateOf(false) }
     var preset by rememberSaveable { mutableStateOf<SandboxPreset?>(null) }
     var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
+    // Watch card: lamp look (render only), torch, auto tour; a Watch-mode time-lapse runs on a sandbox fork
+    var viewLight by rememberSaveable { mutableStateOf(ViewLight.REAL) }
+    var torchOn by rememberSaveable { mutableStateOf(false) }
+    var touring by rememberSaveable { mutableStateOf(false) }
+    var lapseFork by rememberSaveable { mutableStateOf(false) }
+    val torch = remember { TorchState() }
     val sandbox = mode == SimMode.SANDBOX
 
     // every overlay control hidden, only the tank (tap empty water or "Show buttons" to undo)
@@ -236,17 +258,26 @@ fun LiveTankScreen(
     var cleaning by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = cleaning) { cleaning = false }
 
-    /** Plays [r]'s picture, Hermie says his line, and [run] sends the command when the picture reaches the water. */
+    /**
+     * Plays [r]'s picture, names the action and its effect in the banner, Hermie says his line, and [run] sends the
+     * command when the picture reaches the water, together with the action's 3D feedback in the tank.
+     */
     fun cue(r: Reaction, run: (() -> Unit)? = null) {
-        fx.play(r.fx, run)
+        fx.play(r.fx) {
+            run?.invoke()
+            r.feedback.bursts.forEach(bursts::emit)
+        }
+        banner.show(r.feedback, bannerTone(r))
         if (hermieOn) hermie.react(r)
     }
-    /** A picture for a change that was already sent (sliders): keyed ones play once per drag. */
+    /** A picture for a change that was already sent (sliders): keyed ones play once per drag (the banner value stays live). */
     fun echo(r: Reaction?) {
         if (r == null) return
         val key = r.fx.key
         if (key != null && fx.isPlaying(key)) return
         fx.play(r.fx)
+        r.feedback.bursts.forEach(bursts::emit)
+        banner.show(r.feedback, bannerTone(r))
         if (hermieOn) hermie.react(r)
     }
 
@@ -266,12 +297,22 @@ fun LiveTankScreen(
     // a tap on empty water with nothing selected shows / hides the controls; otherwise it selects as before
     val onPick: (String?) -> Unit = { id ->
         val justSkipped = SystemClock.uptimeMillis() - skippedAt[0] < SKIP_PICK_GUARD_MS
+        if (touring) { touring = false; vm.follow(null) }
         when {
             id == null && justSkipped -> Unit
             id == null && open != null -> open = null
             id == null && !cleaning && vm.selectedOrganismId.value == null && vm.followId.value == null -> chromeHidden = !chromeHidden
             else -> vm.select(id)
         }
+    }
+    // long press on the tank: the usual pinch of food dropped right there
+    val onLongPress: (Vec3) -> Unit = { p ->
+        tick()
+        vm.feed(FoodKind.PELLET, FoodKind.PELLET.typicalDoseGrams, p)
+        val at = FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat())
+        val fb = Feedback.feeding(FoodKind.PELLET, at, "A pinch of pellets here")
+        fb.bursts.forEach(bursts::emit)
+        banner.show(fb, Candy.orange)
     }
     // the two-finger tap on the glass (sent at once: it is the finger itself)
     val onTankTap: (Vec3) -> Unit = { p ->
@@ -336,7 +377,9 @@ fun LiveTankScreen(
     val onSet: (SandboxParamDef, Double) -> Unit = { def, v ->
         val now = panel.now
         val old = def.valueIn(now)
-        def.simId?.let { id -> vm.applyParam(def.id, id, v / def.scale, old / def.scale, controlMode) }
+        // on/off rows (pumps, equipment, test switches) always switch now: a ramp or spike would leave them half-done
+        val onOff = def.max - def.min <= def.step
+        def.simId?.let { id -> vm.applyParam(def.id, id, v / def.scale, old / def.scale, if (onOff) SandboxControlMode.SET else controlMode) }
         if (def.max - def.min <= def.step) tick()   // on/off rows (pumps) click; dragged sliders stay quiet
         if (sandbox) echo(LiveReactions.param(def.id, old, v))
     }
@@ -452,6 +495,43 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        speed = if (sandbox) speed else 1.0,
+        simTimeSec = hud.simTimeSec,
+        onSpeed = { x ->
+            tick()
+            when {
+                // Watch mode: fast-forward on a pretend copy, so the real tank keeps real time
+                !sandbox && x > 1.0 -> {
+                    vm.setSpeed(x); lapseFork = true; vm.setMode(SimMode.SANDBOX)
+                    if (hermieOn) hermie.say("Fast-forward runs on a pretend copy. Your real tank keeps real time.", HermieMood.EXCITED)
+                    echo(LiveReactions.speed(x))
+                }
+                sandbox && lapseFork && x <= 1.0 -> {
+                    vm.setSpeed(1.0); lapseFork = false; open = null; vm.setMode(SimMode.REALITY)
+                    echo(LiveReactions.speed(1.0))
+                }
+                else -> actions.onSpeed(x)
+            }
+        },
+        viewLight = viewLight,
+        onViewLight = { v ->
+            tick(); viewLight = v
+            banner.show(Feedback("Lamps: ${v.label}", if (v == ViewLight.REAL) "Back to your tank's real light schedule" else "Just the look: your real tank keeps its own schedule"), Candy.yellow)
+        },
+        torchOn = torchOn,
+        onTorch = {
+            tick(); torchOn = !torchOn
+            banner.show(Feedback(if (torchOn) "Torch on" else "Torch off", if (torchOn) "Drag on the tank to shine it around" else "Torch put away"), Candy.yellow)
+        },
+        touring = touring,
+        onTour = {
+            tick(); touring = !touring
+            if (!touring) vm.follow(null)
+            banner.show(Feedback(if (touring) "Auto tour" else "Tour stopped", if (touring) "The camera visits each animal in turn. Tap the water to stop." else "Back to the free camera"), Candy.cyan)
+        },
+        fish = hud.stats.filter { it.alive }.take(12).map { it.id to it.nickname.ifBlank { it.common } },
+        onFollowFish = { id -> tick(); touring = false; vm.follow(id) },
+        onOpenFeed = { tick(); open = LiveCategory.FEED },
         onHeatWave = {
             tick()
             SandboxParams.byId("temp")?.let { def ->
@@ -461,6 +541,17 @@ fun LiveTankScreen(
             }
         },
     )
+    // auto tour: the follow camera visits every animal in turn
+    LaunchedEffect(touring) {
+        var i = 0
+        while (touring) {
+            val ids = vm.hud.value.stats.filter { it.alive }.map { it.id }
+            if (ids.isEmpty()) break
+            vm.follow(ids[i % ids.size]); i++
+            delay(TOUR_STOP_MS)
+        }
+    }
+    LaunchedEffect(sandbox) { if (!sandbox) lapseFork = false }
     // a picked fish closes the menu card so its own card has the room
     LaunchedEffect(stats?.id) { if (stats != null) open = null }
 
@@ -482,12 +573,29 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, followId, quality, cleaning, onScrape, onPick, onTankTap, micro,
+            vm, fx, projection, bursts, viewLight, torch, torchOn, followId, quality, cleaning, onScrape, onPick, onTankTap, onLongPress, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
             bottomPad = BottomBarClearance,
         )
+        // what is happening right now, where everyone looks first: under the top pills, clear of the rail
+        if (!micro) {
+            ActionBanner(
+                banner, panel.now,
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .padding(start = hudStart + 12.dp, end = 12.dp, top = if (landscape) 104.dp else 108.dp),
+            )
+        }
+        // time-lapse cue: sun / moon over its arc, speed and tank clock, above the dock while time runs fast
+        if (!micro) {
+            FastForwardBadge(
+                if (sandbox) speed else 1.0, hud.simTimeSec,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = hudBottom + 8.dp),
+            )
+        }
         HudLayer(
             vm, hudState, onModeChange, followId, stats, cleaning, toggleCleaning, landscape,
             hidden = chromeHidden || micro,
@@ -543,6 +651,18 @@ fun LiveTankScreen(
     }
 }
 
+/** The banner's colour for a reaction: red for trouble, the dose colour for doses, orange for food, else cyan. */
+private fun bannerTone(r: Reaction): Color = when (r.fx.kind) {
+    FxKind.FEED -> Candy.orange
+    FxKind.HEATER_BREAK, FxKind.HEATER_STUCK, FxKind.POWER_OUT, FxKind.ALERT, FxKind.PEST_ADD, FxKind.PUMP_OFF -> Candy.red
+    FxKind.DOSE, FxKind.PIPETTE, FxKind.SPARKLE, FxKind.BAG -> if (r.fx.tint != Color.Unspecified) r.fx.tint else Candy.cyan
+    FxKind.HEARTS, FxKind.HEATER_FIX, FxKind.MAINTAIN, FxKind.SNIP, FxKind.DEVICE_ON -> Candy.green
+    else -> Candy.cyan
+}
+
+/** How long the auto tour stays with each animal. */
+private const val TOUR_STOP_MS = 12_000L
+
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
 private const val SKIP_PICK_GUARD_MS = 700L
 
@@ -566,12 +686,17 @@ private fun TankArea(
     vm: LiveTankViewModel,
     fx: ActionFxState,
     projection: TankProjection,
+    bursts: TankBursts,
+    viewLight: ViewLight,
+    torch: TorchState,
+    torchOn: Boolean,
     followId: String?,
     quality: LiveQuality,
     cleaning: Boolean,
     onScrape: (GlassStroke) -> Unit,
     onPick: (String?) -> Unit,
     onTapGlass: (Vec3) -> Unit,
+    onLongPress: (Vec3) -> Unit,
     micro: Boolean,
     onCloseMicro: () -> Unit,
     onMicroAction: ((MicroAction) -> Unit)?,
@@ -581,17 +706,21 @@ private fun TankArea(
     Box(Modifier.fillMaxSize()) {
         TankView(
             snapshots = vm.snapshots,
-            modifier = Modifier.fillMaxSize().skipFxOnTap(fx, onSkip),
+            modifier = Modifier.fillMaxSize().skipFxOnTap(fx, onSkip).trackTorch(torch, torchOn),
             followId = if (cleaning) null else followId,
             quality = quality.toRender(),
             onPick = onPick,
             onTapGlass = onTapGlass,
+            onLongPress = onLongPress,
             onFollowLost = { vm.follow(null) },
             onFollow = vm::follow,
             cleaning = cleaning,
             onScrape = onScrape,
             projection = projection,
+            bursts = bursts,
+            viewLight = viewLight,
         )
+        TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
             visible = micro,
             enter = fadeIn(liveSpec(ReefTheme.reduceMotion)),
@@ -616,7 +745,8 @@ private fun TankArea(
             }
         }
         // same bounds as the TankView, so camera pixels and canvas pixels agree; no pointer input, touches go through
-        ActionFxLayer(fx, projection, Modifier.fillMaxSize(), screenOnly = micro)
+        // captions live in the ActionBanner now: one place to read what is happening
+        ActionFxLayer(fx, projection, Modifier.fillMaxSize(), screenOnly = micro, captions = false)
     }
 }
 
