@@ -98,6 +98,23 @@
   "size": {
     "lod0Tris": 3500
   },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 4.5,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 2.0,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 6.0
+  },
   "model": "models/lawnmower_blenny.glb",
   "colors": {
     "primary": "#5E6B3F",

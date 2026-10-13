@@ -103,6 +103,26 @@
     "diseaseSusceptibility": {},
     "hardiness": 0.8,
     "starvationDays": 21.0,
+    "lifeStages": {
+        "stages": [
+            {
+                "id": "juvenile",
+                "fromCm": 0,
+                "label": "Juvenile"
+            },
+            {
+                "id": "adult",
+                "fromCm": 3.5,
+                "label": "Adult"
+            }
+        ],
+        "blendCm": 1.5,
+        "sexSystem": "PROTOGYNOUS",
+        "bidirectional": true,
+        "maturityCm": 4.0,
+        "sexChangeDays": 37,
+        "reverseChangeDays": 72
+    },
     "model": "models/dottyback.glb",
     "colors": {},
     "iridescence": 0.1,

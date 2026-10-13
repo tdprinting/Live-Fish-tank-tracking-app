@@ -7,7 +7,7 @@
     {"speciesId": "paracanthurus_hepatus", "nickname": "Blue", "sizeCm": 6.5, "lifeStage": "JUVENILE"},
     {"speciesId": "sphaeramia_nematoptera", "nickname": "PJ", "sizeCm": 5.0},
     {"speciesId": "labroides_dimidiatus", "nickname": "Cleaner", "sizeCm": 7.0},
-    {"speciesId": "pholidichthys_leucotaenia", "nickname": "Engineer", "sizeCm": 8.0, "lifeStage": "JUVENILE"},
+    {"speciesId": "pholidichthys_leucotaenia", "nickname": "Engineer", "sizeCm": 10.0, "lifeStage": "SUBADULT"},
     {"speciesId": "cirrhitichthys_falco", "nickname": "Hawk", "sizeCm": 5.0},
     {"speciesId": "salarias_fasciatus", "nickname": "Mower", "sizeCm": 7.0},
     {"speciesId": "ecsenius_stigmatura", "nickname": "Tailspot", "sizeCm": 5.0},

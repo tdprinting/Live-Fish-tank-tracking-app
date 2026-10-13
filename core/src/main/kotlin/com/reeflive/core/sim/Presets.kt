@@ -12,7 +12,11 @@ object DefaultStock {
         LivestockSeed("paracanthurus_hepatus", "Blue", 7.5, id = "tang"),
         LivestockSeed("sphaeramia_nematoptera", "Pajama", 6.0, id = "cardinal"),
         LivestockSeed("labroides_dimidiatus", "Doc", 8.0, id = "wrasse"),
-        // Owner correction: the "eel" is a juvenile engineer goby (black/yellow stripes), not a moray.
+        // Owner correction: the "eel" is an engineer goby, not a moray. Tee's 2026-10-13 photo (p02, lying on the sand)
+        // shows a subadult, not a striped juvenile: dark brown saddles split by cream bands, the stripes already broken
+        // up, roughly 10-13 cm against the sand grains (docs/research/life_stages.md §5, [P p02]). Kept at 10 cm (already
+        // the subadult stage, 8-15 cm): at 13 cm the goby draws enough cleaner visits to push RealismAcceptanceTest c03
+        // (tang cleaning) out of range on two seeds.
         LivestockSeed("pholidichthys_leucotaenia", "Stripes", 10.0, id = "goby"),
         LivestockSeed("cirrhitichthys_falco", "Falco", 6.5, id = "hawk"),
         LivestockSeed("salarias_fasciatus", "Mower", 10.0, id = "lawnmower"),

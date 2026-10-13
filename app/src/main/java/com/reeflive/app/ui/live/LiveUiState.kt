@@ -66,6 +66,8 @@ data class FishCardState(
     val alive: Boolean = true,
     val symptoms: List<String> = emptyList(),
     val relationships: List<RelationshipUi> = emptyList(),
+    /** Life stage and sex, e.g. "Juvenile" or "Adult · Female" (core LifeStages; docs/research/life_stages.md). */
+    val lifeStage: String = "",
 )
 
 /** Maps core social memory one-to-one: label drives [RelationKind], fear/harassment/familiarity drive [RelationshipUi.affinity]. */
@@ -94,7 +96,21 @@ fun OrganismStats.toFishCardState(relationships: List<RelationshipUi> = relation
     health = health, stress = stress, hunger = hunger, mood = mood.label,
     behavior = intent.ifBlank { behavior },
     alive = alive, symptoms = symptoms.map { it.label }, relationships = relationships,
+    lifeStage = LifeStageLabels.of(speciesId, lengthCm.toDouble(), sex),
 )
+
+/** Stage labels from the species sheets on the classpath (cached per species; "" for non-fish or a missing sheet). */
+object LifeStageLabels {
+    private val sheets = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<com.reeflive.core.sim.SimSpecies>>()
+
+    fun of(speciesId: String, lengthCm: Double, sex: String): String {
+        val sp = sheets.getOrPut(speciesId) {
+            java.util.Optional.ofNullable(com.reeflive.core.sim.SpeciesCatalog.fromClasspath(listOf(speciesId)).all().firstOrNull())
+        }.orElse(null) ?: return ""
+        if (!sp.kind.equals("FISH", true)) return ""
+        return com.reeflive.core.sim.LifeStages.describe(sp, lengthCm, sex)
+    }
+}
 
 fun OrganismStats.toFollowState(index: Int, count: Int) = FollowState(
     fishName = nickname.ifBlank { common }, speciesName = common,

@@ -104,6 +104,31 @@
     "diseaseSusceptibility": {},
     "hardiness": 0.85,
     "starvationDays": 60.0,
+    "lifeStages": {
+        "stages": [
+            {
+                "id": "juvenile",
+                "fromCm": 0,
+                "label": "Juvenile (striped)",
+                "depthScale": 1.25,
+                "widthScale": 1.1
+            },
+            {
+                "id": "subadult",
+                "fromCm": 8.0,
+                "label": "Subadult (breaking stripes)"
+            },
+            {
+                "id": "adult",
+                "fromCm": 15.0,
+                "label": "Adult",
+                "depthScale": 0.85,
+                "widthScale": 0.95
+            }
+        ],
+        "blendCm": 4.0,
+        "sexSystem": "UNKNOWN"
+    },
     "model": "models/engineer_goby.glb",
     "colors": {},
     "iridescence": 0.05,

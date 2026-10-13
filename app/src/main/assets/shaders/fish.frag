@@ -21,6 +21,10 @@ uniform float uIchSpots;     // 0..1 white spot coverage (ich)
 uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
 uniform float uDead;
+// Life stages (LifeStageVisuals.kt, additive): a second body texture painted on the same UV layout, mixed in by
+// uStageMix while a fish grows from one stage's pattern into the next (or changes sex). 0 = unchanged.
+uniform sampler2D uAlbedoStage;
+uniform float uStageMix;
 
 out vec4 fragColor;
 
@@ -38,6 +42,7 @@ float ichMask(vec2 uv) {
 
 void main() {
     vec4 tex = uHasTexture > 0.5 ? texture(uAlbedo, vUv) : vec4(1.0);
+    if (uStageMix > 0.001 && uHasTexture > 0.5) tex = mix(tex, texture(uAlbedoStage, vUv), clamp(uStageMix, 0.0, 1.0));
     vec3 albedo = toLinear(tex.rgb) * uBaseColor.rgb;
     float alpha = tex.a * uBaseColor.a;
 

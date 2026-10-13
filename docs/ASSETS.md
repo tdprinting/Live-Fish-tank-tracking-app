@@ -309,6 +309,19 @@ Budgets (`tools/validate_glb.py`): `algae_tufts` 450 → **1100**, new `reef_det
 - `tank.glb`: nodes `GlassFront`, `GlassLeft`, `GlassRight` (single quads with `part="glass"`), `GlassBack` (quad, `part="backglass"`), `Sand` (§3.3), `WaterSurface` (quad y=56, `part="water"`), `Rim` (black plastic frame: 2.5 cm × 3 cm profile around the top and bottom, `#15171A`, roughness 0.4), `Stand` (optional dark box below, hidden by default).
 - `equipment.glb`: `PowerheadA`, `PowerheadB` (cylinder r 3 cm × 5 cm with a front grille disc and a magnet block 4 × 4 × 2 cm, black `#111214`, roughness 0.5), `FrontPump` (cylinder r 2.5 × 6 cm lying on the sand + light-grey bracket `#9FA8AD`), `Heater` (tube r 1.5 × 30 cm, black with a grey top cap and a tiny red LED emissive), `Flipper` (box 9 × 4 × 2 cm black, white label texture), `HoseArc` (Bezier tube r 0.6 cm, clear material: alpha 0.35, roughness 0.1), `FeedRing` (torus R 4 cm r 0.3, clear), `HobBody` (box 16 × 10 × 14 cm on the back rim, dark grey; its outflow lip spawns bubbles), `AiPrimeL/R` (hockey-puck 12 × 12 × 3.5 cm black with an emissive bottom disc whose color = current light color; gooseneck: Bezier tube r 0.9 cm from the rear rim up and over). The fixtures are above the water and seen only when the camera orbits high; emissive discs are what the water surface "sees".
 
+### 5b. Life-stage body textures (`tools/blender/life_stages.py`)
+Juvenile / subadult / adult / sex forms per fish (research: `docs/research/life_stages.md`). Each form is painted on the
+model's own unrolled body canvas (same `Flank` as `fish_species.py`) at half the GLB body resolution and written to
+`textures/stages/<model>_<form>.png`, with `textures/stages/manifest.json` mapping `models/<model>.glb` → `forms` and
+`base` (the form the GLB's embedded body texture already shows; it is not written again and stays full resolution). The
+GLBs are unchanged. At runtime `LifeStageVisuals` binds form A on unit 0 (or keeps the embedded albedo for the base
+form) and form B on unit 14, mixed by `uStageMix` in `fish.frag`; `uStageShape` in `fish.vert` scales body depth/width
+per stage (sheet `lifeStages.stages[].depthScale/widthScale`). Forms: clown orange/darwin `juvenile`; tang `juvenile`,
+`adult` (no yellow belly, Tee's Pacific-form fish); cardinal, wrasse, hawkfish, lawnmower, tailspot, dottyback, diamond
+goby `juvenile`; engineer goby `juvenile` (two pale stripes), `subadult` (saddles and cream bands, Tee's p02), `adult`
+(mottled brown), plus fin-sheet forms (`fins.base` / `fins.forms` in the manifest, `textures/stages/engineer_goby_fin_<form>.png`): the GLB fin sheet with its yellow ticks is the `subadult` base, the juvenile gets plain black fins and the adult mottled brown ones. Pending: leopard wrasse `juvenile` / `female` / `male` (`PENDING_MODELS`, painted once
+`models/leopard_wrasse.glb` exists). ≈ 1.7 MB in all.
+
 ### 6. Textures: naming and budgets
 `textures/<asset>_albedo.png` (sRGB), `_normal.png`, `_rough_ao.png`; fish 1024×512 body + 512×256 fins; rock 2048/1024/1024; sand 1024/512; corals 512; `caustic_512.png`, `water_n1.png`, `water_n2.png` (512² tileable normal maps from fBm), `room_env.png` 256×128, `irid_lut.png` 64×1. Total asset budget ≤ 28 MB in the APK (PNG) — as built ≤ 40 MB after the HQ rock maps. The Blender scripts write PNGs via `image.save_render` or Pillow; never JPEG.
 
