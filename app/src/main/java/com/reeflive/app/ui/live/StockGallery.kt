@@ -68,6 +68,7 @@ import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.StockGroup
+import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Stocking
 import com.reeflive.core.species.SpeciesKind
 import kotlinx.coroutines.delay
@@ -122,7 +123,7 @@ private fun plural(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 @Composable
 fun StockGallery(
     stock: StockUi,
-    onAdd: (StockCard, Int) -> Unit,
+    onAdd: (StockCard, Int, StockSize) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -131,6 +132,9 @@ fun StockGallery(
     var groupIdx by rememberSaveable { mutableStateOf(0) }
     var pickedId by rememberSaveable { mutableStateOf<String?>(null) }
     var qty by rememberSaveable { mutableStateOf(5) }
+    // shops sell juveniles, so new fish arrive small unless the owner picks a bigger size
+    var sizeIdx by rememberSaveable { mutableStateOf(StockSize.JUVENILE.ordinal) }
+    val size = StockSize.values()[sizeIdx.coerceIn(0, StockSize.values().size - 1)]
     // brief "+3 Blue tang" confirmation; quick taps on the same card add up
     var flashOn by remember { mutableStateOf(false) }
     var flashText by remember { mutableStateOf("") }
@@ -153,7 +157,7 @@ fun StockGallery(
             flashWarn = true; flashSpecies = null; flashCount = 0
         } else {
             haptics.tick()
-            onAdd(card, n)
+            onAdd(card, n, size)
             flashCount = (if (flashOn && flashSpecies == card.speciesId) flashCount else 0) + n
             flashSpecies = card.speciesId
             flashText = "+$flashCount ${card.name}"
@@ -187,6 +191,14 @@ fun StockGallery(
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Species group" },
             selectedColor = c.coralSoft,
         )
+        if (group != StockGroup.CORALS) {
+            SegmentedPills(
+                options = StockSize.values().map { it.label },
+                selected = sizeIdx,
+                onSelect = { sizeIdx = it; haptics.tick() },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Size of new animals" },
+            )
+        }
         AnimatedVisibility(flashOn, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Text(
                 flashText,
@@ -384,5 +396,5 @@ private val previewStock = StockUi(
 @Preview(name = "Add life · Abyss", widthDp = 393, heightDp = 900, showBackground = true)
 @Composable
 private fun StockGalleryPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg).padding(16.dp)) { StockGallery(previewStock, { _, _ -> }, {}) }
+    Box(Modifier.background(ReefTheme.colors.bg).padding(16.dp)) { StockGallery(previewStock, { _, _, _ -> }, {}) }
 }

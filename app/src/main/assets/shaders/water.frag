@@ -39,6 +39,16 @@ void main() {
 
     vec3 I = normalize(vWorld - uCamPos.xyz);
     bool below = uCamPos.y < uWaterLevel;
+    // where each fixture's cone meets the surface: microbubbles and surface film scatter a soft glowing pool that
+    // shimmers with the ripples (Medium+)
+    vec3 pool = vec3(0.0);
+    if (uQuality >= 0.5) {
+        float sh = texture(uCaustic, vWorld.xz * 0.05 + N.xz * 0.6 + uTime * vec2(0.015, -0.01)).r;
+        for (int i = 0; i < 2; i++) {
+            vec2 d = vWorld.xz - uLightPos[i].xz;
+            pool += uLightColor[i].rgb * exp(-dot(d, d) / 450.0) * (0.05 + 0.6 * sh);
+        }
+    }
     vec3 col;
     float alpha;
     if (below) {
@@ -70,6 +80,7 @@ void main() {
             F = mix(F, 1.0, smoothstep(0.15, 0.0, cosT));
             col = mix(trans, refl, F);
         }
+        col += pool;
         col = applyWater(col, vWorld);
         alpha = 1.0;
     } else {
@@ -81,8 +92,8 @@ void main() {
             vec3 L = normalize(uLightPos[i].xyz - vWorld);
             env += uLightColor[i].rgb * (pow(max(dot(R, L), 0.0), 300.0) * 4.0 + pow(max(dot(R, L), 0.0), 1500.0) * 12.0 * uRipple);
         }
-        col = env * F + uFog.rgb * 0.15;
-        alpha = clamp(F + 0.12, 0.0, 1.0);
+        col = env * F + uFog.rgb * 0.15 + pool * 0.6;
+        alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)), 0.0, 1.0);
     }
     fragColor = vec4(tonemap(col), alpha);
 }

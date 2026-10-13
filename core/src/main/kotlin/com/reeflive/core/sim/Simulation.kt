@@ -889,7 +889,7 @@ class Simulation(
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
-            is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
+            is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm, c.size)
             is Command.ScrapeGlass -> scrapeGlass(c)
             is Command.Micro -> water.micro.apply(c.action, c.amount, water.s)
             is Command.Bacteria -> water.bacteria.apply(c.action, c.amount, water)

@@ -37,13 +37,28 @@ class StockingTest {
         val tangs = sim.organisms.filter { it.species.id == "paracanthurus_hepatus" }
         assertEquals(20, tangs.size)
         assertTrue(tangs.all { it.alive && sim.rock.inWater(it.pos) })
-        assertTrue("real sheet loaded", tangs.first().species.common == "Blue tang" && tangs.first().lengthCm == 25.0)
+        assertTrue("real sheet loaded", tangs.first().species.common == "Blue tang")
+        // shops sell juveniles: a new tang is ~7.5 cm, not the 25 cm adult
+        assertEquals(7.5, tangs.first().lengthCm, 1e-9)
         // released along the surface, not stacked on one point
         val xs = tangs.map { it.pos.x }
         assertTrue("spread ${xs.minOrNull()}..${xs.maxOrNull()}", xs.maxOrNull()!! - xs.minOrNull()!! > 60)
         assertEquals(20, tangs.map { it.id }.toSet().size)
         // they show up in the HUD stats with their species name
         assertEquals(20, sim.snapshot().stats.count { it.speciesId == "paracanthurus_hepatus" })
+    }
+
+    @Test fun addSizeChoiceSetsLength() {
+        val sim = prodSim()
+        sim.enqueue(Command.AddMany("paracanthurus_hepatus", 1, size = StockSize.ADULT))
+        sim.enqueue(Command.AddMany("amphiprion_ocellaris", 1))
+        sim.stepWall(0.05)
+        val tang = sim.organisms.last { it.species.id == "paracanthurus_hepatus" }
+        assertEquals(25.0, tang.lengthCm, 1e-9)
+        // tiny species keep a visible floor: a juvenile clown is 3 cm, not 2.4
+        val clown = sim.organisms.last { it.species.id == "amphiprion_ocellaris" }
+        assertEquals(3.0, clown.lengthCm, 1e-9)
+        assertEquals(4.8, StockSize.YOUNG.lengthCm(8.0), 1e-9)
     }
 
     @Test fun addManyInvertsScattersCrawlers() {
@@ -95,7 +110,7 @@ class StockingTest {
         class Run(val bio: Double, val nh3: Double, val doMgL: Double, val dead: Int)
         fun run(extra: Int): Run {
             val sim = prodSim(tankStock(), seed = 5L)
-            if (extra > 0) sim.enqueue(Command.AddMany("amphiprion_ocellaris", extra))
+            if (extra > 0) sim.enqueue(Command.AddMany("amphiprion_ocellaris", extra, size = StockSize.ADULT))
             sim.stepWall(0.05)
             sim.advanceAbstract(6 * 3600.0)
             return Run(sim.water.bioMassIndex, sim.water.s.nh3Total, sim.water.s.doMgL, sim.eventLog.count { it is SimEvent.Died })
@@ -111,7 +126,7 @@ class StockingTest {
     @Test fun aGrosslyOverstockedTankCrashes() {
         // thirty adult blue tangs in 60 gallons: oxygen runs out and the tank crashes within a day
         val sim = prodSim(tankStock(), seed = 5L)
-        sim.enqueue(Command.AddMany("paracanthurus_hepatus", 30))
+        sim.enqueue(Command.AddMany("paracanthurus_hepatus", 30, size = StockSize.ADULT))
         sim.stepWall(0.05)
         sim.advanceAbstract(86400.0)
         assertTrue(sim.eventLog.count { it is SimEvent.Died } > 10)

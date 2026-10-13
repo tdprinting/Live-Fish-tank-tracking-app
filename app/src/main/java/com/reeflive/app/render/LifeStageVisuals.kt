@@ -113,7 +113,7 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
     companion object {
         const val MANIFEST = "textures/stages/manifest.json"
         /** Texture unit of `uAlbedoStage` (units 0–13 are taken; GLES 3 guarantees 16). */
-        const val UNIT = 14
+        const val UNIT = 15
 
         /** "models/x_lod1.glb" → "models/x.glb" (both LODs share the UV layout and the stage textures). */
         fun lod0(path: String): String = if (path.endsWith("_lod1.glb")) path.removeSuffix("_lod1.glb") + ".glb" else path

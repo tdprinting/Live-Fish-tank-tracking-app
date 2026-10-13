@@ -72,6 +72,11 @@ enum class RenderQuality(
     val snow: Int get() = when (this) { HIGH -> 900; MEDIUM -> 520; LOW -> 160 }
     /** Fish casting soft contact shadows on sand, rock and corals (0 = off). */
     val shadowCasters: Int get() = when (this) { HIGH -> 12; MEDIUM -> 8; LOW -> 0 }
+    /**
+     * Real-time shadow map width ([ShadowMap]; height is 5/16 of it to fit the tank's footprint): High 2048 re-rendered
+     * every frame with the fish, Medium 1024 with static casters only, Low off.
+     */
+    val shadowMapSize: Int get() = when (this) { HIGH -> 2048; MEDIUM -> 1024; LOW -> 0 }
     /** Light-shaft strength multiplier (shafts are off on LOW). */
     val shaftStrength: Float get() = if (this == HIGH) 1.3f else 1f
 

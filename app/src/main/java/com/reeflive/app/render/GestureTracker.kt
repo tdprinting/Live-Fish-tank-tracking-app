@@ -22,6 +22,9 @@ import kotlin.math.sqrt
  */
 class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var doubleTapSlop: Float = 100f) {
 
+    /** Single taps fire on release, without waiting [DOUBLE_TAP_MS] for a second tap (the supply shelf: no zoom there). */
+    var instantTaps = false
+
     interface Sink {
         fun touching(down: Boolean)
         fun orbit(dx: Float, dy: Float)
@@ -223,6 +226,7 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
                 sink.tap(CameraInput.TapKind.GLASS, multiX, multiY)
             maxPointers == 1 && !dragging && !longPressFired && held < LONG_PRESS_MS -> {
                 if (secondTap) sink.tap(CameraInput.TapKind.ZOOM, downX, downY)
+                else if (instantTaps) sink.tap(CameraInput.TapKind.PICK, downX, downY)
                 else { pendingTap = true; pendingT = t; pendingX = downX; pendingY = downY }
             }
             dragging && !quickZoom -> {

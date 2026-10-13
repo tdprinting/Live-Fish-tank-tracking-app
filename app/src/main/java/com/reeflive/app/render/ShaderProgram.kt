@@ -34,7 +34,7 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
         val SAMPLER_UNITS = linkedMapOf(
             "uAlbedo" to 0, "uNormalMap" to 1, "uRoughAo" to 2, "uCaustic" to 3, "uSurface" to 4,
             "uIridLut" to 5, "uEnv" to 6, "uWaterN1" to 7, "uWaterN2" to 8, "uScene" to 9, "uBloom" to 10,
-            "uGlassMask" to 11, "uDof" to 12, "uSandMap" to SandFx.UNIT,
+            "uGlassMask" to 11, "uDof" to 12, "uSandMap" to SandFx.UNIT, "uShadowMap" to ShadowMap.UNIT,
         )
 
         /**
