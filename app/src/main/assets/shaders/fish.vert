@@ -16,6 +16,8 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp tail-flip)
+uniform vec4 uLimb;        // shrimp: x stride phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming
+uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
@@ -123,6 +125,69 @@ void main() {
         r = vec3(c * r.x + s * r.z, r.y, -s * r.x + c * r.z);
         local = pv + r;
         n = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
+    } else if (mode > 1.5 && aColor.r > 0.06) {
+        // Shrimp limbs (research 17). COLOR_0.r = limb class / 8, .g = pair / 8, .b = hinge (0 base .. 1 tip).
+        float cls = floor(aColor.r * 8.0 + 0.5);
+        float pr = floor(aColor.g * 8.0 + 0.5);
+        float side = local.z >= 0.0 ? 1.0 : -1.0;
+        float h = hinge;
+        if (cls < 1.5) {
+            // walking legs: alternating gait, neighbours and opposite legs half a stride apart; the foot swings
+            // forward lifted and pushes back planted. Idle legs shift their footing now and then.
+            float ph = 2.0 * PI * (uLimb.x + 0.5 * mod(pr + (side > 0.0 ? 1.0 : 0.0), 2.0));
+            local.x += h * (0.05 * uLimb.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
+            local.y += h * 0.03 * uLimb.y * max(cos(ph), 0.0);
+        } else if (cls < 2.5) {
+            // picking legs (P1-P2): alternate left/right strokes to the mouth while feeding or cleaning; the
+            // front pair rocks rapidly back and forth as the skunk cleaner's signal; P1 combs the antenna in grooming
+            float k = 0.5 + 0.5 * sin(2.0 * PI * 2.2 * time + (side > 0.0 ? 0.0 : PI) + pr * 1.3);
+            float pick = max(uPick, 0.0);
+            local.x -= h * 0.06 * pick * k;
+            local.y += h * 0.035 * pick * k;
+            local.z -= side * h * 0.03 * pick * k;
+            float rw = pr < 0.5 ? 1.0 : 0.35;
+            float rock = sin(2.0 * PI * 3.0 * time);
+            local.x += h * 0.05 * uLimb.z * rw * rock;
+            local.y += h * 0.025 * uLimb.z * rw * abs(rock);
+            local.x += h * 0.03 * uLimb.w * (pr < 0.5 ? 1.0 : 0.0) * sin(2.0 * PI * 1.4 * time + side);
+            local.y += h * 0.02 * uLimb.w * (pr < 0.5 ? 1.0 : 0.0);
+            local.x += h * 0.012 * uLimb.y * sin(2.0 * PI * uLimb.x + pr * PI);
+        } else if (cls < 3.5) {
+            // banded cheliped: held raised; it swings up and out toward an intruder (display), draws in to feed
+            float dsp = uLimb.z;
+            local.z += side * h * 0.12 * dsp;
+            local.y += h * (0.07 * dsp + 0.008 * sin(time * 0.9 + side));
+            local.x -= h * 0.05 * max(uPick - 0.3, 0.0) * (0.5 + 0.5 * sin(2.0 * PI * 1.2 * time + side * 1.5));
+            local.y -= h * 0.012 * uLimb.y * sin(2.0 * PI * uLimb.x);
+        } else if (cls < 4.5) {
+            // long antennae: slow whip-like sweeps that travel to the tip, faster when the appendage phase runs
+            // (advertising, cleaning); lash with the skunk cleaner's leg rock; grooming draws one down to the mouth
+            float h2 = h * h;
+            float ph = uSwim.w + pr * 2.1 + side * 1.3;
+            local.y += h2 * (0.06 * sin(ph - h * 3.0) + 0.1 * uLimb.z * sin(2.0 * PI * 3.0 * time - h * 6.0 + side));
+            local.z += h2 * 0.07 * cos(0.7 * ph - h * 2.5);
+            float g = uLimb.w * step(0.0, side);
+            local.y -= g * h * 0.25;
+            local.x -= g * h * 0.3 * (0.6 + 0.4 * sin(2.0 * PI * 0.8 * time));
+            local.z -= g * side * h * 0.2;
+        } else if (cls < 5.5) {
+            // antennule flagella: sniffing flicks, a quick down-stroke about once a second (lobster analogue
+            // 0.5-2 Hz, research 17) out of step between whips, over a small sway
+            float f = pow(max(sin(2.0 * PI * 1.1 * time + pr * 2.0 + side * 0.9), 0.0), 12.0);
+            local.y -= h * 0.05 * f;
+            local.z += h * 0.02 * sin(uSwim.w * 0.8 + pr + side);
+            local.y -= uLimb.w * (1.0 - step(0.0, side)) * h * 0.08;
+        } else if (cls < 6.5) {
+            // pleopods: metachronal beat, the hindmost pair leads and the wave runs forward (uMotion: phase, amp)
+            float ph = 2.0 * PI * (uMotion.x + 0.2 * pr);
+            local.x += h * 0.035 * uMotion.y * sin(ph);
+            local.y += h * 0.01 * uMotion.y * cos(ph);
+        } else {
+            // third maxillipeds: a slow idle flutter, quick picking strokes when feeding or grooming
+            float a = 0.004 + 0.02 * max(uPick, uLimb.w);
+            local.y += h * a * sin(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
+            local.x -= h * 0.6 * a * cos(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
+        }
     } else if (mode < 0.5 || mode > 1.5) {
         // legs / antennae: sweep with the appendage phase along the hinge (B) coordinate
         float sweep = sin(uSwim.w * 2.0 * PI + hinge * 4.0 + u * 5.0);

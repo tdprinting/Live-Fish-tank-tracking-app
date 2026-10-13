@@ -5,6 +5,7 @@ import com.reeflive.core.geom.BodySpline
 import com.reeflive.core.geom.Quat
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
+import kotlin.math.max
 import kotlin.math.pow
 
 /**
@@ -98,6 +99,12 @@ class Organism(
     var spineFlare = 0.0
     var dorsalRaise = 0.0
     var legRock = 0.0
+    /** Shrimp limb hooks (research 17): banded shrimp claw display 0..1 and antenna grooming 0..1. */
+    var clawDisplay = 0.0
+    var groom = 0.0
+    /** Walking-leg stride phase (cycles, wrapping at 1000) and stepping amount 0..1, set by crawl steering. */
+    var walkPhase = 0.0
+    var walkAmt = 0.0
     /** Rolling 1 h observation counters (06 §4.2): see [Counters]. */
     val counters = Counters()
     /** Cardinal out of cover under bright light (set by its brain; fin-clamp sign). */
@@ -227,6 +234,8 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
+            walkPhase = (walkPhase % 1000.0).toFloat(), walkAmt = walkAmt.toFloat(),
+            limbSignal = max(legRock, clawDisplay).toFloat(), groom = groom.toFloat(),
             motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else 0; else -> 0 },
         )
     }

@@ -209,6 +209,13 @@ data class OrganismPose(
     val bend: Float = 0f,
     /** How the renderer applies [pecPhase]/[bend]: 0 fish, 1 brittle-star arm rowing, 2 shrimp (ventral flexion). */
     val motionMode: Int = 0,
+    /** Shrimp legs (research 17): stride phase (cycles) and stepping amount 0..1 while walking. */
+    val walkPhase: Float = 0f,
+    val walkAmt: Float = 0f,
+    /** Shrimp signal: skunk front-leg rocking with antenna lashing, or banded claw display, 0..1. */
+    val limbSignal: Float = 0f,
+    /** Shrimp grooming an antenna through its mouthparts, 0..1. */
+    val groom: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())

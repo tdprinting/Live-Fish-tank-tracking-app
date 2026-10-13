@@ -285,6 +285,11 @@ class Steering(private val c: Ctx) {
         p = r.clampToWater(p, 0.2).let { q -> if (q.y < r.sandTopCm + it.surfaceOffset) q.withY(r.sandTopCm + it.surfaceOffset) else q }
         o.vel = (p - o.pos) / max(dt, 1e-6)
         o.pos = p
+        // leg stride clock for the renderer: one stride ≈ a quarter body length (research 17, INFERENCE),
+        // stepping eases in and out so a stop-go pause plants the feet
+        val walkSpeed = o.vel.length()
+        o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
+        o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)
         val nn = envNormal(p)
         var hd = if (v.lengthSq() > 1e-6) v.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
         if (it.sideways && v.lengthSq() > 1e-6) {
@@ -418,7 +423,8 @@ class Steering(private val c: Ctx) {
             } else {
                 // shrimp pleopods fan constantly at 5–8 Hz (stored for the renderer; legs keep their own phase)
                 o.pecPhase = (o.pecPhase + dt * (if (mp.gait == Gait.WALK) 6.0 else 0.0)) % 1000.0
-                o.pecAmp = 0.0
+                // swimmerets idle at a low ventilating stroke and beat fully while moving fast or fleeing
+                o.pecAmp = if (mp.gait == Gait.WALK) 0.3 + 0.7 * smoothstep(0.8, 2.0, speed / cruise) else 0.0
             }
         }
         o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0

@@ -39,7 +39,7 @@ BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800,
-    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
+    "shrimp": 4800, "skunk_shrimp": 4800, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
