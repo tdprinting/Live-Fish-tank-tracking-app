@@ -27,6 +27,7 @@ CARDS = {
     "salarias_fasciatus": "lawnmower_blenny",
     "ecsenius_stigmatura": "tailspot_blenny",
     "pseudochromis_indigo": "dottyback",
+    "valenciennea_puellaris": "diamond_goby",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",
     "clibanarius_tricolor": "hermit_blue",

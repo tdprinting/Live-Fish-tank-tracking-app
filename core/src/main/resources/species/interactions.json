@@ -456,5 +456,111 @@
   "b": "percnon_gibbesi",
   "risk": "L",
   "note": "Both graze the same algae"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "Both dig; the goby keeps to its burrow, the diamond goby to the open sand"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "No overlap: clowns stay up in the water"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Peaceful tankmates"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse cleans the goby"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Hawkfish may chase a small goby off its perch area"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "salarias_fasciatus",
+  "risk": "L",
+  "note": "Different food; both bottom-dwellers"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "ecsenius_stigmatura",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "Dottyback may harass a newly added goby",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "nassarius_sp",
+  "risk": "L",
+  "note": "Competes for the sand fauna and buries nassarius trails; no predation"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "ophiocoma_sp",
+  "risk": "L",
+  "note": "The star may compete for food on the sand"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "lysmata_amboinensis",
+  "risk": "L",
+  "note": "Shrimp may clean the goby"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "zoanthus_sp",
+  "risk": "M",
+  "note": "Sand puffs settle on zoanthids placed low on the sand",
+  "threat": "valenciennea_puellaris"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "discosoma_sp",
+  "risk": "M",
+  "note": "Sand puffs settle on mushrooms placed low on the sand",
+  "threat": "valenciennea_puellaris"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "briareum_sp",
+  "risk": "L",
+  "note": "GSP on low rock gets dusted with sand",
+  "threat": "valenciennea_puellaris"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "valenciennea_puellaris",
+  "risk": "M",
+  "note": "Unpaired diamond gobies fight; a mated pair added together shares a burrow"
  }
 ]

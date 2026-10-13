@@ -87,6 +87,12 @@ enum class PodPredator(
     HERMIT(8.0, true, true, false, doubleArrayOf(0.1, 0.0, 0.0, 0.3, 0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.3, 0.5, 0.0, 0.0, 0.0), sandAccess = 1.0, hiddenAccess = 0.2),
     CRAB(25.0, false, true, false, doubleArrayOf(0.1, 0.0, 0.0, 0.3, 0.1, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.3, 0.5, 0.0, 0.0, 0.0), sandAccess = 1.0, hiddenAccess = 0.2),
     BRITTLE_STAR(8.0, false, true, false, doubleArrayOf(0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0), sandAccess = 1.0, hiddenAccess = 0.3),
+    /**
+     * Sand-sifting goby (diamond goby, research 16): filters copepods, amphipods, ostracods, isopods and worms out of
+     * mouthfuls of sand all day, including those buried in it (high hidden access on the sand only matters there, it
+     * rarely picks rock). Intake at the mandarin's order (est.); it drains a small sand bed.
+     */
+    SAND_SIFTER(1500.0, true, false, true, doubleArrayOf(0.9, 0.0, 0.6, 0.8, 0.0, 0.2, 0.8, 0.6, 0.0, 0.0, 0.0, 0.7, 0.3, 0.4, 0.3, 0.0), sandAccess = 1.0, hiddenAccess = 0.25, halfSat = 2000.0),
     ;
 
     companion object {
@@ -108,6 +114,7 @@ enum class PodPredator(
                 BrainKind.HERMIT -> HERMIT
                 BrainKind.SALLY_CRAB -> CRAB
                 BrainKind.BRITTLE_STAR -> BRITTLE_STAR
+                BrainKind.DIAMOND_GOBY -> SAND_SIFTER
                 else -> null
             }
         }
@@ -276,6 +283,28 @@ class MicrofaunaModel(private val config: TankConfig) {
 
     /** Phytoplankton, cells per mL. */
     val phytoPerMl: Double get() = adults[idx(MicroGroup.PHYTO, MicroHabitat.COLUMN)] / (volumeL * 1000)
+
+    /**
+     * Prey a sand sifter finds in the bed now, relative to a well-fed mature sand bed (research 16): the
+     * [PodPredator.SAND_SIFTER]-weighted pod-equivalents per cm² of sand (adults plus juveniles at [JUV_MASS]) over the
+     * same sum at the reference capacity. 0 = sterile sand (new tank, dry rock), ≈ 1 = established bed.
+     */
+    fun sandPreyIndex(): Double {
+        if (!initialized) return 1.0   // before the first step: a mature tank's starting bed
+        val w = PodPredator.SAND_SIFTER.weights
+        val h = MicroHabitat.SAND.ordinal
+        var now = 0.0
+        var ref = 0.0
+        for (gi in 0 until ng) {
+            val wi = w[gi]
+            if (wi <= 0) continue
+            val eq = P[gi].podEq
+            val i = gi * nh + h
+            now += wi * eq * (adults[i] + juveniles[i] * JUV_MASS)
+            ref += wi * eq * kRef(gi, h) * P[gi].start * (if (MicroGroup.entries[gi].hasJuveniles) 0.75 + 0.25 * JUV_MASS else 1.0)
+        }
+        return if (ref > 0) now / ref else 0.0
+    }
 
     /** Total carrying capacity of a group right now (individuals). */
     fun capacity(g: MicroGroup): Double { var t = 0.0; for (h in 0 until nh) t += kNow[g.ordinal * nh + h]; return t }

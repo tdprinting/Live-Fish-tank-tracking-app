@@ -67,6 +67,8 @@ object HeatModel {
     val MORAY = Profile("moray (est.)", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val ECHINODERM = Profile("brittle star/asterina (est.)", 36.0, 30.5, 60.0, 1.0, 0.5, 15.0)
     val TUBE_WORM = Profile("feather duster (est.)", 36.0, 30.5, 90.0, 1.0, 0.0, 15.0)
+    // Diamond goby (est.): a lagoon sand goby, taken as a cooler-water burrower than the reef-flat blennies.
+    val SAND_GOBY = Profile("diamond goby (est.)", 37.5, 32.0, 1440.0, 0.9, 0.8, 25.0)
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
@@ -79,6 +81,7 @@ object HeatModel {
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
+        BrainKind.DIAMOND_GOBY -> SAND_GOBY
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
@@ -92,7 +95,8 @@ object HeatModel {
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */
-    fun hidesLow(kind: BrainKind) = kind == BrainKind.LAWNMOWER_BLENNY || kind == BrainKind.PEEKER_BLENNY || kind == BrainKind.ENGINEER_GOBY
+    fun hidesLow(kind: BrainKind) = kind == BrainKind.LAWNMOWER_BLENNY || kind == BrainKind.PEEKER_BLENNY || kind == BrainKind.ENGINEER_GOBY ||
+        kind == BrainKind.DIAMOND_GOBY
 
     // ---------------------------------------------------------------- constants (08 §6, §7)
     const val D_AGITATED = 0.05

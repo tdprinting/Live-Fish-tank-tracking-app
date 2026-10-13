@@ -51,6 +51,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         patrolTonight = adult && c.rng.chance(ADULT_NIGHT_PATROL_P)
     }
 
+    /** Where the excavated sand comes from: the dig zone at the burrow mouth (a pit in the sand bed, SIMULATION §16). */
+    val digPoint: Vec3 get() = c.rock.anchors["SAND_GOBY_DIG"]?.pos ?: outside(1.0)
+
     fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.sandTopCm + 1.0), mouth.z) + outDir * k
     fun inside(k: Double) = mouth + inDir * k
 
@@ -154,6 +157,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                     out.seek(dump + Vec3.Y * 1.5, 0.5, arrive = 1.0)
                     out.pitchBias = -0.4
                     if (timer > 0.6) {
+                        digPoint.let { pit -> c.sim.sand.dig(pit.x, pit.z, GOBY_MOUTHFUL_CM3, 1.5) }
                         c.sim.depositSand(dump, GOBY_MOUTHFUL_CM3)
                         sandEvents++
                         // adults: a maintenance trip every 0.7–2 h (≈ 5–15 per day); juveniles dig much more often

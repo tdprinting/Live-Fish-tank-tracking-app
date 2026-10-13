@@ -50,6 +50,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var frame: FrameUniforms? = null
     private var post: PostFx? = null
     private var particlesGl: ParticleRenderer? = null
+    // dynamic sand bed + suspended clouds (SIMULATION §16, SandVisuals.kt)
+    private var sandFx: SandFx? = null
+    private var sandClouds: SandCloudRenderer? = null
     private var shafts: LightShafts? = null
     /** Marine snow and the follow lens (camera / lighting work, kept apart from the scene drawing). */
     private var snow: MarineSnow? = null
@@ -124,6 +127,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         programs = Programs(source, quality)
         frame = FrameUniforms()
         particlesGl = ParticleRenderer()
+        sandFx = SandFx(); sandClouds = SandCloudRenderer()
         shafts = LightShafts()
         white = Texture.solid(255, 255, 255)
         flatNormal = Texture.solid(128, 128, 255)
@@ -146,6 +150,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         frame?.release(); frame = null
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
+        sandFx?.release(); sandFx = null; sandClouds?.release(); sandClouds = null
         shafts?.release(); shafts = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
@@ -188,6 +193,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // 3. per-frame uniforms + shared textures
         updateSurface(cur)
         updateGlassMask(cur)
+        sandFx?.update(cur, now)
         val fu = frame ?: return
         val progs = programs ?: return
         fu.setEffects(quality)
@@ -228,6 +234,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
+        sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -378,6 +385,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     neutralRough?.bind(2)
                     p.set1f("uNormalStrength", if (quality.normalMaps && store.texture(SAND_NORMAL) != null) 0.6f else 0f)
                     p.set1f("uDetailScale", 4f)
+                    sandFx?.bind(p)
                 }
                 MaterialKind.EMITTER -> {
                     // AI Prime lens: emissive follows the live light colour

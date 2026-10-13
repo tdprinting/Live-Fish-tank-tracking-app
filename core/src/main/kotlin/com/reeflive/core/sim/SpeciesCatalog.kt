@@ -121,6 +121,10 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.ASTERINA -> base.copy(kind = "INVERT", common = "Asterina starfish", maxLengthCm = 1.5, depthRatio = 0.2, massCoeff = 0.02, activity = "NOCTURNAL",
                     locomotion = Locomotion("CRAWLING", 0.04, 0.08, 0.0, 30.0), diet = listOf("ALGAE", "DETRITUS"), grazer = true, feedsPerDay = 2.0,
                     hardiness = 0.95, homeRadiusCm = 60.0, model = "models/asterina.glb")
+                BrainKind.DIAMOND_GOBY -> base.copy(common = "Diamond goby", maxLengthCm = 16.0, typicalAdultCm = 12.0, depthRatio = 0.2, massCoeff = 0.012,
+                    locomotion = Locomotion("LABRIFORM", 0.8, 5.0, 2.5, 220.0, 0.85, 0.04, 0.09), zone = Zone(0.0, 0.2, 0.4, 0.6),
+                    temperament = Temperament(0.15, 0.4, 0.4, 0.6), diet = listOf("PODS", "MYSIS", "PELLET", "FLAKE"), feedsPerDay = 3.0,
+                    hardiness = 0.6, starvationDays = 21.0, homeRadiusCm = 35.0, iridescence = 0.15, model = "models/diamond_goby.glb")
                 BrainKind.GENERIC_FISH -> base
                 BrainKind.GENERIC_INVERT -> base.copy(kind = "INVERT", locomotion = Locomotion("CRAWLING", 0.05, 0.2))
             }

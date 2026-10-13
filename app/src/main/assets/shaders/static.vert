@@ -17,6 +17,12 @@ uniform float uPhase;      // per-colony sway phase
 uniform vec3 uSwayDir;     // unit, horizontal flow direction
 uniform float uSwayAmp;    // cm at the tips (0.08 x height x flow)
 #endif
+#ifdef SAND
+// Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus; xz / uSandExtent -> uv.
+uniform sampler2D uSandMap;
+uniform float uSandOn;
+uniform vec2 uSandExtent;
+#endif
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -34,6 +40,13 @@ void main() {
     float ph = uTime * 1.3 + p.y * 0.15 + uPhase + aColor.g * 6.2831;
     p += uSwayDir * sin(ph) * uSwayAmp * weight;
     p.y -= 0.15 * uSwayAmp * weight * (0.5 + 0.5 * sin(ph * 1.7));
+#endif
+#ifdef SAND
+    // pits, mounds and trails: lift the top surface only (the skirt sits at y = -0.5)
+    if (uSandOn > 0.5 && p.y > 0.5) {
+        vec2 suv = clamp(p.xz / max(uSandExtent, vec2(1.0)), 0.0, 1.0);
+        p.y += textureLod(uSandMap, suv, 0.0).r;
+    }
 #endif
     vWorld = p;
     vNormal = normalize(mat3(uModel) * aNormal);
