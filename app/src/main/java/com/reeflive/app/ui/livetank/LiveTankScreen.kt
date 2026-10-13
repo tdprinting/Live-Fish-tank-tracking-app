@@ -183,6 +183,7 @@ fun LiveTankScreen(
             photoperiodH = extras["photoperiod"],
             pumps = extras.filterKeys { it.startsWith("pump_") },
             gains = extras.filterKeys { it.startsWith("spectrum_") }.mapKeys { it.key.removePrefix("spectrum_") },
+            toggles = extras.filterKeys { it.startsWith("eq_") || it.startsWith("sc_") },
         ),
         real = real,
         category = category,
@@ -246,6 +247,14 @@ fun LiveTankScreen(
         onPumpFailTonight = { tick(); vm.pumpFailTonight() },
         onTimelapse = { lapse = true },
         onAddMany = { id, n -> tick(); vm.addMany(id, n) },
+        onAddAiptasia = { tick(); vm.addAiptasia() },
+        onRemoveAiptasia = { tick(); vm.removeAiptasia() },
+        onAddPestControl = { c -> tick(); vm.addPestControl(c) },
+        onStartTreatment = { k -> tick(); vm.startTreatment(k) },
+        onStopTreatment = { k -> tick(); vm.stopTreatment(k) },
+        onInfect = { d -> tick(); vm.infect(d) },
+        onMaintain = { t -> tick(); vm.maintain(t) },
+        onAddSpareShells = { tick(); vm.addSpareShells() },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
         when {

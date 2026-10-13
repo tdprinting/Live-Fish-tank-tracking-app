@@ -181,6 +181,26 @@ object SandboxParams {
             min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0, simId = "spectrum.violet",
             read = { it.gains["violet"]?.times(100.0) }, fallback = 100.0,
         ),
+
+        // ---------------------------------------------------------------- Pests & treatments
+        // On/off rows like the pumps (0 = off, 1 = on). Equipment ids are the sim's SetParam ids; the values live in the
+        // view model's extras (the snapshot doesn't carry them). Defaults mirror WaterSim: skimmer on, the rest off.
+        toggle("eq_skimmer", "Protein skimmer", "Skimmer", "skimmer", on = true),
+        toggle("eq_sock", "Filter sock", "Sock", "sock"),
+        toggle("eq_carbon", "Carbon reactor", "Carbon", "carbon"),
+        toggle("eq_refugium", "Refugium", "Refugium", "refugium"),
+        toggle("eq_uv", "UV steriliser", "UV", "uv"),
+        // Scenario switches (sim SetParam, 1 = on, default off); unproven behaviours kept behind a toggle.
+        toggle("sc_asterina_coral", "Asterina eat organ pipe (unproven)", "Asterina", "asterina_coral"),
+        toggle("sc_crab_predation", "Sally Lightfoot hunts fish (unproven)", "Crab", "crab_predation"),
+    )
+
+    /** An on/off sandbox row driven through `Command.SetParam(simId, 0 | 1)`; the state is kept in the view model's extras. */
+    private fun toggle(id: String, label: String, shortLabel: String, simId: String, on: Boolean = false) = SandboxParamDef(
+        id, label, shortLabel, "", SandboxCategory.PESTS,
+        min = 0.0, max = 1.0, step = 1.0, decimals = 0, simId = simId,
+        caption = { r -> if ((r.toggles[id] ?: (if (on) 1.0 else 0.0)) >= 0.5) "on" else "off" },
+        read = { it.toggles[id] }, fallback = if (on) 1.0 else 0.0,
     )
 
     private val byId = all.associateBy { it.id }
@@ -190,7 +210,7 @@ object SandboxParams {
 
 /** Panel tabs. [EVENTS] holds the scenario presets and one-off actions instead of sliders. */
 enum class SandboxCategory(val label: String) {
-    WATER("Water"), CHEMISTRY("Chemistry"), NUTRIENTS("Nutrients"), LIGHT_FLOW("Light & Flow"), STOCK("Add life"), EVENTS("Events"),
+    WATER("Water"), CHEMISTRY("Chemistry"), NUTRIENTS("Nutrients"), LIGHT_FLOW("Light & Flow"), PESTS("Pests & treatments"), STOCK("Add life"), EVENTS("Events"),
 }
 
 /**
@@ -220,6 +240,8 @@ data class TankReading(
     val pumps: Map<String, Double> = emptyMap(),
     /** Spectrum channel name → gain (1 = as programmed). */
     val gains: Map<String, Double> = emptyMap(),
+    /** On/off row id (equipment `eq_*`, scenario `sc_*`) → 1 on / 0 off. */
+    val toggles: Map<String, Double> = emptyMap(),
 )
 
 /**
