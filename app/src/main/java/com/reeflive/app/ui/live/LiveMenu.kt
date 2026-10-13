@@ -154,6 +154,7 @@ fun LiveMenu(
         awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); touches++ }
     }
     BoxWithConstraints(modifier.fillMaxSize()) {
+        val boxH = maxHeight
         val enterCard = { origin: TransformOrigin ->
             fadeIn(liveSpec<Float>(reduce)) + scaleIn(liveSpec(reduce, ReefMotion.SLOW), initialScale = 0.6f, transformOrigin = origin)
         }
@@ -195,7 +196,7 @@ fun LiveMenu(
                 ) {
                     MenuCard(
                         LiveCategory.MORE, more, { more = it }, close, panel, actions, tools,
-                        cardModifier.width(cardW).heightIn(max = maxHeight * 0.72f).padding(bottom = 8.dp),
+                        cardModifier.width(cardW).heightIn(max = boxH * 0.72f).padding(bottom = 8.dp),
                         onTuck = { onRailShown(!railShown) }, tucked = !railShown,
                     )
                 }
@@ -221,7 +222,7 @@ fun LiveMenu(
                     exit = exitCard(TransformOrigin(0.5f, 1f)),
                 ) {
                     val cat = shownOpen ?: LiveCategory.MORE
-                    MenuCard(cat, more, { more = it }, close, panel, actions, tools, cardModifier.fillMaxWidth().heightIn(max = maxHeight * 0.46f).padding(bottom = 8.dp))
+                    MenuCard(cat, more, { more = it }, close, panel, actions, tools, cardModifier.fillMaxWidth().heightIn(max = boxH * 0.46f).padding(bottom = 8.dp))
                 }
                 Rail(cats, shownOpen, tap, railShown, onRailShown, tools, vertical = false)
             }

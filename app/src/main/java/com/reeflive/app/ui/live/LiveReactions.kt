@@ -7,6 +7,7 @@ import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.PestController
+import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.TreatmentKind
 import java.util.Locale
 
