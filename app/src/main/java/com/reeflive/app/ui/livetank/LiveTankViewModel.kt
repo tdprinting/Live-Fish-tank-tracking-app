@@ -15,6 +15,7 @@ import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.Scenario
 import com.reeflive.core.sim.BacteriaAction
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.GlassPane
@@ -196,7 +197,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun addOrganism(speciesId: String, sizeCm: Double, nickname: String, role: String? = null) =
         sandbox { holder.enqueue(Command.AddOrganism(speciesId, sizeCm, nickname, role)) }
     /** Sandbox stocking test: [count] of [speciesId] at once (core caps it; corals settle on free rock or sand). */
-    fun addMany(speciesId: String, count: Int) = sandbox { holder.enqueue(Command.AddMany(speciesId, count)) }
+    fun addMany(speciesId: String, count: Int, size: StockSize = StockSize.JUVENILE) = sandbox { holder.enqueue(Command.AddMany(speciesId, count, size = size)) }
     fun removeOrganism(id: String) = sandbox {
         holder.enqueue(Command.RemoveOrganism(id))
         if (_selectedOrganismId.value == id) select(null)

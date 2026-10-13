@@ -25,6 +25,9 @@ layout(std140) uniform Frame {
     // Realism effects by quality tier (FrameUniforms.setEffects / setCasters).
     vec4 uFx;            // x contact-shadow caster count, y light-shaft strength, z caustic dispersion (0/1), w surface ripple
     vec4 uCasters[12];   // fish casting soft contact shadows: xyz mid-body (cm), w body length (cm)
+    // Real-time shadow map (ShadowMap.kt): one orthographic depth pass looking down from the fixtures.
+    mat4 uShadowMat;     // world -> shadow clip (orthographic, w = 1)
+    vec4 uShadow;        // x on (0/1), y texel size (cm), z strength 0..1, w depth bias (cm)
 };
 
 #define uTime uCamPos.w
