@@ -35,4 +35,22 @@ class ResearchGapsTest {
         // the dottyback rows carry no sourced rate: their evidence says so
         assertTrue(PairMatrix.rows.filter { it.actor == "DOTTYBACK" }.all { "[I]" in it.evidence })
     }
+
+    /** Gap 2: cruise capped at the family field speed (Fulton07); burst BL/s falls once a fish outgrows adult size. */
+    @Test
+    fun gap2_swimSpeedsFollowFamilyData() {
+        val cat = TestTank.catalog
+        val fish = DefaultStock.all.map { cat[it.speciesId] }.filter { it.kind == "FISH" }.distinctBy { it.id }
+        for (sp in fish) {
+            val bl = SwimSpeed.cruise(sp, sp.typicalAdultCm) / sp.typicalAdultCm
+            assertTrue("${sp.id} cruise $bl BL/s", bl in 0.2..2.0)
+            assertTrue("${sp.id} cruise under its family field speed", SwimSpeed.cruise(sp, sp.typicalAdultCm) <= SwimSpeed.fieldCeiling(sp.locomotion.mode))
+        }
+        val tang = cat["paracanthurus_hepatus"]
+        assertTrue("a giant tang cruises no faster than labriform field speed", SwimSpeed.cruise(tang, 60.0) <= SwimSpeed.LABRIFORM_FIELD_CM_S)
+        val atAdult = SwimSpeed.burst(tang, tang.typicalAdultCm) / tang.typicalAdultCm
+        val big = SwimSpeed.burst(tang, 1.5 * tang.typicalAdultCm) / (1.5 * tang.typicalAdultCm)
+        assertTrue("relative burst falls with size ($atAdult → $big BL/s)", big < atAdult)
+        assertEquals("unchanged up to adult size", tang.locomotion.burstBL, SwimSpeed.burst(tang, 10.0) / 10.0, 1e-9)
+    }
 }

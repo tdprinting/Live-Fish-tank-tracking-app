@@ -187,9 +187,13 @@ class Organism(
     val collisionLength: Double get() = when (brainKind) { BrainKind.EEL -> lengthCm.coerceAtMost(6.0); BrainKind.ENGINEER_GOBY -> lengthCm.coerceAtMost(3.0); else -> lengthCm }
     /** Per-species gait and kinematics (SIMULATION §14). */
     val motion: MotionProfile = MotionProfiles.of(brainKind)
-    /** Invertebrates walk at the research speeds in cm/s (size of the shell or leg span barely matters); fish in BL/s. */
-    val cruiseSpeed: Double get() = motion.walkCmS ?: (species.locomotion.cruiseBL * lengthCm)
-    val burstSpeed: Double get() = motion.walkBurstCmS ?: (species.locomotion.burstBL * lengthCm)
+    /**
+     * Invertebrates walk at the research speeds in cm/s (size of the shell or leg span barely matters). Fish swim at
+     * the species' BL/s, cruise capped at the family field speed and burst falling in relative terms past adult size
+     * (07 gap 2, [SwimSpeed]).
+     */
+    val cruiseSpeed: Double get() = motion.walkCmS ?: SwimSpeed.cruise(species, lengthCm)
+    val burstSpeed: Double get() = motion.walkBurstCmS ?: SwimSpeed.burst(species, lengthCm)
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */
     val mealGrams: Double get() = (0.012 * massG.pow(0.8)).coerceAtLeast(0.004)
 
