@@ -279,8 +279,8 @@ fun ActionFxLayer(
             val unit = (ppcm * 16f).coerceIn(64f * density, 128f * density)
             val margin = unit * 0.6f
             val frame = FxFrame(
-                ax = ax.coerceIn(margin, size.width - margin),
-                ay = ay.coerceIn(margin * 1.4f, size.height - margin * 0.6f),
+                ax = ax.clampSafe(margin, size.width - margin),
+                ay = ay.clampSafe(margin * 1.4f, size.height - margin * 0.6f),
                 ppcm = ppcm.coerceIn(1f, 40f * density),
                 unit = unit,
                 ms = if (reduce) poseMs(a.fx.kind) else ms,
@@ -332,7 +332,7 @@ private fun DrawScope.drawCaption(layout: TextLayoutResult, cx: Float, top: Floa
     val h = layout.size.height.toFloat()
     val padX = 12f * density
     val padY = 5f * density
-    val left = (cx - w / 2 - padX).coerceIn(4f * density, size.width - w - 2 * padX - 4f * density)
+    val left = (cx - w / 2 - padX).clampSafe(4f * density, size.width - w - 2 * padX - 4f * density)
     val y = top.coerceAtMost(size.height - h - 2 * padY - 4f * density)
     drawRoundRect(pal.captionBg, Offset(left, y), Size(w + 2 * padX, h + 2 * padY), CornerRadius((h + 2 * padY) / 2), alpha = alpha)
     drawText(layout, topLeft = Offset(left + padX, y + padY), alpha = alpha)

@@ -73,7 +73,7 @@ import kotlinx.coroutines.delay
  * of bubbles down the left edge (≈ 84 dp), so the tank keeps the rest of the screen; tapping a bubble opens a compact
  * glass card beside it (at most ~35 % of the width). Portrait: a dock of the same bubbles above the app's bottom bar,
  * the card opening above it. Cards are big tiles first; a "More" button folds out the grown-up sliders. A card closes
- * itself after a one-tap action (so the animation in the tank can be watched), after 12 s without a touch, on its ×,
+ * itself after a one-tap action (so the animation in the tank can be watched), after 25 s without a touch, on its ×,
  * or when the bubble is tapped again. The rail tucks away to a single bubble.
  */
 
@@ -158,7 +158,7 @@ fun LiveMenu(
     var touches by remember { mutableIntStateOf(0) }
     var more by remember(shownOpen) { mutableStateOf(false) }
     LaunchedEffect(shownOpen, touches, more) {
-        if (shownOpen != null) { delay(if (more) 30_000 else 12_000); onOpen(null) }
+        if (shownOpen != null) { delay(if (more) CARD_IDLE_MORE_MS else CARD_IDLE_MS); onOpen(null) }
     }
     val tap: (LiveCategory) -> Unit = { c ->
         when {
@@ -319,7 +319,7 @@ private fun Rail(
         // tucked: one bubble to bring the dock back
         Box(modifier.fillMaxWidth().padding(6.dp), contentAlignment = Alignment.CenterEnd) { tuck() }
     } else {
-        // the dock: one slot per category across the width (the mode toggle or a tap on the water tucks it away)
+        // the dock: one slot per category across the width (it stays out; More → Hide buttons clears the screen)
         BoxWithConstraints(modifier.fillMaxWidth()) {
             val per = (maxWidth - 12.dp) / n
             val compact = per < 76.dp
@@ -493,7 +493,7 @@ private fun ColumnScope.CardBody(
             ))
         }
         LiveCategory.LIFE -> {
-            StockGallery(panel.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
@@ -556,18 +556,22 @@ private fun ColumnScope.CardBody(
             }
             LiveSectionTitle("Tools")
             Tiles(tone, close, listOfNotNull(
+                T("What can I do?", ReefGlyphs.help) { tools.onHelp() },
                 onTuck?.let { t -> T(if (tucked) "Show menu" else "Tuck menu", ReefGlyphs.chevronUp) { t() } },
                 T("Look closer", ReefGlyphs.microscope) { tools.onMicroscope() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
                 T("Knock glass", ReefGlyphs.touch) { tools.onTapGlass() },
                 T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
-                T("Tips", ReefGlyphs.help) { tools.onHelp() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
             ))
         }
     }
 }
+
+/** A card left alone closes itself after this long (longer with the grown-up sliders out): long enough to read. */
+private const val CARD_IDLE_MS = 25_000L
+private const val CARD_IDLE_MORE_MS = 45_000L
 
 private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
     ViewLight.REAL -> ReefGlyphs.clockSun

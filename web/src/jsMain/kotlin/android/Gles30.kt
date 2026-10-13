@@ -61,6 +61,10 @@ object GLES30 {
     const val GL_READ_FRAMEBUFFER = 0x8CA8
     const val GL_DRAW_FRAMEBUFFER = 0x8CA9
     const val GL_FRAMEBUFFER_COMPLETE = 0x8CD5
+    const val GL_NONE = 0
+    const val GL_TEXTURE_COMPARE_MODE = 0x884C
+    const val GL_TEXTURE_COMPARE_FUNC = 0x884D
+    const val GL_COMPARE_REF_TO_TEXTURE = 0x884E
     const val GL_COLOR_ATTACHMENT0 = 0x8CE0
     const val GL_DEPTH_ATTACHMENT = 0x8D00
     const val GL_FRAMEBUFFER = 0x8D40
@@ -124,7 +128,11 @@ object GLES30 {
     /** WebGL wants a Uint8Array for UNSIGNED_BYTE pixels; byte buffers are Int8Array views. */
     private fun pixels(b: Buffer?, type: Int): dynamic {
         val v = data(b) ?: return null
-        return if (type == GL_UNSIGNED_BYTE) org.khronos.webgl.Uint8Array(v.buffer, v.byteOffset, v.byteLength) else v
+        return when (type) {
+            GL_UNSIGNED_BYTE -> org.khronos.webgl.Uint8Array(v.buffer, v.byteOffset, v.byteLength)
+            GL_UNSIGNED_INT -> org.khronos.webgl.Uint32Array(v.buffer, v.byteOffset, v.byteLength / 4)
+            else -> v
+        }
     }
 
     // ---- state
@@ -202,6 +210,8 @@ object GLES30 {
     fun glGenFramebuffers(n: Int, out: IntArray, off: Int) = gen(n, out, off) { gl.createFramebuffer() }
     fun glDeleteFramebuffers(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteFramebuffer(it) }
     fun glBindFramebuffer(t: Int, id: Int) = gl.bindFramebuffer(t, Names.get(id))
+    fun glDrawBuffers(n: Int, bufs: IntArray, off: Int) = gl.drawBuffers(Array(n) { bufs[off + it] })
+    fun glReadBuffer(mode: Int) = gl.readBuffer(mode)
     fun glFramebufferTexture2D(t: Int, att: Int, tt: Int, tex: Int, level: Int) = gl.framebufferTexture2D(t, att, tt, Names.get(tex), level)
     fun glFramebufferRenderbuffer(t: Int, att: Int, rt: Int, rb: Int) = gl.framebufferRenderbuffer(t, att, rt, Names.get(rb))
     fun glCheckFramebufferStatus(t: Int): Int = gl.checkFramebufferStatus(t) as Int

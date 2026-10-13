@@ -64,6 +64,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var sandFx: SandFx? = null
     private var sandClouds: SandCloudRenderer? = null
     private var shafts: LightShafts? = null
+    /** Real-time shadows from the fixtures (ShadowMap.kt); its depth pass runs before the scene, see [renderShadowMap]. */
+    private var shadowMap: ShadowMap? = null
     /** Marine snow and the follow lens (camera / lighting work, kept apart from the scene drawing). */
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
@@ -141,6 +143,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl = ParticleRenderer()
         sandFx = SandFx(); sandClouds = SandCloudRenderer()
         shafts = LightShafts()
+        shadowMap = ShadowMap(quality)
         white = Texture.solid(255, 255, 255)
         flatNormal = Texture.solid(128, 128, 255)
         neutralRough = Texture.solid(217, 255, 0)
@@ -164,6 +167,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.release(); particlesGl = null
         sandFx?.release(); sandFx = null; sandClouds?.release(); sandClouds = null
         shafts?.release(); shafts = null
+        shadowMap?.release(); shadowMap = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
@@ -215,8 +219,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val progs = programs ?: return
         fu.setEffects(quality)
         fu.setCasters(rigs, quality.shadowCasters, camera.eye[0], camera.eye[1], camera.eye[2])
+        shadowMap?.fill(fu.data, FrameUniforms.SHADOW_OFFSET)
         fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
         bindShared()
+        shadowMap?.let { renderShadowMap(it, fu, progs, rigs, cur) }
         particles.ambientCount = quality.particles
         bursts?.drain { particles.burst(it, cur) }
         particles.step(dt, time, cur, viewProjM = camera.viewProj)
@@ -328,6 +334,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         (store.texture(WATER_N1) ?: flatNormal ?: w).bind(7)
         (store.texture(WATER_N2) ?: flatNormal ?: w).bind(8)
         (glassMaskTex?.takeIf { glassMaskOn } ?: w).bind(GLASS_MASK_UNIT)
+        shadowMap?.bind()
     }
 
     /** Uploads the front-glass film mask when the snapshot carries a new one (the core shares an array per version). */
@@ -410,6 +417,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.use()
             p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
             part.material.apply(p, w)
+            p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
             when (part.kind) {
                 MaterialKind.ROCK -> {
                     (if (quality.normalMaps) store.texture(ROCK_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
@@ -467,6 +475,77 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4f("uWake", 0f, 0f, 0f, 0f)
         p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
     }
+
+    // ------------------------------------------------------------------ shadow map (ShadowMap.kt)
+
+    /**
+     * Depth pass from the fixtures into [sm]: rock, in-water equipment and opaque reef details, coral bodies, and on
+     * High the fish (their own skinning, LOD1 when shipped). The casters' vertex shaders run unchanged while the Frame
+     * UBO's `uViewProj` holds [ShadowMap.matrix]; the camera matrix is restored afterwards. Self-contained: it binds
+     * its own target and leaves the scene target / viewport to the normal frame code that follows.
+     */
+    private fun renderShadowMap(sm: ShadowMap, fu: FrameUniforms, progs: Programs, rigs: Collection<FishRig>, cur: SimSnapshot?) {
+        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0)
+        if (!sm.needsUpdate(signature)) return
+        fu.overrideViewProj(sm.matrix)
+        sm.begin()
+        val p = progs.shadow
+        p.use()
+        for (key in SHADOW_STATIC) {
+            val m = store.model(key) ?: continue
+            for (part in m.parts) {
+                if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part)) continue
+                p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        val pc = progs.shadowCoral
+        pc.use()
+        store.model(DETAILS)?.let { m ->
+            for (part in m.parts) {
+                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
+                pc.setMat4("uModel", part.node.world)
+                staticCoralUniforms(pc, part)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        for ((m, c) in coralModels(cur)) {
+            val copy = c != null && c.isCopy
+            if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
+            for (part in m.parts) {
+                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
+                if (c != null && copy && !nearHome(part, c)) continue
+                pc.setMat4("uModel", if (copy) M.mul(coralShift, part.node.world, coralModel) else part.node.world)
+                coralUniforms(pc, m, c)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        if (sm.dynamic) {
+            val pf = progs.shadowFish
+            pf.use()
+            for (r in rigs) {
+                if (!r.visible) continue
+                val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant) ?: continue
+                val lod1 = ModelRegistry.lod1(path)
+                val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
+                fishUniforms(pf, r, m.rigid)
+                for (part in m.parts) {
+                    if (part.kind != MaterialKind.FISH_SKIN) continue
+                    val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
+                    pf.set1f("uPart", code)
+                    pf.set4f("uShape", r.thin, code, r.eyeYaw, part.finKind)
+                    pf.set3fv("uEyePivot", part.eyePivot)
+                    part.mesh.draw(); drawCalls++
+                }
+            }
+        }
+        sm.end()
+        fu.overrideViewProj(null)
+        sm.bind()
+    }
+
+    private fun castsShadow(part: DrawPart): Boolean =
+        !part.material.src.blended && part.material.alphaCutoff <= 0f && part.center[1] < ShadowMap.CASTER_MAX_Y
 
     // ------------------------------------------------------------------ corals
 
@@ -853,6 +932,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
         const val GLASS_MASK_H = com.reeflive.core.sim.GlassMask.H
         val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE, DETAILS)
+        /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
+        val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
             "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",
