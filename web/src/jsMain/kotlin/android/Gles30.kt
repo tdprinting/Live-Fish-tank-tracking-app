@@ -66,6 +66,45 @@ object GLES30 {
     const val GL_FRAMEBUFFER = 0x8D40
     const val GL_RENDERBUFFER = 0x8D41
     const val GL_MAX_SAMPLES = 0x8D57
+    // Also commonly used by the Android renderer; declared ahead so new render code keeps compiling for the web.
+    const val GL_ZERO = 0
+    const val GL_LINES = 0x0001
+    const val GL_LINE_STRIP = 0x0003
+    const val GL_TRIANGLE_STRIP = 0x0005
+    const val GL_TRIANGLE_FAN = 0x0006
+    const val GL_LESS = 0x0201
+    const val GL_LEQUAL = 0x0203
+    const val GL_ALWAYS = 0x0207
+    const val GL_SRC_COLOR = 0x0300
+    const val GL_ONE_MINUS_SRC_COLOR = 0x0301
+    const val GL_DST_ALPHA = 0x0304
+    const val GL_ONE_MINUS_DST_ALPHA = 0x0305
+    const val GL_DST_COLOR = 0x0306
+    const val GL_FRONT = 0x0404
+    const val GL_BACK = 0x0405
+    const val GL_CW = 0x0900
+    const val GL_CCW = 0x0901
+    const val GL_SCISSOR_TEST = 0x0C11
+    const val GL_MAX_TEXTURE_SIZE = 0x0D33
+    const val GL_BYTE = 0x1400
+    const val GL_SHORT = 0x1402
+    const val GL_INT = 0x1404
+    const val GL_HALF_FLOAT = 0x140B
+    const val GL_DEPTH_COMPONENT = 0x1902
+    const val GL_RGB = 0x1907
+    const val GL_FUNC_ADD = 0x8006
+    const val GL_POLYGON_OFFSET_FILL = 0x8037
+    const val GL_RGB8 = 0x8051
+    const val GL_DEPTH_COMPONENT16 = 0x81A5
+    const val GL_RG = 0x8227
+    const val GL_R8 = 0x8229
+    const val GL_R32F = 0x822E
+    const val GL_RG16F = 0x822F
+    const val GL_MIRRORED_REPEAT = 0x8370
+    const val GL_RGBA32F = 0x8814
+    const val GL_STREAM_DRAW = 0x88E0
+    const val GL_NEAREST_MIPMAP_NEAREST = 0x2700
+    const val GL_LINEAR_MIPMAP_NEAREST = 0x2701
 
     private object Names {
         private var next = 1
@@ -93,6 +132,15 @@ object GLES30 {
     fun glDisable(cap: Int) = gl.disable(cap)
     fun glBlendFunc(s: Int, d: Int) = gl.blendFunc(s, d)
     fun glDepthMask(f: Boolean) = gl.depthMask(f)
+    fun glDepthFunc(f: Int) = gl.depthFunc(f)
+    fun glCullFace(m: Int) = gl.cullFace(m)
+    fun glFrontFace(m: Int) = gl.frontFace(m)
+    fun glPolygonOffset(factor: Float, units: Float) = gl.polygonOffset(factor, units)
+    fun glBlendFuncSeparate(sr: Int, dr: Int, sa: Int, da: Int) = gl.blendFuncSeparate(sr, dr, sa, da)
+    fun glBlendEquation(m: Int) = gl.blendEquation(m)
+    fun glColorMask(r: Boolean, g: Boolean, b: Boolean, a: Boolean) = gl.colorMask(r, g, b, a)
+    fun glScissor(x: Int, y: Int, w: Int, h: Int) = gl.scissor(x, y, w, h)
+    fun glLineWidth(w: Float) = gl.lineWidth(w)
     fun glViewport(x: Int, y: Int, w: Int, h: Int) = gl.viewport(x, y, w, h)
     fun glClearColor(r: Float, g: Float, b: Float, a: Float) = gl.clearColor(r, g, b, a)
     fun glClear(mask: Int) = gl.clear(mask)
@@ -124,6 +172,8 @@ object GLES30 {
     fun glVertexAttribPointer(i: Int, size: Int, type: Int, norm: Boolean, stride: Int, offset: Int) = gl.vertexAttribPointer(i, size, type, norm, stride, offset)
     fun glVertexAttribDivisor(i: Int, d: Int) = gl.vertexAttribDivisor(i, d)
     fun glDrawArrays(mode: Int, first: Int, count: Int) = gl.drawArrays(mode, first, count)
+    fun glDrawArraysInstanced(mode: Int, first: Int, count: Int, instances: Int) = gl.drawArraysInstanced(mode, first, count, instances)
+    fun glDisableVertexAttribArray(i: Int) = gl.disableVertexAttribArray(i)
     fun glDrawElements(mode: Int, count: Int, type: Int, offset: Int) = gl.drawElements(mode, count, type, offset)
     fun glDrawElementsInstanced(mode: Int, count: Int, type: Int, offset: Int, instances: Int) = gl.drawElementsInstanced(mode, count, type, offset, instances)
 
@@ -189,6 +239,10 @@ object GLES30 {
     fun glUniform2f(l: Int, a: Float, b: Float) = gl.uniform2f(u(l), a, b)
     fun glUniform3f(l: Int, a: Float, b: Float, c: Float) = gl.uniform3f(u(l), a, b, c)
     fun glUniform4f(l: Int, a: Float, b: Float, c: Float, d: Float) = gl.uniform4f(u(l), a, b, c, d)
+    fun glUniform2i(l: Int, a: Int, b: Int) = gl.uniform2i(u(l), a, b)
+    fun glUniform1fv(l: Int, count: Int, v: FloatArray, off: Int) = gl.uniform1fv(u(l), v, off, count)
+    fun glUniform2fv(l: Int, count: Int, v: FloatArray, off: Int) = gl.uniform2fv(u(l), v, off, count * 2)
+    fun glUniformMatrix3fv(l: Int, count: Int, transpose: Boolean, v: FloatArray, off: Int) = gl.uniformMatrix3fv(u(l), transpose, v, off, count * 9)
     fun glUniform3fv(l: Int, count: Int, v: FloatArray, off: Int) = gl.uniform3fv(u(l), v, off, count * 3)
     fun glUniform4fv(l: Int, count: Int, v: FloatArray, off: Int) = gl.uniform4fv(u(l), v, off, count * 4)
     fun glUniformMatrix4fv(l: Int, count: Int, transpose: Boolean, v: FloatArray, off: Int) = gl.uniformMatrix4fv(u(l), transpose, v, off, count * 16)
