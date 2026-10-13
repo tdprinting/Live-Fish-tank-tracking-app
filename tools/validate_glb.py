@@ -40,7 +40,11 @@ BUDGET = {
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800,
     "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
-    "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
+    "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
+    # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
+    "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,
+    "micro_snail": 1400, "micro_flatworm": 200, "micro_tentacle": 800, "micro_caprellid": 2000, "micro_ostracod": 700,
+    "micro_foram": 300, "micro_calanoid": 600,
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
     "mushroom_hairy": 1500,
@@ -55,6 +59,10 @@ HIGH_MAX = 220000
 MEDIUM_MAX = 140000
 # how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
 SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
+# in-tank microfauna (MicroCritters): drawn nearest-first until this per-frame triangle budget is spent, so they add
+# at most this much on screen whatever the population (app render/MicroCritterVisuals.kt MICRO_TRIS_*)
+MICRO_TRIS_HIGH = 12000
+MICRO_TRIS_MEDIUM = 2000
 BODY_BUDGET = {"engineer_goby": 5600}
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
@@ -352,6 +360,8 @@ def estimates(report):
             if name in FISH:
                 fish0 += tris
                 continue
+            if name.startswith("micro_"):
+                continue  # covered by the MICRO_TRIS_* draw budget below
             use = name
             if level == "medium" and name + "_lod1" in files:
                 use = name + "_lod1"
@@ -361,6 +371,7 @@ def estimates(report):
             if level == "medium" and use == name:
                 extra //= 2
             instances += extra
+        meshes += MICRO_TRIS_HIGH if level == "high" else MICRO_TRIS_MEDIUM
         out[level] = {"meshes": meshes, "instances": instances, "fish": fish1, "fish_lod0": fish0,
                       "total": meshes + instances + fish1, "worst": meshes + instances + fish0}
     return out

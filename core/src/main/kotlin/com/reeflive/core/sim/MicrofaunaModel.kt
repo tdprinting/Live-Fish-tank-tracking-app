@@ -155,6 +155,10 @@ class MicrofaunaState(
     /** A mass flatworm kill is releasing toxin (§3.3 flatworm row). */
     val toxin: Boolean,
     val refugiumL: Double,
+    /** Habitat areas (cm²) behind the [visible] densities, so a view can turn them back into animal counts (0 = unknown). */
+    val rockCm2: Double = 0.0,
+    val sandCm2: Double = 0.0,
+    val glassCm2: Double = 0.0,
 ) {
     fun total(g: MicroGroup) = total[g.ordinal]
     fun visible(g: MicroGroup, s: MicroScene): Double = visible[g.ordinal * SCENES + s.ordinal].toDouble()
@@ -899,6 +903,7 @@ class MicrofaunaModel(private val config: TankConfig) {
         return MicrofaunaState(
             tot, juv, breeding.copyOf(), ex, trendPerDay.copyOf(), present.copyOf(), vis, phytoPerMl, night, torch,
             born, eaten, coralCapturePerDay, coralFedDays > 0, toxinHours > 0, refugiumL,
+            size(MicroHabitat.ROCK), sandCm2, glassCm2,
         )
     }
 
