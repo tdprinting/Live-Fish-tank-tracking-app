@@ -39,6 +39,7 @@ class TouchController(context: Context, private val view: View, private val inpu
             return true
         }
         val t = ev.eventTime
+        tracker.instantTaps = input.instantTaps
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 view.parent?.requestDisallowInterceptTouchEvent(true)
@@ -98,6 +99,8 @@ class CameraInput : GestureTracker.Sink {
 
     /** Clean-glass mode: set from the UI thread, read by [TouchController] and the GL thread. */
     @Volatile var cleaning = false
+    /** Supplies mode: taps pick a prop at once (no double-tap wait). Set by the GL thread, read by [TouchController]. */
+    @Volatile var instantTaps = false
     private var scrapeX = 0f; private var scrapeY = 0f; private var scrapeDown = false
 
     /** Clean-glass mode: where the finger is and whether it is on the screen. */

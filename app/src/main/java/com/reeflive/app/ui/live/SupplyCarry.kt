@@ -15,12 +15,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,17 +38,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reeflive.app.render.TankProjection
 import com.reeflive.app.ui.components.Glyph
 import com.reeflive.app.ui.theme.ReefTheme
@@ -55,7 +63,8 @@ import kotlin.math.roundToInt
  * Carrying a supply from the shelf into the tank (UI_STYLE §10.6): after a prop is picked the camera glides back to
  * the tank and the prop floats in the player's hand at the bottom of the screen. Drag it over the tank (the front glass
  * glows) and let go, or just tap the tank, to use it there: food drops in at that spot, the knocker knocks there, the
- * rest do their usual thing. Letting go off the tank, or "Put back", returns it to the shelf.
+ * rest do their usual thing. The prop's name rides under it and over the glass. Letting go off the tank keeps it in the
+ * hand (a near miss should not throw it away); "Back to shelf" returns it to the shelf and "Cancel" just drops the idea.
  */
 
 /** Tank interior on the front glass (cm): the drop zone. */
@@ -97,7 +106,8 @@ fun insideTank(x: Float, y: Float): Boolean = x in 0f..TANK_L && y in 0f..TANK_T
 
 /**
  * The carried prop and its drop gesture, over the whole screen (lay it out at the GL view's bounds). [onDrop] gets the
- * front-glass point (tank cm) the prop was let go over; [onPutBack] runs when it is let go off the tank or put back.
+ * front-glass point (tank cm) the prop was let go over; [onPutBack] takes it back to the shelf; [onCancel] puts it away
+ * and stays at the tank.
  */
 @Composable
 fun SupplyCarryLayer(
@@ -105,16 +115,17 @@ fun SupplyCarryLayer(
     projection: TankProjection,
     onDrop: (SupplyItem, x: Float, y: Float) -> Unit,
     onPutBack: (SupplyItem) -> Unit,
+    onCancel: () -> Unit,
     bottomClearance: Dp,
 ) {
     val s = LiveTheme.style
     val reduce = ReefTheme.reduceMotion
     val density = LocalDensity.current
     val drop by rememberUpdatedState(onDrop)
-    val back by rememberUpdatedState(onPutBack)
     val lift = with(density) { 56.dp.toPx() }
     var finger by remember(item) { mutableStateOf<Offset?>(null) }
     var over by remember(item) { mutableStateOf(false) }
+    var missed by remember(item) { mutableStateOf(false) }
     var frame by remember { mutableLongStateOf(0L) }
     LaunchedEffect(item) { while (true) withFrameNanos { frame = it } }
     val glass = remember { FloatArray(2) }
@@ -124,7 +135,7 @@ fun SupplyCarryLayer(
     val grow by animateFloatAsState(if (finger != null) 1.15f else 1f, liveSpec(reduce), label = "carryGrow")
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val restX = constraints.maxWidth / 2f
-        val restY = constraints.maxHeight - with(density) { (bottomClearance + 120.dp).toPx() }
+        val restY = constraints.maxHeight - with(density) { (bottomClearance + 170.dp).toPx() }
         // the drop gesture: wherever the finger goes down the prop jumps into it; let go to use it there
         Box(
             Modifier
@@ -133,6 +144,7 @@ fun SupplyCarryLayer(
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         finger = down.position
+                        missed = false
                         var pos = down.position
                         while (true) {
                             val ev = awaitPointerEvent()
@@ -146,7 +158,8 @@ fun SupplyCarryLayer(
                         finger = null
                         val hit = glassPointAt(projection, pos.x, pos.y - lift, glass) && insideTank(glass[0], glass[1])
                         over = false
-                        if (hit) drop(item, glass[0], glass[1]) else back(item)
+                        missed = !hit
+                        if (hit) drop(item, glass[0], glass[1])
                     }
                 },
         ) {
@@ -167,32 +180,85 @@ fun SupplyCarryLayer(
                     drawPath(path, tone.copy(alpha = if (over) 1f else pulse), style = Stroke(5.dp.toPx()))
                 }
             }
+            // while dragging, the glass says what goes in ("Drop the krill in") at its top edge
+            if (finger != null) {
+                Box(
+                    Modifier.layout { m, c ->
+                        val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
+                        layout(c.maxWidth, c.maxHeight) {
+                            frame
+                            if (projection.project(TANK_L / 2, 56f, GLASS_Z, corner)) {
+                                val x = (corner[0] - p.width / 2f).roundToInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
+                                val y = (corner[1] + 8.dp.toPx()).roundToInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
+                                p.place(x, y)
+                            }
+                        }
+                    },
+                ) {
+                    NameChip(if (over) "Let go: ${item.label}" else "Drop the ${item.label.lowercase()} in", item.row.tone, strong = over)
+                }
+            }
             val at = finger?.let { Offset(it.x, it.y - lift) } ?: Offset(restX, restY + bob * density.density)
-            Box(
-                Modifier
-                    .offset { IntOffset((at.x - 40.dp.toPx()).roundToInt(), (at.y - 40.dp.toPx()).roundToInt()) }
-                    .size(80.dp)
-                    .graphicsLayer { scaleX = grow; scaleY = grow }
-                    .clip(CircleShape)
-                    .background(s.panel)
-                    .border(3.dp, item.row.tone, CircleShape)
-                    .semantics { contentDescription = "${item.label}: drag it over the tank and let go" },
-                contentAlignment = Alignment.Center,
+            Column(
+                Modifier.offset { IntOffset((at.x - 70.dp.toPx()).roundToInt(), (at.y - 40.dp.toPx()).roundToInt()) }.width(140.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                val k = item.food
-                if (k != null) FoodPicture(k, size = 60.dp) else Glyph(item.glyph, size = 44.dp, tint = s.label, accent = item.row.tone)
+                Box(
+                    Modifier
+                        .size(80.dp)
+                        .graphicsLayer { scaleX = grow; scaleY = grow }
+                        .clip(CircleShape)
+                        .background(s.panel)
+                        .border(3.dp, item.row.tone, CircleShape)
+                        .semantics { contentDescription = "${item.label}: drag it over the tank and let go" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val k = item.food
+                    if (k != null) FoodPicture(k, size = 60.dp) else Glyph(item.glyph, size = 44.dp, tint = s.label, accent = item.row.tone)
+                }
+                // the carried thing's name rides under it
+                NameChip(item.label, item.row.tone, strong = true)
             }
         }
-        // hint and "Put back" (a sibling above the gesture layer, so its taps stay its own)
+        // hint, "Back to shelf" and "Cancel" (a sibling above the gesture layer, so its taps stay its own)
         Column(
             Modifier.align(Alignment.BottomCenter).padding(bottom = bottomClearance).padding(horizontal = 12.dp).widthIn(max = 420.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            LivePanel(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                LiveHelp(if (item.food != null) "Drag the ${item.label.lowercase()} over the tank and let go to feed there." else "Drag it over the tank and let go to use it.")
+            LivePanel(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp), tint = if (missed) Candy.yellow else null) {
+                LiveHelp(
+                    when {
+                        missed -> "Missed the tank! Let go over the glowing glass, or put it back."
+                        item.food != null -> "Drag the ${item.label.lowercase()} over the tank and let go to feed there."
+                        else -> "Drag the ${item.label.lowercase()} over the tank and let go to use it."
+                    },
+                )
             }
-            LivePill("Put back", { onPutBack(item) }, tone = Candy.white)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LivePill("Back to shelf", { onPutBack(item) }, tone = Candy.white)
+                LivePill("Cancel", onCancel, tone = Candy.white)
+            }
         }
     }
+}
+
+/** A small candy chip with the carried thing's name (navy outline, [tone] fill when [strong], glass otherwise). */
+@Composable
+private fun NameChip(text: String, tone: Color, strong: Boolean) {
+    val s = LiveTheme.style
+    val shape = RoundedCornerShape(50)
+    Text(
+        text,
+        style = s.buttonText.copy(fontSize = 14.sp),
+        color = if (strong) s.onCandy else s.label,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (strong) tone else s.panel)
+            .border(2.dp, s.outline, shape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }
