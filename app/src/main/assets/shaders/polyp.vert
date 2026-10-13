@@ -15,6 +15,13 @@ uniform mat4 uModel;        // identity for coral GLBs (instances are in world c
 uniform float uExtension;   // colony extension 0..1
 uniform vec3 uSwayDir;
 uniform float uSwayAmp;     // cm at the tentacle tips
+// tree mode (Kenya sprigs, extras.swayMode = 1): the instance rides its branch's treeSway (same uniforms as the body)
+uniform float uSwayMode;
+uniform vec3 uBase;
+uniform float uHeight;
+uniform float uPhase;
+uniform float uBodySwayAmp;
+uniform vec4 uWake;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -39,9 +46,19 @@ void main() {
     n.xz = vec2(c * n.x - s * n.z, s * n.x + c * n.z);
 
     vec3 w = iPosScale.xyz + qrot(iQuat, p * iPosScale.w);
-    // sway with the flow (coherent phase across a mat)
-    float sw = sin(uTime * 1.6 + phase + dot(iPosScale.xz, vec2(0.15, 0.1)));
-    w += uSwayDir * sw * uSwayAmp * hinge * iPosScale.w;
+    if (uSwayMode > 0.5) {
+        // ride the branch: the body's extension shrink and tree sway at the instance base (uModel is a pure
+        // translation for coral GLBs, so a world-space offset can be added before it), then a quick fringe flutter
+        vec3 ip = (uModel * vec4(iPosScale.xyz, 1.0)).xyz;
+        vec3 shrunk = uBase + (ip - uBase) * mix(0.55, 1.0, clamp(uExtension, 0.0, 1.0));
+        w += shrunk - ip + treeSway(shrunk, uBase, uHeight, uPhase, uSwayDir, uBodySwayAmp, uWake);
+        float fl = sin(uTime * 5.7 + phase * 3.0 + dot(iPosScale.xz, vec2(0.9, 0.7)));
+        w += uSwayDir * fl * uSwayAmp * hinge * iPosScale.w;
+    } else {
+        // sway with the flow (coherent phase across a mat)
+        float sw = sin(uTime * 1.6 + phase + dot(iPosScale.xz, vec2(0.15, 0.1)));
+        w += uSwayDir * sw * uSwayAmp * hinge * iPosScale.w;
+    }
     vec4 world = uModel * vec4(w, 1.0);
     vWorld = world.xyz;
     vNormal = normalize(mat3(uModel) * qrot(iQuat, n));
