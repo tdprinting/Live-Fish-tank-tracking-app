@@ -143,6 +143,8 @@ object CoralGrowth {
         CoralKind.ORGAN_PIPE -> Growth(Form.TREE, 3.0, 0.001, maxSize = 1.6)               // est.
         CoralKind.MACRO -> Growth(Form.MACRO, 4.0, 0.0)
         CoralKind.AIPTASIA -> Growth(Form.NONE, 1.0, 0.0)
+        // [M] (tee_tank_photos.md): "a 5 cm frag can reach about 20 cm across within a year" -> x4 / yr = 0.4 %/day
+        CoralKind.LEATHER -> Growth(Form.TREE, 4.0, 0.004, maxSize = 2.5)
         CoralKind.GENERIC -> Growth(Form.NONE, 3.0, 0.0)
     }
 
@@ -155,6 +157,8 @@ object CoralGrowth {
     const val KENYA_MAX_COLONIES = 6
     const val KENYA_RANGE_CM = 10.0
     const val STING_RANGE_CM = 3.0
+    /** Leather terpene halo: [M] guides keep a ~15 cm clear perimeter (Sammarco et al. 1983: contact and nearby kills). */
+    const val LEATHER_RANGE_CM = 15.0
 
     /** Footprint radius used for edge-to-edge distances, cm. */
     fun extent(c: Coral): Double {
@@ -259,6 +263,9 @@ object CoralGrowth {
             // 03 D: Kenya allelopathy "could damage other corals that are too close", keep 10 cm away, carbon helps
             CoralKind.KENYA -> if (victim.kind == CoralKind.MACRO) 0.0 to 0.0 else
                 0.3 * (1 - d / KENYA_RANGE_CM).coerceIn(0.0, 1.0) * vigour * (1 - 0.6 * carbonEfficiency) to 0.0
+            // leathers (Sarcophyton, Sinularia) leak cytotoxic terpenes (Sammarco et al. 1983; [M]); carbon helps
+            CoralKind.LEATHER -> if (victim.kind == CoralKind.MACRO) 0.0 to 0.0 else
+                0.25 * (1 - d / LEATHER_RANGE_CM).coerceIn(0.0, 1.0) * vigour * (1 - 0.6 * carbonEfficiency) to 0.0
             // 03 D: zoa/paly toxin; sting neighbours on contact (K)
             CoralKind.ZOA -> 0.3 * (1 - d / STING_RANGE_CM).coerceIn(0.0, 1.0) * vigour to 0.0
             // aiptasia sting what they touch (est.)
@@ -302,6 +309,7 @@ object CoralGrowth {
         when (it.kind) {
             CoralKind.KENYA -> 0.006 * it.size * it.tissue
             CoralKind.ZOA -> 0.002 * it.size * it.tissue
+            CoralKind.LEATHER -> 0.003 * it.size * it.tissue
             else -> 0.0
         }
     }

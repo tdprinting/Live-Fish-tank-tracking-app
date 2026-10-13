@@ -2,6 +2,9 @@
 
 Sim hook: `CoralKind.GSP` · Adult size: mat 5–20 cm across [L] · Tank count: 1–3 colonies [L]
 
+Tee's two colonies are the **long-polyp** form (dense curling lime tentacles ~1.5-2 cm on a brown-maroon base): see
+[tee_tank_photos.md](tee_tank_photos.md) [P p12] [P p13] for the rebuilt model and polyp animation.
+
 ## Sources
 | # | Video / page | URL | What it shows |
 |---|---|---|---|

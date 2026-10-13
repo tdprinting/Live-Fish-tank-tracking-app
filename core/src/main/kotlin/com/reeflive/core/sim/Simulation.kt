@@ -668,6 +668,8 @@ class Simulation(
                 CoralKind.ORGAN_PIPE -> small += 200 * open
                 CoralKind.ZOA -> zoa += 50 * open
                 CoralKind.MUSHROOM -> shroom += 5 * open
+                // leather polyps are small particle feeders (est.; tee_tank_photos.md)
+                CoralKind.LEATHER -> small += 80 * open
                 CoralKind.MACRO -> macro += 0.5 * c.tissue
                 else -> {}
             }
