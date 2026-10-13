@@ -109,34 +109,43 @@ class TailFlip(val b: SpeciesBrain, val home: (Ctx) -> Vec3) : Behavior("tailfli
 /**
  * Antenna grooming (research 17, Bauer 1981: Stenopus draws one antennule at a time through the brush of its third
  * maxillipeds and cleans the long flagellum with the first pereiopod; carideans groom the same way, ANALOGY for
- * Lysmata). Done at rest in short bouts; interval and bout length are DESIGN ESTIMATES. No rng draws, so behaviour
- * sequences elsewhere stay as they were.
+ * Lysmata). Done in short bouts while the shrimp sits at its ledge or station, as an overlay on that resting
+ * behaviour (it never changes which behaviour runs, so it draws no rng and leaves other sequences as they were).
+ * Interval and bout length are DESIGN ESTIMATES.
  */
-class Groom(val b: SpeciesBrain, val allowed: (Ctx) -> Boolean = { true }) : Behavior("groom", "Grooming its antennae") {
+class GroomClock {
     companion object {
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "17 Bauer 1981") const val INTERVAL_S = 240.0
         const val BOUT_MIN_S = 6.0
         const val BOUT_MAX_S = 14.0
     }
     private var next = -1.0
-    private var dur = BOUT_MIN_S
+    private var start = 0.0
+    private var until = -1.0
     private var n = 0
-    /** Deterministic 0..1 jitter per bout from the organism id. */
-    private fun jitter(k: Int, c: Ctx): Double { val x = kotlin.math.sin((k * 12.9898 + c.o.id.hashCode() * 0.001) ) * 43758.5453; return x - kotlin.math.floor(x) }
     var bouts = 0; private set
-    override fun score(c: Ctx): Double {
-        if (next < 0) next = c.t + INTERVAL_S * (0.3 + 0.7 * jitter(n++, c))
-        return if (c.t >= next && !c.o.molting && b.threat == null && allowed(c)) 0.65 else 0.0
+    val grooming: Boolean get() = until > start && lastT < until
+    private var lastT = 0.0
+    /** Deterministic 0..1 jitter per bout from the organism id. */
+    private fun jitter(c: Ctx): Double { val x = kotlin.math.sin(n++ * 12.9898 + c.o.id.hashCode() * 0.001) * 43758.5453; return x - kotlin.math.floor(x) }
+
+    /** Call every tick from the resting behaviour; [allowed] false (a client, a threat) ends a bout early. */
+    fun tick(c: Ctx, allowed: Boolean) {
+        lastT = c.t
+        if (next < 0) next = c.t + INTERVAL_S * (0.3 + 0.7 * jitter(c))
+        val ok = allowed && !c.o.molting
+        if (c.t >= until && c.t >= next && ok) {
+            start = c.t; until = c.t + BOUT_MIN_S + (BOUT_MAX_S - BOUT_MIN_S) * jitter(c); bouts++
+            next = until + INTERVAL_S * (0.6 + 0.8 * jitter(c))
+        }
+        if (c.t < until && !ok) until = c.t
+        if (c.t < until) {
+            val e = c.t - start
+            // ease in, hold, ease out: the antenna is drawn down to the mouthparts and pulled through
+            c.o.groom = com.reeflive.core.geom.smoothstep(0.0, 1.0, e) * (1 - com.reeflive.core.geom.smoothstep(until - start - 1.0, until - start, e))
+            c.o.mouth = max(c.o.mouth, 0.4 * c.o.groom)
+        }
     }
-    override fun enter(c: Ctx) { dur = BOUT_MIN_S + (BOUT_MAX_S - BOUT_MIN_S) * jitter(n++, c); bouts++ }
-    override fun update(c: Ctx, out: SteerIntent) {
-        out.rest(Rest(c.o.pos, c.o.heading, c.o.up, c.o.posture), 2.0)
-        // ease in, hold, ease out: the antenna is drawn down to the mouthparts and pulled through
-        c.o.groom = com.reeflive.core.geom.smoothstep(0.0, 1.0, elapsed) * (1 - com.reeflive.core.geom.smoothstep(dur - 1.0, dur, elapsed))
-        c.o.mouth = max(c.o.mouth, 0.4 * c.o.groom)
-        if (elapsed > dur || !allowed(c)) { next = c.t + INTERVAL_S * (0.6 + 0.8 * jitter(n++, c)); finished = true }
-    }
-    override fun exit(c: Ctx) { if (next < c.t) next = c.t + INTERVAL_S * 0.5 }
 }
 
 fun hangPose(c: Ctx, a: Anchor?, fallback: Vec3, inverted: Boolean): Rest {
@@ -197,15 +206,17 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     init {
-        install(Hang(), Scavenge(this, 30.0, urgentAbove = 0.4, settledOnly = false), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos },
-            Groom(this) { c -> c.o.pos.distanceTo(hang(c).pos) < 4 })
+        install(Hang(), Scavenge(this, 30.0, urgentAbove = 0.4, settledOnly = false), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = hang(c)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "ledge") ledge?.pos ?: hang(c).pos else super.anchorPos(c, anchor)
 
+    val groomClock = GroomClock()
+
     inner class Hang : Behavior("hang", "Hanging under the ledge") {
+        override val label: String get() = if (groomClock.grooming) "Grooming its antennae" else "Hanging under the ledge"
         private var shuffle = Vec3.ZERO
         private var next = 0.0
         override fun score(c: Ctx) = if (c.p.night) 0.25 else 0.5
@@ -218,6 +229,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > next) { next = c.t + c.rng.range(5.0, 10.0); shuffle = (c.rng.unitVector().rejectFrom(r.up!!)) * 0.8 }
             out.rest(r.copy(pos = r.pos + shuffle), 1.5)
             c.o.extension = 1.0
+            groomClock.tick(c, threat == null)
         }
     }
 
@@ -289,8 +301,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         c.p.stations += station
-        install(Station(), Climb(), Scavenge(this, 25.0, label = "Grabbing food", settledOnly = false), MoltHide(this) { sit(it) }, TailFlip(this) { sit(it).pos },
-            Groom(this) { c -> station.client == null && c.o.pos.distanceTo(sit(c).pos) < 4 && c.p.neighbors(station.pos, APPROACH_CM).none { it.isFish && it.alive } })
+        install(Station(), Climb(), Scavenge(this, 25.0, label = "Grabbing food", settledOnly = false), MoltHide(this) { sit(it) }, TailFlip(this) { sit(it).pos })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = sit(c)
@@ -360,7 +371,10 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         near.retainAll { id -> id in inside || c.sim.organisms.any { it.id == id && it.alive && it.pos.distanceTo(station.pos) < APPROACH_CM + 4 } }
     }
 
+    val groomClock = GroomClock()
+
     inner class Station : Behavior("station", "Advertising at station") {
+        override val label: String get() = if (groomClock.grooming) "Grooming its antennae" else "Advertising at station"
         override fun score(c: Ctx) = 0.5
         override fun update(c: Ctx, out: SteerIntent) {
             val r = sit(c)
@@ -371,6 +385,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             out.rest(r, 2.0)
             val client = c.p.neighbors(station.pos, 30.0).any { it.isFish && it.alive && it.brainKind != BrainKind.EEL }
             station.advertising = client
+            groomClock.tick(c, station.client == null && threat == null && c.p.neighbors(station.pos, APPROACH_CM).none { it.isFish && it.alive })
             val rocking = c.t < rockUntil
             // the signal is the white front legs rocking with the antennae lashing (research 17, Caves 2019), drawn by
             // the renderer from legRock; the body itself only sways a little with them
