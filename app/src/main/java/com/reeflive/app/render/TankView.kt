@@ -40,6 +40,7 @@ fun TankView(
     onFollowLost: (String) -> Unit = {},
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
@@ -50,7 +51,7 @@ fun TankView(
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow, projection = projection,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, projection = projection,
     )
 }
 
@@ -74,6 +75,7 @@ fun TankView(
     /** Clean-glass mode: the camera faces the front glass and one-finger drags slide the Flipper ([onScrape]). */
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     projection: TankProjection? = null,
@@ -81,6 +83,7 @@ fun TankView(
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
     val scrape by rememberUpdatedState(onScrape)
+    val flipperTap by rememberUpdatedState(onFlipperTap)
     val glass by rememberUpdatedState(onTapGlass)
     val press by rememberUpdatedState(onLongPress)
     val lost by rememberUpdatedState(onFollowLost)
@@ -92,6 +95,7 @@ fun TankView(
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
+            override fun onFlipperTap() = flipperTap()
             override fun onFollowRequest(id: String?) = followReq(id)
         }
     }
