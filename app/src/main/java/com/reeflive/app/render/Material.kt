@@ -44,8 +44,12 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val particles = p("particles", "particles.vert", "particles.frag")
     val shafts = p("shafts", "shafts.vert", "shafts.frag")
     val snow = p("snow", "snow.vert", "snow.frag")
+    /** Shadow-map depth pass (ShadowMap): the casters' own vertex shaders with a depth-only fragment shader. */
+    val shadow = p("shadow", "static.vert", "shadow.frag")
+    val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
+    val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow)
+    fun all() = listOf(rock, sand, generic, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 
@@ -154,15 +158,31 @@ class FrameUniforms {
         data[FX_OFFSET] = n.toFloat()
     }
 
+    /**
+     * Re-uploads only `uViewProj` (floats 32..47): [m] for the shadow-map pass ([ShadowMap.matrix]), or the camera's
+     * own matrix (null) to restore it afterwards. Call after [fill].
+     */
+    fun overrideViewProj(m: FloatArray?) {
+        vpBuffer.position(0)
+        if (m != null) vpBuffer.put(m, 0, 16) else vpBuffer.put(data, VIEW_PROJ_OFFSET, 16)
+        vpBuffer.position(0)
+        GLES30.glBindBuffer(GLES30.GL_UNIFORM_BUFFER, ubo); Gl.check("glBindBuffer(UBO)")
+        GLES30.glBufferSubData(GLES30.GL_UNIFORM_BUFFER, VIEW_PROJ_OFFSET * 4, 16 * 4, vpBuffer); Gl.check("glBufferSubData(viewProj)")
+    }
+    private val vpBuffer = Gl.floats(FloatArray(16))
+
     fun release() = Gl.deleteBuffer(ubo)
 
     companion object {
-        /** std140: 3 mat4 (48 floats) + 12 vec4 (48) + 4 algae vec4 (16) + uFx (4) + 12 casters (48). */
+        /** std140: 3 mat4 (48 floats) + 12 vec4 (48) + 4 algae vec4 (16) + uFx (4) + 12 casters (48) + uShadowMat (16) + uShadow (4). */
+        const val VIEW_PROJ_OFFSET = 32
         const val ALGAE_OFFSET = 96
         const val FX_OFFSET = ALGAE_OFFSET + AlgaeVisuals.FLOATS
         const val CASTER_OFFSET = FX_OFFSET + 4
         const val MAX_CASTERS = 12
-        const val FLOATS = CASTER_OFFSET + MAX_CASTERS * 4
+        /** `uShadowMat` then `uShadow` ([ShadowMap.fill]). */
+        const val SHADOW_OFFSET = CASTER_OFFSET + MAX_CASTERS * 4
+        const val FLOATS = SHADOW_OFFSET + 20
         const val FOG_DENSITY = 0.005f
         const val WATER_LEVEL = 56f
         const val SAND_TOP = 3f

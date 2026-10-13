@@ -96,6 +96,7 @@ import com.reeflive.app.ui.live.LiveMenu
 import com.reeflive.app.ui.live.LivePill
 import com.reeflive.app.ui.live.LiveReactions
 import com.reeflive.app.ui.live.LiveTheme
+import com.reeflive.app.ui.live.LiveTaps
 import com.reeflive.app.ui.live.LiveTools
 import com.reeflive.app.ui.live.MicroscopeView
 import com.reeflive.app.ui.live.ModeToggle
@@ -121,6 +122,7 @@ import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.live.TimelapseSheet
+import com.reeflive.app.ui.live.WaterTap
 import com.reeflive.app.ui.live.liveSpec
 import com.reeflive.app.ui.live.tankHappiness
 import com.reeflive.app.ui.live.toFishCardState
@@ -183,7 +185,8 @@ private val DockTucked = 72.dp
  * portrait, and its cards are compact glass that close on their own. Every action plays a short picture in the tank
  * ([ActionFxLayer], projected through the camera) and sends its command when the picture reaches the water; a tap on
  * the tank skips the picture (the command is sent at once). Hermie and the happy meter sit as small pills at the top.
- * Tapping empty water hides every control so only the tank shows. Sim runs only while RESUMED.
+ * More → "Hide buttons" hides every control so only the tank shows; a tap on the water brings them back, and a tap on
+ * the water never hides anything (UI_STYLE §10.8). Sim runs only while RESUMED.
  */
 @Composable
 fun LiveTankScreen(
@@ -239,17 +242,25 @@ fun LiveTankScreen(
     var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
     val sandbox = mode == SimMode.SANDBOX
 
-    // every overlay control hidden, only the tank (tap empty water or "Show buttons" to undo)
+    // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
+    // "Show buttons" pill or Back undo it
     var chromeHidden by rememberSaveable { mutableStateOf(false) }
-    // first-time tips (remembered in settings), and again from More → Tips
+    // first-time tips, one card for Watch and one for Sandbox (each remembered in settings), and again from
+    // More → "What can I do?"
     var tipsAsked by rememberSaveable { mutableStateOf(false) }
-    val showTips = sandbox && !chromeHidden && (tipsAsked || (settings.loaded && !settings.sandboxHintSeen))
+    val hintSeen = if (sandbox) settings.sandboxHintSeen else settings.watchHintSeen
+    val showTips = !chromeHidden && (tipsAsked || (settings.loaded && !hintSeen))
     val dismissTips: () -> Unit = {
         tipsAsked = false
-        if (!settings.sandboxHintSeen) scope.launch { settingsRepo.setSandboxHintSeen(true) }
+        if (sandbox && !settings.sandboxHintSeen) scope.launch { settingsRepo.setSandboxHintSeen(true) }
+        if (!sandbox && !settings.watchHintSeen) scope.launch { settingsRepo.setWatchHintSeen(true) }
     }
     var ask by remember { mutableStateOf<ConfirmAsk?>(null) }
 
+    // Back undoes whatever is on top (the handler registered last wins): the tips card, a picked fish's card (follow
+    // mode has its own Back in FollowOverlay), an open menu card, hidden buttons, then the modes below
+    BackHandler(enabled = showTips) { dismissTips() }
+    BackHandler(enabled = stats != null && followId == null) { vm.select(null) }
     BackHandler(enabled = open != null) { open = null }
     BackHandler(enabled = chromeHidden) { chromeHidden = false }
     BackHandler(enabled = micro) { micro = false }
@@ -308,14 +319,26 @@ fun LiveTankScreen(
     }
     // a tap that only skipped a picture should not also hide the controls
     val skippedAt = remember { LongArray(1) }
-    // a tap on empty water with nothing selected shows / hides the controls; otherwise it selects as before
+    // a tap on a fish picks it (and brings hidden buttons back so its card can show); a tap on empty water only ever
+    // undoes something (LiveTaps): it never hides the buttons, and it never drops a fish that is being followed
     val onPick: (String?) -> Unit = { id ->
-        val justSkipped = SystemClock.uptimeMillis() - skippedAt[0] < SKIP_PICK_GUARD_MS
-        when {
-            id == null && justSkipped -> Unit
-            id == null && open != null -> open = null
-            id == null && !cleaning && vm.selectedOrganismId.value == null && vm.followId.value == null -> chromeHidden = !chromeHidden
-            else -> vm.select(id)
+        if (id != null) {
+            chromeHidden = false
+            vm.select(id)
+        } else {
+            val tap = LiveTaps.emptyWater(
+                justSkipped = SystemClock.uptimeMillis() - skippedAt[0] < SKIP_PICK_GUARD_MS,
+                controlsHidden = chromeHidden,
+                following = vm.followId.value != null,
+                cardOpen = open != null,
+                fishPicked = vm.selectedOrganismId.value != null,
+            )
+            when (tap) {
+                WaterTap.NOTHING -> Unit
+                WaterTap.SHOW_CONTROLS -> chromeHidden = false
+                WaterTap.CLOSE_CARD -> open = null
+                WaterTap.DESELECT -> vm.select(null)
+            }
         }
     }
     // the two-finger tap on the glass (sent at once: it is the finger itself)
@@ -436,10 +459,10 @@ fun LiveTankScreen(
         onRearrangeRock = { tick(); cue(LiveReactions.rocks()) { vm.rearrangeRock() } },
         onPumpFailTonight = { tick(); cue(LiveReactions.pumpsTonight()) { vm.pumpFailTonight() } },
         onTimelapse = { echo(LiveReactions.timelapse()); lapse = true },
-        onAddMany = { id, n ->
+        onAddMany = { id, n, size ->
             tick()
             val card = stockCards.firstOrNull { it.speciesId == id }
-            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n) }
+            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
         },
         onAddAiptasia = {
             tick()
@@ -464,18 +487,22 @@ fun LiveTankScreen(
         onMaintain = { t -> tick(); cue(LiveReactions.maintain(t)) { vm.maintain(t) } },
         onAddSpareShells = { tick(); cue(LiveReactions.shells()) { vm.addSpareShells() } },
         onMicro = { a -> tick(); cue(LiveReactions.micro(a)) { vm.micro(a) } },
-        onHelp = { tick(); tipsAsked = true },
+        onHelp = { tick(); open = null; vm.select(null); tipsAsked = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
-        heaterSet = HEATER_DEFAULT_C; heaterWorking = true
-        when {
-            m == HudMode.SANDBOX && sandbox -> railShown = !railShown
-            m == HudMode.SANDBOX -> {
-                railShown = true; chromeHidden = false; preset = null; vm.setMode(SimMode.SANDBOX)
+        val toSandbox = m == HudMode.SANDBOX
+        // tapping the side that is already picked never hides anything: it only brings the menu back out
+        railShown = true; chromeHidden = false
+        if (toSandbox != sandbox) {
+            heaterSet = HEATER_DEFAULT_C; heaterWorking = true
+            preset = null; open = null; tipsAsked = false; lapse = false
+            // a sandbox-only prop in the hand cannot be used in the real tank
+            if (carry?.locked(toSandbox) == true) carry = null
+            if (toSandbox) {
+                vm.setMode(SimMode.SANDBOX)
                 if (hermieOn) hermie.say("This is the pretend tank. Try anything, your real tank is safe!", HermieMood.EXCITED)
-            }
-            else -> {
-                preset = null; open = null; vm.setMode(SimMode.REALITY)
+            } else {
+                vm.setMode(SimMode.REALITY)
                 if (hermieOn) hermie.say("Back to your real tank. Just watch and feed.", HermieMood.HAPPY)
             }
         }
@@ -488,7 +515,7 @@ fun LiveTankScreen(
         onHide = { tick(); chromeHidden = true },
         onHelp = {
             tick()
-            if (sandbox) tipsAsked = true else { hermieOn = true; hermie.nextTip(false) }
+            open = null; vm.select(null); tipsAsked = true
         },
         cleaning = cleaning,
         onCleanGlass = toggleCleaning,
@@ -611,7 +638,7 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning && !sandbox) toggleCleaning() }, onPick, onTankTap, micro,
+            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning) toggleCleaning() }, onPick, onTankTap, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
@@ -735,6 +762,11 @@ private fun Modifier.skipFxOnTap(fx: ActionFxState, onSkipped: () -> Unit): Modi
     }
 }
 
+/** Makes this layer a touch target of its own, so overlapping siblings drawn under it (the GL tank) get no touches. */
+private fun Modifier.blockTouchesBelow(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope { while (true) awaitPointerEvent() }
+}
+
 /** The 3D tank, the action pictures drawn over it through the camera, and the microscope. */
 @Composable
 private fun TankArea(
@@ -776,9 +808,10 @@ private fun TankArea(
             enter = fadeIn(liveSpec(ReefTheme.reduceMotion)),
             exit = fadeOut(liveSpec(ReefTheme.reduceMotion, ReefMotion.FAST)),
         ) {
-            // the microscope covers the tank view; doses and treatments only in the sandbox
+            // the microscope covers the tank view; doses and treatments only in the sandbox. It takes every touch, so
+            // nothing reaches the hidden tank under it (a tap there used to pick fish, knock the glass or start cleaning)
             val hud by vm.hud.collectAsStateWithLifecycle()
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().blockTouchesBelow()) {
                 MicroscopeView(
                     state = hud.microfauna,
                     simTimeSec = hud.simTimeSec,
@@ -886,7 +919,8 @@ private fun HudLayer(
         if (st != null) lastCard = st
         val following = followId != null && st != null && !cleaning
         if (following && st != null) {
-            val ids = vm.hud.value.stats.map { it.id }
+            // only living animals: stepping onto a dead one would lose the follow at once
+            val ids = vm.hud.value.stats.filter { it.alive }.map { it.id }
             val i = ids.indexOf(st.id).coerceAtLeast(0)
             fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
             FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
@@ -923,7 +957,7 @@ private fun HudLayer(
             enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 } + scaleIn(liveSpec(reduce), initialScale = 0.92f),
             exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
         ) {
-            SandboxTipsCard(onDismiss = onDismissTips)
+            SandboxTipsCard(onDismiss = onDismissTips, sandbox = sandbox)
         }
     }
 }

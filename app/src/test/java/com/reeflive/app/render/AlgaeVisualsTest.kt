@@ -72,6 +72,7 @@ class AlgaeVisualsTest {
         var algaeAt = -1
         var fxAt = -1
         var castersAt = -1
+        var shadowAt = -1
         val member = Regex("""^\s*(mat4|vec4)\s+(\w+)(\[(\d+)])?\s*;""")
         for (line in body.lines()) {
             val m = member.find(line) ?: continue
@@ -79,6 +80,7 @@ class AlgaeVisualsTest {
             if (m.groupValues[2] == "uAlgaeGlass") algaeAt = floats
             if (m.groupValues[2] == "uFx") fxAt = floats
             if (m.groupValues[2] == "uCasters") castersAt = floats
+            if (m.groupValues[2] == "uShadowMat") shadowAt = floats
             floats += size * (m.groupValues[4].toIntOrNull() ?: 1)
         }
         assertEquals(FrameUniforms.FLOATS, floats)
@@ -86,7 +88,9 @@ class AlgaeVisualsTest {
         assertEquals(AlgaeVisuals.FLOATS, FrameUniforms.FX_OFFSET - FrameUniforms.ALGAE_OFFSET)
         assertEquals(FrameUniforms.FX_OFFSET, fxAt)
         assertEquals(FrameUniforms.CASTER_OFFSET, castersAt)
-        assertEquals(FrameUniforms.FLOATS, FrameUniforms.CASTER_OFFSET + FrameUniforms.MAX_CASTERS * 4)
+        assertEquals(FrameUniforms.SHADOW_OFFSET, FrameUniforms.CASTER_OFFSET + FrameUniforms.MAX_CASTERS * 4)
+        assertEquals(FrameUniforms.SHADOW_OFFSET, shadowAt)
+        assertEquals(FrameUniforms.FLOATS, FrameUniforms.SHADOW_OFFSET + 20)
         val names = Regex("""vec4\s+(uAlgae\w+)\s*;""").findAll(body).map { it.groupValues[1] }.toList()
         assertEquals(listOf("uAlgaeGlass", "uAlgaeSand", "uAlgaeTop", "uAlgaeShade"), names)
     }
