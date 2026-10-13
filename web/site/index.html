@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>ReefLive</title>
+<meta name="description" content="Track your reef tank and watch a live simulation of it.">
+<meta name="theme-color" content="#061327">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ReefLive">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="dot"></span>ReefLive</div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="live" role="tab">Live tank</button>
+    <button class="tab" data-tab="params" role="tab">Parameters</button>
+  </nav>
+</header>
+
+<main>
+  <section id="live" class="view active">
+    <canvas id="tank" aria-label="Live 3D view of the reef tank"></canvas>
+    <div id="loading" class="loading"><div class="spinner"></div><p id="loadText">Loading the tank…</p></div>
+
+    <div class="hud glass" id="hud">
+      <div class="clock"><span id="hudTime">--:--</span> <span id="hudPhase" class="muted"></span></div>
+      <div class="chips" id="hudChips"></div>
+    </div>
+
+    <div class="pick glass hidden" id="pick">
+      <div><strong id="pickName"></strong><div class="muted" id="pickSpecies"></div></div>
+      <div class="health"><div id="pickHealth"></div></div>
+      <button class="btn small" id="pickFollow">Follow</button>
+      <button class="icon-btn" id="pickClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="sheet glass hidden" id="sheet"></div>
+
+    <nav class="toolbar glass" id="toolbar">
+      <button class="tool" data-sheet="feed"><span class="ico">🍤</span><span>Feed</span></button>
+      <button class="tool" data-sheet="light"><span class="ico">💡</span><span>Lights</span></button>
+      <button class="tool" data-sheet="water"><span class="ico">🌡️</span><span>Water</span></button>
+      <button class="tool" data-sheet="time"><span class="ico">⏩</span><span>Speed</span></button>
+      <button class="tool" data-sheet="events"><span class="ico">🌊</span><span>What if</span></button>
+      <button class="tool" id="camReset"><span class="ico">🎥</span><span>Reset view</span></button>
+    </nav>
+    <p class="hint" id="hint">Drag to look around · pinch to zoom · double-tap a fish to follow it · long-press to drop food</p>
+  </section>
+
+  <section id="params" class="view">
+    <div class="wrap">
+      <div class="row-between">
+        <h1>Water parameters</h1>
+        <button class="btn" id="logBtn">＋ Log a test</button>
+      </div>
+      <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
+      <div id="paramGrid" class="grid"></div>
+      <h2>History</h2>
+      <div id="history" class="history"></div>
+      <div class="row-gap">
+        <button class="btn ghost" id="exportBtn">Export backup</button>
+        <label class="btn ghost">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="logDialog" class="glass">
+  <form method="dialog" id="logForm">
+    <h2>Log a test</h2>
+    <label class="field">When<input type="datetime-local" id="logWhen" required></label>
+    <div id="logFields" class="fields"></div>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save" id="logSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="install" class="install glass hidden">
+  <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>
+  <button class="icon-btn" id="installClose" aria-label="Dismiss">✕</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
