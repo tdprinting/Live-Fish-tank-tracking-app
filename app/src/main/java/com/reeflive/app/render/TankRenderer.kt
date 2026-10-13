@@ -244,7 +244,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
         for (r in sorted) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
-        // transparent: shafts, particles, water surface, blended equipment, glass
+        // transparent: back glass, then water (first when the eye is under the surface, so the underside never
+        // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
+        Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GENERIC) }
+        val waterFirst = camera.eye[1] < Camera.WATER_Y
+        if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         if (quality.shafts && light.intensity > 0.03f) {
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             shafts?.let { it.draw(progs.shafts); drawCalls++; triangles += it.triangles }
@@ -253,10 +258,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
-        tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
+        if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
+        GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
+        GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
 
         if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
