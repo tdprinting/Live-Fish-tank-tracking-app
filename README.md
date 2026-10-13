@@ -6,6 +6,12 @@ recreation of the tank. Design docs live in [`docs/`](docs/): start with
 
 Status: **M0** (repository skeleton, CI, placeholder "Hello reef" screen).
 
+## Use it on iPhone / in a browser
+
+Open **https://tdprinting.github.io/Live-Fish-tank-tracking-app/** in Safari, tap **Share → Add to Home Screen**,
+and it runs full screen like an app (also offline). It is the same live tank simulation and 3D view as the Android
+app, plus the water-parameter log. See [`docs/WEB.md`](docs/WEB.md).
+
 ## Install on your phone (for Tee)
 
 ReefLive is not on the Play Store. Every push to `main` builds a new APK and publishes it on the

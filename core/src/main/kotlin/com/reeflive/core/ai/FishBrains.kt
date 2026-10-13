@@ -848,7 +848,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx) = 0.85 * (1 - c.activity)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
-            if (c.o.pos.distanceTo(r.pos) > 4) { out.seek(r.pos, c.o.cruiseSpeed, arrive = 2.0); return }
+            // the cave-mouth steering keeps the fish 4.5-7 cm off the spot, so settle from within 8 cm
+            if (c.o.pos.distanceTo(r.pos) > 8) { out.seek(r.pos, c.o.cruiseSpeed, arrive = 2.0); return }
             out.rest(r, 1.5)
             c.o.sleeping = true
         }
@@ -926,11 +927,11 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             }
             val sway = sin(2 * PI * 0.2 * c.t) * 2.0
             val side = (outDir cross Vec3.Y).normalized(Vec3.X)
-            var head = mouthOut(if (hidden) 0.5 else outK) + side * sway
+            var head = c.rock.clampToWater(mouthOut(if (hidden) 0.5 else outK) + side * sway, 2.5)
             // lunge at particles sinking within 8 cm of the head
             val f = if (o.hunger > 0.1) c.food.nearest(head, 8.0) { o.species.dietMatch(it.kind) > 0 } else null
             if (f != null) {
-                head = mouthOut(1.0) + (f.pos - mouthOut(1.0)).clampLength(14.0)
+                head = c.rock.clampToWater(mouthOut(1.0) + (f.pos - mouthOut(1.0)).clampLength(14.0), 2.5)
                 if (o.pos.distanceTo(f.pos) < 1.8 && c.t > nextBite) { c.bite(f); nextBite = c.t + 0.8 }
             }
             val heading = (head - mouth).normalized(outDir)

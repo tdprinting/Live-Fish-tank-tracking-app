@@ -98,6 +98,8 @@ interface TankViewListener {
     fun onFollowLost(id: String) {}
     /** Clean-glass mode: the Flipper slid along [stroke] on the front glass (sent every ~[GlassStroke.MIN_CM] of travel). */
     fun onScrape(stroke: GlassStroke) {}
+    /** Single tap on the Flipper scraper resting on the glass: the host enters clean-glass mode so a drag can start cleaning. */
+    fun onFlipperTap() {}
 }
 
 /**
