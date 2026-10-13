@@ -39,6 +39,9 @@ def run(step, args):
         import inverts
         for k, fn in inverts.INVERT_BUILDERS.items():
             fn()
+        import microfauna
+        for k, fn in microfauna.MICRO_BUILDERS.items():
+            fn()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)

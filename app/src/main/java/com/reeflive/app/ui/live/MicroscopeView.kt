@@ -35,15 +35,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.dp
 import com.reeflive.app.ui.components.GlassIconButton
 import com.reeflive.app.ui.components.ReefChip
@@ -125,26 +125,26 @@ fun MicroscopeView(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Microscope", style = MaterialTheme.typography.titleMedium, color = c.text)
+                Text("Microscope", style = LiveTheme.style.titleText, color = LiveTheme.style.label)
                 Text(
                     "${zoom.label} · ${fieldLabel(zoom)} field · " +
                         (if (zoom == MicroZoom.X40) "bright-field lamp" else if (state.night) "night, torch" else "day"),
                     style = MaterialTheme.typography.labelMedium, color = c.textSecondary,
                 )
             }
-            GlassIconButton(Icons.Rounded.Close, "Close microscope", onClose)
+            CloseDot(onClose, "Close microscope")
         }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MicroScene.entries.forEach { s -> ReefChip(text = s.label, selected = s == scene, onClick = { scene = s }) }
+            MicroScene.entries.forEach { s -> LivePill(s.label, { scene = s }, tone = Candy.cyan, selected = s == scene, role = Role.Tab) }
             Spacer(Modifier.width(4.dp))
-            MicroZoom.entries.forEach { z -> ReefChip(text = z.label, selected = z == zoom, onClick = { zoom = z }, accent = c.coral) }
+            MicroZoom.entries.forEach { z -> LivePill(z.label, { zoom = z }, tone = Candy.orange, selected = z == zoom, role = Role.Tab) }
         }
         BoxWithConstraints(
-            Modifier.fillMaxWidth().weight(1f).clip(ReefShapes.card).border(1.dp, c.glassBorder, ReefShapes.card),
+            Modifier.fillMaxWidth().weight(1f).clip(ReefShapes.card).border(LiveTheme.style.outlineWidth, LiveTheme.style.outline, ReefShapes.card),
         ) {
             // keep the field's area at the §5.2 value whatever the view's shape, so counts per field stay honest
             val aspect = if (maxWidth.value > 0f) (maxHeight / maxWidth).coerceIn(0.2f, 4f) else NOMINAL_ASPECT
@@ -180,7 +180,7 @@ fun MicroscopeView(
         MicroLegend(state, counts, zoom, Modifier.fillMaxWidth())
         onAction?.let { act ->
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MicroAction.entries.forEach { a -> ReefChip(text = a.label, selected = false, onClick = { act(a) }, accent = c.coral) }
+                MicroAction.entries.forEach { a -> LivePill(a.label, { act(a) }, tone = Candy.green) }
             }
         }
     }
@@ -190,7 +190,7 @@ fun MicroscopeView(
 @Composable
 private fun MicroLegend(state: MicrofaunaState, counts: List<MicroCount>, zoom: MicroZoom, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    GlassCard(modifier, contentPadding = PaddingValues(12.dp)) {
+    LivePanel(modifier, contentPadding = PaddingValues(12.dp)) {
         Column(Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val groups = MicroGroup.entries
                 .filter { it != MicroGroup.PHYTO && state.present[it.ordinal] && state.total(it) >= 1.0 }
@@ -258,7 +258,7 @@ private fun MicroLegend(state: MicrofaunaState, counts: List<MicroCount>, zoom: 
 // ================================================================== particles
 
 /** How a group moves in the field (§5.3). */
-private enum class Gait { HOP, CRAWL, STEP, AMPHIPOD, SWAY, HOVER, GLIDE, STATIC, CELL }
+internal enum class Gait { HOP, CRAWL, STEP, AMPHIPOD, SWAY, HOVER, GLIDE, STATIC, CELL }
 
 private fun gaitOf(g: MicroGroup, nauplius: Boolean, scene: MicroScene): Gait = when {
     nauplius -> Gait.HOP
@@ -292,7 +292,7 @@ private fun glideSpeed(g: MicroGroup): Float = when (g) {
 }
 
 /** One animal on screen. Position in mm from the field's top-left; [r1]/[r2] are fixed per-animal randoms. */
-private class Mote(val group: MicroGroup, val nauplius: Boolean, val gait: Gait, val r1: Float, val r2: Float) {
+internal class Mote(val group: MicroGroup, val nauplius: Boolean, val gait: Gait, val r1: Float, val r2: Float) {
     var x = 0f
     var y = 0f
     var vx = 0f
@@ -391,8 +391,8 @@ private class Swarm {
             when (m.gait) {
                 Gait.HOP -> hop(m, dt)
                 Gait.CRAWL -> crawl(m, dt)
-                Gait.STEP -> {
-                    // Euplotes: a jerky crawl in 0.1-0.5 mm steps with right-angle turns
+                Gait.STEP -> if (!isVorticella(m)) {
+                    // Euplotes: a jerky crawl in 0.1-0.5 mm steps with right-angle turns (Vorticella stays on its stalk)
                     m.timer -= dt
                     if (m.timer <= 0f) {
                         m.timer = 0.3f + 0.7f * rnd.nextFloat()
@@ -418,7 +418,11 @@ private class Swarm {
                     m.y += sin(m.heading) * v * dt
                     m.since += dt
                 }
-                Gait.CELL -> {
+                Gait.CELL -> if (isNanno(m)) {
+                    // Nannochloropsis: no flagella, Brownian jitter only
+                    m.x += (rnd.nextFloat() - 0.5f) * 0.004f
+                    m.y += (rnd.nextFloat() - 0.5f) * 0.004f
+                } else {
                     // Tetraselmis: a straight run, then an abrupt new direction
                     m.timer -= dt
                     if (m.timer <= 0f) { m.timer = 0.5f + 1.5f * rnd.nextFloat(); m.heading = rnd.nextFloat() * TAU }
@@ -503,7 +507,7 @@ private class Swarm {
 // ================================================================== drawing
 
 /** Colour scheme for the current light (§5.4): daylight macro, torch at night, or 40x bright-field. */
-private class Look(val night: Boolean, val bright: Boolean, greenGut: Boolean, private val breeding: DoubleArray) {
+internal class Look(val night: Boolean, val bright: Boolean, greenGut: Boolean, private val breeding: DoubleArray) {
     val outline: Color? = if (bright) BRIGHT_INK else null
     /** Gut band: brown on film and detritus, green after a phyto dose. */
     val gut: Color = if (greenGut) Color(0xFF4F8F3A) else Color(0xFF6B4A2A)
@@ -635,210 +639,20 @@ private fun DrawScope.drawMote(m: Mote, px: Float, t: Float, look: Look) {
     val body = look.body(m.group)
     val c = Offset(cx, cy)
     if (l < DOT_PX) {
-        // below ~8 px an animal is a speck; at night the torch makes pods glint
-        val r = (l * 0.4f).coerceAtLeast(1.3f)
+        // below ~8 px an animal is a speck; at night the torch makes pods glint. Nannochloropsis sits at the limit.
+        val r = if (isNanno(m)) 0.9f else (l * 0.4f).coerceAtLeast(1.3f)
         if (look.night && m.group.isCrustacean) drawCircle(body.copy(alpha = 0.25f), r * 2.6f, c)
         drawCircle(body, r, c)
         return
     }
-    val sw = (l * 0.04f).coerceAtLeast(1f)
-    rotate(m.heading * DEG, c) {
-        when {
-            m.nauplius -> nauplius(m, cx, cy, l, sw, body, look, t)
-            m.group.isCopepod -> copepod(m, cx, cy, l, sw, body, look)
-            else -> when (m.group) {
-                MicroGroup.GAMMARID -> amphipod(m, cx, cy, l, sw, body, t)
-                MicroGroup.CAPRELLID -> caprellid(m, cx, cy, l, sw, body, t)
-                MicroGroup.MYSID -> mysid(cx, cy, l, sw, body, look)
-                MicroGroup.OSTRACOD -> {
-                    blob(body, look.outline, cx, cy, l, 0.65f * l, sw)
-                    drawLine(Color.Black.copy(alpha = 0.25f), Offset(cx - 0.3f * l, cy - 0.2f * l), Offset(cx + 0.3f * l, cy - 0.2f * l), strokeWidth = sw)
-                    // antennae flick out only while it runs
-                    if (m.state == 0) for (s in SIDES) {
-                        drawLine(body, Offset(cx + 0.45f * l, cy), Offset(cx + 0.7f * l, cy + s * 0.15f * l), strokeWidth = sw)
-                    }
-                }
-                MicroGroup.ISOPOD -> {
-                    blob(body, look.outline, cx, cy, l, 0.5f * l, sw)
-                    for (i in 1..5) {
-                        val x = cx - 0.4f * l + i * 0.13f * l
-                        drawLine(Color.Black.copy(alpha = 0.25f), Offset(x, cy - 0.2f * l), Offset(x, cy + 0.2f * l), strokeWidth = sw)
-                    }
-                    for (s in SIDES) drawLine(body, Offset(cx + 0.48f * l, cy), Offset(cx + 0.7f * l, cy + s * 0.18f * l), strokeWidth = sw)
-                }
-                MicroGroup.ROTIFER -> rotifer(cx, cy, l, sw, body, look, t)
-                MicroGroup.CILIATE -> {
-                    blob(body.copy(alpha = 0.6f), look.outline, cx, cy, l, 0.7f * l, sw)
-                    // the cilia shimmer round the rim
-                    for (k in 0 until 12) {
-                        val a = k * TAU / 12f
-                        val f = 0.5f + 0.5f * sin(t * 12f + k)
-                        drawCircle(look.highlight.copy(alpha = 0.5f * f), 0.03f * l, Offset(cx + cos(a) * 0.52f * l, cy + sin(a) * 0.37f * l))
-                    }
-                }
-                MicroGroup.BRISTLEWORM -> bristleworm(cx, cy, l, body, t)
-                MicroGroup.MICROSNAIL -> {
-                    val shell = Color.Black.copy(alpha = 0.3f)
-                    for (s in SIDES) drawLine(Color(0xFFD8CBB8), Offset(cx + 0.3f * l, cy + s * 0.1f * l), Offset(cx + 0.6f * l, cy + s * 0.22f * l), strokeWidth = sw)
-                    drawCircle(body, 0.4f * l, c)
-                    drawCircle(shell, 0.25f * l, Offset(cx - 0.03f * l, cy), style = Stroke(width = sw))
-                    drawCircle(shell, 0.1f * l, Offset(cx - 0.06f * l, cy - 0.03f * l), style = Stroke(width = sw))
-                }
-                MicroGroup.SPAGHETTI_WORM -> {
-                    // tentacles spread over the surface, slowly extending and drawing back
-                    for (k in 0 until 6) {
-                        val a = k * TAU / 6f + m.r1 * 6f
-                        val reach = l * (0.35f + 0.25f * sin(t * 0.3f + k * 1.7f + m.r2 * 6f))
-                        val wig = 0.05f * l * sin(t + k)
-                        val mid = Offset(cx + cos(a) * reach * 0.5f - sin(a) * wig, cy + sin(a) * reach * 0.5f + cos(a) * wig)
-                        val end = Offset(cx + cos(a) * reach, cy + sin(a) * reach)
-                        drawLine(body, c, mid, strokeWidth = sw)
-                        drawLine(body, mid, end, strokeWidth = sw)
-                    }
-                    drawCircle(body, 0.05f * l, c)
-                }
-                MicroGroup.FORAM -> {
-                    // at 40x the pseudopod net radiates from the test
-                    if (look.bright) for (k in 0 until 24) {
-                        val a = k * TAU / 24f + m.r1
-                        val r = 0.9f * l * (0.7f + 0.3f * sin(t * 0.5f + k))
-                        drawLine(body.copy(alpha = 0.25f), c, Offset(cx + cos(a) * r, cy + sin(a) * r), strokeWidth = sw * 0.6f)
-                    }
-                    drawCircle(body, 0.4f * l, c)
-                    drawCircle(Color.White.copy(alpha = 0.25f), 0.25f * l, c, style = Stroke(width = sw))
-                    drawCircle(Color.Black.copy(alpha = 0.3f), 0.08f * l, c)
-                }
-                MicroGroup.FLATWORM -> {
-                    blob(body, null, cx, cy, l, 0.6f * l, sw)
-                    drawOval(Color(0xFFE08A6A), Offset(cx - 0.5f * l, cy - 0.3f * l), Size(l, 0.6f * l), style = Stroke(width = sw))
-                    for (s in SIDES) drawCircle(Color(0xFF2A1410), 0.04f * l, Offset(cx + 0.3f * l, cy + s * 0.08f * l))
-                }
-                else -> blob(body, look.outline, cx, cy, l, 0.6f * l, sw)
-            }
-        }
+    // the sprite is drawn in body lengths, head along +x (MicroSprites.kt)
+    withTransform({
+        translate(cx, cy)
+        rotate(m.heading * DEG, Offset.Zero)
+        scale(l, l, Offset.Zero)
+    }) {
+        drawMicroSprite(m, l, t, look)
     }
-}
-
-/** Copepod seen from above, head at +x: prosome, urosome and furca, gut band, egg sacs and antennules. */
-private fun DrawScope.copepod(m: Mote, cx: Float, cy: Float, l: Float, sw: Float, body: Color, look: Look) {
-    val g = m.group
-    val slim = if (g == MicroGroup.HARPACTICOID) 0.24f else 0.34f
-    // harpacticoids flex the body at ~3 Hz while they crawl
-    val flex = if (g == MicroGroup.HARPACTICOID && m.state == 0) sin(m.x * 7f + m.y * 5f) * 0.08f * l else 0f
-    val tail = Offset(cx - 0.5f * l, cy + flex)
-    drawLine(body, Offset(cx - 0.1f * l, cy), tail, strokeWidth = 0.08f * l, cap = StrokeCap.Round)
-    for (s in SIDES) drawLine(body, tail, Offset(tail.x - 0.1f * l, tail.y + s * 0.06f * l), strokeWidth = sw)
-    // egg sacs: paired on cyclopoids, single on harpacticoids; the share of females carrying follows the breeding index
-    if (g != MicroGroup.CALANOID && m.r2 < 0.5f * look.breeding(g)) {
-        val sac = Color(0xFF8A7A5C)
-        if (g == MicroGroup.CYCLOPOID) {
-            for (s in SIDES) drawOval(sac, Offset(cx - 0.5f * l, cy + s * 0.16f * l - 0.07f * l), Size(0.3f * l, 0.14f * l))
-        } else {
-            drawOval(sac, Offset(cx - 0.42f * l, cy - 0.08f * l), Size(0.25f * l, 0.16f * l))
-        }
-    }
-    blob(body, look.outline, cx + 0.15f * l, cy, 0.7f * l, slim * l, sw)
-    blob(look.gut, null, cx + 0.1f * l, cy, 0.35f * l, slim * 0.35f * l, 0f)
-    // antennules: long on calanoids and flared back on a hop, short on harpacticoids
-    val reach = l * (when (g) { MicroGroup.CALANOID -> 0.9f; MicroGroup.CYCLOPOID -> 0.4f; else -> 0.15f })
-    val angle = if (g == MicroGroup.CALANOID && m.since < 0.2f) 2.3f else 1.25f
-    val head = Offset(cx + 0.48f * l, cy)
-    for (s in SIDES) drawLine(body, head, Offset(head.x + cos(angle) * reach, head.y + s * sin(angle) * reach), strokeWidth = sw)
-    drawCircle(Color(0xFFB0302A), 0.035f * l, Offset(head.x - 0.04f * l, cy))
-}
-
-/** Nauplius: a small oval with three flickering limb pairs (§5.3). */
-private fun DrawScope.nauplius(m: Mote, cx: Float, cy: Float, l: Float, sw: Float, body: Color, look: Look, t: Float) {
-    for (i in 0 until 3) for (s in SIDES) {
-        val a = 0.9f + 0.35f * i + sin(t * 6f * TAU + i * 1.3f + m.r1 * 6f) * 0.35f
-        val base = Offset(cx + (0.2f - 0.15f * i) * l, cy)
-        drawLine(body, base, Offset(base.x + cos(a) * 0.7f * l, base.y + s * sin(a) * 0.7f * l), strokeWidth = sw)
-    }
-    blob(body, look.outline, cx, cy, 0.8f * l, 0.6f * l, sw)
-    drawCircle(Color(0xFFB0302A), 0.06f * l, Offset(cx + 0.25f * l, cy))
-}
-
-/** Gammarid from the side: a bowed row of segments, cycling legs, antennae and an eye. */
-private fun DrawScope.amphipod(m: Mote, cx: Float, cy: Float, l: Float, sw: Float, body: Color, t: Float) {
-    val n = 7
-    val legPhase = if (m.state == 0) m.since * 6.5f * TAU else 0f
-    for (i in 1..5) {
-        val u = i / (n - 1f)
-        val base = Offset(cx + (u - 0.5f) * 0.9f * l, cy - (0.25f - (u - 0.5f) * (u - 0.5f)) * 0.6f * l)
-        drawLine(body.copy(alpha = 0.8f), base, Offset(base.x + sin(legPhase + i) * 0.06f * l, base.y + 0.2f * l), strokeWidth = sw)
-    }
-    if (m.state == 1) blob(body.copy(alpha = 0.25f), null, cx - 0.1f * l, cy + 0.12f * l, 0.5f * l, 0.2f * l, 0f)   // pleopod blur
-    var head = Offset(cx, cy)
-    for (i in 0 until n) {
-        val u = i / (n - 1f)
-        val p = Offset(cx + (u - 0.5f) * 0.9f * l, cy - (0.25f - (u - 0.5f) * (u - 0.5f)) * 0.6f * l)
-        drawCircle(body, l * (0.06f + 0.05f * sin(u * PI.toFloat())), p)
-        head = p
-    }
-    val wave = 0.04f * l * sin(t * 3f + m.r1 * 6f)
-    drawLine(body, head, Offset(head.x + 0.35f * l, head.y - 0.15f * l + wave), strokeWidth = sw)
-    drawLine(body, head, Offset(head.x + 0.3f * l, head.y - 0.04f * l - wave), strokeWidth = sw)
-    drawCircle(Color(0xFF1E1A16), 0.03f * l, Offset(head.x - 0.01f * l, head.y - 0.02f * l))
-}
-
-/** Skeleton shrimp: anchored at its base (the pivot), a jointed stick with gnathopods that snap every few seconds. */
-private fun DrawScope.caprellid(m: Mote, cx: Float, cy: Float, l: Float, sw: Float, body: Color, t: Float) {
-    drawLine(body, Offset(cx, cy), Offset(cx + l, cy), strokeWidth = (0.05f * l).coerceAtLeast(1f), cap = StrokeCap.Round)
-    for (i in 1..4) drawCircle(body, 0.035f * l, Offset(cx + l * i / 5f, cy))
-    val snap = (t + m.r1 * 7f) % (2f + 8f * m.r2) < 0.15f
-    val a = if (snap) 0.3f else 0.9f
-    val g0 = Offset(cx + 0.8f * l, cy)
-    for (s in SIDES) {
-        drawLine(body, g0, Offset(g0.x + cos(a) * 0.18f * l, g0.y + s * sin(a) * 0.18f * l), strokeWidth = sw * 1.5f)
-        drawLine(body, Offset(cx + l, cy), Offset(cx + 1.2f * l, cy + s * 0.06f * l), strokeWidth = sw)
-    }
-}
-
-/** Mysid: a glassy body, tail fan, statocysts and stalked eyes that shine in the torch. */
-private fun DrawScope.mysid(cx: Float, cy: Float, l: Float, sw: Float, body: Color, look: Look) {
-    for (s in SIDES) drawLine(body, Offset(cx - 0.45f * l, cy), Offset(cx - 0.62f * l, cy + s * 0.08f * l), strokeWidth = sw * 1.5f)
-    blob(body.copy(alpha = 0.55f), look.outline, cx, cy, l, 0.22f * l, sw)
-    for (s in SIDES) drawCircle(Color(0xFF3A3A3A), 0.025f * l, Offset(cx - 0.4f * l, cy + s * 0.04f * l))
-    val eye = if (look.night) Color(0xFFFFF4C8) else Color(0xFF1E1A16)
-    for (s in SIDES) {
-        drawLine(body, Offset(cx + 0.45f * l, cy), Offset(cx + 0.55f * l, cy + s * 0.08f * l), strokeWidth = sw)
-        drawCircle(eye, 0.04f * l, Offset(cx + 0.56f * l, cy + s * 0.08f * l))
-    }
-}
-
-/** Rotifer: body, foot, and the corona as two wheels whose highlights run round (the "wheel" illusion). */
-private fun DrawScope.rotifer(cx: Float, cy: Float, l: Float, sw: Float, body: Color, look: Look, t: Float) {
-    drawLine(body, Offset(cx - 0.35f * l, cy), Offset(cx - 0.55f * l, cy), strokeWidth = sw * 2f, cap = StrokeCap.Round)
-    blob(body.copy(alpha = 0.7f), look.outline, cx, cy, 0.8f * l, 0.38f * l, sw)
-    blob(look.gut, null, cx - 0.02f * l, cy, 0.3f * l, 0.14f * l, 0f)
-    for (s in SIDES) {
-        val wc = Offset(cx + 0.42f * l, cy + s * 0.12f * l)
-        drawCircle(body.copy(alpha = 0.5f), 0.11f * l, wc, style = Stroke(width = sw))
-        for (k in 0 until 5) {
-            val a = t * 1.5f * TAU * s + k * TAU / 5f
-            drawCircle(look.highlight, 0.025f * l, Offset(wc.x + cos(a) * 0.11f * l, wc.y + sin(a) * 0.11f * l))
-        }
-    }
-}
-
-/** Bristleworm: a chain of segments with a parapodial wave travelling tail-ward at ~1.5 Hz, bristles on each side. */
-private fun DrawScope.bristleworm(cx: Float, cy: Float, l: Float, body: Color, t: Float) {
-    val n = 14
-    val r = 0.035f * l
-    val bristle = Color(0xFFF2E6D8).copy(alpha = 0.6f)
-    for (i in 0 until n) {
-        val u = i / (n - 1f)
-        val x = cx + (u - 0.5f) * l
-        val y = cy + sin(u * 2f * TAU + t * 1.5f * TAU) * 0.03f * l
-        for (s in SIDES) drawLine(bristle, Offset(x, y + s * r), Offset(x - 0.02f * l, y + s * r * 2.2f), strokeWidth = 1f)
-        drawCircle(if (i == n - 1) Color(0xFF8A4A35) else body, r, Offset(x, y))
-    }
-}
-
-/** Filled oval centred on (cx, cy), with an optional outline (bright-field). */
-private fun DrawScope.blob(color: Color, outline: Color?, cx: Float, cy: Float, w: Float, h: Float, sw: Float) {
-    drawOval(color, Offset(cx - w / 2f, cy - h / 2f), Size(w, h))
-    if (outline != null && sw > 0f) drawOval(outline, Offset(cx - w / 2f, cy - h / 2f), Size(w, h), style = Stroke(width = sw))
 }
 
 // ================================================================== helpers
@@ -886,7 +700,6 @@ private const val GREEN_GUT_CELLS = 5e4
 /** The §5.2 fields are 30 × 17 cm and their scaled copies. */
 private const val NOMINAL_ASPECT = 0.567f
 private val SCALE_BARS_MM = floatArrayOf(0.1f, 0.2f, 0.5f, 1f, 2f, 5f, 10f, 20f, 50f)
-private val SIDES = floatArrayOf(-1f, 1f)
 private val PHYTO_GREEN = Color(0xFF4CAF50)
 private val NIGHT_SPECK = Color(0xFFDDEBFF)
 private val BRIGHT_INK = Color(0xFF2E2A24)

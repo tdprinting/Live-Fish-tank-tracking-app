@@ -47,6 +47,9 @@ import com.reeflive.app.ui.components.ReefChip
 import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.components.StatusIcon
+import com.reeflive.app.ui.components.bubbleBurst
+import com.reeflive.app.ui.components.pressSquash
+import com.reeflive.app.ui.components.rememberHaptics
 import com.reeflive.app.ui.components.tapSplash
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
@@ -123,37 +126,40 @@ fun LiveOverlay(
  */
 @Composable
 fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifier = Modifier) {
-    val c = ReefTheme.colors
+    val s = LiveTheme.style
+    val haptics = rememberHaptics()
     Row(
-        modifier.clip(ReefShapes.pill).background(c.glass).padding(3.dp),
+        modifier.livePanel(s, s.pillShape).padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HudMode.values().forEach { m ->
             val sel = m == mode
-            val selColor = if (m == HudMode.SANDBOX) c.coral else c.primaryBright
+            // live theme (UI_STYLE §10.1): the picked side is a candy pill, Sandbox pink to signal "not real"
+            val tone = if (m == HudMode.SANDBOX) Candy.pink else Candy.cyan
             val reduce = ReefTheme.reduceMotion
-            val fg by animateColorAsState(if (sel) selColor else c.textSecondary, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
-            val bg by animateColorAsState(if (sel) selColor.copy(alpha = 0.22f) else selColor.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
+            val fg by animateColorAsState(if (sel) s.onCandy else s.label, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
+            val bg by animateColorAsState(if (sel) tone else tone.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
             val grow by animateFloatAsState(if (sel) 1.15f else 1f, ReefMotion.bouncy(reduce), label = "modeGlyph")
             val interaction = remember { MutableInteractionSource() }
             Row(
                 Modifier
                     .heightIn(min = 48.dp)
                     .semantics { selected = sel }
+                    .pressSquash(interaction)
+                    .bubbleBurst(interaction, tone, Color.White)
                     .clip(ReefShapes.pill)
                     .background(bg)
-                    .tapSplash(interaction, selColor)
-                    .clickable(interactionSource = interaction, indication = null, role = Role.Tab) { onModeChange(m) }
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Tab) { haptics.tick(); onModeChange(m) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Glyph(
                     if (m == HudMode.SANDBOX) ReefGlyphs.bucket else ReefGlyphs.eye,
-                    size = 20.dp, tint = fg, accent = if (sel) c.coralSoft else c.textTertiary,
+                    size = 20.dp, tint = fg, accent = if (sel) Color.White else s.labelDim,
                     modifier = Modifier.graphicsLayer { scaleX = grow; scaleY = grow },
                 )
-                Text(m.label, style = MaterialTheme.typography.labelLarge, color = fg)
+                Text(m.label, style = s.buttonText, color = fg)
             }
         }
     }
@@ -266,7 +272,10 @@ fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier
 /** Glass pill shown while the controls are hidden: brings them back (tapping empty water does too). */
 @Composable
 fun ShowControlsPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    ToolPill(onClick, "Show the controls", "Show controls", ReefGlyphs.eye, modifier)
+    LivePill(
+        "Show buttons", onClick, modifier, tone = Candy.cyan,
+        leading = { Glyph(ReefGlyphs.eye, size = 20.dp, tint = LiveTheme.style.onCandy, accent = Color.White) },
+    )
 }
 
 /** Round glass button that hides all the overlay controls so the whole tank shows: an eye that closes as you tap. */
@@ -297,31 +306,27 @@ private fun phaseLevel(p: DayPhase): Float = when (p) {
 
 @Composable
 fun ClockPill(simTimeSec: Double, phase: DayPhase, modifier: Modifier = Modifier) {
-    val c = ReefTheme.colors
+    val s = LiveTheme.style
     Row(
         modifier
-            .clip(ReefShapes.pill)
-            .background(c.glass)
+            .livePanel(s, s.pillShape)
             .semantics { contentDescription = "${formatSimClock(simTimeSec)}, ${phase.label}" }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SunMoonIcon(phaseLevel(phase), size = 20.dp, tint = c.coralSoft, accent = c.coral)
+        SunMoonIcon(phaseLevel(phase), size = 20.dp, tint = Candy.yellow, accent = Candy.orange)
         Spacer(Modifier.width(6.dp))
-        Text(formatSimClock(simTimeSec), style = MaterialTheme.typography.labelLarge, color = c.text)
+        Text(formatSimClock(simTimeSec), style = s.buttonText, color = s.label)
         Spacer(Modifier.width(6.dp))
-        Text(phase.label, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+        Text(phase.label, style = MaterialTheme.typography.labelMedium, color = s.labelDim)
     }
 }
 
 /** Compact water-state strip: one cell per readout, status icon + status-coloured value. */
 @Composable
 fun WaterStrip(readouts: List<WaterReadout>, modifier: Modifier = Modifier) {
-    GlassCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = ReefShapes.tile,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-    ) {
+    val s = LiveTheme.style
+    Box(modifier.fillMaxWidth().livePanel(s, s.tileShape).padding(horizontal = 10.dp, vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             readouts.forEach { WaterCell(it) }
         }
@@ -335,7 +340,7 @@ private fun WaterCell(r: WaterReadout) {
         Modifier.semantics { contentDescription = "${r.label} ${r.valueText}" },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(r.label, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
+        Text(r.label, style = MaterialTheme.typography.labelSmall, color = LiveTheme.style.labelDim, maxLines = 1)
         Text(r.valueText, style = MaterialTheme.typography.labelLarge, color = c.statusText(r.status), maxLines = 1)
         StatusIcon(r.status, size = 12.dp)
     }

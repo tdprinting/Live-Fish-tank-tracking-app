@@ -1,5 +1,6 @@
 package com.reeflive.app.render
 
+import com.reeflive.core.sim.CritterPose
 import com.reeflive.core.sim.OrganismPose
 import com.reeflive.core.sim.SimSnapshot
 import kotlin.math.sqrt
@@ -74,6 +75,22 @@ class FishRig(val id: String) {
     }
 
     private val bendScratch = FloatArray(64)
+
+    /** Fills this rig from an in-tank microfauna pose (core [CritterPose]); critters are not interpolated. */
+    fun setCritter(p: CritterPose) {
+        speciesId = p.kind.speciesId
+        variant = null
+        for (i in 0 until 16) {
+            spine[i * 4] = p.spine[i * 3]; spine[i * 4 + 1] = p.spine[i * 3 + 1]; spine[i * 4 + 2] = p.spine[i * 3 + 2]; spine[i * 4 + 3] = 0f
+            for (c in 0 until 4) frames[i * 4 + c] = p.frames[i * 4 + c]
+        }
+        phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage
+        pectoral = 0f; finClamp = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
+        scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
+        alive = true; visible = true; posture = 0
+        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
+        touched = true
+    }
 
     /** Distance from a point to the head (cm), for LOD selection. */
     fun distanceTo(x: Float, y: Float, z: Float): Float {
