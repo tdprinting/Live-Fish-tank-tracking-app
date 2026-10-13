@@ -36,6 +36,8 @@ data class AppSettings(
     /** Live Tank ambience and event sounds, and their volume (0..1). */
     val tankSounds: Boolean = true,
     val tankVolume: Float = DEFAULT_TANK_VOLUME,
+    /** The first-time sandbox tips were dismissed. */
+    val sandboxHintSeen: Boolean = false,
 ) {
     /** Preferred display unit for a parameter whose base unit is [base]. */
     fun displayUnitFor(paramId: String, base: ParamUnit): ParamUnit = when (paramId) {
@@ -68,6 +70,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val paramUnits = stringPreferencesKey("paramUnits")
         val tankSounds = booleanPreferencesKey("tankSounds")
         val tankVolume = floatPreferencesKey("tankVolume")
+        val sandboxHintSeen = booleanPreferencesKey("sandboxHintSeen")
     }
 
     private fun unit(name: String?, default: ParamUnit) = ParamUnit.entries.firstOrNull { it.name == name } ?: default
@@ -91,6 +94,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             paramUnits = parseUnits(p[K.paramUnits]),
             tankSounds = p[K.tankSounds] ?: true,
             tankVolume = (p[K.tankVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
+            sandboxHintSeen = p[K.sandboxHintSeen] ?: false,
         )
     }
 
@@ -131,4 +135,5 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setNotifications(v: Boolean) = store.edit { it[K.notifications] = v }
     suspend fun setTankSounds(v: Boolean) = store.edit { it[K.tankSounds] = v }
     suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
+    suspend fun setSandboxHintSeen(v: Boolean) = store.edit { it[K.sandboxHintSeen] = v }
 }

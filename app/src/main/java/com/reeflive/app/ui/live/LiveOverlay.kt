@@ -1,6 +1,7 @@
 package com.reeflive.app.ui.live
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -27,11 +28,14 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +50,7 @@ import com.reeflive.app.ui.components.ReefChip
 import com.reeflive.app.ui.components.StatusIcon
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
+import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.app.ui.theme.statusText
@@ -71,6 +76,8 @@ fun LiveOverlay(
     onToggleCleaning: () -> Unit = {},
     /** Opens the microscope view; null hides the button. */
     onMicro: (() -> Unit)? = null,
+    /** Hides every control so only the tank shows (tap the tank or "Show controls" to bring them back); null hides the button. */
+    onHideChrome: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -81,11 +88,12 @@ fun LiveOverlay(
             if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
             // under the strip at the right edge: the top row has no room for them on a phone
-            if (soundOn != null || cleaning != null || onMicro != null) {
+            if (soundOn != null || cleaning != null || onMicro != null || onHideChrome != null) {
                 Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (onMicro != null) MicroButton(onMicro)
                     if (cleaning != null) CleanGlassButton(cleaning, onToggleCleaning)
                     if (soundOn != null) SoundButton(soundOn, onToggleSound)
+                    if (onHideChrome != null) HideChromeButton(onHideChrome)
                 }
             }
         }
@@ -115,17 +123,20 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
         HudMode.values().forEach { m ->
             val sel = m == mode
             val selColor = if (m == HudMode.SANDBOX) c.coral else c.primaryBright
+            val reduce = ReefTheme.reduceMotion
+            val fg by animateColorAsState(if (sel) selColor else c.textSecondary, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
+            val bg by animateColorAsState(if (sel) selColor.copy(alpha = 0.22f) else selColor.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
             Text(
                 m.label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (sel) selColor else c.textSecondary,
+                color = fg,
                 modifier = Modifier
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = 48.dp)
                     .semantics { selected = sel }
                     .clip(ReefShapes.pill)
-                    .background(if (sel) selColor.copy(alpha = 0.22f) else c.glass.copy(alpha = 0f))
+                    .background(bg)
                     .clickable(role = Role.Tab) { onModeChange(m) }
-                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
             )
         }
     }
@@ -137,7 +148,7 @@ fun MicroButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
     Row(
         modifier
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .clip(ReefShapes.pill)
             .background(c.glass)
             .clickable(role = Role.Button, onClickLabel = "Open the microscope") { onClick() }
@@ -156,7 +167,7 @@ fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier
     val c = ReefTheme.colors
     Box(
         modifier
-            .size(44.dp)
+            .size(48.dp)
             .clip(ReefShapes.pill)
             .background(c.glass)
             .clickable(role = Role.Switch, onClickLabel = if (on) "Mute tank sounds" else "Unmute tank sounds") { onToggle() },
@@ -168,6 +179,41 @@ fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier
             tint = if (on) c.text else c.textSecondary,
             modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+/** Glass pill shown while the controls are hidden: brings them back (tapping empty water does too). */
+@Composable
+fun ShowControlsPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = ReefTheme.colors
+    Row(
+        modifier
+            .heightIn(min = 48.dp)
+            .clip(ReefShapes.pill)
+            .background(c.glass)
+            .clickable(role = Role.Button, onClickLabel = "Show the controls") { onClick() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Rounded.Visibility, contentDescription = null, tint = c.text, modifier = Modifier.size(18.dp))
+        Text("Show controls", style = MaterialTheme.typography.labelLarge, color = c.text)
+    }
+}
+
+/** Round glass button that hides all the overlay controls so the whole tank shows. */
+@Composable
+fun HideChromeButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = ReefTheme.colors
+    Box(
+        modifier
+            .size(48.dp)
+            .clip(ReefShapes.pill)
+            .background(c.glass)
+            .clickable(role = Role.Button, onClickLabel = "Hide the controls") { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide controls", tint = c.text, modifier = Modifier.size(20.dp))
     }
 }
 

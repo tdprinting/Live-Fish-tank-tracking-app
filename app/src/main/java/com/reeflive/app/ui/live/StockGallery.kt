@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -164,18 +165,18 @@ fun StockGallery(
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Stocking test", style = MaterialTheme.typography.titleMedium, color = c.text, modifier = Modifier.semantics { heading() })
+                Text("In the tank now", style = MaterialTheme.typography.titleMedium, color = c.text, modifier = Modifier.semantics { heading() })
                 Text(
                     "${plural(stock.animals, "animal", "animals")} · ${plural(stock.corals, "coral colony", "coral colonies")}",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (stock.animalsFull || stock.coralsFull) c.cautionText else c.textSecondary,
                 )
             }
-            ReefButton("Reset to my tank", onReset, kind = ButtonKind.OUTLINED, icon = Icons.Rounded.RestartAlt, compact = true)
+            ReefButton("Reset tank", onReset, kind = ButtonKind.OUTLINED, icon = Icons.Rounded.RestartAlt)
         }
         Text(
-            "Tap a card to add one, hold it to add many. They live, eat, squabble and load the water like real stock, " +
-                "so you can see what overstocking does. Only this sandbox changes.",
+            "Tap a card to add one. Tap + (or hold the card) to add many. They eat, play, squabble and make the water " +
+                "dirtier like real animals, so you can see what happens with too many. Only this sandbox changes.",
             style = MaterialTheme.typography.bodySmall, color = c.textSecondary,
         )
         SegmentedPills(
@@ -228,13 +229,14 @@ private fun CardGrid(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val cols = (maxWidth / 112.dp).toInt().coerceIn(2, 5)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            cards.chunked(cols).forEach { row ->
+            cards.chunked(cols).forEachIndexed { r, row ->
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { card ->
+                    row.forEachIndexed { i, card ->
                         SpeciesCard(
                             card, counts[card.speciesId] ?: 0, card.speciesId == picked,
                             onTap = { onTap(card) }, onMany = { onMany(card) },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
+                            order = r * cols + i,
                         )
                     }
                     repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
@@ -245,9 +247,17 @@ private fun CardGrid(
 }
 
 @Composable
-private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () -> Unit, onMany: () -> Unit, modifier: Modifier) {
+private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () -> Unit, onMany: () -> Unit, modifier: Modifier, order: Int = 0) {
     val c = ReefTheme.colors
     val reduce = ReefTheme.reduceMotion
+    // staggered entrance: each card rises and fades in a beat after the one before (first dozen only, so it stays quick)
+    val appear = remember(card.speciesId) { Animatable(if (reduce) 1f else 0f) }
+    LaunchedEffect(card.speciesId) {
+        if (appear.value < 1f) {
+            delay(order.coerceAtMost(12) * 28L)
+            appear.animateTo(1f, ReefMotion.tween(false, ReefMotion.NORMAL))
+        }
+    }
     val pop = remember { Animatable(1f) }
     var lastCount by remember { mutableStateOf(count) }
     LaunchedEffect(count) {
@@ -255,7 +265,12 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
         lastCount = count
     }
     GlassCard(
-        modifier = modifier.semantics(mergeDescendants = true) {
+        modifier = modifier
+            .graphicsLayer {
+                alpha = appear.value
+                translationY = (1f - appear.value) * 18.dp.toPx()
+            }
+            .semantics(mergeDescendants = true) {
             contentDescription = "${card.name}, ${card.sizeText}, $count in the tank. Tap to add one, hold to add several."
         },
         shape = ReefShapes.tile,
@@ -292,13 +307,13 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
             // visible "add many" affordance for people who don't long-press
             Box(
                 Modifier
-                    .size(32.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(c.glass)
                     .clickable(role = Role.Button, onClickLabel = "Add several ${card.name}", onClick = onMany),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add several", tint = c.coralSoft, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Add, contentDescription = "Add several", tint = c.coralSoft, modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -333,12 +348,15 @@ private fun QuantityBar(card: StockCard, qty: Int, onQty: (Int) -> Unit, onAdd: 
             )
             GlassIconButton(Icons.Rounded.Add, "One more", { onQty(qty + 1) })
             Spacer(Modifier.weight(1f))
-            ReefButton("Add $qty", onAdd, kind = ButtonKind.CORAL, compact = true)
+            ReefButton("Add $qty", onAdd, kind = ButtonKind.CORAL, icon = Icons.Rounded.Add)
         }
         Spacer(Modifier.height(8.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(5, 10, 20, card.maxPerAdd).distinct().filter { it <= card.maxPerAdd }.forEach { n ->
-                ReefChip(if (n == card.maxPerAdd) "Max $n" else "$n", selected = qty == n, onClick = { onQty(n) }, accent = c.coral)
+                ReefChip(
+                    if (n == card.maxPerAdd) "Max $n" else "$n", selected = qty == n, onClick = { onQty(n) }, accent = c.coral,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
         }
     }

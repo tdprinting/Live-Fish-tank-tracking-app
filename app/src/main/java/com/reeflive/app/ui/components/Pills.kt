@@ -1,9 +1,13 @@
 package com.reeflive.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,10 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -108,13 +114,18 @@ fun ReefChip(
     val bg by animateColorAsState(if (selected) tone.copy(alpha = 0.22f) else c.glass, ReefMotion.tween(reduce, ReefMotion.FAST), label = "chipBg")
     val border by animateColorAsState(if (selected) tone else c.glassBorder, ReefMotion.tween(reduce, ReefMotion.FAST), label = "chipBorder")
     val fg = if (selected) (accent ?: c.primaryBright) else c.text
+    // press feedback: a quick shrink like the buttons (UI_STYLE §6.3), on top of the ripple
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, ReefMotion.spring(reduce), label = "chipPress")
     Row(
         modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .heightIn(min = 36.dp)
             .clip(ReefShapes.pill)
             .background(bg)
             .border(1.dp, border, ReefShapes.pill)
-            .clickable(role = Role.Checkbox, onClick = onClick)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Checkbox, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

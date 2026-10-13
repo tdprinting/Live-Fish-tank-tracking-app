@@ -41,7 +41,7 @@ fun CleanGlassButton(cleaning: Boolean, onToggle: () -> Unit, modifier: Modifier
     val tone = c.primaryBright
     Row(
         modifier
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .clip(ReefShapes.pill)
             .background(if (cleaning) tone.copy(alpha = 0.22f) else c.glass)
             .clickable(role = Role.Button, onClickLabel = if (cleaning) "Stop cleaning the glass" else "Clean the glass with the Flipper") { onToggle() }
