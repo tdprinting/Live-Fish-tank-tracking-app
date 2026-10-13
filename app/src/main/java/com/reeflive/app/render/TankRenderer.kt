@@ -210,11 +210,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("glClear")
 
         val tank = store.model(TANK); val rock = store.model(ROCK); val equipment = store.model(EQUIPMENT); val algae = store.model(ALGAE)
-        // opaque: back glass, sand, rock, equipment
+        val details = store.model(DETAILS)
+        // opaque: back glass, sand, rock, equipment, static reef details (coralline layer, encrusting, mag cleaner)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = true) }
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
+        details?.let { drawStatic(it, progs, light, opaque = true) }
         // corals: soft bodies then polyps
         val corals = coralModels(cur)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = false)
@@ -224,6 +226,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         algae?.let { drawAlgae(it, progs) }
+        // blended details (the back-glass algae film) right after the cards, before particles and the water
+        Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        details?.let { drawStatic(it, progs, light, opaque = false) }
+        Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
         for (r in sorted) drawOrganism(r, progs, pass = 1)
         // transparent: shafts, particles, water surface, blended equipment, glass
@@ -387,6 +393,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     p.set1f("uDetailScale", 4f)
                     sandFx?.bind(p)
                 }
+                // soft bodies in a static scene model (reef_details.glb): coral shading without sway or retraction
+                MaterialKind.SOFT_CORAL -> staticCoralUniforms(p, part)
                 MaterialKind.EMITTER -> {
                     // AI Prime lens: emissive follows the live light colour
                     val c = light.lightColor()
@@ -406,9 +414,25 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         for (part in m.parts) {
             p.setMat4("uModel", part.node.world)
             part.material.apply(p, w, alphaTestOverride = part.node.float("alphaTest") ?: 0.4f)
-            coralUniforms(p, m, null, 0.3f)
+            // full extension: the shader scales every vertex toward the model's base by uExtension, and this model
+            // spans the whole tank (0.3 pulled tufts up to ~15 cm off the rock)
+            coralUniforms(p, m, null, 1f)
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
         }
+    }
+
+    /** Soft-coral program uniforms for a static part: anchored at its own centre, no sway, fully open. */
+    private fun staticCoralUniforms(p: ShaderProgram, part: DrawPart) {
+        val c = part.center
+        p.set3f("uBase", c[0], c[1], c[2])
+        p.set1f("uHeight", 1f)
+        p.set1f("uExtension", 1f)
+        p.set1f("uPhase", 0f)
+        p.set1f("uBleach", 0f)
+        p.set1f("uBrown", 0f)
+        p.set3f("uSwayDir", 1f, 0f, 0f)
+        p.set1f("uSwayAmp", 0f)
+        p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
     }
 
     // ------------------------------------------------------------------ corals
@@ -678,6 +702,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
         const val ALGAE = "models/algae_tufts.glb"
+        /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
+        const val DETAILS = "models/reef_details.glb"
         /** equipment.glb node of the Flipper magnet scraper (both halves), seated at x 2–8, y 13–33 on the front glass. */
         const val FLIPPER_NODE = "Flipper"
         const val FLIPPER_REST_X = 5f
@@ -690,7 +716,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val GLASS_MASK_UNIT = 11
         const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
         const val GLASS_MASK_H = com.reeflive.core.sim.GlassMask.H
-        val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE)
+        val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE, DETAILS)
         val DEMO_CORALS = listOf(
             "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",

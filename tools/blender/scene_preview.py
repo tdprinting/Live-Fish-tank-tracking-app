@@ -23,6 +23,10 @@ VIEWS = {
     "top": ((61, 170, 16.01), (61, 0, 16), 40),
     "left_end": ((-150, 35, 16), (0, 30, 16), 35),
     "right_end": ((272, 35, 16), (122, 30, 16), 35),
+    # close-ups for the 2026-10-13 backlog details (ASSETS.md §4.1)
+    "clowns": ((80, 26, 95), (82, 14, 20), 26),
+    "left_glass": ((40, 30, 85), (2, 19, 13), 28),
+    "upper": ((50, 52, 95), (45, 42, 14), 34),
 }
 # fish placements for the preview: (id, lengthCm, world pos, heading deg about +Y (0 = +X), pitch)
 FISH_POSES = [
@@ -40,7 +44,7 @@ INVERT_POSES = [
     ("sally_lightfoot", 5.0, (100.5, 40.5, 11.5), 250),
 ]
 CORALS = ("kenya", "gsp_neon", "gsp_mat", "zoa", "clove", "mushroom", "mushroom_hairy", "macro_red", "organ_pipe",
-          "algae_tufts", "aiptasia")
+          "algae_tufts", "aiptasia", "reef_details")
 POLYP_FILES = ("gsp_neon", "gsp_mat", "zoa", "clove", "kenya", "organ_pipe", "mushroom_hairy")
 
 

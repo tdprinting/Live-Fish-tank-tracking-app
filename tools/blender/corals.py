@@ -1112,7 +1112,136 @@ def algae_tufts(rock, A):
                     double=True, clip=True)
     clump = g2.obj("ClumpLeft", root, "card", [m2], smooth=False,
                    extras={"alphaTest": 0.4, "anchor": "coral_algae_clump_left"})
-    return root, [body, clump], {}
+    long_ = long_tufts(rock, root)
+    glass = glass_strands(root)
+    return root, [body, clump, long_, glass], {}
+
+
+# backlog 2026-10-13 (ASSETS.md §4.1): long dark hair algae streaming from the upper ledges and hair strands on the
+# left pane. Both are bent alpha strips (`card`), so the card shader sways them with the flow and grows them
+# root -> tip with uAlgaeBloom (COLOR_0.b), like the GRAZE tufts.
+FLOW_JETS = [(np.array(pos, float), unit(np.array(ex["dir"], float))) for name, _t, pos, ex, _s in
+             __import__("rockscape").ANCHORS if name.startswith("FLOW_PH_")]
+
+
+def flow_dir(p):
+    """Horizontal downstream direction at p from the three powerhead jets (distance-weighted)."""
+    f = np.array([0.95, 0.0, 0.3]) * 0.05
+    for jp, jd in FLOW_JETS:
+        f = f + np.array([jd[0], 0.0, jd[2]]) * math.exp(-np.linalg.norm(p - jp) / 35.0)
+    return unit(f)
+
+
+def strand_canvas(base, dark, tip, seed, w=128, h=256, n=90, width0=0.014):
+    """Long filament strip texture: n sinuous filaments from the root (v 0) to random lengths, alpha-masked."""
+    cv = P.Canvas(w, h, base, 0.0)
+    rs = RS(seed)
+    a = np.zeros((h, w), np.float32)
+    col = np.zeros((h, w, 3), np.float32)
+    v, u = cv.v, cv.u
+    for f in range(n):
+        x0 = rs.uniform(0.08, 0.92)
+        length = rs.uniform(0.55, 1.0)
+        amp, freq, ph = rs.uniform(0.01, 0.04), rs.uniform(5, 11), rs.uniform(0, 6.28)
+        xs = x0 + (0.5 - x0) * 0.25 * v + amp * np.sin(v * freq + ph)
+        width = width0 * rs.uniform(0.7, 1.3) * (1 - 0.5 * v / length)
+        m = (1 - S(width, width + 0.008, np.abs(u - xs))) * (v < length) * (1 - S(length - 0.05, length, v))
+        shade = rs.uniform(0.75, 1.15)
+        c = (hex2rgb(base) * (1 - v[..., None]) + hex2rgb(tip) * v[..., None]) * shade
+        c = np.where(rs.random() < 0.3, hex2rgb(dark)[None, None] * np.ones_like(c), c)
+        col = np.where(m[..., None] > a[..., None], c, col)
+        a = np.maximum(a, m)
+    cv.rgb = np.clip(np.where(a[..., None] > 0, col, hex2rgb(base)[None, None]), 0, 1).astype(np.float32)
+    cv.a = a
+    return cv
+
+
+def strip(g, pts, side, widths, col_rg, tip_b=1.0):
+    """Bent strip along pts (world), widths per point; UV u across, v along; COLOR_0.b = 0 root -> tip_b."""
+    n = len(pts)
+    V, UV, COL = [], [], []
+    for k, (p, w) in enumerate(zip(pts, widths)):
+        t = k / (n - 1)
+        V += [p - side * w / 2, p + side * w / 2]
+        UV += [(0, t), (1, t)]
+        COL += [(col_rg[0], col_rg[1], t * tip_b, 1)] * 2
+    F = [(2 * k, 2 * k + 1, 2 * k + 3, 2 * k + 2) for k in range(n - 1)]
+    g.add(np.array(V), F, np.array(UV, float), np.array(COL, float))
+
+
+def long_tufts(rock, root, count=16):
+    rs = RS(161)
+    avoid = [(np.array(p, float), r) for p, r in (((20, 39, 15), 7.0), ((36.6, 41.1, 14), 5.0),
+                                                  ((42.8, 51.5, 13.1), 5.0), ((103.1, 39.3, 8.8), 3.0))]
+    spots = []
+    for x in np.arange(4, 119, 3.0):
+        for z in np.arange(2, 32, 3.0):
+            q = np.array([x + rs.uniform(-1, 1), 60.0, z + rs.uniform(-1, 1)])
+            hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
+            if hit is None or nn[1] < 0.55 or not (34.0 <= hit[1] <= 48.0) or hit[2] < 9.0:
+                continue
+            if any(np.linalg.norm(hit - p) < r for p, r in avoid):
+                continue
+            spots.append((hit, unit(nn)))
+    order = rs.permutation(len(spots))
+    chosen = []
+    for i in order:
+        hit, nn = spots[i]
+        if all(np.linalg.norm(hit - h) > 5.0 for h, _ in chosen):
+            chosen.append((hit, nn))
+        if len(chosen) >= count:
+            break
+    print(f"[coral] long hair tufts: {len(chosen)} on the upper ledges at "
+          f"{[tuple(int(round(c)) for c in h) for h, _ in chosen]}")
+    g = T.WGeo()
+    for ti, (hit, nn) in enumerate(chosen):
+        f = flow_dir(hit)
+        phase = (ti * 0.37) % 1
+        for c in range(4):
+            d0 = unit(nn * 0.45 + f + rs.normal(0, 0.18, 3))
+            L = rs.uniform(5.0, 10.0)
+            # shorten where the strand would run into rock, out of the water or through the glass
+            h2, _ = rock.ray(hit + nn * 0.3, d0, L)
+            if h2 is not None:
+                L = max(3.0, np.linalg.norm(h2 - hit) * 0.9)
+            p0 = hit - nn * 0.1 + rs.normal(0, 0.3, 3)
+            pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
+            for _ in range(8):
+                if all(0.6 < p[0] < 121.3 and p[1] < 54.5 and 0.6 < p[2] < 32.4 for p in pts):
+                    break
+                L *= 0.8
+                pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
+            s1 = unit(np.cross(d0, nn) + 1e-6)
+            s2 = np.cross(d0, s1)
+            ang = math.pi * c / 4 + rs.uniform(-0.2, 0.2)
+            side = unit(s1 * math.cos(ang) + s2 * math.sin(ang))
+            W = rs.uniform(1.6, 2.6)
+            strip(g, pts, side, W * np.linspace(1.0, 0.6, 5), (0.5, phase))
+    cv = strand_canvas("#4E4C24", "#363A1C", "#7A7440", 162)
+    m = C.material("algae_long", rough=0.75, image=tex("algae_long", cv, alpha=True), image_alpha=True, double=True,
+                   clip=True)
+    return g.obj("LongTufts", root, "card", [m], smooth=False,
+                 extras={"alphaTest": 0.4, "species": "hair_algae", "flowLean": True})
+
+
+def glass_strands(root, count=16):
+    """Hair strands on the inside of the left pane, low and toward the back, lying almost flat on the glass."""
+    rs = RS(171)
+    g = T.WGeo()
+    roots = P.poisson(rs, count, 2.2, box=(4.5, 15.0, 5.0, 20.0))  # (y, z)
+    for k, (y, z) in enumerate(roots):
+        d = unit(np.array([0.22, rs.uniform(0.4, 1.0), rs.uniform(-0.8, 0.8)]))
+        L = rs.uniform(3.0, 6.0)
+        p0 = np.array([0.12, y, z])
+        drift = unit(np.array([0.0, rs.uniform(-0.3, 0.3), rs.uniform(-1, 1)]))
+        pts = [p0 + d * L * t + drift * L * 0.2 * t * t for t in np.linspace(0, 1, 4)]
+        side = unit(np.cross(d, [1.0, 0, 0]))
+        strip(g, pts, side, rs.uniform(1.0, 1.6) * np.linspace(1.0, 0.7, 4), (0.5, (k * 0.29) % 1), tip_b=0.8)
+    cv = strand_canvas("#4F7A2E", "#35521F", "#7FA23A", 172, w=64, h=128, n=36, width0=0.02)
+    m = C.material("algae_glass", rough=0.6, image=tex("algae_glass", cv, alpha=True), image_alpha=True, double=True,
+                   clip=True)
+    return g.obj("GlassStrands", root, "card", [m], smooth=False,
+                 extras={"alphaTest": 0.4, "species": "hair_algae", "pane": "left"})
 
 
 # ----------------------------------------------------------------------------
