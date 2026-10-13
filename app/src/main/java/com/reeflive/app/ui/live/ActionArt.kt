@@ -670,7 +670,7 @@ private fun DrawScope.waterChange(fx: TankFx, f: FxFrame) {
     val inWater = f.project(FxSpots.SIPHON.x, FxSpots.SIPHON.y, FxSpots.SIPHON.z) ?: o(f.ax, f.ay)
     val rim = f.project(FxSpots.SIPHON.x + 6f, 64f, FxSpots.SIPHON.z) ?: o(inWater.x, inWater.y - u)
     val bk = f.project(FxSpots.BUCKET.x, FxSpots.BUCKET.y, FxSpots.BUCKET.z) ?: o(rim.x + u, rim.y)
-    val bx = bk.x.coerceAtMost(size.width - u * 0.55f); val by = bk.y.coerceIn(u * 0.8f, size.height - u)
+    val bx = bk.x.coerceAtMost(size.width - u * 0.55f); val by = bk.y.clampSafe(u * 0.8f, size.height - u)
     val hoseIn = ease(f.span(0f, 350f)) * (1f - ease(f.span(1600f, 1900f)))
     if (hoseIn > 0f) {
         val end = o(rim.x + (inWater.x - rim.x) * hoseIn, rim.y + (inWater.y - rim.y) * hoseIn)
