@@ -39,8 +39,9 @@ object LiveReactions {
     private val phyto = Color(0xFF6DBF5A)
     private val pods = Color(0xFFD8CBA8)
 
-    fun feed(k: FoodKind) = Reaction(
-        TankFx(FxKind.FEED, if (k == FoodKind.NORI) FxSpots.NORI else FxSpots.FEED, food = k, caption = k.label),
+    /** [at]: where the food goes in (dragged from the shelf), else the sim's surface feed point. */
+    fun feed(k: FoodKind, at: FxPoint? = null) = Reaction(
+        TankFx(FxKind.FEED, if (k == FoodKind.NORI) FxSpots.NORI else at ?: FxSpots.FEED, food = k, caption = k.label),
         when (feedTool(k)) {
             FeedTool.PINCH -> "A pinch by the return. Watch the current carry it across!"
             FeedTool.SHAKER -> "Shake shake! ${k.label} for everyone."

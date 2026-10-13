@@ -42,7 +42,7 @@ happens.
 
 | Control | Sim effect | Before (in tank) | After (in tank / banner) |
 |---|---|---|---|
-| Feed → any food, "Usual pinch" (new) | `Feed(kind, typical dose)` at the hand-feed spot | Same dots for every food | Each food's own sprite (table above), plus a splash or plop. Banner says how this food behaves. |
+| Feed: any food from the supply shelf (#47), dragged to where it goes in | `Feed(kind, typical dose)` where it is let go (the same sim path in Watch and sandbox) | Same dots for every food | Each food's own sprite (table above), plus a splash or plop. Banner says how this food behaves. |
 | Long press on the tank | `Feed(PELLET)` at that point | **No-op: `onLongPress` was not wired on the Live screen** | Fixed: drops a pinch there, with a splash and a banner |
 | Water → Change water 25 % / 10 % | `WaterChange` | Overlay only | Muck streams into the siphon, then fresh water swirls in from the return as bubbles. Banner shows nitrate live. Fine suspended muck also tracks the water's detritus load. |
 | Warmer / Cooler | temp ±1 °C | Overlay only | Warm shimmer rising, or cool shimmer sinking, at the heater. Banner shows temperature. |
@@ -84,7 +84,7 @@ happens.
 - **A highlight ring** pulses on the exact tank spot where the action happens (the projected sim point), so the eye
   knows where to look from any camera angle.
 - **3D feedback in the water itself** (above) at the moment the picture "lands", when the sim command goes out.
-- **Fewer steps:** "Usual pinch" is the first tile on the Feed card (one tap does the everyday feed), long press on
+- **Fewer steps:** long press on
   the tank feeds there, and on/off tiles act at once whatever slider mode is selected.
 
 ## Feeding clip (IMG_0097)
@@ -117,7 +117,7 @@ and the banner say so, and sliding back to 1× returns to the real tank.
 |---|---|---|
 | Lamps: Real clock / Day / Dusk / Night / Moonlight | Render-only light look (`render/ViewLight.kt`, read by `TankRenderer`). The sim's light schedule and photosynthesis do not change. | The tank relights at once. The tile stays lit, and the banner says it is only the look. |
 | Torch | A warm beam over the tank that follows your finger (touches pass through to the tank) | The beam, with the rest of the tank dimmed a little. Banner: "Drag on the tank to shine it around". |
-| Feed | Opens the existing Feed card (food tray) | The Feed card |
+| Feed | Opens the supply shelf (#47), the same as the Supplies bubble; the tour stops | The camera swings to the shelf |
 | Auto tour | The follow camera visits each living animal for 12 s in turn. A tap on the water stops it. | The camera moves, and a banner explains it |
 | Cinematic | The existing "hide buttons" | Every control hides. Tap the water to bring them back. |
 | Sound on / off | The existing tank-sound toggle | Tile state and sound |

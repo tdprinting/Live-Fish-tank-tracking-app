@@ -469,7 +469,7 @@ Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a
 | Banded shrimp | Hang (inverted under `SHRIMP_LEDGE`, leg shuffles, antenna phase), Scavenge, NightForage, cosmetic Clean, MoltHide, TailFlip |
 | **Skunk cleaner shrimp** | Station at `STATION_SHRIMP` (rocks side to side when clients are near), Climb (rides on the posing client 8–20 s), Scavenge, MoltHide (station closed while molting), TailFlip |
 | **Hermit crab** | CrawlWander, Pick (rasping rock), Scavenge, Retreat into shell (posture 6) |
-| **Brittle star** | HideUnder (`BRITTLE_HOME`, arms out 0.3–0.5), Roam at night, RaceToFood, Retract |
+| **Brittle star** | HideUnder (`BRITTLE_HOME`, 1–3 arm tips out toward the cave mouth), Roam at night (arm rowing), RaceToFood (arms first, then the disc), ArmFeed (arm loops the item to the mouth), Retract (arms in, run home), autotomy when bitten. See §19. |
 | **Feather duster** | Filter (crown open, eats drifting particles within 8 cm plus a detritus baseline), Snap (retracts on shadow, tap, a fish touching the crown, or food dosed within 15 cm above; reopens over 10 s) |
 | **Nassarius** | Buried (siphon only, posture 5), Erupt and race to food after any feed, re-bury where they stop |
 | **Astrea** | GlassGraze (slow on glass/rock), Flipped (lands upside down on the sand occasionally, rights itself after 2–6 h) |
@@ -964,7 +964,7 @@ Snail predation by the crab and hermit snail-shell theft still need `predationEn
 | Nassarius | Buried → food cue → emerges after a latency of 20–240 s × (1.2 − hunger), so hungrier snails come out sooner → travels → a **feed bout** with the proboscis on the food (lognormal, mean 6 min, about 3/4 of bouts ≤ 8 min, after Lucena 2012) → reburies. |
 | Astrea | Flipping is now loss of attachment, then a righting attempt every 10–40 min. Each attempt succeeds 12 % of the time on open sand and 35 % with rock or glass in reach. There is **no death timer** (and the old "always rights after 2–6 h" timer is gone). |
 | Asterina | `CorrelatedWalk`: the heading persists with σ 0.35 rad turns every 4 s. Speed drops to 0.35× near food or a rich film, so it covers less ground there. Organ-pipe damage is opt-in (`asterina_coral`). Fission is kept as an analogy (fissiparous trade asterinids). |
-| Brittle star | `ArmFeed`: the disc stays under the rock while one arm brings in food within 0.45 × span over 3–8 s. When it travels, the body does not turn: `SteerIntent.armGait` snaps the heading to the arm nearest the direction of travel, a lead-arm switch that looks identical with 5-fold symmetry. |
+| Brittle star | `ArmFeed`: the disc stays put while one arm reaches, loops round the item and carries it to the mouth (10 cm in 8–15 s, Chartok 1983). When it travels the disc never turns: `BrittleArms` makes a different arm the centre arm (§19.2). |
 | Feather duster | Retraction, crown loss and tube abandonment are separate states (`InvertEcology.dusterState`). After 3 days crownless with health < 0.4, the worm leaves the tube: invisible, but alive. It re-settles above health 0.7. The 30–60 d regrowth is labelled a design estimate. |
 
 ### 14.3 Tests
@@ -1027,7 +1027,9 @@ interpolates them and `fish.vert` reads them as `uMotion`:
 - The C-start bends the head and tail to one side and the middle to the other.
 - Shrimp flex the abdomen down during a tail-flip.
 - Brittle star: the arm along +X leads and stays still, the side arms sweep in mirrored strokes in the disc plane,
-  and the trailing arms drag (Astley 2012, J Exp Biol 215:1923: ~2 s per stroke cycle).
+  and the trailing arms drag (Astley 2012, J Exp Biol 215:1923: ~2 s per stroke cycle). This is now the fallback
+  for a model without limb pivots; the rebuilt star and the Sally Lightfoot use the limb rig (§19), and
+  `motionMode` 3 marks the crab.
 
 ### 15.4 Behaviour states that are mostly motion
 
@@ -1254,3 +1256,85 @@ H2S also enters fish and invert `envStress` (`HealthModel.H2S_FISH`: opt 0.005, 
 The research-17 E.8 cyanobacteria check is the AlgaeModel's own (research 09).
 
 **Default tank unchanged.** A mature tank can have no dose, no antibiotic, no copper and no stirring, with water below ~27 °C and normal O2. In that tank every coupling is exactly 0 or 1, so the existing chemistry and behaviour runs come out the same. A young community (low `microbes`), low O2 or dirty water can still raise the pathogen pressure a little. Weeks at 31 °C now also raise the Vibrio risk, so `RealismAcceptanceTest.noIch` clears bacterial infections as well as ich, to keep c25 about acclimation alone.
+## 19. Limb rig: brittle star arms, Sally Lightfoot legs and shrimp limb signals (`sim/LimbRig.kt`, `shaders/fish.vert`)
+
+Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_star_sally_crab.md). The two many-limbed crawlers no longer use the generic leg sweep. The sim owns each limb's pose, meaning which arm leads, which legs are in stance and where each claw is in its stroke. The renderer turns that pose into vertex motion. There are no skins or bones: each limb is posed about a pivot stored in the model.
+
+### 19.1 Data path
+
+- **Core.** `Organism.limbRig` is a `LimbRig.forKind`: `BrittleArms` for `BRITTLE_STAR`, `CrabLegs` for `SALLY_CRAB`, `ShrimpLimbs` for `BANDED_SHRIMP` and `CLEANER_SHRIMP`, and null for every other kind. This is the one channel for limb pose from the sim to the renderer.
+  - `Steering.animate` calls `limbRig.step(o, dt, speed)` once per tick.
+  - `Steering.crawl` writes the intended travel to `limbRig.travel` and multiplies the crawl velocity by `limbRig.pulse`. The disc moves in pulses; the crab's pulse is a steady 1.
+- **Pose.** `OrganismPose.limbs` holds `LimbRig.count` vec4s: 10 for the crawlers, 1 for the shrimp, empty for other kinds. Component x is a phase in [0, 1) or a slow scalar; y, z and w are plain scalars.
+  - `motionMode` is 1 for the brittle star and 3 for the crab.
+  - Both bodies are now `rigid` splines. The disc never bends or turns with its path.
+- **App.**
+  - `FishRig.limbs` interpolates the vec4s (`limbCount` of them). x is interpolated across the 1 → 0 wrap.
+  - `DrawPart.limbPivots` / `GpuModel.limbPivots` read the node extras `limbPivots`: 10 × vec4 in glTF model space, xyz = limb root and w = rest length.
+  - `TankRenderer.fishUniforms` uploads every entry to `uLimb[10]` (uLimb[0] is zeroed when the pose has none) and sets `uLimbOn` and `uLimbPivot[10]`. `uLimbOn` is 1 only when the model has pivots and the pose has 10 limbs. Older GLBs fall back to the §15.3 shader paths.
+- **Shader** (`fish.vert`, `uLimbOn`).
+  - The body, carapace and eyes are placed rigidly at spine station 0, which is the organism position, with frame 0.
+  - Limb vertices (part 3, `COLOR_0.r` = t along the limb, `COLOR_0.b` = limb / 9) go through `starArm` (mode 1) or `crabLimb` (mode 3).
+- **Shrimp** (`ShrimpLimbs`, research 17 shrimp motion detail). One entry, uLimb[0] = (stride phase from `Organism.walkPhase`, stepping `walkAmt`, signal = max(skunk front-leg rock `legRock`, banded claw display `clawDisplay`), antenna grooming `groom`). The shrimp models have no pivots; `fish.vert` (mode 2, `uLimbOn` 0) animates each limb class from the vertex colour (ASSETS §2.8 limb rig) with uLimb[0], `uPick` (mouth) and `uMotion` (pleopods).
+- **Offline.** `tools/blender/limbpose.py` is a numpy mirror of both functions. It poses previews and species cards (`preview.import_glb`) the way the app does.
+
+### 19.2 Brittle star arms (`BrittleArms`)
+
+- **Rowing** (75 % of bouts; Astley 2012). Arm roles are counted from the centre arm `lead`:
+  - The centre arm probes ahead with its tip a little up.
+  - The two arms either side make mirrored power strokes: `FORE_SWEEP` 0.78 rad, lifted in the swing, with the right arm 0.04 cycle behind.
+  - The two rear arms trail with `HIND_SWEEP` 0.22 rad.
+- **Reverse rowing** (25 %, `REVERSE_SHARE`). The centre arm drags behind and the other four push.
+- **Cycle.**
+  - The cycle runs at `MotionProfile.rowHz` 0.23 Hz × the speed ratio. It idles at 0.06 Hz.
+  - The disc moves for the first `DUTY` 45 % of the cycle and creeps at 20 % in the rest (`pulse`; the mean over a cycle is 1).
+- **Turning.**
+  - The mode holds for a whole bout.
+  - A turn is a new centre arm, chosen only in the static disc phase and only once the travel is more than 0.78 rad off the current arm's sector (`leadSwitches`).
+  - `Steering.crawl` parallel-transports the heading over the surface, so the disc never yaws.
+- **Arm shape.** Each arm also carries:
+  - a travelling bend wave from root to tip (`waveAmp`, faster while `snake`);
+  - a resting tip curl, alternating in sign;
+  - coiling when drawn in (reach → 0).
+- **Shader (`starArm`).** It integrates the arm's centreline over 8 steps from the per-s direction angles:
+  - yaw = base swing × (1 − 0.55 s) + wave + tip curl + coil;
+  - pitch = lift × s (0.4 + 0.6 s) − sag.
+
+  The cross-section rides on the curve's frame. Vertices past the arm's current length collapse onto the stump.
+- **Brain states (`BrittleStarBrain`).**
+  - `HideUnder` by day leaves `outArms` = 1–3 tips (fixed per animal) out toward the cave mouth.
+  - `Roam` at night uses the arm gait.
+  - `RaceToFood`: the scent arrives after 15 s + distance / 0.5 cm/s. A hidden star first reaches out with its arms for 5–10 s (`armsFirstEmergences`) and then rows out at burst speed.
+  - `ArmFeed`: the nearest arm reaches out, loops its tip round the item (`feedLoop` → curl) and carries the item to the mouth at 10 cm per 8–15 s (`armFeeds`).
+  - `Retract`: every arm is pulled in at 6/s for 1.2 s, then it runs home at burst speed.
+  - `onAttacked`: with p 0.5 the arm nearest the attacker breaks distally (`shed`, `autotomies`) and regrows at 0.4 mm/day.
+
+### 19.3 Sally Lightfoot legs and claws (`CrabLegs`)
+
+- **Legs** (k = 2 pair + (0 left, 1 right), pair 0 at the front).
+  - Gait: an alternating tetrapod, group = (pair + side) mod 2, half a cycle apart. Each leg also has a 0.06-cycle rear-to-front lag.
+  - Stride: frequency = speed / (0.45 carapace widths), clamped to 1.5–7 Hz.
+  - The pose for each leg is (phase, signed extension stroke, foot lift, tuck).
+  - The legs on the side the crab is moving toward are leading: their stroke sign is negative, so they flex and pull. The trailing legs extend and push.
+  - Shader (`crabLimb`): the first half of the cycle is the swing, with the foot lifted about the leg's horizontal axis. The second half is the stance, with the foot planted while the leg flexes or extends along its length. A small fore-aft yaw is added. Tuck draws the legs in and down.
+- **Chelae 8/9.**
+  - The pose for each claw is (pick phase, stroke, reach), with the two claws half a cycle apart at `PICK_HZ` 1.6 Hz each. `pickStrokes` counts the strokes.
+  - In the shader, each claw dips toward the rock and comes back to the mouth.
+- **Brain states (`SallyCrabBrain`).**
+  - `Graze` scores hair algae, film and diatoms. It shuffles sideways between bites with `pick` = 1, and at night it grazes a glass spot 15 % of the time (`glassSpot`).
+  - `CrabScavenge` (pick 0.6) and `CarcassPick` (pick 1).
+  - `HideCrevice`: legs tucked, with occasional picking. It gets +0.35 for 48 h after a molt (`softShell`) and +0.4 for 60 s after a dart.
+  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It takes a detour when stuck, tucks on arrival and counts `darts`.
+  - `NightGrab` and the `crab_predation` sandbox toggle are unchanged.
+
+### 19.4 Tests
+
+`ai/CrawlerTest.kt` has 8 tests:
+- the star hides by day with only a few tips out;
+- it comes out at night;
+- it emerges for food by day, arms first;
+- it switches the lead arm instead of turning (the travel direction changes by more than 1.5 rad while the disc turns by less than 0.15 rad);
+- an arm loops food to the mouth;
+- it retreats fast when disturbed and sheds an arm when bitten;
+- the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
+- the crab's legs step in an alternating tetrapod.

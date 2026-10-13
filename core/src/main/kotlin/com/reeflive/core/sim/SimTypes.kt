@@ -169,6 +169,9 @@ sealed class SimEvent {
  * frames = 16 × quaternion xyzw mapping model X(forward)/Y(up)/Z(side) to world.
  * Fields after `scale` are Track C additions with defaults (contract extension, backward compatible).
  */
+/** Shared empty [OrganismPose.limbs]. */
+val NO_LIMBS = FloatArray(0)
+
 data class OrganismPose(
     val id: String,
     val speciesId: String,
@@ -209,15 +212,15 @@ data class OrganismPose(
     val pecAmp: Float = 0f,
     /** Signed escape flexion −1..1: fish C-start bend (lateral), shrimp tail-flip (ventral abdomen). */
     val bend: Float = 0f,
-    /** How the renderer applies [pecPhase]/[bend]: 0 fish, 1 brittle-star arm rowing, 2 shrimp (ventral flexion). */
+    /** How the renderer applies [pecPhase]/[bend]: 0 fish, 1 brittle-star arm rowing, 2 shrimp (ventral flexion), 3 crab legs. */
     val motionMode: Int = 0,
-    /** Shrimp legs (research 17): stride phase (cycles) and stepping amount 0..1 while walking. */
-    val walkPhase: Float = 0f,
-    val walkAmt: Float = 0f,
-    /** Shrimp signal: skunk front-leg rocking with antenna lashing, or banded claw display, 0..1. */
-    val limbSignal: Float = 0f,
-    /** Shrimp grooming an antenna through its mouthparts, 0..1. */
-    val groom: Float = 0f,
+    /**
+     * Per-limb pose from the organism's [LimbRig] (SIMULATION §19), vec4 per entry, empty for animals without one:
+     * [LimbRig.LIMBS] entries for the brittle star arms and the crab's legs and chelae (with model pivots the renderer
+     * centres the model on the head station and poses each limb from these); one entry for the shrimp
+     * ([ShrimpLimbs]: stride phase, stepping, rock / claw-display signal, grooming).
+     */
+    val limbs: FloatArray = NO_LIMBS,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())

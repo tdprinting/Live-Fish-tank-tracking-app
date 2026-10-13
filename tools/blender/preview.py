@@ -89,10 +89,13 @@ def camera(loc, target, lens=50, ortho=None):
     return o
 
 
-def import_glb(path):
+def import_glb(path, limb_pose=None):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
+    # limb-rigged crawlers (brittle star, Sally Lightfoot): pose the limbs the way fish.vert does in the app
+    import limbpose
+    limbpose.pose_imported(new, limb_pose)
     # COLOR_0 is data (not color): stop the importer from multiplying it into base color
     # -> set it to white so the multiply is an identity
     for o in new:
@@ -154,6 +157,60 @@ def compose(cells, cols, out, pad=6, bg=(0.06, 0.07, 0.08)):
     return out
 
 
+# app-side linear albedo multipliers (TankRenderer.CORAL_TINT) so a coral preview shows the in-app colour
+CORAL_TINT = {"zoa_polyp_orange": (1.0, 0.70, 0.55)}
+# coral close-ups: (model, camera yaw deg, elevation deg); the Kenya view matches Tee's clip (front, slightly above)
+CORAL_VIEWS = {"kenya": (-8.0, 12.0)}
+
+
+def render_coral(name, w=720, h=900, samples=48, out=None, rock=True):
+    """Close-up of one coral GLB on the rockscape (polyp instances expanded), framed on the coral's bounds."""
+    import scene_preview as SP
+    C.reset_scene()
+    setup_cycles(w, h, samples)
+    bpy.context.scene.cycles.use_denoising = True
+    bpy.context.scene.view_settings.view_transform = 'AgX'
+    world((0.05, 0.06, 0.08), 1.0)
+    if rock:
+        import_glb(os.path.join(C.MODELS, "rockscape.glb"))
+    objs = import_glb(os.path.join(C.MODELS, f"{name}.glb"))
+    SP.instance_polyps(objs)
+    for o in bpy.data.objects:
+        if o.type == 'MESH':
+            for m in o.data.materials:
+                t = CORAL_TINT.get(m.name.split(".")[0]) if m else None
+                bsdf = m.node_tree.nodes.get("Principled BSDF") if m and m.use_nodes else None
+                if t and bsdf and not m.get("_tinted"):
+                    # multiply the texture by the tint with a MixRGB node in front of Base Color
+                    src = bsdf.inputs["Base Color"].links[0].from_socket if bsdf.inputs["Base Color"].links else None
+                    mix = m.node_tree.nodes.new("ShaderNodeMix")
+                    mix.data_type = 'RGBA'
+                    mix.blend_type = 'MULTIPLY'
+                    mix.inputs[0].default_value = 1.0
+                    if src:
+                        m.node_tree.links.new(src, mix.inputs[6])
+                    mix.inputs[7].default_value = (*t, 1)
+                    m.node_tree.links.new(mix.outputs[2], bsdf.inputs["Base Color"])
+                    m["_tinted"] = True
+    from mathutils import Vector
+    pts = [o.matrix_world @ Vector(c) for o in bpy.data.objects if o.type == 'MESH' and not o.hide_render
+           and o in objs or (o.type == 'MESH' and o.name.endswith("_inst")) for c in o.bound_box]
+    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    ctr = (lo + hi) / 2
+    ext = hi - lo
+    yaw, elev = (math.radians(a) for a in CORAL_VIEWS.get(name, (0.0, 10.0)))
+    d = max(ext.x, ext.y, ext.z) * 4
+    loc = ctr + Vector((d * math.sin(yaw) * math.cos(elev), -d * math.cos(yaw) * math.cos(elev), d * math.sin(elev)))
+    camera(tuple(loc), tuple(ctr), lens=50, ortho=max(ext.x, ext.z * w / h) * 1.25)
+    # blue-white tank light from above, warm fill from the front
+    add_light('SUN', (0, 0, 100), 3.0, rot=(math.radians(-15), math.radians(8), 0), size=6, color=C.lin("#C8D2FF"))
+    add_light('AREA', tuple(ctr + Vector((0, -60, 30))), 120000, size=60, color=C.lin("#FFE6D2"))
+    add_light('AREA', tuple(ctr + Vector((40, 30, 60))), 50000, size=60, color=C.lin("#8E86E0"))
+    out = out or os.path.join(C.BUILD, f"preview_coral_{name}.png")
+    return render_to(out)
+
+
 def fish_sheet(ids, out, cols=2):
     cells = [render_fish(sid) for sid in ids]
     return compose(cells, cols, out)
@@ -163,6 +220,8 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--fish", default=None)
     ap.add_argument("--scene", action="store_true")
+    ap.add_argument("--coral", default=None, help="close-up of one coral GLB, e.g. kenya or kenya_lod1")
+    ap.add_argument("--out", default=None)
     ap.add_argument("--samples", type=int, default=None)
     ap.add_argument("--view", default="front", help="front|left34|right34|top|left_end|right_end|all")
     ap.add_argument("--size", default="1600x1200")
@@ -175,6 +234,9 @@ def main(argv):
             for sid in a.fish.split(","):
                 render_fish(sid)
                 print(os.path.join(C.BUILD, f"preview_{sid}.png"))
+    if a.coral:
+        render_coral(a.coral, samples=a.samples or 48, out=a.out)
+        print(a.out or os.path.join(C.BUILD, f"preview_coral_{a.coral}.png"))
     if a.scene:
         import scene_preview
         w, h = (int(v) for v in a.size.split("x"))

@@ -273,7 +273,15 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
     for (h in listOf(8.0, 16.0, 24.0, 32.0)) {
         val above = safe(goal + Vec3.Y * h)
         if (!sdf.segmentClear(above, goal, 0.5)) continue
-        return if (sdf.segmentClear(o.pos, above, 0.5)) above else safe(Vec3(o.pos.x, above.y, o.pos.z))
+        if (sdf.segmentClear(o.pos, above, 0.5)) return above
+        val up = safe(Vec3(o.pos.x, above.y, o.pos.z))
+        if (sdf.segmentClear(up, above, 0.5)) return up
+        // the climb alone leaves the swimmer pinned under a ridge: slide across at its own height first, along either axis
+        for (mid in listOf(Vec3(above.x, up.y, o.pos.z), Vec3(o.pos.x, up.y, above.z))) {
+            val m = safe(mid)
+            if (sdf.segmentClear(o.pos, m, 0.5) && sdf.segmentClear(m, above, 0.5)) return m
+        }
+        return up
     }
     // under an overhang: a doorway beside the goal that the swimmer can see
     for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
