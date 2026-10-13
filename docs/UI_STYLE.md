@@ -130,12 +130,12 @@ Material Symbols Rounded (`androidx.compose.material:material-icons-extended`, w
 - Sizes: `Glyph(glyph, size)` 24 dp default, 20 dp in chips and tabs, 18 dp inside a `ReefButton`; `GlyphBadge` is the 40 dp tinted disc beside every sandbox row (48 dp for the lamp row).
 - Families, by sandbox tab: Water (thermometer, salt, flask, bubbles, droplet, dropPlus / dropMinus / dropDown, waveSparkle, flame, snowflake), Minerals (shell, branch, rings, palette, gem, bottle, copperBottle), Waste & food (fishWaste, halfClean, crumbs, seaweed, fuzzyRock, feedTin), Light & waves (sun, moon, flow, clockSun, powerhead and its mirrored twin, led), Bugs & medicine (skimmer, sock, carbon, refugium, uvLamp, starfish, crab, pestAnemone, shrimp, slug, plugOff, calendarX), live buttons (fish, whatIf, eye / eyeOff, bucket, microscope, flipper, speaker / speakerOff, timelapse, touch, rocks, reset) and utilities (plus, minus, close, info, help, chevronUp, heart, trash, sparkleTip).
 - Animated icons (`ui/live/LiveGlyphArt.kt`) replace the static glyph where a value is behind it: the thermometer's column follows the temperature slider, the bubbles rise faster and larger with oxygen / flow, the sun rises and sets with the light level (the moon takes over below 15 %), the eye blinks shut on the hide-controls button, the speaker's waves fade with the mute setting, and `ReefSwitch` is a water-filled toggle whose thumb morphs into a wave while it fizzes bubbles. Every animated read happens inside the Canvas lambda, so an idling icon never recomposes its row or the GL view; under Reduce motion they freeze at a sensible pose.
-- Buttons, chips, tabs and the round HUD tools use `Modifier.tapSplash` (`ui/components/Splash.kt`): a soft disc from the press point followed by a thin ring, 450 ms, instead of the Material ripple; nothing at all under Reduce motion.
+- Buttons, chips and tabs on the utility screens use `Modifier.tapSplash` (`ui/components/Splash.kt`): a soft disc from the press point followed by a thin ring, 450 ms, instead of the Material ripple. Every live-tank control adds `Modifier.pressSquash` (squash to 1.07 × 0.88 on press, springy rebound past 1 on release, scaled from the bottom edge) and `Modifier.bubbleBurst` (six bubbles rise ~56 dp from the press point over 700 ms) plus a haptic tick (§10.1). Nothing moves under Reduce motion; haptics stay.
 - Preview sheet: `python3 tools/graphics/glyph_preview.py --out <dir>` renders `icon-set.png/.svg` from the Kotlin tables.
 
 ### 5.2 Food pictures (`ui/live/FoodArt.kt`)
 
-One illustration per `FoodKind`, drawn on a 48-unit box in the `FoodPalette` tokens (`theme/Color.kt`) that the tank's particle tints are matched to: Flakes (four coloured flakes), Mysis shrimp (pink curled shrimp), Sinking pellets (brown balls), Nori sheet (on its clip, a bite out of a corner), Live pods, Prawn chunk, Phytoplankton (green haze), Brine shrimp (orange, feathery legs), Krill (red, big eye), Floating pellets (half out of the water line), Algae wafer (speckled green disc), Coral food (pink powder cloud) and Cyclops (orange-red). `FoodPicture(kind, drop)` plays the "dropped in" beat: the picture dips, squashes as it lands and sends two ripple rings out beneath it. The same script renders `food-pictures.png`.
+One illustration per `FoodKind`, drawn on a 48-unit box in the `FoodPalette` tokens (`theme/Color.kt`) that the tank's particle tints are matched to: Flakes (four coloured flakes), Mysis shrimp (pink curled shrimp), Sinking pellets (brown balls), Nori sheet (on its clip, a bite out of a corner), Live pods, Prawn chunk, Phytoplankton (green haze), Brine shrimp (orange, feathery legs), Krill (red, big eye), Floating pellets (half out of the water line), Algae wafer (speckled green disc), Coral food (pink powder cloud) and Cyclops (orange-red). `FoodPicture(kind, drop)` plays the "dropped in" beat: the picture dips, squashes as it lands and sends two ripple rings out beneath it. The same script renders `food-pictures.png`. The containers that feed each food in the tank (shaker, frozen cube, nori clip, pipette) are in §10.2.
 
 Species art: `res/drawable/species_<id>.webp` 512x512, flat illustration with soft lighting, same palette as the 3D texture; generated from the Blender model with a toon render (ASSETS §9).
 
@@ -144,7 +144,7 @@ Species art: `res/drawable/species_<id>.webp` 512x512, flat illustration with so
 ## 6. Components
 
 ### 6.1 Bottom navigation
-Floating glass pill, 64 dp tall, 16 dp from bottom and sides, 5 items. Active item: filled icon in `lagoonBright`, label visible, 32x32 dp pill behind the icon in `lagoon` @ 20%. Inactive: `mist`, label hidden on phones < 360 dp wide. Center item (Live Tank) has a 4 dp `coral` "live" dot when the simulation is running in the background (it is not; dot shows when Sandbox has unsaved changes).
+Floating glass pill, 64 dp tall, 16 dp from bottom and sides, at most 560 dp wide (`BottomBarMaxWidth`, centred: on a wide landscape screen the Live tank's rail runs down beside it), 5 items. Active item: filled icon in `lagoonBright`, label visible, 32x32 dp pill behind the icon in `lagoon` @ 20%. Inactive: `mist`, label hidden on phones < 360 dp wide. Center item (Live Tank) has a 4 dp `coral` "live" dot when the simulation is running in the background (it is not; dot shows when Sandbox has unsaved changes).
 
 ### 6.2 FAB
 56 dp circle, `coralButton` gradient, icon `add` in `#1A0C08`, shadow coral @ 35% 16 dp. Press: scale 0.94, haptic `CONFIRM`.
@@ -183,9 +183,13 @@ Glass, `foam` text, action in `lagoonBright`, slides up with a bubble pop.
 | Danger alert appears | hero tile border pulses `statusDanger` twice (600 ms each) | `LONG_PRESS` once |
 | Chart scrub | tooltip follows finger with 80 ms spring; point grows to 8 dp | `CLOCK_TICK` per point crossed |
 | Pull-to-dismiss sheet | standard | — |
-| Live Tank feed button | ripple of 6 bubbles from the button; button scale 0.92→1 | `CONFIRM` |
-| Tap glass (Live) | concentric ring 400 ms at tap point in the overlay | `CLOCK_TICK` |
-| Reduce motion | all durations 0 except crossfades at 100 ms; caustics static | haptics unaffected |
+| Live Tank button press (rail bubble, tile, pill) | `pressSquash` + `bubbleBurst` (§5.1); the 6 dp bottom shadow squashes to ~1.5 dp | `CLOCK_TICK` |
+| Live menu card open / close | scale 0.6→1 from the rail / dock side + fade (350 ms), closes 150 ms | — |
+| Live action (feed, dose, water change, …) | in-tank picture 0.9–3.6 s (§10.2), command sent when it reaches the water; tap the tank to skip | `CLOCK_TICK` |
+| Hermie reacts | hop (or worried shake) 420–600 ms, speech bubble expands, auto-hides after 5.2 s | — |
+| Happy meter changes ≥ 3 points | bar springs to the new value, pill bounces 1.12 | — |
+| Tap glass (Live) | knuckle rings on the glass at the tap point (`TAP_GLASS`, 0.9 s) | `CLOCK_TICK` |
+| Reduce motion | all durations 0 except crossfades at 100 ms; caustics static; live action pictures become a 700 ms still pose with a fade, the command is sent at once | haptics unaffected |
 
 Spring defaults: `spring(dampingRatio = 0.8, stiffness = 380)`. Durations: fast 150, normal 220, slow 350 ms.
 
@@ -222,7 +226,7 @@ Spring defaults: `spring(dampingRatio = 0.8, stiffness = 380)`. Durations: fast 
 - GlassCard height 96 dp. Left: species art 64 dp circle crop with 2 dp ring in status (health) color. Middle: nickname titleMedium, species italic labelMedium `mist`, "In tank 1 y 3 m" labelSmall. Right: status pill ("Healthy" / "Watch" / "Verify ID" caution / "Rehomed" unknown). Warning badge `straighten` when adult size exceeds the tank.
 
 ### 8.6 FishCard (Live Tank overlay)
-- Width 300 dp (tablet) or full-width bottom sheet (phone, 180 dp). Glass at 88% opacity.
+- A `LivePanel` (§10.1): full width at the bottom in portrait, at most 420 dp at the bottom right in landscape (clear of the rail). Name in the rounded display font, × close dot, "Follow" as a cyan candy pill.
 - Header: nickname, species, behavior word in `lagoonBright`.
 - Three horizontal bars 6 dp tall, pill: Health (status color by value), Hunger (`coral`), Stress (`anemone`); labels left, % right.
 - Symptom chips when present ("White spots", "Clamped fins", "Gasping").
@@ -257,13 +261,85 @@ Stacked area, 8 channel colors (UI_STYLE §1.4 `lightArc` colors: white `#DDEEFF
 ---
 
 ## 10. Live Tank overlay styling
-- Overlays are glass at 70% opacity, 14 dp radius, 12 dp padding, no caustic background (the 3D view is the background).
-- Speed chip: pill with `fast_forward` icon; active speed in `lagoonBright`.
-- Mode toggle: segmented pill with the eye (Watch) and bucket (Sandbox) glyphs; Sandbox selected shows `coral` text to signal "not real". The round HUD tools (food tin, Micro, Clean glass, sound, hide controls) are 48 dp glass discs / pills with a press shrink and the tap splash; the food tin tips over while the tray is open, the Flipper swings onto the glass while cleaning.
-- Food tray (`FoodTray`): a glass tray of `FoodPicture`s grouped by shelf (Frozen / Dry / Greens / Tiny & live), opened by the food tin in Watch and Sandbox; tapping a picture drops a typical pinch (`FoodKind.typicalDoseGrams`), plays the drop beat, confirms "<food> dropped in" and closes nothing, so a child can keep feeding. It floats bottom-centre over the water and never covers the sandbox dock; the Waste & food tab embeds the compact tray and the What if? tab the four favourites.
-- Sandbox dock: no pop-up sheet. Portrait: the tank keeps the full screen and the dock floats over its bottom as see-through glass (sheet colour at ~80 %): handle + "Sandbox" header and the tab row always peek out; tapping / dragging the handle (or a tab) opens the body, which keeps the whole panel to about 40 % of the height. While a finger drags the tank the body tucks away and comes back ~0.5 s after release. Landscape: 42 % wide column beside the tank. Tapping empty water (nothing selected) hides every overlay control; a "Show controls" pill (or another tap) brings them back. Tabs, in order: Water / Add life / What if? / Light & waves / Waste & food / Minerals / Bugs & medicine. Every row has a plain-words title, a 40 dp ReefGlyph badge (animated for temperature, oxygen, flow and light, §5.1), an (i) explanation and the expert name (+ °F for temperature) as secondary text (`ui/live/SandboxFriendly.kt`); on/off rows are animated switches. First-time tips are remembered in settings (`sandboxHintSeen`) and reopen from the (?) button. Reset, taking a fish out and "make a fish sick" ask first; heater failure, adding aiptasia and starting a treatment offer Undo on the snackbar. Ranges and zones live in one table, `ui/live/SandboxParams.kt`.
-- `ReefSlider` (`ui/components/ReefSlider.kt`): label + "Your tank" reference line, value pill (status icon, tap to type an exact value), −/+ 40 dp steppers with hold-to-repeat, 48 dp custom track with safe/caution/danger segments (status fills) under a water-gradient fill from the left edge to the thumb, a bubble thumb (radial sheen, rim in the zone's status colour) that swells on touch and sends a ripple ring out on touch-down, a `foam` reference marker, a `coral` bar from the reference to the thumb, haptic tick on zone change (stronger on entering danger), reset to the reference. Optional `curve` stretches the low end of wide ranges.
+
+The tank is the screen. In both orientations the GL view fills the whole screen and never resizes; every control floats over it and can be hidden by tapping empty water (a "Show buttons" pill brings them back).
+
+- **Landscape:** a slim rail down the left edge (84 dp, inside the display cutout / safe area) of big candy bubbles, one per category except More. Tapping a bubble opens that category's card beside the rail: compact translucent glass at most 35 % of the width (260–380 dp). The bubbles size themselves to the height: 60 dp with labels when all fit, otherwise smaller (never under 48 dp) without labels, so a child sees every category on a short phone; only if even that does not fit does the rail scroll. The chevron bubble at the top tucks the rail away to itself. More is its own bubble in the bottom-right corner and opens its card from there. Mode, clock, the meter and Hermie sit in the top-right corner. The bottom bar is capped at 560 dp and centred, so on wide screens the rail runs down beside it.
+- **Portrait:** all seven bubbles in a dock (a glass strip) just above the bottom bar, one slot each across the width (44–60 dp bubbles, smaller labels when crowded); the card opens above the dock, at most 46 % of the height. Tapping Sandbox in the mode toggle again tucks the dock to one bubble. Mode and clock on the first top row; the meter (folded to its face) and Hermie on the second.
+- **Categories** (`LiveCategory`, `ui/live/LiveMenu.kt`), each with its candy colour: Feed (orange), Water (cyan), Light (yellow, lamps, pumps and gear), Add life (pink), Clean (green), Trouble (purple), More (white: time speed, time-lapse, reset, microscope, sound, knock on the glass, hide buttons, tips, Hermie and the meter on / off). Watch mode shows only Feed, Clean (a direct clean-glass toggle) and More.
+- **Cards** are big tiles first (`LiveTile`, ≥ 76 dp tall, 2–5 columns by width), each a picture and one or two words. One-shot tiles (feed, dose, break the heater…) close the card so the picture in the tank can be watched; on/off tiles (pumps, skimmer, sound) stay open and show ON / OFF. A **More** pill at the bottom of Water, Light, Add life, Clean and Trouble folds out the grown-up controls: every slider (`ReefSlider`), how sliders change things (set / step / ramp / spike), extra doses, predation, test ideas, the selected animal's size, medicines, disease tests and the what-if cards. A card closes itself after 12 s without a touch (30 s with More open), on its ×, on Back, on a tap on empty water, or when its bubble is tapped again.
+- Reset, taking a fish out and "make a fish sick" ask first in a `LiveDialog`; heater failure, adding a pest anemone and starting a treatment offer Undo on the snackbar. Ranges and zones live in one table, `ui/live/SandboxParams.kt`; friendly words in `ui/live/SandboxFriendly.kt`.
+- `ReefSlider` (`ui/components/ReefSlider.kt`): label + "Your tank" reference line, value pill (status icon, tap to type an exact value), −/+ 40 dp steppers with hold-to-repeat, 48 dp custom track with safe/caution/danger segments under a water-gradient fill, a bubble thumb that swells on touch, a reference marker, haptic tick on zone change, reset to the reference.
 - Loading: a `lagoonBright` thin progress arc inside a dark glass circle while assets load; text "Filling the tank…".
+
+### 10.1 Live theme: "Sea-glass Arcade" (`ui/live/LiveTheme.kt`)
+
+The owner's pick (concepts 1 + 5). All colours, shapes and sizes of the live screen live in `LiveTheme` / `LiveStyle`; restyling means editing that file only.
+
+| Token | Value |
+|---|---|
+| Outline | navy `#1B1340`, 3 dp on panels and bubbles (2.5 dp on pills) |
+| Candy tones | Feed `#FFB13D`, Water `#5FD7FF`, Light `#FFE14D`, Add life `#FF7AA8`, Clean `#8EE66B`, Trouble `#B18CFF`, More `#F2F6FF`; danger `#FF5C6C` |
+| Text on candy | navy |
+| Panel | lagoon-teal glass `#0C5866` @ 74 % (dark) / `#C9F4F7` @ 84 % (light), soft top highlight, navy outline, 28 dp radius |
+| Shapes | tiles 22 dp, panels 28 dp, pills fully round |
+| Sizes | rail 84 dp, rail bubble 60 dp, tile ≥ 76 dp, every touch target ≥ 48 dp |
+| Font | Outfit SemiBold (bundled rounded display face): buttons 13 sp, titles 18 sp |
+
+- **Buttons** are sea-glass bubbles (`drawSeaGlass`): a coloured 6 dp drop shadow under the body, a radial highlight, a white inner rim, the navy outline and a gloss oval. Pressing pushes the body down onto its shadow (the "chunky" press), squashes it and releases bubbles (§5.1). A selected rail bubble gets a white ring and lifts to 1.08.
+- **Pills** (`LivePill`) for small actions (Got it, More, Done cleaning, Follow, mode toggle, Show buttons); **panels** (`LivePanel`, `Modifier.livePanel`) for cards, the fish card, follow bar, tips, clean-glass hint, the microscope legend and dialogs.
+- The Add-life gallery keeps its species cards with a navy outline (pink when picked) and pink count badges; the microscope uses candy pills for scene, zoom and doses.
+
+### 10.2 Action animations (`ui/live/ActionFx.kt`, `ActionArt.kt`, `LiveReactions.kt`)
+
+Every command the live screen sends plays a short picture in the tank, drawn as a Compose overlay through the camera (`render/TankProjection.kt`: the GL thread publishes the camera matrices each frame, the overlay projects tank-cm anchors to pixels and sizes its tools by pixels-per-cm). The tools are drawn on a 48-unit box in the same two-tone style as `FoodArt` and `ReefGlyphs`: navy outline, candy fill, white highlight.
+
+- The command is sent at the picture's **impact** moment (when the food reaches the water, the dropper's first drop lands, the bag opens), so the real sim particles carry on the motion: feeding drops its pellets at the sim's own surface feed point (41, 55.7, 20) within its 2.5 cm spread; nori clips on at the NORI clip; doses fall at the HOB outflow.
+- Sliders are the exception: the change is sent at once (a drag sends many) and one keyed picture plays per drag.
+- 0.9–3.6 s each, at most 5 at a time; tap the tank to skip (every pending command is sent at once and the pictures fade in 180 ms; the tap does not also hide the controls). Pending commands are also sent when the screen pauses or leaves. Reduce motion: a 700 ms still pose with a fade, the command at once.
+- The overlay has no pointer input (touches go to the tank) and reads its frame clock only in its draw lambda, so the GL view never recomposes. While the microscope covers the tank, pictures play at fixed screen spots.
+
+| Command | Where in the menu | Picture |
+|---|---|---|
+| `Feed` | Feed tiles (each `FoodKind`) | shaker tapped three times over the water (flake, pellets, floating pellets, wafer); frozen cube dropped in and thawing (mysis, brine, krill, prawn, cyclops); nori clip pressed onto the glass (nori); pipette squirt (coral food, phyto, pods). Particles land where the sim spawns them |
+| `Dose` | Water → minerals tiles, More doses | dropper bottle tilts, three drops, a swirl in the dose colour (alk purple, Ca white, Mg green, waste brown, copper orange) |
+| `WaterChange` | Water → Change water 25 % / 10 % | siphon hose into a bucket with dirty water flowing, the waterline band on the front glass drops, then a jug pours fresh water back with bubbles |
+| `Heater` | Trouble → heater breaks / fix | the heater shakes and sparks, its coil goes cold, an unplugged badge pops up and a thermometer drops (break); the coil glows warm again with twinkles (fix) |
+| `Heater(stuckOn)` (preset) | Trouble → heater stuck on | red pulse rings and heat shimmer around the glowing heater, a thermometer climbing |
+| `Lights` | Light → on / off / normal day | the lamp bar over the tank lights LED by LED with a beam (on); flickers on-off-on and the tank dims (off); pulses with a sun-clock badge (normal day) |
+| `PowerheadFail` | Trouble → pumps stop tonight | the pump with a moon badge and twinkles |
+| `SetParam` / `RampParam` / `Schedule` | sliders, Warmer / Cooler / Saltier / Less salty, pumps and gear tiles | temperature: thermometer rising (red) or falling (blue); salinity: a salt scoop pours, or a fresh-water jug; light: lamp bar; flow and pumps: the pump's blades spin up with flow lines and bubbles, or slow down with sparks and a red ✕; minerals / waste: dropper; skimmer, sock, carbon, refugium, UV: the device badge at the sump with a power ring filling and bubbles (on) or emptying and fading (off); everything else a sparkle with the row's glyph |
+| heat wave (`RampParam` temp) | Trouble → heat wave | thermometer climbing with heat shimmer |
+| `runScenario(POWER_OUTAGE)` | Trouble → power cut | plug pulled, sparks, the whole tank dims with a flicker |
+| `runScenario(OVERFEEDING)` | Trouble → too much food | the shaker emptying a big pile of pellets |
+| `SetParams` (missed water changes) | Trouble → no water changes | red alert pulse with a crossed-out calendar |
+| `RampParam(sal)` (salt crash) | Trouble → salt crash | fresh-water jug pouring, salt meter dropping |
+| `SetParam(copper)` (copper spill) | Trouble → copper spill | dropper with an orange swirl |
+| `AddAiptasia` / `RemoveAiptasia` | Trouble → pest anemone / Clean → zap pest | the pest anemone grows out of the rock, swaying, with a red pulse / a syringe pushes in, the pest shrinks away with twinkles |
+| `AddPestControl` | Add life → peppermint shrimp / Berghia | a bag floats at the surface, opens and lets the animal out |
+| `StartTreatment` / `StopTreatment` | Clean → More → medicine | medicine dropper (copper orange, others blue); hyposalinity a fresh-water jug; tank transfer the net; UV the device glows on; stop a sparkle |
+| `Infect` | Trouble → a fish gets sick, More disease chips | red alert pulse with the disease name |
+| `Maintain` | Clean → new sock, fresh carbon, trim algae | the dirty old sock / carbon slides out brown and the clean one slides in with sparkles; scissors snip the algae garden and green bits fly |
+| `AddSpareShells` | Add life → spare shells | three shells tumble onto the sand with little sand puffs |
+| `RearrangeRock` | Clean → move rocks | the rocks shake and puff sand |
+| `SetAcclimation` | Clean → settle in | hearts rise from the middle of the tank |
+| `AddOrganism` / `AddMany` | Add life gallery, "another one" chips | a fish bag with the species glyph floats, bobs, opens and releases the animal(s) |
+| `RemoveOrganism` | Add life → More → take out | a net dips into the water and lifts out, with ripples and bubbles |
+| `SetSize` | Add life → More → size | arrows pointing out (bigger) or in (smaller) with twinkles |
+| `SetPredation` | Light → More → fish can eat each other | sparkle with a fish, red (on) or green (off) |
+| `Micro` | Add life → pods / phyto, More chips, microscope | pipette squirt (pods beige, phyto green, rotifers white, medicines blue); amphipods / mysids in a bag; live rock the rock shuffle; flatworm frag an alert |
+| `TapGlass` | More → knock glass, two-finger tap on the tank | knuckle rings on the front glass |
+| `ResetToReality` (+ `Photoperiod`, resets) | More → reset tank | a whoosh sweeping across the tank |
+| speed (holder call) | More → time tiles | fast-forward chevrons sweep across the top of the tank, more the faster |
+| time-lapse (holder call) | More → time-lapse | a spinning clock, then the sheet opens |
+| clean-glass mode | Clean → clean glass | sparkle with the Flipper; the Flipper itself then follows the finger |
+
+`ScrapeGlass` has no extra picture: the Flipper the finger drags is the animation. `Shadow` and `Powerheads` are not sent by the live UI.
+
+### 10.3 Hermie and the happy meter (`ui/live/Hermie.kt`)
+
+- **Hermie**, a hermit crab, sits in a small pill at the top. After every action he hops (or shakes when worried) and says one line about it for ~5 s (`LiveReactions`); tapping him gives the next tip (separate lists for Watch and Sandbox). The × hides him; More → Hermie brings him back. Moods: happy, excited, worried, surprised, sleepy, each with its own face, claw wave, sweat drop or sparkle. He also tells the first-time tips card and the "are you sure?" dialogs.
+- **Tank happy %** (`tankHappiness`): 60 % average health + 40 % average calm of the living animals, minus 10 points per water reading in danger, 3 per caution and 6 per dead animal; display only, it never feeds back into the sim. The pill shows a face whose smile follows the value and a candy bar (green ≥ 70, yellow ≥ 40, red below) that springs to new values and bounces on changes of 3 points or more. Tap folds it to the face; × hides it (More brings it back).
 
 ---
 

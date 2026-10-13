@@ -33,6 +33,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var listener: TankViewListener? = null
     /** Draw the circling-fish test harness when no provider is set or it returns null. */
     @Volatile var demoWhenEmpty = true
+    /** Receives the camera matrices after every update, for Compose overlays (null = nobody listening). */
+    @Volatile var projection: TankProjection? = null
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -186,6 +188,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // 2. camera (+ input)
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
+        projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)

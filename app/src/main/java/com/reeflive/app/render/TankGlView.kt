@@ -56,6 +56,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         get() = renderer.demoWhenEmpty
         set(v) { renderer.demoWhenEmpty = v }
 
+    /** Camera projection published every frame for overlays drawn over this view. */
+    var projection: TankProjection?
+        get() = renderer.projection
+        set(v) { renderer.projection = v }
+
     val stats: StateFlow<RenderStats> get() = renderer.stats
 
     @SuppressLint("ClickableViewAccessibility")

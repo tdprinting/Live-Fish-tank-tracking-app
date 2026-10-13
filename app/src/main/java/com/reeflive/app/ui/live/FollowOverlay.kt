@@ -56,24 +56,23 @@ fun FollowOverlay(
     var hint by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(HINT_MS); hint = false }
     Box(modifier.fillMaxSize().padding(16.dp)) {
-        GlassIconButton(Icons.Rounded.Close, "Exit follow mode", onExit, Modifier.align(Alignment.TopEnd))
+        Box(Modifier.align(Alignment.TopEnd)) { CloseDot(onExit, "Exit follow mode") }
         AnimatedVisibility(hint, Modifier.align(Alignment.TopCenter).padding(top = 56.dp), enter = fadeIn(), exit = fadeOut()) {
-            GlassCard(shape = ReefShapes.card, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+            LivePanel(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
                 Text(
                     "Drag to look around · pinch to get closer · double-tap for a close-up",
                     style = MaterialTheme.typography.labelMedium, color = c.textSecondary, textAlign = TextAlign.Center,
                 )
             }
         }
-        GlassCard(
+        LivePanel(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-            shape = ReefShapes.card,
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 GlassIconButton(Icons.Rounded.ChevronLeft, "Previous fish", onPrevious, tint = if (state.count > 1) null else c.textTertiary)
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(state.fishName, style = MaterialTheme.typography.headlineSmall, color = c.text, maxLines = 1)
+                    Text(state.fishName, style = LiveTheme.style.titleText, color = LiveTheme.style.label, maxLines = 1)
                     Text(state.speciesName, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, maxLines = 1)
                     Text(
                         state.behaviorLine,
