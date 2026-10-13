@@ -337,22 +337,31 @@ class Simulation(
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
                 val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
-                for (t in organisms.toList()) {
-                    if (t === a || !t.alive || !r.targets.contains(t.brainKind.name)) continue
-                    if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL")) continue
-                    var p = r.pEvent
-                    if (r.moltWindowH > 0) {
-                        val cross = a.brainKind != t.brainKind
-                        if (cross && !crossSpeciesShrimpKills) continue
-                        if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) continue
-                        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) continue
-                    }
-                    if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
-                    if (!rng.chance(p)) continue
-                    nightPredation(a, t, r.bout)
-                }
+                val eligible = organisms.filter { t -> t !== a && t.alive && r.targets.contains(t.brainKind.name) && nightEligible(r, a, t) }
+                if (eligible.isEmpty()) continue
+                // one roll per actor and row per night, on the nearest eligible target: the row's pEvent is a
+                // per-night probability for the actor, not per prey animal in the tank
+                val t = eligible.minBy { it.pos.distanceTo(a.pos) }
+                var p = r.pEvent
+                if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
+                if (rng.chance(p)) nightPredation(a, t, r.bout)
             }
         }
+    }
+
+    private fun nightEligible(r: com.reeflive.core.ai.PairRow, a: Organism, t: Organism): Boolean {
+        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) return false
+        // a sleeping fish (diurnal species at 02:00), and only one well under the crab's leg span (07 gap 5)
+        if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL" && t.lengthCm < r.maxPreyRatio * a.lengthCm)) return false
+        if (r.moltWindowH > 0) {
+            val cross = a.brainKind != t.brainKind
+            // banded-on-skunk kills are unsourced: a sandbox toggle, off by default (07 gap 4)
+            if (cross && !crossSpeciesShrimpKills) return false
+            if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) return false
+            // conspecifics: a pair is stable, a third animal is the one at risk (S:Wong11)
+            if (!cross && organisms.count { it.alive && it.brainKind == t.brainKind } < r.minGroup) return false
+        }
+        return true
     }
 
     /** A lethal roll: eaten in Sandbox (predation on), a near miss and a stress spike in Reality. */

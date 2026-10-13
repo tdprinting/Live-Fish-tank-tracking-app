@@ -43,6 +43,10 @@ data class PairRow(
     val perNight: Boolean = false,
     val minActorCm: Double = 0.0,
     val moltWindowH: Double = 0.0,
+    /** Conspecific molt rows: the smallest group in which the row applies (a pair is stable; S:Wong11). */
+    val minGroup: Int = 0,
+    /** Night predation on fish ("sleeping" filter): largest prey length as a fraction of the actor's. */
+    val maxPreyRatio: Double = 0.8,
     val killDay: Double = 0.0,
     val killDusk: Double = 0.0,
     val evidence: String = "",
