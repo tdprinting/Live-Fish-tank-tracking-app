@@ -5,7 +5,6 @@ import com.reeflive.core.geom.BodySpline
 import com.reeflive.core.geom.Quat
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
-import kotlin.math.max
 import kotlin.math.pow
 
 /**
@@ -102,7 +101,10 @@ class Organism(
     /** Shrimp limb hooks (research 17): banded shrimp claw display 0..1 and antenna grooming 0..1. */
     var clawDisplay = 0.0
     var groom = 0.0
-    /** Walking-leg stride phase (cycles, wrapping at 1000) and stepping amount 0..1, set by crawl steering. */
+    /**
+     * Walking-leg stride phase (cycles, wrapping at 1000) and stepping amount 0..1, set by crawl steering. The shrimp
+     * send these with [legRock], [clawDisplay] and [groom] to the renderer through [limbRig] ([ShrimpLimbs]).
+     */
     var walkPhase = 0.0
     var walkAmt = 0.0
     /** Rolling 1 h observation counters (06 §4.2): see [Counters]. */
@@ -178,7 +180,14 @@ class Organism(
     /** Escape flexion: signed C-bend of the body (fish) or tail-flip flexion of the abdomen (shrimp), −1..1. */
     var bend = 0.0
 
-    val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic && brainKind != BrainKind.BRITTLE_STAR)
+    /**
+     * Per-limb pose for the brittle star's arms, the crab's legs and claws and the shrimp's limb signals
+     * (SIMULATION §19); null for the rest.
+     */
+    val limbRig: LimbRig? = LimbRig.forKind(brainKind, id.hashCode().toLong())
+
+    /** The brittle star's disc never bends or turns with its path (its arms do the steering), so it is rigid too. */
+    val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
     lateinit var brain: UtilityBrain
     /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
     val behaviorName: String get() = when {
@@ -234,9 +243,8 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            walkPhase = (walkPhase % 1000.0).toFloat(), walkAmt = walkAmt.toFloat(),
-            limbSignal = max(legRock, clawDisplay).toFloat(), groom = groom.toFloat(),
-            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else 0; else -> 0 },
+            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else 0; else -> 0 },
+            limbs = limbRig?.out?.copyOf() ?: NO_LIMBS,
         )
     }
 

@@ -581,7 +581,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             val p = if (isFin) progs.fin else progs.fish
             p.use()
-            fishUniforms(p, r, m.rigid)
+            fishUniforms(p, r, m.rigid, m.limbPivots)
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
@@ -616,7 +616,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         out[12] = r.spine[0]; out[13] = r.spine[1]; out[14] = r.spine[2]
     }
 
-    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean) {
+    private fun fishUniforms(p: ShaderProgram, r: FishRig, rigid: Boolean, limbPivots: FloatArray? = null) {
         p.set4fv("uSpine", r.spine, 16)
         p.set4fv("uFrame", r.frames, 16)
         p.set1f("uScale", r.scale)
@@ -624,8 +624,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
-        // shrimp limbs: x stride phase (cycles, wrapped), y stepping amount, z rock / claw signal, w antenna grooming
-        p.set4f("uLimb", r.walkPhase - kotlin.math.floor(r.walkPhase), r.walkAmt, r.limbSignal, r.groom)
+        // shrimp picking / feeding strokes (mouth)
         p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat)
         p.set1f("uIchSpots", r.ich)
@@ -633,6 +632,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uDead", if (r.alive) 0f else 1f)
         p.set1f("uRigid", if (rigid) 1f else 0f)
         if (rigid) { rigidModel(r, tmpModel); p.setMat4("uModel", tmpModel) } else p.setMat4("uModel", IDENTITY)
+        // limb pose from the core LimbRig (SIMULATION §19): every entry the sim sent goes to uLimb[]; shrimp send one
+        // (x stride phase, y stepping, z rock / claw signal, w grooming), crawlers ten. Crawler models with pivots are
+        // posed about them (uLimbOn); everything else reads uLimb[0] only, zeroed when the pose carries no limbs.
+        if (r.limbCount > 0) p.set4fv("uLimb", r.limbs, r.limbCount) else p.set4f("uLimb", 0f, 0f, 0f, 0f)
+        val limbsOn = !rigid && limbPivots != null && r.limbCount >= 10
+        p.set1f("uLimbOn", if (limbsOn) 1f else 0f)
+        if (limbsOn) p.set4fv("uLimbPivot", limbPivots!!, 10)
     }
 
     // ------------------------------------------------------------------ taps
