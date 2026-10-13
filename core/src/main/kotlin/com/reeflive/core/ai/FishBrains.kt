@@ -699,7 +699,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val ich = cl.disease == Disease.ICH
                     // honest gleaning feeds in proportion to what is there (a tank has few parasites)
                     o.hunger = max(0.0, o.hunger - c.dt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
-                    // cheating: 0.025/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.17/s when hungry (S:Pinto11)
+                    // cheating: 0.02/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.19/s when hungry (13–21 per 100 s, S:Pinto11)
                     cheatAcc += c.dt
                     while (cheatAcc >= 1.0) {
                         cheatAcc -= 1.0
@@ -806,7 +806,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val REST_MIN_S = 15.0
         const val REST_MAX_S = 75.0
         /** Cheating per second of inspection: 0.04 baseline → 0.17 when hunger > 0.6 (S:Pinto11). */
-        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.17 else 0.025
+        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.19 else 0.02
     }
 
     /** Between clients: zip along the rock face in the lower-mid zone. */

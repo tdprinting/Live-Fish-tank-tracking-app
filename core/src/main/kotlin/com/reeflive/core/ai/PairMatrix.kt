@@ -84,7 +84,8 @@ object PairMatrix {
     fun targetMatches(r: PairRow, actor: Organism, t: Organism): Boolean {
         if (t === actor || !t.alive || !t.visible) return false
         // a recognised partner is not a stranger (research 12: banded shrimp tell a former mate from a stranger)
-        if (actor.mateId != null && actor.mateId == t.id) return false
+        // (the clown pair's dominance quiver is hierarchy upkeep between the mates themselves, so it still applies)
+        if (actor.mateId != null && actor.mateId == t.id && r.type != "dominance") return false
         val kindOk = r.targets.any { k ->
             when (k) {
                 // the cleaner is "never chased sustainedly because of the cleaning role" (06 §3.1, S:Cheney08);
@@ -193,6 +194,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     /** Row id → rate-cap token bucket (refills at the row's current hourly cap, holds max([BURST], cap × [BURST_H])). */
     private class Bucket(var tokens: Double, var t: Double)
     private val buckets = HashMap<String, Bucket>()
+    /** Set by [probability] when the row's cap bucket was empty. */
+    private var capBlocked = false
     private var scanAt = 0.0
     private var pending: Pending? = null
     private var active: Pending? = null
@@ -247,10 +250,13 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                     Entry(c.t, r.lingerS * sensitisation(r, o, t))
                 }
                 if (pending == null && active == null && c.t - e.since >= e.linger && c.t >= e.nextRoll) {
-                    // once a minute; a sensitised host defender re-decides far sooner (latency factor², 60 s → 5 s
-                    // by the third intrusion; S:Fleming24 latency −60–76 %)
-                    e.nextRoll = c.t + REROLL_S * sensitisation(r, o, t).let { it * it }
+                    // once a minute for a passer-by; a host defender facing an intruder that stays keeps re-deciding,
+                    // every 20 s at first and far sooner as it sensitises (latency factor², → ~2 s by the third
+                    // intrusion; S:Fleming24 latency −60–76 %)
+                    e.nextRoll = c.t + if (r.sensitise) REROLL_SENS_S * sensitisation(r, o, t).let { it * it } else REROLL_S
                     val p = probability(c, r, t)
+                    // a roll the hourly cap blocked was no decision: look again once the next token is in
+                    if (capBlocked) e.nextRoll = min(e.nextRoll, c.t + CAP_RETRY_S)
                     if (c.rng.chance(p)) {
                         val lat = when {
                             r.sensitise -> 1.5 * sensitisation(r, o, t)
@@ -283,6 +289,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     /** Per-entry probability with every modifier of 06 §3–§4. */
     fun probability(c: Ctx, r: PairRow, t: Organism): Double {
+        capBlocked = false
         val o = c.o
         val fam = Social.familiarity(o, t, c.t)
         // hourly cap: new pair → maxRate, familiar → floorRate
@@ -309,7 +316,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             val bk = buckets.getOrPut(r.id) { Bucket(burst, c.t) }
             bk.tokens = min(burst, bk.tokens + max(0.0, c.t - bk.t) * cap / 3600)
             bk.t = c.t
-            if (bk.tokens < 1) return 0.0
+            if (bk.tokens < 1) { capBlocked = true; return 0.0 }
         }
         var p = r.pEvent * (1 - r.habituation * fam)
         if (newcomer) p *= r.newcomerMult
@@ -423,6 +430,10 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     companion object {
         const val REROLL_S = 60.0
+        /** First re-roll interval of a sensitising (host-defence) row [I]. */
+        const val REROLL_SENS_S = 20.0
+        /** Re-roll delay after a roll the hourly cap blocked. */
+        const val CAP_RETRY_S = 10.0
         /** "Same size or smaller" for the sizeTerm notLarger rows: up to 10 % longer still counts [I]. */
         const val NOT_LARGER_TOL = 1.1
         /** Bouts a row may run back to back before the hourly cap paces it. */
