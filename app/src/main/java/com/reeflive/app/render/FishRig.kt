@@ -23,8 +23,12 @@ class FishRig(val id: String) {
     var alive = true; var visible = true; var posture = 0
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
-    /** Shrimp limbs (research 17): stride phase (cycles), stepping amount, rock/claw signal, antenna grooming. */
-    var walkPhase = 0f; var walkAmt = 0f; var limbSignal = 0f; var groom = 0f
+    /**
+     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 10 × vec4; [limbCount] entries are valid,
+     * 0 = none. Crawlers send 10 (posed about model pivots), the shrimp one (stride, stepping, signal, grooming).
+     */
+    val limbs = FloatArray(40)
+    var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
 
@@ -68,8 +72,7 @@ class FishRig(val id: String) {
         alive = b.alive; visible = b.visible; posture = b.posture
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
         bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
-        walkPhase = lerpPhase(pa.walkPhase, b.walkPhase, t); walkAmt = lerp(pa.walkAmt, b.walkAmt, t)
-        limbSignal = lerp(pa.limbSignal, b.limbSignal, t); groom = lerp(pa.groom, b.groom, t)
+        lerpLimbs(if (pa.limbs.size == b.limbs.size) pa.limbs else b.limbs, b.limbs, t)
         limitBend(spine, frames, MAX_BEND_PER_SEGMENT, MAX_BEND_TOTAL, bendScratch)
         touched = true
     }
@@ -89,7 +92,23 @@ class FishRig(val id: String) {
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
         alive = true; visible = true; posture = 0
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
+        limbCount = 0
         touched = true
+    }
+
+    /** x of each limb is a phase in [0, 1) cycles (interpolated across the 1 → 0 wrap); y, z, w are plain scalars. */
+    private fun lerpLimbs(a: FloatArray, b: FloatArray, t: Float) {
+        val n = minOf(limbs.size, b.size) / 4
+        limbCount = n
+        for (i in 0 until n) {
+            val j = i * 4
+            var d = b[j] - a[j]
+            d -= kotlin.math.round(d)
+            var x = a[j] + d * t
+            x -= kotlin.math.floor(x)
+            limbs[j] = x
+            for (c in 1 until 4) limbs[j + c] = a[j + c] + (b[j + c] - a[j + c]) * t
+        }
     }
 
     /** Distance from a point to the head (cm), for LOD selection. */

@@ -6,6 +6,8 @@ is the default scale. The feather duster is sessile and modeled in centimeters (
 like the corals.
 COLOR_0 use: A = 0 -> 1 along an appendage (antenna, leg, arm, radiole) or along the body spine;
 B = appendage index / (count-1) (phase offsets for the runtime); R, G = 0.
+Limb-rigged crawlers (brittle star, Sally Lightfoot; SIMULATION §19) instead carry R = t along the limb (0 root .. 1
+tip), B = limb index / 9, A = 0.5 - x, and extras.limbPivots (10 x vec4, glTF space) for the renderer's limb pose.
 """
 import math
 import os
@@ -472,81 +474,124 @@ def _normalize_unit(objs, along="x", sit=True):
 
 
 # ----------------------------------------------------------------------------
-# brittle star (black Ophiocoma): unit arm span, disc at origin, sits on z=0
+# brittle star (black Ophiocoma erinaceus, research 17 §2): unit arm span, disc at origin, sits on z = 0.
+# Limb rig (SIMULATION §19): straight rest arms; the renderer bends each arm from core LimbRig data.
+# COLOR_0 on arms: R = t along the arm (0 at the disc junction .. 1 tip), B = arm index / 9, A = 0.5 - x.
+# Root.extras / Arms.extras `limbPivots` = 10 x vec4 (glTF space): arm-root xyz, w = rest arm length.
 # ----------------------------------------------------------------------------
+BRITTLE_ROOT_R = 0.05      # disc-arm junction radius (fraction of span); core BrittleArms.ROOT_R
+BRITTLE_ARM_LEN = 0.45     # junction -> tip; core BrittleArms.ARM_LEN
+BRITTLE_DISC_R = 0.056     # disc radius: disc 25 mm, arms 100 mm (4 disc diameters), span 225 mm
+BRITTLE_ARM_Z = 0.0085     # arm centreline height above the substrate
+
+
+def gltf_pt(p):
+    """Blender (x, y, z) -> glTF (x, z, -y)."""
+    return [float(p[0]), float(p[2]), float(-p[1])]
+
+
 def build_brittle_star():
-    """Black brittle star (Ophiocoma sp.): pentagonal, granular disc with paired radial shields; five long arms
-    (span ~6x the disc) made of many short segments (dorsal arm plates with dark joints, a faint lighter band
-    every few segments) that taper to a whip tip; a row of stout, blunt arm spines on each side of every
-    other segment, about one arm-width long near the disc and shortening toward the tip."""
+    """Black brittle star, Ophiocoma erinaceus (the usual trade 'black brittle star', research 17 §2.1): small
+    pentagonal disc (≈ 1/9 of the span) with coarse granules and paired radial shields; five robust arms 4 disc
+    diameters long, flattened, of short segments (dorsal arm plates, dark joints, faint lighter bands every few
+    segments that read more distally), tapering to a whip tip; long, stout arm spines that shorten toward the tip;
+    uniformly charcoal black above, a little paler with pale plate marks and orange tube feet below."""
     C.reset_scene()
-    at = Atlas(256, 128, 2)
-    nseg = 44
+    at = Atlas(512, 256, 4)
+    nseg = 52   # visible arm segments (a real 10 cm arm has ~80-100)
 
     def arm(cv):
-        # strip u = along the arm (0 disc -> 1 tip), v = around (0.5 = dorsal midline)
-        cv.vgrad("#1A1A1C", "#202022")
+        # strip u = along the arm (0 disc -> 1 tip), v = dorsal-ness (1 dorsal midline .. 0 ventral midline)
+        cv.vgrad("#2A282C", "#121214")
         ph = (cv.u * nseg) % 1.0
-        joint = 1 - S(0.0, 0.12, np.minimum(ph, 1 - ph))   # dark seam between segments
-        cv.blend(S(0.25, 0.5, np.minimum(ph, 1 - ph)) * (1 - S(0.15, 0.45, np.abs(cv.v - 0.5))), "#3A3A3E", 0.55)
-        cv.blend(joint, "#08080A", 0.8)
-        cv.blend((1 - S(0.0, 0.3, np.abs(((cv.u * nseg / 6.0) % 1.0) - 0.5))) * 0.35, "#4A4A4E")
-        cv.blend(S(0.88, 1.0, cv.u), "#2E2E30", 0.5)
+        dpl = np.minimum(ph, 1 - ph)
+        # dorsal arm plates: slightly raised, faintly lighter middles, dark joints between segments
+        cv.blend(S(0.18, 0.45, dpl) * S(0.45, 0.8, cv.v), "#28282C", 0.6)
+        cv.blend(1 - S(0.0, 0.13, dpl), "#060607", 0.85)
+        # faint bands every ~6 segments, stronger toward the tip (many trade animals show them)
+        band6 = 1 - S(0.0, 0.35, np.abs(((cv.u * nseg / 6.0) % 1.0) - 0.5) * 2)
+        cv.blend(band6 * S(0.45, 0.9, cv.v) * (0.18 + 0.32 * cv.u), "#4A4850")
+        # ventral: pale marks on the lower arm plates and a row of orange tube feet each side
+        cv.blend((1 - S(0.0, 0.25, dpl)) * (1 - S(0.12, 0.22, cv.v)), "#8E8A92", 0.55)
+        tf = np.exp(-(((ph - 0.5) / 0.12) ** 2 + ((cv.v - 0.3) / 0.05) ** 2))
+        cv.blend(np.clip(tf * 1.4, 0, 1), "#C85A22", 0.7)
+        cv.blend(S(0.9, 1.0, cv.u), "#2E2A2A", 0.5)
     at.paint_strip(0, arm)
 
     def disc(cv):
-        # strip u = angle around the disc, v = radius (0 rim -> 1 centre); granules + paired radial shields
-        cv.vgrad("#1E1E20", "#141416")
-        gr = P.value_noise(cv.h, cv.w, 96, 24, 31)
-        cv.multiply(0.8 + 0.4 * S(0.45, 0.75, gr))
+        # strip u = angle around the disc (arm k at u = k/5), v = radius (0 rim -> 1 centre)
+        cv.vgrad("#1A1A1C", "#121214")
+        gr = P.value_noise(cv.h, cv.w, 160, 28, 31)
+        cv.multiply(0.72 + 0.5 * S(0.5, 0.8, gr))                       # coarse granules
         a5 = (cv.u * 5) % 1.0
-        for c in (0.42, 0.58):  # two radial shields per arm base, near the rim
-            m = np.exp(-(((a5 - c) / 0.07) ** 2 + ((cv.v - 0.22) / 0.14) ** 2))
-            cv.blend(S(0.4, 0.6, m), "#2E2E32", 0.8)
+        for c in (0.0 + 0.07, 1.0 - 0.07):                               # paired radial shields at each arm base
+            m = np.exp(-(((a5 - c) / 0.05) ** 2 + ((cv.v - 0.16) / 0.1) ** 2))
+            cv.blend(S(0.35, 0.6, m), "#2C2C30", 0.85)
+        cv.blend((1 - S(0.0, 0.12, np.abs(a5 - 0.5))) * (1 - S(0.0, 0.25, cv.v)), "#0A0A0B", 0.6)  # interradial notch
+        cv.blend(1 - S(0.0, 0.08, 1 - cv.v), "#0E0E10", 0.5)            # mouth side darker centre
     at.paint_strip(1, disc)
+
+    def spine(cv):
+        cv.vgrad("#1C1C20", "#3A3A40")       # black spines with slightly paler tips
+    at.paint_strip(2, spine)
     tex = os.path.join(C.BUILD, "brittle_star_atlas.png")
     at.cv.save(tex)
     mat = C.material("brittle_mat", rough=0.55, image=C.load_image(tex, name="brittle_star"))
+
+    pivots = []
+    for k in range(10):
+        if k < 5:
+            a = 2 * math.pi * k / 5
+            pivots += gltf_pt((BRITTLE_ROOT_R * math.cos(a), BRITTLE_ROOT_R * math.sin(a), BRITTLE_ARM_Z)) + [BRITTLE_ARM_LEN]
+        else:
+            pivots += [0.0, 0.0, 0.0, 0.0]
     root = make_root("Root", dict(species="brittle_star", lengthCm=15.0, unit="arm span 1.0, disc at origin",
-                                  arms=5, roughness=0.55))
+                                  arms=5, roughness=0.55, limbRig="brittle_arms", limbPivots=pivots,
+                                  discToSpan=round(2 * BRITTLE_DISC_R, 3)))
+    # ---- disc: flat pentagon, scalloped between the arms, low dome ----
     gd = G.Geo()
-    Vd, Fd = G.ellipsoid((0, 0, 0.022), (0.075, 0.075, 0.024), 15, 6)
+    Vd, Fd = G.ellipsoid((0, 0, 0.016), (BRITTLE_DISC_R, BRITTLE_DISC_R, 0.016), 18, 6)
     ang = np.arctan2(Vd[:, 1], Vd[:, 0])
-    # pentagonal disc, slightly notched between the arms
-    Vd[:, :2] *= (1 + 0.10 * np.cos(5 * ang) - 0.04 * np.cos(10 * ang))[:, None]
-    rad = np.linalg.norm(Vd[:, :2], axis=1) / 0.085
-    top = Vd[:, 2] >= 0.022
+    Vd[:, :2] *= (1 + 0.10 * np.cos(5 * ang) - 0.03 * np.cos(10 * ang))[:, None]
+    Vd[:, 2] = np.maximum(Vd[:, 2], 0.004)
+    rad = np.linalg.norm(Vd[:, :2], axis=1) / (BRITTLE_DISC_R * 1.1)
+    top = Vd[:, 2] >= 0.016
     vv = np.where(top, 1 - np.clip(rad, 0, 1), 0.0)
-    gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1, vv), [(0, 0, 0, 0)] * len(Vd))
+    xs = Vd[:, 0]
+    gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1, vv), np.stack([0 * xs, 0 * xs, 0 * xs, np.clip(0.5 - xs, 0, 1)], -1))
     disc_o = geo_obj("Body", gd, root, "body", [mat])
+    # ---- arms: straight rest pose (the renderer curves them), flattened, tapering, segmented silhouette ----
     ga = G.Geo()
+    n = 21
+    t = np.linspace(0, 1, n)
     for i in range(5):
         a = 2 * math.pi * i / 5
-        d = np.array([math.cos(a), math.sin(a), 0])
-        perp = np.array([-math.sin(a), math.cos(a), 0])
-        n = 22
-        t = np.linspace(0, 1, n)
-        curl = 0.12 * np.sin(t * math.pi * (1.2 + 0.2 * i)) * (1 if i % 2 else -1)
-        pts = (0.065 + 0.435 * t)[:, None] * d + (curl * t)[:, None] * perp + np.c_[0 * t, 0 * t, 0.02 - 0.013 * t]
-        R = 0.019 * (1 - 0.86 * t ** 0.9)
-        Vt, Ft, tv, av = G.tube(pts, R, 5, squash=0.6)
-        ga.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)),
-                                                    np.full(len(Vt), i / 4), tv], -1))
-        # stout arm spines: one per side at every other station, about an arm-width long, angled forward/up
-        tang = np.gradient(pts, axis=0)
-        tang /= np.linalg.norm(tang, axis=1, keepdims=True)
-        for k in range(1, n - 2):
-            nrm = np.cross([0, 0, 1.0], tang[k])
+        d = np.array([math.cos(a), math.sin(a), 0.0])
+        perp = np.array([-math.sin(a), math.cos(a), 0.0])
+        r0 = BRITTLE_ROOT_R - 0.012                 # start a little inside the disc so the joint is hidden
+        L = BRITTLE_ARM_LEN + (BRITTLE_ROOT_R - r0)
+        pts = (r0 + L * t)[:, None] * d + np.array([0, 0, BRITTLE_ARM_Z])
+        tt = np.clip((np.linalg.norm(pts[:, :2], axis=1) - BRITTLE_ROOT_R) / BRITTLE_ARM_LEN, 0, 1)
+        # O. erinaceus arms are robust: base half-width ~0.011 span, tapering to a fine whip tip
+        R = 0.0105 * (1 - 0.82 * tt ** 1.25) * (1 + 0.06 * np.cos(tt * nseg * math.pi / 2) ** 2)
+        Vt, Ft, tv, av = G.tube(pts, R, 5, squash=0.62, up=perp)
+        dors = 1 - np.abs(((av - 0.25 + 0.5) % 1.0) - 0.5) * 2      # 1 dorsal .. 0 ventral
+        tvv = np.r_[np.repeat(tt, 5), 1.0]          # t of each ring's station (+ the tip cap)
+        ga.add(Vt, Ft, at.uv(0, tvv, dors), np.stack([tvv, 0 * tvv, np.full(len(Vt), i / 9), np.clip(0.5 - Vt[:, 0], 0, 1)], -1))
+        # arm spines: a stout pair at every station, about 1.4 arm-widths long near the disc, shorter distally,
+        # held out to the sides and slightly forward/up (O. erinaceus: long, robust spines)
+        for kk in range(2, n - 1):
             for sgn in (1, -1):
-                L = 0.012 + 0.016 * (1 - t[k])
-                b = pts[k] + nrm * sgn * R[k] * 0.85
-                tipp = b + nrm * sgn * L * 0.85 + tang[k] * L * 0.45 + np.array([0, 0, L * 0.2])
-                Vc, Fc = G.cone(b, tipp, max(0.0022, R[k] * 0.16), 3)
-                ga.add(Vc, Fc, at.uv(0, np.full(len(Vc), t[k])), [(0, 0, i / 4, t[k])] * len(Vc))
-    geo_obj("Arms", ga, root, "leg", [mat], extras={"count": 5})
+                Ls = 0.012 + 0.018 * (1 - tt[kk])
+                b = pts[kk] + perp * sgn * R[kk] * 0.8
+                tip = b + perp * sgn * Ls * 0.88 + d * Ls * 0.35 + np.array([0, 0, Ls * 0.25])
+                Vc, Fc = G.cone(b, tip, max(0.0018, R[kk] * 0.2), 3)
+                ga.add(Vc, Fc, at.uv(2, np.full(len(Vc), 0.5), np.r_[np.zeros(3), 1.0]),
+                       [(tt[kk], 0, i / 9, float(np.clip(0.5 - v[0], 0, 1))) for v in Vc])
+    geo_obj("Arms", ga, root, "leg", [mat], extras={"count": 5, "limbPivots": pivots})
     objs = [o for o in C.all_descendants(root) if o.type == "MESH"]
     C.recalc_normals(disc_o)
-    return finish(root, objs, os.path.join(C.MODELS, "brittle_star.glb"), 2500)
+    return finish(root, objs, os.path.join(C.MODELS, "brittle_star.glb"), 1800)
 
 
 # ----------------------------------------------------------------------------
@@ -817,104 +862,151 @@ def build_feather_duster():
 
 
 # ----------------------------------------------------------------------------
-# Sally Lightfoot crab (Percnon gibbesi): flat, nearly round maroon carapace with a green-yellow mid stripe and
-# radiating lines; long flattened banded legs with yellow-gold spots and joint rings; small claws.
-# Unit: carapace width 1.0 (= lengthCm 5), facing +X (it walks sideways along +-Y), sits on z = 0.
+# Sally Lightfoot crab (Percnon gibbesi, research 17 §3): extremely flat carapace a little wider than long (CW 39.9 /
+# CL 38.2 mm), maroon with a green-yellow midline and paired radiating lines; four pairs of long, flattened walking
+# legs, maroon with yellow-gold blotches and yellow joint rings, a row of spines on the leading edge of each merus;
+# small, equal red-orange chelae with pale spoon tips; short eye stalks at the front corners.
+# Unit: carapace width 1.0 (= lengthCm 5), facing +X (it walks sideways along +-Y), feet on z = 0.
+# Limb rig (SIMULATION §19): COLOR_0 R = t along the limb, B = limb / 9 (legs k = 2 pair + (0 left, 1 right), chelae
+# 8 left, 9 right); extras.limbPivots = 10 x vec4 (glTF space): coxa xyz, w = leg length.
 # ----------------------------------------------------------------------------
+SALLY_LEG_ANGLES = (62.0, 86.0, 110.0, 134.0)    # leg directions from forward (deg)
+SALLY_LEG_LEN = (0.95, 1.12, 1.12, 0.98)         # carapace widths
+SALLY_BODY_Z = 0.15                              # carapace mid-height
+
+
+def _squircle(phi, n=2.6):
+    return (np.abs(np.cos(phi)) ** n + np.abs(np.sin(phi)) ** n) ** (-1.0 / n)
+
+
 def build_sally_lightfoot():
     C.reset_scene()
-    at = Atlas(512, 512, 2)
+    at = Atlas(512, 1024, 4)
+    joints = (0.14, 0.47, 0.62, 0.86)
 
     def leg(cv):
-        cv.vgrad("#4A0E18", "#6E1A24")  # across the leg (flattened top/bottom)
+        # u along the leg (0 coxa .. 1 dactyl tip), v around (0.25 dorsal)
+        cv.vgrad("#4C0C18", "#6A1622")
         u = cv.u
-        for j in (0.34, 0.67, 0.93):     # gold rings at the joints
-            cv.blend(1 - S(0.008, 0.02, np.abs(u - j)), "#E0B030")
         rs = np.random.default_rng(5)
-        for _ in range(26):              # yellow-gold spots on each segment
-            cu, cvv = rs.uniform(0.04, 0.96), rs.uniform(0.2, 0.8)
-            r = rs.uniform(0.012, 0.022)
-            cv.blend(1 - S(r * 0.6, r, np.hypot((u - cu) * 2.0, cv.v - cvv) * 0.5), "#E8C040")
-        cv.blend(S(0.95, 1.0, u), "#2A0A0E")  # dark tips
+        for _ in range(34):              # yellow-gold blotches on each segment, mostly on top
+            cu, cvv = rs.uniform(0.05, 0.95), rs.uniform(0.15, 0.85)
+            r = rs.uniform(0.014, 0.03)
+            cv.blend(1 - S(r * 0.55, r, np.hypot((u - cu) * 1.6, (cv.v - cvv) * 0.35)), "#D8B030", 0.9)
+        for j in joints:                 # yellow rings at the joints
+            cv.blend(1 - S(0.007, 0.018, np.abs(u - j)), "#E8C838")
+        cv.blend(S(0.88, 1.0, u), "#2A0A10", 0.75)      # dark dactyl tips
+        cv.blend(S(0.965, 1.0, u), "#C89030", 0.6)      # pale claw-like tip
+    at.paint_strip(0, leg)
 
     def cara(cv):
-        # square region u 0.25..0.75 holds the top view: px across the body (x, front = 1), py side to side
+        # u 0.25..0.75 holds the top view: px along the body (front = 1), py side to side
         px = np.clip((cv.u - 0.25) / 0.5, 0, 1)
-        py = cv.v
-        X, Y = (px - 0.5) * 2, (py - 0.5) * 2
+        X, Y = (px - 0.5) * 2, (cv.v - 0.5) * 2
         r = np.hypot(X, Y)
-        cv.vgrad("#5A1220", "#5A1220")
-        cv.blend(np.clip(0.5 + 0.5 * X, 0, 1) * 0.4, "#7E2230")
-        cv.blend(S(0.75, 1.0, r), "#3A0A12", 0.7)
-        cv.blend((1 - S(0.025, 0.05, np.abs(Y))) * (1 - S(0.85, 0.95, np.abs(X))), "#B8D040")  # mid stripe
-        ang = np.arctan2(Y, X)
-        lines = (1 - S(0.05, 0.12, np.abs(((ang / (2 * np.pi) * 14) % 1.0) - 0.5))) \
-            * S(0.25, 0.4, r) * (1 - S(0.85, 0.95, r))
-        cv.blend(np.clip(lines, 0, 1) * 0.85, "#A8C840")                  # radiating lines
-        cv.blend((1 - S(0.02, 0.05, np.abs(r - 0.55))) * 0.3, "#C0D050")   # faint ring
-    at.paint_strip(0, leg)
+        cv.vgrad("#561020", "#561020")
+        cv.blend(np.clip(0.5 + 0.5 * X, 0, 1) * 0.35, "#7A2030")
+        cv.blend(S(0.78, 1.0, r), "#38080F", 0.7)
+        cv.blend((1 - S(0.03, 0.06, np.abs(Y))) * (1 - S(0.8, 0.95, np.abs(X))), "#B8D040")   # green-yellow midline
+        ang = np.arctan2(np.abs(Y), X)                                                         # paired (mirrored) lines
+        lines = (1 - S(0.03, 0.08, np.abs(((ang / np.pi * 5 + 0.5) % 1.0) - 0.5))) * S(0.25, 0.42, r) * (1 - S(0.8, 0.93, r))
+        cv.blend(np.clip(lines, 0, 1) * 0.6, "#98B838")
+        cv.blend((1 - S(0.0, 0.04, np.abs(X - 0.92))) * (1 - S(0.5, 0.7, np.abs(Y))), "#B8C048", 0.5)  # front rim
+        cv.multiply(0.9 + 0.2 * P.value_noise(cv.h, cv.w, 64, 16, 7))
     at.paint_strip(1, cara)
+
+    def claw(cv):
+        cv.vgrad("#A82E18", "#D04A22")    # red-orange chelipeds
+        cv.blend(S(0.55, 0.75, cv.u), "#E06A30", 0.7)
+        cv.blend(S(0.84, 0.97, cv.u), "#F2D8B0", 0.9)   # pale spoon tips
+    at.paint_strip(2, claw)
+
+    def stalk(cv):
+        cv.vgrad("#6A1A20", "#C8A050")
+    at.paint_strip(3, stalk)
     tex = os.path.join(C.BUILD, "sally_lightfoot_atlas.png")
     at.cv.save(tex)
     mat = C.material("sally_lightfoot_mat", rough=0.45, image=C.load_image(tex, name="sally_lightfoot"))
     meye = C.material("sally_lightfoot_eye", color="#0A0A0A", rough=0.1)
-    root = make_root("Root", dict(species="sally_lightfoot", lengthCm=5.0,
-                                  unit="carapace width 1.0, crab faces +X and walks sideways (+-Y)",
-                                  iridescence=0.05, roughness=0.45, gait="sideways", grazes="hair_algae"))
-    # carapace: flattened, nearly round dome
+
+    def col(t, k, V):
+        V = np.asarray(V)
+        return np.stack([np.asarray(t, float) * np.ones(len(V)), np.zeros(len(V)), np.full(len(V), k / 9.0),
+                         np.clip(0.5 - V[:, 0], 0, 1)], -1)
+
+    pivots = [0.0] * 40
+    # ---- carapace: flat squircle, slightly wider than long, low dome ----
     gb = G.Geo()
-    Vb, Fb = G.ellipsoid((0, 0, 0.17), (0.46, 0.5, 0.1), 18, 8)
-    Vb[:, 2] = np.maximum(Vb[:, 2], 0.11)
+    Vb, Fb = G.ellipsoid((0, 0, SALLY_BODY_Z), (0.48, 0.5, 0.055), 18, 7)
+    phi = np.arctan2(Vb[:, 1] / 0.5, Vb[:, 0] / 0.48)
+    Vb[:, :2] *= np.minimum(_squircle(phi), 1.25)[:, None]
+    Vb[:, 0] = np.where(Vb[:, 0] > 0.35, 0.35 + (Vb[:, 0] - 0.35) * 0.6, Vb[:, 0])   # straight front edge
+    Vb[:, 2] = SALLY_BODY_Z + (Vb[:, 2] - SALLY_BODY_Z) * np.where(Vb[:, 2] > SALLY_BODY_Z, 1.0, 0.6)
     x0, y0, x1, y1 = at.rect(1)
-    uvb = np.stack([(0.25 + 0.5 * (Vb[:, 0] / 0.92 + 0.5)) * (x1 - x0) / at.w,
-                    1 - (y0 + (Vb[:, 1] / 1.0 + 0.5) * (y1 - y0)) / at.h], -1)
-    gb.add(Vb, Fb, uvb, [(0, 0, 0, 0)] * len(Vb))
+    uvb = np.stack([(0.25 + 0.5 * np.clip(Vb[:, 0] / 0.96 + 0.5, 0, 1)) * (x1 - x0) / at.w,
+                    1 - (y0 + np.clip(Vb[:, 1] + 0.5, 0, 1) * (y1 - y0)) / at.h], -1)
+    gb.add(Vb, Fb, uvb, col(0.0, 0, Vb))
+    root = make_root("Root", {})
     body_o = geo_obj("Body", gb, root, "shell", [mat])
-    # 4 pairs of long, flattened walking legs
+    # ---- walking legs ----
     gl = G.Geo()
-    k = 0
-    for i, (bx, sweep) in enumerate(((0.24, 0.55), (0.08, 0.2), (-0.1, -0.2), (-0.26, -0.55))):
-        for side in (1, -1):
-            b = np.array([bx, side * 0.4, 0.15])
-            out = np.array([sweep, side * 1.0, 0.0])
-            out /= np.linalg.norm(out)
-            L = 1.05 if i in (1, 2) else 0.92
-            pts = smooth_path([b, b + out * 0.42 * L + [0, 0, 0.26], b + out * 0.85 * L + [0, 0, 0.12],
-                               b + out * 1.1 * L + [0.0, 0, -0.14]], 9)
-            Vt, Ft, tv, av = G.tube(pts, np.linspace(0.08, 0.035, 9), 6, squash=0.5, up=(0, 0, 1))
-            gl.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)),
-                                                        np.full(len(Vt), k / 7), tv], -1))
-            k += 1
-    geo_obj("Legs", gl, root, "leg", [mat], extras={"count": k})
-    # small claws at the front
+    for pair, (adeg, L) in enumerate(zip(SALLY_LEG_ANGLES, SALLY_LEG_LEN)):
+        for side in (1, -1):              # +1 = left (+Y), -1 = right
+            k = 2 * pair + (0 if side > 0 else 1)
+            a = math.radians(adeg)
+            d = np.array([math.cos(a), side * math.sin(a), 0.0])
+            fwd = np.array([-d[1], d[0], 0.0])           # leg's leading (anterior) edge, in the leg plane
+            fwd = fwd if fwd[0] >= 0 else -fwd
+            rr = 0.46 * min(_squircle(math.atan2(side * math.sin(a) / 0.5, math.cos(a) / 0.48)), 1.25)
+            base = d * rr * 0.9 + np.array([0, 0, SALLY_BODY_Z - 0.02])
+            pts = smooth_path([base, base + d * 0.22 * L + [0, 0, 0.09], base + d * 0.5 * L + [0, 0, 0.16],
+                               base + d * 0.78 * L + [0, 0, 0.07], base + d * 1.0 * L + [0, 0, -base[2] + 0.004]], 9)
+            tt = np.linspace(0, 1, 9)
+            R = 0.046 * (1 - 0.5 * tt) * np.where(tt < 0.5, 1.15, 1.0)
+            Vt, Ft, tv, av = G.tube(pts, R, 6, squash=0.4, up=fwd)
+            ts = np.r_[np.repeat(tt, 6), 1.0]
+            gl.add(Vt, Ft, at.uv(0, ts, av), col(ts, k, Vt))
+            for j in range(3):            # spines on the leading edge of the merus
+                i = 2 + j
+                b = pts[i] + fwd * R[i] * 0.9
+                tip = b + fwd * 0.035 + d * 0.02
+                Vc, Fc = G.cone(b, tip, 0.008, 3)
+                gl.add(Vc, Fc, at.uv(0, np.full(len(Vc), joints[2])), col(tt[i], k, Vc))
+            pivots[4 * k:4 * k + 4] = gltf_pt(base) + [float(L)]
+    geo_obj("Legs", gl, root, "leg", [mat], extras={"count": 8, "limbPivots": pivots})
+    # ---- chelipeds: small, equal; merus/carpus forward and in, palm, spoon-tipped fingers toward the mouth ----
     gc = G.Geo()
-    for side in (1, -1):
-        b = np.array([0.36, side * 0.2, 0.14])
-        pts = smooth_path([b, b + [0.12, side * 0.1, 0.04], b + [0.2, side * 0.04, 0.02]], 5)
-        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.04, 0.035, 5), 6, cap_end=False)
-        gc.add(Vt, Ft, at.uv(0, tv * 0.5, av), [(0, 0, 0.5 + 0.5 * side, 0.5)] * len(Vt))
-        Vc, Fc = G.ellipsoid(pts[-1] + np.array([0.06, -side * 0.01, 0.0]), (0.07, 0.04, 0.03), 8, 5)
-        gc.add(Vc, Fc, at.uv(0, np.full(len(Vc), 0.5)), [(0, 0, 0.5 + 0.5 * side, 1.0)] * len(Vc))
-    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True})
+    for side, k in ((1, 8), (-1, 9)):
+        b = np.array([0.36, side * 0.17, SALLY_BODY_Z - 0.03])
+        pts = smooth_path([b, b + [0.1, side * 0.1, 0.0], b + [0.2, side * 0.06, -0.03], b + [0.25, side * 0.0, -0.05]], 5)
+        tt = np.linspace(0, 0.55, 5)
+        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.035, 0.03, 5), 6, cap_end=False, up=(0, 0, 1))
+        gc.add(Vt, Ft, at.uv(2, np.repeat(tt, 6), av), col(np.repeat(tt, 6), k, Vt))
+        pc = pts[-1] + np.array([0.03, -side * 0.025, -0.01])
+        Vp, Fp = G.ellipsoid(pc, (0.05, 0.03, 0.028), 6, 4, rot=G.rot_z(-side * 0.5))
+        gc.add(Vp, Fp, at.uv(2, np.full(len(Vp), 0.7)), col(0.75, k, Vp))
+        for dz in (0.012, -0.012):        # fingers with spoon tips
+            fb = pc + np.array([0.035, -side * 0.03, dz])
+            ft = fb + np.array([0.045, -side * 0.035, -0.012])
+            Vf, Ff = G.cone(fb, ft, 0.012, 4)
+            gc.add(Vf, Ff, at.uv(2, np.r_[np.full(4, 0.85), 0.95]), col(np.r_[np.full(4, 0.9), 1.0], k, Vf))
+        pivots[4 * k:4 * k + 4] = gltf_pt(b) + [0.3]
+    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True, "limbPivots": pivots})
+    # ---- eye stalks at the front corners ----
     ge = G.Geo()
     for side in (1, -1):
-        b = np.array([0.4, side * 0.13, 0.2])
-        tip = b + np.array([0.05, side * 0.02, 0.06])
-        Vt, Ft, tv, av = G.tube([b, tip], [0.025, 0.022], 6, cap_end=False)
-        ge.add(Vt, Ft, at.uv(0, tv * 0.3, av), [(0, 0, 0, 0)] * len(Vt), mat=0)
-        Ve, Fe = G.ellipsoid(tip, (0.03, 0.03, 0.03), 8, 5)
-        ge.add(Ve, Fe, None, [(0, 0, 0, 0)] * len(Ve), mat=1)
-    geo_obj("Eyes", ge, root, "eye", [mat, meye])
+        b = np.array([0.4, side * 0.3, SALLY_BODY_Z + 0.03])
+        tip = b + np.array([0.06, side * 0.03, 0.05])
+        Vt, Ft, tv, av = G.tube([b, tip], [0.024, 0.02], 6, cap_end=False)
+        ge.add(Vt, Ft, at.uv(3, tv, av), col(0, 0, Vt), mat=0)
+        Ve, Fe = G.ellipsoid(tip, (0.03, 0.028, 0.03), 6, 4)
+        ge.add(Ve, Fe, None, col(0, 0, Ve), mat=1)
+    geo_obj("Eyes", ge, root, "eye", [mat, meye], extras={"pivot": gltf_pt((0.43, 0.0, SALLY_BODY_Z + 0.05))})
+    C.set_extras(root, species="sally_lightfoot", lengthCm=5.0,
+                 unit="carapace width 1.0, crab faces +X and walks sideways (+-Y)",
+                 iridescence=0.05, roughness=0.45, gait="sideways", grazes="hair_algae",
+                 limbRig="crab_legs", limbPivots=pivots)
     objs = [o for o in C.all_descendants(root) if o.type == 'MESH']
-    # unit = carapace width (x extent of the body 0.92 -> 1.0); feet on z = 0
-    allv = np.vstack([C.get_verts(o) for o in objs])
-    zmin = allv[:, 2].min()
-    for o in objs:
-        V = C.get_verts(o)
-        V[:, 2] -= zmin
-        V /= 0.92
-        o.data.vertices.foreach_set("co", V.ravel())
-        o.data.update()
     C.recalc_normals(body_o)
     return finish(root, objs, os.path.join(C.MODELS, "sally_lightfoot.glb"), 1600)
 
