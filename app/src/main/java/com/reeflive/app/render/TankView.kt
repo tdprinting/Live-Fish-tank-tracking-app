@@ -40,13 +40,15 @@ fun TankView(
     onFollowLost: (String) -> Unit = {},
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
+    onFollow: (String?) -> Unit = {},
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow,
     )
 }
 
@@ -70,8 +72,11 @@ fun TankView(
     /** Clean-glass mode: the camera faces the front glass and one-finger drags slide the Flipper ([onScrape]). */
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
+    onFollow: (String?) -> Unit = {},
 ) {
     val pick by rememberUpdatedState(onPick)
+    val followReq by rememberUpdatedState(onFollow)
     val scrape by rememberUpdatedState(onScrape)
     val glass by rememberUpdatedState(onTapGlass)
     val press by rememberUpdatedState(onLongPress)
@@ -84,6 +89,7 @@ fun TankView(
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
+            override fun onFollowRequest(id: String?) = followReq(id)
         }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle

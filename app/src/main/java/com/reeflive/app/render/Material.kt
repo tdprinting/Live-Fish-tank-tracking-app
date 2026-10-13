@@ -43,8 +43,9 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val water = p("water", "water.vert", "water.frag")
     val particles = p("particles", "particles.vert", "particles.frag")
     val shafts = p("shafts", "shafts.vert", "shafts.frag")
+    val snow = p("snow", "snow.vert", "snow.frag")
 
-    fun all() = listOf(rock, sand, generic, softCoral, card, polyp, fish, fin, glass, water, particles, shafts)
+    fun all() = listOf(rock, sand, generic, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow)
     fun release() = all().forEach { it.release() }
 }
 
@@ -113,19 +114,65 @@ class FrameUniforms {
         GLES30.glBindBufferBase(GLES30.GL_UNIFORM_BUFFER, ShaderProgram.FRAME_BINDING, ubo); Gl.check("glBindBufferBase(UBO)")
     }
 
+    /**
+     * Quality-scaled realism knobs (`uFx`): light-shaft strength, caustic dispersion (High), surface ripple. Call
+     * before [fill], which uploads the whole block.
+     */
+    fun setEffects(quality: RenderQuality) {
+        data[FX_OFFSET + 1] = quality.shaftStrength
+        data[FX_OFFSET + 2] = if (quality == RenderQuality.HIGH) 1f else 0f
+        data[FX_OFFSET + 3] = if (quality == RenderQuality.LOW) 0.5f else 1f
+    }
+
+    private val casterD2 = FloatArray(MAX_CASTERS)
+
+    /**
+     * Picks up to [max] visible organisms nearest the eye (ex, ey, ez) as soft contact-shadow casters (`uCasters`,
+     * `uFx.x`). No allocation. Call before [fill].
+     */
+    fun setCasters(rigs: Collection<FishRig>, max: Int, ex: Float, ey: Float, ez: Float) {
+        val cap = max.coerceIn(0, MAX_CASTERS)
+        var n = 0
+        if (cap > 0) for (r in rigs) {
+            if (!r.visible) continue
+            val s = r.spine
+            val x = s[24]; val y = s[25]; val z = s[26]
+            val dx = x - ex; val dy = y - ey; val dz = z - ez
+            val d2 = dx * dx + dy * dy + dz * dz
+            var slot = -1
+            if (n < cap) { slot = n; n++ }
+            else {
+                var worst = 0
+                for (k in 1 until n) if (casterD2[k] > casterD2[worst]) worst = k
+                if (d2 < casterD2[worst]) slot = worst
+            }
+            if (slot < 0) continue
+            casterD2[slot] = d2
+            val o = CASTER_OFFSET + slot * 4
+            data[o] = x; data[o + 1] = y; data[o + 2] = z; data[o + 3] = r.scale
+        }
+        data[FX_OFFSET] = n.toFloat()
+    }
+
     fun release() = Gl.deleteBuffer(ubo)
 
     companion object {
-        /** std140: 3 mat4 (48 floats) + 12 vec4 (48) + 4 algae vec4 (16). */
+        /** std140: 3 mat4 (48 floats) + 12 vec4 (48) + 4 algae vec4 (16) + uFx (4) + 12 casters (48). */
         const val ALGAE_OFFSET = 96
-        const val FLOATS = ALGAE_OFFSET + AlgaeVisuals.FLOATS
-        const val FOG_DENSITY = 0.004f
+        const val FX_OFFSET = ALGAE_OFFSET + AlgaeVisuals.FLOATS
+        const val CASTER_OFFSET = FX_OFFSET + 4
+        const val MAX_CASTERS = 12
+        const val FLOATS = CASTER_OFFSET + MAX_CASTERS * 4
+        const val FOG_DENSITY = 0.005f
         const val WATER_LEVEL = 56f
         const val SAND_TOP = 3f
-        const val CAUSTIC_STRENGTH = 0.6f
+        const val CAUSTIC_STRENGTH = 0.85f
         const val CAUSTIC_SCALE = 0.04f
-        /** Seawater Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7). */
-        val ABSORB = floatArrayOf(0.0045f, 0.0009f, 0.0006f)
+        /**
+         * Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7). Somewhat above pure seawater so
+         * the blue-green fall-off reads across a 122 cm tank (a side view keeps ~40 % of red).
+         */
+        val ABSORB = floatArrayOf(0.0072f, 0.0016f, 0.0010f)
         const val SCATTER = 0.0004f
     }
 }

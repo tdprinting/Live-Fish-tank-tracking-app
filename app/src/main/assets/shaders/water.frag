@@ -28,7 +28,14 @@ void main() {
     vec3 n1 = texture(uWaterN1, uv + uTime * vec2(1.5, 0.8) / 20.0).xyz * 2.0 - 1.0;
     vec3 n2 = texture(uWaterN2, uv * 1.3 + uTime * vec2(-1.0, 1.2) / 20.0).xyz * 2.0 - 1.0;
     vec2 slope = surfaceSlope(vWorld.xz);
-    vec3 N = normalize(vec3((n1.x + n2.x) * 0.12 - slope.x, 1.0, (n1.y + n2.y) * 0.12 - slope.y));
+    // ripple layer: three travelling wavelets (cm, s) from the return pump's chop, scaled by uRipple (quality)
+    vec2 q = vWorld.xz;
+    float tr = uTime;
+    vec2 rip = vec2(0.8, 0.6) * cos(dot(q, vec2(0.8, 0.6)) * 0.9 + tr * 2.1) * 0.05
+             + vec2(-0.5, 0.86) * cos(dot(q, vec2(-0.5, 0.86)) * 1.45 + tr * 2.7) * 0.035
+             + vec2(0.97, -0.26) * cos(dot(q, vec2(0.97, -0.26)) * 2.3 + tr * 3.4) * 0.02;
+    rip *= uRipple * (0.6 + 0.4 * uFlowStrength);
+    vec3 N = normalize(vec3((n1.x + n2.x) * 0.12 - slope.x + rip.x, 1.0, (n1.y + n2.y) * 0.12 - slope.y + rip.y));
 
     vec3 I = normalize(vWorld - uCamPos.xyz);
     bool below = uCamPos.y < uWaterLevel;
@@ -42,6 +49,9 @@ void main() {
         // reflected underwater scene approximation: lit water colour + the fixtures' reflected glow
         vec3 refl = uFog.rgb * 1.6 + (uLightColor[0].rgb + uLightColor[1].rgb) * 0.04;
         refl += uAmbientB.rgb * 0.5;
+        // the mirror shimmers: bright caustic-like bands drift over the underside of the surface
+        float sh = texture(uCaustic, vWorld.xz * 0.03 + rip * 0.4 + uTime * vec2(0.02, 0.013)).r;
+        refl *= 0.75 + 0.7 * sh * sh;
         if (dot(T, T) < 1e-4) {
             col = refl; // total internal reflection
         } else {
@@ -51,6 +61,8 @@ void main() {
                 vec3 L = normalize(uLightPos[i].xyz - vWorld);
                 float d = max(dot(T, L), 0.0);
                 trans += uLightColor[i].rgb * (pow(d, 120.0) * 6.0 + pow(d, 12.0) * 0.25);
+                // glitter: tiny sharp highlights where the rippled surface points straight at a fixture
+                trans += uLightColor[i].rgb * pow(d, 900.0) * 14.0 * uRipple;
             }
             // Fresnel at the water side, cosT from Snell
             float F = fresnelSchlick(cosI, 0.02);
@@ -67,7 +79,7 @@ void main() {
         vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.4 + ROOM;
         for (int i = 0; i < 2; i++) {
             vec3 L = normalize(uLightPos[i].xyz - vWorld);
-            env += uLightColor[i].rgb * pow(max(dot(R, L), 0.0), 300.0) * 4.0;
+            env += uLightColor[i].rgb * (pow(max(dot(R, L), 0.0), 300.0) * 4.0 + pow(max(dot(R, L), 0.0), 1500.0) * 12.0 * uRipple);
         }
         col = env * F + uFog.rgb * 0.15;
         alpha = clamp(F + 0.12, 0.0, 1.0);

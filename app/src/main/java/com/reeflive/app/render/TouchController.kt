@@ -1,76 +1,100 @@
 package com.reeflive.app.render
 
 import android.content.Context
-import android.view.GestureDetector
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
+import android.view.View
+import android.view.ViewConfiguration
 
 /**
- * Gestures (ARCHITECTURE §8.2): 1-finger orbit, 2-finger pan + pinch zoom, tap (pick), double tap
- * (tap the glass), long press (drop food). In clean-glass mode ([CameraInput.cleaning]) the first finger slides the
- * Flipper instead and the other gestures are off. Runs on the UI thread and only accumulates into
- * [CameraInput]; the GL thread consumes it once per frame.
+ * Gestures (ARCHITECTURE §8.2): the raw MotionEvent stream goes to the pure [GestureTracker] (one-finger orbit +
+ * fling, two-finger pan / pinch / twist, tap = pick, double tap = zoom to a point or follow a fish, double-tap-drag =
+ * one-finger zoom, two-finger tap = tap the glass, long press = drop food). In clean-glass mode
+ * ([CameraInput.cleaning]) the first finger slides the Flipper instead and the other gestures are off.
+ *
+ * On every ACTION_DOWN the view asks its parent not to intercept: inside Compose (AndroidView) that makes the
+ * interop filter hand the view the stream in the Initial pass, so no ancestor `pointerInput` that consumes can turn
+ * the gesture into an ACTION_CANCEL half way. Runs on the UI thread and only accumulates into [CameraInput]; the GL
+ * thread consumes it once per frame.
  */
-class TouchController(context: Context, private val input: CameraInput) {
-    private var lastFocusX = 0f
-    private var lastFocusY = 0f
-    private var multi = false
-
-    private val scale = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
-            lastFocusX = d.focusX; lastFocusY = d.focusY
-            return true
-        }
-
-        override fun onScale(d: ScaleGestureDetector): Boolean {
-            input.zoom(d.scaleFactor)
-            input.pan(d.focusX - lastFocusX, d.focusY - lastFocusY)
-            lastFocusX = d.focusX; lastFocusY = d.focusY
-            return true
-        }
-    })
-
-    private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDown(e: MotionEvent) = true
-
-        override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
-            if (multi || e2.pointerCount > 1) return false
-            input.orbit(-dx, -dy)
-            return true
-        }
-
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean { input.tap(CameraInput.TapKind.PICK, e.x, e.y); return true }
-        override fun onDoubleTap(e: MotionEvent): Boolean { input.tap(CameraInput.TapKind.GLASS, e.x, e.y); return true }
-        override fun onLongPress(e: MotionEvent) { if (!multi) input.tap(CameraInput.TapKind.LONG_PRESS, e.x, e.y) }
-    })
+class TouchController(context: Context, private val view: View, private val input: CameraInput) {
+    private val cfg = ViewConfiguration.get(context)
+    private val tracker = GestureTracker(input, cfg.scaledTouchSlop.toFloat(), cfg.scaledDoubleTapSlop.toFloat())
+    private val handler = Handler(Looper.getMainLooper())
+    private val pid = IntArray(GestureTracker.MAX)
+    private val px = FloatArray(GestureTracker.MAX)
+    private val py = FloatArray(GestureTracker.MAX)
+    private val tick = Runnable { schedule(tracker.timer(SystemClock.uptimeMillis())) }
 
     fun onTouchEvent(ev: MotionEvent): Boolean {
         if (input.cleaning) {
+            if (tracker.count > 0) tracker.cancel()
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> input.scrapeTouch(ev.getX(0), ev.getY(0), true)
+                MotionEvent.ACTION_DOWN -> { view.parent?.requestDisallowInterceptTouchEvent(true); input.scrapeTouch(ev.getX(0), ev.getY(0), true) }
+                MotionEvent.ACTION_MOVE -> input.scrapeTouch(ev.getX(0), ev.getY(0), true)
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> input.scrapeTouch(ev.getX(0), ev.getY(0), false)
             }
             return true
         }
+        val t = ev.eventTime
         when (ev.actionMasked) {
-            MotionEvent.ACTION_POINTER_DOWN -> multi = true
-            MotionEvent.ACTION_DOWN -> multi = false
+            MotionEvent.ACTION_DOWN -> {
+                view.parent?.requestDisallowInterceptTouchEvent(true)
+                tracker.down(ev.getPointerId(0), ev.getX(0), ev.getY(0), t, first = true)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                val i = ev.actionIndex
+                tracker.down(ev.getPointerId(i), ev.getX(i), ev.getY(i), t, first = false)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val n = minOf(ev.pointerCount, GestureTracker.MAX)
+                for (k in 0 until n) { pid[k] = ev.getPointerId(k); px[k] = ev.getX(k); py[k] = ev.getY(k) }
+                tracker.move(n, pid, px, py, t)
+            }
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                val i = ev.actionIndex
+                tracker.up(ev.getPointerId(i), ev.getX(i), ev.getY(i), t)
+            }
+            MotionEvent.ACTION_CANCEL -> tracker.cancel()
         }
-        scale.onTouchEvent(ev)
-        gestures.onTouchEvent(ev)
+        schedule(tracker.timer(SystemClock.uptimeMillis()))
         return true
+    }
+
+    /** Stops the long-press / single-tap timer (view detached). */
+    fun release() {
+        handler.removeCallbacks(tick)
+        tracker.cancel()
+    }
+
+    private fun schedule(next: Long) {
+        handler.removeCallbacks(tick)
+        if (next >= 0) handler.postAtTime(tick, next)
     }
 }
 
-/** Thread-safe accumulator between the UI thread (gestures) and the GL thread (camera). */
-class CameraInput {
-    enum class TapKind { PICK, GLASS, LONG_PRESS }
+/**
+ * Thread-safe accumulator between the UI thread (gestures, as the [GestureTracker.Sink]) and the GL thread
+ * (camera): motion is summed between frames and applied once in [drain].
+ */
+class CameraInput : GestureTracker.Sink {
+    /** PICK single tap, GLASS two-finger tap, LONG_PRESS hold, ZOOM double tap. */
+    enum class TapKind { PICK, GLASS, LONG_PRESS, ZOOM }
     class Tap(val kind: TapKind, val x: Float, val y: Float)
 
     private var orbitX = 0f; private var orbitY = 0f
     private var panX = 0f; private var panY = 0f
     private var zoom = 1f
-    private val taps = ArrayList<Tap>()
+    private var focusX = -1f; private var focusY = -1f
+    private var rotation = 0f
+    private var flingX = 0f; private var flingY = 0f; private var hasFling = false
+    private var caught = false
+    private var down = false
+    private val taps = ArrayList<Tap>(8)
+    /** GL-thread copy handed out by [drain] (reused, so draining allocates nothing). */
+    private val drained = ArrayList<Tap>(8)
 
     /** Clean-glass mode: set from the UI thread, read by [TouchController] and the GL thread. */
     @Volatile var cleaning = false
@@ -86,18 +110,36 @@ class CameraInput {
         return true
     }
 
-    @Synchronized fun orbit(dx: Float, dy: Float) { orbitX += dx; orbitY += dy }
-    @Synchronized fun pan(dx: Float, dy: Float) { panX += dx; panY += dy }
-    @Synchronized fun zoom(f: Float) { if (f > 0f) zoom *= f }
-    @Synchronized fun tap(kind: TapKind, x: Float, y: Float) { if (taps.size < 8) taps += Tap(kind, x, y) }
+    @Synchronized override fun touching(down: Boolean) { this.down = down; if (down) caught = true }
+    @Synchronized override fun orbit(dx: Float, dy: Float) { orbitX += dx; orbitY += dy }
+    @Synchronized override fun pan(dx: Float, dy: Float) { panX += dx; panY += dy }
+    @Synchronized override fun pinch(factor: Float, focusX: Float, focusY: Float) {
+        if (factor > 0f && !factor.isNaN() && !factor.isInfinite()) { zoom *= factor; this.focusX = focusX; this.focusY = focusY }
+    }
+    @Synchronized override fun rotate(radians: Float) { rotation += radians }
+    @Synchronized override fun fling(vx: Float, vy: Float) { flingX = vx; flingY = vy; hasFling = true }
+    @Synchronized override fun tap(kind: TapKind, x: Float, y: Float) { if (taps.size < 8) taps += Tap(kind, x, y) }
 
-    /** GL thread: applies accumulated motion to [cam] and returns pending taps. */
-    @Synchronized fun drain(cam: Camera, viewHeightPx: Float): List<Tap> {
-        if (orbitX != 0f || orbitY != 0f) cam.orbit(orbitX, orbitY, viewHeightPx)
-        if (panX != 0f || panY != 0f) cam.pan(panX, panY, viewHeightPx)
-        if (zoom != 1f) cam.zoom(zoom)
-        orbitX = 0f; orbitY = 0f; panX = 0f; panY = 0f; zoom = 1f
-        if (taps.isEmpty()) return emptyList()
-        return ArrayList(taps).also { taps.clear() }
+    /** Older call sites: pinch about the view centre. */
+    fun zoom(f: Float) = pinch(f, -1f, -1f)
+
+    /** GL thread: applies accumulated motion to [cam] and returns pending taps (a reused list; read it right away). */
+    @Synchronized fun drain(cam: Camera, widthPx: Int, heightPx: Int): List<Tap> {
+        if (caught) { cam.catchMotion(); caught = false }
+        cam.touching = down
+        val h = heightPx.toFloat()
+        if (orbitX != 0f || orbitY != 0f) cam.orbit(orbitX, orbitY, h)
+        if (panX != 0f || panY != 0f) cam.pan(panX, panY, h)
+        if (zoom != 1f) {
+            val fx = if (focusX < 0f) widthPx * 0.5f else focusX
+            val fy = if (focusY < 0f) heightPx * 0.5f else focusY
+            cam.zoomAt(zoom, fx, fy, widthPx, heightPx)
+        }
+        if (rotation != 0f) cam.rotate(rotation)
+        if (hasFling) cam.fling(flingX, flingY, h)
+        orbitX = 0f; orbitY = 0f; panX = 0f; panY = 0f; zoom = 1f; rotation = 0f; hasFling = false
+        drained.clear()
+        if (taps.isNotEmpty()) { drained.addAll(taps); taps.clear() }
+        return drained
     }
 }

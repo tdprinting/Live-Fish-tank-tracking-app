@@ -515,6 +515,7 @@ private fun TankArea(
             onPick = onPick,
             onTapGlass = vm::tapGlass,
             onFollowLost = { vm.follow(null) },
+            onFollow = vm::follow,
             cleaning = cleaning,
             onScrape = onScrape,
         )

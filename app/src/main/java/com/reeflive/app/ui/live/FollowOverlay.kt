@@ -1,5 +1,10 @@
 package com.reeflive.app.ui.live
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +21,11 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -26,8 +36,12 @@ import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
+import kotlinx.coroutines.delay
 
-/** Minimal close-up mode overlay: exit at top-right, name + behaviour line and prev/next at the bottom. */
+/**
+ * Minimal close-up mode overlay: exit at top-right (system back exits too), name + behaviour line and prev/next at
+ * the bottom, and a short gesture hint that fades out after a few seconds.
+ */
 @Composable
 fun FollowOverlay(
     state: FollowState,
@@ -37,8 +51,20 @@ fun FollowOverlay(
     modifier: Modifier = Modifier,
 ) {
     val c = ReefTheme.colors
+    // (no dispatcher in @Preview)
+    if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = onExit)
+    var hint by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(HINT_MS); hint = false }
     Box(modifier.fillMaxSize().padding(16.dp)) {
         GlassIconButton(Icons.Rounded.Close, "Exit follow mode", onExit, Modifier.align(Alignment.TopEnd))
+        AnimatedVisibility(hint, Modifier.align(Alignment.TopCenter).padding(top = 56.dp), enter = fadeIn(), exit = fadeOut()) {
+            GlassCard(shape = ReefShapes.card, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(
+                    "Drag to look around · pinch to get closer · double-tap for a close-up",
+                    style = MaterialTheme.typography.labelMedium, color = c.textSecondary, textAlign = TextAlign.Center,
+                )
+            }
+        }
         GlassCard(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             shape = ReefShapes.card,
@@ -62,6 +88,8 @@ fun FollowOverlay(
         }
     }
 }
+
+private const val HINT_MS = 4000L
 
 private val previewFollow = FollowState("Pixel", "Ocellaris clownfish", "Falco hawkfish eyeing the skunk cleaner shrimp", 1, 5)
 
