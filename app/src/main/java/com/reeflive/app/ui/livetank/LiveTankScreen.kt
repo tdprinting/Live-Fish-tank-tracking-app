@@ -600,7 +600,7 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, onPick, onTankTap, micro,
+            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning && !sandbox) toggleCleaning() }, onPick, onTankTap, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
@@ -724,6 +724,7 @@ private fun TankArea(
     quality: LiveQuality,
     cleaning: Boolean,
     onScrape: (GlassStroke) -> Unit,
+    onFlipperTap: () -> Unit,
     onPick: (String?) -> Unit,
     onTapGlass: (Vec3) -> Unit,
     micro: Boolean,
@@ -745,6 +746,7 @@ private fun TankArea(
             onFollow = vm::follow,
             cleaning = cleaning,
             onScrape = onScrape,
+            onFlipperTap = onFlipperTap,
             projection = projection,
             shelf = shelf,
         )
