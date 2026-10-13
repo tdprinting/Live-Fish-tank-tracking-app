@@ -12,6 +12,8 @@
     {"speciesId": "salarias_fasciatus", "nickname": "Mower", "sizeCm": 7.0},
     {"speciesId": "ecsenius_stigmatura", "nickname": "Tailspot", "sizeCm": 5.0},
     {"speciesId": "pseudochromis_indigo", "nickname": "Indigo", "sizeCm": 5.5},
+    {"speciesId": "valenciennea_puellaris", "nickname": "Diamond", "sizeCm": 10.0},
+    {"speciesId": "macropharyngodon_bipartitus", "nickname": "Leopard", "sizeCm": 8.5},
     {"speciesId": "stenopus_hispidus", "nickname": "Bandit", "sizeCm": 5.0},
     {"speciesId": "lysmata_amboinensis", "nickname": "Skunk", "sizeCm": 5.0},
     {"speciesId": "clibanarius_tricolor", "nickname": "Blue-legs", "sizeCm": 1.5, "quantity": 2},

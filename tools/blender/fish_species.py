@@ -613,44 +613,41 @@ def fins_dottyback(cv):
 
 
 def paint_diamond_goby(cv, fl):
-    """Diamond goby, Valenciennea puellaris (research 16; Fishes of Australia 177): pearly white-silver body with a
-    faint pink-grey back, rows of orange dashes and spots along the flank (a bold row low on the side), a few small
-    blue-edged spots between them, a pale blue-spotted cheek stripe from the mouth under the eye to the gill cover."""
+    """Diamond goby, Valenciennea puellaris, painted from Tee's photos (2026-10-13, p08 side view, p07): pale
+    lavender-white body; two rows of orange dashes (a bold mid-side row and a finer row along the back), an orange line
+    along the lower side from the cheek to the tail base; orange spots on the head; blue iridescent spots and short
+    stripes on the cheek under the eye (Fishes of Australia 177 agrees: orange dashes, orange lower-side stripe, blue
+    head markings)."""
     u, v = cv.u, cv.v
-    cv.vgrad("#F2F4F2", "#E2E4E6", 0.0, 1.0)
-    cv.blend(S(0.7, 1.0, v), "#C9C4C6", 0.35)          # slightly darker back
-    cv.blend(1 - S(0.1, 0.35, v), "#FAFBFB", 0.6)      # bright belly
+    cv.vgrad("#F0EAF3", "#D9CDE3", 0.0, 1.0)            # lavender-white, a little more lilac on the back
+    cv.blend(1 - S(0.08, 0.3, v), "#F8F6F8", 0.6)      # bright belly
     mucus(cv, 0.03, 161)
     scales_overlay(cv, 9, 0.05)
     rs = np.random.default_rng(162)
-    # the bold lower row: orange dashes, slightly elongated along the body
-    lower = np.zeros_like(u)
+    # mid-side row: bold orange dashes, ~0.03 L long, every ~0.065 L (p08)
     x = 0.2
+    while x < 0.93:
+        y0 = 0.57 + 0.01 * math.sin(x * 9)
+        ln = rs.uniform(0.022, 0.034)
+        cv.blend(fl.stroke([(x, y0), (x + ln, y0 - 0.003)], [0.009, 0.009], soft=0.0025), "#EE9030", 0.95)
+        x += rs.uniform(0.055, 0.075)
+    # upper row along the back: smaller, paler dashes
+    x = 0.22
     while x < 0.9:
-        vv = 0.3 + 0.02 * math.sin(x * 23)
-        lower = np.maximum(lower, fl.stroke([(x, vv), (x + rs.uniform(0.012, 0.022), vv + 0.005)], [0.0075, 0.0075],
-                                            soft=0.003))
-        x += rs.uniform(0.04, 0.06)
-    cv.blend(lower, "#E87A2A", 0.95)
-    # scattered orange spots over the upper and middle flank
-    m, _ = fl.spots(rs, 55, 0.005, 0.008, 0.02, (0.16, 0.94, 0.38, 0.92),
-                    weight_fn=lambda uu, vv: 0.5 + 0.5 * S(0.4, 0.8, vv))
-    cv.blend(m, "#EE8A3A", 0.85)
-    # a few small blue spots with a darker rim between the orange
-    b, pts = fl.spots(rs, 18, 0.0035, 0.005, 0.03, (0.2, 0.9, 0.36, 0.8))
-    ring = np.zeros_like(u)
-    for (pu, pv, r) in pts:
-        ring = np.maximum(ring, fl.disc(pu, pv, r + 0.0025) - fl.disc(pu, pv, r))
-    cv.blend(ring, "#2E5A9A", 0.7)
-    cv.blend(b, "#4FA8E8", 0.95)
-    # cheek: pale blue band from the corner of the mouth under the eye to the gill cover, dotted brighter blue
-    cheek = fl.stroke([(0.01, 0.46), (0.05, 0.5), (0.1, 0.52), (0.16, 0.5)], [0.012, 0.016, 0.016, 0.01], soft=0.006)
-    cv.blend(cheek, "#9CC8EE", 0.75)
-    cd, _ = fl.spots(rs, 14, 0.003, 0.0045, 0.008, (0.015, 0.16, 0.43, 0.57))
-    cv.blend(cd * cheek, "#3E8FE0", 1.0)
-    # blue dashes over the snout and above the eye
-    cv.blend(fl.stroke([(0.012, 0.62), (0.04, 0.68)], [0.004, 0.004], soft=0.003), "#5AA8EC", 0.8)
-    cv.blend(fl.stroke([(0.07, 0.8), (0.11, 0.84)], [0.004, 0.003], soft=0.003), "#5AA8EC", 0.7)
+        y0 = 0.82 + 0.01 * math.sin(x * 13)
+        cv.blend(fl.stroke([(x, y0), (x + rs.uniform(0.01, 0.018), y0)], [0.004, 0.004], soft=0.002), "#EEA040", 0.85)
+        x += rs.uniform(0.05, 0.07)
+    # the lower-side line: continuous orange from the cheek to the tail base
+    low = [(0.02, 0.36), (0.1, 0.33), (0.2, 0.32), (0.5, 0.31), (0.8, 0.33), (0.95, 0.38)]
+    cv.blend(fl.stroke(low, [0.009, 0.009, 0.0065, 0.006, 0.005, 0.0035], soft=0.0025), "#EA902E", 0.95)
+    # head: orange spots over the top and behind the eye
+    hs, _ = fl.spots(rs, 16, 0.0035, 0.006, 0.012, (0.03, 0.2, 0.55, 0.95))
+    cv.blend(hs, "#EC9234", 0.9)
+    # cheek: blue iridescent spots and short stripes under the eye, above the orange line
+    cd, _ = fl.spots(rs, 12, 0.0045, 0.0075, 0.012, (0.03, 0.19, 0.38, 0.52))
+    cv.blend(cd, "#7EB6F2", 0.9)
+    for (a0, b0, a1, b1) in ((0.04, 0.44, 0.08, 0.46), (0.1, 0.45, 0.15, 0.44), (0.06, 0.4, 0.11, 0.41)):
+        cv.blend(fl.stroke([(a0, b0), (a1, b1)], [0.003, 0.003], soft=0.002), "#6AA8F0", 0.85)
     dark_mouth(cv, fl, u1=0.025, v0=0.4, v1=0.46, color="#B88A80", op=0.5)
 
 
@@ -660,17 +657,93 @@ def fins_diamond_goby(cv):
         rw = np.abs(((Sx * rows + 0.3) % 1.0) - 0.5)
         m = (1 - S(0.15, 0.3, ph)) * (1 - S(0.12, 0.28, rw)) * (Sx < 0.85)
         return rgb * (1 - m[..., None]) + hex2rgb("#E8862E") * m[..., None], np.maximum(a, 0.85 * m)
-    FL.paint_fin_slot(cv, 0, base="#EEF0F2", alpha=0.55, rays=6, ray_color="#C8C8CC", spine_count=6,
-                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 6, 3), margin="#5AA8EC", margin_w=0.1)
-    FL.paint_fin_slot(cv, 1, base="#EEF0F2", alpha=0.5, rays=12, ray_color="#C8C8CC",
-                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 10, 3), margin="#5AA8EC", margin_w=0.08)
-    FL.paint_fin_slot(cv, 2, base="#F2F2F4", alpha=0.45, rays=12, ray_color="#D0D0D4", margin="#7FBCEF",
-                      margin_w=0.1)
-    FL.paint_fin_slot(cv, 3, base="#ECEEF0", alpha=0.55, rays=14, ray_color="#C8CCD0",
-                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a, 12, 4), margin="#E8EEF4", margin_w=0.05)
+    # translucent fins with faint orange spotting (Tee's photos p08)
+    FL.paint_fin_slot(cv, 0, base="#F0EEF4", alpha=0.35, rays=6, ray_color="#D0CCD8", spine_count=6,
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a * 0.8, 6, 3))
+    FL.paint_fin_slot(cv, 1, base="#F0EEF4", alpha=0.32, rays=12, ray_color="#D0CCD8",
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a * 0.8, 10, 3), margin="#9CC4F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 2, base="#F4F2F6", alpha=0.3, rays=12, ray_color="#D8D4DC", margin="#A8CCF0",
+                      margin_w=0.06)
+    FL.paint_fin_slot(cv, 3, base="#F0EEF2", alpha=0.35, rays=14, ray_color="#D0CCD4",
+                      spots=lambda T, Sx, rgb, a: orange_spots(T, Sx, rgb, a * 0.8, 12, 4))
     FL.paint_fin_slot(cv, 4, base="#F2F2F2", alpha=0.3, rays=14, ray_color="#D8D8D8")
     FL.paint_fin_slot(cv, 5, base="#F4F4F4", alpha=0.4, rays=5, ray_color="#D8D8D8")
 
+
+def _cells(cv, n, seed, region):
+    """Voronoi cell-edge distance (px) over the canvas for n sites restricted to region(u, v) -> bool."""
+    rs = np.random.default_rng(seed)
+    pts = []
+    while len(pts) < n:
+        u, v = rs.random(), rs.random()
+        if region(u, v):
+            pts.append((u * cv.w, (1 - v) * cv.h))
+    yy, xx = np.mgrid[0:cv.h, 0:cv.w].astype(np.float32)
+    f1 = np.full((cv.h, cv.w), 1e9, np.float32)
+    f2 = np.full((cv.h, cv.w), 1e9, np.float32)
+    for (px, py) in pts:
+        d = np.sqrt((xx - px) ** 2 + (yy - py) ** 2)
+        closer = d < f1
+        f2 = np.where(closer, f1, np.minimum(f2, d))
+        f1 = np.where(closer, d, f1)
+    return f2 - f1
+
+
+def paint_leopard_wrasse(cv, fl):
+    """Blue star leopard wrasse, Macropharyngodon bipartitus, female / initial phase, painted from Tee's photos
+    (2026-10-13, p06 side view, p09 flank): orange-brown body densely covered in small pale-blue dots, a black blotch on
+    the chest and lower belly behind the pectoral covered by a bright blue-white mesh, and a yellow-tan head with dark
+    lines and a pale patch behind the eye (Seatizens: female "orange-red with white spots ... large black area over chest
+    and abdomen with a bright iridescent blue network")."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#B0702E", "#874A20", 0.0, 1.0)                           # orange-brown, darker on the back
+    cv.blend(S(0.8, 1.0, v), "#7A4220", 0.4)
+    head = 1 - S(0.17, 0.23, u)
+    cv.blend(head, "#C4A55E", 0.95)                                     # yellow-tan head
+    cv.blend(head * (1 - S(0.2, 0.45, v)), "#D8C48A", 0.6)               # paler throat
+    mucus(cv, 0.04, 301)
+    scales_overlay(cv, 9, 0.05)
+    # dark lines on the head: a vermiculated mesh plus a line from the mouth through the eye and one along the jaw
+    hm = _cells(cv, 45, 302, lambda uu, vv: uu < 0.24 and vv > 0.2)
+    mesh = (1 - S(1.0, 2.6, hm)) * head
+    cv.blend(mesh, "#3A3018", 0.45)
+    cv.blend(fl.stroke([(0.01, 0.5), (0.06, 0.56), (0.12, 0.58), (0.18, 0.55)], [0.004, 0.005, 0.005, 0.004], soft=0.003), "#2E2414", 0.8)
+    cv.blend(fl.stroke([(0.015, 0.4), (0.07, 0.38), (0.15, 0.4)], [0.0035, 0.004, 0.0035], soft=0.003), "#2E2414", 0.7)
+    cv.blend(fl.disc(0.135, 0.68, 0.014, 0.006), "#EDE6CC", 0.85)       # pale patch behind the eye
+    # black chest/belly blotch behind the pectoral with a ragged edge (p06): u 0.18-0.55, up to just below mid-side
+    nz = P.value_noise(cv.h, cv.w, 40, 16, 303)
+    top = 0.46 + 0.05 * np.sin(u * 23.0) + 0.08 * (nz - 0.5) - 0.2 * S(0.36, 0.55, u)
+    field = (1 - S(top - 0.02, top + 0.02, v)) * S(0.17, 0.22, u) * (1 - S(0.5, 0.58, u))
+    cv.blend(field, "#0C0E16", 0.97)
+    # bright blue-white mesh over the blotch: pale lines around black islands
+    net = _cells(cv, 70, 304, lambda uu, vv: 0.14 < uu < 0.6 and vv < 0.55)
+    lines = (1 - S(3.0, 6.5, net)) * field
+    cv.blend(lines, "#7FC4F8", 0.95)
+    cv.blend(lines * (1 - S(0.3, 0.7, nz)), "#E8F4FF", 0.6)
+    # dense small pale-blue dots over everything orange-brown (not the head or the blotch)
+    rs = np.random.default_rng(305)
+    dots, _ = fl.spots(rs, 420, 0.0035, 0.0055, 0.0105, (0.18, 0.98, 0.03, 0.99))
+    body = (1 - field) * S(0.17, 0.22, u)
+    cv.blend(dots * body, "#A8D4FA", 0.92)
+    cv.blend(dots * body * (nz > 0.55), "#F2F8FF", 0.5)
+    dark_mouth(cv, fl, u1=0.018, v0=0.44, v1=0.52, color="#6A4A20", op=0.6)
+
+
+def fins_leopard_wrasse(cv):
+    """Dorsal, anal and caudal orange-brown with pale-blue dots like the body (Tee's photos p06, p09); clear pectorals."""
+    def blue_dots(T, Sx, rgb, a, n=10, rows=3, col="#BCDFFA"):
+        ph = np.abs(((T * n + 0.5 * np.floor(Sx * rows)) % 1.0) - 0.5)
+        rw = np.abs(((Sx * rows) % 1.0) - 0.5)
+        m = (1 - S(0.12, 0.22, ph)) * (1 - S(0.12, 0.22, rw)) * (Sx < 0.9)
+        return rgb * (1 - m[..., None]) + hex2rgb(col) * m[..., None], np.maximum(a, 0.9 * m)
+    FL.paint_fin_slot(cv, 0, base="#9A5A26", alpha=0.8, rays=20, ray_color="#6A3A18", spine_count=9,
+                      spots=lambda T, Sx, rgb, a: blue_dots(T, Sx, rgb, a, 22, 3), margin="#5A3418", margin_w=0.08)
+    FL.paint_fin_slot(cv, 2, base="#94562A", alpha=0.8, rays=13, ray_color="#6A3A18",
+                      spots=lambda T, Sx, rgb, a: blue_dots(T, Sx, rgb, a, 14, 2), margin="#3A2418", margin_w=0.1)
+    FL.paint_fin_slot(cv, 3, base="#A2642C", alpha=0.7, rays=13, ray_color="#6A3A18",
+                      spots=lambda T, Sx, rgb, a: blue_dots(T, Sx, rgb, a, 12, 4), margin="#5A3418", margin_w=0.07)
+    FL.paint_fin_slot(cv, 4, base="#E8D8C0", alpha=0.18, rays=12, ray_color="#C8A880", ray_alpha=0.35)
+    FL.paint_fin_slot(cv, 5, base="#C89A70", alpha=0.5, rays=5, ray_color="#8A6040")
 
 # ----------------------------------------------------------------------------
 SPECIES = {
@@ -830,6 +903,23 @@ SPECIES = {
         eye=dict(u=0.075, zf=0.42, r=0.034, iris="#C8D0D8", ring="#E87A2A", outer="#5AA8EC", ring_w=0.14),
         paint=paint_diamond_goby, fins=fins_diamond_goby, irid=0.3, rough=0.32, length_cm=12.0,
     ),
+    "leopard_wrasse": dict(
+        # Macropharyngodon bipartitus (research video fish_leopard_wrasse): short, deep, compressed labrid (depth ~0.38 L at
+        # the pectoral base, owner clip b81b87e7), steep head with a small pointed terminal mouth, one long continuous
+        # dorsal (IX,11), anal III,11, rounded-truncate caudal; low-aspect rowing pectorals
+        profile=[(0, 0.04, 0.03, -0.01), (0.04, 0.15, 0.07, -0.004), (0.1, 0.27, 0.105, 0.0), (0.2, 0.36, 0.13, 0.0),
+                 (0.32, 0.385, 0.135, 0.0), (0.48, 0.37, 0.125, 0.0), (0.64, 0.3, 0.1, 0.0), (0.78, 0.2, 0.07, 0.0),
+                 (0.9, 0.15, 0.05, 0.0), (1.0, 0.14, 0.035, 0.0)],
+        body_tris=3400, ring=30, p_exp=0.8, belly_bias=0.08, back_pinch=0.2,
+        dorsal=dict(u0=0.2, u1=0.86, h=[(0.2, 0.02), (0.24, 0.07), (0.45, 0.075), (0.7, 0.09), (0.83, 0.08), (0.86, 0.02)],
+                    rake=24, n=30),
+        anal=dict(u0=0.52, u1=0.86, h=[(0.52, 0.02), (0.56, 0.07), (0.78, 0.085), (0.84, 0.06), (0.86, 0.02)], rake=28, n=16),
+        caudal=dict(length=0.2, span=0.24, shape="rounded"),
+        pectoral=dict(u=0.25, length=0.15, width=0.1, zf=-0.05, shape="round"),
+        pelvic=dict(u=0.3, length=0.08),
+        eye=dict(u=0.085, zf=0.3, r=0.04, iris="#D07A30", ring="#3A3A18", outer="#A8B040", ring_w=0.16, pupil=0.4),
+        paint=paint_leopard_wrasse, fins=fins_leopard_wrasse, irid=0.25, rough=0.33, length_cm=8.5,
+    ),
 }
 SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin,
                                fins=lambda cv: fins_clown(cv, darwin=True),
@@ -837,7 +927,7 @@ SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin
                                         ring_w=0.07, pupil=0.4))
 
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
-            "tailspot_blenny", "dottyback", "diamond_goby"]
+            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse"]
 
 
 # ----------------------------------------------------------------------------

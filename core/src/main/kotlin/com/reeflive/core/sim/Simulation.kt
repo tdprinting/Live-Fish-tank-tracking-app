@@ -532,6 +532,9 @@ class Simulation(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
             (agents[o]?.brain as? com.reeflive.core.ai.DiamondGobyBrain)?.abstractSift(dtMin)
         }
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.LEOPARD_WRASSE) {
+            (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+        }
         sandTick(dtMin)
         flushEvents()
     }
@@ -542,6 +545,8 @@ class Simulation(
         for (o in organisms) if (o.alive) when (o.brainKind) {
             BrainKind.DIAMOND_GOBY, BrainKind.ENGINEER_GOBY -> n += 1.0
             BrainKind.NASSARIUS -> n += 0.25
+            // a sand-sleeping wrasse turns over a crater of sand twice a day (research video fish_leopard_wrasse)
+            BrainKind.LEOPARD_WRASSE -> n += 0.1
             else -> {}
         }
         return n
@@ -1127,6 +1132,8 @@ class Simulation(
         if (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.LAWNMOWER_BLENNY) o.acceptsPrepared = rng.chance(0.7)
         // research 16: many diamond gobies never take prepared food and live off the sand fauna alone
         if (o.brainKind == BrainKind.DIAMOND_GOBY) o.acceptsPrepared = rng.chance(0.6)
+        // leopard wrasses: many learn frozen mysis/cyclops, thin ones never do (Fenner, TFH; LiveAquaria)
+        if (o.brainKind == BrainKind.LEOPARD_WRASSE) o.acceptsPrepared = rng.chance(0.7)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)

@@ -95,9 +95,15 @@ class AiTest {
         // the cardinal feeds mostly at dusk and night and the adult engineer goby stays in its burrow by day
         // (research 06 §1.3, §1.5); a noon feeding is for the day-active fish
         val nightFeeders = setOf(BrainKind.EEL, BrainKind.LAWNMOWER_BLENNY, BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY)
-        val fish = sim.organisms.filter { it.isFish && it.brainKind !in nightFeeders }
+        // the diamond goby only takes food that has reached the sand, and fish that never learned prepared food (some
+        // leopard wrasses live on pods alone, research video fish_leopard_wrasse) are left out. With the two new fish
+        // posing at its station the cleaner wrasse spends this window servicing clients (it eats parasites there), so
+        // it is left out too; the original allowance of two misses stays for the rest.
+        val dayFish = sim.organisms.filter { it.isFish && it.brainKind !in nightFeeders }
+        val fish = dayFish.filter { it.brainKind != BrainKind.DIAMOND_GOBY && it.brainKind != BrainKind.WRASSE && it.acceptsPrepared }
         fish.forEach { it.hunger = 0.7 }
-        sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.8))
+        // 0.8 g was the ration for the original seven day-active fish; the same per fish now that there are more
+        sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.8 * dayFish.size / 7.0))
         sim.advance(300.0)
         val fed = fish.count { it.hunger < 0.6 }
         assertTrue("fed $fed of ${fish.size}: ${fish.map { it.nickname + "=" + "%.2f".format(it.hunger) }}", fed >= fish.size - 2)

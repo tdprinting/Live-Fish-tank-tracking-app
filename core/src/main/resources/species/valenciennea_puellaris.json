@@ -98,9 +98,9 @@
   },
   "model": "models/diamond_goby.glb",
   "colors": {
-    "primary": "#E8EEF0",
+    "primary": "#EEE6F2",
     "secondary": "#E87A2A",
-    "accent": "#4FA8E8"
+    "accent": "#7EB6F2"
   },
   "iridescence": 0.15,
   "brain": "diamond_goby",

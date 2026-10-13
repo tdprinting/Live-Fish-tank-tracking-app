@@ -1,6 +1,6 @@
 # Diamond goby and the moving sand bed (research 16)
 
-Research update: 2026-10-13. These notes support SIMULATION §16. The diamond goby is a sandbox species and is not in the owner's tank. Each note says whether it is **observed** (from a species account or a study) or a **design estimate** (a provisional model value).
+Research update: 2026-10-13. These notes support SIMULATION §16. The diamond goby was first added as a sandbox species; since 2026-10 it is in the owner's tank (see video/fish_diamond_goby.md). Each note says whether it is **observed** (from a species account or a study) or a **design estimate** (a provisional model value).
 
 ## 1. Identity and size
 

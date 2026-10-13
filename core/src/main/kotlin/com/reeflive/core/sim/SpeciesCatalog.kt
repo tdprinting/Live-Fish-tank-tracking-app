@@ -125,6 +125,10 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("LABRIFORM", 0.8, 5.0, 2.5, 220.0, 0.85, 0.04, 0.09), zone = Zone(0.0, 0.2, 0.4, 0.6),
                     temperament = Temperament(0.15, 0.4, 0.4, 0.6), diet = listOf("PODS", "MYSIS", "PELLET", "FLAKE"), feedsPerDay = 3.0,
                     hardiness = 0.6, starvationDays = 21.0, homeRadiusCm = 35.0, iridescence = 0.15, model = "models/diamond_goby.glb")
+                BrainKind.LEOPARD_WRASSE -> base.copy(common = "Blue star leopard wrasse", maxLengthCm = 13.0, typicalAdultCm = 10.0, depthRatio = 0.36, massCoeff = 0.016,
+                    locomotion = Locomotion("LABRIFORM", 0.8, 5.0, 3.0, 260.0, 0.85, 0.03, 0.08), zone = Zone(0.05, 0.55, 0.3, 0.7),
+                    temperament = Temperament(0.05, 0.35, 0.5, 0.7), diet = listOf("PODS", "MYSIS", "FLAKE", "PELLET"), feedsPerDay = 3.0,
+                    hardiness = 0.4, starvationDays = 18.0, homeRadiusCm = 40.0, iridescence = 0.25, model = "models/leopard_wrasse.glb")
                 BrainKind.GENERIC_FISH -> base
                 BrainKind.GENERIC_INVERT -> base.copy(kind = "INVERT", locomotion = Locomotion("CRAWLING", 0.05, 0.2))
             }

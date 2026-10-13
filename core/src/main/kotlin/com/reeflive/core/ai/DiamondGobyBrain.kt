@@ -30,6 +30,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** Sand per mouthful for a ~12 cm fish (cm³). */
         @Ev(Evidence.DESIGN_ESTIMATE, "16 diamond goby: mouthful size not measured") const val MOUTHFUL_CM3 = 0.35
+        /** Gap kept between the fish and the rock face while it sifts at the rock foot (cm, render clearance). */
+        const val ROCK_GAP_CM = 0.3
         /** Scoop (head down in the sand) and sift (chewing, gill flare) durations (s). */
         const val SCOOP_S = 0.6
         @Ev(Evidence.DESIGN_ESTIMATE) const val SIFT_MIN_S = 1.5
@@ -93,13 +95,26 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         }
         nextBurrowAt = c.t + c.rng.range(300.0, 1800.0)
         install(InBurrow(), Sift(), DigBurrow(), BottomFeed(),
-            Flee(this, { _, _ -> mouth(0.5) }, "Diving into its burrow"), SurfaceGasp(this))
+            BurrowDash(), SurfaceGasp(this))
     }
 
     private val sand: SandBed get() = c.sim.sand
 
     /** Hover height of the head over the sand at (x, z). */
     private fun hoverY(x: Double, z: Double) = sand.surfaceY(x, z) + 0.5 * o.species.depthRatio * o.lengthCm + 0.2
+
+    /** Sifting at the rock foot and lying in the burrow under it, the fish is kept a few mm off the rock face (the burrow is in the sand). */
+    private fun offRock(p: Vec3): Vec3 = if (c.rock.sdf.dist(p) < ROCK_GAP_CM) c.rock.sdf.project(p, ROCK_GAP_CM) else p
+
+    /** Glide low over the sand toward [to] (kinematic: it hugs the bed and the rock foot without the free-swimmer clearance). */
+    private fun glide(c: Ctx, out: SteerIntent, to: Vec3, speedMul: Double = 0.8) {
+        val v = to - o.pos
+        val step = min(v.length(), o.cruiseSpeed * speedMul * c.dt)
+        val dir = v.normalized(o.heading)
+        val n = o.pos + dir * step
+        out.place(offRock(Vec3(n.x, hoverY(n.x, n.z), n.z)), horizontalHeading(dir, o.heading), Vec3.Y, 30.0)
+        out.ampMul = 0.8
+    }
 
     /** A point just outside the burrow mouth, [k] cm out. */
     fun mouth(k: Double): Vec3 {
@@ -196,12 +211,11 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val night = c.p.night
             if (o.posture != 3 && o.pos.distanceTo(mouth(0.5)) > 3) {
-                out.seek(mouth(0.5), o.cruiseSpeed, arrive = 1.5, urgency = 0.5)
-                out.hover = true
+                glide(c, out, mouth(0.5), 1.2)
                 return
             }
             // head just inside the mouth by day, deeper at night (the pair shares the burrow)
-            out.place(burrow + inDir * (if (night) 1.5 else 0.2), inDir, Vec3.Y, 3.0)
+            out.place(offRock(burrow + inDir * (if (night) 1.5 else 0.2)), inDir, Vec3.Y, 3.0)
             out.posture = 3
             o.visible = !night
             o.sleeping = night
@@ -236,15 +250,14 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             timer += c.dt
             val s = station
             when (phase) {
-                0 -> { // swim low to the station
-                    out.seek(s, o.cruiseSpeed * 0.8, arrive = 1.2, urgency = 0.3)
-                    out.hover = true
-                    out.ampMul = 0.8
-                    if (o.pos.distanceTo(s) < 2.0 || timer > 25) { phase = 1; timer = 0.0; fwd = horizontalHeading(o.heading, fwd) }
+                0 -> { // glide low over the sand to the station
+                    val d = o.pos.distanceTo(s)
+                    glide(c, out, s)
+                    if (d < 2.0 || timer > 25) { phase = 1; timer = 0.0; fwd = horizontalHeading(o.heading, fwd) }
                 }
                 1 -> { // nose into the sand
                     val head = Vec3(s.x, sand.surfaceY(s.x, s.z) + 0.3, s.z)
-                    out.place(head, Vec3(fwd.x, -0.6, fwd.z).normalized(fwd), Vec3.Y, 5.0)
+                    out.place(offRock(head), Vec3(fwd.x, -0.6, fwd.z).normalized(fwd), Vec3.Y, 5.0)
                     o.mouth = 1.0
                     if (timer >= SCOOP_S) {
                         sand.dig(s.x, s.z, MOUTHFUL_CM3, 1.0)
@@ -255,7 +268,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 2 -> { // hover and sift: cheeks working, gills flared, drifting forward
                     val p = s + fwd * (timer * 0.6)
-                    out.place(Vec3(p.x, hoverY(p.x, p.z), p.z), fwd, Vec3.Y, 3.0)
+                    out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
                     o.mouth = 0.3 + 0.2 * sin(c.t * 9.0)
                     o.gill = 0.8 + 0.2 * sin(c.t * 7.0)
                     o.gillRate = 2.5
@@ -263,7 +276,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 else -> { // expel from the gill openings
                     val p = s + fwd * (chew * 0.6)
-                    out.place(Vec3(p.x, hoverY(p.x, p.z), p.z), fwd, Vec3.Y, 3.0)
+                    out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
                     o.gill = 1.0
                     if (timer >= 0.15 && timer - c.dt < 0.15) {
                         val g = o.pos - o.heading * (0.22 * o.lengthCm)
@@ -277,6 +290,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                     if (timer >= 0.5) {
                         o.gillRate = 1.0
                         left--
+                        val next = Vec3(p.x + fwd.x * 2.0, hoverY(p.x + fwd.x * 2.0, p.z + fwd.z * 2.0), p.z + fwd.z * 2.0)
+                        // the shuffle would run it into the rock foot: this station is done
+                        if (c.rock.sdf.dist(next) < 1.5) left = 0
                         if (left > 0) {
                             // shuffle on a little and take the next mouthful
                             station = Vec3(p.x + fwd.x * c.rng.range(0.5, 2.0), 0.0, p.z + fwd.z * c.rng.range(0.5, 2.0)).let { q ->
@@ -308,12 +324,11 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             timer += c.dt
             when (phase) {
                 0 -> {
-                    out.seek(mouth(0.5), o.cruiseSpeed, arrive = 1.0)
-                    out.hover = true
+                    glide(c, out, mouth(0.5))
                     if (o.pos.distanceTo(mouth(0.5)) < 2.0 || timer > 30) { phase = 1; timer = 0.0 }
                 }
                 1 -> { // in under the rock, digging
-                    out.place(burrow + inDir * 1.2, inDir, Vec3.Y, 4.0)
+                    out.place(offRock(burrow + inDir * 1.2), inDir, Vec3.Y, 4.0)
                     out.posture = 3
                     o.mouth = 1.0
                     if (timer > 2.0 + 2.0 * c.rng.nextDouble()) {
@@ -327,13 +342,12 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 2 -> { // carry it out
                     o.mouth = 1.0
-                    out.seek(dump, o.cruiseSpeed * 0.8, arrive = 1.0, urgency = 0.4)
-                    out.hover = true
+                    glide(c, out, dump)
                     if (o.pos.distanceTo(dump) < 1.8 || timer > 10) { phase = 3; timer = 0.0 }
                 }
                 else -> { // spit
                     o.mouth = 1.0
-                    out.seek(dump, 0.5, arrive = 1.0)
+                    glide(c, out, dump, 0.1)
                     out.pitchBias = -0.4
                     if (timer > 0.5) {
                         c.sim.depositSand(dump, MOUTHFUL_CM3 * 1.5)
@@ -344,6 +358,21 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                     }
                 }
             }
+        }
+    }
+
+    /** Startle: a flinch away, then a dash low over the sand into the burrow mouth (kinematic like its other moves, so it can reach the mouth under the rock). */
+    inner class BurrowDash : Flee(this@DiamondGobyBrain, { _, _ -> mouth(0.5) }, "Diving into its burrow") {
+        override fun update(c: Ctx, out: SteerIntent) {
+            super.update(c, out)
+            val burst = o.burstSpeed / max(o.cruiseSpeed, 0.1)
+            val from = out.fleeFrom
+            out.target = null; out.hover = false; out.fleeFrom = null
+            if (from != null) {
+                // the flinch: a burst straight away from the threat, along the bed
+                val away = horizontalHeading(o.pos - from, o.heading)
+                glide(c, out, o.pos + away * 10.0, burst)
+            } else glide(c, out, mouth(0.5), 0.7 * burst)
         }
     }
 

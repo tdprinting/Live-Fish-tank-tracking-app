@@ -57,6 +57,19 @@ object Compatibility {
                     "Diamond gobies live in mated pairs; an extra one will be chased off the sand.")
             }
         }
+        if (kind == BrainKind.LEOPARD_WRASSE) {
+            // research video fish_leopard_wrasse: sleeps buried, lives on pods, newcomers hide for days, bullied by hawkfish/dottybacks
+            out += CompatibilityWarning("leopard_wrasse_care", CompatibilityWarning.Severity.INFO,
+                "Sleeps buried in the sand and lives on the tank's pods: it needs 5–8 cm of fine sand and a mature tank. A new one may stay in the sand for days.")
+            if (others.any { it == BrainKind.HAWK || it == BrainKind.DOTTYBACK }) {
+                out += CompatibilityWarning("leopard_wrasse_bullies", CompatibilityWarning.Severity.INFO,
+                    "Hawkfish and dottybacks may chase a newly added leopard wrasse; it hides in the sand until they settle.")
+            }
+            if (others.count { it == BrainKind.LEOPARD_WRASSE } >= 1) {
+                out += CompatibilityWarning("leopard_wrasse_pair", CompatibilityWarning.Severity.WARN,
+                    "Leopard wrasses change sex: keep one, or one male with females in a large tank. Two males fight.")
+            }
+        }
         val minV = LifeCycle.minVolumeL(kind)
         if (minV > 0 && volumeL > 0 && volumeL < minV) {
             out += CompatibilityWarning("${kind.name.lowercase()}_tank_size", CompatibilityWarning.Severity.WARN,

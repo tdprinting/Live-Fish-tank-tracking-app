@@ -18,6 +18,9 @@ object DefaultStock {
         LivestockSeed("salarias_fasciatus", "Mower", 10.0, id = "lawnmower"),
         LivestockSeed("ecsenius_stigmatura", "Peeker", 5.5, id = "tailspot"),
         LivestockSeed("pseudochromis_indigo", "Indigo", 6.0, id = "dottyback"),
+        // owner, 2026-10: the two fish that were not in the sim yet (research video fish_diamond_goby, fish_leopard_wrasse)
+        LivestockSeed("valenciennea_puellaris", "Diamond", 10.0, id = "diamond_goby"),
+        LivestockSeed("macropharyngodon_bipartitus", "Leopard", 8.5, id = "leopard_wrasse"),
     )
 
     val inverts = listOf(
