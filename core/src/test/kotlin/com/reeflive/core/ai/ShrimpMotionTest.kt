@@ -4,6 +4,7 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.TestTank
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,10 +38,14 @@ class ShrimpMotionTest {
         // a fish darting past within a few cm
         s.advance(2.0, behaviorDt = 0.1) { tang.pos = shrimp.pos + Vec3(3.0, -2.0, 0.0); tang.vel = Vec3(tang.cruiseSpeed * 2, 0.0, 0.0) }
         assertTrue("display ${shrimp.clawDisplay}", shrimp.clawDisplay > 0.6)
+        // the signal reaches the renderer as limb entry 0, z (ShrimpLimbs)
+        val shown = s.snapshot().organisms.first { it.id == shrimp.id }
+        assertEquals(4, shown.limbs.size)
+        assertTrue("pose signal ${shown.limbs[2]}", shown.limbs[2] > 0.5)
         s.advance(5.0, behaviorDt = 0.1) { tang.pos = Vec3(20.0, 45.0, 25.0); tang.vel = Vec3.ZERO }
         assertTrue("relaxed ${shrimp.clawDisplay}", shrimp.clawDisplay < 0.2)
         val pose = s.snapshot().organisms.first { it.id == shrimp.id }
-        assertTrue(pose.limbSignal < 0.2)
+        assertTrue(pose.limbs[2] < 0.2)
     }
 
     @Test
@@ -61,6 +66,6 @@ class ShrimpMotionTest {
         assertTrue("strides $stepped for $moved cm", stepped <= 1.2 * moved / (0.25 * o.lengthCm) + 1)
         if (moved > 5) assertTrue("strides $stepped for $moved cm", stepped > 0.2 * moved / (0.25 * o.lengthCm))
         val pose = s.snapshot().organisms.first { it.id == o.id }
-        assertTrue(pose.walkPhase >= 0f && pose.motionMode == 2)
+        assertTrue(pose.limbs[0] in 0f..1f && pose.limbs[1] in 0f..1f && pose.motionMode == 2)
     }
 }

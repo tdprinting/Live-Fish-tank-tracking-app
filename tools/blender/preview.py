@@ -89,10 +89,13 @@ def camera(loc, target, lens=50, ortho=None):
     return o
 
 
-def import_glb(path):
+def import_glb(path, limb_pose=None):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
+    # limb-rigged crawlers (brittle star, Sally Lightfoot): pose the limbs the way fish.vert does in the app
+    import limbpose
+    limbpose.pose_imported(new, limb_pose)
     # COLOR_0 is data (not color): stop the importer from multiplying it into base color
     # -> set it to white so the multiply is an identity
     for o in new:

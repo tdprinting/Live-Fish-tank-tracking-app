@@ -15,12 +15,19 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp tail-flip)
-uniform vec4 uLimb;        // shrimp: x stride phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
+// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send one entry, uLimb[0] = (x stride
+// phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
+// limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae.
+// The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
+// along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
+uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
+uniform vec4 uLimb[10];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs)
+uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
@@ -53,6 +60,100 @@ void sampleSpine(float u, out vec3 pos, out vec4 q) {
     q = normalize(mix(qa, qb, t));
 }
 
+vec3 rotAxis(vec3 v, vec3 a, float ang) {
+    float c = cos(ang), s = sin(ang);
+    return v * c + cross(a, v) * s + a * dot(a, v) * (1.0 - c);
+}
+
+// Brittle star arm direction angles at s (0 root .. 1 tip): yaw offset from the rest direction (rad, + = toward the
+// model's left, -Z) and pitch (rad, + = tip up). Base swing with a lagging distal part, a bend wave travelling root ->
+// tip, tip curl (loops round food when feeding), and coiling when the arm is drawn in (reach -> 0).
+void starAngles(int k, float s, out float yaw, out float pitch) {
+    vec4 A = uLimb[k];
+    vec4 X = uLimb[k + 5];
+    float alt = (k % 2 == 0) ? 1.0 : -1.0;
+    float coil = 1.0 - clamp(A.w, 0.0, 1.0);
+    yaw = A.y * (1.0 - 0.55 * s) + X.y * s * sin(2.0 * PI * (1.3 * s - A.x))
+        + X.z * smoothstep(0.5, 1.0, s) * 2.0 + alt * coil * 4.0 * s;
+    pitch = A.z * s * (0.4 + 0.6 * s) - coil * 0.15 * s;
+}
+
+vec3 starDir(float psi, float phi) {
+    return vec3(cos(phi) * cos(psi), sin(phi), -cos(phi) * sin(psi));
+}
+
+// Poses one brittle star arm vertex: the rest arm is straight from the pivot along a0 = atan(-P.z, P.x); the bent
+// centreline is integrated from the direction angles, the cross-section rides on its frame. Vertices past the arm's
+// current length (autotomy, regrowth) collapse onto the stump.
+void starArm(int k, inout vec3 local, inout vec3 n) {
+    vec4 P = uLimbPivot[k];
+    float a0 = atan(-P.z, P.x);
+    vec3 d0 = vec3(cos(a0), 0.0, -sin(a0));
+    vec3 l0 = vec3(-sin(a0), 0.0, -cos(a0));
+    vec3 off = local - P.xyz;
+    float along = dot(off, d0);
+    float lat = dot(off, l0);
+    float up = off.y;
+    float lenK = clamp(uLimb[k + 5].x, 0.1, 1.0);
+    float s = clamp(aColor.r, 0.0, 1.0);
+    float keep = 1.0 - step(lenK + 0.001, s);
+    s = min(s, lenK);
+    float ax = along - s * P.w;
+    // integrate the centreline (8 midpoint steps)
+    vec3 c = P.xyz;
+    float h = s / 8.0;
+    float yaw, pitch;
+    for (int i = 0; i < 8; i++) {
+        starAngles(k, (float(i) + 0.5) * h, yaw, pitch);
+        c += starDir(a0 + yaw, pitch) * (h * P.w);
+    }
+    c.y = max(c.y, 0.004);
+    starAngles(k, s, yaw, pitch);
+    float psi = a0 + yaw;
+    vec3 T = starDir(psi, pitch);
+    vec3 L = vec3(-sin(psi), 0.0, -cos(psi));
+    vec3 U = cross(T, L);
+    local = c + (T * ax + L * lat + U * up) * keep;
+    n = T * dot(n, d0) + L * dot(n, l0) + U * n.y;
+}
+
+// Poses one Sally Lightfoot limb vertex about its pivot. Legs (k 0..7; uLimb = phase, signed extension stroke, foot
+// lift, tuck): swing in the first half of the step cycle (foot lifted), stance in the second (foot planted while the
+// leg flexes or extends along its length); tuck draws the legs in and down. Chelae (8, 9; uLimb = pick phase,
+// stroke, reach): dip to the rock and come back to the mouth, alternating.
+void crabLimb(int k, inout vec3 local, inout vec3 n) {
+    vec4 P = uLimbPivot[k];
+    vec4 A = uLimb[k];
+    vec3 off = local - P.xyz;
+    if (k < 8) {
+        vec3 d = normalize(vec3(P.x, 0.0, P.z) + vec3(0.0001, 0.0, 0.0));
+        float ph = A.x;
+        float swing = 1.0 - step(0.5, ph);
+        float q = ph * 2.0;
+        float p = (ph - 0.5) * 2.0;
+        float e = swing > 0.5 ? -cos(PI * q) : 1.0 - 2.0 * p;
+        float t = clamp(aColor.r, 0.0, 1.0);
+        float radial = dot(off, d);
+        // extension / flexion along the leg (distal segments move most), drawn in by the tuck
+        off += d * radial * (0.2 * A.y * e * t - 0.3 * A.w * t);
+        vec3 ax = vec3(-d.z, 0.0, d.x);
+        float lift = A.z * swing * sin(PI * q) - 0.12 * A.w;
+        off = rotAxis(off, ax, lift);
+        n = rotAxis(n, ax, lift);
+        // small fore-aft swing of the whole leg
+        float yaw = 0.08 * A.y * sin(2.0 * PI * ph);
+        off = rotAxis(off, vec3(0.0, 1.0, 0.0), yaw);
+        n = rotAxis(n, vec3(0.0, 1.0, 0.0), yaw);
+    } else {
+        float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the rock
+        float down = A.y * 0.5 * w + 0.15 * (A.z - 0.5);
+        off.x += 0.12 * (A.z - 0.5) - 0.07 * A.y * (1.0 - w);
+        off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);
+    }
+    local = P.xyz + off;
+}
+
 void main() {
     vec3 local = aPos;
     vec3 n = aNormal;
@@ -70,8 +171,28 @@ void main() {
         return;
     }
 
-    float u = aColor.a;
     float mode = uMotion.w;
+    if (uLimbOn > 0.5) {
+        // limb-rigged crawler: rigid body at the organism, limbs posed from the sim (no spline skinning)
+        if (part > 2.5) {
+            int k = int(floor(aColor.b * 9.0 + 0.5));
+            if (mode < 1.5) starArm(k, local, n); else crabLimb(k, local, n);
+        } else if (part > 1.5) {
+            vec3 r = local - uEyePivot;
+            float c = cos(uShape.z), s = sin(uShape.z);
+            local = uEyePivot + vec3(c * r.x + s * r.z, r.y, -s * r.x + c * r.z);
+            n = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
+        }
+        vec3 wl = uSpine[0].xyz + qrot(uFrame[0], local * uScale);
+        vWorld = wl;
+        vNormal = normalize(qrot(uFrame[0], n));
+        vUv = aUv;
+        vColor = aColor;
+        gl_Position = uViewProj * vec4(wl, 1.0);
+        return;
+    }
+
+    float u = aColor.a;
     if (mode > 0.5 && mode < 1.5 && part > 2.5) {
         // Brittle star arm rowing (Astley 2012): the arm pointing forward (+X) leads and barely moves; the arm pairs
         // either side make mirrored power strokes in the disc plane, the trailing pair drags. Rotate about the disc.
@@ -125,7 +246,8 @@ void main() {
         r = vec3(c * r.x + s * r.z, r.y, -s * r.x + c * r.z);
         local = pv + r;
         n = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
-    } else if (mode > 1.5 && aColor.r > 0.06) {
+    } else if (mode > 1.5 && mode < 2.5 && aColor.r > 0.06) {
+        vec4 S = uLimb[0];   // ShrimpLimbs: stride phase, stepping, rock / claw signal, grooming
         // Shrimp limbs (research 17). COLOR_0.r = limb class / 8, .g = pair / 8, .b = hinge (0 base .. 1 tip).
         float cls = floor(aColor.r * 8.0 + 0.5);
         float pr = floor(aColor.g * 8.0 + 0.5);
@@ -134,9 +256,9 @@ void main() {
         if (cls < 1.5) {
             // walking legs: alternating gait, neighbours and opposite legs half a stride apart; the foot swings
             // forward lifted and pushes back planted. Idle legs shift their footing now and then.
-            float ph = 2.0 * PI * (uLimb.x + 0.5 * mod(pr + (side > 0.0 ? 1.0 : 0.0), 2.0));
-            local.x += h * (0.05 * uLimb.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
-            local.y += h * 0.03 * uLimb.y * max(cos(ph), 0.0);
+            float ph = 2.0 * PI * (S.x + 0.5 * mod(pr + (side > 0.0 ? 1.0 : 0.0), 2.0));
+            local.x += h * (0.05 * S.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
+            local.y += h * 0.03 * S.y * max(cos(ph), 0.0);
         } else if (cls < 2.5) {
             // picking legs (P1-P2): alternate left/right strokes to the mouth while feeding or cleaning; the
             // front pair rocks rapidly back and forth as the skunk cleaner's signal; P1 combs the antenna in grooming
@@ -147,26 +269,26 @@ void main() {
             local.z -= side * h * 0.03 * pick * k;
             float rw = pr < 0.5 ? 1.0 : 0.35;
             float rock = sin(2.0 * PI * 3.0 * time);
-            local.x += h * 0.05 * uLimb.z * rw * rock;
-            local.y += h * 0.025 * uLimb.z * rw * abs(rock);
-            local.x += h * 0.03 * uLimb.w * (pr < 0.5 ? 1.0 : 0.0) * sin(2.0 * PI * 1.4 * time + side);
-            local.y += h * 0.02 * uLimb.w * (pr < 0.5 ? 1.0 : 0.0);
-            local.x += h * 0.012 * uLimb.y * sin(2.0 * PI * uLimb.x + pr * PI);
+            local.x += h * 0.05 * S.z * rw * rock;
+            local.y += h * 0.025 * S.z * rw * abs(rock);
+            local.x += h * 0.03 * S.w * (pr < 0.5 ? 1.0 : 0.0) * sin(2.0 * PI * 1.4 * time + side);
+            local.y += h * 0.02 * S.w * (pr < 0.5 ? 1.0 : 0.0);
+            local.x += h * 0.012 * S.y * sin(2.0 * PI * S.x + pr * PI);
         } else if (cls < 3.5) {
             // banded cheliped: held raised; it swings up and out toward an intruder (display), draws in to feed
-            float dsp = uLimb.z;
+            float dsp = S.z;
             local.z += side * h * 0.12 * dsp;
             local.y += h * (0.07 * dsp + 0.008 * sin(time * 0.9 + side));
             local.x -= h * 0.05 * max(uPick - 0.3, 0.0) * (0.5 + 0.5 * sin(2.0 * PI * 1.2 * time + side * 1.5));
-            local.y -= h * 0.012 * uLimb.y * sin(2.0 * PI * uLimb.x);
+            local.y -= h * 0.012 * S.y * sin(2.0 * PI * S.x);
         } else if (cls < 4.5) {
             // long antennae: slow whip-like sweeps that travel to the tip, faster when the appendage phase runs
             // (advertising, cleaning); lash with the skunk cleaner's leg rock; grooming draws one down to the mouth
             float h2 = h * h;
             float ph = uSwim.w + pr * 2.1 + side * 1.3;
-            local.y += h2 * (0.06 * sin(ph - h * 3.0) + 0.1 * uLimb.z * sin(2.0 * PI * 3.0 * time - h * 6.0 + side));
+            local.y += h2 * (0.06 * sin(ph - h * 3.0) + 0.1 * S.z * sin(2.0 * PI * 3.0 * time - h * 6.0 + side));
             local.z += h2 * 0.07 * cos(0.7 * ph - h * 2.5);
-            float g = uLimb.w * step(0.0, side);
+            float g = S.w * step(0.0, side);
             local.y -= g * h * 0.25;
             local.x -= g * h * 0.3 * (0.6 + 0.4 * sin(2.0 * PI * 0.8 * time));
             local.z -= g * side * h * 0.2;
@@ -176,7 +298,7 @@ void main() {
             float f = pow(max(sin(2.0 * PI * 1.1 * time + pr * 2.0 + side * 0.9), 0.0), 12.0);
             local.y -= h * 0.05 * f;
             local.z += h * 0.02 * sin(uSwim.w * 0.8 + pr + side);
-            local.y -= uLimb.w * (1.0 - step(0.0, side)) * h * 0.08;
+            local.y -= S.w * (1.0 - step(0.0, side)) * h * 0.08;
         } else if (cls < 6.5) {
             // pleopods: metachronal beat, the hindmost pair leads and the wave runs forward (uMotion: phase, amp)
             float ph = 2.0 * PI * (uMotion.x + 0.2 * pr);
@@ -184,7 +306,7 @@ void main() {
             local.y += h * 0.01 * uMotion.y * cos(ph);
         } else {
             // third maxillipeds: a slow idle flutter, quick picking strokes when feeding or grooming
-            float a = 0.004 + 0.02 * max(uPick, uLimb.w);
+            float a = 0.004 + 0.02 * max(uPick, S.w);
             local.y += h * a * sin(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
             local.x -= h * 0.6 * a * cos(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
         }
