@@ -32,6 +32,8 @@ object TimelapseFork {
             lights = lights,
         )
         dst.predationEnabled = src.predationEnabled
+        dst.crabLiveFishScenario = src.crabLiveFishScenario
+        dst.asterinaCorallivoryScenario = src.asterinaCorallivoryScenario
         val w = src.water
         dst.water.flowStrength = w.flowStrength; dst.water.heaterWorking = w.heaterWorking
         dst.water.heaterStuckOn = w.heaterStuckOn; dst.water.heaterSetC = w.heaterSetC; dst.water.ato = w.ato

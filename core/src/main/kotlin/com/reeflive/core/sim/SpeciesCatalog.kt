@@ -68,7 +68,7 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.CARDINAL -> base.copy(common = "Pajama cardinalfish", maxLengthCm = 8.0, typicalAdultCm = 6.0, depthRatio = 0.46, activity = "CREPUSCULAR",
                     locomotion = Locomotion("LABRIFORM", 0.8, 4.0, 2.0, 180.0, 0.9, 0.03, 0.08), zone = Zone(0.3, 0.6, 0.4, 0.6),
                     temperament = Temperament(0.0, 0.3, 0.2, 0.8), diet = listOf("MYSIS", "FLAKE", "PELLET", "PODS"), hardiness = 0.8, homeRadiusCm = 25.0, model = "models/cardinal.glb")
-                BrainKind.WRASSE -> base.copy(common = "Bluestreak cleaner wrasse", maxLengthCm = 11.0, depthRatio = 0.21, massCoeff = 0.012,
+                BrainKind.WRASSE -> base.copy(common = "Bluestreak cleaner wrasse", maxLengthCm = 14.0, depthRatio = 0.21, massCoeff = 0.012,
                     locomotion = Locomotion("LABRIFORM", 1.6, 6.0, 5.0, 300.0, 0.8, 0.05, 0.1), zone = Zone(0.1, 0.55, 0.3, 0.6),
                     temperament = Temperament(0.1, 0.8, 0.8, 0.3), diet = listOf("PARASITES", "PODS", "FLAKE", "MYSIS"), feedsPerDay = 3.0,
                     hardiness = 0.5, starvationDays = 28.0, iridescence = 0.5, homeRadiusCm = 30.0, model = "models/wrasse.glb")
@@ -80,7 +80,7 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("ANGUILLIFORM", 0.8, 4.0, 1.6, 160.0, 0.7, 0.06, 0.1), zone = Zone(0.0, 0.25, 0.2, 0.9),
                     temperament = Temperament(0.05, 0.25, 0.4, 0.75), diet = listOf("PODS", "MYSIS", "FLAKE", "PELLET"), feedsPerDay = 3.0,
                     hardiness = 0.85, homeRadiusCm = 15.0, iridescence = 0.05, model = "models/engineer_goby.glb")
-                BrainKind.HAWK -> base.copy(common = "Falco hawkfish", maxLengthCm = 7.0, depthRatio = 0.4,
+                BrainKind.HAWK -> base.copy(common = "Falco hawkfish", maxLengthCm = 8.0, depthRatio = 0.4,
                     locomotion = Locomotion("LABRIFORM", 0.4, 3.0, 2.0, 200.0, 0.9, 0.03, 0.08), zone = Zone(0.05, 0.6, 0.1, 0.8),
                     temperament = Temperament(0.5, 0.7, 0.5, 0.3), diet = listOf("MYSIS", "PELLET", "FLAKE"), hardiness = 0.6, homeRadiusCm = 40.0, model = "models/hawkfish.glb")
                 BrainKind.LAWNMOWER_BLENNY -> base.copy(common = "Lawnmower blenny", maxLengthCm = 13.0, typicalAdultCm = 11.0, depthRatio = 0.18,

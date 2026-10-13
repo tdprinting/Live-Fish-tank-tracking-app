@@ -46,6 +46,11 @@ class SteerIntent {
     var surfaceOffset = 0.5
     /** Crabs: crawl with the body at right angles to the direction of travel. */
     var sideways = false
+    /**
+     * Radial crawlers (brittle star): > 0 = number of arms. The body never turns; the travel direction is led by
+     * whichever arm points closest to it, so the heading jumps by whole arm steps (research 11 §4, Astley 2012).
+     */
+    var armGait = 0
     /** Spline override polyline (den / hole). */
     var splineOverride: List<Vec3>? = null
     var posture = 0
@@ -55,7 +60,7 @@ class SteerIntent {
         target = null; speed = 0.0; arriveRadius = 2.0; urgency = 0.0; faceDir = null; hover = false; wander = 0.0
         fleeFrom = null; allowGlass = false; separation = 1.0; waddleAmp = 0.0; waddleHz = 1.3; pitchBias = 0.0
         rollExtra = 0.0; ampMul = 1.0; pectoral = null; tailMul = 1.0; kinematic = false; kinPos = null; kinHeading = null
-        kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; splineOverride = null
+        kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; armGait = 0; splineOverride = null
         posture = 0; ignoreRock = false
     }
 

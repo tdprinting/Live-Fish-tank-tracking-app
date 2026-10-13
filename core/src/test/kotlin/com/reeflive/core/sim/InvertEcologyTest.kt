@@ -134,12 +134,14 @@ class InvertEcologyTest {
     }
 }
 
+/** Research 11 §7: organ-pipe corallivory is an opt-in sandbox scenario (SetParam "asterina_coral"), off by default. */
 class AsterinaOrganPipeTest {
     private fun star(i: Int) = LivestockSeed("asterina_sp", "Asterina #$i", 1.0, id = "ast$i")
     private val organPipe = LivestockSeed("tubipora_musica", "Organ pipe", placement = "coral_organpipe_kenya_base", id = "organpipe")
 
-    private fun tissueAfter(stars: Int, days: Double): Pair<Double, Simulation> {
+    private fun tissueAfter(stars: Int, days: Double, scenario: Boolean = true): Pair<Double, Simulation> {
         val s = TestTank.sim(listOf(organPipe) + (1..stars).map(::star), seed = 6L)
+        if (scenario) s.enqueue(Command.SetParam("asterina_coral", 1.0))
         s.advanceAbstract(days * 86400)
         return s.corals.first { it.id == "organpipe" }.tissue to s
     }
@@ -154,8 +156,17 @@ class AsterinaOrganPipeTest {
     }
 
     @Test
+    fun corallivoryIsOffByDefault() {
+        val (tissue, s) = tissueAfter(Simulation.ASTERINA_CAP, 5.0, scenario = false)
+        assertTrue("default: no organ-pipe damage ($tissue)", tissue > 0.95)
+        assertEquals(0.0, s.invertEcology.asterinaBitten, 0.0)
+        assertEquals(0.0, s.paramValue("asterina_coral"))
+    }
+
+    @Test
     fun grazingRetractsThePolypsAndColonyCanDie() {
         val s = TestTank.sim(listOf(organPipe) + (1..4).map(::star), seed = 6L)
+        s.asterinaCorallivoryScenario = true
         s.advanceAbstract(2 * 3600.0)
         val c = s.corals.first { it.id == "organpipe" }
         assertTrue("disturbed while grazed: ${c.disturb}", c.disturb >= 0.4)
@@ -167,6 +178,7 @@ class AsterinaOrganPipeTest {
     fun otherCoralsAreLeftAlone() {
         val kenya = LivestockSeed("capnella_sp", "Kenya", placement = "coral_kenya", id = "kenya")
         val s = TestTank.sim(listOf(organPipe, kenya) + (1..4).map(::star), seed = 6L)
+        s.asterinaCorallivoryScenario = true
         s.advanceAbstract(5 * 86400.0)
         val k = s.corals.first { it.id == "kenya" }
         assertTrue("kenya ${k.tissue}", k.tissue > 0.9)

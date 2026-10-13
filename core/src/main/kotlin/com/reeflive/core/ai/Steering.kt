@@ -234,7 +234,14 @@ class Steering(private val c: Ctx) {
             val side = nn.cross(hd).normalized(o.heading)
             hd = if (side.dot(o.heading) >= 0) side else side * -1.0
         }
-        o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
+        if (it.armGait > 0 && v.lengthSq() > 1e-6) {
+            // lead-arm switching: snap to the arm direction nearest the travel direction (a whole-arm step looks identical)
+            val h0 = o.heading.rejectFrom(nn).normalized(hd)
+            val step = 2 * PI / it.armGait
+            val sgn = if (((h0 cross hd) dot nn) >= 0) 1.0 else -1.0
+            val k = kotlin.math.round(Vec3.angle(h0, hd) * sgn / step)
+            o.heading = Vec3.rotateAbout(h0, nn, k * step).normalized(o.heading)
+        } else o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
         o.up = (it.upOverride ?: nn).normalized(Vec3.Y)
     }
 
