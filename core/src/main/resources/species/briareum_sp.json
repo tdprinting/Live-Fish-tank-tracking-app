@@ -60,8 +60,8 @@
   "model": "models/gsp_mat.glb",
   "variantModels": {"neon": "models/gsp_neon.glb"},
   "colors": {
-    "primary": "#7DFF4F",
-    "secondary": "#7A4E9C"
+    "primary": "#B4F53C",
+    "secondary": "#4A2E36"
   },
   "brain": "coral_polyp",
   "coral": {
@@ -70,15 +70,16 @@
     "flow": "HIGH",
     "growth": "Very fast",
     "aggression": "Overgrows neighbours",
-    "fluorescence": 0.8
+    "fluorescence": 0.9
   },
   "careLevel": "Easy",
   "reefSafe": "Yes",
   "dietSummary": "Photosynthetic.",
-  "temperamentSummary": "Encrusting mat that advances several cm per month.",
+  "temperamentSummary": "Long-polyp form: a dense dome of long, curling, fluorescent lime tentacles on short brown stalks over a brown-maroon base; spreads as an encrusting mat several cm per month.",
   "careNotes": [
     "Keep a 10 cm gap to other corals.",
-    "Retracts in stagnant water."
+    "Retracts in stagnant water.",
+    "Tee's colonies are the long-polyp form (photos 2026-10-13); polyps grow longer under dimmer light and pull fully into the mat at night or when touched."
   ],
   "activity": "DIURNAL",
   "locomotion": {

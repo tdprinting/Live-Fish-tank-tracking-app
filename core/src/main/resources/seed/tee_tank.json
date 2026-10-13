@@ -30,6 +30,10 @@
     {"speciesId": "discosoma_sp", "nickname": "Green shroom", "placement": "shroom_front_left"},
     {"speciesId": "rhodactis_sp", "nickname": "Hairy shrooms", "placement": "shroom_hairy", "notes": "Hairy green mushroom cluster on the arch ledge; hosts the clowns."},
     {"speciesId": "tubipora_musica", "nickname": "Organ pipe", "placement": "organpipe_kenya_base"},
+    {"speciesId": "sarcophyton_sp", "nickname": "Toadstool", "placement": "toadstool_front", "verified": false, "notes": "Seen in Tee's photo 2026-10-13 (p04): pale stalk, golden-tan cap. Position estimated."},
+    {"speciesId": "lobophytum_sp", "nickname": "Pink leather", "placement": "leather_pink_front", "verified": false, "notes": "Photo 2026-10-13 (p04): lavender plate with pink polyp pores beside the toadstool; genus tentative."},
+    {"speciesId": "sinularia_sp", "nickname": "Finger leather", "placement": "finger_leather", "verified": false, "notes": "Photo 2026-10-13 (p14): tan finger leather, top left. Position estimated."},
+    {"speciesId": "amplexidiscus_fenestrafer", "nickname": "Elephant ear", "placement": "elephant_ear", "verified": false, "notes": "Photo 2026-10-13 (p05): big folded corallimorph near the surface; carpet anemone not ruled out. Can eat small fish."},
     {"speciesId": "gracilaria_sp", "nickname": "Red macro", "placement": "macro_back_left"}
   ],
   "equipment": [
