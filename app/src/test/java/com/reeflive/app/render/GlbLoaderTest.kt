@@ -85,6 +85,21 @@ class GlbLoaderTest {
         assertTrue(eq.materials.any { it.emissive.any { e -> e > 1.5f } })
     }
 
+    @Test fun reefDetails() {
+        // backlog 2026-10-13 static details (ASSETS.md §4.1), drawn as a scene model by drawStatic
+        val d = load("reef_details.glb")
+        val byName = d.nodes.associateBy { it.name }
+        val parts = mapOf("CorallineLow" to "body", "EncrustYellow" to "body", "MushroomsRed" to "body",
+            "MagCleaner" to "equipment", "MagCleanerOuter" to "equipment", "FilmBackGlass" to "backglass")
+        for ((name, part) in parts) assertEquals(name, part, byName.getValue(name).part)
+        // the coralline coat is an alpha-tested layer (opaque pass); the glass film is blended (transparent pass)
+        assertEquals("MASK", d.materials[byName.getValue("CorallineLow").primitives[0].material].alphaMode)
+        assertTrue(d.materials[byName.getValue("FilmBackGlass").primitives[0].material].blended)
+        // the long hair tufts and the glass strands ride the algae-card path (sway + bloom growth)
+        val algae = load("algae_tufts.glb")
+        for (n in listOf("LongTufts", "GlassStrands")) assertEquals("card", algae.nodes.first { it.name == n }.part)
+    }
+
     @Test fun rejectsGarbage() {
         try { GlbLoader.parse(ByteArray(64), "junk"); fail() } catch (_: GlbFormatException) {}
     }
