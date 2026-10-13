@@ -143,6 +143,8 @@ class AlgaeModel(config: TankConfig) {
     val active = BooleanArray(ng) { true }
     /** Film grazed by copepods and micro-snails, g DW per day ([MicrofaunaModel], research 10 §3.1 food feedback). */
     var podGrazeGPerDay = 0.0
+    /** Extra cyanobacteria die-back per day from [BacteriaModel] (an antibiotic in the water; research 18). */
+    var cyanoExtraDeathPerDay = 0.0
 
     // ---- outputs of the last step ----
     /** mg N taken from / returned to the water in the last step (WaterSim nitrogen accounting). */
@@ -289,6 +291,7 @@ class AlgaeModel(config: TankConfig) {
         glassMask.copyFrom(o.glassMask); o.glassNet.copyInto(glassNet)
         deadN = o.deadN; deadP = o.deadP; deadDw = o.deadDw; darkH = o.darkH; docOverride = o.docOverride
         oldN = o.oldN; oldP = o.oldP; oldDw = o.oldDw
+        cyanoExtraDeathPerDay = o.cyanoExtraDeathPerDay
         initialized = o.initialized
     }
 
@@ -361,6 +364,7 @@ class AlgaeModel(config: TankConfig) {
             } else d += 0.2 * ((pr.phMin - s.ph) / 0.3).coerceIn(0.0, 1.0)
             if (ppt < pr.pptMin - 3 || ppt > 58) d += 0.3
             if (g == AlgaeGroup.CYANO && p < 0.01) d += 0.2
+            if (g == AlgaeGroup.CYANO) d += cyanoExtraDeathPerDay
             // nutrients back and competitors present: dinos lose (A5 0.3/d, raised so a mature tank holds them at the seed)
             if (g == AlgaeGroup.DINOS && !uln) d += DINO_RETURN_DEATH * ci
             dBase[gi] = d

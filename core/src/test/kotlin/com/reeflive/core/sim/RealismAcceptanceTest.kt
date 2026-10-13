@@ -53,7 +53,11 @@ class RealismAcceptanceTest {
      * spontaneously above 28 °C (SIMULATION §3.4), which would kill the stock before day 60 and
      * confound the measurement, so these runs clear it.
      */
-    private fun Simulation.noIch() { for (o in organisms) if (o.disease == Disease.ICH) { o.disease = null; o.diseaseStage = 0.0 } }
+    /**
+     * Keeps a long run about stress and acclimation alone: clears ich and, since research 18's Vibrio layer makes weeks
+     * at 31 °C a bacterial-infection risk too (BacteriaModelTest covers that), opportunistic bacterial infections.
+     */
+    private fun Simulation.noIch() { for (o in organisms) if (o.disease == Disease.ICH || o.disease == Disease.BACTERIAL) { o.disease = null; o.diseaseStage = 0.0 } }
 
     private fun chases(ev: List<SimEvent>) = ev.filterIsInstance<SimEvent.Chase>().filter { it.bout != "QUIVER_YIELD" }
 

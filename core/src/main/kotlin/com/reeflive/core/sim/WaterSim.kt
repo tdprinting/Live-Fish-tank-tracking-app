@@ -15,6 +15,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     val algae = AlgaeModel(config)
     /** Pods, plankton and the other microfauna (research 10 Part 2). */
     val micro = MicrofaunaModel(config)
+    /** Bacterial guilds: nitrifier inhibitors, carbon-fed heterotrophs, anaerobes, pathogens (research 18). */
+    val bacteria = BacteriaModel(config)
 
     // ---- external drivers (set by Simulation before each step) ----
     var lightIntensity = 0.0
@@ -71,7 +73,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     /** Allelochemical release by the soft corals this hour (index/h), set by Simulation from colony sizes (03 D). */
     var alleloSourcePerHour = 0.0
     /** Fraction of the light reaching the corals through DOC-yellowed water (1 = clear; carbon clears it). */
-    val clarity: Double get() = 1 - 0.2 * ((s.doc - 3.0) / 5.0).coerceIn(0.0, 1.0)
+    val clarity: Double get() = (1 - 0.2 * ((s.doc - 3.0) / 5.0).coerceIn(0.0, 1.0)) * (1 - 0.15 * bacteria.cloudiness)
     /** Carbon adsorption efficiency: fresh 1, exhausted after ~3 weeks (01 §3.5 change every 2-4 weeks). */
     val carbonEfficiency: Double get() = if (carbon) exp(-carbonAgeH / (24 * 14.0)) else 0.0
     /** NO3 taken up by the display macro and the refugium in the last step, ppm/day. */
@@ -102,6 +104,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         macroalgae(h)
         algae(h)
         microfauna(h)
+        bacteria(h)
         gases(h)
         s.nh3Free = ChemFns.freeNh3(s.nh3Total, s.ph, s.tempC)
         s.lightPar = lightIntensity
@@ -152,7 +155,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.sg = 1 + salt / v1
         s.alk *= k; s.ca *= k; s.mg *= k; s.k *= k; s.sr *= k; s.i *= k; s.copper *= k
         s.nh3Total *= k; s.no2 *= k; s.no3 *= k; s.po4 *= k; s.detritus *= k; s.silicate *= k
-        s.doc *= k; s.allelo *= k; sockLoad *= k
+        s.doc *= k; s.allelo *= k; sockLoad *= k; s.h2s *= k
+        bacteria.concentrate(k)
         pendingFeedTan *= k; pendingFeedPo4 *= k
         s.volumeL = v1
     }
@@ -169,12 +173,17 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         nInputMg += excretion * N_TAN * v
         s.nh3Total += excretion + feedRelease + detritusDecay
         // Nitrification (saturating Monod), limited by available substrate
-        val n1 = min(K_AOB * s.bacteriaAob * s.nh3Total / (s.nh3Total + KS) * tF * h, s.nh3Total)
+        // antibiotic / copper inhibition from the bacteria layer (1 when none; research 18 §1.4)
+        val fA = bacteria.aobFactor
+        val fN = bacteria.nobFactor
+        val n1 = min(K_AOB * s.bacteriaAob * s.nh3Total / (s.nh3Total + KS) * tF * fA * h, s.nh3Total)
         s.nh3Total -= n1
         s.no2 += n1 * NO2_PER_NH3
-        val n2 = min(K_NOB * s.bacteriaNob * s.no2 / (s.no2 + KS) * tF * h, s.no2)
+        val n2 = min(K_NOB * s.bacteriaNob * s.no2 / (s.no2 + KS) * tF * fN * h, s.no2)
         s.no2 -= n2
         s.no3 += n2 * NO3_PER_NO2
+        bacteria.aobPpmPerDay += (n1 / h.coerceAtLeast(1e-9) * 24 - bacteria.aobPpmPerDay) * min(1.0, h / 6)
+        bacteria.nobPpmPerDay += (n2 / h.coerceAtLeast(1e-9) * 24 - bacteria.nobPpmPerDay) * min(1.0, h / 6)
         // O2 consumed by decomposition (BOD ≈ 20 mg O2 per mg TAN-equivalent) and nitrification (research 05 §11)
         oxygenDemandPerHour = (detritusDecay * BOD_PER_TAN + n1 * 3.4 + n2 * 0.35) / h.coerceAtLeast(1e-9)
         // Stronger flow keeps detritus suspended for the filter/skimmer (research 05 §16)
@@ -190,8 +199,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         val sA = s.nh3Total / (s.nh3Total + KS)
         val sN = s.no2 / (s.no2 + KS)
         val kill = if (s.doMgL < 2 || s.tempC > 35) 0.029 else 0.0   // 50 %/day
-        s.bacteriaAob += (MU_AOB * s.bacteriaAob * (1 - s.bacteriaAob) * sA * tF - B_DECAY * s.bacteriaAob * (1 - sA) - kill * s.bacteriaAob) * h
-        s.bacteriaNob += (MU_NOB * s.bacteriaNob * (1 - s.bacteriaNob) * sN * tF - B_DECAY * s.bacteriaNob * (1 - sN) - kill * s.bacteriaNob) * h
+        s.bacteriaAob += (MU_AOB * s.bacteriaAob * (1 - s.bacteriaAob) * sA * tF * fA - B_DECAY * s.bacteriaAob * (1 - sA) - kill * s.bacteriaAob) * h
+        s.bacteriaNob += (MU_NOB * s.bacteriaNob * (1 - s.bacteriaNob) * sN * tF * fN - B_DECAY * s.bacteriaNob * (1 - sN) - kill * s.bacteriaNob) * h
         s.bacteriaAob = s.bacteriaAob.coerceIn(B_MIN, 1.0)
         s.bacteriaNob = s.bacteriaNob.coerceIn(B_MIN, 1.0)
     }
@@ -351,6 +360,19 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         }
     }
 
+    /**
+     * Bacterial guilds (research 18). AOB/NOB growth stays in [nitrogen]; this adds AOA, carbon-fed heterotrophs and
+     * their N/P uptake, the anaerobes' extra denitrification and H2S, and pathogens. Its N flows enter the balance like
+     * the algae's: uptake into cells is export, dead cells back to detritus are input, N2 gas is export.
+     */
+    private fun bacteria(h: Double) {
+        bacteria.step(s, h, flowEff, skimmer, uv, algae)
+        oxygenDemandPerHour += bacteria.o2DemandPerHour
+        nExportMg += bacteria.nUptakeMg + bacteria.nDenitMg
+        nInputMg += bacteria.nReleaseMg
+        bacteria.nUptakeMg = 0.0; bacteria.nDenitMg = 0.0; bacteria.nReleaseMg = 0.0
+    }
+
     private fun clampAll() {
         s.nh3Total = max(0.0, s.nh3Total); s.no2 = max(0.0, s.no2); s.no3 = max(0.0, s.no3)
         s.alk = max(0.0, s.alk); s.ca = max(0.0, s.ca); s.mg = max(0.0, s.mg); s.detritus = max(0.0, s.detritus)
@@ -400,9 +422,10 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.nh3Total = m(s.nh3Total, mix.nh3Total); s.no2 = m(s.no2, mix.no2); s.no3 = m(s.no3, mix.no3); s.po4 = m(s.po4, mix.po4)
         s.k = m(s.k, mix.k); s.sr = m(s.sr, mix.sr); s.i = m(s.i, mix.i); s.copper = m(s.copper, mix.copper); s.doMgL = m(s.doMgL, mix.doMgL)
         s.silicate = m(s.silicate, mix.silicate)
-        s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo)
+        s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo); s.h2s = m(s.h2s, mix.h2s)
         s.detritus *= (1 - f)
         micro.waterChange(f)
+        bacteria.waterChange(f)
         val after = nitrogenInSystemMg() - pendingFeedTan * N_TAN * s.volumeL
         val mixN = (mix.nh3Total * N_TAN + mix.no2 * N_NO2 + mix.no3 * N_NO3) * f * s.volumeL
         nInputMg += mixN
@@ -470,6 +493,12 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "doc" -> s.doc = max(0.0, value)
             "allelo" -> s.allelo = max(0.0, value)
             "ato" -> ato = value > 0.5
+            // bacteria layer (research 18): carbon dosing mg C/L/day, sand depth cm, antibiotic mg/L, H2S mg/L, probiotic 0..1
+            "carbondose" -> bacteria.carbonDose = max(0.0, value)
+            "sanddepth" -> bacteria.sandDepthCm = value
+            "antibiotic" -> bacteria.antibiotic = max(0.0, value)
+            "h2s" -> s.h2s = max(0.0, value)
+            "probiotic" -> bacteria.probiotic = value.coerceIn(0.0, 1.0)
             "bacteria" -> { s.bacteriaAob = value.coerceIn(B_MIN, 1.0); s.bacteriaNob = value.coerceIn(B_MIN, 1.0) }
             "heaterstuck" -> heaterStuckOn = value > 0.5
             "roomtemp" -> {} // handled by Simulation (config copy)

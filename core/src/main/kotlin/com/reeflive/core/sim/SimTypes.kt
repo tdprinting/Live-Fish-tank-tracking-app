@@ -86,6 +86,8 @@ sealed class Command {
     data class Infect(val id: String?, val disease: Disease, val stage: Double = 0.05) : Command()
     /** A microfauna action (research 10): dose pods, phyto or rotifers, seed live rock, treat flatworms; [amount] scales the bottle. */
     data class Micro(val action: MicroAction, val amount: Double = 1.0) : Command()
+    /** A bacteria-layer action (research 18): bottled nitrifiers, carbon dosing, antibiotic, UV, stir the sand, probiotic. */
+    data class Bacteria(val action: BacteriaAction, val amount: Double = 1.0) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -295,6 +297,8 @@ data class SimSnapshot(
     val eggClutches: List<EggClutchPose> = emptyList(),
     /** Pods, plankton and the other microfauna (research 10) for the microscope view and its readout. */
     val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
+    /** Bacterial guilds (research 18) for the Bacteria card: levels, trends and what each is doing to the tank. */
+    val bacteria: BacteriaState = BacteriaState.EMPTY,
     /** Dynamic sand bed grid (SIMULATION §16); refreshed ≤ 4×/s and shared until it changes. Null = flat, untouched sand. */
     val sandGrid: SandGridSnapshot? = null,
     /** Suspended sand / detritus particles: x, y, z (cm) and `Grain.ordinal + age fraction` per particle. */

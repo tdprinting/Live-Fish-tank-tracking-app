@@ -40,6 +40,7 @@ object TimelapseFork {
         dst.water.algae.copyFrom(w.algae)
         dst.water.copyEquipmentFrom(w)
         dst.water.micro.copyFrom(w.micro)
+        dst.water.bacteria.copyFrom(w.bacteria)
         val srcOrgs = src.organisms.associateBy { it.id }
         for (o in dst.organisms) {
             val s = srcOrgs[o.id] ?: continue
