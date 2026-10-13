@@ -53,4 +53,23 @@ class ResearchGapsTest {
         assertTrue("relative burst falls with size ($atAdult → $big BL/s)", big < atAdult)
         assertEquals("unchanged up to adult size", tang.locomotion.burstBL, SwimSpeed.burst(tang, 10.0) / 10.0, 1e-9)
     }
+
+    /** Gap 3: an adult engineer goby patrols outside on ~5 % of nights; a juvenile never does. */
+    @Test
+    fun gap3_adultGobyRarelyPatrols() {
+        val sim = TestTank.sim(DefaultStock.all, seed = 2L, startHour = 21.0)
+        sim.advance(1.0)
+        val goby = sim.org(BrainKind.ENGINEER_GOBY)
+        val agent = sim.agentOf(goby)!!
+        val brain = agent.brain as GobyBrain
+        fun nights(len: Double): Int {
+            goby.lengthCm = len
+            var n = 0
+            for (i in 1..400) { agent.ctx.p.lightsOffAt = i * 86400.0; brain.rollNight(agent.ctx); if (brain.patrolTonight) n++ }
+            return n
+        }
+        val adult = nights(GobyBrain.ADULT_CM + 10)
+        assertTrue("adult patrol nights $adult / 400 (≈ 5 %)", adult in 6..40)
+        assertEquals("juvenile never patrols", 0, nights(GobyBrain.ADULT_CM - 5))
+    }
 }
