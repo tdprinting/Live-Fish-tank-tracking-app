@@ -134,6 +134,9 @@ object DefaultScape {
             Anchor(n, t, v(x, y, z), dir, normal, radius, depth, pts)
         return AnchorSet(listOf(
             a("HOST_KENYA", "HOST", 72.0, 40.0, 15.0, radius = 10.0),
+            // Owner: the clowns host a hairy green mushroom (Rhodactis) cluster. It sits where the mushroom_hairy.glb
+            // model is built: the centroid of its disc tufts, on a ledge of the arch's left leg beside HOST_ARCH_CLOWNS.
+            a("HOST_SHROOM", "HOST", 82.3, 20.3, 15.2, normal = v(0.7, 0.7, -0.18), radius = 6.0),
             a("HOST_GSP_RIGHT", "HOST", 104.0, 14.0, 22.0, radius = 8.0),
             a("CAVE_EEL", "CAVE_EEL", 69.0, 5.0, 23.0, dir = v(0.5, 0.1, -0.85)),
             a("den_path", "PATH", 69.0, 5.0, 23.0, pts = listOf(v(69.0, 5.0, 23.0), v(73.0, 6.0, 19.0), v(77.0, 7.0, 15.0), v(80.0, 9.0, 11.0), v(83.0, 10.0, 8.0), v(86.0, 10.0, 5.0), v(88.0, 9.0, 3.0), v(90.0, 8.0, 2.0))),
@@ -161,6 +164,7 @@ object DefaultScape {
             a("coral_zoa_front_center", "CORAL", 71.0, 5.0, 27.0, normal = v(0.0, 1.0, 0.0)),
             a("coral_clove_kenya_base", "CORAL", 77.0, 18.0, 22.0, normal = v(0.6, 0.5, 0.6)),
             a("coral_shroom_front_left", "CORAL", 53.0, 4.0, 28.0, normal = v(0.0, 1.0, 0.0)),
+            a("coral_shroom_hairy", "CORAL", 82.3, 20.3, 15.2, normal = v(0.7, 0.7, -0.18)),
             a("coral_macro_back_left", "CORAL", 47.0, 36.0, 10.0, normal = v(0.2, 0.5, 0.8)),
             a("coral_aiptasia_kenya_base", "CORAL", 68.0, 37.0, 14.0, normal = v(-0.3, 0.9, 0.3)),
             // ---- Track C additions (new livestock, 04_more_species); Track B: please add to anchors.json ----

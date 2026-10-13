@@ -225,5 +225,12 @@ class ModelRegistry(private val loader: ClassLoader? = ModelRegistry::class.java
 
     companion object {
         fun lod1(path: String): String = path.removeSuffix(".glb") + "_lod1.glb"
+
+        /**
+         * Stand-ins for coral models that are mapped but not shipped yet. The hairy green mushroom
+         * (species `rhodactis_sp` → `models/mushroom_hairy.glb`) borrows the plain mushroom until its own
+         * GLB lands; the renderer draws the stand-in moved to the colony's anchor.
+         */
+        val FALLBACK_MODELS: Map<String, String> = mapOf("models/mushroom_hairy.glb" to "models/mushroom.glb")
     }
 }

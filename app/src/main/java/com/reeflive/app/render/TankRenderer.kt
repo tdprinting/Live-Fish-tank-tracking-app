@@ -421,7 +421,19 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         val used = HashSet<String>()
         for (c in s.corals) {
-            val candidates = registry.coralModels(c.speciesId).mapNotNull { store.model(it) }
+            val paths = registry.coralModels(c.speciesId)
+            if (paths.isNotEmpty() && paths.none { store.exists(it) }) {
+                // own GLB not shipped yet (hairy mushroom): borrow a stand-in model, moved to this colony's spot
+                val fb = paths.firstNotNullOfOrNull { ModelRegistry.FALLBACK_MODELS[it] }?.let { store.model(it) } ?: continue
+                val home = fb.parts.firstOrNull()?.center ?: continue
+                var ox = c.homeX + c.offsetX - home[0]
+                val oy = c.homeY + c.offsetY - home[1]
+                val oz = c.homeZ + c.offsetZ - home[2]
+                if (ox == 0f && oy == 0f && oz == 0f) ox = 1e-3f
+                out += fb to c.copy(offsetX = ox, offsetY = oy, offsetZ = oz, homeX = home[0], homeY = home[1], homeZ = home[2])
+                continue
+            }
+            val candidates = paths.mapNotNull { store.model(it) }
             val anchored = candidates.firstOrNull { it.rootAnchor != null && it.rootAnchor == c.anchor }
             if (c.isCopy) {
                 // sandbox copy (Command.AddMany): the anchored model again, moved to the new spot
@@ -571,6 +583,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uScale", r.scale)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
+        // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
+        p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
         p.set1f("uDesat", r.desat)
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)

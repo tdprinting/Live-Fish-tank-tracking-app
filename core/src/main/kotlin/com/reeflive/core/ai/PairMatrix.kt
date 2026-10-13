@@ -433,12 +433,17 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
             out.seek(w.pos, o.burstSpeed * 0.6, arrive = 0.5, urgency = 0.8)
             return
         }
-        out.hover = true; out.pitchBias = 0.44; out.pectoral = 1.0; out.ampMul = 0.2
+        // freeze head-up with fins spread, mouth agape and gill covers flared; only the pectorals scull to hold station
+        out.hover = true; out.pitchBias = 0.44; out.pectoral = 1.0; out.ampMul = 0.1; out.tailMul = 0.3
         out.seek(o.pos + o.heading * 0.2, o.cruiseSpeed * 0.1, arrive = 2.0)
         o.mouth = 0.7
         o.finClamp = 0.0
+        o.gill = max(o.gill, 0.9)
+        flared = true
         if (o.poseUntil <= c.t) finished = true
     }
+    private var flared = false
+    override fun exit(c: Ctx) { if (flared) { c.o.gill = 0.3; flared = false } }
 }
 
 /** Sine helper for display wobble. */

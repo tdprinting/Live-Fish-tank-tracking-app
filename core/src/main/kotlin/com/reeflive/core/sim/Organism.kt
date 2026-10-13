@@ -165,6 +165,11 @@ class Organism(
     var visible = true
     var extraRoll = 0.0
     var pitchBias = 0.0
+    /** Pectoral (or brittle-star arm) stroke phase in cycles and stroke size 0..1 (SIMULATION §14). */
+    var pecPhase = appendagePhase / 6.283
+    var pecAmp = 0.0
+    /** Escape flexion: signed C-bend of the body (fish) or tail-flip flexion of the abdomen (shrimp), −1..1. */
+    var bend = 0.0
 
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic && brainKind != BrainKind.BRITTLE_STAR)
     lateinit var brain: UtilityBrain
@@ -180,8 +185,11 @@ class Organism(
     val isFish: Boolean get() = brainKind.isFish
     /** Collision length: real BL, capped at 6 cm for eels so the clearance follows body girth, not length (SIMULATION §8.7). */
     val collisionLength: Double get() = when (brainKind) { BrainKind.EEL -> lengthCm.coerceAtMost(6.0); BrainKind.ENGINEER_GOBY -> lengthCm.coerceAtMost(3.0); else -> lengthCm }
-    val cruiseSpeed: Double get() = species.locomotion.cruiseBL * lengthCm
-    val burstSpeed: Double get() = species.locomotion.burstBL * lengthCm
+    /** Per-species gait and kinematics (SIMULATION §14). */
+    val motion: MotionProfile = MotionProfiles.of(brainKind)
+    /** Invertebrates walk at the research speeds in cm/s (size of the shell or leg span barely matters); fish in BL/s. */
+    val cruiseSpeed: Double get() = motion.walkCmS ?: (species.locomotion.cruiseBL * lengthCm)
+    val burstSpeed: Double get() = motion.walkBurstCmS ?: (species.locomotion.burstBL * lengthCm)
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */
     val mealGrams: Double get() = (0.012 * massG.pow(0.8)).coerceAtLeast(0.004)
 
@@ -214,6 +222,8 @@ class Organism(
             brain = brainKind.name, posture = posture, eyeYaw = eyeYaw.toFloat(), mouth = mouth.toFloat(),
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
+            pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
+            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else 0; else -> 0 },
         )
     }
 

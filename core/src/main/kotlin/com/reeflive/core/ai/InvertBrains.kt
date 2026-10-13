@@ -600,6 +600,9 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         const val LATENCY_MIN_S = 20.0
         const val LATENCY_MAX_S = 240.0
+        /** Buried pose: shell centre this far below the sand top (× length) and the siphon tilt above horizontal (DESIGN ESTIMATES). */
+        const val BURY_FRAC = 0.15
+        const val SIPHON_TILT_DEG = 60.0
         /** Feed bout lognormal: mean 6 min, ~3/4 of bouts ≤ 8 min (ANALOGY, N. vibex field bouts, Lucena 2012). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.ANALOGY, "11 §5 Lucena 2012") const val BOUT_MEAN_MIN = 6.0
         const val BOUT_SIGMA = 0.75
@@ -639,7 +642,17 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
             }
             sink = min(1.0, sink + c.dt / 3)
             val r = restSpot(c, c.p.night)
-            out.rest(if (sink < 1) r.copy(posture = 0) else r, 1.0)
+            if (sink < 1) out.rest(r.copy(posture = 0), 1.0)
+            else {
+                // under the sand with only the siphon out (research video invert_nassarius): the shell lies a little
+                // below the surface, nose tilted ~60° up into the current so the siphon tube samples the water
+                val fl = c.sim.flow.velocityFast(r.pos).horizontal()
+                val h = if (fl.length() > 0.5) (fl * -1.0).normalized(Vec3.X) else c.o.heading.horizontal().normalized(Vec3.X)
+                val tilt = Math.toRadians(SIPHON_TILT_DEG)
+                val head = h * kotlin.math.cos(tilt) + Vec3.Y * kotlin.math.sin(tilt)
+                val up = h * -kotlin.math.sin(tilt) + Vec3.Y * kotlin.math.cos(tilt)
+                out.rest(Rest(r.pos.withY(c.rock.sandTopCm - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
+            }
             c.o.extension = 0.6 + 0.2 * sin(c.t * 0.5 + c.o.appendagePhase)   // siphon
         }
     }

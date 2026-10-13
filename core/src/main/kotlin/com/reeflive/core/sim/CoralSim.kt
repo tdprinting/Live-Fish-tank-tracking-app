@@ -89,12 +89,22 @@ object CoralSim {
      * Extension driven by the light cycle: opens 1–2 h after lights-on, closes 30 min before
      * lights-off (03 §B).
      */
-    fun lightOpen(k: CoralKind, minutesSinceOn: Double?, minutesUntilOff: Double?): Double {
+    fun lightOpen(k: CoralKind, minutesSinceOn: Double?, minutesUntilOff: Double?, speciesId: String? = null): Double {
         val p = params(k)
-        if (minutesSinceOn == null || minutesUntilOff == null) return p.nightExtension
+        val night = nightExtensionOf(k, speciesId)
+        if (minutesSinceOn == null || minutesUntilOff == null) return night
         val open = smoothstep(45.0, 110.0, minutesSinceOn) * smoothstep(0.0, 30.0, minutesUntilOff)
-        return p.nightExtension + (1 - p.nightExtension) * open
+        return night + (1 - night) * open
     }
+
+    /**
+     * Extension kept through the night. Hairy mushrooms (*Rhodactis*) keep their discs open after lights-out in Tee's
+     * tank (owner observation; the clowns sleep on them), unlike the smooth Discosoma that half close.
+     */
+    fun nightExtensionOf(k: CoralKind, speciesId: String?): Double =
+        if (speciesId != null && speciesId.lowercase().startsWith("rhodactis")) HAIRY_SHROOM_NIGHT_EXTENSION else params(k).nightExtension
+
+    const val HAIRY_SHROOM_NIGHT_EXTENSION = 0.9
 
     /** Bleaching threshold for the DHW accumulator (tank analogue of the local max monthly mean + 1 °C). */
     const val DHW_THRESHOLD_C = 29.0
@@ -148,7 +158,7 @@ object CoralSim {
 
         c.disturb = max(0.0, c.disturb - 0.25 * dtMin)
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
-        var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff) * (1 - 0.8 * c.stress) * flowExt
+        var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff, c.species.id) * (1 - 0.8 * c.stress) * flowExt
         target *= (1 - c.disturb).coerceIn(0.0, 1.0) * (1 - c.overgrown)
         // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis
         if (c.necrosis > 0.02) target *= 0.2

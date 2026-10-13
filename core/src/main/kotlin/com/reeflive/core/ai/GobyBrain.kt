@@ -21,6 +21,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val GOBY_MOUTHFUL_CM3 = 0.6
         /** Chance an adult patrols outside on a given night: [I] ≈5 % (07 gap 3; 06 had 40 %, unsupported). */
         const val ADULT_NIGHT_PATROL_P = 0.05
+        /** Peeking head swivel, rad, and the head-shake rate while spitting sand, Hz (DESIGN ESTIMATES). */
+        const val PEEK_YAW = 0.35
+        const val SPIT_HZ = 6.0
     }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
     val mouth: Vec3 = burrow?.pos ?: Vec3(69.0, 5.0, 23.0)
@@ -67,8 +70,13 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun findThreat(c: Ctx): Organism? = super.findThreat(c)
 
-    /** In the burrow: deep and out of sight at night; at the entrance (head out) when resting by day. */
+    /**
+     * In the burrow: deep and out of sight at night; by day it peeks with just the head out (research video
+     * fish_engineer_goby [S1][M]), easing in and out and swivelling the head and eyes to look around.
+     */
     inner class InBurrow : Behavior("burrow", "In its burrow") {
+        private var lookYaw = 0.0
+        private var nextLook = 0.0
         override fun score(c: Ctx): Double {
             val o = c.o
             return when {
@@ -86,14 +94,17 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             val head = if (night) inside(4.0) else outside(0.6 + 0.4 * sin(c.t * 0.3))
-            out.place(head, if (night) inDir else outDir, Vec3.Y, 3.0)
+            if (!night && c.t > nextLook) { nextLook = c.t + c.rng.range(1.5, 4.0); lookYaw = c.rng.signed() * PEEK_YAW }
+            val face = if (night) inDir else Vec3.rotateAbout(outDir, Vec3.Y, lookYaw)
+            o.eyeYaw = if (night) 0.0 else lookYaw * 0.6
+            out.place(head, face, Vec3.Y, 3.0)
             out.posture = 3
             out.splineOverride = tunnelSpline(o.pos)
             o.visible = !night
             o.sleeping = night
             o.gill = 0.4 + 0.3 * sin(2 * PI * 0.5 * c.t)
         }
-        override fun exit(c: Ctx) { c.o.visible = true }
+        override fun exit(c: Ctx) { c.o.visible = true; c.o.eyeYaw = 0.0 }
     }
 
     /** Daytime: hover low in a loose group near the mouth, nose into the current, snapping at plankton. */
@@ -130,7 +141,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) {
             phase = 0; timer = 0.0
             val side = (outDir cross Vec3.Y).normalized(Vec3.X) * (c.rng.signed() * 5.0)
-            dump = c.safe(outside(c.rng.range(4.0, 9.0)) + side, 0.5).withY(c.rock.sandTopCm + 1.2)
+            val d = c.safe(outside(c.rng.range(4.0, 9.0)) + side, 0.5)
+            // spit just above the live sand surface, so the mouthful lands on the SandBed mound it builds
+            dump = d.withY(c.sim.sand.surfaceY(d.x, d.z) + 1.2)
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
@@ -144,24 +157,31 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                     out.place(inside(2.5), inDir, Vec3.Y, 4.0)
                     out.posture = 3
                     out.splineOverride = tunnelSpline(o.pos)
-                    if (timer > 4.0 + 4.0 * c.rng.nextDouble()) { phase = 2; timer = 0.0 }
+                    if (timer > 4.0 + 4.0 * c.rng.nextDouble()) {
+                        // the mouthful leaves the pit as it turns to carry it out
+                        digPoint.let { pit -> c.sim.sand.dig(pit.x, pit.z, GOBY_MOUTHFUL_CM3, 1.5) }
+                        phase = 2; timer = 0.0
+                    }
                 }
-                2 -> { // carry the mouthful out
-                    o.mouth = 1.0
+                2 -> { // carry the mouthful out: cheeks full, head a little down, short wriggling swim
+                    o.mouth = 0.45
                     out.seek(dump, o.cruiseSpeed * 0.8, arrive = 1.0, urgency = 0.4)
                     out.ampMul = 1.3
+                    out.pitchBias = -0.15
                     if (o.pos.distanceTo(dump) < 2.0 || timer > 10) { phase = 3; timer = 0.0 }
                 }
-                else -> { // spit
-                    o.mouth = 1.0
+                else -> { // spit: head jerks side to side as the sand is blown out
+                    o.mouth = 0.6 + 0.4 * sin(2 * PI * SPIT_HZ * timer)
                     out.seek(dump + Vec3.Y * 1.5, 0.5, arrive = 1.0)
                     out.pitchBias = -0.4
+                    out.rollExtra = 0.25 * sin(2 * PI * SPIT_HZ * timer)
+                    out.waddleAmp = 0.2; out.waddleHz = SPIT_HZ
                     if (timer > 0.6) {
-                        digPoint.let { pit -> c.sim.sand.dig(pit.x, pit.z, GOBY_MOUTHFUL_CM3, 1.5) }
                         c.sim.depositSand(dump, GOBY_MOUTHFUL_CM3)
                         sandEvents++
                         // adults: a maintenance trip every 0.7–2 h (≈ 5–15 per day); juveniles dig much more often
-                        nextAt = c.t + if (adult) c.rng.range(2500.0, 7000.0) else c.rng.range(45.0, 300.0)
+                        // (a mouthful every 20–40 s while working, research video fish_engineer_goby [S2][M]; with breaks)
+                        nextAt = c.t + if (adult) c.rng.range(2500.0, 7000.0) else c.rng.range(25.0, 120.0)
                         finished = true
                     }
                 }

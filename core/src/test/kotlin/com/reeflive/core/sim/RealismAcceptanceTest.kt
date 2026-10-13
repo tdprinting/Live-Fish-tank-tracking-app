@@ -88,7 +88,7 @@ class RealismAcceptanceTest {
         val clowns = sim.organisms.filter { it.brainKind == BrainKind.CLOWN }
         val female = clowns.first { it.role == "FEMALE" }
         val male = clowns.first { it !== female }
-        val host = sim.rock.anchors.pos("HOST_KENYA", Vec3.ZERO)
+        val host = sim.rock.anchors.pos("HOST_SHROOM", Vec3.ZERO)
         var pairOk = 0; var hostOk = 0; var n = 0
         val hours = 2.0
         val ev = sim.run(hours * 3600) {
@@ -116,7 +116,7 @@ class RealismAcceptanceTest {
             val sim = tank(stockWithout("tang", "wrasse", "cardinal", "hawk", "lawnmower", "tailspot", "goby"), seed = seed)
             val dotty = sim.org(BrainKind.DOTTYBACK)
             val female = sim.organisms.first { it.brainKind == BrainKind.CLOWN && it.role == "FEMALE" }
-            val host = sim.rock.anchors.pos("HOST_KENYA", Vec3.ZERO)
+            val host = sim.rock.anchors.pos("HOST_SHROOM", Vec3.ZERO)
             val inside = sim.rock.clampToWater(host + Vec3(-6.0, 6.0, 6.0), 2.0)
             val away = Vec3(45.0, 30.0, 22.0)
             val stats = sim.pairBouts(female).statsOf("clownF_host")

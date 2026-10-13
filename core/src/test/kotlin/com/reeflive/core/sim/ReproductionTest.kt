@@ -11,8 +11,8 @@ import org.junit.Test
 /** Coverage B-1 (clown spawning, sex change), B-2 (cardinal mouthbrooding), B-3 (wrasse harem), C-3 (tang nips). */
 class ReproductionTest {
     private fun pair(sizeF: Double = 8.0, sizeM: Double = 6.5) = listOf(
-        LivestockSeed("amphiprion_ocellaris", "Nemo", sizeF, role = "FEMALE", placement = "HOST_KENYA", id = "clown_f"),
-        LivestockSeed("amphiprion_ocellaris", "Marlin", sizeM, role = "MALE", placement = "HOST_KENYA", id = "clown_m"),
+        LivestockSeed("amphiprion_ocellaris", "Nemo", sizeF, role = "FEMALE", placement = "HOST_SHROOM", id = "clown_f"),
+        LivestockSeed("amphiprion_ocellaris", "Marlin", sizeM, role = "MALE", placement = "HOST_SHROOM", id = "clown_m"),
     )
 
     /** Abstract-mode days with the fish kept fed and calm (a clean tank gives no feeding). */

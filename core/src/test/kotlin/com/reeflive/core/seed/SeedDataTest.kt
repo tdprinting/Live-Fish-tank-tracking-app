@@ -13,7 +13,7 @@ class SeedDataTest {
         assertEquals("Tee's Reef", seed.tank.name)
         assertEquals(60.0, seed.tank.displayGallons, 0.0)
         assertEquals(ReefType.SOFT, seed.tank.reefType)
-        assertEquals(28, seed.livestock.size)
+        assertEquals(29, seed.livestock.size)
         assertEquals(8, seed.equipment.size)
         assertEquals(12, seed.tasks.size)
         assertTrue(seed.livestock.none { it.speciesId == "aiptasia_sp" })
@@ -25,7 +25,7 @@ class SeedDataTest {
     fun materialisesWithLinksAndLights() {
         val b = SeedData.materialise(SeedData.loadFile(), nowMs = 1_000L)
         assertEquals(SeedData.DEFAULT_TANK_ID, b.tank.id)
-        assertEquals(28, b.livestock.size)
+        assertEquals(29, b.livestock.size)
         assertEquals(b.livestock.size, b.livestock.map { it.id }.toSet().size)
         val sock = b.tasks.single { it.title.startsWith("Filter sock") }
         assertEquals(b.equipment.single { it.name == "HOB filter / skimmer" }.id, sock.equipmentId)
