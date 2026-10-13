@@ -88,7 +88,7 @@ fun DrawScope.drawFood(kind: FoodKind) {
         when (kind) {
             FoodKind.FLAKE -> flakes()
             FoodKind.MYSIS -> mysis()
-            FoodKind.PELLET -> pellets(FoodPalette.pelletBrown, FoodPalette.pelletLight, floating = false)
+            FoodKind.PELLET -> pellets(FoodPalette.granule, FoodPalette.granuleShade, floating = false)
             FoodKind.NORI -> nori()
             FoodKind.PODS -> pods()
             FoodKind.PRAWN -> prawn()
