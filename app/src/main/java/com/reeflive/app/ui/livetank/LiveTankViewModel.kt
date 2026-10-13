@@ -13,6 +13,7 @@ import com.reeflive.app.ui.nav.LiveFocus
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.Scenario
+import com.reeflive.core.sim.BacteriaAction
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
@@ -215,6 +216,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
     fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }
+    /** Bottled nitrifiers, carbon dosing, antibiotic, UV, stirring the sand, probiotic (research 18). */
+    fun bacteria(action: BacteriaAction) = sandbox { holder.enqueue(Command.Bacteria(action)) }
 
     /**
      * One-tap what-if presets. Power outage and overfeeding reuse the core scenarios; the rest are built from commands

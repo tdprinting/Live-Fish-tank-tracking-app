@@ -107,6 +107,11 @@ object CoralSim {
         if (speciesId != null && speciesId.lowercase().startsWith("rhodactis")) HAIRY_SHROOM_NIGHT_EXTENSION else params(k).nightExtension
 
     const val HAIRY_SHROOM_NIGHT_EXTENSION = 0.9
+    /** H2S band for corals (research 18 §3.3 [K]). */
+    val H2S_CORAL = ToleranceRange(optHi = 0.005, tolHi = 0.02, lethalHi = 0.15)
+    /** Tissue loss per minute at full Vibrio stress (white-syndrome-like lesion front, research 18 §5.5; est.). */
+    @Ev(Evidence.DESIGN_ESTIMATE, "17 §5.5 [K]")
+    const val PATHOGEN_TISSUE_LOSS = 0.0001
 
     /** Bleaching threshold for the DHW accumulator (tank analogue of the local max monthly mean + 1 °C). */
     const val DHW_THRESHOLD_C = 29.0
@@ -120,6 +125,7 @@ object CoralSim {
     fun step(
         c: Coral, w: WaterState, lightIntensity: Double, minutesSinceOn: Double?, minutesUntilOff: Double?,
         dtMin: Double, simTimeSec: Double, events: MutableList<SimEvent>, flowStrength: Double = if (w.flowOn) 1.0 else 0.0,
+        pathogenStress: Double = 0.0,
     ) {
         val p = params(c.kind)
         if (c.acclSg.isNaN()) { c.acclSg = w.sg; c.acclAlk = w.alk; c.acclLight = lightIntensity.coerceAtLeast(0.6) }
@@ -135,6 +141,9 @@ object CoralSim {
         val (sNh3, _) = HealthModel.stressOf(w.nh3Free, ToleranceRange(optHi = 0.02, tolHi = 0.1, lethalHi = 0.6))
         val (sPo4, _) = HealthModel.stressOf(w.po4, ToleranceRange(optHi = 0.1, tolHi = 0.3, lethalHi = 1.0))
         val (sCu, _) = HealthModel.stressOf(w.copper, ToleranceRange(optHi = 0.02, tolHi = 0.1, lethalHi = 0.3))
+        // research 18: H2S from stirred deep sand, Vibrio-type infection in warm water (V. coralliilyticus ≥ 28 °C)
+        val sH2s = if (w.h2s > 0) HealthModel.stressOf(w.h2s, H2S_CORAL).first else 0.0
+        val sPath = pathogenStress.coerceIn(0.0, 1.0)
         // research 01 §1.1 / 05 §13: potassium out of 340-460 ppm stresses corals; low strontium (< 6) only mildly (skeletal element)
         val (sK, _) = HealthModel.stressOf(w.k, HealthModel.POTASSIUM)
         val (sSr, _) = HealthModel.stressOf(w.sr, HealthModel.STRONTIUM)
@@ -153,7 +162,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6)
         var prod = 1.0
         for (s in parts) prod *= (1 - s)
         c.stress = 1 - prod
@@ -185,7 +194,7 @@ object CoralSim {
         c.brown = c.brown.coerceIn(0.0, 1.0)
         c.tissue += (-0.00005 * (if (c.bleach > 0.8) 1.0 else 0.0) - 0.00005 * smoothstep(8.0, 12.0, c.dhw) - 0.0002 * sNh3 -
             0.00003 * c.algaeCover - 0.0003 * sCu - (if (sgLethal) 0.002 else 0.0) - 0.0002 * max(0.0, sPh - 0.6) -
-            0.00002 * c.neighborStress - 0.00003 * c.overgrown +
+            0.00002 * c.neighborStress - 0.00003 * c.overgrown - PATHOGEN_TISSUE_LOSS * sPath - 0.0003 * sH2s +
             (if (c.stress < 0.1 && c.tissue < 1) 0.00002 else 0.0)) * dtMin
         // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
         if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0

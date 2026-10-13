@@ -1214,3 +1214,43 @@ Hiding animals back into their surface and vanish; nothing is ever teleported in
 **Accuracy audit** (2026-10-13): an independent review against research 10/17 checked sizes, speeds, beat rates and diel exposure; its findings (tentacle diel cycle, predator flight, mysid jitter amplitude, fireworm length up to 12 cm, calanoid antennule length, podocopid eye size, paired mysid eyes, missing water-column pods) are fixed here.
 
 **Tests** (`MicroCrittersTest`): more worms and amphipods at night than by day from a mature tank's own model; they withdraw when the lights come on; every body has its length and sits on rock, sand or glass; tentacles retract from a passing fish.
+
+## 18. Bacteria layer (`sim/BacteriaModel.kt`, research 18)
+
+Source: [`docs/research/18_reef_bacteria.md`](research/18_reef_bacteria.md) ("Implementable model"). Most of its numbers are marked [K] (recalled, not checked), so here they are design estimates. Each constant carries an `@Ev` tag, and the main ones are in `EvidenceLedger` under `"bacteria"`. The app shows the evidence level on each guild row.
+
+`WaterSim.bacteria` steps every 10 sim minutes, after the microfauna and before the gases. It is deterministic. Guilds:
+
+| Guild | State | What it does to the tank |
+|---|---|---|
+| AOB / NOB | `WaterState.bacteriaAob/Nob` (unchanged, grown by `WaterSim.nitrogen`) | Rates and growth are multiplied by `aobFactor`/`nobFactor`: antibiotic (Kinh 0.5 / 1.0 mg/L, half-life 2 d) and copper (Kinh 1 mg/L). The antibiotic also kills 0.25/d × inhibition. Bottled nitrifiers add 5 % of a mature bed × 0.3-0.6 establishment (more with food) over ~2 days. |
+| AOA | `aoa` 0..1 | Up to 0.002 ppm NH3/h, Ks 0.0017 ppm NH3 (0.1 µM). In a normal tank this share is inside the tuned AOB rates (AOB dominate reef rock), so nothing extra is applied and the default tank is unchanged. Antibiotics do not touch archaea, so AOA keep oxidising ammonia (rate × AOB inhibition) while the bacteria are held back. Comammox is off (marine). |
+| Heterotrophs | `hetBase` (resident, follows DOC), `hetC/N/P` (grown on dosed carbon), `freeCells` | Natural DOC breakdown stays `WaterSim.DOC_DECAY`. Its N and P are already in the food budget, so it is not counted again. Carbon dosing feeds a separate labile pool. Uptake is 5/d per unit biomass. Yield is 0.4 × nutrient limit; the rest is respired at 2.67 mg O2/mg C. N comes from NH3 first, then NO3. C:N:P is 50:10:1 replete, flexible to C:P 500 when P-starved. New cells are skimmed (0.01/h) or die (0.2/d) back to detritus (N) and PO4. Free count = 5×10⁵ × resident + 10 % of the carbon-fed cells (20 fg C each). Above ~10⁷/mL the water is cloudy (`clarity` −15 %). UV strips the column at 1/h; the biofilm is untouched. |
+| Denitrifiers | `denit` (1 = mature reference bed), `anoxicMaturity` | Oxic layer 2 cm (thinner with detritus, deeper with sand sifters). Anoxic sand + rock interiors (50 %) set capacity. The reference 3 cm bed's denitrification is already inside WaterSim's tuned NO3 export, so only the extra is applied: a deeper bed (0.117 ppm NO3/day per unit above 1), and 25 % of dosed carbon reaching anoxic zones at C:N 5. |
+| Sulfate reducers | `srb`, `sulfideStore` | Below 1 cm of anoxic sand. Store 0.15 mg/L per cm, built over ~2-3 weeks. Stirring (`STIR_SAND`) releases 80 % over ~20 min into `WaterState.h2s`, which oxidises at ~1.4/h (O2 cost 1.9 mg/mg). It also re-oxygenates the bed. A 5 cm bed gives ~0.12 mg/L. Tee's 3 cm bed and a 2 cm bed give none. |
+| Cyanobacteria | `WaterState.cyano` (AlgaeModel) | The antibiotic adds 0.8/d × inhibition die-back (`AlgaeModel.cyanoExtraDeathPerDay`). |
+| Pathogens (Vibrio-type) | `vibrioLog` (log10 cells/mL, base 3) | Relaxes (0.6/d up, 0.4/d down) toward 3 + 2.5·heat(27→30 °C) + organics (DOC > 1.5, detritus > 0.4, NO2) + low O2 + bloom + young community − 1.5·probiotic − 0.7·UV − 2·antibiotic. `pathogenPressure` (from 3×10³/mL) adds `HealthModel.PATHOGEN_ONSET` to the BACTERIAL onset and drives its growth. `coralPathogenStress` (≥ 10⁴/mL and > 28 °C) adds coral stress and tissue loss in `CoralSim`. Research 18's µ = 0.5/d cannot meet its own "10× in 3 days at 29 °C" check, so the rate is chosen to meet the check. |
+| Biofilm | `WaterState.microbes` | The antibiotic strips it (0.15/d × inhibition), so a medicated tank also loses its dinoflagellate guard (09 A2). |
+| Probiotic | `probiotic` 0..1 (10⁶/mL) | +0.3 per dose, decays 0.25/d (no bloom, 17 §6.2), and competes with the pathogens. |
+
+H2S also enters fish and invert `envStress` (`HealthModel.H2S_FISH`: opt 0.005, tol 0.03, lethal 0.2 mg/L) and coral stress (`CoralSim.H2S_CORAL`).
+
+**N accounting.** Uptake into cells and N2 gas count as export. Dead cells returned to detritus count as input, the same as the algae. The §8.1 balance holds within 1 %.
+
+**Sandbox.** `Command.Bacteria(BacteriaAction, amount)` takes these actions: dose nitrifiers, start or stop carbon dosing (2 mg C/L/day × amount), antibiotic (3 mg/L), UV on or off (the same `WaterSim.uv` the treatments use), stir the sand, and dose probiotic. SetParam ids: `carbondose`, `sanddepth`, `antibiotic`, `h2s`, `probiotic`. `SimSnapshot.bacteria` (`BacteriaState`) lists each guild with its level 0..1, trend per day, amount, and a plain-language effect. In the app, a "Bacteria" chip on the microscope header opens `BacteriaPanel` (`ui/live/BacteriaPanel.kt`); its actions show only in the sandbox.
+
+**Tests** (`BacteriaModelTest`, research 18 §E):
+
+- **New tank cycle.** The tuned cycle finishes at ~3.3 weeks on this light ghost-feed, so the check is 3-6 weeks. Research says 4-6 weeks. A bottle speeds it up.
+- **Carbon dosing.** 2 mg C/L/day lowers NO3 by about 0.6 mg N/L a week and draws PO4 down. The effect is smaller in low-nitrate water. Without the skimmer the cells pile up instead.
+- **Overdose.** 8 mg C/L/day for 5 days gives > 10⁷ cells/mL and a pre-dawn O2 ≥ 1 mg/L lower. With the pumps off, the bloom clears after dosing stops.
+- **Antibiotic.** Nitrification stalls, then recovers.
+- **Stirred sand.** A 5 cm bed gives 0.1-0.5 mg/L H2S. A 2 or 3 cm bed gives < 0.05.
+- **Pathogens.** Vibrio stays below 10⁴ at 26 °C and rises ≥ 10× in 3 days at 29 °C. Warm, dirty water gives pressure on fish and corals, and probiotic plus UV push it down.
+- **UV.** Free cells fall by 50-90 % while the nitrifiers are unchanged.
+- **Nitrogen.** The mass balance holds.
+- **Mature tank.** Tee's tank stays stable for 30 days.
+
+The research-17 E.8 cyanobacteria check is the AlgaeModel's own (research 09).
+
+**Default tank unchanged.** A mature tank can have no dose, no antibiotic, no copper and no stirring, with water below ~27 °C and normal O2. In that tank every coupling is exactly 0 or 1, so the existing chemistry and behaviour runs come out the same. A young community (low `microbes`), low O2 or dirty water can still raise the pathogen pressure a little. Weeks at 31 °C now also raise the Vibrio risk, so `RealismAcceptanceTest.noIch` clears bacterial infections as well as ich, to keep c25 about acclimation alone.

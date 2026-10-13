@@ -104,6 +104,20 @@ object EvidenceLedger {
         EvidenceEntry("valenciennea_puellaris", "starves on a young or small sand bed", "prey index", S, "16 §2 aquariadise (direction); rates D"),
         EvidenceEntry("valenciennea_puellaris", "sand on low corals", "puff within 7 cm, coral < 8 cm over the sand", S, "16 §2 aquariadise, aquariumsource (direction); distances D"),
         EvidenceEntry("valenciennea_puellaris", "DiamondGobyBrain.SIFT_YIELD_MIN", "0.3 min per mouthful at prey index 1", D, "16 §4", "condition over 3 weeks on a young vs mature bed"),
+        // ------------------------------------------------------------ bacteria layer (research 18, BacteriaModel)
+        EvidenceEntry("bacteria", "AOB dominate reef live rock; AOA a minor high-affinity pool", "AOA_K 2 % of the AOB bed", S, "17 §1.1 live-rock study (AOA < 0.01 %); capacity D", "NH3 floor in a lightly stocked tank"),
+        EvidenceEntry("bacteria", "no comammox in marine biofilters", "comammox = 0", S, "17 §1.6 McKnight & Neufeld 2024"),
+        EvidenceEntry("bacteria", "antibiotic inhibition Kinh AOB / NOB", "0.5 / 1.0 mg/L, half-life 2 d", D, "17 §1.4 [K]", "NH3 and NO2 after an in-tank erythromycin dose"),
+        EvidenceEntry("bacteria", "bottled nitrifiers", "5 % of a mature bed × 0.3-0.6 establishment", D, "17 §6.1 no independent validation", "cycle length with and without a bottle"),
+        EvidenceEntry("bacteria", "heterotroph C:N:P", "50:10:1 replete, flexible to C:P 500", D, "17 §2.2 forum [S], unverified", "NO3:PO4 drawdown ratio while carbon dosing"),
+        EvidenceEntry("bacteria", "carbon-fed cells skimmed / dying", "0.01 /h / 0.2 /d", D, "17 §2.3, §2.5 [K]", "NO3 fall per week at 2 mg C/L/day, skimmer on vs off"),
+        EvidenceEntry("bacteria", "dosed carbon reaching anoxic zones", "25 % at C:N 5", D, "17 §2.1 C:N 4-7 [K]"),
+        EvidenceEntry("bacteria", "oxic sand layer", "2 cm (less with detritus, more with sifters)", D, "17 §3.1 [K]", "depth of the grey/black layer in the bed"),
+        EvidenceEntry("bacteria", "denitrification needs < ~0.3 mg O2/L", "anoxic zones only", S, "17 §3.1 Heron Island preprint"),
+        EvidenceEntry("bacteria", "deep-sand H2S on stirring", "0.15 mg/L per cm of sulfate-reducing sand", D, "17 §3.3 [K]", "H2S test after stirring a 5 cm bed"),
+        EvidenceEntry("bacteria", "Vibrio rise with temperature", "≥ 10× in 3 d at 29 °C; coral stress above 28 °C and 1e4/mL", A, "17 §5.1 V. coralliilyticus (Oculina, Pocillopora) [S]; rates D"),
+        EvidenceEntry("bacteria", "probiotic", "decays 0.25 /d, lowers the pathogen level", A, "17 §6.2 Pseudoalteromonas McH1-7, Red Sea trial [S]; rates D"),
+        EvidenceEntry("bacteria", "UV-C on free-living cells", "1 /h at normal flow; biofilm untouched", D, "17 §6.3 [K]", "plate counts before/after 24 h of UV"),
     )
 
     fun of(speciesId: String): List<EvidenceEntry> = entries.filter { it.speciesId == speciesId }

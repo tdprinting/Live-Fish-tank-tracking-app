@@ -28,6 +28,8 @@ data class HealthContext(
     val mods: Map<Disease, DiseaseMods> = emptyMap(),
     /** A slow hyposalinity course is running: fish SG tolerance follows the treatment band. */
     val hypo: Boolean = false,
+    /** Vibrio-type pathogen pressure 0..1 from the bacteria layer ([BacteriaModel.pathogenPressure], research 18 §5). */
+    val pathogenPressure: Double = 0.0,
 )
 
 /**
@@ -51,6 +53,17 @@ object HealthModel {
     const val FLUKE_GROWTH = 1 * ICH_GROWTH
     const val BACT_GROWTH = 0.0002
     const val BACT_RECOVERY = 0.00008
+    /**
+     * Vibrio-type pressure (research 18 §5, model B fish coupling): onset per minute at full pressure and zero immunity
+     * (~3.5 %/day with immunity 0.5), and its share of the infection's growth drive. 0 in a stable mature tank.
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "17 model B Risk_disease; mature tank < 0.02/month")
+    const val PATHOGEN_ONSET = 0.00005
+    const val PATHOGEN_GROWTH = 0.5
+    /** Dissolved H2S (research 18 §3.3: above ~0.02-0.05 mg/L toxic to fish and corals [K]). */
+    @Ev(Evidence.DESIGN_ESTIMATE, "17 §3.3 toxic above 0.02-0.05 mg/L [K]")
+    val H2S_FISH = ToleranceRange(optHi = 0.005, tolHi = 0.03, lethalHi = 0.2)
+    val H2S_INVERT = ToleranceRange(optHi = 0.003, tolHi = 0.02, lethalHi = 0.12)
     const val K_STRESS = 0.00016
     const val K_DISEASE = 0.00035
     const val K_REGEN = 0.0003
@@ -224,6 +237,8 @@ object HealthModel {
             }
         }
         for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else if (k == "temp") acclimatedTemp(o, tr) else tr)
+        // hydrogen sulfide from stirred deep sand (research 18 §3.3)
+        if (w.h2s > 0) add("h2s", w.h2s, if (o.isFish) H2S_FISH else H2S_INVERT)
         if (!o.acclTemp.isNaN()) {
             val st = if (o.isFish) FISH_STEPS else if (o.brainKind == BrainKind.SALLY_CRAB) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)
@@ -292,7 +307,8 @@ object HealthModel {
             val ichMods = ctx.mods[Disease.ICH]
             val pIch = ICH_BASE_PRESSURE * tF * (1 + 3 * ctx.infectedIchSum * (ichMods?.transmission ?: 1.0)) * ichSus * sq(1 - o.immunity) * hardInv *
                 (ichMods?.onset ?: 1.0) * LifeCycle.susceptibility(o)
-            val pBact = if (sNh3 + sNo2 > 0.3) 0.0005 * (sNh3 + sNo2) * (1 - o.immunity) else 0.0
+            val pBact = (if (sNh3 + sNo2 > 0.3) 0.0005 * (sNh3 + sNo2) * (1 - o.immunity) else 0.0) +
+                PATHOGEN_ONSET * ctx.pathogenPressure * (1 - o.immunity)
             val hlleSus = s.diseaseSusceptibility["HLLE"] ?: 0.0
             when {
                 o.isFish && o.rng.chance(pIch * dtMin) -> onset(o, Disease.ICH, 0.05, ctx, events)
@@ -310,7 +326,7 @@ object HealthModel {
                 Disease.BROOKLYNELLA -> BROOK_GROWTH * (0.5 + 0.5 * (1 - o.immunity)) * tF
                 Disease.URONEMA -> URONEMA_GROWTH * (0.5 + 0.5 * (1 - o.immunity)) * tF
                 Disease.FLUKES -> FLUKE_GROWTH * (1 - o.immunity)
-                Disease.BACTERIAL -> BACT_GROWTH * (sNh3 + sNo2)
+                Disease.BACTERIAL -> BACT_GROWTH * (sNh3 + sNo2 + PATHOGEN_GROWTH * ctx.pathogenPressure)
                 Disease.HLLE -> 0.00005 * (if (o.nutritionGreens < 0.3) 1.0 else 0.0)
             }
             val rec = when (dz) {

@@ -91,6 +91,7 @@ import com.reeflive.app.ui.live.LiveTools
 import com.reeflive.app.ui.live.MicroscopeView
 import com.reeflive.app.ui.live.ModeToggle
 import com.reeflive.app.ui.live.Reaction
+import com.reeflive.app.ui.live.BacteriaOverlay
 import com.reeflive.app.ui.live.SandboxActions
 import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxFriendly
@@ -598,13 +599,21 @@ private fun TankArea(
         ) {
             // the microscope covers the tank view; doses and treatments only in the sandbox
             val hud by vm.hud.collectAsStateWithLifecycle()
-            MicroscopeView(
-                state = hud.microfauna,
-                simTimeSec = hud.simTimeSec,
-                onClose = onCloseMicro,
-                modifier = Modifier.fillMaxSize().background(ReefTheme.colors.bg).statusBarsPadding().padding(bottom = bottomPad),
-                onAction = onMicroAction,
-            )
+            Box(Modifier.fillMaxSize()) {
+                MicroscopeView(
+                    state = hud.microfauna,
+                    simTimeSec = hud.simTimeSec,
+                    onClose = onCloseMicro,
+                    modifier = Modifier.fillMaxSize().background(ReefTheme.colors.bg).statusBarsPadding().padding(bottom = bottomPad),
+                    onAction = onMicroAction,
+                )
+                // bacteria section (research 18): a chip over the microscope header opens the guild panel; actions only in the sandbox
+                BacteriaOverlay(
+                    state = hud.bacteria,
+                    modifier = Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad),
+                    onAction = if (onMicroAction != null) vm::bacteria else null,
+                )
+            }
         }
         // same bounds as the TankView, so camera pixels and canvas pixels agree; no pointer input, touches go through
         ActionFxLayer(fx, projection, Modifier.fillMaxSize(), screenOnly = micro)

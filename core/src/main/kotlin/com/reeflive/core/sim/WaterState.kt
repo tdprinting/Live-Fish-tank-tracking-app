@@ -60,6 +60,8 @@ data class WaterState(
     var allelo: Double = 0.0,
     /** Refugium macroalgae (Chaetomorpha) biomass index; 0 = no refugium (research 01 §3.5). */
     var chaeto: Double = 0.0,
+    /** Dissolved hydrogen sulfide, mg/L: 0 normally; a pulse when deep anoxic sand is stirred (research 18 §3.3, [BacteriaModel]). */
+    var h2s: Double = 0.0,
 ) {
     /** Salinity in ppt (ARCHITECTURE §4.1 table, linear in SG near seawater). */
     val ppt: Double get() = ChemFns.sgToPpt(sg)
@@ -95,6 +97,7 @@ data class WaterState(
         "chaeto" -> chaeto
         "doc" -> doc
         "allelo" -> allelo
+        "h2s" -> h2s
         else -> null
     }
 

@@ -460,6 +460,7 @@ class Simulation(
         grazeAccum = 0.0
         w.algae.grazers = algaeGrazers()
         microDrivers()
+        w.bacteria.bioturbation = sandStirrers()
         w.step(CHEM_DT)
         applyRamps()
         cycle?.update(w.s, simTimeSec)
@@ -482,7 +483,7 @@ class Simulation(
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
                 organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
             val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess,
-                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish)
+                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)
@@ -493,7 +494,7 @@ class Simulation(
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
             val tissueBefore = c.tissue
-            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
+            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength, w.bacteria.coralPathogenStress)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
@@ -533,6 +534,17 @@ class Simulation(
         }
         sandTick(dtMin)
         flushEvents()
+    }
+
+    /** Sand sifters and burrowers alive (bioturbation keeps the sand bed's top layer oxic; research 18 §3.1). */
+    private fun sandStirrers(): Double {
+        var n = 0.0
+        for (o in organisms) if (o.alive) when (o.brainKind) {
+            BrainKind.DIAMOND_GOBY, BrainKind.ENGINEER_GOBY -> n += 1.0
+            BrainKind.NASSARIUS -> n += 0.25
+            else -> {}
+        }
+        return n
     }
 
     /** Colony growth, Kenya branch drops and neighbour competition (CoralGrowth; coverage gaps C-1, C-2). */
@@ -879,6 +891,7 @@ class Simulation(
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm)
             is Command.ScrapeGlass -> scrapeGlass(c)
             is Command.Micro -> water.micro.apply(c.action, c.amount, water.s)
+            is Command.Bacteria -> water.bacteria.apply(c.action, c.amount, water)
         }
     }
 
@@ -994,6 +1007,7 @@ class Simulation(
             nw.algae.copyFrom(old.algae)
             nw.copyEquipmentFrom(old)
             nw.micro.copyFrom(old.micro)
+            nw.bacteria.copyFrom(old.bacteria)
             nw.flowStrength = old.flowStrength; nw.heaterWorking = old.heaterWorking; nw.heaterStuckOn = old.heaterStuckOn; nw.heaterSetC = old.heaterSetC; nw.ato = old.ato
         }
     }
@@ -1165,6 +1179,7 @@ class Simulation(
             algae = water.algae.snapshot(),
             eggClutches = repro.poses(),
             microfauna = water.micro.snapshot(),
+            bacteria = water.bacteria.snapshot(),
             events = evs,
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
