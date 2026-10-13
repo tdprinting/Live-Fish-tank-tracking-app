@@ -423,7 +423,11 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     private fun finish(c: Ctx) { active = null; finished = true; c.o.dorsalRaise = 0.0 }
 
-    override fun exit(c: Ctx) { active = null; c.o.dorsalRaise = 0.0 }
+    override fun exit(c: Ctx) {
+        // a chase cut short by a higher-priority behaviour still happened: settle its outcome (and event)
+        active?.let { a -> if (phase == 1 && a.target.alive) { phase = 2; outcome(c, a.row, a.target) } }
+        active = null; c.o.dorsalRaise = 0.0
+    }
 
     /** Clears every territory entry (RearrangeRock). */
     fun reset() { entries.clear(); pending = null }

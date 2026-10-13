@@ -108,6 +108,13 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 wiggleUntil = c.t + c.rng.range(2.0, 4.0)
                 wiggleAt = c.safe(h + Vec3(c.rng.range(-2.0, 2.0), if (flatHost) FLAT_LO else 2.0, c.rng.range(-1.5, 1.0)), 1.0)
             }
+            // back from a cleaner visit or a chase across the tank: home over the rock, not into it
+            val away = c.o.pos.distanceTo(h) > 4 * L
+            if (away) {
+                out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = L)
+                out.waddleAmp = 0.3; out.waddleHz = 1.3
+                return
+            }
             wiggling = c.t < wiggleUntil
             if (wiggling) {
                 out.seek(wiggleAt, c.o.cruiseSpeed * 0.5, arrive = 1.0)
