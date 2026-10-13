@@ -476,7 +476,7 @@ private fun ColumnScope.CardBody(
             ))
         }
         LiveCategory.LIFE -> {
-            StockGallery(panel.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
