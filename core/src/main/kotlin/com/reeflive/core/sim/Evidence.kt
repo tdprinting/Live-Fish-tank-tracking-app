@@ -104,6 +104,13 @@ object EvidenceLedger {
         EvidenceEntry("valenciennea_puellaris", "starves on a young or small sand bed", "prey index", S, "16 §2 aquariadise (direction); rates D"),
         EvidenceEntry("valenciennea_puellaris", "sand on low corals", "puff within 7 cm, coral < 8 cm over the sand", S, "16 §2 aquariadise, aquariumsource (direction); distances D"),
         EvidenceEntry("valenciennea_puellaris", "DiamondGobyBrain.SIFT_YIELD_MIN", "0.3 min per mouthful at prey index 1", D, "16 §4", "condition over 3 weeks on a young vs mature bed"),
+        EvidenceEntry("euprymna_berryi", "buried by day, eyes exposed; hunts at night", "behaviour", S, "cephalopod_squid §5 Jolly 2022, Hanlon 1997, Shears 1988"),
+        EvidenceEntry("euprymna_berryi", "backward jet escape with inking", "behaviour", S, "cephalopod_squid §5 Hanlon 1997 (paralarvae)"),
+        EvidenceEntry("euprymna_berryi", "light organ output follows downwelling light; symbionts vented at dawn", "glow, 90 % vented", S, "cephalopod_squid §5 Jones & Nishiguchi 2004, Nyholm & McFall-Ngai 2021"),
+        EvidenceEntry("euprymna_berryi", "prefers shrimp and mysids; fish slip from its suckers", "prey weights", S, "cephalopod_squid §4 Hanlon 1997"),
+        EvidenceEntry("euprymna_berryi", "BobtailSquidBrain.SHRIMP_PREY_FRAC", "shrimp < 0.75 × squid length (molting < 1.1 ×)", D, "cephalopod_squid §4", "which shrimp sizes a captive squid takes"),
+        EvidenceEntry("euprymna_berryi", "hawkfish threat radius", "3.5 BL", D, "cephalopod_squid §4", "time buried with and without a hawkfish"),
+        EvidenceEntry("euprymna_berryi", "temperature band", "opt 20-25.5 °C, tol to 27.5", A, "cephalopod_squid §3 culture at 20-25 °C; upper bounds D"),
         // ------------------------------------------------------------ bacteria layer (research 18, BacteriaModel)
         EvidenceEntry("bacteria", "AOB dominate reef live rock; AOA a minor high-affinity pool", "AOA_K 2 % of the AOB bed", S, "17 §1.1 live-rock study (AOA < 0.01 %); capacity D", "NH3 floor in a lightly stocked tank"),
         EvidenceEntry("bacteria", "no comammox in marine biofilters", "comammox = 0", S, "17 §1.6 McKnight & Neufeld 2024"),

@@ -301,6 +301,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     ASTERINA(listOf("asterina", "aquilonastra"), false),
     /** Sand-sifting sleeper gobies (diamond goby, *Valenciennea puellaris*; research 16). Sandbox only. */
     DIAMOND_GOBY(listOf("valenciennea"), true),
+    /**
+     * Bobtail squid (*Euprymna berryi* and relatives, Sepiolidae; research cephalopod_squid). Sandbox only. A mollusc, so not a fish
+     * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
+     */
+    BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -325,6 +330,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
+            "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
         )
 
         fun byId(id: String): BrainKind? {

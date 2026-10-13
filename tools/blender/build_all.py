@@ -42,6 +42,8 @@ def run(step, args):
         import microfauna
         for k, fn in microfauna.MICRO_BUILDERS.items():
             fn()
+        import squid  # sandbox bobtail squid (docs/research/cephalopod_squid.md)
+        squid.build_all()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)

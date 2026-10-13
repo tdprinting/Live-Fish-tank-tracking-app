@@ -14,10 +14,11 @@ class SpeciesDbTest {
     @Test
     fun loadsEverySheet() {
         // 10 fish species (9 kinds incl. a clown pair), 9 inverts, 6 corals, 1 macroalga per Tee's confirmed list,
-        // plus the diamond goby (sandbox "Add life" only, research 16) and the hairy mushroom the clowns host.
-        assertEquals(28, db.size)
+        // plus the diamond goby (sandbox "Add life" only, research 16), the hairy mushroom the clowns host and the
+        // bobtail squid (sandbox only, research cephalopod_squid).
+        assertEquals(29, db.size)
         assertEquals(10, db.all.count { it.kind == SpeciesKind.FISH })
-        assertEquals(10, db.all.count { it.kind == SpeciesKind.INVERT })
+        assertEquals(11, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(7, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
     }
@@ -41,7 +42,7 @@ class SpeciesDbTest {
     fun modelsMatchShippedAssets() {
         // File names from the asset track (app/src/main/assets/models, ASSETS §5).
         val shipped = setOf(
-            "algae_tufts", "asterina", "astrea", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
+            "algae_tufts", "asterina", "astrea", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
             "kenya", "lawnmower_blenny", "macro_red", "mushroom", "mushroom_hairy", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "tang", "wrasse", "zoa",

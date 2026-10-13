@@ -56,6 +56,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     // dynamic sand bed + suspended clouds (SIMULATION §16, SandVisuals.kt)
     private var sandFx: SandFx? = null
     private var sandClouds: SandCloudRenderer? = null
+    private var inkClouds: InkCloudRenderer? = null
     private var shafts: LightShafts? = null
     /** Marine snow and the follow lens (camera / lighting work, kept apart from the scene drawing). */
     private var snow: MarineSnow? = null
@@ -133,6 +134,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         frame = FrameUniforms()
         particlesGl = ParticleRenderer()
         sandFx = SandFx(); sandClouds = SandCloudRenderer()
+        inkClouds = InkCloudRenderer()
         shafts = LightShafts()
         white = Texture.solid(255, 255, 255)
         flatNormal = Texture.solid(128, 128, 255)
@@ -156,6 +158,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
         sandFx?.release(); sandFx = null; sandClouds?.release(); sandClouds = null
+        inkClouds?.release(); inkClouds = null
         shafts?.release(); shafts = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
@@ -258,6 +261,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
+        inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
         if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -644,6 +648,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // (x stride phase, y stepping, z rock / claw signal, w grooming), crawlers ten. Crawler models with pivots are
         // posed about them (uLimbOn); everything else reads uLimb[0] only, zeroed when the pose carries no limbs.
         if (r.limbCount > 0) p.set4fv("uLimb", r.limbs, r.limbCount) else p.set4f("uLimb", 0f, 0f, 0f, 0f)
+        // bobtail squid skin (motion mode 4, core SquidRig limbs[2]): chromatophore expansion, passing cloud, glow, 1 + cloud phase
+        if (r.motionMode == 4 && r.limbCount >= 3) p.set4f("uChroma", r.limbs[9], r.limbs[10], r.limbs[11], 1f + r.limbs[8])
+        else p.set4f("uChroma", 0f, 0f, 0f, 0f)
         val limbsOn = !rigid && limbPivots != null && r.limbCount >= 10
         p.set1f("uLimbOn", if (limbsOn) 1f else 0f)
         if (limbsOn) p.set4fv("uLimbPivot", limbPivots!!, 10)

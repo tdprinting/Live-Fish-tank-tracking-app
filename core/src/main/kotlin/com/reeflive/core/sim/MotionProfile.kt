@@ -25,6 +25,11 @@ enum class Gait {
     /** Muscular foot or tube feet gliding (snails, asterina). */
     GLIDE,
     SESSILE,
+    /**
+     * Cephalopod: hovers and cruises on undulating fins, escapes and lunges with the mantle jet (bobtail squid,
+     * research cephalopod_squid). Moved by the swim integrator; fin, mantle and arm motion come from its [SquidRig].
+     */
+    FIN_JET,
 }
 
 /**
@@ -164,6 +169,9 @@ object MotionProfiles {
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
+        // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
+        // jet speeds live in the species sheet (burstBL) and SquidRig
+        BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),
         BrainKind.GENERIC_INVERT to MotionProfile(Gait.WALK),
     )
 
