@@ -420,20 +420,34 @@ def _normalize_unit(objs, along="x", sit=True):
 # brittle star (black Ophiocoma): unit arm span, disc at origin, sits on z=0
 # ----------------------------------------------------------------------------
 def build_brittle_star():
+    """Black brittle star (Ophiocoma sp.): pentagonal, granular disc with paired radial shields; five long arms
+    (span ~6x the disc) made of many short segments (dorsal arm plates with dark joints, a faint lighter band
+    every few segments) that taper to a whip tip; a row of stout, blunt arm spines on each side of every
+    other segment, about one arm-width long near the disc and shortening toward the tip."""
     C.reset_scene()
     at = Atlas(256, 128, 2)
+    nseg = 44
 
     def arm(cv):
-        cv.vgrad("#1A1A1A", "#1E1E1E")
-        b = 0.5 + 0.5 * np.sin(cv.u * 2 * math.pi * 14)
-        cv.blend(S(0.6, 0.9, b), "#3B3B3B", 0.8)
-        cv.blend(S(0.85, 1.0, cv.u), "#2A2A2A", 0.5)
+        # strip u = along the arm (0 disc -> 1 tip), v = around (0.5 = dorsal midline)
+        cv.vgrad("#1A1A1C", "#202022")
+        ph = (cv.u * nseg) % 1.0
+        joint = 1 - S(0.0, 0.12, np.minimum(ph, 1 - ph))   # dark seam between segments
+        cv.blend(S(0.25, 0.5, np.minimum(ph, 1 - ph)) * (1 - S(0.15, 0.45, np.abs(cv.v - 0.5))), "#3A3A3E", 0.55)
+        cv.blend(joint, "#08080A", 0.8)
+        cv.blend((1 - S(0.0, 0.3, np.abs(((cv.u * nseg / 6.0) % 1.0) - 0.5))) * 0.35, "#4A4A4E")
+        cv.blend(S(0.88, 1.0, cv.u), "#2E2E30", 0.5)
     at.paint_strip(0, arm)
 
     def disc(cv):
-        cv.vgrad("#141414", "#1C1C1C")
-        n = P.fbm(cv.h, cv.w, 20, 3, 31)
-        cv.multiply(0.85 + 0.3 * n)
+        # strip u = angle around the disc, v = radius (0 rim -> 1 centre); granules + paired radial shields
+        cv.vgrad("#1E1E20", "#141416")
+        gr = P.value_noise(cv.h, cv.w, 96, 24, 31)
+        cv.multiply(0.8 + 0.4 * S(0.45, 0.75, gr))
+        a5 = (cv.u * 5) % 1.0
+        for c in (0.42, 0.58):  # two radial shields per arm base, near the rim
+            m = np.exp(-(((a5 - c) / 0.07) ** 2 + ((cv.v - 0.22) / 0.14) ** 2))
+            cv.blend(S(0.4, 0.6, m), "#2E2E32", 0.8)
     at.paint_strip(1, disc)
     tex = os.path.join(C.BUILD, "brittle_star_atlas.png")
     at.cv.save(tex)
@@ -441,11 +455,14 @@ def build_brittle_star():
     root = make_root("Root", dict(species="brittle_star", lengthCm=15.0, unit="arm span 1.0, disc at origin",
                                   arms=5, roughness=0.55))
     gd = G.Geo()
-    Vd, Fd = G.ellipsoid((0, 0, 0.025), (0.07, 0.07, 0.025), 15, 6)
+    Vd, Fd = G.ellipsoid((0, 0, 0.022), (0.075, 0.075, 0.024), 15, 6)
     ang = np.arctan2(Vd[:, 1], Vd[:, 0])
-    # pentagonal disc
-    Vd[:, :2] *= (1 + 0.12 * np.cos(5 * ang))[:, None]
-    gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1), [(0, 0, 0, 0)] * len(Vd))
+    # pentagonal disc, slightly notched between the arms
+    Vd[:, :2] *= (1 + 0.10 * np.cos(5 * ang) - 0.04 * np.cos(10 * ang))[:, None]
+    rad = np.linalg.norm(Vd[:, :2], axis=1) / 0.085
+    top = Vd[:, 2] >= 0.022
+    vv = np.where(top, 1 - np.clip(rad, 0, 1), 0.0)
+    gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1, vv), [(0, 0, 0, 0)] * len(Vd))
     disc_o = geo_obj("Body", gd, root, "body", [mat])
     ga = G.Geo()
     for i in range(5):
@@ -455,15 +472,21 @@ def build_brittle_star():
         n = 22
         t = np.linspace(0, 1, n)
         curl = 0.12 * np.sin(t * math.pi * (1.2 + 0.2 * i)) * (1 if i % 2 else -1)
-        pts = (0.06 + 0.44 * t)[:, None] * d + (curl * t)[:, None] * perp + np.c_[0 * t, 0 * t, 0.02 - 0.012 * t]
-        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.02, 0.003, n), 5, squash=0.6)
+        pts = (0.065 + 0.435 * t)[:, None] * d + (curl * t)[:, None] * perp + np.c_[0 * t, 0 * t, 0.02 - 0.013 * t]
+        R = 0.019 * (1 - 0.86 * t ** 0.9)
+        Vt, Ft, tv, av = G.tube(pts, R, 5, squash=0.6)
         ga.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)),
                                                     np.full(len(Vt), i / 4), tv], -1))
-        # short spines along each arm: thin side quads
-        for k in range(2, n - 2, 2):
+        # stout arm spines: one per side at every other station, about an arm-width long, angled forward/up
+        tang = np.gradient(pts, axis=0)
+        tang /= np.linalg.norm(tang, axis=1, keepdims=True)
+        for k in range(1, n - 2):
+            nrm = np.cross([0, 0, 1.0], tang[k])
             for sgn in (1, -1):
-                b = pts[k] + perp * sgn * 0.015
-                Vc, Fc = G.cone(b, b + perp * sgn * 0.02 + d * 0.004, 0.003, 3)
+                L = 0.012 + 0.016 * (1 - t[k])
+                b = pts[k] + nrm * sgn * R[k] * 0.85
+                tipp = b + nrm * sgn * L * 0.85 + tang[k] * L * 0.45 + np.array([0, 0, L * 0.2])
+                Vc, Fc = G.cone(b, tipp, max(0.0022, R[k] * 0.16), 3)
                 ga.add(Vc, Fc, at.uv(0, np.full(len(Vc), t[k])), [(0, 0, i / 4, t[k])] * len(Vc))
     geo_obj("Arms", ga, root, "leg", [mat], extras={"count": 5})
     objs = [o for o in C.all_descendants(root) if o.type == "MESH"]
@@ -520,12 +543,17 @@ def build_astrea():
     at = Atlas(256, 128, 2)
 
     def shell(cv):
-        cv.vgrad("#C4522B", "#D9733E")
+        # Lithopoma tectum: grey-brown / olive conical shell with knobby axial ribs, usually filmed with algae
+        # and spotted with pink coralline; paler worn knobs (strip u = up the spire, v = around)
+        cv.vgrad("#7E7660", "#A49A80")
         n = P.fbm(cv.h, cv.w, 12, 4, 41)
-        cv.blend(S(0.55, 0.62, n), "#F2EFE6", 0.85)
-        n2 = P.fbm(cv.h, cv.w, 14, 4, 42)
-        cv.blend(S(0.58, 0.64, n2), "#6E6B2E", 0.8)
-        cv.blend(S(0.45, 0.5, 0.5 + 0.5 * np.sin(cv.u * 2 * math.pi * 7)), "#E8C8A8", 0.25)
+        cv.blend(S(0.5, 0.62, n), "#5E5C3A", 0.6)  # olive algae film
+        n2 = P.fbm(cv.h, cv.w, 18, 4, 42)
+        cv.blend(S(0.64, 0.7, n2), "#B87890", 0.75)  # pink coralline patches
+        cv.blend(S(0.7, 0.74, P.fbm(cv.h, cv.w, 40, 2, 43)), "#E6E0D2", 0.6)  # pale worn specks
+        rib = 0.5 + 0.5 * np.cos(cv.v * 2 * math.pi * 7 + cv.u * 2 * math.pi * 0.7)
+        cv.blend(S(0.75, 0.95, rib), "#CFC6AE", 0.35)  # knob crests
+        cv.multiply(0.9 + 0.1 * (0.5 + 0.5 * np.sin(cv.u * 2 * math.pi * 9)))  # growth lines
     at.paint_strip(0, shell)
     at.paint_strip(1, lambda cv: cv.vgrad("#7A6A50", "#A89878"))
     tex = os.path.join(C.BUILD, "astrea_atlas.png")
@@ -592,9 +620,14 @@ ASTERINA_GLASS = [  # default world placements (cm) on the glass: pos3, normal3 
 
 def build_asterina():
     C.reset_scene()
-    cv = P.Canvas(64, 64, "#8E8C82")
+    # Asterina-type (Aquilonastra) star: salmon-tan, mottled olive-brown with cream and orange flecks,
+    # paler disc centre (research: "salmon/tan")
+    cv = P.Canvas(64, 64, "#C9A084")
     n = P.fbm(64, 64, 6, 3, 51)
-    cv.multiply(0.85 + 0.3 * n)
+    cv.blend(S(0.5, 0.62, n), "#8A7656", 0.7)
+    cv.blend(S(0.7, 0.76, P.fbm(64, 64, 14, 2, 52)), "#E8D8C0", 0.7)
+    cv.blend(S(0.72, 0.78, P.fbm(64, 64, 16, 2, 53)), "#D8783E", 0.7)
+    cv.blend(1 - S(0.0, 0.22, np.sqrt((cv.u - 0.5) ** 2 + (cv.v - 0.5) ** 2)), "#DCC0A0", 0.5)
     tex = os.path.join(C.BUILD, "asterina.png")
     cv.save(tex)
     mat = C.material("asterina_mat", rough=0.6, image=C.load_image(tex, name="asterina"))

@@ -753,6 +753,171 @@ def mushroom(rock, A):
 
 
 # ----------------------------------------------------------------------------
+# Hairy mushroom (Rhodactis sp.): the clownfish host. A cluster of flat-to-slightly-cupped discs 3-6 cm across,
+# the oral surface densely covered in short branching ("hairy") tentacles: olive-green base, green tentacles
+# with a lighter, fluorescent tip glow; no visible mouth under the hair (a faint one at most).
+# ----------------------------------------------------------------------------
+HAIRY_DISCS = 5           # discs in the clump
+HAIRY_SPACING = 0.25      # cm between tentacle tufts (jittered); sets the instance count (~1100)
+
+
+def hairy_disc_local(radius, cup, ph, t, a):
+    """Point on a hairy-mushroom disc in its local frame (cm, base at the origin, oral surface up +Y).
+    t: 0 centre -> 1 rim, a: angle. Cupped: the rim rises by `cup` x radius, with a gentle 5-6 lobe wave."""
+    r = radius * t
+    wave = radius * (0.05 * t ** 3 * math.sin(5 * a + ph) + 0.025 * t ** 2 * math.sin(11 * a + 2 * ph))
+    y = radius * (0.30 + cup * t ** 2) + wave
+    return np.array([r * math.cos(a), y, r * 0.92 * math.sin(a)])
+
+
+def hairy_disc(c, n, radius, cup, seed, twist):
+    """Disc mesh (oral surface + a short stalk skirt) placed at c, oriented to normal n.
+    Returns V, F, UV, COL and the (q, ph) needed to place tentacles on the same surface."""
+    rs = RS(seed)
+    ph = rs.uniform(0, 6.28)
+    rings, segs = 5, 24
+    V, UV, COL, F = [hairy_disc_local(radius, cup, ph, 0.0, 0.0)], [(0.5, 0.5)], [(0.2, 0, 0.25, 1)], []
+    for i in range(1, rings + 1):
+        t = i / rings
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            V.append(hairy_disc_local(radius, cup, ph, t, a))
+            UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
+            COL.append((0.8 * t, 0, 0.25 + 0.75 * t, 1))
+    for k in range(segs):
+        F.append((0, 1 + (k + 1) % segs, 1 + k))
+    for i in range(rings - 1):
+        b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
+        for k in range(segs):
+            F.append((b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k))
+    b = len(V)  # underside skirt down to the stalk foot
+    for k in range(segs):
+        a = 2 * math.pi * k / segs
+        V.append(np.array([0.3 * radius * math.cos(a), 0.0, 0.27 * radius * math.sin(a)]))
+        UV.append((0.5 + 0.08 * math.cos(a), 0.5 + 0.08 * math.sin(a)))
+        COL.append((0, 0, 0, 1))
+    outer = 1 + (rings - 1) * segs
+    for k in range(segs):
+        F.append((outer + k, outer + (k + 1) % segs, b + (k + 1) % segs, b + k))
+    q = q_from_up(unit(n), twist)
+    V = np.array([q_rotate(q, v) for v in V]) + np.asarray(c, float)
+    return V, F, np.array(UV), np.array(COL), q, ph
+
+
+def proto_hairy(h=0.24):
+    """One branching tentacle tuft (10 tris): a short 3-sided stub (6 tris) splitting into 4 single-triangle
+    branchlets that fork out and up. UV v runs base (0) -> tip (1) so the tips take the fluorescent colour."""
+    V, F, UV, COL = [], [], [], []
+    stub = h * 0.45
+    for j, (y, r) in enumerate(((0.0, 0.06), (stub, 0.045))):
+        for k in range(3):
+            a = 2 * math.pi * k / 3
+            V.append((r * math.cos(a), y, r * math.sin(a)))
+            UV.append((0.2 + 0.3 * k / 3, 0.05 + 0.4 * j))
+            COL.append((0, 0, 0.45 * j, 1))
+    for k in range(3):
+        F.append((k, 3 + k, 3 + (k + 1) % 3, (k + 1) % 3))
+    for k in range(4):
+        a = 2 * math.pi * (k + 0.25) / 4
+        d = np.array([math.cos(a), 0.0, math.sin(a)])
+        tng = np.array([-math.sin(a), 0.0, math.cos(a)])
+        base = np.array([0.0, stub, 0.0]) + d * 0.02
+        L = h * (0.85 if k % 2 else 0.75)
+        sp = math.radians(52 if k % 2 else 40)
+        tip = base + (d * math.sin(sp) + UP * math.cos(sp)) * L
+        bi = len(V)
+        V += [tuple(base - tng * 0.055), tuple(base + tng * 0.055), tuple(tip)]
+        UV += [(0.6, 0.45), (0.8, 0.45), (0.7, 0.98)]
+        COL += [(0, 0, 0.45, 1), (0, 0, 0.45, 1), (0, 0, 1, 1)]
+        F.append((bi, bi + 2, bi + 1))
+    return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
+
+
+def mushroom_hairy(rock, A):
+    """Rhodactis clump on the rock under HOST_ARCH_CLOWNS (the clowns' host spot)."""
+    import json
+    anchors_all = {a["name"]: a for a in json.load(open(os.path.join(C.SIM, "anchors.json")))["anchors"]}
+    host = np.array(anchors_all["HOST_ARCH_CLOWNS"]["pos"], float)
+    hit, hn = None, None
+    for d in ((0, -1, 0), (0, -0.6, -0.8), (0, 0, -1), (-0.6, -0.6, -0.5), (0.6, -0.6, -0.5)):
+        p_, n_ = rock.ray(host, unit(np.array(d, float)), 30.0)
+        if p_ is not None and (hit is None or np.linalg.norm(p_ - host) < np.linalg.norm(hit - host)):
+            hit, hn = p_, n_
+    if hit is None:  # fallback: the sand under the host point
+        hit, hn = np.array([host[0], 4.0, host[2]]), np.array([0, 1.0, 0])
+    hn = unit(hn + UP * 0.6)
+    print(f"[coral] mushroom_hairy: clump at {np.round(hit, 1)} normal {np.round(hn, 2)}")
+    rs = RS(97)
+    # disc centres: one big disc in the middle and the rest around it, overlapping slightly like a clump
+    t1 = unit(np.cross(hn, [0, 0, 1.0]) if abs(hn[2]) < 0.9 else np.cross(hn, [1.0, 0, 0]))
+    t2 = np.cross(hn, t1)
+    radii = [2.9, 2.2, 1.9, 1.6, 1.5][:HAIRY_DISCS]  # 3-6 cm discs
+    offs = [(0, 0)] + [(math.cos(a) * rr, math.sin(a) * rr) for a, rr in
+                       zip(np.linspace(0, 2 * math.pi, HAIRY_DISCS - 1, endpoint=False) + 0.4, (3.9, 3.6, 3.4, 3.6))]
+    g = T.WGeo()
+    inst = Instances(98)
+    discs = []
+    for k, (r, (oa, ob)) in enumerate(zip(radii, offs)):
+        guess = hit + t1 * oa + t2 * ob + hn * 2.0
+        p, nrm, _ = rock.nearest(guess)
+        if p is None or np.linalg.norm(p - guess) > 5.0:
+            p, nrm = hit + t1 * oa + t2 * ob, hn
+        nrm = unit(unit(nrm) * 0.5 + hn * 0.5 + unit(np.array([oa, 0, ob]) + 1e-6) * 0.15 * (k > 0))
+        cup = rs.uniform(0.04, 0.14)
+        V, F, UV, COL, q, ph = hairy_disc(p - nrm * 0.15, nrm, r, cup, 300 + k, rs.uniform(0, 6.28))
+        g.add(V, F, UV, COL)
+        discs.append((p - nrm * 0.15, nrm, r, cup, q, ph))
+    # tentacle tufts: jittered hex grid over each disc's oral surface, normals from the local surface
+    proto = proto_hairy()
+    for (c, nrm, r, cup, q, ph) in discs:
+        sp = HAIRY_SPACING
+        for j in range(int(2 * r / (sp * 0.866)) + 1):
+            for i in range(int(2 * r / sp) + 1):
+                x = -r + i * sp + (j % 2) * sp * 0.5 + rs.normal(0, sp * 0.15)
+                z = -r + j * sp * 0.866 + rs.normal(0, sp * 0.15)
+                t = math.hypot(x, z / 0.92) / r
+                if t > 0.97:
+                    continue
+                a = math.atan2(z / 0.92, x)
+                lp = hairy_disc_local(r, cup, ph, t, a)
+                e = 0.01
+                du = hairy_disc_local(r, cup, ph, min(t + e, 1), a) - hairy_disc_local(r, cup, ph, max(t - e, 0), a)
+                dv = hairy_disc_local(r, cup, ph, t, a + e) - hairy_disc_local(r, cup, ph, t, a - e)
+                ln = unit(np.cross(dv, du)) if t > 0.03 else UP
+                if ln[1] < 0:
+                    ln = -ln
+                ln = unit(ln + UP * 0.3)
+                wp = q_rotate(q, lp) + c
+                wn = unit(q_rotate(q, ln))
+                # shorter, denser fuzz toward the rim; a faint bare mouth spot at the centre
+                scale = (0.75 + 0.35 * (1 - t)) * rs.uniform(0.85, 1.15) * (0.55 if t < 0.06 else 1.0)
+                inst.add(wp + wn * 0.02, wn, scale)
+    # textures: disc = dark olive with a slightly paler rim and a faint dark centre; tentacles olive -> green ->
+    # light fluorescent green tips
+    dc = P.Canvas(128, 128, "#2E4420")
+    rr = np.hypot(dc.u - 0.5, dc.v - 0.5) * 2
+    dc.blend(S(0.6, 1.0, rr), "#56743A", 0.7)
+    dc.blend(1 - S(0.04, 0.12, rr), "#26341A", 0.6)
+    dc.multiply(0.85 + 0.3 * P.fbm(128, 128, 8, 3, 99))
+    disc_m = C.material("mushroom_hairy", rough=0.85, image=tex("mushroom_hairy", dc), emissive="#6FD45A",
+                        emissive_strength=0.0, double=True)
+    pc = P.Canvas(64, 64, "#4A6A2C")
+    tt = pc.v
+    pc.rgb = (hex2rgb("#34481E")[None, None] * (1 - S(0.0, 0.55, tt))[..., None]
+              + hex2rgb("#4E8C2E")[None, None] * (S(0.0, 0.55, tt) * (1 - S(0.72, 0.97, tt)))[..., None]
+              + hex2rgb("#9CEB6C")[None, None] * S(0.72, 0.97, tt)[..., None])
+    pc.multiply(0.92 + 0.16 * P.fbm(64, 64, 6, 2, 100))
+    pol_m = C.material("mushroom_hairy_polyp", rough=0.55, image=tex("mushroom_hairy_polyp", pc), emissive="#8CF060",
+                       emissive_strength=0.1, double=True)
+    root = C.empty("Root")
+    C.set_extras(root, anchor="HOST_ARCH_CLOWNS", species="rhodactis_sp", fluorescent=0.6,
+                 hostFor="clown_orange,clown_darwin", discs=HAIRY_DISCS)
+    body = g.obj("Body", root, "body", [disc_m], smooth=True)
+    pol = polyp_node("Polyps", root, proto, [pol_m], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4))}
+
+
+# ----------------------------------------------------------------------------
 # Red Gracilaria-type macroalgae (M1): 3 tufts
 # ----------------------------------------------------------------------------
 def macro_red(rock, A):
@@ -991,7 +1156,8 @@ BUILDERS = {
                                  "gsp_neon", tent=0.65),
     "gsp_mat": lambda r, A: gsp(r, A, "coral_gsp_lower_right", 9.0, (8.0, 9.5), 0.28, 2200, "#59D64A", "#7DFF4F", 81,
                                 "gsp_mat", mat_hex="#4E3860", raw=True, tent=0.55),
-    "zoa": zoa, "clove": clove, "mushroom": mushroom, "macro_red": macro_red, "organ_pipe": organ_pipe,
+    "zoa": zoa, "clove": clove, "mushroom": mushroom, "mushroom_hairy": mushroom_hairy, "macro_red": macro_red,
+    "organ_pipe": organ_pipe,
     "algae_tufts": algae_tufts, "aiptasia": aiptasia,
 }
 

@@ -184,8 +184,10 @@ def fin_grid(base, tip, ns, slot, ts=None, A=None, bend=None, skip=()):
 
 
 def median_fin(prof, kind, u0, u1, heights, rake_deg=25.0, n=20, ns=6, slot=None, inset=0.12,
-               cirri=False):
-    """Dorsal/anal fin along the top/bottom contour. heights: list of (u, h)."""
+               cirri=False, cirri_len=0.02, cirri_ts=None):
+    """Dorsal/anal fin along the top/bottom contour. heights: list of (u, h).
+    cirri: a tuft of 3 tapered filaments at each spine tip, at the fractions `cirri_ts` along the fin (default:
+    every column of the front half). Tufts sample the spare atlas slot 7 (painted opaque by the species)."""
     us = np.linspace(u0, u1, n)
     hs = np.maximum(pchip([h[0] for h in heights], [h[1] for h in heights], us), 0.003)
     sign = 1.0 if kind.startswith("dorsal") else -1.0
@@ -201,22 +203,25 @@ def median_fin(prof, kind, u0, u1, heights, rake_deg=25.0, n=20, ns=6, slot=None
     slot = FIN_SLOTS[kind] if slot is None else slot
     V, F, UV, COL = fin_grid(base, tip, ns, slot, ts=ts, A=us)
     if cirri:
-        # tiny tufts (3 tapered triangles) at each spine tip of the spiny part
         extra_v, extra_f, extra_uv, extra_c = [], [], [], []
         nb = len(V)
-        for j in range(0, n // 2 + 1, max(1, n // 20)):
-            tp = tip[j]
+        cts = np.linspace(0, 0.5, n // 2 + 1) if cirri_ts is None else np.asarray(cirri_ts, float)
+        for k_, tt in enumerate(cts):
+            tp = np.array([np.interp(tt, ts, tip[:, c]) for c in range(3)])
+            ln = float(np.interp(tt, ts, lean))
+            ua = float(np.interp(tt, ts, us))
             for kk in range(3):
-                ang = math.radians(-35 + 35 * kk) + lean[j]
-                d = np.array([math.sin(ang), 0.0, sign * math.cos(ang)]) * 0.02
+                ang = math.radians(-40 + 40 * kk) + ln
+                d = np.array([math.sin(ang), 0.0, sign * math.cos(ang)]) * cirri_len * (1.0 - 0.3 * (kk != 1))
                 side = np.array([0.0, 0.004 * (kk - 1), 0.0])
-                w = np.array([0.003, 0.0, 0.0])
+                w = np.array([0.0035, 0.0, 0.0])
                 vi = nb + len(extra_v)
-                extra_v += [tp - w + side, tp + w + side, tp + d + side]
+                extra_v += [tp - w + side - d * 0.15, tp + w + side - d * 0.15, tp + d + side]
                 extra_f.append((vi, vi + 1, vi + 2))
-                uvt = slot_uv(slot, ts[j], 0.999)
-                extra_uv += [uvt, uvt, uvt]
-                extra_c += [(0, 0, 1.0, us[j])] * 3
+                tcol = (k_ % 4 + 0.5) / 4
+                extra_uv += [slot_uv(FIN_SLOTS["spare"], tcol, 0.1), slot_uv(FIN_SLOTS["spare"], tcol, 0.1),
+                             slot_uv(FIN_SLOTS["spare"], tcol, 0.8)]
+                extra_c += [(0, 0, 1.0, ua)] * 3
         V = np.vstack([V, extra_v])
         F = F + extra_f
         UV = np.vstack([UV, extra_uv])
@@ -241,6 +246,9 @@ def caudal_fin(prof, ub, length, span, shape="rounded", n=21, ns=6, slot=None):
     elif shape == "lunate":
         ext = 0.42 + 0.58 * at ** 1.8
         zt = np.sign(t) * at ** 0.9 * span / 2
+    elif shape == "lanceolate":  # pointed (dottybacks): middle rays longest, a short filament at the tip
+        ext = 0.66 + 0.34 * np.clip(1 - at, 0, 1) ** 1.3
+        zt = t * span / 2 * (1 - 0.15 * at)
     else:
         raise ValueError(shape)
     base = np.stack([np.full(n, ub - 0.025), np.zeros(n), zc0 + t * 0.92 * H0], -1)
@@ -366,8 +374,10 @@ def uv_sphere(center, r, axis_sign, segs=10, rings=6):
 # ----------------------------------------------------------------------------
 def paint_fin_slot(cv, slot, base="#C9C6C2", alpha=0.55, rays=12, ray_color=None, ray_alpha=0.85,
                    margin=None, margin_w=0.08, tip_color=None, tip_from=0.5, spots=None, base_fn=None,
-                   edge_fade=0.06, spine_count=0, alpha_fn=None):
-    """Paint one 256x64 slot. Pixel space t (0..1 across), s (0 base -> 1 tip)."""
+                   edge_fade=0.06, spine_count=0, alpha_fn=None, incise=0.0):
+    """Paint one 256x64 slot. Pixel space t (0..1 across), s (0 base -> 1 tip).
+    incise > 0 cuts the membrane between the first `spine_count` spines back from the tip (fraction of the
+    fin height), so the spiny dorsal reads as free spine tips with notched membrane (alpha-tested)."""
     col, row = slot % 2, slot // 2
     x0, y0 = col * SLOT_W, row * SLOT_H
     t = (np.arange(SLOT_W) + 0.5) / SLOT_W
@@ -395,12 +405,19 @@ def paint_fin_slot(cv, slot, base="#C9C6C2", alpha=0.55, rays=12, ray_color=None
         a = np.maximum(a, ray_alpha * line)
     if spots is not None:
         rgb, a = spots(T, S, rgb, a)
+    top = np.ones_like(S)
+    if incise and rays and spine_count:
+        ph = np.abs(((T * rays) % 1.0) - 0.5)  # 0 on a spine, 0.5 midway between spines
+        top = np.where((T * rays) < spine_count, 1 - incise * (ph / 0.5) ** 0.9, 1.0)
+    Sm = S / np.maximum(top, 0.2)  # margins follow the incised membrane edge
     if margin is not None:
-        m = P.smoothstep(1 - margin_w - 0.03, 1 - margin_w, S)[..., None]
+        m = P.smoothstep(1 - margin_w - 0.03, 1 - margin_w, Sm)[..., None]
         rgb = rgb * (1 - m) + C.hex2rgb(margin) * m
         a = np.maximum(a, 0.85 * m[..., 0])
     if alpha_fn is not None:
         a = alpha_fn(T, S, a)
+    if incise and rays and spine_count:
+        a = a * (1 - P.smoothstep(top - 0.04, top + 0.005, S))
     a = a * (1 - P.smoothstep(1 - edge_fade, 1.0, S))
     cv.rgb[y0:y0 + SLOT_H, x0:x0 + SLOT_W] = rgb
     cv.a[y0:y0 + SLOT_H, x0:x0 + SLOT_W] = a
