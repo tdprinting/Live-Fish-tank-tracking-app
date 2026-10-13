@@ -619,41 +619,79 @@ ASTERINA_GLASS = [  # default world placements (cm) on the glass: pos3, normal3 
 
 
 def build_asterina():
+    """Asterina-type star (Aquilonastra, research 16 §14.4): small (5-15 mm), flat-bottomed and gently domed, short
+    broad arms (R:r ~ 1.8) fringed with spinelets; the aquarium form is fissiparous, so most stars show 6-7 arms of
+    unequal length (one side regenerating after a split). Mottled cream to olive-brown with orange flecks and a paler
+    madreporite area; the top is granular with tiny spinelets and papulae."""
     C.reset_scene()
-    # Asterina-type (Aquilonastra) star: salmon-tan, mottled olive-brown with cream and orange flecks,
-    # paler disc centre (research: "salmon/tan")
-    cv = P.Canvas(64, 64, "#C9A084")
-    n = P.fbm(64, 64, 6, 3, 51)
-    cv.blend(S(0.5, 0.62, n), "#8A7656", 0.7)
-    cv.blend(S(0.7, 0.76, P.fbm(64, 64, 14, 2, 52)), "#E8D8C0", 0.7)
-    cv.blend(S(0.72, 0.78, P.fbm(64, 64, 16, 2, 53)), "#D8783E", 0.7)
-    cv.blend(1 - S(0.0, 0.22, np.sqrt((cv.u - 0.5) ** 2 + (cv.v - 0.5) ** 2)), "#DCC0A0", 0.5)
+    cv = P.Canvas(128, 128, "#C9A88A")
+    n = P.fbm(128, 128, 8, 4, 51)
+    cv.blend(S(0.48, 0.62, n), "#7E6E4E", 0.75)
+    cv.blend(S(0.66, 0.74, P.fbm(128, 128, 22, 2, 52)), "#EADCC6", 0.75)
+    cv.blend(S(0.7, 0.78, P.fbm(128, 128, 26, 2, 53)), "#D8743A", 0.8)
+    gran = P.value_noise(128, 128, 64, 64, 54)
+    cv.multiply(0.86 + 0.22 * S(0.4, 0.8, gran))                       # granules / spinelets
+    rr = np.sqrt((cv.u - 0.5) ** 2 + (cv.v - 0.5) ** 2)
+    cv.blend(1 - S(0.0, 0.12, rr), "#DCC2A2", 0.45)
+    cv.blend(S(0.8, 0.95, rr / 0.5), "#E6D6C0", 0.5)                    # pale spinelet fringe at the margin
     tex = os.path.join(C.BUILD, "asterina.png")
     cv.save(tex)
-    mat = C.material("asterina_mat", rough=0.6, image=C.load_image(tex, name="asterina"))
+    mat = C.material("asterina_mat", rough=0.65, image=C.load_image(tex, name="asterina"))
     root = make_root("Root", dict(species="asterina", lengthCm=1.2, unit="diameter 1.0, flat in XY, top +Z",
                                   instanceStride=6, instances=[float(x) for p in ASTERINA_GLASS for x in p],
                                   instanceLayout="world pos3 (cm) + surface normal3; runtime scales by lengthCm"))
-    # star: 5 broad short arms, slightly domed
-    pts = 30
-    V = [(0, 0, 0.08)]
+    arms = [1.0, 0.97, 1.0, 0.62, 0.5, 0.95]          # fissiparous: two short regenerating arms on one side
+    na = len(arms)
+    m, rings = 54, 4
+    rs = np.random.default_rng(9)
+    jitter = rs.uniform(-0.06, 0.06, na)
+
+    def radius(a):
+        # star outline: disc radius r plus a rounded lobe per arm, blended by the nearest arm's angle
+        r = 0.2
+        best = 0.0
+        for i in range(na):
+            ai = 2 * math.pi * i / na + jitter[i]
+            d = math.atan2(math.sin(a - ai), math.cos(a - ai))
+            best = max(best, arms[i] * math.exp(-(d / 0.36) ** 2))
+        return r + 0.3 * best
+
+    V = [(0.0, 0.0, 0.11)]
     UV = [(0.5, 0.5)]
-    for k in range(pts):
-        a = 2 * math.pi * k / pts
-        r = 0.5 * (0.62 + 0.38 * math.cos(5 * a) ** 2 * (1 if math.cos(5 * a) > 0 else 0.3))
-        r = 0.32 + 0.18 * max(0.0, math.cos(5 * a / 2) ** 2)
-        V.append((r * math.cos(a), r * math.sin(a), 0.01))
-        UV.append((0.5 + r * math.cos(a), 0.5 + r * math.sin(a)))
-    F = [(0, k + 1, (k + 1) % pts + 1) for k in range(pts)]
-    # underside
-    b = len(V)
+    for j in range(1, rings + 1):
+        f = j / rings
+        for k in range(m):
+            a = 2 * math.pi * k / m
+            R = radius(a) * f
+            z = 0.11 * (1 - f ** 1.6) + 0.012
+            V.append((R * math.cos(a), R * math.sin(a), z))
+            UV.append((0.5 + R * math.cos(a), 0.5 + R * math.sin(a)))
+    F = [(0, k + 1, (k + 1) % m + 1) for k in range(m)]
+    for j in range(rings - 1):
+        b0 = 1 + j * m
+        b1 = 1 + (j + 1) * m
+        for k in range(m):
+            F.append((b0 + k, b1 + k, b1 + (k + 1) % m, b0 + (k + 1) % m))
+    # flat oral side
+    rim = 1 + (rings - 1) * m
+    c = len(V)
     V.append((0, 0, 0.0))
     UV.append((0.5, 0.5))
-    F += [(b, (k + 1) % pts + 1, k + 1) for k in range(pts)]
+    for k in range(m):
+        a = 2 * math.pi * k / m
+        R = radius(a)
+        V.append((R * math.cos(a) * 1.0, R * math.sin(a), 0.0))
+        UV.append((0.5 + R * math.cos(a), 0.5 + R * math.sin(a)))
+    for k in range(m):
+        F.append((rim + k, rim + (k + 1) % m, c + 1 + (k + 1) % m, c + 1 + k))
+        F.append((c, c + 1 + (k + 1) % m, c + 1 + k))
+    V = np.array(V)
+    V *= 0.5 / np.abs(V[:, :2]).max()
     g = G.Geo()
-    g.add(np.array(V), F, np.array(UV), [(0, 0, 0, 0)] * len(V))
+    g.add(V, F, np.array(UV), [(0, 0, 0, 0)] * len(V))
     o = geo_obj("Body", g, root, "body", [mat])
-    return finish(root, [o], os.path.join(C.MODELS, "asterina.glb"), 200)
+    C.recalc_normals(o)
+    return finish(root, [o], os.path.join(C.MODELS, "asterina.glb"), 560)
 
 
 # ----------------------------------------------------------------------------

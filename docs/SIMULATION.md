@@ -1189,3 +1189,28 @@ The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
 - nassarius trails and burial craters, both direct and fed in a live run;
 - the engineer goby's pit and mound;
 - the diamond goby: catalogue and compatibility, sifting (mouthfuls, puffs, stations, sifted load, level bed), pair burrow, dusting of low corals, decline without sand fauna, and the prey index on a sterile bed.
+
+## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
+
+Sources: [research 10](research/10_microfauna.md) §2.2 diel behaviour and §5.3 motion primitives; [microfauna morphology](research/17_microfauna_morphology.md) (anatomy, colour in life, speeds; owner request 2026-10-13: "see some of the bigger microfauna in the actual tank and not just under the microscope").
+
+**What shows.** `CritterKind` lists the animals big enough to see with the naked eye: Eurythoe-type bristleworms, gammarid amphipods, mysids, sphaeromatid isopods, harpacticoid pods on the front glass (only within ±12 cm of the camera's look-at point, they are ~1 mm), micro-snails, red planaria (only once the pest is present), spaghetti-worm tentacles, skeleton shrimp (caprellids) clinging to the turf on the rock tops, podocopid ostracods on the glass and free-swimming calanoids (*Parvocalanus*) hopping in the water, both only near the camera, and the sessile red foram *Homotrema rubrum* on shaded rock undersides. Asterina stars were already sim organisms; their model was rebuilt (fissiparous form, 6 unequal arms, granular mottled top).
+
+**How many.** Expected animals out on each habitat = `MicrofaunaState.visible(group, scene)` (the model's density × diel exposure) × that habitat's area (`rockCm2`, `sandCm2`, `glassCm2`, new on the state). Shown = `cap · E / (E + K)` per kind (K is a visual half-saturation, est.), so a mature tank shows one or two worms and a few amphipods by day and many more an hour after lights-out. Settled food adds up to 3 worms by day (they come out to feed). Spaghetti worms: `0.5 × exposure` of the buried worms have their 5 tentacles out (more at night), plus one more while food lies on the sand.
+
+**How they move** (wall-clock, ×sim speed up to 4):
+- Bristleworm: comes out of a crevice head-first, gliding 8 mm/s along the rock or sand with a lateral body wave and a backward metachronal parapodial wave; turns toward settled food within 12 cm; after 40-200 s (or ~16 body lengths of travel) reverses down its own trail into the hole at 30 mm/s. The body follows the trail, so a worm half out of a hole looks it.
+- Amphipod: stop-go scuttle (legs 6.5 Hz), rare side-swim bouts rolled 90° at 5 cm/s (pleopods 12 Hz), lands on the nearest rock or drops to the sand; flees into cover when a fish comes within 5 cm.
+- Mysids: a loose swarm 3 cm off a cave mouth, 2.5 Hz positional jitter, heading into the main flow; a fish within 6 cm makes one tail-flip backward ~7 BL.
+- Calanoids: 1-3 mm hops every 0.5-2 s biased upward toward the light, sinking ~0.7 mm/s between.
+- Pods, isopods, snails, flatworms: correlated random walks on their surface with pauses (pods dart 2-5 mm).
+- Skeleton shrimp: grip with the rear pereopods and stand off the rock, swaying as a 0.7 Hz pendulum in the flow with the gnathopods held up; let go and drop into the turf to hide.
+- *Homotrema*: never moves; it appears and disappears only with the population.
+- Spaghetti-worm tentacles: creep out over the sand at 1.2 mm/s along gently curving paths; pull back within ~2 s when a fish's head comes within 4 cm, then stay in for 20-60 s.
+Hiding animals back into their surface and vanish; nothing is ever teleported in view.
+
+**Rendering.** Each critter is a 16-station spine + frames, drawn with the organism shaders (the same spline skinning as fish and inverts), never picked or followed. Models are built by `tools/blender/microfauna.py`. Nearest first, skipping anything under ~3 px, until 12k (High) / 3k (Medium) triangles are spent; off on Low. `tools/validate_glb.py` counts that budget in its on-screen estimate.
+
+**Accuracy audit** (2026-10-13): an independent review against research 10/17 checked sizes, speeds, beat rates and diel exposure; its findings (tentacle diel cycle, predator flight, mysid jitter amplitude, fireworm length up to 12 cm, calanoid antennule length, podocopid eye size, paired mysid eyes, missing water-column pods) are fixed here.
+
+**Tests** (`MicroCrittersTest`): more worms and amphipods at night than by day from a mature tank's own model; they withdraw when the lights come on; every body has its length and sits on rock, sand or glass; tentacles retract from a passing fish.
