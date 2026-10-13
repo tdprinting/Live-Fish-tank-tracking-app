@@ -919,7 +919,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             if (o.hunger < 0.7 || c.t < o.satietyUntil || c.t < cooldown) return 0.0
             if (!c.p.night && o.hunger < 0.85) return 0.0
             val p = choose(c) ?: return 0.0
-            prey = p
+            if (strikeAt < 0) prey = p
             return (0.75 + 0.2 * o.hunger) * (if (c.p.night) 1.0 else 0.8)
         }
         private fun choose(c: Ctx): Organism? {
@@ -978,7 +978,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 // Falco hawkfish (HawkBrain)
 // =====================================================================================
 class HawkBrain(c: Ctx) : SpeciesBrain(c) {
-    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
+    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").distinctBy { it.pos }.ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
     var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
 
     init {
@@ -1096,7 +1096,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
                     o.eyeYaw = lookYaw * 0.5
                     o.sleeping = c.p.night
                     if (!c.p.night && c.t - since > dwell) {
-                        val others = perches.filter { it !== current }
+                        val others = perches.filter { it.pos.distanceTo(current.pos) > 1.0 }
                         if (others.isNotEmpty()) {
                             target = others.maxBy { a -> 1.0 / (10 + a.pos.distanceTo(o.pos)) + c.rng.nextDouble() * 0.05 + (if (c.food.countNear(a.pos, 20.0) > 0) 0.1 else 0.0) }
                             state = 1; since = c.t; events.departures++

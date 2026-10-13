@@ -55,7 +55,8 @@ class SurfacePatch private constructor(val cells: List<Vec3>, val dist: DoubleAr
         /** Cached per rockscape and anchor position (time-lapse forks and tests reuse it). */
         fun of(rock: RockData, from: Vec3, maxRadius: Double): SurfacePatch? = synchronized(cache) {
             val key = "%.2f,%.2f,%.2f,%.1f".format(from.x, from.y, from.z, maxRadius)
-            cache.getOrPut(rock) { HashMap() }.getOrPut(key) { build(rock, from, maxRadius) }
+            val m = cache.getOrPut(rock) { HashMap() }
+            if (m.containsKey(key)) m[key] else build(rock, from, maxRadius).also { m[key] = it }
         }
 
         fun build(rock: RockData, from: Vec3, maxRadius: Double): SurfacePatch? {

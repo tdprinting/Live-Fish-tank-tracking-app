@@ -482,7 +482,7 @@ class Simulation(
             CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
-            c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % 6283.0
+            c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % (2 * Math.PI)
         }
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
@@ -1014,7 +1014,8 @@ class Simulation(
             o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
                 !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
-        }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind)) }
+        }.map { it to (it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind))) }
+            .sortedByDescending { it.second }.map { it.first }
         // corals catch a share of a dosed cloud straight away (no particles in abstract mode)
         if (kind.coralCatchable) for (c in corals) if (c.tissue >= 0.1 && c.kind != CoralKind.MACRO) c.fed = min(1.0, c.fed + CORAL_FED_PER_CATCH * 3)
         for (o in eaters) {
@@ -1071,7 +1072,7 @@ class Simulation(
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset()
-        pests.copyFrom(PestState()); treatments.active.clear()
+        pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }

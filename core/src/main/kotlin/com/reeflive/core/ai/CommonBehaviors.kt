@@ -144,6 +144,8 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
 /** Nibble the nori sheet on its clip (grazers; SIMULATION §4.5 tang). */
 class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0) : Behavior("nori", "Eating nori") {
     private var nextBite = 0.0
+    private var noriLimit = 120.0
+    override fun enter(c: Ctx) { noriLimit = c.rng.range(120.0, 300.0) }
     override fun score(c: Ctx): Double {
         val n = c.food.nori ?: return 0.0
         if (n.remaining <= 0.02 || c.o.hunger < 0.1) return 0.0
@@ -163,7 +165,7 @@ class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0) : Behavior("nori
             c.o.mouth = 1.0
             out.pitchBias = 0.15
         }
-        if (c.o.hunger < 0.05 || elapsed > c.rng.range(120.0, 300.0)) finished = true
+        if (c.o.hunger < 0.05 || elapsed > noriLimit) finished = true
     }
 }
 

@@ -32,6 +32,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     }
 
     fun update(headPos: Vec3, headingDir: Vec3, dt: Double, relaxRate: Double) {
+        if (!(headPos.x.isFinite() && headPos.y.isFinite() && headPos.z.isFinite())) return
         head = headPos
         heading = headingDir.normalized(heading)
         if (rigid) return
@@ -39,7 +40,9 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         if (trail.isEmpty()) { reset(headPos, headingDir); return }
         // Record a new trail point whenever the head has travelled one step from the last one.
         var d = head.distanceTo(trail[0])
-        while (d >= step) {
+        var guard = 0
+        if (d > 2 * length) { reset(headPos, headingDir); return }
+        while (d >= step && guard++ < 64) {
             val dir = (head - trail[0]) / d
             trail.add(0, trail[0] + dir * step)
             d -= step

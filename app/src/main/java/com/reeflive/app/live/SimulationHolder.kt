@@ -274,6 +274,7 @@ class SimulationHolder(
             publish(sb)
         } else {
             _mode.value = m
+            sandbox?.let { lastWallMs.remove(it) }
             sandbox = null; fork = null; scenarios.clear()
             real?.let { catchUp(it); publish(it) }
         }
