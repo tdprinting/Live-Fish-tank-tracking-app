@@ -61,6 +61,16 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         get() = renderer.projection
         set(v) { renderer.projection = v }
 
+    /** Watch-mode lamp look, drawn only (the sim's light schedule is untouched). */
+    var viewLight: ViewLight
+        get() = renderer.viewLight
+        set(v) { renderer.viewLight = v }
+
+    /** Mailbox for in-tank action feedback ([TankBursts.emit] from any thread). */
+    var bursts: TankBursts?
+        get() = renderer.bursts
+        set(v) { renderer.bursts = v }
+
     val stats: StateFlow<RenderStats> get() = renderer.stats
 
     @SuppressLint("ClickableViewAccessibility")
