@@ -44,6 +44,8 @@ fun TankView(
     onFollow: (String?) -> Unit = {},
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
     projection: TankProjection? = null,
+    /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
+    shelf: SupplyShelfControl? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -51,6 +53,7 @@ fun TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow, projection = projection,
+        shelf = shelf,
     )
 }
 
@@ -77,6 +80,7 @@ fun TankView(
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     projection: TankProjection? = null,
+    shelf: SupplyShelfControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -107,6 +111,7 @@ fun TankView(
                         v.listener = listener
                         v.setSnapshotProvider { currentProvider() }
                         v.projection = projection
+                        v.shelf = shelf
                         view = v
                     }
                 },
@@ -116,6 +121,7 @@ fun TankView(
                     v.demoWhenEmpty = demoWhenEmpty
                     v.setCleaning(cleaning)
                     v.projection = projection
+                    v.shelf = shelf
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

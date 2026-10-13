@@ -213,11 +213,9 @@ object LiveTheme {
                 pink = Candy.pink, green = Candy.green, purple = Candy.purple,
             ),
             tones = mapOf(
-                LiveCategory.FEED to Candy.orange,
-                LiveCategory.WATER to Candy.cyan,
+                LiveCategory.SUPPLIES to Candy.orange,
                 LiveCategory.LIGHT to Candy.yellow,
                 LiveCategory.LIFE to Candy.pink,
-                LiveCategory.CLEAN to Candy.green,
                 LiveCategory.TROUBLE to Candy.purple,
                 LiveCategory.MORE to Candy.white,
             ),

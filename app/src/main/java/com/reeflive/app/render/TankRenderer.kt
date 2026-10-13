@@ -36,6 +36,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var demoWhenEmpty = true
     /** Receives the camera matrices after every update, for Compose overlays (null = nobody listening). */
     @Volatile var projection: TankProjection? = null
+    /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
+    @Volatile var shelf: SupplyShelfControl? = null
+    private val shelfScene = SupplyShelfScene()
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -179,6 +182,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         drawCalls = 0; triangles = 0
 
         applyRequests()
+        applyShelf(dt)
         store.pump(2)
 
         // 1. snapshot + rigs
@@ -227,6 +231,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
         details?.let { drawStatic(it, progs, light, opaque = true) }
+        drawShelf(progs)
         // corals: soft bodies then polyps
         val corals = coralModels(cur)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = false)
@@ -635,9 +640,42 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (rigid) { rigidModel(r, tmpModel); p.setMat4("uModel", tmpModel) } else p.setMat4("uModel", IDENTITY)
     }
 
+    // ------------------------------------------------------------------ supply shelf (SupplyShelf.kt)
+
+    /** Open / row requests from the UI, the shelf model (loaded once a shelf is attached) and the props' lift. */
+    private fun applyShelf(dt: Float) {
+        val c = shelf
+        shelfScene.apply(c, camera)
+        if (c != null) store.model(SupplyShelfLayout.MODEL)
+        shelfScene.update(dt)
+    }
+
+    /** The shelf stands outside the default view: drawn only while the camera is there or on its way. */
+    private fun drawShelf(progs: Programs) {
+        if (camera.shelfMix <= 0f) return
+        val m = store.model(SupplyShelfLayout.MODEL) ?: return
+        val w = white ?: return
+        drawCalls += shelfScene.draw(m, progs.generic, w, shelf?.locked ?: emptySet())
+        triangles += m.triangles
+    }
+
+    /** In Supplies mode a tap (or double tap) picks the prop under the finger; the other gestures do nothing. */
+    private fun shelfTap(t: CameraInput.Tap) {
+        if (t.kind != CameraInput.TapKind.PICK && t.kind != CameraInput.TapKind.ZOOM) return
+        val m = store.model(SupplyShelfLayout.MODEL) ?: return
+        shelfScene.bind(m)
+        val dir = FloatArray(3)
+        camera.ray(t.x, t.y, width, height, dir)
+        val top = FloatArray(3)
+        val id = shelfScene.pick(camera.eye, dir, top) ?: return
+        val cb = shelf?.onPick ?: return
+        main.post { cb(id, top[0], top[1], top[2]) }
+    }
+
     // ------------------------------------------------------------------ taps
 
     private fun handleTap(t: CameraInput.Tap, rigs: Collection<FishRig>) {
+        if (camera.shelfOn) { shelfTap(t); return }
         val dir = FloatArray(3)
         camera.ray(t.x, t.y, width, height, dir)
         val o = camera.eye.copyOf()

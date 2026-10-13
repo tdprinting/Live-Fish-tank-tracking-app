@@ -37,6 +37,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,6 +65,7 @@ import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
+import com.reeflive.app.render.SupplyShelfControl
 import com.reeflive.app.render.TankProjection
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
@@ -74,6 +80,8 @@ import com.reeflive.app.ui.live.DayPhase
 import com.reeflive.app.ui.live.FishCard
 import com.reeflive.app.ui.live.FishSummary
 import com.reeflive.app.ui.live.FollowOverlay
+import com.reeflive.app.ui.live.GaugeDial
+import com.reeflive.app.ui.live.GaugeReadings
 import com.reeflive.app.ui.live.FxPoint
 import com.reeflive.app.ui.live.HappyMeterPill
 import com.reeflive.app.ui.live.HermieMood
@@ -101,6 +109,13 @@ import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.SandboxTipsCard
 import com.reeflive.app.ui.live.SelectedAnimalUi
+import com.reeflive.app.ui.live.ShelfPick
+import com.reeflive.app.ui.live.ShelfRow
+import com.reeflive.app.ui.live.SupplyCarryLayer
+import com.reeflive.app.ui.live.SupplyItem
+import com.reeflive.app.ui.live.SupplyShelfOverlay
+import com.reeflive.app.ui.live.TankGauge
+import com.reeflive.app.ui.live.TankGaugeLayer
 import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
@@ -115,10 +130,13 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun LiveQuality.toRender() = when (this) {
@@ -235,6 +253,27 @@ fun LiveTankScreen(
     // clean-glass mode (both modes): drag the Flipper over the front glass; Back or "Done" leaves it
     var cleaning by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = cleaning) { cleaning = false }
+
+    // Supplies mode (UI_STYLE §10.6): the camera looks at the 3D supply shelf beside the tank; a picked prop is then
+    // carried back into the tank view and used where it is let go
+    val shelf = remember { SupplyShelfControl() }
+    var supplies by rememberSaveable { mutableStateOf(false) }
+    var shelfPick by remember { mutableStateOf<ShelfPick?>(null) }
+    var testKit by remember { mutableStateOf(false) }
+    var carry by remember { mutableStateOf<SupplyItem?>(null) }
+    var pickSerial by remember { mutableIntStateOf(0) }
+    val pickJob = remember { arrayOfNulls<Job>(1) }
+    BackHandler(enabled = supplies) { supplies = false }
+    BackHandler(enabled = carry != null) { carry = null; supplies = true }
+    // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
+    var heaterSet by rememberSaveable { mutableDoubleStateOf(HEATER_DEFAULT_C) }
+    var heaterWorking by rememberSaveable { mutableStateOf(true) }
+    var dial by remember { mutableStateOf<TankGauge?>(null) }
+    val reduceMotion = ReefTheme.reduceMotion
+    SideEffect {
+        shelf.locked = SupplyItem.lockedIds(sandbox)
+        shelf.setOpen(supplies, reduceMotion)
+    }
 
     /** Plays [r]'s picture, Hermie says his line, and [run] sends the command when the picture reaches the water. */
     fun cue(r: Reaction, run: (() -> Unit)? = null) {
@@ -360,8 +399,9 @@ fun LiveTankScreen(
         },
         onHeater = { working ->
             tick()
+            heaterWorking = working
             cue(LiveReactions.heater(working)) { vm.setHeater(working = working) }
-            if (!working) offerUndo("The heater broke. The water will slowly cool.") { cue(LiveReactions.heater(true)) { vm.setHeater(working = true) } }
+            if (!working) offerUndo("The heater broke. The water will slowly cool.") { heaterWorking = true; cue(LiveReactions.heater(true)) { vm.setHeater(working = true) } }
         },
         onLights = { on -> tick(); cue(LiveReactions.lights(on)) { vm.setLights(on) } },
         onPredation = { on -> tick(); cue(LiveReactions.predation(on)) { vm.setPredation(on) } },
@@ -384,7 +424,7 @@ fun LiveTankScreen(
                 "Reset the sandbox?",
                 "Everything you changed here goes back to match your real tank: the water, the animals, the equipment and any what-ifs.",
                 "Reset tank",
-            ) { tick(); preset = null; cue(LiveReactions.reset()) { vm.resetSandbox() } }
+            ) { tick(); preset = null; heaterSet = HEATER_DEFAULT_C; heaterWorking = true; cue(LiveReactions.reset()) { vm.resetSandbox() } }
         },
         onAcclimateAll = { tick(); cue(LiveReactions.acclimate()) { vm.acclimateAll() } },
         onRearrangeRock = { tick(); cue(LiveReactions.rocks()) { vm.rearrangeRock() } },
@@ -421,6 +461,7 @@ fun LiveTankScreen(
         onHelp = { tick(); tipsAsked = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
+        heaterSet = HEATER_DEFAULT_C; heaterWorking = true
         when {
             m == HudMode.SANDBOX && sandbox -> railShown = !railShown
             m == HudMode.SANDBOX -> {
@@ -452,6 +493,12 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        onSupplies = {
+            tick()
+            open = null; vm.select(null); vm.follow(null); cleaning = false
+            carry = null; shelfPick = null; testKit = false
+            supplies = true
+        },
         onHeatWave = {
             tick()
             SandboxParams.byId("temp")?.let { def ->
@@ -464,6 +511,77 @@ fun LiveTankScreen(
     // a picked fish closes the menu card so its own card has the room
     LaunchedEffect(stats?.id) { if (stats != null) open = null }
 
+    // a prop tapped on the shelf: its label pops up; a usable one is then carried back to the tank
+    val onShelfPick: (String, Float, Float, Float) -> Unit = { id, x, y, z ->
+        val item = SupplyItem.byId(id)
+        if (item != null && supplies && carry == null) {
+            tick()
+            val px = FloatArray(3)
+            val at = if (projection.project(x, y + 3f, z, px)) Offset(px[0], px[1]) else null
+            val locked = item.locked(sandbox)
+            pickSerial++
+            shelfPick = ShelfPick(item, at, locked, pickSerial)
+            pickJob[0]?.cancel()
+            when {
+                locked -> if (hermieOn) hermie.say("${item.label} is for the pretend tank. Switch to Sandbox to try it!", HermieMood.SURPRISED)
+                item.staysOnShelf -> {
+                    testKit = true
+                    if (hermieOn) hermie.say("Test time! Here is how the water is doing.", HermieMood.HAPPY)
+                }
+                else -> pickJob[0] = scope.launch {
+                    delay(if (reduceMotion) SHELF_LABEL_REDUCED_MS else SHELF_LABEL_MS)
+                    supplies = false; shelfPick = null; testKit = false
+                    // wait for the camera to arrive back at the tank (a cut with Reduce Motion)
+                    if (!reduceMotion) delay(SHELF_TRAVEL_MS)
+                    carry = item
+                }
+            }
+            Unit
+        }
+    }
+    val latestShelfPick by rememberUpdatedState(onShelfPick)
+    DisposableEffect(shelf) {
+        shelf.onPick = { id, x, y, z -> latestShelfPick(id, x, y, z) }
+        onDispose { shelf.onPick = null }
+    }
+    // the carried prop let go over the tank: food drops in there, the knocker knocks there, the rest do their thing
+    val onCarryDrop: (SupplyItem, Float, Float) -> Unit = { item, gx, gy ->
+        carry = null
+        val k = item.food
+        when {
+            k != null && k != FoodKind.NORI -> {
+                val fx = gx.coerceIn(4f, 118f)
+                tick()
+                cue(LiveReactions.feed(k, FxPoint(fx, SURFACE_Y, FEED_Z))) { vm.feed(k, k.typicalDoseGrams, Vec3(fx.toDouble(), SURFACE_Y.toDouble(), FEED_Z.toDouble())) }
+            }
+            item == SupplyItem.KNOCKER -> {
+                val p = Vec3(gx.coerceIn(1f, 121f).toDouble(), gy.coerceIn(3f, 56f).toDouble(), FrontGlassCentre.z)
+                tick()
+                cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
+            }
+            else -> item.use(actions, tools)
+        }
+    }
+    val onCarryBack: (SupplyItem) -> Unit = { carry = null; tick(); supplies = true }
+    val gauges = GaugeReadings(
+        tempC = hud.water.tempC,
+        sg = hud.water.sg,
+        lightPct = hud.lightIntensity * 100.0,
+        flowPct = hud.flowStrength * 100.0,
+        heaterSetC = heaterSet,
+        heaterWorking = heaterWorking,
+    )
+    val applyGauge: (TankGauge, Double) -> Unit = { g, v ->
+        if (g == TankGauge.HEATER) {
+            val old = heaterSet
+            heaterSet = v; heaterWorking = true
+            tick()
+            cue(LiveReactions.param("temp", old, v) ?: LiveReactions.heater(true)) { vm.setHeater(working = true, setC = v) }
+        } else {
+            g.paramId?.let { SandboxParams.byId(it) }?.let { def -> actions.onSet(def, v) }
+        }
+    }
+
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
         val reduce = ReefTheme.reduceMotion
@@ -473,7 +591,7 @@ fun LiveTankScreen(
         val besideBar = landscape && maxWidth >= BottomBarMaxWidth + (s.railWidth + 32.dp) * 2
         val menuBottom = if (besideBar) navInset + 8.dp else NavClearance + navInset
         val following = followId != null && stats != null && !cleaning
-        val menuUp = !chromeHidden && !micro && !cleaning && !following
+        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null
         // what the HUD keeps clear of: the rail on the left (landscape) or the dock above the bar (portrait)
         val hudStart = if (landscape && menuUp) s.railWidth + 4.dp else 0.dp
         val hudBottom = when {
@@ -482,18 +600,25 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, followId, quality, cleaning, onScrape, onPick, onTankTap, micro,
+            vm, fx, projection, if (supplies) null else followId, quality, cleaning, onScrape, onPick, onTankTap, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
             bottomPad = BottomBarClearance,
+            shelf = shelf,
+        )
+        TankGaugeLayer(
+            visible = !chromeHidden && !micro && !supplies && carry == null && !cleaning,
+            projection = projection,
+            r = gauges,
+            onDial = if (sandbox) ({ g: TankGauge -> tick(); dial = g }) else null,
         )
         HudLayer(
             vm, hudState, onModeChange, followId, stats, cleaning, toggleCleaning, landscape,
             hidden = chromeHidden || micro,
             hermie = hermie, hermieOn = hermieOn, onHermieOff = { hermieOn = false },
             happy = happy, meterOn = meterOn, onMeterOff = { meterOn = false },
-            showTips = showTips && open == null, onDismissTips = dismissTips,
+            showTips = showTips && open == null && !supplies && carry == null, onDismissTips = dismissTips,
             start = hudStart, bottom = hudBottom,
         )
         AnimatedVisibility(
@@ -514,6 +639,18 @@ fun LiveTankScreen(
                 cardBottomClearance = NavClearance + navInset,
             )
         }
+        SupplyShelfOverlay(
+            visible = supplies,
+            pick = shelfPick,
+            readouts = hudState.readouts,
+            showReadouts = testKit,
+            onRow = { r: ShelfRow -> tick(); shelf.focusRow(r.ordinal) },
+            onClose = { tick(); pickJob[0]?.cancel(); supplies = false; shelfPick = null; testKit = false },
+            bottomClearance = NavClearance + navInset,
+        )
+        carry?.let { item ->
+            SupplyCarryLayer(item, projection, onCarryDrop, onCarryBack, bottomClearance = NavClearance + navInset)
+        }
         // the only control left while everything is hidden
         AnimatedVisibility(
             visible = chromeHidden,
@@ -531,6 +668,13 @@ fun LiveTankScreen(
             )
         }
     }
+    dial?.let { g ->
+        val start = when (g) {
+            TankGauge.HEATER -> heaterSet
+            else -> g.paramId?.let { SandboxParams.byId(it) }?.valueIn(panel.now) ?: g.lo
+        }
+        GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
+    }
     ask?.let { a ->
         LiveDialog(
             title = a.title,
@@ -542,6 +686,16 @@ fun LiveTankScreen(
         )
     }
 }
+
+/** The sim's default heater set point (WaterState.heaterSetC default). */
+private const val HEATER_DEFAULT_C = 25.5
+/** Supplies: how long a picked prop's label shows before the camera glides back, and the glide (Camera.SHELF_TRAVEL_S). */
+private const val SHELF_LABEL_MS = 700L
+private const val SHELF_LABEL_REDUCED_MS = 300L
+private const val SHELF_TRAVEL_MS = 1000L
+/** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
+private const val SURFACE_Y = 55.7f
+private const val FEED_Z = 20f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
 private const val SKIP_PICK_GUARD_MS = 700L
@@ -577,6 +731,7 @@ private fun TankArea(
     onMicroAction: ((MicroAction) -> Unit)?,
     onSkip: () -> Unit,
     bottomPad: Dp,
+    shelf: SupplyShelfControl,
 ) {
     Box(Modifier.fillMaxSize()) {
         TankView(
@@ -591,6 +746,7 @@ private fun TankArea(
             cleaning = cleaning,
             onScrape = onScrape,
             projection = projection,
+            shelf = shelf,
         )
         AnimatedVisibility(
             visible = micro,
