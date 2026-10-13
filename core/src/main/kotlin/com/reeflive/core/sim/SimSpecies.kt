@@ -181,7 +181,11 @@ data class ToleranceRange(
 enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val floatSeconds: Double, val nutrientFactor: Double) {
     FLAKE(1.0 / 40, 0.6, 45.0, 1.0),
     MYSIS(1.0 / 25, 1.5, 0.0, 0.3),
-    PELLET(1.0 / 20, 3.0, 0.0, 1.0),
+    /**
+     * Small sinking pellets / granules: Tee's everyday food (video T97: tiny pale ~1 mm granules, 40-80 to a pinch,
+     * sinking ~1-2 cm/s once the return current has spread them). A 1 g pinch makes ~60 particles.
+     */
+    PELLET(1.0 / 60, 1.5, 0.0, 1.0),
     NORI(0.0, 0.0, 0.0, 0.3),
     /** Live copepods/"pods" (sandbox, cleaner wrasse rescue: SIMULATION §3.4) and plankton dosing. */
     PODS(1.0 / 200, 0.3, 0.0, 0.2),
@@ -237,7 +241,7 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
     val label: String get() = when (this) {
         FLAKE -> "Flakes"
         MYSIS -> "Mysis shrimp"
-        PELLET -> "Sinking pellets"
+        PELLET -> "Pellets"
         NORI -> "Nori sheet"
         PODS -> "Live pods"
         PRAWN -> "Prawn chunk"
@@ -254,7 +258,7 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
     val blurb: String get() = when (this) {
         FLAKE -> "Floats first, then sinks. Most fish grab some."
         MYSIS -> "Frozen little shrimp. The favourite of nearly every fish."
-        PELLET -> "Sinks fast so bottom fish and shrimp get a share."
+        PELLET -> "Tiny granules: the return spreads them, then they sink slowly so every level gets a share."
         NORI -> "Seaweed on a clip. The tang and blennies nibble it all day."
         PODS -> "Tiny live bugs. The wrasse and cardinal pick them out of the water."
         PRAWN -> "A chunk of raw prawn for the snails and crabs on the sand."

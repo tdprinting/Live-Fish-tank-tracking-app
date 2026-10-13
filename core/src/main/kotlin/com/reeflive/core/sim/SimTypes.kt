@@ -303,12 +303,24 @@ data class SimSnapshot(
     val sandGrid: SandGridSnapshot? = null,
     /** Suspended sand / detritus particles: x, y, z (cm) and `Grain.ordinal + age fraction` per particle. */
     val sandClouds: FloatArray = FloatArray(0),
+    /**
+     * Per [food] particle (same order), [com.reeflive.core.sim.FoodSystem.META_STRIDE] floats: seconds in the water,
+     * settled (1/0) and a stable 0..1 seed. Renderer only (thawing cubes, fluttering flakes, spreading plankton haze).
+     */
+    val foodMeta: FloatArray = FloatArray(0),
+    /**
+     * Water movers for the renderer, [PUMP_STRIDE] floats each: nozzle x, y, z (cm), unit jet axis x, y, z, the jet's
+     * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
+     */
+    val pumps: FloatArray = FloatArray(0),
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
 
     companion object {
         val EMPTY = SimSnapshot(0.0, FloatArray(8), WaterState(), emptyList(), emptyList(), FloatArray(0), ByteArray(0), 0f, emptyList())
+        /** Floats per pump in [pumps]. */
+        const val PUMP_STRIDE = 8
     }
 }
 
