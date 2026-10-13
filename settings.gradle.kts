@@ -21,3 +21,4 @@ include(":core")
 // `./gradlew -PcoreOnly :core:test` configures and tests :core with no Android SDK
 // and no Google Maven access. CI (no -PcoreOnly) builds everything.
 if (!providers.gradleProperty("coreOnly").isPresent) include(":app")
+include(":web")
