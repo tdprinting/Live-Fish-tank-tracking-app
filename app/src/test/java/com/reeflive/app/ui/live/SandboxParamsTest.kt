@@ -49,6 +49,21 @@ class SandboxParamsTest {
         }
     }
 
+    @Test fun everyRowHasPlainWordsAndEveryTabIsListed() {
+        SandboxParams.all.forEach { d ->
+            assertTrue(d.id, SandboxFriendly.has(d.id))
+            assertTrue(d.id, SandboxFriendly.of(d).explain.isNotBlank())
+        }
+        assertEquals(SandboxCategory.values().toSet(), SandboxFriendly.tabs.toSet())
+        assertEquals(SandboxFriendly.tabs.size, SandboxFriendly.tabs.toSet().size)
+    }
+
+    @Test fun temperatureShowsFahrenheitAsTheExpertLine() {
+        val r = TankReading(WaterState(tempC = 25.0), lightPct = 100.0, flowPct = 100.0)
+        val line = SandboxFriendly.expert(SandboxParams.byId("temp")!!, r)!!
+        assertTrue(line, line.contains("Temperature") && line.contains("77.0 °F"))
+    }
+
     @Test fun readingsUseDisplayUnits() {
         val r = TankReading(WaterState(algaeHair = 0.25), lightPct = 80.0, flowPct = 100.0)
         assertEquals(25.0, SandboxParams.byId("algae")!!.valueIn(r), 1e-9)

@@ -1,5 +1,12 @@
 package com.reeflive.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.AlertDialog
@@ -46,6 +54,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -64,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.reeflive.app.ui.theme.ReefLiveTheme
+import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.app.ui.theme.statusText
@@ -155,9 +165,12 @@ fun ReefSlider(
     caption: String? = null,
     disabledReason: String? = null,
     leading: (@Composable () -> Unit)? = null,
+    /** Plain-words explanation shown under the header when the (i) button is tapped; null hides the button. */
+    info: String? = null,
 ) {
     val c = ReefTheme.colors
     val haptics = rememberHaptics()
+    var showInfo by remember { mutableStateOf(false) }
     val latestValue by rememberUpdatedState(value)
     val latestOnChange by rememberUpdatedState(onValueChange)
     var local by remember { mutableStateOf<Double?>(null) }
@@ -200,10 +213,18 @@ fun ReefSlider(
                 }
                 if (sub != null) Text(sub, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 2)
             }
-            Spacer(Modifier.width(8.dp))
+            if (!info.isNullOrBlank()) {
+                InfoButton(spec.label, showInfo) { showInfo = !showInfo }
+            }
+            Spacer(Modifier.width(4.dp))
             ValuePill(spec, shown, status, enabled) { editing = true }
             if (showReset) {
                 SmallRoundButton(Icons.Rounded.RestartAlt, "Reset ${spec.label} to ${referenceLabel.lowercase()} value", enabled = true, repeat = false) { reset?.invoke() }
+            }
+        }
+        if (!info.isNullOrBlank()) {
+            AnimatedVisibility(showInfo, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                InfoText(info)
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -250,8 +271,18 @@ fun ReefSlider(
 @Composable
 private fun ValuePill(spec: ReefSliderSpec, value: Double, status: Status?, enabled: Boolean, onEdit: () -> Unit) {
     val c = ReefTheme.colors
+    val reduce = ReefTheme.reduceMotion
+    val tone by animateColorAsState(if (status != null) c.statusText(status) else c.text, ReefMotion.tween(reduce), label = "valueTone")
+    // a small pop whenever the value crosses into another zone, so the change is noticed without reading numbers
+    val pop = remember { Animatable(1f) }
+    var lastStatus by remember { mutableStateOf(status) }
+    LaunchedEffect(status) {
+        if (status != lastStatus && !reduce) { pop.snapTo(1.12f); pop.animateTo(1f, ReefMotion.bouncy(false)) }
+        lastStatus = status
+    }
     Row(
         Modifier
+            .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
             .heightIn(min = 40.dp)
             .clip(ReefShapes.pill)
             .background(c.glass)
@@ -265,11 +296,47 @@ private fun ValuePill(spec: ReefSliderSpec, value: Double, status: Status?, enab
         Text(
             spec.format(value),
             style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
-            color = if (status != null) c.statusText(status) else c.text,
+            color = tone,
             maxLines = 1,
         )
         if (enabled) Icon(Icons.Rounded.Edit, contentDescription = null, tint = c.textTertiary, modifier = Modifier.size(14.dp))
     }
+}
+
+/** 48 dp round "what is this?" button that shows or hides the slider's explanation. */
+@Composable
+private fun InfoButton(label: String, open: Boolean, onClick: () -> Unit) {
+    val c = ReefTheme.colors
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = if (open) "Hide what $label means" else "What is $label?", onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Rounded.Info,
+            contentDescription = if (open) "Hide what $label means" else "What is $label?",
+            tint = if (open) c.primaryBright else c.textTertiary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun InfoText(text: String) {
+    val c = ReefTheme.colors
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = c.textSecondary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 2.dp)
+            .clip(ReefShapes.overlay)
+            .background(c.primary.copy(alpha = 0.10f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
 }
 
 /** 40 dp round glass button; with [repeat], press-and-hold keeps stepping. */

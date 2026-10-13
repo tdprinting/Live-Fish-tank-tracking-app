@@ -1,8 +1,16 @@
 package com.reeflive.app.ui.livetank
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,13 +31,19 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -43,6 +57,8 @@ import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
+import com.reeflive.app.ui.components.LocalSnackbar
+import com.reeflive.app.ui.components.ReefDialog
 import com.reeflive.app.ui.live.AddableSpecies
 import com.reeflive.app.ui.live.CleanGlassHint
 import com.reeflive.app.ui.live.DayPhase
@@ -57,16 +73,20 @@ import com.reeflive.app.ui.live.SandboxActions
 import com.reeflive.app.ui.live.SandboxCategory
 import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxDock
+import com.reeflive.app.ui.live.SandboxFriendly
 import com.reeflive.app.ui.live.SandboxPanelState
 import com.reeflive.app.ui.live.SandboxParamDef
 import com.reeflive.app.ui.live.SandboxPreset
+import com.reeflive.app.ui.live.SandboxTipsCard
 import com.reeflive.app.ui.live.SelectedAnimalUi
+import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.toFollowState
 import com.reeflive.app.ui.live.waterReadouts
+import com.reeflive.app.ui.live.liveSpec
 import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
@@ -74,6 +94,9 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun LiveQuality.toRender() = when (this) {
@@ -104,10 +127,15 @@ private fun powerheadShare(extras: Map<String, Double>): Float {
     return ids.count { (extras[it] ?: 1.0) >= 0.5 }.toFloat() / ids.size.coerceAtLeast(1)
 }
 
+/** A question to confirm before something that can't be undone with one tap (reset, take a fish out, make one sick). */
+private data class ConfirmAsk(val title: String, val body: String, val confirmLabel: String, val run: () -> Unit)
+
 /**
- * Live Tank: GL [TankView] with the HUD on top and, in Sandbox mode, the [SandboxDock] docked inline: under the tank in
- * portrait (the tank view shrinks to the space above it), beside it in landscape. The Watch / Sandbox toggle opens and
- * closes the dock; tapping Sandbox again collapses / expands it. Sim runs only while RESUMED.
+ * Live Tank: GL [TankView] with the HUD on top and, in Sandbox mode, the [SandboxDock]. Portrait: the tank keeps the
+ * whole screen and the dock floats over its bottom as a see-through panel that tucks down to its tabs (tap / drag the
+ * handle, or automatically while a finger drags the tank), at most about 40 % of the height when open. Landscape: the
+ * dock sits beside the tank. Tapping empty water hides every control so only the tank shows; tapping again (or "Show
+ * controls") brings them back. Sim runs only while RESUMED.
  */
 @Composable
 fun LiveTankScreen(
@@ -119,6 +147,7 @@ fun LiveTankScreen(
     val settingsRepo = context.appGraph.settings
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(AppSettings())
     val scope = rememberCoroutineScope()
+    val snackbar = LocalSnackbar.current
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
     val audio = remember { TankAudio(context.applicationContext) }
     DisposableEffect(audio) { onDispose { audio.release() } }
@@ -153,7 +182,25 @@ fun LiveTankScreen(
     var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
     val sandbox = mode == SimMode.SANDBOX
 
+    // every overlay control hidden, only the tank (tap empty water or "Show controls" to undo)
+    var chromeHidden by rememberSaveable { mutableStateOf(false) }
+    // a finger is dragging the tank: the portrait panel tucks away, and comes back shortly after the finger lifts
+    var touchingTank by remember { mutableStateOf(false) }
+    var tucked by remember { mutableStateOf(false) }
+    LaunchedEffect(touchingTank) {
+        if (touchingTank) tucked = true else { delay(450); tucked = false }
+    }
+    // first-time tips (remembered in settings), and again from the panel's (?) button
+    var tipsAsked by rememberSaveable { mutableStateOf(false) }
+    val showTips = sandbox && !chromeHidden && (tipsAsked || (settings.loaded && !settings.sandboxHintSeen))
+    val dismissTips: () -> Unit = {
+        tipsAsked = false
+        if (!settings.sandboxHintSeen) scope.launch { settingsRepo.setSandboxHintSeen(true) }
+    }
+    var ask by remember { mutableStateOf<ConfirmAsk?>(null) }
+
     BackHandler(enabled = sandbox && expanded) { expanded = false }
+    BackHandler(enabled = chromeHidden) { chromeHidden = false }
     // clean-glass mode (both modes): drag the Flipper over the front glass; Back or "Done" leaves it
     var cleaning by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = cleaning) { cleaning = false }
@@ -165,6 +212,24 @@ fun LiveTankScreen(
     val onScrape: (GlassStroke) -> Unit = { s ->
         vm.scrapeGlass(s)
         audio.scrape(s.lengthCm)
+    }
+    // a tap on empty water with nothing selected shows / hides the controls; otherwise it selects as before
+    val onPick: (String?) -> Unit = { id ->
+        if (id == null && !cleaning && vm.selectedOrganismId.value == null && vm.followId.value == null) {
+            chromeHidden = !chromeHidden
+        } else {
+            vm.select(id)
+        }
+    }
+    val hideChrome: () -> Unit = { tick(); chromeHidden = true }
+
+    /** Runs nothing more; offers "Undo" on the app snackbar for a command that has an opposite. */
+    val offerUndo: (String, () -> Unit) -> Unit = { message, undo ->
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val r = snackbar.showSnackbar(message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+            if (r == SnackbarResult.ActionPerformed) { tick(); undo() }
+        }
     }
 
     val hudState = HudState(
@@ -187,7 +252,7 @@ fun LiveTankScreen(
         ),
         real = real,
         category = category,
-        expanded = expanded,
+        expanded = expanded && !tucked,
         speed = speed,
         controlMode = controlMode,
         activePreset = preset,
@@ -219,7 +284,7 @@ fun LiveTankScreen(
     }
     val actions = SandboxActions(
         onSet = onSet,
-        onCategory = { category = it },
+        onCategory = { category = it; expanded = true },
         onToggleExpanded = { expanded = !expanded },
         onSpeed = { tick(); vm.setSpeed(it) },
         onControlMode = { controlMode = it },
@@ -235,48 +300,93 @@ fun LiveTankScreen(
         onTapGlass = { tick(); vm.tapGlass(FrontGlassCentre) },
         onWaterChange = { tick(); vm.waterChange(it) },
         onDose = { id, d -> tick(); vm.dose(id, d) },
-        onHeater = { tick(); vm.setHeater(working = it) },
+        onHeater = { working ->
+            tick()
+            vm.setHeater(working = working)
+            if (!working) offerUndo("The heater broke. The water will slowly cool.") { vm.setHeater(working = true) }
+        },
         onLights = { tick(); vm.setLights(it) },
         onPredation = { tick(); vm.setPredation(it) },
         onResize = { id, cm -> vm.setSize(id, cm) },
-        onRemove = { tick(); vm.removeOrganism(it) },
+        onRemove = { id ->
+            val name = panel.selected?.takeIf { it.id == id }?.name ?: "this animal"
+            ask = ConfirmAsk(
+                "Take out $name?",
+                "$name leaves the sandbox. Your real tank is not touched, and Reset tank brings everyone back.",
+                "Take out",
+            ) { tick(); vm.removeOrganism(id) }
+        },
         onAdd = { a -> tick(); vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") },
-        onReset = { tick(); vm.resetSandbox(); preset = null },
+        onReset = {
+            ask = ConfirmAsk(
+                "Reset the sandbox?",
+                "Everything you changed here goes back to match your real tank: the water, the animals, the equipment and any what-ifs.",
+                "Reset tank",
+            ) { tick(); vm.resetSandbox(); preset = null }
+        },
         onAcclimateAll = { tick(); vm.acclimateAll() },
         onRearrangeRock = { tick(); vm.rearrangeRock() },
         onPumpFailTonight = { tick(); vm.pumpFailTonight() },
         onTimelapse = { lapse = true },
         onAddMany = { id, n -> tick(); vm.addMany(id, n) },
-        onAddAiptasia = { tick(); vm.addAiptasia() },
+        onAddAiptasia = {
+            tick()
+            vm.addAiptasia()
+            offerUndo("Added a pest anemone") { vm.removeAiptasia() }
+        },
         onRemoveAiptasia = { tick(); vm.removeAiptasia() },
         onAddPestControl = { c -> tick(); vm.addPestControl(c) },
-        onStartTreatment = { k -> tick(); vm.startTreatment(k) },
+        onStartTreatment = { k ->
+            tick()
+            vm.startTreatment(k)
+            offerUndo("Started ${k.label}") { vm.stopTreatment(k) }
+        },
         onStopTreatment = { k -> tick(); vm.stopTreatment(k) },
-        onInfect = { d -> tick(); vm.infect(d) },
+        onInfect = { d ->
+            ask = ConfirmAsk(
+                "Make a fish sick?",
+                "A random fish in the sandbox catches ${SandboxFriendly.diseaseLabel(d)}. Only the sandbox changes; Reset tank undoes it.",
+                "Make one sick",
+            ) { tick(); vm.infect(d) }
+        },
         onMaintain = { t -> tick(); vm.maintain(t) },
         onAddSpareShells = { tick(); vm.addSpareShells() },
+        onHelp = { tick(); tipsAsked = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
         when {
             m == HudMode.SANDBOX && sandbox -> expanded = !expanded
-            m == HudMode.SANDBOX -> { expanded = true; preset = null; vm.setMode(SimMode.SANDBOX) }
+            m == HudMode.SANDBOX -> { expanded = true; chromeHidden = false; preset = null; vm.setMode(SimMode.SANDBOX) }
             else -> { preset = null; vm.setMode(SimMode.REALITY) }
         }
     }
+    val chrome = ChromeState(
+        hidden = chromeHidden,
+        onHide = hideChrome,
+        showTips = showTips,
+        onDismissTips = dismissTips,
+    )
+    val onTankTouch: (Boolean) -> Unit = { touchingTank = it }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
-        val sideWidth = (maxWidth * 0.42f).coerceIn(300.dp, 440.dp)
-        val dockHeight = (maxHeight * 0.55f).coerceAtLeast(minOf(320.dp, maxHeight * 0.7f))
+        val reduce = ReefTheme.reduceMotion
         val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val clearance = NavClearance + navInset
         if (landscape) {
+            val sideWidth = (maxWidth * 0.42f).coerceIn(300.dp, 440.dp)
             Row(Modifier.fillMaxSize()) {
                 TankArea(
                     vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound, cleaning, toggleCleaning, onScrape,
-                    Modifier.weight(1f).fillMaxHeight(), bottomPad = BottomBarClearance,
+                    onPick, chrome, onTankTouch = null,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    bottomPad = { BottomBarClearance },
                 )
-                if (sandbox) {
+                AnimatedVisibility(
+                    visible = sandbox && !chromeHidden,
+                    enter = fadeIn(liveSpec(reduce)) + expandHorizontally(liveSpec(reduce)),
+                    exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + shrinkHorizontally(liveSpec(reduce)),
+                ) {
                     SandboxDock(
                         panel, actions,
                         Modifier.width(sideWidth).fillMaxHeight().statusBarsPadding(),
@@ -285,19 +395,39 @@ fun LiveTankScreen(
                 }
             }
         } else {
-            val reduce = ReefTheme.reduceMotion
-            // the dock takes a bit over half the height; the tank view gets the rest (never less than 30 %)
-            val animated by animateDpAsState(dockHeight, ReefMotion.tween(reduce), label = "dock")
-            Column(Modifier.fillMaxSize()) {
-                TankArea(
-                    vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound, cleaning, toggleCleaning, onScrape,
-                    Modifier.weight(1f).fillMaxWidth(), bottomPad = if (sandbox) 8.dp else BottomBarClearance,
+            // the tank keeps the full screen (the GL view never resizes); the panel floats over its bottom
+            val density = LocalDensity.current
+            var dockPx by remember { mutableIntStateOf(0) }
+            // body height so header + tabs + body stay around 40 % of the screen above the bottom bar
+            val bodyHeight = (maxHeight * 0.40f - 112.dp).coerceAtLeast(150.dp)
+            val panelUp = sandbox && !chromeHidden
+            TankArea(
+                vm, hudState, onModeChange, followId, stats, quality, soundOn, toggleSound, cleaning, toggleCleaning, onScrape,
+                onPick, chrome, onTankTouch = if (sandbox) onTankTouch else null,
+                modifier = Modifier.fillMaxSize(),
+                bottomPad = { if (panelUp) with(density) { dockPx.toDp() } + 8.dp else BottomBarClearance },
+            )
+            AnimatedVisibility(
+                visible = panelUp,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically(liveSpec(reduce)) { it } + fadeIn(liveSpec(reduce)),
+                exit = slideOutVertically(liveSpec(reduce)) { it } + fadeOut(liveSpec(reduce, ReefMotion.FAST)),
+            ) {
+                SandboxDock(
+                    panel, actions,
+                    Modifier.fillMaxWidth().onSizeChanged { dockPx = it.height },
+                    side = false, bottomClearance = clearance, bodyHeight = bodyHeight,
                 )
-                if (sandbox) {
-                    val dockModifier = if (expanded) Modifier.fillMaxWidth().height(animated) else Modifier.fillMaxWidth()
-                    SandboxDock(panel, actions, dockModifier, side = false, bottomClearance = clearance)
-                }
             }
+        }
+        // the only control left while everything is hidden
+        AnimatedVisibility(
+            visible = chromeHidden,
+            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { -it / 2 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)),
+        ) {
+            ShowControlsPill(onClick = { tick(); chromeHidden = false })
         }
         if (lapse && sandbox) {
             TimelapseSheet(
@@ -307,9 +437,53 @@ fun LiveTankScreen(
             )
         }
     }
+    ask?.let { a ->
+        ReefDialog(
+            title = a.title,
+            body = a.body,
+            confirm = a.confirmLabel,
+            onConfirm = { ask = null; a.run() },
+            onDismiss = { ask = null },
+            destructive = true,
+        )
+    }
 }
 
-/** The 3D tank with the HUD, follow overlay and fish card layered on top. */
+/** Show / hide state of the overlay controls and the first-time tips, handed to the tank layer. */
+private class ChromeState(
+    val hidden: Boolean,
+    val onHide: () -> Unit,
+    val showTips: Boolean,
+    val onDismissTips: () -> Unit,
+)
+
+/**
+ * Watches touches on the tank without taking them (the GL view still gets every event): reports true once a finger
+ * has dragged past the touch slop (or a second finger lands), false when all fingers lift. Plain taps report nothing.
+ */
+private fun Modifier.watchTankDrags(onDragging: (Boolean) -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val slop = viewConfiguration.touchSlop
+        var dragging = false
+        var travelled = 0f
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (!dragging) {
+                val primary = event.changes.firstOrNull { it.id == down.id }
+                if (primary != null) travelled += (primary.position - primary.previousPosition).getDistance()
+                if (travelled > slop || event.changes.count { it.pressed } > 1) {
+                    dragging = true
+                    onDragging(true)
+                }
+            }
+            if (event.changes.none { it.pressed }) break
+        }
+        if (dragging) onDragging(false)
+    }
+}
+
+/** The 3D tank with the HUD, follow overlay, fish card and tips layered on top. */
 @Composable
 private fun TankArea(
     vm: LiveTankViewModel,
@@ -323,24 +497,75 @@ private fun TankArea(
     cleaning: Boolean,
     onToggleCleaning: () -> Unit,
     onScrape: (GlassStroke) -> Unit,
+    onPick: (String?) -> Unit,
+    chrome: ChromeState,
+    onTankTouch: ((Boolean) -> Unit)?,
     modifier: Modifier,
-    bottomPad: Dp,
+    bottomPad: () -> Dp,
 ) {
     var micro by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = micro) { micro = false }
+    val latestTouch by rememberUpdatedState(onTankTouch)
     Box(modifier) {
         TankView(
             snapshots = vm.snapshots,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().watchTankDrags { latestTouch?.invoke(it) },
             followId = if (cleaning) null else followId,
             quality = quality.toRender(),
-            onPick = vm::select,
+            onPick = onPick,
             onTapGlass = vm::tapGlass,
             onFollowLost = { vm.follow(null) },
             cleaning = cleaning,
             onScrape = onScrape,
         )
-        Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad)) {
+        HudLayer(
+            vm, hudState, onModeChange, followId, stats, soundOn, onToggleSound, cleaning, onToggleCleaning,
+            onMicro = { micro = true }, chrome = chrome, bottomPad = bottomPad,
+        )
+        AnimatedVisibility(
+            visible = micro,
+            enter = fadeIn(liveSpec(ReefTheme.reduceMotion)),
+            exit = fadeOut(liveSpec(ReefTheme.reduceMotion, ReefMotion.FAST)),
+        ) {
+            // the microscope covers the tank view; doses and treatments only in the sandbox
+            val hud by vm.hud.collectAsStateWithLifecycle()
+            MicroscopeView(
+                state = hud.microfauna,
+                simTimeSec = hud.simTimeSec,
+                onClose = { micro = false },
+                modifier = Modifier.fillMaxSize().background(ReefTheme.colors.bg).statusBarsPadding().padding(bottom = bottomPad()),
+                onAction = if (hudState.mode == HudMode.SANDBOX) vm::micro else null,
+            )
+        }
+    }
+}
+
+/**
+ * Everything drawn over the tank. Kept in its own composable so the panel height ([bottomPad], read here) only
+ * recomposes this layer while the panel animates, not the GL view.
+ */
+@Composable
+private fun HudLayer(
+    vm: LiveTankViewModel,
+    hudState: HudState,
+    onModeChange: (HudMode) -> Unit,
+    followId: String?,
+    stats: OrganismStats?,
+    soundOn: Boolean,
+    onToggleSound: () -> Unit,
+    cleaning: Boolean,
+    onToggleCleaning: () -> Unit,
+    onMicro: () -> Unit,
+    chrome: ChromeState,
+    bottomPad: () -> Dp,
+) {
+    val reduce = ReefTheme.reduceMotion
+    Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad())) {
+        AnimatedVisibility(
+            visible = !chrome.hidden,
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { -it / 6 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { -it / 6 },
+        ) {
             LiveOverlay(
                 state = hudState,
                 onModeChange = onModeChange,
@@ -350,32 +575,49 @@ private fun TankArea(
                 onToggleSound = onToggleSound,
                 cleaning = cleaning,
                 onToggleCleaning = onToggleCleaning,
-                onMicro = { micro = true },
+                onMicro = onMicro,
+                onHideChrome = chrome.onHide,
             )
-            val st = stats
-            if (cleaning) {
-                CleanGlassHint(Modifier.align(Alignment.BottomCenter).padding(16.dp))
-            } else if (followId != null && st != null) {
-                val ids = vm.hud.value.stats.map { it.id }
-                val i = ids.indexOf(st.id).coerceAtLeast(0)
-                fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
-                FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
-            } else if (st != null) {
-                Column(Modifier.align(Alignment.BottomCenter).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FishCard(st.toFishCardState(), onFollow = { vm.follow(st.id) }, onClose = { vm.select(null) })
+        }
+        val st = stats
+        // keep the last card on screen while it animates out
+        var lastCard by remember { mutableStateOf<OrganismStats?>(null) }
+        if (st != null) lastCard = st
+        val following = followId != null && st != null && !cleaning
+        if (following && st != null) {
+            val ids = vm.hud.value.stats.map { it.id }
+            val i = ids.indexOf(st.id).coerceAtLeast(0)
+            fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
+            FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
+        }
+        AnimatedVisibility(
+            visible = cleaning,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 2 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 2 },
+        ) {
+            CleanGlassHint()
+        }
+        AnimatedVisibility(
+            visible = !cleaning && !following && st != null,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
+        ) {
+            val card = st ?: lastCard
+            if (card != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FishCard(card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) })
                 }
             }
         }
-        if (micro) {
-            // the microscope covers the tank view; doses and treatments only in the sandbox
-            val hud by vm.hud.collectAsStateWithLifecycle()
-            MicroscopeView(
-                state = hud.microfauna,
-                simTimeSec = hud.simTimeSec,
-                onClose = { micro = false },
-                modifier = Modifier.fillMaxSize().background(ReefTheme.colors.bg).statusBarsPadding().padding(bottom = bottomPad),
-                onAction = if (hudState.mode == HudMode.SANDBOX) vm::micro else null,
-            )
+        AnimatedVisibility(
+            visible = chrome.showTips && !cleaning && st == null,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
+        ) {
+            SandboxTipsCard(onDismiss = chrome.onDismissTips)
         }
     }
 }

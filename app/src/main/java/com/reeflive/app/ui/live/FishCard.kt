@@ -1,5 +1,7 @@
 package com.reeflive.app.ui.live
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,7 @@ import com.reeflive.app.ui.components.ReefButton
 import com.reeflive.app.ui.components.StatusPill
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
+import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.status.Status
@@ -99,11 +103,17 @@ fun StatBar(label: String, value: Float, higherIsBetter: Boolean, modifier: Modi
     val c = ReefTheme.colors
     val v = value.coerceIn(0f, 1f)
     val goodness = if (higherIsBetter) v else 1f - v
-    val fill = when {
-        goodness >= 0.6f -> c.good
-        goodness >= 0.35f -> c.caution
-        else -> c.danger
-    }
+    val reduce = ReefTheme.reduceMotion
+    val fill by animateColorAsState(
+        when {
+            goodness >= 0.6f -> c.good
+            goodness >= 0.35f -> c.caution
+            else -> c.danger
+        },
+        ReefMotion.tween(reduce), label = "statFill",
+    )
+    // the bar glides to new values instead of jumping every HUD tick
+    val shown by animateFloatAsState(v, ReefMotion.tween(reduce, ReefMotion.SLOW), label = "statBar")
     val pct = (v * 100).roundToInt()
     Column(modifier.fillMaxWidth().semantics { contentDescription = "$label $pct percent" }) {
         Row {
@@ -112,7 +122,7 @@ fun StatBar(label: String, value: Float, higherIsBetter: Boolean, modifier: Modi
         }
         Spacer(Modifier.height(3.dp))
         Box(Modifier.fillMaxWidth().height(8.dp).clip(ReefShapes.pill).background(c.glassHi)) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(v).clip(ReefShapes.pill).background(fill))
+            Box(Modifier.fillMaxHeight().fillMaxWidth(shown).clip(ReefShapes.pill).background(fill))
         }
     }
 }
