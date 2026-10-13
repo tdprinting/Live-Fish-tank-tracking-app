@@ -1,6 +1,7 @@
 package com.reeflive.app.render
 
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -21,6 +22,9 @@ object SupplyShelfLayout {
     const val Z_PROP = 13f
     /** Board tops of the rows: feed, care, tools. */
     val ROW_Y = floatArrayOf(36.4f, 17.4f, -3.6f)
+    /** Board thickness and the underside of the top board (over the feed row). */
+    const val BOARD = 2f
+    const val TOP_Y = 52.4f
     const val ROWS = 3
 
     /** Where the camera looks (x along the shelf, y up) when Supplies opens: the middle, feed and care rows. */
@@ -31,6 +35,23 @@ object SupplyShelfLayout {
     const val LOOK_X_HI = 218f
     const val LOOK_Y_LO = 4f
     const val LOOK_Y_HI = 44f
+
+    /** Inner x span of the boards: props stand evenly spaced along it, centred in equal slots (supplies.py prop_xs). */
+    const val SLOT_X0 = 136.4f
+    const val SLOT_X1 = 233.6f
+    /** Props per row (feed, care, tools), in the order of the script's lists and of SupplyItem. */
+    val ROW_COUNT = intArrayOf(13, 10, 5)
+    /** Node of the lit "Supplies" sign on the crest (drawn brighter than the rest). */
+    const val SIGN_NODE = "ShelfSign"
+
+    /** Centre x of the [index]th of [count] props in a row. */
+    fun propX(index: Int, count: Int): Float {
+        val pitch = slotWidth(count)
+        return SLOT_X0 + pitch * (index + 0.5f)
+    }
+
+    /** Width of one prop's slot (cm) in a row of [count]. */
+    fun slotWidth(count: Int): Float = (SLOT_X1 - SLOT_X0) / max(count, 1)
 
     /** Look height for a row (a little above its board, so the props sit in the middle of the frame). */
     fun rowLookY(row: Int): Float = ROW_Y[row.coerceIn(0, ROWS - 1)] + if (row >= 2) 8f else 6.5f
@@ -50,6 +71,7 @@ class SupplyShelfControl {
     @Volatile var locked: Set<String> = emptySet()
     @Volatile var onPick: ((item: String, x: Float, y: Float, z: Float) -> Unit)? = null
     private val rowRequest = AtomicInteger(-1)
+    private val pickRequest = AtomicReference<String?>(null)
 
     fun setOpen(on: Boolean, instant: Boolean) {
         this.instant = instant
@@ -58,7 +80,12 @@ class SupplyShelfControl {
 
     fun focusRow(row: Int) = rowRequest.set(row)
 
+    /** Picks prop [id] as if it was tapped (its name tag on screen was): it lifts, and [onPick] hears it. */
+    fun pick(id: String) = pickRequest.set(id)
+
     internal fun takeRowRequest(): Int = rowRequest.getAndSet(-1)
+
+    internal fun takePickRequest(): String? = pickRequest.getAndSet(null)
 }
 
 /**
@@ -134,11 +161,22 @@ internal class SupplyShelfScene {
             if (t < bestT) { bestT = t; best = p }
         }
         val b = best ?: return null
+        select(b, out)
+        return b.id
+    }
+
+    /** Picks the prop [id] (a tap on its name tag): lifts it and writes its top-centre point; false if unknown. */
+    fun pickId(id: String, out: FloatArray): Boolean {
+        val b = byNode[SupplyShelfLayout.NODE_PREFIX + id] ?: return false
+        select(b, out)
+        return true
+    }
+
+    private fun select(b: Prop, out: FloatArray) {
         picked = b
         out[0] = (b.box[0] + b.box[3]) * 0.5f
         out[1] = b.box[4]
         out[2] = (b.box[2] + b.box[5]) * 0.5f
-        return b.id
     }
 
     /** Draws the shelf with [p] (the generic program). Returns the number of draw calls. */
@@ -156,8 +194,15 @@ internal class SupplyShelfScene {
             val c = part.material.src.baseColor
             val k = if (dim) DIM else 1f
             if (dim) p.set4f("uBaseColor", c[0] * k + GREY, c[1] * k + GREY, c[2] * k + GREY, c.getOrElse(3) { 1f })
-            // self-glow so the shelf reads at night, brighter (and gently pulsing) on the picked prop
-            val glow = (if (dim) GLOW_DIM else GLOW) + lift * (PICK_GLOW + 0.08f * sin(time * 7f))
+            // self-glow so the shelf reads at night, brighter (and gently pulsing) on the picked prop; printed labels
+            // (textured) glow less so their print keeps its contrast, and the "Supplies" sign is lit
+            val base = when {
+                part.node.name == SupplyShelfLayout.SIGN_NODE -> SIGN_GLOW
+                dim -> GLOW_DIM
+                part.material.albedo != null -> GLOW_PRINT
+                else -> GLOW
+            }
+            val glow = base + lift * (PICK_GLOW + 0.08f * sin(time * 7f))
             p.set3f("uEmissive", c[0] * k * glow + lift * 0.05f, c[1] * k * glow + lift * 0.05f, c[2] * k * glow + lift * 0.05f)
             part.mesh.draw()
             calls++
@@ -183,6 +228,8 @@ internal class SupplyShelfScene {
         const val PICK_PAD = 0.8f
         const val GLOW = 0.32f
         const val GLOW_DIM = 0.12f
+        const val GLOW_PRINT = 0.18f
+        const val SIGN_GLOW = 0.9f
         const val PICK_GLOW = 0.35f
         /** Locked (sandbox-only in Watch mode) props: colour × DIM + GREY, a faded grey-blue. */
         const val DIM = 0.35f

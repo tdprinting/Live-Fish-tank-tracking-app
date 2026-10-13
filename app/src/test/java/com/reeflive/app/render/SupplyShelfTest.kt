@@ -101,4 +101,28 @@ class SupplyShelfTest {
         assertEquals(SupplyItem.entries.filter { it.sandboxOnly }.map { it.id }.toSet(), SupplyItem.lockedIds(false))
         assertFalse(SupplyItem.GLASS_CLEANER.sandboxOnly)
     }
+
+    @Test fun nameTagSlotsMatchThePropsInTheModel() {
+        // the on-screen name tags are laid out from SupplyShelfLayout (propX / slotWidth); every prop must sit in its
+        // slot (centred, and no wider than it, so neighbouring tags and props never overlap) and the shelf has a sign
+        val glb = GlbLoader.parse(File("src/main/assets/models/supply_shelf.glb").readBytes(), "supply_shelf")
+        assertNotNull(glb.nodes.firstOrNull { it.name == SupplyShelfLayout.SIGN_NODE })
+        for (r in SupplyShelfLayout.ROW_COUNT.indices) {
+            assertEquals("items in row $r", SupplyShelfLayout.ROW_COUNT[r], SupplyItem.entries.count { it.row.ordinal == r })
+        }
+        val tmp = FloatArray(3)
+        for (item in SupplyItem.entries) {
+            val node = glb.nodes.first { it.name == SupplyShelfLayout.NODE_PREFIX + item.id }
+            var lo = Float.MAX_VALUE
+            var hi = -Float.MAX_VALUE
+            for (pr in node.primitives) for (cx in 0..1) for (cz in 0..1) {
+                M.transformPoint(node.world, if (cx == 0) pr.bmin[0] else pr.bmax[0], pr.bmin[1], if (cz == 0) pr.bmin[2] else pr.bmax[2], tmp)
+                lo = minOf(lo, tmp[0]); hi = maxOf(hi, tmp[0])
+            }
+            val n = SupplyShelfLayout.ROW_COUNT[item.row.ordinal]
+            assertEquals("${item.id} centre", SupplyShelfLayout.propX(item.slot, n), (lo + hi) / 2f, 1.5f)
+            assertTrue("${item.id} fits its slot: ${hi - lo}", hi - lo <= SupplyShelfLayout.slotWidth(n))
+            assertTrue("${item.id} has a tag", item.tag.isNotBlank())
+        }
+    }
 }
