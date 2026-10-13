@@ -1209,7 +1209,7 @@ Sources: [research 10](research/10_microfauna.md) §2.2 diel behaviour and §5.3
 - Spaghetti-worm tentacles: creep out over the sand at 1.2 mm/s along gently curving paths; pull back within ~2 s when a fish's head comes within 4 cm, then stay in for 20-60 s.
 Hiding animals back into their surface and vanish; nothing is ever teleported in view.
 
-**Rendering.** Each critter is a 16-station spine + frames, drawn with the organism shaders (the same spline skinning as fish and inverts), never picked or followed. Models are built by `tools/blender/microfauna.py`. Nearest first, skipping anything under ~3 px, until 12k (High) / 3k (Medium) triangles are spent; off on Low. `tools/validate_glb.py` counts that budget in its on-screen estimate.
+**Rendering.** Each critter is a 16-station spine + frames, drawn with the organism shaders (the same spline skinning as fish and inverts), never picked or followed. Models are built by `tools/blender/microfauna.py`. Nearest first, skipping anything under ~3 px, until 12k (High) / 2k (Medium) triangles are spent; off on Low. `tools/validate_glb.py` counts that budget in its on-screen estimate.
 
 **Accuracy audit** (2026-10-13): an independent review against research 10/17 checked sizes, speeds, beat rates and diel exposure; its findings (tentacle diel cycle, predator flight, mysid jitter amplitude, fireworm length up to 12 cm, calanoid antennule length, podocopid eye size, paired mysid eyes, missing water-column pods) are fixed here.
 

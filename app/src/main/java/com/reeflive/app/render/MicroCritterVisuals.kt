@@ -64,6 +64,6 @@ class MicroCritterVisuals {
         /** Body length / distance below which a critter is a sub-pixel speck at phone resolution (~3 px at 60° FOV). */
         const val MIN_ANGULAR_SIZE = 0.0035f
         const val MICRO_TRIS_HIGH = 12000
-        const val MICRO_TRIS_MEDIUM = 3000
+        const val MICRO_TRIS_MEDIUM = 2000
     }
 }

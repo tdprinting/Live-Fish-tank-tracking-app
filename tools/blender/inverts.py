@@ -642,7 +642,7 @@ def build_asterina():
                                   instanceLayout="world pos3 (cm) + surface normal3; runtime scales by lengthCm"))
     arms = [1.0, 0.97, 1.0, 0.62, 0.5, 0.95]          # fissiparous: two short regenerating arms on one side
     na = len(arms)
-    m, rings = 54, 4
+    m, rings = 40, 3
     rs = np.random.default_rng(9)
     jitter = rs.uniform(-0.06, 0.06, na)
 
@@ -691,7 +691,7 @@ def build_asterina():
     g.add(V, F, np.array(UV), [(0, 0, 0, 0)] * len(V))
     o = geo_obj("Body", g, root, "body", [mat])
     C.recalc_normals(o)
-    return finish(root, [o], os.path.join(C.MODELS, "asterina.glb"), 560)
+    return finish(root, [o], os.path.join(C.MODELS, "asterina.glb"), 400)
 
 
 # ----------------------------------------------------------------------------
