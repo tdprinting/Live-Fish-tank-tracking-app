@@ -116,6 +116,8 @@ class Organism(
     var sexChange = 0.0
     /** A cardinal male carrying eggs in his mouth: does not eat, throat distended (B-2). */
     var mouthbrooding = false
+    /** Recognised mate (banded shrimp pair, research 12 Johnson 1977): never a target of conspecific aggression rows. */
+    var mateId: String? = null
 
     // transient stress sources (decay per minute in HealthModel)
     var socialStress = 0.0

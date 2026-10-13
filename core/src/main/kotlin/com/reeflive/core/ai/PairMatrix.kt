@@ -79,6 +79,8 @@ object PairMatrix {
 
     fun targetMatches(r: PairRow, actor: Organism, t: Organism): Boolean {
         if (t === actor || !t.alive || !t.visible) return false
+        // a recognised partner is not a stranger (research 12: banded shrimp tell a former mate from a stranger)
+        if (actor.mateId != null && actor.mateId == t.id) return false
         val kindOk = r.targets.any { k ->
             when (k) {
                 "ANY_FISH" -> t.isFish

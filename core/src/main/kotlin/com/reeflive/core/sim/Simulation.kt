@@ -60,6 +60,18 @@ class Simulation(
      * cross-species kills are unsourced (07 gap 4); the conspecific molt-window rule stays on.
      */
     var crossSpeciesShrimpKills = false
+    /**
+     * Sandbox scenario (research 11 §3): a big, hungry Sally Lightfoot may attack a sleeping small fish. Off by default:
+     * *Percnon* is primarily a grazer and no live-fish capture rate is sourced. SetParam id `crab_predation` (1 = on).
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "11 §3") var crabLiveFishScenario = false
+    /**
+     * Sandbox scenario (research 11 §7): a capped asterina population grazes organ pipe tissue. Off by default: no
+     * species-confirmed corallivory for the owner's unidentified stars. SetParam id `asterina_coral` (1 = on).
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "11 §7") var asterinaCorallivoryScenario = false
+    /** Shrimp pairing, molt-linked mating and egg carrying (research 12). */
+    val shrimpBreeding = ShrimpBreeding(this)
     /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
     var nightPlanktonPerHour = 60.0
     private var planktonAcc = 0.0
@@ -284,6 +296,9 @@ class Simulation(
                 if (!a.alive || a.brainKind.name != r.actor || a.lengthCm < r.minActorCm) continue
                 // the crab is an opportunist: only a hungry one tries (vendor statement, 07 gap 5)
                 if (a.brainKind == BrainKind.SALLY_CRAB && a.hunger < 0.5) continue
+                // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
+                val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
+                if (crabOnFish && !crabLiveFishScenario) continue
                 for (t in organisms.toList()) {
                     if (t === a || !t.alive || !r.targets.contains(t.brainKind.name)) continue
                     if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL")) continue
@@ -387,6 +402,7 @@ class Simulation(
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
+        shrimpBreeding.step(CHEM_DT / 60.0)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
@@ -624,7 +640,8 @@ class Simulation(
         for (o in organisms) {
             if (!o.alive) continue
             val (lo, hi, dur) = when (o.brainKind) {
-                BrainKind.BANDED_SHRIMP -> Triple(21.0, 56.0, 36.0)
+                // research 12: adult intermolt ≈ 25–26 d at 26 °C (S); Q10 = 2 temperature scaling (D)
+                BrainKind.BANDED_SHRIMP -> ShrimpBreeding.stenopusIntermoltDays(water.s.tempC).let { Triple(0.92 * it, 1.08 * it, 36.0) }
                 BrainKind.CLEANER_SHRIMP -> Triple(21.0, 42.0, 36.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 else -> continue
@@ -852,6 +869,8 @@ class Simulation(
         "flow" -> water.flowStrength
         "photoperiod" -> lights.photoperiodHours ?: LightSchedule.DEFAULT_PHOTOPERIOD_H
         "roomtemp" -> config.roomC
+        "crab_predation" -> if (crabLiveFishScenario) 1.0 else 0.0
+        "asterina_coral" -> if (asterinaCorallivoryScenario) 1.0 else 0.0
         else -> water.s.get(id)
     }
 
@@ -874,6 +893,8 @@ class Simulation(
             k == "flow" -> setFlowStrength(value)
             k == "speed" -> speed = value
             k == "photoperiod" -> lights.photoperiodHours = value.coerceIn(4.0, 16.0)
+            k == "crab_predation" -> crabLiveFishScenario = value > 0.5
+            k == "asterina_coral" -> asterinaCorallivoryScenario = value > 0.5
             k.startsWith("spectrum.") -> lights.setGain(k.removePrefix("spectrum."), value)
             k.startsWith("pump.") -> setPump(id.substring(5), value > 0.5)
             else -> water.setParam(id, value)
@@ -992,7 +1013,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); invertEcology.reset(); shrimpBreeding.reset()
         pests.copyFrom(PestState()); treatments.active.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled

@@ -843,3 +843,54 @@ Capacities are the §3.2 densities with the §3.1 refuge factor folded in, times
 | Amphipod `T_lethal` | 34 °C | 36 °C, so §6.3 #7's 30-60 % loss at 35 °C holds |
 | Cyclopoid `T_lethal` | 36 °C | 37 °C |
 | Phyto clearance by benthic filter feeders | — | 1.8 d⁻¹ on top of 0.3 d⁻¹ export, so a dose clears in about 2 days |
+
+## 14. Research 10-15 (behaviour detail)
+
+Sources: [fish detail](research/10_fish_behavior_detail.md), [invertebrate detail](research/11_invertebrate_behavior_detail.md), [cleaner shrimp detail](research/12_cleaner_shrimp_detail.md), [master livestock research](research/15_master_livestock_research.md) (13 and 14 are source directories). Not to be confused with the older [research 10 microfauna](research/10_microfauna.md) in §13.
+
+The research's main point: many older constants are design estimates, not sourced values. Behaviour is now modelled as encounter sequences that can fail, and it depends on context (light, molt state, size, intrusion) rather than fixed quotas or a single kill roll.
+
+**Evidence labels.** `sim/Evidence.kt` has three levels: `SOURCED` (a direct study or species account of the taxon), `ANALOGY` (another species or setting, labelled as a transfer) and `DESIGN_ESTIMATE` (a provisional model choice). It also has a source-only `@Ev(level, ref)` tag on constants and `EvidenceLedger`, a list of rows readable at runtime (species, constant, value, level, reference, and what tank observation would test it). The project-wide ledger document is `docs/research/evidence_ledger.md`.
+
+**Sandbox scenarios (off by default).** Both are `SetParam` ids, 1 = on, readable through `paramValue`, and copied into time-lapse forks.
+
+| id | Flag | What it enables | Why it is off |
+|---|---|---|---|
+| `crab_predation` | `Simulation.crabLiveFishScenario` | Sally Lightfoot attacks on sleeping small fish, in the brain (`NightGrab`) and the 02:00 night rolls | *Percnon* is mainly a grazer; no live-fish capture rate is sourced (11 §3) |
+| `asterina_coral` | `Simulation.asterinaCorallivoryScenario` | The old asterina → organ-pipe tissue loss | No species-confirmed corallivory for the owner's unidentified stars (11 §7) |
+
+Snail predation by the crab and hermit snail-shell theft still need `predationEnabled` (sandbox). They are labelled design estimates.
+
+### 14.1 Fish
+
+| Species | Change |
+|---|---|
+| Ocellaris | Colour forms behave identically: `variant` is cosmetic only (test `clownColourFormsBehaveIdentically`). |
+| Blue tang | New `ColumnPick`: holds in the current and snaps at passing zooplankton every 3–8 s. Open-water feeding now comes first and picking at surfaces second (`Graze` weight 1.5 → `GRAZE_WEIGHT` 1.0). `TangFeed` favours drifting particles. The alarm retreat to its refuge was already reversible. |
+| Pajama cardinal | Foraging range follows the light ramp rather than a clock label: `forageRadius` is half of 40 cm at the 0.3 light threshold and the full 40 cm in darkness. It still takes nearby food by day. |
+| Cleaner wrasse | The existing approach → tactile advert → pose (client can refuse) → inspect → jolt/complete sequence now keeps counts in `WrasseBrain.encounters`, with failed approaches kept in the denominator. `OVERDUE_S` is relabelled a design-estimate weighting, not a visit guarantee. Max length is now **14 cm TL** (FishBase; was 11). |
+| Falco hawkfish | Scans, departures, landings and food strikes are counted as separate events (`HawkBrain.events`). A strike on a live animal (sandbox) goes approach → strike → miss (`STRIKE_CONTACT_P`) / injury / kill. A kill needs a soft shrimp (molted within 48 h) or prey under 0.5 × its own length. The old flat 40 % kill is gone. The 5–20 hops/h dwell is labelled a design estimate. Max length is now **8 cm TL** (was 7). |
+| Lawnmower blenny | `matrixQuality` makes a rasp's food value come from the whole surface film matrix: rock film/diatom cover, hair algae and detritus. Before, it came from hair algae alone. Territorial response stays conditional on intrusion (`lmb_tailspot` 0.9, `lmb_tang` 0.15 per entry, Heron Island 90 % vs 20 %). |
+| Tailspot blenny | Head-out inspection, then a short excursion, then a return to the hole mouth (`excursions` / `returns`). It fully retreats (head in) while threatened, freshly startled or timid. Fixed a bug: `PlanktonDash` used to be dropped the tick after it started. `MOVE_AWAY_CM` is labelled a design estimate. |
+| Indigo dottyback | Behaviour is unchanged (cave ownership and patrol). The c07/c08 quotas ("≥ 3 chases in hour 1", "≤ 1/h after 7 days") are recorded as design estimates. |
+| Engineer fish | Already modelled as pickup → transport → release, plus feeding by the burrow. `ADULT_CM` 15, the 18 cm feed radius and the 5 % night patrol are labelled design estimates (no code change). |
+
+### 14.2 Invertebrates
+
+| Species | Change |
+|---|---|
+| Banded coral shrimp | Cleans on **5.6 % of fish visits** (`CLEAN_PER_VISIT`, counted per arrival in `visitStats`), with no dance. Removes fewer parasites by day (`DAY_PARASITE_FACTOR` 0.3). Night forays follow `forayDrive`: light at the ledge × (1 − 0.6 shade), so dim light or shade lets it out by day. Intermolt is 25.5 d at 26 °C, with Q10 = 2 (`ShrimpBreeding.stenopusIntermoltDays`, ±8 %); it was 21–56 d. Mate recognition: opposite-sex shrimp that became familiar form a pair (`Organism.mateId`), and a recognised mate is never a target of the conspecific aggression rows, though a stranger still is. Mating follows the female's molt when her mate is within 30 cm, and the clutch incubates 20.5–25.1 d (mean ≈ 22.8). |
+| Skunk cleaner shrimp | Leg-rock chance is 0.51 for predators and 0.12 for others, up to ×1.6 in the dark (`rockChance`). The sequence is advert → **antenna tap** (1–2 s, the client may leave: `tapWithdrawals`) → climb and clean. It cleans by day and at night (`nightCleans`). As a hermaphrodite, after a molt an adult spawns: the clutch is fertile if another adult is in the tank and infertile alone. Eggs are carried until the next molt, then hatch or are dropped. Molt state and egg state are tracked separately (`sim/ShrimpBreeding.kt`). Larvae never recruit. |
+| Hermits | A smaller attacker wins a shell fight at most 8 % of the time (`SMALL_ATTACKER_WIN`). A defender that molted in the last 48 h loses 25 % more often; a freshly molted attacker wins half as often. Hermits molt every 30–60 d (design estimate). Counted separately: fights, wins, small-attacker fights and wins, and inspections of occupied snail shells (`occupiedShellInspections`). A kill happens only on the sandbox roll. Scarlet stays at 0.25 × blue-leg pushiness. |
+| Sally Lightfoot | Grazing comes first. New `CarcassPick` scavenges dead animals, separate from predation (`carcassBites`, no `Eaten` event). Live-fish attacks only happen with `crab_predation`. |
+| Nassarius | Buried → food cue → emerges after a latency of 20–240 s × (1.2 − hunger), so hungrier snails come out sooner → travels → a **feed bout** with the proboscis on the food (lognormal, mean 6 min, about 3/4 of bouts ≤ 8 min, after Lucena 2012) → reburies. |
+| Astrea | Flipping is now loss of attachment, then a righting attempt every 10–40 min. Each attempt succeeds 12 % of the time on open sand and 35 % with rock or glass in reach. There is **no death timer** (and the old "always rights after 2–6 h" timer is gone). |
+| Asterina | `CorrelatedWalk`: the heading persists with σ 0.35 rad turns every 4 s. Speed drops to 0.35× near food or a rich film, so it covers less ground there. Organ-pipe damage is opt-in (`asterina_coral`). Fission is kept as an analogy (fissiparous trade asterinids). |
+| Brittle star | `ArmFeed`: the disc stays under the rock while one arm brings in food within 0.45 × span over 3–8 s. When it travels, the body does not turn: `SteerIntent.armGait` snaps the heading to the arm nearest the direction of travel, a lead-arm switch that looks identical with 5-fold symmetry. |
+| Feather duster | Retraction, crown loss and tube abandonment are separate states (`InvertEcology.dusterState`). After 3 days crownless with health < 0.4, the worm leaves the tube: invisible, but alive. It re-settles above health 0.7. The 30–60 d regrowth is labelled a design estimate. |
+
+### 14.3 Tests
+
+New: `ai/BehaviourDetailTest.kt` (23 tests: evidence labels, sheet lengths, colour forms, banded visit rate / light / intermolt / pairing, Lysmata fertility, skunk tap and night cleaning, wrasse encounters, tang column feeding, cardinal ramp, hawk strike outcomes, lawnmower matrix, tailspot excursions, hermit size rule, crab scenario and scavenging, nassarius latency and bouts, astrea righting, asterina CRW, brittle arm feeding, duster states).
+
+Changed: `AsterinaOrganPipeTest` now turns on `asterina_coral` explicitly, because research 11 §7 contradicts the default-on premise, and it adds `corallivoryIsOffByDefault`. `RealismAcceptanceTest` is unchanged.
