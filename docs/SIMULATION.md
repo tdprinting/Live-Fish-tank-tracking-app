@@ -704,6 +704,62 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 ### 9.8 SimRunner
 `./gradlew -PcoreOnly :core:simRunner` prints a 24 h scenario (each hour 2 min of full 20 Hz behavior plus abstract time, and 12-min windows around the 09:30 and 17:30 feeds) with every animal's behavior mix, hunger, stress and the water state. `--args="long 90"` runs 90 days of health/chemistry with a daily log; `--args="preset ich_outbreak 14"` runs a preset.
 
+### 9.10 Social and stress realism (research 06/07, `RealismAcceptanceTest`)
+Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6) and `07_gap_sources.md`. Tags: [S] sourced, [D] derived, [I] inferred and tunable.
+
+**Stress channels (`StressModel`, 06 §4.1).**
+- Each channel (temp, sg, pH, NH3, NO2, NO3, DO, light, social) has a fast state `S_fast`. It follows the drive with τ_rise / τ_fall.
+- Each channel also has a slow state `S_slow`. It follows `slowGain × S_fast` (or the chronic floor) with τ_slowRise / τ_slowFall.
+- The drive is measured against an acclimation setpoint `A`, which tracks the parameter with τ_accl.
+  - Ramps slower than τ_accl therefore move `A` and raise little stress.
+  - Steps saturate `S_fast`.
+- `S_env = 1 − Π(1 − w·max(fast, slow))`.
+- NH3 has `slowGain` 0.35 and τ_slowFall 7 d. Gill irritation lingers but does not pin appetite (c27). Fin clamp uses `0.8·max(slow, 0.5·fast)`.
+- The social channel has a linear envelope, unlike the other channels' smoothstep. It is fed by a reservoir (τ 120 s) that chases, jolts and glass taps add to. A tap therefore peaks within minutes and decays over about an hour (c24).
+- **Thermal acclimation.** The temperature setpoint is capped at `thermalCeiling`. `HealthModel.acclimatedTemp` shifts optHi and tolHi up by at most 3 °C as `A_temp` rises, and keeps them 2 °C and 1 °C below lethal. A fish held at 31 °C settles (c22, c25).
+
+**Pair matrix (`ai/PairMatrix.kt`, `sim/interactions.json`, 06 §5.3).**
+- *Scan.* Every 0.5 s each actor scans its rows. A target entering the trigger radius opens an entry. After `lingerS` the entry rolls once a minute with probability `p`.
+- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step), tactile damping, and rank.
+- *Hourly cap.* A token bucket that refills at `floor + (max − floor)(1 − fam)`, scaled by the modifiers below, and holds max(1, ¼ h of the cap).
+- **Host-defence sensitisation:**
+  - repeated intrusions raise p up to ×2;
+  - they shorten the stare;
+  - re-rolls come every 60 s × (latency factor)², so about 5 s by the third intrusion (S:Fleming24; c02).
+- **Tactile damping** (S:Cheney08) multiplies both the cap and p by 0.35 for 20 min after a dance. It does not apply:
+  - between strangers (either animal in its first day; the field percentages include cleaners);
+  - to the clown pair's dominance quiver.
+- **Standoff rows** shrink their watched halo past familiarity 0.6, to 40 % at familiarity 1 ("the halos partition the rock"; c08).
+- **`RearrangeRock`** keeps intrusion memory and caps familiarity at 0.5. Territorial cap and p then run ×(1 + 2·e^(−t/12 h)) [I] (c20).
+- A wrasse at work is never a target and is not `ANY_FISH`.
+- **Lawnmower rows** use the 07 gap 1 figures (Townsend04): 0.9 per intruding blenny of its own size or smaller (`sizeTerm notLarger`), 0.2 for the tang. Dottyback rates are [I].
+- **Night predation** (`perNight` rows, rolled at 02:00 every step) makes one roll per actor and row, on the nearest eligible target.
+  - **Sally Lightfoot** (07 gap 5): rolls only when hungry; sleeping fish must be under 0.8× its leg span; snail 0.05 and fish 0.01 per night [I].
+  - **Shrimp** (07 gap 4): banded-on-skunk kills are behind `crossSpeciesShrimpKills` (off). Conspecific molt kills (`skunk_skunk_molt`, `cbs_cbs_molt`) need a group of 3 or more (S:Wong11, S:Johnson69).
+
+**Cleaner station loop (`WrasseBrain.Work`, 06 §5.5).**
+- *Who.* The wrasse picks clients by weight:
+  - base `area × (1 + 3·ich + 0.5·posing) × (1 − 0.5·threat)`, where area = (L/7)²·√(depth/0.35);
+  - × a due term that grows with time since the last contact (900 s scale);
+  - × 10 for overdue clients (45 min), which are sought tank-wide;
+  - × up to 4 for aggressors whose damping is lapsing.
+- *How.* Sequence: approach → tactile dance (high-rank, hungry or recently chasing clients) → pose request → inspection.
+  - The pose request succeeds with p = (0.3 + 0.6·trust) × need. Need recovers over 2000 s after a full pose, so the tang gets 1–3 full poses/h plus brief passes.
+  - Inspection length is lognormal with mean 6.7 s × area^¼.
+  - Cheating runs at 0.025/s, or 0.17/s when hunger > 0.6 (S:Pinto11).
+  - The rest between bouts is 15–75 s × (1.3 − hunger).
+- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A client still unreachable after 20 s is skipped for 5 min.
+- The shrimp counts approaches every tick (`preTick`, c16).
+
+**Newcomers.** A tailspot added to the tank prospects holes and grazing patches for its first day (c09). Engineer goby adults patrol on about 5 % of nights (07 gap 3).
+
+**Swim speeds** (07 gap 2). `SwimSpeed` caps cruise at the family field speed (labriform 68.8 cm/s, body-caudal 39 cm/s; Fulton07). Burst BL/s falls as (adult/L)^0.5 past adult size.
+
+**Test mapping.**
+- `RealismAcceptanceTest` c01–c28 follow 06 §5.6 by number. Windows are 2–5 h instead of a 10 h day where a rate per hour is checked.
+- c22 and c25 clear spontaneous ich (`noIch()`), because the heat checks are about stress filters.
+- `ResearchGapsTest` gap1–gap5 cover research 07.
+
 ## 10. Catastrophic heat (`HeatModel`, `ai/HeatBehaviors.kt`)
 Research: `docs/research/08_extreme_heat.md` (§2 stages, §6 recovery, §7 model). Runs on the chemistry tick beside the chronic tolerance path. Per animal it keeps a damage value `D` (0..1), the stage, the episode's peak stage, a long-term acclimation temperature, a dT/dt filter and a 24 h hourly window for slow-creep detection.
 
