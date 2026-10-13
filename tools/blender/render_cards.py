@@ -41,11 +41,12 @@ CARDS = {
     "briareum_sp": "gsp_mat",
     "clavularia_sp": "clove",
     "discosoma_sp": "mushroom",
+    "rhodactis_sp": "mushroom_hairy",
     "gracilaria_sp": "macro_red",
     "tubipora_musica": "organ_pipe",
     "zoanthus_sp": "zoa",
 }
-TOP = {"brittle_star", "asterina", "mushroom", "zoa"}
+TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
 HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "shrimp", "skunk_shrimp", "gsp_mat",
         "organ_pipe", "clove"}
 

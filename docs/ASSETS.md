@@ -51,6 +51,20 @@ Each fish GLB contains one node hierarchy: `Root` → `Body` (mesh), `FinDorsal`
 
 ## 2. Per-species specs
 
+> **Accuracy refresh (branch `local/models`, from docs/research + FishBase / Fishes of Australia / ORA descriptions and the owner photos).** Superseding the per-species text below where they differ:
+> - **Fins (fishlib)**: `paint_fin_slot(incise=…)` cuts the membrane between the first `spine_count` spines back from the tip (alpha), and fin margins follow the notched edge, so spiny dorsals read as free spine tips: ocellaris **XI** spines (was 10, `incise` 0.18), tang IX (0.10), cardinal first dorsal VII (0.22), hawkfish X (0.42), lawnmower XII (0.12). New caudal shape `lanceolate` (dottyback). Hawkfish dorsal **cirri tufts** sit exactly on the 10 painted spines (`cirri_ts`, length 0.032 L) and sample the spare atlas slot 7 (opaque white with red bases); before, they sampled the faded fin edge and were nearly invisible.
+> - **Ocellaris (both forms)**: oval body, caudal peduncle deepened 0.13 → 0.19 L (was a "bottle" shape), depth 0.44 L; orange iris with a dark ring (was white).
+> - **Blue tang**: palette pattern redrawn: eye band → black field over the upper rear body sweeping down to the peduncle, with an **enclosed blue oval** under the soft dorsal, nape above the eye band blue; snout smaller / more pointed, depth 0.51 L (was 0.545).
+> - **Pajama cardinal**: shorter pointed snout, deeper peduncle (0.155 L), second-dorsal filament 0.46 → 0.34 L.
+> - **Cleaner wrasse**: electric-blue lines bordering the black stripe on the rear body.
+> - **Falco hawkfish**: five red-brown **saddles** from the dorsal ridge that taper and break into blotches below the lateral line, **two red bars radiating back from the eye** (Fishes of Australia), pale snout; deeper peduncle.
+> - **Lawnmower blenny**: fins translucent with rows of dark dashes (was a camo mottle).
+> - **Tailspot blenny**: grey-blue / purplish head, body warming to orange-tan and yellow-cream; yellow-orange line from under the eye to above the pectoral axil, blue line above it; yellow iris; caudal-base spot with a pale ring.
+> - **Dottyback (Electric Indigo, ORA)**: periwinkle → turquoise back, sharp black band, white belly, lanceolate tail with the black band running out along the middle rays; dorsal/anal translucent blue with a dark base.
+> - **Inverts**: brittle star rebuilt (44-segment arm texture with dark joints, granular disc with radial shields, arms tapering to whip tips, a stout spine pair at every station: 1825 tris); astrea recoloured grey-olive with pink coralline and pale knobs (Lithopoma tectum, was orange/white); asterina salmon-tan mottled (research: "salmon/tan").
+> - Species cards for every changed species were re-rendered. Engineer goby, shrimps, hermits, Sally Lightfoot, feather duster, nassarius and the existing corals are unchanged (byte-identical rebuilds).
+
+
 ### 2.1 Ocellaris clownfish — `clown_orange.glb`, `clown_darwin.glb` (same mesh, two textures)
 - Profile (u, h, w, yOff): (0, 0.05, 0.04, 0.0), (0.08, 0.22, 0.14, 0.0), (0.2, 0.36, 0.18, 0.0), (0.4, 0.42, 0.19, 0.0), (0.55, 0.40, 0.18, 0.0), (0.75, 0.26, 0.12, 0.0), (0.88, 0.14, 0.07, 0.0), (0.93, 0.12, 0.05, 0.0), (1.0, 0.06, 0.02, 0.0). Depth:length 0.42 at the deepest point.
 - Fins: dorsal continuous notched: base u 0.22→0.80, spiny front lobe height 0.14 L (u 0.22–0.50), notch to 0.08 at u 0.52, soft lobe 0.12 (u 0.55–0.80), rounded tips, 11 + 14 rays. Anal: u 0.56→0.82, height 0.10, rounded. Caudal: rounded fan, span 0.26 L, length 0.2 L from the peduncle at u 1.0. Pectorals: rounded paddle 0.18 L long × 0.12 wide at u 0.27, lateral line −0.02; pelvics 0.10 L at u 0.33 below.
@@ -243,6 +257,7 @@ Soft bodies (`part="body"`, `Col.r` = thickness: baked as inverted AO) and polyp
 | `mushroom.glb` | ruffled disc r 2.5 cm on the sand | 0.6k | — |
 | `macro_red.glb` | 3 Gracilaria tufts × 19 branches with side branches | 4.6k | — |
 | `organ_pipe.glb` | **Tubipora musica (replaces aiptasia)**: ~90 red tubes `#7A1F1F`–`#9A2A2A` in a dome on two stolonal platforms, pale green-grey 8-tentacle feathery polyps `#B8C97A`/`#C7A16A` with `#E8E0C8` tips | 1.5k | 90 × 24 tris |
+| `mushroom_hairy.glb` | **Hairy mushroom (Rhodactis sp.), the clownfish host** (`corals.mushroom_hairy`): 5 flat-to-slightly-cupped discs 3–6 cm across (radii 2.9/2.2/1.9/1.6/1.5 cm, lobed rim) on the rock found by ray-casting from `HOST_ARCH_CLOWNS` (lands ≈ (82.9, 18.9, 15.7)); `Root.extras` {anchor `HOST_ARCH_CLOWNS`, species `rhodactis_sp`, fluorescent 0.6, hostFor}; `Body` (material `mushroom_hairy`, dark olive with a faint dark centre: no mouth slit) + polyp node `Polyps` (material `mushroom_hairy_polyp`: olive base → green → light fluorescent tips, emissive `#8CF060`) = a 10-tri branching tentacle tuft (3-sided stub + 4 forked branchlets) instanced on a jittered 0.25 cm grid over every disc, normals from the disc surface, shorter at the rim. Card `species_rhodactis_sp.webp` | 1.3k | **1089** × 10 tris |
 | `algae_tufts.glb` | 3 crossed alpha cards at each of the 8 GRAZE anchors (`part="card"`, scale with `uAlgaeBloom`) | 48 | — |
 
 | Asset | Method | Budget |

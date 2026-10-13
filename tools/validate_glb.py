@@ -42,6 +42,7 @@ BUDGET = {
     "nassarius": 1300, "astrea": 1100, "asterina": 100, "feather_duster": 1300,
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
+    "mushroom_hairy": 1500,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 450,
 }
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
