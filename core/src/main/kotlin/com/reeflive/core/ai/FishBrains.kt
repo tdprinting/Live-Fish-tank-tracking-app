@@ -108,6 +108,13 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 wiggleUntil = c.t + c.rng.range(2.0, 4.0)
                 wiggleAt = c.safe(h + Vec3(c.rng.range(-2.0, 2.0), if (flatHost) FLAT_LO else 2.0, c.rng.range(-1.5, 1.0)), 1.0)
             }
+            // back from a cleaner visit or a chase across the tank: home over the rock, not into it
+            val away = c.o.pos.distanceTo(h) > 4 * L
+            if (away) {
+                out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = L)
+                out.waddleAmp = 0.3; out.waddleHz = 1.3
+                return
+            }
             wiggling = c.t < wiggleUntil
             if (wiggling) {
                 out.seek(wiggleAt, c.o.cruiseSpeed * 0.5, arrive = 1.0)
@@ -571,12 +578,17 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         private var danceS = 1.5
         private var nextScan = 0.0
         private var cheatAcc = 0.0
+        private val lastPoseAt = HashMap<String, Double>()
+        private val unreachableUntil = HashMap<String, Double>()
         override val targetVerb: String get() = if (phase == 3) "inspecting" else "approaching"
         override val committed: Boolean get() = client != null && phase in 1..3
 
         override fun score(c: Ctx): Double {
             val o = c.o
             if (c.p.night || o.sleeping || c.activity < 0.3 || o.health < 0.35) return 0.0
+            // a bout under way keeps its score (the candidate is consumed on entry; without this the
+            // approach lost to the station on the very next tick and the wrasse barely ever cleaned)
+            client?.let { if (it.alive) return 0.6 + 0.2 * o.hunger }
             if (c.t < restUntil) return 0.0
             if (c.t >= nextScan) { nextScan = c.t + 1.0; candidate = choose(c) }
             val cand = candidate ?: return 0.0
@@ -584,7 +596,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             return 0.6 + 0.2 * o.hunger
         }
 
-        /** Client weight w = BL² × (1 + 3·ich + 0.5·posing) × (1 − 0.5·threat), plus overdue and buffer terms. */
+        /** Client weight w = area × (1 + 3·ich + 0.5·posing) × (1 − 0.5·threat), plus due, overdue and buffer terms. */
         fun choose(c: Ctx): Organism? {
             val o = c.o
             var best: Organism? = null
@@ -592,16 +604,26 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             for (f in c.sim.organisms) {
                 if (f === o || !f.alive || !f.isFish || !f.visible || f.sleeping || f.brainKind == BrainKind.WRASSE || f.brainKind == BrainKind.EEL) continue
                 if (c.t - f.lastCleanerContactAt < CLIENT_COOLDOWN_S) continue
+                if ((unreachableUntil[f.id] ?: -1.0) > c.t) continue
                 val d = f.pos.distanceTo(o.pos)
                 val overdue = c.t - f.lastCleanerContactAt > OVERDUE_S
                 val atStation = station.client === f && station.clientReady
-                if (d > SEARCH_CM && !overdue && !atStation) continue
+                // an active aggressor whose damping has lapsed is sought out across the tank, like an overdue client
+                val aggressor = f.aggressionDampUntil < c.t + DAMP_RENEW_S && f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t) > 0
+                if (d > SEARCH_CM && !overdue && !atStation && !aggressor) continue
                 val ich = if (f.disease == Disease.ICH) f.diseaseStage else 0.0
                 val threat = o.relations[f.id]?.fear ?: 0.0
-                var w = (f.lengthCm / 7.0).let { it * it } * (1 + 3 * ich + (if (atStation) 0.5 else 0.0)) * (1 - 0.5 * threat)
+                // lateral area (length² × body depth, S:Grutter95; gives 06 §2.11's order tang > clowns > dottyback >
+                // lawnmower > hawk > cardinal > blennies) × parasites × a client posing at the station × wariness (06 §5.5)
+                val area = clientArea(f)
+                var w = area * (1 + 3 * ich + (if (atStation) 0.5 else 0.0)) * (1 - 0.5 * threat)
                 // calming the tank: aggressors whose tactile damping has expired are worth a visit (06 §3.5)
-                if (PairMatrix.baseRank(f, c.sim) >= TACTILE_RANK && f.aggressionDampUntil < c.t) w *= 2.0
-                if (overdue) w *= 3.0
+                // ... the more so the more it has been chasing lately (06 §3.5: the buffer is aimed at aggressors)
+                if (wantsTactile(f, c) && f.aggressionDampUntil < c.t + DAMP_RENEW_S)
+                    w *= 1 + min(AGGRESSOR_WEIGHT, f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t).toDouble())
+                // clients come due again as time passes; an overdue one outranks everyone (06 §5.6 #4)
+                w *= 1 + min(c.t - f.lastCleanerContactAt, OVERDUE_S) / DUE_S
+                if (overdue) w *= OVERDUE_WEIGHT
                 // infested clients seek the cleaner out and are served first (06 §5.7: ich visits at ×3 weight; S:Grutter99)
                 if (ich > 0.05) w *= 3.0
                 w /= 1 + d / SEARCH_CM
@@ -613,9 +635,11 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) {
             client = candidate; candidate = null
             phase = 0; phaseT = 0.0; cheatAcc = 0.0
-            // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96)
+            // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a
+            // larger client, ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I])
+            val mean = 6.7 * sqrt(sqrt(client?.let { clientArea(it) } ?: 1.0)).coerceIn(0.8, 1.25)
             val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
-            val mu = ln(6.7) - sigma2 / 2
+            val mu = ln(mean) - sigma2 / 2
             inspectS = exp(mu + sqrt(sigma2) * c.rng.gaussian()).coerceIn(2.0, 20.0)
             danceS = c.rng.range(1.0, 2.0)
             if (client == null) finished = true else encounters.approaches++
@@ -632,13 +656,15 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 // approach to 1 BL at 1.8 BL/s
                 0 -> {
-                    out.seek(c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm)), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
+                    val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
                     if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5) {
-                        phase = if (PairMatrix.baseRank(cl, c.sim) >= TACTILE_RANK || cl.hunger > 0.6) 1 else 2
+                        phase = if (wantsTactile(cl, c)) 1 else 2
                         if (phase == 1) encounters.advertised++
                         phaseT = 0.0
                     }
-                    if (phaseT > 30) { encounters.failedApproaches++; done(c, cl, false) }
+                    // no path-finding: a client it cannot reach (rock in the way) is left alone for a while
+                    if (phaseT > APPROACH_GIVE_UP_S) { encounters.failedApproaches++; unreachableUntil[cl.id] = c.t + UNREACHABLE_S; done(c, cl, false) }
                 }
                 // tactile dance: pitch ±20° at 2 Hz within 15 cm, stroking with the pelvic fins
                 1 -> {
@@ -655,8 +681,14 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 2 -> {
                     cl.lastCleanerContactAt = c.t
                     val trust = Social.rel(cl, o, c.t).cleanerTrust
-                    if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0))) { encounters.refused++; done(c, cl, false); return }
+                    // a client that posed recently is less keen (few parasites to shed): full poses are spaced out,
+                    // the other contacts stay brief passes ("tang 1–3 full poses/h plus several brief passes", 06 §5.5)
+                    val sincePose = c.t - (lastPoseAt[cl.id] ?: -1e9)
+                    val ichS = if (cl.disease == Disease.ICH) cl.diseaseStage else 0.0
+                    val need = (sincePose / POSE_REFRACT_S + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
+                    if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0) * need)) { encounters.refused++; done(c, cl, false); return }
                     encounters.accepted++
+                    lastPoseAt[cl.id] = c.t
                     cl.poseFor = o; cl.poseUntil = c.t + inspectS + 1.0
                     cl.counters.add(Counters.K.POSE, c.t)
                     c.sim.emit(SimEvent.Pose(cl.id, o.id, c.sim.simTimeSec))
@@ -674,7 +706,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val ich = cl.disease == Disease.ICH
                     // honest gleaning feeds in proportion to what is there (a tank has few parasites)
                     o.hunger = max(0.0, o.hunger - c.dt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
-                    // cheating: 0.04/s baseline → 0.17/s when hungry (S:Pinto11)
+                    // cheating: 0.02/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.19/s when hungry (13–21 per 100 s, S:Pinto11)
                     cheatAcc += c.dt
                     while (cheatAcc >= 1.0) {
                         cheatAcc -= 1.0
@@ -712,8 +744,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             if (station.client === cl) station.release()
             client = null; finished = true
             if (served) c.o.counters.add(Counters.K.CLEAN_GIVEN, c.t)
-            // pause between bouts (few clients, scarce parasites); half the time back to the station
-            restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S) * (1.2 - 0.6 * c.o.hunger)
+            // pause between bouts (few clients, scarce parasites), shorter the hungrier it is: a hungry cleaner
+            // keeps working and takes mucus where parasites are lacking (06 §2.11); half the time back to the station
+            restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S) * (1.3 - c.o.hunger).coerceAtLeast(0.3)
             stationBias = if (c.rng.chance(0.5)) c.t + 60 else -1.0
         }
 
@@ -731,6 +764,17 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
     class Encounters { var approaches = 0; var failedApproaches = 0; var advertised = 0; var accepted = 0; var refused = 0; var jolts = 0; var completed = 0 }
     val encounters = Encounters()
 
+    /**
+     * Who gets the tactile dance first (06 §5.5, §2.11): high-ranked ("predatory") clients, hungry
+     * ones, and any client that has started a chase in the last hour: tactile stimulation is
+     * pre-conflict management aimed at likely aggressors (S:Grutter04, S:Cheney08).
+     */
+    /** Relative lateral area of a client: (L / 7 cm)² × √(depth / 0.35); 1 for a 7 cm, mid-depth fish. */
+    fun clientArea(f: Organism): Double = (f.lengthCm / 7.0).let { it * it } * sqrt(f.species.depthRatio / 0.35)
+
+    fun wantsTactile(f: Organism, c: Ctx): Boolean =
+        PairMatrix.baseRank(f, c.sim) >= TACTILE_RANK || f.hunger > 0.6 || f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t) > 0
+
     /** Pause until then between bouts; after a bout the wrasse goes back to its station half the time (06 §5.5). */
     var restUntil = 0.0
     var stationBias = -1.0
@@ -742,6 +786,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val DANCE_BOB_CM = 0.8
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
         const val CLIENT_COOLDOWN_S = 60.0
+        /** A client's keenness to pose recovers linearly over this long after its last full pose [I]. */
+        const val POSE_REFRACT_S = 2000.0
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
         /**
@@ -751,12 +797,23 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §4") const val OVERDUE_S = 45 * 60.0
         /** Base rank from which a client gets the tactile dance first (hawk = 6; S:Grutter04, S:Cheney08). */
         const val TACTILE_RANK = 6.0
+        /** An aggressor whose tactile damping has lapsed (or lapses within this many s) is worth up to 1 + this much more (06 §3.5). */
+        const val DAMP_RENEW_S = 120.0
+        const val AGGRESSOR_WEIGHT = 3.0
+        /** A client's weight grows by 1× per this many seconds since its last contact (capped at [OVERDUE_S]). */
+        const val DUE_S = 900.0
+        const val OVERDUE_WEIGHT = 10.0
+        /** Lateral area (length² × depth ratio) of a 7 cm fish of depth ratio 0.35: weight 1. */
+        const val AREA_REF = 49.0 * 0.35
+        /** Approach timeout, and how long a client it could not reach is skipped. */
+        const val APPROACH_GIVE_UP_S = 20.0
+        const val UNREACHABLE_S = 300.0
         /** Honest gleaning: hunger −0.002/s at full parasite load. */
         const val HONEST_YIELD_PER_S = 0.002
         const val REST_MIN_S = 15.0
         const val REST_MAX_S = 75.0
         /** Cheating per second of inspection: 0.04 baseline → 0.17 when hunger > 0.6 (S:Pinto11). */
-        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.17 else 0.04
+        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.19 else 0.02
     }
 
     /** Between clients: zip along the rock face in the lower-mid zone. */
@@ -1227,7 +1284,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         install(RockGraze(),
             InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this), VisitCleaner(this))
+            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
@@ -1387,7 +1444,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4),
+            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(),
             Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
@@ -1432,8 +1489,43 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     var excursions = 0; private set
     var returns = 0; private set
 
-    /** DESIGN ESTIMATE (research 10 §7: "does not establish that the tailspot must move exactly 50 cm away"). */
-    companion object { @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0 }
+    companion object {
+        /** DESIGN ESTIMATE (research 10 §7: "does not establish that the tailspot must move exactly 50 cm away"). */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
+        /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
+        const val PROSPECT_S = 86400.0
+    }
+
+    /**
+     * Newcomer prospecting (06 §3.3, §2.7, §5.6 #9): for its first day a new tailspot has no settled
+     * range and samples every hole and grazing patch, the lawnmower's included; the lawnmower's chases
+     * (and the 10 min hide that follows each) are what teach it to keep to the far hole. [I]
+     */
+    inner class Prospect : Behavior("prospect", "Exploring its new tank") {
+        private var site = Vec3.ZERO
+        private var stand = Vec3.ZERO
+        private var stay = 30.0
+        private var arrived = -1.0
+        override fun score(c: Ctx): Double {
+            if (c.p.night || c.t - c.o.arrivalTime > PROSPECT_S) return 0.0
+            return 0.55
+        }
+        override fun enter(c: Ctx) {
+            val sites = (c.rock.anchors.ofType("HOLE") + c.rock.anchors.ofType("GRAZE")).map { it.pos }.filter { it.distanceTo(holePos) > 15 }
+            if (sites.isEmpty()) { finished = true; return }
+            site = sites[c.rng.nextInt(sites.size)]
+            val sp = c.rockSurfacePoint(site, 6.0)
+            stand = sp?.let { (p, n) -> c.safe(p + n * (c.clearance + 0.5), c.clearance * 0.8) } ?: c.safe(site, c.clearance)
+            stay = c.rng.range(20.0, 60.0)
+            arrived = -1.0
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            out.seek(stand, c.o.cruiseSpeed * 1.2, arrive = 2.0)
+            if (arrived < 0 && c.o.pos.distanceTo(stand) < 3.0) arrived = c.t
+            if (arrived >= 0) { out.hover = true; out.pectoral = 1.0 }
+            if (arrived >= 0 && c.t - arrived > stay || elapsed > stay + 40) finished = true
+        }
+    }
 
     /** Dart up into the water column to snap plankton or a drifting particle, then back. */
     inner class PlanktonDash : Behavior("dash", "Darting for plankton") {

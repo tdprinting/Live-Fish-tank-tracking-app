@@ -72,6 +72,8 @@ class Simulation(
     @Ev(Evidence.DESIGN_ESTIMATE, "11 §7") var asterinaCorallivoryScenario = false
     /** Shrimp pairing, molt-linked mating and egg carrying (research 12). */
     val shrimpBreeding = ShrimpBreeding(this)
+    /** Sim time of the last [Command.RearrangeRock]; territorial bouts run hot for a day after it (06 §3.3). */
+    var territoryResetAt = -1e12
     /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
     var nightPlanktonPerHour = 60.0
     private var planktonAcc = 0.0
@@ -262,6 +264,8 @@ class Simulation(
         simTimeSec += simDt
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
+        // every step (cheap), so the multiplier is right from the first bout and follows adds and deaths at once
+        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
@@ -271,6 +275,8 @@ class Simulation(
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         if (useBehavior && !abstractMode) coralCatch(simDt)
+        // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
+        nightRolls()
         chemAccum += simDt
         while (chemAccum >= CHEM_DT) {
             chemAccum -= CHEM_DT
@@ -331,22 +337,31 @@ class Simulation(
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
                 val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
-                for (t in organisms.toList()) {
-                    if (t === a || !t.alive || !r.targets.contains(t.brainKind.name)) continue
-                    if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL")) continue
-                    var p = r.pEvent
-                    if (r.moltWindowH > 0) {
-                        val cross = a.brainKind != t.brainKind
-                        if (cross && !crossSpeciesShrimpKills) continue
-                        if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) continue
-                        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) continue
-                    }
-                    if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
-                    if (!rng.chance(p)) continue
-                    nightPredation(a, t, r.bout)
-                }
+                val eligible = organisms.filter { t -> t !== a && t.alive && r.targets.contains(t.brainKind.name) && nightEligible(r, a, t) }
+                if (eligible.isEmpty()) continue
+                // one roll per actor and row per night, on the nearest eligible target: the row's pEvent is a
+                // per-night probability for the actor, not per prey animal in the tank
+                val t = eligible.minBy { it.pos.distanceTo(a.pos) }
+                var p = r.pEvent
+                if (simTimeSec - t.arrivalTime < 7 * 86400) p *= r.newcomerMult
+                if (rng.chance(p)) nightPredation(a, t, r.bout)
             }
         }
+    }
+
+    private fun nightEligible(r: com.reeflive.core.ai.PairRow, a: Organism, t: Organism): Boolean {
+        if (a.pos.distanceTo(t.pos) > r.triggerRadius + 2) return false
+        // a sleeping fish (diurnal species at 02:00), and only one well under the crab's leg span (07 gap 5)
+        if (r.filter == "sleeping" && !(t.isFish && t.species.activity.uppercase() != "NOCTURNAL" && t.lengthCm < r.maxPreyRatio * a.lengthCm)) return false
+        if (r.moltWindowH > 0) {
+            val cross = a.brainKind != t.brainKind
+            // banded-on-skunk kills are unsourced: a sandbox toggle, off by default (07 gap 4)
+            if (cross && !crossSpeciesShrimpKills) return false
+            if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) return false
+            // conspecifics: a pair is stable, a third animal is the one at risk (S:Wong11)
+            if (!cross && organisms.count { it.alive && it.brainKind == t.brainKind } < r.minGroup) return false
+        }
+        return true
     }
 
     /** A lethal roll: eaten in Sandbox (predation on), a near miss and a stress spike in Reality. */
@@ -451,7 +466,6 @@ class Simulation(
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
-        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         expireTreatments()
         val infectedAll = HashMap<Disease, Double>()
         for (x in organisms) if (x.alive) x.disease?.let { infectedAll[it] = (infectedAll[it] ?: 0.0) + x.diseaseStage }
@@ -487,7 +501,6 @@ class Simulation(
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
         flatwormToxin()
-        nightRolls()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
         if (!behaviorEnabled || abstractMode) {
             val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
@@ -966,8 +979,10 @@ class Simulation(
 
     /** Rock rearrangement (06 §3.3): territories re-anchor, familiarity falls to 0.5, intrusion memory clears. */
     private fun rearrangeRock() {
+        territoryResetAt = simTimeSec
         for (o in organisms) {
-            for (r in o.relations.values) { r.familiarity = min(r.familiarity, 0.5); r.intrusions = 0.0 }
+            // individuals still recognise each other (familiarity 0.5, not 0; 06 §3.3); intrusion memory is kept
+            for (r in o.relations.values) r.familiarity = min(r.familiarity, 0.5)
             agents[o]?.brain?.utility?.behaviors?.forEach { (it as? com.reeflive.core.ai.PairBouts)?.reset() }
         }
         emit(SimEvent.TerritoryReset(simTimeSec))

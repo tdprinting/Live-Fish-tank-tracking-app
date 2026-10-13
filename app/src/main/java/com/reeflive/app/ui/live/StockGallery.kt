@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -264,17 +265,20 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
         if (count > lastCount && !reduce) { pop.snapTo(1.35f); pop.animateTo(1f, ReefMotion.bouncy(false)) }
         lastCount = count
     }
+    val ls = LiveTheme.style
     GlassCard(
         modifier = modifier
             .graphicsLayer {
                 alpha = appear.value
                 translationY = (1f - appear.value) * 18.dp.toPx()
             }
+            // live theme (UI_STYLE §10.1): thick navy outline, pink when picked
+            .border(ls.outlineWidth, if (picked) Candy.pink else ls.outline, ls.tileShape)
             .semantics(mergeDescendants = true) {
             contentDescription = "${card.name}, ${card.sizeText}, $count in the tank. Tap to add one, hold to add several."
         },
-        shape = ReefShapes.tile,
-        tint = if (picked) c.coral else null,
+        shape = ls.tileShape,
+        tint = if (picked) Candy.pink else null,
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 8.dp),
         onClick = onTap,
         onLongClick = onMany,
@@ -285,13 +289,13 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
                 Text(
                     "×$count",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Ink.onCoral,
+                    color = Candy.navy,
                     maxLines = 1,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
                         .clip(ReefShapes.pill)
-                        .background(c.coral)
+                        .background(Candy.pink)
                         .padding(horizontal = 7.dp, vertical = 1.dp),
                 )
             }
@@ -309,11 +313,12 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
                 Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(c.glass)
+                    .background(Candy.pink)
+                    .border(2.dp, Candy.navy, CircleShape)
                     .clickable(role = Role.Button, onClickLabel = "Add several ${card.name}", onClick = onMany),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add several", tint = c.coralSoft, modifier = Modifier.size(22.dp))
+                Icon(Icons.Rounded.Add, contentDescription = "Add several", tint = Candy.navy, modifier = Modifier.size(22.dp))
             }
         }
     }

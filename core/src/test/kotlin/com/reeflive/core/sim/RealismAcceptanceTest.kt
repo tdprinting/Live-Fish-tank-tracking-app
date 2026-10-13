@@ -47,6 +47,14 @@ class RealismAcceptanceTest {
 
     private fun stockWithout(vararg ids: String) = DefaultStock.all.filter { it.id !in ids }
 
+    /**
+     * The 06 heat checks (#22, #25) are about the stress filters and the aggression rule in a tank with
+     * no parasite introduced (S:Warren16, S:Dabruzzi21 ran parasite-free). HealthModel seeds ich
+     * spontaneously above 28 °C (SIMULATION §3.4), which would kill the stock before day 60 and
+     * confound the measurement, so these runs clear it.
+     */
+    private fun Simulation.noIch() { for (o in organisms) if (o.disease == Disease.ICH) { o.disease = null; o.diseaseStage = 0.0 } }
+
     private fun chases(ev: List<SimEvent>) = ev.filterIsInstance<SimEvent.Chase>().filter { it.bout != "QUIVER_YIELD" }
 
     // ------------------------------------------------------------------ shared healthy day (c03, c04, c12, c13)
@@ -108,7 +116,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c02
     /** 06 §5.6 #2: three host intrusions in 10 min; third bout latency ≤ 40 % of the first, bouts per entry ≥ 1.5×. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c02_hostDefenceSensitisation() {
         var lat1 = 0.0; var lat3 = 0.0; var nLat = 0
         var bouts1 = 0; var bouts3 = 0
@@ -145,7 +152,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c03
     /** 06 §5.6 #3: tang 1–3 posed inspections/h, mean inspection 4–10 s, 2–10 min of cleaning per 10 h day. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c03_cleanerServicesTang() {
         val d = day
         val tang = d.sim.org(BrainKind.TANG)
@@ -168,7 +174,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c04
     /** 06 §5.6 #4: no client goes > 90 min by day without at least a tactile pass. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c04_cleanerCooldown() {
         val worst = day.maxGapMin.maxBy { it.value }
         assertTrue("longest gap without a cleaner contact: $worst min (all ${day.maxGapMin})", worst.value <= 90.0)
@@ -177,7 +182,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c05
     /** 06 §5.6 #5: no prepared food → wrasse hunger past 0.6 within 3 days; jolts rise ≥ 3×; trust < 0.4 and fewer poses. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c05_cheatingRespondsToHunger() {
         // hunger climbs on cleaning alone (tank parasites are scarce) — health-only days for speed
         val s0 = tank(hour = 8.0)
@@ -192,7 +196,8 @@ class RealismAcceptanceTest {
             val w = sim.org(BrainKind.WRASSE)
             w.acceptsPrepared = false
             val ev = sim.run(3 * 3600.0) { w.hunger = maxOf(w.hunger, hunger) }
-            val jolts = ev.count { it is SimEvent.Jolt }
+            // the wrasse's own jolts: the skunk shrimp's (S:Caves19) do not depend on the wrasse's hunger
+            val jolts = ev.count { it is SimEvent.Jolt && it.cleanerId == w.id }
             val poses = ev.count { it is SimEvent.Pose && it.cleanerId == w.id }
             val trust = sim.organisms.filter { it.isFish && it !== w }.mapNotNull { it.relations[w.id]?.cleanerTrust }.let { if (it.isEmpty()) 0.7 else it.average() }
             return Triple(jolts, poses, trust)
@@ -208,7 +213,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c06
     /** 06 §5.6 #6: without the wrasse ≥ 2× the chase bouts (tolerance 1.6–4×; S:Cheney08). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c06_cleanerAsBuffer() {
         var with = 0; var without = 0
         for (seed in 1L..2L) {
@@ -253,7 +257,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c08
     /** 06 §5.6 #8: a new dottyback's bouts with the clowns fall from ≥ 2/h on day 1 to ≤ 0.5/h by day 7, mostly display. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c08_dottybackStandoff() {
         val sim = tank(stockWithout("dottyback"), hour = 10.0)
         sim.enqueue(Command.AddOrganism("pseudochromis_indigo", 6.0, "Newdot"))
@@ -272,7 +275,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c09
     /** 06 §5.6 #9: lawnmower chases a new tailspot on ≥ 60 % of entries (day 1) and ≥ 35 % (day 14); the tailspot moves ≥ 50 cm away by day 3 and stays in its hole ≥ 40 % of daylight. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c09_blennyWar() {
         val sim = tank(stockWithout("tailspot"), hour = 10.0)
         sim.enqueue(Command.AddOrganism("ecsenius_stigmatura", 5.5, "Newspot"))
@@ -324,7 +326,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c11
     /** 06 §5.6 #11: hawk perched ≥ 75 % of daylight; 5–20 hops/h; never strikes a fish ≥ 0.5 its length; ≤ 1 charge/h at the wrasse. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c11_hawkfishEconomy() {
         val sim = tank(hour = 10.5)
         val hawk = sim.org(BrainKind.HAWK)
@@ -426,7 +427,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c15
     /** 06 §5.6 #15: banded and skunk shrimp ≥ 25 cm apart; a night molt next to the banded shrimp → ~5 % kills (sandbox toggle, 07 gap 4). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c15_shrimpPolitics() {
         val sim = tank(hour = 12.0)
         val cbs = sim.org(BrainKind.BANDED_SHRIMP)
@@ -461,7 +461,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c16
     /** 06 §5.6 #16: leg-rocking on ≥ 40 % of hawk/dottyback approaches and ≤ 20 % of tang/clown; cleans ≤ 35 % vs ≥ 40 %. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c16_skunkCleanerSignalling() {
         val stock = listOf(TestTank.seed("skunk"), TestTank.seed("hawk"), TestTank.seed("dottyback"), TestTank.seed("tang"), TestTank.seed("clown_m"))
         val sim = TestTank.sim(stock, seed = 4L, startHour = 11.0)
@@ -562,18 +561,18 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c20
     /** 06 §5.6 #20: RearrangeRock → bouts in the next 6 h ≥ 2× the pre-command rate, ≤ 1.2× by 72 h. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c20_rockRearrangement() {
-        fun rate(sim: Simulation, hours: Double) = chases(sim.run(hours * 3600)).size / hours
         var pre = 0.0; var post = 0.0; var late = 0.0
         for (seed in 1L..2L) {
             val sim = tank(seed = seed, hour = 10.0)
-            pre += rate(sim, 2.0)
+            pre += chases(sim.run(2 * 3600.0)).size / 2.0
             sim.enqueue(Command.RearrangeRock)
-            post += rate(sim, 2.0)
-            assertTrue("territory reset event", sim.eventLog.any { it is SimEvent.TerritoryReset })
+            // read the reset from the run's own events: the 200-entry eventLog has rolled over by the end of a busy 2 h
+            val ev = sim.run(2 * 3600.0)
+            post += chases(ev).size / 2.0
+            assertTrue("territory reset event", ev.any { it is SimEvent.TerritoryReset })
             sim.advanceAbstract(68 * 3600.0)
-            late += rate(sim, 2.0)
+            late += chases(sim.run(2 * 3600.0)).size / 2.0
         }
         assertTrue("pre $pre post $post", post >= 2 * pre)
         assertTrue("pre $pre after 72 h $late", late <= 1.2 * pre)
@@ -597,7 +596,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c22
     /** 06 §5.6 #22: 26 → 29 °C as a 3 h step vs a 7-day ramp; acclimation after 14 days; the cardinal fails to acclimate. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c22_rampVersusStep() {
         fun run(overMin: Double): Map<BrainKind, DoubleArray> {
             val sim = tank(hour = 8.0)
@@ -609,6 +607,7 @@ class RealismAcceptanceTest {
             val peak = HashMap<BrainKind, Double>()
             repeat(14 * 24) {
                 sim.advanceAbstract(3600.0)
+                sim.noIch()
                 for (o in sim.organisms) if (o.alive && o.isFish) peak.merge(o.brainKind, o.stressState.fast(StressModel.Ch.TEMP), ::maxOf)
             }
             return sim.organisms.filter { it.alive && it.isFish }.associate {
@@ -667,7 +666,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c24
     /** 06 §5.6 #24: one tap peaks within 1–4 h and is < 10 % by 24 h; three taps an hour apart ≥ 2× the peak. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c24_acuteStressEnvelope() {
         fun peak(taps: Int): Triple<Double, Double, Double> {
             val sim = tank(stock = listOf(TestTank.seed("clown_m")), hour = 12.0)
@@ -693,7 +691,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c25
     /** 06 §5.6 #25: at 31 °C aggression is ≥ 1.2× baseline in days 1–4 and ≤ 0.7× by day 60 (S:Warren16). */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c25_biphasicHeatAggression() {
         val stock = listOf(TestTank.seed("clown_f"), TestTank.seed("clown_m"), TestTank.seed("dottyback"), TestTank.seed("lawnmower"))
         val sim = TestTank.sim(stock, seed = 1L, startHour = 8.0)
@@ -702,8 +699,8 @@ class RealismAcceptanceTest {
         val base = mult()
         sim.enqueue(Command.RampParam("temp", 31.0, 0.0))
         val early = ArrayList<Double>()
-        repeat(4) { sim.advanceAbstract(86400.0); early += mult() }
-        repeat(56) { sim.advanceAbstract(86400.0) }
+        repeat(4) { repeat(24) { sim.advanceAbstract(3600.0); sim.noIch() }; early += mult() }
+        repeat(56) { repeat(24) { sim.advanceAbstract(3600.0); sim.noIch() } }
         val late = mult()
         assertTrue("days 1–4 ${early.average() / base}", early.average() >= 1.2 * base)
         assertTrue("day 60 ${late / base}", late <= 0.7 * base)
@@ -728,10 +725,10 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c27
     /** 06 §5.6 #27: after a 6 h free-NH₃ 0.3 spike and a 50 % water change: gasping ends < 1 h, appetite ≥ 80 % < 3 d, finClamp < 0.2 < 2 d, S_slow_NH3 < 0.1 only after ≥ 7 d. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c27_recoveryOrdering() {
         val sim = tank(hour = 8.0)
-        val frac = sim.water.s.nh3Free / sim.water.s.nh3Total.coerceAtLeast(1e-6)
+        // free-NH3 fraction at this pH/temperature (the fresh tank has no TAN to take a ratio of)
+        val frac = ChemFns.freeNh3(1.0, sim.water.s.ph, sim.water.s.tempC)
         sim.enqueue(Command.RampParam("tan", 0.3 / frac, 0.0, hold = true))
         sim.advanceAbstract(6 * 3600.0)
         val clown = sim.organisms.first { it.brainKind == BrainKind.CLOWN }

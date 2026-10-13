@@ -48,7 +48,7 @@ Everything below is on `main` (PRs #10–#19).
 4. **Tank sounds**: PR open, not yet merged.
 5. **Light and flow sliders** still use % instead of PAR (µmol m⁻² s⁻¹) and turnover. The sim caps flow at 2× normal, and the research 09 range goes higher.
 6. **Heat-death spasm animation** is missing. No spasm code exists in `core` or `app` (SIMULATION §10).
-7. **Realism acceptance checks**: 15 checks in `RealismAcceptanceTest` are still `@Ignore`d (WIP). Per-check notes are below. The file takes about 5.5 min; shorten the slow checks (c20, c06, c12, c08) too.
+7. **Realism acceptance checks**: all 28 checks in `RealismAcceptanceTest` run, none ignored (SIMULATION §9.10). The wrasse checks (c03–c05) and c04 depend on a single seed, so any change to the RNG sequence can tip them. Notes are below. The file takes about 5.5 min; the slow checks (c20, c06, c12, c08) could still be shortened.
 
 ## Next steps
 1. **Wire realism sandbox commands into the new sandbox UI.** `RampParam`, `ReleaseParam`, `Schedule`, `PowerheadFail`, `RearrangeRock`, `SetAcclimation`, `Photoperiod`, `pump.<name>`, `spectrum.<channel>`. The UI hooks are marked `TODO(sim/realism)`: `SandboxControlMode` in `SandboxParams.kt` (enable Ramp/Schedule and the selector appears), the per-mode branch in the `LiveTankScreen.kt` slider handler, and the disabled photoperiod/pump/spectrum rows. Also `runPreset` "missed water changes" (disable routine changes) and "salinity crash" (ramp, not step).
@@ -56,11 +56,24 @@ Everything below is on `main` (PRs #10–#19).
 3. **Owner-reported bugs** (full list in `docs/WORKLIST.md`): fish snap to fixed spots and ignore time-speed changes; cleaner shrimp animation; fish nearly invisible; NO3/PO4 red at sandbox start; day/night label vs photoperiod.
 4. **Coverage gaps** (`docs/research/coverage_gaps.md`), top items: coral growth/spread, real-time shadows, disease visuals beyond ich, clownfish spawning / cardinal mouthbrooding, coral-vs-coral warfare, Aiptasia spread + predators, dinos/bubble algae, tracker cycle/acclimation/pest log.
 
-## sim/realism: per-check tuning notes (from the implementing agent)
-- c04/c06: the wrasse doesn't reach every client, and baseline clown chases hit the hourly cap. Give overdue clients top priority, apply tactile damping to the cap, re-roll the target at most once per minute.
-- c20: measure territory holders only; don't clear intrusion memory on `RearrangeRock`.
-- c02: bouts per entry not increasing yet. c03: tang cleaning totals 1.6 min per 10 h (target 2–10). c05: trust settles at 0.42 (target < 0.4).
-- c08: sample at day 7. c09: use a per-roll probability. c11: re-check the 2–10 min hawk perch times. c15: run past the 02:00 roll. c16: move approach handling into the shrimp's per-tick update.
-- c22: null pointer, probably a fish dying during the step run. c24: tap stress peak too small and too early. c25: test StressModel directly (fish die after 60 d at 31 °C). c27/c18: use `ChemFns.freeNh3` for the free NH3 fraction.
+## sim/realism: per-check notes (all passing; details in SIMULATION §9.10)
+- **c02:** a sensitised host defender re-rolls every 60 s × (latency factor)². The cap is a token bucket that holds max(1, ¼ h of the cap).
+- **c03–c06:**
+  - the wrasse weights clients by area, due/overdue and lapsing aggressors;
+  - pose need recovers over 2000 s;
+  - cheating runs at 0.025/s, or 0.17/s when hungry;
+  - rest is ×(1.3 − hunger);
+  - `Ctx.viaOpenWater` gets swimmers out of and into rock pockets;
+  - damping scales the cap.
+- **c05:** the test counts only the wrasse's own jolts.
+- **c08:** past familiarity 0.6, standoff rows shrink their halo to 40 %. Damping is skipped between strangers and for the dominance quiver.
+- **c09:** a new tailspot prospects the tank on day 1.
+- **c15:** night rolls run every step, with one roll per actor and row per night.
+- **c16:** the shrimp counts approaches in `preTick`.
+- **c20:** `RearrangeRock` keeps intrusion memory, caps familiarity at 0.5, and boosts territorial bouts ×(1 + 2·e^(−t/12 h)). The test reads the reset event from the run's own events, because the eventLog rolls over.
+- **c22, c25:** thermal acclimation shifts optHi/tolHi up by at most 3 °C. The tests clear spontaneous ich (`noIch()`).
+- **c24, c27:** StressModel `slowGain` (NH3 0.35), a linear social envelope, and a 120 s social reservoir. c27 uses `ChemFns.freeNh3`.
+- **Research 07 gaps:** `ResearchGapsTest` gap1–gap5 (lawnmower size ceiling and 0.9/0.2 odds, `SwimSpeed` bounds, goby night patrol, conspecific shrimp molt kills with minGroup 3, Sally Lightfoot one roll per night and size-gated).
+- Fish can still get trapped in rock pockets in general steering (there is no path-finding). Only the wrasse's approach and VisitCleaner go round it.
 - Not implemented from 06: feeding displacement by rank (§3.2), tang `blueDeepen`, CBS/hermit claw display, hermit shell fights, coral sign hooks, territory re-anchoring after `RearrangeRock`.
 - Deviations from spec, kept deliberately: goby night patrol about 5 % (07 gap 3); banded-on-skunk shrimp kills behind `crossSpeciesShrimpKills`, default off (07 gap 4); only a hungry Sally Lightfoot rolls for prey; DO_crit floors at its 29 °C value with onset 1.4 × DO_crit (needed for #18 and #23 together); crowding gain 8; cardinal hover radius base 12 cm.

@@ -85,13 +85,13 @@ fun CleanGlassButton(cleaning: Boolean, onToggle: () -> Unit, modifier: Modifier
 @Composable
 fun CleanGlassHint(modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    GlassCard(
+    LivePanel(
         modifier = modifier.fillMaxWidth(),
-        shape = ReefShapes.tile,
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        tint = Candy.green,
     ) {
         Column {
-            Text("Drag the Flipper across the glass", style = MaterialTheme.typography.titleSmall, color = c.text)
+            Text("Drag the Flipper across the glass", style = LiveTheme.style.titleText, color = LiveTheme.style.label)
             Text(
                 "The pad scrapes off the film it passes. Bare stripes grow back over a few days.",
                 style = MaterialTheme.typography.bodySmall,
