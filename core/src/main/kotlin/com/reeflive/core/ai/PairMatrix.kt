@@ -321,6 +321,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             if (o.hunger < 0.3 && c.sim.water.s.algaeHair >= 0.6) p *= 0.7   // well fed blenny is calmer (06 §4 table)
         }
         if (r.sizeTerm == "tang") p *= max(0.0, 1.5 - t.lengthCm / o.lengthCm.coerceAtLeast(0.5))
+        // the lawnmower chases blennies of its own size or smaller only (S:Townsend04, 07 gap 1; "same size" ±10 % [I])
+        if (r.sizeTerm == "notLarger" && t.lengthCm > NOT_LARGER_TOL * o.lengthCm) return 0.0
         if (r.type == "dominance" && ClownQueue.ratio(c.sim) < ClownQueue.STABLE_RATIO) p *= 2.0
         val temper = (o.aggression / o.species.temperament.aggression.coerceAtLeast(0.05)).coerceIn(0.7, 1.3)
         p *= temper * StressModel.aggressionMult(o, o.lastTempC) * c.sim.crowdingMult
@@ -421,6 +423,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     companion object {
         const val REROLL_S = 60.0
+        /** "Same size or smaller" for the sizeTerm notLarger rows: up to 10 % longer still counts [I]. */
+        const val NOT_LARGER_TOL = 1.1
         /** Bouts a row may run back to back before the hourly cap paces it. */
         const val BURST = 1.0
         /** ... or this many hours of the cap, if more. */
