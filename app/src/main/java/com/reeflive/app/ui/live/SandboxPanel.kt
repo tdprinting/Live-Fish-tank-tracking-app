@@ -629,32 +629,35 @@ private fun PresetCard(p: SandboxPreset, active: Boolean, modifier: Modifier, on
 // ---------------------------------------------------------------- first-time tips
 
 /**
- * First-time tips for the pretend tank, told by Hermie on a live panel. Shown once (remembered in settings) and again
- * from More → Tips.
+ * First-time tips told by Hermie on a live panel: the pretend tank's when [sandbox], else the live tank's (Watch).
+ * Each is shown once (remembered in settings) and again from More → "What can I do?". Words in [LiveTips].
  */
 @Composable
-fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbox: Boolean = true) {
     val s = LiveTheme.style
     val reduce = ReefTheme.reduceMotion
     val hop = remember { androidx.compose.animation.core.Animatable(0f) }
+    // one glyph per line of LiveTips (zip stops at the shorter list, so a missing glyph never crashes)
+    val glyphs = if (sandbox) {
+        listOf(ReefGlyphs.touch, ReefGlyphs.whatIf, ReefGlyphs.sparkleTip, ReefGlyphs.reset, ReefGlyphs.eye)
+    } else {
+        listOf(ReefGlyphs.fish, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
+    }
     LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             HermieArt(HermieMood.EXCITED, hop, reduce, Modifier.size(56.dp))
             Spacer(Modifier.width(8.dp))
-            Text("This is your pretend tank!", style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
+            Text(if (sandbox) LiveTips.SANDBOX_TITLE else LiveTips.WATCH_TITLE, style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
         }
         Spacer(Modifier.height(6.dp))
-        listOf(
-            ReefGlyphs.touch to "Tap a big bubble, then a tile. Watch it happen in the tank. Your real tank never changes.",
-            ReefGlyphs.whatIf to "Trouble breaks things on purpose. Speed up time in More to see what happens.",
-            ReefGlyphs.eye to "Tap empty water to hide every button. Tap again to bring them back.",
-            ReefGlyphs.sparkleTip to "Each card has a More button with the grown-up sliders.",
-            ReefGlyphs.reset to "Made a mess? More has a big Reset button.",
-        ).forEach { (glyph, text) ->
-            Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                Glyph(glyph, size = 20.dp, tint = s.label, accent = Candy.orange)
-                Spacer(Modifier.width(10.dp))
-                Text(text, style = MaterialTheme.typography.bodySmall, color = s.labelDim)
+        // a long list scrolls inside the card instead of pushing "Got it" off a short landscape screen
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            glyphs.zip(if (sandbox) LiveTips.sandbox else LiveTips.watch).forEach { (glyph, text) ->
+                Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                    Glyph(glyph, size = 20.dp, tint = s.label, accent = Candy.orange)
+                    Spacer(Modifier.width(10.dp))
+                    Text(text, style = MaterialTheme.typography.bodySmall, color = s.labelDim)
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
