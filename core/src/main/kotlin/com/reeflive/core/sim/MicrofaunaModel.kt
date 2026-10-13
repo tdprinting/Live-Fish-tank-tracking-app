@@ -11,8 +11,10 @@ import kotlin.math.pow
  * group only when it exceeds 2 pixels"); [planktonic] groups live in the water column only.
  */
 enum class MicroGroup(val label: String, val plural: String, val sizeMm: Double, val planktonic: Boolean = false) {
-    HARPACTICOID("Harpacticoid copepod", "Harpacticoids", 0.8),
-    CALANOID("Tigger pod (calanoid)", "Tigger pods", 0.3, planktonic = true),
+    // Tisbe and the "Tigger pod" Tigriopus californicus (~1 mm) are both harpacticoids (research video micro_fauna S2)
+    HARPACTICOID("Harpacticoid copepod (Tisbe, Tigriopus)", "Harpacticoids", 0.8),
+    // pelagic calanoid: Parvocalanus crassirostris (~0.3 mm adult). Not the "Tigger pod" (a harpacticoid).
+    CALANOID("Calanoid copepod (Parvocalanus)", "Calanoids", 0.3, planktonic = true),
     CYCLOPOID("Cyclopoid copepod", "Cyclopoids", 0.9),
     GAMMARID("Gammarid amphipod", "Amphipods", 6.0),
     CAPRELLID("Skeleton shrimp", "Skeleton shrimp", 10.0),
@@ -47,7 +49,9 @@ enum class MicroScene(val label: String) { ROCK("Rock"), GLASS("Glass"), SAND("S
 /** One-tap sandbox actions for the microfauna (research 10 §3.3 scenarios, §4 medications). */
 enum class MicroAction(val label: String) {
     DOSE_TISBE("Dose Tisbe pods"),
-    DOSE_TIGGER("Dose Tigger pods"),
+    /** Kept under its old name for saved commands; it doses the calanoid Parvocalanus. */
+    DOSE_TIGGER("Dose Parvocalanus (calanoid)"),
+    DOSE_TIGRIOPUS("Dose Tigger pods (Tigriopus)"),
     DOSE_PHYTO("Dose phyto"),
     DOSE_ROTIFERS("Dose rotifers"),
     DOSE_AMPHIPODS("Add amphipods"),
@@ -379,6 +383,9 @@ class MicrofaunaModel(private val config: TankConfig) {
             MicroAction.DOSE_TISBE -> { add(MicroGroup.HARPACTICOID, MicroHabitat.ROCK, 2500.0 * k); add(MicroGroup.HARPACTICOID, MicroHabitat.GLASS, 1000.0 * k) }
             // a 2,000-pod bottle of Parvocalanus: 9 per L in 227 L (§2.5)
             MicroAction.DOSE_TIGGER -> add(MicroGroup.CALANOID, MicroHabitat.COLUMN, 2000.0 * k)
+            // a bottle of Tigger pods (Tigriopus californicus, harpacticoid): they settle on the rock and glass and swim
+            // up in jerky hops near the rock rather than drifting as plankton (micro_fauna §CALANOID, S2 [M])
+            MicroAction.DOSE_TIGRIOPUS -> { add(MicroGroup.HARPACTICOID, MicroHabitat.ROCK, 1500.0 * k); add(MicroGroup.HARPACTICOID, MicroHabitat.GLASS, 500.0 * k) }
             // 50 mL of 10^9 cells/mL: 2 × 10^5 cells/mL in 227 L (§2.5)
             MicroAction.DOSE_PHYTO -> { adults[idx(MicroGroup.PHYTO, MicroHabitat.COLUMN)] += 5e10 * k; present[MicroGroup.PHYTO.ordinal] = true }
             // a rotifer culture: 5 per mL (§2.5: 5-50 per mL for 1-2 d after a dose)

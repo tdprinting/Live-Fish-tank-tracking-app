@@ -15,6 +15,7 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp tail-flip)
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
@@ -68,6 +69,19 @@ void main() {
     }
 
     float u = aColor.a;
+    float mode = uMotion.w;
+    if (mode > 0.5 && mode < 1.5 && part > 2.5) {
+        // Brittle star arm rowing (Astley 2012): the arm pointing forward (+X) leads and barely moves; the arm pairs
+        // either side make mirrored power strokes in the disc plane, the trailing pair drags. Rotate about the disc.
+        float phi = atan(local.z, local.x);
+        float r = length(local.xz);
+        float side = abs(phi);
+        float w = smoothstep(0.3, 1.2, side) * (1.0 - 0.6 * smoothstep(2.0, 2.8, side));
+        float d = sign(phi) * w * uMotion.y * sin(2.0 * PI * uMotion.x - 2.5 * r) * smoothstep(0.02, 0.2, r);
+        float c = cos(d), s = sin(d);
+        local = vec3(c * local.x - s * local.z, local.y + 0.02 * w * uMotion.y * r * cos(2.0 * PI * uMotion.x), s * local.x + c * local.z);
+        n = vec3(c * n.x - s * n.z, n.y, s * n.x + c * n.z);
+    }
     // Offset of this vertex from its spine station along the body axis (fins/eyes carry the u of their base).
     local.x -= (0.5 - u);
 
@@ -87,7 +101,15 @@ void main() {
             // pectorals: fan open and row
             float spread = mix(0.25, 1.0, uFin.x);
             local.z *= mix(0.35, 1.0, spread);
-            local.x += 0.04 * hinge * sin(time * 7.0 + u * 3.0) * spread;
+            if (uMotion.y > 0.001) {
+                // labriform rowing from the sim's stroke phase (core MotionProfile): fore-aft sweep with a
+                // feathering lift, amplitude set by speed (Drucker & Jensen 1996)
+                float ph = 2.0 * PI * uMotion.x - u * 1.5;
+                local.x += 0.09 * uMotion.y * hinge * sin(ph) * spread;
+                local.y += 0.03 * uMotion.y * hinge * cos(ph) * spread;
+            } else {
+                local.x += 0.04 * hinge * sin(time * 7.0 + u * 3.0) * spread;
+            }
             local.z += sign(local.z) * flutter;
         } else {
             local.z += flutter;
@@ -101,7 +123,7 @@ void main() {
         r = vec3(c * r.x + s * r.z, r.y, -s * r.x + c * r.z);
         local = pv + r;
         n = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
-    } else {
+    } else if (mode < 0.5 || mode > 1.5) {
         // legs / antennae: sweep with the appendage phase along the hinge (B) coordinate
         float sweep = sin(uSwim.w * 2.0 * PI + hinge * 4.0 + u * 5.0);
         local.y += 0.04 * hinge * sweep;
@@ -130,6 +152,18 @@ void main() {
     local.z += A * sin(arg);
     // slope dz/du tilts the normal (cheap analytic correction instead of a finite difference)
     float dzdu = amp * (1.8 * uw) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
+    // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
+    // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
+    float bend = uMotion.z;
+    if (mode > 1.5) {
+        float ab = max(uw - 0.4, 0.0);
+        local.y -= 0.9 * max(bend, 0.0) * ab * ab;
+        local.x -= 0.4 * max(bend, 0.0) * ab * ab;
+    } else if (mode < 0.5 && abs(bend) > 0.001) {
+        float e = uw - 0.35;
+        local.z += bend * 0.55 * (e * e - 0.04);
+        dzdu += bend * 0.55 * 2.0 * e;
+    }
     n = normalize(vec3(n.x - dzdu * n.z, n.y, n.z));
 
     vec3 sp;

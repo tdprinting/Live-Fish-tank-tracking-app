@@ -14,11 +14,11 @@ class SpeciesDbTest {
     @Test
     fun loadsEverySheet() {
         // 10 fish species (9 kinds incl. a clown pair), 9 inverts, 6 corals, 1 macroalga per Tee's confirmed list,
-        // plus the diamond goby (sandbox "Add life" only, research 16).
-        assertEquals(27, db.size)
+        // plus the diamond goby (sandbox "Add life" only, research 16) and the hairy mushroom the clowns host.
+        assertEquals(28, db.size)
         assertEquals(10, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(10, db.all.count { it.kind == SpeciesKind.INVERT })
-        assertEquals(6, db.all.count { it.kind == SpeciesKind.CORAL })
+        assertEquals(7, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
     }
 
@@ -43,7 +43,7 @@ class SpeciesDbTest {
         val shipped = setOf(
             "algae_tufts", "asterina", "astrea", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
-            "kenya", "lawnmower_blenny", "macro_red", "mushroom", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
+            "kenya", "lawnmower_blenny", "macro_red", "mushroom", "mushroom_hairy", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "tang", "wrasse", "zoa",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {

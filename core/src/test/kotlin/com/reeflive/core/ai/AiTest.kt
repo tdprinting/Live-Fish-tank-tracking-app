@@ -21,7 +21,7 @@ class AiTest {
     @Test
     fun clownsStayNearHost() {
         val sim = fullTank()
-        val host = sim.rock.anchors.pos("HOST_KENYA", Vec3.ZERO)
+        val host = sim.rock.anchors.pos("HOST_SHROOM", Vec3.ZERO)
         val clowns = sim.organisms.filter { it.brainKind == BrainKind.CLOWN }
         var near = 0; var total = 0
         var t = 0.0

@@ -201,6 +201,13 @@ data class OrganismPose(
     val variant: String? = null,
     /** Cardinal male with eggs in his mouth: draw the throat distended (coverage B-2). */
     val mouthbrooding: Boolean = false,
+    /** Pectoral stroke (brittle star: arm row) phase in cycles, wrapping at 1000, and stroke size 0..1 (SIMULATION §15). */
+    val pecPhase: Float = 0f,
+    val pecAmp: Float = 0f,
+    /** Signed escape flexion −1..1: fish C-start bend (lateral), shrimp tail-flip (ventral abdomen). */
+    val bend: Float = 0f,
+    /** How the renderer applies [pecPhase]/[bend]: 0 fish, 1 brittle-star arm rowing, 2 shrimp (ventral flexion). */
+    val motionMode: Int = 0,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())

@@ -2,8 +2,8 @@
   "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 33.0, "heightCm": 61.0,
            "displayGallons": 60, "sumpGallons": 0, "reefType": "SOFT", "sandDepthCm": 3.0},
   "livestock": [
-    {"speciesId": "amphiprion_ocellaris", "nickname": "Orange", "variant": "classic", "sizeCm": 7.0, "role": "FEMALE"},
-    {"speciesId": "amphiprion_ocellaris", "nickname": "Darwin", "variant": "darwin_black", "sizeCm": 5.5, "role": "MALE"},
+    {"speciesId": "amphiprion_ocellaris", "nickname": "Orange", "variant": "classic", "sizeCm": 7.0, "role": "FEMALE", "placement": "HOST_SHROOM"},
+    {"speciesId": "amphiprion_ocellaris", "nickname": "Darwin", "variant": "darwin_black", "sizeCm": 5.5, "role": "MALE", "placement": "HOST_SHROOM"},
     {"speciesId": "paracanthurus_hepatus", "nickname": "Blue", "sizeCm": 6.5, "lifeStage": "JUVENILE"},
     {"speciesId": "sphaeramia_nematoptera", "nickname": "PJ", "sizeCm": 5.0},
     {"speciesId": "labroides_dimidiatus", "nickname": "Cleaner", "sizeCm": 7.0},
@@ -28,6 +28,7 @@
     {"speciesId": "zoanthus_sp", "nickname": "Zoas", "placement": "zoa_front_center"},
     {"speciesId": "clavularia_sp", "nickname": "Cloves", "placement": "clove_kenya_base"},
     {"speciesId": "discosoma_sp", "nickname": "Green shroom", "placement": "shroom_front_left"},
+    {"speciesId": "rhodactis_sp", "nickname": "Hairy shrooms", "placement": "shroom_hairy", "notes": "Hairy green mushroom cluster on the arch ledge; hosts the clowns."},
     {"speciesId": "tubipora_musica", "nickname": "Organ pipe", "placement": "organpipe_kenya_base"},
     {"speciesId": "gracilaria_sp", "nickname": "Red macro", "placement": "macro_back_left"}
   ],

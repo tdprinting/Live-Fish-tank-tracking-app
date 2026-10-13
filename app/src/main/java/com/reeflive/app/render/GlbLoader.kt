@@ -145,7 +145,9 @@ object GlbLoader {
                 val mesh = meshes[meshIdx].jsonObj()
                 // Node extras win over mesh extras (both are written by the exporter).
                 val extras = JsonObject(mesh.obj("extras") + n.obj("extras"))
-                val part = (extras["part"] as? JsonPrimitive)?.contentOrNullSafe() ?: ""
+                // a coral's instanced tufts named "Polyps" without a part tag still draw as polyps (hairy mushroom)
+                val part = (extras["part"] as? JsonPrimitive)?.contentOrNullSafe()
+                    ?: if ((n.str("name") ?: "").equals("Polyps", ignoreCase = true) && extras["instances"] != null) "polyp" else ""
                 val prims = mesh.arr("primitives").mapNotNull { parsePrimitive(it.jsonObj()) }
                 out += GlbNode(n.str("name") ?: mesh.str("name") ?: "node$i", part, extras, world, prims)
             }

@@ -7,8 +7,8 @@ package com.reeflive.core.sim
  */
 object DefaultStock {
     val fish = listOf(
-        LivestockSeed("amphiprion_ocellaris", "Nemo", 8.0, role = "FEMALE", placement = "HOST_KENYA", id = "clown_f"),
-        LivestockSeed("amphiprion_ocellaris", "Marlin", 6.5, role = "MALE", placement = "HOST_KENYA", id = "clown_m"),
+        LivestockSeed("amphiprion_ocellaris", "Nemo", 8.0, role = "FEMALE", placement = "HOST_SHROOM", id = "clown_f"),
+        LivestockSeed("amphiprion_ocellaris", "Marlin", 6.5, role = "MALE", placement = "HOST_SHROOM", id = "clown_m"),
         LivestockSeed("paracanthurus_hepatus", "Blue", 7.5, id = "tang"),
         LivestockSeed("sphaeramia_nematoptera", "Pajama", 6.0, id = "cardinal"),
         LivestockSeed("labroides_dimidiatus", "Doc", 8.0, id = "wrasse"),
@@ -46,6 +46,8 @@ object DefaultStock {
         LivestockSeed("zoanthus_sp", "Zoas", placement = "coral_zoa_front_center", id = "zoa"),
         LivestockSeed("clavularia_sp", "Clove polyps", placement = "coral_clove_kenya_base", id = "clove"),
         LivestockSeed("discosoma_sp", "Mushrooms", placement = "coral_shroom_front_left", id = "shroom"),
+        // the clowns' host (owner, 2026-10): hairy green mushrooms on the arch ledge
+        LivestockSeed("rhodactis_sp", "Hairy mushrooms", placement = "coral_shroom_hairy", id = "shroom_hairy"),
         LivestockSeed("gracilaria_sp", "Red macro", placement = "coral_macro_back_left", id = "macro"),
         LivestockSeed("tubipora_musica", "Organ pipe", placement = "coral_organpipe_kenya_base", id = "organpipe"),
     )

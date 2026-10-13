@@ -72,6 +72,11 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
     private var lastFood = 0.0
     private var cachedScoreAt = -1.0
     private var cached: FoodParticle? = null
+    /** Progress guard: a particle it cannot reach (pinned between rock and glass) is given up on for a while. */
+    private var bestD = Double.MAX_VALUE
+    private var progressAt = 0.0
+    private var giveUpUntil = -1.0
+    private var bestFor: FoodParticle? = null
     open fun accept(c: Ctx, f: FoodParticle): Boolean = true
     open fun bonus(c: Ctx, f: FoodParticle): Double = 0.0
     open fun scoreMul(c: Ctx, f: FoodParticle): Double = 1.0
@@ -85,7 +90,7 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
 
     override fun score(c: Ctx): Double {
         val o = c.o
-        if (o.hunger < 0.12) return 0.0
+        if (o.hunger < 0.12 || c.t < giveUpUntil) return 0.0
         val f = candidate(c) ?: return 0.0
         val match = o.species.dietMatch(f.kind)
         val act = max(c.activity, 0.4)
@@ -96,7 +101,13 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         return (s * scoreMul(c, f) * app).coerceAtMost(0.93)
     }
 
-    override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0 }
+    override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null }
+
+    companion object {
+        /** No closer by 1 cm in this long → the food is out of reach; ignore food for [GIVE_UP_S] (DESIGN ESTIMATES). */
+        const val STUCK_S = 8.0
+        const val GIVE_UP_S = 20.0
+    }
 
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
@@ -112,6 +123,9 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         }
         lastFood = c.t
         val d = o.pos.distanceTo(f.pos)
+        if (f !== bestFor) { bestFor = f; bestD = d; progressAt = c.t }
+        else if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
+        if (c.t - progressAt > STUCK_S) { giveUpUntil = c.t + GIVE_UP_S; finished = true; return }
         val reach = 1.2 + 0.1 * o.lengthCm
         if (d < reach) {
             c.bite(f)

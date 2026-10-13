@@ -53,6 +53,7 @@ object Stocking {
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
         StockEntry("clavularia_sp", StockGroup.CORALS, "Clove polyps", 8.0),
         StockEntry("discosoma_sp", StockGroup.CORALS, "Green mushroom", 5.0),
+        StockEntry("rhodactis_sp", StockGroup.CORALS, "Hairy green mushroom", 6.0),
         StockEntry("tubipora_musica", StockGroup.CORALS, "Organ pipe coral", 15.0),
     )
 
@@ -84,8 +85,14 @@ object Stocking {
     }
 
     /** The anchor a coral species' model sits on, or null (no anchored model in this rockscape). */
+    /** Species with a model of their own built around a different anchor than their kind's. */
+    private val SPECIES_HOME_ANCHORS: Map<String, List<String>> = mapOf(
+        "rhodactis_sp" to listOf("coral_shroom_hairy"),
+    )
+
     fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =
-        HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
+        SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
+            ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
 
     /** Adds up to [count] of [speciesId]; returns how many were added (caps: per add and whole tank). */

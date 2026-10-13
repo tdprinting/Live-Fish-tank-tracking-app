@@ -20,6 +20,8 @@ class FishRig(val id: String) {
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
     var alive = true; var visible = true; var posture = 0
+    /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
+    var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
 
@@ -61,6 +63,8 @@ class FishRig(val id: String) {
         eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
         alive = b.alive; visible = b.visible; posture = b.posture
+        pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
+        bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
         limitBend(spine, frames, MAX_BEND_PER_SEGMENT, MAX_BEND_TOTAL, bendScratch)
         touched = true
     }

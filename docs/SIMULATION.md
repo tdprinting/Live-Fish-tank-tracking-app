@@ -745,7 +745,7 @@ Tests: `core/src/test/.../sim/timelapse/TimelapseTest.kt` (runs headless on a `T
 ## 13. Microfauna: pods, plankton and the microscope view (research 10)
 `sim/MicrofaunaModel.kt` holds the small animals of `docs/research/10_microfauna.md` as aggregate populations. It lives in `WaterSim` next to the algae model (`water.micro`), steps from the chemistry tick in 15-min chunks, and costs nothing at 1x.
 
-**Groups** (`MicroGroup`): harpacticoids, Tigger pods (calanoids), cyclopoids, gammarid and caprellid amphipods, mysids, ostracods, isopods, rotifers, ciliates, phytoplankton, bristleworms, micro-snails, spaghetti worms, forams and red flatworms. Caprellids, mysids and flatworms are absent until added. A new tank on dry rock (`dryRock()`, the `new_tank_cycle` preset) has only ciliates and phyto.
+**Groups** (`MicroGroup`): harpacticoids (Tisbe, and the "Tigger pod" *Tigriopus californicus*, ~1 mm), calanoids (*Parvocalanus*, ~0.3 mm), cyclopoids, gammarid and caprellid amphipods, mysids, ostracods, isopods, rotifers, ciliates, phytoplankton, bristleworms, micro-snails, spaghetti worms, forams and red flatworms. Caprellids, mysids and flatworms are absent until added. A new tank on dry rock (`dryRock()`, the `new_tank_cycle` preset) has only ciliates and phyto.
 
 **Habitats** (`MicroHabitat`), in individuals:
 - `ROCK`: the algae model's rock area (1.2 × footprint) plus 3,000 cm² per litre of display macroalgae.
@@ -797,7 +797,8 @@ Capacities are the §3.2 densities with the §3.1 refuge factor folded in, times
 | Action | Effect |
 |---|---|
 | Tisbe bottle | 3,500 harpacticoids |
-| Tigger bottle | 2,000 calanoids, 9 per L |
+| Parvocalanus bottle (`DOSE_TIGGER`) | 2,000 calanoids, 9 per L |
+| Tigger pod bottle (`DOSE_TIGRIOPUS`, Tigriopus) | 1,500 harpacticoids on rock + 500 on glass |
 | Phyto | 2 × 10⁵ cells/mL |
 | Rotifers | 5 per mL |
 | Amphipods | 100 |
@@ -894,6 +895,111 @@ Snail predation by the crab and hermit snail-shell theft still need `predationEn
 New: `ai/BehaviourDetailTest.kt` (23 tests: evidence labels, sheet lengths, colour forms, banded visit rate / light / intermolt / pairing, Lysmata fertility, skunk tap and night cleaning, wrasse encounters, tang column feeding, cardinal ramp, hawk strike outcomes, lawnmower matrix, tailspot excursions, hermit size rule, crab scenario and scavenging, nassarius latency and bouts, astrea righting, asterina CRW, brittle arm feeding, duster states).
 
 Changed: `AsterinaOrganPipeTest` now turns on `asterina_coral` explicitly, because research 11 §7 contradicts the default-on premise, and it adds `corallivoryIsOffByDefault`. `RealismAcceptanceTest` is unchanged.
+
+## 15. Locomotion model (`sim/MotionProfile.kt`, `ai/Steering.kt`, `shaders/fish.vert`)
+
+Every animal now moves by a per-species **motion profile** (`MotionProfiles.of(brainKind)`): data in core that
+both the steering and the renderer read. Behaviours still say *where* to go; the profile decides *how* the body
+gets there. Evidence tags: **[M]** a source states it, **[L]** inferred from the research notes, **DESIGN
+ESTIMATE** a tuning value. YouTube was not reachable; the per-species facts come from `docs/research/video/*.md`
+(page sources listed there) plus the published locomotion papers below.
+
+### 15.1 Gaits
+
+| Gait | Species | What drives the body |
+|---|---|---|
+| `LABRIFORM` | clown, tang, cleaner wrasse | Pectoral rowing at slow speed; the tail takes over past the gait-transition speed `U(p-c)` |
+| `BODY_CAUDAL` | pajama cardinal, dottyback | Tail beats with beat-and-glide bouts |
+| `ANGUILLIFORM` | engineer goby (and moray) | Whole-body wave, low amplitude |
+| `PERCH_HOP` | Falco hawkfish, lawnmower and tailspot blennies | No swim bladder: perches, short hops with a tail flick, sinks when it stops swimming |
+| `WALK` | shrimp, hermits, Sally crab | Leg walking at fixed cm/s with stop-go pauses; tail-flip escape for shrimp |
+| `ARM_ROW` | brittle star | Leading arm forward, the side arms row in mirrored strokes |
+| `GLIDE` | nassarius, astrea, asterina | Foot or tube-foot gliding at fixed cm/s |
+
+### 15.2 Stroke kinematics (`MotionProfile.stroke(bl)`)
+
+- **Tail-beat frequency** rises linearly with speed (Bainbridge 1958, J Exp Biol 35:129, `U = L(3f − 4)/4`):
+  `f = tailHzMin + (St / tailPP) · U/L`, with a Strouhal number of 0.25–0.35 (cruising fish sit at
+  St 0.2–0.4: Taylor, Nudds & Thomas 2003, Nature 425:707). **[M]** for the law, DESIGN ESTIMATE per species.
+- **Tail amplitude** (peak to peak) about 0.2 L once the beat is above ~5 Hz (Bainbridge 1958), smaller at slow beats.
+- **Labriform swimmers**: pectoral frequency climbs linearly with speed up to the gait-transition speed, and the
+  stroke sweep plateaus near it. Past the transition the caudal fin joins in (Drucker & Jensen 1996, J Exp Biol
+  199:2235; their `U(p-c)` is size-dependent, ~1.8 L/s for a 23 cm surfperch). The share of caudal thrust
+  (`caudalShare`) blends pectoral rowing into body-caudal beats between 0.75 and 1.05 × `U(p-c)`. Clown 1.8 L/s,
+  tang 2.2, wrasse 3.0 (DESIGN ESTIMATES from the research notes' cruise and burst speeds).
+- **Beat-and-glide** (Videler & Weihs 1982, J Exp Biol 97:169): cardinal (0.8 s glides after 2 beats), dottyback,
+  hawkfish and blennies. Thrust surges in the beat bout, the body coasts straight in the glide. The bout timing
+  uses a deterministic jitter (no extra random draws).
+- **Hover**: labriform fish hold station by sculling the pectorals while the body barely moves.
+- **Turning and banking**: the roll into a turn scales with `bankGain`; clowns add a ±5° rolling waddle at 1.3 Hz,
+  and wrasse a ±3° pitch bob at 2 Hz (research notes [L]).
+- **Escape C-start** (Domenici & Blake 1997, J Exp Biol 200:1165): when a flee starts at full urgency the head
+  snaps away from the threat by up to `cStartDeg`. Stage 1 curls the body into a C (`OrganismPose.bend`), stage 2
+  is the return stroke. Real stage 1 lasts 20–40 ms; here it is stretched to 0.12 s so that it spans two sim ticks.
+  Shrimp make a train of ventral tail-flips (~8 Hz for 0.5 s) instead.
+- **No swim bladder**: hawkfish and blennies sink at 1.5–2.5 cm/s whenever they stop swimming (Reef Builders on
+  *C. falco* [M]; combtooth blennies outside the fangblenny clade lack a swim bladder [M]).
+
+### 15.3 What the renderer gets
+
+`OrganismPose` gained `pecPhase` (stroke phase in cycles), `pecAmp` (stroke sweep), `bend` (C-start curl, + toward
+the fish's right side) and `motionMode` (0 fish, 1 brittle-star arm rowing, 2 shrimp tail-flip). `FishRig`
+interpolates them and `fish.vert` reads them as `uMotion`:
+
+- Pectorals row fore and aft with a feathering lift, driven by the sim phase instead of a fixed 7 Hz flutter.
+- The C-start bends the head and tail to one side and the middle to the other.
+- Shrimp flex the abdomen down during a tail-flip.
+- Brittle star: the arm along +X leads and stays still, the side arms sweep in mirrored strokes in the disc plane,
+  and the trailing arms drag (Astley 2012, J Exp Biol 215:1923: ~2 s per stroke cycle).
+
+### 15.4 Behaviour states that are mostly motion
+
+| Species | State | Rule |
+|---|---|---|
+| Blue tang | `PlayDead` | A hard startle (tap or attack, magnitude > 0.35) makes a juvenile flip onto its side (~85° over 0.4 s) and lie rigid and 20 % paler for 3–8 s, settling onto rock or sinking slowly, with p = 0.4 for juveniles and 0.05 for adults (research video fish_blue_tang [S1][M]; the odds are a DESIGN ESTIMATE). Counted in `TangBrain.playDeadCount`. |
+| Blue tang | `TangSleep` | At night it lies over ~70° in its crevice with its back toward the rock (observed 30–90° [S3][M]). The roll builds over 20 s. |
+| Clownfish | `HoverHost` | A host-wiggle bout every 20–60 s for 2–4 s: the fish drops onto the host and shimmies at 3 Hz with a rolling body. Labelled "Wiggling in the host". |
+| Cleaner wrasse | `RunStation` | Greeting dance for an unfamiliar fish within 15 cm, and advertising when clients are within 35 cm: the rear see-saws ±20° at 2 Hz with wide tail beats for 2–4 s ([S1][S2][M]). |
+| Clients | `PoseForCleaner` | They freeze head-up with fins spread, mouth open and gill covers flared, and only the pectorals scull. |
+| Engineer goby | `InBurrow`, `Excavate` | It peeks with only the head out, swivelling its head and eyes every 1.5–4 s. It carries sand head-down with full cheeks and spits it with a 6 Hz head shake. A juvenile makes a dig trip every 25–120 s ("every 20–40 s" while working [S2][M]). |
+| Falco hawkfish | `PerchHop`, `DuckToPerch` | It sits propped head-up ~15° on its pectorals ([S1][M]). A startle sends it in a burst to the perch farthest from the threat, where it clamps on instead of hovering in cover. |
+| Lawnmower blenny | `RockGraze` | Ballistic hops between patches at ~3 L/s (0.25–1.2 s arcs, a tail flick at take-off, fins folded in the air). Targets more than 3 L away are crawled to instead. Between rasps it sits propped head-up 15°, and the head dips for each bite. |
+| Dottyback | `CaveDart` | It pauses in each crevice mouth facing out before the next dart. |
+| Nassarius | `Buried` | Fully buried, the shell lies 0.15 L under the sand with the siphon end tilted 60° up into the current. |
+| All feeders | `Feed` | A particle it gets no closer to (by 1 cm in 8 s) is given up for 20 s. This fixes fish pinned against rock and glass chasing pods in the front corner. |
+
+### 15.5 Hairy mushroom host (owner, 2026-10)
+
+The clowns host a cluster of hairy green mushrooms (`rhodactis_sp`, *Rhodactis* sp., `CoralKind.MUSHROOM`). The
+cluster sits where the `mushroom_hairy.glb` model is built, on a ledge of the arch's left leg. The anchor
+`HOST_SHROOM` and the coral anchor `coral_shroom_hairy` are at (82.3, 20.3, 15.2), the centroid of the model's
+disc tufts, next to `HOST_ARCH_CLOWNS`. The owner's
+research docs on `claude/project-thread-r6d0sa` were not reachable when this was written. The specs below come
+from the coordinator's summary of them.
+
+- Both clowns' placement is `HOST_SHROOM`, which is also the `ClownBrain` default. Anything that resolves
+  `"host"` (nesting in `Reproduction`, hosting, defending the host) uses it.
+- On a flat host (`ClownBrain.flatHost`: the anchor name contains SHROOM, MUSHROOM or RHODACTIS) the pair stays
+  within ~1.1 L of the cluster and holds its body centre 3.6–4.6 cm above the disc tops, which puts the belly about 1–3 cm
+  over the tentacles. They do not weave up through branches. Wiggle bouts and night nestling sit at the
+  lowest height, with the female lowest and central.
+- The discs stay open at night: `CoralSim.nightExtensionOf` gives *Rhodactis* 0.9 night extension, against the
+  mushroom-kind default.
+- App: the species sheet maps to `models/mushroom_hairy.glb`, which ships, with its Polyps node drawn as coral
+  polyps. If the file were ever missing, `TankRenderer.coralModels` would draw `mushroom.glb`'s main clump moved
+  to the colony's anchor (`ModelRegistry.FALLBACK_MODELS`). A node named
+  `Polyps` with an instance table draws as coral polyps even without a `part` tag.
+
+### 15.6 Tests
+
+`ai/MotionTest.kt`:
+
+- Stroke laws: tail Hz rises with speed, Strouhal stays 0.15–0.45, and the labriform gait transition holds.
+- Both clowns spend ≥ 80 % of an hour within 15 cm of the hairy mushroom, and `"host"` resolves to it.
+- The hawkfish is attached ≥ 85 % of the time, and its longest free-swimming bout is ≤ 25 s.
+- The cardinal covers more ground in 15 min at night than by day.
+- The tang lies rolled > 50° while asleep.
+- A tapped juvenile tang plays dead, rolled > 60°, for ≥ 3 s.
 
 ## 16. Dynamic sand bed and the diamond goby (`sim/SandBed.kt`, `ai/DiamondGobyBrain.kt`, `render/SandVisuals.kt`)
 

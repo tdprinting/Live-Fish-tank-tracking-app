@@ -363,6 +363,17 @@ coral(id="discosoma_sp", kind="CORAL", common="Green mushroom", scientific="Disc
       temperamentSummary="Disc inflates by day and closes at night.",
       careNotes=["Bleaches under very strong light (over ~90% intensity)."])
 
+coral(id="rhodactis_sp", kind="CORAL", common="Hairy green mushroom", scientific="Rhodactis sp.", family="Discosomatidae",
+      maxLengthCm=10, typicalAdultCm=6, growthCmPerYear=2, lifespanYears=20,
+      tolerance=coral_tol(), model="models/mushroom_hairy.glb",
+      colors={"primary": "#5FBF4A", "secondary": "#2F7A3A", "accent": "#B8E07A"}, brain="coral_soft",
+      coral=dict(lightLo=0.2, lightHi=0.55, flow="LOW", growth="Moderate", aggression="Moderate", fluorescence=0.6),
+      careLevel="Easy", reefSafe="Yes", dietSummary="Photosynthetic; also traps small particles and mysis on the disc.",
+      temperamentSummary="Flat green discs covered in short branched tentacles; stays open after lights-out. Hosts the clownfish in this tank.",
+      careNotes=["Low to moderate light and gentle flow; discs shrink and detach under strong light or flow.",
+                 "Can sting or engulf neighbours that touch the disc; give it a few cm of space.",
+                 "Captive clownfish often adopt hairy mushrooms as a substitute host; the pair rubs and nestles low over the discs."])
+
 coral(id="tubipora_musica", kind="CORAL", common="Organ pipe coral", scientific="Tubipora musica", family="Tubiporidae",
       maxLengthCm=30, typicalAdultCm=15, growthCmPerYear=2, lifespanYears=30,
       tolerance=coral_tol(temp=(25, 28, 24, 29, 20, 30), sg=(1.024, 1.026, 1.023, 1.027, 1.020, 1.030), ph=(8.1, 8.4, 8.0, 8.4, 7.9, 8.8)),
