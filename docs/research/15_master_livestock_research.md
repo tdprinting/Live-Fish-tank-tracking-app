@@ -145,3 +145,5 @@ The species cards intentionally avoid invented lethal numbers. Research on [NOAA
 ## Research and simulation evidence ledger
 
 For every future claim or rule, record: **catalog ID; confirmed scientific name or uncertainty; source URL/DOI; evidence type (direct, account, analogy, owner observation, design assumption); environment (wild, laboratory, aquarium); life stage and sample size; measured outcome and units; time scale; transfer caveat; proposed simulation state or interaction; and what tank observation could test it.** Store contradictory claims together until resolved. Do not turn a study mean into a deterministic individual behavior. The detailed files linked at the top remain the working citation trail; this master is the roster-aligned entry point.
+
+Per-species constant ledger (SOURCED / ANALOGY / DESIGN-ESTIMATE, with tank tests): [evidence_ledger.md](evidence_ledger.md).
