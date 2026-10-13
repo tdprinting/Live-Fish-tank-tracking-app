@@ -36,6 +36,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var demoWhenEmpty = true
     /** Receives the camera matrices after every update, for Compose overlays (null = nobody listening). */
     @Volatile var projection: TankProjection? = null
+    /** In-tank feedback bursts from the UI (dye plumes, bubbles, jets…), drained once per frame. */
+    @Volatile var bursts: TankBursts? = null
+    /** Watch-mode lamp look (render only; the simulation keeps its schedule). */
+    @Volatile var viewLight: ViewLight = ViewLight.REAL
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
     private val shelfScene = SupplyShelfScene()
@@ -194,7 +198,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
-        val light = LightingState.from(cur?.lights ?: DemoSnapshots.DAY)
+        val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input)
         val taps = input.drain(camera, width, height)
@@ -220,7 +224,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         bindShared()
         shadowMap?.let { renderShadowMap(it, fu, progs, rigs, cur) }
         particles.ambientCount = quality.particles
-        particles.step(dt, time, cur)
+        bursts?.drain { particles.burst(it, cur) }
+        particles.step(dt, time, cur, viewProjM = camera.viewProj)
 
         // 4. draw
         val usePost = post?.ok == true && (quality.bloom || lens.amount > 0f)

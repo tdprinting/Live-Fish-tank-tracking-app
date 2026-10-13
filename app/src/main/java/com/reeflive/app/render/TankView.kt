@@ -45,6 +45,10 @@ fun TankView(
     onFollow: (String?) -> Unit = {},
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
     projection: TankProjection? = null,
+    /** In-tank feedback for actions (dye plumes, bubbles, pump jets): the screen emits, the renderer draws. */
+    bursts: TankBursts? = null,
+    /** Watch-mode lamp look (render only). */
+    viewLight: ViewLight = ViewLight.REAL,
     /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
     shelf: SupplyShelfControl? = null,
 ) {
@@ -54,7 +58,7 @@ fun TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, projection = projection,
-        shelf = shelf,
+        bursts = bursts, viewLight = viewLight, shelf = shelf,
     )
 }
 
@@ -82,6 +86,8 @@ fun TankView(
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     projection: TankProjection? = null,
+    bursts: TankBursts? = null,
+    viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
@@ -115,6 +121,8 @@ fun TankView(
                         v.listener = listener
                         v.setSnapshotProvider { currentProvider() }
                         v.projection = projection
+                        v.bursts = bursts
+                        v.viewLight = viewLight
                         v.shelf = shelf
                         view = v
                     }
@@ -125,6 +133,8 @@ fun TankView(
                     v.demoWhenEmpty = demoWhenEmpty
                     v.setCleaning(cleaning)
                     v.projection = projection
+                    v.bursts = bursts
+                    v.viewLight = viewLight
                     v.shelf = shelf
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },

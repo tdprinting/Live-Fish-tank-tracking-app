@@ -60,6 +60,7 @@ import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.Disease
+import com.reeflive.app.render.ViewLight
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.PestController
@@ -84,11 +85,13 @@ enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: Stri
     LIGHT("Tank", ReefGlyphs.sun, "Light, water & gear"),
     TROUBLE("Trouble", ReefGlyphs.whatIf, "Tank trouble"),
     MORE("More", ReefGlyphs.sparkleTip, "More"),
+    /** Watch mode only: lamps look, torch, follow a fish, auto tour, cinematic, sound, time slider. */
+    VIEW("Watch", ReefGlyphs.eye, "Watch the tank"),
     ;
 
     companion object {
-        /** Watch mode can only use the shelf (feed, clean the glass, test, look) and More: the rest needs the pretend tank. */
-        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.toList() else listOf(SUPPLIES, MORE)
+        /** Watch mode can watch, use the shelf (feed, clean the glass, test, look) and More: the rest needs the pretend tank. */
+        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.filter { it != VIEW } else listOf(VIEW, SUPPLIES, MORE)
     }
 }
 
@@ -111,6 +114,20 @@ class LiveTools(
     val readouts: List<WaterReadout>,
     /** Things that make a fish ill ask first; the menu only reports the pick. */
     val onHeatWave: () -> Unit = {},
+    // ---- time slider (both modes) and the Watch card
+    val speed: Double = 1.0,
+    val simTimeSec: Double = 0.0,
+    val onSpeed: (Double) -> Unit = {},
+    val viewLight: ViewLight = ViewLight.REAL,
+    val onViewLight: (ViewLight) -> Unit = {},
+    val torchOn: Boolean = false,
+    val onTorch: () -> Unit = {},
+    val touring: Boolean = false,
+    val onTour: () -> Unit = {},
+    /** Fish to follow: id to name. */
+    val fish: List<Pair<String, String>> = emptyList(),
+    val onFollowFish: (String) -> Unit = {},
+    val onOpenFeed: () -> Unit = {},
     /** The Supplies bubble: look at the supply shelf beside the tank. */
     val onSupplies: () -> Unit = {},
 )
@@ -504,12 +521,31 @@ private fun ColumnScope.CardBody(
                 T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },
             ))
         }
+        LiveCategory.VIEW -> {
+            LiveSectionTitle("Time")
+            TimeSlider(tools.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
+            LiveHelp("Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
+            LiveSectionTitle("Lamps")
+            Tiles(tone, close, ViewLight.entries.map { v ->
+                T(v.label, viewLightGlyph(v), on = tools.viewLight == v, closes = false) { tools.onViewLight(v) }
+            } + T("Torch", ReefGlyphs.led, on = tools.torchOn, closes = false, sub = "Drag to aim") { tools.onTorch() })
+            LiveSectionTitle("Look around")
+            Tiles(tone, close, listOf(
+                T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
+                T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
+                T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
+                T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
+            ))
+            if (tools.fish.isNotEmpty()) {
+                LiveSectionTitle("Follow a fish")
+                Tiles(tone, close, tools.fish.map { (id, name) -> T(name, ReefGlyphs.fish) { tools.onFollowFish(id) } })
+            }
+        }
         LiveCategory.MORE -> {
             if (tools.sandbox) {
                 LiveSectionTitle("Time")
-                Tiles(tone, close, panel.speeds.map { x ->
-                    T(speedName(x), ReefGlyphs.timelapse, on = x == panel.speed, sub = formatSpeed(x), closes = false) { actions.onSpeed(x) }
-                })
+                // one slider from real time to 1000x (was four speed tiles)
+                TimeSlider(panel.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
                 LiveHelp(SandboxFriendly.speedHelp(panel.speed))
                 Tiles(tone, close, listOf(
                     T(if (panel.timelapseStatus == null) "Time-lapse" else "See time-lapse", ReefGlyphs.timelapse, sub = panel.timelapseStatus) { actions.onTimelapse() },
@@ -537,9 +573,10 @@ private fun ColumnScope.CardBody(
 private const val CARD_IDLE_MS = 25_000L
 private const val CARD_IDLE_MORE_MS = 45_000L
 
-private fun speedName(x: Double): String = when {
-    x <= 1.0 -> "Real time"
-    x <= 60.0 -> "Fast"
-    x <= 240.0 -> "Faster"
-    else -> "Super fast"
+private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
+    ViewLight.REAL -> ReefGlyphs.clockSun
+    ViewLight.DAY -> ReefGlyphs.sun
+    ViewLight.DUSK -> ReefGlyphs.sun
+    ViewLight.NIGHT -> ReefGlyphs.moon
+    ViewLight.MOON -> ReefGlyphs.moon
 }

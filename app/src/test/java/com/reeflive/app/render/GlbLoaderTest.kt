@@ -60,7 +60,8 @@ class GlbLoaderTest {
         assertEquals(1f, kotlin.math.sqrt(q.sumOf { (it * it).toDouble() }).toFloat(), 1e-3f)
         val gsp = load("gsp_mat.glb").nodes.first { it.part == "polyp" }.instances()!!
         val gspCount = gsp.size / 10
-        assertTrue("gsp_mat has a polyp table: $gspCount", gspCount >= 1000)
+        // Tee's long-polyp GSP: fewer, longer curling polyps than the old short-dot mat (photos p12-p13)
+        assertTrue("gsp_mat has a polyp table: $gspCount", gspCount >= 200)
         // density 0.5 keeps every 2nd polyp (indices 0, 2, 4, ...)
         val half = Mesh.polypInstances(gsp, 10, 0.5f)
         assertEquals((gspCount + 1) / 2 * Mesh.INSTANCE_FLOATS, half.size)

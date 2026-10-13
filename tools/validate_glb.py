@@ -48,6 +48,8 @@ BUDGET = {
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
     "mushroom_hairy": 1500,
+    # Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md): leathers and the big corallimorph
+    "toadstool_leather": 700, "leather_pink": 500, "finger_leather": 900, "elephant_ear": 800,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)

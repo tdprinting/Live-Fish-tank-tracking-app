@@ -84,6 +84,10 @@ object CoralSim {
         CoralKind.MACRO -> Params(ToleranceRange(22.0, 28.5, 20.0, 30.5, 17.0, 33.0), 1.0, false, false, 1.1, 0.0)
         CoralKind.ORGAN_PIPE -> Params(ToleranceRange(24.5, 28.0, 23.5, 29.5, 20.0, 31.5), 0.1, false, false, 0.95, 0.35)
         CoralKind.AIPTASIA -> Params(ToleranceRange(22.0, 29.0, 20.0, 31.0, 17.0, 34.0), 1.0, false, false, 1.1, 0.0)
+        // Leathers (tee_tank_photos.md, [M] care guides): moderate light (PAR ~100-200), moderate indirect flow; polyps
+        // retract at night; a direct jet makes them retract and fold (flowSensitive), stagnant water lets detritus and
+        // the shed film sit on the cap (needsFlow).
+        CoralKind.LEATHER -> Params(ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0), 0.25, true, true, 0.95, 0.15)
         CoralKind.GENERIC -> Params(ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0), 0.3, false, false, 0.9, 0.15)
     }
 
@@ -107,6 +111,26 @@ object CoralSim {
         if (speciesId != null && speciesId.lowercase().startsWith("rhodactis")) HAIRY_SHROOM_NIGHT_EXTENSION else params(k).nightExtension
 
     const val HAIRY_SHROOM_NIGHT_EXTENSION = 0.9
+
+    /**
+     * Leather wax shedding ([M] Lobophytum / Sarcophyton care guides, tee_tank_photos.md): "close once every couple
+     * weeks to a month and develop a film covering that eventually gets shed off"; stronger flow clears it faster, a
+     * shed lasting over a week points at flow or alkalinity. Each colony has its own phase (from its id).
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "tee_tank_photos.md leather shedding [M]")
+    const val SHED_PERIOD_DAYS = 24.0
+    const val SHED_DAYS = 3.0
+    /** Extension while shedding (polyps in, cap shrunk and glazed). */
+    const val SHED_EXTENSION = 0.1
+
+    fun shedding(c: Coral, simTimeSec: Double, flowStrength: Double = 1.0): Boolean {
+        if (c.kind != CoralKind.LEATHER || c.tissue <= 0.0) return false
+        val period = SHED_PERIOD_DAYS * 86400.0
+        val offset = ((c.id.hashCode().toLong() and 0x7fffffffL) % 1000L) / 1000.0 * period
+        // weak flow: the film hangs on about twice as long (up to ~a week)
+        val days = SHED_DAYS * (if (flowStrength < 0.3) 2.0 else 1.0)
+        return ((simTimeSec + offset) % period) < days * 86400.0
+    }
     /** H2S band for corals (research 18 §3.3 [K]). */
     val H2S_CORAL = ToleranceRange(optHi = 0.005, tolHi = 0.02, lethalHi = 0.15)
     /** Tissue loss per minute at full Vibrio stress (white-syndrome-like lesion front, research 18 §5.5; est.). */
@@ -171,6 +195,8 @@ object CoralSim {
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
         var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff, c.species.id) * (1 - 0.8 * c.stress) * flowExt
         target *= (1 - c.disturb).coerceIn(0.0, 1.0) * (1 - c.overgrown)
+        // leathers close up for a few days every few weeks while they shed a waxy film
+        if (shedding(c, simTimeSec, flowStrength)) target *= SHED_EXTENSION
         // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis
         if (c.necrosis > 0.02) target *= 0.2
         if (c.melting) target = 0.0

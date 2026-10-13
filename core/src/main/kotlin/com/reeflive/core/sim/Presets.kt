@@ -53,6 +53,11 @@ object DefaultStock {
         LivestockSeed("rhodactis_sp", "Hairy mushrooms", placement = "coral_shroom_hairy", id = "shroom_hairy"),
         LivestockSeed("gracilaria_sp", "Red macro", placement = "coral_macro_back_left", id = "macro"),
         LivestockSeed("tubipora_musica", "Organ pipe", placement = "coral_organpipe_kenya_base", id = "organpipe"),
+        // seen in Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md); placements estimated from the photos
+        LivestockSeed("sarcophyton_sp", "Toadstool leather", placement = "coral_toadstool_front", id = "toadstool"),
+        LivestockSeed("lobophytum_sp", "Pink leather", placement = "coral_leather_pink_front", id = "leather_pink"),
+        LivestockSeed("sinularia_sp", "Finger leather", placement = "coral_finger_leather", id = "finger_leather"),
+        LivestockSeed("amplexidiscus_fenestrafer", "Elephant ear", placement = "coral_elephant_ear", id = "elephant_ear"),
     )
 
     val all: List<LivestockSeed> get() = fish + inverts + corals

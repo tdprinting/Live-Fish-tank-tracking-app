@@ -68,6 +68,11 @@ object Stocking {
         StockEntry("discosoma_sp", StockGroup.CORALS, "Green mushroom", 5.0),
         StockEntry("rhodactis_sp", StockGroup.CORALS, "Hairy green mushroom", 6.0),
         StockEntry("tubipora_musica", StockGroup.CORALS, "Organ pipe coral", 15.0),
+        // Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md)
+        StockEntry("sarcophyton_sp", StockGroup.CORALS, "Toadstool leather", 12.0),
+        StockEntry("lobophytum_sp", StockGroup.CORALS, "Pink lobed leather", 10.0),
+        StockEntry("sinularia_sp", StockGroup.CORALS, "Finger leather", 12.0),
+        StockEntry("amplexidiscus_fenestrafer", StockGroup.CORALS, "Elephant ear mushroom", 13.0),
     )
 
     fun entry(speciesId: String): StockEntry? = CATALOG.firstOrNull { it.speciesId == speciesId }
@@ -84,6 +89,7 @@ object Stocking {
         CoralKind.CLOVE to listOf("coral_clove_kenya_front", "coral_clove_kenya_base"),
         CoralKind.MUSHROOM to listOf("coral_shroom_center", "coral_shroom_front_left"),
         CoralKind.ORGAN_PIPE to listOf("coral_organpipe_kenya_base"),
+        CoralKind.LEATHER to listOf("coral_toadstool_front", "coral_finger_leather", "coral_leather_pink_front"),
     )
 
     /** Same fallback spot as [Simulation.addFromSeed] when a coral has no anchor. */
@@ -92,7 +98,7 @@ object Stocking {
     /** Clear space around a new colony (cm), by how wide the model is. */
     fun spacingCm(k: CoralKind): Double = when (k) {
         CoralKind.KENYA -> 16.0
-        CoralKind.GSP -> 12.0
+        CoralKind.GSP, CoralKind.LEATHER -> 12.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -101,6 +107,10 @@ object Stocking {
     /** Species with a model of their own built around a different anchor than their kind's. */
     private val SPECIES_HOME_ANCHORS: Map<String, List<String>> = mapOf(
         "rhodactis_sp" to listOf("coral_shroom_hairy"),
+        "sarcophyton_sp" to listOf("coral_toadstool_front"),
+        "lobophytum_sp" to listOf("coral_leather_pink_front"),
+        "sinularia_sp" to listOf("coral_finger_leather"),
+        "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
     fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =

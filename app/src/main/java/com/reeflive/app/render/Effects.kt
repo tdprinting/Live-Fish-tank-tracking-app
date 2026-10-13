@@ -10,8 +10,10 @@ import kotlin.random.Random
 /**
  * CPU particle field (ARCHITECTURE §8.4 item 9, SIMULATION §5.4): suspended particulate advected by the
  * flow (the snapshot's [FlowGrid] when the Navier-Stokes solver runs, a gentle analytic gyre otherwise)
- * plus Brownian jitter; sinking detritus; bubbles entrained by the HOB return; and the sim's food
- * particles. Output is packed as (pos.xyz, size cm, r, g, b, a) per point in three ranges. Pure Kotlin.
+ * plus Brownian jitter; sinking detritus (as much as the water's detritus load); bubbles entrained by the HOB return;
+ * the sim's food particles, each kind with its own sprite and motion ([FoodVisuals]); and the action bursts and pump
+ * jets ([BurstField]). Output is packed as (pos.xyz, size cm, r, g, b, a, shape, seed, angle, param) per point in
+ * five ranges. Pure Kotlin.
  */
 class ParticleField(var ambientCount: Int, seed: Int = 7) {
     private val rnd = Random(seed)
@@ -20,12 +22,22 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
     private val bub = FloatArray(MAX_BUBBLES * 4) // xyz, vy
     private var bubbles = 0
     private var bubbleAcc = 0f
+    private val foodFx = FoodVisuals()
+    /** Action bursts and pump jets; spawn into it with [burst]. */
+    val bursts = BurstField()
+    private var viewProj = FloatArray(16)
 
-    /** Packed output; [ambientRange], [bubbleRange], [foodRange] are (first, count) in points. */
-    val out = FloatArray((MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD) * FLOATS)
+    /** Packed output; each range is (first, count) in points. */
+    val out = FloatArray(CAPACITY * FLOATS)
     var ambientRange = 0 to 0; private set
     var bubbleRange = 0 to 0; private set
+    /** Exactly one point per snapshot food particle, in snapshot order. */
     var foodRange = 0 to 0; private set
+    /** Thawing cubes, the nori sheet and solid burst sprites (bubbles, streaks, sparkles, pods). */
+    var fxRange = 0 to 0; private set
+    /** Large soft clouds: phyto and powder food, dye plumes, silt. */
+    var hazeRange = 0 to 0; private set
+    private var k = 0
 
     init {
         for (i in 0 until MAX_AMBIENT) respawn(amb, i)
@@ -38,22 +50,29 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         a[i * 3 + 2] = rnd.nextFloat() * (Camera.TANK[2] - 2f) + 1f
     }
 
-    fun step(dtIn: Float, time: Float, snap: SimSnapshot?, flowOn: Boolean = true) {
+    /** Starts an action burst (GL thread). */
+    fun burst(b: TankBurst, snap: SimSnapshot?) = bursts.spawn(b, snap)
+
+    /** [viewProjM] (column-major) orients streak sprites along their motion; omit it in tests. */
+    fun step(dtIn: Float, time: Float, snap: SimSnapshot?, flowOn: Boolean = true, viewProjM: FloatArray? = null) {
+        if (viewProjM != null) viewProj = viewProjM
         val dt = dtIn.coerceIn(0f, 0.1f)
         val grid = snap?.flowGrid
         val strength = (snap?.flowStrength ?: 1f) * (if (flowOn) 1f else 0.2f)
         val v = FloatArray(3)
         val n = ambientCount.coerceIn(0, MAX_AMBIENT)
+        // time-lapse cue: while the sim runs fast the suspended specks race with it (1x → 1, 60x → ~3.7, 1000x → 5.5)
+        val ff = fastForward(snap?.speed ?: 1.0)
         for (i in 0 until n) {
             flowAt(grid, amb[i * 3], amb[i * 3 + 1], amb[i * 3 + 2], time, v)
-            for (c in 0 until 3) amb[i * 3 + c] += (v[c] * strength * 0.6f + (rnd.nextFloat() - 0.5f) * 2f) * dt
+            for (c in 0 until 3) amb[i * 3 + c] += (v[c] * strength * 0.6f + (rnd.nextFloat() - 0.5f) * 2f) * dt * ff
             if (!inWater(amb, i)) respawn(amb, i)
         }
         for (i in 0 until DETRITUS) {
             flowAt(grid, det[i * 3], det[i * 3 + 1], det[i * 3 + 2], time, v)
-            det[i * 3] += v[0] * strength * 0.3f * dt
-            det[i * 3 + 1] += (v[1] * 0.2f - 0.25f) * dt
-            det[i * 3 + 2] += v[2] * strength * 0.3f * dt
+            det[i * 3] += v[0] * strength * 0.3f * dt * ff
+            det[i * 3 + 1] += (v[1] * 0.2f - 0.25f) * dt * ff
+            det[i * 3 + 2] += v[2] * strength * 0.3f * dt * ff
             if (det[i * 3 + 1] < Camera.SAND_Y + 0.2f || !inWater(det, i)) { respawn(det, i); det[i * 3 + 1] = Camera.WATER_Y - 2f - rnd.nextFloat() * 30f }
         }
         // HOB return (equipment.glb `outflow` (72, 55, 2.3)): bubbles plunge, slow down, then rise
@@ -78,7 +97,8 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
             }
         }
         bubbles = w
-        pack(snap)
+        bursts.step(dt, time, snap)
+        pack(snap, time)
     }
 
     private fun inWater(a: FloatArray, i: Int): Boolean {
@@ -86,59 +106,63 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         return x in 0.3f..(Camera.TANK[0] - 0.3f) && y in Camera.SAND_Y..(Camera.WATER_Y - 0.3f) && z in 0.3f..(Camera.TANK[2] - 0.3f)
     }
 
-    private fun pack(snap: SimSnapshot?) {
-        var k = 0
+    private val sink = PointSink { x, y, z, size, r, g, b, a, shape, seed, angle, param ->
+        if (k < CAPACITY) k = put(k, x, y, z, size, r, g, b, a, shape, seed, angle, param)
+    }
+
+    private fun pack(snap: SimSnapshot?, time: Float) {
+        k = 0
+        // haze first: it sits behind the sharper sprites in the same blended pass
+        if (snap != null) foodFx.packExtras(snap, time, haze = sink, solid = NULL_SINK, maxHaze = MAX_FOOD_HAZE)
+        bursts.pack(viewProj, time, haze = sink, solid = NULL_SINK, maxHaze = MAX_BURST_HAZE, maxSolid = 0)
+        hazeRange = 0 to k
+        val a0 = k
         val n = ambientCount.coerceIn(0, MAX_AMBIENT)
         for (i in 0 until n) k = put(k, amb[i * 3], amb[i * 3 + 1], amb[i * 3 + 2], 0.07f, 0.85f, 0.92f, 1.0f, 0.15f)
-        for (i in 0 until DETRITUS) k = put(k, det[i * 3], det[i * 3 + 1], det[i * 3 + 2], 0.1f, 0.45f, 0.36f, 0.24f, 0.35f)
-        ambientRange = 0 to k
+        // suspended muck follows the water: a water change, the sock or the skimmer thin it out, overfeeding thickens it
+        val load = ((snap?.water?.detritus ?: 0.2).toFloat() / 0.2f).coerceIn(0.3f, 1f)
+        for (i in 0 until (DETRITUS * load).toInt()) k = put(k, det[i * 3], det[i * 3 + 1], det[i * 3 + 2], 0.1f, 0.45f, 0.36f, 0.24f, 0.35f)
+        ambientRange = a0 to (k - a0)
         val b0 = k
         for (i in 0 until bubbles) k = put(k, bub[i * 4], bub[i * 4 + 1], bub[i * 4 + 2], 0.18f + (i % 3) * 0.05f, 0.95f, 0.98f, 1f, 0.45f)
         bubbleRange = b0 to (k - b0)
+        val x0 = k
+        if (snap != null) foodFx.packExtras(snap, time, haze = NULL_SINK, solid = sink, maxHaze = 0)
+        bursts.pack(viewProj, time, haze = NULL_SINK, solid = sink, maxHaze = 0, maxSolid = BurstField.CAP)
+        fxRange = x0 to (k - x0)
         val f0 = k
-        if (snap != null) {
-            val food = snap.food
-            val count = minOf(food.size / 3, MAX_FOOD)
-            for (i in 0 until count) {
-                val kind = (snap.foodKinds.getOrNull(i)?.toInt() ?: 0).coerceIn(0, FOOD_COLORS.size - 1)
-                val c = FOOD_COLORS[kind]
-                k = put(k, food[i * 3], food[i * 3 + 1], food[i * 3 + 2], FOOD_SIZES[kind], c[0], c[1], c[2], 0.95f)
-            }
-        }
+        if (snap != null) foodFx.packBodies(snap, time, MAX_FOOD, sink)
         foodRange = f0 to (k - f0)
     }
 
-    private fun put(k: Int, x: Float, y: Float, z: Float, size: Float, r: Float, g: Float, b: Float, a: Float): Int {
+    private fun put(
+        k: Int, x: Float, y: Float, z: Float, size: Float, r: Float, g: Float, b: Float, a: Float,
+        shape: Float = Shape.DOT, seed: Float = 0f, angle: Float = 0f, param: Float = 1f,
+    ): Int {
         val o = k * FLOATS
         out[o] = x; out[o + 1] = y; out[o + 2] = z; out[o + 3] = size
         out[o + 4] = r; out[o + 5] = g; out[o + 6] = b; out[o + 7] = a
+        out[o + 8] = shape; out[o + 9] = seed; out[o + 10] = angle; out[o + 11] = param
         return k + 1
     }
 
     companion object {
-        const val FLOATS = 8
+        const val FLOATS = 12
         const val MAX_AMBIENT = 300
         const val DETRITUS = 40
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
+        /** Haze puffs for fine foods (one per particle at most). */
+        const val MAX_FOOD_HAZE = 160
+        const val MAX_BURST_HAZE = 200
+        /** Cubes (one per frozen kind), the nori sheet (clip + tiles). */
+        private const val MAX_FOOD_EXTRA = 16 + FoodVisuals.NORI_COLS * FoodVisuals.NORI_ROWS
+        const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP
         val HOB = floatArrayOf(72f, 55f, 2.3f)
-        /**
-         * Linear colours by FoodKind ordinal (keep in step with core FoodKind): flake #C8A060, mysis #E8D8C0, pellet,
-         * nori #2E4A1A, pods, raw prawn #D88A7A, plankton #5A8A3A, brine #F4A040, krill #D85A48, floating pellet
-         * #B88A50, algae wafer #3A4E2A, coral food #D88AB0 (pink powder), cyclops #FF5A38.
-         */
-        val FOOD_COLORS = arrayOf(
-            floatArrayOf(0.578f, 0.352f, 0.117f), floatArrayOf(0.807f, 0.687f, 0.527f), floatArrayOf(0.40f, 0.20f, 0.08f),
-            floatArrayOf(0.027f, 0.068f, 0.010f), floatArrayOf(0.75f, 0.72f, 0.65f),
-            floatArrayOf(0.69f, 0.25f, 0.195f), floatArrayOf(0.10f, 0.25f, 0.04f),
-            floatArrayOf(0.89f, 0.36f, 0.10f), floatArrayOf(0.69f, 0.085f, 0.05f), floatArrayOf(0.48f, 0.25f, 0.07f),
-            floatArrayOf(0.036f, 0.08f, 0.023f), floatArrayOf(0.69f, 0.27f, 0.43f), floatArrayOf(1.0f, 0.10f, 0.037f),
-        )
-        /** Particle size (world cm) by FoodKind ordinal: a pinch of cyclops is a dust, an algae wafer a disc. */
-        val FOOD_SIZES = floatArrayOf(
-            0.25f, 0.30f, 0.25f, 0.25f, 0.12f, 0.45f, 0.10f,
-            0.22f, 0.50f, 0.30f, 0.60f, 0.09f, 0.13f,
-        )
+        private val NULL_SINK = PointSink { _, _, _, _, _, _, _, _, _, _, _, _ -> }
+
+        /** How much faster suspended specks drift at sim [speed] (log-scaled, capped so they stay readable). */
+        fun fastForward(speed: Double): Float = (1.0 + 1.5 * kotlin.math.log10(speed.coerceAtLeast(1.0))).toFloat().coerceIn(1f, 5.5f)
 
         /** Flow velocity (cm/s) at a point: trilinear in the solver grid, or an analytic slow gyre. */
         fun flowAt(g: FlowGrid?, x: Float, y: Float, z: Float, t: Float, out: FloatArray) {
@@ -168,21 +192,24 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
     }
 }
 
-/** GL side of the particles: one dynamic VBO, three ranges drawn as points. */
+/** GL side of the particles: one dynamic VBO, five ranges drawn as points (one draw call each). */
 class ParticleRenderer {
     private val vao = Gl.genVertexArray()
     private val vbo = Gl.genBuffer()
-    private val capacity = (ParticleField.MAX_AMBIENT + ParticleField.DETRITUS + ParticleField.MAX_BUBBLES + ParticleField.MAX_FOOD)
+    private val capacity = ParticleField.CAPACITY
     private val buffer = Gl.floats(FloatArray(capacity * ParticleField.FLOATS))
 
     init {
+        val stride = ParticleField.FLOATS * 4
         GLES30.glBindVertexArray(vao); Gl.check("glBindVertexArray(particles)")
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo); Gl.check("glBindBuffer(particles)")
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, capacity * ParticleField.FLOATS * 4, null, GLES30.GL_DYNAMIC_DRAW); Gl.check("glBufferData(particles)")
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, capacity * stride, null, GLES30.GL_DYNAMIC_DRAW); Gl.check("glBufferData(particles)")
         GLES30.glEnableVertexAttribArray(0); Gl.check("enable0")
-        GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 32, 0); Gl.check("ptr0")
+        GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, stride, 0); Gl.check("ptr0")
         GLES30.glEnableVertexAttribArray(1); Gl.check("enable1")
-        GLES30.glVertexAttribPointer(1, 4, GLES30.GL_FLOAT, false, 32, 16); Gl.check("ptr1")
+        GLES30.glVertexAttribPointer(1, 4, GLES30.GL_FLOAT, false, stride, 16); Gl.check("ptr1")
+        GLES30.glEnableVertexAttribArray(2); Gl.check("enable2")
+        GLES30.glVertexAttribPointer(2, 4, GLES30.GL_FLOAT, false, stride, 32); Gl.check("ptr2")
         GLES30.glBindVertexArray(0); Gl.check("unbind")
     }
 
@@ -197,7 +224,13 @@ class ParticleRenderer {
         p.set1f("uViewportH", viewportH.toFloat())
         GLES30.glBindVertexArray(vao); Gl.check("glBindVertexArray(particles)")
         var calls = 0
-        for ((range, clamp) in listOf(f.ambientRange to (1.5f to 4f), f.bubbleRange to (2f to 8f), f.foodRange to (4f to 8f))) {
+        for ((range, clamp) in listOf(
+            f.hazeRange to (4f to 96f),
+            f.ambientRange to (1.5f to 4f),
+            f.bubbleRange to (2f to 8f),
+            f.fxRange to (2f to 40f),
+            f.foodRange to (2f to 32f),
+        )) {
             if (range.second == 0) continue
             p.set2f("uSizeClamp", clamp.first, clamp.second)
             GLES30.glDrawArrays(GLES30.GL_POINTS, range.first, range.second); Gl.check("glDrawArrays(points)")
