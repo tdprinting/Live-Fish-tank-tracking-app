@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -107,33 +108,43 @@ fun TankGaugeLayer(
     r: GaugeReadings,
     onDial: ((TankGauge) -> Unit)?,
     modifier: Modifier = Modifier,
+    safeTop: Dp = 0.dp,
+    safeBottom: Dp = 0.dp,
+    safeStart: Dp = 0.dp,
 ) {
     // a frame tick read only while placing, so the gauges follow the camera without recomposing
     var frame by remember { mutableLongStateOf(0L) }
     LaunchedEffect(visible) { while (visible) withFrameNanos { frame = it } }
     val reduce = ReefTheme.reduceMotion
     AnimatedVisibility(visible, modifier.fillMaxSize(), enter = fadeIn(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce))) {
+        val safe = GaugeSafe(safeTop, safeBottom, safeStart)
         Box(Modifier.fillMaxSize()) {
-            Anchored(projection, { frame }, 114f, 36f, 33.8f) { Thermometer(r.tempC) }
-            Anchored(projection, { frame }, 7f, 30f, 33.8f) {
+            Anchored(projection, { frame }, 114f, 36f, 33.8f, safe) { Thermometer(r.tempC) }
+            Anchored(projection, { frame }, 7f, 30f, 33.8f, safe) {
                 Badge(TankGauge.HEATER, if (r.heaterWorking) "Set ${TankGauge.HEATER.format(r.heaterSetC)}" else "Off", glow = if (r.heating()) Candy.orange else null, warn = !r.heaterWorking, onClick = onDial)
             }
-            Anchored(projection, { frame }, 18f, 50f, 33.8f) {
+            Anchored(projection, { frame }, 18f, 50f, 33.8f, safe) {
                 Badge(TankGauge.SALINITY, String.format(Locale.US, "%.3f", r.sg), warn = r.sg < 1.021 || r.sg > 1.028, onClick = onDial)
             }
-            Anchored(projection, { frame }, 61f, 63f, 30f) {
+            Anchored(projection, { frame }, 61f, 63f, 30f, safe) {
                 Badge(TankGauge.LIGHT, TankGauge.LIGHT.format(r.lightPct), glow = if (r.lightPct > 1.0) Candy.yellow else null, onClick = onDial)
             }
-            Anchored(projection, { frame }, 112f, 50f, 33.8f) {
+            Anchored(projection, { frame }, 112f, 50f, 33.8f, safe) {
                 Badge(TankGauge.FLOW, TankGauge.FLOW.format(r.flowPct), spin = (r.flowPct / 100.0).toFloat(), warn = r.flowPct < 15.0, onClick = onDial)
             }
         }
     }
 }
 
-/** Places [content] centred on the projected tank point, or hides it while the point is behind the camera. */
+/** Screen edges the gauges keep clear of: the HUD's top row, the dock / bottom bar, the landscape rail. */
+private data class GaugeSafe(val top: Dp, val bottom: Dp, val start: Dp)
+
+/**
+ * Places [content] centred on the projected tank point, or hides it while the point is off screen or behind the
+ * camera. A gauge that would sit under the HUD (small phones) is nudged inside [safe], so it never hides a button.
+ */
 @Composable
-private fun Anchored(projection: TankProjection, frame: () -> Long, x: Float, y: Float, z: Float, content: @Composable () -> Unit) {
+private fun Anchored(projection: TankProjection, frame: () -> Long, x: Float, y: Float, z: Float, safe: GaugeSafe, content: @Composable () -> Unit) {
     val pt = remember { FloatArray(3) }
     Box(
         Modifier.layout { m, c ->
@@ -145,7 +156,14 @@ private fun Anchored(projection: TankProjection, frame: () -> Long, x: Float, y:
                 if (projection.project(x, y, z, pt)) {
                     val px = (pt[0] - p.width / 2f).roundToInt()
                     val py = (pt[1] - p.height / 2f).roundToInt()
-                    if (px > -p.width && py > -p.height && px < w && py < h) p.place(px, py)
+                    if (px > -p.width && py > -p.height && px < w && py < h) {
+                        val lo = safe.top.roundToPx()
+                        val hi = h - safe.bottom.roundToPx() - p.height
+                        val left = safe.start.roundToPx()
+                        val cx = px.coerceIn(left, maxOf(left, w - p.width))
+                        val cy = if (hi >= lo) py.coerceIn(lo, hi) else py
+                        p.place(cx, cy)
+                    }
                 }
             }
         },

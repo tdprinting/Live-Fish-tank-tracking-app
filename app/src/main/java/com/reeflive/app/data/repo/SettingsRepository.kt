@@ -38,6 +38,8 @@ data class AppSettings(
     val tankVolume: Float = DEFAULT_TANK_VOLUME,
     /** The first-time sandbox tips were dismissed. */
     val sandboxHintSeen: Boolean = false,
+    /** A supply was carried from the shelf into the tank once: the shelf's "tap, then drag" hint is done. */
+    val supplyHintSeen: Boolean = false,
 ) {
     /** Preferred display unit for a parameter whose base unit is [base]. */
     fun displayUnitFor(paramId: String, base: ParamUnit): ParamUnit = when (paramId) {
@@ -71,6 +73,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val tankSounds = booleanPreferencesKey("tankSounds")
         val tankVolume = floatPreferencesKey("tankVolume")
         val sandboxHintSeen = booleanPreferencesKey("sandboxHintSeen")
+        val supplyHintSeen = booleanPreferencesKey("supplyHintSeen")
     }
 
     private fun unit(name: String?, default: ParamUnit) = ParamUnit.entries.firstOrNull { it.name == name } ?: default
@@ -95,6 +98,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             tankSounds = p[K.tankSounds] ?: true,
             tankVolume = (p[K.tankVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
             sandboxHintSeen = p[K.sandboxHintSeen] ?: false,
+            supplyHintSeen = p[K.supplyHintSeen] ?: false,
         )
     }
 
@@ -136,4 +140,5 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setTankSounds(v: Boolean) = store.edit { it[K.tankSounds] = v }
     suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
     suspend fun setSandboxHintSeen(v: Boolean) = store.edit { it[K.sandboxHintSeen] = v }
+    suspend fun setSupplyHintSeen(v: Boolean) = store.edit { it[K.supplyHintSeen] = v }
 }
