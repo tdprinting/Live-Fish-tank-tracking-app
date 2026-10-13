@@ -246,6 +246,14 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean) = sit(c)
 
+    /** Approaches are judged every tick, whatever the shrimp is doing (a fish arriving mid-clean still gets the signal). */
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        approaches(c)
+        val rocking = c.t < rockUntil
+        c.o.legRock = if (rocking) 1.0 else max(0.0, c.o.legRock - c.dt * 2)
+    }
+
     /** Approach statistics (06 §5.6 #16): approaches, leg-rocks and cleans offered, for predators and others. */
     class ApproachStats { var approaches = 0; var rocks = 0; var cleans = 0 }
     val predatorStats = ApproachStats()
@@ -312,9 +320,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             val client = c.p.neighbors(station.pos, 30.0).any { it.isFish && it.alive && it.brainKind != BrainKind.EEL }
             station.advertising = client
             if (client) out.rollExtra = 0.3 * sin(2 * PI * 1.2 * c.t)    // rocks side to side
-            approaches(c)
             val rocking = c.t < rockUntil
-            c.o.legRock = if (rocking) 1.0 else max(0.0, c.o.legRock - c.dt * 2)
             // leg-rocking: forelegs at 4 Hz (S:Caves19)
             c.o.appendagePhase += c.dt * (if (rocking) 8.0 * PI else if (client) 4.0 else 1.0)
         }

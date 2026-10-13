@@ -1,6 +1,8 @@
 package com.reeflive.core.sim
 
 import kotlinx.serialization.Serializable
+import kotlin.math.min
+import kotlin.math.pow
 import kotlinx.serialization.json.Json
 
 /**
@@ -114,6 +116,33 @@ data class Locomotion(
     val ampCruise: Double = 0.04,
     val ampBurst: Double = 0.09,
 )
+
+/**
+ * Swimming speeds (research 07 gap 2). No species-level adult BL/s values exist for this stock: the
+ * per-species `cruiseBL` / `burstBL` are [I], checked against family-level field data. Fulton 2007
+ * (Coral Reefs 26:217): labriform reef fishes average up to 68.8 cm/s in the field (≈ 70 % of Ucrit,
+ * max 82.4 cm/s), body-caudal swimmers ≤ 39 cm/s. Bellwood & Fisher 2001: relative speed (BL/s) falls
+ * with size. So cruise is capped at the family field speed, and burst BL/s scales as
+ * (typical adult / length)^0.5 once a fish outgrows its typical adult size.
+ */
+object SwimSpeed {
+    const val LABRIFORM_FIELD_CM_S = 68.8
+    const val BODY_CAUDAL_FIELD_CM_S = 39.0
+    const val BURST_SIZE_EXP = 0.5
+
+    fun fieldCeiling(mode: String): Double = if (mode == "LABRIFORM") LABRIFORM_FIELD_CM_S else BODY_CAUDAL_FIELD_CM_S
+
+    fun cruise(sp: SimSpecies, lengthCm: Double): Double {
+        val v = sp.locomotion.cruiseBL * lengthCm
+        return if (sp.kind == "FISH") min(v, fieldCeiling(sp.locomotion.mode)) else v
+    }
+
+    fun burst(sp: SimSpecies, lengthCm: Double): Double {
+        val adult = sp.typicalAdultCm
+        val rel = if (sp.kind == "FISH" && adult > 0 && lengthCm > adult) (adult / lengthCm).pow(BURST_SIZE_EXP) else 1.0
+        return sp.locomotion.burstBL * rel * lengthCm
+    }
+}
 
 @Serializable
 data class Zone(

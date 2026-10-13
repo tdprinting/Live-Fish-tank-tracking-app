@@ -288,11 +288,11 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         val d = o.pos.distanceTo(pose)
         if (st.client == null) st.client = o
         if (st.client !== o) {
-            out.seek(c.safe(pose + Vec3(0.0, 4.0, 3.0)), o.cruiseSpeed * 0.6, arrive = 3.0); out.hover = true
+            out.seek(c.viaOpenWater(c.safe(pose + Vec3(0.0, 4.0, 3.0))), o.cruiseSpeed * 0.6, arrive = 3.0); out.hover = true
             if (elapsed > 40) finished = true
             return
         }
-        out.seek(pose, o.cruiseSpeed * (if (d > 8) 1.0 else 0.4), arrive = 3.0)
+        out.seek(if (d > 8) c.viaOpenWater(pose) else pose, o.cruiseSpeed * (if (d > 8) 1.0 else 0.4), arrive = 3.0)
         out.hover = true
         if (d < 4) {
             st.clientReady = true
