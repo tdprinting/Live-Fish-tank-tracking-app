@@ -75,6 +75,17 @@ class Camera {
     private val prevMid = FloatArray(3)
     private var hasPrevMid = false
 
+    // ---- supply shelf (SupplyShelf.kt): a second framing beside the tank, blended over the tank view ----
+    /** True while the camera looks at (or travels to) the supply shelf; drags then look along the shelf rows. */
+    var shelfOn = false; private set
+    /** Travel progress: 0 = the tank view, 1 = the shelf view (eased with smoothstep, arcing up and back). */
+    var shelfMix = 0f; private set
+    private val shelfGoal = floatArrayOf(SupplyShelfLayout.START_X, SupplyShelfLayout.START_Y)
+    private val shelfX = Spring(OMEGA_TOUCH)
+    private val shelfY = Spring(OMEGA_TOUCH)
+    private val shelfEye = FloatArray(3)
+    private val shelfAim = FloatArray(3)
+
     // ---- outputs (valid after update) ----
     val eye = FloatArray(3)
     private val aim = FloatArray(3)
@@ -102,6 +113,72 @@ class Camera {
         yawGoal = 0f; pitchGoal = DEFAULT_PITCH; distLogGoal = ln(DEFAULT_DISTANCE)
     }
 
+    /**
+     * Swaps to the supply shelf beside the tank ([on]) or back to the tank. The camera glides there in
+     * [SHELF_TRAVEL_S] on an arc, or cuts at once with [instant] (Reduce Motion). Going back also eases the tank view
+     * back to its default framing, so the action picture that follows is in view. Stops any follow.
+     */
+    fun lookAtShelf(on: Boolean, instant: Boolean) {
+        if (on) {
+            if (followId != null) releaseFollow()
+            yawInertia.stop(); pitchInertia.stop()
+            if (!shelfOn) {
+                shelfGoal[0] = SupplyShelfLayout.START_X; shelfGoal[1] = SupplyShelfLayout.START_Y
+                shelfX.snap(shelfGoal[0]); shelfY.snap(shelfGoal[1])
+            }
+        } else if (shelfOn) {
+            reset()
+        }
+        shelfOn = on
+        if (instant) shelfMix = if (on) 1f else 0f
+    }
+
+    /** Glides the shelf view to one row (0 feed, 1 care, 2 tools). */
+    fun shelfFocusRow(row: Int) {
+        if (!shelfOn) return
+        shelfX.omega = OMEGA_GLIDE; shelfY.omega = OMEGA_GLIDE
+        shelfGoal[1] = SupplyShelfLayout.rowLookY(row).coerceIn(SupplyShelfLayout.LOOK_Y_LO, SupplyShelfLayout.LOOK_Y_HI)
+    }
+
+    /** One-finger drag on the shelf: the shelf follows the finger, along the rows and between them. */
+    private fun shelfDrag(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
+        shelfX.omega = OMEGA_TOUCH; shelfY.omega = OMEGA_TOUCH
+        val cmPerPx = 2f * shelfDistance * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) / max(viewHeightPx, 1f)
+        shelfGoal[0] = SoftLimit.drag(shelfGoal[0], -dxPx * cmPerPx, SupplyShelfLayout.LOOK_X_LO, SupplyShelfLayout.LOOK_X_HI, SHELF_GIVE)
+        shelfGoal[1] = SoftLimit.drag(shelfGoal[1], dyPx * cmPerPx, SupplyShelfLayout.LOOK_Y_LO, SupplyShelfLayout.LOOK_Y_HI, SHELF_GIVE)
+    }
+
+    /** Shelf viewing distance (cm from the front of the boards): close in, further out on tall narrow screens. */
+    val shelfDistance: Float
+        get() = max(SHELF_DISTANCE, SHELF_MIN_WIDTH / (2f * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) * max(aspect, 0.1f)))
+
+    /** Advances the shelf travel and look springs, then blends the shelf framing over [eye] / [aim]. */
+    private fun blendShelf(dt: Float) {
+        val goal = if (shelfOn) 1f else 0f
+        if (shelfMix != goal) {
+            val d = dt / SHELF_TRAVEL_S
+            shelfMix = if (goal > shelfMix) kotlin.math.min(goal, shelfMix + d) else max(goal, shelfMix - d)
+        }
+        if (!touching) {
+            shelfGoal[0] = SoftLimit.relax(shelfGoal[0], SupplyShelfLayout.LOOK_X_LO, SupplyShelfLayout.LOOK_X_HI, RELAX_RATE, dt)
+            shelfGoal[1] = SoftLimit.relax(shelfGoal[1], SupplyShelfLayout.LOOK_Y_LO, SupplyShelfLayout.LOOK_Y_HI, RELAX_RATE, dt)
+        }
+        val lx = shelfX.step(shelfGoal[0], dt)
+        val ly = shelfY.step(shelfGoal[1], dt)
+        if (shelfMix <= 0f) return
+        val dist = shelfDistance
+        shelfEye[0] = lx; shelfEye[1] = ly + dist * SHELF_EYE_RISE; shelfEye[2] = SupplyShelfLayout.Z_FRONT + dist
+        shelfAim[0] = lx; shelfAim[1] = ly; shelfAim[2] = SupplyShelfLayout.Z_PROP
+        val e = smooth01(shelfMix)
+        val arc = sin(PI.toFloat() * e)
+        for (i in 0 until 3) {
+            eye[i] += (shelfEye[i] - eye[i]) * e
+            aim[i] += (shelfAim[i] - aim[i]) * e
+        }
+        eye[1] += arc * SHELF_ARC_UP
+        eye[2] += arc * SHELF_ARC_BACK
+    }
+
     /** Square-on, level view of the whole front glass (clean-glass mode); stops any follow. */
     fun faceGlass() {
         if (followId != null) releaseFollow()
@@ -115,7 +192,7 @@ class Camera {
      * when already close in glides back out to the default framing.
      */
     fun focusOn(x: Float, y: Float, z: Float) {
-        if (followId != null) return
+        if (followId != null || shelfOn) return
         glide()
         if (distLogGoal <= ln(FOCUS_TOGGLE_DISTANCE)) {
             target[0] = DEFAULT_TARGET[0]; target[1] = DEFAULT_TARGET[1]; target[2] = DEFAULT_TARGET[2]
@@ -158,6 +235,7 @@ class Camera {
 
     /** One-finger drag in pixels. In follow mode it swings the camera around the fish. */
     fun orbit(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
+        if (shelfOn) { shelfDrag(dxPx, dyPx, viewHeightPx); return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         if (followId != null) {
             followYaw -= dxPx * k
@@ -171,6 +249,7 @@ class Camera {
 
     /** One-finger release velocity (px/s): keeps the orbit turning and coasting to a stop. */
     fun fling(vxPx: Float, vyPx: Float, viewHeightPx: Float) {
+        if (shelfOn) return
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         val wy = (-vxPx * k).coerceIn(-MAX_SPIN, MAX_SPIN)
         val wp = (vyPx * k * 0.6f).coerceIn(-MAX_SPIN, MAX_SPIN)
@@ -179,13 +258,14 @@ class Camera {
 
     /** Two-finger twist (radians, screen): turns the view about the vertical axis. */
     fun rotate(radians: Float) {
+        if (shelfOn) return
         if (followId != null) followYaw -= radians
         else { snappy(); yawGoal = SoftLimit.drag(yawGoal, -radians, -MAX_YAW, MAX_YAW, YAW_GIVE) }
     }
 
     /** Pinch: factor > 1 zooms in (about the view centre). */
     fun zoom(factor: Float) {
-        if (factor <= 0f) return
+        if (factor <= 0f || shelfOn) return
         if (followId != null) followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
         else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE) }
     }
@@ -195,7 +275,7 @@ class Camera {
      * orbit target slides toward it), so you can zoom straight into a gap in the rockwork.
      */
     fun zoomAt(factor: Float, focusXPx: Float, focusYPx: Float, widthPx: Int, heightPx: Int) {
-        if (factor <= 0f || factor.isNaN()) return
+        if (factor <= 0f || factor.isNaN() || shelfOn) return
         if (followId != null || !initialized) { zoom(factor); return }
         val before = exp(distLogGoal)
         zoom(factor)
@@ -213,7 +293,7 @@ class Camera {
 
     /** Two-finger drag in pixels: moves the orbit target in the view plane (ignored while following). */
     fun pan(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
-        if (followId != null) return
+        if (followId != null || shelfOn) return
         snappy()
         val wpp = 2f * effectiveDistance * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) / max(viewHeightPx, 1f)
         val y = yawS.value; val p = pitchS.value
@@ -261,6 +341,7 @@ class Camera {
             targetS.valueInto(aim)
             initialized = true
         }
+        blendShelf(step)
         // Keep the eye out of rock and out of the sand bed.
         if (sdf != null) pushOut(eye, sdf, CLEARANCE)
         if (eye[0] > 0f && eye[0] < TANK[0] && eye[2] > 0f && eye[2] < TANK[2] && eye[1] < SAND_Y + 1.5f) eye[1] = SAND_Y + 1.5f
@@ -519,6 +600,18 @@ class Camera {
         const val FOLLOW_YAW_OMEGA = 3.5f
         /** Cross to the other flank once the kept one would view from behind by more than this (cos of the angle off +Z). */
         const val FLANK_SWITCH_COS = 0.35f
+
+        /** Supply shelf: travel time tank ↔ shelf, closest viewing distance, the width a narrow screen still shows. */
+        const val SHELF_TRAVEL_S = 1.0f
+        const val SHELF_DISTANCE = 50f
+        const val SHELF_MIN_WIDTH = 42f
+        /** The eye sits this far up per cm of distance (looks a little down onto the boards). */
+        const val SHELF_EYE_RISE = 0.16f
+        /** The glide arcs this much up and back at its middle. */
+        const val SHELF_ARC_UP = 12f
+        const val SHELF_ARC_BACK = 25f
+        /** Soft give (cm) past the ends of the shelf. */
+        const val SHELF_GIVE = 6f
 
         private fun smooth01(x: Float): Float { val t = x.coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 

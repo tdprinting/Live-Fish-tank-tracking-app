@@ -490,8 +490,8 @@ internal fun ControlModeSelector(state: SandboxPanelState, actions: SandboxActio
 
 /** Water card, More: every water, mineral and waste slider. */
 @Composable
-internal fun WaterMore(state: SandboxPanelState, actions: SandboxActions) {
-    ControlModeSelector(state, actions)
+internal fun WaterMore(state: SandboxPanelState, actions: SandboxActions, withMode: Boolean = true) {
+    if (withMode) ControlModeSelector(state, actions)
     SubHeader("Water", ReefGlyphs.droplet)
     ParamsContent(state, actions, SandboxCategory.WATER)
     SubHeader("Minerals", ReefGlyphs.flask)

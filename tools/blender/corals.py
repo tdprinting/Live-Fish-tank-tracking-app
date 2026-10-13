@@ -279,10 +279,40 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 # ----------------------------------------------------------------------------
 # Kenya tree (C1)
 # ----------------------------------------------------------------------------
-MAXD = 6  # depth 6 = the short lobe beside each tip (HQ: one more generation of thin branchlets than v1's 5)
-KENYA_TUFTS = 1500       # LOD0 polyp tufts (10 tris each); the photo's crown is a fuzz of polyps on every branchlet
-KENYA_TUFTS_LOD1 = 700
-KENYA_LOD1_RATIO = 0.42  # body decimation for kenya_lod1.glb
+# v3 (2026-10-13) from Tee's own clip (reference/kenya_clip; docs/research/video/coral_kenya.md [H] section): a short,
+# thick, pale cream stalk fans into 8 stout trunks just above the rock (3 near-upright in the middle, 5 in a ring at
+# 50-72 deg from vertical); each forks 4 more times into slender branches that arch upward in the middle and arch out
+# and sag at the tips round the lower ring; every outer branch carries short pinnate twigs and feathery polyp sprigs
+# (the fuzz of the clip). Warm pinkish tan, paler cream-white tips, pale translucent stalk. Footprint as v2: crown top
+# y = 48, crown 26 x 20 cm about (73, 17). Body and Tufts carry extras.swayMode = 1 (tree sway in static.vert and
+# polyp.vert: trunk still, tips lag, sprigs ride their branch, local ripple around a passing fish).
+MAXD = 5                  # 0 stalk, 1 trunks, 2..5 forks; pinnate twig tubes hang off depth 3..5 (LOD0 only)
+KENYA_TRUNKS_UP = 3
+KENYA_TRUNKS_RING = 5
+KENYA_SPRIGS = 2200       # LOD0 polyp sprigs, 6 tris each: Kenya (body + sprigs) keeps its old share of the High budget
+KENYA_SPRIGS_LOD1 = 1100
+KENYA_LOD1_TRIS = 5000    # kenya_lod1.glb body: the branches without twigs, decimated to about this
+KENYA_TWIG_STEP = 0.95    # cm between pinnate twigs along a branch (alternate sides)
+
+
+def proto_sprig(n=3, length=1.0, w=0.3, splay=22.0):
+    """Kenya polyp sprig: n alpha-feathered pinnate quads fanned about +Y (2n tris). UV: the right (feather) half of
+    feather_canvas, v base -> tip; COLOR_0.b = t along the feather (flutter hinge in polyp.vert)."""
+    V, F, UV, COL = [], [], [], []
+    sp = math.radians(splay)
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        d = np.array([math.cos(a), 0.0, math.sin(a)])
+        tng = np.array([-math.sin(a), 0.0, math.cos(a)])
+        b = len(V)
+        for t in (0.0, 1.0):
+            p = (d * math.sin(sp) + UP * math.cos(sp)) * length * t
+            ww = w * (0.55 + 0.45 * t)
+            V += [tuple(p - tng * ww), tuple(p + tng * ww)]
+            UV += [(0.5, t), (1.0, t)]
+            COL += [(0, 0, t, 1)] * 2
+        F.append((b, b + 2, b + 3, b + 1))
+    return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
 
 
 def raw_anchor(name):
@@ -295,123 +325,187 @@ def raw_anchor(name):
 
 def kenya(rock, A):
     pos, n = A["coral_kenya_main"]
-    rs = RS(11)
-    branches = []  # (points, radii, depth, phase)
+    rs = RS(7)  # seed picked for the clip's front silhouette: widths 26 / 22 / 16 / 10 cm at 35 / 55 / 75 / 90 % height
+    branches = []  # (points, radii, depth, phase, terminal)
+    X, Z = np.array([1.0, 0, 0]), np.array([0, 0, 1.0])
+    top_y = [pos[1] + 2.4]  # stalk top (set once the stalk is grown)
 
     def grow(p0, d, length, r0, depth, phase):
-        """Fleshy Capnella branching: short thick trunk, 5 primaries fanning out, lobed tips."""
         pts, rad = [], []
-        bend = unit(rs.normal(0, 1, 3)) * (0.3 if depth < 4 else 0.5)
-        k = 4 if depth <= 2 else (3 if depth < MAXD - 1 else 2)
-        p = np.array(p0, float)
         dd = unit(d)
+        horiz = math.sqrt(max(0.0, 1.0 - dd[1] ** 2))  # sin(angle from vertical) at the branch root
+        # clip: near-upright branches keep curving up; branches leaving at > ~30 deg arch out, their tips sag
+        lift = 0.06 + 0.4 * (1.0 - horiz) ** 2
+        sag = 0.0 if depth < 2 else 0.85 * max(0.0, horiz - 0.45)
+        wob = unit(rs.normal(0, 1, 3)) * (0.12 if depth < 3 else 0.28)
+        k = {0: 4, 1: 5, 2: 4, 3: 3}.get(depth, 2)
+        p = np.array(p0, float)
         for i in range(k + 1):
             t = i / k
             pts.append(p.copy())
-            # fleshy: little taper on the thick limbs, thin branchlets taper to a swollen polyp-covered club
-            club = 1.0 + (0.25 * math.sin(math.pi * t) if depth >= MAXD - 1 else 0.0)
-            taper = 0.22 if depth < 4 else 0.4
-            rad.append(r0 * (1 - taper * t) * club)
-            dd = unit(dd + bend / k + UP * 0.08 / k)
+            if depth == 0:  # flared foot, swelling where the trunks fan out
+                rad.append(r0 * (1.3 - 0.3 * S(0.0, 0.45, t)) * (1.0 - 0.35 * S(0.55, 1.0, t)))
+            else:
+                rad.append(r0 * (1.0 - (0.3 if depth < 3 else 0.45) * t))
+            dd = unit(dd + (wob + UP * (lift - 2.0 * sag * t)) / k)
+            # tips droop to ~20 deg below horizontal at most, and nothing dips below the stalk's crown
+            floor_y = -0.35 if depth < 2 or p[1] > top_y[0] + 1.5 else 0.0
+            if dd[1] < floor_y:
+                dd = unit(np.r_[dd[0], 0.0, dd[2]] * math.sqrt(1 - floor_y ** 2) / max(math.hypot(dd[0], dd[2]), 1e-6)
+                          + UP * floor_y)
             p = p + dd * length / k
-        branches.append((np.array(pts), np.array(rad), depth, phase))
+        idx = len(branches)
+        branches.append([np.array(pts), np.array(rad), depth, phase, True])
         if depth >= MAXD:
             return
-        nchild = {0: 5, 1: 3, 2: 3, 3: 3, 4: 2}.get(depth, 1)
-        if depth == MAXD - 1:
-            nchild = 1 if rs.uniform() < 0.5 else 0  # a short lobe beside half of the tips
-        for c in range(nchild):
-            ang = (2 * math.pi * c / nchild) + rs.uniform(-0.35, 0.35)
-            if depth == 0:
-                spread = math.radians(rs.uniform(38, 62))
-            else:
-                spread = math.radians(rs.uniform(25, 45))
-            t1 = unit(np.cross(dd, UP if abs(dd[1]) < 0.95 else np.array([1.0, 0, 0])))
-            t2 = np.cross(dd, t1)
-            cd = unit(dd * math.cos(spread) + (t1 * math.cos(ang) + t2 * math.sin(ang)) * math.sin(spread) + UP * 0.25)
-            j = len(pts) - 1 if c == 0 or depth < 1 else rs.integers(len(pts) // 2, len(pts))
-            lf = {0: 1.5, MAXD - 1: 0.35}.get(depth, rs.uniform(0.62, 0.78))
-            grow(pts[j], cd, length * lf, rad[j] * (0.62 if depth == 0 else (0.82 if depth < 3 else 0.7)), depth + 1,
-                 phase if depth > 0 else c / 5.0)
+        if depth == 0:
+            top_y[0] = pts[-1][1]
+            specs = [(rs.uniform(0, 2 * math.pi), rs.uniform(14, 30), 1.15) for _ in range(KENYA_TRUNKS_UP)]
+            a0 = rs.uniform(0, 2 * math.pi)
+            specs += [(a0 + 2 * math.pi * c / KENYA_TRUNKS_RING + rs.uniform(-0.3, 0.3), rs.uniform(50, 72), 1.12)
+                      for c in range(KENYA_TRUNKS_RING)]
+            for c, (az, inc, lf) in enumerate(specs):
+                inc = math.radians(inc)
+                cd = unit(UP * math.cos(inc) + (X * math.cos(az) + Z * math.sin(az)) * math.sin(inc))
+                j = len(pts) - 2 - (c % 2)  # trunks leave the upper stalk, so it fans out rather than ends
+                grow(pts[j], cd, length * 2.2 * lf * rs.uniform(0.9, 1.1), rad[j] * 0.48, 1, c / len(specs))
+            branches[idx][4] = False
+            return
+        t1 = unit(np.cross(dd, UP)) if abs(dd[1]) < 0.97 else X
+        t2 = unit(np.cross(t1, dd))
+        rot = rs.uniform(-1.0, 1.0)
+        fork = unit(t1 * math.cos(rot) + t2 * math.sin(rot))
+        a = math.radians(rs.uniform(24, 40))
+        kids = [(len(pts) - 1, unit(dd * math.cos(a * 0.55) + fork * math.sin(a * 0.55)), 1.0)]
+        if depth < MAXD - 1 or rs.uniform() < 0.6:
+            kids.append((len(pts) - 1, unit(dd * math.cos(a) - fork * math.sin(a)), 0.85))
+        if depth <= 2 or (depth == 3 and rs.uniform() < 0.3):
+            a2 = math.radians(rs.uniform(32, 48))
+            az = rs.uniform(0, 2 * math.pi)
+            kids.append((int(rs.integers(len(pts) // 2, len(pts) - 1)),
+                         unit(dd * math.cos(a2) + (t1 * math.cos(az) + t2 * math.sin(az)) * math.sin(a2)), 0.7))
+        branches[idx][4] = False
+        for j, cd, lf in kids:
+            grow(pts[j], cd, length * lf * rs.uniform(0.62, 0.74), rad[j] * 0.72, depth + 1, phase)
 
-    trunk_dir = unit(0.85 * UP + 0.15 * n)
-    grow(pos - n * 0.8, trunk_dir, 4.0, 2.0, 0, 0.0)
+    trunk_dir = unit(0.9 * UP + 0.1 * n)
+    grow(pos - n * 0.6, trunk_dir, 2.4, 2.2, 0, 0.0)
     allp = np.vstack([b[0] for b in branches])
     lo, hi = allp.min(0), allp.max(0)
     sy = (48.0 - pos[1]) / (hi[1] - pos[1])
-    crown = allp[allp[:, 1] > pos[1] + 0.35 * (hi[1] - pos[1])]
+    # the whole colony above the stalk (sagging lower ring included) fits the 26 x 20 cm crown footprint
+    crown = allp[allp[:, 1] > pos[1] + 0.12 * (hi[1] - pos[1])]
     clo, chi = crown.min(0), crown.max(0)
     sx, sz = 26.0 / (chi[0] - clo[0]), 20.0 / (chi[2] - clo[2])
     cx, cz = (clo[0] + chi[0]) / 2, (clo[2] + chi[2]) / 2
     rsc = float(np.clip(((sx + sz) / 2) ** 0.6, 0.8, 1.6))
-    for k, (pts, rad, depth, phase) in enumerate(branches):
+    print(f"[coral] kenya warp sx {sx:.2f} sy {sy:.2f} sz {sz:.2f}")
+    for b in branches:
+        pts, rad = b[0], b[1]
         h = np.clip((pts[:, 1] - pos[1]) / (hi[1] - pos[1]), 0, 1)
-        w = S(0.12, 0.45, h)
+        w = S(0.04, 0.22, h)
         q = pts.copy()
         q[:, 1] = pos[1] + (pts[:, 1] - pos[1]) * sy
         q[:, 0] = pts[:, 0] + w * ((73.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
         q[:, 2] = pts[:, 2] + w * ((17.0 + (pts[:, 2] - cz) * sz) - pts[:, 2])
-        branches[k] = (q, rad * (1 + (rsc - 1) * (1 - 0.5 * h)), depth, phase)
+        b[0], b[1] = q, rad * (1 + (rsc - 1) * (1 - 0.5 * h))
     allp = np.vstack([b[0] for b in branches])
+    _q = allp[allp[:, 1] > 23.0]
+    _h = (_q[:, 1] - 23.0) / 25.0
+    _w = [np.ptp(_q[(_h > lo_) & (_h < lo_ + 0.1), 0]) if np.any((_h > lo_) & (_h < lo_ + 0.1)) else 0 for lo_ in (0.3, 0.5, 0.7, 0.85)]
+    print("[coral] kenya silhouette widths@.35/.55/.75/.9", np.round(_w, 1), "top-x", round(float(_q[_h > 0.7, 0].mean()), 1))
     print("[coral] kenya bbox", np.round(allp.min(0), 1), np.round(allp.max(0), 1))
-    g = T.WGeo()
-    inst = Instances(12)
-    import geomlib as G
-    sides = {0: 10, 1: 8, 2: 7, 3: 6, 4: 4, 5: 3, 6: 3}
-    ymin = pos[1]
-    ymax = max(b[0][:, 1].max() for b in branches)
     print(f"[coral] kenya branches {len(branches)} (per depth {[sum(1 for b in branches if b[2] == d) for d in range(MAXD + 1)]})")
-    for pts, rad, depth, phase in branches:
-        V, F, tv, av = G.tube(pts, rad, sides[depth], cap_start=depth == 0, cap_end=depth >= MAXD - 1, up=(0, 0, 1))
-        hgt = np.clip((V[:, 1] - ymin) / (ymax - ymin), 0, 1)
-        thin = np.full(len(V), 1 - np.interp(rad.mean(), [0.2, 2.0], [0.1, 0.9]))  # thin branches: translucent
-        col = np.c_[thin, np.full(len(V), phase), np.clip((depth + tv) / (MAXD + 1.0), 0, 1) ** 1.3, np.ones(len(V))]
-        g.add(V, F, np.c_[av, hgt], col)
-        # polyp tufts, denser toward the outer branchlets (every tip carries several)
-        if depth >= 1:
-            m = {1: 1, 2: 2, 3: 3, 4: 4, 5: 3, 6: 2}[depth]
-            for _ in range(m):
-                t = rs.uniform(0.3, 1.0) ** 0.5
-                i = min(int(t * (len(pts) - 1)), len(pts) - 2)
-                f = t * (len(pts) - 1) - i
-                c = pts[i] * (1 - f) + pts[i + 1] * f
-                r = rad[i] * (1 - f) + rad[i + 1] * f
-                tng = unit(pts[i + 1] - pts[i])
+    import geomlib as G
+    g1 = T.WGeo()   # branches (LOD1 body)
+    g0 = T.WGeo()   # branches + pinnate twigs (LOD0 body)
+    sides = {0: 12, 1: 8, 2: 6, 3: 5, 4: 4, 5: 3}
+    cand = []       # sprig candidates: (pos, dir, scale, phase, lod1_ok)
+    ntw = 0
+    for pts, rad, depth, phase, terminal in branches:
+        V, F, tv, av = G.tube(pts, rad, sides[depth], cap_start=depth == 0, cap_end=terminal, up=(0, 0, 1))
+        prog = np.clip((depth + tv) / (MAXD + 1.0), 0, 1)        # 0 stalk foot -> 1 branch tip (texture v)
+        thin = np.full(len(V), 1 - np.interp(rad.mean(), [0.15, 2.0], [0.1, 0.9]))  # thin branches: translucent
+        col = np.c_[thin, np.full(len(V), phase), prog ** 1.3, np.ones(len(V))]
+        g0.add(V, F, np.c_[av, prog], col)
+        g1.add(V, F, np.c_[av, prog], col)
+        seg = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+        L = seg[-1]
+
+        def at(s):
+            i = min(int(np.searchsorted(seg, s, side="right")) - 1, len(pts) - 2)
+            f = (s - seg[i]) / max(seg[i + 1] - seg[i], 1e-6)
+            return pts[i] * (1 - f) + pts[i + 1] * f, rad[i] * (1 - f) + rad[i + 1] * f, unit(pts[i + 1] - pts[i])
+
+        if terminal:  # tip fluff: a cream-tipped cluster of sprigs round the branch end
+            c, r, tng = at(L)
+            for _ in range(3):
+                cand.append((c, unit(tng + rs.normal(0, 0.45, 3)), rs.uniform(1.0, 1.35), phase, True))
+        if depth >= 2:  # polyp sprigs straight on the branch skin
+            for _ in range(int(L / (0.55 if depth >= 4 else (0.8 if depth == 3 else 1.4)))):
+                c, r, tng = at(rs.uniform(0.15, 1.0) * L)
                 o = unit(np.cross(tng, rs.normal(0, 1, 3)))
-                if np.dot(o, UP) < -0.3:
+                if np.dot(o, UP) < -0.2:
                     o = -o
-                inst.add(c + o * r * 0.7, o, rs.uniform(1.0, 1.5), phase=(phase + 0.1 * depth) % 1.0)
-    print(f"[coral] kenya tufts generated {len(inst)}")
-    if len(inst) > KENYA_TUFTS:
-        keep = np.sort(RS(5).choice(len(inst), KENYA_TUFTS, replace=False))
-        inst.rows = [inst.rows[i] for i in keep]
-    inst1 = Instances(12)
-    inst1.rows = [inst.rows[i] for i in np.sort(RS(6).choice(len(inst), min(KENYA_TUFTS_LOD1, len(inst)), replace=False))]
+                cand.append((c + o * r * 0.6, unit(o + tng * 0.8), rs.uniform(0.9, 1.35), phase, True))
+        if depth >= 3:  # pinnate twigs, alternate sides, about 55 deg off the branch, each tipped with a sprig
+            s, side, rot0 = rs.uniform(0.2, 0.6), 1.0, rs.uniform(0, math.pi)
+            k = 0
+            while s < L - 0.25:
+                c, r, tng = at(s)
+                t1 = unit(np.cross(tng, UP)) if abs(tng[1]) < 0.97 else X
+                t2 = unit(np.cross(t1, tng))
+                ang = rot0 + (k // 2) * math.pi / 2
+                o = side * unit(t1 * math.cos(ang) + t2 * math.sin(ang))
+                dtw = unit(tng * math.cos(math.radians(55)) + o * math.sin(math.radians(55)) + UP * 0.15)
+                ln = rs.uniform(0.5, 0.9)
+                tp = np.array([c + o * r * 0.8, c + o * r * 0.8 + dtw * ln])
+                V, F, tv, av = G.tube(tp, np.array([max(r * 0.45, 0.07), 0.05]), 3, cap_start=False, cap_end=False,
+                                      up=(0, 0, 1))
+                pr = np.clip(0.9 + 0.1 * tv, 0, 1)
+                g0.add(V, F, np.c_[av, pr], np.c_[np.full(len(V), 0.9), np.full(len(V), phase), pr ** 1.3,
+                                                     np.ones(len(V))])
+                cand.append((tp[1] - dtw * 0.1, unit(dtw + UP * 0.2), rs.uniform(0.7, 0.95), phase, False))
+                ntw += 1
+                side, k, s = -side, k + 1, s + KENYA_TWIG_STEP * rs.uniform(0.8, 1.2)
+    print(f"[coral] kenya twigs {ntw}, body tris LOD0 {g0.tris()} LOD1 (pre-decimate) {g1.tris()}, sprig candidates {len(cand)}")
+
+    def sprigs(rows, seed):
+        inst = Instances(seed)
+        for c, d, sc, ph, _ in rows:
+            inst.add(c, d, sc, phase=(ph + rs.uniform(0, 0.15)) % 1.0)
+        return inst
+
+    keep = np.sort(RS(5).choice(len(cand), min(KENYA_SPRIGS, len(cand)), replace=False))
+    inst = sprigs([cand[i] for i in keep], 12)
+    ok1 = [i for i in range(len(cand)) if cand[i][4]]
+    keep1 = np.sort(RS(6).choice(len(ok1), min(KENYA_SPRIGS_LOD1, len(ok1)), replace=False))
+    inst1 = sprigs([cand[ok1[i]] for i in keep1], 13)
+    # body: pale translucent cream stalk -> warm pinkish tan trunks/branches with lilac-grey mottling -> cream tips
     cv = P.Canvas(64, 256)
-    cv.vgrad("#C9A08E", "#E4C2BA", 0.0, 1.0, 0.8)  # tan-pink stalk -> branches #D8A9A0
-    cv.blend(S(0.2, 0.6, cv.v) * (1 - S(0.75, 1.0, cv.v)), "#D8A9A0", 0.7)
+    cv.vgrad("#C9B3A8", "#A27D70", 0.02, 0.4, 0.8)
     spk = P.fbm(256, 64, 8, 3, 7)
-    cv.multiply(0.9 + 0.2 * spk)
-    body_m = C.material("kenya_body", rough=0.75, image=tex("kenya_body", cv))
-    pc = P.Canvas(64, 64, "#E9C2BC")
-    rr = np.hypot(pc.u - 0.5, pc.v - 0.5)
-    pc.blend(1 - S(0.05, 0.2, rr), "#C99A90")
-    pc.blend(S(0.38, 0.5, rr), "#EBD3CC")
-    polyp_m = C.material("kenya_polyp", rough=0.6, image=tex("kenya_polyp", pc))
-    # tuft prototype: a short stalk quad + 8 splayed single-triangle tentacles (10 tris); seen in the mass they
-    # read as the fuzzy polyp coat of tank_right.jpg rather than the flat 8-point stars of v1 (0.85 cm tentacles)
-    proto = proto_feather(8, 0.25, 0.1, 0.85, 66, 0.1, 1)
+    cv.blend(S(0.25, 0.6, cv.v) * S(0.55, 0.8, spk) * 0.4, "#98808A")
+    cv.blend(S(0.8, 0.97, cv.v), "#D8C4BC")
+    cv.multiply(0.92 + 0.16 * spk)
+    body_m = C.material("kenya_body", rough=0.7, image=tex("kenya_body", cv))
+    fc = feather_canvas("#A27D70", "#AE8A7E", "#A6806F", "#DCC8C0", "#8E6E64", pinnules=8, seed=5,
+                        tip_white="#EFE4DE")
+    polyp_m = C.material("kenya_polyp", rough=0.6, image=tex("kenya_polyp", fc, alpha=True), image_alpha=True,
+                         double=True, clip=True)
+    proto = proto_sprig(3, 1.3, 0.4, 24.0)
     ntri = len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4)
+    ex = {"alphaTest": 0.5, "swayMode": 1}
     root = C.empty("Root")
-    C.set_extras(root, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3)
-    body = g.obj("Body", root, "body", [body_m], smooth=True)
-    pol = polyp_node("Tufts", root, proto, [polyp_m], inst)
-    # LOD1 (Medium / far): decimated body, fewer tufts, same materials
+    C.set_extras(root, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3, swayMode=1)
+    body = g0.obj("Body", root, "body", [body_m], smooth=True, extras={"swayMode": 1})
+    pol = polyp_node("Tufts", root, proto, [polyp_m], inst, extras=ex)
+    # LOD1 (Medium / far): branches without the twig tubes, decimated; fewer sprigs, same materials
     root1 = C.empty("Root")
-    C.set_extras(root1, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3, lod=1)
-    body1 = g.obj("Body", root1, "body", [body_m], smooth=True)
-    C.decimate(body1, KENYA_LOD1_RATIO)
-    pol1 = polyp_node("Tufts", root1, proto, [polyp_m], inst1)
+    C.set_extras(root1, anchor="coral_kenya_main", species="kenya_tree", swayGroups=3, swayMode=1, lod=1)
+    body1 = g1.obj("Body", root1, "body", [body_m], smooth=True, extras={"swayMode": 1})
+    C.decimate(body1, min(1.0, KENYA_LOD1_TRIS / max(g1.tris(), 1)))
+    pol1 = polyp_node("Tufts", root1, proto, [polyp_m], inst1, extras=ex)
     lod1 = (root1, [body1, pol1], {"Tufts": (len(inst1), ntri)})
     return root, [body, pol], {"Tufts": (len(inst), ntri)}, lod1
 

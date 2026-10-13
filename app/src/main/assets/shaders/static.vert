@@ -15,7 +15,9 @@ uniform float uHeight;     // colony height (cm)
 uniform float uExtension;  // 0 retracted .. 1 open
 uniform float uPhase;      // per-colony sway phase
 uniform vec3 uSwayDir;     // unit, horizontal flow direction
-uniform float uSwayAmp;    // cm at the tips (0.08 x height x flow)
+uniform float uSwayAmp;    // cm at the tips (0.08 x height x flow; tree mode: 0.035 x height x flow)
+uniform float uSwayMode;   // 0 legacy sway, 1 branching tree (treeSway in common.glsl; Kenya)
+uniform vec4 uWake;        // tree mode: nearest fish (xyz world cm) and ripple strength (w 0..1)
 #endif
 #ifdef SAND
 // Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus; xz / uSandExtent -> uv.
@@ -36,10 +38,14 @@ void main() {
     // extension: shrink toward the base (retracted colonies are ~55% size)
     p = uBase + (p - uBase) * mix(0.55, 1.0, clamp(uExtension, 0.0, 1.0));
     float h = clamp((p.y - uBase.y) / max(uHeight, 1.0), 0.0, 1.0);
-    float weight = max(aColor.b, h * 0.5);
-    float ph = uTime * 1.3 + p.y * 0.15 + uPhase + aColor.g * 6.2831;
-    p += uSwayDir * sin(ph) * uSwayAmp * weight;
-    p.y -= 0.15 * uSwayAmp * weight * (0.5 + 0.5 * sin(ph * 1.7));
+    if (uSwayMode > 0.5) {
+        p += treeSway(p, uBase, uHeight, uPhase, uSwayDir, uSwayAmp, uWake);
+    } else {
+        float weight = max(aColor.b, h * 0.5);
+        float ph = uTime * 1.3 + p.y * 0.15 + uPhase + aColor.g * 6.2831;
+        p += uSwayDir * sin(ph) * uSwayAmp * weight;
+        p.y -= 0.15 * uSwayAmp * weight * (0.5 + 0.5 * sin(ph * 1.7));
+    }
 #endif
 #ifdef SAND
     // pits, mounds and trails: lift the top surface only (the skirt sits at y = -0.5)

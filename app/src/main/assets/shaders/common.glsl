@@ -121,3 +121,27 @@ float waterPath(vec3 a, vec3 b) {
     float tf = min(min(tmax.x, tmax.y), min(tmax.z, 1.0));
     return max(tf - tn, 0.0) * length(d);
 }
+
+// Branching-tree sway (Kenya tree, extras.swayMode = 1; measured from Tee's clip, research/video/coral_kenya.md [H]):
+// a slow whole-crown lean (period ~7 s) plus a quicker branch-tip sway (~2 s) whose phase lags with distance from the
+// base, a little cross-flow wander, and a brief local ripple round a passing fish (wake.xyz world cm, wake.w 0..1).
+// The stalk and trunk bases (r < ~25 % of the height from uBase) stay put. static.vert (body) and polyp.vert (sprigs,
+// evaluated at the instance base) call it with the same arguments, so the sprigs ride their branch.
+vec3 treeSway(vec3 p, vec3 base, float height, float phase, vec3 dir, float amp, vec4 wake) {
+    float r = clamp(length(p - base) / max(height, 1.0), 0.0, 1.2);
+    float wgt = pow(smoothstep(0.2, 1.0, r), 1.5);
+    float sp = dot(p.xz, vec2(0.23, 0.17));          // neighbouring branches move together, distant ones drift apart
+    float lean = sin(uTime * 0.9 + phase);
+    float tip = sin(uTime * 3.14 + phase * 1.7 + sp - 1.6 * wgt);
+    vec3 side = vec3(-dir.z, 0.0, dir.x);
+    vec3 off = dir * (amp * wgt * (0.65 * lean + 0.35 * tip))
+             + side * (amp * wgt * 0.2 * sin(uTime * 2.3 + sp * 1.3 + phase));
+    off.y -= 0.1 * amp * wgt * (0.5 + 0.5 * lean);
+    if (wake.w > 0.0) {
+        vec3 q = p - wake.xyz;
+        float dq = length(q);
+        float fall = exp(-dq * dq / 30.0);           // ~5.5 cm radius
+        off += (q / max(dq, 0.5)) * (wake.w * fall * wgt * 0.7 * (0.55 + 0.45 * sin(uTime * 7.0 - dq * 1.1)));
+    }
+    return off;
+}
