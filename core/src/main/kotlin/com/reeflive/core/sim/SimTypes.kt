@@ -5,6 +5,7 @@ import com.reeflive.core.geom.Vec3
 /** Sandbox / UI commands (SIMULATION §1.3). Applied at the start of the next behavior tick. */
 sealed class Command {
     data class SetParam(val paramId: String, val value: Double) : Command()
+    /** Drop [grams] of [kind] at [at] (world cm) or the feeding ring; [FoodKind.typicalDoseGrams] is one tap of the button. */
     data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null) : Command()
     data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX) : Command()
     data class Dose(val paramId: String, val delta: Double) : Command()

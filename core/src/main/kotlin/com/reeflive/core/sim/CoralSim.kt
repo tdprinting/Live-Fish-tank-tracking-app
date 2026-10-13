@@ -30,6 +30,8 @@ class Coral(
     var bleachingReported = false
     /** Disturbance (fish contact, food on it) retracts briefly; decays per minute. */
     var disturb = 0.0
+    /** Recently caught food (coral powder, cyclops, plankton; 0..1): a small growth boost that fades over ~2 days. */
+    var fed = 0.0
     /** Degree heating weeks above the bleaching threshold (NOAA logic, research 05 §1). */
     var dhw = 0.0
     /** Acclimated SG / alkalinity / light (rate-of-change shock); NaN until the first chem tick. */

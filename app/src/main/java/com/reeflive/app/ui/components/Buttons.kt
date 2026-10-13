@@ -43,7 +43,10 @@ import com.reeflive.app.ui.theme.ReefTheme
 
 enum class ButtonKind { FILLED, TONAL, OUTLINED, DESTRUCTIVE, CORAL }
 
-/** Pill button family (UI_STYLE §6.3), 48 dp tall, press scale 0.96. */
+/**
+ * Pill button family (UI_STYLE §6.3), 48 dp tall, press scale 0.96 and a water splash from the finger. Takes either a
+ * Material [icon] or one of ReefLive's own [glyph]s (UI_STYLE §5.1).
+ */
 @Composable
 fun ReefButton(
     text: String,
@@ -53,6 +56,7 @@ fun ReefButton(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     compact: Boolean = false,
+    glyph: ReefGlyph? = null,
 ) {
     val c = ReefTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -65,17 +69,32 @@ fun ReefButton(
         ButtonKind.OUTLINED -> Triple(null, c.text, c.glassBorder)
         ButtonKind.DESTRUCTIVE -> Triple(Brush.linearGradient(listOf(c.danger.copy(alpha = 0.16f), c.danger.copy(alpha = 0.16f))), c.dangerText, null)
     }
+    // the glyph accent: coral on glass, a darker ink on the gradient fills so it stays readable
+    val accent = when (kind) {
+        ButtonKind.FILLED, ButtonKind.CORAL -> fg.copy(alpha = 0.55f)
+        ButtonKind.DESTRUCTIVE -> c.danger
+        else -> c.coralSoft
+    }
+    val splash = when (kind) {
+        ButtonKind.FILLED, ButtonKind.CORAL -> Color.White
+        ButtonKind.DESTRUCTIVE -> c.danger
+        else -> c.primaryBright
+    }
     var m = modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .defaultMinSize(minHeight = if (compact) 36.dp else 48.dp)
         .clip(ReefShapes.pill)
     if (bg != null) m = m.background(bg)
     if (border != null) m = m.border(1.dp, border, ReefShapes.pill)
-    m = m.clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+    m = m.tapSplash(interaction, splash, enabled)
+        .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
         .alpha(if (enabled) 1f else 0.45f)
         .padding(horizontal = if (compact) 14.dp else 22.dp, vertical = if (compact) 8.dp else 12.dp)
     Row(m, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        if (icon != null) {
+        if (glyph != null) {
+            Glyph(glyph, size = if (compact) 18.dp else 22.dp, tint = fg, accent = accent)
+            Spacer(Modifier.width(8.dp))
+        } else if (icon != null) {
             Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (compact) 18.dp else 20.dp))
             Spacer(Modifier.width(8.dp))
         }
@@ -104,20 +123,33 @@ fun ReefFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVecto
     }
 }
 
-/** Round glass icon button (48 dp touch target). */
+/** Round glass icon button (48 dp touch target) with a splash on tap; a Material [icon] or a ReefLive [glyph]. */
 @Composable
-fun GlassIconButton(icon: ImageVector, contentDescription: String?, onClick: () -> Unit, modifier: Modifier = Modifier, tint: Color? = null) {
+fun GlassIconButton(
+    icon: ImageVector?,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color? = null,
+    glyph: ReefGlyph? = null,
+) {
     val c = ReefTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.92f else 1f, ReefMotion.spring(ReefTheme.reduceMotion), label = "glassBtn")
     Box(
         modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .size(44.dp)
             .clip(CircleShape)
             .background(c.glass)
             .border(1.dp, c.glassBorder, CircleShape)
-            .clickable(role = Role.Button, onClick = onClick),
+            .tapSplash(interaction, c.primaryBright)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = tint ?: c.text, modifier = Modifier.size(22.dp))
+        if (glyph != null) Glyph(glyph, size = 24.dp, tint = tint ?: c.text, contentDescription = contentDescription)
+        else if (icon != null) Icon(icon, contentDescription = contentDescription, tint = tint ?: c.text, modifier = Modifier.size(22.dp))
     }
 }
 

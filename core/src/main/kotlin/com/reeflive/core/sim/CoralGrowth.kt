@@ -145,6 +145,10 @@ object CoralGrowth {
         CoralKind.GENERIC -> Growth(Form.NONE, 3.0, 0.0)
     }
 
+    /** Growth-vigour boost at full [Coral.fed] (design estimate). */
+
+    const val FED_BOOST = 0.15
+
     const val KENYA_SHED_SIZE = 1.4
     const val KENYA_SHED_PER_DAY = 1.0 / 20
     const val KENYA_MAX_COLONIES = 6
@@ -180,7 +184,9 @@ object CoralGrowth {
         val algae = 1 - c.algaeCover
         val sr = 0.7 + 0.3 * ((w.sr - 4) / 3).coerceIn(0.0, 1.0)
         val ca = if (c.kind == CoralKind.ORGAN_PIPE) WaterSim.calcificationFactor(w) else 0.9 + 0.1 * ((w.ca - 300) / 100).coerceIn(0.0, 1.0)
-        return (health * light * nut * algae * sr * ca).coerceIn(0.0, 1.2)
+        // target feeding (coral powder, cyclops, plankton) adds a little heterotrophic growth (design estimate, ≤ +15 %)
+        val fed = 1.0 + FED_BOOST * c.fed.coerceIn(0.0, 1.0)
+        return (health * light * nut * algae * sr * ca * fed).coerceIn(0.0, 1.2)
     }
 
     /**

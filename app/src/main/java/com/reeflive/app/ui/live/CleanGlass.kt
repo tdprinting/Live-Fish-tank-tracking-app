@@ -13,21 +13,30 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.TouchApp
-import androidx.compose.material3.Icon
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.reeflive.app.ui.components.Glyph
+import com.reeflive.app.ui.components.ReefGlyphs
+import com.reeflive.app.ui.components.tapSplash
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
+import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
 
@@ -38,27 +47,36 @@ import com.reeflive.app.ui.theme.ReefTheme
 @Composable
 fun CleanGlassButton(cleaning: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
+    val reduce = ReefTheme.reduceMotion
     val tone = c.primaryBright
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, ReefMotion.spring(reduce), label = "cleanScale")
+    // the magnet scraper swings down onto the glass while cleaning is on
+    val swing by animateFloatAsState(if (cleaning) -20f else 0f, ReefMotion.bouncy(reduce), label = "flipper")
+    val bg by animateColorAsState(if (cleaning) tone.copy(alpha = 0.22f) else c.glass, ReefMotion.tween(reduce, ReefMotion.FAST), label = "cleanBg")
+    val fg by animateColorAsState(if (cleaning) tone else c.text, ReefMotion.tween(reduce, ReefMotion.FAST), label = "cleanFg")
     Row(
         modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .heightIn(min = 48.dp)
             .clip(ReefShapes.pill)
-            .background(if (cleaning) tone.copy(alpha = 0.22f) else c.glass)
-            .clickable(role = Role.Button, onClickLabel = if (cleaning) "Stop cleaning the glass" else "Clean the glass with the Flipper") { onToggle() }
+            .background(bg)
+            .tapSplash(interaction, tone)
+            .clickable(
+                interactionSource = interaction, indication = null, role = Role.Button,
+                onClickLabel = if (cleaning) "Stop cleaning the glass" else "Clean the glass with the Flipper",
+            ) { onToggle() }
+            .semantics { stateDescription = if (cleaning) "Cleaning" else "" }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            if (cleaning) Icons.Rounded.Check else Icons.Rounded.TouchApp,
-            contentDescription = null,
-            tint = if (cleaning) tone else c.text,
-            modifier = Modifier.size(18.dp),
-        )
+        Glyph(ReefGlyphs.flipper, size = 20.dp, tint = fg, accent = c.coralSoft, modifier = Modifier.graphicsLayer { rotationZ = swing })
         Spacer(Modifier.width(6.dp))
         Text(
             if (cleaning) "Done" else "Clean glass",
             style = MaterialTheme.typography.labelLarge,
-            color = if (cleaning) tone else c.text,
+            color = fg,
         )
     }
 }

@@ -47,10 +47,22 @@ data class SimSpecies(
     val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true)
     val coralKind: CoralKind get() = CoralKind.resolve(id)
 
-    fun eats(food: FoodKind): Boolean = diet.any { it.equals(food.name, ignoreCase = true) } ||
-        (food == FoodKind.PODS && diet.any { it.equals("PODS", true) || it.equals("PARASITES", true) }) ||
-        (food == FoodKind.PRAWN && diet.any { it.equals("MEATY", true) }) ||
-        (food == FoodKind.PLANKTON && diet.any { it.equals("PHYTOPLANKTON", true) || it.equals("ZOOPLANKTON", true) })
+    private fun has(tag: String): Boolean = diet.any { it.equals(tag, ignoreCase = true) }
+
+    /**
+     * Does the sheet's diet list cover [food]? Sheets use food names (FLAKE, MYSIS, BRINE, KRILL, NORI, ...) plus
+     * broader tags (MEATY, ALGAE, SPIRULINA, PLANKTON, PHYTOPLANKTON, ZOOPLANKTON, PODS, PARASITES) that map onto the
+     * particle kinds here.
+     */
+    fun eats(food: FoodKind): Boolean = has(food.name) || when (food) {
+        FoodKind.PODS -> has("PODS") || has("PARASITES")
+        FoodKind.PRAWN, FoodKind.KRILL -> has("MEATY")
+        FoodKind.PLANKTON, FoodKind.CORAL_FOOD -> has("PHYTOPLANKTON") || has("ZOOPLANKTON") || has("PLANKTON")
+        FoodKind.CYCLOPS -> has("ZOOPLANKTON") || has("PODS") || has("PLANKTON")
+        FoodKind.ALGAE_WAFER -> has("SPIRULINA") || has("NORI") || (grazer && has("ALGAE"))
+        FoodKind.FLOATING_PELLET -> has("PELLET")
+        else -> false
+    }
 
     /**
      * How well this species does on [food] (research 04 §15 item 9): [dietMatch] scaled by a
@@ -60,12 +72,28 @@ data class SimSpecies(
         food == FoodKind.PRAWN && brainKind == BrainKind.NASSARIUS -> 1.5
         food == FoodKind.MYSIS && brainKind == BrainKind.CLEANER_SHRIMP -> 1.3
         food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
+        // hawkfish are krill specialists in the shops' experience; grazers prefer a wafer to a pellet (design estimates)
+        food == FoodKind.KRILL && brainKind == BrainKind.HAWK -> 1.3
+        food == FoodKind.ALGAE_WAFER && (brainKind == BrainKind.TANG || brainKind == BrainKind.LAWNMOWER_BLENNY || brainKind == BrainKind.ASTREA) -> 1.2
+        food == FoodKind.CYCLOPS && (brainKind == BrainKind.CARDINAL || brainKind == BrainKind.PEEKER_BLENNY || brainKind == BrainKind.FEATHER_DUSTER) -> 1.2
         else -> 1.0
     }
 
+    /**
+     * 1 = listed in the diet, 0 = ignored, in between = eaten when offered though not a staple: flake for any
+     * mysis/pellet eater, brine shrimp for any mysis eater, krill picked at by smaller mouths, a wafer nibbled by
+     * omnivores and the coral-food cloud by flake eaters (design estimates).
+     */
     fun dietMatch(food: FoodKind): Double = when {
         eats(food) -> 1.0
         food == FoodKind.FLAKE && (eats(FoodKind.MYSIS) || eats(FoodKind.PELLET)) -> 0.5
+        food == FoodKind.BRINE && eats(FoodKind.MYSIS) -> 0.8
+        food == FoodKind.CYCLOPS && (eats(FoodKind.BRINE) || eats(FoodKind.MYSIS)) -> 0.7
+        food == FoodKind.KRILL && eats(FoodKind.MYSIS) -> 0.6
+        food == FoodKind.FLOATING_PELLET && eats(FoodKind.FLAKE) -> 0.6
+        food == FoodKind.ALGAE_WAFER && has("ALGAE") -> 0.4
+        food == FoodKind.ALGAE_WAFER && eats(FoodKind.PELLET) -> 0.25
+        food == FoodKind.CORAL_FOOD && eats(FoodKind.FLAKE) -> 0.3
         else -> 0.0
     }
 
@@ -115,8 +143,11 @@ data class ToleranceRange(
 )
 
 /**
- * Food kinds. [nutrientFactor] converts grams as fed into dry-flake-equivalent grams for the
- * nitrogen/phosphate load (frozen mysis is ~75 % water, nori and live pods are light). (tune)
+ * Food kinds (SIMULATION §4.6 table). [gramsPerParticle] sets how many particles a dose makes, [sinkCmS] the
+ * terminal sink speed, [floatSeconds] how long a buoyant food sits on the surface first, and [nutrientFactor]
+ * converts grams as fed into dry-flake-equivalent grams for the nitrogen/phosphate load (frozen foods are
+ * 75–90 % water; nori and live pods are light). New kinds are appended: the renderer's colour and size
+ * tables are indexed by ordinal.
  */
 enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val floatSeconds: Double, val nutrientFactor: Double) {
     FLAKE(1.0 / 40, 0.6, 45.0, 1.0),
@@ -128,15 +159,92 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
     /** Raw prawn chunk for Nassarius and other scavengers (research 04 §15 item 9, [GS-NAS]); sinks fast. */
     PRAWN(1.0 / 10, 4.0, 0.0, 0.4),
     /** Plankton / phytoplankton dosed near a feather duster's crown ([TFH-SI]); a drifting cloud that does not settle. */
-    PLANKTON(1.0 / 400, 0.1, 0.0, 0.15);
+    PLANKTON(1.0 / 400, 0.1, 0.0, 0.15),
+    /** Frozen adult brine shrimp (Artemia, ~8–10 mm): a slow sinker fish pick off mid-water; mostly water. */
+    BRINE(1.0 / 60, 0.5, 0.0, 0.2),
+    /** Frozen krill pieces (Euphausia): bigger meaty chunks for hawkfish, dottybacks, shrimp and scavengers. */
+    KRILL(1.0 / 8, 2.5, 0.0, 0.35),
+    /** Floating pellets: sit on the surface for minutes, then waterlog and sink slowly (design estimate). */
+    FLOATING_PELLET(1.0 / 20, 1.5, 300.0, 1.0),
+    /** Sinking algae wafer for snails, hermits, blennies and the tang: drops fast, holds together for hours. */
+    ALGAE_WAFER(1.0 / 6, 3.5, 0.0, 1.0),
+    /** Coral food powder (Reef-Roids class, ~150–200 µm): a fine suspended cloud corals and filter feeders catch. */
+    CORAL_FOOD(1.0 / 300, 0.05, 0.0, 1.0),
+    /** Frozen Cyclops ("Cyclop-eeze", ~0.8 mm red copepods): drifts; small-mouthed fish and filter feeders love it. */
+    CYCLOPS(1.0 / 250, 0.15, 0.0, 0.3);
 
-    /** Drifting live/suspended foods (pods, plankton): advected by the flow, never settle on rock or sand. */
-    val suspended: Boolean get() = this == PODS || this == PLANKTON
+    /** Drifting live/suspended foods: advected by the flow, never settle on rock or sand. */
+    val suspended: Boolean get() = this == PODS || this == PLANKTON || this == CORAL_FOOD || this == CYCLOPS
+
+    /** Sits on the surface for [floatSeconds] before sinking (flake, floating pellets). */
+    val floats: Boolean get() = floatSeconds > 0.0
+
+    /** Fine suspended foods that coral polyps and feather dusters catch out of the water column. */
+    val coralCatchable: Boolean get() = this == CORAL_FOOD || this == CYCLOPS || this == PLANKTON || this == PODS
+
+    /** Uneaten particles expire to detritus after this long (SIMULATION §4.6): 20 min, 30 min drifting, 3 h for a wafer. */
+    val lifeSeconds: Double get() = when {
+        this == ALGAE_WAFER -> 3 * 3600.0
+        suspended -> 1800.0
+        else -> 1200.0
+    }
+
+    /** Grams one tap of the feed button drops (a pinch, a cube, a sheet, a small dose of powder). */
+    val typicalDoseGrams: Double get() = when (this) {
+        PLANKTON -> 0.2
+        PODS, CORAL_FOOD -> 0.3
+        CYCLOPS, ALGAE_WAFER -> 0.5
+        else -> 1.0
+    }
+
+    val group: FoodGroup get() = when (this) {
+        FLAKE, PELLET, FLOATING_PELLET -> FoodGroup.DRY
+        MYSIS, BRINE, KRILL, PRAWN -> FoodGroup.FROZEN
+        NORI, ALGAE_WAFER -> FoodGroup.GREENS
+        PODS, PLANKTON, CORAL_FOOD, CYCLOPS -> FoodGroup.TINY
+    }
+
+    /** Plain-words name for buttons and toasts. */
+    val label: String get() = when (this) {
+        FLAKE -> "Flakes"
+        MYSIS -> "Mysis shrimp"
+        PELLET -> "Sinking pellets"
+        NORI -> "Nori sheet"
+        PODS -> "Live pods"
+        PRAWN -> "Prawn chunk"
+        PLANKTON -> "Phytoplankton"
+        BRINE -> "Brine shrimp"
+        KRILL -> "Krill"
+        FLOATING_PELLET -> "Floating pellets"
+        ALGAE_WAFER -> "Algae wafer"
+        CORAL_FOOD -> "Coral food"
+        CYCLOPS -> "Cyclops"
+    }
+
+    /** One line a child can read: who eats it and what it does in the water. */
+    val blurb: String get() = when (this) {
+        FLAKE -> "Floats first, then sinks. Most fish grab some."
+        MYSIS -> "Frozen little shrimp. The favourite of nearly every fish."
+        PELLET -> "Sinks fast so bottom fish and shrimp get a share."
+        NORI -> "Seaweed on a clip. The tang and blennies nibble it all day."
+        PODS -> "Tiny live bugs. The wrasse and cardinal pick them out of the water."
+        PRAWN -> "A chunk of raw prawn for the snails and crabs on the sand."
+        PLANKTON -> "Green water for the feather duster and the corals."
+        BRINE -> "Frozen orange shrimp. Easy to eat, but mostly water."
+        KRILL -> "Chunky red shrimp. Hawkfish and shrimp love it."
+        FLOATING_PELLET -> "Stays on top a while. Clownfish come up to grab them."
+        ALGAE_WAFER -> "A green disc that sinks. Snails and hermits crowd round it."
+        CORAL_FOOD -> "Fine powder that corals catch with their polyps."
+        CYCLOPS -> "Tiny red bugs. Small fish and corals snap them up."
+    }
 
     companion object {
         fun of(s: String): FoodKind = entries.firstOrNull { it.name.equals(s, true) } ?: FLAKE
     }
 }
+
+/** Shelf the food comes from, for grouping the picker. */
+enum class FoodGroup(val label: String) { FROZEN("Frozen"), DRY("Dry"), GREENS("Greens"), TINY("Tiny & live") }
 
 /**
  * Behaviour archetype. Resolved from the sheet's `brain` field or the scientific genus in the id,

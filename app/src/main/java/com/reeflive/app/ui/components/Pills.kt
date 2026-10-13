@@ -2,7 +2,6 @@ package com.reeflive.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -125,7 +124,8 @@ fun ReefChip(
             .clip(ReefShapes.pill)
             .background(bg)
             .border(1.dp, border, ReefShapes.pill)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Checkbox, onClick = onClick)
+            .tapSplash(interaction, accent ?: c.primaryBright)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Checkbox, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -152,13 +152,15 @@ fun SegmentedPills(
         options.forEachIndexed { i, label ->
             val sel = i == selected
             val bg by animateColorAsState(if (sel) c.primary.copy(alpha = 0.28f) else Color.Transparent, ReefMotion.tween(ReefTheme.reduceMotion, ReefMotion.FAST), label = "seg")
+            val interaction = remember { MutableInteractionSource() }
             Box(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 36.dp)
                     .clip(ReefShapes.pill)
                     .background(bg)
-                    .clickable(role = Role.Tab) { onSelect(i) }
+                    .tapSplash(interaction, selectedColor ?: c.primaryBright)
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Tab) { onSelect(i) }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
