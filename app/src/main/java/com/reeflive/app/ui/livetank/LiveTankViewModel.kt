@@ -6,6 +6,7 @@ import com.reeflive.app.live.SimMode
 import com.reeflive.app.live.SimulationHolder
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.ui.live.SandboxControlMode
+import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
 import com.reeflive.app.ui.nav.LiveFocus
@@ -13,11 +14,15 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.Scenario
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.GlassPane
+import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
+import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseSpec
 import com.reeflive.core.sim.timelapse.TimelapseState
@@ -154,7 +159,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
      * hold, or a one-hour spike that returns to [current]. [rowId] keys values the snapshot doesn't carry.
      */
     fun applyParam(rowId: String, simId: String, value: Double, current: Double, mode: SandboxControlMode) = sandbox {
-        if (rowId in DEFAULT_EXTRAS) _extras.value = _extras.value + (rowId to (if (rowId.startsWith("pump_")) (if (value >= 0.5) 1.0 else 0.0) else value))
+        if (rowId in DEFAULT_EXTRAS) _extras.value = _extras.value + (rowId to (if (rowId.startsWith("pump_") || rowId in TOGGLE_DEFAULTS) (if (value >= 0.5) 1.0 else 0.0) else value))
         if (rowId == "light") _lightPct.value = value * 100.0
         when (mode) {
             SandboxControlMode.SET -> holder.enqueue(Command.SetParam(simId, value))
@@ -196,6 +201,18 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         if (_selectedOrganismId.value == id) select(null)
     }
     fun runScenario(s: Scenario) = sandbox { holder.runScenario(s) }
+
+    // pests, treatments, maintenance (sandbox only)
+    fun addAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.AddAiptasia(count)) }
+    fun removeAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.RemoveAiptasia(count)) }
+    fun addPestControl(controller: PestController, count: Int = 1) = sandbox { holder.enqueue(Command.AddPestControl(controller, count)) }
+    /** Starts [kind] for its default duration (UV runs until stopped) on every fish. */
+    fun startTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StartTreatment(kind)) }
+    fun stopTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StopTreatment(kind)) }
+    /** Infects a random fish with [disease] (test aid). */
+    fun infect(disease: Disease) = sandbox { holder.enqueue(Command.Infect(null, disease)) }
+    fun maintain(task: MaintenanceTask) = sandbox { holder.enqueue(Command.Maintain(task)) }
+    fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
     fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }
 
@@ -234,6 +251,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
             id.startsWith("pump_") -> holder.enqueue(Command.SetParam(PUMP_IDS.getValue(id), v))
             id.startsWith("spectrum_") -> holder.enqueue(Command.SetParam("spectrum." + id.removePrefix("spectrum_"), v))
         }
+        for ((id, v) in TOGGLE_DEFAULTS) SandboxParams.byId(id)?.simId?.let { holder.enqueue(Command.SetParam(it, v)) }
         _predation.value = true
         holder.resetSandbox()
         // ResetToReality restores water and livestock; also undo the overrides that live outside them
@@ -246,10 +264,15 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         const val HUD_PERIOD_MS = 100L   // 10 Hz
         const val REAL_SAMPLE_MS = 500L
         val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")
+        /** On/off sandbox rows (equipment, unproven scenarios) → default; the skimmer is the only one that starts on. */
+        val TOGGLE_DEFAULTS: Map<String, Double> = mapOf(
+            "eq_skimmer" to 1.0, "eq_sock" to 0.0, "eq_carbon" to 0.0, "eq_refugium" to 0.0, "eq_uv" to 0.0,
+            "sc_asterina_coral" to 0.0, "sc_crab_predation" to 0.0,
+        )
         val DEFAULT_EXTRAS: Map<String, Double> = mapOf(
             "photoperiod" to com.reeflive.core.sim.LightSchedule.DEFAULT_PHOTOPERIOD_H,
             "pump_left" to 1.0, "pump_right" to 1.0,
             "spectrum_royal" to 1.0, "spectrum_blue" to 1.0, "spectrum_white" to 1.0, "spectrum_violet" to 1.0,
-        )
+        ) + TOGGLE_DEFAULTS
     }
 }

@@ -70,6 +70,10 @@ import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.sim.Disease
+import com.reeflive.core.sim.MaintenanceTask
+import com.reeflive.core.sim.PestController
+import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 
 // ---------------------------------------------------------------- state
@@ -139,6 +143,15 @@ data class SandboxActions(
     val onTimelapse: () -> Unit = {},
     /** "Add life" gallery: add [count] of a species to the sandbox. */
     val onAddMany: (speciesId: String, count: Int) -> Unit = { _, _ -> },
+    /** "Pests & treatments" tab. */
+    val onAddAiptasia: () -> Unit = {},
+    val onRemoveAiptasia: () -> Unit = {},
+    val onAddPestControl: (PestController) -> Unit = {},
+    val onStartTreatment: (TreatmentKind) -> Unit = {},
+    val onStopTreatment: (TreatmentKind) -> Unit = {},
+    val onInfect: (Disease) -> Unit = {},
+    val onMaintain: (MaintenanceTask) -> Unit = {},
+    val onAddSpareShells: () -> Unit = {},
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */
@@ -213,6 +226,7 @@ fun SandboxDock(
             ) {
                 when (state.category) {
                     SandboxCategory.EVENTS -> EventsContent(state, actions)
+                    SandboxCategory.PESTS -> PestsContent(state, actions)
                     SandboxCategory.STOCK -> StockGallery(state.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
                     else -> ParamsContent(state, actions)
                 }
@@ -310,6 +324,44 @@ private fun ParamsContent(state: SandboxPanelState, actions: SandboxActions) {
         SubHeader("Coming soon")
         pending.forEach { def -> ParamSlider(def, state, actions) }
     }
+}
+
+/** "Pests & treatments": one-tap actions first, then the equipment and scenario on/off rows. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PestsContent(state: SandboxPanelState, actions: SandboxActions) {
+    SubHeader("Pests")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ReefButton("Add aiptasia", actions.onAddAiptasia, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Remove aiptasia", actions.onRemoveAiptasia, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Add peppermint shrimp", { actions.onAddPestControl(PestController.PEPPERMINT_SHRIMP) }, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Add Berghia", { actions.onAddPestControl(PestController.BERGHIA) }, kind = ButtonKind.TONAL, compact = true)
+    }
+
+    SubHeader("Treatments")
+    Text("Start runs each treatment for its default length; UV runs until stopped.", style = MaterialTheme.typography.labelMedium, color = ReefTheme.colors.textSecondary)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TreatmentKind.values().forEach { k -> ReefChip("Start ${k.label}", selected = false, onClick = { actions.onStartTreatment(k) }) }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TreatmentKind.values().forEach { k -> ReefChip("Stop ${k.label}", selected = false, onClick = { actions.onStopTreatment(k) }) }
+    }
+
+    SubHeader("Infect a random fish (test)")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Disease.values().forEach { d -> ReefChip(d.name.take(1) + d.name.drop(1).lowercase(), selected = false, onClick = { actions.onInfect(d) }) }
+    }
+
+    SubHeader("Maintenance")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ReefButton("Change sock", { actions.onMaintain(MaintenanceTask.CHANGE_SOCK) }, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Replace carbon", { actions.onMaintain(MaintenanceTask.REPLACE_CARBON) }, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Harvest macro", { actions.onMaintain(MaintenanceTask.HARVEST_MACRO) }, kind = ButtonKind.TONAL, compact = true)
+        ReefButton("Add spare shells", actions.onAddSpareShells, kind = ButtonKind.TONAL, compact = true)
+    }
+
+    SubHeader("Equipment & scenarios")
+    ParamsContent(state, actions)
 }
 
 @Composable
