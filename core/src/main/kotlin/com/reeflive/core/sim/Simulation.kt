@@ -72,6 +72,8 @@ class Simulation(
     @Ev(Evidence.DESIGN_ESTIMATE, "11 §7") var asterinaCorallivoryScenario = false
     /** Shrimp pairing, molt-linked mating and egg carrying (research 12). */
     val shrimpBreeding = ShrimpBreeding(this)
+    /** Sim time of the last [Command.RearrangeRock]; territorial bouts run hot for a day after it (06 §3.3). */
+    var territoryResetAt = -1e12
     /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
     var nightPlanktonPerHour = 60.0
     private var planktonAcc = 0.0
@@ -262,6 +264,8 @@ class Simulation(
         simTimeSec += simDt
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
+        // every step (cheap), so the multiplier is right from the first bout and follows adds and deaths at once
+        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
@@ -453,7 +457,6 @@ class Simulation(
         // health
         val night = light < LightSchedule.LIGHTS_ON
         val fishCount = organisms.count { it.alive && it.isFish }
-        crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         expireTreatments()
         val infectedAll = HashMap<Disease, Double>()
         for (x in organisms) if (x.alive) x.disease?.let { infectedAll[it] = (infectedAll[it] ?: 0.0) + x.diseaseStage }
@@ -967,8 +970,10 @@ class Simulation(
 
     /** Rock rearrangement (06 §3.3): territories re-anchor, familiarity falls to 0.5, intrusion memory clears. */
     private fun rearrangeRock() {
+        territoryResetAt = simTimeSec
         for (o in organisms) {
-            for (r in o.relations.values) { r.familiarity = min(r.familiarity, 0.5); r.intrusions = 0.0 }
+            // individuals still recognise each other (familiarity 0.5, not 0; 06 §3.3); intrusion memory is kept
+            for (r in o.relations.values) r.familiarity = min(r.familiarity, 0.5)
             agents[o]?.brain?.utility?.behaviors?.forEach { (it as? com.reeflive.core.ai.PairBouts)?.reset() }
         }
         emit(SimEvent.TerritoryReset(simTimeSec))

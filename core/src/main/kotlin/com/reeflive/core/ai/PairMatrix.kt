@@ -134,12 +134,18 @@ object PairMatrix {
     /** Tactile cleaning damping (S:Cheney08: chases cut by two-thirds). */
     const val AGG_DAMP = 0.35
     const val AGG_DAMP_S = 20 * 60.0
+    /** Peak bout multiplier right after a RearrangeRock, and its decay time constant [I]. */
+    const val REARRANGE_MULT = 3.0
+    const val REARRANGE_TAU_S = 12 * 3600.0
 
     fun crowding(sim: Simulation): Double {
         var sum = 0.0
         for (o in sim.organisms) if (o.alive && o.isFish) sum += o.lengthCm * o.lengthCm
         return sum / (sim.rock.lengthCm * sim.rock.widthCm)
     }
+
+    /** Bout-rate multiplier [dt] seconds after a RearrangeRock: 1 + 2·e^(−dt / 12 h) [I]. */
+    fun rearrangeMult(dt: Double): Double = if (dt < 0) 1.0 else 1 + (REARRANGE_MULT - 1) * kotlin.math.exp(-dt / REARRANGE_TAU_S)
 
     fun crowdingMult(c: Double): Double = (1 + CROWDING_GAIN * (c - CROWDING_BASE)).coerceIn(0.5, 2.5)
 }
@@ -180,7 +186,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     private class Pending(val row: PairRow, val target: Organism, val latency: Double)
 
     private val entries = HashMap<String, HashMap<String, Entry>>()   // row id → target id → entry
-    /** Row id → rate-cap token bucket (refills at the row's current hourly cap, holds [BURST]). */
+    /** Row id → rate-cap token bucket (refills at the row's current hourly cap, holds max([BURST], cap × [BURST_H])). */
     private class Bucket(var tokens: Double, var t: Double)
     private val buckets = HashMap<String, Bucket>()
     private var scanAt = 0.0
@@ -225,6 +231,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             for (t in c.p.neighbors(a, radius)) {
                 if (t.posture == 3 && t.brainKind != BrainKind.CLOWN) continue   // safe in its own hole
                 if (t.pos.distanceTo(a) > radius || !PairMatrix.targetMatches(r, o, t)) continue
+                // a settled standoff partitions the rock: past familiarity 0.6 only a close approach to the
+                // cave counts, the halo shrinking to 40 % at familiarity 1 (06 §2.3) [I]
+                if (r.type == "standoff" && t.pos.distanceTo(a) > radius * standoffReach(Social.familiarity(o, t, c.t))) continue
                 if (r.type == "dominance" && !ClownQueue.isDominant(o, sim)) continue
                 inside += t.id
                 val e = map.getOrPut(t.id) {
@@ -234,7 +243,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                     Entry(c.t, r.lingerS * sensitisation(r, o, t))
                 }
                 if (pending == null && active == null && c.t - e.since >= e.linger && c.t >= e.nextRoll) {
-                    e.nextRoll = c.t + REROLL_S
+                    // once a minute; a sensitised host defender re-decides far sooner (latency factor², 60 s → 5 s
+                    // by the third intrusion; S:Fleming24 latency −60–76 %)
+                    e.nextRoll = c.t + REROLL_S * sensitisation(r, o, t).let { it * it }
                     val p = probability(c, r, t)
                     if (c.rng.chance(p)) {
                         val lat = when {
@@ -256,6 +267,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         }
     }
 
+    /** Fraction of the trigger radius a standoff row still watches at familiarity [fam]: 1 up to 0.6, 0.4 at 1. */
+    fun standoffReach(fam: Double): Double = 1 - 1.5 * (fam - 0.6).coerceIn(0.0, 0.4)
+
     /** Latency factor after repeated intrusions: 1 → 0.3 by the third entry (sensitising rows only). */
     fun sensitisation(r: PairRow, o: Organism, t: Organism): Double {
         if (!r.sensitise) return 1.0
@@ -269,19 +283,33 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         val fam = Social.familiarity(o, t, c.t)
         // hourly cap: new pair → maxRate, familiar → floorRate
         var cap = r.floorRatePerH + (r.maxRatePerH - r.floorRatePerH) * (1 - fam)
+        // a pair of strangers, either one new in its first day: the hierarchy is still being settled
+        val newcomer = c.t - t.arrivalTime < 86400 && fam < 0.5
+        val strangers = fam < 0.5 && (newcomer || c.t - o.arrivalTime < 86400)
         // tactile damping cuts the bout rate, not only the per-entry odds: a rate-capped holder (the host
-        // clown sees an intruder every few seconds) otherwise ignores the cleaner (S:Cheney08, 06 §3.5)
-        if (o.aggressionDampUntil > c.t) cap *= PairMatrix.AGG_DAMP
+        // clown sees an intruder every few seconds) otherwise ignores the cleaner (S:Cheney08, 06 §3.5).
+        // It calms known neighbours; between strangers the newcomer fights go ahead (S:Townsend04's 90 % and
+        // the newcomer accounts of S:H-FC-dotty come from reefs and tanks with cleaners) [I]. The clown pair's
+        // dominance quiver is hierarchy upkeep, not aggression, and is left alone.
+        val damped = o.aggressionDampUntil > c.t && !strangers && r.type != "dominance"
+        if (damped) cap *= PairMatrix.AGG_DAMP
+        // rearranged rock resets every boundary: each holder is a newcomer to its own patch, so bout rate and
+        // odds run up to ×3, fading over a day (06 §3.3 newcomer ×2–3 for ~24 h; S:H-FC-dotty) [I]
+        val reset = if (r.type == "dominance") 1.0 else PairMatrix.rearrangeMult(c.t - c.sim.territoryResetAt)
+        cap *= reset
         // a token bucket rather than a sliding hour, so the cap follows the damping as it comes and goes
         if (cap > 0) {
-            val bk = buckets.getOrPut(r.id) { Bucket(BURST, c.t) }
-            bk.tokens = min(BURST, bk.tokens + max(0.0, c.t - bk.t) * cap / 3600)
+            // holds a quarter-hour of the cap (≥ 1): room for a short escalation (repeated intrusions, a newcomer)
+            // without lifting the long-run rate
+            val burst = max(BURST, cap * BURST_H)
+            val bk = buckets.getOrPut(r.id) { Bucket(burst, c.t) }
+            bk.tokens = min(burst, bk.tokens + max(0.0, c.t - bk.t) * cap / 3600)
             bk.t = c.t
             if (bk.tokens < 1) return 0.0
         }
         var p = r.pEvent * (1 - r.habituation * fam)
-        val newcomer = c.t - t.arrivalTime < 86400 && fam < 0.5
         if (newcomer) p *= r.newcomerMult
+        p *= reset
         if (r.sensitise) p *= 1 + min(1.0, max(0.0, ((o.relations[t.id]?.intrusions ?: 1.0) - 1) / 2))
         if (r.hungerScaled) {
             // normalised so an ordinary appetite (hunger ≥ 0.5) gives the sourced 90 % (07 gap 1); well fed → calmer
@@ -292,9 +320,7 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
         if (r.type == "dominance" && ClownQueue.ratio(c.sim) < ClownQueue.STABLE_RATIO) p *= 2.0
         val temper = (o.aggression / o.species.temperament.aggression.coerceAtLeast(0.05)).coerceIn(0.7, 1.3)
         p *= temper * StressModel.aggressionMult(o, o.lastTempC) * c.sim.crowdingMult
-        // tactile damping lowers the odds against known neighbours; a stranger in the first day still draws the
-        // full response (S:Townsend04's 90 % is a field figure, with cleaners present) and is limited by the cap alone
-        if (o.aggressionDampUntil > c.t && !newcomer) p *= PairMatrix.AGG_DAMP
+        if (damped) p *= PairMatrix.AGG_DAMP
         // a much higher-ranked target is only displayed at (size > residency > history; S:Poulos16)
         if (r.type != "dominance" && PairMatrix.rankEff(t, c.sim) > PairMatrix.rankEff(o, c.sim) + 1.5) p *= 0.3
         return p.coerceIn(0.0, 1.0)
@@ -392,7 +418,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     companion object {
         const val REROLL_S = 60.0
         /** Bouts a row may run back to back before the hourly cap paces it. */
-        const val BURST = 2.0
+        const val BURST = 1.0
+        /** ... or this many hours of the cap, if more. */
+        const val BURST_H = 0.25
     }
 }
 

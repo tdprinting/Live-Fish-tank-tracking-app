@@ -116,7 +116,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c02
     /** 06 §5.6 #2: three host intrusions in 10 min; third bout latency ≤ 40 % of the first, bouts per entry ≥ 1.5×. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c02_hostDefenceSensitisation() {
         var lat1 = 0.0; var lat3 = 0.0; var nLat = 0
         var bouts1 = 0; var bouts3 = 0
@@ -257,7 +256,6 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c08
     /** 06 §5.6 #8: a new dottyback's bouts with the clowns fall from ≥ 2/h on day 1 to ≤ 0.5/h by day 7, mostly display. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c08_dottybackStandoff() {
         val sim = tank(stockWithout("dottyback"), hour = 10.0)
         sim.enqueue(Command.AddOrganism("pseudochromis_indigo", 6.0, "Newdot"))
@@ -562,18 +560,18 @@ class RealismAcceptanceTest {
     // ------------------------------------------------------------------ c20
     /** 06 §5.6 #20: RearrangeRock → bouts in the next 6 h ≥ 2× the pre-command rate, ≤ 1.2× by 72 h. */
     @Test
-    @Ignore("WIP: not yet passing (sim/realism handoff)")
     fun c20_rockRearrangement() {
-        fun rate(sim: Simulation, hours: Double) = chases(sim.run(hours * 3600)).size / hours
         var pre = 0.0; var post = 0.0; var late = 0.0
         for (seed in 1L..2L) {
             val sim = tank(seed = seed, hour = 10.0)
-            pre += rate(sim, 2.0)
+            pre += chases(sim.run(2 * 3600.0)).size / 2.0
             sim.enqueue(Command.RearrangeRock)
-            post += rate(sim, 2.0)
-            assertTrue("territory reset event", sim.eventLog.any { it is SimEvent.TerritoryReset })
+            // read the reset from the run's own events: the 200-entry eventLog has rolled over by the end of a busy 2 h
+            val ev = sim.run(2 * 3600.0)
+            post += chases(ev).size / 2.0
+            assertTrue("territory reset event", ev.any { it is SimEvent.TerritoryReset })
             sim.advanceAbstract(68 * 3600.0)
-            late += rate(sim, 2.0)
+            late += chases(sim.run(2 * 3600.0)).size / 2.0
         }
         assertTrue("pre $pre post $post", post >= 2 * pre)
         assertTrue("pre $pre after 72 h $late", late <= 1.2 * pre)
