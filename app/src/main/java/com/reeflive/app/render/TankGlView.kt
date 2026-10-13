@@ -32,7 +32,7 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         renderer = TankRenderer(context, quality)
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
-        touch = TouchController(context, renderer.input)
+        touch = TouchController(context, this, renderer.input)
     }
 
     /** Polled on the GL thread once per frame; must be thread-safe (e.g. `AtomicReference::get`). */
@@ -63,6 +63,7 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        touch.release()
         renderer.shutdown()
     }
 

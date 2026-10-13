@@ -22,6 +22,9 @@ layout(std140) uniform Frame {
     vec4 uAlgaeSand;     // x diatoms, y cyano, z dinos, w hair
     vec4 uAlgaeTop;      // rock tops: x hair, y cyano, z dinos, w bubble
     vec4 uAlgaeShade;    // shaded rock: x coralline, y cyano, z dinos, w bubble
+    // Realism effects by quality tier (FrameUniforms.setEffects / setCasters).
+    vec4 uFx;            // x contact-shadow caster count, y light-shaft strength, z caustic dispersion (0/1), w surface ripple
+    vec4 uCasters[12];   // fish casting soft contact shadows: xyz mid-body (cm), w body length (cm)
 };
 
 #define uTime uCamPos.w
@@ -33,6 +36,10 @@ layout(std140) uniform Frame {
 #define uAlgaeBloom uParams2.y
 #define uFlowStrength uParams2.z
 #define uBlueFraction uAmbientB.w
+#define uCasterCount uFx.x
+#define uShaftStrength uFx.y
+#define uCausticDispersion uFx.z
+#define uRipple uFx.w
 
 const float PI = 3.14159265;
 

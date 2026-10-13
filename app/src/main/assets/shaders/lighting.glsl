@@ -57,19 +57,75 @@ float causticAt(vec3 p, vec3 n) {
     return c * max(n.y, 0.0) * lightIntensity() * exp(-0.012 * depth);
 }
 
-// Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics.
+// Hue of the live fixture light, normalised so its brightest channel is 1 (follows the AI Prime schedule).
+vec3 lightTint() {
+    vec3 s = uLightColor[0].rgb + uLightColor[1].rgb;
+    return s / max(max(s.r, max(s.g, s.b)), 1e-3);
+}
+
+// Stronger caustics, tinted by the live light: two scrolling samples of the shared tile refracted by the surface
+// slope. High quality splits the second sample per channel (dispersion: thin colour fringes on the bright lines).
+// Faces that look sideways still catch a little of the pattern.
+vec3 causticColor(vec3 p, vec3 n) {
+    if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
+    float depth = max(uWaterLevel - p.y, 0.0);
+    vec2 refr = surfaceSlope(p.xz) * depth * 0.6;
+    vec2 uv = (p.xz + refr) * uCausticScale;
+    float t = uTime;
+    vec2 uvA = uv + t * vec2(0.013, 0.008);
+    vec2 uvB = uv * 1.7 - t * vec2(0.010, -0.014);
+    float a = texture(uCaustic, uvA).r;
+    vec3 b;
+    if (uCausticDispersion > 0.5) {
+        vec2 disp = vec2(0.0035, 0.0025) * (1.0 + depth * 0.03);
+        b = vec3(texture(uCaustic, uvB + disp).r, texture(uCaustic, uvB).r, texture(uCaustic, uvB - disp).r);
+    } else {
+        b = vec3(texture(uCaustic, uvB).r);
+    }
+    vec3 c = pow(a * b, vec3(1.25)) * 5.0;
+    float facing = clamp(n.y * 0.85 + 0.15, 0.0, 1.0);
+    return c * lightTint() * (facing * lightIntensity() * exp(-0.010 * depth));
+}
+
+// Soft contact shadows under the nearest fish (uCasters): a blob below each body that widens and fades with height.
+// Static receivers only (fish.frag defines NO_CONTACT_SHADOW so a fish does not shadow itself).
+float contactShadow(vec3 p) {
+    float occ = 0.0;
+    int n = int(uCasterCount + 0.5);
+    for (int i = 0; i < 12; i++) {
+        if (i >= n) break;
+        vec4 c = uCasters[i];
+        float h = c.y - p.y;
+        if (h < -0.5 || h > 32.0) continue;
+        vec2 d = p.xz - c.xz;
+        float r = max(c.w * 0.3, 0.8) + max(h, 0.0) * 0.12;
+        float d2 = dot(d, d) / (r * r);
+        if (d2 > 4.0) continue;
+        float blob = exp(-d2 * 1.4);
+        float fade = smoothstep(-0.5, 0.6, h) * (1.0 - smoothstep(3.0, 32.0, h));
+        occ = max(occ, blob * fade);
+    }
+    return 1.0 - 0.6 * occ;
+}
+
+// Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics; direct light and
+// caustics are dimmed under nearby fish (contact shadows).
 vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float f0, float wrap, float specScale) {
     vec3 col = hemiAmbient(N) * albedo * ao;
+    vec3 direct = vec3(0.0);
     for (int i = 0; i < 2; i++) {
         vec3 L;
         vec3 rad = fixtureLight(i, p, L);
         float ndl = dot(N, L);
         float diff = max((ndl + wrap) / (1.0 + wrap), 0.0);
         float spec = ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), f0) * max(ndl, 0.0);
-        col += rad * (albedo * diff + vec3(spec * specScale));
+        direct += rad * (albedo * diff + vec3(spec * specScale));
     }
-    col += albedo * causticAt(p, N) * uCausticStrength;
-    return col;
+    direct += albedo * causticColor(p, N) * uCausticStrength;
+#ifndef NO_CONTACT_SHADOW
+    if (uCasterCount > 0.5) direct *= contactShadow(p);
+#endif
+    return col + direct;
 }
 
 // Beer-Lambert spectral attenuation along the in-water part of the view path + depth fog toward the

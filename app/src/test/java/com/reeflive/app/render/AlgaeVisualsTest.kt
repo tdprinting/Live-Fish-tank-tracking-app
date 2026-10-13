@@ -70,16 +70,23 @@ class AlgaeVisualsTest {
         val body = src.substringAfter("uniform Frame {").substringBefore("};")
         var floats = 0
         var algaeAt = -1
+        var fxAt = -1
+        var castersAt = -1
         val member = Regex("""^\s*(mat4|vec4)\s+(\w+)(\[(\d+)])?\s*;""")
         for (line in body.lines()) {
             val m = member.find(line) ?: continue
             val size = if (m.groupValues[1] == "mat4") 16 else 4
             if (m.groupValues[2] == "uAlgaeGlass") algaeAt = floats
+            if (m.groupValues[2] == "uFx") fxAt = floats
+            if (m.groupValues[2] == "uCasters") castersAt = floats
             floats += size * (m.groupValues[4].toIntOrNull() ?: 1)
         }
         assertEquals(FrameUniforms.FLOATS, floats)
         assertEquals(FrameUniforms.ALGAE_OFFSET, algaeAt)
-        assertEquals(AlgaeVisuals.FLOATS, FrameUniforms.FLOATS - FrameUniforms.ALGAE_OFFSET)
+        assertEquals(AlgaeVisuals.FLOATS, FrameUniforms.FX_OFFSET - FrameUniforms.ALGAE_OFFSET)
+        assertEquals(FrameUniforms.FX_OFFSET, fxAt)
+        assertEquals(FrameUniforms.CASTER_OFFSET, castersAt)
+        assertEquals(FrameUniforms.FLOATS, FrameUniforms.CASTER_OFFSET + FrameUniforms.MAX_CASTERS * 4)
         val names = Regex("""vec4\s+(uAlgae\w+)\s*;""").findAll(body).map { it.groupValues[1] }.toList()
         assertEquals(listOf("uAlgaeGlass", "uAlgaeSand", "uAlgaeTop", "uAlgaeShade"), names)
     }

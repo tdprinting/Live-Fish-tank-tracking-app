@@ -51,6 +51,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var post: PostFx? = null
     private var particlesGl: ParticleRenderer? = null
     private var shafts: LightShafts? = null
+    /** Marine snow and the follow lens (camera / lighting work, kept apart from the scene drawing). */
+    private var snow: MarineSnow? = null
+    private val lens = LensState()
+    private var postFailed = false
     private var placeholder: Mesh? = null
     private var white: Texture? = null
     private var flatNormal: Texture? = null
@@ -129,8 +133,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         glassMaskTex = null; glassMaskData = null; glassMaskOn = false
         val (v, i) = Placeholder.spindle()
         placeholder = Mesh.create(v, i)
-        post = if (quality.bloom) runCatching { PostFx(source, quality.msaa) }.onFailure { Log.e(Gl.TAG, "PostFx", it) }.getOrNull() else null
-        post?.resize(width, height)
+        postFailed = false
+        post = if (quality.bloom) createPost() else null
+        snow = MarineSnow()
         // kick off the static scene and shared textures
         SCENE_MODELS.forEach { store.model(it) }
         SHARED_TEXTURES.forEach { store.texture(it) }
@@ -142,6 +147,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
         shafts?.release(); shafts = null
+        snow?.release(); snow = null
         placeholder?.release(); placeholder = null
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
@@ -173,9 +179,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val light = LightingState.from(cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input)
-        val taps = input.drain(camera, height.toFloat())
+        val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         for (t in taps) handleTap(t, rigs)
+        updateLens(dt)
         if (cleaning) dragFlipper(dt)
 
         // 3. per-frame uniforms + shared textures
@@ -183,13 +190,15 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         updateGlassMask(cur)
         val fu = frame ?: return
         val progs = programs ?: return
+        fu.setEffects(quality)
+        fu.setCasters(rigs, quality.shadowCasters, camera.eye[0], camera.eye[1], camera.eye[2])
         fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
         bindShared()
         particles.ambientCount = quality.particles
         particles.step(dt, time, cur)
 
         // 4. draw
-        val usePost = post?.ok == true
+        val usePost = post?.ok == true && (quality.bloom || lens.amount > 0f)
         if (usePost) post!!.begin() else { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); Gl.check("bind default"); GLES30.glViewport(0, 0, width, height); Gl.check("viewport") }
         GLES30.glClearColor(0.012f, 0.016f, 0.024f, 1f); Gl.check("glClearColor")
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("glClear")
@@ -218,14 +227,29 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
+        snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
 
-        if (usePost) drawCalls += post!!.end()
+        if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
         publishStats(now, rigs.size, light)
+    }
+
+    // ------------------------------------------------------------------ follow lens
+
+    private fun createPost(): PostFx? =
+        runCatching { PostFx(source, quality.msaa, quality.bloom).also { it.resize(width, height) } }
+            .onFailure { Log.e(Gl.TAG, "PostFx", it); postFailed = true }.getOrNull()
+
+    /** Fades the follow lens in/out and tracks the fish on screen; on Medium the post chain is created on first use. */
+    private fun updateLens(dt: Float) {
+        val fid = camera.followId
+        val rig = if (fid != null) interp.rigs[fid] else null
+        lens.update(dt, quality.lens && !cleaning && fid != null, rig, camera)
+        if (lens.amount > 0f && post == null && quality.lens && !postFailed) post = createPost()
     }
 
     // ------------------------------------------------------------------ requests
@@ -557,7 +581,20 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
                 val id = Picker.pick(o, dir, rigs)
-                main.post { l?.onPick(id) }
+                val following = camera.followId
+                // while following, tapping another fish switches the follow to it
+                if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
+                else main.post { l?.onPick(id) }
+            }
+            CameraInput.TapKind.ZOOM -> {
+                // double tap: a fish → fly in and follow it; while following → closer / normal framing;
+                // otherwise glide in to the rock / sand / water point under the finger (again to glide back out)
+                val id = Picker.pick(o, dir, rigs)
+                when {
+                    id != null && id != camera.followId -> main.post { l?.onFollowRequest(id) }
+                    camera.followId != null -> camera.toggleFollowCloseUp()
+                    else -> surfacePoint(o, dir)?.let { p -> camera.focusOn(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()) }
+                }
             }
             CameraInput.TapKind.GLASS -> {
                 val tz = Picker.rayPlaneZ(o, dir, Camera.TANK[2]) ?: return

@@ -1,4 +1,6 @@
 #version 300 es
+// A fish never darkens itself with its own contact shadow (lighting.glsl shadeLit).
+#define NO_CONTACT_SHADOW 1
 #include "common.glsl"
 #include "lighting.glsl"
 // Fish skin (ARCHITECTURE §8.4 items 5-6). Define FIN for the translucent two-sided fin sheet variant.
@@ -76,7 +78,9 @@ void main() {
     vec3 lightSum = (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5;
     col += albedo * 0.10 * (0.15 + lightIntensity());
     float rim = pow(1.0 - ndv, 2.2);
-    col += rim * (0.40 * lightSum + 0.30 * albedo * lightIntensity());
+    // the rim is brightest on the top edge (light from the fixtures above) and picks up the water colour below
+    float top = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+    col += rim * (0.40 * lightSum * (0.6 + 0.8 * top) + 0.30 * albedo * lightIntensity() + uFog.rgb * 0.6 * (1.0 - top));
     alpha = 1.0;
 #endif
     col = applyWater(col, vWorld);

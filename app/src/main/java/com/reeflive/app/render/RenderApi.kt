@@ -10,7 +10,8 @@
  *     snapshots = holder.snapshots,          // Flow<SimSnapshot> (or pass `provider = { holder.latest() }`)
  *     followId = followedId,                 // organism id to follow close up, or null for the orbit camera
  *     onPick = { id -> followedId = id },    // tap: organism id under the finger, or null (empty water)
- *     onTapGlass = { p -> sim.enqueue(Command.TapGlass(p)) },     // double tap, world cm on the front glass
+ *     onFollow = { id -> followedId = id },  // double tap on a fish (or a tap on another fish while following)
+ *     onTapGlass = { p -> sim.enqueue(Command.TapGlass(p)) },     // two-finger tap, world cm on the front glass
  *     onLongPress = { p -> sim.enqueue(Command.Feed(FoodKind.FLAKE, 0.1, p)) }, // long press, world cm
  *     quality = RenderQuality.MEDIUM,
  *     showHud = BuildConfig-or-settings flag,
@@ -21,9 +22,13 @@
  * ## Imperative API ([TankGlView])
  * - `setSnapshotProvider { SimSnapshot? }`: polled once per frame on the GL thread (must be thread-safe,
  *   e.g. an `AtomicReference.get()`); the renderer interpolates organisms between the last two distinct snapshots.
- * - `follow(id: String?)`: smooth close-up follow camera from the organism's SimSnapshot pose, collision-tested
- *   against the rock SDF (`assets/sim/rock_sdf.bin`). Orbit/pinch gestures adjust the follow offset.
- *   `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
+ * - `follow(id: String?)`: smooth close-up follow camera from the organism's SimSnapshot pose (fly-in, leads the
+ *   fish's travel), collision-tested against the rock SDF (`assets/sim/rock_sdf.bin`). Drag swings round the fish,
+ *   pinch moves closer; a lens effect (soft background blur, vignette, slight chromatic aberration) fades in on
+ *   MEDIUM/HIGH. `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
+ * - Gestures: drag orbits (fling coasts), two fingers pan / pinch / twist, double tap zooms to the point (or follows
+ *   the fish under the finger), double-tap-and-drag zooms with one finger, two-finger tap knocks on the glass,
+ *   long press drops food. Limits are soft and ease back. See [GestureTracker] and [Camera].
  * - `setQuality(RenderQuality)`: HIGH (4x MSAA FBO + bloom + light shafts), MEDIUM (2x MSAA, shafts),
  *   LOW (no MSAA, no shafts, no normal maps, half particles, textures ≤ 512²). Fish beyond 60 cm use LOD1.
  * - `resetCamera()`, `listener = TankViewListener` (pick / tap glass / long press / follow lost / scrape; main thread).
@@ -59,6 +64,17 @@ enum class RenderQuality(
     MEDIUM(2, false, true, true, 300, 2048, 0.5f, 1),
     LOW(0, false, false, false, 120, 512, 0.5f, 0);
 
+    /** Follow-mode lens (depth-of-field blur, vignette, chromatic aberration) through [PostFx]; off on LOW. */
+    val lens: Boolean get() = this != LOW
+    /** Lens blur passes at half resolution (one H+V pair per pass). */
+    val lensBlurPasses: Int get() = if (this == HIGH) 2 else 1
+    /** Drifting marine-snow points (GPU-animated, no CPU cost per frame). */
+    val snow: Int get() = when (this) { HIGH -> 900; MEDIUM -> 520; LOW -> 160 }
+    /** Fish casting soft contact shadows on sand, rock and corals (0 = off). */
+    val shadowCasters: Int get() = when (this) { HIGH -> 12; MEDIUM -> 8; LOW -> 0 }
+    /** Light-shaft strength multiplier (shafts are off on LOW). */
+    val shaftStrength: Float get() = if (this == HIGH) 1.3f else 1f
+
     companion object {
         /** Camera distance (cm) beyond which fish switch to their `_lod1.glb` (ARCHITECTURE §8.7). */
         const val LOD1_DISTANCE_CM = 60f
@@ -69,8 +85,13 @@ enum class RenderQuality(
 interface TankViewListener {
     /** Single tap: the organism id under the finger, or null when nothing was hit. */
     fun onPick(id: String?) {}
-    /** Double tap: the world point (cm) on the front glass under the finger. */
+    /** Two-finger tap: the world point (cm) on the front glass under the fingers. */
     fun onTapGlass(worldPoint: Vec3) {}
+    /**
+     * Double tap on an organism (id), a tap on another organism while following one (id), or null to stop
+     * following. The host should route it to its follow state (it comes back through `follow` / `followId`).
+     */
+    fun onFollowRequest(id: String?) {}
     /** Long press: the first rock/sand/water point under the finger (cm), e.g. to drop food. */
     fun onLongPress(worldPoint: Vec3) {}
     /** The followed organism is gone from the snapshot (removed, eaten); the camera returned to orbit. */

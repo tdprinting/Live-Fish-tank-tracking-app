@@ -410,14 +410,59 @@ Why not Filament: Filament ships on Maven Central (fine), but every custom look 
 | `ShaderProgram` | compile/link at runtime from `assets/shaders/*.vert/.frag`; `#define` injection for quality; uniform cache |
 | `Material` | program + uniforms + textures; variants: `RockPbr`, `SandPbr`, `SoftCoral`, `PolypInstanced`, `FishSkin`, `FinSheet`, `Glass`, `WaterSurface`, `Particles`, `Caustic` (shared texture), `Unlit` |
 | `Scene` | static nodes (tank, rock, sand, equipment, corals) + dynamic `OrganismNode`s; lights (`TankLight` x2) |
-| `Camera` | orbit camera: target, yaw, pitch, distance, fov 50°; follow mode with smoothing |
-| `TouchController` | 1-finger orbit, 2-finger pan/pinch, tap (select via ray vs organism bounding capsules), double-tap (tap glass), long-press (drop food) |
+| `Camera` | orbit camera: target, yaw, pitch, distance, fov 50°; gestures move goals, critically damped springs (`CameraMath.Spring`, exact for any dt) ease the view toward them; soft limits; fling inertia; follow mode (§8.2.1) |
+| `GestureTracker` | pure multi-touch recogniser (no Android types, unit-tested): orbit + fling, pan / pinch / twist, tap, double tap, double-tap-drag zoom, two-finger tap, long press |
+| `TouchController` | adapts `MotionEvent`s to `GestureTracker` (claims the stream from Compose ancestors on ACTION_DOWN, runs the long-press / tap timer) and accumulates into `CameraInput` for the GL thread |
+| `PostFx` / `LensState` | MSAA FBO → resolve → bloom (High) and the follow lens (Medium/High): half-res blur, focus circle, vignette, chromatic aberration (§8.2.1) |
+| `MarineSnow` (Atmosphere.kt) | GPU-animated marine snow points (position from `gl_VertexID` + time; no CPU per frame) |
 | `FishRig` | per organism: spline control points (16), swim phase, amplitude, fin states → uniforms |
 | `CoralRig` | per coral: extension 0..1, sway phase, bleaching 0..1, browning 0..1 → uniforms |
 | `Effects` | caustic projector (texture scroll), god-ray quads, particulate (GPU points), bubbles from HOB return |
 | `LightingState` | current 8-channel intensities → key light color/intensity, ambient, fog color |
 | `Picker` | ray cast from touch against organism capsules (CPU) |
 | `DebugHud` | fps, draw calls, tri count (dev builds) |
+
+#### 8.2.1 Camera, gestures and follow lens
+
+**Gestures** (`GestureTracker`, all deltas re-based whenever the finger count changes, so nothing jumps):
+
+| Gesture | Orbit view | Following a fish |
+|---|---|---|
+| one-finger drag | orbit (yaw / pitch); the whole move since touch-down counts once past the touch slop; a quick release flings and coasts (friction 3.2/s) | swing round the fish |
+| two fingers | pan (centroid, in the view plane), pinch zoom about the fingers (the point under them stays put), twist = yaw after a 0.14 rad dead zone | pinch closer / further, twist swings |
+| tap | pick (Picker) → fish card | another fish: follow it; empty water: stop |
+| double tap | on a fish: fly in and follow it; elsewhere: glide in to the rock / sand point (again: glide back out) | toggle close-up |
+| double-tap and drag | one-finger zoom (down = in) | — |
+| two-finger tap | tap the glass (`onTapGlass`) | — |
+| long press | drop food (`onLongPress`); the same finger can still drag afterwards | — |
+
+Why gestures used to drop out (fixed): `GestureDetector` stops reporting scrolls once its long press fires, so resting a
+finger ~0.5 s and then dragging did nothing (and dropped food); after any two-finger gesture the `multi` flag stayed
+set until every finger lifted, so the remaining finger could not orbit; `ScaleGestureDetector` ignores pinches below
+its minimum span (~27 mm) and two-finger pan only ran inside `onScale`, so close-together fingers did nothing; and
+inside Compose the AndroidView gets the stream only in the Final pass, so any ancestor `pointerInput` that consumes
+turns the gesture into ACTION_CANCEL. Now one pure tracker handles all pointers by id with no minimum span, a long
+press never locks out the drag, and the view calls `requestDisallowInterceptTouchEvent(true)` on ACTION_DOWN so the
+interop filter dispatches in the Initial pass (non-consuming watchers such as the tank-drag watcher still see it all).
+
+**Feel.** Yaw, pitch, log-distance and target each follow their goal with a critically damped spring (ω 16/s while
+touched, 4.5/s for programmatic glides). Soft limits: yaw ±1.75 rad (a little past either side glass), pitch −0.3..1.38,
+distance 12..320 user units (≈ 10 cm from the target, right up to the rockwork), target inside the tank plus a margin;
+past a limit the input is resisted by `1/(1+over/give)²`, and on release the goal relaxes back at 7/s. Fling momentum
+brakes harder past a limit. The eye is pushed out of rock (SDF) and kept above the sand. Everything is exact in dt
+(springs, inertia, relax), so 30, 60 and 120 fps feel the same (`CameraFeelTest`).
+
+**Follow.** Selecting a fish flies the eye and aim springs from the current view (ω 2.4/s stiffening to 6.5/s over
+1.4 s). The frame sits ~3.2 body lengths away in profile from the viewer's side (heading spring, flank kept;
+`Camera.followTarget`), aimed 0.35 s ahead along the fish's smoothed velocity (≤ 0.8 BL) so it leads the direction of travel;
+the eye orbits a point half way to the lead. Drag/fling swings round, pinch scales the distance (0.3–3×, soft). Exit:
+the X, system back, a tap on empty water, or follow lost.
+
+**Lens** (Medium and High; `LensState`, `PostFx`, `composite.frag`): fades in/out at 2.6/s while following. The fish's
+mid-body is projected each frame to a focus circle (0.75 BL radius); outside it the image blends toward a half-res
+separable blur of the scene (9 taps, 2-texel spacing; one H+V pair on Medium, two on High), with a vignette (0.45) and
+red/blue chromatic aberration growing toward the corners (0.006 uv). Medium renders straight to the window and only
+routes frames through `PostFx` (created on first use, targets reused) while the lens is non-zero.
 
 ### 8.3 Coordinate system and scale
 World units = centimeters. Origin at the tank's inside bottom-front-left corner; +X right (length 121.9), +Y up (61.0), +Z toward the viewer (depth 33.0; back glass at z=0, front glass at z=33). Sand top at y=3. Water surface at y=56 (tank filled to ~2" from the top). All assets exported in this frame.
@@ -435,6 +480,17 @@ Common uniforms (UBO `Frame`): `uView, uProj, uViewProj, uCamPos, uTime, uLightD
 7. **`glass.frag`**: front/side panes rendered last, additive Fresnel: `F = 0.02 + 0.98(1−NdotV)^5`, reflection color = a 6-color static gradient "room" cubemap approximation (`assets/textures/room_env.png` 256×128 equirect), alpha `F×0.6`; slight green tint `#E0F8F0` × 0.05 on transmission (we don't render transmission; the scene behind is already drawn). Back glass: opaque black `#05070A` with 0.1 roughness reflection of the key lights (two soft blobs) — this matches the photos' dark back wall.
 8. **`watersurface.vert/frag`**: a plane at y=56 seen from below: scrolling 2 normal maps (`water_n1.png`, `water_n2.png` 512², speeds (1.5, 0.8) and (−1.0, 1.2) cm/s), Fresnel from below with total internal reflection: if `angle(V, up) > 48.6°` → reflect the scene color approximation (fog color × 1.6 + light blobs) else show the "room above" color (`#0A0F1A` + light fixture glow discs at the two AI Prime positions). Light shafts: 6 vertical quads per light, billboarded about Y, additive, alpha `0.08 × lightIntensity × (1−y/56)`, scrolling noise; disabled at Low.
 9. **`particles.vert/frag`**: GL_POINTS, 300 (Low 120) suspended particles with positions advected on the CPU by the flow field (SIMULATION §5.6), size 2–4 px, alpha 0.15, slightly bluish-white; food particles use the same pipeline with size 5–7 px and color by food type (flake `#C8A060`, mysis `#E8D8C0`, nori `#2E4A1A`).
+9b. **Realism layer** (`uFx` + `uCasters[12]` at the end of the `Frame` UBO; tiers from `RenderQuality`): caustics are
+    stronger (`pow(a·b, 1.25)×5`, strength 0.85), tinted by the live light hue, reach side-facing rock a little, and on
+    High split per channel (dispersion fringes). Soft **contact shadows**: up to 12 (High) / 8 (Medium) / 0 (Low) fish
+    nearest the eye darken direct light and caustics below them with a blob that widens and fades with height (≤ 32
+    cm); fish themselves skip it (`NO_CONTACT_SHADOW`). God rays: smoothstep-edged, flicker, `uShaftStrength` (High
+    1.3), fade near the camera and when seen from above. Water surface: a three-wavelet **ripple** normal layer,
+    glitter highlights toward the fixtures and a shimmering mirror (caustic bands) in the total-internal-reflection
+    zone. Absorption (0.0072, 0.0016, 0.0010)/cm and fog 0.005/cm make the blue-green fall-off read across the tank.
+    **Fish rim** brighter on the top edge and water-tinted underneath. **Marine snow**: 900 / 520 / 160 GPU-animated
+    flakes that sink, wander with the flow, glint when back-lit by a fixture, and dim at night. All colours follow
+    `uLightColor` (the AI Prime schedule), so dawn, day, actinic evening and moonlight change every effect.
 10. **`caustic` shared texture**: `assets/textures/caustic_512.png` (tileable, generated by `tools/textures/caustics.py`: Voronoi edge intensity, 3 octaves, gamma 2.2).
 
 Color management: all lighting in linear space; final `pow(1/2.2)` + ACES-ish tonemap `x/(x+0.155)×1.019` at the end of each opaque shader (no post-process pass at Low/Medium; High renders to an FBO and applies a 1-pass bloom (threshold 0.8, 9-tap blur at half res) for the fluorescent corals and iridescence).
@@ -447,8 +503,8 @@ Color management: all lighting in linear space; final `pow(1/2.2)` + ACES-ish to
 2. Update rigs (spline uniforms, coral states) — CPU, < 1 ms.
 3. Opaque: back glass → sand → rock (1 draw) → equipment (≤ 6 draws) → corals (soft bodies ≤ 8 draws) → polyp instanced batches (4 draws: GSP×2, zoa, clove, Kenya tufts) → fish bodies (9 draws) → shrimp (1).
 4. Alpha-tested fins (9 draws).
-5. Transparent, back-to-front: light shafts (High/Medium), particles, water surface, front/side glass.
-6. High only: bloom composite.
+5. Transparent, back-to-front: light shafts (High/Medium), particles, marine snow, water surface, front/side glass.
+6. High: bloom composite; High/Medium while following: lens blur + composite (§8.2.1).
 Target: ≤ 45 draw calls, ≤ 140k triangles on screen.
 
 ### 8.7 Performance budget (mid-range phone, 1080p, Medium)
