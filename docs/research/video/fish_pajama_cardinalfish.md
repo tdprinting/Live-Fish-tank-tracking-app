@@ -9,7 +9,7 @@ Sim hook: `BrainKind.CARDINAL` · Adult size: up to 8.5 cm (FishBase via search)
 | S2 | Saltwater Aquarium Blog | https://www.saltwateraquariumblog.com/pajama-cardinalfish/ | slow methodical swimmer near cover |
 | S3 | FishBase | https://nrm-fishbaselinux01.nrm.se/summary/5778 | max length 8.5 cm |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: No footage was watched. Wikimedia Commons video downloads (candidates found: clownfish CAS-Aquarium-Clownfish&Coral.ogv, Aquarium of Cattolica - Clownfishes.webm; Paracanthurus - August 14 2021.webm; Labroides dimidiatus cleaning Acanthurus mata - Gijon Aquarium) were blocked by HTTP 429 rate limiting from this server, and no usable Commons clip was found for the other species. YouTube rows V1-V3 remain queued for hand review. No rows upgraded to [H]; numbers stay [L] unless a source is cited.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |

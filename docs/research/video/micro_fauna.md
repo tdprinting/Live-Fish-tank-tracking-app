@@ -2,7 +2,7 @@
 
 Sim source: `core/src/main/kotlin/com/reeflive/core/sim/MicrofaunaModel.kt` (`MicroGroup`, `sizeMm` = current sim value).
 
-**Scope note:** No video footage was watched. Sources were search snippets and articles; several pages were not opened. Every claim is tagged **[M]** (stated by a source) or **[L]** (inferred, no source). Nothing is **[H]**. Most reef-specific material is hobbyist forum or retailer text. Microscope and stock clips found are mostly pond or marine-lab footage. Timestamps: none verified.
+**Scope note:** No footage was watched this pass. Commons has a few copepod, ostracod and Tigriopus clips (e.g. `Tigriopus brevicornis.webm`, `Ostrácodo nadando.webm`, `Copepod Nauplius.webm`) but the Commons/upload hosts returned HTTP 429 (retry-after 600 s) so none could be downloaded; queued for hand review. YouTube rows stay queued. This pass added [M] speed values from papers. Tags: **[M]** source-stated, **[L]** estimate; nothing is **[H]**.
 
 ## Sources
 | # | Page | URL | What it supports |
@@ -28,6 +28,8 @@ Sim source: `core/src/main/kotlin/com/reeflive/core/sim/MicrofaunaModel.kt` (`Mi
 | S19 | YouTube, "Amphipods and Copepods at night in reef tank" | https://www.youtube.com/watch?v=33BcJXhnLsA | Night pod/amphipod clip in a reef tank (title/blurb only) |
 | S20 | PMC, cyclopoid "hop and sink" (2023 reply, high-speed Schlieren) | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10762428/ | Cyclopoid hop lasts ~17 ms (search snippet, not opened) |
 | S21 | PMC, small-aquatic-animal trajectory method | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12388259/ | Eodiaptomus: cruise ~5 mm/s, jumps ~190 mm/s, mean 9.8 mm/s (snippet, not opened) |
+| S22 | Kiørboe, escape jumps in planktonic copepods (search summary) | https://orbit.dtu.dk/en/publications/unsteady-motion-escape-jumps-in-planktonic-copepods-their-kinemat/ | Acartia tonsa (0.7–1.1 mm prosome) jump speed up to ~500 mm/s, power strokes 2–10 ms; escape velocity scales with length^0.65; cyclopoid escapes >500 BL/s |
+| S23 | Americamysis bahia swimming (search summary) | https://archive.org/download/biostor-10198/biostor-10198.pdf | Shallow-water mysid reaches up to 12 BL/s with pleopods; bathypelagic mysid cruises 5–6.5 cm/s (search result group) |
 
 ---
 
@@ -37,7 +39,7 @@ Tigger pods are harpacticoids (see CALANOID). Tisbe is also harpacticoid, benthi
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Movement | Crawls on glass, rock, film algae; short upward darts, then stalls | Crawl at rest; dart 1–3 body lengths, pause 0.5–2 s | S2 [M], S1 [M] |
-| Speed | Burst speed not measured in sources | Cruise ~1–2 BL/s [L]; burst ~10 BL/s [L] (≈1–8 mm/s at 0.8 mm) | [L] |
+| Speed | Copepod escape jumps are 10^2 to 10^3 BL/s over 2–10 ms (calanoid/cyclopoid); Tigriopus not measured | Cruise ~1–2 BL/s [L]; escape jump ~100+ BL/s for 2–10 ms then stall, shown as 2–3 frame dart [M]/[L] | S22 [M] (proxy) / [L] |
 | Where | Benthic: glass lower band, rock crevices, film | Stay within glass/rock band, rarely open water | S2 [M] |
 | Day/night | Hide in rock by day; sources do not say they are nocturnal | Visible day and night on glass; more at night on glass if lights dim [L] | [L] |
 | Light/predators | Fish (mandarins, pipefish) take them; no light response reported | Scatter/hide on light change, short dash to crevice [L] | S2 [M] |
@@ -49,7 +51,7 @@ Tigger pods are harpacticoids (see CALANOID). Tisbe is also harpacticoid, benthi
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Movement | Tigriopus swims up in a stimulating jerky motion, then sinks; benthic in practice | Upward jerk, sink, repeat; not drifting plankton | S2 [M] |
-| Speed | Calanoid analogue (Eodiaptomus): cruise ~5 mm/s, jumps ~190 mm/s, each jump very short | Cruise 5 mm/s; jump impulse ~190 mm/s lasting a few frames, then sink | S21 [M]; Tigriopus values not measured [L] |
+| Speed | Calanoid analogue (Eodiaptomus): cruise ~5 mm/s, jumps ~190 mm/s, each jump very short | Cruise 5 mm/s; jump impulse ~190 mm/s (Acartia up to ~500 mm/s) lasting a few frames, then sink | S21, S22 [M]; Tigriopus values not measured [L] |
 | Where | Water column for Tigriopus, Parvocalanus pelagic and "gets consumed in hours" [M] | Tigriopus: mid-tank near rock; Parvocalanus: open water, sparse | S2 [M] |
 | Day/night | No source | Same day/night as harpacticoid [L] | [L] |
 | Light/predators | Eaten fast by fish; hard to breed at reef temperature (disputed) [M] | Dense school flees toward fish, dies off fast [L] | S2 [M] |
@@ -61,7 +63,7 @@ Apocyclops is cyclopoid: hides among rock like Tisbe, swims in water column like
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Movement | Mixed: crawl in rock, swim-hop in water | Hop-and-pause, longer pauses than harpacticoids [L] | S2 [M] |
-| Speed | Hop lasts ~17 ms, then sink (high-speed Schlieren, cyclopoid) | Hop impulse ~17 ms, then sink; sink-pause 0.5–1 s [L] | S20 [M] |
+| Speed | Hop lasts ~17 ms, then sink (S20); cyclopoid escapes >500 BL/s (S22) | Hop impulse ~17 ms, then sink; sink-pause 0.5–1 s [L] | S20 [M] |
 | Where | Rock crevices, sometimes open water | Rock band with occasional water-column drift | S2 [M] |
 | Day/night | No source | Visible on rock in night light [L] | [L] |
 | Light/predators | Not reported | Flee from torch beam [L] | [L] |
@@ -91,7 +93,7 @@ Apocyclops is cyclopoid: hides among rock like Tisbe, swims in water column like
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Movement | Hover in swarms in water column; swim backwards and forwards | Hover in tight swarm, flicker, drift | S7 [M], S8 [M] |
-| Speed | Not measured | Hover ~0.5 BL/s; dart 5 BL/s [L] | [L] |
+| Speed | Americamysis bahia bursts to ~12 BL/s with pleopods (S23); Neomysis vertical migration ~10 mm/s | Hover ~0.5 BL/s [L]; dart ~10 BL/s (~70 mm/s at 7 mm) | S23 [M] (proxy) / [L] |
 | Where | Benthic by day (rock/sand), swarm up at night (wild Mysis model) | Rock/sand by day; rise into swarms at night | S8 [M] |
 | Day/night | Swarm to torch beam, anecdote; reef-specific data thin | Night swarm at light; day mostly hidden [M]/[L] | S7 [M] |
 | Light/predators | Flee bright light (wild Hemimysis) | Scatter at bright light, return after [M] | S8 [M] |

@@ -8,8 +8,9 @@ Sim hook: `BrainKind.WRASSE` · Adult size: ~10-12 cm [L] · Tank count: 1
 | S1 | Wikipedia Bluestreak cleaner wrasse | https://en.wikipedia.org/wiki/Bluestreak_cleaner_wrasse | greeting dance; station occupancy |
 | S2 | FishBase | https://fishbase.se/summary/SpeciesSummary.php?id=5459 | unfamiliar visitor greeted with tail up-down dance |
 | S3 | Australian Museum | https://australianmuseum.net.au/Common-Cleanerfish-Labroides-dimidiatus | enters mouth/gill chamber of large fish |
+| S9 | Wainwright et al. 2002 / Fulton et al. 2005 (proxy, labrids) | https://fishlab.ucdavis.edu/wp-content/uploads/sites/397/2020/06/Wainwright-et-al-2002.pdf | labrid routine speeds ~1-3 BL/s (low fin aspect ratio) to 4-7 BL/s (high); Ucrit ~3->5 BL/s [M, proxy not species-specific] |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: No footage was watched. Wikimedia Commons video downloads (candidates found: clownfish CAS-Aquarium-Clownfish&Coral.ogv, Aquarium of Cattolica - Clownfishes.webm; Paracanthurus - August 14 2021.webm; Labroides dimidiatus cleaning Acanthurus mata - Gijon Aquarium) were blocked by HTTP 429 rate limiting from this server, and no usable Commons clip was found for the other species. YouTube rows V1-V3 remain queued for hand review. No rows upgraded to [H]; numbers stay [L] unless a source is cited.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |

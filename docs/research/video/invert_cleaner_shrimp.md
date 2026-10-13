@@ -11,8 +11,10 @@ Sim hook: `BrainKind.CLEANER_SHRIMP` · Adult size: 5-6 cm · Tank count: 1-2 (p
 | S1 | Sydney Zoo fact sheet | https://sydneyzoo.com/animals/skunk-cleaner-shrimp | antenna sway + rocking dance |
 | S2 | Biology Letters 2019 (PMC) | https://pmc.ncbi.nlm.nih.gov/articles/PMC6769148 | risk-adjusted cleaning of predators |
 | S3 | Reef Builders spotlight | https://reefbuilders.com/2016/12/22/invertebrate-spotlight-the-skunk-cleaner-shrimp | care/behaviour |
+| M1 | Caves, Chen & Johnsen 2019, Biol. Lett. (PMC6769148, read) | https://pmc.ncbi.nlm.nih.gov/articles/PMC6769148 | 241 field interactions, leg rocking stats |
+| M2 | Wikipedia Lysmata amboinensis (read) | https://en.wikipedia.org/wiki/Lysmata_amboinensis | size, colour, molt, night cleaning |
 
-No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
+NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pass done afterwards (M# rows). Wikimedia Commons API/upload hosts returned HTTP 429 (Retry-After 600) for this server during the pass, and YouTube is blocked; candidate Commons clips found but not downloaded (cleaner shrimp: File:Pacific cleaner shrimp and leopard moray eel.webm; Nassarius: File:Gevlochten fuikhoorn kruipend over de zandbodem-4931664.webm). YouTube V# rows stay queued for hand review. Numbers marked [L] are estimates from general crustacean/echinoderm knowledge.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -35,6 +37,11 @@ No YouTube pages surfaced by WebSearch (not fetched); no [H] claims. Numbers mar
 | Social / interactions | fish queue; will climb onto fish; assesses risk with predators | invite dance when fish within 30 cm; hop on if fish still | [S1][S2][M] |
 | Reaction to parameters | - | - | |
 | Distinctive tells | antenna wave + side-rocking dance; climbs on fish; cleans still hand | | [S1][M] |
+
+## Sourced values ([M] pass, 2026-10-13; supersede [L] rows above where they conflict)
+- Leg rocking occurs in 51% of interactions with predatory clients vs 12% non-predatory; rocking followed by cleaning in 45% vs 5% [M1]. Client was cleaned in 28% (predatory) vs 51% (non-predatory) of interactions; ~25-41% of clients pose then get cleaned, 25-44% pose then leave uncleaned [M1]. Occasional 'jolts' (0-3 per interaction) [M1]. Paper gives no cleaning-bout seconds or rocking Hz; those stay [L]. Shrimp watch clients on screen >5 s; interactions scored up to 1 min.
+- Colour: pale amber body/legs, central white carapace band flanked by wider scarlet bands, red tail with symmetrical white spots, long white antennae (front pair forked); 5-6 cm [M2].
+- Pairs in caves/ledges, 5-40 m; in captivity parasite removal mainly at night [M2] (sim's 'rests in cave at night' is doubtful). Post-larval molt every 3-8 weeks; mates shortly after a molt, pair alternate molt timing [M2].
 
 ## Priority fixes for Opus
 1. Dance: antennae wave + rock at station when fish near.

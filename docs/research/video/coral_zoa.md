@@ -12,8 +12,10 @@ Sim hook: `CoralKind.ZOA` · Adult size: colony 5–15 cm across [L] · Tank cou
 | V5 | YouTube: Nano reef zoanthid time lapse | https://www.youtube.com/watch?v=pK2d2CfeBro | Title only, not viewed [M] |
 | V6 | YouTube: Zoa corals closed? | https://www.youtube.com/watch?v=8WSJBOG2Y_U | Snippet: closure attributed to aeolid nudibranchs (cut off) [M] |
 | V7 | YouTube: Zoanthids not opening, possible reasons found | https://www.youtube.com/watch?v=3-gE8xMZURk | Title only; snippet gives strong flow as one cause, mapping to this video unconfirmed [M] |
+| V8 | Sorek 2018 / Favia analogy | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3089635/ | No zoanthid-specific rhythm or fluorescence study found; Favia fragum shows light-entrained daily tentacle expansion (analogy only) |
+| V9 | Photobehaviour of corals, 400–520 nm | https://cob.silverchair.com/jeb/article/206/22/4041/14111/Photobehavior-of-stony-corals-responses-to-light | Blue 400–520 nm most effective at triggering full tentacle contraction in some stony corals (analogy) |
 
-Video search (youtube.com only) found zoa timelapses (V5) and closed-polyp troubleshooting videos (V6, V7). No footage was viewed; claims are from snippets. No controlled photoperiod study was found.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
@@ -24,7 +26,7 @@ Video search (youtube.com only) found zoa timelapses (V5) and closed-polyp troub
 | Retraction on touch | No source | Polyps close over ~1–3 s | [L] |
 | Recovery after touch | No source | Re-open over ~10–30 min | [L] |
 | Feeding response | Polyps can open for food (general) | Partly open, tips lift | [L] |
-| Colour under blue light | Colour strong when open and healthy (V1) | Bright saturated colour when open; washed out when closed | V1 [M] |
+| Colour under blue light | No zoanthid fluorescence study found; hobby morphs vary (green/orange/pink) | Keep base morph colour; mild glow on disc and tentacle ring | V9 [M] (analogy) / [L] |
 | Growth / spread | Colony spreads by budding; carpets (general) | Slow sideways creep | [L] |
 | Unhappy look | Closed for days, washed out colour, polyps reabsorbing (V3) | Keep closed, pale; slow shrink | V3 [M] |
 

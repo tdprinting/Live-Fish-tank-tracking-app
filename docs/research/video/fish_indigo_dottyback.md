@@ -9,7 +9,8 @@ Sim hook: `BrainKind.DOTTYBACK` · Adult size: ~6-7 cm (diadem, FishBase) · Tan
 | S2 | Top Shelf Aquatics diadem | https://topshelfaquatics.com/pages/saltwater-fish/diadem-dottyback | defends rockwork zone |
 | S3 | That Pet Place dottybacks | https://www.thatpetplace.com/articles/dottybacks-article | bully smaller fish; shy |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+
+NOTE: 2026-10-13 footage pass: no rows upgraded to [H]. Wikimedia Commons search found no usable clip for this species (or only a related one), and Commons/upload.wikimedia.org returned HTTP 429 (Retry-After 600 s, still blocked after ~25 min), so nothing was downloaded or watched. YouTube V# rows remain queued for hand review. Page-based claims are [M]; numbers are [L] estimates. Commons has no Pseudochromis/Pictichromis video.
 No "indigo" source found; data are for congeneric Pictichromis.
 
 ## Animation spec (for the renderer)

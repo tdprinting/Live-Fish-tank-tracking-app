@@ -8,8 +8,9 @@ Sim hook: `BrainKind.TANG` · Adult size: ~25-30 cm (juvenile 5-8 cm) [L] · Tan
 | S1 | Furrycritter juvenile blue tang | https://www.furrycritter.com/pages/life_stages/fish/blue_tang_juvenile.htm | young tangs lie on side motionless when startled/stressed |
 | S2 | Nano-Reef "blue tang laying on side" | https://www.nano-reef.com/forums/topic/420062-blue-tang-laying-on-side/ | hobbyist reports; stress/ich watch |
 | S3 | Do Tangs Play Dead? (enviroliteracy; species labelling unreliable) | https://enviroliteracy.org/animals/do-tangs-play-dead/ | resting at night, lights off |
+| S9 | Fulton et al. 2005 (proxy, labriform reef fishes) | https://researchonline.jcu.edu.au/2857/ | pectoral swimmers (Pomacentridae/Acanthuridae/Labridae) hold ~70% of max speed in field; fin aspect ratio predicts speed [M, proxy not species-specific] |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: No footage was watched. Wikimedia Commons video downloads (candidates found: clownfish CAS-Aquarium-Clownfish&Coral.ogv, Aquarium of Cattolica - Clownfishes.webm; Paracanthurus - August 14 2021.webm; Labroides dimidiatus cleaning Acanthurus mata - Gijon Aquarium) were blocked by HTTP 429 rate limiting from this server, and no usable Commons clip was found for the other species. YouTube rows V1-V3 remain queued for hand review. No rows upgraded to [H]; numbers stay [L] unless a source is cited.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |

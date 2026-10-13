@@ -9,14 +9,16 @@ Sim hook: `CoralKind.MACRO` · Adult size: clump 10–30 cm [L] · Tank count: 1
 | V2 | Algae Barn Gracilaria overview | https://algaebarn.com/blog/macro-algae/red-alga-gracilaria-overview | Gracilaria: moderate-to-slow growth; forms thick beds over time |
 | V3 | Reefbuilders: propagating Gracilaria | https://reefbuilders.com/2009/10/17/propagating-gracilaria-for-fun-and-food | Fragments regrow; refugium use |
 | V4 | YouTube: Botryocladia Red Grape marine macro algae | https://www.youtube.com/watch?v=6xN0JAOokh0 | Product listing; no timelapse or growth data [M] |
+| V5 | Marine Agronomy, Gracilaria in Hawaiian fishponds | https://marineagronomy.org/node/144 | Gracilaria growth tied to ammonia (2–10 µM) at field sites; water motion among factors tested |
+| V6 | Algae Barn Gracilaria overview | https://algaebarn.com/blog/macro-algae/red-alga-gracilaria-overview | Hobby guidance: moderate turbulent flow, palatable to herbivores |
 
-Video search (youtube.com only) found no Gracilaria or Botryocladia timelapse; V4 is a product listing. No footage was viewed; claims are from vendor and hobby pages.
+**NOTE:** No footage was watched. Wikimedia Commons has no usable clip of this species, and the Commons/upload hosts rate-limited this server (HTTP 429, retry-after 600 s) so the nearest generic clips could not be downloaded. YouTube rows stay queued for hand review. This pass upgraded [M] sourcing only; nothing here is [H].
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
 |---|---|---|---|
 | Polyp/tissue motion | No polyps; frond and grape motion only | Fronds sway with flow | [L] |
-| Sway in flow | Hobby pages describe flow-driven motion only generally | Fronds sway ~0.1–0.3 Hz, amplitude ~20–30 degrees [L] | [L] |
+| Sway in flow | Hobby guidance: moderate, tumbling flow suits Gracilaria (V6); no measured sway Hz | Fronds sway ~0.1–0.3 Hz, small amplitude | V6 [M] / [L] |
 | Open/close vs lights | No source; algae does not open and close | No open/close; slight colour change only | [L] |
 | Retraction on touch | Grapes shed under stress (V1) | Grapes drop off, then regrow | V1 [M] |
 | Recovery after touch | Fragments regrow (V1, V3) | Regrow over weeks | V1, V3 [M] |

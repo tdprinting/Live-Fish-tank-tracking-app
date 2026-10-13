@@ -9,7 +9,7 @@ Sim hook: `BrainKind.ENGINEER_GOBY` · Adult size: ~30 cm; juveniles few cm · T
 | S2 | Saltwater Aquarium Blog | https://www.saltwateraquariumblog.com/engineer-goby-cichlid-of-the-sea/ | tunnel building |
 | S3 | Aquarium of the Pacific | https://aquarium.org/animals/engineer-goby/ | juvenile schooling, catfish mimicry |
 
-NOTE: Video links (V1-V3) found via search listings only; titles/snippets seen, footage not viewed, so listed for hand review. Page-based claims are [M]; numbers are [L] estimates.
+NOTE: No footage was watched. Wikimedia Commons video downloads (candidates found: clownfish CAS-Aquarium-Clownfish&Coral.ogv, Aquarium of Cattolica - Clownfishes.webm; Paracanthurus - August 14 2021.webm; Labroides dimidiatus cleaning Acanthurus mata - Gijon Aquarium) were blocked by HTTP 429 rate limiting from this server, and no usable Commons clip was found for the other species. YouTube rows V1-V3 remain queued for hand review. No rows upgraded to [H]; numbers stay [L] unless a source is cited.
 
 ## Animation spec (for the renderer)
 | Aspect | Observation | Suggested sim value | Cite |
