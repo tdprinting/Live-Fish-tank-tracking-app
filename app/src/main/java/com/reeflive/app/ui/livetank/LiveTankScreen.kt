@@ -59,11 +59,13 @@ import com.reeflive.app.render.TankView
 import com.reeflive.app.ui.components.BottomBarClearance
 import com.reeflive.app.ui.components.LocalSnackbar
 import com.reeflive.app.ui.components.ReefDialog
+import com.reeflive.app.ui.components.rememberHaptics
 import com.reeflive.app.ui.live.AddableSpecies
 import com.reeflive.app.ui.live.CleanGlassHint
 import com.reeflive.app.ui.live.DayPhase
 import com.reeflive.app.ui.live.FishCard
 import com.reeflive.app.ui.live.FishSummary
+import com.reeflive.app.ui.live.FoodTray
 import com.reeflive.app.ui.live.FollowOverlay
 import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.HudState
@@ -91,6 +93,7 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.timelapse.TimelapseState
@@ -296,7 +299,7 @@ fun LiveTankScreen(
             expanded = true
         },
         onDismissPreset = { preset = null },
-        onFeed = { vm.feed() },
+        onFeed = { k -> tick(); vm.feed(k, k.typicalDoseGrams) },
         onTapGlass = { tick(); vm.tapGlass(FrontGlassCentre) },
         onWaterChange = { tick(); vm.waterChange(it) },
         onDose = { id, d -> tick(); vm.dose(id, d) },
@@ -561,6 +564,10 @@ private fun HudLayer(
     bottomPad: () -> Dp,
 ) {
     val reduce = ReefTheme.reduceMotion
+    var feedOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = feedOpen) { feedOpen = false }
+    val haptics = rememberHaptics()
+    val onFeed: (FoodKind) -> Unit = { k -> vm.feed(k, k.typicalDoseGrams) }
     Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = bottomPad())) {
         AnimatedVisibility(
             visible = !chrome.hidden,
@@ -578,6 +585,8 @@ private fun HudLayer(
                 onToggleCleaning = onToggleCleaning,
                 onMicro = onMicro,
                 onHideChrome = chrome.onHide,
+                feedOpen = feedOpen,
+                onToggleFeed = { haptics.tick(); feedOpen = !feedOpen },
             )
         }
         val st = stats
@@ -591,6 +600,15 @@ private fun HudLayer(
             fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
             FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
         }
+        // the food tray floats over the bottom of the water, above the fish card; it closes with the controls
+        AnimatedVisibility(
+            visible = feedOpen && !chrome.hidden && !cleaning,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 16.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
+        ) {
+            FoodTray(onFeed = onFeed, onClose = { feedOpen = false })
+        }
         AnimatedVisibility(
             visible = cleaning,
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
@@ -600,7 +618,7 @@ private fun HudLayer(
             CleanGlassHint()
         }
         AnimatedVisibility(
-            visible = !cleaning && !following && st != null,
+            visible = !cleaning && !following && st != null && !feedOpen,
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
             enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 },
             exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
@@ -613,7 +631,7 @@ private fun HudLayer(
             }
         }
         AnimatedVisibility(
-            visible = chrome.showTips && !cleaning && st == null,
+            visible = chrome.showTips && !cleaning && st == null && !feedOpen,
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
             enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 },
             exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },

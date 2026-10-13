@@ -197,6 +197,38 @@ object PeekPalette {
     val pale = Color(0xFFF4F0E8)
 }
 
+/** Illustration colours for the food pictures (`ui/live/FoodArt.kt`), matched to the renderer's particle tints. */
+object FoodPalette {
+    val flakeOrange = Color(0xFFE8893A)
+    val flakeRed = Color(0xFFC94B3C)
+    val flakeGreen = Color(0xFF6E9A3E)
+    val flakeTan = Color(0xFFD9B36A)
+    val mysisPink = Color(0xFFF2A7B8)
+    val mysisDeep = Color(0xFFD9748F)
+    val brineOrange = Color(0xFFF2A25A)
+    val brineDeep = Color(0xFFD8763A)
+    val krillRed = Color(0xFFE2604A)
+    val krillPale = Color(0xFFF7B9A8)
+    val pelletBrown = Color(0xFF8A5A2B)
+    val pelletLight = Color(0xFFB88A4A)
+    val noriGreen = Color(0xFF2F6B3A)
+    val noriDark = Color(0xFF1E4A2A)
+    val clipBlack = Color(0xFF1B2230)
+    val waferGreen = Color(0xFF35502A)
+    val waferSpeck = Color(0xFFA9C58A)
+    val podTan = Color(0xFFD8CBA8)
+    val prawnPink = Color(0xFFF0B7A4)
+    val prawnStripe = Color(0xFFD9684F)
+    val phyto = Color(0xFF6DBF5A)
+    val cyclopsRed = Color(0xFFFF5A36)
+    val powderPink = Color(0xFFD98FB0)
+    val powderOrange = Color(0xFFF2B35C)
+    val eye = Color(0xFF14161C)
+    val glint = Color(0xFFFFFFFF)
+    val water = Color(0xFF5CE1E6)
+    val shade = Color(0x33000000)
+}
+
 /** Parses "#RRGGBB" / "#AARRGGBB" from species data (not for UI tokens). */
 fun parseHexColor(hex: String?): Color? {
     val h = hex?.trim()?.removePrefix("#") ?: return null

@@ -100,8 +100,9 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
             val food = snap.food
             val count = minOf(food.size / 3, MAX_FOOD)
             for (i in 0 until count) {
-                val c = FOOD_COLORS[(snap.foodKinds.getOrNull(i)?.toInt() ?: 0).coerceIn(0, FOOD_COLORS.size - 1)]
-                k = put(k, food[i * 3], food[i * 3 + 1], food[i * 3 + 2], 0.25f, c[0], c[1], c[2], 0.95f)
+                val kind = (snap.foodKinds.getOrNull(i)?.toInt() ?: 0).coerceIn(0, FOOD_COLORS.size - 1)
+                val c = FOOD_COLORS[kind]
+                k = put(k, food[i * 3], food[i * 3 + 1], food[i * 3 + 2], FOOD_SIZES[kind], c[0], c[1], c[2], 0.95f)
             }
         }
         foodRange = f0 to (k - f0)
@@ -121,11 +122,22 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
         val HOB = floatArrayOf(72f, 55f, 2.3f)
-        /** Linear colours by FoodKind ordinal: flake #C8A060, mysis #E8D8C0, pellet, nori #2E4A1A, pods, raw prawn #D88A7A, plankton #5A8A3A. */
+        /**
+         * Linear colours by FoodKind ordinal (keep in step with core FoodKind): flake #C8A060, mysis #E8D8C0, pellet,
+         * nori #2E4A1A, pods, raw prawn #D88A7A, plankton #5A8A3A, brine #F4A040, krill #D85A48, floating pellet
+         * #B88A50, algae wafer #3A4E2A, coral food #D88AB0 (pink powder), cyclops #FF5A38.
+         */
         val FOOD_COLORS = arrayOf(
             floatArrayOf(0.578f, 0.352f, 0.117f), floatArrayOf(0.807f, 0.687f, 0.527f), floatArrayOf(0.40f, 0.20f, 0.08f),
             floatArrayOf(0.027f, 0.068f, 0.010f), floatArrayOf(0.75f, 0.72f, 0.65f),
             floatArrayOf(0.69f, 0.25f, 0.195f), floatArrayOf(0.10f, 0.25f, 0.04f),
+            floatArrayOf(0.89f, 0.36f, 0.10f), floatArrayOf(0.69f, 0.085f, 0.05f), floatArrayOf(0.48f, 0.25f, 0.07f),
+            floatArrayOf(0.036f, 0.08f, 0.023f), floatArrayOf(0.69f, 0.27f, 0.43f), floatArrayOf(1.0f, 0.10f, 0.037f),
+        )
+        /** Particle size (world cm) by FoodKind ordinal: a pinch of cyclops is a dust, an algae wafer a disc. */
+        val FOOD_SIZES = floatArrayOf(
+            0.25f, 0.30f, 0.25f, 0.25f, 0.12f, 0.45f, 0.10f,
+            0.22f, 0.50f, 0.30f, 0.60f, 0.09f, 0.13f,
         )
 
         /** Flow velocity (cm/s) at a point: trilinear in the solver grid, or an analytic slow gyre. */

@@ -2,6 +2,7 @@ package com.reeflive.app.ui.live
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -9,6 +10,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,32 +25,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.WbTwilight
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.reeflive.app.ui.components.Glyph
 import com.reeflive.app.ui.components.ReefChip
+import com.reeflive.app.ui.components.ReefGlyph
+import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.components.StatusIcon
+import com.reeflive.app.ui.components.tapSplash
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefMotion
@@ -57,8 +57,8 @@ import com.reeflive.app.ui.theme.statusText
 import com.reeflive.core.status.Status
 
 /**
- * Live Tank HUD (stateless). Lays out top-to-bottom: mode toggle + clock, speed chips, water strip, sound button,
- * and an events toast pinned to the bottom. Empty space is left untouched so the GL view shows through.
+ * Live Tank HUD (stateless). Lays out top-to-bottom: mode toggle + clock, speed chips, water strip, the round tool
+ * buttons, and an events toast pinned to the bottom. Empty space is left untouched so the GL view shows through.
  */
 @Composable
 fun LiveOverlay(
@@ -78,6 +78,9 @@ fun LiveOverlay(
     onMicro: (() -> Unit)? = null,
     /** Hides every control so only the tank shows (tap the tank or "Show controls" to bring them back); null hides the button. */
     onHideChrome: (() -> Unit)? = null,
+    /** Whether the food tray is open, for the [FeedButton]; null hides the button. */
+    feedOpen: Boolean? = null,
+    onToggleFeed: () -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.fillMaxWidth().align(Alignment.TopStart), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -88,8 +91,13 @@ fun LiveOverlay(
             if (showSpeed) SpeedChips(state.speeds, state.speed, onSpeedChange)
             if (state.readouts.isNotEmpty()) WaterStrip(state.readouts)
             // under the strip at the right edge: the top row has no room for them on a phone
-            if (soundOn != null || cleaning != null || onMicro != null || onHideChrome != null) {
-                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (soundOn != null || cleaning != null || onMicro != null || onHideChrome != null || feedOpen != null) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState(), reverseScrolling = true),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (feedOpen != null) FeedButton(feedOpen, onToggleFeed)
                     if (onMicro != null) MicroButton(onMicro)
                     if (cleaning != null) CleanGlassButton(cleaning, onToggleCleaning)
                     if (soundOn != null) SoundButton(soundOn, onToggleSound)
@@ -111,7 +119,7 @@ fun LiveOverlay(
 /**
  * Watch / Sandbox segmented pill. Selecting Sandbox opens the inline sandbox panel; tapping Sandbox again while it is
  * selected collapses / expands it (the screen decides, [onModeChange] fires on every tap). Sandbox shows coral text
- * to signal "not real" (UI_STYLE §10).
+ * to signal "not real" (UI_STYLE §10). Each option carries its glyph: an eye for Watch, a bucket for Sandbox.
  */
 @Composable
 fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifier = Modifier) {
@@ -126,94 +134,149 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
             val reduce = ReefTheme.reduceMotion
             val fg by animateColorAsState(if (sel) selColor else c.textSecondary, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
             val bg by animateColorAsState(if (sel) selColor.copy(alpha = 0.22f) else selColor.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
-            Text(
-                m.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = fg,
-                modifier = Modifier
+            val grow by animateFloatAsState(if (sel) 1.15f else 1f, ReefMotion.bouncy(reduce), label = "modeGlyph")
+            val interaction = remember { MutableInteractionSource() }
+            Row(
+                Modifier
                     .heightIn(min = 48.dp)
                     .semantics { selected = sel }
                     .clip(ReefShapes.pill)
                     .background(bg)
-                    .clickable(role = Role.Tab) { onModeChange(m) }
-                    .padding(horizontal = 16.dp, vertical = 13.dp),
-            )
+                    .tapSplash(interaction, selColor)
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Tab) { onModeChange(m) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Glyph(
+                    if (m == HudMode.SANDBOX) ReefGlyphs.bucket else ReefGlyphs.eye,
+                    size = 20.dp, tint = fg, accent = if (sel) c.coralSoft else c.textTertiary,
+                    modifier = Modifier.graphicsLayer { scaleX = grow; scaleY = grow },
+                )
+                Text(m.label, style = MaterialTheme.typography.labelLarge, color = fg)
+            }
         }
+    }
+}
+
+/** A round 48 dp glass tool button: press shrink + water splash, glyph or custom content. */
+@Composable
+private fun ToolButton(
+    onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    role: Role = Role.Button,
+    active: Boolean = false,
+    interaction: MutableInteractionSource = remember { MutableInteractionSource() },
+    content: @Composable () -> Unit,
+) {
+    val c = ReefTheme.colors
+    val reduce = ReefTheme.reduceMotion
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.9f else 1f, ReefMotion.spring(reduce), label = "tool")
+    val bg by animateColorAsState(if (active) c.primaryBright.copy(alpha = 0.22f) else c.glass, ReefMotion.tween(reduce, ReefMotion.FAST), label = "toolBg")
+    Box(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .size(48.dp)
+            .clip(ReefShapes.pill)
+            .background(bg)
+            .tapSplash(interaction, c.primaryBright)
+            .clickable(interactionSource = interaction, indication = null, role = role, onClickLabel = label) { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+/** A pill-shaped glass tool button with a glyph and a word. */
+@Composable
+private fun ToolPill(
+    onClick: () -> Unit,
+    label: String,
+    text: String,
+    glyph: ReefGlyph,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+) {
+    val c = ReefTheme.colors
+    val reduce = ReefTheme.reduceMotion
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, ReefMotion.spring(reduce), label = "pill")
+    val tone = c.primaryBright
+    val bg by animateColorAsState(if (active) tone.copy(alpha = 0.22f) else c.glass, ReefMotion.tween(reduce, ReefMotion.FAST), label = "pillBg")
+    val fg by animateColorAsState(if (active) tone else c.text, ReefMotion.tween(reduce, ReefMotion.FAST), label = "pillFg")
+    Row(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .heightIn(min = 48.dp)
+            .clip(ReefShapes.pill)
+            .background(bg)
+            .tapSplash(interaction, tone)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClickLabel = label) { onClick() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Glyph(glyph, size = 20.dp, tint = fg, accent = c.coralSoft)
+        Text(text, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }
 
 /** Glass pill that opens the microscope (pods and plankton up close). */
 @Composable
 fun MicroButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    ToolPill(onClick, "Open the microscope", "Micro", ReefGlyphs.microscope, modifier)
+}
+
+/**
+ * The food tin: opens / closes the food tray. The tin tips over while the tray is open, as if pouring, and rights
+ * itself when it closes.
+ */
+@Composable
+fun FeedButton(open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    Row(
-        modifier
-            .heightIn(min = 48.dp)
-            .clip(ReefShapes.pill)
-            .background(c.glass)
-            .clickable(role = Role.Button, onClickLabel = "Open the microscope") { onClick() }
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    val reduce = ReefTheme.reduceMotion
+    val tilt by animateFloatAsState(if (open) -28f else 0f, ReefMotion.bouncy(reduce), label = "tin")
+    ToolButton(
+        onToggle, if (open) "Close the food tray" else "Feed the fish",
+        modifier.semantics { stateDescription = if (open) "Food tray open" else "Food tray closed" },
+        active = open,
     ) {
-        Icon(Icons.Rounded.Search, contentDescription = null, tint = c.text, modifier = Modifier.size(18.dp))
-        Text("Micro", style = MaterialTheme.typography.labelLarge, color = c.text)
+        Glyph(
+            ReefGlyphs.feedTin, size = 24.dp, tint = if (open) c.primaryBright else c.text, accent = c.coral,
+            contentDescription = "Feed",
+            modifier = Modifier.graphicsLayer { rotationZ = tilt },
+        )
     }
 }
 
-/** Round glass mute / unmute button for the tank sounds. */
+/** Round glass mute / unmute button for the tank sounds: the speaker's waves fade in and out with the setting. */
 @Composable
 fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    Box(
-        modifier
-            .size(48.dp)
-            .clip(ReefShapes.pill)
-            .background(c.glass)
-            .clickable(role = Role.Switch, onClickLabel = if (on) "Mute tank sounds" else "Unmute tank sounds") { onToggle() },
-        contentAlignment = Alignment.Center,
+    ToolButton(
+        onToggle, if (on) "Mute tank sounds" else "Unmute tank sounds",
+        modifier.semantics { stateDescription = if (on) "Tank sounds on" else "Tank sounds off" },
+        role = Role.Switch,
     ) {
-        Icon(
-            if (on) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff,
-            contentDescription = if (on) "Tank sounds on" else "Tank sounds off",
-            tint = if (on) c.text else c.textSecondary,
-            modifier = Modifier.size(20.dp),
-        )
+        SpeakerIcon(on, size = 24.dp, tint = if (on) c.text else c.textSecondary, accent = c.coralSoft)
     }
 }
 
 /** Glass pill shown while the controls are hidden: brings them back (tapping empty water does too). */
 @Composable
 fun ShowControlsPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val c = ReefTheme.colors
-    Row(
-        modifier
-            .heightIn(min = 48.dp)
-            .clip(ReefShapes.pill)
-            .background(c.glass)
-            .clickable(role = Role.Button, onClickLabel = "Show the controls") { onClick() }
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(Icons.Rounded.Visibility, contentDescription = null, tint = c.text, modifier = Modifier.size(18.dp))
-        Text("Show controls", style = MaterialTheme.typography.labelLarge, color = c.text)
-    }
+    ToolPill(onClick, "Show the controls", "Show controls", ReefGlyphs.eye, modifier)
 }
 
-/** Round glass button that hides all the overlay controls so the whole tank shows. */
+/** Round glass button that hides all the overlay controls so the whole tank shows: an eye that closes as you tap. */
 @Composable
 fun HideChromeButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
-    Box(
-        modifier
-            .size(48.dp)
-            .clip(ReefShapes.pill)
-            .background(c.glass)
-            .clickable(role = Role.Button, onClickLabel = "Hide the controls") { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.Rounded.VisibilityOff, contentDescription = "Hide controls", tint = c.text, modifier = Modifier.size(20.dp))
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    ToolButton(onClick, "Hide the controls", modifier, interaction = interaction) {
+        EyeIcon(open = !pressed, size = 24.dp, tint = c.text, accent = c.coralSoft)
     }
 }
 
@@ -224,20 +287,26 @@ fun SpeedChips(speeds: List<Double>, speed: Double, onSpeedChange: (Double) -> U
     }
 }
 
-private fun phaseIcon(p: DayPhase): ImageVector = when (p) {
-    DayPhase.NIGHT -> Icons.Rounded.DarkMode
-    DayPhase.DAY -> Icons.Rounded.LightMode
-    DayPhase.DAWN, DayPhase.DUSK -> Icons.Rounded.WbTwilight
+/** Where the sun sits for the clock's little sky: 0 = moon, 1 = full sun. */
+private fun phaseLevel(p: DayPhase): Float = when (p) {
+    DayPhase.NIGHT -> 0f
+    DayPhase.DAWN -> 0.4f
+    DayPhase.DAY -> 1f
+    DayPhase.DUSK -> 0.3f
 }
 
 @Composable
 fun ClockPill(simTimeSec: Double, phase: DayPhase, modifier: Modifier = Modifier) {
     val c = ReefTheme.colors
     Row(
-        modifier.clip(ReefShapes.pill).background(c.glass).padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier
+            .clip(ReefShapes.pill)
+            .background(c.glass)
+            .semantics { contentDescription = "${formatSimClock(simTimeSec)}, ${phase.label}" }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(phaseIcon(phase), contentDescription = phase.label, tint = c.coralSoft, modifier = Modifier.size(18.dp))
+        SunMoonIcon(phaseLevel(phase), size = 20.dp, tint = c.coralSoft, accent = c.coral)
         Spacer(Modifier.width(6.dp))
         Text(formatSimClock(simTimeSec), style = MaterialTheme.typography.labelLarge, color = c.text)
         Spacer(Modifier.width(6.dp))
@@ -291,7 +360,7 @@ fun EventToast(toast: HudToast, modifier: Modifier = Modifier, onDismiss: () -> 
 }
 
 @Composable
-internal fun statusColor(s: Status) = with(ReefTheme.colors) {
+internal fun statusColor(s: Status): Color = with(ReefTheme.colors) {
     when (s) {
         Status.GOOD -> good
         Status.CAUTION -> caution
@@ -321,11 +390,13 @@ internal val previewHud = HudState(
 @Preview(name = "HUD · Abyss", widthDp = 393, heightDp = 400, showBackground = true)
 @Composable
 private fun LiveOverlayDarkPreview() = ReefLiveTheme(darkTheme = true, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud, {}, {}, soundOn = true) }
+    Box(Modifier.background(ReefTheme.colors.bg)) {
+        LiveOverlay(previewHud, {}, {}, soundOn = true, cleaning = false, onMicro = {}, onHideChrome = {}, feedOpen = false)
+    }
 }
 
 @Preview(name = "HUD · Lagoon", widthDp = 393, heightDp = 400, showBackground = true)
 @Composable
 private fun LiveOverlayLightPreview() = ReefLiveTheme(darkTheme = false, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud.copy(mode = HudMode.SANDBOX), {}, {}) }
+    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud.copy(mode = HudMode.SANDBOX), {}, {}, feedOpen = true) }
 }

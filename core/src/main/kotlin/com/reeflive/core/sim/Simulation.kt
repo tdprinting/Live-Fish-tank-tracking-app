@@ -270,6 +270,7 @@ class Simulation(
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
+        if (useBehavior && !abstractMode) coralCatch(simDt)
         chemAccum += simDt
         while (chemAccum >= CHEM_DT) {
             chemAccum -= CHEM_DT
@@ -277,6 +278,26 @@ class Simulation(
         }
         tickCount++
     }
+
+    /**
+     * Coral polyps catch fine suspended food (coral powder, cyclops, plankton, pods) drifting within reach of the
+     * colony: one particle per colony per second at most, so a dosed cloud is shared with the filter feeders.
+     * Caught food tops up [Coral.fed], which [CoralGrowth.vigor] turns into a small growth boost.
+     */
+    private fun coralCatch(dt: Double) {
+        coralCatchAcc += dt
+        if (coralCatchAcc < 1.0) return
+        coralCatchAcc = 0.0
+        if (corals.isEmpty() || food.particles.none { !it.eaten && it.kind.coralCatchable }) return
+        for (c in corals) {
+            if (c.tissue < 0.1 || c.extension < 0.3 || c.kind == CoralKind.MACRO) continue
+            val reach = (2.0 + CoralGrowth.extent(c)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
+            val f = food.nearest(c.pos, reach) { it.kind.coralCatchable } ?: continue
+            food.consume(f)
+            c.fed = min(1.0, c.fed + CORAL_FED_PER_CATCH)
+        }
+    }
+    private var coralCatchAcc = 0.0
 
     /** Demersal zooplankton rises from the rock after dark (S:Marnane02 context); pods drift and expire. */
     private fun nightPlankton(dt: Double) {
@@ -456,6 +477,7 @@ class Simulation(
         if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
+            c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
             val tissueBefore = c.tissue
             CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
@@ -993,6 +1015,8 @@ class Simulation(
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
                 !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
         }.sortedByDescending { it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind)) }
+        // corals catch a share of a dosed cloud straight away (no particles in abstract mode)
+        if (kind.coralCatchable) for (c in corals) if (c.tissue >= 0.1 && c.kind != CoralKind.MACRO) c.fed = min(1.0, c.fed + CORAL_FED_PER_CATCH * 3)
         for (o in eaters) {
             if (left <= 0) break
             if (kind == FoodKind.NORI) { o.hunger = max(0.0, o.hunger - 0.4); o.nutritionGreens = 1.0; continue }
@@ -1188,6 +1212,9 @@ class Simulation(
          */
         @Ev(Evidence.DESIGN_ESTIMATE) const val RESUSPEND_CAPTURE_PER_LOAD = 0.005
         const val RESUSPEND_CAPTURE_MAX_PER_MIN = 0.0002
+        /** [Coral.fed] gained per caught particle and its e-folding time (≈ 2 days). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_PER_CATCH = 0.08
+        @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_DECAY_MIN = 2 * 1440.0
         val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }

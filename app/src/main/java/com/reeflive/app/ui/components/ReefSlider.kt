@@ -3,6 +3,7 @@ package com.reeflive.app.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,7 +54,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,6 +79,7 @@ import com.reeflive.app.ui.theme.ReefLiveTheme
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefShapes
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.app.ui.theme.status
 import com.reeflive.app.ui.theme.statusText
 import com.reeflive.core.status.Status
 import kotlinx.coroutines.delay
@@ -377,8 +381,10 @@ private fun SmallRoundButton(icon: ImageVector, description: String, enabled: Bo
 }
 
 /**
- * Custom-drawn track: the zones, the reference marker and the thumb share one inset so they always line up
- * (the old Material slider drew its band strip with a different inset than its thumb).
+ * Custom-drawn track (UI_STYLE §10): the zones, the reference marker and the thumb share one inset so they always
+ * line up. The track is a water pill: safe/caution/danger segments under a lagoon gradient that fills from the left
+ * end to the thumb, and the thumb is a bubble (radial sheen, highlight, status-coloured rim) that swells while it is
+ * held and sends out a ripple ring when first touched.
  */
 @Composable
 private fun SliderTrack(
@@ -391,10 +397,17 @@ private fun SliderTrack(
     onValue: (Double) -> Unit,
 ) {
     val c = ReefTheme.colors
+    val reduce = ReefTheme.reduceMotion
     var pressed by remember { mutableStateOf(false) }
     val latestSpec by rememberUpdatedState(spec)
     val latestOnValue by rememberUpdatedState(onValue)
     val latestOnDrag by rememberUpdatedState(onDragState)
+    // thumb swell while held, and one ripple ring on touch-down
+    val swell by animateFloatAsState(if (pressed) 1f else 0f, ReefMotion.spring(reduce), label = "thumbSwell")
+    val ripple = remember { Animatable(1f) }
+    LaunchedEffect(pressed) {
+        if (pressed && !reduce) { ripple.snapTo(0f); ripple.animateTo(1f, ReefMotion.tween(false, 520)) }
+    }
     Box(
         modifier
             .padding(horizontal = 4.dp)
@@ -416,12 +429,16 @@ private fun SliderTrack(
                 )
             },
     ) {
-        val good = c.good.copy(alpha = 0.6f)
-        val warn = c.caution.copy(alpha = 0.5f)
-        val bad = c.danger.copy(alpha = 0.6f)
+        val good = c.good.copy(alpha = 0.55f)
+        val warn = c.caution.copy(alpha = 0.45f)
+        val bad = c.danger.copy(alpha = 0.55f)
         val plain = c.glassHi
-        val thumb = c.primaryBright
+        val water = listOf(c.primary.copy(alpha = 0.55f), c.primaryBright.copy(alpha = 0.75f))
+        val thumbCore = c.primaryBright
+        val thumbEdge = c.primary
         val ring = c.bg
+        val sheen = Color.White
+        val rim = spec.zones?.status(value)?.let { c.status(it) } ?: c.primaryBright
         val refColor = c.text
         val delta = c.coral
         Canvas(Modifier.fillMaxSize()) {
@@ -432,6 +449,7 @@ private fun SliderTrack(
             fun x(v: Double) = pad + spec.fraction(v) * w
             val top = cy - th / 2
             val z = spec.zones
+            // the track: zones (or plain glass), rounded ends
             if (z == null) {
                 drawRoundRect(plain, Offset(pad, top), Size(w, th), CornerRadius(th / 2))
             } else {
@@ -443,11 +461,17 @@ private fun SliderTrack(
                 val hi = z.dangerAbove ?: spec.max
                 seg(spec.min, lo, bad); seg(lo, z.safeFrom, warn); seg(z.safeFrom, z.safeTo, good)
                 seg(z.safeTo, hi, warn); seg(hi, spec.max, bad)
-                // round the ends
                 drawCircle(if ((z.dangerBelow ?: Double.NEGATIVE_INFINITY) > spec.min) bad else if (z.safeFrom > spec.min) warn else good, th / 2, Offset(pad, cy))
                 drawCircle(if ((z.dangerAbove ?: Double.POSITIVE_INFINITY) < spec.max) bad else if (z.safeTo < spec.max) warn else good, th / 2, Offset(pad + w, cy))
             }
             val tx = x(value)
+            // water fills the pill from the left end up to the thumb
+            if (tx - pad > 1f) {
+                drawRoundRect(
+                    Brush.horizontalGradient(water, startX = pad, endX = tx),
+                    Offset(pad - th / 2, top), Size(tx - pad + th / 2, th), CornerRadius(th / 2),
+                )
+            }
             if (reference != null) {
                 val rx = x(reference.coerceIn(spec.min, spec.max))
                 // how far the sandbox is pushed from the real tank
@@ -455,9 +479,17 @@ private fun SliderTrack(
                 drawLine(refColor, Offset(rx, cy - 13.dp.toPx()), Offset(rx, cy + 13.dp.toPx()), strokeWidth = 2.dp.toPx())
                 drawCircle(refColor, 3.dp.toPx(), Offset(rx, cy - 13.dp.toPx()))
             }
-            val r = if (pressed) ThumbRadius.toPx() + 3.dp.toPx() else ThumbRadius.toPx()
-            drawCircle(ring, r + 2.dp.toPx(), Offset(tx, cy))
-            drawCircle(thumb, r, Offset(tx, cy))
+            // ripple ring on touch-down
+            val rp = ripple.value
+            if (rp < 1f) drawCircle(thumbCore.copy(alpha = 0.45f * (1f - rp)), ThumbRadius.toPx() * (1f + 1.6f * rp), Offset(tx, cy), style = Stroke(2.dp.toPx() * (1f - rp) + 0.5f))
+            // the bubble thumb
+            val r = ThumbRadius.toPx() + 3.dp.toPx() * swell
+            val centre = Offset(tx, cy)
+            drawCircle(ring, r + 2.dp.toPx(), centre)
+            drawCircle(rim, r + 1.dp.toPx(), centre)
+            drawCircle(Brush.radialGradient(listOf(thumbCore, thumbEdge), center = Offset(tx - r * 0.25f, cy - r * 0.25f), radius = r * 1.3f), r, centre)
+            drawCircle(sheen.copy(alpha = 0.75f), r * 0.26f, Offset(tx - r * 0.38f, cy - r * 0.38f))
+            drawArc(sheen.copy(alpha = 0.35f), startAngle = 20f, sweepAngle = 70f, useCenter = false, topLeft = Offset(tx - r * 0.72f, cy - r * 0.72f), size = Size(r * 1.44f, r * 1.44f), style = Stroke(1.5.dp.toPx()))
         }
     }
 }

@@ -32,7 +32,7 @@ data class TankConfig(val lengthCm: Double, val widthCm: Double, val heightCm: D
 ```kotlin
 sealed class Command {
   data class SetParam(val paramId: String, val value: Double): Command()
-  data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null): Command()   // FLAKE, MYSIS, NORI, PELLET
+  data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null): Command()   // any FoodKind (§4.6)
   data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX): Command()
   data class Dose(val paramId: String, val delta: Double): Command()
   data class Lights(val on: Boolean?, val overrideIntensity: Double? = null): Command()
@@ -361,10 +361,31 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - Threat: eel within 12 cm → tail-flip escape (burst 40 cm/s for 0.5 s, backwards), then hide deeper in the ledge crevice.
 
 ### 4.6 Feeding system (`FoodSystem`)
-- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams × 40 (flake), × 25 (mysis), nori = one 4×6 cm sheet mesh at the clip anchor (`NORI_CLIP` at the left glass, y 35) that fish nibble (a `remaining` scalar scales the sheet).
-- Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`, with `g_sink` = flake 0.6 cm/s terminal (floats 30–60 s first: buoyant phase with `sink = 0` for `t < 45 s`), mysis 1.5 cm/s, pellet 3 cm/s. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after 20 min uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles.
+- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 4×6 cm sheet mesh at the clip anchor (`NORI_CLIP` at the left glass, y 35) that fish nibble (a `remaining` scalar scales the sheet).
+- Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`; floating kinds hold `sink = 0` at the surface for `floatSeconds`, then sink at `sinkCmS`. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after `lifeSeconds` uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles. Suspended kinds (pods, phyto, coral food, cyclops) barely sink and ride the flow.
 - Fish bite radius 1.2 cm; competition: a particle targeted by two fish goes to the first to reach it; clowns and tang get burst speed when hunger > 0.4.
 - "Frenzy" score: all diet-matching fish with hunger > 0.2 get `Feed` ≥ 0.6 immediately on spawn (perception event), producing the rush.
+- Coral feeding (`Simulation.coralCatch`, 1 Hz): a colony with tissue ≥ 0.1 and polyps ≥ 30 % extended catches one `coralCatchable` particle (coral food, cyclops, phyto, pods) within `2 cm + its extent` (3–12 cm) per second; each catch adds 0.08 to `Coral.fed` (capped at 1, decays with a 2-day half-time) and `CoralGrowth.vigor` gains up to +15 % (`FED_BOOST`). Abstract (fast-forward) feeding of a catchable kind bumps every colony by 0.24. Magnitudes are design estimates: target feeding of LPS and zooplankton capture by SPS is well documented (Houlbrèque & Ferrier-Pagès 2009, *Biol. Rev.* 84:1–17, "Heterotrophy in tropical scleractinian corals"), but a per-catch growth number is not.
+
+**Food table** (`FoodKind`, ordinal order; the renderer indexes colours and sizes by ordinal, so new kinds are appended):
+
+| Kind | g / particle | sink cm/s | float s | nutrient factor | basis |
+|---|---|---|---|---|---|
+| FLAKE | 1/40 | 0.6 | 45 | 1.0 | dry food, ~8 % moisture; flakes float then sink (hobby observation) |
+| MYSIS | 1/25 | 1.5 | 0 | 0.3 | frozen mysis is ~88–92 % moisture (Hikari / San Francisco Bay Brand guaranteed analyses), so ~1/3 the dry nutrient of flake |
+| PELLET | 1/20 | 3.0 | 0 | 1.0 | sinking pellet, ~1–1.5 mm (Hikari Marine-S, New Life Spectrum 1 mm) |
+| NORI | sheet | 0 | ∞ (clipped) | 0.3 | dried seaweed, low protein per gram eaten; sheet nibbled, not particles |
+| PODS | 1/400 | 0.05 | 0 | 0.2 | live copepods 0.5–2 mm swim; mass per animal ~2–3 mg |
+| PRAWN | 1/4 | 2.5 | 0 | 0.35 | raw prawn ~78 % moisture (USDA FoodData Central, shrimp raw) |
+| PLANKTON | 1/300 | 0.0 | 0 | 0.2 | live phytoplankton stays in suspension |
+| BRINE | 1/60 | 0.5 | 0 | 0.2 | adult *Artemia* 8–10 mm, ~90 % moisture and poor in HUFA unless enriched (FAO *Manual on the production and use of live food for aquaculture*, 1996, §4; Sorgeloos et al.) |
+| KRILL | 1/8 | 2.5 | 0 | 0.35 | freeze-dried / frozen krill pieces, 15–25 mm whole; frozen ~80 % moisture (Hikari Krill guaranteed analysis) |
+| FLOATING_PELLET | 1/20 | 1.5 | 300 | 1.0 | extruded floating pellets stay up for minutes before waterlogging (manufacturer "floating" claim; 300 s is a design estimate) |
+| ALGAE_WAFER | 1/6 | 3.5 | 0 | 1.0 | Hikari Algae Wafers: sink fast, hold shape for hours (3 h life here), ≤10 % moisture |
+| CORAL_FOOD | 1/300 | 0.05 | 0 | 1.0 | powdered coral food 150–200 µm (Polyp Lab Reef-Roids particle size as published) stays suspended; dry powder |
+| CYCLOPS | 1/250 | 0.15 | 0 | 0.3 | Cyclop-eeze / frozen cyclops ~0.8 mm (Argent); frozen, so mostly water |
+
+Sink rates, float times and `lifeSeconds` (20 min default, 30 min suspended kinds, 3 h wafer) are design estimates tuned for the simulation's 20-minute detritus window, not measurements. Diet wiring (`SimSpecies.eats` / `dietMatch`): BRINE, KRILL and CYCLOPS fall under the MEATY / ZOOPLANKTON diet tags, so clowns, hawkfish, cardinals, wrasses and filter-feeders take them without sheet changes; FLOATING_PELLET follows PELLET; ALGAE_WAFER needs an algae / spirulina / nori diet (tangs, blennies, snails); CORAL_FOOD counts as plankton for filter-feeders and is otherwise coral-only. Preferences: hawkfish favour krill ×1.3, tangs / lawnmower blennies / astrea snails algae wafers ×1.2, cardinals / peeker blennies / feather dusters cyclops ×1.2 (design estimates reflecting hobby feeding guides).
 
 ### 4.7 Lights and sleep
 `LightSchedule.intensity(t)` and channels from the app's schedule (default 03 §F5 ramp scaled to a 10-h photoperiod: moon 00:00–08:00 at 2%, dawn 08:00–09:30, peak 10:30–18:00, dusk 18:00–20:00, moon after). Fish react to the derivative too: lights-on within the last 2 min → DIURNAL fish `Flee`-lite (stress +0.05, dart 1 s) then resume; lights-off → within 10 min diurnal fish go to sleep anchors; nocturnal activate. Tap-glass at night startles more (×1.5).
@@ -466,7 +487,7 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 | Nitrification `K_AOB`, `K_NOB` | 0.10, 0.15 ppm/h at B = 1 | cycle peaks on day ≈ 6.7 (NH3) and ≈ 15 (NO2) |
 | Bacteria growth `MU_AOB`, `MU_NOB` | 0.012, 0.007 /h | same |
 | `new_tank_cycle` preset | ghost-feed 0.3 g flake/day, B = 0.02 | fishless-cycle timeline (§8.2) |
-| Food nutrient factor | flake/pellet 1.0, mysis 0.3, nori 0.3, pods 0.2 | frozen food is mostly water; avoids NO2 spikes after the eel's feed |
+| Food nutrient factor | flake/pellet/floating pellet/algae wafer/coral food 1.0, mysis 0.3, nori 0.3, cyclops 0.3, prawn/krill 0.35, pods/phyto/brine 0.2 | frozen food is mostly water; avoids NO2 spikes after the eel's feed (§4.6 table) |
 | `FEED_TAN_PER_G`, `FEED_PO4_PER_G` | 0.04, 0.004 | NO3 +2–5 ppm/week at 1 g/day |
 | `K_EXCRETION` | 0.0074 mg TAN/h per g^0.8 | basal excretion |
 | Eel `massCoeff` | 0.0022 | a 45 cm snowflake ≈ 200 g |

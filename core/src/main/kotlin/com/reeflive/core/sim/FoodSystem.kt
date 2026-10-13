@@ -25,7 +25,7 @@ class NoriSheet(val pos: Vec3, var remaining: Double, val bornAt: Double)
 
 /**
  * Food particles (SIMULATION §4.6): spawn, sink/float with the flow, settle on rock or sand,
- * expire to detritus after 20 min. Max 400 particles.
+ * expire to detritus after [FoodKind.lifeSeconds] (20 min for most; a wafer lasts hours). Max 400 particles.
  */
 class FoodSystem(private val rock: RockData, private val flow: FlowField, private val rng: Rng) {
     val particles = ArrayList<FoodParticle>()
@@ -56,7 +56,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             var p = at + Vec3(rng.gaussian() * spread, if (surface) 0.0 else rng.gaussian() * 1.0, rng.gaussian() * spread)
             p = rock.clampToWater(p, 0.5)
             if (surface) p = p.withY(rock.waterLevelCm - 0.3)
-            val vy = if (surface && kind == FoodKind.FLAKE) 0.0 else -kind.sinkCmS
+            val vy = if (surface && kind.floats) 0.0 else -kind.sinkCmS
             particles += FoodParticle(nextId++, kind, p, Vec3(0.0, vy, 0.0), simTime + rng.nextDouble() * 10, fid)
         }
         feeds += FeedRecord(fid, count, count, simTime)
@@ -70,14 +70,13 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             val f = it.next()
             if (f.eaten) { it.remove(); continue }
             val age = t - f.bornAt
-            val life = if (f.kind.suspended) 1800.0 else 1200.0
-            if (age > life) {
+            if (age > f.kind.lifeSeconds) {
                 expiredGrams += f.grams
                 it.remove(); continue
             }
             if (f.settled) continue
             val w = flow.velocityFast(f.pos)
-            val floating = f.kind == FoodKind.FLAKE && age < f.kind.floatSeconds && f.pos.y > rock.waterLevelCm - 1
+            val floating = f.kind.floats && age < f.kind.floatSeconds && f.pos.y > rock.waterLevelCm - 1
             val sink = if (floating) 0.0 else f.kind.sinkCmS
             val target = if (floating) Vec3(w.x, 0.0, w.z) else w * (if (f.kind.suspended) 1.0 else 0.7) + Vec3(0.0, -sink, 0.0)
             val k = (2.0 * dt).coerceAtMost(1.0)
