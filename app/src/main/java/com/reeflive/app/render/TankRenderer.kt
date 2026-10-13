@@ -620,6 +620,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
+        // shrimp limbs: x stride phase (cycles, wrapped), y stepping amount, z rock / claw signal, w antenna grooming
+        p.set4f("uLimb", r.walkPhase - kotlin.math.floor(r.walkPhase), r.walkAmt, r.limbSignal, r.groom)
+        p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat)
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)

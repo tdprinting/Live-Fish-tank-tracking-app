@@ -23,6 +23,8 @@ class FishRig(val id: String) {
     var alive = true; var visible = true; var posture = 0
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
+    /** Shrimp limbs (research 17): stride phase (cycles), stepping amount, rock/claw signal, antenna grooming. */
+    var walkPhase = 0f; var walkAmt = 0f; var limbSignal = 0f; var groom = 0f
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
 
@@ -66,6 +68,8 @@ class FishRig(val id: String) {
         alive = b.alive; visible = b.visible; posture = b.posture
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
         bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
+        walkPhase = lerpPhase(pa.walkPhase, b.walkPhase, t); walkAmt = lerp(pa.walkAmt, b.walkAmt, t)
+        limbSignal = lerp(pa.limbSignal, b.limbSignal, t); groom = lerp(pa.groom, b.groom, t)
         limitBend(spine, frames, MAX_BEND_PER_SEGMENT, MAX_BEND_TOTAL, bendScratch)
         touched = true
     }

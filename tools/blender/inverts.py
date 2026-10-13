@@ -218,72 +218,115 @@ def build_shrimp(kind="banded"):
             gb.add(Vc, Fc, at.uv(2, np.full(len(Vc), 0.5)), [(0, 0, 0, i / 47)] * len(Vc))
     body = geo_obj("Body", gb, root, "shell", [mshell])
 
-    # --- walking legs (4 pairs; banded: pair 3 = chelipeds built separately) --------------------
+    # --- limb rig data (research 17) ------------------------------------------------------------
+    # COLOR_0 on every limb vertex: R = limb class / 8, G = pair index / 8, B = hinge (0 base .. 1 tip),
+    # A = spine coordinate u of the attachment point (set after normalisation, so the limb rides its body
+    # station). Classes: 1 walking leg, 2 picking leg (small chelate P1-P2), 3 cheliped (Stenopus P3),
+    # 4 antenna, 5 antennule flagellum, 6 pleopod, 7 third maxilliped. fish.vert animates each class.
+    WALK, PICK, CLAW, ANT, ANTL, PLEO, MXP = 1, 2, 3, 4, 5, 6, 7
+    bases = []  # (geo, first vertex, vertex count, base x) for the u fix-up below
+
+    def limb(g, pts, radii, sides, cls, pair, uvstrip, base_x, cap_end=True, uscale=1.0):
+        Vt, Ft, tv, av = G.tube(pts, radii, sides, cap_end=cap_end)
+        col = np.stack([np.full(len(Vt), cls / 8), np.full(len(Vt), pair / 8), tv, np.zeros(len(Vt))], -1)
+        g.add(Vt, Ft, at.uv(uvstrip, tv * uscale, av), col)
+        bases.append((g, len(Vt), base_x))
+        return Vt
+
+    # --- pereiopods: P1-P2 slender pickers, P3 the big banded cheliped (Stenopus) or a walking leg
+    # (Lysmata), P4-P5 walking legs (research 17: Stenopus has 3 chelate pairs, only P3 enlarged)
     gl = G.Geo()
     leg_x = [0.32, 0.22, 0.12, 0.03, -0.05]
-    idx = 0
     for li, x in enumerate(leg_x):
         if banded and li == 2:
             continue
+        cls = PICK if li < 2 else WALK
         for side in (1, -1):
             base = np.array([x, side * 0.05, -0.05])
-            pts = leg_path(base, base + [0.03, side * 0.16, 0.05], base + [-0.02, side * 0.24, -0.08],
-                           base + [-0.06, side * 0.27, -0.2], 9)
-            Vt, Ft, tv, av = G.tube(pts, np.linspace(0.012, 0.005, 9), 5)
-            col = np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)), np.full(len(Vt), idx / 9), tv], -1)
-            gl.add(Vt, Ft, at.uv(2 if banded else 1, tv, av), col)
-            idx += 1
-    # skunk: small chelae on the first two pairs (white tips)
-    legs = geo_obj("Legs", gl, root, "leg", [mshell], extras={"count": idx})
+            if cls == PICK:
+                # held forward and up under the head, chela tips near the mouth (white in Lysmata's front pair)
+                L = 1.0 if li == 0 else 1.25
+                pts = leg_path(base, base + [0.06 * L, side * 0.09, 0.0], base + [0.14 * L, side * 0.12, -0.06],
+                               base + [0.2 * L, side * 0.1, -0.14], 7)
+            else:
+                pts = leg_path(base, base + [0.03, side * 0.16, 0.05], base + [-0.02, side * 0.24, -0.08],
+                               base + [-0.06, side * 0.27, -0.2], 7)
+            # Lysmata's front legs are white (the rocking signal, Caves 2019)
+            limb(gl, pts, np.linspace(0.012, 0.005, 7), 5, cls, li, 2 if banded or cls == PICK else 1, x)
+    # third maxillipeds: short leg-like palps in front of P1 (Lysmata picks with them; Stenopus grooms
+    # its antennules with their brush, Bauer 1981)
+    for side in (1, -1):
+        base = np.array([0.4, side * 0.03, -0.04])
+        pts = leg_path(base, base + [0.06, side * 0.05, -0.02], base + [0.12, side * 0.06, -0.05],
+                       base + [0.17, side * 0.05, -0.06], 7)
+        limb(gl, pts, np.linspace(0.009, 0.004, 7), 4, MXP, 0, 2 if banded else 1, 0.4)
+    # pleopods: five pairs of swimmerets under abdominal segments 1-5
+    for pi in range(5):
+        k = 18 + pi * 5
+        p0 = spine[k]
+        x = p0[0]
+        for side in (1, -1):
+            base = p0 + np.array([0.0, side * 0.03, -R[k] * 0.8])
+            pts = leg_path(base, base + [-0.01, side * 0.02, -0.04], base + [-0.03, side * 0.025, -0.07],
+                           base + [-0.05, side * 0.02, -0.09], 4)
+            limb(gl, pts, np.linspace(0.008, 0.003, 4), 4, PLEO, pi, 2 if banded else 1, x)
+    legs = geo_obj("Legs", gl, root, "leg", [mshell], extras={"count": 18 if banded else 20})
 
-    # --- chelipeds (banded: big raised claws) --------------------------------------
+    # --- chelipeds (banded: big raised claws on P3) --------------------------------------
     if banded:
         gc = G.Geo()
         for side in (1, -1):
-            base = np.array([0.24, side * 0.06, -0.04])
-            pts = smooth_path([base, base + [0.1, side * 0.2, 0.08], base + [0.28, side * 0.32, 0.22],
-                               base + [0.46, side * 0.36, 0.34]], 14)
+            base = np.array([0.12, side * 0.06, -0.04])
+            pts = smooth_path([base, base + [0.14, side * 0.2, 0.08], base + [0.36, side * 0.32, 0.22],
+                               base + [0.56, side * 0.36, 0.34]], 14)
             Rr = np.linspace(0.03, 0.026, 14)
-            Vt, Ft, tv, av = G.tube(pts, Rr, 8, cap_end=False)
-            col = np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)), np.full(len(Vt), 0.5 + 0.5 * side), tv * 0.8], -1)
-            gc.add(Vt, Ft, at.uv(1, tv * 0.8, av), col)
             tipd = pts[-1] - pts[-2]
             tipd /= np.linalg.norm(tipd)
-            # palm (thicker) and two fingers
             palm_end = pts[-1] + tipd * 0.07
+            arm_len = np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1))
+            full = arm_len + 0.2
+            Vt, Ft, tv, av = G.tube(pts, Rr, 8, cap_end=False)
+            col = np.stack([np.full(len(Vt), CLAW / 8), np.zeros(len(Vt)), tv * arm_len / full, np.zeros(len(Vt))], -1)
+            gc.add(Vt, Ft, at.uv(1, tv * 0.8, av), col)
+            n = len(Vt)
+            # palm (thicker) and two fingers
             Vp, Fp, tp, ap = G.tube([pts[-1], palm_end], [0.032, 0.03], 8, cap_end=False)
-            gc.add(Vp, Fp, at.uv(1, 0.8 + 0.1 * tp, ap), [(0, 0, 0.5 + 0.5 * side, 0.85)] * len(Vp))
+            gc.add(Vp, Fp, at.uv(1, 0.8 + 0.1 * tp, ap), [(CLAW / 8, 0, (arm_len + 0.07 * t) / full, 0) for t in tp])
+            n += len(Vp)
             up = np.array([0, 0, 1.0])
             for sgn in (1, -1):
                 fp = smooth_path([palm_end + up * 0.012 * sgn, palm_end + tipd * 0.06 + up * 0.02 * sgn,
                                   palm_end + tipd * 0.13 + up * 0.004 * sgn], 6)
                 Vf, Ff, tf, af = G.tube(fp, np.linspace(0.016, 0.003, 6), 6)
-                gc.add(Vf, Ff, at.uv(1, 0.9 + 0.1 * tf, af), [(0, 0, 0.5 + 0.5 * side, 1.0)] * len(Vf))
+                gc.add(Vf, Ff, at.uv(1, 0.9 + 0.1 * tf, af), [(CLAW / 8, 0, min(1.0, (arm_len + 0.07 + 0.13 * t) / full), 0) for t in tf])
+                n += len(Vf)
+            bases.append((gc, n, 0.12))
         geo_obj("Claws", gc, root, "leg", [mshell], extras={"claw": True})
 
-    # --- antennae ---------------------------------------------------------------------
+    # --- antennae: one long pair + the antennule flagella (Stenopus: 2 pairs, the antennules biramous so
+    # four short whips; Lysmata: long white antennae and a forked antennule pair, research 17) ----------
     ga = G.Geo()
     head = spine[2] + np.array([0, 0, 0.02])
-    ants = [(1.6, 1), (1.6, -1), (0.9, 1), (0.9, -1)]
-    if not banded:
-        ants += [(0.5, 1), (0.5, -1)]
-    for i, (L, side) in enumerate(ants):
-        if L > 1.0:
+    if banded:
+        ants = [(2.0, 1, ANT, 0), (2.0, -1, ANT, 0), (1.1, 1, ANTL, 0), (1.1, -1, ANTL, 0), (0.8, 1, ANTL, 1), (0.8, -1, ANTL, 1)]
+    else:
+        ants = [(1.6, 1, ANT, 0), (1.6, -1, ANT, 0), (0.9, 1, ANTL, 0), (0.9, -1, ANTL, 0), (0.5, 1, ANTL, 1), (0.5, -1, ANTL, 1)]
+    for i, (L, side, cls, pair) in enumerate(ants):
+        if cls == ANT:
+            # swept up and back over the body
             ctrl = [head, head + [0.25, side * 0.08, 0.2], head + [0.2, side * 0.45, 0.45],
                     head + [-0.55, side * 0.6, 0.5]]
-        elif L > 0.7:
+        elif pair == 0:
             ctrl = [head, head + [0.3, side * 0.12, 0.1], head + [0.55, side * 0.35, 0.15],
                     head + [0.6, side * 0.55, 0.05]]
         else:
             ctrl = [head, head + [0.15, side * 0.05, 0.05], head + [0.3, side * 0.12, 0.08],
                     head + [0.42, side * 0.2, 0.06]]
-        pts = G.bezier(*ctrl, 24)
+        pts = G.bezier(*ctrl, 16)
         # rescale to the requested length
         ln = np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1))
         pts = head + (pts - head) * (L / ln)
-        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.006, 0.0015, 24), 4, cap_end=False)
-        col = np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)), np.full(len(Vt), i / (len(ants) - 1)), tv], -1)
-        ga.add(Vt, Ft, at.uv(2, tv, av), col)
+        limb(ga, pts, np.linspace(0.006, 0.0015, 16), 4, cls, pair, 2, head[0], cap_end=False)
     geo_obj("Antennae", ga, root, "antenna", [mshell], extras={"count": len(ants)})
 
     # --- eyes on stalks ---------------------------------------------------------------------
@@ -308,6 +351,18 @@ def build_shrimp(kind="banded"):
         Vv *= sc
         o.data.vertices.foreach_set("co", Vv.ravel())
         o.data.update()
+    # limbs: A = spine coordinate of the attachment point (u = 0.5 - x in the normalised model)
+    for o in objs:
+        if o.name not in ("Legs", "Claws", "Antennae"):
+            continue
+        g = [b for b in bases if b[0] is {"Legs": gl, "Antennae": ga}.get(o.name, gc if banded else None)]
+        cols = C.get_cols(o)
+        i = 0
+        for _, n, bx in g:
+            cols[i:i + n, 3] = np.clip(0.5 - (bx + off) * sc, 0.0, 1.0)
+            i += n
+        assert i == len(cols), (o.name, i, len(cols))
+        C.set_cols(o, cols)
     for o in (body, eyes):
         C.recalc_normals(o)
     return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 4200)
