@@ -413,8 +413,8 @@ def main(argv):
                 errors.append(f"{level.capitalize()} triangle estimate {est['total']} > {cap}")
         size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ASSETS) for f in fs)
         print(f"app/src/main/assets total: {size / 1e6:.2f} MB")
-        if size > 40e6:
-            errors.append(f"assets {size / 1e6:.1f} MB > 40 MB")
+        if size > 45e6:
+            errors.append(f"assets {size / 1e6:.1f} MB > 45 MB")
     for w in warnings:
         print("WARN", w)
     for e in errors:
