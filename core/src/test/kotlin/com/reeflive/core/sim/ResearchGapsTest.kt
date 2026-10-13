@@ -72,4 +72,28 @@ class ResearchGapsTest {
         assertTrue("adult patrol nights $adult / 400 (≈ 5 %)", adult in 6..40)
         assertEquals("juvenile never patrols", 0, nights(GobyBrain.ADULT_CM - 5))
     }
+
+    /** Gap 4: no cross-species shrimp kills by default; conspecific kills only after a molt, and only past a pair. */
+    @Test
+    fun gap4_shrimpKillsAreConspecificAndMoltBound() {
+        fun kills(n: Int, molted: Boolean, cross: Boolean = false): Int {
+            var hits = 0
+            for (seed in 1L..150L) {
+                val stock = List(n) { TestTank.seed("skunk").copy(id = "skunk$it") } + (if (cross) listOf(TestTank.seed("banded")) else emptyList())
+                val s = TestTank.sim(stock, seed = seed, startHour = 1.0 + 59.5 / 60)
+                val shrimp = s.organisms.filter { it.brainKind == BrainKind.CLEANER_SHRIMP }
+                val victim = shrimp.first()
+                if (molted) victim.lastMoltAt = s.simTimeSec
+                for ((i, o) in s.organisms.withIndex()) if (o !== victim && !o.isFish) o.pos = victim.pos + Vec3(3.0 + i, 0.0, 0.0)
+                s.advance(40.0, behaviorDt = 0.5)
+                if (s.eventLog.any { it is SimEvent.NearMiss || it is SimEvent.Eaten }) hits++
+            }
+            return hits
+        }
+        assertEquals("a molted skunk next to a banded shrimp: off by default", 0, kills(1, molted = true, cross = true))
+        assertEquals("a pair is stable (S:Wong11)", 0, kills(2, molted = true))
+        assertEquals("no molt, no kill", 0, kills(3, molted = false))
+        val trio = kills(3, molted = true)
+        assertTrue("a third skunk just molted: $trio / 150 nights (row p 0.06 per roller)", trio in 4..40)
+    }
 }
