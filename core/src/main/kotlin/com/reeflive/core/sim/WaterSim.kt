@@ -136,7 +136,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         hoursSinceTopOff += h
         if (ato) return
         val v0 = s.volumeL
-        val v1 = max(v0 - evapLitersPerHour() * h, v0 * 0.7)
+        val v1 = max(v0 - evapLitersPerHour() * h, minOf(v0, config.systemLiters * 0.7))
         concentrate(v0, v1)
         if (manualTopOffDays > 0 && hoursSinceTopOff >= manualTopOffDays * 24) topOff()
     }
@@ -288,6 +288,9 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         macroTrimAbove = o.macroTrimAbove
         sockAgeH = o.sockAgeH; carbonAgeH = o.carbonAgeH; refugiumAgeH = o.refugiumAgeH; sockLoad = o.sockLoad
         alleloSourcePerHour = o.alleloSourcePerHour
+        pendingFeedTan = o.pendingFeedTan; pendingFeedPo4 = o.pendingFeedPo4
+        pendingDose.clear(); pendingDose.putAll(o.pendingDose)
+        hoursSinceTopOff = o.hoursSinceTopOff; manualTopOffDays = o.manualTopOffDays; heaterPowered = o.heaterPowered
     }
 
     fun changeSock() { sockLoad = 0.0; sockAgeH = 0.0 }

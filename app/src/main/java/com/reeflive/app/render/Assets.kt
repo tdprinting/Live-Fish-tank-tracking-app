@@ -65,7 +65,7 @@ private class Parsed(val path: String, val glb: GlbModel?, val bitmaps: Map<Int,
  * happen on the GL thread in [pump] (a few per frame, so the first frame is not blocked).
  */
 class AssetStore(private val assets: AssetManager, private var quality: RenderQuality) {
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor { r -> Thread(r, "reef-assets").apply { priority = Thread.NORM_PRIORITY - 1 } }
+    private var executor: ExecutorService = Executors.newSingleThreadExecutor { r -> Thread(r, "reef-assets").apply { priority = Thread.NORM_PRIORITY - 1 } }
     private val requested = ConcurrentHashMap.newKeySet<String>()
     private val ready = ConcurrentLinkedQueue<Parsed>()
     private val models = HashMap<String, GpuModel>()
@@ -180,6 +180,7 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
         quality = newQuality
         models.clear(); textures.clear(); failed.clear(); requested.clear()
         ready.clear(); textureReady.clear()
+        if (executor.isShutdown) executor = Executors.newSingleThreadExecutor { r -> Thread(r, "reef-assets").apply { priority = Thread.NORM_PRIORITY - 1 } }
     }
 
     /** Releases GPU objects (GL thread, context alive). */
@@ -188,6 +189,8 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
         textures.values.forEach { it.release() }
         models.clear(); textures.clear()
     }
+
+    fun hasFailed(path: String) = path in failed
 
     fun shutdown() = executor.shutdownNow()
 }

@@ -63,7 +63,7 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
         if (forcedOn == true && intensity(out) < 0.3) {
             // "Lights on" outside the photoperiod: use the brightest scheduled point.
             val peak = pts.maxBy { intensity(it.channels) }
-            peak.channels.copyInto(out)
+            for (c in 0 until CHANNELS) out[c] = maxOf(out[c], peak.channels[c])
         }
         intensityOverride?.let { k -> for (c in 0 until CHANNELS) out[c] = (out[c] * k).coerceIn(0.0, 1.0) }
         for (c in 0 until CHANNELS) if (gains[c] != 1.0) out[c] = (out[c] * gains[c]).coerceIn(0.0, 1.0)

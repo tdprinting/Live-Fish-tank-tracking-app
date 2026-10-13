@@ -175,7 +175,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val now = System.nanoTime()
         val dt = if (lastNs == 0L) 1f / 60f else ((now - lastNs) / 1e9f).coerceIn(0f, 0.25f)
         lastNs = now
-        val time = ((now - startNs) / 1e9).toFloat()
+        val time = (((now - startNs) / 1e9) % 4096.0).toFloat()
         drawCalls = 0; triangles = 0
 
         applyRequests()
@@ -216,6 +216,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val usePost = post?.ok == true && (quality.bloom || lens.amount > 0f)
         if (usePost) post!!.begin() else { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); Gl.check("bind default"); GLES30.glViewport(0, 0, width, height); Gl.check("viewport") }
         GLES30.glClearColor(0.012f, 0.016f, 0.024f, 1f); Gl.check("glClearColor")
+        GLES30.glDepthMask(true) // the post path leaves the depth mask off, which would make glClear skip depth
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("glClear")
 
         val tank = store.model(TANK); val rock = store.model(ROCK); val equipment = store.model(EQUIPMENT); val algae = store.model(ALGAE)
@@ -556,7 +557,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (path != null && store.exists(path)) {
             val lod1 = ModelRegistry.lod1(path)
             m = if (far && store.exists(lod1)) store.model(lod1) ?: store.model(path) else store.model(path) ?: if (store.exists(lod1)) store.model(lod1) else null
-            if (m == null) return // still loading
+            if (m == null) {
+                if (store.hasFailed(path) && pass == 0) drawPlaceholder(r, progs)
+                return // still loading
+            }
         }
         if (m == null) { if (pass == 0) drawPlaceholder(r, progs); return }
         val w = white ?: return

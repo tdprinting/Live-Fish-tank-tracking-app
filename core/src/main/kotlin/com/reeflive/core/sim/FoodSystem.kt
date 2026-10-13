@@ -59,7 +59,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             val vy = if (surface && kind.floats) 0.0 else -kind.sinkCmS
             particles += FoodParticle(nextId++, kind, p, Vec3(0.0, vy, 0.0), simTime + rng.nextDouble() * 10, fid)
         }
-        feeds += FeedRecord(fid, count, count, simTime)
+        if (count > 0) feeds += FeedRecord(fid, count, count, simTime)
         return fid
     }
 
@@ -99,7 +99,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
     fun consume(f: FoodParticle) {
         if (f.eaten) return
         f.eaten = true
-        feeds.firstOrNull { it.id == f.feedId }?.let { it.remaining-- }
+        feeds.firstOrNull { it.id == f.feedId }?.let { it.remaining--; if (it.remaining <= 0) feeds.remove(it) }
     }
 
     fun active(): List<FoodParticle> = particles.filter { !it.eaten }

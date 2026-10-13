@@ -272,7 +272,8 @@ class FluidSim(
             if (count > 0) {
                 val corr = ((before - after) / count).toFloat()
                 val mean = (before / count).toFloat()
-                for (id in 0 until n) if (!solid[id]) f[id] = f[id] + corr - mean
+                val isScent = f === scent
+                for (id in 0 until n) if (!solid[id]) f[id] = if (isScent) maxOf(0f, f[id] + corr) else f[id] + corr - mean
             }
             val k = if (f === scent) decayScent else relaxMix
             for (id in 0 until n) f[id] *= k

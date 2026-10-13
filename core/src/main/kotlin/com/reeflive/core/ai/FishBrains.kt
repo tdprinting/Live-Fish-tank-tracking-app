@@ -976,7 +976,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
             if (o.hunger < 0.7 || c.t < o.satietyUntil || c.t < cooldown) return 0.0
             if (!c.p.night && o.hunger < 0.85) return 0.0
             val p = choose(c) ?: return 0.0
-            prey = p
+            if (strikeAt < 0) prey = p
             return (0.75 + 0.2 * o.hunger) * (if (c.p.night) 1.0 else 0.8)
         }
         private fun choose(c: Ctx): Organism? {
