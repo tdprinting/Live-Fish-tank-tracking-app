@@ -29,7 +29,9 @@ void main() {
     if (dot(N, V) < 0.0) N = -N;
     float ndv = max(dot(N, V), 0.0);
     float F = fresnelSchlick(ndv, 0.04);
-    vec3 R = reflect(-V, N);
+    // float-glass waviness: a very slight low-frequency wobble in the reflected room and fixture highlights
+    vec3 Nr = uQuality >= 0.5 ? normalize(N + (vec3(vnoise(vWorld * 0.07), 0.0, vnoise(vWorld * 0.07 + 9.0)) - 0.5) * 0.012) : N;
+    vec3 R = reflect(-V, Nr);
     vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.6;
     // A pane seen from inside the tank (the side, back and bottom panes looked at through the water while the
     // camera is out front) mirrors the lit water by total internal reflection, not the room: without this the

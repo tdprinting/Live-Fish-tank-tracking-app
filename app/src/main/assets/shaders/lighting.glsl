@@ -1,5 +1,7 @@
 // Fragment-side lighting shared by the opaque shaders (ARCHITECTURE §8.4, SIMULATION §9.7 optics).
 uniform sampler2D uCaustic;
+// Shadow depth map (ShadowMap.kt, unit 14), compared in hardware (bilinear PCF per tap).
+uniform highp sampler2DShadow uShadowMap;
 
 const vec3 HEMI_TOP = vec3(0.0103, 0.0356, 0.0823);    // #1A3550 linear
 const vec3 HEMI_BOTTOM = vec3(0.0019, 0.0052, 0.0116); // #06101C linear
@@ -70,7 +72,9 @@ vec3 causticColor(vec3 p, vec3 n) {
     if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
     float depth = max(uWaterLevel - p.y, 0.0);
     vec2 refr = surfaceSlope(p.xz) * depth * 0.6;
-    vec2 uv = (p.xz + refr) * uCausticScale;
+    // walls see the pattern projected down their face: shift by height along the normal so it varies (stretched)
+    // vertically instead of smearing into stripes
+    vec2 uv = (p.xz + refr + n.xz * (p.y * 0.55)) * uCausticScale;
     float t = uTime;
     vec2 uvA = uv + t * vec2(0.013, 0.008);
     vec2 uvB = uv * 1.7 - t * vec2(0.010, -0.014);
@@ -83,7 +87,9 @@ vec3 causticColor(vec3 p, vec3 n) {
         b = vec3(texture(uCaustic, uvB).r);
     }
     vec3 c = pow(a * b, vec3(1.25)) * 5.0;
-    float facing = clamp(n.y * 0.85 + 0.15, 0.0, 1.0);
+    // Medium/High: side faces keep ~a third of the shimmer (light arrives steeply but not only from straight above)
+    float side = uQuality >= 0.5 ? 0.32 : 0.15;
+    float facing = clamp(n.y * (1.0 - side) + side, 0.0, 1.0);
     return c * lightTint() * (facing * lightIntensity() * exp(-0.010 * depth));
 }
 
@@ -108,6 +114,72 @@ float contactShadow(vec3 p) {
     return 1.0 - 0.6 * occ;
 }
 
+// Shadow from the fixtures (uShadowMap): 1 lit .. 0 fully shadowed (scaled by uShadow.z). Normal offset and a world
+// bias toward the light avoid acne; High takes 8 rotated taps (~1.6 cm penumbra), Medium 4, Low has no map.
+float shadowAt(vec3 p, vec3 n) {
+    if (uShadow.x < 0.5) return 1.0;
+    vec3 q = p + n * (0.25 + 0.5 * (1.0 - abs(n.y))) + vec3(0.0, uShadow.w, 0.0);
+    vec3 c = (uShadowMat * vec4(q, 1.0)).xyz * 0.5 + 0.5;
+    if (c.x <= 0.0 || c.x >= 1.0 || c.y <= 0.0 || c.y >= 1.0 || c.z >= 1.0) return 1.0;
+    // the kernel is in cm (uShadow.y = cm per texel along u), rotated per pixel (interleaved gradient noise)
+    float ang = 6.2831 * fract(52.9829 * fract(dot(gl_FragCoord.xy, vec2(0.06711, 0.00584))));
+    vec2 cs = vec2(cos(ang), sin(ang));
+    mat2 rot = mat2(cs.x, cs.y, -cs.y, cs.x);
+    vec2 texel = vec2(1.0) / vec2(textureSize(uShadowMap, 0));
+    float lit;
+    if (uQuality >= 1.5) {
+        vec2 k = texel * (0.8 / max(uShadow.y, 1e-3));
+        lit = 0.0;
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.94, -0.40) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.95, -0.77) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.09, -0.93) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.34, 0.29) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.82, 0.54) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.54, 0.89) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.97, 0.23) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.32, 0.12) * k, c.z), 0.0);
+        lit *= 0.125;
+    } else {
+        vec2 k = texel * (0.6 / max(uShadow.y, 1e-3));
+        lit = 0.25 * (textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.7, -0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.7, -0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.7, 0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.7, 0.7) * k, c.z), 0.0));
+    }
+    return mix(1.0, lit, uShadow.z);
+}
+
+// Slow light flicker of the direct beam as the rippled surface focuses and spreads it (a heavily blurred, scrolling
+// read of the caustic tile, ~1 around its mean). Medium and High.
+float surfaceFlicker(vec3 p) {
+    if (uQuality < 0.5 || p.y > uWaterLevel) return 1.0;
+    vec2 uv = (p.xz + surfaceSlope(p.xz) * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
+    float f = texture(uCaustic, uv + uTime * vec2(0.017, -0.012), 3.5).r;
+    return 0.82 + 0.18 * clamp(f * 28.0, 0.0, 2.2);
+}
+
+// Bump from a scalar height h (cm) via screen-space derivatives (surface gradient, no tangents). Callers keep it in
+// uniform control flow (derivatives).
+vec3 bumpH(vec3 N, vec3 p, float h) {
+    vec3 sx = dFdx(p), sy = dFdy(p);
+    vec3 r1 = cross(sy, N), r2 = cross(N, sx);
+    float det = dot(sx, r1);
+    vec3 g = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+    return normalize(abs(det) * N - g);
+}
+
+// Wet clear-coat lobe (mucus / water film): a tight GGX highlight from both fixtures on top of the base response.
+vec3 wetCoat(vec3 N, vec3 V, vec3 p, float rough, float strength) {
+    vec3 s = vec3(0.0);
+    for (int i = 0; i < 2; i++) {
+        vec3 L;
+        vec3 rad = fixtureLight(i, p, L);
+        float ndl = max(dot(N, L), 0.0);
+        s += rad * ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), 0.02) * ndl;
+    }
+    return s * strength;
+}
+
 // Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics; direct light and
 // caustics are dimmed under nearby fish (contact shadows).
 vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float f0, float wrap, float specScale) {
@@ -121,10 +193,12 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
         float spec = ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), f0) * max(ndl, 0.0);
         direct += rad * (albedo * diff + vec3(spec * specScale));
     }
+    direct *= surfaceFlicker(p);
     direct += albedo * causticColor(p, N) * uCausticStrength;
 #ifndef NO_CONTACT_SHADOW
     if (uCasterCount > 0.5) direct *= contactShadow(p);
 #endif
+    direct *= shadowAt(p, N);
     return col + direct;
 }
 
@@ -138,7 +212,16 @@ vec3 applyWater(vec3 col, vec3 p) {
 }
 
 // Filmic curve (Hejl-style x/(x+0.155)*1.019); it already includes the display gamma, so no extra pow.
+// Shared grade, so every shader lands in one look: partial white balance toward the fixture colour (the eye / a
+// camera adapts to the AI Prime mix, so cream rock reads cream under a blue-heavy daylight, while dusk keeps more blue
+// and moonlight stays blue), then a gentle S-curve and a touch of saturation.
 vec3 tonemap(vec3 x) {
     x = max(x, vec3(0.0));
-    return x / (x + 0.155) * 1.019;
+    vec3 adapt = mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()));
+    x /= max(adapt, vec3(0.2));
+    vec3 c = x / (x + 0.155) * 1.019;
+    c = clamp(c, 0.0, 1.0);
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    return clamp(mix(vec3(l), c, 1.06), 0.0, 1.0);
 }

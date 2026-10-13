@@ -57,6 +57,7 @@ class ByteBuffer private constructor(ab: ArrayBuffer, off: Int, cap: Int) : Buff
     val float: Float get() = getFloat(pos).also { pos += 4 }
     fun put(src: ByteArray): ByteBuffer { bytes.asDynamic().set(src, pos); pos += src.size; return this }
     fun put(b: Byte): ByteBuffer { dv.setInt8(pos, b); pos += 1; return this }
+    fun putInt(v: Int): ByteBuffer { dv.setInt32(pos, v, le); pos += 4; return this }
 
     fun asFloatBuffer() = FloatBuffer(ab, byteOff + pos, (capacity - pos) / 4)
     fun asShortBuffer() = ShortBuffer(ab, byteOff + pos, (capacity - pos) / 2)
