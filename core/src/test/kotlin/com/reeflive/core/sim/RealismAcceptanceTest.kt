@@ -196,7 +196,8 @@ class RealismAcceptanceTest {
             val w = sim.org(BrainKind.WRASSE)
             w.acceptsPrepared = false
             val ev = sim.run(3 * 3600.0) { w.hunger = maxOf(w.hunger, hunger) }
-            val jolts = ev.count { it is SimEvent.Jolt }
+            // the wrasse's own jolts: the skunk shrimp's (S:Caves19) do not depend on the wrasse's hunger
+            val jolts = ev.count { it is SimEvent.Jolt && it.cleanerId == w.id }
             val poses = ev.count { it is SimEvent.Pose && it.cleanerId == w.id }
             val trust = sim.organisms.filter { it.isFish && it !== w }.mapNotNull { it.relations[w.id]?.cleanerTrust }.let { if (it.isEmpty()) 0.7 else it.average() }
             return Triple(jolts, poses, trust)

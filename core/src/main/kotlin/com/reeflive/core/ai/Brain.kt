@@ -262,6 +262,30 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
     return q
 }
 
+/**
+ * Next point to steer for on the way to [goal]. There is no path-finding: with rock in the way the
+ * swimmer goes over the top, as reef fish do: it climbs to a height from which the goal is in clear
+ * view, crosses, then drops to it.
+ */
+fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
+    val sdf = rock.sdf
+    if (sdf.segmentClear(o.pos, goal, 0.5)) return goal
+    for (h in listOf(8.0, 16.0, 24.0, 32.0)) {
+        val above = safe(goal + Vec3.Y * h)
+        if (!sdf.segmentClear(above, goal, 0.5)) continue
+        return if (sdf.segmentClear(o.pos, above, 0.5)) above else safe(Vec3(o.pos.x, above.y, o.pos.z))
+    }
+    // under an overhang: a doorway beside the goal that the swimmer can see
+    for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
+        val door = safe(goal + dir * d)
+        if (sdf.segmentClear(door, goal, 0.5) && sdf.segmentClear(o.pos, door, 0.5)) return door
+    }
+    return goal
+}
+
+private val DOORWAYS = listOf(Vec3(0.0, 0.0, -1.0), Vec3(0.0, 0.0, 1.0), Vec3(-1.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0),
+    Vec3(0.0, 0.7, -0.7), Vec3(0.0, 0.7, 0.7), Vec3(-0.7, 0.7, 0.0), Vec3(0.7, 0.7, 0.0))
+
 /** A point on the rock surface near [center] with its outward normal; null if none found. */
 fun Ctx.rockSurfacePoint(center: Vec3, radius: Double, minNormalY: Double = -0.2, tries: Int = 12): Pair<Vec3, Vec3>? {
     for (i in 0 until tries) {

@@ -608,7 +608,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 val threat = o.relations[f.id]?.fear ?: 0.0
                 // lateral area (length² × body depth, S:Grutter95; gives 06 §2.11's order tang > clowns > dottyback >
                 // lawnmower > hawk > cardinal > blennies) × parasites × a client posing at the station × wariness (06 §5.5)
-                val area = (f.lengthCm / 7.0).let { it * it } * sqrt(f.species.depthRatio / 0.35)
+                val area = clientArea(f)
                 var w = area * (1 + 3 * ich + (if (atStation) 0.5 else 0.0)) * (1 - 0.5 * threat)
                 // calming the tank: aggressors whose tactile damping has expired are worth a visit (06 §3.5)
                 // ... the more so the more it has been chasing lately (06 §3.5: the buffer is aimed at aggressors)
@@ -628,9 +628,11 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) {
             client = candidate; candidate = null
             phase = 0; phaseT = 0.0; cheatAcc = 0.0
-            // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96)
+            // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a
+            // larger client, ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I])
+            val mean = 6.7 * sqrt(sqrt(client?.let { clientArea(it) } ?: 1.0)).coerceIn(0.8, 1.25)
             val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
-            val mu = ln(6.7) - sigma2 / 2
+            val mu = ln(mean) - sigma2 / 2
             inspectS = exp(mu + sqrt(sigma2) * c.rng.gaussian()).coerceIn(2.0, 20.0)
             danceS = c.rng.range(1.0, 2.0)
             if (client == null) finished = true else encounters.approaches++
@@ -647,7 +649,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 // approach to 1 BL at 1.8 BL/s
                 0 -> {
-                    out.seek(c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm)), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
+                    val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
                     if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5) {
                         phase = if (wantsTactile(cl, c)) 1 else 2
                         if (phase == 1) encounters.advertised++
@@ -696,7 +699,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val ich = cl.disease == Disease.ICH
                     // honest gleaning feeds in proportion to what is there (a tank has few parasites)
                     o.hunger = max(0.0, o.hunger - c.dt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
-                    // cheating: 0.04/s baseline → 0.17/s when hungry (S:Pinto11)
+                    // cheating: 0.025/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.17/s when hungry (S:Pinto11)
                     cheatAcc += c.dt
                     while (cheatAcc >= 1.0) {
                         cheatAcc -= 1.0
@@ -734,8 +737,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             if (station.client === cl) station.release()
             client = null; finished = true
             if (served) c.o.counters.add(Counters.K.CLEAN_GIVEN, c.t)
-            // pause between bouts (few clients, scarce parasites); half the time back to the station
-            restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S) * (1.2 - 0.6 * c.o.hunger)
+            // pause between bouts (few clients, scarce parasites), shorter the hungrier it is: a hungry cleaner
+            // keeps working and takes mucus where parasites are lacking (06 §2.11); half the time back to the station
+            restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S) * (1.3 - c.o.hunger).coerceAtLeast(0.3)
             stationBias = if (c.rng.chance(0.5)) c.t + 60 else -1.0
         }
 
@@ -758,6 +762,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
      * ones, and any client that has started a chase in the last hour: tactile stimulation is
      * pre-conflict management aimed at likely aggressors (S:Grutter04, S:Cheney08).
      */
+    /** Relative lateral area of a client: (L / 7 cm)² × √(depth / 0.35); 1 for a 7 cm, mid-depth fish. */
+    fun clientArea(f: Organism): Double = (f.lengthCm / 7.0).let { it * it } * sqrt(f.species.depthRatio / 0.35)
+
     fun wantsTactile(f: Organism, c: Ctx): Boolean =
         PairMatrix.baseRank(f, c.sim) >= TACTILE_RANK || f.hunger > 0.6 || f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t) > 0
 
@@ -773,7 +780,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
         const val CLIENT_COOLDOWN_S = 60.0
         /** A client's keenness to pose recovers linearly over this long after its last full pose [I]. */
-        const val POSE_REFRACT_S = 1800.0
+        const val POSE_REFRACT_S = 2000.0
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
         /**
@@ -799,7 +806,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val REST_MIN_S = 15.0
         const val REST_MAX_S = 75.0
         /** Cheating per second of inspection: 0.04 baseline → 0.17 when hunger > 0.6 (S:Pinto11). */
-        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.17 else 0.04
+        fun cheatRate(w: Organism): Double = if (w.hunger > 0.6) 0.17 else 0.025
     }
 
     /** Between clients: zip along the rock face in the lower-mid zone. */
@@ -1270,7 +1277,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         install(RockGraze(),
             InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this), VisitCleaner(this))
+            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
