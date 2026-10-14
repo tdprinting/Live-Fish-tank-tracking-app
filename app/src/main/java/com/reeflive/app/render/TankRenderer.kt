@@ -47,6 +47,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
     private val subScene = SubmarineScene()
+    /** Acclimation bags floating in the tank (sandbox Add life). */
+    private val bagScene = BagScene().also { bs ->
+        bs.onBurst = { kind, x, y, z, r ->
+            particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
+        }
+    }
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -182,6 +188,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
         subScene.release()
+        bagScene.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -216,6 +223,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val fp = subFirstPerson
         camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
         if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
+        bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
@@ -302,6 +310,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        // acclimation bags: see-through plastic over the animals riding in them
+        if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }

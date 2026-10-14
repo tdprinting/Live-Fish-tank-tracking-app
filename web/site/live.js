@@ -2,6 +2,7 @@
 // MicroscopeView + TimelapseSheet). The sim, renderer and the shared tables come from Kotlin (kotlin/ReefLive-web.mjs):
 // ReefLive drives the 3D view, ReefSandbox is the Android view model's actions and readings.
 import { ReefLive, ReefSandbox } from './kotlin/ReefLive-web.mjs';
+import { initBags, pickBag } from './bags.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -48,6 +49,7 @@ export function startLive(applyReadings) {
     onShelfPick: (id) => useSupply(id),
   }).then(() => {
     C = JSON.parse(SB.catalog());
+    initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     $('loading').classList.add('done');
     applyReadings();
     renderAll();
@@ -260,7 +262,8 @@ function lifeCard(sb) {
   const groups = [['FISH', '🐠', 'Fish'], ['INVERTS', '🦐', 'Inverts'], ['CORALS', '🪸', 'Corals']];
   const list = C.stock.filter((s) => s.group === ui.addGroup);
   let h = `<div class="pills">${groups.map(([g, i, n]) => `<button class="pillbtn ${ui.addGroup === g ? 'on' : ''}" data-group="${g}">${i} ${n}</button>`).join('')}</div>
-    <div class="pills"><span class="muted">How many</span>${[1, 5, 10, 25, 50].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
+    <p class="muted">Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and it floats until they are ready.</p>
+    <div class="pills"><span class="muted">How many</span>${[1, 2, 3, 5, 10].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
     ${ui.addGroup !== 'CORALS' ? `<div class="pills"><span class="muted">Size</span>${C.sizes.map((z) => `<button class="pillbtn ${ui.addSize === z.id ? 'on' : ''}" data-size="${z.id}">${esc(z.label)}</button>`).join('')}</div>` : ''}
     <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, STOCK_ICON[s.group], s.name, false, !sb)).join('')}</div>
     <h4>Helpers</h4><div class="options">
@@ -399,10 +402,11 @@ $('card').addEventListener('click', (e) => {
   else if (d.count) ui.addCount = Number(d.count);
   else if (d.size) ui.addSize = d.size;
   else if (d.add) sbOnly(() => {
+    // new animals come in a shop bag: it goes in your hand, to drag onto the tank (bags.js)
     const s = C.stock.find((x) => x.id === d.add);
-    const n = ui.addCount;
-    act(s.group === 'CORALS' || ui.addSize === 'JUVENILE' && n === 1 ? 'add' : 'addSized', s.group === 'CORALS' || ui.addSize === 'JUVENILE' && n === 1 ? s.id : `${s.id}:${ui.addSize}`, n,
-      `${n === 1 ? `A new ${s.name}` : `${n} ${s.name}`} ${s.group === 'CORALS' ? 'settle on the rock.' : 'swim out of the bag!'}`);
+    closeCard(); cue('TICK');
+    pickBag(s, ui.addCount, s.group === 'CORALS' ? 'JUVENILE' : ui.addSize);
+    return;
   });
   else if (d.micro) act('micro', d.micro, 0, `${C.micro.find((m) => m.id === d.micro).label}. Look closer to see them!`);
   else if (d.pest) act('pestControl', d.pest, 0, d.pest === 'BERGHIA' ? 'Berghia slugs only eat pest anemones.' : 'Peppermint shrimp eat pest anemones. Yum!');
