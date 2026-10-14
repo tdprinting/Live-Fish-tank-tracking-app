@@ -328,6 +328,22 @@ object ReefLive {
         val d = director ?: return "null"
         return JSON.stringify(obj { it.fade = d.fade; it.caption = d.caption ?: ""; it.alpha = d.captionAlpha })
     }
+    /**
+     * Submarine mode (as the Android live menu): launch or park the toy sub; [visible] false hides it from the fish;
+     * [headlight] is its lamp. The camera rides with it while it is out.
+     */
+    fun submarine(on: Boolean, visible: Boolean, headlight: Boolean) {
+        if (on) renderer?.follow(null)
+        sim?.enqueue(Command.SubmarineMode(on, visible, headlight))
+    }
+    /** The pilot's stick, each axis -1..1 (send on change only). */
+    fun steerSub(thrust: Double, turn: Double, rise: Double, strafe: Double) {
+        sim?.enqueue(Command.SteerSubmarine(com.reeflive.core.sim.SubControls(thrust, turn, rise, strafe)))
+    }
+    /** Ride inside the sub (first person) or chase it from behind. */
+    fun subView(firstPerson: Boolean) { renderer?.subFirstPerson = firstPerson }
+    /** JSON {curious, wary} while the sub is out, else null: how many animals are reacting to it. */
+    fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
         current = v

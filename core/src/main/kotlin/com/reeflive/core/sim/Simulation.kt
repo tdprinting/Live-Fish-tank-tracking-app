@@ -213,6 +213,7 @@ class Simulation(
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
         drainCommands()
+        submarine.step(dtWall, rock, sand)
         val simDt = speed * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
@@ -233,6 +234,7 @@ class Simulation(
         while (left > 1e-9) {
             drainCommands()
             val dt = min(behaviorDt, left)
+            submarine.step(dt, rock, sand)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -393,6 +395,7 @@ class Simulation(
     private fun behaviorTick(dt: Double) {
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
+        if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
         for (o in organisms.toList()) {
             if (o !in organisms) continue   // eaten during this tick
@@ -900,6 +903,12 @@ class Simulation(
             is Command.Finger -> finger(c)
             is Command.WaterPuff -> waterPuff(c)
             is Command.TouchAnimal -> touchAnimal(c.id)
+            is Command.SubmarineMode -> {
+                submarine.setActive(c.on, rock, sand)
+                submarine.visible = c.visible; submarine.headlight = c.headlight
+                if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
+            }
+            is Command.SteerSubmarine -> submarine.controls = c.controls
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1096,6 +1105,11 @@ class Simulation(
         }
     }
 
+    /** The toy submarine (Submarine mode, [Command.SubmarineMode]) and the animals' perception of it. */
+    val submarine = Submarine()
+    val subSense = com.reeflive.core.ai.SubmarineSense()
+    private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
+
     /** Habituation and quick-tap runs for [Command.TouchTank]. */
     val touchMemory = TouchMemory()
     /** The last gentle tap's outcome (UI wording, tests). */
@@ -1277,6 +1291,7 @@ class Simulation(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
+        submarine.reset(); subSense.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1360,7 +1375,10 @@ class Simulation(
 
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
     fun snapshot(): SimSnapshot =
-        buildSnapshot().copy(lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
+        buildSnapshot().copy(
+            lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
+            submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
+        )
 
     private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()

@@ -154,6 +154,16 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun puff(point: Vec3, velocity: Vec3) = holder.enqueue(Command.WaterPuff(point, velocity))
     /** A tap right on an animal: snails and crabs tuck in, shrimp freeze, a hermit ducks into its shell. */
     fun touchAnimal(id: String) = holder.enqueue(Command.TouchAnimal(id))
+
+    private val _submarine = MutableStateFlow(com.reeflive.app.ui.live.SubUi())
+    /** Submarine mode (SubmarineControls): the toy sub is out, seen by the fish, ridden from inside, lamp on. */
+    val submarine: StateFlow<com.reeflive.app.ui.live.SubUi> = _submarine.asStateFlow()
+    fun setSubmarine(s: com.reeflive.app.ui.live.SubUi) {
+        _submarine.value = s
+        if (s.on) follow(null)
+        holder.enqueue(Command.SubmarineMode(s.on, s.visible, s.light))
+    }
+    fun steerSubmarine(c: com.reeflive.core.sim.SubControls) = holder.enqueue(Command.SteerSubmarine(c))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner

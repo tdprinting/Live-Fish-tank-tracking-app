@@ -124,6 +124,9 @@ class LiveTools(
     val onTorch: () -> Unit = {},
     val touring: Boolean = false,
     val onTour: () -> Unit = {},
+    /** Submarine mode (SubmarineControls): steer a toy sub among the fish. */
+    val subOn: Boolean = false,
+    val onSubmarine: () -> Unit = {},
     /** Fish to follow: id to name. */
     val fish: List<Pair<String, String>> = emptyList(),
     val onFollowFish: (String) -> Unit = {},
@@ -538,6 +541,7 @@ private fun ColumnScope.CardBody(
             Tiles(tone, close, listOf(
                 T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
                 T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
+                T("Submarine", ReefGlyphs.bubbles, on = tools.subOn, sub = "Swim with the fish") { tools.onSubmarine() },
                 T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
                 T("Screensaver", ReefGlyphs.moon, sub = "Relax and watch") { tools.onScreensaver() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
