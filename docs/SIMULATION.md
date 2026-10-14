@@ -1158,6 +1158,7 @@ All of this uses its own `Rng`, so the behaviour random streams and the existing
 | Brittle star | A shallow, wide furrow where its arms drag. |
 | Engineer goby | Digs tunnels under the rock mouthful by mouthful and spits the spoil at the entrance (§16.8). In abstract mode one mouthful every ~3 daylight minutes. |
 | Diamond goby | Scoops pits at its feeding stations, puffs sand and fines out of its gills, digs its burrow, and sifts detritus away (§16.5). |
+| Leopard wrasse | Digs a body-sized slot at dusk, throws the sand to a rim, pulls it back over itself, and bursts out after lights-on (§16.10). |
 | Pump flow | Smooths the bed (§16.1) and refills burrows (§16.8). |
 | Every body | Rests on the live surface and pushes sand aside where it touches it (§16.9). |
 
@@ -1289,7 +1290,33 @@ Contact moves sand (mass-conserving):
 - **Bow wave.** Each 0.25 BL (≥ 0.6 cm) travelled in contact pushes a 0.2 mm layer over the body width (plus what a pressed-in body overlapped) 60 % ahead and 20 % to each side. Nassarius, hermits, the Sally Lightfoot and the brittle star keep their `SandWork` trails instead.
 - **Impression.** After 20 s still in contact, a brittle star leaves one disc impression and a goby three along its body (0.12 cm deep, with a rim).
 
+Wedged between rock and sand (a crevice at the rock foot, a diamond goby dashing into its burrow), the lift stops `ROCK_KEEP` (0.3 cm) short of the rock. The body then shoves the sand out from under itself (bow waves at least one cell wide, so the sand lands outside the cells the head reads). Sand that cannot move (bed at its floor) carries the head up inside that rock margin.
+
 Swap point: when the shared collision layer lands (`BodyCollision.resolveEnv` reading `SandBed.surfaceY` live), `clamp` becomes its sand term and `exempt` its per-cell rule. The displacement half stays.
+
+### 16.10 Sand physics shared by every species, and bodies buried in it
+
+Every species moves sand through the same `SandBed` operations, and all of them conserve mass: `sandVolumeCm3()` (grid + suspended sand grains + mouthfuls carried) changes only when fines drift out as silt.
+
+- **Transfer.** `takeExact`/`depositExact` (spill to wider rings past `MAX_MOUND`), `takeMouthful`/`spit` (§16.8), `bowWave` and `impress` (§16.9), `buryStep`/`emergeFrom` (below). No take goes below a cell's floor.
+- **Angle of repose.** `relax` slumps any step steeper than tan 32° (open sand) or tan 63° (roofed tunnel walls). It works on the *visible* surface, so a buried body's volume holds its cover up.
+- **Flow.** Diffusion grows with pump flow (ripples and pits flatten over hours to days). Roofed cells infill slowly (§16.8).
+- **Suspension.** A puff lifts grains out of the cell (sand where there is sand, silt at the floor). They drift with the local flow and settle back by fall speed. A sand grain that lands or times out goes back into the grid where it is.
+- **Brains.** Anything that rests on, burrows in or sleeps under the sand reads `SandBed.surfaceY`, not the flat `RockData.sandTopCm`: the gobies, nassarius rest and burial, brittle star rest, an overturned snail, the bobtail squid's fallback bed, the leopard wrasse, and food settling (`FoodSystem.groundY`). The renderer's sand mesh is coarser than this grid, so a pit can look slightly shallower than the body in it.
+
+**Bodies in the sand (`SandBed.BuriedBody`).** A body lying in the sand is a slot of cells along its length. `inclusion` holds the body's own volume as height per cell. It lifts `surfaceY` and the rendered surface but is not sand.
+
+- `canBury(head, dir, len, width, thick, cover)`: open sand only (no rock over it, no other body in it), and deep enough along the whole slot for thick + cover above a floor 0.5 cm over the glass. The 3.5 cm front of the bed is too shallow for a 10 cm wrasse (1.6 cm thick + 2.2 cm cover). The back (up to 6 cm) is not.
+- `buryStep(b, digTo, coverTo)`: digging lowers the slot by (thick + cover) × share and throws the sand to a rim: half ahead of the head, a quarter to each side. This makes a depression and a rim. The body volume goes in under the surface as it digs. Covering takes the rim sand back over the body. Exact transfer.
+- `emergeFrom(owner)`: the body volume leaves and the cover over the head end is thrown aside. This leaves a dimple about as deep as the body was thick, with a low rim. `relax` slowly flattens it.
+
+**Leopard wrasse (*Macropharyngodon bipartitus*).** It dives at dusk (light < 0.25, or lights out) at a sleep spot where `canBury` holds; spots on shallow or dug-out sand are skipped. It lies on its side: the slot is as wide as the body is deep (0.36 L), thick 0.45 × that, with cover `max(1, 3 − thick/2)` cm, so the body centre is 3 cm down (research: 2–5 cm).
+
+- **Dive.** Lasts 1.05–3.06 s (SICB P2-191, *H. bivittatus*). Digging runs over the first 85 % and covering from 55 %. Small puffs rise as it wriggles and settle back.
+- **Night.** It is placed at `BuriedBody.bodyY` under the surface it made.
+- **Emergence.** 15–60 min after lights-on it bursts out (`emergeFrom` plus a puff) and rises from that depth.
+
+Abstract mode (no dive) keeps it 3 cm under the live surface. Tests: `SandBurialTest`, `LeopardWrasseTest`.
 
 ## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
 

@@ -3,6 +3,7 @@ package com.reeflive.core.sim
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
@@ -143,8 +144,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
     }
 
-    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it. */
-    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z)
+    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it (and any body buried in it). */
+    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z) + inclusionAt(x, z)
 
     fun freshAt(x: Double, z: Double): Double = fresh[index(x, z)].toDouble()
     fun detritusAt(x: Double, z: Double): Double = detritus[index(x, z)].toDouble()
@@ -402,13 +403,15 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val d = (D_BASE + D_FLOW * f * f) * dtS
         val ax = (d / (cellX * cellX)).coerceAtMost(0.2).toFloat(); val az = (d / (cellZ * cellZ)).coerceAtMost(0.2).toFloat()
         if (ax > 1e-7f) {
+            // on the visible surface: a buried body's volume holds its cover up instead of sand creeping in under it
             val h = height.copyOf()
+            if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
                 val c = h[a]
                 val l = if (i > 0) h[a - 1] else c; val r = if (i < nx - 1) h[a + 1] else c
                 val b = if (k > 0) h[a - nx] else c; val t = if (k < nz - 1) h[a + nx] else c
-                height[a] = c + ax * (l + r - 2 * c) + az * (b + t - 2 * c)
+                height[a] = height[a] + ax * (l + r - 2 * c) + az * (b + t - 2 * c)   // left to right: bit-identical to a bed with nothing buried
             }
         }
         // 2b. burrows under rock slowly fill back in: grains trickle off the walls and the flow carries sand in
@@ -426,7 +429,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     }
 
     private fun slump(a: Int, b: Int, maxStep: Float) {
-        val dh = height[a] - height[b]
+        val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
         if (abs(dh) <= maxStep) return
         val move = (abs(dh) - maxStep) * 0.5f * (if (dh > 0) 1f else -1f)
         height[a] -= move; height[b] += move
@@ -437,6 +440,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         height.fill(0f); fresh.fill(0f); detritus.fill(0.25f)
         particleCount = 0; resuspendedPending = 0.0
         burrows.clear(); carriedCm3 = 0.0; burrowEpoch++
+        inclusion.fill(0f); anyInclusion = false; buried.clear()
         version++
     }
 
@@ -838,8 +842,184 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         for (b in o.burrows) burrows += Burrow(b.owner, b.mouthX, b.mouthZ, b.dirX, b.dirZ, b.lengthCm, b.primary).also { it.mouthfuls = b.mouthfuls }
         burrowEpoch++
         carriedCm3 = 0.0
+        o.inclusion.copyInto(inclusion); anyInclusion = o.anyInclusion
+        buried.clear()
+        for ((k, b) in o.buried) buried[k] = b.copy()
         version++
     }
+
+    // ============================================================== bodies buried in the sand (SIMULATION §16.10)
+    /**
+     * A body lying in the sand: the cells of its slot with their weights, the trench depth dug there, the sand thrown to
+     * the rim spots, and the body volume it puts under the surface ([inclusion]).
+     */
+    class BuriedBody(
+        val owner: String, val headX: Double, val headZ: Double, val ux: Double, val uz: Double,
+        val lengthCm: Double, val widthCm: Double, val thickCm: Double, val coverCm: Double,
+        val cells: IntArray, val w: FloatArray, val bottomY: Double,
+    ) {
+        /** Share of the trench dug and of the cover pulled back over the body (0..1 each). */
+        var dug = 0.0
+        var covered = 0.0
+        /** Body volume added per cell so far (cm as height). */
+        val added = FloatArray(cells.size)
+        /** Sand thrown to the rim (cm³), per rim spot: ahead, left, right. */
+        val rim = DoubleArray(3)
+        fun rimX(k: Int) = when (k) { 0 -> headX + ux * 1.6; 1 -> cx - uz * (0.5 * widthCm + 1.6); else -> cx + uz * (0.5 * widthCm + 1.6) }
+        fun rimZ(k: Int) = when (k) { 0 -> headZ + uz * 1.6; 1 -> cz + ux * (0.5 * widthCm + 1.6); else -> cz - ux * (0.5 * widthCm + 1.6) }
+        val cx: Double get() = headX - ux * 0.5 * lengthCm
+        val cz: Double get() = headZ - uz * 0.5 * lengthCm
+        /** Centre height (cm) of the body lying on the trench floor. */
+        val bodyY: Double get() = bottomY + 0.5 * thickCm
+        /** Depth of the body's top under the surface it made (cm) once covered. */
+        val coveredBy: Double get() = covered * coverCm
+
+        fun copy(): BuriedBody = BuriedBody(owner, headX, headZ, ux, uz, lengthCm, widthCm, thickCm, coverCm, cells.copyOf(), w.copyOf(), bottomY).also {
+            it.dug = dug; it.covered = covered; added.copyInto(it.added); rim.copyInto(it.rim)
+        }
+    }
+
+    /** Body volume under the sand per cell (cm, as height): it lifts the visible surface but is not sand. */
+    private val inclusion = FloatArray(nx * nz)
+    private var anyInclusion = false
+    private val buried = HashMap<String, BuriedBody>()
+    fun buriedOf(owner: String): BuriedBody? = buried[owner]
+
+    /** Buried-body volume under (x, z) as height (cm), bilinear like [heightAt]. */
+    fun inclusionAt(x: Double, z: Double): Double {
+        if (!anyInclusion) return 0.0
+        val fx = (x / cellX - 0.5).coerceIn(0.0, nx - 1.001)
+        val fz = (z / cellZ - 0.5).coerceIn(0.0, nz - 1.001)
+        val i = fx.toInt(); val k = fz.toInt()
+        val tx = fx - i; val tz = fz - k
+        val a = inclusion[k * nx + i]; val b = inclusion[k * nx + i + 1]
+        val c = inclusion[(k + 1) * nx + i]; val d = inclusion[(k + 1) * nx + i + 1]
+        return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
+    }
+
+    /** Sand (not counting buried bodies) above the glass at (x, z) (cm). */
+    fun sandDepthAt(x: Double, z: Double): Double = baseY(z) + heightAt(x, z) - GLASS_Y
+
+    /** Cells of a body slot from the head at (hx, hz) back along −(ux, uz) for [len], [width] wide, weight 1 at the midline. */
+    private fun slot(hx: Double, hz: Double, ux: Double, uz: Double, len: Double, width: Double): Pair<IntArray, FloatArray> {
+        val r = max(0.5 * width, 0.55 * max(cellX, cellZ))
+        val ids = ArrayList<Int>(); val ws = ArrayList<Float>()
+        val i0 = ((min(hx, hx - ux * len) - r) / cellX).toInt().coerceIn(0, nx - 1)
+        val i1 = ((max(hx, hx - ux * len) + r) / cellX).toInt().coerceIn(0, nx - 1)
+        val k0 = ((min(hz, hz - uz * len) - r) / cellZ).toInt().coerceIn(0, nz - 1)
+        val k1 = ((max(hz, hz - uz * len) + r) / cellZ).toInt().coerceIn(0, nz - 1)
+        for (k in k0..k1) for (i in i0..i1) {
+            val px = (i + 0.5) * cellX - hx; val pz = (k + 0.5) * cellZ - hz
+            val t = (-(px * ux + pz * uz)).coerceIn(0.0, len)
+            val dx = px + ux * t; val dz = pz + uz * t
+            val q = (dx * dx + dz * dz) / (r * r)
+            if (q >= 1.0) continue
+            ids += k * nx + i; ws += (1 - q).toFloat()
+        }
+        if (ids.isEmpty()) { ids += index(hx, hz); ws += 1f }
+        return ids.toIntArray() to ws.toFloatArray()
+    }
+
+    /**
+     * Whether a body [len] × [width] × [thick] can bury itself with its head at (hx, hz) heading (ux, uz) under [cover]
+     * cm of sand: open sand (no rock over it, no other body in it) deep enough everywhere along the slot for the trench
+     * (thick + cover) above the cell's floor.
+     */
+    fun canBury(hx: Double, hz: Double, ux: Double, uz: Double, len: Double, width: Double, thick: Double, cover: Double): Boolean {
+        val (ids, _) = slot(hx, hz, ux, uz, len, width)
+        val d = (thick + cover).toFloat()
+        for (a in ids) {
+            if (roof[a] != OPEN || inclusion[a] > 0.01f) return false
+            if (height[a] - d < buryFloor(a)) return false
+        }
+        return true
+    }
+
+    /** Lowest a body slot can be dug to in cell [a] (height offset, cm): just above the glass (deeper than an open pit). */
+    private fun buryFloor(a: Int): Float = min(floorH[a], (GLASS_Y + FLOOR_MARGIN - baseY((a / nx + 0.5) * cellZ)).toFloat())
+
+    /** Starts a burial for [owner] (see [buryStep]); null when [canBury] says no. */
+    fun startBurial(owner: String, hx: Double, hz: Double, ux0: Double, uz0: Double, len: Double, width: Double, thick: Double, cover: Double): BuriedBody? {
+        val l = sqrt(ux0 * ux0 + uz0 * uz0)
+        val ux = if (l > 1e-9) ux0 / l else 1.0; val uz = if (l > 1e-9) uz0 / l else 0.0
+        if (!canBury(hx, hz, ux, uz, len, width, thick, cover)) return null
+        buried[owner]?.let { finishEmergence(it) }
+        val (ids, ws) = slot(hx, hz, ux, uz, len, width)
+        val cxm = hx - ux * 0.5 * len; val czm = hz - uz * 0.5 * len
+        val b = BuriedBody(owner, hx, hz, ux, uz, len, width, thick, cover, ids, ws, baseY(czm) + heightAt(cxm, czm) - thick - cover)
+        buried[owner] = b
+        dives++
+        version++
+        return b
+    }
+
+    /**
+     * The body works [b] down to [digTo] (share of the trench, 0..1) and pulls the sand back over itself up to
+     * [coverTo] (0..1). Digging lowers the slot and throws the sand to the rim (half ahead, a quarter to each side) while
+     * the body's own volume goes in under the surface; covering takes it back from the rim onto the body. Exact sand
+     * transfer: nothing made or lost. Returns the sand moved this step (cm³), for the plume.
+     */
+    fun buryStep(b: BuriedBody, digTo: Double, coverTo: Double): Double {
+        var moved = 0.0
+        val dDig = (digTo.coerceIn(0.0, 1.0) - b.dug).coerceAtLeast(0.0)
+        if (dDig > 0) {
+            val depth = b.thickCm + b.coverCm
+            var taken = 0.0
+            for ((j, a) in b.cells.withIndex()) {
+                val want = (dDig * depth * b.w[j]).toFloat()
+                val t = min(want, max(0f, height[a] - buryFloor(a)))
+                height[a] -= t; taken += t * cellArea
+                fresh[a] = max(fresh[a], 0.9f)
+                val add = (dDig * b.thickCm * b.w[j]).toFloat()
+                inclusion[a] += add; b.added[j] += add
+            }
+            anyInclusion = true
+            val share = doubleArrayOf(0.5, 0.25, 0.25)
+            for (k in 0 until 3) { depositExact(b.rimX(k), b.rimZ(k), taken * share[k], 1.0); b.rim[k] += taken * share[k] }
+            b.dug += dDig
+            moved += taken
+        }
+        val dCov = (coverTo.coerceIn(0.0, 1.0) - b.covered).coerceAtLeast(0.0)
+        if (dCov > 0) {
+            var wsum = 0.0
+            for (wj in b.w) wsum += wj
+            var want = 0.0
+            for (wj in b.w) want += dCov * b.coverCm * wj * cellArea
+            var got = 0.0
+            val rimTotal = b.rim.sum().coerceAtLeast(1e-9)
+            for (k in 0 until 3) {
+                val t = takeExact(b.rimX(k), b.rimZ(k), min(b.rim[k], want * b.rim[k] / rimTotal), 1.0)
+                b.rim[k] -= t; got += t
+            }
+            for ((j, a) in b.cells.withIndex()) { height[a] += (got * b.w[j] / wsum / cellArea).toFloat(); fresh[a] = max(fresh[a], 0.8f) }
+            b.covered += dCov
+            moved += got
+        }
+        if (moved > 0) { movedCm3 += moved; version++ }
+        return moved
+    }
+
+    /**
+     * The body pushes out of the sand: its volume leaves the slot, and the cover over its head end is thrown aside
+     * (a dimple with a low rim, [burstShare] of the cover). The dimple then relaxes like any pit. Returns sand moved.
+     */
+    fun emergeFrom(owner: String, burstShare: Double = 0.5): Double {
+        val b = buried.remove(owner) ?: return 0.0
+        for ((j, a) in b.cells.withIndex()) inclusion[a] = max(0f, inclusion[a] - b.added[j])
+        anyInclusion = buried.isNotEmpty() && inclusion.any { it > 0f }
+        if (!anyInclusion) inclusion.fill(0f)
+        val r = max(1.0, 0.6 * b.widthCm + 0.5)
+        val v = takeExact(b.headX - b.ux * 0.25 * b.lengthCm, b.headZ - b.uz * 0.25 * b.lengthCm, burstShare * b.coverCm * PI * r * r * 0.5, r)
+        if (v > 0) {
+            depositExact(b.headX - b.uz * 1.6 * r, b.headZ + b.ux * 1.6 * r, 0.5 * v, r)
+            depositExact(b.headX + b.uz * 1.6 * r, b.headZ - b.ux * 1.6 * r, 0.5 * v, r)
+        }
+        emergences++
+        version++
+        return v
+    }
+
+    private fun finishEmergence(b: BuriedBody) { emergeFrom(b.owner, 0.0) }
 
     // ============================================================== snapshot
     private var cached: SandGridSnapshot? = null
@@ -848,7 +1028,10 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun gridSnapshot(): SandGridSnapshot {
         val c = cached
         if (c != null && c.version == version) return c
-        return SandGridSnapshot(nx, nz, cellX.toFloat(), cellZ.toFloat(), height.copyOf(), fresh.copyOf(), detritus.copyOf(), version,
+        // the renderer draws the visible surface: sand plus any body lying under it
+        val h = height.copyOf()
+        if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
+        return SandGridSnapshot(nx, nz, cellX.toFloat(), cellZ.toFloat(), h, fresh.copyOf(), detritus.copyOf(), version,
             if (rockAttached) cavityArray() else FloatArray(0)).also { cached = it }
     }
 
