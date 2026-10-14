@@ -110,6 +110,13 @@ object EvidenceLedger {
         EvidenceEntry("macropharyngodon_bipartitus", "LeopardWrasseBrain.EMERGE_LAG", "15-60 min after lights-on", D, "fish_leopard_wrasse S7 (H. trimaculatus, direction only)", "minutes from lights-on to the wrasse showing"),
         EvidenceEntry("macropharyngodon_bipartitus", "newcomer stays buried", "1-4 days", D, "fish_leopard_wrasse S4 Fenner TFH ('for days')", "days to first sighting after adding one"),
         EvidenceEntry("macropharyngodon_bipartitus", "LeopardWrasseBrain.PICK rate and yield", "10-20 picks/min; 0.17 min per pick at prey index 1", D, "fish_leopard_wrasse H1 (owner clip), rate not measured", "picks per minute counted on video"),
+        EvidenceEntry("euprymna_berryi", "buried by day, eyes exposed; hunts at night", "behaviour", S, "cephalopod_squid §5 Jolly 2022, Hanlon 1997, Shears 1988"),
+        EvidenceEntry("euprymna_berryi", "backward jet escape with inking", "behaviour", S, "cephalopod_squid §5 Hanlon 1997 (paralarvae)"),
+        EvidenceEntry("euprymna_berryi", "light organ output follows downwelling light; symbionts vented at dawn", "glow, 90 % vented", S, "cephalopod_squid §5 Jones & Nishiguchi 2004, Nyholm & McFall-Ngai 2021"),
+        EvidenceEntry("euprymna_berryi", "prefers shrimp and mysids; fish slip from its suckers", "prey weights", S, "cephalopod_squid §4 Hanlon 1997"),
+        EvidenceEntry("euprymna_berryi", "BobtailSquidBrain.SHRIMP_PREY_FRAC", "shrimp < 0.75 × squid length (molting < 1.1 ×)", D, "cephalopod_squid §4", "which shrimp sizes a captive squid takes"),
+        EvidenceEntry("euprymna_berryi", "hawkfish threat radius", "3.5 BL", D, "cephalopod_squid §4", "time buried with and without a hawkfish"),
+        EvidenceEntry("euprymna_berryi", "temperature band", "opt 20-25.5 °C, tol to 27.5", A, "cephalopod_squid §3 culture at 20-25 °C; upper bounds D"),
         // ------------------------------------------------------------ bacteria layer (research 18, BacteriaModel)
         EvidenceEntry("bacteria", "AOB dominate reef live rock; AOA a minor high-affinity pool", "AOA_K 2 % of the AOB bed", S, "17 §1.1 live-rock study (AOA < 0.01 %); capacity D", "NH3 floor in a lightly stocked tank"),
         EvidenceEntry("bacteria", "no comammox in marine biofilters", "comammox = 0", S, "17 §1.6 McKnight & Neufeld 2024"),

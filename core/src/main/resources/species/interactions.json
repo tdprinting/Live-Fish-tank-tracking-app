@@ -458,6 +458,139 @@
   "note": "Both graze the same algae"
  },
  {
+  "a": "euprymna_berryi",
+  "b": "cirrhitichthys_falco",
+  "risk": "H",
+  "note": "Hawkfish hunts an exposed squid at night and keeps it buried by day",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "pseudochromis_indigo",
+  "risk": "M-H",
+  "note": "Dottyback chases and nips the squid when it leaves the sand",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "paracanthurus_hepatus",
+  "risk": "M",
+  "note": "Busy tang steals its food and keeps it hiding"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Clowns stay high; they may take its food"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "labroides_dimidiatus",
+  "risk": "M",
+  "note": "Wrasse may pick at its soft, scaleless skin",
+  "threat": "labroides_dimidiatus"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "salarias_fasciatus",
+  "risk": "L",
+  "note": "Blenny keeps to the rock; little overlap"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "ecsenius_stigmatura",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Both hunt at night; cardinals may compete for mysids"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "No conflict; both use the sand"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "valenciennea_puellaris",
+  "risk": "M",
+  "note": "Goby sifts the bed the squid buries in and competes for pods"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "stenopus_hispidus",
+  "risk": "M-H",
+  "note": "Squid takes young or freshly molted banded shrimp; an adult may grab a sleeping squid",
+  "threat": "euprymna_berryi"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "lysmata_amboinensis",
+  "risk": "M",
+  "note": "Squid hunts small or molting cleaner shrimp",
+  "threat": "euprymna_berryi"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "clibanarius_tricolor",
+  "risk": "M",
+  "note": "Small blue-leg hermits are prey",
+  "threat": "euprymna_berryi"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "paguristes_cadenati",
+  "risk": "L",
+  "note": "Scarlet hermits are mostly too big"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "percnon_gibbesi",
+  "risk": "M",
+  "note": "A young crab is prey; a big crab can grab a resting squid"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "nassarius_sp",
+  "risk": "L",
+  "note": "Snails are ignored; they dig through its sand"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "lithopoma_tectum",
+  "risk": "L",
+  "note": "Snails are ignored"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "ophiocoma_sp",
+  "risk": "M",
+  "note": "Brittle star roams the sand at night and can catch a resting squid",
+  "threat": "ophiocoma_sp"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "sabellastarte_sp",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "asterina_sp",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "euprymna_berryi",
+  "b": "euprymna_berryi",
+  "risk": "L",
+  "note": "Bobtail squid tolerate company; mature males squabble when crowded"
+ },
+ {
   "a": "valenciennea_puellaris",
   "b": "pholidichthys_leucotaenia",
   "risk": "L",

@@ -309,6 +309,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     DIAMOND_GOBY(listOf("valenciennea"), true),
     /** Leopard wrasses (blue star leopard wrasse, *Macropharyngodon bipartitus*; research video fish_leopard_wrasse). */
     LEOPARD_WRASSE(listOf("macropharyngodon"), true),
+    /**
+     * Bobtail squid (*Euprymna berryi* and relatives, Sepiolidae; research cephalopod_squid). Sandbox only. A mollusc, so not a fish
+     * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
+     */
+    BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -334,6 +339,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
+            "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
         )
 
         fun byId(id: String): BrainKind? {

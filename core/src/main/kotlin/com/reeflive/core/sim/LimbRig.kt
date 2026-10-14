@@ -50,6 +50,7 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.BRITTLE_STAR -> BrittleArms(seed)
             BrainKind.SALLY_CRAB -> CrabLegs()
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> ShrimpLimbs()
+            BrainKind.BOBTAIL_SQUID -> SquidRig()
             else -> null
         }
 

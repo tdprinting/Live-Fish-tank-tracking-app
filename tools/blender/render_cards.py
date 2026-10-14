@@ -29,6 +29,7 @@ CARDS = {
     "pseudochromis_indigo": "dottyback",
     "valenciennea_puellaris": "diamond_goby",
     "macropharyngodon_bipartitus": "leopard_wrasse",
+    "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",
     "clibanarius_tricolor": "hermit_blue",

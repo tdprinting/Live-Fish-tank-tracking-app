@@ -202,6 +202,8 @@ object Predation {
                 BrainKind.HERMIT -> 5.0
                 BrainKind.CARDINAL -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
+                // research cephalopod_squid: a bobtail squid out of the sand is the size of the hawk's usual prey
+                BrainKind.BOBTAIL_SQUID -> if (me.posture == 5) 0.0 else 2.5 * L
                 else -> 0.0
             }
             else -> 0.0
@@ -234,6 +236,8 @@ object Predation {
                 BrainKind.HERMIT -> 0.4
                 BrainKind.CARDINAL -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
                 BrainKind.BRITTLE_STAR -> 0.1
+                // research cephalopod_squid: an exposed bobtail squid is soft prey for a hawkfish (buried in the sand it is not found)
+                BrainKind.BOBTAIL_SQUID -> if (prey.posture == 5 || prey.lengthCm > 1.2 * pred.lengthCm) 0.0 else 0.5
                 else -> 0.0
             }
             else -> 0.0

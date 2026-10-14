@@ -34,11 +34,12 @@ NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
 
 # triangle budgets for LOD0 files: (total max, body max) ; None = not checked
 FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish",
-        "lawnmower_blenny", "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse"]
+        "lawnmower_blenny", "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse",
+        "bobtail_squid"]  # the squid is unit length facing +X too (arm tips = "snout"; tools/blender/squid.py)
 BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
-    "diamond_goby": 4800, "leopard_wrasse": 4800,
+    "diamond_goby": 4800, "leopard_wrasse": 4800, "bobtail_squid": 4600,
     "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 1600, "brittle_star": 1800,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
@@ -71,6 +72,10 @@ SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
 MICRO_TRIS_HIGH = 12000
 MICRO_TRIS_MEDIUM = 2000
 BODY_BUDGET = {"engineer_goby": 5600}
+# body COLOR_0.a at its front end: the squid body starts at the arm crown (its arms, part "leg", are the snout)
+SNOUT_A = {"bobtail_squid": 0.3}
+# sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
+SANDBOX_ONLY = {"bobtail_squid"}
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}
@@ -266,7 +271,7 @@ def check_glb(path, errors, warnings, report):
         xs_a.sort()
         xmin, a_tail = xs_a[0]
         xmax, a_snout = xs_a[-1]
-        if not (a_snout < 0.08 and a_tail > 0.75):
+        if not (a_snout < SNOUT_A.get(base, 0.08) and a_tail > 0.75):
             errors.append(f"{name}: COLOR_0.a not 0 (snout,+x) -> 1 (tail,-x): snout {a_snout:.3f} tail {a_tail:.3f}")
         # monotonic in bins
         bins = {}
@@ -360,6 +365,8 @@ def estimates(report):
     for level in ("high", "medium"):
         meshes = instances = fish1 = fish0 = 0
         for name, (tris, body) in files.items():
+            if name.replace("_lod1", "") in SANDBOX_ONLY:
+                continue  # not in the default tank (sandbox species)
             if name.endswith("_lod1"):
                 if name[:-5] in FISH:
                     fish1 += tris
