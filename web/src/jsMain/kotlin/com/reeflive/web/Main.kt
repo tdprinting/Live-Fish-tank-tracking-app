@@ -66,6 +66,8 @@ object ReefLive {
     private var applied: Map<String, Double> = emptyMap()
     internal val scenarioQueue = ArrayList<Pair<Double, Command>>()
     private var pendingTouch: Pair<Vec3, TouchSurface>? = null
+    /** Screensaver camera while on (same director as the Android screensaver). */
+    private var director: com.reeflive.app.render.CinemaDirector? = null
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -120,7 +122,7 @@ object ReefLive {
                 r.listener = object : TankViewListener {
                     override fun onPick(id: String?) { emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
-                    override fun onFollowLost(id: String) { emit("onFollow", null) }
+                    override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
                     override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
@@ -191,7 +193,8 @@ object ReefLive {
             if (steps == 3) simAcc = 0.0
         }
         val c = canvas
-        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt())) resize()
+        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt() || c.height != (c.clientHeight * pixelRatio()).toInt())) resize()
+        director?.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
         window.requestAnimationFrame(::frame)
     }
@@ -292,6 +295,28 @@ object ReefLive {
         pendingTouch = null
         ReefSandbox.touch(p, surface)
         return true
+    }
+
+    /** Screensaver mode on/off: slow cinematic moves and animal follows; read [cinema] each frame for the overlay. */
+    fun screensaver(on: Boolean) {
+        val r = renderer ?: return
+        if (on == (director != null)) return
+        if (on) {
+            director = com.reeflive.app.render.CinemaDirector(r.input, object : com.reeflive.app.render.CinemaDirector.Control {
+                override fun follow(id: String?) { r.follow(id); emit("onFollow", id) }
+                override fun resetCamera() = r.resetCamera()
+                override fun viewHeightPx(): Float = (canvas?.height ?: 1).toFloat()
+            }).also { it.start() }
+        } else {
+            director = null
+            r.follow(null); emit("onFollow", null); r.resetCamera()
+        }
+    }
+
+    /** Screensaver overlay state as JSON {fade, caption, alpha}, or "null" when off. */
+    fun cinema(): String {
+        val d = director ?: return "null"
+        return JSON.stringify(obj { it.fade = d.fade; it.caption = d.caption ?: ""; it.alpha = d.captionAlpha })
     }
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return

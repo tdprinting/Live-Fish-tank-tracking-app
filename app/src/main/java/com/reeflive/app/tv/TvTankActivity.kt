@@ -29,7 +29,7 @@ class TvTankActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        watch = TankWatch(this, interactive = true)
+        watch = TankWatch(this, hint = "Press OK for options")
         setContentView(watch.root)
         watch.onInstallUpdate = { (updates.state.value as? UpdateState.Ready)?.let(::install) }
         WindowCompat.setDecorFitsSystemWindows(window, false)

@@ -17,6 +17,7 @@ import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import com.reeflive.app.R
 import com.reeflive.app.appGraph
+import com.reeflive.app.render.CinemaDirector
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankGlView
 import com.reeflive.app.render.TankViewListener
@@ -28,20 +29,26 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * Full-screen, hands-off Live Tank for a TV (activity) or a screensaver (dream). Plain views, no Compose, so a
- * DreamService can host it too. The camera sways slowly across the tank and, in tour mode, glides in to follow
- * one animal at a time.
+ * DreamService can host it too. A [CinemaDirector] runs the camera: slow eased moves at different angles and
+ * heights, then a slow follow of one animal, joined by long glides or a gentle dip through black.
  *
  * TV GPUs (Fire TV sticks and TV-integrated Fire OS) are far weaker than a phone and often hand out a 4K surface,
  * so the tank renders into a small fixed-size buffer that the display hardware scales up for free, at a TV preset
- * that steps down ([STEPS]) until the frame rate holds.
+ * that steps down ([TV_STEPS]) until the frame rate holds.
  *
- * Remote (interactive): ◀ ▶ turn, ▲ ▼ zoom, OK opens a one-row menu with a clearly lit selection; Back closes it.
+ * Remote (interactive): ◀ ▶ turn, ▲ ▼ zoom (the director resumes 30 s later), OK opens a one-row menu with a clearly lit selection; Back closes it.
  */
-class TankWatch(private val context: Context, private val interactive: Boolean) {
+class TankWatch(
+    private val context: Context,
+    /** Shown for a few seconds on start (null = none, e.g. the dream). */
+    private val hint: String?,
+    /** Phone / tablet screensaver: phone GPUs take the full-resolution presets first. */
+    phone: Boolean = false,
+) {
+    private val steps = if (phone) PHONE_STEPS else TV_STEPS
     private val graph = context.appGraph
     private val holder = graph.simulationHolder
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -50,11 +57,15 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     // window MSAA off: the TV presets never use it, and it is the costliest thing on these GPUs
     private val gl = TankGlView(context, RenderQuality.LOW)
     private val label = TextView(context)
+    private val caption = TextView(context)
+    private val black = View(context).apply { setBackgroundColor(Color.BLACK); alpha = 1f }
     private val notice = TextView(context)
     private val menu = LinearLayout(context)
     val root: FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
         addView(gl, FrameLayout.LayoutParams(-1, -1))
+        addView(black, FrameLayout.LayoutParams(-1, -1))
+        addView(caption, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(56); bottomMargin = dp(48) })
         addView(label, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(40) })
         addView(notice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(28); rightMargin = dp(36) })
         addView(menu, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(40) })
@@ -65,13 +76,13 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     var onInstallUpdate: (() -> Unit)? = null
     private var updateReady = false
 
-    private var tour = true
+    private val director = CinemaDirector(gl.renderer.input, object : CinemaDirector.Control {
+        override fun follow(id: String?) = gl.follow(id)
+        override fun resetCamera() = gl.resetCamera()
+        override fun viewHeightPx() = surfaceLines().toFloat()
+    })
     private var lightIdx = 0
-    private var following: String? = null
-    private var phaseStart = 0L
     private var manualUntil = 0L
-    private var swayT = 0.0
-    private var lastSwayYaw = 0.0
     private var lastTick = 0L
     private var step = 0
     private var slowSince = 0L
@@ -103,7 +114,14 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
         gl.setSnapshotProvider { holder.snapshots.value }
         gl.demoWhenEmpty = false
         gl.listener = object : TankViewListener {
-            override fun onFollowLost(id: String) { main.post { wide() } }
+            override fun onFollowLost(id: String) { main.post { director.followLost() } }
+        }
+        caption.apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            typeface = ResourcesCompat.getFont(context, R.font.outfit_medium)
+            setShadowLayer(dp(6).toFloat(), 0f, dp(1).toFloat(), Color.argb(200, 0, 0, 0))
+            alpha = 0f
         }
         // small render buffer, scaled up by the display (see class note); re-applied when the window size changes
         root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
@@ -116,11 +134,11 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     fun resume() {
         holder.onForeground()
         gl.onResume()
-        phaseStart = SystemClock.uptimeMillis()
-        lastTick = phaseStart
-        stepAt = phaseStart
+        lastTick = SystemClock.uptimeMillis()
+        stepAt = lastTick
+        director.start()
         main.post(tick)
-        if (interactive) show("Press OK for options", 5000)
+        hint?.let { show(it, 5000) }
     }
 
     fun pause() {
@@ -151,8 +169,8 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
         when (code) {
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { manualUntil = now + MANUAL_HOLD_MS; turn(-0.22f) }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { manualUntil = now + MANUAL_HOLD_MS; turn(0.22f) }
-            KeyEvent.KEYCODE_DPAD_UP -> { manualUntil = now + MANUAL_HOLD_MS; gl.renderer.input.zoom(0.8f) }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { manualUntil = now + MANUAL_HOLD_MS; gl.renderer.input.zoom(1.25f) }
+            KeyEvent.KEYCODE_DPAD_UP -> { manualUntil = now + MANUAL_HOLD_MS; gl.renderer.input.zoom(1.25f) }   // closer
+            KeyEvent.KEYCODE_DPAD_DOWN -> { manualUntil = now + MANUAL_HOLD_MS; gl.renderer.input.zoom(0.8f) }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> openMenu()
             else -> return false
@@ -165,12 +183,7 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     private fun openMenu() {
         menu.removeAllViews()
         if (updateReady) item("Install update") { closeMenu(); onInstallUpdate?.invoke() }
-        item(if (tour) "Whole tank" else "Fish tour") {
-            tour = !tour
-            if (tour) nextAnimal() else { wide(); gl.resetCamera() }
-            closeMenu()
-        }
-        item("Next fish") { tour = true; nextAnimal(); closeMenu() }
+        item("Next scene") { manualUntil = 0L; director.next(); closeMenu() }
         item("Lights: ${ViewLight.entries[lightIdx].label}") {
             lightIdx = (lightIdx + 1) % ViewLight.entries.size
             gl.viewLight = ViewLight.entries[lightIdx]
@@ -219,45 +232,23 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     // ---------------------------------------------------------------- camera
 
     private fun turn(radians: Float) {
-        val h = gl.height.coerceAtLeast(1)
+        val h = surfaceLines().coerceAtLeast(1)
         gl.renderer.input.orbit(-radians * h / PI.toFloat(), 0f)
-    }
-
-    private fun wide() {
-        following = null
-        gl.follow(null)
-        phaseStart = SystemClock.uptimeMillis()
-    }
-
-    private fun nextAnimal() {
-        val ids = holder.snapshots.value.organisms.map { it.id }.filter { it != following }
-        if (ids.isEmpty()) { wide(); return }
-        following = ids.random()
-        gl.follow(following)
-        phaseStart = SystemClock.uptimeMillis()
     }
 
     private val tick = object : Runnable {
         override fun run() {
             val now = SystemClock.uptimeMillis()
-            val dt = (now - lastTick).coerceIn(0, 200) / 1000.0
+            val dt = (now - lastTick).coerceIn(0, 200) / 1000f
             lastTick = now
-            val inPhase = now - phaseStart
-            if (now > manualUntil && !menuOpen) {
-                if (following == null) {
-                    // slow side-to-side sway across the front glass
-                    swayT += dt
-                    val yaw = SWAY_YAW * sin(2 * PI * swayT / SWAY_PERIOD_S)
-                    turn((yaw - lastSwayYaw).toFloat())
-                    lastSwayYaw = yaw
-                    if (tour && inPhase > WIDE_MS) nextAnimal()
-                } else {
-                    turn((0.05 * dt).toFloat())   // drift around the followed animal
-                    if (inPhase > FOLLOW_MS) wide()
-                }
-            }
+            if (manualUntil != 0L && now > manualUntil) { manualUntil = 0L; director.next() }
+            if (manualUntil == 0L && !menuOpen) director.update(dt, holder.snapshots.value)
+            val manual = manualUntil != 0L
+            black.alpha = if (manual) 0f else director.fade
+            caption.alpha = if (manual) 0f else director.captionAlpha
+            director.caption?.let { if (caption.text != it) caption.text = it }
             adapt(now)
-            main.postDelayed(this, 33)
+            main.postDelayed(this, 16)
         }
     }
 
@@ -266,18 +257,23 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     private class Step(val quality: RenderQuality, val lines: Int)
 
     private fun applyStep() {
-        val s = STEPS[step]
+        val s = steps[step]
         gl.setQuality(s.quality)
         val w = root.width; val h = root.height
         if (w > 0 && h > 0) {
             val lines = minOf(s.lines, h)
             gl.holder.setFixedSize((lines * w.toFloat() / h).roundToInt(), lines)
+            fixedLines = lines
         }
     }
 
+    /** Camera input is in surface pixels, and the surface is the small fixed-size buffer once it is set. */
+    private var fixedLines = 0
+    private fun surfaceLines() = if (fixedLines > 0) fixedLines else gl.height
+
     /** Steps down a preset whenever the frame rate stays under [MIN_FPS] for a few seconds. */
     private fun adapt(now: Long) {
-        if (step == STEPS.lastIndex || now - stepAt < SETTLE_MS) return
+        if (step == steps.lastIndex || now - stepAt < SETTLE_MS) return
         val fps = gl.stats.value.fps
         if (fps <= 0f) return
         if (fps < MIN_FPS) {
@@ -304,20 +300,22 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     private companion object {
         val TEXT = Color.rgb(225, 240, 248)
         /** TV presets, best first: render lines (scaled up to the screen) and renderer preset. */
-        val STEPS = listOf(
+        val TV_STEPS = listOf(
             Step(RenderQuality.MEDIUM, 720),
             Step(RenderQuality.LOW, 720),
             Step(RenderQuality.LOW, 540),
             Step(RenderQuality.LOW, 432),
         )
+        val PHONE_STEPS = listOf(
+            Step(RenderQuality.HIGH, Int.MAX_VALUE),
+            Step(RenderQuality.MEDIUM, 1080),
+            Step(RenderQuality.MEDIUM, 720),
+            Step(RenderQuality.LOW, 720),
+        )
         const val MIN_FPS = 26f
         const val SLOW_MS = 3000L
         /** Let a new preset warm up (texture uploads, shader compiles) before judging it. */
         const val SETTLE_MS = 5000L
-        const val SWAY_YAW = 0.35
-        const val SWAY_PERIOD_S = 120.0
-        const val WIDE_MS = 90_000L
-        const val FOLLOW_MS = 35_000L
         const val MANUAL_HOLD_MS = 30_000L
         const val MENU_IDLE_MS = 10_000L
     }
