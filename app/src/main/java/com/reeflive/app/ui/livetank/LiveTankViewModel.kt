@@ -173,7 +173,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
             }
         }
     }
-    fun acclimateAll() = sandbox { holder.enqueue(Command.SetAcclimation(null)) }
+    // care props from the shelf also work in Watch, like feeding (Reality re-syncs from the next logged reading)
+    fun acclimateAll() = holder.enqueue(Command.SetAcclimation(null))
     fun rearrangeRock() = sandbox { holder.enqueue(Command.RearrangeRock) }
     /** Powerheads fail at the next 23:00 for six hours (the heat × oxygen × night test). */
     fun pumpFailTonight() = sandbox {
@@ -182,8 +183,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         if (at <= t) at += 86400
         holder.enqueue(Command.PowerheadFail(at, 6 * 3600.0))
     }
-    fun dose(paramId: String, delta: Double) = sandbox { holder.enqueue(Command.Dose(paramId, delta)) }
-    fun waterChange(fraction: Double, mix: WaterState = WaterState.FRESH_MIX) = sandbox { holder.enqueue(Command.WaterChange(fraction, mix)) }
+    fun dose(paramId: String, delta: Double) = holder.enqueue(Command.Dose(paramId, delta))
+    fun waterChange(fraction: Double, mix: WaterState = WaterState.FRESH_MIX) = holder.enqueue(Command.WaterChange(fraction, mix))
     fun setLights(on: Boolean?, intensity: Double? = null) = sandbox { holder.enqueue(Command.Lights(on, intensity)) }
     fun setHeater(working: Boolean, setC: Double? = null, stuckOn: Boolean = false) = sandbox { holder.enqueue(Command.Heater(working, setC, stuckOn)) }
     fun setPowerheads(on: Boolean) = sandbox { holder.enqueue(Command.Powerheads(on)) }
@@ -206,14 +207,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
 
     // pests, treatments, maintenance (sandbox only)
     fun addAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.AddAiptasia(count)) }
-    fun removeAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.RemoveAiptasia(count)) }
+    fun removeAiptasia(count: Int = 1) = holder.enqueue(Command.RemoveAiptasia(count))
     fun addPestControl(controller: PestController, count: Int = 1) = sandbox { holder.enqueue(Command.AddPestControl(controller, count)) }
     /** Starts [kind] for its default duration (UV runs until stopped) on every fish. */
     fun startTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StartTreatment(kind)) }
     fun stopTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StopTreatment(kind)) }
     /** Infects a random fish with [disease] (test aid). */
     fun infect(disease: Disease) = sandbox { holder.enqueue(Command.Infect(null, disease)) }
-    fun maintain(task: MaintenanceTask) = sandbox { holder.enqueue(Command.Maintain(task)) }
+    fun maintain(task: MaintenanceTask) = holder.enqueue(Command.Maintain(task))
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
     fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }
