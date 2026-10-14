@@ -462,7 +462,11 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         private var p = Vec3.ZERO
         private var next = 0.0
         private var yaw = 0.0
+        private var bestD = 0.0
+        private var progressAt = 0.0
+        private var detour: Vec3? = null
         override fun score(c: Ctx) = 0.45
+        override fun enter(c: Ctx) { bestD = c.o.pos.distanceTo(spot); progressAt = c.t; detour = null }
         override fun update(c: Ctx, out: SteerIntent) {
             if (c.t > next) {
                 next = c.t + c.rng.range(8.0, 20.0)
@@ -472,12 +476,42 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
                 if (p.distanceTo(spot) > c.o.hoverRadius + 2) p = c.safe(spot)
                 yaw = c.rng.signed() * 0.5
             }
+            // outside its zone with rock in the way (left on the far side of a ridge after a cleaner visit), the slow
+            // straight seek stalls against the rock: take a waypoint with a clear line both ways (over the ridge or
+            // around it), then hover on as before
+            val d = c.o.pos.distanceTo(spot)
+            if (d < bestD - 0.5) { bestD = d; progressAt = c.t }
+            if (d <= c.o.hoverRadius + 2) { bestD = d; progressAt = c.t; detour = null }
+            if (detour == null && c.t - progressAt > STALL_S) {
+                detour = detourTo(c, c.o.pos, spot)
+                progressAt = c.t; bestD = d
+            }
+            detour?.let { w ->
+                if (c.o.pos.distanceTo(w) < 2.0 || c.t - progressAt > 3 * STALL_S) detour = null
+                else { out.seek(w, c.o.cruiseSpeed * 0.6, arrive = 2.0); out.hover = true; out.maxPitch = HOVER_PITCH; return }
+            }
             out.seek(p, c.o.cruiseSpeed * 0.25, arrive = 4.0)
             out.hover = true; out.ampMul = 0.3; out.pectoral = 1.0; out.tailMul = 0.4
             out.maxPitch = HOVER_PITCH
             out.faceDir = hoverFacing(c, yaw)
             if (c.o.brightExposed) out.ampMul = 0.2
         }
+    }
+
+    /** A waypoint from [a] toward [b] with open water on both legs (≥ 1 cm off rock between the ends): above, in front of
+     *  or beside the midpoint, nearest first. */
+    private fun detourTo(c: Ctx, a: Vec3, b: Vec3): Vec3? {
+        val mid = (a + b) * 0.5
+        for (k in 1..6) for (dir in DETOUR_DIRS) {
+            val w = c.safe(mid + dir * (5.0 * k))
+            if (clearLine(c, a, w) && clearLine(c, w, b)) return w
+        }
+        return null
+    }
+
+    private fun clearLine(c: Ctx, a: Vec3, b: Vec3): Boolean {
+        for (k in 2..17) if (c.rock.sdf.dist(a.lerp(b, k / 20.0)) < 1.0) return false
+        return true
     }
 
     /** Into the current when there is one, else away from the nearest rock toward the open front; turned by [yaw] rad. */
@@ -548,6 +582,9 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         const val BASE_RADIUS = 12.0
         /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
         const val HOVER_PITCH = 0.17
+        /** Seconds outside its zone without closing on the pocket before the hover takes a detour round the rock. */
+        const val STALL_S = 8.0
+        private val DETOUR_DIRS = listOf(Vec3.Y, Vec3.Z, Vec3(0.0, 0.7, 0.7).normalized(), Vec3.X, Vec3.X * -1.0, Vec3.Z * -1.0)
         const val FORAGE_RADIUS = 40.0
         const val FORAGE_LIGHT = 0.3
     }
