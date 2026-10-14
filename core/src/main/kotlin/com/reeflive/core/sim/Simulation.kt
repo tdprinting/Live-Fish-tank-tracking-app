@@ -124,6 +124,8 @@ class Simulation(
     val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
+    /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
+    val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
@@ -274,6 +276,7 @@ class Simulation(
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
+        waste.step(simDt, simTimeSec, water.s.tempC, organisms, water, useBehavior && !abstractMode, fluid?.hobOn ?: true)
         if (useBehavior && !abstractMode) coralCatch(simDt)
         // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
         nightRolls()
@@ -449,6 +452,9 @@ class Simulation(
         var bio = 0.0
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
+        var fecalBio = 0.0
+        for (o in organisms) if (o.alive && o.isFish && !o.sleeping) fecalBio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC)
+        w.fecalBioIndex = fecalBio
         repro.step(CHEM_DT)
         SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(CHEM_DT / 60.0)
@@ -463,6 +469,7 @@ class Simulation(
         microDrivers()
         w.bacteria.bioturbation = sandStirrers()
         w.step(CHEM_DT)
+        waste.collect(organisms, w)
         applyRamps()
         cycle?.update(w.s, simTimeSec)
         // health
@@ -861,7 +868,10 @@ class Simulation(
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
-            is Command.Maintain -> water.maintain(c.task)
+            is Command.Maintain -> {
+                water.maintain(c.task)
+                if (c.task == MaintenanceTask.SIPHON_SAND) { waste.siphon(); sand.siphon(WaterSim.SIPHON_SHARE) }
+            }
             is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
             is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
             is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
@@ -1273,6 +1283,7 @@ class Simulation(
             },
             sandClouds = sand.cloudArray(),
             foodMeta = food.exportMeta(simTimeSec),
+            waste = waste.export(simTimeSec),
             pumps = pumpArray(),
         )
     }

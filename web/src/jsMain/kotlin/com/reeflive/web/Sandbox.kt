@@ -198,7 +198,7 @@ object ReefSandbox {
             "maintain" -> {
                 val t = MaintenanceTask.valueOf(arg ?: return false)
                 send(Command.Maintain(t))
-                burst(when (t) { MaintenanceTask.CHANGE_SOCK -> BurstKind.SUCTION; MaintenanceTask.REPLACE_CARBON -> BurstKind.CLARITY; MaintenanceTask.HARVEST_MACRO -> BurstKind.SPARKLE }, SUMP_SPOT)
+                burst(when (t) { MaintenanceTask.CHANGE_SOCK -> BurstKind.SUCTION; MaintenanceTask.REPLACE_CARBON -> BurstKind.CLARITY; MaintenanceTask.HARVEST_MACRO -> BurstKind.SPARKLE; MaintenanceTask.RINSE_FILTER -> BurstKind.WATER_CHANGE; MaintenanceTask.SIPHON_SAND -> BurstKind.SUCTION }, if (t == MaintenanceTask.SIPHON_SAND) SAND_SPOT else SUMP_SPOT)
             }
             "acclimate" -> send(Command.SetAcclimation(null))
             "rearrangeRock" -> { send(Command.RearrangeRock); burst(BurstKind.SILT, ROCK_SPOT, amount = 1.5f) }
@@ -536,6 +536,7 @@ object ReefSandbox {
     private val PUMP_RIGHT = floatArrayOf(84f, 48f, 1.5f)
     private val LIGHT_SPOT = floatArrayOf(61f, 66f, 16f)
     private val SUMP_SPOT = floatArrayOf(108f, 62f, 3f)
+    private val SAND_SPOT = floatArrayOf(58f, 4f, 26f)
     private val ROCK_SPOT = floatArrayOf(72f, 28f, 15f)
     private val WHITE = floatArrayOf(1f, 1f, 1f)
     private val DOSE_TINT = mapOf(

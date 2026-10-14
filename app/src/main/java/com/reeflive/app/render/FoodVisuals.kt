@@ -30,6 +30,7 @@ object Shape {
     const val BUBBLE = 13f
     const val GLOW = 14f
     const val STREAK = 15f
+    const val FECES = 16f
 }
 
 /** Where packed points go: (position, size cm, linear rgba, shape, seed, screen angle, shape parameter). */

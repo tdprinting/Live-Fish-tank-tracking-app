@@ -113,7 +113,7 @@ data class LivestockSeed(
 )
 
 /** Routine maintenance jobs (research 01 §3.5). */
-enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO }
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO, RINSE_FILTER, SIPHON_SAND }
 
 /**
  * Fish diseases (research 01 §4.3). BROOKLYNELLA, URONEMA and FLUKES were added for the treatment model (W-4);
@@ -320,6 +320,8 @@ data class SimSnapshot(
      * settled (1/0) and a stable 0..1 seed. Renderer only (thawing cubes, fluttering flakes, spreading plankton haze).
      */
     val foodMeta: FloatArray = FloatArray(0),
+    /** Fish feces pellets, [WasteSystem.STRIDE] floats each: x, y, z, length (cm), tint, settled (0 / 1 + breakdown), seed, tumble. */
+    val waste: FloatArray = FloatArray(0),
     /**
      * Water movers for the renderer, [PUMP_STRIDE] floats each: nozzle x, y, z (cm), unit jet axis x, y, z, the jet's
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).

@@ -513,6 +513,8 @@ const SUPPLIES = [
   { id: 'new_sock', row: 1, label: 'New sock', sandbox: true, run: () => act('maintain', 'CHANGE_SOCK', 0, 'A clean filter sock. Fresh!') },
   { id: 'fresh_carbon', row: 1, label: 'Fresh carbon', sandbox: true, run: () => act('maintain', 'REPLACE_CARBON', 0, 'New carbon keeps the water clear.') },
   { id: 'trim_algae', row: 1, label: 'Trim algae', sandbox: true, run: () => act('maintain', 'HARVEST_MACRO', 0, 'Snip snip! The algae garden is trimmed.') },
+  { id: 'siphon', row: 1, label: 'Siphon gunk', run: () => act('maintain', 'SIPHON_SAND', 0, 'Slurp! Fish poop and mulm vacuumed off the sand.') },
+  { id: 'rinse_filter', row: 1, label: 'Rinse filter', run: () => act('maintain', 'RINSE_FILTER', 0, 'The filter floss is rinsed. Trapped poop is gone before it rots.') },
   { id: 'zap_pest', row: 1, label: 'Zap pest', sandbox: true, run: () => act('aiptasia', null, -1, 'Zap! One pest anemone gone.') },
   { id: 'settle_in', row: 1, label: 'Settle in', sandbox: true, run: () => act('acclimate', null, 0, 'Everyone gets used to the water now.') },
   { id: 'glass_cleaner', row: 2, label: 'Clean glass', run: () => { closeShelf(); setCleaning(true); } },
@@ -540,7 +542,7 @@ function renderShelf() {
   $('shelfbar').classList.remove('hidden');
 }
 const FOOD_ICON = { FLAKE: '🟠', PELLET: '🟤', FLOATING_PELLET: '🟫', ALGAE_WAFER: '🟢', MYSIS: '🦐', BRINE: '🦐', KRILL: '🦐', PRAWN: '🍤', CYCLOPS: '🔴', NORI: '🥬', CORAL_FOOD: '🪸', PLANKTON: '✨', PODS: '🐛' };
-const SUPPLY_ICON = { water_change: '🪣', water_small: '💧', dose_alk: '🐚', dose_ca: '🦴', dose_mg: '⭕', new_sock: '🧦', fresh_carbon: '⚫', trim_algae: '✂️', zap_pest: '⚡', settle_in: '💚', glass_cleaner: '🧽', test_kit: '🧪', microscope: '🔬', knocker: '✊', move_rocks: '🪨' };
+const SUPPLY_ICON = { water_change: '🪣', water_small: '💧', dose_alk: '🐚', dose_ca: '🦴', dose_mg: '⭕', new_sock: '🧦', fresh_carbon: '⚫', trim_algae: '✂️', siphon: '🧹', rinse_filter: '🚿', zap_pest: '⚡', settle_in: '💚', glass_cleaner: '🧽', test_kit: '🧪', microscope: '🔬', knocker: '✊', move_rocks: '🪨' };
 $('shelfbar').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;

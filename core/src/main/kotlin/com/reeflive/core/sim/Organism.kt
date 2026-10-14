@@ -220,7 +220,11 @@ class Organism(
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */
     val mealGrams: Double get() = (0.012 * massG.pow(0.8)).coerceAtLeast(0.004)
 
+    /** Grams of food swallowed since the start, read by [WasteSystem] to fill the gut. */
+    var eatenG = 0.0
+
     fun eat(grams: Double) {
+        eatenG += grams
         hunger = (hunger - 0.8 * grams / mealGrams).coerceAtLeast(0.0)
     }
 
