@@ -278,6 +278,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         val aOut = s.allelo * (ALLELO_DECAY + (if (skimmer) 0.01 else 0.0) + 0.1 * ce) * h
         s.allelo = max(0.0, s.allelo + alleloSourcePerHour * h - min(aOut, s.allelo))
         if (ce > 0) s.copper = max(0.0, s.copper - s.copper * 0.01 * ce * h)
+        // carbon also adsorbs iodine/iodide (01 §3.5 trace stripping): crustaceans then moult worse once it runs low
+        if (ce > 0) s.i = max(0.0, s.i - s.i * CARBON_IODINE * ce * h)
     }
 
     /** Carries the equipment state over to a rebuilt or forked water model. */
@@ -335,11 +337,15 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         refugiumAgeH = 0.0
     }
 
-    /** One-off maintenance (sandbox buttons, routine schedule). */
+    /**
+     * One-off maintenance (the shelf's care props, sandbox buttons). A fresh sock or fresh carbon goes in whether or not
+     * one was running: with none fitted the swap fits one (the sock then starts catching detritus, the carbon stripping
+     * DOC, allelochemicals and some iodine), so the prop always does what its label says. The harvest trims what is there.
+     */
     fun maintain(task: MaintenanceTask) {
         when (task) {
-            MaintenanceTask.CHANGE_SOCK -> changeSock()
-            MaintenanceTask.REPLACE_CARBON -> carbonAgeH = 0.0
+            MaintenanceTask.CHANGE_SOCK -> { filterSock = true; changeSock() }
+            MaintenanceTask.REPLACE_CARBON -> { carbon = true; carbonAgeH = 0.0 }
             MaintenanceTask.HARVEST_MACRO -> harvestMacro()
         }
     }
@@ -385,13 +391,16 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     // ===================================================================================
     // Inputs from FoodSystem / Commands
 
-    /** Food added to the tank: its N/P leaches over ~6 h (τ = 2 h). */
-    fun addFeed(grams: Double) {
-        s.doc += grams * DOC_PER_G * 1000 / s.volumeL
+    /**
+     * Food added to the tank: its N/P leaches over ~6 h (τ = 2 h). [po4Factor] and [docFactor] scale the phosphate and
+     * dissolved organics against the tuned reference foods (FoodKind.po4Factor / docFactor; 1 = flake).
+     */
+    fun addFeed(grams: Double, po4Factor: Double = 1.0, docFactor: Double = 1.0) {
+        s.doc += grams * DOC_PER_G * docFactor * 1000 / s.volumeL
         val tan = grams * FEED_TAN_PER_G * 1000 / s.volumeL
         pendingFeedTan += tan
         nInputMg += tan * N_TAN * s.volumeL
-        pendingFeedPo4 += grams * FEED_PO4_PER_G * 1000 / s.volumeL
+        pendingFeedPo4 += grams * FEED_PO4_PER_G * po4Factor * 1000 / s.volumeL
     }
 
     /**
@@ -570,6 +579,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val DOC_DECAY = 0.01             // /h bacterial breakdown (τ ≈ 4 days)
         const val DOC_SKIM = 0.02              // /h skimmer removal at normal flow
         const val DOC_CARBON = 0.08            // /h fresh carbon
+        const val CARBON_IODINE = 0.004        // /h iodine adsorbed by fresh carbon (τ ≈ 10 days; est.)
         const val ALLELO_DECAY = 0.02          // /h breakdown of terpenoids in water (τ ≈ 2 days)
         const val MACRO_MU = 0.1 / 24          // /h max specific growth (refugium chaeto doubles in ~2-3 weeks)
         const val MACRO_CAP = 1.0

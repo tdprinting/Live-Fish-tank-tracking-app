@@ -4,7 +4,11 @@ import androidx.compose.ui.graphics.Color
 import com.reeflive.app.render.BurstKind
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.core.sim.Disease
+import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.SupplyPreview
+import com.reeflive.core.sim.WaterState
+import com.reeflive.core.sim.kitFmt
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.PestController
@@ -38,19 +42,60 @@ object LiveReactions {
     private val medicine = Color(0xFF5FD7FF)
     private val phyto = Color(0xFF6DBF5A)
     private val pods = Color(0xFFD8CBA8)
+    private val carbonDust = Color(0xFF2E2F33)
+    private val redMacro = Color(0xFFB0413E)
 
     /** [at]: where the food goes in (dragged from the shelf), else the sim's surface feed point. */
     fun feed(k: FoodKind, at: FxPoint? = null) = Reaction(
         TankFx(FxKind.FEED, if (k == FoodKind.NORI) FxSpots.NORI else at ?: FxSpots.FEED, food = k, caption = k.label),
-        when (feedTool(k)) {
-            FeedTool.PINCH -> "A pinch by the return. Watch the current carry it across!"
-            FeedTool.SHAKER -> "Shake shake! ${k.label} for everyone."
-            FeedTool.CUBE -> "A frozen ${k.label.lowercase(Locale.US)} cube. It thaws as it sinks."
-            FeedTool.CLIP -> "Nori on the clip. The grazers will love it."
-            FeedTool.PIPETTE -> "A squirt of ${k.label.lowercase(Locale.US)} for the corals and filter feeders."
-        },
+        feedLine(k),
         HermieMood.EXCITED,
     )
+
+    /** Hermie's line for each food: who it is for and what it does (FoodKind.eatenBy, its sink / float behaviour). */
+    fun feedLine(k: FoodKind): String = when (k) {
+        FoodKind.FLAKE -> "Flakes float a moment, then flutter down. Almost everyone gets a bite!"
+        FoodKind.PELLET -> "A pinch by the return. Watch the current carry it across!"
+        FoodKind.FLOATING_PELLET -> "Floating pellets! The clownfish come right up to the top for these."
+        FoodKind.ALGAE_WAFER -> "Plop! An algae wafer for us bottom grazers. Snails, hermits, the tang: dinner!"
+        FoodKind.MYSIS -> "A frozen mysis cube. It thaws as it sinks: everyone's favourite."
+        FoodKind.BRINE -> "Brine shrimp: a tasty treat, but mostly water. Not a whole meal."
+        FoodKind.KRILL -> "Big krill pieces! The hawkfish is already watching from his perch."
+        FoodKind.PRAWN -> "A prawn chunk sinks fast. The Nassarius snails will pop out of the sand!"
+        FoodKind.CYCLOPS -> "A red cloud of Cyclops. Small mouths and coral polyps snap them up."
+        FoodKind.NORI -> "Nori on the clip. The tang and the blennies will graze it all day."
+        FoodKind.CORAL_FOOD -> "Coral food dust. Watch the polyps reach out and catch it!"
+        FoodKind.PLANKTON -> "Green phyto for the feather duster and the pods. The water goes a bit green."
+        FoodKind.PODS -> "Live pods! They hop off to hide in the rock. The hunt is on!"
+    }
+
+    /**
+     * A dose from the shelf or the dose chips. [verdict] (core DoseCheck: daily swing, level, Ca × alk precipitation)
+     * turns the line into a warning; a dose that precipitates also snows white grains in the tank.
+     */
+    fun dose(paramId: String, label: String, verdict: DoseCheck.Verdict): Reaction {
+        val base = dose(paramId, label)
+        val max = DoseCheck.DAILY_MAX[paramId]
+        val unit = if (paramId == "alk") "dKH" else "ppm"
+        val maxText = max?.let { m -> "${if (m % 1.0 == 0.0) m.toInt().toString() else m.toString()} $unit" } ?: ""
+        val fb = base.feedback
+        return when (verdict) {
+            DoseCheck.Verdict.OK -> base
+            DoseCheck.Verdict.FAST_SWING -> Reaction(
+                base.fx, "Whoa, that is more than one dose today. Big swings stress the corals!", HermieMood.WORRIED,
+                fb.withEffect("More than $maxText in a day: corals pull their polyps in"),
+            )
+            DoseCheck.Verdict.TOO_HIGH -> Reaction(
+                base.fx, "$label is already high. Too much is as bad as too little!", HermieMood.WORRIED,
+                fb.withEffect("$label above the reef range: skip a day and test again"),
+            )
+            DoseCheck.Verdict.PRECIPITATION -> Reaction(
+                base.fx, "Uh oh, white snow! Calcium and alkalinity are falling out of the water.", HermieMood.SURPRISED,
+                fb.plus(listOf(Feedback.burst(BurstKind.SALT, FxSpots.DOSE, amount = 0.8f)))
+                    .withEffect("Too much calcium × alkalinity: it crusts out white (magnesium holds it off)"),
+            )
+        }
+    }
 
     fun dose(paramId: String, label: String): Reaction {
         val tint = when (paramId) {
@@ -86,6 +131,33 @@ object LiveReactions {
         "Out with the old water, in with fresh salt water!",
         HermieMood.EXCITED,
     )
+
+    /**
+     * A shelf water change with its own salt ([salt] mixed as [mix]) on the water as it is now ([before]): the banner
+     * says what it will do (core SupplyPreview: nitrate down, the salt's alkalinity, a cooler bucket), a big change
+     * siphons and swirls harder than a small one, and a bucket colder than the tank shows a cool shimmer at the return.
+     */
+    fun waterChange(fraction: Double, salt: String, mix: WaterState, before: WaterState): Reaction {
+        val pct = (fraction * 100).toInt()
+        val after = SupplyPreview.afterWaterChange(before, fraction, mix)
+        val dAlk = after.alk - before.alk
+        val dT = after.tempC - before.tempC
+        val parts = ArrayList<String>()
+        parts += "Nitrate ${kitFmt(before.no3, 1)} → ${kitFmt(after.no3, 1)}"
+        if (kotlin.math.abs(dAlk) >= 0.05) parts += "alk ${if (dAlk > 0) "+" else ""}${kitFmt(dAlk, 1)} dKH"
+        if (dT <= -0.1) parts += "${kitFmt(-dT, 1)} °C cooler" else if (dT >= 0.1) parts += "${kitFmt(dT, 1)} °C warmer"
+        val big = fraction >= 0.2
+        val fx = TankFx(FxKind.WATER_CHANGE, FxSpots.SIPHON, amount = fraction.toFloat(), caption = "$salt water change $pct %")
+        val bursts = ArrayList(Feedback.from(fx).bursts)
+        if (dT <= -0.1) bursts += Feedback.burst(BurstKind.COOL, FxSpots.DOSE, amount = if (big) 0.8f else 0.4f)
+        return Reaction(
+            fx,
+            if (big) "A big change! A quarter of the old water out, fresh $salt in. It mixes rich, so not every day."
+            else "A small change: gentle and safe. A little fresh $salt, nobody even notices.",
+            if (big) HermieMood.EXCITED else HermieMood.HAPPY,
+            Feedback("$salt water change $pct %", parts.joinToString(" · "), bursts, watch = "no3", durationMs = FxKind.WATER_CHANGE.ms + 400),
+        )
+    }
 
     fun heater(working: Boolean) = if (working) {
         Reaction(TankFx(FxKind.HEATER_FIX, FxSpots.HEATER, caption = "Heater fixed"), "Warm and cosy again.")
@@ -213,6 +285,30 @@ object LiveReactions {
     fun addAiptasia() = Reaction(TankFx(FxKind.PEST_ADD, FxSpots.AIPTASIA, glyph = ReefGlyphs.pestAnemone, caption = "Pest anemone"), "A pest anemone popped up! It stings corals.", HermieMood.SURPRISED)
     fun removeAiptasia() = Reaction(TankFx(FxKind.PEST_REMOVE, FxSpots.AIPTASIA, glyph = ReefGlyphs.pestAnemone, caption = "Pest removed"), "Zap! One pest anemone gone.")
 
+    /** Zap pest with [count] pest anemones in the tank: none means nothing to zap (and no command), more means keep going. */
+    fun removeAiptasia(count: Int): Reaction = when {
+        count <= 0 -> Reaction(
+            TankFx(FxKind.SPARKLE, FxSpots.AIPTASIA, glyph = ReefGlyphs.pestAnemone, tint = Color(0xFF8EE66B), caption = "No pests"),
+            "No pest anemones right now. Nothing to zap!", HermieMood.HAPPY,
+            Feedback("No pest anemones", "Keep an eye on the rock: they hide in cracks", listOf(Feedback.burst(BurstKind.SPARKLE, FxSpots.AIPTASIA, Color(0xFF8EE66B), 0.4f))),
+        )
+        count == 1 -> removeAiptasia()
+        else -> removeAiptasia().let {
+            Reaction(it.fx, "Zap! That's one. ${count - 1} more to go, and some split if you're unlucky.", HermieMood.EXCITED, it.feedback.withEffect("A dab of paste kills the biggest; one in five leaves a baby behind"))
+        }
+    }
+
+    /** Hermie on the test kit's readings: the worst one, or all clear. */
+    fun testKit(readouts: List<WaterReadout>): String {
+        val bad = readouts.firstOrNull { it.status == com.reeflive.core.status.Status.DANGER }
+            ?: readouts.firstOrNull { it.status == com.reeflive.core.status.Status.CAUTION }
+        return if (bad == null) "Test time! Everything reads fine on the cards. Remember, kits round off."
+        else "Test time! ${bad.label} reads ${bad.valueText}. That one needs a look."
+    }
+
+    /** Hermie on the microscope. */
+    fun microscope() = "Let's look closer! Pods, worms and plankton live in every bit of rock."
+
     fun pestControl(c: PestController) = when (c) {
         PestController.PEPPERMINT_SHRIMP -> Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, glyph = ReefGlyphs.shrimp, tint = Color(0xFFFF7AA8), caption = "Peppermint shrimp"), "Peppermint shrimp eat pest anemones. Yum!", HermieMood.EXCITED)
         PestController.BERGHIA -> Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, glyph = ReefGlyphs.slug, tint = Color(0xFFB18CFF), caption = "Berghia sea slugs"), "Berghia slugs only eat pest anemones.", HermieMood.EXCITED)
@@ -262,16 +358,47 @@ object LiveReactions {
         }.let { Reaction(it.fx, it.say, it.mood, fb) }
     }
 
-    fun maintain(t: MaintenanceTask) = when (t) {
+    fun maintain(t: MaintenanceTask) = maintain(t, null)
+
+    /**
+     * The care props that work on the filtration. The sock swap lifts a brown puff of old muck out before the clean
+     * sock starts pulling drifting dirt in; fresh carbon sheds a little black dust, then the water clears; a trim drops
+     * a few red macro bits and says how much nitrate left with what was cut. [now] (the water before the trim) lets
+     * the trim say there is nothing to cut instead (core SupplyPreview.canTrim).
+     */
+    fun maintain(t: MaintenanceTask, now: WaterState?): Reaction = when (t) {
         MaintenanceTask.CHANGE_SOCK -> Reaction(
-            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Fresh filter sock"), "Dirty sock out, clean sock in!",
-            feedback = Feedback("Fresh filter sock", "A clean sock pulls floating muck out again", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.DOSE))),
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Fresh filter sock"), "Dirty sock out, clean felt sock in! It catches the floating muck.",
+            feedback = Feedback(
+                "Fresh filter sock", "Traps drifting muck before it rots: swap it again in 2-3 days",
+                listOf(Feedback.burst(BurstKind.HAZE, FxSpots.DOSE, waste, 0.35f), Feedback.burst(BurstKind.SUCTION, FxSpots.DOSE)),
+            ),
         )
         MaintenanceTask.REPLACE_CARBON -> Reaction(
-            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.carbon, caption = "Fresh carbon"), "New carbon soaks up yellow and smells.",
-            feedback = Feedback("Fresh carbon", "New carbon clears the yellow tint", listOf(Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE))),
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.carbon, caption = "Fresh carbon"), "Fresh carbon! A puff of black dust, then crystal-clear water.",
+            feedback = Feedback(
+                "Fresh carbon", "Clears yellow water and coral toxins within a day; strips some iodine too",
+                listOf(Feedback.burst(BurstKind.HAZE, FxSpots.DOSE, carbonDust, 0.4f), Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE)),
+            ),
         )
-        MaintenanceTask.HARVEST_MACRO -> Reaction(TankFx(FxKind.SNIP, FxSpots.SUMP, glyph = ReefGlyphs.refugium, caption = "Algae garden trimmed"), "Snip snip! Trimming takes waste out of the water.")
+        MaintenanceTask.HARVEST_MACRO -> if (now != null && !SupplyPreview.canTrim(now)) {
+            Reaction(
+                TankFx(FxKind.SPARKLE, FxSpots.ROCK, glyph = ReefGlyphs.refugium, tint = Color(0xFF8EE66B), caption = "Nothing to trim"),
+                "No algae to trim yet. Let the garden grow first!", HermieMood.SURPRISED,
+                Feedback("Nothing to trim", "The red macro and the refugium are bare: nothing to cut", listOf(Feedback.burst(BurstKind.SPARKLE, FxSpots.ROCK, Color(0xFF8EE66B), 0.4f))),
+            )
+        } else {
+            val no3 = now?.let { SupplyPreview.trimExportNo3(it) }
+            Reaction(
+                TankFx(FxKind.SNIP, FxSpots.SUMP, glyph = ReefGlyphs.refugium, caption = "Algae garden trimmed"), "Snip snip! The nitrate inside the algae leaves with it.",
+                feedback = Feedback(
+                    "Algae garden trimmed",
+                    if (no3 != null) "Took out about ${kitFmt(no3, 1)} ppm of nitrate locked in the algae; it regrows hungry" else "Trimming takes nitrate and phosphate out with it",
+                    listOf(Feedback.burst(BurstKind.HAZE, FxSpots.ROCK, redMacro, 0.3f), Feedback.burst(BurstKind.CLARITY, FxSpots.SUMP, Candy.green)),
+                    watch = "no3",
+                ),
+            )
+        }
     }
 
     fun shells() = Reaction(TankFx(FxKind.SHELLS, FxSpots.SAND, caption = "Spare shells"), "New shells for hermits like me! Moving day!", HermieMood.EXCITED)

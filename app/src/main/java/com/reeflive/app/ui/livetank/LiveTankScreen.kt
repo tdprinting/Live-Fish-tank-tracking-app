@@ -142,13 +142,19 @@ import com.reeflive.app.ui.live.tankHappiness
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.toFollowState
 import com.reeflive.app.ui.live.waterReadouts
+import com.reeflive.app.ui.live.testKitReadouts
+import com.reeflive.app.ui.live.WaterReadout
 import com.reeflive.app.ui.nav.BottomBarMaxWidth
 import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.CoralKind
+import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
+import com.reeflive.core.sim.SupplyPreview
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.TouchSurface
@@ -299,6 +305,10 @@ fun LiveTankScreen(
     var supplies by rememberSaveable { mutableStateOf(false) }
     var shelfPick by remember { mutableStateOf<ShelfPick?>(null) }
     var testKit by remember { mutableStateOf(false) }
+    // what the shelf test kit read when it was last picked (a hobby kit's rounded reading: core TestKit)
+    var kitReadouts by remember { mutableStateOf<List<WaterReadout>>(emptyList()) }
+    // doses given in the last sim day, so a second dose the same day is flagged as a swing (core DoseCheck)
+    val doseLog = remember { DoseCheck.Log() }
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
@@ -490,10 +500,15 @@ fun LiveTankScreen(
         onFeed = { k -> tick(); cue(LiveReactions.feed(k)) { vm.feed(k, k.typicalDoseGrams) } },
         onTapGlass = { tick(); cue(LiveReactions.tapGlass()) { vm.tapGlass(FrontGlassCentre) } },
         onWaterChange = { f -> tick(); cue(LiveReactions.waterChange(f)) { vm.waterChange(f) } },
+        onSaltChange = { f, mix, salt -> tick(); cue(LiveReactions.waterChange(f, salt, mix, hud.water)) { vm.waterChange(f, mix) } },
         onDose = { id, d ->
             tick()
             val label = SandboxParams.byId(id)?.let { SandboxFriendly.of(it).title } ?: id
-            cue(LiveReactions.dose(id, label)) { vm.dose(id, d) }
+            // checked against what already went in today and the Ca × alk × Mg balance (core DoseCheck)
+            val now = hud.simTimeSec
+            val verdict = DoseCheck.check(id, d, hud.water, doseLog.lastDay(id, now))
+            doseLog.add(now, id, d)
+            cue(LiveReactions.dose(id, label, verdict)) { vm.dose(id, d) }
         },
         onHeater = { working ->
             tick()
@@ -538,7 +553,12 @@ fun LiveTankScreen(
             cue(LiveReactions.addAiptasia()) { vm.addAiptasia() }
             offerUndo("Added a pest anemone") { cue(LiveReactions.removeAiptasia()) { vm.removeAiptasia() } }
         },
-        onRemoveAiptasia = { tick(); cue(LiveReactions.removeAiptasia()) { vm.removeAiptasia() } },
+        onRemoveAiptasia = {
+            tick()
+            // nothing to zap is said so, and no command goes out
+            val pests = hud.corals.count { CoralKind.resolve(it.speciesId) == CoralKind.AIPTASIA && it.tissue > 0.01f }
+            if (pests > 0) cue(LiveReactions.removeAiptasia(pests)) { vm.removeAiptasia() } else cue(LiveReactions.removeAiptasia(0))
+        },
         onAddPestControl = { c -> tick(); cue(LiveReactions.pestControl(c)) { vm.addPestControl(c) } },
         onStartTreatment = { k ->
             tick()
@@ -553,7 +573,12 @@ fun LiveTankScreen(
                 "Make one sick",
             ) { tick(); cue(LiveReactions.infect(d)) { vm.infect(d) } }
         },
-        onMaintain = { t -> tick(); cue(LiveReactions.maintain(t)) { vm.maintain(t) } },
+        onMaintain = { t ->
+            tick()
+            val r = LiveReactions.maintain(t, hud.water)
+            // a trim with nothing to cut only says so
+            if (t == MaintenanceTask.HARVEST_MACRO && !SupplyPreview.canTrim(hud.water)) cue(r) else cue(r) { vm.maintain(t) }
+        },
         onAddSpareShells = { tick(); cue(LiveReactions.shells()) { vm.addSpareShells() } },
         onMicro = { a -> tick(); cue(LiveReactions.micro(a)) { vm.micro(a) } },
         onHelp = { tick(); open = null; vm.select(null); tipsAsked = true },
@@ -587,7 +612,7 @@ fun LiveTankScreen(
         sandbox = sandbox,
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
-        onMicroscope = { tick(); micro = true },
+        onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
         onHide = { tick(); chromeHidden = true },
         onHelp = {
             tick()
@@ -678,8 +703,10 @@ fun LiveTankScreen(
             when {
                 locked -> if (hermieOn) hermie.say("${item.label} is for the pretend tank. Switch to Sandbox to try it!", HermieMood.SURPRISED)
                 item.staysOnShelf -> {
+                    // a fresh test each pick: the kit's own rounding and read error, not the sim's exact numbers
+                    kitReadouts = testKitReadouts(hud.water, kotlin.random.Random(pickSerial * 7919L + hud.simTimeSec.toLong()))
                     testKit = true
-                    if (hermieOn) hermie.say("Test time! Here is how the water is doing.", HermieMood.HAPPY)
+                    if (hermieOn) hermie.say(LiveReactions.testKit(kitReadouts), HermieMood.HAPPY)
                 }
                 else -> pickJob[0] = scope.launch {
                     delay(if (reduceMotion) SHELF_LABEL_REDUCED_MS else SHELF_LABEL_MS)
@@ -823,7 +850,7 @@ fun LiveTankScreen(
         SupplyShelfOverlay(
             visible = supplies,
             pick = shelfPick,
-            readouts = hudState.readouts,
+            readouts = kitReadouts,
             showReadouts = testKit,
             projection = projection,
             locked = SupplyItem.lockedIds(sandbox),
