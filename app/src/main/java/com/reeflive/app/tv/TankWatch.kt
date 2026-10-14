@@ -41,10 +41,12 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
 
     private val gl = TankGlView(context, RenderQuality.HIGH)
     private val label = TextView(context)
+    private val notice = TextView(context)
     val root: View = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
         addView(gl, FrameLayout.LayoutParams(-1, -1))
         addView(label, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(36) })
+        addView(notice, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(28); rightMargin = dp(36) })
         keepScreenOn = true
     }
 
@@ -67,6 +69,14 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
             setPadding(dp(20), dp(10), dp(20), dp(10))
             background = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(Color.argb(150, 4, 16, 32)) }
             alpha = 0f
+        }
+        notice.apply {
+            setTextColor(Color.rgb(225, 240, 248))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = ResourcesCompat.getFont(context, R.font.inter_medium)
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            background = GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(Color.argb(170, 4, 16, 32)) }
+            visibility = View.GONE
         }
         gl.setSnapshotProvider { holder.snapshots.value }
         gl.demoWhenEmpty = false
@@ -93,6 +103,12 @@ class TankWatch(private val context: Context, private val interactive: Boolean) 
     }
 
     fun destroy() { pause(); scope.cancel() }
+
+    /** A small pill in the top corner that stays up (e.g. "Update ready"); null hides it. */
+    fun setNotice(text: String?) {
+        notice.text = text
+        notice.visibility = if (text == null) View.GONE else View.VISIBLE
+    }
 
     /** D-pad handling; returns false for keys left to the system (Back, Home). */
     fun onKey(code: Int): Boolean {

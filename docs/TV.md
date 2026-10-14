@@ -11,6 +11,11 @@ The normal `reeflive.apk` also installs on Fire TV and Android TV. On a TV it ad
 Both share `tv/TankWatch` (plain views, no Compose, so the dream can host it). Rendering starts on HIGH and
 steps down to MEDIUM, then LOW, if the TV's GPU stays under 24 fps. A fresh TV install seeds Tee's tank.
 
+## Updates
+The TV app checks GitHub Releases (every 6 h while it runs), downloads a new APK on its own, then shows
+"Update ready · press OK to install" in the top corner. One OK press opens the system installer (Android
+never installs silently). The first time, it asks to allow "Install unknown apps" for ReefLive.
+
 ## Install on Fire TV
 1. Fire TV Settings → My Fire TV → Developer options: turn on **Install unknown apps** for Downloader
    (if Developer options is hidden: My Fire TV → About → click the device name 7 times).
