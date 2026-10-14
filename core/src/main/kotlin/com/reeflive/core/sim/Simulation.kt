@@ -134,10 +134,12 @@ class Simulation(
         sb.base = this.rock.sandBase
         this.rock.floorAt = sb::surfaceY
     }
-    /** Body-vs-geometry and body-vs-body collision (SIMULATION §4.3). */
-    val bodies = BodyCollision(this.rock)
     /** Path-finding round the rock for bodies that cannot pass through it (SIMULATION §4.3). */
     val nav = Navigation(this.rock)
+    /** Corals, decor and equipment as solid capsules for the body collision ([StaticObstacles]); synced each behaviour tick. */
+    val obstacles = StaticObstacles(this.rock)
+    /** Body-vs-geometry and body-vs-body collision (SIMULATION §4.3); the static obstacles push its stations too. */
+    val bodies = BodyCollision(this.rock).also { it.obstacles = obstacles }
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, this.rock)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
@@ -411,6 +413,7 @@ class Simulation(
     }
 
     private fun behaviorTick(dt: Double) {
+        obstacles.sync(this)
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
         if (submarine.active) subSense.tick(this, dt, agentOf)
