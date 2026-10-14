@@ -21,7 +21,7 @@ const ui = {
   picked: null, following: null, tour: false, shelf: false, shelfRow: 0, cleaning: false, chromeHidden: false,
   torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
-  hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
+  water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
@@ -54,7 +54,9 @@ export function startLive(applyReadings) {
     setInterval(tick, 500);
     tick();
     say(C.tips.hello);
-    if (!store.get('reeflive.tipsSeen', false)) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
+    const firstVisit = !store.get('reeflive.tipsSeen', false);
+    if (firstVisit) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
+    checkNews(firstVisit);
   }).catch(() => {});
 }
 export function setLiveVisible(v) { live.setVisible(v); if (!v) stopLoops(); }
@@ -70,6 +72,10 @@ function tick() {
   animals = JSON.parse(SB.animals());
   const s = JSON.parse(live.state());
   if (s) $('clock').textContent = `${clockText(s.time)} · ${s.phase}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
+  const worst = P.readouts.some((r) => r.status === 'DANGER') ? 'danger' : P.readouts.some((r) => r.status === 'CAUTION') ? 'caution' : 'good';
+  $('waterBtn').className = `pill glass water-${worst}${ui.water ? ' on' : ''}`;
+  $('waterSum').textContent = worst === 'good' ? 'Water OK' : worst === 'caution' ? 'Water: check' : 'Water: help!';
+  $('strip').classList.toggle('hidden', !ui.water);
   $('strip').innerHTML = P.readouts.map((r) => `<span class="chip ${r.status.toLowerCase()}">${esc(r.label)} ${esc(r.text)}</span>`).join('');
   $('happy').classList.toggle('hidden', !ui.happy);
   $('happyVal').textContent = `${P.happy}%`;
@@ -99,6 +105,7 @@ function say(text) {
   clearTimeout(hermieTimer);
   hermieTimer = setTimeout(() => $('hermie').classList.remove('talk'), 6000);
 }
+$('waterBtn').addEventListener('click', () => { ui.water = !ui.water; store.set('reeflive.water', ui.water); cue('TICK'); tick(); });
 $('hermie').addEventListener('click', () => {
   const list = ui.mode === 'sandbox' ? C.tips.hermieSandbox : C.tips.hermieWatch;
   say(list[tipIndex++ % list.length]);
@@ -121,6 +128,31 @@ function act(name, arg = null, num = 0, line = null) {
   cue('TICK');
   setTimeout(tick, 150);
   return true;
+}
+
+// ---- What's new: updates merged since this browser last opened the app (whats-new.json, built from main's history)
+let news = [];
+async function checkNews(firstVisit) {
+  try { news = await (await fetch('whats-new.json', { cache: 'no-store' })).json(); } catch { return; }
+  if (!news.length) return;
+  const last = store.get('reeflive.newsSeen', 0);
+  store.set('reeflive.newsSeen', news[0].n);
+  if (firstVisit) return; // brand new: the tips come first, everything is new anyway
+  const fresh = last ? news.filter((e) => e.n > last) : news.slice(0, 8);
+  if (fresh.length) setTimeout(() => showNews(fresh, true), 1500);
+}
+function showNews(list = news.slice(0, 15), since = false) {
+  if (!list.length) { say('Nothing new yet.'); return; }
+  const shown = list.slice(0, 15);
+  $('newsTitle').textContent = since ? `New since your last visit (${list.length})` : "What's new";
+  $('newsList').innerHTML = shown.map((e) => `<li>${esc(e.text)}<small>${esc(niceDate(e.date))}</small></li>`).join('')
+    + (list.length > shown.length ? `<li class="muted">…and ${list.length - shown.length} more</li>` : '');
+  const d = $('news');
+  if (!d.open) d.showModal();
+}
+function niceDate(iso) {
+  const t = new Date(`${iso}T12:00:00`);
+  return isNaN(t) ? iso : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function showTips() {
@@ -333,7 +365,7 @@ function moreCard(sb) {
   return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
     <div class="options">${tile('data-lapse', '⏱', 'Time-lapse')}${sb ? tile('data-reset', '♻️', 'Reset tank') : ''}</div>
     <h4>Tools</h4><div class="options">
-      ${tile('data-tips', '❓', 'What can I do?')}${tile('data-microscope', '🔬', 'Look closer')}
+      ${tile('data-tips', '❓', 'What can I do?')}${tile('data-news', '✨', "What's new")}${tile('data-microscope', '🔬', 'Look closer')}
       ${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}${tile('data-knock', '✊', 'Knock glass')}
       ${tile('data-clean', '🧽', 'Clean glass', ui.cleaning)}${tile('data-hide', '🙈', 'Hide buttons')}
       ${tile('data-hermie-toggle', '🦀', ui.hermie ? 'Hermie on' : 'Hermie off', ui.hermie)}${tile('data-happy-toggle', '😊', ui.happy ? 'Happy meter on' : 'Happy meter off', ui.happy)}
@@ -411,6 +443,7 @@ $('card').addEventListener('click', (e) => {
   else if ('lapse' in d) { closeCard(); openLapse(); return; }
   else if ('reset' in d) { if (confirm('Reset the pretend tank to how your real tank is now?')) act('reset', null, 0, 'All fresh! The pretend tank matches your real one again.'); }
   else if ('tips' in d) showTips();
+  else if ('news' in d) { closeCard(); showNews(); return; }
   else if ('microscope' in d) { closeCard(); openMicro(); return; }
   else if ('knock' in d) { act('knock'); cue('CLICK'); }
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }

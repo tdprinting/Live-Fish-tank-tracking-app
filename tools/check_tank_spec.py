@@ -1,7 +1,7 @@
 """Automated checks from docs/specs/tank_design.md §6 that need the built assets (stdlib + numpy only):
   - every anchor (with a pos) within 2 cm of a surface: rock (rock_sdf.bin) or sand (rockscape.sand_height)
   - the back-glass black visible through the three openings in the front render (luminance < 8 % at the
-    opening centres)
+    opening centres; render it with `preview.py --scene --view front`)
 Non-manifold edges, rock y range and rock tri count are printed by the builders / validate_glb.py.
 
   python3 tools/check_tank_spec.py [docs/preview/scene.png]
@@ -25,17 +25,26 @@ def smoothstep(a, b, x):
     return t * t * (3 - 2 * t)
 
 
+# mirrors of tools/blender/common.py TANK / SAND_Y* and rockscape LANES / SPOIL / BURROW_MOUTH (rockscape needs bpy)
+TANK = (121.9, 40.6, 45.7)
+SAND_Y, SAND_Y_BACK = 3.5, 6.0
+LANES = ((26, 31, 9, 9.1), (54, 34, 8, 7.8))
+SPOIL = (60.0, 37.0)
+BURROW_MOUTH = (62.0, 32.5)
+
+
 def sand_height(x, z, d):
     """Mirror of rockscape.sand_height (kept in sync; rockscape needs bpy)."""
     S = smoothstep
-    base = 3.5 + 2.5 * (33.0 - z) / 33.0
+    D = TANK[2]
+    base = SAND_Y + (SAND_Y_BACK - SAND_Y) * (D - z) / D
     h = base + 2.5 * (1 - S(0.0, 10.0, max(d, 0)))
-    for cx, cz, rx, rz in ((36, 24, 9, 7), (58, 26, 8, 6)):
+    for cx, cz, rx, rz in LANES:
         e = ((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2
         h -= 0.8 * (1 - S(0.6, 1.0, e))
-    e = ((x - 64) / 6.0) ** 2 + ((z - 28.5) / 7.5) ** 2
+    e = ((x - SPOIL[0]) / 6.0) ** 2 + ((z - SPOIL[1]) / 7.5) ** 2
     h += 1.5 * (1 - S(0.2, 1.0, e))
-    k = 1 - S(2.5, 5.0, math.hypot(x - 66.0, (z - 25.0) * 1.3))
+    k = 1 - S(2.5, 5.0, math.hypot(x - BURROW_MOUTH[0], (z - BURROW_MOUTH[1]) * 1.3))
     return float(h * (1 - k) + (base - 0.4) * k)
 
 
@@ -134,8 +143,8 @@ def main():
         img = read_png(img_path)
         h, w = img.shape[:2]
         lum = 0.2126 * img[..., 0] + 0.7152 * img[..., 1] + 0.0722 * img[..., 2]
-        cam, tgt, fov = (61, 48, 215), (61, 30, 16), 38
-        for name, p in (("CAVE_BIG", (35.5, 18, 2)), ("under R4", (55, 22, 2)), ("ARCH", (86, 22, 2))):
+        cam, tgt, fov = (61, 26, TANK[2] + 150), (61, 21, TANK[2] / 2), 32   # scene_preview.VIEWS["front"]
+        for name, p in (("CAVE_BIG", (34, 12, 2)), ("central arch", (58, 14, 2)), ("right recess", (86, 13, 2))):
             px, py = project(p, cam, tgt, fov, w, h)
             ix, iy = int(px), int(py)
             patch = lum[max(iy - 3, 0):iy + 4, max(ix - 3, 0):ix + 4]

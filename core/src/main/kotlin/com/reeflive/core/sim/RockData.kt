@@ -67,10 +67,11 @@ class AnchorSet(anchors: Collection<Anchor>) {
 class RockData(
     val sdf: Sdf,
     val anchors: AnchorSet,
-    val lengthCm: Double = 121.9,
-    val widthCm: Double = 33.0,
-    val sandTopCm: Double = 3.0,
-    val waterLevelCm: Double = 56.0,
+    val lengthCm: Double = TankDims.LENGTH_CM,
+    /** Front-to-back depth (z), back glass z = 0. */
+    val widthCm: Double = TankDims.DEPTH_CM,
+    val sandTopCm: Double = TankDims.SAND_TOP_CM,
+    val waterLevelCm: Double = TankDims.WATER_LEVEL_CM,
 ) {
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
@@ -101,31 +102,37 @@ class RockData(
 }
 
 /**
- * Analytic rockscape matching the ASSETS §3.1 layout table (cm; X right, Y up, Z front; back glass z=0).
- * Used until `rock_sdf.bin` from Track B lands; anchors are snapped to this surface like the bake does.
+ * Analytic stand-in for the baked rock: the positive metaballs of `tools/blender/rockscape.py` `ROCKS` (cm; X right, Y up,
+ * Z front; back glass z=0), for tests and as a fallback. Anchor defaults mirror the baked `anchors.json`; they fill in
+ * names missing from it and are snapped to this surface like the bake does.
  */
 object DefaultScape {
     private fun v(x: Double, y: Double, z: Double) = Vec3(x, y, z)
     private fun e(x: Double, y: Double, z: Double, rx: Double, ry: Double, rz: Double) = Ellipsoid(v(x, y, z), v(rx, ry, rz))
 
     val blobs: List<Ellipsoid> = listOf(
-        // R1 left back wall stack (x 11–56, top ~55, z 0–15) with the big cavern under its right overhang
-        e(22.0, 20.0, 6.0, 12.0, 18.0, 8.0), e(30.0, 42.0, 6.0, 18.0, 13.0, 8.0), e(46.0, 46.0, 5.0, 10.0, 8.0, 6.0), e(16.0, 50.0, 5.0, 7.0, 6.0, 5.0),
-        // R2 left pillar (x 12–26, top 33, z 15–25)
-        e(19.0, 15.0, 20.0, 6.0, 16.0, 5.0), e(19.0, 28.0, 20.0, 4.5, 5.5, 4.0),
-        // R3 center pillar (x 44–55, top 29)
-        e(49.5, 13.5, 21.0, 5.0, 15.5, 4.5),
-        // R4 center arch / back shelf (opening x 57–68, y 5–24)
-        e(63.0, 29.0, 5.0, 10.0, 5.0, 6.0), e(56.0, 14.0, 4.0, 3.5, 12.0, 4.0),
-        // R5 Kenya rock + front lip + den overhang + zoa rubble
-        e(72.0, 22.0, 15.0, 7.5, 16.0, 7.0), e(75.0, 9.0, 13.0, 11.0, 8.0, 10.0), e(70.0, 34.5, 20.0, 6.0, 3.5, 5.0),
-        e(68.0, 8.5, 24.0, 6.0, 2.5, 4.0), e(71.0, 3.5, 28.0, 3.0, 2.0, 2.5),
-        // R6 right arch (legs + top) and the shrimp shelf
-        e(81.0, 22.0, 6.0, 5.0, 22.0, 6.0), e(100.0, 22.0, 6.0, 5.0, 22.0, 6.0), e(90.0, 46.0, 6.0, 14.0, 8.0, 6.0), e(89.0, 39.0, 12.0, 9.0, 3.5, 6.0),
-        // R7 GSP mound (front right)
-        e(104.0, 6.0, 19.0, 10.0, 18.0, 8.0),
-        // R8 far-right rubble
-        e(116.0, 8.0, 23.0, 4.0, 13.0, 7.0),
+        // R0 (Z1)
+        e(4.5, 5.2, 26.0, 4.0, 3.3, 6.5), e(6.0, 7.1, 27.3, 2.5, 1.7, 3.2),
+        // R2 (Z1)
+        e(10.0, 4.5, 26.0, 6.5, 3.3, 8.5), e(9.7, 9.1, 26.0, 5.6, 4.0, 7.3), e(9.3, 13.7, 26.0, 4.9, 4.0, 6.4), e(8.6, 17.7, 25.7, 4.2, 3.3, 5.5), e(7.0, 21.7, 24.7, 5.0, 2.6, 5.2),
+        // R1 (Z2)
+        e(22.0, 11.1, 10.4, 11.0, 8.6, 10.4), e(19.0, 20.3, 9.1, 7.0, 4.0, 7.8), e(26.0, 28.9, 10.4, 12.0, 7.3, 10.4), e(36.0, 31.6, 9.1, 10.0, 5.9, 9.1), e(31.0, 36.8, 9.8, 4.0, 1.3, 5.2),
+        // R4 (Z3)
+        e(44.0, 31.6, 9.1, 10.0, 4.6, 9.1), e(54.0, 30.9, 7.8, 10.0, 4.0, 7.8), e(61.0, 28.9, 6.5, 7.0, 4.0, 6.5), e(54.0, 27.6, 11.7, 4.5, 2.6, 3.9),
+        // R3 (Z1b)
+        e(42.0, 4.5, 28.6, 5.8, 3.3, 6.8), e(42.2, 9.1, 28.6, 4.8, 4.0, 6.0), e(42.5, 13.7, 28.6, 4.6, 3.3, 5.7), e(43.0, 18.4, 28.6, 5.0, 2.3, 5.2),
+        // R5 (Z4)
+        e(67.0, 7.8, 23.4, 9.0, 5.3, 10.4), e(70.0, 13.1, 19.5, 7.0, 4.0, 7.8), e(66.0, 14.4, 27.3, 6.0, 1.7, 6.5), e(63.5, 7.8, 32.0, 5.0, 1.8, 3.2), e(71.0, 4.6, 27.0, 3.5, 2.6, 3.8),
+        // R6 (Z5)
+        e(78.0, 14.4, 5.2, 4.0, 11.9, 5.2), e(84.0, 25.0, 11.0, 9.0, 2.2, 9.0), e(95.0, 26.0, 8.0, 8.0, 3.0, 8.0), e(95.0, 13.0, 7.8, 6.0, 10.5, 7.8),
+        // R9 (Z6)
+        e(106.0, 15.0, 8.0, 6.5, 9.0, 8.0), e(104.0, 25.0, 6.5, 5.0, 3.0, 6.0),
+        // R7 (Z7)
+        e(107.0, 5.5, 33.0, 10.0, 5.0, 9.0), e(105.0, 10.0, 31.0, 7.5, 4.5, 7.5),
+        // R8 (Z8)
+        e(116.0, 5.0, 34.0, 6.0, 3.3, 8.0), e(108.0, 17.0, 15.0, 3.5, 2.5, 3.5),
+        // R10 (Z8)
+        e(82.0, 5.5, 22.0, 7.0, 4.0, 6.0), e(81.5, 9.0, 21.0, 5.0, 2.5, 4.5),
     )
 
     /** Raw (un-snapped) anchors from ASSETS §3.4 plus Track C additions for the new species. */
@@ -133,53 +140,52 @@ object DefaultScape {
         fun a(n: String, t: String, x: Double, y: Double, z: Double, dir: Vec3? = null, normal: Vec3? = null, radius: Double? = null, depth: Double? = null, pts: List<Vec3>? = null) =
             Anchor(n, t, v(x, y, z), dir, normal, radius, depth, pts)
         return AnchorSet(listOf(
-            a("HOST_KENYA", "HOST", 72.0, 40.0, 15.0, radius = 10.0),
-            // Owner: the clowns host a hairy green mushroom (Rhodactis) cluster. It sits where the mushroom_hairy.glb
-            // model is built: the centroid of its disc tufts, on a ledge of the arch's left leg beside HOST_ARCH_CLOWNS.
-            a("HOST_SHROOM", "HOST", 82.3, 20.3, 15.2, normal = v(0.7, 0.7, -0.18), radius = 6.0),
-            a("HOST_GSP_RIGHT", "HOST", 104.0, 14.0, 22.0, radius = 8.0),
-            a("CAVE_EEL", "CAVE_EEL", 69.0, 5.0, 23.0, dir = v(0.5, 0.1, -0.85)),
-            a("den_path", "PATH", 69.0, 5.0, 23.0, pts = listOf(v(69.0, 5.0, 23.0), v(73.0, 6.0, 19.0), v(77.0, 7.0, 15.0), v(80.0, 9.0, 11.0), v(83.0, 10.0, 8.0), v(86.0, 10.0, 5.0), v(88.0, 9.0, 3.0), v(90.0, 8.0, 2.0))),
-            a("CAVE_SMALL", "CAVE", 62.0, 12.0, 8.0),
-            a("CAVE_BIG", "CAVE", 42.0, 18.0, 6.0),
-            a("HOLE_BLENNY", "HOLE", 25.0, 18.0, 24.0, dir = v(0.6, 0.2, 0.78), depth = 6.0),
-            a("PERCH_1", "PERCH", 19.0, 33.0, 20.0, normal = v(0.0, 1.0, 0.0)),
-            a("PERCH_2", "PERCH", 49.0, 29.0, 21.0, normal = v(0.0, 1.0, 0.0)),
-            a("PERCH_3", "PERCH", 92.0, 54.0, 8.0, normal = v(0.2, 1.0, 0.3)),
-            a("PERCH_4", "PERCH", 70.0, 38.0, 24.0, normal = v(0.0, 0.8, 0.6)),
-            a("PERCH_5", "PERCH", 104.0, 25.0, 20.0, normal = v(0.0, 1.0, 0.2)),
-            a("STATION_CLEANER", "STATION", 62.0, 20.0, 18.0),
-            a("SHRIMP_LEDGE", "LEDGE", 88.0, 35.0, 15.0, normal = v(0.0, -1.0, 0.3)),
-            a("SLEEP_TANG", "SLEEP", 36.0, 25.0, 7.0, dir = v(-0.7, 0.2, -0.7)),
-            a("SURFACE_FEED", "FEED", 41.0, 55.0, 20.0),
-            a("NORI_CLIP", "FEED", 2.0, 35.0, 18.0),
-            a("HOB_OUTFLOW", "FLOW", 71.0, 55.0, 1.0),
-            a("GRAZE_1", "GRAZE", 12.0, 20.0, 30.0), a("GRAZE_2", "GRAZE", 30.0, 40.0, 12.0),
-            a("GRAZE_3", "GRAZE", 44.0, 8.0, 27.0), a("GRAZE_4", "GRAZE", 52.0, 30.0, 9.0),
-            a("GRAZE_5", "GRAZE", 80.0, 20.0, 25.0), a("GRAZE_6", "GRAZE", 96.0, 45.0, 6.0),
-            a("GRAZE_7", "GRAZE", 110.0, 12.0, 28.0), a("GRAZE_8", "GRAZE", 60.0, 4.0, 30.0),
-            a("coral_kenya_main", "CORAL", 72.0, 38.0, 15.0, normal = v(0.0, 1.0, 0.2)),
-            a("coral_gsp_upper_left", "CORAL", 21.0, 42.0, 12.0, normal = v(0.3, 0.6, 0.75)),
-            a("coral_gsp_lower_right", "CORAL", 105.0, 12.0, 22.0, normal = v(0.0, 0.7, 0.7)),
-            a("coral_zoa_front_center", "CORAL", 71.0, 5.0, 27.0, normal = v(0.0, 1.0, 0.0)),
-            a("coral_clove_kenya_base", "CORAL", 77.0, 18.0, 22.0, normal = v(0.6, 0.5, 0.6)),
-            a("coral_shroom_front_left", "CORAL", 53.0, 4.0, 28.0, normal = v(0.0, 1.0, 0.0)),
-            a("coral_shroom_hairy", "CORAL", 82.3, 20.3, 15.2, normal = v(0.7, 0.7, -0.18)),
-            a("coral_macro_back_left", "CORAL", 47.0, 36.0, 10.0, normal = v(0.2, 0.5, 0.8)),
-            a("coral_aiptasia_kenya_base", "CORAL", 68.0, 37.0, 14.0, normal = v(-0.3, 0.9, 0.3)),
+            a("HOST_KENYA", "HOST", 82.0, 16.0, 21.0, radius = 10.0),
+            // Owner: the clowns host a hairy green mushroom (Rhodactis) carpet, low on the front-right mound (R7), where
+            // mushroom_hairy.glb is built. Positions below are the baked anchors.json values (resized 48 x 18 x 16 in tank).
+            a("HOST_SHROOM", "HOST", 81.6, 13.2, 21.1, normal = v(-0.13, 0.95, -0.3), radius = 6.0),
+            a("HOST_GSP_RIGHT", "HOST", 107.0, 14.0, 32.0, radius = 8.0),
+            a("CAVE_EEL", "CAVE_EEL", 62.0, 3.8, 32.5, dir = v(0.55, 0.1, -0.83)),
+            a("den_path", "PATH", 62.0, 3.8, 32.5, pts = listOf(v(62.0, 3.8, 32.5), v(66.0, 4.5, 26.0), v(71.0, 5.2, 19.5), v(74.5, 5.8, 14.0))),
+            a("CAVE_SMALL", "CAVE", 56.0, 11.8, 7.8),
+            a("CAVE_BIG", "CAVE", 36.0, 10.4, 7.8),
+            a("HOLE_BLENNY", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 6.0),
+            a("PERCH_1", "PERCH", 7.2, 24.9, 24.7, normal = v(0.3, 0.92, 0.24)),
+            a("PERCH_2", "PERCH", 43.1, 20.2, 28.7, normal = v(-0.47, 0.83, -0.3)),
+            a("PERCH_3", "PERCH", 103.8, 28.9, 6.8, normal = v(-0.34, 0.91, -0.24)),
+            a("PERCH_4", "PERCH", 66.3, 15.5, 27.6, normal = v(-0.45, 0.84, -0.32)),
+            a("PERCH_5", "PERCH", 47.9, 35.4, 12.8, normal = v(0.47, 0.56, 0.69)),
+            a("STATION_CLEANER", "STATION", 38.0, 10.0, 14.0),
+            a("SHRIMP_LEDGE", "LEDGE", 40.0, 26.2, 16.6, normal = v(-0.05, -0.97, 0.23)),
+            a("SLEEP_TANG", "SLEEP", 38.0, 9.1, 5.2, dir = v(-0.7, 0.2, -0.7)),
+            a("SURFACE_FEED", "FEED", 41.0, 37.5, 23.4),
+            a("NORI_CLIP", "FEED", 2.0, 27.0, 40.0),
+            a("HOB_OUTFLOW", "FLOW", 73.0, 37.4, 1.3),
+            a("GRAZE_1", "GRAZE", 12.0, 14.2, 32.0), a("GRAZE_2", "GRAZE", 30.5, 33.1, 18.6),
+            a("GRAZE_3", "GRAZE", 39.9, 14.3, 33.7), a("GRAZE_4", "GRAZE", 50.0, 35.6, 13.0),
+            a("GRAZE_5", "GRAZE", 67.9, 11.2, 31.0), a("GRAZE_6", "GRAZE", 96.1, 29.2, 10.0),
+            a("GRAZE_7", "GRAZE", 104.6, 27.7, 9.4), a("GRAZE_8", "GRAZE", 60.0, 6.5, 39.0),
+            a("coral_kenya_main", "CORAL", 69.0, 17.2, 21.9, normal = v(-0.12, 0.94, -0.31)),
+            a("coral_gsp_upper_left", "CORAL", 20.3, 27.7, 19.4, normal = v(0.31, 0.5, 0.81)),
+            a("coral_gsp_lower_right", "CORAL", 107.0, 14.0, 32.0, normal = v(-0.26, 0.95, -0.18)),
+            a("coral_zoa_front_center", "CORAL", 63.0, 7.2, 38.0, normal = v(0.0, 1.0, 0.0)),
+            a("coral_clove_kenya_base", "CORAL", 71.3, 10.5, 31.5, normal = v(0.36, 0.7, 0.62)),
+            a("coral_shroom_front_left", "CORAL", 50.0, 4.4, 38.0, normal = v(0.0, 1.0, 0.0)),
+            a("coral_shroom_hairy", "CORAL", 81.6, 13.2, 21.1, normal = v(-0.13, 0.95, -0.3)),
+            a("coral_macro_back_left", "CORAL", 35.9, 30.0, 20.9, normal = v(0.66, -0.3, 0.69)),
+            a("coral_aiptasia_kenya_base", "CORAL", 63.9, 16.5, 21.4, normal = v(0.22, 0.8, -0.56)),
             // ---- Track C additions (new livestock, 04_more_species); Track B: please add to anchors.json ----
-            a("coral_organpipe_kenya_base", "CORAL", 68.0, 37.0, 14.0, normal = v(-0.3, 0.9, 0.3)),
-            a("HOLE_LAWNMOWER", "HOLE", 30.0, 10.0, 11.0, dir = v(0.3, 0.1, 0.95), depth = 7.0),
-            a("STATION_SHRIMP", "STATION", 50.0, 18.0, 26.0, normal = v(0.0, 0.0, 1.0)),
-            a("DUSTER_TUBE", "TUBE", 15.0, 3.0, 27.0, normal = v(0.0, 1.0, 0.0)),
-            a("BRITTLE_HOME", "CAVE", 95.0, 4.0, 15.0),
-            a("CAVE_DOTTYBACK", "CAVE", 42.0, 18.0, 6.0),
-            // ---- corals from Tee's photos 2026-10-13 (tee_tank_photos.md); positions as snapped by
-            // tools/blender/corals.py NEW_ANCHORS on rockscape.glb. Track B: please add to anchors.json ----
-            a("coral_toadstool_front", "CORAL", 52.0, 8.57, 27.09, normal = v(-0.12, 0.97, 0.21)),
-            a("coral_leather_pink_front", "CORAL", 46.58, 8.21, 27.63, normal = v(-0.58, 0.19, 0.79)),
-            a("coral_finger_leather", "CORAL", 78.3, 42.81, 9.3, normal = v(0.13, 0.79, 0.6)),
-            a("coral_elephant_ear", "CORAL", 37.0, 48.27, 18.0, normal = v(-0.04, 0.96, 0.28)),
+            a("coral_organpipe_kenya_base", "CORAL", 71.8, 15.5, 25.2, normal = v(-0.08, 0.84, 0.53)),
+            a("HOLE_LAWNMOWER", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 7.0),
+            a("STATION_SHRIMP", "STATION", 106.0, 28.0, 16.0, normal = v(0.28, 0.35, 0.9)),
+            a("DUSTER_TUBE", "TUBE", 86.0, 7.0, 27.3, normal = v(0.0, 1.0, 0.0)),
+            a("BRITTLE_HOME", "CAVE", 36.0, 5.5, 10.4),
+            a("CAVE_DOTTYBACK", "CAVE", 106.0, 7.5, 13.0),
+            // ---- corals from Tee's photos 2026-10-13 (tee_tank_photos.md); snapped by rockscape.py ANCHORS ----
+            a("coral_toadstool_front", "CORAL", 60.4, 9.1, 29.0, normal = v(0.42, 0.9, 0.09)),
+            a("coral_leather_pink_front", "CORAL", 58.1, 8.7, 31.8, normal = v(-0.43, 0.75, 0.5)),
+            a("coral_finger_leather", "CORAL", 75.9, 26.8, 11.9, normal = v(0.13, 0.6, 0.79)),
+            a("coral_elephant_ear", "CORAL", 41.0, 34.1, 16.5, normal = v(-0.02, 0.93, -0.36)),
         ))
     }
 

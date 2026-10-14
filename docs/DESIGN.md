@@ -1,6 +1,6 @@
 # ReefLive — Product Design
 
-Owner: Tee. Tank: 60 gal (assumed 48" x 13" x 24", 122 x 33 x 61 cm) mixed soft-coral reef, 2x AI Prime HD on goosenecks.
+Owner: Tee. Tank: 60 gal (measured 48" long x 18" front-to-back x 16" tall, 121.9 x 45.7 x 40.6 cm; water 38.1 cm) mixed soft-coral reef, 2x AI Prime HD on goosenecks.
 This document is the product spec. UI_STYLE.md holds the visual system, ARCHITECTURE.md the code, SIMULATION.md the sandbox, ASSETS.md the 3D assets, PLAN.md the build order.
 
 Everything about Tee's tank (dimensions, livestock, equipment, light schedule) is **seed data** in `core/src/main/resources/seed/tee_tank.json`, never hard-coded in logic. The user can edit all of it in the app.
@@ -159,7 +159,7 @@ All screens use the glass-over-caustics background (UI_STYLE §4). Spacing grid 
 
 Pages (horizontal pager, 4 pages, "Skip" top-right):
 1. **Welcome** — full-bleed animated caustic background, app name in Display font, one line: "Track it. Watch it live." Button: Get started.
-2. **Your tank** — Pre-filled card: "Tee's Reef · 60 gal · 48 x 13 x 24 in · soft coral". Fields: name, length/width/height (in or cm, unit toggle), display volume (auto-computed, editable), sump volume (default 0), coral type (FOWLR / Soft / LPS / SPS → picks default targets). Button: Looks right.
+2. **Your tank** — Pre-filled card: "Tee's Reef · 60 gal · 48 x 18 x 16 in · soft coral". Fields: name, length/width/height (in or cm, unit toggle), display volume (auto-computed, editable), sump volume (default 0), coral type (FOWLR / Soft / LPS / SPS → picks default targets). Button: Looks right.
 3. **Your livestock** — list of pre-seeded livestock cards with a checkbox each (Tee's confirmed list, Oct 2026: fish — 2 ocellaris clowns (orange + dark), juvenile blue tang, pajama cardinal, cleaner wrasse, snowflake eel, Falco hawkfish, lawnmower blenny, tailspot blenny, indigo dottyback; inverts — coral banded shrimp, skunk cleaner shrimp, blue-leg hermits ×2, scarlet hermit, black brittle star (species "verify"), brown feather duster ("verify"), nassarius ×3, astrea ×3, asterina ×3; corals — Kenya tree, GSP ×2, zoanthids, clove polyps, green mushroom, organ pipe coral, red macroalgae). Uncheck to remove; "+ Add" to add from species DB. Button: Continue.
 4. **Reminders & units** — units (°F/°C, SG/ppt, dKH/meq), notification permission request (Android 13+), default reminder time (08:00). Button: Dive in.
 
@@ -315,7 +315,7 @@ Channels: `reef_alerts_danger` (IMPORTANCE_HIGH, vibrate), `reef_alerts_caution`
 
 ```json
 {
-  "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 33.0, "heightCm": 61.0,
+  "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 45.7, "heightCm": 40.6,
            "displayGallons": 60, "sumpGallons": 0, "reefType": "SOFT", "sandDepthCm": 3.0},
   "livestock": [ … 27 entries, see core/src/main/resources/seed/tee_tank.json (updated to Tee's confirmed list; species research in research/04_more_species.md; the "aiptasia" at the Kenya base is organ pipe coral) … ],
 

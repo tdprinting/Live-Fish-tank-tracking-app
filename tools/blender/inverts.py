@@ -918,9 +918,10 @@ def build_astrea():
     return finish(root, objs, os.path.join(C.MODELS, "astrea.glb"), 1200)
 
 
+_L, _H, _D = C.TANK
 ASTERINA_GLASS = [  # default world placements (cm) on the glass: pos3, normal3 (pointing into the tank)
-    (5.0, 14.0, 33.0, 0, 0, -1), (9.0, 22.0, 33.0, 0, 0, -1), (47.0, 9.0, 33.0, 0, 0, -1),
-    (0.0, 30.0, 12.0, 1, 0, 0), (121.9, 18.0, 20.0, -1, 0, 0), (88.0, 6.0, 33.0, 0, 0, -1)]
+    (5.0, 14.0, _D, 0, 0, -1), (9.0, 22.0, _D, 0, 0, -1), (47.0, 9.0, _D, 0, 0, -1),
+    (0.0, 27.0, 16.0, 1, 0, 0), (_L, 18.0, 26.0, -1, 0, 0), (88.0, 6.0, _D, 0, 0, -1)]
 
 
 def build_asterina():

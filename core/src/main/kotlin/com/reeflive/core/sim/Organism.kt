@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.ai.UtilityBrain
 import com.reeflive.core.geom.BodySpline
+import com.reeflive.core.geom.Quat
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
 import kotlin.math.pow
@@ -187,6 +188,16 @@ class Organism(
 
     /** The brittle star's disc never bends or turns with its path (its arms do the steering), so it is rigid too. */
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
+
+    /**
+     * Surface seat for crawlers whose model stands on its y = 0 plane (hermits, Sally Lightfoot, brittle star, astrea;
+     * [CrawlerSeat], SIMULATION §19.6). While [seatOn], [toPose] draws the body at [seatPos] with up [seatUp] instead of
+     * [pos] / [up], which stay the sim's own.
+     */
+    val seat: CrawlerSeat? = CrawlerSeat.forOrganism(brainKind, species.id)
+    var seatOn = false
+    var seatPos = Vec3.ZERO
+    var seatUp = Vec3.Y
     lateinit var brain: UtilityBrain
     /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
     val behaviorName: String get() = when {
@@ -225,6 +236,7 @@ class Organism(
 
     /** Spine and frame buffers reused by [toPose]. */
     private val spinePos = Array(BodySpline.POINTS) { Vec3.ZERO }
+    private val spineRot = Array(BodySpline.POINTS) { Quat.IDENTITY }
 
     fun placeAt(p: Vec3, dir: Vec3) {
         pos = p; heading = dir.normalized(); vel = Vec3.ZERO
@@ -234,7 +246,27 @@ class Organism(
     fun toPose(): OrganismPose {
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
-        spline.sampleInto(up, spinePos, sp, fr)
+        if (!seatOn) spline.sampleInto(up, spinePos, sp, fr)   // allocation-free (most organisms)
+        else {
+            spline.sample(up, spinePos, spineRot)
+            // a rigid crawler body on its seat: straight back from the seat point, tangent to the seated surface
+            val seg = spline.length / (BodySpline.POINTS - 1)
+            // (the seat's own forward: the one its contact points were solved with)
+            val f = seat?.fwd ?: heading.rejectFrom(seatUp).normalized(heading)
+            val q = Quat.fromForwardUp(f, seatUp)
+            // (while the seat fades in or out the whole body blends from the sim's own spine, not just its head)
+            val b = seat?.blend ?: 1.0
+            for (i in 0 until BodySpline.POINTS) {
+                val at = seatPos - f * (seg * i)
+                if (b >= 1.0) { spinePos[i] = at; spineRot[i] = q }
+                else { spinePos[i] = spinePos[i].lerp(at, b); spineRot[i] = spineRot[i].nlerp(q, b) }
+            }
+            for (i in 0 until BodySpline.POINTS) {
+                val p = spinePos[i]; val q = spineRot[i]
+                sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
+                fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+            }
+        }
         return OrganismPose(
             id, species.id, sp, fr, swimPhase.toFloat(), amp.toFloat(), species.locomotion.waveLen.toFloat(),
             pectoral.toFloat(), finClamp.toFloat(), gill.toFloat(), gillRate.toFloat(), desat.toFloat(), ich.toFloat(),
