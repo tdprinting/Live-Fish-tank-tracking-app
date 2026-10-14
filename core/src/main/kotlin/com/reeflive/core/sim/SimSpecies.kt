@@ -98,7 +98,8 @@ data class SimSpecies(
         food == FoodKind.ALGAE_WAFER && has("ALGAE") -> 0.4
         food == FoodKind.ALGAE_WAFER && eats(FoodKind.PELLET) -> 0.25
         food == FoodKind.CORAL_FOOD && eats(FoodKind.FLAKE) -> 0.3
-        // hermits and brittle stars scavenge any meaty chunk that reaches the sand, though their sheets don't list it
+        // hermits and brittle stars scavenge any meaty chunk that reaches the sand; the shipped sheets list MEATY, this
+        // covers older sheets that do not
         food == FoodKind.PRAWN && (brainKind == BrainKind.HERMIT || brainKind == BrainKind.BRITTLE_STAR) -> 0.8
         else -> 0.0
     }
