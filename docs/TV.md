@@ -1,12 +1,19 @@
-# ReefLive on a TV (Fire TV / Android TV)
+# ReefLive on a TV (Fire TV / Android TV) and screensaver mode
+
+**Screensaver mode** (`render/CinemaDirector`, pure Kotlin so the web build shares it): an endless, calm
+sequence of scenes. Slow eased dollies from different angles and heights (whole tank, low across the rockwork,
+over the reef, along the sand) and every third scene a 30 s slow follow of one animal with its name and live
+behaviour caption, joined by 8 s glides or a soft dip through black. It drives the TV app and the dream, the phone's
+Live tank → Look around → Screensaver (`tv/ScreensaverActivity`, tap to exit), and the web app's Screensaver tile.
+On phones the same dream can be picked in Settings → Display → Screen saver.
 
 The normal `reeflive.apk` also installs on Fire TV and Android TV. On a TV it adds:
 
 - **TV app** (`tv/TvTankActivity`): opening ReefLive on a TV (detected by `tv/isTv`) always goes straight to
   the live tank full screen; the phone tracker screens never show there.
-  The camera sways slowly across the tank and every ~90 s glides in to follow one animal for ~35 s.
+  The camera runs screensaver mode (above).
   Remote: ◀ ▶ turn, ▲ ▼ zoom (manual moves pause the auto camera for 30 s), OK opens a one-row menu
-  (Install update when one is ready, Whole tank / Fish tour, Next fish, Lights, Close) whose selected button
+  (Install update when one is ready, Next scene, Lights, Close) whose selected button
   is solid bright with a white ring; Back closes the menu, or exits.
 - **Screensaver** (`tv/TankDream`, an Android DreamService) showing the same view.
 

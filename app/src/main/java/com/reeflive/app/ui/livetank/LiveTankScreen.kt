@@ -56,6 +56,8 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import com.reeflive.app.tv.ScreensaverActivity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -589,6 +591,7 @@ fun LiveTankScreen(
         onSound = { tick(); toggleSound() },
         onMicroscope = { tick(); micro = true },
         onHide = { tick(); chromeHidden = true },
+        onScreensaver = { tick(); context.startActivity(Intent(context, ScreensaverActivity::class.java)) },
         onHelp = {
             tick()
             open = null; vm.select(null); tipsAsked = true
