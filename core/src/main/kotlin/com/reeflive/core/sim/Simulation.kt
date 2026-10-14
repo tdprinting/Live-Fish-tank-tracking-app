@@ -450,6 +450,7 @@ class Simulation(
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
+        SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(CHEM_DT / 60.0)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
@@ -802,7 +803,9 @@ class Simulation(
     }
 
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
-        null -> rock.anchors.pos("SURFACE_FEED", Vec3(41.0, 55.0, 20.0)).withY(rock.waterLevelCm - 0.3)
+        // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
+        // sweeps the pinch forward and sideways before it sinks
+        null -> rock.anchors.pos("HAND_FEED", HAND_FEED).withY(rock.waterLevelCm - 0.3)
         "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(69.0, 5.0, 23.0)) + Vec3(-2.0, 7.0, 5.0)
         "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0)) + Vec3(2.0, 12.0, 1.0)
         else -> rock.anchors.pos(anchor, Vec3(41.0, 50.0, 20.0))
@@ -1168,7 +1171,11 @@ class Simulation(
         }
     }
 
-    fun snapshot(): SimSnapshot {
+    // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
+    fun snapshot(): SimSnapshot =
+        buildSnapshot().copy(lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
+
+    private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
         return SimSnapshot(
@@ -1205,7 +1212,29 @@ class Simulation(
                 sandGridCache
             },
             sandClouds = sand.cloudArray(),
+            foodMeta = food.exportMeta(simTimeSec),
+            pumps = pumpArray(),
         )
+    }
+
+    /** Jets for the renderer ([SimSnapshot.pumps]): powerheads follow the master switch and the flow slider, the HOB runs on its own. */
+    private fun pumpArray(): FloatArray {
+        val jets = flow.jets
+        val out = FloatArray(jets.size * SimSnapshot.PUMP_STRIDE)
+        jets.forEachIndexed { i, j ->
+            val o = i * SimSnapshot.PUMP_STRIDE
+            val hob = j.name.equals("HOB", true)
+            val output = when {
+                !j.on -> 0.0
+                hob -> 1.0
+                !flow.powerheadsOn -> 0.0
+                else -> flow.strength
+            }
+            out[o] = j.pos.x.toFloat(); out[o + 1] = j.pos.y.toFloat(); out[o + 2] = j.pos.z.toFloat()
+            out[o + 3] = j.axis.x.toFloat(); out[o + 4] = j.axis.y.toFloat(); out[o + 5] = j.axis.z.toFloat()
+            out[o + 6] = output.toFloat(); out[o + 7] = j.v0.toFloat()
+        }
+        return out
     }
 
     // Initialised last so every property above exists before livestock is added.
@@ -1219,6 +1248,8 @@ class Simulation(
     }
 
     companion object {
+        /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
+        val HAND_FEED = Vec3(68.0, 55.0, 4.5)
         const val CHEM_DT = 60.0
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35

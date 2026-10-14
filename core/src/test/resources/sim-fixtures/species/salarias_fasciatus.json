@@ -102,6 +102,23 @@
     "diseaseSusceptibility": {},
     "hardiness": 0.8,
     "starvationDays": 35.0,
+    "lifeStages": {
+        "stages": [
+            {
+                "id": "juvenile",
+                "fromCm": 0,
+                "label": "Juvenile"
+            },
+            {
+                "id": "adult",
+                "fromCm": 4.5,
+                "label": "Adult"
+            }
+        ],
+        "blendCm": 2.0,
+        "sexSystem": "GONOCHORISTIC",
+        "maturityCm": 6.0
+    },
     "model": "models/lawnmower_blenny.glb",
     "colors": {},
     "iridescence": 0.1,

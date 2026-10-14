@@ -94,6 +94,31 @@
   "size": {
     "lod0Tris": 5000
   },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile (striped)",
+        "depthScale": 1.25,
+        "widthScale": 1.1
+      },
+      {
+        "id": "subadult",
+        "fromCm": 8.0,
+        "label": "Subadult (breaking stripes)"
+      },
+      {
+        "id": "adult",
+        "fromCm": 15.0,
+        "label": "Adult",
+        "depthScale": 0.85,
+        "widthScale": 0.95
+      }
+    ],
+    "blendCm": 4.0,
+    "sexSystem": "UNKNOWN"
+  },
   "model": "models/engineer_goby.glb",
   "colors": {
     "primary": "#141414",
@@ -110,6 +135,6 @@
   "careNotes": [
     "Grows slowly to 12–20 in (30–50 cm) over several years — plan for 100 gal+ once adult.",
     "Moves a lot of sand: set rockwork on the glass, not on the sandbed, and keep corals off the sand near its burrow.",
-    "Juveniles wear black and yellow stripes; adults fade to a darker, blotchier pattern."
+    "Juveniles are black with pale lengthwise stripes and school like the venomous striped catfish they mimic; from about 5–11 cm the stripes break into bars and spots, and adults are mottled brown with pale bands."
   ]
 }

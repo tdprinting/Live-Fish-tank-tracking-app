@@ -179,6 +179,7 @@ object GLES30 {
     fun glEnableVertexAttribArray(i: Int) = gl.enableVertexAttribArray(i)
     fun glVertexAttribPointer(i: Int, size: Int, type: Int, norm: Boolean, stride: Int, offset: Int) = gl.vertexAttribPointer(i, size, type, norm, stride, offset)
     fun glVertexAttribDivisor(i: Int, d: Int) = gl.vertexAttribDivisor(i, d)
+    fun glVertexAttrib4f(i: Int, x: Float, y: Float, z: Float, w: Float) = gl.vertexAttrib4f(i, x, y, z, w)
     fun glDrawArrays(mode: Int, first: Int, count: Int) = gl.drawArrays(mode, first, count)
     fun glDrawArraysInstanced(mode: Int, first: Int, count: Int, instances: Int) = gl.drawArraysInstanced(mode, first, count, instances)
     fun glDisableVertexAttribArray(i: Int) = gl.disableVertexAttribArray(i)

@@ -36,6 +36,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var demoWhenEmpty = true
     /** Receives the camera matrices after every update, for Compose overlays (null = nobody listening). */
     @Volatile var projection: TankProjection? = null
+    /** In-tank feedback bursts from the UI (dye plumes, bubbles, jets…), drained once per frame. */
+    @Volatile var bursts: TankBursts? = null
+    /** Watch-mode lamp look (render only; the simulation keeps its schedule). */
+    @Volatile var viewLight: ViewLight = ViewLight.REAL
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
     private val shelfScene = SupplyShelfScene()
@@ -93,6 +97,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var store = AssetStore(assets, initialQuality)
     private val registry = ModelRegistry()
     private val interp = SnapshotInterpolator()
+    /** Juvenile / adult / sex forms: stage textures and body shape (LifeStageVisuals, life_stages.md). */
+    private val lifeStages = LifeStageVisuals(assets)
+    private val stageBinding = LifeStageVisuals.Binding()
     private val particles = ParticleField(initialQuality.particles)
     @Volatile private var sdf: Sdf? = null
     private var width = 1; private var height = 1
@@ -197,7 +204,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
-        val light = LightingState.from(cur?.lights ?: DemoSnapshots.DAY)
+        val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input)
         val taps = input.drain(camera, width, height)
@@ -223,7 +230,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         bindShared()
         shadowMap?.let { renderShadowMap(it, fu, progs, rigs, cur) }
         particles.ambientCount = quality.particles
-        particles.step(dt, time, cur)
+        bursts?.drain { particles.burst(it, cur) }
+        particles.step(dt, time, cur, viewProjM = camera.viewProj)
 
         // 4. draw
         val usePost = post?.ok == true && (quality.bloom || lens.amount > 0f)
@@ -697,6 +705,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     /** pass 0: opaque parts; pass 1: fins (blended). */
     private fun drawOrganism(r: FishRig, progs: Programs, pass: Int) {
+        stageBinding.clear()
         if (!r.visible) return
         val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant)
         val far = r.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) > RenderQuality.LOD1_DISTANCE_CM
@@ -711,6 +720,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         if (m == null) { if (pass == 0) drawPlaceholder(r, progs); return }
         val w = white ?: return
+        // life stage: body texture forms A/B and their mix, body depth/width scale (core LifeForm via LifeFormChannel)
+        val sb = stageBinding
+        if (path != null && CritterKind.of(r.speciesId) == null) {
+            lifeStages.resolve(r.speciesId, path, r.scale, com.reeflive.core.sim.LifeFormChannel.of(interp.current)[r.id], sb)
+        } else sb.clear()
         for (part in m.parts) {
             val isFin = part.kind == MaterialKind.FIN_SHEET
             if ((pass == 1) != isFin) continue
@@ -735,11 +749,28 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
             p.set3fv("uEyePivot", part.eyePivot)
             part.material.apply(p, w)
+            bindStage(p, w, when { isFin -> sb.fin; part.part == "body" -> sb.body; else -> null })
             val iri = m.glb.rootFloat("iridescence") ?: 0.1f
             p.set1f("uIridStrength", if (partCode == 0f) iri else 0f)
             p.set1f("uRoughness", m.glb.rootFloat("roughness")?.takeIf { partCode == 0f } ?: part.material.src.roughness)
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
         }
+    }
+
+    /**
+     * Stage texture blend for a fish body or fin part (LifeStageVisuals): form A replaces the GLB albedo on unit 0 once loaded
+     * (none = the GLB's own texture), form B goes to [LifeStageVisuals.UNIT] mixed by `uStageMix`. Textures load
+     * asynchronously; until then the GLB albedo shows. Other parts get `uStageMix` 0.
+     */
+    private fun bindStage(p: ShaderProgram, w: Texture, b: LifeStageVisuals.TexPair?) {
+        p.set1i("uAlbedoStage", LifeStageVisuals.UNIT)
+        val ta = b?.texA?.let { store.texture(it) }
+        val tb = b?.texB?.let { store.texture(it) }
+        val mix = b?.mix ?: 0f
+        if (ta != null) { ta.bind(0); p.set1f("uHasTexture", 1f) }
+        // texA null = the GLB's own body albedo stays on unit 0 (the model's base form)
+        if (tb != null && mix > 0.001f) { tb.bind(LifeStageVisuals.UNIT); p.set1f("uStageMix", mix) }
+        else { w.bind(LifeStageVisuals.UNIT); p.set1f("uStageMix", 0f) }
     }
 
     private fun drawPlaceholder(r: FishRig, progs: Programs) {
@@ -778,6 +809,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)
         p.set1f("uDead", if (r.alive) 0f else 1f)
+        // life-stage body proportions (depth, width offsets from the GLB; 0 = as built), set for every fish draw
+        p.set3f("uStageShape", stageBinding.depth, stageBinding.width, 0f)
         p.set1f("uRigid", if (rigid) 1f else 0f)
         if (rigid) { rigidModel(r, tmpModel); p.setMat4("uModel", tmpModel) } else p.setMat4("uModel", IDENTITY)
         // limb pose from the core LimbRig (SIMULATION §19): every entry the sim sent goes to uLimb[]; shrimp send one

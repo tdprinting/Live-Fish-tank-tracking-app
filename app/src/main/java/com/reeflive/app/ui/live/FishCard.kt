@@ -60,6 +60,9 @@ fun FishCard(
             Column(Modifier.weight(1f)) {
                 Text(state.name, style = s.titleText, color = s.label, maxLines = 1)
                 Text(state.speciesName, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, maxLines = 1)
+                if (state.lifeStage.isNotBlank()) {
+                    Text(state.lifeStage, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, maxLines = 1)
+                }
             }
             StatusPill(moodStatus(state), label = state.mood)
             Spacer(Modifier.width(4.dp))

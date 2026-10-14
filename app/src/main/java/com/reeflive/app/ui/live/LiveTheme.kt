@@ -218,6 +218,7 @@ object LiveTheme {
                 LiveCategory.LIFE to Candy.pink,
                 LiveCategory.TROUBLE to Candy.purple,
                 LiveCategory.MORE to Candy.white,
+                LiveCategory.VIEW to Candy.cyan,
             ),
         )
     }

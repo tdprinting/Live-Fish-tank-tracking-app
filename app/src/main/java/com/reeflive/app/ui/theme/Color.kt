@@ -211,6 +211,12 @@ object FoodPalette {
     val krillPale = Color(0xFFF7B9A8)
     val pelletBrown = Color(0xFF8A5A2B)
     val pelletLight = Color(0xFFB88A4A)
+    /** Tee's everyday food: tiny pale granules (video T97). */
+    val granule = Color(0xFFD9C9A2)
+    val granuleShade = Color(0xFFB9A57A)
+    /** The feeding hand (pinch cue). */
+    val skin = Color(0xFFF1C7A5)
+    val skinShade = Color(0xFFD9A07E)
     val noriGreen = Color(0xFF2F6B3A)
     val noriDark = Color(0xFF1E4A2A)
     val clipBlack = Color(0xFF1B2230)

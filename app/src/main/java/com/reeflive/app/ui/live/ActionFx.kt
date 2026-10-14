@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -52,10 +53,10 @@ data class FxPoint(val x: Float, val y: Float, val z: Float)
 
 /** Where things happen, matched to the sim's own anchors (core RockData / Simulation) so pictures and particles agree. */
 object FxSpots {
-    /** SURFACE_FEED at the waterline: where `Command.Feed` with no point spawns its particles. */
-    val FEED = FxPoint(41f, 55.7f, 20f)
-    /** NORI_CLIP on the left glass. */
-    val NORI = FxPoint(2f, 35f, 18f)
+    /** Hand-feed spot at the waterline, back middle beside the return (core Simulation.HAND_FEED, video T97). */
+    val FEED = FxPoint(68f, 55.7f, 4.5f)
+    /** NORI_CLIP on the left glass (anchors.json). */
+    val NORI = FxPoint(2f, 35f, 20f)
     /** HOB_OUTFLOW: `Command.Dose` enters here and spreads with the flow. */
     val DOSE = FxPoint(71f, 55.7f, 3f)
     /** Where AddOrganism / AddMany release fish (tank middle, just under the surface). */
@@ -64,8 +65,9 @@ object FxSpots {
     val CENTRE = FxPoint(61f, 32f, 18f)
     val HEATER = FxPoint(7f, 30f, 4f)
     val THERMO = FxPoint(18f, 44f, 14f)
-    val PUMP_LEFT = FxPoint(3f, 45f, 16f)
-    val PUMP_RIGHT = FxPoint(119f, 45f, 16f)
+    /** Powerheads as the sim places them (core FlowField.defaultJets): PH-B on the left wall, PH-A on the back glass. */
+    val PUMP_LEFT = FxPoint(1.5f, 42f, 10f)
+    val PUMP_RIGHT = FxPoint(84f, 48f, 1.5f)
     /** Above the tank: the lamp. */
     val LIGHT = FxPoint(61f, 66f, 16f)
     /** The sump equipment lives under the tank, out of view: shown on the back-right corner above the water. */
@@ -243,6 +245,10 @@ fun ActionFxLayer(
     projection: TankProjection?,
     modifier: Modifier = Modifier,
     screenOnly: Boolean = false,
+    /** Draw each effect's caption under it (off when the screen shows the ActionBanner instead). */
+    captions: Boolean = true,
+    /** A pulsing ring on the tank spot where the action happens, so the eye knows where to look. */
+    highlight: Boolean = true,
 ) {
     val reduce = ReefTheme.reduceMotion
     SideEffect { state.reduce = reduce }
@@ -284,8 +290,15 @@ fun ActionFxLayer(
                 pal = pal,
                 project = project,
             )
+            if (highlight && a.fx.kind != FxKind.SPEED && a.fx.kind != FxKind.TIMELAPSE) {
+                // the true spot (unclamped), so the ring sits on the place in the tank even when the picture is nudged on screen
+                val pulse = if (reduce) 0.5f else 0.5f + 0.5f * kotlin.math.sin(ms / 160f)
+                val r = (ppcm * 5f).coerceIn(18f * density, 56f * density) * (0.9f + 0.25f * pulse)
+                drawCircle(Color.White.copy(alpha = alpha * (0.35f + 0.35f * pulse)), r, Offset(ax, ay), style = Stroke(2.5f * density))
+                drawCircle(Color.White.copy(alpha = alpha * 0.12f), r * 1.35f, Offset(ax, ay), style = Stroke(1.5f * density))
+            }
             drawFx(a.fx, frame)
-            a.fx.caption?.let { text ->
+            if (captions) a.fx.caption?.let { text ->
                 val layout = a.captionLayout ?: measurer.measure(text, captionStyle).also { a.captionLayout = it }
                 drawCaption(layout, frame.ax, frame.ay + unit * 0.62f, pal, alpha)
             }

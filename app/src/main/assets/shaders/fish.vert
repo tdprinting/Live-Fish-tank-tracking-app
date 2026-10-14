@@ -20,6 +20,7 @@ uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
+uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
 // Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send one entry, uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
 // limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae.
@@ -362,6 +363,14 @@ void main() {
     if (part > 0.5 && part < 1.5) {
         uw = clamp(u - local.x, 0.0, 1.0);
         local.x += uw - u;
+    }
+
+    // Life-stage proportions (a juvenile engineer goby is stubbier than the eel-like adult): scale depth and width
+    // about the body axis before the wave and skinning; normals take the inverse scale.
+    if (abs(uStageShape.x) + abs(uStageShape.y) > 0.0001) {
+        vec2 k = vec2(1.0) + uStageShape.xy;
+        local.y *= k.x; local.z *= k.y;
+        n = normalize(vec3(n.x, n.y / k.x, n.z / k.y));
     }
 
     // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (0.1 + 0.9 u^2). The amplitude is

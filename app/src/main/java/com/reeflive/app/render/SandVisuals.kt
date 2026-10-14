@@ -137,6 +137,8 @@ class SandCloudRenderer {
         p.set1f("uViewportH", viewportH.toFloat())
         p.set2f("uSizeClamp", 1.5f, 10f)
         GLES30.glBindVertexArray(vao); Gl.check("glBindVertexArray(sandClouds)")
+        // the particle shader's sprite-shape attribute is not fed here: pin it to the plain soft dot
+        GLES30.glVertexAttrib4f(2, 0f, 0f, 0f, 1f); Gl.check("glVertexAttrib4f(sandClouds)")
         GLES30.glDrawArrays(GLES30.GL_POINTS, 0, k); Gl.check("glDrawArrays(sandClouds)")
         GLES30.glBindVertexArray(0); Gl.check("unbind(sandClouds)")
         return 1
