@@ -259,9 +259,9 @@ interface LivestockDao {
     @Upsert
     suspend fun upsertAll(l: List<LivestockEntity>)
 
-    /** Renames a row only while it still has [old]; returns the number of rows changed. */
-    @Query("UPDATE livestock SET nickname = :new WHERE speciesId = :speciesId AND nickname = :old")
-    suspend fun renameIfStill(speciesId: String, old: String, new: String): Int
+    /** Renames a row only while it still has [oldName]; returns the number of rows changed. */
+    @Query("UPDATE livestock SET nickname = :newName WHERE speciesId = :speciesId AND nickname = :oldName")
+    suspend fun renameIfStill(speciesId: String, oldName: String, newName: String): Int
 
     @Query("DELETE FROM livestock WHERE id = :id")
     suspend fun delete(id: String)
