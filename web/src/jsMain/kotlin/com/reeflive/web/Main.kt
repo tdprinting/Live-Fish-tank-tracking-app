@@ -164,12 +164,35 @@ object ReefLive {
 
     private var current = RenderQuality.HIGH
 
-    /** HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. */
+    /**
+     * HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. [scaleStep] trims
+     * it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
+     */
     private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
         RenderQuality.HIGH -> 3.0
         RenderQuality.MEDIUM -> 2.0
         RenderQuality.LOW -> 1.5
-    })
+    }) * SCALES[scaleStep]
+
+    private var scaleStep = 0
+    private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
+
+    /**
+     * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
+     * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
+     * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
+     * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
+     */
+    private fun adapt(dt: Double) {
+        if (dt <= 0.0) return
+        windowTime += min(dt, 0.1); windowFrames++
+        if (windowFrames < ADAPT_FRAMES) return
+        val mean = windowTime / windowFrames
+        windowTime = 0.0; windowFrames = 0
+        if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0 }
+        else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
+        else goodWindows = 0
+    }
 
     private fun status(text: String) { emit("onStatus", text) }
 
@@ -202,8 +225,9 @@ object ReefLive {
             }
             if (steps == 3) simAcc = 0.0
         }
+        adapt(dt)
         val c = canvas
-        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt() || c.height != (c.clientHeight * pixelRatio()).toInt())) resize()
+        if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
         director?.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
         window.requestAnimationFrame(::frame)
@@ -346,7 +370,7 @@ object ReefLive {
     fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v
+        current = v; scaleStep = 0; goodWindows = 0
         renderer?.setQuality(v)
         resize()
     }
@@ -434,6 +458,12 @@ object ReefLive {
     }
 
     private const val TICK = 0.05
+    /** Render-resolution multipliers tried in order while frames are slow (1 → ⅔ of the device pixel ratio). */
+    private val SCALES = doubleArrayOf(1.0, 0.9, 0.8, 0.72, 0.67)
+    private const val ADAPT_FRAMES = 45
+    private const val SLOW_DT = 1.0 / 48
+    private const val FAST_DT = 1.0 / 57
+    private const val GOOD_WINDOWS = 4
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }
