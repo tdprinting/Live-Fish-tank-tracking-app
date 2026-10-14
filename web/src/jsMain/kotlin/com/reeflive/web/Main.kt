@@ -79,7 +79,7 @@ object ReefLive {
                 val known = (have.species.unsafeCast<Array<String>?>() ?: emptyArray()).toSet()
                 speciesIds.filter { known.isEmpty() || it in known }.forEach { id -> boot += "res/species/$id.json" }
                 fetchAll(boot)
-                AssetPrefetch.fetcher = { path, done -> MainScope().launch { runCatching { fetchFile("assets/$path") }; done() } }
+                AssetPrefetch.fetcher = { path, done -> MainScope().launch { fetchWithRetry("assets/$path"); done() } }
 
                 status("Building the reef…")
                 val species = SpeciesCatalog.fromClasspath(speciesIds)
@@ -324,12 +324,36 @@ object ReefLive {
         return r.json().await()
     }
 
-    private suspend fun fetchFile(path: String) {
+    private suspend fun fetchFile(path: String, timeoutMs: Int = 0) {
         if (kotlin.Resources.has(resKey(path))) return
-        val r = window.fetch(base + path).await()
-        if (!r.ok) return
-        val ab = r.arrayBuffer().await().unsafeCast<ArrayBuffer>()
-        kotlin.Resources.put(resKey(path), Int8Array(ab).unsafeCast<ByteArray>())
+        val init: dynamic = js("({})")
+        val timer = if (timeoutMs > 0) {
+            val ctl: dynamic = js("new AbortController()")
+            init.signal = ctl.signal
+            window.setTimeout({ ctl.abort() }, timeoutMs)
+        } else null
+        try {
+            val r = window.fetch(base + path, init.unsafeCast<org.w3c.fetch.RequestInit>()).await()
+            if (!r.ok) return
+            val ab = r.arrayBuffer().await().unsafeCast<ArrayBuffer>()
+            kotlin.Resources.put(resKey(path), Int8Array(ab).unsafeCast<ByteArray>())
+        } finally {
+            timer?.let { window.clearTimeout(it) }
+        }
+    }
+
+    /**
+     * The renderer marks a model that fails to load as failed for good, so a dropped download (common for the 10 MB
+     * rockscape on a phone connection) would leave the tank without rock until reload. A stalled download is cut
+     * off and retried too, since the load waits for it.
+     */
+    private suspend fun fetchWithRetry(path: String) {
+        for (attempt in 0 until 4) {
+            runCatching { fetchFile(path, timeoutMs = 45_000 shl attempt) }
+            if (kotlin.Resources.has(resKey(path))) return
+            kotlinx.coroutines.delay(500L shl attempt)
+        }
+        console.warn("[ReefLive] could not download $path")
     }
 
     /** "res/x" is a classpath resource "x"; "assets/x" stays "assets/x" (see AssetManager). */
