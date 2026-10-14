@@ -55,7 +55,12 @@ class SubmarineSense {
             val k = SubmarineRules.reaction(o, d, closing, guardD, night, h)
             a.ctx.p = sim.perception
             when (k) {
-                SubReaction.NONE -> { r.drop(); current.remove(o.id); continue }
+                SubReaction.NONE -> {
+                    // a fish that already ignores a harmless sub nearby keeps getting used to it: without this,
+                    // habituation stalled right at the ignore level and every short trip away tipped it back under
+                    if (h >= SubmarineRules.HABIT_IGNORE && d < SubmarineRules.SEE_CM && closing <= SubmarineRules.STARTLE_SPEED) memory.exposed(o.id, t, step)
+                    r.drop(); current.remove(o.id); continue
+                }
                 SubReaction.STARTLE, SubReaction.HIDE -> {
                     if (t >= r.cooldownUntil) {
                         val mag = if (k == SubReaction.STARTLE) SubmarineRules.startleMag(closing, d, SubmarineRules.startleReach(o, h)) else 0.5

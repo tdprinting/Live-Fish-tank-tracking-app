@@ -514,7 +514,8 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
     }
     /** A perched (benthic) client poses where it sits instead of lifting off the rock. */
     private var perch: Rest? = null
-    override fun enter(c: Ctx) { perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null }
+    private var hold: Vec3? = null
+    override fun enter(c: Ctx) { perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null; hold = null }
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
         val w = o.poseFor ?: run { finished = true; return }
@@ -534,7 +535,10 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
         }
         // freeze head-up with fins spread, mouth agape and gill covers flared; only the pectorals scull to hold station
         out.hover = true; out.pitchBias = 0.44; out.pectoral = 1.0; out.ampMul = 0.1; out.tailMul = 0.3
-        out.seek(o.pos + o.heading * 0.2, o.cruiseSpeed * 0.1, arrive = 2.0)
+        // it holds the spot where it began to pose (seeking just ahead of itself, the separation from the cleaner working
+        // along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass at 6-9 cm/s)
+        val h = hold ?: o.pos.also { hold = it }
+        out.seek(if (o.pos.distanceTo(h) > 2.0) h else o.pos + o.heading * 0.2, o.cruiseSpeed * (if (o.pos.distanceTo(h) > 2.0) 0.5 else 0.1), arrive = 2.0)
         o.mouth = 0.7
         o.finClamp = 0.0
         o.gill = max(o.gill, 0.9)

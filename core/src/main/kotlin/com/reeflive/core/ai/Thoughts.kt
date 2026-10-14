@@ -451,7 +451,7 @@ object Thoughts {
         val nick = t.nickname
         if (nick.isBlank()) return "the $kind"
         if (t.species.id == me.species.id) return nick
-        // "Hermit 2", "Brittle", "Mower": the nickname already says what it is
+        // "Hermit 2", "Brittle", "Mr. Crabs": the nickname already says what it is; personal names ("Dori") get the kind added
         val n = nick.lowercase()
         val named = kind.lowercase().split(' ').any { w -> w.length >= 4 && (n.contains(w) || n.length >= 4 && w.contains(n)) }
         return if (named) nick else "$nick the $kind"
