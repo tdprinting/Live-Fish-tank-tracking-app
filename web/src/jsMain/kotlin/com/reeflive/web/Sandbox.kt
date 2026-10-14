@@ -332,7 +332,11 @@ object ReefSandbox {
     internal fun touch(p: com.reeflive.core.geom.Vec3, surface: com.reeflive.core.sim.TouchSurface) {
         send(Command.TouchTank(p, surface))
         val glass = surface == com.reeflive.core.sim.TouchSurface.GLASS
-        val kind = if (surface == com.reeflive.core.sim.TouchSurface.SAND) BurstKind.SAND_PUFF else BurstKind.GLASS_RIPPLE
+        val kind = when (surface) {
+            com.reeflive.core.sim.TouchSurface.SAND -> BurstKind.SAND_PUFF
+            com.reeflive.core.sim.TouchSurface.SURFACE -> BurstKind.SURFACE_RIPPLE
+            else -> BurstKind.GLASS_RIPPLE
+        }
         burst(kind, floatArrayOf(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()), amount = if (glass) 1f else 0.7f)
     }
 

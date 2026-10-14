@@ -644,7 +644,7 @@ fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbo
     val glyphs = if (sandbox) {
         listOf(ReefGlyphs.touch, ReefGlyphs.whatIf, ReefGlyphs.sparkleTip, ReefGlyphs.reset, ReefGlyphs.eye)
     } else {
-        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
+        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
     }
     LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

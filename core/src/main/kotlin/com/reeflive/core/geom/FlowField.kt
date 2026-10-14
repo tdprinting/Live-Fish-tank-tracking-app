@@ -71,8 +71,41 @@ class FlowField(
 
     private fun isPowerhead(j: Powerhead) = !j.name.startsWith("HOB")
 
+    /**
+     * Touch puffs in the water (`Command.WaterPuff`, a flick of the finger), added on top of the jets or the solver by
+     * [velocity] and [velocityFast] (never baked into the cached grid). [now] is the sim time they are evaluated at.
+     */
+    val gusts = ArrayList<FlowGust>()
+    var now = 0.0
+
+    /** A puff of water at [pos] moving at [vel] (cm/s) from sim time [t]; at most [FlowGust.MAX] live at once. */
+    fun addGust(pos: Vec3, vel: Vec3, t: Double) {
+        val sp = vel.length()
+        if (sp < 1e-6) return
+        if (gusts.size >= FlowGust.MAX) gusts.removeAt(0)
+        gusts += FlowGust(pos, vel / sp, sp.coerceAtMost(FlowGust.MAX_SPEED), t)
+    }
+
+    /** Drops spent puffs. */
+    fun pruneGusts(t: Double) { if (gusts.isNotEmpty()) gusts.removeAll { t - it.bornAt > FlowGust.LIFE_S || t < it.bornAt - 1.0 } }
+
+    /** Velocity the live puffs add at [p] (cm/s). */
+    fun gustVelocity(p: Vec3): Vec3 {
+        var vx = 0.0; var vy = 0.0; var vz = 0.0
+        for (g in gusts) {
+            val s = FlowGust.strength(g.pos.x, g.pos.y, g.pos.z, g.dir.x, g.dir.y, g.dir.z, g.speed, now - g.bornAt, p.x, p.y, p.z)
+            vx += g.dir.x * s; vy += g.dir.y * s; vz += g.dir.z * s
+        }
+        return Vec3(vx, vy, vz)
+    }
+
     /** Full-fidelity velocity at p and sim time t. */
     fun velocity(p: Vec3, t: Double = 0.0): Vec3 {
+        val base = baseVelocity(p, t)
+        return if (gusts.isEmpty()) base else base + gustVelocity(p)
+    }
+
+    private fun baseVelocity(p: Vec3, t: Double): Vec3 {
         fluid?.let { return it.velocity(p) }
         var v = Vec3.ZERO
         var any = false
@@ -97,7 +130,7 @@ class FlowField(
     private fun buildGrid() {
         val g = FloatArray(gx * gy * gz * 3)
         for (z in 0 until gz) for (y in 0 until gy) for (x in 0 until gx) {
-            val v = velocity(Vec3(x * cell, y * cell, z * cell))
+            val v = baseVelocity(Vec3(x * cell, y * cell, z * cell), 0.0)
             val i = ((z * gy + y) * gx + x) * 3
             g[i] = v.x.toFloat(); g[i + 1] = v.y.toFloat(); g[i + 2] = v.z.toFloat()
         }
@@ -107,6 +140,11 @@ class FlowField(
 
     /** Trilinear lookup in a 4 cm grid (built lazily, invalidated when jets change). */
     fun velocityFast(p: Vec3): Vec3 {
+        val base = baseFast(p)
+        return if (gusts.isEmpty()) base else base + gustVelocity(p)
+    }
+
+    private fun baseFast(p: Vec3): Vec3 {
         fluid?.let { return it.velocity(p) }
         if (!gridValid) synchronized(this) { if (!gridValid) buildGrid() }
         val g = grid
@@ -129,5 +167,37 @@ class FlowField(
             Powerhead("PH-B", Vec3(1.0, 42.0, 10.0), Vec3(0.95, -0.2, 0.25)),
             Powerhead("HOB", Vec3(71.0, 55.0, 2.0), Vec3(0.0, -0.5, 0.87), v0 = 25.0),
         )
+    }
+}
+
+/**
+ * One puff of water pushed by a flick of the finger (`Command.WaterPuff`): a blob of moving water that travels along
+ * [dir] from [pos], slowing as it spreads (a decaying vortex-ring-like slug, design estimate). [strength] is shared by
+ * the sim ([FlowField.gustVelocity]) and the renderer (coral sway, burst specks) so both see the same puff.
+ */
+class FlowGust(val pos: Vec3, val dir: Vec3, val speed: Double, val bornAt: Double) {
+    companion object {
+        /** Live puffs at once, their lifetime (s), slowing time (s), start radius (cm) and fastest puff (cm/s). */
+        const val MAX = 4
+        const val LIFE_S = 4.0
+        const val TAU_S = 0.8
+        const val R0_CM = 3.5
+        const val MAX_SPEED = 45.0
+        /** Floats per puff in a snapshot: x, y, z, dir x, y, z, speed (cm/s), age at the snapshot (s). */
+        const val STRIDE = 8
+
+        /** Speed (cm/s, along the puff's direction) of a puff of [speed] [age] s old, at point ([x], [y], [z]). */
+        fun strength(px: Double, py: Double, pz: Double, dx: Double, dy: Double, dz: Double, speed: Double, age: Double, x: Double, y: Double, z: Double): Double {
+            if (age < 0.0 || age > LIFE_S) return 0.0
+            val decay = exp(-age / TAU_S)
+            val travel = speed * TAU_S * (1.0 - decay)
+            val cx = px + dx * travel; val cy = py + dy * travel; val cz = pz + dz * travel
+            val r = R0_CM + 0.35 * travel
+            val ex = x - cx; val ey = y - cy; val ez = z - cz
+            val d2 = (ex * ex + ey * ey + ez * ez) / (r * r)
+            if (d2 > 9.0) return 0.0
+            val fade = if (age > LIFE_S - 1.0) LIFE_S - age else 1.0
+            return speed * decay * exp(-d2) * fade
+        }
     }
 }

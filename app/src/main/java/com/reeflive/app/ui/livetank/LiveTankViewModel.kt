@@ -142,6 +142,18 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
     fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
+    /** True while a fingertip is held on the tank (between the first [finger] with a point and the one with null). */
+    var fingerDown = false
+        private set
+    /** A fingertip held on the glass or water top (null = lifted): bold fish follow it and nip when it rests. */
+    fun finger(point: Vec3?, speedCmS: Float, surface: TouchSurface) {
+        fingerDown = point != null
+        holder.enqueue(Command.Finger(point, speedCmS.toDouble(), surface))
+    }
+    /** A flick of the held finger: a short puff of current at [point] along [velocity] (cm/s). */
+    fun puff(point: Vec3, velocity: Vec3) = holder.enqueue(Command.WaterPuff(point, velocity))
+    /** A tap right on an animal: snails and crabs tuck in, shrimp freeze, a hermit ducks into its shell. */
+    fun touchAnimal(id: String) = holder.enqueue(Command.TouchAnimal(id))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner

@@ -40,6 +40,9 @@ export function startLive(applyReadings) {
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
+    // a fingertip held on the glass (UI_STYLE §10.8): slide it and fish follow; flick it as it lifts for a puff of current
+    onFinger: (surface) => { if (surface) { try { navigator.vibrate?.(6); } catch { /* not on iOS */ } fingerSay(); } },
+    onFlick: () => say('Whoosh! A puff of current.'),
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
@@ -846,8 +849,14 @@ function touchTank(surface) {
   try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
   if (performance.now() - touchSaidAt > 9000) {
     touchSaidAt = performance.now();
-    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?' }[surface] || 'Soft corals pull in, the shy ones duck.');
+    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?', SURFACE: 'Plip! Hungry fish come up to look.' }[surface] || 'Soft corals pull in, the shy ones duck.');
   }
+}
+let fingerSaidAt = 0;
+function fingerSay() {
+  if (performance.now() - fingerSaidAt < 20000) return;
+  fingerSaidAt = performance.now();
+  say('Slide your finger. Who follows? Rest it and they nibble.');
 }
 function knockSound(gain) {
   const b = ui.sound && actx && buffers[CUES.PELLET];

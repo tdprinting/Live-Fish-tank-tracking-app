@@ -363,7 +363,7 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - Threat: eel within 12 cm → tail-flip escape (burst 40 cm/s for 0.5 s, backwards), then hide deeper in the ledge crevice.
 
 ### 4.6 Feeding system (`FoodSystem`)
-- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 4×6 cm sheet mesh at the clip anchor (`NORI_CLIP` at the left glass, y 35) that fish nibble (a `remaining` scalar scales the sheet).
+- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` at the left glass, y 35) simulated as a cloth (`NoriCloth`, below).
 - Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`; floating kinds hold `sink = 0` at the surface for `floatSeconds`, then sink at `sinkCmS`. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after `lifeSeconds` uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles. Suspended kinds (pods, phyto, coral food, cyclops) barely sink and ride the flow.
 - Fish bite radius 1.2 cm; competition: a particle targeted by two fish goes to the first to reach it; clowns and tang get burst speed when hunger > 0.4.
 - "Frenzy" score: all diet-matching fish with hunger > 0.2 get `Feed` ≥ 0.6 immediately on spawn (perception event), producing the rush.
@@ -431,6 +431,12 @@ Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, floa
 ### 5.3 Flow field (`FlowField`)
 Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 84, y 48, z 1), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 42, z 10), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** at the back center top (x 61, y 55, z 2), aiming forward-down (0, −0.5, 0.87) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 20) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
 
+**Gusts** (`FlowGust`, a flick of the finger): `addGust(pos, vel, t)` adds up to 4 short puffs on top of the jets, never baked into the cached grid. Each is a travelling Gaussian blob: centre `pos + dir × speed × τ(1 − e^(−age/τ))` with τ 0.8 s, radius 3.5 cm + 0.35 × distance travelled, speed `speed × e^(−age/τ)`, faded out over the last second of its 4 s life; launch speed ≤ 45 cm/s. `velocity()` and `velocityFast()` add them, so corals, sand, particles and the nori all feel the same puff; the snapshot carries them (`gusts`, stride 8) for the renderer's coral sway and flow motes.
+
+**Nori cloth** (`NoriCloth`): the clipped sheet is a 5×7-node mass-spring grid (24 cells), hung from one pinned node at the clip so it can swing and turn in any current. Position-based dynamics at 1/60 s substeps (≤ 8 per call), 6 constraint iterations: stretch, shear 0.6, bend 0.08 (compression only), a strain limit of 1.4× rest from the pin outward, sinking 2 cm/s². Each node reads `FlowField.velocity` (so the pump schedule, wavemaker pulse, pump off and gusts all reach it; no outlet is hard-coded) through anisotropic flat-plate drag, strong across the sheet and weak along it, plus a travelling-wave turbulence term (30 % of the local speed, no rng) that makes it flutter. Pane and rock contact use the rock SDF. Material per cell: a bite takes from the nearest cell, preferring ragged edges; an edge cell bitten below 30 % tears off with weak neighbours, a cell weakened below 55 % tears when strained past 1.3, and any cells no longer connected to the pin break away. Torn pieces become NORI `FoodParticle`s (grams by area, slow sink) that drift in the flow and get eaten like any food. Material is conserved: `remaining + eaten + torn = total`. The snapshot carries the pose (`NoriPose`: nodes and per-cell material) and the renderer skins its tiles over it.
+
+**Grazing the nori** (`NibbleNori`): grazers come at the sheet from downstream (flow at the sheet's centre, else straight out from the glass), face up-current and pick the most downstream cell whose station they can reach; tangs and others take a bite with a tug and a head shake, the lawnmower blenny rasps in quick bouts of small bites. A grazer that cannot get there in 8 s gives up for a minute.
+
 ### 5.4 Particulate
 300 ambient particles advected by `flow` plus Brownian jitter (1 cm/s), respawned when out of the box.
 
@@ -441,6 +447,14 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 `TapGlass(point)`: every fish within 30 cm gets `startle = skittishness × (1 − dist/30)`; `Flee` if startle > 0.35 else a flinch (0.3 s burst away 1 L); curious species may approach after 5 s.
 
 `TouchTank(point, surface, strength)` is the gentle single-finger tap (`TankTouch`, UI_STYLE §10.8). Surfaces GLASS / SAND / ROCK / CORAL (a rock tap within 5 cm of a colony). Per animal `TankTouch.reaction` picks INVESTIGATE (food-conditioned bold fish, glass, ≤ 50 cm, day), AVOID (shy fish, ≤ 28 cm), PEEK (blennies), FREEZE (shrimp, sally crab), CHECK (diamond goby, nassarius on sand), DUCK (hermits, dusters; crustaceans, blennies and hawkfish on rock: the species' own startle at 0.4–0.7) or NONE; strength falls off linearly with distance. The shared `TouchReact` behaviour (score 0.75–0.9, no utility noise and no rng until a tap, so it changes no other sequence) plays it for a few seconds. Polyp corals (GSP, zoa, clove) within 12 cm of a rock / coral tap get `disturb` 0.6 (0.8 on the tapped colony). Habituation per animal: +0.22 per answered tap, decays with τ 20 min, ignored at ≥ 0.75; a feed clears it. Three taps within 4 s (× speed) and 10 cm escalate to `TapGlass`.
+
+Surface SURFACE (a tap at the water's top): food-conditioned bold fish within 50 cm RISE to just under the surface for 4–9 s (not at night); shy fish close by AVOID; the surface gets a small ripple impulse.
+
+`Finger(point, speedCmS, surface)` is a fingertip held on the glass (null = lifted; no news for 6 s counts as lifted). Each animal is considered once per hold: bold fish that would INVESTIGATE FOLLOW instead: they track the finger along the pane (offset 0.5 L + 2 cm, 10 cm + 0.5 L while it moves faster than 35 cm/s) and, once it has rested 1.5 s, close in and nip every 0.7–1.4 s (`touchNips`). Lifting ends following after a 2.5 s linger. A finger moving faster than 35 cm/s only makes shy fish and crustaceans close by react. Holds habituate like taps.
+
+`WaterPuff(point, velocity)` is a flick: a `FlowGust` (§5.3), a sand puff where it passes within reach of the bed, polyp `disturb` 0.4 within 12 cm of its path, and shy fish and crustaceans in it flinch (AVOID / FREEZE / DUCK).
+
+`TouchAnimal(id)` is a tap right on an animal: snails, crabs, stars and other walkers TUCK (stop, pull in for 5–15 s), hermits, dusters, brittle stars DUCK, shrimp FREEZE, fish NONE (the tap only picks them). Habituation as for taps.
 
 ---
 
@@ -536,7 +550,7 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 ### 9.5 Contract extensions (backward compatible, all defaulted)
 - `OrganismPose`: `brain`, `posture`, `eyeYaw`, `mouth`, `appendagePhase`, `extension`, `visible`, `nickname`.
 - `CoralPose`: `speciesId`, `anchor`, `flow`, `tissue`.
-- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`, `sandPiles`, `flowStrength`, `surfaceHeights`/`surfaceDims`, `flowGrid`.
+- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`, `nori` (cloth pose), `gusts`, `sandPiles`, `flowStrength`, `surfaceHeights`/`surfaceDims`, `flowGrid`.
 - `OrganismStats` (FishCard, follow mode):
   - `caption`, `focusId`, `envStress` and `cause`.
   - `intent`: the caption without the name, e.g. "eyeing the skunk cleaner shrimp".
