@@ -79,6 +79,7 @@ object Thoughts {
             n == "unwell" -> Line("resting quietly because it is not feeling well", "rest until it feels better", "Not feeling great…", Driver.HEALTH, 2)
             n == "heat" -> Line(heatNow(e, label), "find cooler water", "Too hot!", Driver.WATER, 3)
             n == "touch" -> touchLine(e)
+            b is SubmarineReact -> subLine(b)
             n == "bout" -> boutLine(b, tgt)
             n == "yield" -> Line("backing off to let ${tgt ?: "the boss"} go first", "give way to the boss", "OK, OK, you first!", Driver.TERRITORY, 2)
             n == "pose" -> Line("holding still so ${tgt ?: "the cleaner"} can clean it", "get cleaned", "Clean me, please!", Driver.GET_CLEANED, 2)
@@ -195,6 +196,15 @@ object Thoughts {
         TouchReaction.FREEZE -> Line("freezing very still after the tap", "freeze until it is safe", "Shh…", Driver.FEAR, 3)
         TouchReaction.CHECK -> Line("checking out the little sand puff", "check the sand puff", "Something smells good?", Driver.CURIOSITY, 3)
         else -> Line("noticing the tap on the tank", "check out the tap", "Huh?", Driver.CURIOSITY, 2)
+    }
+
+    private fun subLine(b: SubmarineReact): Line = when (b.reaction) {
+        com.reeflive.core.sim.SubReaction.INVESTIGATE -> Line("swimming over to look at the little submarine", "follow the submarine", "Ooh, what's that?", Driver.CURIOSITY, 3)
+        com.reeflive.core.sim.SubReaction.POSTURE -> if (b.guarding) Line("guarding its home from the submarine", "chase the submarine off", "Go away, this is mine!", Driver.TERRITORY, 3)
+            else Line("watching the submarine closely", "keep an eye on the submarine", "I see you…", Driver.CURIOSITY, 3)
+        com.reeflive.core.sim.SubReaction.AVOID -> Line("swimming away from the submarine", "keep away from the submarine", "Too big! Too close!", Driver.FEAR, 3)
+        com.reeflive.core.sim.SubReaction.FREEZE -> Line("freezing very still while the submarine goes by", "freeze until it is gone", "Shh…", Driver.FEAR, 3)
+        else -> Line("noticing the little submarine", "watch the submarine", "Huh? A submarine?", Driver.CURIOSITY, 2)
     }
 
     private fun boutLine(b: Behavior, tgt: String?): Line {

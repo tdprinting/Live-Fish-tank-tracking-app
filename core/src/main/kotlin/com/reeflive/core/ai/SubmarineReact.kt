@@ -109,6 +109,9 @@ class SubmarineReact(val b: SpeciesBrain) : Behavior("submarine", "Watching the 
     private var guard: Vec3? = null
     internal var cooldownUntil = -1e9
     private var playing = SubReaction.NONE
+    /** The reaction being played (or about to be), for the thoughts readout. */
+    val reaction: SubReaction get() = if (playing != SubReaction.NONE) playing else kind
+    val guarding: Boolean get() = guard != null
     private var cover: Vec3 = Vec3.ZERO
     private var holdPos: Vec3 = Vec3.ZERO
     private var holdHeading: Vec3 = Vec3.X
