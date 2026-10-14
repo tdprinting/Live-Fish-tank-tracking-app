@@ -69,6 +69,9 @@ object ReefLive {
     /** Screensaver camera while on (same director as the Android screensaver). */
     private var director: com.reeflive.app.render.CinemaDirector? = null
     private var fingerDown = false
+    /** Camera projection the renderer publishes every frame (bag drops and the bag timers). */
+    private val projection = com.reeflive.app.render.TankProjection()
+    private val bagPt = FloatArray(3)
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -119,6 +122,7 @@ object ReefLive {
                 current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
+                r.projection = projection
                 r.demoWhenEmpty = false
                 r.listener = object : TankViewListener {
                     // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
@@ -369,13 +373,41 @@ object ReefLive {
         }
     }.toTypedArray())
 
+    /**
+     * Tank x (cm) of the front glass under canvas pixel ([px], [py]) for dropping a shop bag there, or -1 when the
+     * point is off the tank.
+     */
+    fun bagDropX(px: Double, py: Double): Double {
+        if (!projection.planePointAt(px.toFloat(), py.toFloat(), 33.8f, bagPt)) return -1.0
+        return if (bagPt[0] in 0f..121.9f && bagPt[1] in 0f..61f) bagPt[0].toDouble() else -1.0
+    }
+
+    /**
+     * The floating acclimation bags for the page's timers: canvas pixel (x, y) just under each bag, minutes left,
+     * progress 0..1, bag and tank temperature, phase, count and species; plus whether Hurry up is on.
+     */
+    fun bagState(): String {
+        val snap = sim?.latest ?: return "null"
+        val o: dynamic = js("({})")
+        o.hurry = snap.bagHurry
+        o.bags = snap.bags.map { b ->
+            val on = projection.project(b.x, b.y - b.radius * 1.8f, b.z, bagPt)
+            obj {
+                it.id = b.id; it.x = if (on) bagPt[0] else -1f; it.y = if (on) bagPt[1] else -1f
+                it.min = b.minutesLeft; it.progress = b.progress; it.bagT = b.bagTempC; it.tankT = b.tankTempC
+                it.phase = b.phase; it.count = b.count; it.name = b.common
+            }
+        }.toTypedArray()
+        return JSON.stringify(o)
+    }
+
     /** HUD state: clock, light phase, water and the organisms (id, name, species, health). */
     fun state(): String {
         val s = sim ?: return "null"
         val snap: SimSnapshot = s.latest
         val w = snap.water
         val o: dynamic = js("({})")
-        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = s.speed; o.light = snap.lightIntensity
+        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = snap.speed; o.light = snap.lightIntensity
         o.tempC = w.tempC; o.sg = w.sg; o.ph = w.ph; o.alk = w.alk; o.ca = w.ca; o.mg = w.mg
         o.no3 = w.no3; o.po4 = w.po4; o.nh3 = w.nh3Total; o.no2 = w.no2; o.flow = snap.flowStrength
         o.organisms = s.organisms.filter { it.alive }.map { a ->

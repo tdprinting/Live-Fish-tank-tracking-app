@@ -116,8 +116,9 @@ private fun plural(n: Int, one: String, many: String) = if (n == 1) "1 $one" els
 // ---------------------------------------------------------------- gallery
 
 /**
- * "Add life" tab of the sandbox dock: a gallery of every species the tank can draw. Tap a card to drop one into
- * the sandbox; hold it (or use the + on the card) to pick how many. Everything added is ordinary livestock in the
+ * "Add life" tab of the sandbox dock: a gallery of every species the tank can draw. Pick how many (one tap on the
+ * "How many" pills), then tap a card: the animals come packed in a shop bag that the keeper drags onto the tank
+ * ([BagCarryLayer]); it floats 30 sim minutes before they come out. Everything added is ordinary livestock in the
  * sandbox sim (stress, aggression, bioload), and Reset puts the tank back the way it is.
  */
 @Composable
@@ -130,8 +131,7 @@ fun StockGallery(
     val c = ReefTheme.colors
     val haptics = rememberHaptics()
     var groupIdx by rememberSaveable { mutableStateOf(0) }
-    var pickedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var qty by rememberSaveable { mutableStateOf(5) }
+    var qtyIdx by rememberSaveable { mutableStateOf(0) }
     // shops sell juveniles, so new fish arrive small unless the owner picks a bigger size
     var sizeIdx by rememberSaveable { mutableStateOf(StockSize.JUVENILE.ordinal) }
     val size = StockSize.values()[sizeIdx.coerceIn(0, StockSize.values().size - 1)]
@@ -148,7 +148,7 @@ fun StockGallery(
     val groups = StockGroup.values().toList()
     val group = groups[groupIdx.coerceIn(0, groups.size - 1)]
     val cards = stock.cards.filter { it.group == group }
-    val picked = stock.cards.firstOrNull { it.speciesId == pickedId }
+    val qty = BAG_COUNTS[qtyIdx.coerceIn(0, BAG_COUNTS.size - 1)]
 
     val add: (StockCard, Int) -> Unit = { card, n ->
         val full = if (card.group == StockGroup.CORALS) stock.coralsFull else stock.animalsFull
@@ -157,10 +157,10 @@ fun StockGallery(
             flashWarn = true; flashSpecies = null; flashCount = 0
         } else {
             haptics.tick()
-            onAdd(card, n, size)
-            flashCount = (if (flashOn && flashSpecies == card.speciesId) flashCount else 0) + n
+            onAdd(card, n.coerceAtMost(card.maxPerAdd), size)
+            flashCount = n
             flashSpecies = card.speciesId
-            flashText = "+$flashCount ${card.name}"
+            flashText = "Bagged ${if (n == 1) "a" else "$n"} ${card.name}. Drag the bag to the tank!"
             flashWarn = false
         }
         flashOn = true
@@ -180,8 +180,8 @@ fun StockGallery(
             ReefButton("Reset tank", onReset, kind = ButtonKind.OUTLINED, icon = Icons.Rounded.RestartAlt)
         }
         Text(
-            "Tap a card to add one. Tap + (or hold the card) to add many. They eat, play, squabble and make the water " +
-                "dirtier like real animals, so you can see what happens with too many. Only this sandbox changes.",
+            "Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and let it float until " +
+                "they are ready to swim out. Only this sandbox changes.",
             style = MaterialTheme.typography.bodySmall, color = c.textSecondary,
         )
         SegmentedPills(
@@ -190,6 +190,12 @@ fun StockGallery(
             onSelect = { groupIdx = it; haptics.tick() },
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Species group" },
             selectedColor = c.coralSoft,
+        )
+        SegmentedPills(
+            options = BAG_COUNTS.map { if (it == 1) "1" else "$it" },
+            selected = qtyIdx,
+            onSelect = { qtyIdx = it; haptics.tick() },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "How many in the bag" },
         )
         if (group != StockGroup.CORALS) {
             SegmentedPills(
@@ -210,23 +216,12 @@ fun StockGallery(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
-        AnimatedVisibility(picked != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            picked?.let { p ->
-                QuantityBar(
-                    card = p,
-                    qty = qty.coerceIn(1, p.maxPerAdd),
-                    onQty = { qty = it.coerceIn(1, p.maxPerAdd); haptics.tick() },
-                    onAdd = { add(p, qty.coerceIn(1, p.maxPerAdd)); pickedId = null },
-                    onClose = { pickedId = null },
-                )
-            }
-        }
         CardGrid(
             cards = cards,
             counts = stock.counts,
-            picked = pickedId,
-            onTap = { add(it, 1) },
-            onMany = { pickedId = it.speciesId; qty = qty.coerceIn(1, it.maxPerAdd); haptics.confirm() },
+            picked = null,
+            onTap = { add(it, qty) },
+            onMany = { add(it, qty) },
         )
     }
 }
@@ -287,7 +282,7 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
             // live theme (UI_STYLE §10.1): thick navy outline, pink when picked
             .border(ls.outlineWidth, if (picked) Candy.pink else ls.outline, ls.tileShape)
             .semantics(mergeDescendants = true) {
-            contentDescription = "${card.name}, ${card.sizeText}, $count in the tank. Tap to add one, hold to add several."
+            contentDescription = "${card.name}, ${card.sizeText}, $count in the tank. Tap to put it in a bag for the tank."
         },
         shape = ls.tileShape,
         tint = if (picked) Candy.pink else null,
@@ -337,47 +332,8 @@ private fun SpeciesCard(card: StockCard, count: Int, picked: Boolean, onTap: () 
 }
 
 /** Hold-to-add-many panel: − / count / + stepper, quick amounts and the Add button. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun QuantityBar(card: StockCard, qty: Int, onQty: (Int) -> Unit, onAdd: () -> Unit, onClose: () -> Unit) {
-    val c = ReefTheme.colors
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = ReefShapes.tile,
-        tint = c.coral,
-        contentPadding = PaddingValues(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SpeciesAvatar(card.speciesId, card.kind, card.colors, size = 44.dp)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(card.name, style = MaterialTheme.typography.titleSmall, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("How many? Up to ${card.maxPerAdd} at a time", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
-            }
-            GlassIconButton(Icons.Rounded.Close, "Close", onClose)
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GlassIconButton(Icons.Rounded.Remove, "One fewer", { onQty(qty - 1) })
-            Text(
-                "$qty", style = MaterialTheme.typography.headlineSmall, color = c.text, textAlign = TextAlign.Center,
-                modifier = Modifier.width(48.dp),
-            )
-            GlassIconButton(Icons.Rounded.Add, "One more", { onQty(qty + 1) })
-            Spacer(Modifier.weight(1f))
-            ReefButton("Add $qty", onAdd, kind = ButtonKind.CORAL, icon = Icons.Rounded.Add)
-        }
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(5, 10, 20, card.maxPerAdd).distinct().filter { it <= card.maxPerAdd }.forEach { n ->
-                ReefChip(
-                    if (n == card.maxPerAdd) "Max $n" else "$n", selected = qty == n, onClick = { onQty(n) }, accent = c.coral,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                )
-            }
-        }
-    }
-}
+/** The "How many" choices: a bag of one up to a shop's bulk order. */
+private val BAG_COUNTS = intArrayOf(1, 2, 3, 5, 10)
 
 // ---------------------------------------------------------------- previews
 

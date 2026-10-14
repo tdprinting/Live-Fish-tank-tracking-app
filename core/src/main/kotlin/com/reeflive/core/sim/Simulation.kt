@@ -221,7 +221,8 @@ class Simulation(
     fun stepWall(dtWall: Double) {
         drainCommands()
         submarine.step(dtWall, rock, sand)
-        val simDt = speed * dtWall
+        bags.stepWall(this, dtWall)
+        val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
@@ -242,6 +243,7 @@ class Simulation(
             drainCommands()
             val dt = min(behaviorDt, left)
             submarine.step(dt, rock, sand)
+            bags.stepWall(this, dt)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -282,6 +284,7 @@ class Simulation(
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
+        bags.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
@@ -918,6 +921,8 @@ class Simulation(
                 if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
+            is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
+            is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1120,6 +1125,8 @@ class Simulation(
 
     /** The toy submarine (Submarine mode, [Command.SubmarineMode]) and the animals' perception of it. */
     val submarine = Submarine()
+    /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
+    val bags = AcclimationBags()
     val subSense = com.reeflive.core.ai.SubmarineSense()
     private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
 
@@ -1304,7 +1311,7 @@ class Simulation(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear()
+        submarine.reset(); subSense.clear(); bags.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1391,7 +1398,10 @@ class Simulation(
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
-        )
+        ).let { s ->
+            if (!bags.any) s
+            else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
+        }
 
     private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()

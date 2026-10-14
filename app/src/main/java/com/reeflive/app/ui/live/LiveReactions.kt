@@ -421,6 +421,23 @@ object LiveReactions {
         HermieMood.EXCITED,
     )
 
+    /** A shop bag dropped onto the water at tank x [x]: it floats 30 minutes before the animals come out. */
+    fun bagIn(card: StockCard, count: Int, x: Float) = Reaction(
+        TankFx(
+            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, 114f), 56f, 16.5f),
+            tint = Color(0xFF5FD7FF),
+            caption = if (count == 1) "${card.name} is floating" else "$count × ${card.name} floating",
+        ),
+        "Plop! The bag floats so the water inside warms up. They come out in 30 minutes, or tap Hurry up.",
+        HermieMood.EXCITED,
+    )
+
+    fun hurryBags(on: Boolean) = Reaction(
+        TankFx(FxKind.SPEED, FxSpots.LIGHT, amount = if (on) 2f else 1f, caption = if (on) "Hurry up: 60×" else "Normal speed"),
+        if (on) "Zoom! Time flies until the bags open." else "Back to your speed.",
+        if (on) HermieMood.EXCITED else HermieMood.HAPPY,
+    )
+
     fun addSimple(name: String) = Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, caption = name), "Welcome, $name!", HermieMood.EXCITED)
 
     fun speed(x: Double) = Reaction(

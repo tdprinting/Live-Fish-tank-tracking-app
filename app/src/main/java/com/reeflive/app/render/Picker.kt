@@ -22,7 +22,7 @@ object Picker {
         var best: String? = null
         var bestT = Float.MAX_VALUE
         for (r in rigs) {
-            if (!r.visible) continue
+            if (!r.visible || r.bagged) continue
             val rad = max(r.scale * RADIUS_FRACTION, MIN_RADIUS_CM)
             for (k in 0 until SEGMENTS.size - 1) {
                 val a = SEGMENTS[k] * 4; val b = SEGMENTS[k + 1] * 4

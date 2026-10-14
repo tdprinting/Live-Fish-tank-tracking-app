@@ -130,6 +130,9 @@ import com.reeflive.app.ui.live.SelectedAnimalUi
 import com.reeflive.app.ui.live.ShelfPick
 import com.reeflive.app.ui.live.ShelfRow
 import com.reeflive.app.ui.live.SupplyCarryLayer
+import com.reeflive.app.ui.live.BagCarry
+import com.reeflive.app.ui.live.BagCarryLayer
+import com.reeflive.app.ui.live.BagTimerLayer
 import com.reeflive.app.ui.live.SupplyItem
 import com.reeflive.app.ui.live.SupplyShelfOverlay
 import com.reeflive.app.ui.live.SubmarineControls
@@ -319,6 +322,8 @@ fun LiveTankScreen(
     // doses given in the last sim day, so a second dose the same day is flagged as a swing (core DoseCheck)
     val doseLog = remember { DoseCheck.Log() }
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
+    // the shop bag in hand after an animal is picked in Add life (dragged onto the tank to float)
+    var bagCarry by remember { mutableStateOf<BagCarry?>(null) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
     // "Tap a supply, then drag it to the tank" until the first supply lands in the tank (remembered in settings)
@@ -326,6 +331,7 @@ fun LiveTankScreen(
     val showSupplyHint = settings.loaded && !settings.supplyHintSeen && !supplyHintDone
     BackHandler(enabled = supplies) { supplies = false }
     BackHandler(enabled = carry != null) { carry = null; supplies = true }
+    BackHandler(enabled = bagCarry != null) { bagCarry = null; open = LiveCategory.LIFE }
     // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
     var heaterSet by rememberSaveable { mutableDoubleStateOf(HEATER_DEFAULT_C) }
     var heaterWorking by rememberSaveable { mutableStateOf(true) }
@@ -581,7 +587,9 @@ fun LiveTankScreen(
         onAddMany = { id, n, size ->
             tick()
             val card = stockCards.firstOrNull { it.speciesId == id }
-            cue(card?.let { LiveReactions.addLife(it, n) } ?: LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
+            // new animals come in a shop bag: it goes in the keeper's hand, to be dragged onto the tank
+            if (card != null) { open = null; bagCarry = BagCarry(card, n, size) }
+            else cue(LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
         },
         onAddAiptasia = {
             tick()
@@ -794,6 +802,12 @@ fun LiveTankScreen(
         }
     }
     val onCarryBack: (SupplyItem) -> Unit = { carry = null; tick(); supplies = true }
+    val onBagDrop: (BagCarry, Float) -> Unit = { b, gx ->
+        bagCarry = null
+        tick()
+        vm.floatBag(b.card.speciesId, b.count, b.size, gx)
+        echo(LiveReactions.bagIn(b.card, b.count, gx))
+    }
     val onCarryCancel: () -> Unit = { carry = null; tick() }
     val gauges = GaugeReadings(
         tempC = hud.water.tempC,
@@ -823,7 +837,7 @@ fun LiveTankScreen(
         val besideBar = landscape && maxWidth >= BottomBarMaxWidth + (s.railWidth + 32.dp) * 2
         val menuBottom = if (besideBar) navInset + 8.dp else NavClearance + navInset
         val following = followId != null && stats != null && !cleaning
-        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && !subUi.on
+        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && bagCarry == null && !subUi.on
         // what the HUD keeps clear of: the rail on the left (landscape) or the dock above the bar (portrait)
         val hudStart = if (landscape && menuUp) s.railWidth + 4.dp else 0.dp
         val hudBottom = when {
@@ -843,11 +857,11 @@ fun LiveTankScreen(
             onFlick = onFlick,
         )
         // speech bubbles over a few animals: same bounds as the tank view, draws only, touches go through
-        if (thoughtsOn && !micro && !supplies && carry == null && !cleaning && !subUi.on) {
+        if (thoughtsOn && !micro && !supplies && carry == null && bagCarry == null && !cleaning && !subUi.on) {
             ThoughtBubbleLayer(vm.snapshots, projection, Modifier.fillMaxSize())
         }
         TankGaugeLayer(
-            visible = !chromeHidden && !micro && !supplies && carry == null && !cleaning && !subUi.on,
+            visible = !chromeHidden && !micro && !supplies && carry == null && bagCarry == null && !cleaning && !subUi.on,
             projection = projection,
             r = gauges,
             onDial = if (sandbox) ({ g: TankGauge -> tick(); dial = g }) else null,
@@ -879,7 +893,7 @@ fun LiveTankScreen(
             hidden = chromeHidden || micro || (supplies && landscape) || subUi.on,
             hermie = hermie, hermieOn = hermieOn, onHermieOff = { hermieOn = false },
             happy = happy, meterOn = meterOn, onMeterOff = { meterOn = false },
-            showTips = showTips && open == null && !supplies && carry == null, onDismissTips = dismissTips,
+            showTips = showTips && open == null && !supplies && carry == null && bagCarry == null, onDismissTips = dismissTips,
             start = hudStart, bottom = hudBottom,
         )
         AnimatedVisibility(
@@ -934,6 +948,17 @@ fun LiveTankScreen(
         )
         carry?.let { item ->
             SupplyCarryLayer(item, projection, onCarryDrop, onCarryBack, onCarryCancel, bottomClearance = NavClearance + navInset)
+        }
+        // floating acclimation bags: a timer over each, and Hurry up (fast-forward until they open)
+        if (sandbox && hud.bags.isNotEmpty() && bagCarry == null && !micro && !supplies && !subUi.on) {
+            BagTimerLayer(
+                vm.snapshots, projection, hud.bags, hud.bagHurry,
+                onHurry = { on -> tick(); vm.hurryBags(on); echo(LiveReactions.hurryBags(on)) },
+                bottomClearance = hudBottom,
+            )
+        }
+        bagCarry?.let { b ->
+            BagCarryLayer(b, projection, onBagDrop, { bagCarry = null; tick(); open = LiveCategory.LIFE }, bottomClearance = NavClearance + navInset)
         }
         // the only control left while everything is hidden
         AnimatedVisibility(

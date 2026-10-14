@@ -81,6 +81,18 @@ sealed class Command {
     data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE) : Command()
 
     /**
+     * Sandbox "Add life" the way a keeper does it: [count] of [speciesId] arrive in sealed bags dropped onto the water
+     * at tank x [x] (and front-to-back [z], null = the middle). They float for 30 sim minutes, then tip and the
+     * animals come out ([AcclimationBags]).
+     */
+    data class FloatBag(
+        val speciesId: String, val count: Int, val x: Double, val z: Double? = null,
+        val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE,
+    ) : Command()
+    /** Fast-forward while bags float ([on]) or back to the chosen speed; [openNow] tips every floating bag at once. */
+    data class HurryBags(val on: Boolean, val openNow: Boolean = false) : Command()
+
+    /**
      * The owner slides the Flipper magnet scraper over [pane] from (x0, y0) to (x1, y1), in cm along the pane (x from
      * the tank's left end, y from the tank floor); the [widthCm] × [heightCm] pad clears the film it sweeps
      * ([AlgaeModel.scrapeGlass]). Allowed in Reality too: it is what the owner does to the real glass.
@@ -249,6 +261,8 @@ data class OrganismPose(
      * ([ShrimpLimbs]: stride phase, stepping, rock / claw-display signal, grooming).
      */
     val limbs: FloatArray = NO_LIMBS,
+    /** Still in an acclimation bag ([AcclimationBags]): drawn, but not pickable and not yet in the tank. */
+    val bagged: Boolean = false,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
@@ -352,6 +366,9 @@ data class SimSnapshot(
     val nori: NoriPose? = null,
     /** Live touch puffs in the water, [com.reeflive.core.geom.FlowGust.STRIDE] floats each (coral sway, burst specks). */
     val gusts: FloatArray = FloatArray(0),
+    /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
+    val bags: List<BagPose> = emptyList(),
+    val bagHurry: Boolean = false,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
