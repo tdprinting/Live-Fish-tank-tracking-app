@@ -156,6 +156,9 @@ class Organism(
     var up = Vec3.Y
     /** The fish a cleaner shrimp is standing on while it cleans it (its legs grip the body, core ShrimpLimbs). */
     var ridingOn: Organism? = null
+    /** Where this grazer's last trail mark on the front glass is (pane cm; NaN = not on the pane), [GlassTrails]. */
+    var trailX = Double.NaN
+    var trailY = Double.NaN
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
     /**
      * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
