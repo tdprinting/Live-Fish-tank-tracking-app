@@ -734,7 +734,18 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             val b = planBurrow(owner, x, z, dx, dz, bodyH, maxLen, false) ?: continue
             if (b.lengthCm >= minLen) cands += b
         }
-        cands.sortByDescending { it.lengthCm }
+        // cheapest to open first, then longest: a site where the rock foot sits deep in the sand needs centimetres of sand
+        // moved before the body fits, and its pit slumps back in about as fast as one goby carries it out
+        fun need(b: Burrow): Double {
+            var sum = 0.0; var n = 0; var t = 0.0
+            while (t <= b.lengthCm) {
+                val g = gapAt(b.x(t), b.z(t))
+                if (g.isFinite()) { sum += max(0.0, bodyH - g); n++ }
+                t += REACH_STEP
+            }
+            return if (n == 0) 0.0 else sum / n
+        }
+        cands.sortBy { need(it) - 0.05 * it.lengthCm }
         val out = ArrayList<Burrow>()
         for (b in cands) {
             if (out.size >= count) break

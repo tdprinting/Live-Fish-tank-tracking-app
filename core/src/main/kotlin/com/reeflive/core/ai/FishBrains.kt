@@ -112,8 +112,9 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 wiggleUntil = c.t + c.rng.range(2.0, 4.0)
                 wiggleAt = c.safe(h + Vec3(c.rng.range(-2.0, 2.0), if (flatHost) FLAT_LO else 2.0, c.rng.range(-1.5, 1.0)), 1.0)
             }
-            // back from a cleaner visit or a chase across the tank: home over the rock, not into it
-            val away = c.o.pos.distanceTo(h) > 4 * L
+            // back from a cleaner visit or a chase across the tank: home over the rock, not into it (also from closer
+            // than 4 BL when rock stands between it and the host: a straight seek pinned it behind the rock for minutes)
+            val away = c.o.pos.distanceTo(h) > 4 * L || c.o.pos.distanceTo(h) > 1.5 * L && !c.rock.sdf.segmentClear(c.o.pos, spot, 0.5)
             if (away) {
                 out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = L)
                 out.waddleAmp = 0.3; out.waddleHz = 1.3
@@ -1447,8 +1448,14 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     fun perchOn(p: Vec3, n: Vec3): Rest {
-        val h = Vec3.Y.rejectFrom(n).let { if (it.length() < 0.2) Vec3.X.rejectFrom(n) else it }.normalized(Vec3.X)
-        return Rest(p + n * (0.5 * o.species.depthRatio * o.lengthCm + 0.3), h, n, posture = 1)
+        var h = Vec3.Y.rejectFrom(n).let { if (it.length() < 0.2) Vec3.X.rejectFrom(n) else it }.normalized(Vec3.X)
+        val at = p + n * (0.5 * o.species.depthRatio * o.lengthCm + 0.3)
+        // head-up low on a face would hang the body down into the sand (SandBed.surfaceY): lie along the face instead
+        if (at.y - o.lengthCm * h.y < c.sim.sand.surfaceY(at.x, at.z) + 0.5) {
+            val side = Vec3.Y.cross(n).let { if ((it dot o.heading) < 0) it * -1.0 else it }
+            if (side.length() > 0.2) h = side.normalized(h)
+        }
+        return Rest(at, h, n, posture = 1)
     }
 
     /**

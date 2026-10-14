@@ -119,6 +119,13 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     /** Open sand within reach of [near]: away from rock, not hard against the glass. */
+    /**
+     * Open water straight up from the sand at (x, z): a spot under an overhang can only be reached through the rock
+     * (a wrasse pressed against a ledge all night, heading for sand it could not see from above).
+     */
+    private fun openAbove(r: com.reeflive.core.sim.RockData, x: Double, y: Double, z: Double): Boolean =
+        r.sdf.segmentClear(Vec3(x, y + 1.5, z), Vec3(x, min(y + 20.0, r.waterLevelCm - 2.0), z), 0.5)
+
     private fun findSleepSpot(c: Ctx, near: Vec3): Vec3 {
         val r = c.rock
         var best: Vec3? = null
@@ -128,7 +135,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val z = c.rng.range(6.0, r.widthCm - 5.0)
             val y = c.sim.sand.surfaceY(x, z)
             val clear = r.sdf.dist(Vec3(x, y + 1.5, z))
-            if (clear < 4.0) continue
+            if (clear < 4.0 || !openAbove(r, x, y, z)) continue
             // only where the sand is deep enough for the whole body under real cover (it lies along x, either way)
             if (!fitsAt(x, z, 1.0, 0.0) && !fitsAt(x, z, -1.0, 0.0)) continue
             val s = -0.05 * kotlin.math.abs(x - near.x) - 0.02 * kotlin.math.abs(z - near.z) + 0.02 * min(clear, 10.0)
@@ -140,7 +147,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
         while (z < r.widthCm - 4.0) {
             var x = 8.0
             while (x < r.lengthCm - 8.0) {
-                if (r.sdf.dist(Vec3(x, sand.surfaceY(x, z) + 1.5, z)) >= 4.0 && (fitsAt(x, z, 1.0, 0.0) || fitsAt(x, z, -1.0, 0.0))) {
+                if (r.sdf.dist(Vec3(x, sand.surfaceY(x, z) + 1.5, z)) >= 4.0 && openAbove(r, x, sand.surfaceY(x, z), z) && (fitsAt(x, z, 1.0, 0.0) || fitsAt(x, z, -1.0, 0.0))) {
                     val s = -0.05 * kotlin.math.abs(x - near.x) - 0.02 * kotlin.math.abs(z - near.z)
                     if (s > bs) { bs = s; best = Vec3(x, sand.surfaceY(x, z), z) }
                 }
@@ -272,7 +279,11 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 0 -> {
                     val above = Vec3(sleepSpot.x, sand.surfaceY(sleepSpot.x, sleepSpot.z) + 0.3 * o.lengthCm + 1.0, sleepSpot.z)
                     val urgent = c.t < hideUntil || newcomerHide(c)
-                    out.seek(if (o.pos.distanceTo(above) > 10) c.viaOpenWater(above) else above,
+                    // over the patch at its own height first, then straight down the open column above it ([openAbove])
+                    val over = Vec3(above.x, above.y + (o.pos.y - above.y).coerceIn(0.0, 16.0), above.z)
+                    val far = o.pos.withY(0.0).distanceTo(above.withY(0.0)) > 3.0
+                    val goal = if (far) over else above
+                    out.seek(if (o.pos.distanceTo(goal) > 10) c.viaOpenWater(goal) else goal,
                         if (urgent) o.burstSpeed * 0.7 else o.cruiseSpeed, arrive = 1.5, urgency = if (urgent) 0.8 else 0.4)
                     out.hover = true
                     if (o.pos.distanceTo(above) >= 3.0 && timer > 40) {

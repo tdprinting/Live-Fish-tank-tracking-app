@@ -54,10 +54,17 @@ class SandBurrowTest {
         assertEquals(0.0, s.carriedCm3, 1e-9)
     }
 
+    /**
+     * A burrow site where the undug gap is lower than the body. In Tee's 48 x 18 x 16 in layout the burrow anchor sits
+     * in a natural cave a 10 cm goby already fits, so the test takes the best rock-edge site in the tank that needs digging.
+     */
+    private fun undugSite(s: SandBed): Burrow =
+        s.burrowSites("g", rock.lengthCm / 2, rock.widthCm / 2, 200.0, bodyH, 6.0, 12.0, 4.0, emptyList(), 400)
+            .first { s.reach(it, bodyH, bodyW) < it.lengthCm }
+
     @Test fun gobyCannotPassUnderRockUntilDug() {
         val s = bed()
-        val a = gobyAnchor()
-        val b = s.addBurrow(s.planBurrow("g", a.pos.x, a.pos.z, a.dir!!.x, a.dir!!.z, bodyH, 12.0, primary = true)!!)
+        val b = s.addBurrow(undugSite(s))
         val before = s.reach(b, bodyH, bodyW)
         assertTrue("burrow runs under the rock: ${b.lengthCm}", b.lengthCm >= 6.0)
         assertTrue("undug, the body does not fit all the way: reach $before of ${b.lengthCm}", before < b.lengthCm)
@@ -78,25 +85,31 @@ class SandBurrowTest {
         sim.sand.reset()   // a fresh bed: the burrows are planned again but nothing is dug
         val g = sim.org(BrainKind.ENGINEER_GOBY)
         val br = sim.agentOf(g)!!.brain as GobyBrain
-        val p = br.primary!!
+        val bs = br.burrows
         val h = br.bodyH; val w = br.bodyW
-        val reach0 = sim.sand.reach(p, h, w)
-        assertTrue("undug at the start: $reach0 < ${p.lengthCm}", reach0 < p.lengthCm)
+        val reach0 = bs.map { sim.sand.reach(it, h, w) }
+        // (Tee's burrow anchor is a natural cave the goby already fits; its other burrows have to be dug)
+        assertTrue("a burrow still to dig at the start: $reach0 of ${bs.map { it.lengthCm }}", bs.indices.any { reach0[it] < bs[it].lengthCm })
+        val v0 = sim.sand.sandVolumeCm3()
         var worst = -1e9
         var under = 0
         sim.advance(2400.0, behaviorDt = 0.1) {
             val q = g.pos
-            val s = (q.x - p.mouthX) * p.dirX + (q.z - p.mouthZ) * p.dirZ
-            val lat = abs(-(q.x - p.mouthX) * p.dirZ + (q.z - p.mouthZ) * p.dirX)
-            if (lat < 1.5 && s > 0.5) {
-                under++
-                worst = maxOf(worst, s - sim.sand.reach(p, h, w))
+            for (p in bs) {
+                val s = (q.x - p.mouthX) * p.dirX + (q.z - p.mouthZ) * p.dirZ
+                val lat = abs(-(q.x - p.mouthX) * p.dirZ + (q.z - p.mouthZ) * p.dirX)
+                if (lat < 1.5 && s > 0.5) {
+                    under++
+                    worst = maxOf(worst, s - sim.sand.reach(p, h, w))
+                }
             }
         }
-        assertTrue("goby went into its burrow ($under ticks)", under > 0)
+        val reach1 = bs.map { sim.sand.reach(it, h, w) }
+        assertTrue("goby went into a burrow ($under ticks)", under > 0)
         assertTrue("head beyond the dug face by $worst cm", worst <= 0.8)
-        assertTrue("it dug: ${br.sandEvents} trips, reach ${sim.sand.reach(p, h, w)} from $reach0", br.sandEvents > 0 && sim.sand.reach(p, h, w) > reach0)
+        assertTrue("it dug: ${br.sandEvents} trips, reach $reach1 from $reach0", br.sandEvents > 0 && bs.indices.any { reach1[it] > reach0[it] })
         assertTrue("spoil heaped at the entrance", sim.sand.height.any { it > 0.2f })
+        assertEquals("sand moved, not made", v0, sim.sand.sandVolumeCm3(), 0.05 * kotlin.math.abs(v0) + 0.5)
     }
 
     @Test fun noBodyCentreBelowTheSandUnlessBurrowing() {
@@ -137,6 +150,9 @@ class SandBurrowTest {
         val f = com.reeflive.core.sim.timelapse.TimelapseFork.of(sim)
         assertEquals(sim.sand.burrows.size, f.sand.burrows.size)
         assertEquals(sim.sand.sandVolumeCm3(), f.sand.sandVolumeCm3(), 1e-3)
-        assertTrue(f.sand.gridSnapshot().cavity.any { it > 0f })
+        // the dug state goes with it: the same burrows, bed and cavity shading
+        assertTrue(sim.sand.burrows.zip(f.sand.burrows).all { (a, b) -> a.mouthX == b.mouthX && a.mouthZ == b.mouthZ && a.lengthCm == b.lengthCm })
+        assertTrue(sim.sand.gridSnapshot().cavity.contentEquals(f.sand.gridSnapshot().cavity))
+        assertTrue(sim.sand.height.contentEquals(f.sand.height))
     }
 }
