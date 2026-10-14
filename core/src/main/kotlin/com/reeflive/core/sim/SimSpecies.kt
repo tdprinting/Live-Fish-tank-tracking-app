@@ -347,10 +347,16 @@ enum class CoralKind(val genera: List<String>, val demandDkhPerDay: Double, val 
     GSP(listOf("briareum", "pachyclavularia"), 0.006, 0.20),
     ZOA(listOf("zoanthus", "palythoa"), 0.003, 0.10),
     CLOVE(listOf("clavularia"), 0.002, 0.06),
-    MUSHROOM(listOf("discosoma", "rhodactis", "ricordea"), 0.001, 0.04),
+    // amplexidiscus: the big "elephant ear" corallimorph in Tee's photos 2026-10-13 (tee_tank_photos.md [P p05])
+    MUSHROOM(listOf("discosoma", "rhodactis", "ricordea", "amplexidiscus"), 0.001, 0.04),
     MACRO(listOf("gracilaria", "botryocladia", "chaetomorpha"), 0.0, 0.15),
     ORGAN_PIPE(listOf("tubipora"), 0.008, 0.08),
     AIPTASIA(listOf("aiptasia", "exaiptasia"), 0.0, 0.02),
+    // Leather corals (Alcyoniidae): toadstool, finger and lobed leathers seen in Tee's photos 2026-10-13
+    // (tee_tank_photos.md [P p04], [P p14]). Calcite sclerites only, so little carbonate uptake (est.).
+    // Biomass kept small: the water model was tuned on Tee's tank, which already held these leathers unseen,
+    // so they must not add a new day/night O2 and pH swing on top of it (tune).
+    LEATHER(listOf("sarcophyton", "sinularia", "lobophytum", "cladiella"), 0.002, 0.05),
     GENERIC(emptyList(), 0.01, 0.05);
 
     companion object {

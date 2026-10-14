@@ -77,6 +77,16 @@ void main() {
         if (uPart < 0.5) sqGlow = uChroma.z * (1.0 - smoothstep(0.1, 0.45, dorsal));
     }
 
+    // scale / shell micro-relief: offset rows of rounded scales in texture space (body only, Medium+), faded out
+    // once a scale is smaller than a pixel so it never sparkles
+    if (uQuality >= 0.5 && uChroma.w < 0.5) {   // squid skin (uChroma) is scaleless
+        vec2 g = vUv * vec2(70.0, 38.0);
+        g.x += 0.5 * mod(floor(g.y), 2.0);
+        vec2 f = fract(g) - vec2(0.5, 0.35);
+        float scale = 1.0 - smoothstep(0.15, 0.36, dot(f, f));
+        float vis = (1.0 - smoothstep(0.2, 0.5, length(fwidth(g)))) * step(uPart, 0.5);
+        N = bumpH(N, vWorld, scale * vis * 0.012);
+    }
     float ndv = max(dot(N, V), 0.0);
     float specScale = mix(1.0, 0.25, uNight) * (1.0 - 0.7 * uDead);
 #ifdef FIN
@@ -94,7 +104,10 @@ void main() {
     vec3 irid = toLinear(texture(uIridLut, vec2(ndv, 0.5)).rgb) * uIridStrength * (1.0 - uDesat);
     vec3 Lk;
     vec3 rad = fixtureLight(0, vWorld, Lk) + fixtureLight(1, vWorld, Lk);
-    col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0));
+    float shade = shadowAt(vWorld, N);
+    col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0)) * shade;
+    // wet skin / shell: a tight clear-coat highlight over the body's own roughness
+    col += wetCoat(N, V, vWorld, 0.14, 0.55 * specScale) * shade;
     // Fish were nearly invisible against the rock and the blue water. A soft camera-side fill lets the body
     // pattern read in the shade, and a stronger rim (light colour plus a little of the fish's own colour)
     // separates the silhouette from the background. Both follow the light, so night stays dark.

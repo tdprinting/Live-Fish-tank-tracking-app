@@ -29,6 +29,7 @@ void main() {
     } else {
         c = texture(uScene, vUv).rgb;
     }
-    if (uBloomStrength > 0.0) c += texture(uBloom, vUv).rgb * uBloomStrength;
+    // screen blend: highlights bloom into a soft halo instead of clipping to flat white
+    if (uBloomStrength > 0.0) c = 1.0 - (1.0 - c) * (1.0 - min(texture(uBloom, vUv).rgb * uBloomStrength, vec3(1.0)));
     fragColor = vec4(min(c, vec3(1.0)), 1.0);
 }

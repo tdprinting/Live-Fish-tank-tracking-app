@@ -1,0 +1,535 @@
+package com.reeflive.app.ui.live
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.reeflive.app.render.SupplyShelfLayout
+import com.reeflive.app.render.TankProjection
+import com.reeflive.app.ui.components.Glyph
+import com.reeflive.app.ui.components.ReefGlyph
+import com.reeflive.app.ui.components.ReefGlyphs
+import com.reeflive.app.ui.theme.ReefMotion
+import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.MaintenanceTask
+import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.roundToInt
+
+/*
+ * The supply shelf (UI_STYLE §10.6): a 3D rack beside the tank (render/SupplyShelf.kt, supply_shelf.glb) that holds
+ * one prop per thing the live menu used to list as tiles. The Supplies bubble swings the camera over to it; a drag
+ * looks along the rows, a tap picks a prop (it lifts and glows in 3D, its name pops up here), then the camera glides
+ * back to the tank and the action plays its usual in-tank picture (ActionFx) and Hermie line, the command going out
+ * when the picture reaches the water. Sandbox-only props stand dimmed in Watch mode and only explain themselves.
+ */
+
+/** Shelf rows, top to bottom, in the menu's candy tones. */
+enum class ShelfRow(val label: String, val glyph: ReefGlyph, val tone: Color) {
+    FEED("Feed", ReefGlyphs.feedTin, Candy.orange),
+    CARE("Care", ReefGlyphs.droplet, Candy.green),
+    TOOLS("Tools", ReefGlyphs.microscope, Candy.cyan),
+}
+
+/**
+ * One prop on the shelf. [id] is its node in supply_shelf.glb (`Supply_<id>`, tools/blender/supplies.py);
+ * [sandboxOnly] props work only in the pretend tank (as their tiles did in the old menu).
+ */
+enum class SupplyItem(
+    val id: String,
+    val row: ShelfRow,
+    private val title: String? = null,
+    val sandboxOnly: Boolean = false,
+    val food: FoodKind? = null,
+    private val note: String? = null,
+) {
+    FLAKE("flake", ShelfRow.FEED, food = FoodKind.FLAKE),
+    PELLET("pellet", ShelfRow.FEED, food = FoodKind.PELLET),
+    FLOATING_PELLET("floating_pellet", ShelfRow.FEED, food = FoodKind.FLOATING_PELLET),
+    ALGAE_WAFER("algae_wafer", ShelfRow.FEED, food = FoodKind.ALGAE_WAFER),
+    MYSIS("mysis", ShelfRow.FEED, food = FoodKind.MYSIS),
+    BRINE("brine", ShelfRow.FEED, food = FoodKind.BRINE),
+    KRILL("krill", ShelfRow.FEED, food = FoodKind.KRILL),
+    PRAWN("prawn", ShelfRow.FEED, food = FoodKind.PRAWN),
+    CYCLOPS("cyclops", ShelfRow.FEED, food = FoodKind.CYCLOPS),
+    NORI("nori", ShelfRow.FEED, food = FoodKind.NORI),
+    CORAL_FOOD("coral_food", ShelfRow.FEED, food = FoodKind.CORAL_FOOD),
+    PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON),
+    PODS("pods", ShelfRow.FEED, food = FoodKind.PODS),
+
+    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", true, note = "Swap 25 % for fresh salt water"),
+    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", true, note = "Swap 10 % of the water"),
+    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", true, note = "Alkalinity +1 for coral skeletons"),
+    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", true, note = "Calcium +20"),
+    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", true, note = "Magnesium +50"),
+    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", true, note = "Swap the dirty filter sock"),
+    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", true, note = "New carbon keeps the water clear"),
+    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", true, note = "Snip the algae garden"),
+    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", true, note = "Get rid of a pest anemone"),
+    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", true, note = "Everyone gets used to the water now"),
+
+    GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass"),
+    TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water"),
+    MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank"),
+    KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?"),
+    MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork"),
+    ;
+
+    val label: String get() = food?.label ?: title.orEmpty()
+
+    /** The short name on the prop's tag under it on the shelf (two lines at most on a small phone). */
+    val tag: String get() = when (this) {
+        PLANKTON -> "Phyto plankton"
+        MYSIS -> "Mysis"
+        PRAWN -> "Prawn"
+        NORI -> "Nori"
+        WATER_CHANGE -> "Big water change"
+        WATER_SMALL -> "Small water change"
+        DOSE_ALK -> "Alkalinity"
+        GLASS_CLEANER -> "Glass cleaner"
+        else -> label
+    }
+
+    /** Position along its row, left to right (the order of the props in supply_shelf.glb). */
+    val slot: Int get() = SupplyItem.entries.count { it.row == row && it.ordinal < ordinal }
+    val blurb: String get() = food?.blurb ?: note.orEmpty()
+
+    /** The picture the carried prop shows (foods draw their own [FoodPicture]). */
+    val glyph: ReefGlyph get() = when (this) {
+        WATER_CHANGE -> ReefGlyphs.bucket
+        WATER_SMALL -> ReefGlyphs.droplet
+        DOSE_ALK -> ReefGlyphs.shell
+        DOSE_CA -> ReefGlyphs.branch
+        DOSE_MG -> ReefGlyphs.rings
+        NEW_SOCK -> ReefGlyphs.sock
+        FRESH_CARBON -> ReefGlyphs.carbon
+        TRIM_ALGAE -> ReefGlyphs.refugium
+        ZAP_PEST -> ReefGlyphs.pestAnemone
+        SETTLE_IN -> ReefGlyphs.heart
+        GLASS_CLEANER -> ReefGlyphs.flipper
+        TEST_KIT -> ReefGlyphs.flask
+        MICROSCOPE -> ReefGlyphs.microscope
+        KNOCKER -> ReefGlyphs.touch
+        MOVE_ROCKS -> ReefGlyphs.rocks
+        else -> ReefGlyphs.feedTin
+    }
+
+    /** The prop stays on the shelf when picked (it shows something there) instead of taking you back to the tank. */
+    val staysOnShelf: Boolean get() = this == TEST_KIT
+
+    fun locked(sandbox: Boolean): Boolean = sandboxOnly && !sandbox
+
+    /**
+     * Sends this supply's action through the same paths as the old menu tiles, so it plays the same in-tank picture
+     * and Hermie line ([SandboxActions] cue them). The glass cleaner enters clean-glass mode like the old button.
+     */
+    fun use(actions: SandboxActions, tools: LiveTools) {
+        food?.let { actions.onFeed(it); return }
+        when (this) {
+            WATER_CHANGE -> actions.onWaterChange(0.25)
+            WATER_SMALL -> actions.onWaterChange(0.10)
+            DOSE_ALK -> actions.onDose("alk", 1.0)
+            DOSE_CA -> actions.onDose("ca", 20.0)
+            DOSE_MG -> actions.onDose("mg", 50.0)
+            NEW_SOCK -> actions.onMaintain(MaintenanceTask.CHANGE_SOCK)
+            FRESH_CARBON -> actions.onMaintain(MaintenanceTask.REPLACE_CARBON)
+            TRIM_ALGAE -> actions.onMaintain(MaintenanceTask.HARVEST_MACRO)
+            ZAP_PEST -> actions.onRemoveAiptasia()
+            SETTLE_IN -> actions.onAcclimateAll()
+            GLASS_CLEANER -> if (!tools.cleaning) tools.onCleanGlass()
+            MICROSCOPE -> tools.onMicroscope()
+            KNOCKER -> actions.onTapGlass()
+            MOVE_ROCKS -> actions.onRearrangeRock()
+            else -> Unit
+        }
+    }
+
+    companion object {
+        fun byId(id: String): SupplyItem? = entries.firstOrNull { it.id == id }
+
+        /** Prop ids drawn dimmed: the sandbox-only ones while watching the real tank. */
+        fun lockedIds(sandbox: Boolean): Set<String> = if (sandbox) emptySet() else entries.filter { it.sandboxOnly }.map { it.id }.toSet()
+    }
+}
+
+/** A prop the user just tapped: [at] is the view pixel above it (null if the camera could not project it). */
+@Immutable
+data class ShelfPick(val item: SupplyItem, val at: Offset?, val locked: Boolean, val serial: Int)
+
+/**
+ * The Supplies overlay, laid over the full-screen tank view while the camera looks at the shelf: a name tag under every
+ * prop and a header on every row (anchored to the shelf in 3D, so they follow the camera; tapping one picks it like
+ * tapping the prop), the picked prop's label above it, the first-use hint, the test-kit readouts, and the row jumps
+ * with "Back to tank" (a bottom bar in portrait, a column at the side in landscape so the rows stay in view).
+ * [bottomClearance] keeps it above the app's bottom bar.
+ */
+@Composable
+fun BoxScope.SupplyShelfOverlay(
+    visible: Boolean,
+    pick: ShelfPick?,
+    readouts: List<WaterReadout>,
+    showReadouts: Boolean,
+    projection: TankProjection,
+    locked: Set<String>,
+    showHint: Boolean,
+    landscape: Boolean,
+    onTag: (SupplyItem) -> Unit,
+    onRow: (ShelfRow) -> Unit,
+    onClose: () -> Unit,
+    bottomClearance: Dp,
+) {
+    val s = LiveTheme.style
+    val reduce = ReefTheme.reduceMotion
+    // name tags and row headers: they fade in once the camera has (nearly) arrived at the shelf
+    AnimatedVisibility(
+        visible = visible,
+        modifier = Modifier.fillMaxSize(),
+        enter = fadeIn(tween(if (reduce) 0 else ReefMotion.SLOW, delayMillis = if (reduce) 0 else TAG_DELAY_MS)),
+        exit = fadeOut(tween(if (reduce) 0 else ReefMotion.FAST)),
+    ) {
+        ShelfTagLayer(projection, locked, pick?.item, onTag, onRow, sideClear = if (landscape) SIDE_COLUMN else 0.dp)
+    }
+    // the picked prop's name, floating above it (same bounds as the GL view, so view pixels are layout pixels)
+    AnimatedVisibility(
+        visible = visible && pick != null,
+        modifier = Modifier.fillMaxSize(),
+        enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce, ReefMotion.SLOW), initialScale = 0.7f, transformOrigin = TransformOrigin(0.5f, 1f)),
+        exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)),
+    ) {
+        val p = pick ?: return@AnimatedVisibility
+        Box(Modifier.fillMaxSize()) {
+            ShelfLabel(
+                p,
+                Modifier.layout { m, c ->
+                    val placeable = m.measure(c.copy(minWidth = 0, minHeight = 0))
+                    val w = if (c.hasBoundedWidth) c.maxWidth else placeable.width
+                    val h = if (c.hasBoundedHeight) c.maxHeight else placeable.height
+                    layout(w, h) {
+                        val ax = p.at?.x ?: (w / 2f)
+                        val ay = p.at?.y ?: (h * 0.3f)
+                        val x = (ax - placeable.width / 2f).roundToInt().coerceIn(0, (w - placeable.width).coerceAtLeast(0))
+                        val y = (ay - placeable.height - 8.dp.toPx()).roundToInt().coerceIn(0, (h - placeable.height).coerceAtLeast(0))
+                        placeable.place(x, y)
+                    }
+                },
+            )
+        }
+    }
+    if (landscape) {
+        // landscape: a slim column at the side, so the short screen keeps the rows of the shelf in view
+        AnimatedVisibility(
+            visible = visible,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp, top = 12.dp, bottom = 12.dp),
+            enter = fadeIn(liveSpec(reduce)) + slideInHorizontally(liveSpec(reduce)) { it / 2 },
+            exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutHorizontally(liveSpec(reduce)) { it / 2 },
+        ) {
+            Column(
+                Modifier.width(SIDE_COLUMN - 12.dp).verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                LivePill("Back to tank", onClose, tone = Candy.white)
+                ShelfRow.entries.forEach { r ->
+                    LivePill(r.label, { onRow(r) }, tone = r.tone, leading = { Glyph(r.glyph, size = 18.dp, tint = s.onCandy) })
+                }
+            }
+        }
+        Column(
+            Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, end = SIDE_COLUMN).widthIn(max = 420.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ShelfHint(visible && showHint && pick == null)
+            AnimatedVisibility(visible && showReadouts && readouts.isNotEmpty(), enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce), initialScale = 0.9f), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST))) {
+                WaterStrip(readouts)
+            }
+        }
+        return
+    }
+    AnimatedVisibility(
+        visible = visible,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottomClearance).padding(horizontal = 12.dp),
+        enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 2 },
+        exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 2 },
+    ) {
+        Column(
+            Modifier.widthIn(max = 560.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ShelfHint(showHint && pick == null)
+            AnimatedVisibility(showReadouts && readouts.isNotEmpty(), enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce), initialScale = 0.9f), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST))) {
+                WaterStrip(readouts)
+            }
+            LivePanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Supply shelf", style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
+                        LiveHelp("Drag to look along the shelf. Tap a supply or its name tag to use it.")
+                    }
+                    LivePill("Back to tank", onClose, tone = Candy.white)
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ShelfRow.entries.forEach { r ->
+                        LivePill(r.label, { onRow(r) }, tone = r.tone, leading = { Glyph(r.glyph, size = 18.dp, tint = s.onCandy) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The first-use coach line ("tap, then drag"), until a supply has been carried into the tank once. */
+@Composable
+private fun ShelfHint(visible: Boolean) {
+    val s = LiveTheme.style
+    val reduce = ReefTheme.reduceMotion
+    AnimatedVisibility(visible, enter = fadeIn(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST))) {
+        LivePanel(
+            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            tint = Candy.yellow,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Glyph(ReefGlyphs.touch, size = 22.dp, tint = s.label)
+                Text("Tap a supply, then drag it to the tank", style = s.buttonText.copy(fontSize = 14.sp), color = s.label)
+            }
+        }
+    }
+}
+
+/** Width the landscape side column (row jumps, "Back to tank") keeps clear on the right. */
+private val SIDE_COLUMN = 148.dp
+/** The tags wait for most of the camera's glide to the shelf (Camera.SHELF_TRAVEL_S) before fading in. */
+private const val TAG_DELAY_MS = 650
+/** A tag hangs from the row's front lip: its top this far below the board top, and this far in front of the lip. */
+private const val TAG_DROP_CM = 0.7f
+private const val TAG_OUT_CM = 0.8f
+/** Row headers hang under the board above their row, this far below it (cm). */
+private const val HEADER_DROP_CM = 0.6f
+
+/**
+ * Every prop's name tag and every row's header, placed each frame where the shelf is on screen: a tag is as wide as
+ * its prop's slot on the board (so neighbours never overlap) and hangs from the board's front lip under the prop; a
+ * row header hangs under the board above its row at the row's left end, and stays on screen (sticky at the left)
+ * while the camera looks further along. Tapping a tag picks its prop; tapping a header looks at that row.
+ * [sideClear] is kept free on the right (the landscape side column).
+ */
+@Composable
+private fun ShelfTagLayer(
+    projection: TankProjection,
+    locked: Set<String>,
+    picked: SupplyItem?,
+    onTag: (SupplyItem) -> Unit,
+    onRow: (ShelfRow) -> Unit,
+    sideClear: Dp,
+) {
+    // a frame tick read only while placing, so the tags follow the camera without recomposing
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) { while (true) withFrameNanos { frame = it } }
+    // the feed row's slot width on screen (dp), sampled a few times a second: it picks the tag text size
+    val density = LocalDensity.current.density
+    var feedSlotDp by remember { mutableFloatStateOf(80f) }
+    LaunchedEffect(projection, density) {
+        val a = FloatArray(3)
+        val b = FloatArray(3)
+        val half = SupplyShelfLayout.slotWidth(SupplyShelfLayout.ROW_COUNT[0]) / 2f
+        while (true) {
+            val y = SupplyShelfLayout.ROW_Y[0]
+            if (projection.project(SupplyShelfLayout.START_X - half, y, SupplyShelfLayout.Z_FRONT, a) &&
+                projection.project(SupplyShelfLayout.START_X + half, y, SupplyShelfLayout.Z_FRONT, b)
+            ) {
+                val dp = abs(b[0] - a[0]) / density
+                if (abs(dp - feedSlotDp) > 3f) feedSlotDp = dp
+            }
+            delay(300)
+        }
+    }
+    val items = SupplyItem.entries
+    val rows = ShelfRow.entries
+    val a = remember { FloatArray(3) }
+    val b = remember { FloatArray(3) }
+    Layout(
+        content = {
+            items.forEach { item ->
+                val slotDp = feedSlotDp * SupplyShelfLayout.ROW_COUNT[0] / SupplyShelfLayout.ROW_COUNT[item.row.ordinal]
+                ShelfTag(item, item.id in locked, item == picked, small = slotDp < 70f) { onTag(item) }
+            }
+            rows.forEach { r -> RowHeader(r) { onRow(r) } }
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) { ms, c ->
+        frame
+        val w = c.maxWidth
+        val h = c.maxHeight
+        val gap = 4.dp.toPx()
+        val minW = 30.dp.roundToPx()
+        val maxW = 150.dp.roundToPx()
+        val left = 8.dp.roundToPx()
+        val right = w - sideClear.roundToPx()
+        val placed = arrayOfNulls<Placeable>(ms.size)
+        val xs = IntArray(ms.size)
+        val ys = IntArray(ms.size)
+        items.forEachIndexed { i, item ->
+            val r = item.row.ordinal
+            val n = SupplyShelfLayout.ROW_COUNT[r]
+            val cx = SupplyShelfLayout.propX(item.slot, n)
+            val half = SupplyShelfLayout.slotWidth(n) / 2f
+            val y = SupplyShelfLayout.ROW_Y[r] - TAG_DROP_CM
+            val z = SupplyShelfLayout.Z_FRONT + TAG_OUT_CM
+            if (projection.project(cx - half, y, z, a) && projection.project(cx + half, y, z, b)) {
+                val tw = ((b[0] - a[0]) - gap).roundToInt()
+                if (tw >= minW) {
+                    val cw = tw.coerceAtMost(maxW)
+                    val p = ms[i].measure(Constraints(minWidth = cw, maxWidth = cw))
+                    val x = ((a[0] + b[0]) / 2f - cw / 2f).roundToInt()
+                    val top = ((a[1] + b[1]) / 2f).roundToInt()
+                    if (x + cw > 0 && x < right && top < h && top + p.height > 0) { placed[i] = p; xs[i] = x; ys[i] = top }
+                }
+            }
+        }
+        rows.forEachIndexed { k, _ ->
+            val i = items.size + k
+            val y = (if (k == 0) SupplyShelfLayout.TOP_Y else SupplyShelfLayout.ROW_Y[k - 1] - SupplyShelfLayout.BOARD) - HEADER_DROP_CM
+            if (projection.project(SupplyShelfLayout.SLOT_X0, y, SupplyShelfLayout.Z_FRONT, a) &&
+                projection.project(SupplyShelfLayout.SLOT_X1, y, SupplyShelfLayout.Z_FRONT, b)
+            ) {
+                val p = ms[i].measure(Constraints())
+                val x = max(a[0].roundToInt(), left)
+                val top = a[1].roundToInt()
+                // sticky at the left edge, gone once the row's far end has passed it
+                if (x + p.width < b[0] && x < right && top < h && top + p.height > 0) { placed[i] = p; xs[i] = x; ys[i] = top }
+            }
+        }
+        layout(w, h) {
+            for (i in placed.indices) placed[i]?.place(xs[i], ys[i])
+        }
+    }
+}
+
+/** A prop's name tag: a candy price tag in its row's tone with the navy outline (faded for sandbox-only props). */
+@Composable
+private fun ShelfTag(item: SupplyItem, locked: Boolean, picked: Boolean, small: Boolean, onClick: () -> Unit) {
+    val s = LiveTheme.style
+    val shape = RoundedCornerShape(7.dp)
+    val fill = if (locked) Color(0xFFE9F3FF).copy(alpha = 0.72f) else item.row.tone
+    Box(
+        Modifier
+            .clip(shape)
+            .background(fill)
+            .border(if (picked) 3.dp else 2.dp, if (picked) Candy.yellow else s.outline, shape)
+            .clickable(onClickLabel = "Use ${item.label}", role = Role.Button, onClick = onClick)
+            .padding(horizontal = 3.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            item.tag,
+            style = s.buttonText.copy(fontSize = if (small) 10.sp else 12.sp, lineHeight = if (small) 11.sp else 14.sp, letterSpacing = 0.sp),
+            color = if (locked) s.onCandy.copy(alpha = 0.55f) else s.onCandy,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** A row's header chip (Feed / Care / Tools) in its candy tone. */
+@Composable
+private fun RowHeader(r: ShelfRow, onClick: () -> Unit) {
+    val s = LiveTheme.style
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier
+            .clip(shape)
+            .background(r.tone)
+            .border(2.dp, s.outline, shape)
+            .clickable(onClickLabel = "Look at ${r.label}", role = Role.Button, onClick = onClick)
+            .semantics { heading() }
+            .padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Glyph(r.glyph, size = 18.dp, tint = s.onCandy)
+        Text(r.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.onCandy)
+    }
+}
+
+/** The label that pops up over a picked prop: name, one line about it, and a lock note for sandbox-only props. */
+@Composable
+private fun ShelfLabel(p: ShelfPick, modifier: Modifier = Modifier) {
+    val s = LiveTheme.style
+    val item = p.item
+    LivePanel(
+        modifier.widthIn(max = 240.dp).semantics { liveRegion = LiveRegionMode.Polite },
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        tint = if (p.locked) Candy.purple else item.row.tone,
+    ) {
+        Text(item.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        val line = if (p.locked) "Pretend tank only: switch to Sandbox to use it" else item.blurb
+        if (line.isNotEmpty()) {
+            Text(line, style = s.buttonText.copy(fontSize = 12.sp, lineHeight = 15.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}

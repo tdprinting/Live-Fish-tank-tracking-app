@@ -37,7 +37,20 @@ void main() {
     vec3 N = normalize(vNormal);
     vec3 V = normalize(uCamPos.xyz - vWorld);
     if (dot(N, V) < 0.0) N = -N;
+    // tissue micro-relief (polyp pores, wrinkles) where the mesh is smooth, Medium+; fades with pixel footprint
+#ifndef CARD
+    if (uQuality >= 0.5) {
+        float fp = length(fwidth(vWorld));
+        float relief = (vnoise(vWorld * 2.6) - 0.5) * 0.09 * (1.0 - smoothstep(0.15, 0.6, fp));
+        if (uQuality >= 1.5) relief += (vnoise(vWorld * 7.0 + 3.0) - 0.5) * 0.03 * (1.0 - smoothstep(0.05, 0.25, fp));
+        N = bumpH(N, vWorld, relief);
+    }
+#endif
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.03, 1.0, 0.6);
+#ifndef CARD
+    // mucus sheen: soft corals and mushrooms read wet in the tank
+    col += wetCoat(N, V, vWorld, 0.3, 0.35) * shadowAt(vWorld, N);
+#endif
     float thickness = clamp(vColor.r, 0.0, 1.0);
     for (int i = 0; i < 2; i++) {
         vec3 L;

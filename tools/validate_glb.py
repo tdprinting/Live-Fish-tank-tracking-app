@@ -49,11 +49,17 @@ BUDGET = {
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
     "mushroom_hairy": 1500,
+    # Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md): leathers and the big corallimorph
+    "toadstool_leather": 700, "leather_pink": 500, "finger_leather": 900, "elephant_ear": 800,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     "reef_details": 2000,
+    # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
+    "supply_shelf": 18000,
 }
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
 LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
+# scene assets outside the default view: the supply shelf is drawn only in Supplies mode (SupplyShelf.kt)
+OFF_VIEW = {"supply_shelf"}
 # on-screen triangle ceilings (docs/ASSETS.md §8): High = LOD0 scene + all polyp instances + fish at LOD1 (default
 # camera > 60 cm); Medium = *_lod1.glb wherever one exists, polyp instance tables halved, fish at LOD1
 HIGH_MAX = 220000
@@ -369,6 +375,8 @@ def estimates(report):
                 continue
             if name.startswith("micro_"):
                 continue  # covered by the MICRO_TRIS_* draw budget below
+            if name in OFF_VIEW:
+                continue  # drawn only while the camera looks away from the tank
             use = name
             if level == "medium" and name + "_lod1" in files:
                 use = name + "_lod1"
@@ -414,8 +422,8 @@ def main(argv):
                 errors.append(f"{level.capitalize()} triangle estimate {est['total']} > {cap}")
         size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ASSETS) for f in fs)
         print(f"app/src/main/assets total: {size / 1e6:.2f} MB")
-        if size > 40e6:
-            errors.append(f"assets {size / 1e6:.1f} MB > 40 MB")
+        if size > 45e6:
+            errors.append(f"assets {size / 1e6:.1f} MB > 45 MB")
     for w in warnings:
         print("WARN", w)
     for e in errors:

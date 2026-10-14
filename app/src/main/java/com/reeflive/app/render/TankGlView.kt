@@ -61,6 +61,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         get() = renderer.projection
         set(v) { renderer.projection = v }
 
+    /** The supply shelf beside the tank (Supplies mode): open / close, row focus, locked props and taps. */
+    var shelf: SupplyShelfControl?
+        get() = renderer.shelf
+        set(v) { renderer.shelf = v }
+
     val stats: StateFlow<RenderStats> get() = renderer.stats
 
     @SuppressLint("ClickableViewAccessibility")

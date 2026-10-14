@@ -174,6 +174,12 @@ object DefaultScape {
             a("DUSTER_TUBE", "TUBE", 15.0, 3.0, 27.0, normal = v(0.0, 1.0, 0.0)),
             a("BRITTLE_HOME", "CAVE", 95.0, 4.0, 15.0),
             a("CAVE_DOTTYBACK", "CAVE", 42.0, 18.0, 6.0),
+            // ---- corals from Tee's photos 2026-10-13 (tee_tank_photos.md); positions as snapped by
+            // tools/blender/corals.py NEW_ANCHORS on rockscape.glb. Track B: please add to anchors.json ----
+            a("coral_toadstool_front", "CORAL", 52.0, 8.57, 27.09, normal = v(-0.12, 0.97, 0.21)),
+            a("coral_leather_pink_front", "CORAL", 46.58, 8.21, 27.63, normal = v(-0.58, 0.19, 0.79)),
+            a("coral_finger_leather", "CORAL", 78.3, 42.81, 9.3, normal = v(0.13, 0.79, 0.6)),
+            a("coral_elephant_ear", "CORAL", 37.0, 48.27, 18.0, normal = v(-0.04, 0.96, 0.28)),
         ))
     }
 

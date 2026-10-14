@@ -41,7 +41,16 @@ class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, p
     val limbPivots: FloatArray? = parts.firstNotNullOfOrNull { it.limbPivots }
 
     /** Bounds over all non-polyp parts in world space: min xyz, max xyz. */
-    val bounds: FloatArray = FloatArray(6).also { b ->
+    val bounds: FloatArray = boundsOf(parts)
+
+    /**
+     * Bounds over the non-polyp parts only. [bounds] also takes in each polyp prototype (local cm about the origin),
+     * which drags its min corner to ~0; the tree sway (Kenya) needs the real colony base and height, so it uses this.
+     * (Other corals keep [bounds] so their look is unchanged.)
+     */
+    val bodyBounds: FloatArray = boundsOf(parts.filter { it.kind != MaterialKind.POLYP })
+
+    private fun boundsOf(parts: List<DrawPart>): FloatArray = FloatArray(6).also { b ->
         b[0] = Float.MAX_VALUE; b[1] = Float.MAX_VALUE; b[2] = Float.MAX_VALUE
         b[3] = -Float.MAX_VALUE; b[4] = -Float.MAX_VALUE; b[5] = -Float.MAX_VALUE
         val tmp = FloatArray(3)
