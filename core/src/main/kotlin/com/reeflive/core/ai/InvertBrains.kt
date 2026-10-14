@@ -6,6 +6,7 @@ import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.BrittleArms
 import com.reeflive.core.sim.CrabLegs
 import com.reeflive.core.sim.FoodParticle
+import com.reeflive.core.sim.HermitLegs
 import com.reeflive.core.sim.Organism
 import com.reeflive.core.sim.SimEvent
 import kotlin.math.PI
@@ -95,24 +96,62 @@ class MoltHide(val b: SpeciesBrain, val spot: (Ctx) -> Rest) : Behavior("molt", 
     override fun exit(c: Ctx) { c.o.visible = true }
 }
 
-/** Shrimp tail-flip escape: 0.5 s backward burst, then crawl back to shelter. */
-class TailFlip(val b: SpeciesBrain, val home: (Ctx) -> Vec3) : Behavior("tailflip", "Tail-flip escape") {
+/**
+ * Shrimp tail-flip escape (caridoid escape): a 0.5 s backward burst of abdominal flexions facing the threat, then back
+ * to shelter on foot, or with a swim hop when the flip left it in open water or the walk stalls ([ShrimpNav]).
+ */
+class TailFlip(val b: SpeciesBrain, val nav: ShrimpNav? = null, val home: (Ctx) -> Rest) : Behavior("tailflip", "Tail-flip escape") {
     private var from = Vec3.ZERO
     override val committed: Boolean get() = elapsed < 6
     override fun score(c: Ctx): Double {
         b.threat?.let { return 0.96 }
         return if (b.startledRecently && b.startleMag > 0.3) 0.9 else 0.0
     }
-    override fun enter(c: Ctx) { from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9 }
+    override fun enter(c: Ctx) { from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset() }
     override fun update(c: Ctx, out: SteerIntent) {
         if (elapsed < 0.5) {
             out.fleeFrom = from; out.urgency = 1.0
             out.faceDir = (from - c.o.pos).normalized(c.o.heading)
             return
         }
-        out.crawl = true; out.target = home(c); out.speed = c.o.burstSpeed * 0.5; out.urgency = 0.8
-        out.surfaceOffset = surfaceOffset(c)
+        val h = home(c)
+        if (nav != null) {
+            if (nav.drive(c, out, h.pos, h.up, c.o.cruiseSpeed * 2.0) == ShrimpNav.Status.ARRIVED) out.rest(h, 3.0)
+        } else {
+            out.crawl = true; out.target = h.pos; out.speed = c.o.burstSpeed * 0.5; out.urgency = 0.8
+            out.surfaceOffset = surfaceOffset(c)
+        }
         if (elapsed > 6 && b.threat == null) finished = true
+    }
+}
+
+/**
+ * Shrimp food run (feeding time, research 12/04): walk to settled food or food lodged on the rock, or swim a short hop
+ * to grab a particle drifting within [swimRadius] cm (the skunk cleaner steals food out of the water column and from
+ * fishes' mouths; the banded shrimp lunges for nearby pieces) [M behaviour; radii DESIGN ESTIMATE]. Picks with the small
+ * chelae (mouth strokes) and goes home afterwards through the resting behaviour's navigation.
+ */
+class ShrimpForage(val b: SpeciesBrain, val nav: ShrimpNav, val radius: Double, val swimRadius: Double, label: String) : Behavior("scavenge", label) {
+    private var f: FoodParticle? = null
+    private var lastSeen = 0.0
+    private fun reachable(c: Ctx, p: FoodParticle): Boolean =
+        p.settled || c.rock.envDist(p.pos) < shrimpStance(c.o) + 2.0 || p.pos.distanceTo(c.o.pos) < swimRadius
+    override fun score(c: Ctx): Double {
+        if (c.o.hunger < 0.12 || c.o.molting) return 0.0
+        f = c.findFood(radius, los = false) { reachable(c, it) }
+        return if (f != null) (0.55 + 0.35 * c.o.hunger) else 0.0
+    }
+    override fun enter(c: Ctx) { lastSeen = c.t; nav.reset() }
+    override fun update(c: Ctx, out: SteerIntent) {
+        var ff = f
+        if (ff == null || ff.eaten) { ff = c.findFood(radius, los = false) { reachable(c, it) }; f = ff }
+        if (ff == null) { if (c.t - lastSeen > 3) finished = true; out.crawl = c.rock.envDist(c.o.pos) < 3; out.surfaceOffset = shrimpStance(c.o); return }
+        lastSeen = c.t
+        val reach = 1.5 + 0.3 * c.L
+        nav.drive(c, out, ff.pos, null, c.o.cruiseSpeed * (if (c.o.hunger > 0.4) 1.8 else 1.4), arrive = reach * 0.7,
+            swimCmS = ShrimpNav.HOP_CM_S * (if (b.o.brainKind == com.reeflive.core.sim.BrainKind.CLEANER_SHRIMP) 1.4 else 1.0))
+        c.o.mouth = max(c.o.mouth, 0.3)
+        if (c.o.pos.distanceTo(ff.pos) < reach) { c.bite(ff); f = null }
     }
 }
 
@@ -165,30 +204,77 @@ fun hangPose(c: Ctx, a: Anchor?, fallback: Vec3, inverted: Boolean): Rest {
     return Rest(p + n * surfaceOffset(c), h, n, posture = if (inverted) 2 else 1)
 }
 
+/**
+ * A shrimp's resting spot resolved on the real rock (the anchors file stores points that can sit in open water, as the
+ * cleaning station does, or just inside the rock, and normals from an older bake): [perchNear] around the anchor, the
+ * body laid along the surface ([bodyHeading]) at stance height. Null when no face passes [accept].
+ */
+fun shrimpPerch(c: Ctx, near: Vec3, radius: Double, posture: Int, taken: List<Vec3>, prefer: Vec3,
+                accept: (Vec3, Vec3) -> Boolean, score: (Vec3, Vec3) -> Double): Rest? {
+    val hit = c.rock.perchNear(near, radius, spacing = 3.5, taken = taken, accept = accept, score = score) ?: return null
+    val (q, n) = hit
+    val st = shrimpStance(c.o)
+    val h = c.rock.bodyHeading(q, n, c.L, st, prefer)
+    return Rest(q + n * st, h, n, posture)
+}
+
 // =====================================================================================
 // Banded coral shrimp (Stenopus hispidus): hangs under ledges, antennae, scavenges, molts
 // =====================================================================================
 class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
-        const val KEEP_APART_CM = 30.0
+        /**
+         * Keep-apart distance from a skunk cleaner's station, cm (06 §2.14, §5.6 #15). Was 30; Tee's tank keeps both
+         * shrimp with the banded one under the LEFT ledge (tee_tank_day P1, T96 0:09 [H]), about 25 cm above the
+         * station, so the rule only moves it when the skunk sits practically next door (DESIGN ESTIMATE).
+         */
+        const val KEEP_APART_CM = 20.0
         /** Intruder distance that raises the claw display, cm (DESIGN ESTIMATE). */
         const val DISPLAY_CM = 8.0
         /** Cleans per fish visit (SOURCED for its stations, research 12 NTOU thesis: 5.6 %; not a universal constant). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.SOURCED, "12 NTOU thesis") const val CLEAN_PER_VISIT = 0.056
         /** Parasite removal by day vs night (ANALOGY from grouper trials, Vaughan 2018; value DESIGN ESTIMATE). */
         const val DAY_PARASITE_FACTOR = 0.3
+        /** Night foray radius around the ledge, cm: territory 1–2 m wide in the wild (Wikipedia/ADW, <0.5 m moves) scaled to the tank [M][L]. */
+        const val FORAY_CM = 30.0
     }
     private val requested: Anchor? = c.rock.anchors[o.hostAnchor ?: "SHRIMP_LEDGE"] ?: c.rock.anchors["SHRIMP_LEDGE"]
     var ledge: Anchor? = requested; private set
     private var nextLedgeCheck = 0.0
-    fun hang(c: Ctx) = hangPose(c, ledge, Vec3(88.0, 35.0, 15.0), inverted = true)
+    val nav = ShrimpNav(o)
+    private var perch: Rest? = null
+    private var perchFor: String? = null
+
+    /**
+     * The hang spot: the underside of the ledge (normal pointing down, n.y < −0.45) nearest the anchor, in its shade,
+     * the body along the ceiling with the head toward the open front so the antennae reach out of the overhang
+     * (Tee's photos b_02/b_03: upside down under the ledge, claws and antennae out [H]). A mate takes the next spot.
+     */
+    fun hang(c: Ctx): Rest {
+        val a = ledge
+        val key = a?.name ?: "fallback"
+        if (perchFor != key) {
+            perchFor = key
+            val near = a?.pos ?: Vec3(88.0, 35.0, 15.0)
+            val taken = c.sim.organisms.filter { it !== o && it.brainKind == com.reeflive.core.sim.BrainKind.BANDED_SHRIMP }
+                .mapNotNull { (c.sim.agentOf(it)?.brain as? BandedShrimpBrain)?.perchPoint }
+            perch = shrimpPerch(c, near, 10.0, 2, taken, Vec3(0.2, 0.0, 1.0),
+                accept = { _, n -> n.y < -0.45 },
+                score = { q, n -> q.distanceTo(near) + 6.0 * (1 - c.rock.sdf.cover(q + n * 2.0)) + 3.0 * (1 + n.y) })
+        }
+        return perch ?: hangPose(c, a, Vec3(88.0, 35.0, 15.0), inverted = true)
+    }
+    /** The surface point under the hang spot (for a mate's spacing). */
+    val perchPoint: Vec3? get() = perch?.let { it.pos - (it.up ?: Vec3.Y) * shrimpStance(o) }
 
     /**
      * Banded and skunk shrimp keep apart (06 §2.14, §5.6 #15): with a skunk cleaner in the tank the
      * banded shrimp takes the ledge farthest from it when its own is within [KEEP_APART_CM].
      */
     fun chooseLedge(c: Ctx) {
-        val skunks = c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.CLEANER_SHRIMP }.map { it.homePos.takeIf { h -> h != Vec3.ZERO } ?: it.pos }
+        val skunks = c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.CLEANER_SHRIMP }.map {
+            (c.sim.agentOf(it)?.brain as? CleanerShrimpBrain)?.homeSpot ?: it.homePos.takeIf { h -> h != Vec3.ZERO } ?: it.pos
+        }
         if (skunks.isEmpty()) { ledge = requested; return }
         fun sep(a: Anchor) = skunks.minOf { it.distanceTo(a.pos) }
         val req = requested ?: return
@@ -205,7 +291,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         // cleaning is not an intruder (Clean drops the display).
         val intruder = threat != null || c.p.neighbors(o.pos, DISPLAY_CM + 4).any {
             it !== o && it.alive && it.pos.distanceTo(o.pos) < DISPLAY_CM &&
-                (it.brainKind == BrainKind.BANDED_SHRIMP || it.brainKind == BrainKind.CLEANER_SHRIMP || (it.isFish && it.vel.length() > 0.5 * it.cruiseSpeed))
+                (it.brainKind == BrainKind.BANDED_SHRIMP && it.id != o.mateId || it.brainKind == BrainKind.CLEANER_SHRIMP || (it.isFish && it.vel.length() > 0.5 * it.cruiseSpeed))
         }
         o.clawDisplay += ((if (intruder && !o.molting) 1.0 else 0.0) - o.clawDisplay) * kotlin.math.min(1.0, c.dt * 3)
     }
@@ -216,30 +302,55 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     init {
-        install(Hang(), Scavenge(this, 30.0, urgentAbove = 0.4, settledOnly = false), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this) { hang(it).pos })
+        install(Hang(), ShrimpForage(this, nav, 30.0, 8.0, "Scavenging"), NightForage(), Clean(), MoltHide(this) { hang(it) }, TailFlip(this, nav) { hang(it) })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = hang(c)
 
-    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "ledge") ledge?.pos ?: hang(c).pos else super.anchorPos(c, anchor)
+    override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "ledge") hang(c).pos else super.anchorPos(c, anchor)
 
     val groomClock = GroomClock()
 
+    /**
+     * Upside down under the ledge (Tee's tank [H]; "hangs upside-down … antennae waving", research 02). The antennae
+     * advertise: when a fish idles within [ADVERT_CM] the shrimp waves them faster and sways side to side (the
+     * "dance" near home, Wikipedia S. hispidus [M]; rate DESIGN ESTIMATE).
+     */
     inner class Hang : Behavior("hang", "Hanging under the ledge") {
-        override val label: String get() = if (groomClock.grooming) "Grooming its antennae" else "Hanging under the ledge"
+        override val label: String get() = when {
+            nav.swimming -> "Swimming back to its ledge"
+            !home -> "Walking back to its ledge"
+            groomClock.grooming -> "Grooming its antennae"
+            else -> "Hanging under the ledge"
+        }
+        private var home = true
         private var shuffle = Vec3.ZERO
         private var next = 0.0
         override fun score(c: Ctx) = if (c.p.night) 0.25 else 0.5
+        override fun enter(c: Ctx) { nav.reset() }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = hang(c)
-            if (c.o.pos.distanceTo(r.pos) > 3) {
-                out.crawl = true; out.target = r.pos; out.speed = c.o.cruiseSpeed * 1.5; out.surfaceOffset = surfaceOffset(c)
-                return
+            val n = r.up ?: Vec3.Y
+            if (c.o.pos.distanceTo(r.pos) > 2.5 || nav.swimming) {
+                home = nav.drive(c, out, r.pos, n, c.o.cruiseSpeed * 1.2, arrive = 1.0) == ShrimpNav.Status.ARRIVED
+                if (!home) return
             }
-            if (c.t > next) { next = c.t + c.rng.range(5.0, 10.0); shuffle = (c.rng.unitVector().rejectFrom(r.up!!)) * 0.8 }
+            home = true
+            if (c.t > next) {
+                next = c.t + c.rng.range(5.0, 10.0)
+                // a small step along the ceiling, kept at stance height on the real (curved) surface
+                val st = shrimpStance(c.o)
+                val foot = c.rock.sdf.project(r.pos - n * st + c.rng.unitVector().rejectFrom(n) * 0.8, 0.0)
+                shuffle = if (kotlin.math.abs(c.rock.sdf.dist(foot)) < 0.2) foot + c.rock.sdf.gradient(foot) * st - r.pos else Vec3.ZERO
+            }
             out.rest(r.copy(pos = r.pos + shuffle), 1.5)
             c.o.extension = 1.0
-            groomClock.tick(c, threat == null)
+            val client = nearestOther(c, ADVERT_CM) { it.isFish && it.vel.length() < 0.4 * it.cruiseSpeed + 0.3 }
+            if (client != null && threat == null) {
+                out.rollExtra = 0.07 * sin(2 * PI * 0.6 * c.t)
+                c.o.appendagePhase += c.dt * 2.5
+            }
+            groomClock.tick(c, threat == null && client == null)
         }
     }
 
@@ -253,7 +364,40 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         return 1 - 0.85 * com.reeflive.core.geom.smoothstep(0.08, 0.45, local)
     }
 
-    inner class NightForage : CrawlWander(this, { ledge?.pos ?: Vec3(88.0, 35.0, 15.0) }, 30.0, { c -> 0.45 * forayDrive(c) }, "Foraging")
+    /**
+     * Night foraging over its territory (research 12; ADW: never more than ~0.5 m unless disturbed): walks the rock
+     * within [FORAY_CM] of the ledge, over cave ceilings and overhang undersides as well as tops (it walks inverted
+     * as easily as upright), stops at each spot to pick the surface with the small chelae, then moves on.
+     */
+    inner class NightForage : Behavior("crawl", "Foraging") {
+        private var wp: Rest? = null
+        private var next = 0.0
+        private var dwellUntil = -1.0
+        override val label: String get() = if (c.t < dwellUntil) "Picking at the rock" else "Foraging"
+        override fun score(c: Ctx) = 0.45 * forayDrive(c)
+        override fun enter(c: Ctx) { next = 0.0; nav.reset() }
+        private fun pick(c: Ctx, around: Vec3, radius: Double) {
+            val hit = c.rockSurfacePoint(around, radius, minNormalY = -1.0)
+            wp = if (hit != null) Rest(hit.first + hit.second * shrimpStance(c.o), c.o.heading, hit.second, 0)
+            else Rest(sandSpot(c, (around.x - radius)..(around.x + radius), 8.0..(c.rock.widthCm - 3), shrimpStance(c.o)), c.o.heading, Vec3.Y, 0)
+            next = c.t + c.rng.range(30.0, 80.0)
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val home = hang(c).pos
+            if (wp == null || c.t > next) pick(c, home, FORAY_CM)
+            val w = wp!!
+            if (c.t < dwellUntil) {
+                out.crawl = true; out.target = null; out.surfaceOffset = shrimpStance(c.o)
+                c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.5 * c.t))
+                return
+            }
+            when (nav.drive(c, out, w.pos, w.up, c.o.cruiseSpeed, arrive = 1.2, canHop = c.rock.envDist(c.o.pos) > shrimpStance(c.o) + 1.5)) {
+                ShrimpNav.Status.ARRIVED -> { dwellUntil = c.t + c.rng.range(4.0, 15.0); next = dwellUntil + 1.0; wp = null; out.crawl = true; out.surfaceOffset = shrimpStance(c.o) }
+                ShrimpNav.Status.STALLED -> pick(c, c.o.pos, 12.0)
+                else -> {}
+            }
+        }
+    }
 
     /** Fish visits to the shrimp and how many it cleaned (research 12: 5.6 % of visits at Taiwanese stations). */
     class VisitStats { var visits = 0; var cleans = 0 }
@@ -282,7 +426,9 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val cl = client ?: run { finished = true; return }
-            out.rest(Rest(c.o.pos, (cl.pos - c.o.pos).normalized(c.o.heading), c.o.up, c.o.posture), 2.0)
+            // stays on its surface (it "usually stays in contact with the substrate", ADW) and turns to the client
+            val up = c.o.up
+            out.rest(Rest(c.o.pos, (cl.pos - c.o.pos).rejectFrom(up).normalized(c.o.heading), up, c.o.posture), 2.0)
             c.o.appendagePhase += c.dt * 6
             // picks with the small chelae of P1-P2 and passes food to the mouth; the big claws stay down
             c.o.mouth = 0.6 + 0.4 * sin(2 * PI * 1.5 * c.t)
@@ -299,19 +445,44 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     }
 }
 
+/** A slow fish within this distance of the hanging banded shrimp gets the antenna wave and sway, cm (DESIGN ESTIMATE). */
+private const val ADVERT_CM = 12.0
+
 // =====================================================================================
 // Skunk cleaner shrimp (Lysmata amboinensis): station, rocking advert, climbs onto clients
 // =====================================================================================
 class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     val anchor: Anchor? = c.rock.anchors["STATION_SHRIMP"]
-    fun sit(c: Ctx) = hangPose(c, anchor, Vec3(50.0, 18.0, 26.0), inverted = false).let { r ->
-        Rest(r.pos, Vec3.Y.rejectFrom(r.up!!).normalized(r.heading), r.up, 1)
+    private val anchorPos: Vec3 = anchor?.pos ?: Vec3(50.0, 18.0, 26.0)
+    val nav = ShrimpNav(o)
+    private var perch: Rest? = null
+
+    /**
+     * Its station: a rock face near the station anchor that looks out over open water toward the front (clients must
+     * reach it, and it is a "coral head or cave mouth", research video/invert_cleaner_shrimp) — not the anchor point
+     * itself, which sits in open water 4 cm off the rock. Other skunk cleaners take the next spot along (pairs and
+     * groups share a station, Wikipedia/Aquarium of the Pacific [M]). The body lies head-up/out along the face.
+     */
+    fun sit(c: Ctx): Rest {
+        perch?.let { return it }
+        val taken = c.sim.organisms.filter { it !== o && it.brainKind == BrainKind.CLEANER_SHRIMP }
+            .mapNotNull { (c.sim.agentOf(it)?.brain as? CleanerShrimpBrain)?.homeSpot }
+        val r = shrimpPerch(c, anchorPos, 14.0, 1, taken, Vec3(0.0, 0.6, 0.8),
+            accept = { _, n -> n.y > -0.3 && n.z > -0.35 },
+            score = { q, n -> q.distanceTo(anchorPos) + 4.0 * max(0.0, -n.z) + 2.0 * c.rock.sdf.cover(q + n * 3.0) })
+            ?: hangPose(c, anchor, Vec3(50.0, 18.0, 26.0), inverted = false).let { h -> Rest(h.pos, Vec3.Y.rejectFrom(h.up!!).normalized(h.heading), h.up, 1) }
+        perch = r
+        // clients pose in open water just in front of the shrimp
+        station.pos = c.safe(r.pos + (r.up ?: Vec3.Y) * 3.5, 2.0)
+        return r
     }
-    val station = CleaningStation(o, (anchor?.pos ?: Vec3(50.0, 18.0, 26.0)) + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
+    /** Surface point of its station (for spacing and the banded shrimp's keep-apart rule). */
+    val homeSpot: Vec3? get() = perch?.let { it.pos - (it.up ?: Vec3.Y) * shrimpStance(o) }
+    val station = CleaningStation(o, anchorPos + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
 
     init {
         c.p.stations += station
-        install(Station(), Climb(), Scavenge(this, 25.0, label = "Grabbing food", settledOnly = false), MoltHide(this) { sit(it) }, TailFlip(this) { sit(it).pos })
+        install(Station(), Climb(), ShrimpForage(this, nav, 25.0, 20.0, "Grabbing food"), MoltHide(this) { sit(it) }, TailFlip(this, nav) { sit(it) })
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = sit(c)
@@ -319,6 +490,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     /** Approaches are judged every tick, whatever the shrimp is doing (a fish arriving mid-clean still gets the signal). */
     override fun preTick(c: Ctx) {
         super.preTick(c)
+        if (perch == null) sit(c)
         approaches(c)
         val rocking = c.t < rockUntil
         c.o.legRock = if (rocking) 1.0 else max(0.0, c.o.legRock - c.dt * 2)
@@ -341,6 +513,11 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         /** Antenna-tap phase before mounting the client, seconds (sequence S; duration D). */
         const val TAP_MIN_S = 1.0
         const val TAP_MAX_S = 2.0
+        /** Side-to-side body sway of the station "dance" while a fish is about, Hz and roll (rad) (Aquarium of the Pacific [M]; numbers DESIGN ESTIMATE). */
+        const val SWAY_HZ = 0.8
+        const val SWAY_ROLL = 0.12
+        /** Swim speed onto a client, cm/s: Lysmata swims up to and onto the fish (DESIGN ESTIMATE). */
+        const val MOUNT_CM_S = 8.0
     }
 
     /** Leg-rock probability: predators 0.51, others 0.12 in full light (S:Caves19), up to ×1.6 in the dark. */
@@ -384,22 +561,36 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     val groomClock = GroomClock()
 
     inner class Station : Behavior("station", "Advertising at station") {
-        override val label: String get() = if (groomClock.grooming) "Grooming its antennae" else "Advertising at station"
+        override val label: String get() = when {
+            nav.swimming -> "Swimming back to its station"
+            !home -> "Walking back to its station"
+            groomClock.grooming -> "Grooming its antennae"
+            else -> "Advertising at station"
+        }
+        private var home = true
         override fun score(c: Ctx) = 0.5
+        override fun enter(c: Ctx) { nav.reset() }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = sit(c)
-            if (c.o.pos.distanceTo(r.pos) > 3) {
-                out.crawl = true; out.target = r.pos; out.speed = c.o.cruiseSpeed * 1.5; out.surfaceOffset = surfaceOffset(c)
-                return
+            if (c.o.pos.distanceTo(r.pos) > 2.0 || nav.swimming) {
+                home = nav.drive(c, out, r.pos, r.up, c.o.cruiseSpeed * 1.5, arrive = 0.8, swimCmS = ShrimpNav.HOP_CM_S * 1.4) == ShrimpNav.Status.ARRIVED
+                station.advertising = false
+                if (!home) return
             }
+            home = true
             out.rest(r, 2.0)
             val client = c.p.neighbors(station.pos, 30.0).any { it.isFish && it.alive && it.brainKind != BrainKind.EEL }
             station.advertising = client
             groomClock.tick(c, station.client == null && threat == null && c.p.neighbors(station.pos, APPROACH_CM).none { it.isFish && it.alive })
             val rocking = c.t < rockUntil
             // the signal is the white front legs rocking with the antennae lashing (research 17, Caves 2019), drawn by
-            // the renderer from legRock; the body itself only sways a little with them
-            if (rocking) out.rollExtra = 0.08 * sin(2 * PI * ROCK_HZ * c.t)
+            // the renderer from legRock; the body sways side to side with them, and more slowly whenever a fish is about
+            // (the "rocking dance", Aquarium of the Pacific [M])
+            out.rollExtra = when {
+                rocking -> 0.08 * sin(2 * PI * ROCK_HZ * c.t)
+                client -> SWAY_ROLL * sin(2 * PI * SWAY_HZ * c.t)
+                else -> 0.0
+            }
             // antennae sweep faster while a client is about (advertising)
             c.o.appendagePhase += c.dt * (if (rocking) 4.0 else if (client) 2.0 else 0.5)
         }
@@ -408,16 +599,19 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     /**
      * Antenna tap (1–2 s, beside the client), then climb onto it and pick along its body for 8–20 s. A client that
      * leaves during the tap is a withdrawal, not a cleaning. Works day and night (research 12, Vaughan 2018).
+     * The shrimp swims across to the client at [MOUNT_CM_S] (it does not jump), rides it, and swims home afterwards
+     * through [Station]'s navigation.
      */
     inner class Climb : Behavior("climb", "Cleaning a client") {
         private var dur = 12.0
         private var tap = 1.5
+        private var mounted = false
         override val committed: Boolean get() = elapsed < dur + tap
         override fun score(c: Ctx): Double {
             val cl = station.client ?: return 0.0
             return if (station.clientReady && cl.alive && cl.pos.distanceTo(c.o.pos) < 15) 0.9 else 0.0
         }
-        override fun enter(c: Ctx) { dur = c.rng.range(8.0, 20.0); tap = c.rng.range(TAP_MIN_S, TAP_MAX_S); antennaTaps++ }
+        override fun enter(c: Ctx) { dur = c.rng.range(8.0, 20.0); tap = c.rng.range(TAP_MIN_S, TAP_MAX_S); antennaTaps++; mounted = false }
         override fun update(c: Ctx, out: SteerIntent) {
             val cl = station.client
             if (cl == null || !cl.alive) { finished = true; station.release(); return }
@@ -430,14 +624,25 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             val k = ((elapsed - tap) / dur).coerceIn(0.0, 1.0)
-            val onBack = cl.pos + cl.heading * (cl.lengthCm * (0.3 - 0.6 * k)) + cl.up * (cl.lengthCm * cl.species.depthRatio * 0.5 + 0.6)
-            out.place(onBack, cl.heading, cl.up, 5.0)
+            val onBack = cl.pos + cl.heading * (cl.lengthCm * (0.3 - 0.6 * k)) + cl.up * (cl.lengthCm * cl.species.depthRatio * 0.5 + 0.8 * shrimpStance(c.o))
+            val gap = onBack - c.o.pos
+            if (!mounted && gap.length() > 0.6) {
+                // swim across head first, legs reaching for the fish
+                val step = gap.clampLength(MOUNT_CM_S * c.dt)
+                out.place(c.o.pos + step, gap.normalized(c.o.heading), Vec3.Y.lerp(cl.up, 0.5).normalized(Vec3.Y), 40.0)
+                cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
+                c.o.appendagePhase += c.dt * 6
+                return
+            }
+            mounted = true
+            out.place(onBack, cl.heading, cl.up, 12.0)
             out.posture = 1
             c.o.mouth = 0.5 + 0.5 * sin(2 * PI * 2 * c.t)
             c.o.appendagePhase += c.dt * 6
             cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
             if (elapsed > dur + tap) { if (c.p.night) nightCleans++; finishClean(c, cl, isShrimp = true); cl.poseUntil = c.t; station.release(); finished = true }
         }
+        override fun exit(c: Ctx) { nav.reset() }
     }
 }
 
@@ -449,6 +654,19 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this))
+    }
+
+    /** Walking legs, chelae, shell roll and retraction (sim/LimbRig.kt HermitLegs). */
+    val legs: HermitLegs? = o.limbRig as? HermitLegs
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        val l = legs ?: return
+        // claws work the surface while it stands picking; antennules flick nonstop while it follows a food scent
+        when (utility.current?.name) {
+            "pick" -> if (o.vel.length() < 0.5) l.pick = 1.0
+            "scavenge" -> { l.searching = true; if (o.vel.length() < 0.5) l.pick = 0.8 }
+        }
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
@@ -1196,15 +1414,15 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         private var arrived = false
         private var bestD = 1e9
         private var stuckT = 0.0
-        private var detour: Vec3? = null
-        private var detourUntil = 0.0
+        private var route: List<Vec3> = emptyList()
+        private var leap: Vec3? = null
         override val committed: Boolean get() = elapsed < MIN_HIDE_S || (!arrived && elapsed < 15)
         override fun score(c: Ctx): Double {
             if (threat != null || startledRecently && startleMag > 0.1) return 0.97
             val big = nearestOther(c, 6.0) { it.isFish && it.lengthCm > 0.8 * c.o.lengthCm && it.vel.length() > 3.0 }
             return if (big != null) 0.92 else 0.0
         }
-        override fun enter(c: Ctx) { startleAt = -1e9; darts++; arrived = false; bestD = 1e9; stuckT = 0.0; detour = null }
+        override fun enter(c: Ctx) { startleAt = -1e9; darts++; arrived = false; bestD = 1e9; stuckT = 0.0; route = emptyList(); leap = null }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
             val d = c.o.pos.distanceTo(r.pos)
@@ -1214,15 +1432,30 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                 if (elapsed > MIN_HIDE_S && threat == null) { finished = true; lastDartAt = c.t }
                 return
             }
-            if (d < bestD - 0.3) { bestD = d; stuckT = 0.0 } else stuckT += c.dt
-            if (stuckT > 0.8 && detour == null) {
-                val side = c.rng.unitVector().rejectFrom(c.o.up).normalized(c.o.heading)
-                detour = c.o.pos + (side + c.o.up * 0.6) * 6.0
-                detourUntil = c.t + 1.2; stuckT = 0.0; bestD = d
+            leap?.let { l ->
+                // scrambling straight across a gap or round a lip to the next waypoint (the surface walk cannot turn
+                // from one face onto another across open water)
+                val to = l - c.o.pos
+                val step = c.o.burstSpeed * c.dt
+                val dir = to.normalized(c.o.heading)
+                val up = c.o.up.lerp(c.rock.envNormal(l), 0.15).normalized(Vec3.Y)
+                out.place(if (to.length() <= step) l else c.o.pos + dir * step, dir.rejectFrom(up).normalized(c.o.heading), up, 40.0)
+                if (to.length() <= step + 0.05) { leap = null; stuckT = 0.0; bestD = d }
+                return
             }
-            val dt = detour
-            val tgt = if (dt != null && c.t < detourUntil) dt else { detour = null; r.pos }
-            scuttle(c, out, tgt, fast = true)
+            if (d < bestD - 0.3) { bestD = d; stuckT = 0.0 } else stuckT += c.dt
+            // the straight dash is blocked (a wall between it and the crevice): follow a walking route round it
+            // (re-planned from where it is if it stalls on the route too; waypoints are grid cells, so it passes one
+            // within ~2.5 cm while holding its stance off the rock)
+            if (stuckT > 0.8) {
+                val next = route.firstOrNull()
+                if (next != null && c.rock.sdf.segmentClear(c.o.pos, next, 0.3)) leap = next
+                else route = c.rock.surfaceRoute(c.o.pos, r.pos, clear = surfaceOffset(c)) ?: emptyList()
+                stuckT = 0.0; bestD = d
+                if (leap != null) return update(c, out)
+            }
+            while (route.size > 1 && (c.o.pos.distanceTo(route.first()) < 2.5 || c.o.pos.distanceTo(route[1]) < c.o.pos.distanceTo(route.first()))) route = route.drop(1)
+            scuttle(c, out, if (route.isNotEmpty()) route.first() else r.pos, fast = true)
         }
     }
 

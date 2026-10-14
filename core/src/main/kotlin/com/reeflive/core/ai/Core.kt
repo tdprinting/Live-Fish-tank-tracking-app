@@ -55,13 +55,18 @@ class SteerIntent {
     var splineOverride: List<Vec3>? = null
     var posture = 0
     var ignoreRock = false
+    /**
+     * Swimmers: largest |heading.y| this tick (null = the default 0.57, ~35°). Hoverers keep the body level and change
+     * depth with the fins (the pajama cardinal), instead of pointing nose-up or nose-down at every small move.
+     */
+    var maxPitch: Double? = null
 
     fun reset() {
         target = null; speed = 0.0; arriveRadius = 2.0; urgency = 0.0; faceDir = null; hover = false; wander = 0.0
         fleeFrom = null; allowGlass = false; separation = 1.0; waddleAmp = 0.0; waddleHz = 1.3; pitchBias = 0.0
         rollExtra = 0.0; ampMul = 1.0; pectoral = null; tailMul = 1.0; kinematic = false; kinPos = null; kinHeading = null
         kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; armGait = 0; splineOverride = null
-        posture = 0; ignoreRock = false
+        posture = 0; ignoreRock = false; maxPitch = null
     }
 
     fun seek(t: Vec3, speed: Double, arrive: Double = 2.0, urgency: Double = 0.3) {
@@ -158,6 +163,11 @@ abstract class Behavior(val name: String, label: String) {
     var enteredAt = 0.0
     /** While true the brain will not preempt this behavior except for score ≥ 0.95 (flee, dead). */
     open val committed: Boolean get() = false
+    /**
+     * False for a behavior that is idle almost always (a reaction to the user): it gets no utility noise, so adding it
+     * draws no rng and leaves every other random sequence exactly as it was.
+     */
+    open val noisy: Boolean get() = true
 
     abstract fun score(c: Ctx): Double
     open fun enter(c: Ctx) {}
@@ -182,7 +192,7 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         val k = c.dt / NOISE_TAU
         val amp = c.o.whim * kotlin.math.sqrt(2 * k)
         for ((i, b) in behaviors.withIndex()) {
-            noise[i] += -noise[i] * k + amp * c.rng.gaussian()
+            if (b.noisy) noise[i] += -noise[i] * k + amp * c.rng.gaussian()
             val raw = b.score(c)
             // stochastic utility: only nudges ordinary scores; urgent ones (≥ 0.95) and zeros stay exact
             val s = if (raw > 0.0 && raw < 0.95) (raw + noise[i]).coerceIn(0.01, 0.94) else raw

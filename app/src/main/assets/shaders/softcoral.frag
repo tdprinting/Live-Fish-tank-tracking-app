@@ -46,10 +46,13 @@ void main() {
         N = bumpH(N, vWorld, relief);
     }
 #endif
+    // view-angle terms (sheen, rim) use the smooth normal, so the micro-relief does not sparkle white up close
+    vec3 Ng = normalize(vNormal);
+    if (dot(Ng, V) < 0.0) Ng = -Ng;
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.03, 1.0, 0.6);
 #ifndef CARD
     // mucus sheen: soft corals and mushrooms read wet in the tank
-    col += wetCoat(N, V, vWorld, 0.3, 0.35) * shadowAt(vWorld, N);
+    col += wetCoat(Ng, V, vWorld, 0.3, 0.35) * shadowAt(vWorld, N);
 #endif
     float thickness = clamp(vColor.r, 0.0, 1.0);
     for (int i = 0; i < 2; i++) {
@@ -57,7 +60,7 @@ void main() {
         vec3 rad = fixtureLight(i, vWorld, L);
         col += rad * uSssColor * albedo * pow(clamp(dot(V, -L), 0.0, 1.0), 3.0) * thickness;
     }
-    float ndv = max(dot(N, V), 0.0);
+    float ndv = max(dot(Ng, V), 0.0);
     col += pow(1.0 - ndv, 2.5) * 0.35 * (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5 * albedo;
     // fluorescence: emissive scaled by blue light and extension (bleached tissue loses it)
     col += uEmissive * uBlueFraction * lightIntensity() * mix(0.4, 1.0, uExtension) * (1.0 - uBleach) * 1.5;

@@ -41,6 +41,7 @@ sealed class Command {
   data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String): Command()
   data class RemoveOrganism(val id: String): Command()
   data class TapGlass(val worldPoint: Vec3): Command()
+  data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0): Command()
   data class SetSpeed(val speed: Double): Command()
   data class ResetToReality(val water: WaterState, val livestock: List<LivestockSeed>): Command()
 }
@@ -319,7 +320,8 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - `Space` stress grows with size (sandbox "grow fish" slider shows the cramped behavior: more turning, shorter runs: waypoint spacing shrinks to 0.5 L when L > 15 cm).
 
 **Pajama cardinal (`CardinalBrain`)**
-- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1).
+- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1). Since 2026-10-14 it hovers level: the drift target changes every 8–20 s with vertical offsets ×0.3, speed 0.25 cruise, and `SteerIntent.maxPitch` = 0.17 rad caps the body pitch (it was sitting at the 0.6 rad default clamp). It faces into the flow, or else away from the rock toward the front glass (research fish_pajama_cardinalfish, 2026-10-14).
+- `NocturnalForage` and `CardinalFeed` take only open-water food (`openWaterFood`: not settled, above the sand, and not touching rock). It is a mid-water picker; before this it hung for hours over pellets lodged in rock it could not reach. It gives up on a particle after `Feed.STUCK_S` without progress.
 - Crepuscular activity: at dawn/dusk `Wander` radius grows to 40 cm and it hunts drifting particles (`Feed` on mysis preferred, dietMatch flakes 0.5).
 - Shy: observer tap → retreat behind the pillar for 30 s; never `GlassCurious`.
 - Schooling hooks (cohere/align) active if more cardinals are added in the sandbox.
@@ -385,7 +387,17 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 | CORAL_FOOD | 1/300 | 0.05 | 0 | 1.0 | powdered coral food 150–200 µm (Polyp Lab Reef-Roids particle size as published) stays suspended; dry powder |
 | CYCLOPS | 1/250 | 0.15 | 0 | 0.3 | Cyclop-eeze / frozen cyclops ~0.8 mm (Argent); frozen, so mostly water |
 
-Sink rates, float times and `lifeSeconds` (20 min default, 30 min suspended kinds, 3 h wafer) are design estimates tuned for the simulation's 20-minute detritus window, not measurements. Diet wiring (`SimSpecies.eats` / `dietMatch`): BRINE, KRILL and CYCLOPS fall under the MEATY / ZOOPLANKTON diet tags, so clowns, hawkfish, cardinals, wrasses and filter-feeders take them without sheet changes; FLOATING_PELLET follows PELLET; ALGAE_WAFER needs an algae / spirulina / nori diet (tangs, blennies, snails); CORAL_FOOD counts as plankton for filter-feeders and is otherwise coral-only. Preferences: hawkfish favour krill ×1.3, tangs / lawnmower blennies / astrea snails algae wafers ×1.2, cardinals / peeker blennies / feather dusters cyclops ×1.2 (design estimates reflecting hobby feeding guides).
+Sink rates, float times and `lifeSeconds` (20 min default, 30 min suspended kinds, 3 h wafer) are design estimates tuned for the simulation's 20-minute detritus window, not measurements. Diet wiring (`SimSpecies.eats` / `dietMatch`): BRINE, KRILL and CYCLOPS fall under the MEATY / ZOOPLANKTON diet tags, so clowns, hawkfish, cardinals, wrasses and filter-feeders take them without sheet changes; FLOATING_PELLET follows PELLET; ALGAE_WAFER needs an algae / spirulina / nori diet (tangs, blennies, snails); CORAL_FOOD counts as plankton for filter-feeders and is otherwise coral-only. Preferences: hawkfish favour krill ×1.3, tangs / lawnmower blennies / astrea snails algae wafers ×1.2, cardinals / peeker blennies / feather dusters cyclops ×1.2 (design estimates reflecting hobby feeding guides). Hermit crabs and brittle stars scavenge a prawn chunk at 0.8 (their sheets list no MEATY tag; Nassarius stay first at 1.5).
+
+**Waste per food** (supply shelf, docs/research/shelf_audit.md): `WaterSim.addFeed(dryGrams, po4Factor, docFactor)` scales the phosphate and DOC each food leaches against the tuned reference foods (flake, pellets, floating pellets, mysis, pods = 1, so the autofeed schedule is unchanged): coral food PO4 ×1.6 / DOC ×1.4, krill ×1.5 / ×1.2, prawn ×1.4 / ×1.5, brine ×1.2 / ×1.3, cyclops ×1.2 / ×1.2, algae wafer ×0.8 / ×0.8, phyto ×0.6 / ×1.5, nori ×0.5 / ×0.6 (design estimates: meaty frozen foods and coral powders carry more P and shed P-rich thaw juice; seaweed is P-poor). `FoodKind.properties` turns the table into the shelf's one-line "how it moves · who eats it · waste" text.
+
+### 4.6.1 Care props from the supply shelf (`SupplyChemistry.kt`)
+- **Water changes** use the prop's salt: `WaterState.CORAL_PRO_MIX` (big, 25 %: alk 12, Ca 445, Mg 1370, K 395 at SG 1.025, 25 °C; Red Sea's published ranges scaled to 1.025) lifts alk ≈ 0.9 dKH, a "noticeable" step for the corals' alk-shock rule (`CoralSim.ALK_STEP`); `INSTANT_OCEAN_MIX` (small, 10 %: alk 10.5, Ca 400, Mg 1280) barely moves the minerals. `SupplyPreview.afterWaterChange` predicts the result for the banner (same mixing as `WaterSim.waterChange`).
+- **Doses** stay `Command.Dose` (rate-limited); `DoseCheck.check` flags a dose for the UI: Ca × alk precipitating after it (`precipitationDkhPerHour`, Mg sets the threshold), more than 1 dKH / 25 ppm Ca / 100 ppm Mg in a sim day (`DoseCheck.Log`), or a level above 11 dKH / 470 / 1500 ppm.
+- **New sock / fresh carbon** (`WaterSim.maintain`): fit one when none runs (`filterSock` / `carbon` = true), then reset its age. Carbon now also adsorbs iodine (`CARBON_IODINE` 0.004 /h × efficiency, τ ≈ 10 days fresh; 01 §3.5 trace stripping), which matters for crustacean moults below 0.02 ppm.
+- **Trim** (`HARVEST_MACRO`): `SupplyPreview.canTrim` (macro or chaeto ≥ 0.05) gates the prop; `trimExportNo3` reports the nitrate locked in the third of the macro and half the chaeto cut (`MACRO_YIELD`).
+- **Test kit** (`TestKit.read`): Salifert KH in 0.2 dKH steps ±1 step, API calcium in 20 ppm drops ±1 drop, API NO3 (0/5/10/20/40/80/160) and PO4 (0/0.25/0.5/1/2/5/10) colour cards read as the nearer swatch more often (probability = how far toward the next one), so a reef's 0.04 PO4 reads 0. Read errors are design estimates; resolutions are the kits' instructions.
+- **Zap pest**: the UI counts Aiptasia in the snapshot first; none → no `RemoveAiptasia` command.
 
 ### 4.7 Lights and sleep
 `LightSchedule.intensity(t)` and channels from the app's schedule (default 03 §F5 ramp scaled to a 10-h photoperiod: moon 00:00–08:00 at 2%, dawn 08:00–09:30, peak 10:30–18:00, dusk 18:00–20:00, moon after). Fish react to the derivative too: lights-on within the last 2 min → DIURNAL fish `Flee`-lite (stress +0.05, dart 1 s) then resume; lights-off → within 10 min diurnal fish go to sleep anchors; nocturnal activate. Tap-glass at night startles more (×1.5).
@@ -417,6 +429,8 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 
 ### 5.6 Glass tap
 `TapGlass(point)`: every fish within 30 cm gets `startle = skittishness × (1 − dist/30)`; `Flee` if startle > 0.35 else a flinch (0.3 s burst away 1 L); curious species may approach after 5 s.
+
+`TouchTank(point, surface, strength)` is the gentle single-finger tap (`TankTouch`, UI_STYLE §10.8). Surfaces GLASS / SAND / ROCK / CORAL (a rock tap within 5 cm of a colony). Per animal `TankTouch.reaction` picks INVESTIGATE (food-conditioned bold fish, glass, ≤ 50 cm, day), AVOID (shy fish, ≤ 28 cm), PEEK (blennies), FREEZE (shrimp, sally crab), CHECK (diamond goby, nassarius on sand), DUCK (hermits, dusters; crustaceans, blennies and hawkfish on rock: the species' own startle at 0.4–0.7) or NONE; strength falls off linearly with distance. The shared `TouchReact` behaviour (score 0.75–0.9, no utility noise and no rng until a tap, so it changes no other sequence) plays it for a few seconds. Polyp corals (GSP, zoa, clove) within 12 cm of a rock / coral tap get `disturb` 0.6 (0.8 on the tapped colony). Habituation per animal: +0.22 per answered tap, decays with τ 20 min, ignored at ≥ 0.75; a feed clears it. Three taps within 4 s (× speed) and 10 cm escalate to `TapGlass`.
 
 ---
 
@@ -466,8 +480,8 @@ Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a
 | **Lawnmower blenny** | RockGraze (perch on rock and rasp 5–20 s, hop 5–15 cm, stays within 20 cm of `HOLE_LAWNMOWER`), InHole (night), BenthicFeed, BlennyRival (one blenny per tank, 04 §15) |
 | **Tailspot blenny** | InHole/Peek at `HOLE_BLENNY` (eye swivel), PlanktonDash (darts up for drifting food or plankton every 30–90 s), PerchNearHole (tail curled), Graze ×0.4, BlennyRival |
 | **Dottyback** | CaveDart (short rock-hugging darts around `CAVE_DOTTYBACK`, pauses in cover), Territorial (moderate to blennies, low to the cardinal, none to shrimp — 04 §13), Feed, Sleep in cave |
-| Banded shrimp | Hang (inverted under `SHRIMP_LEDGE`, leg shuffles, antenna phase), Scavenge, NightForage, cosmetic Clean, MoltHide, TailFlip |
-| **Skunk cleaner shrimp** | Station at `STATION_SHRIMP` (rocks side to side when clients are near), Climb (rides on the posing client 8–20 s), Scavenge, MoltHide (station closed while molting), TailFlip |
+| Banded shrimp | Hang (inverted under the left ledge, at a perch found on the SDF at run time; leg shuffles; sways at a passing fish), ShrimpForage, NightForage (walks rock tops, walls and ceilings within 30 cm), cosmetic Clean, MoltHide, TailFlip (then walks or swims home). See §19.5. |
+| **Skunk cleaner shrimp** | Station on a rock face near `STATION_SHRIMP` (perch found at run time; rocks side to side at 0.8 Hz when clients are within 30 cm), Climb (swims onto the posing client at ≤ 8 cm/s, rides it 8–20 s, swims home), ShrimpForage, MoltHide (station closed while molting), TailFlip. See §19.5. |
 | **Hermit crab** | CrawlWander, Pick (rasping rock), Scavenge, Retreat into shell (posture 6) |
 | **Brittle star** | HideUnder (`BRITTLE_HOME`, 1–3 arm tips out toward the cave mouth), Roam at night (arm rowing), RaceToFood (arms first, then the disc), ArmFeed (arm loops the item to the mouth), Retract (arms in, run home), autotomy when bitten. See §19. |
 | **Feather duster** | Filter (crown open, eats drifting particles within 8 cm plus a detritus baseline), Snap (retracts on shadow, tap, a fish touching the crown, or food dosed within 15 cm above; reopens over 10 s) |
@@ -1324,8 +1338,18 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
   - `Graze` scores hair algae, film and diatoms. It shuffles sideways between bites with `pick` = 1, and at night it grazes a glass spot 15 % of the time (`glassSpot`).
   - `CrabScavenge` (pick 0.6) and `CarcassPick` (pick 1).
   - `HideCrevice`: legs tucked, with occasional picking. It gets +0.35 for 48 h after a molt (`softShell`) and +0.4 for 60 s after a dart.
-  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It takes a detour when stuck, tucks on arrival and counts `darts`.
+  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It tucks on arrival and counts `darts`. When the straight dash stalls (2026-10-14), it plans a walking route with `RockData.surfaceRoute` (A* over 1.5 cm water cells near a surface; see §19.5). If it stalls on a waypoint it can see, it scrambles straight across to it. The old random side-step kept hitting the same wall.
   - `NightGrab` and the `crab_predation` sandbox toggle are unchanged.
+
+### 19.5 Hermit crab legs, chelae and shell (`HermitLegs`, research [hermit_crab_motion](research/hermit_crab_motion.md))
+
+- **Rig.** `LimbRig.forKind(HERMIT)` is a `HermitLegs`; `motionMode` 5. Every part of the model (shell, shield, eyestalks, limbs) carries its limb index in `COLOR_0.b`, and `fish.vert` `hermitLimb` poses it about `extras.limbPivots`.
+- **Legs** (k = 2 pair + (0 left, 1 right), pair 0 = P2). Forward walking in diagonal pairs: left P2 steps with right P3, half a cycle against the other two, with a 0.08-cycle lag from P2 to P3. Stride = 0.3 shell lengths, 0.8–3.5 Hz. The pose is (phase, fore-aft stroke rad, foot lift, withdrawal); the foot swings forward lifted in the first 40 % of the cycle and pushes back planted in the rest.
+- **Chelae 4/5** (pick phase, pick, walking support, withdrawal): alternate strokes to the mouth at `PICK_HZ` 1.2 Hz each while the brain's `pick` is set (`Pick` at its spot: 1; `Scavenge` once slowed: 0.8) or `mouth` is up.
+- **Shell 6**: rolls ±0.1 rad once per stride and bobs twice per stride while walking.
+- **Shield and eyestalks 7**: eyestalks scan out of step; the shield bobs with the stride. **Antennae 8** sweep (faster while `searching`), **antennules 9** flick at 2.5 Hz in 1–2.5 s bursts every 2–6 s, nonstop while following a scent.
+- **Withdrawal.** `retract` follows 1 − `Organism.extension` (Retreat sets 0): in at 12/s (≈ 0.15 s), out at 0.35/s. Eyestalks and antennae come out first, then the chelae, the walking legs last. In the shader every part but the shell shrinks toward `limbPivots[7]`, just inside the aperture; the left chela stays at the opening.
+- **Tests.** `ai/HermitLegsTest.kt`: diagonal pairs and shell roll; snaps in within 0.25 s and comes out eyes first; alternating claw strokes while picking in the sim.
 
 ### 19.4 Tests
 
@@ -1338,6 +1362,35 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - it retreats fast when disturbed and sheds an arm when bitten;
 - the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
 - the crab's legs step in an alternating tetrapod.
+
+### 19.5 Shrimp navigation and perches (`ai/ShrimpNav.kt`, 2026-10-14)
+
+A 24-hour diagnostic run of the owner's stock found three problems:
+- The banded shrimp never reached its ledge. The skunk's keep-apart rule (30 cm) sent it to the right ledge, and the surface walk stalled on a wall at x ≈ 69 for the whole day, right side up.
+- The skunk's `STATION_SHRIMP` anchor sits 4 cm off the rock. The shrimp paced the sand, climbed the front glass and teleported onto clients.
+- The baked anchor normals disagree with the SDF gradients.
+
+What changed:
+- **Perches are found at run time.** `RockData.perchNear` is a deterministic grid search of SDF surface points that have open water in front of them.
+  - Banded shrimp: an underside (normal y < −0.45) near the left ledge (owner photos b_02–b_04). The score is distance + 6·(1 − cover) + 3·(1 + n.y).
+  - Skunk: an upright or vertical face near the station that does not face the back glass.
+  - Animals of the same species keep 3.5 cm apart.
+  - The body is laid flat on the surface with `bodyHeading`.
+  - The banded keep-apart distance is 20 cm, and the check excludes its mate.
+- **`ShrimpNav`** wraps `Steering.crawl`. The shrimp walks at stance height (0.21 BL off the surface). If the walk makes no 0.5 cm of progress for 6 s, or if the shrimp or its goal is off every surface, it plans a pleopod swim hop. The hop lifts 2 cm off the surface and takes the shortest SDF-clear route: direct, over the rock at +4…32 cm, or along the front glass. It lands at stance height and rolls belly-to-surface over the last 4 cm. Hop speed is 6 cm/s, a design estimate. There is no general collision; only clear segments are checked against the SDF, so this stays compatible with a capsule body layer.
+- **Banded shrimp at night:** `NightForage` picks waypoints on rock of any orientation (ceilings included) within `FORAY_CM` = 30 cm and dwells 4–15 s picking at each one. At dawn it walks back and hangs inverted (posture 2).
+- **Skunk:** `Climb` swims to the client's back at `MOUNT_CM_S` = 8 cm/s instead of being placed there. After `TailFlip`, both species navigate home.
+- **Antenna snap:** `appendagePhase` wrapped at 1000 rad, a non-multiple of 2π, which made the antennae snap about every 9 minutes. It now wraps at `Organism.APPENDAGE_WRAP` = 2π·159, and `FishRig.lerpPhase` uses the same period.
+
+Tests: `ai/CritterAccuracyTest.kt` checks that:
+- the banded shrimp hangs inverted under the left ledge with the full stock;
+- it gets home from the old stall point;
+- it forages on foot, including inverted, within its territory;
+- the skunk sits on rock at its station, not the sand;
+- two skunks take separate spots;
+- the skunk swims onto a client at a bounded speed and back;
+- the cardinal hovers level and slow;
+- the wrap period is a whole number of turns.
 
 ## 20. Hummingbird bobtail squid, sandbox only (`ai/BobtailSquidBrain.kt`, `sim/SquidRig.kt`, research cephalopod_squid)
 

@@ -15,7 +15,7 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
@@ -23,7 +23,7 @@ uniform mat4 uModel;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
 // Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send one entry, uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
-// limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae.
+// limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae, mode 5 hermit crab.
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
@@ -155,6 +155,66 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
     local = P.xyz + off;
 }
 
+// Hermit crab (mode 5, core HermitLegs). Walking legs (k 0..3; uLimb = step phase, fore-aft stroke, foot lift,
+// withdrawal): forward walking in diagonal pairs, the foot swung forward lifted for the first 40 % of the cycle and
+// pushed back planted for the rest. Chelae (4 left, 5 right; pick phase, pick, walking support, withdrawal): dip to
+// the substrate and come back to the mouth, alternating. 6 = shell: rolls and bobs about its ground point with the
+// stride. 7 = shield and eyestalks (COLOR_0.g = 1: the stalks scan out of step). 8 antennae sweep, 9 antennules
+// flick. uLimb.w pulls every part but the shell toward uLimbPivot[7], just inside the aperture (the larger left
+// chela stays at the opening).
+void hermitLimb(int k, inout vec3 local, inout vec3 n) {
+    vec4 P = uLimbPivot[k];
+    vec4 A = uLimb[k];
+    vec3 off = local - P.xyz;
+    float t = clamp(aColor.r, 0.0, 1.0);
+    float side = local.z >= 0.0 ? 1.0 : -1.0;
+    if (k < 4) {
+        float ph = A.x;
+        float sw = 1.0 - step(0.4, ph);
+        float q = ph / 0.4;
+        float e = sw > 0.5 ? -cos(PI * q) : 1.0 - 2.0 * (ph - 0.4) / 0.6;
+        float yaw = A.y * e * (P.z >= 0.0 ? 1.0 : -1.0);
+        off = rotAxis(off, vec3(0.0, 1.0, 0.0), yaw);
+        n = rotAxis(n, vec3(0.0, 1.0, 0.0), yaw);
+        off.y += A.z * sw * sin(PI * q) * smoothstep(0.25, 1.0, t) * 0.22 * P.w;
+    } else if (k < 6) {
+        float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the substrate
+        float sd = k == 4 ? -1.0 : 1.0;
+        float down = A.y * (0.55 * w - 0.15) + 0.1 * A.z;
+        off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);
+        off.x -= 0.25 * P.w * A.y * (1.0 - w) * t;
+        off.z -= sd * 0.1 * P.w * A.y * (1.0 - w) * t;
+    } else if (k == 6) {
+        float roll = A.y * sin(2.0 * PI * A.x);
+        off = rotAxis(off, vec3(1.0, 0.0, 0.0), roll);
+        n = rotAxis(n, vec3(1.0, 0.0, 0.0), roll);
+        off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), A.z);
+    } else if (k == 7) {
+        off.y += A.z * 0.02 * P.w;
+        float a = A.y * 0.3 * sin(2.0 * PI * A.x + side * 1.7) * step(0.5, aColor.g);
+        off.z += t * a * P.w;
+        off.x -= t * abs(a) * 0.3 * P.w;
+    } else if (k == 8) {
+        float ph = 2.0 * PI * A.x + side * 1.3;
+        float h2 = t * t;
+        off.y += h2 * A.y * 0.18 * P.w * sin(ph - t * 3.0);
+        off.z += h2 * A.y * 0.14 * P.w * cos(0.7 * ph - t * 2.5) * side;
+        off.x += h2 * A.y * 0.08 * P.w * sin(0.5 * ph);
+    } else {
+        float f = pow(max(sin(2.0 * PI * A.x + side * 0.9), 0.0), 8.0);
+        off.y -= t * t * A.y * f * 0.3 * P.w;
+    }
+    vec3 v = P.xyz + off;
+    if (k != 6) {
+        vec3 c = uLimbPivot[7].xyz;
+        float s = k == 4 ? 0.6 : (k == 5 ? 0.45 : (k < 4 ? 0.25 : 0.2));
+        v = mix(v, c + (v - c) * s, A.w);
+    }
+    local = v;
+}
+
 // Bobtail squid (mode 4, core SquidRig): uLimb[0] fins (x wave phase, y stroke, z mantle contraction, w wrap),
 // uLimb[1] arms (x wave phase, y spread, z dorsal-pair raise, w tentacle strike). The ear fins (part 1, B = hinge)
 // beat in a wave running along the fin and wrap against the mantle in a jet; the mantle behind the collar narrows as
@@ -210,7 +270,10 @@ void main() {
     float mode = uMotion.w;
     if (uLimbOn > 0.5) {
         // limb-rigged crawler: rigid body at the organism, limbs posed from the sim (no spline skinning)
-        if (part > 2.5) {
+        if (mode > 4.5) {
+            // hermit: every part (shell, shield, eyes, limbs) carries its limb index
+            hermitLimb(int(floor(aColor.b * 9.0 + 0.5)), local, n);
+        } else if (part > 2.5) {
             int k = int(floor(aColor.b * 9.0 + 0.5));
             if (mode < 1.5) starArm(k, local, n); else crabLimb(k, local, n);
         } else if (part > 1.5) {

@@ -13,6 +13,7 @@ import com.reeflive.core.sim.AlgaeCover
 import com.reeflive.core.sim.CritterKind
 import com.reeflive.core.sim.CoralPose
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TouchSurface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.microedition.khronos.egl.EGLConfig
@@ -137,6 +138,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // A new context: every GL object from a previous one is gone.
         store.onContextLost(quality)
         Texture.resetCaps()
+        Gl.currentProgram = 0
         initGl()
         _stats.value = _stats.value.copy(glInfo = "${GLES30.glGetString(GLES30.GL_RENDERER)} / ${GLES30.glGetString(GLES30.GL_VERSION)}")
     }
@@ -459,7 +461,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.use()
         for (part in m.parts) {
             p.setMat4("uModel", part.node.world)
-            part.material.apply(p, w, alphaTestOverride = part.node.float("alphaTest") ?: 0.4f)
+            part.material.apply(p, w, alphaTestOverride = part.alphaTest ?: 0.4f)
             // full extension: the shader scales every vertex toward the model's base by uExtension, and this model
             // spans the whole tank (0.3 pulled tufts up to ~15 cm off the rock)
             coralUniforms(p, m, null, 1f)
@@ -535,7 +537,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant) ?: continue
                 val lod1 = ModelRegistry.lod1(path)
                 val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
-                fishUniforms(pf, r, m.rigid)
+                fishUniforms(pf, r, m.rigid, m.limbPivots)
                 for (part in m.parts) {
                     if (part.kind != MaterialKind.FISH_SKIN) continue
                     val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
@@ -556,7 +558,19 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     // ------------------------------------------------------------------ corals
 
+    private var coralsFor: SimSnapshot? = null
+    private var coralsLoaded = -1
+    private var coralsCache: List<Pair<GpuModel, CoralPose?>> = emptyList()
+
+    /** [buildCoralModels] for this snapshot, rebuilt only when the snapshot or the set of loaded models changes. */
     private fun coralModels(s: SimSnapshot?): List<Pair<GpuModel, CoralPose?>> {
+        if (s !== coralsFor || store.loadedCount != coralsLoaded || s == null) {
+            coralsCache = buildCoralModels(s); coralsFor = s; coralsLoaded = store.loadedCount
+        }
+        return coralsCache
+    }
+
+    private fun buildCoralModels(s: SimSnapshot?): List<Pair<GpuModel, CoralPose?>> {
         val out = ArrayList<Pair<GpuModel, CoralPose?>>()
         if (s == null || s.organisms.firstOrNull()?.id?.startsWith("demo_") == true && s.corals.isEmpty()) {
             for (path in DEMO_CORALS) store.model(path)?.let { out += it to null }
@@ -600,10 +614,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         return dx * dx + dy * dy + dz * dz < COPY_RADIUS_CM * COPY_RADIUS_CM
     }
 
+    private val flowScratch = FloatArray(3)
+
     private fun coralUniforms(p: ShaderProgram, m: GpuModel, c: CoralPose?, defaultExtension: Float = 1f) {
         // branching trees (Kenya, extras.swayMode = 1): smaller, measured sway in treeSway (common.glsl) + fish ripple,
         // about the real colony base (bodyBounds: m.bounds also spans the polyp prototype at the origin)
-        val tree = isTree(m)
+        val tree = m.isTree
         val b = if (tree) m.bodyBounds else m.bounds
         val height = (b[4] - b[1]).coerceAtLeast(1f)
         val ox = c?.offsetX ?: 0f; val oy = c?.offsetY ?: 0f; val oz = c?.offsetZ ?: 0f
@@ -616,7 +632,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uBleach", c?.bleach ?: 0f)
         p.set1f("uBrown", c?.brown ?: 0f)
         val flow = c?.flow ?: 8f
-        val v = FloatArray(3)
+        val v = flowScratch
         ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f + ox, b[4] + oy, (b[2] + b[5]) * 0.5f + oz, 0f, v)
         val l = sqrt(v[0] * v[0] + v[2] * v[2])
         if (l > 1e-3f) p.set3f("uSwayDir", v[0] / l, 0f, v[2] / l) else p.set3f("uSwayDir", 0.95f, 0f, 0.3f)
@@ -627,8 +643,6 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (tree) setWake(p, b, ox, oy, oz) else p.set4f("uWake", 0f, 0f, 0f, 0f)
         p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
     }
-
-    private fun isTree(m: GpuModel): Boolean = m.parts.any { it.node.float("swayMode") == 1f }
 
     /** Head position and speed (cm/s) of every organism this frame, for the tree-coral fish ripple. */
     private val wakeHeads = HashMap<String, FloatArray>()
@@ -688,13 +702,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 isPolyp -> coralShift
                 else -> M.mul(coralShift, part.node.world, coralModel)
             })
-            part.material.apply(p, w, alphaTestOverride = part.node.float("alphaTest") ?: if (part.material.src.blended) 0.3f else null)
+            part.material.apply(p, w, alphaTestOverride = part.alphaTest ?: if (part.material.src.blended) 0.3f else null)
             CORAL_TINT[part.material.src.name]?.let { t ->
                 val bc = part.material.src.baseColor
                 p.set4f("uBaseColor", bc[0] * t[0], bc[1] * t[1], bc[2] * t[2], bc.getOrElse(3) { 1f })
             }
             coralUniforms(p, m, c)
-            if (isPolyp) p.set1f("uSwayAmp", (if (isTree(m)) TREE_FLUTTER else 0.25f) * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
+            if (isPolyp) p.set1f("uSwayAmp", (if (m.isTree) TREE_FLUTTER else 0.25f) * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
         }
     }
@@ -725,6 +739,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (path != null && CritterKind.of(r.speciesId) == null) {
             lifeStages.resolve(r.speciesId, path, r.scale, com.reeflive.core.sim.LifeFormChannel.of(interp.current)[r.id], sb)
         } else sb.clear()
+        var uniformsSet: ShaderProgram? = null
         for (part in m.parts) {
             val isFin = part.kind == MaterialKind.FIN_SHEET
             if ((pass == 1) != isFin) continue
@@ -743,16 +758,16 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             val p = if (isFin) progs.fin else progs.fish
             p.use()
-            fishUniforms(p, r, m.rigid, m.limbPivots)
+            // per-organism uniforms persist in the program: upload them once, not again for every part
+            if (p !== uniformsSet) { fishUniforms(p, r, m.rigid, m.limbPivots); uniformsSet = p }
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
             p.set3fv("uEyePivot", part.eyePivot)
             part.material.apply(p, w)
             bindStage(p, w, when { isFin -> sb.fin; part.part == "body" -> sb.body; else -> null })
-            val iri = m.glb.rootFloat("iridescence") ?: 0.1f
-            p.set1f("uIridStrength", if (partCode == 0f) iri else 0f)
-            p.set1f("uRoughness", m.glb.rootFloat("roughness")?.takeIf { partCode == 0f } ?: part.material.src.roughness)
+            p.set1f("uIridStrength", if (partCode == 0f) m.iridescence else 0f)
+            p.set1f("uRoughness", m.roughness?.takeIf { partCode == 0f } ?: part.material.src.roughness)
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
         }
     }
@@ -885,6 +900,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
                 if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
+                else if (id == null && following == null && !cleaning) {
+                    // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
+                    // (not in clean-glass mode, where the finger is on the Flipper)
+                    val hit = touchHit(o, dir)
+                    if (hit != null) main.post { l?.onTouchTank(hit.first, hit.second) } else main.post { l?.onPick(null) }
+                }
                 else main.post { l?.onPick(id) }
             }
             CameraInput.TapKind.ZOOM -> {
@@ -914,6 +935,33 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val t = Picker.rayPlaneZ(o, d, Camera.TANK[2]) ?: return false
         val x = o[0] + d[0] * t; val y = o[1] + d[1] * t
         return kotlin.math.abs(x - flipper[0]) <= FLIPPER_HALF_W + 2f && kotlin.math.abs(y - flipper[1]) <= FLIPPER_HALF_H + 2f
+    }
+
+    /**
+     * What a single tap with no fish under it touches: the first rock point along the ray (ROCK; the sim turns it into
+     * CORAL when a colony sits there), else the sand when the ray reaches the floor (SAND), else the glass where the
+     * ray enters the water (GLASS, the fingertip on the pane). Null when the ray misses the tank.
+     */
+    private fun touchHit(o: FloatArray, d: FloatArray): Pair<Vec3, TouchSurface>? {
+        var t0 = 0f; var t1 = 1000f
+        val lo = floatArrayOf(0f, Camera.SAND_Y, 0f); val hi = floatArrayOf(Camera.TANK[0], Camera.WATER_Y, Camera.TANK[2])
+        for (k in 0 until 3) {
+            if (kotlin.math.abs(d[k]) < 1e-6f) { if (o[k] < lo[k] || o[k] > hi[k]) return null; continue }
+            var a = (lo[k] - o[k]) / d[k]; var b = (hi[k] - o[k]) / d[k]
+            if (a > b) { val s = a; a = b; b = s }
+            t0 = maxOf(t0, a); t1 = minOf(t1, b)
+        }
+        if (t0 > t1) return null
+        fun at(t: Float) = Vec3((o[0] + d[0] * t).toDouble(), (o[1] + d[1] * t).toDouble(), (o[2] + d[2] * t).toDouble())
+        val g = sdf
+        if (g != null) {
+            val tr = t0 + Camera.marchClear(g, o[0] + d[0] * t0, o[1] + d[1] * t0, o[2] + d[2] * t0, d[0], d[1], d[2], t1 - t0, 0f)
+            if (tr < t1 - 0.05f) { val r = at(tr); return r to (if (r.y <= Camera.SAND_Y + 0.6) TouchSurface.SAND else TouchSurface.ROCK) }
+        }
+        val end = at(t1)
+        if (end.y <= Camera.SAND_Y + 0.5) return end to TouchSurface.SAND
+        val entry = at(t0)
+        return Vec3(entry.x.coerceIn(0.0, Camera.TANK[0].toDouble()), entry.y.coerceIn(Camera.SAND_Y + 0.5, Camera.WATER_Y - 0.5), entry.z) to TouchSurface.GLASS
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */

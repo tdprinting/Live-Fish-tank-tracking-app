@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 /**
  * TV launcher entry (Fire TV / Android TV): the live tank full screen, driven by the remote. Keeps itself up to
  * date: checks GitHub Releases (the updater's 6 h spacing), downloads a new APK in the background, then a corner
- * pill asks for one OK press to hand it to the system installer (Android never installs without that press).
+ * pill and an "Install update" menu item ask for one OK press to hand it to the system installer (Android never installs without that press).
  */
 class TvTankActivity : Activity() {
     private lateinit var watch: TankWatch
@@ -29,8 +29,9 @@ class TvTankActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        watch = TankWatch(this, interactive = true)
+        watch = TankWatch(this, hint = "Press OK for options")
         setContentView(watch.root)
+        watch.onInstallUpdate = { (updates.state.value as? UpdateState.Ready)?.let(::install) }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -41,7 +42,7 @@ class TvTankActivity : Activity() {
                 when (s) {
                     is UpdateState.Available -> updates.download()   // nobody taps "Download" on a TV
                     is UpdateState.Downloading -> watch.setNotice("Downloading update ${(s.read * 100 / s.total.coerceAtLeast(1))}%")
-                    is UpdateState.Ready -> watch.setNotice("Update ready · press OK to install")
+                    is UpdateState.Ready -> watch.setNotice("Update ready · press OK", updateReady = true)
                     else -> watch.setNotice(null)
                 }
             }
@@ -58,22 +59,18 @@ class TvTankActivity : Activity() {
     override fun onPause() { updateJob?.cancel(); watch.pause(); super.onPause() }
     override fun onDestroy() { scope.cancel(); watch.destroy(); super.onDestroy() }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val ok = keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
-        val ready = updates.state.value as? UpdateState.Ready
-        if (ok && ready != null) { install(ready); return true }
-        return watch.onKey(keyCode) || super.onKeyDown(keyCode, event)
-    }
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        watch.onKey(keyCode) || super.onKeyDown(keyCode, event)
 
     private fun install(ready: UpdateState.Ready) {
         if (!updates.canInstall(this)) {
             // first update only: Android wants "Install unknown apps" allowed for ReefLive
             val opened = runCatching { startActivity(updates.unknownSourcesIntent(this)) }.isSuccess
-            watch.setNotice(if (opened) "Allow ReefLive, then press OK again" else "Allow ReefLive under Developer options → Install unknown apps")
+            watch.setNotice(if (opened) "Allow ReefLive, then choose Install update again" else "Allow ReefLive under Developer options → Install unknown apps", updateReady = true)
             return
         }
         runCatching { startActivity(updates.installIntent(this, ready.file)) }
-            .onFailure { watch.setNotice("Couldn't open the installer") }
+            .onFailure { watch.setNotice("Couldn't open the installer", updateReady = true) }
     }
 
     private companion object {

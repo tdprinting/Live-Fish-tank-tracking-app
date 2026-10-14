@@ -166,6 +166,8 @@ data class SandboxActions(
     val onMicro: (MicroAction) -> Unit = {},
     /** Shows the sandbox tips again. */
     val onHelp: () -> Unit = {},
+    /** A shelf water change with its own salt: swap [fraction] for [mix], the salt named [salt] in the banner. */
+    val onSaltChange: (fraction: Double, mix: WaterState, salt: String) -> Unit = { _, _, _ -> },
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */
@@ -642,7 +644,7 @@ fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbo
     val glyphs = if (sandbox) {
         listOf(ReefGlyphs.touch, ReefGlyphs.whatIf, ReefGlyphs.sparkleTip, ReefGlyphs.reset, ReefGlyphs.eye)
     } else {
-        listOf(ReefGlyphs.fish, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
+        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
     }
     LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -887,7 +887,7 @@ class Simulation(
                 PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
-            is Command.Feed -> feed(c.kind, c.grams, c.at ?: feedPoint(null))
+            is Command.Feed -> { feed(c.kind, c.grams, c.at ?: feedPoint(null)); touchMemory.fed() }
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
@@ -905,6 +905,7 @@ class Simulation(
             }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
             is Command.TapGlass -> tapGlass(c.worldPoint)
+            is Command.TouchTank -> touchTank(c)
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1051,7 +1052,7 @@ class Simulation(
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
         surface.impulse(at.x, at.z, 0.08, 2.5)
-        water.addFeed(grams * kind.nutrientFactor)
+        water.addFeed(grams * kind.nutrientFactor, kind.po4Factor, kind.docFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
@@ -1101,6 +1102,58 @@ class Simulation(
         }
     }
 
+    /** Habituation and quick-tap runs for [Command.TouchTank]. */
+    val touchMemory = TouchMemory()
+    /** The last gentle tap's outcome (UI wording, tests). */
+    var lastTouch: TouchOutcome? = null; private set
+
+    /**
+     * A gentle fingertip tap ([TankTouch]): polyp corals by a rock / coral tap retract, nearby animals answer by
+     * species and personality unless they have got used to it, and a quick run of taps in one spot is a knock
+     * ([tapGlass], the full startle).
+     */
+    fun touchTank(c: Command.TouchTank) {
+        val p = c.point
+        val night = perception.night
+        val surface = if (c.surface == TouchSurface.ROCK && corals.any { it.pos.distanceTo(p) < TankTouch.ON_CORAL_CM }) TouchSurface.CORAL else c.surface
+        if (touchMemory.tap(p, simTimeSec, TankTouch.RUN_WINDOW_S * max(1.0, speed))) {
+            tapGlass(p)
+            lastTouch = TouchOutcome(surface, p, true, emptyMap(), 0, simTimeSec)
+            return
+        }
+        var retracted = 0
+        if (surface == TouchSurface.ROCK || surface == TouchSurface.CORAL) for (k in corals) {
+            val d = k.pos.distanceTo(p)
+            if (d >= TankTouch.CORAL_CM || !TankTouch.retracts(k.kind)) continue
+            k.disturb = max(k.disturb, if (d < TankTouch.ON_CORAL_CM) TankTouch.CORAL_DISTURB_HIT else TankTouch.CORAL_DISTURB)
+            retracted++
+        }
+        val out = LinkedHashMap<String, TouchReaction>()
+        for (o in organisms) {
+            if (!o.alive) continue
+            val d = o.pos.distanceTo(p)
+            val r = TankTouch.reaction(o, surface, d, night)
+            if (r == TouchReaction.NONE) continue
+            val h = touchMemory.habituation(o.id, simTimeSec)
+            if (h >= TankTouch.HABIT_IGNORE) continue
+            val reach = when (r) {
+                TouchReaction.INVESTIGATE -> TankTouch.SEE_CM
+                TouchReaction.CHECK -> 30.0
+                else -> if (surface == TouchSurface.GLASS) TankTouch.FEEL_CM else TankTouch.ROCK_CM
+            }
+            val s = TankTouch.falloff(d, reach, c.strength) * (1 - h)
+            if (s < 0.05) continue
+            touchMemory.reacted(o.id, simTimeSec)
+            if (r == TouchReaction.DUCK || r == TouchReaction.AVOID) {
+                o.startle = max(o.startle, 0.1 * s)
+                StressModel.addSocial(o, TAP_SOCIAL * 0.3 * s)
+            }
+            agents[o]?.let { a -> a.ctx.p = perception; a.brain.onTouch(a.ctx, p, r, s) }
+            out[o.id] = r
+        }
+        lastTouch = TouchOutcome(surface, p, false, out, retracted, simTimeSec)
+    }
+
     private var lastScrapeStir = -1e9
 
     /** A Flipper stroke on the glass: clears the film it sweeps; nearby fish and corals react as to a passing hand. */
@@ -1122,7 +1175,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled

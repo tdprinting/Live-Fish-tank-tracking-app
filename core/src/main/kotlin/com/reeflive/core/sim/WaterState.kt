@@ -110,6 +110,19 @@ data class WaterState(
             tempC = 25.0, sg = 1.025, ph = 8.2, alk = 8.5, ca = 430.0, mg = 1320.0, nh3Total = 0.0, no2 = 0.0, no3 = 0.0,
             po4 = 0.0, doMgL = 6.6, k = 400.0, sr = 8.0, i = 0.06, detritus = 0.0, doc = 0.3,
         )
+
+        /**
+         * The shelf's big water change: Red Sea Coral Pro mixed to SG 1.025 (maker's figures at 35 ppt: Ca 440-470,
+         * alk 12.2-13 dKH, Mg 1340-1460, K 380-420; scaled to 1.025). A "rich" mix: a 25 % change lifts alk by about
+         * 1 dKH, the classic Coral Pro swing. The bucket is heated to 25 °C, half a degree under the display.
+         */
+        val CORAL_PRO_MIX = FRESH_MIX.copy(alk = 12.0, ca = 445.0, mg = 1370.0, k = 395.0, sr = 8.5, i = 0.06)
+
+        /**
+         * The shelf's small water change: Instant Ocean Sea Salt at SG 1.025 (Ca ~400, alk ~10.5 dKH, Mg ~1280,
+         * K ~380; hobby lab tests). Close to natural sea water: a 10 % change barely moves the minerals.
+         */
+        val INSTANT_OCEAN_MIX = FRESH_MIX.copy(alk = 10.5, ca = 400.0, mg = 1280.0, k = 380.0, sr = 7.8, i = 0.05)
     }
 }
 

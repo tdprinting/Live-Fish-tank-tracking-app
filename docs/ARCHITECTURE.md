@@ -430,7 +430,7 @@ Why not Filament: Filament ships on Maven Central (fine), but every custom look 
 |---|---|---|
 | one-finger drag | orbit (yaw / pitch); the whole move since touch-down counts once past the touch slop; a quick release flings and coasts (friction 3.2/s) | swing round the fish |
 | two fingers | pan (centroid, in the view plane), pinch zoom about the fingers (the point under them stays put), twist = yaw after a 0.14 rad dead zone | pinch closer / further, twist swings |
-| tap | pick (Picker) → fish card | another fish: follow it; empty water: stop |
+| tap | pick (Picker) → fish card; no fish: touch the tank where the ray lands (`onTouchTank`: rock, sand or glass) | another fish: follow it; empty water: stop |
 | double tap | on a fish: fly in and follow it; elsewhere: glide in to the rock / sand point (again: glide back out) | toggle close-up |
 | double-tap and drag | one-finger zoom (down = in) | — |
 | two-finger tap | tap the glass (`onTapGlass`) | — |

@@ -448,22 +448,40 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         return BASE_RADIUS * k
     }
 
-    /** Nearly motionless hover beside cover with pectoral sculling, within [dayRadius] of the pocket. */
+    /**
+     * Nearly motionless hover beside cover with pectoral sculling, within [dayRadius] of the pocket (research
+     * video/fish_pajama_cardinalfish; "groups hover near branching corals", Fishes of Australia [M]; Tee's tank T96 0:09 [H]).
+     * The body stays level ([HOVER_PITCH]): depth changes come from the fins, not from pointing the snout. It faces
+     * into the current (or out of the rock when the water is still) with a small per-bout yaw, so a group hangs
+     * roughly aligned. Station changes are small and slow: a new spot every 8–20 s at a quarter of cruise.
+     */
     inner class HoverCover : Behavior("hovercover", "Hovering by cover") {
         private var p = Vec3.ZERO
         private var next = 0.0
+        private var yaw = 0.0
         override fun score(c: Ctx) = 0.45
         override fun update(c: Ctx, out: SteerIntent) {
             if (c.t > next) {
-                next = c.t + c.rng.range(5.0, 15.0)
+                next = c.t + c.rng.range(8.0, 20.0)
                 val r = c.o.hoverRadius * kotlin.math.sqrt(c.rng.nextDouble())
-                p = c.safe(schoolTarget(c, spot + c.rng.unitVector() * r))
+                val u = c.rng.unitVector()
+                p = c.safe(schoolTarget(c, spot + Vec3(u.x, 0.3 * u.y, u.z) * r))
                 if (p.distanceTo(spot) > c.o.hoverRadius + 2) p = c.safe(spot)
+                yaw = c.rng.signed() * 0.5
             }
-            out.seek(p, c.o.cruiseSpeed * 0.3, arrive = 3.0)
+            out.seek(p, c.o.cruiseSpeed * 0.25, arrive = 4.0)
             out.hover = true; out.ampMul = 0.3; out.pectoral = 1.0; out.tailMul = 0.4
+            out.maxPitch = HOVER_PITCH
+            out.faceDir = hoverFacing(c, yaw)
             if (c.o.brightExposed) out.ampMul = 0.2
         }
+    }
+
+    /** Into the current when there is one, else away from the nearest rock toward the open front; turned by [yaw] rad. */
+    fun hoverFacing(c: Ctx, yaw: Double): Vec3 {
+        val f = c.sim.flow.velocityFast(c.o.pos).horizontal()
+        val base = if (f.length() > 0.5) f * -1.0 else (c.rock.sdf.gradient(c.o.pos).horizontal() + Vec3(0.0, 0.0, 0.6)).normalized(Vec3.Z)
+        return Vec3.rotateAbout(base.normalized(Vec3.Z), Vec3.Y, yaw)
     }
 
     /**
@@ -473,6 +491,10 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     inner class NocturnalForage : Behavior("dusk", "Night foraging") {
         private var wp = Vec3.ZERO
         private var next = 0.0
+        private var chasing: FoodParticle? = null
+        private var dropped: FoodParticle? = null
+        private var bestD = 0.0
+        private var progressAt = 0.0
         override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT && !c.o.mouthbrooding) 0.55 else 0.0
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
@@ -480,19 +502,28 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + c.rng.range(4.0, 9.0)
                 wp = c.safe(schoolTarget(c, spot + c.rng.unitVector() * (forageRadius(c) * (0.3 + 0.7 * c.rng.nextDouble()))))
             }
-            val f = if (o.hunger > 0.05) c.food.nearest(o.pos, 15.0) { it.kind == FoodKind.PODS || o.species.dietMatch(it.kind) > 0 && o.acceptsPrepared } else null
+            // drifting plankton only: a particle on the sand or wedged against the rock is out of reach of a mid-water
+            // picker (the body cannot get its head there), and one it has chased for STUCK_S without closing is dropped
+            val f = if (o.hunger > 0.05) c.food.nearest(o.pos, 15.0) {
+                (it.kind == FoodKind.PODS || o.species.dietMatch(it.kind) > 0 && o.acceptsPrepared) && openWaterFood(c, it) && it !== dropped
+            } else null
             if (f != null) {
+                val d = o.pos.distanceTo(f.pos)
+                if (f !== chasing) { chasing = f; bestD = d; progressAt = c.t } else if (d < bestD - 0.5) { bestD = d; progressAt = c.t }
+                if (c.t - progressAt > Feed.STUCK_S) { dropped = f; chasing = null }
                 out.seek(f.pos, o.cruiseSpeed * 1.4, arrive = 0.8)
-                if (o.pos.distanceTo(f.pos) < 1.2 + 0.1 * c.L) c.bite(f)
-            } else out.seek(wp, o.cruiseSpeed, arrive = c.L)
+                if (d < 1.2 + 0.1 * c.L) c.bite(f)
+            } else out.seek(wp, o.cruiseSpeed * 0.8, arrive = c.L)
             out.ampMul = 0.6
+            // slow, deliberate night cruise: level body, pitching only to snap up a particle
+            out.maxPitch = if (f != null) 0.45 else 0.3
         }
     }
 
     /** By day faster tankmates leave it little (×0.4 unless the food drifts within 10 cm); dusk/night ×1.5 (06 §3.2). */
     inner class CardinalFeed : Feed(this@CardinalBrain, 60.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = if (f.kind == FoodKind.MYSIS || f.kind == FoodKind.PODS) 0.1 else 0.0
-        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface
+        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface && openWaterFood(c, f)
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
             c.p.light < FORAGE_LIGHT -> 1.5
             f.pos.distanceTo(c.o.pos) <= 10.0 -> 1.0
@@ -504,10 +535,16 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
      * How far it ranges from cover follows the light ramp, not a clock label (research 10 §3): half of
      * [FORAGE_RADIUS] when the light first drops below [FORAGE_LIGHT], all of it in darkness.
      */
+    /** A particle a hovering mid-water picker can reach: not settled and clear of the rock by its head room (swim resolve keeps 0.45 Lc). */
+    fun openWaterFood(c: Ctx, f: FoodParticle): Boolean =
+        !f.settled && f.pos.y > c.rock.sandTopCm + 1.0 && c.rock.sdf.dist(f.pos) > 0.45 * c.o.collisionLength - (1.2 + 0.1 * c.L)
+
     fun forageRadius(c: Ctx): Double = FORAGE_RADIUS * (0.5 + 0.5 * (1 - com.reeflive.core.geom.smoothstep(0.02, FORAGE_LIGHT, c.p.light)))
 
     companion object {
         const val BASE_RADIUS = 12.0
+        /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
+        const val HOVER_PITCH = 0.17
         const val FORAGE_RADIUS = 40.0
         const val FORAGE_LIGHT = 0.3
     }
@@ -1268,6 +1305,9 @@ fun holeRest(c: Ctx, hole: Anchor?, fallback: Vec3, headOut: Double): Rest {
     return Rest(head, dir, Vec3.Y.rejectFrom(dir).normalized(Vec3.Y), posture = 3, spline = listOf(head, pos, pos - dir * depth, pos - dir * (depth + c.L)))
 }
 
+/** How far a blenny's head comes out of its hole to watch a tap on the glass (cm; its day pose is 1–1.6). */
+const val PEEK_HEAD_OUT_CM = 2.2
+
 /** Go to the hole mouth (swim), then slide in (kinematic). [headOut] < 0 = fully inside. */
 open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3, label: String, val scoreFn: (Ctx) -> Double, val headOutFn: (Ctx) -> Double) : Behavior("hole_$holeName", label) {
     private var inside = false
@@ -1303,6 +1343,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
+
+    /** A tap on the glass: head and shoulders out of the hole to look (research 04 §1C "watches from rock"). */
+    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, territory, PEEK_HEAD_OUT_CM)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
         if (night) holeRest(c, hole, territory, -0.5)
@@ -1466,6 +1509,9 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     override fun restSpot(c: Ctx, night: Boolean): Rest = holeRest(c, hole, holePos, if (night) -0.5 else 1.5)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole") holePos else super.anchorPos(c, anchor)
+
+    /** A tap on the glass: further out of its hole to look (research 04 §2C "peeks from rock"). */
+    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, holePos, PEEK_HEAD_OUT_CM)
 
     override fun initialPlace(c: Ctx) {
         super.initialPlace(c)

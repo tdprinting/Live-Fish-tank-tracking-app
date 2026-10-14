@@ -24,6 +24,7 @@ import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseSpec
@@ -43,7 +44,7 @@ enum class LiveQuality { LOW, MEDIUM, HIGH }
 
 /**
  * State and actions for the Live Tank tab (ARCHITECTURE §5.2). Wraps the app-wide [SimulationHolder]:
- * the renderer reads [snapshots] (full rate), the overlay reads [hud] (10 Hz).
+ * the renderer reads [snapshots] (full rate), the overlay reads [hud] (4 Hz).
  */
 @OptIn(FlowPreview::class)
 class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
@@ -65,7 +66,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Full-rate snapshots for the renderer. */
     val snapshots: StateFlow<SimSnapshot> = holder.snapshots
 
-    /** HUD snapshot throttled to 10 Hz. */
+    /** HUD snapshot throttled to 4 Hz: every collector recomposes the whole live screen, and readouts need no more. */
     val hud: StateFlow<SimSnapshot> = holder.snapshots.sample(HUD_PERIOD_MS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SimSnapshot.EMPTY)
 
@@ -139,6 +140,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // ---- actions allowed in both modes ----
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null) = holder.enqueue(Command.Feed(kind, grams, at))
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
+    /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
+    fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner
@@ -214,7 +217,18 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun stopTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StopTreatment(kind)) }
     /** Infects a random fish with [disease] (test aid). */
     fun infect(disease: Disease) = sandbox { holder.enqueue(Command.Infect(null, disease)) }
-    fun maintain(task: MaintenanceTask) = holder.enqueue(Command.Maintain(task))
+    fun maintain(task: MaintenanceTask) {
+        holder.enqueue(Command.Maintain(task))
+        // a fresh sock or fresh carbon fits one when none was running (WaterSim.maintain): keep the sandbox's
+        // equipment switches in step with the tank
+        if (mode.value != SimMode.SANDBOX) return
+        val row = when (task) {
+            MaintenanceTask.CHANGE_SOCK -> "eq_sock"
+            MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
+            MaintenanceTask.HARVEST_MACRO -> null
+        }
+        if (row != null) _extras.value = _extras.value + (row to 1.0)
+    }
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
     fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }
@@ -266,7 +280,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
 
     companion object {
-        const val HUD_PERIOD_MS = 100L   // 10 Hz
+        const val HUD_PERIOD_MS = 250L   // 4 Hz
         const val REAL_SAMPLE_MS = 500L
         val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")
         /** On/off sandbox rows (equipment, unproven scenarios) → default; the skimmer is the only one that starts on. */

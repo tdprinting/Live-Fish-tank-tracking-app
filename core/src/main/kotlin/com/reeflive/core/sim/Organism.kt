@@ -252,7 +252,7 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.out?.copyOf() ?: NO_LIMBS,
         )
     }
@@ -292,6 +292,11 @@ class Organism(
     }
 
     override fun toString() = "$nickname(${species.id})"
+
+    companion object {
+        /** [appendagePhase] wraps here (rad): 159 whole turns (≈ 999 rad), so a sine of the phase is continuous. */
+        const val APPENDAGE_WRAP = 2 * kotlin.math.PI * 159
+    }
 }
 
 /**
