@@ -87,6 +87,15 @@ Each fish GLB contains one node hierarchy: `Root` → `Body` (mesh), `FinDorsal`
 - Texture (from b_04.jpg): head and front third (u 0–0.38) **greenish-yellow** `#E9D24E` → `#D9C55A` with a white cheek; eye with an **orange-red ring** `#E0663A` and black pupil, large (r 0.06 L); a **broad black vertical band** `#2A2A2A` at u 0.38–0.48 with a visible dark scale mesh (hex net 1.5% L, contrast 40%); rear body (u 0.48–1.0) **white-cream** `#F3EBD6` covered in **reddish-brown spots** `#B8603F` (round, radius 1.5–2.2% L, Poisson spacing 4% L, ~45 spots on each flank, fewer near the belly), the caudal peduncle cream.
 - **Photo update** (owner photo `reference/ref_cardinal.jpg`; this supersedes the colors above): head/front **golden-yellow `#D6BC4A`, olive `#A89A3C` on top**; big eye with a red-orange ring; black band with a scaly mesh (`#5A5246` scale centres on a `#0E0C0A` net); rear **pinkish-white** `#F2E2DE` with ≈70 **brown-red** `#9A3E2C` spots reaching onto the caudal peduncle (u ≤ 0.97). First dorsal **yellow-gold `#D8B840` with an orange `#E0702A` edge**; pelvics **yellow-orange `#E8A830` with a red `#D0302A` edge**; second dorsal, anal, caudal and pectorals clear.
 - Scale 5.0 cm. Iridescence 0.15. Tris: body 3.4k, fins 1.1k.
+- **2026-10-14 rebuild** (research `fish_pajama_cardinalfish.md`, sources: FishBase morphology, Fishes of Australia, owner photo b_04). This supersedes the profile and fin lengths above.
+  - Body depth 0.535 L at u 0.42 (was 0.46). The forehead is straight and steep and the snout short. The peduncle is 0.155 L deep.
+  - First dorsal VII at u 0.385–0.485, 0.27 L tall: yellow with a dark leading part, incise 0.1.
+  - Second dorsal and anal: long and translucent, with dusky leading rays (0.36 / 0.25 L).
+  - Caudal: forked, 0.30 L long, 0.42 span.
+  - Pelvics: long (0.30 L) and yellow with an orange-red rim, set under the band at u 0.35.
+  - Black band 0.385–0.505, slanted, with the scale net. The cheek is cream.
+  - Rear body pinkish, with two spot sizes in `#B65A38`.
+  - Tris: body 3392 + fins (4402 total); LOD1 1455.
 
 ### 2.4 Bluestreak cleaner wrasse — `wrasse.glb`
 - Profile: (0, 0.03, 0.03, 0.0), (0.08, 0.12, 0.09, 0.0), (0.2, 0.19, 0.12, 0.0), (0.45, 0.21, 0.13, 0.0), (0.7, 0.17, 0.10, 0.0), (0.88, 0.10, 0.06, 0.0), (1.0, 0.05, 0.02, 0.0). Slender, round cross-section (d:l 0.21). Snout pointed, small terminal mouth.
@@ -124,6 +133,15 @@ Body length 1.0 (rostrum to telson), built from primitives:
 - Legs: 4 pairs of walking legs (3-segment chains, radius 0.012 L, total 0.35 L) + the **3rd pair as the big claws**: 3 segments (0.25 + 0.25 + 0.2 L) radius 0.03 L ending in a 0.15 L pincer (two tapered cones). Claws held raised at 45°.
 - **Antennae**: 2 long (1.6 L) + 2 shorter (0.9 L) thin tapered tubes (radius 0.006 L, 24 segments) `part="antenna"` with `Col.a` = 0→1 along the length (the runtime sways them with a sine along `Col.a`).
 - Texture: alternating bands **red** `#C8281E` / **white** `#F4F2EE` across the carapace (2 bands), abdomen (3 red/3 white, 0.08 L each) and claws (4 bands each), legs white, antennae white, tail fan white with red edge; eyes black on short stalks. Spines white.
+- **2026-10-14 rebuild** (research `invert_banded_shrimp.md` / `invert_cleaner_shrimp.md`; sources: ADW, Aquarium of the Pacific, owner photos b_02–b_04).
+  - Banded shrimp (4246 tris):
+    - Bands are aligned to the shell segments, with purple rims `#6E2450` and joint lines; red is `#C21E1A` and white `#F3EEE8`.
+    - The abdomen is humped, the tail band sits at 0.42–0.74, and there are 50 carapace spines.
+    - Each claw has 20 white spines.
+  - Skunk shrimp (3344 tris):
+    - Amber flanks, a broad red dorsal band and a white dorsal stripe from the rostrum to the telson.
+    - The tail is red with one white band and a pale rim; the tail fan is spread 110°.
+    - The abdomen is humped.
 - Scale 5.0 cm (body). Tris: 4.0k total. Hard surface: roughness 0.5, iridescence 0.
 - **Limb rig (both shrimp, research 17)**: every limb vertex carries `Col.r` = class / 8 (1 walking leg, 2 picking leg P1–P2, 3 cheliped P3 (banded only), 4 antenna, 5 antennule flagellum, 6 pleopod, 7 third maxilliped), `Col.g` = pair / 8, `Col.b` = hinge 0 base → 1 tip, `Col.a` = spine u of the attachment point. Both models add five pleopod pairs and a third-maxilliped pair; antennae are one long pair plus four antennule whips. `fish.vert` (motion mode 2) animates each class from `uLimb[0]` (core `ShrimpLimbs` via `OrganismPose.limbs`, SIMULATION §19: stride phase, stepping, rock / claw signal, grooming), `uPick` (mouth) and `uMotion` (pleopod phase and stroke). Budget 4.2k tris.
 

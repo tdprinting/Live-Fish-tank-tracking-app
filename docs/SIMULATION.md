@@ -320,7 +320,8 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - `Space` stress grows with size (sandbox "grow fish" slider shows the cramped behavior: more turning, shorter runs: waypoint spacing shrinks to 0.5 L when L > 15 cm).
 
 **Pajama cardinal (`CardinalBrain`)**
-- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1).
+- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1). Since 2026-10-14 it hovers level: the drift target changes every 8–20 s with vertical offsets ×0.3, speed 0.25 cruise, and `SteerIntent.maxPitch` = 0.17 rad caps the body pitch (it was sitting at the 0.6 rad default clamp). It faces into the flow, or else away from the rock toward the front glass (research fish_pajama_cardinalfish, 2026-10-14).
+- `NocturnalForage` and `CardinalFeed` take only open-water food (`openWaterFood`: not settled, above the sand, and not touching rock). It is a mid-water picker; before this it hung for hours over pellets lodged in rock it could not reach. It gives up on a particle after `Feed.STUCK_S` without progress.
 - Crepuscular activity: at dawn/dusk `Wander` radius grows to 40 cm and it hunts drifting particles (`Feed` on mysis preferred, dietMatch flakes 0.5).
 - Shy: observer tap → retreat behind the pillar for 30 s; never `GlassCurious`.
 - Schooling hooks (cohere/align) active if more cardinals are added in the sandbox.
@@ -469,8 +470,8 @@ Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a
 | **Lawnmower blenny** | RockGraze (perch on rock and rasp 5–20 s, hop 5–15 cm, stays within 20 cm of `HOLE_LAWNMOWER`), InHole (night), BenthicFeed, BlennyRival (one blenny per tank, 04 §15) |
 | **Tailspot blenny** | InHole/Peek at `HOLE_BLENNY` (eye swivel), PlanktonDash (darts up for drifting food or plankton every 30–90 s), PerchNearHole (tail curled), Graze ×0.4, BlennyRival |
 | **Dottyback** | CaveDart (short rock-hugging darts around `CAVE_DOTTYBACK`, pauses in cover), Territorial (moderate to blennies, low to the cardinal, none to shrimp — 04 §13), Feed, Sleep in cave |
-| Banded shrimp | Hang (inverted under `SHRIMP_LEDGE`, leg shuffles, antenna phase), Scavenge, NightForage, cosmetic Clean, MoltHide, TailFlip |
-| **Skunk cleaner shrimp** | Station at `STATION_SHRIMP` (rocks side to side when clients are near), Climb (rides on the posing client 8–20 s), Scavenge, MoltHide (station closed while molting), TailFlip |
+| Banded shrimp | Hang (inverted under the left ledge, at a perch found on the SDF at run time; leg shuffles; sways at a passing fish), ShrimpForage, NightForage (walks rock tops, walls and ceilings within 30 cm), cosmetic Clean, MoltHide, TailFlip (then walks or swims home). See §19.5. |
+| **Skunk cleaner shrimp** | Station on a rock face near `STATION_SHRIMP` (perch found at run time; rocks side to side at 0.8 Hz when clients are within 30 cm), Climb (swims onto the posing client at ≤ 8 cm/s, rides it 8–20 s, swims home), ShrimpForage, MoltHide (station closed while molting), TailFlip. See §19.5. |
 | **Hermit crab** | CrawlWander, Pick (rasping rock), Scavenge, Retreat into shell (posture 6) |
 | **Brittle star** | HideUnder (`BRITTLE_HOME`, 1–3 arm tips out toward the cave mouth), Roam at night (arm rowing), RaceToFood (arms first, then the disc), ArmFeed (arm loops the item to the mouth), Retract (arms in, run home), autotomy when bitten. See §19. |
 | **Feather duster** | Filter (crown open, eats drifting particles within 8 cm plus a detritus baseline), Snap (retracts on shadow, tap, a fish touching the crown, or food dosed within 15 cm above; reopens over 10 s) |
@@ -1327,7 +1328,7 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
   - `Graze` scores hair algae, film and diatoms. It shuffles sideways between bites with `pick` = 1, and at night it grazes a glass spot 15 % of the time (`glassSpot`).
   - `CrabScavenge` (pick 0.6) and `CarcassPick` (pick 1).
   - `HideCrevice`: legs tucked, with occasional picking. It gets +0.35 for 48 h after a molt (`softShell`) and +0.4 for 60 s after a dart.
-  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It takes a detour when stuck, tucks on arrival and counts `darts`.
+  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It tucks on arrival and counts `darts`. When the straight dash stalls (2026-10-14), it plans a walking route with `RockData.surfaceRoute` (A* over 1.5 cm water cells near a surface; see §19.5). If it stalls on a waypoint it can see, it scrambles straight across to it. The old random side-step kept hitting the same wall.
   - `NightGrab` and the `crab_predation` sandbox toggle are unchanged.
 
 ### 19.4 Tests
@@ -1341,6 +1342,35 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - it retreats fast when disturbed and sheds an arm when bitten;
 - the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
 - the crab's legs step in an alternating tetrapod.
+
+### 19.5 Shrimp navigation and perches (`ai/ShrimpNav.kt`, 2026-10-14)
+
+A 24-hour diagnostic run of the owner's stock found three problems:
+- The banded shrimp never reached its ledge. The skunk's keep-apart rule (30 cm) sent it to the right ledge, and the surface walk stalled on a wall at x ≈ 69 for the whole day, right side up.
+- The skunk's `STATION_SHRIMP` anchor sits 4 cm off the rock. The shrimp paced the sand, climbed the front glass and teleported onto clients.
+- The baked anchor normals disagree with the SDF gradients.
+
+What changed:
+- **Perches are found at run time.** `RockData.perchNear` is a deterministic grid search of SDF surface points that have open water in front of them.
+  - Banded shrimp: an underside (normal y < −0.45) near the left ledge (owner photos b_02–b_04). The score is distance + 6·(1 − cover) + 3·(1 + n.y).
+  - Skunk: an upright or vertical face near the station that does not face the back glass.
+  - Animals of the same species keep 3.5 cm apart.
+  - The body is laid flat on the surface with `bodyHeading`.
+  - The banded keep-apart distance is 20 cm, and the check excludes its mate.
+- **`ShrimpNav`** wraps `Steering.crawl`. The shrimp walks at stance height (0.21 BL off the surface). If the walk makes no 0.5 cm of progress for 6 s, or if the shrimp or its goal is off every surface, it plans a pleopod swim hop. The hop lifts 2 cm off the surface and takes the shortest SDF-clear route: direct, over the rock at +4…32 cm, or along the front glass. It lands at stance height and rolls belly-to-surface over the last 4 cm. Hop speed is 6 cm/s, a design estimate. There is no general collision; only clear segments are checked against the SDF, so this stays compatible with a capsule body layer.
+- **Banded shrimp at night:** `NightForage` picks waypoints on rock of any orientation (ceilings included) within `FORAY_CM` = 30 cm and dwells 4–15 s picking at each one. At dawn it walks back and hangs inverted (posture 2).
+- **Skunk:** `Climb` swims to the client's back at `MOUNT_CM_S` = 8 cm/s instead of being placed there. After `TailFlip`, both species navigate home.
+- **Antenna snap:** `appendagePhase` wrapped at 1000 rad, a non-multiple of 2π, which made the antennae snap about every 9 minutes. It now wraps at `Organism.APPENDAGE_WRAP` = 2π·159, and `FishRig.lerpPhase` uses the same period.
+
+Tests: `ai/CritterAccuracyTest.kt` checks that:
+- the banded shrimp hangs inverted under the left ledge with the full stock;
+- it gets home from the old stall point;
+- it forages on foot, including inverted, within its territory;
+- the skunk sits on rock at its station, not the sand;
+- two skunks take separate spots;
+- the skunk swims onto a client at a bounded speed and back;
+- the cardinal hovers level and slow;
+- the wrap period is a whole number of turns.
 
 ## 20. Hummingbird bobtail squid, sandbox only (`ai/BobtailSquidBrain.kt`, `sim/SquidRig.kt`, research cephalopod_squid)
 

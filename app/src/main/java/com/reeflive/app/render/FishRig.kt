@@ -67,7 +67,7 @@ class FishRig(val id: String) {
         gill = lerp(pa.gill, b.gill, t); gillRate = lerp(pa.gillRate, b.gillRate, t)
         desat = lerp(pa.desat, b.desat, t); ich = lerp(pa.ich, b.ich, t); thin = lerp(pa.thin, b.thin, t)
         eyeCloud = lerp(pa.eyeCloud, b.eyeCloud, t); scale = lerp(pa.scale, b.scale, t).coerceAtLeast(0.1f)
-        eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t)
+        eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t, APPENDAGE_WRAP)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
         alive = b.alive; visible = b.visible; posture = b.posture
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
@@ -121,12 +121,15 @@ class FishRig(val id: String) {
         fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
         /** Phases are in cycles and may wrap (e.g. mod 1000); interpolate across the wrap. */
-        fun lerpPhase(a: Float, b: Float, t: Float): Float {
+        fun lerpPhase(a: Float, b: Float, t: Float, period: Float = 1000f): Float {
             var d = b - a
-            if (d > 500f) d -= 1000f
-            if (d < -500f) d += 1000f
+            if (d > 0.5f * period) d -= period
+            if (d < -0.5f * period) d += period
             return a + d * t
         }
+
+        /** The core's appendage phase wrap (rad, a whole number of turns: core Organism.APPENDAGE_WRAP). */
+        val APPENDAGE_WRAP = com.reeflive.core.sim.Organism.APPENDAGE_WRAP.toFloat()
 
         /** The pose's model variant (darwin_black clown, …) when the core exposes one. */
         fun variantOf(p: OrganismPose): String? = p.variant

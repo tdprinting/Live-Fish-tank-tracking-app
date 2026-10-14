@@ -47,3 +47,21 @@ NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pa
 1. Dance: antennae wave + rock at station when fish near.
 2. Shrimp climbs onto stationary fish and picks.
 3. Fixed station site, not roaming.
+
+## Look and behaviour pass, 2026-10-14 (critters thread)
+Sources: [Aquarium of the Pacific, Pacific cleaner shrimp](https://www.aquariumofpacific.org/onlinelearningcenter/species/pacific_cleaner_shrimp)
+(AP, read), Wikipedia (M2), Caves et al. 2019 (M1). No footage watched (YouTube blocked).
+
+| Trait | Finding | Conf. | Sim / model now |
+|---|---|---|---|
+| Colour | "pale amber body ... one white band down the carapace center separates two red bands on each side"; tail red with white spots; two pairs of long white antennae, the front pair split (looks like three) | [M] AP | white dorsal stripe rostrum->telson, broad scarlet bands, amber flanks with segment joints; red fan with white spots on the lobes |
+| Shape | carapace ~0.4 of the body, abdomen arched (hump at the 3rd segment) | [M] photos, [L] | spine keys with the hump; wider tail fan |
+| Station dance | "a rocking dance from side to side as the fish approach" | [M] AP | slow body sway (0.8 Hz, 0.12 rad) whenever a fish is within 30 cm; fast front-leg rocking as before (M1 rates) |
+| Station | on coral or rock; pairs, rarely groups | [M] AP | perch resolved on a rock face near the station anchor, facing open water; further skunks take spots >= 3.5 cm away |
+| Cleaning | climbs onto the client | [M] M1, M2 | antenna tap, then swims across at 8 cm/s (no teleport) and rides the client; swims home afterwards |
+| Feeding | omnivore; steals food at feeding time [L hobby] | [L] | ShrimpForage: walks to settled food, swims a hop for drifting food within 20 cm |
+| Note | AP says "ten pairs of walking legs" - decapods have five pairs of pereiopods; ignored | - | five pairs kept |
+
+Deviations found before this pass: the STATION_CLEANER anchor (40, 14, 20) is 4 cm off the rock in open water, so the
+shrimp could never sit at it; it paced the sand under it for the whole day ("Advertising at station" at y = 3.8),
+sometimes climbing the front glass, and jumped 10-15 cm to clients through the water in under a second.
