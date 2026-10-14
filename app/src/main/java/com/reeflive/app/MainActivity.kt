@@ -20,6 +20,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.data.repo.ThemeMode
 import com.reeflive.app.notif.Notifier
+import com.reeflive.app.tv.TvTankActivity
+import com.reeflive.app.tv.isTv
 import com.reeflive.app.ui.components.LocalHapticsEnabled
 import com.reeflive.app.ui.nav.ReefRoot
 import com.reeflive.app.ui.theme.ReefLiveTheme
@@ -32,6 +34,13 @@ class MainActivity : ComponentActivity() {
     private val pendingRoute = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (isTv(this)) {
+            // TVs get the tank only: the tracker's touch screens make no sense with a remote
+            super.onCreate(savedInstanceState)
+            startActivity(Intent(this, TvTankActivity::class.java))
+            finish()
+            return
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) pendingRoute.value = intent?.getStringExtra(Notifier.EXTRA_ROUTE)
