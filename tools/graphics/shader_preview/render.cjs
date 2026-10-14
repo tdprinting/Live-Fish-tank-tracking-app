@@ -101,6 +101,10 @@ const VIEWS = {
   front_glass_sand: { w: 800, h: 600, eye: [52, 6, 50], aim: [56, 2.5, 33] },
   // under the left AI Prime, looking up past the water line at the lens
   fixture: { w: 800, h: 600, eye: [40, 66, 44], aim: [32, 89, 16] },
+  // close-ups (zoomed-in orbit / follow cam): a clown, the tang and the rock face from a few cm away
+  close_clown: { w: 800, h: 600, eye: [74, 27, 34], aim: [70, 24, 22] },
+  close_tang: { w: 800, h: 600, eye: [50, 38, 32], aim: [44, 34, 18] },
+  close_rock: { w: 800, h: 600, eye: [32, 18, 36], aim: [30, 14, 20] },
 };
 
 function lookAt(e, c) {
