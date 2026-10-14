@@ -18,7 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Enough of main's history for the "What's new" popup (web/build.gradle.kts whatsNew).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 200
 
       - uses: actions/setup-java@v4
         with:

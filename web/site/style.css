@@ -140,6 +140,7 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .verdict svg { width: 120px; height: 30px; color: var(--lagoonBright); }
 .loading.inline { position: static; background: none; padding: 40px 0; }
 .tips { padding-left: 20px; } .tips li { margin: 6px 0; }
+.news li small { display: block; opacity: .6; font-size: 12px; }
 .good { color: var(--good); } .danger { color: var(--danger); }
 @media (max-width: 430px) { .hide-sm { display: none; } .fish { top: calc(var(--topH, 96px) + 110px); max-height: calc(100% - var(--topH, 96px) - 210px); } }
 
