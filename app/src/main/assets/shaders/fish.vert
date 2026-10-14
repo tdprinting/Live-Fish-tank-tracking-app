@@ -257,7 +257,11 @@ void main() {
         local.x -= clampA * 0.06;
         local.y *= 1.0 - 0.45 * clampA * step(abs(local.z), abs(local.y));
         local.z *= 1.0 - 0.45 * clampA * step(abs(local.y), abs(local.z));
-        float flutter = 0.02 * sin(time * 12.0 + u * 6.0) * hinge * (1.0 - 0.7 * uFin.y);
+        // Flexible tips lag their roots. Couple motion to the animal's stroke
+        // rather than a shared wall-clock flutter that never stops at rest.
+        float activity = clamp(uSwim.y * 8.0 + uMotion.y * 0.25, 0.0, 1.0);
+        float flutter = 0.007 * sin(2.0 * PI * uSwim.x - u * 6.0 - hinge * 1.8)
+            * hinge * hinge * activity * (1.0 - uFin.y);
         if (uShape.w > 0.5 && uShape.w < 1.5) {
             // pectorals: fan open and row
             float spread = mix(0.25, 1.0, uFin.x);
@@ -265,11 +269,12 @@ void main() {
             if (uMotion.y > 0.001) {
                 // labriform rowing from the sim's stroke phase (core MotionProfile): fore-aft sweep with a
                 // feathering lift, amplitude set by speed (Drucker & Jensen 1996)
-                float ph = 2.0 * PI * uMotion.x - u * 1.5;
-                local.x += 0.09 * uMotion.y * hinge * sin(ph) * spread;
-                local.y += 0.03 * uMotion.y * hinge * cos(ph) * spread;
-            } else {
-                local.x += 0.04 * hinge * sin(time * 7.0 + u * 3.0) * spread;
+                float ph = 2.0 * PI * uMotion.x - hinge * 0.65;
+                // Open on the power stroke, feather on recovery; roots remain fixed.
+                float recovery = 0.5 + 0.5 * cos(ph);
+                local.x += 0.065 * uMotion.y * hinge * sin(ph) * spread;
+                local.y += 0.022 * uMotion.y * hinge * cos(ph) * spread;
+                local.z *= 1.0 - 0.32 * recovery * uMotion.y * hinge;
             }
             local.z += sign(local.z) * flutter;
         } else {
@@ -373,18 +378,28 @@ void main() {
         n = normalize(vec3(n.x, n.y / k.x, n.z / k.y));
     }
 
-    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (0.1 + 0.9 u^2). The amplitude is
+    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)). The amplitude is
     // capped and faded while the body is strongly curved (head vs tail heading) so the wave cannot fold the tail
     // back into the body on a tight turn.
     vec3 fwdHead = qrot(uFrame[0], vec3(1.0, 0.0, 0.0));
     vec3 fwdTail = qrot(uFrame[15], vec3(1.0, 0.0, 0.0));
     float bendFade = mix(0.35, 1.0, smoothstep(-0.2, 0.85, dot(fwdHead, fwdTail)));
     float amp = min(uSwim.y, MAX_WAVE_AMP) * bendFade;
-    float A = amp * (0.1 + 0.9 * uw * uw);
+    // Keep the skull stable; long-wave-count eel-like fish bend farther forward.
+    float eel = smoothstep(1.15, 1.65, uSwim.z);
+    float onset = mix(0.18, 0.06, eel);
+    float tBody = max(0.0, (uw - onset) / (1.0 - onset));
+    float envelope = mix(tBody * tBody, tBody, eel);
+    float envelopeSlope = uw > onset ? mix(2.0 * tBody, 1.0, eel) / (1.0 - onset) : 0.0;
+    if (mode > 0.5) { // retain the existing invertebrate deformation envelope
+        envelope = 0.1 + 0.9 * uw * uw;
+        envelopeSlope = 1.8 * uw;
+    }
+    float A = amp * envelope;
     float arg = 2.0 * PI * (uw * uSwim.z - uSwim.x);
     local.z += A * sin(arg);
     // slope dz/du tilts the normal (cheap analytic correction instead of a finite difference)
-    float dzdu = amp * (1.8 * uw) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
+    float dzdu = amp * envelopeSlope * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
     // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
     // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
     float bend = uMotion.z;
@@ -397,7 +412,8 @@ void main() {
         local.z += bend * 0.55 * (e * e - 0.04);
         dzdu += bend * 0.55 * 2.0 * e;
     }
-    n = normalize(vec3(n.x - dzdu * n.z, n.y, n.z));
+    // u increases toward -X: inverse-transpose shear has a positive X correction.
+    n = normalize(vec3(n.x + dzdu * n.z, n.y, n.z));
 
     vec3 sp;
     vec4 q;

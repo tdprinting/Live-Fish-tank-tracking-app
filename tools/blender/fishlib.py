@@ -188,7 +188,10 @@ def median_fin(prof, kind, u0, u1, heights, rake_deg=25.0, n=20, ns=6, slot=None
     """Dorsal/anal fin along the top/bottom contour. heights: list of (u, h).
     cirri: a tuft of 3 tapered filaments at each spine tip, at the fractions `cirri_ts` along the fin (default:
     every column of the front half). Tufts sample the spare atlas slot 7 (painted opaque by the species)."""
-    us = np.linspace(u0, u1, n)
+    # Include silhouette landmarks: uniform samples used to miss the cardinal's
+    # narrow dorsal filament and soften the notch between spines and soft rays.
+    us = np.unique(np.r_[np.linspace(u0, u1, n), [u for u, _ in heights if u0 <= u <= u1]])
+    n = len(us)
     hs = np.maximum(pchip([h[0] for h in heights], [h[1] for h in heights], us), 0.003)
     sign = 1.0 if kind.startswith("dorsal") else -1.0
     zc = prof.Zc(us)
@@ -199,9 +202,12 @@ def median_fin(prof, kind, u0, u1, heights, rake_deg=25.0, n=20, ns=6, slot=None
     lean = r + np.linspace(0, 0.35, n)
     tip = base + np.stack([hs * np.sin(lean) + inset * H * 0.5, np.zeros(n),
                            sign * (hs * np.cos(lean) + inset * H)], -1)
-    ts = np.linspace(0, 1, n)
+    ts = (us - u0) / (u1 - u0)
     slot = FIN_SLOTS[kind] if slot is None else slot
-    V, F, UV, COL = fin_grid(base, tip, ns, slot, ts=ts, A=us)
+    # A shallow camber makes the membrane catch light without a flat cardboard silhouette.
+    cup = np.zeros_like(base)
+    cup[:, 1] = 0.035 * hs * np.sin(np.pi * ts)
+    V, F, UV, COL = fin_grid(base, tip, ns, slot, ts=ts, A=us, bend=cup)
     if cirri:
         extra_v, extra_f, extra_uv, extra_c = [], [], [], []
         nb = len(V)
@@ -246,6 +252,9 @@ def caudal_fin(prof, ub, length, span, shape="rounded", n=21, ns=6, slot=None):
     elif shape == "lunate":
         ext = 0.42 + 0.58 * at ** 1.8
         zt = np.sign(t) * at ** 0.9 * span / 2
+    elif shape == "emarginate":
+        ext = 0.80 + 0.20 * at ** 1.6
+        zt = t * span / 2
     elif shape == "lanceolate":  # pointed (dottybacks): middle rays longest, a short filament at the tip
         ext = 0.66 + 0.34 * np.clip(1 - at, 0, 1) ** 1.3
         zt = t * span / 2 * (1 - 0.15 * at)
@@ -335,7 +344,7 @@ def ribbon_fin(prof, u_dorsal0, u_anal0, h_dorsal, h_anal, n=90, ns=3, slot=None
     return fin_grid(base, tip, ns, slot, ts=ts, A=us)
 
 
-def uv_sphere(center, r, axis_sign, segs=10, rings=6):
+def uv_sphere(center, r, axis_sign, segs=16, rings=8):
     """Sphere with its pole on the lateral axis (spec y). Returns V, F, UV(planar side), polar angle per face."""
     V = [center + np.array([0, axis_sign * r, 0])]
     phis = np.linspace(0, np.pi, rings + 1)[1:-1]
@@ -423,7 +432,7 @@ def paint_fin_slot(cv, slot, base="#C9C6C2", alpha=0.55, rays=12, ray_color=None
     cv.a[y0:y0 + SLOT_H, x0:x0 + SLOT_W] = a
 
 
-def paint_eye(path, iris="#F5F5F5", ring="#E0663A", outer="#202020", ring_w=0.18, pupil=0.36, size=64):
+def paint_eye(path, iris="#F5F5F5", ring="#E0663A", outer="#202020", ring_w=0.18, pupil=0.36, size=128):
     cv = P.Canvas(size, size, outer)
     d = np.sqrt((cv.u - 0.5) ** 2 + (cv.v - 0.5) ** 2) * 2
     cv.blend(1 - P.smoothstep(0.78, 0.84, d), ring)
@@ -433,8 +442,8 @@ def paint_eye(path, iris="#F5F5F5", ring="#E0663A", outer="#202020", ring_w=0.18
     streak = 0.5 + 0.5 * np.sin(ang * 23)
     cv.multiply(1 - 0.12 * streak * (d < 0.78))
     cv.blend(1 - P.smoothstep(pupil - 0.03, pupil + 0.02, d), "#050505")
-    # specular catchlight
-    cv.blend(1 - P.smoothstep(0.06, 0.1, np.sqrt((cv.u - 0.38) ** 2 + (cv.v - 0.62) ** 2)), "#FFFFFF", 0.85)
+    # Highlights come from lighting on the cornea, not a painted white square
+    # that stays fixed while the fish turns or enters a dark cave.
     return cv.save(path)
 
 

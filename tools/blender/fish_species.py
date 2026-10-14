@@ -71,7 +71,8 @@ class Flank:
 
 def scales_overlay(cv, size_px=14, contrast=0.06, seed=1):
     sc = P.hex_scales(cv, size_px, seed)
-    cv.multiply(1 - contrast * sc)
+    # Fine scales should break up light subtly, not read as a printed grid.
+    cv.multiply(1 - 0.55 * contrast * sc)
 
 
 def mucus(cv, amount=0.03, seed=5):
@@ -227,8 +228,8 @@ def paint_cardinal(cv, fl):
     scales_overlay(cv, 12, 0.05)
     # black band with a dark scale mesh
     band = P.band(u, b0, b1, 0.004) * S(0.02, 0.08, v) * (1 - S(0.97, 1.0, v))
-    net = P.hex_net(cv, 15, 1.6)
-    bandc = (1 - net[..., None]) * hex2rgb("#5A5246") + net[..., None] * hex2rgb("#0E0C0A")
+    net = P.hex_net(cv, 28, 2.0)
+    bandc = (1 - net[..., None]) * hex2rgb("#716E62") + net[..., None] * hex2rgb("#151710")
     cv.rgb = cv.rgb * (1 - band[..., None]) + bandc * band[..., None]
     # reddish-brown spots on the rear body
     rs = np.random.default_rng(7)
@@ -543,7 +544,7 @@ def paint_tailspot(cv, fl):
     mid = P.Canvas(cv.w, cv.h)
     mid.vgrad("#D8B88A", "#9A7058", 0.0, 1.0)
     rear = P.Canvas(cv.w, cv.h)
-    rear.vgrad("#F2E2B0", "#E2C078", 0.0, 1.0)
+    rear.vgrad("#CFA276", "#AC7153", 0.0, 1.0)
     t1 = S(0.2, 0.5, u)[..., None]
     t2 = S(0.5, 0.85, u)[..., None]
     cv.rgb = (front.rgb * (1 - t1) + mid.rgb * t1) * (1 - t2) + rear.rgb * t2
@@ -551,7 +552,7 @@ def paint_tailspot(cv, fl):
     cv.blend(head * S(0.55, 0.95, v), "#4E3A52", 0.5)  # dark purplish crown
     cv.blend(head * (1 - S(0.2, 0.45, v)), "#A8A8B8", 0.4)  # grey-blue throat
     mucus(cv, 0.05, 81)
-    scales_overlay(cv, 9, 0.03)  # combtooth blennies are scaleless; this is only a faint skin texture
+    # Scaleless skin: the mucus variation above supplies texture without a scale grid.
     lv = fl.lv
     # eye at v ~0.69; blue line just below it, yellow-orange line under that running back above the pectoral
     yl = np.interp(u, [0.015, 0.1, 0.2], [0.50, 0.50, 0.52])
@@ -774,7 +775,7 @@ SPECIES = {
                                          (0.86, 0.02)], rake=15, n=30),
         anal=dict(u0=0.42, u1=0.86, h=[(0.42, 0.03), (0.47, 0.09), (0.7, 0.10), (0.82, 0.08), (0.86, 0.02)],
                   rake=18, n=22),
-        caudal=dict(length=0.22, span=0.30, shape="lunate"),
+        caudal=dict(length=0.22, span=0.30, shape="emarginate"),
         pectoral=dict(u=0.28, length=0.22, width=0.14, zf=-0.05, shape="pointed"),
         pelvic=dict(u=0.35, length=0.08),
         eye=dict(u=0.12, zf=0.32, r=0.05, iris="#1A1A24", ring="#3B6FE0", outer="#101018", ring_w=0.1),
@@ -782,7 +783,7 @@ SPECIES = {
     ),
     "cardinal": dict(
         # S. nematoptera: snout short but pointed, head depth at the eye ~0.7 of the body depth
-        profile=[(0, 0.08, 0.035, 0.035), (0.04, 0.21, 0.065, 0.026), (0.12, 0.34, 0.095, 0.012), (0.27, 0.44, 0.115, 0.0),
+        profile=[(0, 0.045, 0.030, 0.015), (0.04, 0.135, 0.060, 0.014), (0.12, 0.285, 0.095, 0.008), (0.27, 0.44, 0.115, 0.0),
                  (0.42, 0.46, 0.115, 0.0), (0.58, 0.41, 0.105, 0.0), (0.72, 0.31, 0.09, 0.0), (0.84, 0.21, 0.065, 0.0),
                  (0.93, 0.16, 0.045, 0.0), (1.0, 0.155, 0.035, 0.0)],
         body_tris=3400, ring=32, p_exp=0.7, belly_bias=0.05,
@@ -839,7 +840,7 @@ SPECIES = {
                     cirri_len=0.032, cirri_ts=[(k + 0.5) / 20 for k in range(10)]),
         anal=dict(u0=0.58, u1=0.78, h=[(0.58, 0.03), (0.62, 0.09), (0.72, 0.09), (0.78, 0.02)], rake=30, n=12),
         caudal=dict(length=0.17, span=0.24, shape="truncate"),
-        pectoral=dict(u=0.27, length=0.22, width=0.15, zf=-0.3, shape="round", fingers=True, n=12),
+        pectoral=dict(u=0.27, length=0.25, width=0.19, zf=-0.3, shape="round", fingers=True, n=16, out_deg=48, down_deg=24),
         pelvic=dict(u=0.33, length=0.12),
         eye=dict(u=0.10, zf=0.45, r=0.06, iris="#D8C8A0", ring="#8B3A24", outer="#B04A30", ring_w=0.14),
         paint=paint_hawkfish, fins=fins_hawkfish, irid=0.1, rough=0.4, length_cm=5.0,
@@ -852,7 +853,7 @@ SPECIES = {
                                          (0.86, 0.10), (0.90, 0.02)], rake=22, n=32),
         anal=dict(u0=0.48, u1=0.90, h=[(0.48, 0.02), (0.52, 0.07), (0.86, 0.07), (0.90, 0.02)], rake=28, n=18),
         caudal=dict(length=0.14, span=0.2, shape="rounded"),
-        pectoral=dict(u=0.17, length=0.17, width=0.16, zf=-0.2, shape="round"),
+        pectoral=dict(u=0.17, length=0.18, width=0.18, zf=-0.2, shape="round", out_deg=46, down_deg=22),
         pelvic=dict(u=0.10, length=0.06),
         eye=dict(u=0.065, zf=0.55, r=0.05, iris="#B89A50", ring="#3A2A10", outer="#4A4A2A", ring_w=0.1),
         cirri=dict(u=0.06, h=0.07, blades=4),
@@ -866,7 +867,7 @@ SPECIES = {
                                          (0.88, 0.08), (0.92, 0.02)], rake=25, n=30),
         anal=dict(u0=0.5, u1=0.92, h=[(0.5, 0.02), (0.54, 0.07), (0.88, 0.065), (0.92, 0.02)], rake=30, n=18),
         caudal=dict(length=0.13, span=0.18, shape="rounded"),
-        pectoral=dict(u=0.18, length=0.16, width=0.14, zf=-0.25, shape="round"),
+        pectoral=dict(u=0.18, length=0.16, width=0.15, zf=-0.25, shape="round", out_deg=44, down_deg=22),
         pelvic=dict(u=0.12, length=0.06),
         eye=dict(u=0.07, zf=0.55, r=0.055, iris="#E0C040", ring="#2A1A10", outer="#3A2420", ring_w=0.1),
         cirri=dict(u=0.065, h=0.035, blades=2),
@@ -997,7 +998,8 @@ def build_geometry(sid):
         p = sp["pectoral"]
         for side, nm in ((-1, "FinPectoralL"), (1, "FinPectoralR")):
             fins.append((nm, FL.paired_fin(prof, "pectoral", p["u"], side, p["length"], p["width"], zf=p["zf"],
-                                           shape=p["shape"], fingers=p.get("fingers", False), n=p.get("n", 10))))
+                                           shape=p["shape"], fingers=p.get("fingers", False), n=p.get("n", 14),
+                                           out_deg=p.get("out_deg", 35), down_deg=p.get("down_deg", 15))))
     if "pelvic" in sp:
         p = sp["pelvic"]
         for side, nm in ((-1, "FinPelvicL"), (1, "FinPelvicR")):
