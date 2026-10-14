@@ -1495,3 +1495,71 @@ These signals drive three parts of the renderer:
   - venting at dawn;
   - living on pods but starving on dry rock;
   - adding from the stocking gallery.
+
+## 21. Perception, memory, mood and species quirks (research realism_gaps, `ai/Perceive.kt`, `ai/Mind.kt`)
+
+Source: the realism gap analysis `realism_gaps.md` (project research files, 2026-10-14) with its keys: POH04, DIX12, HAZ96, AIZ01, REE02, TOM25, WIL94, SOA11, MRL23. Most numbers below are design estimates inside the direction of a source; each constant carries an `@Ev` tag and the main ones are rows in `EvidenceLedger` (species `"perception"`, `"mind"` and the species ids). Nothing in this section draws random numbers except where noted, so a fish that never meets a trigger behaves exactly as before.
+
+### 21.1 Perception channels (X1, X6)
+
+Each species sheet may carry a `senses` block (`sim/Senses.kt`, `SensesSpec`); without one, fish get the defaults below and invertebrates are ungated (the old radius search, so their tuned scavenging stays as it was).
+
+| Field | Default (fish) | Meaning | Evidence |
+|---|---|---|---|
+| `visionCm` | 120 | sight range in full light; covers the tank so daytime search is unchanged | DESIGN-ESTIMATE |
+| `darkVision` | 0.12 diurnal, 0.5 nocturnal/crepuscular | fraction of sight left in darkness; range = visionCm × (dark + (1 − dark) · smoothstep(0.02, 0.3, light)) | MRL23 (title only) direction; values [L] |
+| `lateralBL` | 1.5 | lateral-line reach in body lengths, light-independent | POH04 catfish analogy; value [L] |
+| `chem` | 0.6 | weight of smell | DIX12 goby, HAZ96 hermit analogies |
+| `gated` | true (false for invertebrates) | false = old search |  |
+
+- **Food** (`Ctx.findFood`): a particle is found if it is within sight, within the lateral line, or the animal is in its scent plume. Scent: inside √(4·D·age) of the particle (D 1.5 cm²/s, cap 25 cm), or downstream inside a cone of half-angle tan 0.25 whose front has travelled |u|·age along the local current, up to 90 cm; 3 s leach lag; weighted scent ≥ 0.15 counts. In the dark a diurnal fish upstream of food finds nothing until it drifts into the plume; downstream it smells it.
+- **Threats** (`SpeciesBrain.findThreat`): invertebrates keep the old ×0.6 at night. A fish's threat radius is scaled by its sight factor but never below its lateral-line reach.
+
+### 21.2 Place memory (X2)
+
+`PlaceMemory` holds a few entries per kind, each fading with a half-life; writing within 6 cm of an entry reinforces it.
+
+| Kind | Written by | Read by | Half-life | Cap |
+|---|---|---|---|---|
+| REFUGE | a flee that reached its cover | `Flee.enter`: a remembered refuge within 45 cm, not toward the threat or a threat site, replaces the computed cover when it is nearer: the nearest familiar shelter (not for the hawkfish, which picks its own perch) | 7 d | 3 |
+| THREAT | `onAttacked` | refuge choice | 6 h (as `Social.kt`) | 4 |
+| NIGHT | the hawkfish's sand spot | `SandRest` | 30 d | 1 |
+| PATROL | the dottyback's route | `CavePatrol` | 14 d | 6 |
+| GRAZE | (reserved) | | 1 d | 6 |
+
+### 21.3 Keeper and feeding clock (X3)
+
+- `Simulation.feed` (every mode, abstract included) calls `Mind.onKeeperFeed` for every animal whose diet matches. `FeedClock` keeps up to 3 slots (REE02: golden shiners learn up to three times and places). A feed within 90 min of a slot shifts it 30 % toward the new time and place and adds 0.15 × (1 − strength); feeds within 30 min are one meal. A slot whose time passes without food loses 20 % per missed day (REE02: anticipation outlasted withheld food by 3–10 days).
+- **`AnticipateFeed`** (fish except eel, hawkfish, cardinal, the two gobies and the leopard wrasse): from 60 min before to 30 min after a slot with strength ≥ 0.35, an awake, hungry, unafraid fish sweeps a slow figure-eight under the learned feeding spot, rising as the time nears, mouth working near the end. Score ≤ 0.55 (below the cleaner's work and any startle). From the third consistent daily feed.
+- **`ComeToKeeper`**: each meal raises a keeper association by 0.06 × (1 − a) (−10 % per day without food; TOM25 analogy: sea bream learned the diver who fed them over 12 days). A keeper cue (a gentle tap, a hand's shadow) with association ≥ 0.35 brings a calm, awake fish to the glass at that spot for 20–60 s (video fish_tailspot_blenny S2 "approaches the glass when the observer is near"). A knock (`TapGlass`) is a startle, not a cue. The app's torch is render-only and is not a cue.
+
+### 21.4 Mood and personality drift (X4)
+
+- `Mood.fear` (τ 29 min, ≈ 20 min half-life) rises 0.6 × magnitude per attack and 0.3 × per startle; `arousal` (τ 4.3 min) with feeds, startles and attacks. Feed scores × (1 − 0.5 · fear); glass curiosity and begging need fear < 0.3.
+- A tactile session with the cleaner (the dance that sets `aggressionDampUntil`) halves fear and arousal and trims social stress by 20 % (SOA11, *Ctenochaetus* cortisol analogy): the tang's P2 row.
+- Drift (WIL94 direction): +0.002 boldness per safe meal, −0.02 boldness and +0.01 skittishness per attack ≥ 0.4, −0.003 skittishness per tap not followed by an attack within a minute; capped at ±0.15 around the birth value (the ±15 % birth jitter is unchanged).
+
+### 21.5 Species quirks
+
+| Species | Sequence | Evidence |
+|---|---|---|
+| Falco hawkfish (`ai/HawkNight.kt` `SandRest`) | At dusk (activity < 0.3) it hops down from its perch in ≤ 3 BL ballistic hops at 3 BL/s with 1.5 s pauses on rock or sand, to an open-sand spot 2.5–10 cm from the rock base near its lowest perch (remembered, same spot every night). It settles propped on its pelvic fins, head up 17.5°, body still, head and eyes turning toward movement every 1–3 s. A lights-on flinch is ignored while resting. At dawn `PerchHop` hops it back up. Abstract mode parks it in the same pose. | Tee's night clip T89 [H] (sand, within 10 cm, pitch 15–20°, no flight); FishBase "rests at coral-head bases" (10 §5) |
+| Brittle star (`ai/BrittleLight.kt` `LightWithdraw`) | A light step (≥ 0.08 within ~30 s; lights forced on) or a shadow within 40 cm: all arms whip in and the disc freezes 3–8 s (score 0.93), then the old behaviours resume (by day it rows home). Slow dawn ramps do not trigger it. The day arm tips out of the hide reach × (1 − 0.5 · light). | AIZ01 calcite lenses (*O. wendtii*, ANALOGY for *O. erinaceus*); video invert_brittle_star S3; durations [L] |
+| Tailspot and lawnmower blennies (`ai/HoleEntry.kt` `TailFirstHole`) | Home is entered tail first: swim to a stand-off at the mouth, pivot to face out (6 rad/s), scull backwards along the tunnel axis at 0.8 BL/s with the body laid along the tunnel, then rest head-out (fully in at night). Leaving is head first. | owner direction 2026-10-14; head-out inspection, 10 §7; rates [L] |
+| Tailspot blenny | `GlassCurious` added (fear-gated), plus `ComeToKeeper`. A newcomer's trip out to a prospecting site is committed (only a flee breaks it off, at most `PROSPECT_TRIP_S` 25 s [L]) | video fish_tailspot_blenny S2 [M] |
+| Indigo dottyback (`ai/DottyPatrol.kt` `CavePatrol`) | A learned route of 4 crevice mouths within its territory (PATROL memory). Each round: dart along the rock to each stop, watch from the crevice mouth facing out 2–8 s, dart back to sit in the cave mouth 5–20 s. One stop is swapped every 6 rounds. | 10 §8 "record cave, patrol route, retreats"; video fish_indigo_dottyback "cave-mouth darts" [M]; numbers [L] |
+| Blue tang | Already present: `PlayDead` (side-roll 3–8 s after a hard startle) and `TangSleep` (wedged, rolled ~70°). New: cleaner contact lowers its fear and stress (21.4). | video fish_blue_tang S1, S3 [M]; SOA11 |
+
+### 21.6 Predation evidence gate (X7)
+
+`Simulation.unsourcedPredation` (SetParam `unsourced_predation`, default off, copied by the time-lapse fork) gates the predation rolls no source supports, even in the sandbox with predation on: the Sally Lightfoot's nightly snail rolls and its `NightGrab` on snails (PUC06, PIZ25 support grazing and scavenging only), and the moray's kill roll (the strike still lands as an attack that startles). Crab-on-fish keeps its own `crab_predation` scenario. The hawkfish's strike outcomes stay as they were (10 §5 separates approach, strike, contact and kill).
+
+Two crawler fixes ride with it: `Sdf.project` returns the iterate nearest the surface (in a rock crease the finite-difference gradient can point the wrong way, and the old last iterate could sit deeper in the rock than the input), and the Sally Lightfoot's home, which falls back to the `CAVE_SMALL` anchor in the middle of a cave, is moved onto the nearest wall when it lies more than 3 cm off the rock (`HOME_SNAP_CM` [L]); a crawler cannot reach open water.
+
+### 21.7 Tests
+
+`ai/PerceptionTest`, `ai/MindMemoryTest`, `ai/SpeciesQuirksTest` and `ai/PredationGateTest`: food in the dark found by smell downstream, not upstream, felt within the lateral line, seen by day; invertebrates ungated and the cardinal keeping more night sight; the clock learning a time and fading after missed days; a tang gathering under the feed spot before a learned 13:00 feed (control fed at 17:00); a keeper cue bringing a fed fish to the glass; a remembered refuge used under attack; a flee writing a refuge, fear fading and drift capped; the hawkfish's night sand pose and its return to a perch by day; the brittle star's withdrawal from a light step and a shadow but not from the dawn ramp; the tailspot backing tail first into its hole; the dottyback's patrol rounds; the predation gate.
+
+### 21.8 Deferred
+
+Engineer-goby juvenile schooling (the goby and sand code belong to the sand-bed work), the cleaner's audience effect and cortisol-driven cheating (P2; c03/c04 sensitive), clown host learning and size hierarchy, lawnmower graze-patch memory (the algae model has no spatial film value yet), nassarius and brittle-star plume emergence, astrea and asterina day/night rhythms, the asterina fission identity gate, and every hermit item (owned by the hermit rebuild). The pajama cardinal and both shrimp are being reworked elsewhere.
