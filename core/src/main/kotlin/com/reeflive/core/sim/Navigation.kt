@@ -168,7 +168,14 @@ class Navigation(private val rock: RockData) {
         val goalCell = nearestPassable(g, to, GOAL_SNAP) ?: run { unreachable = true; return null }
         val f = fieldFor(g, to, goalCell)
         f.lastUsed = ++clock
-        val start = nearestReached(g, f, from) ?: run { if (f.done) unreachable = true; return null }
+        val start = nearestReached(g, f, from, START_SNAP) ?: run {
+            // the body is in a slot the grid does not count passable (the resolve lets it squeeze where the 1 cm grid
+            // cannot): back out to the nearest cell of the route network it can see, then on from there
+            if (!f.done) return null
+            val out = nearestReached(g, f, from, EXIT_SNAP)?.let { g.centre(it) }?.takeIf { rock.sdf.segmentClear(from, it, 0.3) }
+            if (out == null) unreachable = true
+            return out
+        }
         // walk down the field, then take the farthest point along it in clear view (string pulling)
         var cur = start
         var best = g.centre(cur)
@@ -233,12 +240,12 @@ class Navigation(private val rock: RockData) {
         return nearestPassable(g, p, APPROACH_SNAP)?.let { g.centre(it) }
     }
 
-    private fun nearestReached(g: Grid, f: Field, p: Vec3): Int? {
+    private fun nearestReached(g: Grid, f: Field, p: Vec3, snap: Int): Int? {
         val c = g.cellOf(p)
         if (f.dist[c] != Field.UNSET) return c
         val cx = g.cx(p.x); val cy = g.cy(p.y); val cz = g.cz(p.z)
         var best: Int? = null; var bd = Int.MAX_VALUE
-        for (dz in -START_SNAP..START_SNAP) for (dy in -START_SNAP..START_SNAP) for (dx in -START_SNAP..START_SNAP) {
+        for (dz in -snap..snap) for (dy in -snap..snap) for (dx in -snap..snap) {
             val x = cx + dx; val y = cy + dy; val z = cz + dz
             if (x < 0 || y < 0 || z < 0 || x >= g.nx || y >= g.ny || z >= g.nz) continue
             val j = g.idx(x, y, z)
@@ -266,6 +273,8 @@ class Navigation(private val rock: RockData) {
         const val GOAL_SNAP = 8
         const val APPROACH_SNAP = 8
         const val START_SNAP = 2
+        /** How far (cells) a body outside the network looks for the nearest cell of it in view ([route]). */
+        const val EXIT_SNAP = 6
         const val DESCENT = 24
         const val LINE_STEP = 0.5
         const val END_SKIP = 1.0

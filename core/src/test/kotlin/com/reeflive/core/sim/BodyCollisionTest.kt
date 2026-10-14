@@ -92,6 +92,61 @@ class BodyCollisionTest {
     }
 
     /**
+     * tee-clips #6: a goby's tail through the front glass while it sits in its burrow. A body in a burrow or the sand
+     * (posture 3 / 5) is let into the rock and sand, never through the glass.
+     */
+    @Test
+    fun aBurrowedBodyStaysInsideTheGlass() {
+        val sim = teeSim(5, 12.0)
+        val goby = sim.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }
+        val z = sim.rock.widthCm - 0.3 * goby.lengthCm
+        // nose in the sand by the front pane, the tail swung out through it
+        goby.placeAt(Vec3(50.0, sim.rock.floorY(50.0, z) - 0.5, z), Vec3(0.3, 0.0, -1.0).normalized(Vec3.X))
+        goby.posture = 3
+        assertTrue(sim.bodies.exempt(goby))
+        sim.bodies.resolveEnv(goby, 0.05)
+        val b = goby.body
+        b.refresh(goby)
+        for (i in 0 until BodyState.N) {
+            val c = b.p[i] + b.up[i] * b.ctr[i]
+            val r = max(b.a[i], b.b[i])
+            assertTrue("station $i at z ${c.z} + $r through the front glass (${sim.rock.widthCm})", c.z + r <= sim.rock.widthCm + 0.01)
+            assertTrue("station $i through the back glass", c.z - r >= -0.01)
+        }
+    }
+
+    /**
+     * tee-clips #4, #5, #8: a fish standing on its nose on the rock summit, a fish edge-on in the sand, a clown near
+     * vertical. A free-swimming fish is never pitched past its species limit (0.57, eels 0.87, sin of pitch) nor rolled
+     * past 40 degrees, by day or by night; it slides along a surface level instead.
+     */
+    @Test
+    fun freeSwimmersStayWithinPitchAndRollLimits() {
+        var samples = 0
+        var worstPitch = 0.0; var worstRoll = 0.0; var where = ""
+        for ((seed, hour) in listOf(41L to 11.0, 42L to 23.0)) {
+            val sim = teeSim(seed, hour)
+            for (k in 0 until (0.25 * 3600 / 0.05).toInt()) {
+                sim.advance(0.05, 0.05)
+                if (k % 10 != 0) continue
+                for (o in sim.organisms) {
+                    if (!o.alive || !o.isFish || o.attached || o.posture != 0 || o.spline.override != null || !o.visible) continue
+                    samples++
+                    val limit = if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
+                    val pitch = kotlin.math.abs(o.heading.normalized(Vec3.X).y) - limit
+                    val level = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
+                    val roll = 0.766 - (o.up.rejectFrom(o.heading).normalized(level) dot level)
+                    if (pitch > worstPitch) { worstPitch = pitch; where = "${o.id} '${o.behaviorName}' pitch ${o.heading} seed $seed t=${sim.simTimeSec}" }
+                    if (roll > worstRoll) { worstRoll = roll; where = "${o.id} '${o.behaviorName}' up ${o.up} heading ${o.heading} seed $seed t=${sim.simTimeSec}" }
+                }
+            }
+        }
+        println("BodyCollisionTest: pitch/roll over $samples free-swimmer samples, worst pitch excess $worstPitch, worst roll excess (cos) $worstRoll ($where)")
+        assertTrue("pitch past the limit by $worstPitch: $where", worstPitch < 0.03)
+        assertTrue("rolled past 40 degrees by $worstRoll (cos): $where", worstRoll < 0.03)
+    }
+
+    /**
      * Property run: Tee's preset for simulated hours by day and by night (full behaviour at 20 Hz), sampling every
      * body's surface (ellipse rings every ~1/30 BL) against rock, sand, glass and water surface, and every pair of
      * bodies, outside the allowed states. Reports the worst violation and the per-tick cost.
