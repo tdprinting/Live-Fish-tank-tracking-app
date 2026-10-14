@@ -1,6 +1,8 @@
 package com.reeflive.core.geom
 
 import kotlin.math.exp
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
  * Body spline shared by sim and renderer (SIMULATION §4.8).
@@ -94,6 +96,78 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      * given the organism [up] vector (roll/posture already applied by Steering).
      */
     fun sample(up: Vec3, pos: Array<Vec3>, frames: Array<Quat>) {
+        samplePositions(pos)
+        for (i in 0 until POINTS) {
+            val fwd = when (i) {
+                0 -> pos[0] - pos[1]
+                POINTS - 1 -> pos[POINTS - 2] - pos[POINTS - 1]
+                else -> pos[i - 1] - pos[i + 1]
+            }.normalized(heading)
+            frames[i] = Quat.fromForwardUp(fwd, up)
+        }
+    }
+
+    /**
+     * [sample] straight into pose arrays: spine xyz into [sp] (POINTS × 3) and frame quaternions xyzw into [fr]
+     * (POINTS × 4). The frames use the same arithmetic as [Quat.fromForwardUp] without allocating (this runs for
+     * every organism on every snapshot); [pos] is scratch for the spine points.
+     */
+    fun sampleInto(up: Vec3, pos: Array<Vec3>, sp: FloatArray, fr: FloatArray) {
+        samplePositions(pos)
+        for (i in 0 until POINTS) {
+            val p = pos[i]
+            sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
+            val a = pos[if (i == 0) 0 else i - 1]; val b = pos[if (i == POINTS - 1) POINTS - 1 else i + 1]
+            frameInto(a.x - b.x, a.y - b.y, a.z - b.z, up, fr, i * 4)
+        }
+    }
+
+    /** Quat.fromForwardUp((dx, dy, dz).normalized(heading), up), written as floats to [out] at [o]. */
+    private fun frameInto(dx: Double, dy: Double, dz: Double, up: Vec3, out: FloatArray, o: Int) {
+        // forward: normalized(heading), then normalized again as fromForwardUp does
+        var fx: Double; var fy: Double; var fz: Double
+        val l0 = sqrt(dx * dx + dy * dy + dz * dz)
+        if (l0 < 1e-9) { fx = heading.x; fy = heading.y; fz = heading.z } else { fx = dx / l0; fy = dy / l0; fz = dz / l0 }
+        val l1 = sqrt(fx * fx + fy * fy + fz * fz)
+        if (l1 < 1e-9) { fx = 1.0; fy = 0.0; fz = 0.0 } else { fx /= l1; fy /= l1; fz /= l1 }
+        // up rejected from forward (fallback Y or X), normalized
+        var d = up.x * fx + up.y * fy + up.z * fz
+        var ux = up.x - fx * d; var uy = up.y - fy * d; var uz = up.z - fz * d
+        if (ux * ux + uy * uy + uz * uz < 1e-10) {
+            val bx: Double; val by: Double
+            if (abs(fy) < 0.9) { bx = 0.0; by = 1.0 } else { bx = 1.0; by = 0.0 }
+            d = bx * fx + by * fy + 0.0 * fz
+            ux = bx - fx * d; uy = by - fy * d; uz = 0.0 - fz * d
+        }
+        val lu = sqrt(ux * ux + uy * uy + uz * uz)
+        if (lu < 1e-9) { ux = 1.0; uy = 0.0; uz = 0.0 } else { ux /= lu; uy /= lu; uz /= lu }
+        // side = forward × up; quaternion from the columns (f, u, s), as Quat.fromColumns
+        val sx = fy * uz - fz * uy; val sy = fz * ux - fx * uz; val sz = fx * uy - fy * ux
+        val m00 = fx; val m10 = fy; val m20 = fz
+        val m01 = ux; val m11 = uy; val m21 = uz
+        val m02 = sx; val m12 = sy; val m22 = sz
+        val tr = m00 + m11 + m22
+        var qx: Double; var qy: Double; var qz: Double; var qw: Double
+        if (tr > 0) {
+            val s = sqrt(tr + 1.0) * 2
+            qx = (m21 - m12) / s; qy = (m02 - m20) / s; qz = (m10 - m01) / s; qw = 0.25 * s
+        } else if (m00 > m11 && m00 > m22) {
+            val s = sqrt(1.0 + m00 - m11 - m22) * 2
+            qx = 0.25 * s; qy = (m01 + m10) / s; qz = (m02 + m20) / s; qw = (m21 - m12) / s
+        } else if (m11 > m22) {
+            val s = sqrt(1.0 + m11 - m00 - m22) * 2
+            qx = (m01 + m10) / s; qy = 0.25 * s; qz = (m12 + m21) / s; qw = (m02 - m20) / s
+        } else {
+            val s = sqrt(1.0 + m22 - m00 - m11) * 2
+            qx = (m02 + m20) / s; qy = (m12 + m21) / s; qz = 0.25 * s; qw = (m10 - m01) / s
+        }
+        val lq = sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+        if (lq < 1e-12) { qx = 0.0; qy = 0.0; qz = 0.0; qw = 1.0 } else { qx /= lq; qy /= lq; qz /= lq; qw /= lq }
+        out[o] = qx.toFloat(); out[o + 1] = qy.toFloat(); out[o + 2] = qz.toFloat(); out[o + 3] = qw.toFloat()
+    }
+
+    /** Spine points head→tail into [pos] (trail or rigid line, eased into an [override] path). */
+    private fun samplePositions(pos: Array<Vec3>) {
         val seg = length / (POINTS - 1)
         val ov = override ?: lastOverride
         val mix = if (ov == null || ov.isEmpty()) 0.0 else overrideMix
@@ -108,14 +182,6 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             val dst = if (mix >= 1.0) pos else scratch
             walk(shifted, 1, head, seg, dst)
             if (mix < 1.0) for (i in 0 until POINTS) pos[i] = pos[i].lerp(scratch[i], mix)
-        }
-        for (i in 0 until POINTS) {
-            val fwd = when (i) {
-                0 -> pos[0] - pos[1]
-                POINTS - 1 -> pos[POINTS - 2] - pos[POINTS - 1]
-                else -> pos[i - 1] - pos[i + 1]
-            }.normalized(heading)
-            frames[i] = Quat.fromForwardUp(fwd, up)
         }
     }
 

@@ -81,3 +81,33 @@ class SdfTest {
         assertEquals(1.0, s.gradient(Vec3(8.0, 0.0, 0.0)).x, 0.01)
     }
 }
+
+class SplineSampleIntoTest {
+    /** The allocation-free pose path must give exactly the floats [BodySpline.sample] gives. */
+    @Test fun sampleIntoMatchesSample() {
+        for (rigid in listOf(false, true)) {
+            val s = BodySpline(8.0, rigid)
+            val pos = Array(BodySpline.POINTS) { Vec3.ZERO }
+            val frames = Array(BodySpline.POINTS) { Quat.IDENTITY }
+            val sp = FloatArray(BodySpline.POINTS * 3); val fr = FloatArray(BodySpline.POINTS * 4)
+            var p = Vec3(40.0, 20.0, 10.0)
+            for (k in 0 until 400) {
+                val a = k * 0.05
+                val h = Vec3(cos(a), 0.4 * sin(a * 0.7), sin(a)).normalized()
+                p += h * 0.3
+                s.update(p, h, 0.05, 0.15)
+                // vertical up, a tilted up, and up parallel to the heading (fallback axis)
+                for (up in listOf(Vec3.Y, Vec3(0.3, 0.9, 0.1).normalized(), h)) {
+                    s.sample(up, pos, frames)
+                    s.sampleInto(up, pos, sp, fr)
+                    for (i in 0 until BodySpline.POINTS) {
+                        assertEquals(pos[i].x.toFloat(), sp[i * 3]); assertEquals(pos[i].y.toFloat(), sp[i * 3 + 1]); assertEquals(pos[i].z.toFloat(), sp[i * 3 + 2])
+                        val q = frames[i]
+                        assertEquals(q.x.toFloat(), fr[i * 4]); assertEquals(q.y.toFloat(), fr[i * 4 + 1])
+                        assertEquals(q.z.toFloat(), fr[i * 4 + 2]); assertEquals(q.w.toFloat(), fr[i * 4 + 3])
+                    }
+                }
+            }
+        }
+    }
+}
