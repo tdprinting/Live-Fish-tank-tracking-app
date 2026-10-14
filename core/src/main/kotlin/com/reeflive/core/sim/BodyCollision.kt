@@ -75,6 +75,8 @@ class BodyState {
     var escaping = false
     /** The last resolve left this pose clear of the environment (committed as the clear pose at the end of the tick). */
     var clearPose = false
+    internal var clearBroad = false
+    internal var clearRock = true
     /** Coming out of a burrow / the sand: resolves left that it is still let into the geometry (0: not emerging). */
     var emerging = 0
     /** The last exempt resolve was in a burrow, a hole or the sand (posture 3 / 5). */
@@ -264,6 +266,7 @@ class BodyCollision(private val rock: RockData) {
         val mask = StaticObstacles.passMask(o)
         var worst = 0.0
         var clear = false
+        var broad = false
         var lastPush = 0.0
         var bellyN = Vec3.ZERO
         var bellyCount = 0
@@ -286,7 +289,7 @@ class BodyCollision(private val rock: RockData) {
                 rockGap.fill(dc)
                 // broad phase: a body whose bounding sphere is clear of the rock, the sand, the glass and the surface
                 // (most swimmers in open water, most of the time) needs no station checks
-                if (dc > SKIN && clearOfBounds(body, surfaceOn) && obstacles?.push(body.centre, body.radius + SKIN, mask) == null) { clear = true; break }
+                if (dc > SKIN && clearOfBounds(body, surfaceOn) && obstacles?.push(body.centre, body.radius + SKIN, mask) == null) { clear = true; broad = true; break }
             }
             var any = false
             var best = 0.0
@@ -439,6 +442,8 @@ class BodyCollision(private val rock: RockData) {
         }
         lastClear = clear || lastPush <= WEDGE_LIMIT
         o.body.clearPose = clear
+        o.body.clearBroad = broad
+        o.body.clearRock = rockOn
         if (clear) {
             // remembered as the pose to hold to only once it is clear of the other bodies too ([commitSafe])
             if (wedgeFallback) o.body.held = 0   // (not the re-settle of a held pose: that is still the same hold)
@@ -708,7 +713,9 @@ class BodyCollision(private val rock: RockData) {
      */
     private fun commitSafe(animals: List<Organism>) {
         for (o in animals) {
-            if (o.body.clearPose && o.alive && o !in overlapping) saveSafe(o)
+            // (a body near the geometry is measured as the no-overlap checks measure it before it becomes the pose
+            // every hold returns to: a pose the station pushes called clear but a rim or section centre is still in)
+            if (o.body.clearPose && o.alive && o !in overlapping && (o.body.clearBroad || rimDepth(o, o.body.clearRock, true) <= SKIN)) saveSafe(o)
             o.body.clearPose = false
         }
     }
@@ -751,15 +758,18 @@ class BodyCollision(private val rock: RockData) {
         for ((o, d) in pairDelta) {
             overlapping += o
             pairPushes++
-            val before = o.pos
+            val before = o.body.centre
             o.spline.displace(d)
             o.pos = o.spline.headPos
-            val pushed = o.pos
             resolveEnv(o, dt)
             // the environment took back most of the push (the body is against the rock or a coral on that side): from
             // now on the other body of the pair moves instead, or the two would trade the same overlap pass after pass
-            val want = pushed - before
-            if (want.lengthSq() > 1e-6 && ((o.pos - before) dot want) < 0.5 * want.lengthSq()) pinned += o
+            // (measured at the body's middle against the mean push: a push on the tail barely moves the head)
+            var wx = 0.0; var wy = 0.0; var wz = 0.0
+            for (v in d) { wx += v.x; wy += v.y; wz += v.z }
+            val want = Vec3(wx, wy, wz) / d.size.toDouble()
+            o.body.refresh(o)
+            if (want.lengthSq() > 1e-6 && ((o.body.centre - before) dot want) < 0.5 * want.lengthSq()) pinned += o
         }
         return true
     }
