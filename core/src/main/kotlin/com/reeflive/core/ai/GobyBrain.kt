@@ -24,6 +24,8 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         /** Peeking head swivel, rad, and the head-shake rate while spitting sand, Hz (DESIGN ESTIMATES). */
         const val PEEK_YAW = 0.35
         const val SPIT_HZ = 6.0
+        /** Seconds the body eases out of the burrow pose before the dig pose (its own spline override) is taken. */
+        const val OVERRIDE_SETTLE_S = 0.8
     }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
     val mouth: Vec3 = burrow?.pos ?: Vec3(69.0, 5.0, 23.0)
@@ -166,7 +168,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 0 -> { // into the mouth
                     out.seek(outside(0.5), o.cruiseSpeed, arrive = 1.0)
-                    if (o.pos.distanceTo(outside(0.5)) < 2.0) { phase = 1; timer = 0.0 }
+                    // (not before the body has eased out of the burrow pose it was in: the dig pose replaces that
+                    // override outright, and taking it the next tick swung the tail 14 cm in one frame)
+                    if (o.pos.distanceTo(outside(0.5)) < 2.0 && timer > OVERRIDE_SETTLE_S) { phase = 1; timer = 0.0 }
                 }
                 1 -> { // digging inside, out of sight for a few seconds
                     out.place(inside(2.5), inDir, Vec3.Y, 4.0)

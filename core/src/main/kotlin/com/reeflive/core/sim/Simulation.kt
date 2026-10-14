@@ -419,7 +419,7 @@ class Simulation(
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
-            o.seat?.update(o, a.intent.crawl, crawlSurface, dt)
+            o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
     }
@@ -437,7 +437,7 @@ class Simulation(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
-            o.seat?.update(o, true, crawlSurface, dt)
+            o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
     }
 

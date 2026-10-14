@@ -651,8 +651,20 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     /** Walking legs, chelae, shell roll and retraction (sim/LimbRig.kt HermitLegs). */
     val legs: HermitLegs? = o.limbRig as? HermitLegs
 
+    /** Until this sim time the hermit does not settle to pick (it walks off a spot where its body would not sit). */
+    private var unwedgeUntil = -1e9
+
     override fun preTick(c: Ctx) {
         super.preTick(c)
+        // wedged under an overhang or in a slot where the shell has no clean rest (sim/CrawlerSeat.kt): give up the
+        // spot or waypoint and walk on, rather than hop in place
+        o.seat?.let { st ->
+            if (st.wedged) {
+                st.clearWedge()
+                unwedgeUntil = c.t + UNWEDGE_S
+                utility.current?.let { if (it.name == "pick" || it.name == "crawl") it.finished = true }
+            }
+        }
         val l = legs ?: return
         // claws work the surface while it stands picking; antennules flick nonstop while it follows a food scent
         when (utility.current?.name) {
@@ -670,7 +682,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Pick : Behavior("pick", "Picking at rock") {
         private var spot: Pair<Vec3, Vec3>? = null
         private var next = 0.0
-        override fun score(c: Ctx) = 0.3 + 0.3 * c.o.hunger
+        override fun score(c: Ctx) = if (c.t < unwedgeUntil) 0.0 else 0.3 + 0.3 * c.o.hunger
         override fun enter(c: Ctx) { spot = c.rockSurfacePoint(c.o.pos, 12.0, minNormalY = 0.0) }
         override fun update(c: Ctx, out: SteerIntent) {
             // stay on the surface even on the frame it gives up (a hermit never floats free of the rock)
@@ -699,6 +711,11 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
             if (elapsed > dur) { finished = true; c.o.extension = 1.0 }
         }
         override fun exit(c: Ctx) { c.o.extension = 1.0 }
+    }
+
+    companion object {
+        /** Seconds a hermit that was wedged walks on before it settles to pick again. */
+        const val UNWEDGE_S = 20.0
     }
 }
 

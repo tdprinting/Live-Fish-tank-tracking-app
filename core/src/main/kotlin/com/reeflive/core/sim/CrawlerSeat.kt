@@ -77,6 +77,11 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     private var upS = Vec3.Y
     private var fitUp = Vec3.Y
     private var oPrev = Vec3.ZERO
+    private var wedge = 0.0
+    private var oHeadPrev = Vec3.X
+    /** The seat has had to hop several ticks running (see [update]); the hermit brain walks off and clears it. */
+    val wedged: Boolean get() = wedge >= WEDGE_TICKS
+    fun clearWedge() { wedge = 0.0 }
 
     /** Solved seat (unblended): model origin and frame (model +X = [fwd], +Y = [up], +Z = [right]). */
     var pos = Vec3.ZERO; private set
@@ -115,7 +120,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         out[0] = d dot fwd; out[1] = d dot up; out[2] = d dot right
     }
 
-    fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double) {
+    fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double, simOffset: Double = -1.0) {
         val L = max(o.lengthCm, 0.3)
         val d0 = s.dist(o.pos)
         val onSurface = d0 < 0.5 * o.species.depthRatio * L + 0.2 + SURFACE_TOL_CM
@@ -155,7 +160,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         val fwdT = o.heading.rejectFrom(nT).normalized(h0.rejectFrom(nT).normalized(Vec3.X))
         val rightT = fwdT cross nT
         up = upS
-        fwd = o.heading.rejectFrom(up).normalized(h0.rejectFrom(up).normalized(Vec3.X))
+        fwd = fwdOn(o.heading, up, fPrev, h0)
         right = fwd cross up
         // 1. warm start: the last seat carried along with the sim's motion along the seated surface. A body at rest
         // stays at rest (a fresh solve from the sim position each tick could land on a different one of several rests
@@ -167,7 +172,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             done = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
             // 2. else the last seat unmoved, while it is still clean and over the sim position
             if (!done) {
-                pos = pPrev; up = uPrev; fwd = o.heading.rejectFrom(up).normalized(fPrev); right = fwd cross up
+                pos = pPrev; up = uPrev; fwd = fwdOn(o.heading, up, fPrev, h0); right = fwd cross up
                 done = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
             }
         }
@@ -185,7 +190,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
                     else -> Vec3.rotateAbout(nT, fwdT, -RETRY_TILT)
                 }
                 up = u0
-                fwd = o.heading.rejectFrom(up).normalized(h0.rejectFrom(up).normalized(Vec3.X))
+                fwd = fwdOn(o.heading, up, fPrev, h0)
                 right = fwd cross up
                 val pp = solveContacts(s, g, n0, L)
                 val mm = lowestContact(s, pp, L)
@@ -195,25 +200,57 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             }
             pos = bestP; up = bestU; fwd = bestF; right = fwd cross up
         }
+        var hop = !done
+        if (hadSeat && pos.distanceTo(pPrev) < HOLD_EPS_CM && Vec3.angle(up, uPrev) < HOLD_EPS_RAD) {
+            // a change under the clip tolerance: the last seat is kept exactly while still clean (no sub-mm shimmer)
+            val pNew = pos; val uNew = up; val fNew = fwd
+            pos = pPrev; up = uPrev; fwd = fwdOn(o.heading, up, fPrev, h0); right = fwd cross up
+            if (!ok(lowestContact(s, pos, L), pos, o.pos, d0, L)) { pos = pNew; up = uNew; fwd = fNew; right = fwd cross up }
+        }
         if (hadSeat) {
             // the drawn body glides rather than hops: a new seat further than the sim moved (plus a little) or turned
             // further than a crawler turns in a tick is approached by a limited step, whenever that step is itself
             // clean (otherwise the solved seat is taken at once: no clipping beats no hop)
             val stepMax = SEAT_SPEED * dt + o.pos.distanceTo(oPrev)
-            val turnMax = SEAT_TURN * dt
+            // (the turn capped per tick too: at fast-forward a long tick must not swing the body about its head)
+            val turnMax = min(SEAT_TURN * dt, SEAT_TURN_TICK)
             val dp = pos - pPrev
             val dA = Vec3.angle(uPrev, up)
-            if (dp.length() > stepMax || dA > turnMax) {
+            val dF = Vec3.angle(fPrev, fwd) - Vec3.angle(oHeadPrev, o.heading)
+            if (dp.length() > stepMax || dA > turnMax || dF > turnMax) {
                 val pNew = pos; val uNew = up; val fNew = fwd
                 pos = pPrev + dp.clampLength(stepMax)
                 up = if (dA > turnMax) Vec3.rotateToward(uPrev, uNew, turnMax, fNew).normalized(uNew) else uNew
-                fwd = o.heading.rejectFrom(up).normalized(fNew.rejectFrom(up).normalized(fPrev))
+                fwd = Vec3.rotateToward(fPrev, fNew, turnMax + Vec3.angle(oHeadPrev, o.heading), up).rejectFrom(up).normalized(fNew.rejectFrom(up).normalized(fPrev))
                 right = fwd cross up
-                if (!ok(lowestContact(s, pos, L), pos, o.pos, d0, L)) { pos = pNew; up = uNew; fwd = fNew; right = fwd cross up }
+                if (!ok(lowestContact(s, pos, L), pos, o.pos, d0, L)) {
+                    // the limited step touches something: let the contact solve settle it from there, and keep that
+                    // if it stays within twice the step; only then does the body hop to the solved seat
+                    val pL = solveContacts(s, g, n0, L, pos)
+                    if (!(ok(lowestContact(s, pL, L), pL, o.pos, d0, L) && pL.distanceTo(pPrev) <= 2 * stepMax &&
+                            Vec3.angle(up, uPrev) <= 2 * turnMax && Vec3.angle(fwd, fPrev) <= 2 * turnMax + Vec3.angle(oHeadPrev, o.heading))) {
+                        pos = pNew; up = uNew; fwd = fNew; right = fwd cross up; hop = true
+                    } else pos = pL
+                }
+            }
+        }
+        // wedged: the seat keeps having to hop (no clean rest carries over from the last tick); the brain walks it off
+        wedge = if (hadSeat && hop) wedge + 1.0 else max(0.0, wedge - WEDGE_DECAY)
+        val clean = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
+        if (kind == BrainKind.HERMIT && clean && blend >= 1.0 && simOffset >= 0.0) {
+            // the sim follows the seat: where the body rests differs from where the sim walks it by more than a few
+            // mm (an overhang or crevice where the single-normal crawl step thrashes): the sim takes the seat's pose
+            // (the position at once when that point is itself clear of rock, sand and glass; the sim's up eases toward
+            // the seat's at a crawler's turn rate and its heading is left to the steering, so neither flips or spins)
+            val simSeat = pos + up * simOffset
+            if (simSeat.distanceTo(o.pos) > WRITE_BACK_CM && s.dist(simSeat) >= 0.5 * simOffset) {
+                o.pos = simSeat
+                o.up = Vec3.rotateToward(o.up, up, min(WRITE_BACK_TURN * dt, SEAT_TURN_TICK), o.heading).normalized(up)
             }
         }
         upS = up
         oPrev = o.pos
+        oHeadPrev = o.heading
 
         val hl = o.limbRig as? HermitLegs
         if (hermit != null && hl != null) poseHermit(o, hl, hermit, s, L, dt)
@@ -222,6 +259,14 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         // (unblended: [Organism.toPose] blends the whole body from the sim's spine by [blend])
         o.seatPos = pos
         o.seatUp = up
+    }
+
+    /** Body forward on [up]: the sim heading in that plane, or the last forward when the heading is nearly along up. */
+    private fun fwdOn(h: Vec3, up: Vec3, prev: Vec3, h0: Vec3): Vec3 {
+        val r = h.rejectFrom(up)
+        if (r.lengthSq() > FWD_MIN * FWD_MIN) return r / r.length()
+        val p = prev.rejectFrom(up)
+        return if (p.lengthSq() > FWD_MIN * FWD_MIN) p / p.length() else r.normalized(h0.rejectFrom(up).normalized(Vec3.X))
     }
 
     /** A footprint sample: cast down onto the surface from above; over an edge (or inside a wall) it stays in the plane. */
@@ -682,6 +727,19 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         /** Fastest the drawn seat moves (cm/s, on top of the sim's own motion) and turns (rad/s) while it stays clean. */
         const val SEAT_SPEED = 10.0
         const val SEAT_TURN = 6.0
+        const val SEAT_TURN_TICK = 0.4
+        /** Below this sine of the heading's angle off the body plane the last forward is kept. */
+        const val FWD_MIN = 0.3
+        /** Seat changes under these (cm, rad) are not drawn: the last seat is held while clean. */
+        const val HOLD_EPS_CM = 0.1
+        const val HOLD_EPS_RAD = 0.05
+        /** Seat (raised by the brain's surface offset) this far from the sim position (cm) is written back to the sim. */
+        const val WRITE_BACK_CM = 0.3
+        /** Rate (rad/s) at which the written-back sim up follows the seat's. */
+        const val WRITE_BACK_TURN = 3.0
+        /** Hop count (each hop +1, each clean carry −[WEDGE_DECAY]) at which the seat reports [wedged]. */
+        const val WEDGE_TICKS = 4.0
+        const val WEDGE_DECAY = 0.25
         /** Seat the Sally Lightfoot, brittle star and astrea too (see [forOrganism]). */
         const val SEAT_OTHER_CRAWLERS = false
         const val RETRY_TILT = 0.6
