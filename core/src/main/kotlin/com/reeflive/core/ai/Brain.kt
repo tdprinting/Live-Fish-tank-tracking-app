@@ -86,6 +86,8 @@ abstract class SpeciesBrain(val c: Ctx) {
             add(HeatResponse(this@SpeciesBrain))
             // a gentle tap on the tank (Command.TouchTank); scores 0 and draws no rng until a tap arrives
             add(TouchReact(this@SpeciesBrain))
+            // the toy submarine (Submarine mode); scores 0 and draws no rng while the sub is away, hidden or off
+            add(SubmarineReact(this@SpeciesBrain))
         }
         utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility

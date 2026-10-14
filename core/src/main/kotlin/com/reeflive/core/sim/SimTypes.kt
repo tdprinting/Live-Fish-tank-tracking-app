@@ -16,6 +16,13 @@ sealed class Command {
     data class RemoveOrganism(val id: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
     /**
+     * Submarine mode ([Submarine]): launch ([on]) or park the toy sub; [visible] false hides it from the animals
+     * (they ignore it entirely; it still cannot pass through glass, sand or rock); [headlight] is its lamp.
+     */
+    data class SubmarineMode(val on: Boolean, val visible: Boolean = true, val headlight: Boolean = true) : Command()
+    /** The pilot's stick for the sub; it holds until the next one, so hosts send it only when the input changes. */
+    data class SteerSubmarine(val controls: SubControls) : Command()
+    /**
      * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
      * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
@@ -325,6 +332,8 @@ data class SimSnapshot(
     val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
     /** Bacterial guilds (research 18) for the Bacteria card: levels, trends and what each is doing to the tank. */
     val bacteria: BacteriaState = BacteriaState.EMPTY,
+    /** The toy submarine while Submarine mode is on (null = off). */
+    val submarine: SubPose? = null,
     /** Dynamic sand bed grid (SIMULATION §16); refreshed ≤ 4×/s and shared until it changes. Null = flat, untouched sand. */
     val sandGrid: SandGridSnapshot? = null,
     /** Suspended sand / detritus particles: x, y, z (cm) and `Grain.ordinal + age fraction` per particle. */
