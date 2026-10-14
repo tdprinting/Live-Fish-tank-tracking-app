@@ -525,10 +525,14 @@ class Simulation(
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
         flatwormToxin()
-        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
+        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3), and fear, grudges and
+        // intrusion memory fade on their own half-lives (Social.perceive only runs on behaviour ticks)
         if (!behaviorEnabled || abstractMode) {
             val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
-            for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+            for (o in organisms) if (o.alive) {
+                for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+                com.reeflive.core.ai.Social.fadeMemories(o, CHEM_DT)
+            }
         }
         asterinaPopulation()
         invertEcology.step(dtMin)

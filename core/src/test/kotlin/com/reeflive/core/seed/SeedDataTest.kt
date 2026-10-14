@@ -17,7 +17,7 @@ class SeedDataTest {
         assertEquals(8, seed.equipment.size)
         assertEquals(12, seed.tasks.size)
         assertTrue(seed.livestock.none { it.speciesId == "aiptasia_sp" })
-        assertTrue(seed.livestock.single { it.nickname == "Hawk" }.verified)
+        assertTrue(seed.livestock.single { it.nickname == "Hawk tuah" }.verified)
         assertFalse(seed.livestock.single { it.nickname == "Brittle star" }.verified)
     }
 

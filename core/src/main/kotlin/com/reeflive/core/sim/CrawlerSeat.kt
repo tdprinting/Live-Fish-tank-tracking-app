@@ -238,12 +238,16 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         wedge = if (hadSeat && hop) wedge + 1.0 else max(0.0, wedge - WEDGE_DECAY)
         val clean = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
         if (kind == BrainKind.HERMIT && clean && blend >= 1.0 && simOffset >= 0.0) {
-            // the sim follows the seat: where the body rests differs from where the sim walks it by more than a few
-            // mm (an overhang or crevice where the single-normal crawl step thrashes): the sim takes the seat's pose
+            // the sim follows the seat: where the body rests is higher or lower than where the sim walks it by more than a
+            // few mm (an overhang or crevice where the single-normal crawl step thrashes): the sim takes the seat's pose
             // (the position at once when that point is itself clear of rock, sand and glass; the sim's up eases toward
             // the seat's at a crawler's turn rate and its heading is left to the steering, so neither flips or spins)
-            val simSeat = pos + up * simOffset
-            if (simSeat.distanceTo(o.pos) > WRITE_BACK_CM && s.dist(simSeat) >= 0.5 * simOffset) {
+            // Only the height over the seated surface is written: the walk along the surface stays the sim's (writing
+            // the whole seat pinned a hermit whose seat was held at a ledge: the sim stepped off each tick and was put
+            // back, so it never reached its pick spot)
+            val dh = (pos + up * simOffset - o.pos) dot up
+            val simSeat = o.pos + up * dh
+            if (kotlin.math.abs(dh) > WRITE_BACK_CM && s.dist(simSeat) >= 0.5 * simOffset) {
                 o.pos = simSeat
                 o.up = Vec3.rotateToward(o.up, up, min(WRITE_BACK_TURN * dt, SEAT_TURN_TICK), o.heading).normalized(up)
             }
