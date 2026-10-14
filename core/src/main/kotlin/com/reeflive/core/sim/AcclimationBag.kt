@@ -508,15 +508,18 @@ class AcclimationBags {
         private val BULB_PROBES = doubleArrayOf(-0.7, -1.25)
 
         /**
-         * Equipment that reaches the surface, as (x, z, radius) cylinders (tank cm, from equipment.glb): left and
-         * right powerheads, the heater and intake in the back right corner, the floating feed ring, the hose arc.
+         * Equipment a floating bulb could reach, as (x, z, radius) cylinders (tank cm, from tools/blender/equipment.py):
+         * left and right powerheads, the HOB intake, the back powerhead, the floating feed ring, the hose arc.
          */
         private val KEEP_OUT = doubleArrayOf(
-            5.8, 14.0, 6.0,
-            116.8, 10.0, 6.0,
-            118.5, 2.0, 5.0,
-            41.0, 18.0, 6.5,
-            18.8, 13.0, 3.0,
+            7.0, 18.0, 6.5,
+            116.0, 13.0, 6.0,
+            114.5, 5.0, 3.0,
+            77.0, 3.0, 5.0,
+            41.0, 23.4, 5.2,
+            13.0, 18.0, 1.5,
+            22.0, 16.0, 1.5,
+            30.0, 13.0, 1.5,
         )
 
         /** Bulb radius (cm) for [n] animals of [cm] each: the body has to fit, and more animals need more water. */

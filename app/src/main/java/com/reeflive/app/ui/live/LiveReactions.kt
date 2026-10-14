@@ -7,6 +7,7 @@ import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.SupplyPreview
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.kitFmt
 import com.reeflive.core.sim.MaintenanceTask
@@ -424,7 +425,7 @@ object LiveReactions {
     /** A shop bag dropped onto the water at tank x [x]: it floats 30 minutes before the animals come out. */
     fun bagIn(card: StockCard, count: Int, x: Float) = Reaction(
         TankFx(
-            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, 114f), 56f, 16.5f),
+            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, TankDims.LENGTH_F - 8f), TankDims.WATER_LEVEL_F, TankDims.DEPTH_F * 0.5f),
             tint = Color(0xFF5FD7FF),
             caption = if (count == 1) "${card.name} is floating" else "$count × ${card.name} floating",
         ),

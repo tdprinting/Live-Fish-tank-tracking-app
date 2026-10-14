@@ -65,6 +65,7 @@ import com.reeflive.core.sim.BagPose
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.StockSize
+import com.reeflive.core.sim.TankDims
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
 
@@ -142,9 +143,9 @@ fun BagCarryLayer(
                 frame
                 val path = Path()
                 var ok = true
-                val pts = arrayOf(0f to 44f, 121.9f to 44f, 121.9f to 58f, 0f to 58f)
+                val pts = arrayOf(0f to TankDims.WATER_LEVEL_F - 12f, TankDims.LENGTH_F to TankDims.WATER_LEVEL_F - 12f, TankDims.LENGTH_F to TankDims.WATER_LEVEL_F + 2f, 0f to TankDims.WATER_LEVEL_F + 2f)
                 pts.forEachIndexed { i, (x, y) ->
-                    if (!projection.project(x, y, 33.8f, corner)) ok = false
+                    if (!projection.project(x, y, TankDims.DEPTH_F + 0.8f, corner)) ok = false
                     if (i == 0) path.moveTo(corner[0], corner[1]) else path.lineTo(corner[0], corner[1])
                 }
                 path.close()

@@ -24,6 +24,7 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.WaterState
 import com.reeflive.app.render.GlassStroke
@@ -378,8 +379,8 @@ object ReefLive {
      * point is off the tank.
      */
     fun bagDropX(px: Double, py: Double): Double {
-        if (!projection.planePointAt(px.toFloat(), py.toFloat(), 33.8f, bagPt)) return -1.0
-        return if (bagPt[0] in 0f..121.9f && bagPt[1] in 0f..61f) bagPt[0].toDouble() else -1.0
+        if (!projection.planePointAt(px.toFloat(), py.toFloat(), TankDims.DEPTH_F + 0.8f, bagPt)) return -1.0
+        return if (bagPt[0] in 0f..TankDims.LENGTH_F && bagPt[1] in 0f..TankDims.HEIGHT_F) bagPt[0].toDouble() else -1.0
     }
 
     /**
