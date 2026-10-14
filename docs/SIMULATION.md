@@ -41,6 +41,7 @@ sealed class Command {
   data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String): Command()
   data class RemoveOrganism(val id: String): Command()
   data class TapGlass(val worldPoint: Vec3): Command()
+  data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0): Command()
   data class SetSpeed(val speed: Double): Command()
   data class ResetToReality(val water: WaterState, val livestock: List<LivestockSeed>): Command()
 }
@@ -417,6 +418,8 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 
 ### 5.6 Glass tap
 `TapGlass(point)`: every fish within 30 cm gets `startle = skittishness × (1 − dist/30)`; `Flee` if startle > 0.35 else a flinch (0.3 s burst away 1 L); curious species may approach after 5 s.
+
+`TouchTank(point, surface, strength)` is the gentle single-finger tap (`TankTouch`, UI_STYLE §10.8). Surfaces GLASS / SAND / ROCK / CORAL (a rock tap within 5 cm of a colony). Per animal `TankTouch.reaction` picks INVESTIGATE (food-conditioned bold fish, glass, ≤ 50 cm, day), AVOID (shy fish, ≤ 28 cm), PEEK (blennies), FREEZE (shrimp, sally crab), CHECK (diamond goby, nassarius on sand), DUCK (hermits, dusters; crustaceans, blennies and hawkfish on rock: the species' own startle at 0.4–0.7) or NONE; strength falls off linearly with distance. The shared `TouchReact` behaviour (score 0.75–0.9, no utility noise and no rng until a tap, so it changes no other sequence) plays it for a few seconds. Polyp corals (GSP, zoa, clove) within 12 cm of a rock / coral tap get `disturb` 0.6 (0.8 on the tapped colony). Habituation per animal: +0.22 per answered tap, decays with τ 20 min, ignored at ≥ 0.75; a feed clears it. Three taps within 4 s (× speed) and 10 cm escalate to `TapGlass`.
 
 ---
 

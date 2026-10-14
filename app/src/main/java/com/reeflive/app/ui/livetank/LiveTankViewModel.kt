@@ -24,6 +24,7 @@ import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseSpec
@@ -139,6 +140,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // ---- actions allowed in both modes ----
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null) = holder.enqueue(Command.Feed(kind, grams, at))
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
+    /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
+    fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner

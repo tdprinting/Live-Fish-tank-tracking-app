@@ -69,6 +69,10 @@ enum class BurstKind {
     SHELLS,
     /** Torn nori bits drifting off the clip (spawned by the renderer itself). */
     NORI_BITS,
+    /** A fingertip tap on the glass: a small ring of ripples spreading over the pane from the point. */
+    GLASS_RIPPLE,
+    /** A fingertip tap on the sand: a little puff of grains that lifts and settles. */
+    SAND_PUFF,
 }
 
 /** One burst request: what, where (tank cm), an sRGB tint (0..1) and a size factor. */
@@ -240,6 +244,23 @@ class BurstField(seed: Int = 23) {
             BurstKind.SHELLS -> {
                 repeat(n(3)) { add(x + g(4f), Camera.WATER_Y - 1f, z + g(3f), 0f, -12f, 0f, 3.5f, 1.4f, 1.4f, SHELL_C, 1f, Shape.CHUNK, SINK_FAST, delay = it * 0.25f) }
                 repeat(n(10)) { add(x + g(5f), Camera.SAND_Y + 0.6f, z + g(3f), g(2f), 2f, g(2f), 3f, 1f, 3.5f, SILT_C, 0.16f, Shape.HAZE, DRAG, delay = 1.2f + rnd.nextFloat() * 0.6f) }
+            }
+            BurstKind.GLASS_RIPPLE -> {
+                // two thin rings of streaks on the inside of the pane, racing outward and fading (no z travel)
+                val gz = min(z, Camera.TANK[2] - 0.5f)
+                for (ring in 0 until 2) {
+                    val m = n(if (ring == 0) 22 else 14)
+                    val sp = if (ring == 0) 7f else 4.5f
+                    repeat(m) {
+                        val a = TAU * it / m + rnd.nextFloat() * 0.1f
+                        add(x + cos(a) * 0.4f, y + sin(a) * 0.4f, gz, cos(a) * sp, sin(a) * sp, 0f, 0.75f, 0.45f, 0.3f, CLEAR, if (ring == 0) 0.5f else 0.3f, Shape.STREAK, DRAG or ORIENT, delay = ring * 0.14f)
+                    }
+                }
+            }
+            BurstKind.SAND_PUFF -> {
+                val sy = Camera.SAND_Y + 0.4f
+                repeat(n(8)) { add(x + g(1.2f), sy + rnd.nextFloat() * 0.6f, z + g(1.2f), g(1.5f), 1.2f + rnd.nextFloat() * 1.5f, g(1.5f), 2.2f + rnd.nextFloat(), 0.6f, 2.6f, SILT_C, 0.18f, Shape.HAZE, DRAG or FLOW) }
+                repeat(n(16)) { add(x + g(0.8f), sy, z + g(0.8f), g(4f), 2.5f + rnd.nextFloat() * 3f, g(4f), 1.6f, 0.12f, 0.1f, SILT_C, 0.85f, Shape.DOT, SINK or DRAG) }
             }
             BurstKind.NORI_BITS -> repeat(n(3)) {
                 add(x + g(1.5f), y + g(3f), z + g(3f), 1f + g(1f), -0.6f, g(1f), 6f, 0.7f, 0.5f, FoodVisuals.NORI_COLOR, 0.9f, Shape.NORI, FLOW or SINK)

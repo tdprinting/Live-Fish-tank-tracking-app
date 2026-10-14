@@ -24,6 +24,7 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.WaterState
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.SupplyShelfControl
@@ -64,6 +65,7 @@ object ReefLive {
     private var running = false
     private var applied: Map<String, Double> = emptyMap()
     internal val scenarioQueue = ArrayList<Pair<Double, Command>>()
+    private var pendingTouch: Pair<Vec3, TouchSurface>? = null
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -120,6 +122,8 @@ object ReefLive {
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
                     override fun onFollowLost(id: String) { emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
+                    // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
+                    override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
                     // as on Android (LiveTankScreen): a long press drops a pinch of pellets where the finger is
                     override fun onLongPress(worldPoint: Vec3) { sim?.enqueue(Command.Feed(FoodKind.PELLET, 1.0, worldPoint)); emit("onFed", "PELLET") }
                     override fun onScrape(stroke: GlassStroke) { ReefSandbox.scrape(stroke); emit("onScrape", stroke.lengthCm) }
@@ -282,6 +286,13 @@ object ReefLive {
     fun shelfPick(id: String) { shelf.pick(id) }
     fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }
     fun resetCamera() { renderer?.resetCamera() }
+    /** The page's answer to `onTouch(surface)`: touch the tank where that tap landed (ripple or sand puff, Command.TouchTank). */
+    fun touchTank(): Boolean {
+        val (p, surface) = pendingTouch ?: return false
+        pendingTouch = null
+        ReefSandbox.touch(p, surface)
+        return true
+    }
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
         current = v

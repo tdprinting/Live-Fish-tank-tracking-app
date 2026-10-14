@@ -13,6 +13,7 @@ import com.reeflive.core.sim.AlgaeCover
 import com.reeflive.core.sim.CritterKind
 import com.reeflive.core.sim.CoralPose
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TouchSurface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.microedition.khronos.egl.EGLConfig
@@ -899,6 +900,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
                 if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
+                else if (id == null && following == null && !cleaning) {
+                    // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
+                    // (not in clean-glass mode, where the finger is on the Flipper)
+                    val hit = touchHit(o, dir)
+                    if (hit != null) main.post { l?.onTouchTank(hit.first, hit.second) } else main.post { l?.onPick(null) }
+                }
                 else main.post { l?.onPick(id) }
             }
             CameraInput.TapKind.ZOOM -> {
@@ -928,6 +935,33 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val t = Picker.rayPlaneZ(o, d, Camera.TANK[2]) ?: return false
         val x = o[0] + d[0] * t; val y = o[1] + d[1] * t
         return kotlin.math.abs(x - flipper[0]) <= FLIPPER_HALF_W + 2f && kotlin.math.abs(y - flipper[1]) <= FLIPPER_HALF_H + 2f
+    }
+
+    /**
+     * What a single tap with no fish under it touches: the first rock point along the ray (ROCK; the sim turns it into
+     * CORAL when a colony sits there), else the sand when the ray reaches the floor (SAND), else the glass where the
+     * ray enters the water (GLASS, the fingertip on the pane). Null when the ray misses the tank.
+     */
+    private fun touchHit(o: FloatArray, d: FloatArray): Pair<Vec3, TouchSurface>? {
+        var t0 = 0f; var t1 = 1000f
+        val lo = floatArrayOf(0f, Camera.SAND_Y, 0f); val hi = floatArrayOf(Camera.TANK[0], Camera.WATER_Y, Camera.TANK[2])
+        for (k in 0 until 3) {
+            if (kotlin.math.abs(d[k]) < 1e-6f) { if (o[k] < lo[k] || o[k] > hi[k]) return null; continue }
+            var a = (lo[k] - o[k]) / d[k]; var b = (hi[k] - o[k]) / d[k]
+            if (a > b) { val s = a; a = b; b = s }
+            t0 = maxOf(t0, a); t1 = minOf(t1, b)
+        }
+        if (t0 > t1) return null
+        fun at(t: Float) = Vec3((o[0] + d[0] * t).toDouble(), (o[1] + d[1] * t).toDouble(), (o[2] + d[2] * t).toDouble())
+        val g = sdf
+        if (g != null) {
+            val tr = t0 + Camera.marchClear(g, o[0] + d[0] * t0, o[1] + d[1] * t0, o[2] + d[2] * t0, d[0], d[1], d[2], t1 - t0, 0f)
+            if (tr < t1 - 0.05f) { val r = at(tr); return r to (if (r.y <= Camera.SAND_Y + 0.6) TouchSurface.SAND else TouchSurface.ROCK) }
+        }
+        val end = at(t1)
+        if (end.y <= Camera.SAND_Y + 0.5) return end to TouchSurface.SAND
+        val entry = at(t0)
+        return Vec3(entry.x.coerceIn(0.0, Camera.TANK[0].toDouble()), entry.y.coerceIn(Camera.SAND_Y + 0.5, Camera.WATER_Y - 0.5), entry.z) to TouchSurface.GLASS
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */

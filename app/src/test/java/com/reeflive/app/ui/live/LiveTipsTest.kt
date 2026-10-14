@@ -30,6 +30,12 @@ class LiveTipsTest {
         (LiveTips.hermieWatch + LiveTips.hermieSandbox + LiveTips.HELLO).forEach { assertTrue(it, it.length <= 70) }
     }
 
+    @Test fun tapTheGlassIsTaught() {
+        // a tap on the tank touches it (UI_STYLE §10.8): the card and Hermie both say so
+        assertTrue(LiveTips.watch.any { "Tap the glass and see who comes to look" in it })
+        assertTrue(LiveTips.hermieWatch.any { "Tap the glass and see who comes to look" in it })
+    }
+
     @Test fun theHelpButtonHermieMentionsIsInTheMenu() {
         assertTrue(LiveTips.hermieWatch.any { "What can I do?" in it })
     }

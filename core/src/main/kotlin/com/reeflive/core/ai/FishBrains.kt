@@ -1261,6 +1261,9 @@ fun holeRest(c: Ctx, hole: Anchor?, fallback: Vec3, headOut: Double): Rest {
     return Rest(head, dir, Vec3.Y.rejectFrom(dir).normalized(Vec3.Y), posture = 3, spline = listOf(head, pos, pos - dir * depth, pos - dir * (depth + c.L)))
 }
 
+/** How far a blenny's head comes out of its hole to watch a tap on the glass (cm; its day pose is 1–1.6). */
+const val PEEK_HEAD_OUT_CM = 2.2
+
 /** Go to the hole mouth (swim), then slide in (kinematic). [headOut] < 0 = fully inside. */
 open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3, label: String, val scoreFn: (Ctx) -> Double, val headOutFn: (Ctx) -> Double) : Behavior("hole_$holeName", label) {
     private var inside = false
@@ -1296,6 +1299,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
+
+    /** A tap on the glass: head and shoulders out of the hole to look (research 04 §1C "watches from rock"). */
+    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, territory, PEEK_HEAD_OUT_CM)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
         if (night) holeRest(c, hole, territory, -0.5)
@@ -1459,6 +1465,9 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     override fun restSpot(c: Ctx, night: Boolean): Rest = holeRest(c, hole, holePos, if (night) -0.5 else 1.5)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole") holePos else super.anchorPos(c, anchor)
+
+    /** A tap on the glass: further out of its hole to look (research 04 §2C "peeks from rock"). */
+    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, holePos, PEEK_HEAD_OUT_CM)
 
     override fun initialPlace(c: Ctx) {
         super.initialPlace(c)

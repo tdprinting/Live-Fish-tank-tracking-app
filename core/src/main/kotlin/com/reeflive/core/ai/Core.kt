@@ -158,6 +158,11 @@ abstract class Behavior(val name: String, label: String) {
     var enteredAt = 0.0
     /** While true the brain will not preempt this behavior except for score ≥ 0.95 (flee, dead). */
     open val committed: Boolean get() = false
+    /**
+     * False for a behavior that is idle almost always (a reaction to the user): it gets no utility noise, so adding it
+     * draws no rng and leaves every other random sequence exactly as it was.
+     */
+    open val noisy: Boolean get() = true
 
     abstract fun score(c: Ctx): Double
     open fun enter(c: Ctx) {}
@@ -182,7 +187,7 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         val k = c.dt / NOISE_TAU
         val amp = c.o.whim * kotlin.math.sqrt(2 * k)
         for ((i, b) in behaviors.withIndex()) {
-            noise[i] += -noise[i] * k + amp * c.rng.gaussian()
+            if (b.noisy) noise[i] += -noise[i] * k + amp * c.rng.gaussian()
             val raw = b.score(c)
             // stochastic utility: only nudges ordinary scores; urgent ones (≥ 0.95) and zeros stay exact
             val s = if (raw > 0.0 && raw < 0.95) (raw + noise[i]).coerceIn(0.01, 0.94) else raw
