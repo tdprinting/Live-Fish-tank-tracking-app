@@ -244,7 +244,7 @@ Grid 120×32 (1 cm quads), heightmap: base 3 cm + 1.5 cm mounds against rock fee
   {"name": "SHRIMP_LEDGE", "type": "LEDGE", "pos": [88, 35, 15], "normal": [0, -1, 0.3]},
   {"name": "SLEEP_TANG", "type": "SLEEP", "pos": [36, 25, 7], "dir": [-0.7, 0.2, -0.7]},
   {"name": "SURFACE_FEED", "type": "FEED", "pos": [41, 55, 20]},
-  {"name": "NORI_CLIP", "type": "FEED", "pos": [2, 32, 39]},
+  {"name": "NORI_CLIP", "type": "FEED", "pos": [2, 27, 40]},
   {"name": "HOB_OUTFLOW", "type": "FLOW", "pos": [71, 55, 1]},
   {"name": "GRAZE_1", "type": "GRAZE", "pos": [12, 20, 30]}, {"name": "GRAZE_2", "type": "GRAZE", "pos": [30, 40, 12]},
   {"name": "GRAZE_3", "type": "GRAZE", "pos": [44, 8, 27]}, {"name": "GRAZE_4", "type": "GRAZE", "pos": [52, 30, 9]},

@@ -159,7 +159,7 @@ object DefaultScape {
             a("SHRIMP_LEDGE", "LEDGE", 40.0, 26.2, 16.6, normal = v(-0.05, -0.97, 0.23)),
             a("SLEEP_TANG", "SLEEP", 38.0, 9.1, 5.2, dir = v(-0.7, 0.2, -0.7)),
             a("SURFACE_FEED", "FEED", 41.0, 37.5, 23.4),
-            a("NORI_CLIP", "FEED", 2.0, 32.0, 39.0),
+            a("NORI_CLIP", "FEED", 2.0, 27.0, 40.0),
             a("HOB_OUTFLOW", "FLOW", 73.0, 37.4, 1.3),
             a("GRAZE_1", "GRAZE", 12.0, 14.2, 32.0), a("GRAZE_2", "GRAZE", 30.5, 33.1, 18.6),
             a("GRAZE_3", "GRAZE", 39.9, 14.3, 33.7), a("GRAZE_4", "GRAZE", 50.0, 35.6, 13.0),

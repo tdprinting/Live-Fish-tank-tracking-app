@@ -71,7 +71,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
         val fid = nextFeed++
         lastFeedTime = simTime; lastFeedPos = at; lastFeedKind = kind
         if (kind == FoodKind.NORI) {
-            val clip = rock.anchors.pos("NORI_CLIP", Vec3(2.0, 32.0, 39.0))
+            val clip = rock.anchors.pos("NORI_CLIP", Vec3(2.0, 27.0, 40.0))
             nori = NoriSheet(clip, simTime, NoriCloth(clip, rock))
             return fid
         }

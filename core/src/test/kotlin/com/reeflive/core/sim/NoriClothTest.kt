@@ -14,11 +14,14 @@ import kotlin.math.sqrt
  * the downstream side and torn pieces drift off as food.
  */
 class NoriClothTest {
-    /** An open tank with one small rock far from the clip. */
-    private val rock = RockData.ofSpheres(listOf(Vec3(100.0, 10.0, 15.0) to 5.0))
-    // the resized tank's NORI_CLIP (left glass, front corner): main's (2, 35, 18) was 21 cm under its 56 cm water but
-    // sits only 3 cm under the 38.1 cm surface here, too shallow for the sheet to stream up and back
-    private val clip = Vec3(2.0, 32.0, 39.0)
+    // the open test tank's own clip, mid-water on the left glass well clear of the front and back panes: main's (2, 35, 18)
+    // was 21 cm under its 56 cm water but is only 3 cm under the 38.1 cm surface here, in the surface band of the
+    // circulation; the real tank's NORI_CLIP (2, 27, 40) sits in the front corner, where a jet from behind pins the sheet
+    // against the front glass
+    private val clip = Vec3(2.0, 22.0, 22.0)
+    /** An open tank with one small rock far from the clip (the clip given to the sim as its NORI_CLIP anchor). */
+    private val rock = RockData.ofSpheres(listOf(Vec3(100.0, 10.0, 15.0) to 5.0),
+        AnchorSet(listOf(Anchor("NORI_CLIP", "FEED", clip))).withDefaults(DefaultScape.anchorsRaw()))
 
     private fun run(c: NoriCloth, seconds: Double, dt: Double = 0.05, t0: Double = 0.0, flow: (Vec3, Double) -> Vec3): Double {
         var t = t0

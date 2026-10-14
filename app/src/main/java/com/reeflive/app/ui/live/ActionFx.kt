@@ -59,7 +59,7 @@ object FxSpots {
     /** Hand-feed spot at the waterline, back middle beside the return (core Simulation.HAND_FEED, video T97). */
     val FEED = FxPoint(74f, WY, 4.5f)
     /** NORI_CLIP on the left glass (anchors.json). */
-    val NORI = FxPoint(2f, 32f, 39f)
+    val NORI = FxPoint(2f, 27f, 40f)
     /** HOB_OUTFLOW: `Command.Dose` enters here and spreads with the flow. */
     val DOSE = FxPoint(73f, WY, 3f)
     /** Where AddOrganism / AddMany release fish (tank middle, just under the surface). */
