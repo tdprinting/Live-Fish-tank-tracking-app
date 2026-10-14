@@ -36,6 +36,13 @@ class LiveTipsTest {
         assertTrue(LiveTips.hermieWatch.any { "Tap the glass and see who comes to look" in it })
     }
 
+    @Test fun thoughtBubblesAreTaught() {
+        // the fish card's "Thinking…" lines and More → "Thought bubbles" (UI_STYLE §10.9)
+        assertTrue(LiveTips.watch.any { "thinking" in it && "Thought bubbles" in it })
+        assertTrue(LiveTips.hermieWatch.any { "Thought bubbles" in it })
+        assertTrue(LiveTips.hermieSandbox.any { "Thought bubbles" in it })
+    }
+
     @Test fun theHelpButtonHermieMentionsIsInTheMenu() {
         assertTrue(LiveTips.hermieWatch.any { "What can I do?" in it })
     }

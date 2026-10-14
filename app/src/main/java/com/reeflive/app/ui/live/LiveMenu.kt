@@ -124,6 +124,9 @@ class LiveTools(
     val onTorch: () -> Unit = {},
     val touring: Boolean = false,
     val onTour: () -> Unit = {},
+    /** Submarine mode (SubmarineControls): steer a toy sub among the fish. */
+    val subOn: Boolean = false,
+    val onSubmarine: () -> Unit = {},
     /** Fish to follow: id to name. */
     val fish: List<Pair<String, String>> = emptyList(),
     val onFollowFish: (String) -> Unit = {},
@@ -132,6 +135,9 @@ class LiveTools(
     val onSupplies: () -> Unit = {},
     /** Full-screen screensaver: slow cinematic moves and fish follows with soft transitions. */
     val onScreensaver: () -> Unit = {},
+    /** More → "Thought bubbles": speech bubbles over a few animals saying what they are thinking. */
+    val thoughtsOn: Boolean = false,
+    val onThoughts: () -> Unit = {},
 )
 
 /**
@@ -535,6 +541,7 @@ private fun ColumnScope.CardBody(
             Tiles(tone, close, listOf(
                 T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
                 T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
+                T("Submarine", ReefGlyphs.bubbles, on = tools.subOn, sub = "Swim with the fish") { tools.onSubmarine() },
                 T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
                 T("Screensaver", ReefGlyphs.moon, sub = "Relax and watch") { tools.onScreensaver() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
@@ -567,6 +574,7 @@ private fun ColumnScope.CardBody(
                 T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
+                T("Thought bubbles", ReefGlyphs.bubbles, on = tools.thoughtsOn, closes = false, sub = "What fish think") { tools.onThoughts() },
             ))
         }
     }

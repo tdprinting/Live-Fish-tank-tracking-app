@@ -185,6 +185,9 @@ class UtilityBrain(val behaviors: List<Behavior>) {
 
     fun scores(): Map<String, Double> = behaviors.mapIndexed { i, b -> b.name to lastScores[i] }.toMap()
 
+    /** The last tick's (noisy) score of behaviour [i] of [behaviors]; read-only (the thought readout's "next" plan). */
+    fun lastScore(i: Int): Double = lastScores[i]
+
     fun tick(c: Ctx, intent: SteerIntent) {
         var best: Behavior? = null
         var bestScore = -1.0

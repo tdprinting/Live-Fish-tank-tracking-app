@@ -40,6 +40,9 @@ export function startLive(applyReadings) {
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
+    // a fingertip held on the glass (UI_STYLE §10.8): slide it and fish follow; flick it as it lifts for a puff of current
+    onFinger: (surface) => { if (surface) { try { navigator.vibrate?.(6); } catch { /* not on iOS */ } fingerSay(); } },
+    onFlick: () => say('Whoosh! A puff of current.'),
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
@@ -55,6 +58,10 @@ export function startLive(applyReadings) {
   }).catch(() => {});
 }
 export function setLiveVisible(v) { live.setVisible(v); if (!v) stopLoops(); }
+
+// keep the side rail and fish card below however many rows the top HUD wraps to
+try { const top = document.querySelector('#live .top'), chrome = $('chrome');
+  if (top && window.ResizeObserver) new ResizeObserver(() => chrome.style.setProperty('--topH', `${top.offsetHeight + 8}px`)).observe(top); } catch (e) { /* keep CSS fallback */ }
 
 // ================================================================ periodic refresh
 function tick() {
@@ -75,6 +82,7 @@ function tick() {
   updateSound();
   if (ui.tour && ++ui.tourTicks >= 24) nextTour();
   if (!$('micro').classList.contains('hidden')) drawMicro();
+  if (sub.on) renderSubInfo();
 }
 const clockText = (sec) => {
   const t = Math.max(0, Math.floor(sec));
@@ -210,7 +218,7 @@ function viewCard() {
   const fish = animals.slice(0, 12);
   return `${timeSlider(STOPS)}
     <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
-    <div class="options">${tile('data-torch', '🔦', 'Torch', ui.torch)}${tile('data-feedshelf', '🍤', 'Feed')}${tile('data-tour', '🎬', 'Auto tour', ui.tour)}
+    <div class="options">${tile('data-torch', '🔦', 'Torch', ui.torch)}${tile('data-feedshelf', '🍤', 'Feed')}${tile('data-tour', '🎬', 'Auto tour', ui.tour)}${tile('data-sub', '🟡', 'Submarine', sub.on)}
       ${tile('data-hide', '🎞', 'Cinematic')}${tile('data-saver', '🌙', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
     <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, '🐟', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
 }
@@ -329,7 +337,7 @@ function moreCard(sb) {
       ${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}${tile('data-knock', '✊', 'Knock glass')}
       ${tile('data-clean', '🧽', 'Clean glass', ui.cleaning)}${tile('data-hide', '🙈', 'Hide buttons')}
       ${tile('data-hermie-toggle', '🦀', ui.hermie ? 'Hermie on' : 'Hermie off', ui.hermie)}${tile('data-happy-toggle', '😊', ui.happy ? 'Happy meter on' : 'Happy meter off', ui.happy)}
-      ${tile('data-camreset', '🎥', 'Reset view')}</div>
+      ${tile('data-thoughts-toggle', '💭', 'Thought bubbles', thoughts.on)}${tile('data-camreset', '🎥', 'Reset view')}</div>
     <h4>Picture quality</h4><div class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</div>
     <label class="slider"><span>Sound volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>`;
 }
@@ -352,6 +360,7 @@ $('card').addEventListener('click', (e) => {
   else if ('tour' in d) { ui.tour = !ui.tour; ui.tourTicks = 0; ui.tourIndex = -1; if (ui.tour) nextTour(); else { ui.following = null; live.follow(null); } }
   else if ('hide' in d) { setChrome(true); return; }
   else if ('saver' in d) { closeCard(); setSaver(true); return; }
+  else if ('sub' in d) { setSub(!sub.on); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -407,6 +416,7 @@ $('card').addEventListener('click', (e) => {
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }
   else if ('hermieToggle' in d) { ui.hermie = !ui.hermie; store.set('reeflive.hermie', ui.hermie); $('hermie').classList.toggle('hidden', !ui.hermie); }
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
+  else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);
   else if ('camreset' in d) { ui.following = null; ui.tour = false; live.follow(null); live.resetCamera(); }
   else if (d.quality) { ui.quality = d.quality; store.set('reeflive.quality', ui.quality); live.setQuality(ui.quality); }
   else return;
@@ -450,7 +460,7 @@ function renderFish() {
   $('fish').innerHTML = `<div class="card-head"><div><strong>${esc(a.name)}</strong><div class="muted">${esc(a.species)}${a.stage ? ` · ${esc(a.stage)}` : ''} · ${a.cm.toFixed(1)} cm</div></div>
       <button class="icon-btn" data-fclose aria-label="Close">✕</button></div>
     ${bar('Health', a.health, 'good')}${bar('Stress', a.stress, 'caution')}${bar('Hunger', a.hunger, 'hunger')}
-    <p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>
+    ${a.thinking ? thinkHtml(a) : `<p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>`}
     ${a.disease ? `<p class="warn">🤒 ${esc(a.disease)}${a.symptoms.length ? `: ${esc(a.symptoms.join(', '))}` : ''}</p>` : ''}
     ${a.relations.length ? `<div class="rels">${a.relations.map((r) => `<span class="rel ${r.affinity > 0.15 ? 'good' : r.affinity < -0.15 ? 'danger' : ''}">${esc(r.label)} ${esc(r.name)}</span>`).join('')}</div>` : ''}
     <div class="row-gap"><button class="btn small" data-ffollow>${ui.following === a.id ? 'Stop following' : 'Follow'}</button>
@@ -484,7 +494,7 @@ function renderFollow() {
   if (i < 0) return;
   const a = animals[i];
   $('follow').innerHTML = `<button class="icon-btn" data-fprev aria-label="Previous">◀</button>
-    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.caption || a.behavior)}</div></div>
+    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.thinking || a.caption || a.behavior)}</div></div>
     <button class="icon-btn" data-fnext aria-label="Next">▶</button><button class="btn small ghost" data-fback>Back to tank</button>`;
 }
 $('follow').addEventListener('click', (e) => {
@@ -845,8 +855,14 @@ function touchTank(surface) {
   try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
   if (performance.now() - touchSaidAt > 9000) {
     touchSaidAt = performance.now();
-    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?' }[surface] || 'Soft corals pull in, the shy ones duck.');
+    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?', SURFACE: 'Plip! Hungry fish come up to look.' }[surface] || 'Soft corals pull in, the shy ones duck.');
   }
+}
+let fingerSaidAt = 0;
+function fingerSay() {
+  if (performance.now() - fingerSaidAt < 20000) return;
+  fingerSaidAt = performance.now();
+  say('Slide your finger. Who follows? Rest it and they nibble.');
 }
 function knockSound(gain) {
   const b = ui.sound && actx && buffers[CUES.PELLET];
@@ -859,9 +875,146 @@ function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.m
 // iOS only allows audio after a tap: resume the context on the first touch when sound was left on
 document.addEventListener('pointerdown', () => { if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume(); }, { once: false, passive: true });
 
+// ================================================================ what is it thinking (Android ThinkingBlock / ThoughtBubbleLayer)
+// The card's "Thinking…" lines come held from Kotlin (ThoughtHold); More → "Thought bubbles" puts speech bubbles over at
+// most three animals (ThoughtBubblePicker in Kotlin picks them, fades them; this only draws them where the camera sees them).
+function thinkHtml(a) {
+  return `<div class="think"><b>Thinking…</b><p>${esc(a.thinking)}</p>${a.thinkNext ? `<p class="muted">${esc(a.thinkNext)}</p>` : ''}${a.feeling ? `<p class="muted">${esc(a.feeling)}</p>` : ''}</div>`;
+}
+const thoughts = { on: store.get('reeflive.thoughts', false), raf: 0, layer: null, els: new Map() };
+(() => {
+  const css = document.createElement('style');
+  css.textContent = `.think{margin:8px 0 4px;font-size:13px}.think b{font-size:12px;opacity:.75}.think p{margin:2px 0}
+    .tbubbles{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1}
+    .tbubble{position:absolute;transform:translate(-50%,-100%);max-width:170px;padding:5px 10px;border-radius:999px;background:#F2F6FF;
+      color:#1B1340;border:2px solid #1B1340;box-shadow:0 3px 0 #1B1340;font:600 13px/16px system-ui,sans-serif;text-align:center;white-space:normal;transition:opacity .2s}
+    .tbubble::after{content:'';position:absolute;left:50%;bottom:-8px;margin-left:-6px;border:6px solid transparent;border-top:8px solid #1B1340;border-bottom:0}`;
+  document.head.appendChild(css);
+})();
+function setThoughts(on) {
+  thoughts.on = on; store.set('reeflive.thoughts', on);
+  say(on ? 'Look! Now you can see what the fish are thinking.' : 'The fish keep their thoughts to themselves.');
+  if (on) startThoughts(); else stopThoughts();
+}
+function startThoughts() {
+  if (thoughts.raf || !thoughts.on) return;
+  if (!thoughts.layer) { thoughts.layer = document.createElement('div'); thoughts.layer.className = 'tbubbles'; $('tank').after(thoughts.layer); }
+  const frame = () => {
+    thoughts.raf = requestAnimationFrame(frame);
+    const hide = ui.shelf || ui.cleaning || sub.on || !$('micro').classList.contains('hidden');
+    const list = hide ? [] : JSON.parse(SB.bubbles(true));
+    const cnv = $('tank'), k = cnv.clientWidth / Math.max(1, cnv.width), seen = new Set();
+    for (const b of list) {
+      let el = thoughts.els.get(b.id);
+      if (!el) { el = document.createElement('div'); el.className = 'tbubble'; thoughts.layer.appendChild(el); thoughts.els.set(b.id, el); }
+      if (el.textContent !== b.text) el.textContent = b.text;
+      el.style.left = `${Math.max(90, Math.min(cnv.clientWidth - 90, b.x * k))}px`;
+      el.style.top = `${Math.max(40, b.y * k - 10)}px`;
+      el.style.opacity = b.a.toFixed(2);
+      seen.add(b.id);
+    }
+    for (const [id, el] of thoughts.els) if (!seen.has(id)) { el.remove(); thoughts.els.delete(id); }
+  };
+  frame();
+}
+function stopThoughts() {
+  cancelAnimationFrame(thoughts.raf); thoughts.raf = 0; SB.bubbles(false);
+  for (const el of thoughts.els.values()) el.remove();
+  thoughts.els.clear();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopThoughts(); else startThoughts(); });
+// ================================================================ submarine (Android SubmarineControls)
+// Be a little submarine: a stick (or W A S D / arrows) steers, the up and down buttons (or Space / E and Shift / Q)
+// dive and climb. The fish see it by species and personality unless it is invisible.
+const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '' };
+function setSub(on) {
+  sub.on = on;
+  if (on) { closeCard(); if (ui.tour) ui.tour = false; ui.following = null; if (ui.cleaning) setCleaning(false); if (ui.shelf) closeShelf(); }
+  document.body.classList.toggle('subbing', on);
+  $('subui').classList.toggle('hidden', !on);
+  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = '';
+  live.submarine(on, sub.visible, sub.light);
+  live.subView(sub.inside);
+  if (on) live.steerSub(0, 0, 0, 0);
+  moveKnob(0, 0);
+  renderSub();
+  toast(on ? 'Dive dive! Steer with the yellow stick (or W A S D). Swim slowly and the curious fish come to look.' : 'The submarine is back in its dock.');
+  if (!on) { renderRail(); renderFollow(); }
+}
+function renderSub() {
+  $('subGhost').classList.toggle('on', !sub.visible);
+  $('subGhost').textContent = sub.visible ? '👻 Invisible' : '👻 Invisible: on';
+  $('subCam').classList.toggle('on', sub.inside);
+  $('subCam').textContent = sub.inside ? '🎥 Outside view' : '🎥 Inside view';
+  $('subLight').classList.toggle('on', sub.light);
+  $('subLight').textContent = sub.light ? '💡 Light on' : '💡 Light off';
+  renderSubInfo();
+}
+function renderSubInfo() {
+  let s = null;
+  try { s = JSON.parse(live.subState()); } catch { /* not out yet */ }
+  $('subInfo').textContent = !sub.visible ? '👻 The fish cannot see you'
+    : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+}
+const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+function steerSub() {
+  if (!sub.on) return;
+  const k = sub.keys;
+  const key = (...names) => (names.some((n) => k.has(n)) ? 1 : 0);
+  const thrust = clamp1(-sub.joy[1] + key('w', 'arrowup') - key('s', 'arrowdown'));
+  const turn = clamp1(sub.joy[0] + key('d', 'arrowright') - key('a', 'arrowleft'));
+  const rise = clamp1(sub.rise + key(' ', 'e') - key('shift', 'q'));
+  $('subUp').classList.toggle('on', rise > 0); $('subDown').classList.toggle('on', rise < 0);
+  const msg = `${thrust.toFixed(2)},${turn.toFixed(2)},${rise.toFixed(2)}`;
+  if (msg === sub.sent) return;
+  sub.sent = msg;
+  live.steerSub(thrust, turn, rise, 0);
+}
+function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px, ${y * 40}px)`; }
+(() => {
+  const joy = $('subJoy');
+  let id = null;
+  const at = (e) => {
+    const r = joy.getBoundingClientRect();
+    let x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2 - 14), y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2 - 14);
+    const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
+    sub.joy = [Math.abs(x) < 0.12 ? 0 : x, Math.abs(y) < 0.12 ? 0 : y];
+    moveKnob(x, y); steerSub();
+  };
+  joy.addEventListener('pointerdown', (e) => { id = e.pointerId; joy.setPointerCapture(id); at(e); e.preventDefault(); });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === id) at(e); });
+  const end = (e) => { if (e.pointerId !== id) return; id = null; sub.joy = [0, 0]; moveKnob(0, 0); steerSub(); };
+  joy.addEventListener('pointerup', end); joy.addEventListener('pointercancel', end);
+  for (const [btn, v] of [['subUp', 1], ['subDown', -1]]) {
+    const b = $(btn);
+    b.addEventListener('pointerdown', (e) => { b.setPointerCapture(e.pointerId); sub.rise = v; steerSub(); e.preventDefault(); });
+    const stop = () => { sub.rise = 0; steerSub(); };
+    b.addEventListener('pointerup', stop); b.addEventListener('pointercancel', stop);
+  }
+  $('subGhost').addEventListener('click', () => {
+    sub.visible = !sub.visible; live.submarine(true, sub.visible, sub.light); renderSub();
+    toast(sub.visible ? 'Peek-a-boo! The fish can see you again.' : 'Invisible! Now the fish do not notice you at all.');
+  });
+  $('subCam').addEventListener('click', () => { sub.inside = !sub.inside; live.subView(sub.inside); renderSub(); });
+  $('subLight').addEventListener('click', () => { sub.light = !sub.light; live.submarine(true, sub.visible, sub.light); renderSub(); });
+  $('subDone').addEventListener('click', () => setSub(false));
+  const KEYS = ['w', 'a', 's', 'd', 'q', 'e', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+  const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '');
+  addEventListener('keydown', (e) => {
+    if (!sub.on || typing(e)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { setSub(false); return; }
+    if (!KEYS.includes(k)) return;
+    e.preventDefault(); sub.keys.add(k); steerSub();
+  });
+  addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (sub.keys.delete(k)) steerSub(); });
+  addEventListener('blur', () => { if (sub.keys.size) { sub.keys.clear(); steerSub(); } });
+})();
+
 // ================================================================ render all
 function renderAll() {
   $('soundBtn').textContent = ui.sound ? '🔊' : '🔇';
+  startThoughts();
   $('hermie').classList.toggle('hidden', !ui.hermie);
   live.shelfLocked(SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
   renderRail();

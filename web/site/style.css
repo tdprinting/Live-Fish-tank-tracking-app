@@ -59,10 +59,10 @@ main { flex: 1; position: relative; min-height: 0; }
 /* Hermie's words float under the top row on a solid bubble so they never mix with the water strip */
 .hermie.talk #hermieText { position: absolute; top: calc(100% + 4px); left: 0; z-index: 3; background: #0B2140; border: 1px solid var(--glassBorder);
   border-radius: 14px; padding: 8px 12px; width: max-content; max-width: min(340px, calc(100vw - 32px)); box-shadow: 0 6px 20px rgba(0,0,0,.4); }
-.strip { position: absolute; top: 52px; left: 8px; right: 60px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+.strip { flex: 0 0 calc(100% - 52px); min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
 .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(6,19,39,.62); border: 1px solid var(--glassBorder); font-variant-numeric: tabular-nums; }
 .chip.good { color: var(--good); } .chip.caution { color: var(--caution); } .chip.danger { color: var(--danger); }
-.side { position: absolute; right: 8px; top: 96px; display: flex; flex-direction: column; gap: 8px; }
+.side { position: absolute; right: 8px; top: calc(var(--topH, 96px) + 16px); display: flex; flex-direction: column; gap: 8px; }
 .round { width: 44px; height: 44px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 .round.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.35); }
 
@@ -112,7 +112,7 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .preset strong { font-size: 14px; } .preset em { color: var(--lagoonBright); font-style: normal; }
 .preset.lock { opacity: .45; }
 
-.fish { position: absolute; top: 96px; left: 8px; width: min(330px, calc(100% - 70px)); padding: 12px; max-height: calc(100% - 200px); overflow-y: auto; }
+.fish { position: absolute; top: calc(var(--topH, 96px) + 16px); left: 8px; width: min(330px, calc(100% - 70px)); padding: 12px; max-height: calc(100% - 200px); overflow-y: auto; }
 .stat { display: grid; grid-template-columns: 64px 1fr; align-items: center; font-size: 12px; color: var(--mist); margin: 4px 0; }
 .stat .meter { width: 100%; }
 .mood { font-size: 13px; margin: 8px 0 4px; }
@@ -141,7 +141,7 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .loading.inline { position: static; background: none; padding: 40px 0; }
 .tips { padding-left: 20px; } .tips li { margin: 6px 0; }
 .good { color: var(--good); } .danger { color: var(--danger); }
-@media (max-width: 430px) { .hide-sm { display: none; } .strip { top: 92px; } .side { top: 128px; } .fish { top: 196px; max-height: calc(100% - 300px); } }
+@media (max-width: 430px) { .hide-sm { display: none; } .fish { top: calc(var(--topH, 96px) + 110px); max-height: calc(100% - var(--topH, 96px) - 210px); } }
 
 .btn { border: 0; background: var(--lagoon); color: #fff; padding: 9px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; }
 .btn.small { padding: 6px 12px; font-size: 13px; }
@@ -189,3 +189,17 @@ dialog::backdrop { background: rgba(3,9,18,.6); }
 .saver-hint { position: absolute; left: 50%; bottom: calc(var(--safe-bottom, 0px) + 36px); transform: translateX(-50%); padding: 8px 18px; border-radius: 20px; background: rgba(4,16,32,.6); color: #e1f0f8; font: 500 15px system-ui, sans-serif; transition: opacity .6s; pointer-events: none; }
 body.saver-on header.bar { display: none; }
 body.saver-on .saver { position: fixed; }
+/* Submarine mode (Android SubmarineControls): steering stick bottom left, up / down bottom right, options on top */
+.subbing #chrome, .subbing #showChrome { display: none !important; }
+.subui { position: absolute; inset: 0; pointer-events: none; }
+.subui > * { pointer-events: auto; }
+.subbar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 10px); display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; max-width: calc(100% - 16px); }
+.subbar .btn.ghost.on { background: rgba(31,166,201,.45); border-color: var(--lagoonBright); }
+.subjoy { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(var(--safe-bottom) + 20px); width: 132px; height: 132px;
+  border-radius: 50%; touch-action: none; }
+.subjoy .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+  background: rgba(255,214,64,.85); box-shadow: 0 2px 10px rgba(0,0,0,.35); pointer-events: none; }
+.subud { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-bottom) + 28px); display: flex; flex-direction: column; gap: 14px; }
+.subud .round { width: 58px; height: 58px; font-size: 24px; touch-action: none; }
+.subud .round.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.45); }

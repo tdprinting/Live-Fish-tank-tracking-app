@@ -68,12 +68,18 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.sandTopCm + 1.0), mouth.z) + outDir * k
     fun inside(k: Double) = mouth + inDir * k
 
-    /** Body trailing back down the tunnel from the head. */
-    fun tunnelSpline(head: Vec3): List<Vec3> = listOf(head, mouth) + tunnel.drop(1)
+    /**
+     * Body trailing back from the head: down the tunnel when it faces out of the burrow, out through the mouth when it
+     * faces in (going in head first to dig, or deep inside at night). The old single path ran head → mouth → tunnel
+     * whichever way the goby faced, so a head-first goby folded back on itself and its body flipped 20 cm in one tick
+     * as the head passed the mouth.
+     */
+    fun tunnelSpline(head: Vec3, heading: Vec3 = outDir): List<Vec3> =
+        if ((heading dot inDir) > 0) listOf(head, mouth, outside(o.lengthCm)) else listOf(head, mouth) + tunnel.drop(1)
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val head = if (night) inside(4.0) else outside(0.5)
-        return Rest(head, if (night) inDir else outDir, posture = 3, spline = tunnelSpline(head))
+        return Rest(head, if (night) inDir else outDir, posture = 3, spline = tunnelSpline(head, if (night) inDir else outDir))
     }
 
     override fun findThreat(c: Ctx): Organism? = super.findThreat(c)
@@ -107,7 +113,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             o.eyeYaw = if (night) 0.0 else lookYaw * 0.6
             out.place(head, face, Vec3.Y, 3.0)
             out.posture = 3
-            out.splineOverride = tunnelSpline(o.pos)
+            out.splineOverride = tunnelSpline(o.pos, face)
             o.visible = !night
             o.sleeping = night
             o.gill = 0.4 + 0.3 * sin(2 * PI * 0.5 * c.t)
@@ -165,7 +171,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                 1 -> { // digging inside, out of sight for a few seconds
                     out.place(inside(2.5), inDir, Vec3.Y, 4.0)
                     out.posture = 3
-                    out.splineOverride = tunnelSpline(o.pos)
+                    out.splineOverride = tunnelSpline(o.pos, inDir)
                     if (timer > 4.0 + 4.0 * c.rng.nextDouble()) {
                         // the mouthful leaves the pit as it turns to carry it out
                         digPoint.let { pit -> c.sim.sand.dig(pit.x, pit.z, GOBY_MOUTHFUL_CM3, 1.5) }

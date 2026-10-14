@@ -148,7 +148,7 @@ ANCHORS = [
     ("SLEEP_TANG", "SLEEP", (38, 9.1, 5.2), dict(dir=[-0.7, 0.2, -0.7]), None),
     ("SLEEP_WRASSE", "SLEEP", (47, 4, 23.4), dict(dir=[0, 0, -1]), "sand"),
     ("SURFACE_FEED", "FEED", (41, WATER_Y - 0.6, 23.4), {}, None),
-    ("NORI_CLIP", "FEED", (2, 24.3, 26.0), {}, None),
+    ("NORI_CLIP", "FEED", (2, 32.0, 39.0), {}, None),
     ("HOB_OUTFLOW", "FLOW", (73, WATER_Y - 0.7, 1.3), dict(dir=[0, -0.4, 0.92]), None),
     ("FLOW_PH_LEFT", "FLOW", (12.6, 28, 18), dict(dir=[1, -0.1, 0.1]), None),
     ("FLOW_PH_BACK", "FLOW", (76, 31, 4.5), dict(dir=[-0.3, -0.3, 0.9]), None),

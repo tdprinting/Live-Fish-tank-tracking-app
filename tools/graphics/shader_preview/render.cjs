@@ -13,7 +13,10 @@
  * and the exit code is 1.
  *
  * Usage (Chromium + Playwright are preinstalled; no `playwright install`):
- *   node tools/graphics/shader_preview/render.cjs [--out DIR] [--scene full|rocksand] [--light day|dusk|night|all]
+ * --scene shelf is the full scene plus the supply shelf beside the tank (SupplyShelfScene: shelf.frag, or the generic
+ * program with the old self-glow when shelf.frag is missing), seen from the shelf views.
+ *
+ *   node tools/graphics/shader_preview/render.cjs [--out DIR] [--scene full|rocksand|shelf] [--light day|dusk|night|all]
  *        [--quality 0|1|2] [--views front,wide,rock,sand,fish] [--time SECONDS] [--shaders DIR]
  * Writes DIR/<view>_<light>.png (default DIR = build/shader_preview, light = day, quality = 2 / High).
  * --shaders points at an alternate shader folder (e.g. a copy of the old shaders for before/after shots).
@@ -105,6 +108,12 @@ const VIEWS = {
   close_clown: { w: 800, h: 600, eye: [74, 27, 34], aim: [70, 24, 22] },
   close_tang: { w: 800, h: 600, eye: [50, 38, 32], aim: [44, 34, 18] },
   close_rock: { w: 800, h: 600, eye: [32, 18, 36], aim: [30, 14, 20] },
+  // supply shelf (--scene shelf; Camera.kt shelf framing: eye (x, y + 0.16 d, Z_FRONT + d), aim (x, y, Z_PROP), d =
+  // shelfDistance): landscape and portrait phones at the start look point, the whole rack, and the feed row up close
+  shelf_land: { w: 1200, h: 600, eye: [185, 40, 74], aim: [185, 32, 13] },
+  shelf_portrait: { w: 540, h: 1170, eye: [185, 47.6, 121.6], aim: [185, 32, 13] },
+  shelf_all: { w: 1200, h: 750, eye: [185, 31, 112], aim: [185, 27, 13] },
+  shelf_feed: { w: 1200, h: 600, eye: [160, 50.9, 74], aim: [160, 42.9, 13] },
 };
 
 function lookAt(e, c) {
@@ -180,7 +189,7 @@ async function main() {
   const lightArg = arg('light', 'day');
   const lights = lightArg === 'all' ? ['day', 'dusk', 'night'] : lightArg === 'both' ? ['day', 'night'] : lightArg.split(',');
   const scene = arg('scene', 'full');
-  const views = arg('views', scene === 'full' ? 'front,wide,rock,fish' : 'front,rock,sand').split(',');
+  const views = arg('views', scene === 'full' ? 'front,wide,rock,fish' : scene === 'shelf' ? 'shelf_all,shelf_land,shelf_portrait,shelf_feed' : 'front,rock,sand').split(',');
   const check = process.argv.includes('--check');
   fs.mkdirSync(out, { recursive: true });
 

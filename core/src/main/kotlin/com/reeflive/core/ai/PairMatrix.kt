@@ -71,6 +71,13 @@ object PairMatrix {
 
     fun row(id: String): PairRow? = rows.firstOrNull { it.id == id }
 
+    private val rivalKinds: Set<Pair<BrainKind, BrainKind>> by lazy {
+        rows.flatMap { r -> BrainKind.values().filter { it.name == r.actor }.flatMap { a -> r.targets.mapNotNull { k -> BrainKind.values().firstOrNull { it.name == k }?.let { a to it } } } }.toSet()
+    }
+
+    /** [t] has a row of its own against [o]'s kind (a dottyback's standoff with the clowns): a rival, not a bystander. */
+    fun isRival(t: Organism, o: Organism): Boolean = (t.brainKind to o.brainKind) in rivalKinds
+
     /** Behaviour rows (bouts run by [PairBouts]); predation/defensive rows are handled by their own code. */
     fun boutRowsFor(o: Organism, sim: Simulation): List<PairRow> =
         rows.filter { it.type != "predation" && it.type != "defensive" && actorMatches(it, o, sim) }
@@ -243,6 +250,13 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             val map = entries.getOrPut(r.id) { HashMap() }
             for (t in c.p.neighbors(a, radius)) {
                 if (t.posture == 3 && t.brainKind != BrainKind.CLOWN) continue   // safe in its own hole
+                // a neighbour whose own shelter lies in the host's halo is a resident there, not an intruder: it is let be
+                // at its shelter, and a harmless one (no rival of the clowns, unlike the dottyback's standoff) anywhere in
+                // the outer halo, chased only into the 10 cm core (06 §5.3 territory core / halo; a tailspot leaving its
+                // hole 16 cm from the anemone was nipped back in on most trips out) [I]
+                if (r.anchor == "host" && t !== o && t.homePos.distanceTo(a) < radius &&
+                    (t.pos.distanceTo(t.homePos) < OWN_SHELTER_CM + 0.5 * t.lengthCm ||
+                        t.pos.distanceTo(a) > HOST_CORE_CM && !PairMatrix.isRival(t, o))) continue
                 if (t.pos.distanceTo(a) > radius || !PairMatrix.targetMatches(r, o, t)) continue
                 // a settled standoff partitions the rock: past familiarity 0.6 only a close approach to the
                 // cave counts, the halo shrinking to 40 % at familiarity 1 (06 §2.3) [I]
@@ -393,7 +407,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 val contact = o.pos.distanceTo(t.pos) < 0.3 * c.L + 0.5 * t.lengthCm + 0.5
                 if (contact && !r.displayOnly) { nip = true; o.mouth = 1.0 }
                 val limit = if (r.displayOnly) 2 * c.L else len
-                if (contact || travelled > limit || phaseT > 1.5) { phase = 2; phaseT = 0.0 }
+                // a host defender breaks off once the intruder is out of the halo: it does not leave its anemone [I]
+                val fled = r.anchor == "host" && t.pos.distanceTo(anchorOf(c, r)) > r.triggerRadius + r.triggerBL * c.L
+                if (contact || fled || travelled > limit || phaseT > 1.5) { phase = 2; phaseT = 0.0 }
             }
             // 2: apply the outcome, then return to the anchor
             2 -> {
@@ -440,6 +456,10 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     companion object {
         const val REROLL_S = 60.0
+        /** A resident within this (cm, plus half its length) of its own shelter is not a host intruder [I]. */
+        const val OWN_SHELTER_CM = 4.0
+        /** Host territory core (cm, 06 §5.3 "core / halo 10 / 22"): defended against residents of the halo too. */
+        const val HOST_CORE_CM = 10.0
         /** First re-roll interval of a sensitising (host-defence) row [I]. */
         const val REROLL_SENS_S = 20.0
         /** Re-roll delay after a roll the hourly cap blocked. */

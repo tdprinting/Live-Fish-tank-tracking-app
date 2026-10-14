@@ -13,6 +13,8 @@ import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
+import com.reeflive.app.ui.live.ThoughtBubblePicker
+import com.reeflive.app.ui.live.ThoughtHold
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.waterReadouts
 import com.reeflive.core.live.Scenario
@@ -330,7 +332,11 @@ object ReefSandbox {
     internal fun touch(p: com.reeflive.core.geom.Vec3, surface: com.reeflive.core.sim.TouchSurface) {
         send(Command.TouchTank(p, surface))
         val glass = surface == com.reeflive.core.sim.TouchSurface.GLASS
-        val kind = if (surface == com.reeflive.core.sim.TouchSurface.SAND) BurstKind.SAND_PUFF else BurstKind.GLASS_RIPPLE
+        val kind = when (surface) {
+            com.reeflive.core.sim.TouchSurface.SAND -> BurstKind.SAND_PUFF
+            com.reeflive.core.sim.TouchSurface.SURFACE -> BurstKind.SURFACE_RIPPLE
+            else -> BurstKind.GLASS_RIPPLE
+        }
         burst(kind, floatArrayOf(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()), amount = if (glass) 1f else 0.7f)
     }
 
@@ -392,12 +398,42 @@ object ReefSandbox {
             it.id = c.id; it.name = c.name; it.species = c.speciesName; it.speciesId = st.speciesId
             it.health = c.health; it.stress = c.stress; it.hunger = c.hunger; it.mood = c.mood; it.behavior = c.behavior
             it.alive = c.alive; it.stage = c.lifeStage; it.cm = st.lengthCm; it.caption = st.caption
+            // "Thinking…" lines (core ai/Thoughts.kt), each held ≥ 1.5 s like the Android card (ThoughtHold)
+            val held = holds.getOrPut(st.id) { ThoughtHold() }.update(st.id, st.thought, now().toLong())
+            it.thinking = held.now; it.thinkNext = held.next; it.feeling = held.feeling; it.moodWord = st.thought.mood
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
             it.relations = c.relationships.take(6).map { r ->
                 obj { o -> o.name = r.otherName; o.species = r.otherSpecies; o.label = r.labelOverride ?: r.kind.label; o.affinity = r.affinity; o.note = r.note }
             }.toTypedArray()
         }
+    }
+
+    private val holds = HashMap<String, ThoughtHold>()
+    private val bubblePicker = ThoughtBubblePicker()
+
+    /**
+     * More → "Thought bubbles" (as on Android, ThoughtBubbleLayer): at most three animals with a speech bubble, as
+     * JSON [{id, text, x, y, a}] with x, y in canvas pixels just above the animal. Call every animation frame while
+     * on; [on] false clears the picker.
+     */
+    fun bubbles(on: Boolean): String {
+        if (!on) { bubblePicker.clear(); return "[]" }
+        val s = sim ?: return "[]"
+        val r = live.renderer ?: return "[]"
+        val proj = r.projection ?: com.reeflive.app.render.TankProjection().also { r.projection = it }
+        val snap = s.latest
+        val canvas = kotlinx.browser.document.getElementById("tank") as? org.w3c.dom.HTMLCanvasElement ?: return "[]"
+        val w = canvas.width.toFloat()
+        val h = canvas.height.toFloat()
+        val anchor = FloatArray(3)
+        val pt = FloatArray(3)
+        val list = bubblePicker.update(snap.stats, now().toLong()) { id ->
+            if (ThoughtBubblePicker.anchorOf(snap, id, anchor) && proj.project(anchor[0], anchor[1], anchor[2], pt) &&
+                pt[0] in 0f..w && pt[1] in 0f..h
+            ) floatArrayOf(pt[0], pt[1], pt[2]) else null
+        }
+        return JSON.stringify(list.map { b -> obj { o -> o.id = b.id; o.text = b.text; o.x = b.x; o.y = b.y; o.a = b.alpha } }.toTypedArray())
     }
 
     /** "Tank happy" 0..100 (Hermie.kt tankHappiness): health and calm of the animals minus water and death penalties. */

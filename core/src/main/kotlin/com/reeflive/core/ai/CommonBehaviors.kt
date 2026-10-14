@@ -98,7 +98,8 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         if (c.t - b.foodAlertAt < 30 && o.hunger > 0.2) s = max(s, 0.62)
         val app = com.reeflive.core.sim.HealthModel.appetite(o)
         if (app < 0.3) return 0.0
-        return (s * scoreMul(c, f) * app).coerceAtMost(0.93)
+        // a frightened animal comes to food less eagerly (Mind.kt X4; 1 when calm)
+        return (s * scoreMul(c, f) * app * b.mind.mood.feedFactor).coerceAtMost(0.93)
     }
 
     override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null }
@@ -127,7 +128,10 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         else if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
         if (c.t - progressAt > STUCK_S) { giveUpUntil = c.t + GIVE_UP_S; finished = true; return }
         val reach = 1.2 + 0.1 * o.lengthCm
-        if (d < reach) {
+        // the mouth is half a body length ahead of the body centre: a particle settled on rock is picked off from as
+        // close as the rock clearance lets the body come (a wrasse stalled 4 cm short of mysis on a ledge, never eating)
+        val mouthD = (o.pos + o.heading * (0.5 * o.lengthCm)).distanceTo(f.pos)
+        if (d < reach || mouthD < reach) {
             c.bite(f)
             target = null
             if (o.hunger < 0.05) finished = true
@@ -141,31 +145,113 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
     }
 }
 
-/** Nibble the nori sheet on its clip (grazers; SIMULATION §4.5 tang). */
-class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0) : Behavior("nori", "Eating nori") {
+/**
+ * Nibble the nori sheet on its clip (grazers; SIMULATION §4.5 tang, §4.6 [com.reeflive.core.sim.NoriCloth]). The sheet
+ * streams downstream in the current, so a grazer holds station on its downstream side facing up-current (the way fish
+ * hold in flow and pick at drifting weed) and bites at the free trailing edge: a tang takes a mouthful and tugs back
+ * with a head shake, tearing it; a lawnmower blenny rasps quick small bites in short bouts. Bites tear ragged edges
+ * that break off and drift away as food. [quiet]: no utility noise while there is no sheet (added to a brain whose
+ * random sequence must stay as it was).
+ */
+class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0, private val quiet: Boolean = false) : Behavior("nori", "Eating nori") {
+    override val noisy: Boolean get() = !quiet || b.c.food.nori != null
     private var nextBite = 0.0
     private var noriLimit = 120.0
-    override fun enter(c: Ctx) { noriLimit = c.rng.range(120.0, 300.0) }
+    private var tugUntil = -1.0
+    private var boutLeft = 0
+    private var bestD = Double.MAX_VALUE
+    private var progressAt = 0.0
+    private var giveUpUntil = -1e9
+    private var cell = -1
+    private var repickAt = 0.0
+    private val rasper: Boolean get() = b.o.brainKind == BrainKind.LAWNMOWER_BLENNY
+    override fun enter(c: Ctx) { noriLimit = c.rng.range(120.0, 300.0); nextBite = c.t + 0.4; tugUntil = -1.0; boutLeft = 0; bestD = Double.MAX_VALUE; progressAt = c.t; cell = -1; repickAt = 0.0 }
+
+    /**
+     * Present cells from the most downstream back, the first whose station ([back] cm downstream of it) is open water
+     * (the clearance check moves it less than 1.5 cm). When rock or glass crowds every station (a sheet hanging close
+     * to the rockwork), the cell whose station is moved least while staying on its downstream side, so the grazer still
+     * comes in from downstream and snouts in where it can; −1 only when no cell can be reached from downstream at all.
+     */
+    private fun pickCell(c: Ctx, cloth: com.reeflive.core.sim.NoriCloth, down: Vec3, back: Double): Int {
+        val order = (0 until cloth.cellCount).filter { cloth.present(it) }.sortedByDescending { (cloth.cellCentre(it) dot down) + (if (cloth.isEdge(it)) 1.5 else 0.0) }
+        var fallback = -1
+        var fallbackMove = Double.MAX_VALUE
+        for (k in order) {
+            val at = cloth.cellCentre(k)
+            val want = at + down * back
+            val got = c.safe(want)
+            val moved = got.distanceTo(want)
+            if (moved < 1.5) return k
+            if (((got - at) dot down) > 0.25 * back && moved < fallbackMove) { fallback = k; fallbackMove = moved }
+        }
+        return fallback
+    }
     override fun score(c: Ctx): Double {
         val n = c.food.nori ?: return 0.0
-        if (n.remaining <= 0.02 || c.o.hunger < 0.1) return 0.0
+        if (n.remaining <= 0.02 || c.o.hunger < 0.1 || c.t < giveUpUntil) return 0.0
         return ((0.55 + 0.4 * c.o.hunger) * weight * max(c.activity, 0.3)).coerceAtMost(0.9)
     }
     override fun update(c: Ctx, out: SteerIntent) {
+        val o = c.o
         val n = c.food.nori ?: run { finished = true; return }
-        val spot = c.safe(n.pos + Vec3(1.5 + 0.3 * c.L, c.rng.signed() * 0.2, 0.0), 0.5)
-        out.seek(spot, c.o.cruiseSpeed * 1.5, arrive = 1.5)
-        out.allowGlass = true
-        out.faceDir = (n.pos - c.o.pos).normalized(c.o.heading)
-        if (c.o.pos.distanceTo(spot) < 2.5 && c.t > nextBite) {
-            nextBite = c.t + 1.5
-            n.remaining -= 0.004 * c.L / 8
-            c.o.hunger = max(0.0, c.o.hunger - 0.025)
-            c.o.nutritionGreens = 1.0
-            c.o.mouth = 1.0
+        val cloth = n.cloth
+        val mid = cloth.centroid()
+        // downstream at the sheet: where the water takes it; in still water the open side away from the glass
+        val w = c.sim.flow.velocity(mid, c.t)
+        val flowDir = if (w.length() > 1.5) w.normalized() else cloth.inward
+        // a current pressing the sheet onto its pane leaves no room behind it: come in along the glass instead
+        val into = flowDir dot cloth.inward
+        val down = if (into < 0.0) (flowDir - cloth.inward * into).normalized(cloth.inward) else flowDir
+        val tugging = c.t < tugUntil
+        val back = 0.5 * c.L + (if (tugging) 1.4 else 0.4)
+        // the cell to go for: the most downstream piece of edge it can hold station behind (re-picked each second)
+        if (c.t >= repickAt || cell < 0 || !cloth.present(cell)) { cell = pickCell(c, cloth, down, back); repickAt = c.t + 1.0 }
+        if (cell < 0) { giveUpUntil = c.t + GIVE_UP_S; finished = true; return }
+        val at = cloth.cellCentre(cell)
+        val station = c.safe(at + down * back)
+        out.seek(station, o.cruiseSpeed * 1.5, arrive = 1.0, urgency = 0.4)
+        out.allowGlass = true; out.hover = true
+        out.separation = 0.5
+        // nose up-current into the sheet
+        out.faceDir = (at - o.pos).normalized(down * -1.0)
+        if (tugging) { out.rollExtra = 0.25 * sin(c.t * 30.0); o.mouth = 1.0 }
+        val dist = o.pos.distanceTo(station)
+        // blocked on the way in (rock, a tankmate): give up for now rather than hang there
+        if (dist < bestD - 0.5) { bestD = dist; progressAt = c.t }
+        if (c.t - progressAt > STUCK_S) { giveUpUntil = c.t + GIVE_UP_S; finished = true; return }
+        // in reach: at its station, or (where rock keeps it from squaring up) snout to the sheet from its downstream side
+        val close = dist < 1.6 + 0.1 * c.L || o.pos.distanceTo(at) < 0.5 * c.L + 2.0 && ((o.pos - at) dot down) > 0.0
+        if (close) progressAt = c.t
+        if (close && c.t > nextBite) {
+            val share = NORI_BITE * c.L / 8
+            if (rasper) {
+                // comb-toothed rasping: 4–8 quick small bites, then a look round (research 10 §6 rasping bites)
+                if (boutLeft <= 0) boutLeft = 4 + c.rng.nextInt(5)
+                boutLeft--
+                n.bite(o.pos, at, share * 0.45, Vec3.ZERO, down)
+                nextBite = c.t + if (boutLeft > 0) 0.35 else c.rng.range(1.8, 3.5)
+                o.hunger = max(0.0, o.hunger - 0.012)
+            } else {
+                // a mouthful, then the head shake that tears it off: the bitten edge is pulled downstream
+                n.bite(o.pos, at, share, down * (6.0 + 0.6 * c.L), down)
+                tugUntil = c.t + 0.35
+                nextBite = c.t + c.rng.range(1.1, 1.9)
+                o.hunger = max(0.0, o.hunger - 0.025)
+            }
+            o.nutritionGreens = 1.0
+            o.mouth = 1.0
             out.pitchBias = 0.15
         }
-        if (c.o.hunger < 0.05 || elapsed > noriLimit) finished = true
+        if (o.hunger < 0.05 || elapsed > noriLimit) finished = true
+    }
+
+    companion object {
+        /** Share of a whole sheet one bite of an 8 cm fish takes (scales with length). */
+        const val NORI_BITE = 0.004
+        /** Seconds without getting closer before it gives up for a while, and how long that while is. */
+        const val STUCK_S = 8.0
+        const val GIVE_UP_S = 60.0
     }
 }
 
@@ -228,9 +314,20 @@ open class Flee(val b: SpeciesBrain, val cover: (Ctx, Vec3) -> Vec3, label: Stri
         flinch = t == null && b.startleMag <= 0.35
         dur = if (flinch) 0.4 else c.rng.range(10.0, 40.0) * (0.4 + c.o.skittishness)
         hide = cover(c, from)
+        // a refuge it has used before, when it is nearer than the species' own cover and not toward the threat: the
+        // nearest familiar shelter (Mind.kt X2)
+        if (!flinch && remembersRefuges) b.mind.refugeFor(c, from)?.let { r ->
+            if (r.distanceTo(c.o.pos) < hide.distanceTo(c.o.pos)) hide = c.safe(r, 1.0)
+        }
+        reached = false
         if (!flinch) c.o.startle = max(c.o.startle, 0.15)
         b.startleAt = -1e9
     }
+    private var reached = false
+    /** The hawkfish ducks to a perch it picks itself ([HawkBrain.DuckToPerch]); everyone else may use a remembered refuge. */
+    open val remembersRefuges: Boolean get() = b.o.brainKind != BrainKind.HAWK
+    /** Where the last full flee was headed (tests). */
+    val hideTarget: Vec3 get() = hide
     override fun update(c: Ctx, out: SteerIntent) {
         val t = b.threat
         if (t != null) from = t.pos
@@ -239,6 +336,7 @@ open class Flee(val b: SpeciesBrain, val cover: (Ctx, Vec3) -> Vec3, label: Stri
         } else {
             out.seek(hide, c.o.burstSpeed * 0.7, arrive = 2.0, urgency = 0.6)
             out.hover = true
+            if (!reached && c.o.pos.distanceTo(hide) < 4.0) { reached = true; b.mind.onRefuge(c, hide) }
             if (t != null && t.pos.distanceTo(c.o.pos) < 6) { out.fleeFrom = t.pos; out.urgency = 1.0 }
         }
         if (elapsed > dur && (t == null || !t.alive)) finished = true
@@ -323,7 +421,7 @@ class GlassCurious(val b: SpeciesBrain) : Behavior("glass", "Curious at the glas
     override fun score(c: Ctx): Double {
         val o = c.o
         val tap = c.p.taps.lastOrNull { c.t - it.time in 3.0..20.0 && it.point.distanceTo(o.pos) < 60 } ?: return 0.0
-        if (o.curiosity <= 0.5 || o.stress > 0.3 || tap.night) return 0.0
+        if (o.curiosity <= 0.5 || o.stress > 0.3 || tap.night || b.mind.mood.fear > 0.3) return 0.0
         point = tap.point
         return 0.4 + 0.2 * o.curiosity
     }
@@ -352,9 +450,15 @@ class SurfaceGasp(val b: SpeciesBrain) : Behavior("gasp", "Gasping at the surfac
     }
     override fun update(c: Ctx, out: SteerIntent) {
         val hob = c.rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, c.rock.waterLevelCm - 1, 1.0))
-        val spot = c.safe(Vec3(hob.x + c.rng.signed() * 3, c.rock.waterLevelCm - 1.5 - 0.2 * c.L, hob.z + 6 + 0.5 * c.L), 1.0)
-        out.seek(spot, c.o.cruiseSpeed, arrive = 3.0)
+        // in the surface ripple a hand's width in front of the return, above its downward jet rather than in it (the
+        // resized tank's nozzle sits 0.7 cm under the surface and its jet only drops ~4 cm over the first 10 cm)
+        val spot = c.safe(Vec3(hob.x + c.rng.signed() * 3, c.rock.waterLevelCm - 1.5 - 0.2 * c.L, hob.z + 12 + 0.5 * c.L), 1.0)
+        // from under an overhang (the R4 / R6 shelves beside the return) the way up is around the rock, not through it
+        out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = 3.0)
         out.hover = true; out.pitchBias = 0.3
+        // gasping is done at the surface film: the steering's glass / surface stand-off (0.5 L + 1 cm below the
+        // surface) would otherwise hold it ~5 cm down
+        out.allowGlass = true
         c.o.mouth = 0.5 + 0.5 * sin(c.t * 8)
         if (c.t - lastEvent > 1800) { lastEvent = c.t; c.sim.emit(SimEvent.Gasping(c.o.id, c.sim.simTimeSec)) }
     }
