@@ -91,7 +91,7 @@ enum class ShelfRow(val label: String, val glyph: ReefGlyph, val tone: Color) {
 
 /**
  * One prop on the shelf. [id] is its node in supply_shelf.glb (`Supply_<id>`, tools/blender/supplies.py);
- * [sandboxOnly] props work only in the pretend tank (as their tiles did in the old menu).
+ * [sandboxOnly] props work only in the pretend tank (only Move rocks now; care props work in Watch too).
  */
 enum class SupplyItem(
     val id: String,
@@ -115,16 +115,16 @@ enum class SupplyItem(
     PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON),
     PODS("pods", ShelfRow.FEED, food = FoodKind.PODS),
 
-    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", true, note = "Swap 25 % for fresh salt water"),
-    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", true, note = "Swap 10 % of the water"),
-    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", true, note = "Alkalinity +1 for coral skeletons"),
-    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", true, note = "Calcium +20"),
-    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", true, note = "Magnesium +50"),
-    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", true, note = "Swap the dirty filter sock"),
-    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", true, note = "New carbon keeps the water clear"),
-    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", true, note = "Snip the algae garden"),
-    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", true, note = "Get rid of a pest anemone"),
-    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", true, note = "Everyone gets used to the water now"),
+    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", note = "Swap 25 % for fresh salt water"),
+    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", note = "Swap 10 % of the water"),
+    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", note = "Alkalinity +1 for coral skeletons"),
+    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", note = "Calcium +20"),
+    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", note = "Magnesium +50"),
+    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", note = "Swap the dirty filter sock"),
+    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", note = "New carbon keeps the water clear"),
+    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", note = "Snip the algae garden"),
+    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", note = "Get rid of a pest anemone"),
+    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", note = "Everyone gets used to the water now"),
 
     GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass"),
     TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water"),

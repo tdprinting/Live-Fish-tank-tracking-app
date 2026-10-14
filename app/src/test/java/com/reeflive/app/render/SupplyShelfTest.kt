@@ -100,6 +100,8 @@ class SupplyShelfTest {
         assertTrue(SupplyItem.lockedIds(true).isEmpty())
         assertEquals(SupplyItem.entries.filter { it.sandboxOnly }.map { it.id }.toSet(), SupplyItem.lockedIds(false))
         assertFalse(SupplyItem.GLASS_CLEANER.sandboxOnly)
+        assertFalse(SupplyItem.WATER_CHANGE.sandboxOnly)
+        assertTrue(SupplyItem.MOVE_ROCKS.sandboxOnly)
     }
 
     @Test fun nameTagSlotsMatchThePropsInTheModel() {
