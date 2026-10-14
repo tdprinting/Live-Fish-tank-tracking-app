@@ -5,9 +5,9 @@ Writes app/src/main/res/raw/tank_*.ogg (Vorbis, via ffmpeg's libvorbis) or, when
 same files.
 
 Ambience loops (played with loop = -1 in SoundPool):
-  tank_flow_loop     powerhead wash: band-limited pink noise with slow wavemaker-style surges
+  tank_flow_loop     powerhead wash: soft, dark low-passed noise with slow wavemaker-style surges
   tank_hum_loop      return pump hum: 100/120 Hz magnet hum with harmonics and a little motor noise
-  tank_hob_loop      HOB filter waterfall: bright fluttering noise and small droplets
+  tank_hob_loop      surface trickle: quiet rounded water noise and a few soft droplets
   tank_bubbles_loop  sparse, quiet bubble pops
 One-shots:
   tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime, tank_glass_scrape
@@ -123,12 +123,13 @@ def loop_len(sec):
 def flow_loop():
     n, f = loop_len(8.0)
     m = n + f
-    wash = spectral_noise(m, 120, 1800, tilt=-0.6)
-    hiss = spectral_noise(m, 1500, 5000, tilt=-0.3) * 0.18
-    surge = smooth_random(m, 0.35, 0.35)          # wavemaker-ish swells
-    ripple = smooth_random(m, 6.0, 0.12)          # turbulence
-    x = (wash + hiss) * surge * ripple
-    return normalize(make_loop(x, n), 0.7)
+    # soft, dark water movement heard through the glass: almost no energy above ~900 Hz (the old 1.5-5 kHz hiss
+    # read as a scratchy, loud static on phone and laptop speakers)
+    wash = spectral_noise(m, 60, 700, tilt=-1.0)
+    surge = smooth_random(m, 0.25, 0.30)          # slow wavemaker-ish swells
+    ripple = smooth_random(m, 2.0, 0.06)          # gentle turbulence
+    x = wash * surge * ripple
+    return normalize(make_loop(x, n), 0.5)
 
 
 def hum_loop():
@@ -147,18 +148,16 @@ def hum_loop():
 def hob_loop():
     n, f = loop_len(6.0)
     m = n + f
-    fall = spectral_noise(m, 700, 6500, tilt=-0.4)
-    flutter = smooth_random(m, 14.0, 0.45)
-    body = spectral_noise(m, 200, 900, tilt=-0.5) * 0.35 * smooth_random(m, 1.5, 0.3)
-    x = fall * flutter + body
-    # droplets / small splashes on the surface
+    # quiet surface trickle: low, rounded water noise with a few soft droplets (was bright 0.7-6.5 kHz flutter)
+    body = spectral_noise(m, 150, 1100, tilt=-0.9) * smooth_random(m, 1.2, 0.25)
+    x = body
     drops = np.zeros(m)
-    for _ in range(int(6.0 * 9)):
-        f0 = rng.uniform(900, 2600)
-        d = bubble(rng.uniform(0.02, 0.05), f0, rise=rng.uniform(0.3, 0.9), amp=rng.uniform(0.6, 1.6))
+    for _ in range(int(6.0 * 3)):
+        f0 = rng.uniform(600, 1400)
+        d = bubble(rng.uniform(0.03, 0.06), f0, rise=rng.uniform(0.3, 0.7), amp=rng.uniform(0.3, 0.7))
         add_at(drops, d, int(rng.uniform(0, m - len(d))))
-    x = x + drops * 1.4
-    return normalize(make_loop(x, n), 0.65)
+    x = x + drops * 0.8
+    return normalize(make_loop(x, n), 0.45)
 
 
 def bubbles_loop():
