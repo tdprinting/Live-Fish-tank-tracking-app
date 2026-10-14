@@ -29,12 +29,19 @@ class DrawPart(
     val identityWorld: Boolean = M.isIdentity(node.world)
     /** Limb pivots for the crawler limb rig (`extras.limbPivots`: 10 × vec4, model space xyz + rest length), or null. */
     val limbPivots: FloatArray? = node.floats("limbPivots")?.takeIf { it.size >= 40 }
+    /** `extras.alphaTest`, parsed once (the draw loop reads it for every part every frame). */
+    val alphaTest: Float? = node.float("alphaTest")
 }
 
 /** A GLB uploaded to GL. */
 class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, private val textures: List<Texture>) {
     val triangles: Int = parts.sumOf { it.mesh.triangles }
     val rootAnchor: String? = glb.rootString("anchor")
+    /** Branching tree coral (Kenya, `extras.swayMode` = 1). */
+    val isTree: Boolean = parts.any { it.node.float("swayMode") == 1f }
+    /** Root `iridescence` / `roughness` overrides for fish bodies, parsed once. */
+    val iridescence: Float = glb.rootFloat("iridescence") ?: 0.1f
+    val roughness: Float? = glb.rootFloat("roughness")
     /** Organism models in cm (feather duster) are placed rigidly instead of spline-skinned. */
     val rigid: Boolean = glb.rootString("unit")?.startsWith("centimeters") == true
     /** Limb pivots of a limb-rigged crawler (brittle star, Sally Lightfoot; SIMULATION §19), or null. */

@@ -11,21 +11,38 @@ import android.util.Log
  */
 class ShaderProgram private constructor(val id: Int, val name: String) {
     private val locations = HashMap<String, Int>()
+    /** Last scalar/vector value sent per uniform: uniform state lives in the program, so an unchanged value is skipped. */
+    private val last = HashMap<String, FloatArray>()
 
-    fun use() { GLES30.glUseProgram(id); Gl.check("glUseProgram($name)") }
+    fun use() {
+        if (Gl.currentProgram == id) return
+        GLES30.glUseProgram(id); Gl.check("glUseProgram", name)
+        Gl.currentProgram = id
+    }
 
     fun loc(uniform: String): Int = locations.getOrPut(uniform) { GLES30.glGetUniformLocation(id, uniform).also { Gl.check("glGetUniformLocation") } }
 
-    fun set1f(u: String, v: Float) { val l = loc(u); if (l >= 0) { GLES30.glUniform1f(l, v); Gl.check("glUniform1f($u)") } }
-    fun set1i(u: String, v: Int) { val l = loc(u); if (l >= 0) { GLES30.glUniform1i(l, v); Gl.check("glUniform1i($u)") } }
-    fun set2f(u: String, x: Float, y: Float) { val l = loc(u); if (l >= 0) { GLES30.glUniform2f(l, x, y); Gl.check("glUniform2f($u)") } }
-    fun set3f(u: String, x: Float, y: Float, z: Float) { val l = loc(u); if (l >= 0) { GLES30.glUniform3f(l, x, y, z); Gl.check("glUniform3f($u)") } }
-    fun set4f(u: String, x: Float, y: Float, z: Float, w: Float) { val l = loc(u); if (l >= 0) { GLES30.glUniform4f(l, x, y, z, w); Gl.check("glUniform4f($u)") } }
-    fun set3fv(u: String, v: FloatArray) { val l = loc(u); if (l >= 0) { GLES30.glUniform3fv(l, 1, v, 0); Gl.check("glUniform3fv($u)") } }
-    fun set4fv(u: String, v: FloatArray, count: Int = v.size / 4) { val l = loc(u); if (l >= 0) { GLES30.glUniform4fv(l, count, v, 0); Gl.check("glUniform4fv($u)") } }
-    fun setMat4(u: String, m: FloatArray) { val l = loc(u); if (l >= 0) { GLES30.glUniformMatrix4fv(l, 1, false, m, 0); Gl.check("glUniformMatrix4fv($u)") } }
+    /** True when [u] already holds (x, y, z, w); otherwise records them for next time. */
+    private fun same(u: String, x: Float, y: Float, z: Float, w: Float): Boolean {
+        val v = last[u]
+        if (v != null && v[0] == x && v[1] == y && v[2] == z && v[3] == w) return true
+        if (v == null) last[u] = floatArrayOf(x, y, z, w) else { v[0] = x; v[1] = y; v[2] = z; v[3] = w }
+        return false
+    }
 
-    fun release() { GLES30.glDeleteProgram(id); Gl.check("glDeleteProgram") }
+    fun set1f(u: String, v: Float) { val l = loc(u); if (l >= 0 && !same(u, v, 0f, 0f, 0f)) { GLES30.glUniform1f(l, v); Gl.check("glUniform1f", u) } }
+    fun set1i(u: String, v: Int) { val l = loc(u); if (l >= 0 && !same(u, v.toFloat(), 0f, 0f, 0f)) { GLES30.glUniform1i(l, v); Gl.check("glUniform1i", u) } }
+    fun set2f(u: String, x: Float, y: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, 0f, 0f)) { GLES30.glUniform2f(l, x, y); Gl.check("glUniform2f", u) } }
+    fun set3f(u: String, x: Float, y: Float, z: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, z, 0f)) { GLES30.glUniform3f(l, x, y, z); Gl.check("glUniform3f", u) } }
+    fun set4f(u: String, x: Float, y: Float, z: Float, w: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, z, w)) { GLES30.glUniform4f(l, x, y, z, w); Gl.check("glUniform4f", u) } }
+    fun set3fv(u: String, v: FloatArray) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniform3fv(l, 1, v, 0); Gl.check("glUniform3fv", u) } }
+    fun set4fv(u: String, v: FloatArray, count: Int = v.size / 4) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniform4fv(l, count, v, 0); Gl.check("glUniform4fv", u) } }
+    fun setMat4(u: String, m: FloatArray) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniformMatrix4fv(l, 1, false, m, 0); Gl.check("glUniformMatrix4fv", u) } }
+
+    fun release() {
+        if (Gl.currentProgram == id) Gl.currentProgram = 0
+        GLES30.glDeleteProgram(id); Gl.check("glDeleteProgram")
+    }
 
     companion object {
         const val FRAME_BINDING = 0

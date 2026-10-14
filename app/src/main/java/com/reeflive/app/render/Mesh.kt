@@ -85,9 +85,9 @@ class Mesh private constructor(
         }
 
         private fun attrib(loc: Int, size: Int, stride: Int, offset: Int, divisor: Int = 0) {
-            GLES30.glEnableVertexAttribArray(loc); Gl.check("glEnableVertexAttribArray($loc)")
-            GLES30.glVertexAttribPointer(loc, size, GLES30.GL_FLOAT, false, stride, offset); Gl.check("glVertexAttribPointer($loc)")
-            if (divisor != 0) { GLES30.glVertexAttribDivisor(loc, divisor); Gl.check("glVertexAttribDivisor($loc)") }
+            GLES30.glEnableVertexAttribArray(loc); Gl.check("glEnableVertexAttribArray", loc)
+            GLES30.glVertexAttribPointer(loc, size, GLES30.GL_FLOAT, false, stride, offset); Gl.check("glVertexAttribPointer", loc)
+            if (divisor != 0) { GLES30.glVertexAttribDivisor(loc, divisor); Gl.check("glVertexAttribDivisor", loc) }
         }
 
         /**
