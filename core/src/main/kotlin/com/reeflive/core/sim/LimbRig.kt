@@ -296,6 +296,9 @@ class CrabLegs : LimbRig() {
     var clock = 0.0; private set
     private var moving = 0.0
     private var side = 1.0
+    /** [side] eased (−1..1): the legs swap leading/trailing roles over ~0.4 s, not in one tick. */
+    private var sideS = 1.0
+    private var speedS = 0.0
     private var tuck = 0.0
     private var pickS = 0.0
     private var clawClock = 0.0
@@ -321,17 +324,24 @@ class CrabLegs : LimbRig() {
         strideHz = (speed / (STRIDE_W * L)).coerceIn(1.5, 7.0)
         if (moving > 0.02) clock = (clock + strideHz * dt * moving) % 1000.0
         val v = if (travel.lengthSq() > 1e-6) travel else o.vel
-        if (v.lengthSq() > 0.04) side = if ((v dot right) >= 0) 1.0 else -1.0
+        // swap leading / trailing legs only on a clear change of side (a course near the body axis flipped it every tick)
+        if (v.lengthSq() > 0.04) {
+            val s = (v dot right) / v.length()
+            if (s > 0.25) side = 1.0 else if (s < -0.25) side = -1.0
+        }
+        sideS += (side - sideS) * min(1.0, dt * SIDE_RATE)
+        speedS += (speed - speedS) * min(1.0, dt * 8)
         tuck += ((if (tucked) 1.0 else 0.0) - tuck) * min(1.0, dt * 5)
-        val extAmp = (0.25 + 0.4 * min(1.0, speed / (4 * L))) * moving
+        val extAmp = (0.25 + 0.4 * min(1.0, speedS / (4 * L))) * moving
         val lift = 0.38 * moving
         for (k in 0 until 8) {
             val pair = k / 2
             val isRight = k % 2 == 1
             val group = (pair + (if (isRight) 1 else 0)) % 2
             val ph = frac(clock + 0.5 * group + METACHRONAL * (3 - pair))
-            val leading = (isRight && side > 0) || (!isRight && side < 0)
-            put(k, ph, (if (leading) -1.0 else 1.0) * extAmp, lift, tuck)
+            // −1 = leading (pulls), +1 = trailing (pushes)
+            val role = if (isRight) -sideS else sideS
+            put(k, ph, role * extAmp, lift, tuck)
         }
         pickS += (pick - pickS) * min(1.0, dt * 6)
         val hz = PICK_HZ * (0.6 + 0.4 * pickS)
@@ -346,6 +356,8 @@ class CrabLegs : LimbRig() {
 
     companion object {
         const val STRIDE_W = 0.45
+        /** Leg-role swap rate (1/s): a full swap of the leading side takes ~0.4 s. */
+        const val SIDE_RATE = 5.0
         const val METACHRONAL = 0.06
         /** Claw picking rate per chela (Hz); the two alternate, so strokes reach the mouth at twice this [L]. */
         const val PICK_HZ = 1.6
@@ -421,7 +433,10 @@ class HermitLegs(seed: Long = 0L) : LimbRig() {
         put(5, frac(clawClock + 0.5), pickS, moving, smoothstep(0.1, 0.7, r))
         put(6, frac(clock), ROLL * moving, 0.03 * moving * sin(4 * PI * clock), 0.0)
         scan = (scan + dt * (0.15 + 0.1 * pickS)) % 1000.0
-        put(7, frac(scan), 1.0 - 0.6 * moving, 0.6 * moving * sin(4 * PI * clock + 0.6), rFront)
+        // the eyestalks and antennae bob once per stride, smaller at a fast patter: at twice the stride rate the bob ran up
+        // to 7 Hz, faster than the 20 Hz pose stream can carry, and flicked between extremes from one snapshot to the next
+        val bob = 0.6 * moving * min(1.0, BOB_MAX_HZ / strideHz)
+        put(7, frac(scan), 1.0 - 0.6 * moving, bob * sin(2 * PI * clock + 0.6), rFront)
         sweep = (sweep + dt * (if (searching || pickS > 0.3) 0.8 else 0.35)) % 1000.0
         put(8, frac(sweep), 0.5 + 0.5 * (if (searching) 1.0 else moving), 0.0, rFront)
         // antennule flicking comes in bursts with pauses (Waldrop & Koehl 2016); continuous while tracking a scent
@@ -443,6 +458,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig() {
         const val ROLL = 0.1
         const val PICK_HZ = 1.2
         const val FLICK_HZ = 2.5
+        /** Stride rate (Hz) above which the eyestalk bob shrinks, keeping it smooth at the 20 Hz pose rate. */
+        const val BOB_MAX_HZ = 1.5
     }
 }
 
@@ -455,7 +472,18 @@ class HermitLegs(seed: Long = 0L) : LimbRig() {
  * signal 0..1 = max(skunk front-leg rock `legRock`, banded claw display `clawDisplay`), antenna grooming `groom`).
  */
 class ShrimpLimbs : LimbRig(1) {
+    /** The brains switch the signals on and off in one tick; the legs and antennae ease in and out (~0.25 s). */
+    private var signal = 0.0
+    private var groom = 0.0
+
     override fun step(o: Organism, dt: Double, speed: Double) {
-        put(0, frac(o.walkPhase), o.walkAmt, max(o.legRock, o.clawDisplay), o.groom)
+        val k = min(1.0, dt * EASE_RATE)
+        signal += (max(o.legRock, o.clawDisplay) - signal) * k
+        groom += (o.groom - groom) * k
+        put(0, frac(o.walkPhase), o.walkAmt, signal, groom)
+    }
+
+    companion object {
+        const val EASE_RATE = 8.0
     }
 }
