@@ -177,7 +177,7 @@ object DefaultScape {
             // ---- Track C additions (new livestock, 04_more_species); Track B: please add to anchors.json ----
             a("coral_organpipe_kenya_base", "CORAL", 71.8, 15.5, 25.2, normal = v(-0.08, 0.84, 0.53)),
             a("HOLE_LAWNMOWER", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 7.0),
-            a("STATION_SHRIMP", "STATION", 38.0, 10.0, 14.0, normal = v(0.0, 0.0, 1.0)),
+            a("STATION_SHRIMP", "STATION", 106.0, 28.0, 16.0, normal = v(0.28, 0.35, 0.9)),
             a("DUSTER_TUBE", "TUBE", 86.0, 7.0, 27.3, normal = v(0.0, 1.0, 0.0)),
             a("BRITTLE_HOME", "CAVE", 36.0, 5.5, 10.4),
             a("CAVE_DOTTYBACK", "CAVE", 106.0, 7.5, 13.0),

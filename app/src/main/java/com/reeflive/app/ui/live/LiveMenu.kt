@@ -130,6 +130,8 @@ class LiveTools(
     val onOpenFeed: () -> Unit = {},
     /** The Supplies bubble: look at the supply shelf beside the tank. */
     val onSupplies: () -> Unit = {},
+    /** Full-screen screensaver: slow cinematic moves and fish follows with soft transitions. */
+    val onScreensaver: () -> Unit = {},
 )
 
 /**
@@ -534,6 +536,7 @@ private fun ColumnScope.CardBody(
                 T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
                 T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
                 T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
+                T("Screensaver", ReefGlyphs.moon, sub = "Relax and watch") { tools.onScreensaver() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
             ))
             if (tools.fish.isNotEmpty()) {

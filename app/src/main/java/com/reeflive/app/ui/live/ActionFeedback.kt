@@ -151,12 +151,19 @@ class Feedback(
                 FoodKind.PLANKTON -> "A green haze drifts through the flow"
                 FoodKind.CORAL_FOOD -> "A pink powder cloud for corals and dusters"
             }
-            val bursts = when (feedTool(k)) {
-                FeedTool.PINCH -> listOf(burst(BurstKind.SPLASH, at, amount = 0.7f))
-                FeedTool.SHAKER -> listOf(burst(BurstKind.SPLASH, at))
-                FeedTool.CUBE -> listOf(burst(BurstKind.PLOP, at))
-                FeedTool.CLIP -> emptyList()
-                FeedTool.PIPETTE -> listOf(burst(BurstKind.SPLASH, at, amount = 0.4f))
+            // each food goes in its own way: a pinch, a shake of flakes, light floating pellets, a heavy wafer, a frozen
+            // cube shedding a cloud of thaw juice in its own colour, a pipette of powder or phyto, live pods hopping off
+            val tint = foodColors(k).first()
+            val bursts = when (k) {
+                FoodKind.NORI -> emptyList()
+                FoodKind.PELLET -> listOf(burst(BurstKind.SPLASH, at, amount = 0.7f))
+                FoodKind.FLAKE -> listOf(burst(BurstKind.SPLASH, at))
+                FoodKind.FLOATING_PELLET -> listOf(burst(BurstKind.SPLASH, at, amount = 0.45f))
+                FoodKind.ALGAE_WAFER -> listOf(burst(BurstKind.PLOP, at, amount = 0.8f))
+                FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL, FoodKind.CYCLOPS, FoodKind.PRAWN ->
+                    listOf(burst(BurstKind.PLOP, at), burst(BurstKind.HAZE, at, tint, if (k == FoodKind.PRAWN) 0.25f else 0.35f))
+                FoodKind.PODS -> listOf(burst(BurstKind.SPLASH, at, amount = 0.3f), burst(BurstKind.PODS, at, amount = 0.5f))
+                FoodKind.PLANKTON, FoodKind.CORAL_FOOD -> listOf(burst(BurstKind.SPLASH, at, amount = 0.3f), burst(BurstKind.HAZE, at, tint, 0.6f))
             }
             return Feedback(title.ifEmpty { k.label }, effect, bursts, durationMs = FxKind.FEED.ms + 600)
         }

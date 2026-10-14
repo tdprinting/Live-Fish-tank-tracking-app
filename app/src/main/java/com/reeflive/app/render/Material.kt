@@ -59,12 +59,9 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
  */
 class Material(val kind: MaterialKind, val src: GlbMaterial, val albedo: Texture?) {
     val blended: Boolean get() = src.blended || kind == MaterialKind.GLASS || kind == MaterialKind.WATER
-    val alphaCutoff: Float get() = when {
-        src.alphaMode == "MASK" -> src.alphaCutoff
-        (src.extras["alphaTest"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() != null ->
-            (src.extras["alphaTest"] as kotlinx.serialization.json.JsonPrimitive).content.toFloat()
-        else -> 0f
-    }
+    /** Parsed once: [apply] runs for every part every frame. */
+    val alphaCutoff: Float = if (src.alphaMode == "MASK") src.alphaCutoff
+        else (src.extras["alphaTest"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
 
     /** Binds texture unit 0 and the per-material uniforms. [white] is the 1×1 default. */
     fun apply(p: ShaderProgram, white: Texture, alphaTestOverride: Float? = null) {

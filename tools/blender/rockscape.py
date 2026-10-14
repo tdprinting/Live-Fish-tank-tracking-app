@@ -137,7 +137,11 @@ ANCHORS = [
     ("PERCH_SHELF", "PERCH", (48, 35.5, 13.0), dict(normal=[0, 1, 0.2]), "surface"),
     ("PERCH_R9", "PERCH", (104, 28, 7), dict(normal=[0, 1, 0]), "surface"),
     ("PERCH_CORALLINE_LOW", "PERCH", (57, 8.5, 20.5), dict(normal=[0, 1, 0.6]), "surface"),
-    ("STATION_CLEANER", "STATION", (38, 10, 14), dict(species="wrasse,skunk_shrimp"), None),
+    ("STATION_CLEANER", "STATION", (38, 10, 14), dict(species="wrasse"), None),
+    # the skunk cleaner's own station, on the front face of the R9 top at the right: the left cave mouth by the
+    # wrasse station is the banded shrimp's ledge (SHRIMP_LEDGE_L, owner photos b_02/b_03) and the two shrimp keep
+    # >= 20 cm apart (06 §2.14); this face is off the tang's front lane and outside the clowns' 22 cm host halo
+    ("STATION_SKUNK", "STATION", (106, 28, 16), dict(species="skunk_shrimp", normal=[0.28, 0.35, 0.9]), None),
     ("SHRIMP_LEDGE_L", "LEDGE", (40, 24.9, 16.9), dict(normal=[0, -1, 0.3]), "surface"),
     ("SHRIMP_LEDGE_R", "LEDGE", (95, 22.5, 12), dict(normal=[0, -1, 0.3]), "surface"),
     ("HOVER_CARDINAL", "HOVER", (26, 14, 23), dict(radius=6, species="cardinal"), None),
@@ -190,7 +194,7 @@ ALIASES = [("CAVE_EEL", "BURROW_GOBY", None), ("HOST_KENYA", "HOST_ARCH_CLOWNS",
            ("HOLE_TAILSPOT", "HOLE_BLENNY_2", None), ("PERCH_1", "PERCH_R2_CROWN", None),
            ("PERCH_2", "PERCH_R3_TOP", None), ("PERCH_3", "PERCH_R9", None), ("PERCH_4", "PERCH_R5_LIP", None),
            ("PERCH_5", "PERCH_SHELF", None), ("SHRIMP_LEDGE", "SHRIMP_LEDGE_L", None),
-           ("STATION_SKUNK", "STATION_CLEANER", None), ("STATION_SHRIMP", "STATION_CLEANER", None),
+           ("STATION_SHRIMP", "STATION_SKUNK", None),
            ("BRITTLE_HOME", "BRITTLE_HIDE", "CAVE"), ("DUSTER_TUBE", "DUSTER_BASE", "TUBE"),
            ("coral_shroom_hairy", "HOST_SHROOM", "CORAL"), ("coral_clove_kenya_base", "coral_clove_kenya_front", None),
            ("coral_aiptasia_kenya_base", "coral_aiptasia_1", None),

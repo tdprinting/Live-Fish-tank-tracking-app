@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -69,6 +70,7 @@ import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
+import com.reeflive.core.sim.WaterState
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.max
@@ -91,7 +93,9 @@ enum class ShelfRow(val label: String, val glyph: ReefGlyph, val tone: Color) {
 
 /**
  * One prop on the shelf. [id] is its node in supply_shelf.glb (`Supply_<id>`, tools/blender/supplies.py);
- * [sandboxOnly] props work only in the pretend tank (only Move rocks now; care props work in Watch too).
+ * [sandboxOnly] props work only in the pretend tank (only Move rocks now; care props work in Watch too). [product] is
+ * the real reef-keeping product the prop is modelled on (its packaging is printed on the 3D prop; supply_labels.py),
+ * shown small under the name when the prop is picked; the name tag itself stays a short plain name.
  */
 enum class SupplyItem(
     val id: String,
@@ -100,37 +104,38 @@ enum class SupplyItem(
     val sandboxOnly: Boolean = false,
     val food: FoodKind? = null,
     private val note: String? = null,
+    val product: String = "",
 ) {
-    FLAKE("flake", ShelfRow.FEED, food = FoodKind.FLAKE),
-    PELLET("pellet", ShelfRow.FEED, food = FoodKind.PELLET),
-    FLOATING_PELLET("floating_pellet", ShelfRow.FEED, food = FoodKind.FLOATING_PELLET),
-    ALGAE_WAFER("algae_wafer", ShelfRow.FEED, food = FoodKind.ALGAE_WAFER),
-    MYSIS("mysis", ShelfRow.FEED, food = FoodKind.MYSIS),
-    BRINE("brine", ShelfRow.FEED, food = FoodKind.BRINE),
-    KRILL("krill", ShelfRow.FEED, food = FoodKind.KRILL),
-    PRAWN("prawn", ShelfRow.FEED, food = FoodKind.PRAWN),
-    CYCLOPS("cyclops", ShelfRow.FEED, food = FoodKind.CYCLOPS),
-    NORI("nori", ShelfRow.FEED, food = FoodKind.NORI),
-    CORAL_FOOD("coral_food", ShelfRow.FEED, food = FoodKind.CORAL_FOOD),
-    PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON),
-    PODS("pods", ShelfRow.FEED, food = FoodKind.PODS),
+    FLAKE("flake", ShelfRow.FEED, food = FoodKind.FLAKE, product = "Ocean Nutrition Formula Two Flakes"),
+    PELLET("pellet", ShelfRow.FEED, food = FoodKind.PELLET, product = "Ocean Nutrition Formula One Pellets"),
+    FLOATING_PELLET("floating_pellet", ShelfRow.FEED, food = FoodKind.FLOATING_PELLET, product = "Hikari Marine S"),
+    ALGAE_WAFER("algae_wafer", ShelfRow.FEED, food = FoodKind.ALGAE_WAFER, product = "Hikari Mini Algae Wafers"),
+    MYSIS("mysis", ShelfRow.FEED, food = FoodKind.MYSIS, product = "Hikari Bio-Pure Mysis Shrimp"),
+    BRINE("brine", ShelfRow.FEED, food = FoodKind.BRINE, product = "San Francisco Bay Brand Brine Shrimp"),
+    KRILL("krill", ShelfRow.FEED, food = FoodKind.KRILL, product = "BRS Krill Superba"),
+    PRAWN("prawn", ShelfRow.FEED, food = FoodKind.PRAWN, product = "Fresh frozen prawn"),
+    CYCLOPS("cyclops", ShelfRow.FEED, food = FoodKind.CYCLOPS, product = "Hikari Bio-Pure Cyclops"),
+    NORI("nori", ShelfRow.FEED, food = FoodKind.NORI, product = "Two Little Fishies Sea Veggies"),
+    CORAL_FOOD("coral_food", ShelfRow.FEED, food = FoodKind.CORAL_FOOD, product = "Polyp Lab Reef-Roids"),
+    PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON, product = "Reef Nutrition Phyto-Feast"),
+    PODS("pods", ShelfRow.FEED, food = FoodKind.PODS, product = "AlgaeBarn 5280 Pods"),
 
-    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", note = "Swap 25 % for fresh salt water"),
-    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", note = "Swap 10 % of the water"),
-    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", note = "Alkalinity +1 for coral skeletons"),
-    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", note = "Calcium +20"),
-    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", note = "Magnesium +50"),
-    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", note = "Swap the dirty filter sock"),
-    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", note = "New carbon keeps the water clear"),
-    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", note = "Snip the algae garden"),
-    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", note = "Get rid of a pest anemone"),
-    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", note = "Everyone gets used to the water now"),
+    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", note = "Mix fresh salt water and swap 25 %", product = "Red Sea Coral Pro Salt"),
+    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", note = "Mix a little salt water and swap 10 %", product = "Instant Ocean Sea Salt"),
+    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", note = "Alkalinity +1 for coral skeletons", product = "Red Sea Reef Foundation B"),
+    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", note = "Calcium +20 for corals and coralline", product = "Red Sea Reef Foundation A"),
+    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", note = "Magnesium +50 keeps calcium in balance", product = "Red Sea Reef Foundation C"),
+    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", note = "Swap the dirty filter sock for a clean felt one", product = "BRS felt filter sock"),
+    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", note = "New carbon keeps the water clear", product = "Seachem Matrix Carbon"),
+    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", note = "Snip the algae garden", product = "Curved aquascaping scissors"),
+    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", note = "Get rid of a pest anemone", product = "Red Sea Aiptasia-X"),
+    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", note = "Everyone gets used to the water now", product = "Drip acclimation kit"),
 
-    GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass"),
-    TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water"),
-    MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank"),
-    KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?"),
-    MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork"),
+    GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass", product = "Flipper Edge magnet"),
+    TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water", product = "API Reef Master + Salifert KH"),
+    MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank", product = "Student microscope"),
+    KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?", product = "Rubber mallet"),
+    MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork", product = "CaribSea LifeRock"),
     ;
 
     val label: String get() = food?.label ?: title.orEmpty()
@@ -172,6 +177,51 @@ enum class SupplyItem(
         else -> ReefGlyphs.feedTin
     }
 
+    /**
+     * What the prop changes in the tank and by how much, shown under its blurb in the pick label (docs/research/
+     * shelf_audit.md). Foods read theirs off the sim's own numbers (FoodKind.properties: sink / float, who eats it,
+     * waste); the care props and tools name the sim effect they drive.
+     */
+    val properties: String get() = food?.properties ?: when (this) {
+        WATER_CHANGE -> "Swaps 25 %: nitrate and phosphate −25 %. Coral Pro mixes rich: alk about +1 dKH, Ca +6, Mg +18"
+        WATER_SMALL -> "Swaps 10 %: nitrate and phosphate −10 %. Instant Ocean is close to sea water: minerals barely move"
+        DOSE_ALK -> "Alkalinity +1 dKH over 10 min. More than 1 dKH a day stresses corals"
+        DOSE_CA -> "Calcium +20 ppm over 20 min. With high alk it falls out as white crust"
+        DOSE_MG -> "Magnesium +50 ppm. Holds calcium and alk in the water (no crust)"
+        NEW_SOCK -> "Fits a clean felt sock: traps drifting muck. Left in past 2-3 days it rots back to ammonia"
+        FRESH_CARBON -> "Fresh carbon: clears yellow water and coral toxins in a day. Slowly strips iodine too"
+        TRIM_ALGAE -> "Cuts the red macro by a third and the refugium by half: the nitrate in it leaves too"
+        ZAP_PEST -> "Kills the biggest pest anemone. One in five leaves a baby behind"
+        SETTLE_IN -> "Resets everyone's comfort point to today's water: shock from swings fades"
+        GLASS_CLEANER -> "Wipes the algae film off the front glass where you drag"
+        TEST_KIT -> "Reads KH, Ca, NO3, PO4 like a real kit: colour cards round, drops are ±1"
+        MICROSCOPE -> "Pods, worms and plankton living in the rock, sand and water"
+        KNOCKER -> "A hard knock: nearby fish startle and hide, and stress a little"
+        MOVE_ROCKS -> "Territories reset for a day (more squabbles); can tear a pest anemone in two"
+        else -> ""
+    }
+
+    /** The salt a water-change prop mixes (its product): Coral Pro for the big change, Instant Ocean for the small. */
+    val saltMix: WaterState? get() = when (this) {
+        WATER_CHANGE -> WaterState.CORAL_PRO_MIX
+        WATER_SMALL -> WaterState.INSTANT_OCEAN_MIX
+        else -> null
+    }
+
+    /** Share of the water a water-change prop swaps. */
+    val changeFraction: Double get() = when (this) {
+        WATER_CHANGE -> 0.25
+        WATER_SMALL -> 0.10
+        else -> 0.0
+    }
+
+    /** The salt's short name for the banner ("Coral Pro"). */
+    val saltName: String get() = when (this) {
+        WATER_CHANGE -> "Coral Pro"
+        WATER_SMALL -> "Instant Ocean"
+        else -> ""
+    }
+
     /** The prop stays on the shelf when picked (it shows something there) instead of taking you back to the tank. */
     val staysOnShelf: Boolean get() = this == TEST_KIT
 
@@ -179,13 +229,13 @@ enum class SupplyItem(
 
     /**
      * Sends this supply's action through the same paths as the old menu tiles, so it plays the same in-tank picture
-     * and Hermie line ([SandboxActions] cue them). The glass cleaner enters clean-glass mode like the old button.
+     * and Hermie line ([SandboxActions] cue them). The glass cleaner enters clean-glass mode like the old button. The
+     * water changes go with their own salt ([saltMix]).
      */
     fun use(actions: SandboxActions, tools: LiveTools) {
         food?.let { actions.onFeed(it); return }
         when (this) {
-            WATER_CHANGE -> actions.onWaterChange(0.25)
-            WATER_SMALL -> actions.onWaterChange(0.10)
+            WATER_CHANGE, WATER_SMALL -> actions.onSaltChange(changeFraction, saltMix ?: WaterState.FRESH_MIX, saltName)
             DOSE_ALK -> actions.onDose("alk", 1.0)
             DOSE_CA -> actions.onDose("ca", 20.0)
             DOSE_MG -> actions.onDose("mg", 50.0)
@@ -527,9 +577,17 @@ private fun ShelfLabel(p: ShelfPick, modifier: Modifier = Modifier) {
         tint = if (p.locked) Candy.purple else item.row.tone,
     ) {
         Text(item.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (item.product.isNotEmpty()) {
+            Text(item.product, style = s.buttonText.copy(fontSize = 11.sp, lineHeight = 13.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
         val line = if (p.locked) "Pretend tank only: switch to Sandbox to use it" else item.blurb
         if (line.isNotEmpty()) {
             Text(line, style = s.buttonText.copy(fontSize = 12.sp, lineHeight = 15.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+        // what it changes and by how much (the sim effect behind the prop), set apart by a thin rule
+        if (item.properties.isNotEmpty()) {
+            Box(Modifier.padding(vertical = 4.dp).fillMaxWidth().height(1.dp).background(s.labelDim.copy(alpha = 0.25f)))
+            Text(item.properties, style = s.buttonText.copy(fontSize = 11.sp, lineHeight = 14.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }

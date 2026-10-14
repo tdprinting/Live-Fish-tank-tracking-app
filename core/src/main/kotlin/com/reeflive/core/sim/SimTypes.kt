@@ -15,6 +15,12 @@ sealed class Command {
     data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
+    /**
+     * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
+     * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
+     * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
+     */
+    data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
     data class SetSpeed(val speed: Double) : Command()
     data class ResetToReality(val water: WaterState, val livestock: List<LivestockSeed>) : Command()
     /** Sandbox: set an organism's length (the "grow fish" slider, SIMULATION §4.5 tang). */

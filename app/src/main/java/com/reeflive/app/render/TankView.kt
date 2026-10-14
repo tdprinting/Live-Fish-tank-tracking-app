@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TouchSurface
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.atomic.AtomicReference
 
@@ -43,6 +44,8 @@ fun TankView(
     onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
+    /** A tap with no animal under the finger: where and on what it landed ([TankViewListener.onTouchTank]); null = [onPick] (null). */
+    onTouchTank: ((Vec3, TouchSurface) -> Unit)? = null,
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
     projection: TankProjection? = null,
     /** In-tank feedback for actions (dye plumes, bubbles, pump jets): the screen emits, the renderer draws. */
@@ -57,7 +60,7 @@ fun TankView(
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, projection = projection,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf,
     )
 }
@@ -85,6 +88,8 @@ fun TankView(
     onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
+    /** A tap with no animal under the finger: where and on what it landed ([TankViewListener.onTouchTank]); null = [onPick] (null). */
+    onTouchTank: ((Vec3, TouchSurface) -> Unit)? = null,
     projection: TankProjection? = null,
     bursts: TankBursts? = null,
     viewLight: ViewLight = ViewLight.REAL,
@@ -95,6 +100,7 @@ fun TankView(
     val scrape by rememberUpdatedState(onScrape)
     val flipperTap by rememberUpdatedState(onFlipperTap)
     val glass by rememberUpdatedState(onTapGlass)
+    val touch by rememberUpdatedState(onTouchTank)
     val press by rememberUpdatedState(onLongPress)
     val lost by rememberUpdatedState(onFollowLost)
     val currentProvider by rememberUpdatedState(provider)
@@ -102,6 +108,10 @@ fun TankView(
         object : TankViewListener {
             override fun onPick(id: String?) = pick(id)
             override fun onTapGlass(worldPoint: Vec3) = glass(worldPoint)
+            override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) {
+                val f = touch
+                if (f != null) f(worldPoint, surface) else pick(null)
+            }
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)

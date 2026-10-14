@@ -86,7 +86,7 @@ data class SimSpecies(
     /**
      * 1 = listed in the diet, 0 = ignored, in between = eaten when offered though not a staple: flake for any
      * mysis/pellet eater, brine shrimp for any mysis eater, krill picked at by smaller mouths, a wafer nibbled by
-     * omnivores and the coral-food cloud by flake eaters (design estimates).
+     * omnivores, the coral-food cloud by flake eaters and a prawn chunk by the sand scavengers (design estimates).
      */
     fun dietMatch(food: FoodKind): Double = when {
         eats(food) -> 1.0
@@ -98,6 +98,8 @@ data class SimSpecies(
         food == FoodKind.ALGAE_WAFER && has("ALGAE") -> 0.4
         food == FoodKind.ALGAE_WAFER && eats(FoodKind.PELLET) -> 0.25
         food == FoodKind.CORAL_FOOD && eats(FoodKind.FLAKE) -> 0.3
+        // hermits and brittle stars scavenge any meaty chunk that reaches the sand, though their sheets don't list it
+        food == FoodKind.PRAWN && (brainKind == BrainKind.HERMIT || brainKind == BrainKind.BRITTLE_STAR) -> 0.8
         else -> 0.0
     }
 
@@ -232,6 +234,79 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
         else -> 1.0
     }
 
+    /**
+     * Phosphate per unit of nitrogen relative to the tuned reference foods (flake, pellets, mysis, pods = 1): meaty
+     * frozen foods and coral powders carry more P (and frozen cubes shed P-rich thaw juice unless rinsed), seaweed and
+     * bottled phyto less (design estimates from the hobby's nutrient-export experience, research 01 §3.5).
+     */
+    val po4Factor: Double get() = when (this) {
+        CORAL_FOOD -> 1.6
+        KRILL -> 1.5
+        PRAWN -> 1.4
+        BRINE, CYCLOPS -> 1.2
+        ALGAE_WAFER -> 0.8
+        PLANKTON -> 0.6
+        NORI -> 0.5
+        else -> 1.0
+    }
+
+    /** Dissolved organics leached per gram relative to the reference foods: thaw juice, raw prawn, fine powders and bottled phyto leach more, dry greens less (est.). */
+    val docFactor: Double get() = when (this) {
+        PRAWN, PLANKTON -> 1.5
+        CORAL_FOOD -> 1.4
+        BRINE -> 1.3
+        KRILL, CYCLOPS -> 1.2
+        ALGAE_WAFER -> 0.8
+        NORI -> 0.6
+        else -> 1.0
+    }
+
+    /** Who in the owner's tank goes for it (SimSpecies.dietMatch / foodPreference with the shipped sheets), in plain words. */
+    val eatenBy: String get() = when (this) {
+        FLAKE -> "almost every fish, the shrimp and hermits"
+        MYSIS -> "every fish and shrimp; the skunk shrimp's favourite"
+        PELLET -> "most fish, the shrimp and the crab"
+        NORI -> "the tang and the blennies"
+        PODS -> "the cardinal, wrasses, gobies, blenny and duster"
+        PRAWN -> "Nassarius first, then hermits, crab, shrimp, brittle star"
+        PLANKTON -> "the feather duster and the corals"
+        BRINE -> "nearly every fish and shrimp, as a treat"
+        KRILL -> "the hawkfish first, then shrimp, crab and bigger fish"
+        FLOATING_PELLET -> "surface feeders: clownfish, cardinal, tang"
+        ALGAE_WAFER -> "the tang, lawnmower blenny, snails, hermits, crab"
+        CORAL_FOOD -> "the corals and the duster; fish only nibble"
+        CYCLOPS -> "cardinal, blenny, gobies, wrasses, duster, corals"
+    }
+
+    /** Waste one tap leaves in the water, as dry-flake-equivalent grams (the nitrogen load before anyone eats). */
+    val wastePerTap: Double get() = typicalDoseGrams * nutrientFactor
+
+    /**
+     * One line for the shelf's pick label: how it moves in the water, who eats it and how much waste it leaves, all
+     * read from the numbers the sim uses ([sinkCmS], [floatSeconds], [suspended], [eatenBy], [wastePerTap], [po4Factor]).
+     */
+    val properties: String get() {
+        val motion = when {
+            this == NORI -> "On the clip up to 4 h"
+            floats -> "Floats ${if (floatSeconds >= 120) "${(floatSeconds / 60).toInt()} min" else "${floatSeconds.toInt()} s"}, then sinks"
+            suspended -> "Drifts in the flow, never settles"
+            sinkCmS >= 3.0 -> "Sinks fast (${oneDecimal(sinkCmS)} cm/s)"
+            sinkCmS >= 1.0 -> "Sinks ${oneDecimal(sinkCmS)} cm/s"
+            else -> "Sinks slowly (${oneDecimal(sinkCmS)} cm/s)"
+        }
+        val load = when {
+            wastePerTap >= 0.8 -> "heavy waste"
+            wastePerTap >= 0.25 -> "some waste"
+            else -> "light waste"
+        }
+        val p = when {
+            po4Factor >= 1.3 -> ", phosphate-rich"
+            po4Factor <= 0.6 -> ", low phosphate"
+            else -> ""
+        }
+        return "$motion · for $eatenBy · $load$p"
+    }
+
     val group: FoodGroup get() = when (this) {
         FLAKE, PELLET, FLOATING_PELLET -> FoodGroup.DRY
         MYSIS, BRINE, KRILL, PRAWN -> FoodGroup.FROZEN
@@ -275,6 +350,12 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
 
     companion object {
         fun of(s: String): FoodKind = entries.firstOrNull { it.name.equals(s, true) } ?: FLAKE
+
+        /** 1.5 → "1.5", 4.0 → "4" (no String.format: core also compiles to JS). */
+        private fun oneDecimal(v: Double): String {
+            val t = kotlin.math.round(v * 10).toLong()
+            return if (t % 10 == 0L) "${t / 10}" else "${t / 10}.${t % 10}"
+        }
     }
 }
 

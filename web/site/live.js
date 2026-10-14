@@ -39,6 +39,7 @@ export function startLive(applyReadings) {
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
+    onTouch: (surface) => touchTank(surface),
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
@@ -173,7 +174,7 @@ $('rail').addEventListener('click', (e) => {
   renderRail();
 });
 function closeCard() { ui.card = null; $('card').classList.add('hidden'); renderRail(); }
-$('tank').addEventListener('pointerdown', () => { if (ui.card) closeCard(); });
+$('tank').addEventListener('pointerdown', () => { if (ui.card) { closeCard(); ui.cardClosedAt = performance.now(); } });
 
 const tile = (attrs, ico, label, on = false, lock = false) =>
   `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${ico}</span>${esc(label)}</button>`;
@@ -210,7 +211,7 @@ function viewCard() {
   return `${timeSlider(STOPS)}
     <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
     <div class="options">${tile('data-torch', '🔦', 'Torch', ui.torch)}${tile('data-feedshelf', '🍤', 'Feed')}${tile('data-tour', '🎬', 'Auto tour', ui.tour)}
-      ${tile('data-hide', '🎞', 'Cinematic')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
+      ${tile('data-hide', '🎞', 'Cinematic')}${tile('data-saver', '🌙', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
     <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, '🐟', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
 }
 
@@ -350,6 +351,7 @@ $('card').addEventListener('click', (e) => {
   else if ('feedshelf' in d) { closeCard(); openShelf(); return; }
   else if ('tour' in d) { ui.tour = !ui.tour; ui.tourTicks = 0; ui.tourIndex = -1; if (ui.tour) nextTour(); else { ui.following = null; live.follow(null); } }
   else if ('hide' in d) { setChrome(true); return; }
+  else if ('saver' in d) { closeCard(); setSaver(true); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -568,6 +570,32 @@ function testKit() {
   const extra = ['ph', 'alk', 'ca', 'mg', 'nh3', 'no2'].map((id) => { const p = C.params.find((x) => x.id === id); return `${p.short} ${fmt(p, val(id))}`; }).join(' · ');
   say(`Test kit: ${r} · ${extra}`);
 }
+
+// ================================================================ screensaver
+// Full-screen calm mode: the shared CinemaDirector moves the camera; this only draws the dip-to-black and caption.
+function setSaver(on) {
+  ui.saver = on;
+  document.body.classList.toggle('saver-on', on);
+  if (on) { ui.tour = false; setChrome(true); $('showChrome').classList.add('hidden'); }
+  live.screensaver(on);
+  $('saver').classList.toggle('hidden', !on);
+  if (on) { $('saverHint').style.opacity = 1; setTimeout(() => { $('saverHint').style.opacity = 0; }, 3000); requestAnimationFrame(saverFrame); }
+  else setChrome(false);
+  if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+function saverFrame() {
+  if (!ui.saver) return;
+  const c = JSON.parse(live.cinema());
+  if (c) {
+    $('saverBlack').style.opacity = c.fade;
+    $('saverCaption').style.opacity = c.alpha;
+    if ($('saverCaption').textContent !== c.caption) $('saverCaption').textContent = c.caption;
+  }
+  requestAnimationFrame(saverFrame);
+}
+$('saver').addEventListener('click', () => setSaver(false));
+document.addEventListener('keydown', (e) => { if (ui.saver && e.key === 'Escape') setSaver(false); });
 
 // ================================================================ chrome, torch, cleaning
 function setChrome(hidden) {
@@ -804,6 +832,27 @@ function cue(name, gain = 0.8) {
   if (!b) return;
   const src = actx.createBufferSource(); src.buffer = b;
   const g = actx.createGain(); g.gain.value = gain * ui.volume;
+  src.connect(g).connect(actx.destination); src.start();
+}
+// a tap with no fish under it (Android LiveTaps): undo what is open first, else touch the tank there
+let touchSaidAt = 0;
+function touchTank(surface) {
+  if (ui.chromeHidden) { setChrome(false); return; }
+  if (performance.now() - (ui.cardClosedAt || 0) < 700) return;
+  if (ui.picked && !ui.following) { select(null); return; }
+  if (!live.touchTank()) return;
+  knockSound(surface === 'GLASS' ? 1 : 0.7);
+  try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
+  if (performance.now() - touchSaidAt > 9000) {
+    touchSaidAt = performance.now();
+    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?' }[surface] || 'Soft corals pull in, the shy ones duck.');
+  }
+}
+function knockSound(gain) {
+  const b = ui.sound && actx && buffers[CUES.PELLET];
+  if (!b) return;
+  const src = actx.createBufferSource(); src.buffer = b; src.playbackRate.value = 0.5 + Math.random() * 0.08;
+  const g = actx.createGain(); g.gain.value = 0.55 * gain * ui.volume;
   src.connect(g).connect(actx.destination); src.start();
 }
 function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.min(1, cm / 1.5)) / 0.45)); }

@@ -15,10 +15,10 @@ class LiveTapsTest {
     ) = LiveTaps.emptyWater(justSkipped, hidden, following, cardOpen, fishPicked)
 
     @Test fun aTapOnEmptyWaterNeverHidesTheButtons() {
-        // there is no "hide" outcome at all, a plain tap is a no-op, and with the buttons already hidden every tap
-        // that was not a skip brings them back
+        // there is no "hide" outcome at all, a plain tap touches the tank, and with the buttons already hidden every
+        // tap that was not a skip brings them back
         assertFalse(WaterTap.entries.any { it.name.contains("HIDE") })
-        assertEquals(WaterTap.NOTHING, tap())
+        assertEquals(WaterTap.TOUCH, tap())
         for (bits in 0 until 32) {
             val skipped = bits and 1 != 0
             val hidden = bits and 2 != 0
@@ -45,6 +45,15 @@ class LiveTapsTest {
     @Test fun cardsCloseBeforeTheFishIsPutDown() {
         assertEquals(WaterTap.CLOSE_CARD, tap(cardOpen = true, fishPicked = true))
         assertEquals(WaterTap.DESELECT, tap(fishPicked = true))
+    }
+
+    @Test fun aTapOnlyTouchesTheTankWhenNothingIsOpen() {
+        // card open or buttons hidden: the tap only undoes that (PR #53); otherwise it is a fingertip on the glass
+        assertEquals(WaterTap.TOUCH, tap())
+        for (bits in 1 until 32) {
+            val r = tap(bits and 1 != 0, bits and 2 != 0, bits and 4 != 0, bits and 8 != 0, bits and 16 != 0)
+            assertTrue("bits $bits gave $r", r != WaterTap.TOUCH)
+        }
     }
 
     @Test fun clampSafeNeverThrows() {
