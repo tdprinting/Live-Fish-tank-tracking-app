@@ -104,6 +104,27 @@
     "diseaseSusceptibility": {},
     "hardiness": 0.5,
     "starvationDays": 28.0,
+    "lifeStages": {
+        "stages": [
+            {
+                "id": "juvenile",
+                "fromCm": 0,
+                "label": "Juvenile",
+                "depthScale": 1.05
+            },
+            {
+                "id": "adult",
+                "fromCm": 3.5,
+                "label": "Adult"
+            }
+        ],
+        "blendCm": 2.0,
+        "sexSystem": "PROTOGYNOUS",
+        "bidirectional": true,
+        "maturityCm": 4.5,
+        "sexChangeDays": 16,
+        "reverseChangeDays": 30
+    },
     "model": "models/wrasse.glb",
     "colors": {},
     "iridescence": 0.5,

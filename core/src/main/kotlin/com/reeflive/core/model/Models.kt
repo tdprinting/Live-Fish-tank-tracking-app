@@ -167,7 +167,7 @@ data class Livestock(
     val variant: String? = null,
     /** FEMALE / MALE when known. */
     val role: String? = null,
-    /** JUVENILE / ADULT when known. */
+    /** JUVENILE / SUBADULT / ADULT when known (stage names of the species `lifeStages`, LifeStages.kt). */
     val lifeStage: String? = null,
     val sizeCm: Double? = null,
     /** Group entries (snails, hermits) carry a count. */

@@ -96,6 +96,23 @@
   "size": {
     "lod0Tris": 4800
   },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 5.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 2.0,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 8.0
+  },
   "model": "models/diamond_goby.glb",
   "colors": {
     "primary": "#E8EEF0",

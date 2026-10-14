@@ -307,8 +307,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
-    /** Juvenile P. hepatus (under ~45 % of max length) feign death far more readily than adults. */
-    val juvenile: Boolean get() = o.lengthCm < 0.45 * o.species.maxLengthCm
+    /** Juvenile P. hepatus (first life stage of the sheet's `lifeStages`, < 9 cm) feign death far more readily than adults. */
+    val juvenile: Boolean get() = com.reeflive.core.sim.LifeStages.isJuvenile(o)
 
     /** +1 rolls the back toward the right side (model +Z), −1 toward the left: whichever side the rock is on. */
     fun leanSign(c: Ctx, p: Vec3, heading: Vec3): Double {
@@ -601,6 +601,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val o = c.o
             var best: Organism? = null
             var bw = 0.0
+            // a juvenile (black with the neon dorsal stripe) works close to its station (life_stages.md §4 [L])
+            val searchCm = SEARCH_CM * (if (com.reeflive.core.sim.LifeStages.isJuvenile(o)) JUVENILE_SEARCH else 1.0)
             for (f in c.sim.organisms) {
                 if (f === o || !f.alive || !f.isFish || !f.visible || f.sleeping || f.brainKind == BrainKind.WRASSE || f.brainKind == BrainKind.EEL) continue
                 if (c.t - f.lastCleanerContactAt < CLIENT_COOLDOWN_S) continue
@@ -610,7 +612,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 val atStation = station.client === f && station.clientReady
                 // an active aggressor whose damping has lapsed is sought out across the tank, like an overdue client
                 val aggressor = f.aggressionDampUntil < c.t + DAMP_RENEW_S && f.counters.lastHour(Counters.K.CHASE_GIVEN, c.t) > 0
-                if (d > SEARCH_CM && !overdue && !atStation && !aggressor) continue
+                if (d > searchCm && !overdue && !atStation && !aggressor) continue
                 val ich = if (f.disease == Disease.ICH) f.diseaseStage else 0.0
                 val threat = o.relations[f.id]?.fear ?: 0.0
                 // lateral area (length² × body depth, S:Grutter95; gives 06 §2.11's order tang > clowns > dottyback >
@@ -793,6 +795,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val POSE_REFRACT_S = 2250.0
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
+        /** Juvenile cleaners search a smaller radius around the station (life_stages.md §4: DESIGN ESTIMATE [L]). */
+        const val JUVENILE_SEARCH = 0.6
         /**
          * A client not touched for this long gets a higher weight and is sought anywhere in the tank (06 §5.6 #4). A DESIGN
          * ESTIMATE that biases choice only: research 10 §4 finds no visit guarantee, and a client can still refuse.

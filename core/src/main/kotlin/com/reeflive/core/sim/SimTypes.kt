@@ -282,6 +282,8 @@ data class SimSnapshot(
     val stats: List<OrganismStats> = emptyList(),
     val tick: Long = 0,
     val abstractMode: Boolean = false,
+    /** Life stage and sex per fish id (LifeStages.kt), for the renderer's stage textures and the fish card. */
+    val lifeForms: Map<String, LifeForm> = emptyMap(),
     /** Shed shrimp exoskeletons lying on the sand (24 h each). */
     val moltShells: List<Vec3> = emptyList(),
     /** Nori sheet remaining on the clip (0 = none). */

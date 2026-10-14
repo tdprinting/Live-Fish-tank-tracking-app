@@ -43,6 +43,8 @@ data class SimSpecies(
     val brain: String? = null,
     /** Dead body floats (true) or sinks (false); default by brain (SIMULATION §3.4). */
     val buoyantWhenDead: Boolean? = null,
+    /** Juvenile / adult stages and sex system (LifeStages.kt, docs/research/life_stages.md); null = generic fallback. */
+    val lifeStages: LifeStageSpec? = null,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */

@@ -105,6 +105,31 @@
   "size": {
     "lod0Tris": 4500
   },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile",
+        "depthScale": 1.05
+      },
+      {
+        "id": "subadult",
+        "fromCm": 9.0,
+        "form": "adult",
+        "label": "Subadult"
+      },
+      {
+        "id": "adult",
+        "fromCm": 15.0,
+        "label": "Adult",
+        "depthScale": 0.96
+      }
+    ],
+    "blendCm": 3.0,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 12.0
+  },
   "model": "models/tang.glb",
   "colors": {
     "primary": "#2B5FD9",
