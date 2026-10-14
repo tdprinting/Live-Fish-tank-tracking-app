@@ -208,51 +208,82 @@ def fins_tang(cv):
     FL.paint_fin_slot(cv, 5, base="#2B5FD9", alpha=0.8, rays=5, ray_color="#1A3C8F", margin="#0A0A0A")
 
 
+CARD_BAND = (0.385, 0.505)  # dark bar at the dorsal edge (u), behind the opercle under the first dorsal
+
+
+def card_band_edges(v):
+    """The bar leans back toward the belly a little (Tee's fish b_04 [H]; FishBase: 'a dark brown bar crosses the
+    anterior body'); it is ~0.12 SL wide at the back, ~0.11 at the belly."""
+    lean = (1.0 - v) * 0.035
+    return CARD_BAND[0] + lean, CARD_BAND[1] + lean - 0.012 * (1.0 - v)
+
+
 def paint_cardinal(cv, fl):
+    """S. nematoptera after Tee's own fish (reference b_04, 2026-10-13 [H]) and ref_cardinal.jpg: lemon-yellow head
+    and nape up to the bar, a pale silvery cheek behind the eye, a dark brown-black bar with a scaly net from the
+    first dorsal down to the belly, and a pinkish-white rear body with round orange-brown spots that get smaller
+    toward the peduncle (FishBase morphology: 'head yellow ... dark brown bar ... posterior body with purple
+    [red-brown] spots')."""
     u, v = cv.u, cv.v
-    # band tilts: further back at the top
-    slant = (v - 0.5) * -0.03  # band runs from the first dorsal (top) down to the pelvics (slightly forward)
-    b0, b1 = 0.345 + slant, 0.455 + slant
-    cv.vgrad("#F2E2DE", "#EAD6D2", 0.0, 1.0)  # silvery white rear
-    cv.blend(P.value_noise(cv.h, cv.w, 40, 20, 23) * 0.5, "#E8D0CC", 0.5)
-    head = 1 - S(b0 - 0.01, b0 + 0.005, u)
+    b0, b1 = card_band_edges(v)
+    # rear: pinkish white, a faint warm flush along the back
+    cv.vgrad("#F4E9E6", "#EDDCD6", 0.0, 1.0)
+    cv.blend(P.value_noise(cv.h, cv.w, 40, 20, 23) * 0.4, "#E9D3CD", 0.5)
+    # head: lemon yellow, brighter on the nape/forehead, paler on the throat
+    head = 1 - S(b0 - 0.012, b0 + 0.004, u)
     hc = P.Canvas(cv.w, cv.h)
-    hc.vgrad("#D6BC4A", "#A89A3C", 0.0, 1.0)  # yellow-olive to tan head
+    hc.vgrad("#EFE6A6", "#E2CB3A", 0.0, 0.85)
     cv.rgb = cv.rgb * (1 - head[..., None]) + hc.rgb * head[..., None]
-    # yellow stronger on the snout and nape, white cheek
-    cv.blend(head * (1 - S(0.05, 0.25, u)) * S(0.4, 0.7, v), "#D4BC48", 0.5)
-    cheek = np.exp(-(((u - 0.20) / 0.09) ** 2 + ((v - 0.33) / 0.13) ** 2))
-    cv.blend(cheek * head, "#E4DCC0", 0.5)
+    cv.blend(head * S(0.55, 0.9, v) * (1 - S(0.15, 0.38, u)), "#E6CE32", 0.6)
+    # silvery-cream cheek and opercle behind the eye
+    cheek = np.exp(-(((u - 0.24) / 0.08) ** 2 + ((v - 0.40) / 0.14) ** 2))
+    cv.blend(cheek * head, "#EEE8CC", 0.55)
+    # yellow wash carries a little way past the bar on the belly (Tee's fish)
+    cv.blend((1 - S(b1 + 0.0, b1 + 0.06, u)) * S(b1 - 0.02, b1, u) * (1 - S(0.15, 0.35, v)), "#EBDD8A", 0.45)
     mucus(cv, 0.04, 21)
     scales_overlay(cv, 12, 0.05)
-    # black band with a dark scale mesh
-    band = P.band(u, b0, b1, 0.004) * S(0.02, 0.08, v) * (1 - S(0.97, 1.0, v))
-    net = P.hex_net(cv, 15, 1.6)
-    bandc = (1 - net[..., None]) * hex2rgb("#5A5246") + net[..., None] * hex2rgb("#0E0C0A")
+    # the bar: dark net of scale outlines over brown-black scale centres, soft edges
+    band = S(b0 - 0.006, b0 + 0.006, u) * (1 - S(b1 - 0.006, b1 + 0.006, u)) * S(0.03, 0.09, v)
+    net = P.hex_net(cv, 15, 1.7)
+    bandc = (1 - net[..., None]) * hex2rgb("#4E4238") + net[..., None] * hex2rgb("#0D0A08")
     cv.rgb = cv.rgb * (1 - band[..., None]) + bandc * band[..., None]
-    # reddish-brown spots on the rear body
+    # orange-brown spots on the rear body, shrinking toward the peduncle, sparse low on the flank
     rs = np.random.default_rng(7)
-    m, _ = fl.spots(rs, 60, 0.012, 0.018, 0.033, (0.49, 0.97, 0.08, 0.97),
-                    weight_fn=lambda uu, vv: 0.35 + 0.65 * S(0.1, 0.4, vv))
-    # second flank pass with a different seed gives a different arrangement on the far side
-    # (both flanks share UVs, so one set is used)
-    cv.blend(m, "#9A3E2C")
-    # dark edge of the lips
-    dark_mouth(cv, fl, u1=0.03, v0=0.62, v1=0.7, color="#8C7A30", op=0.6)
+    m = np.zeros_like(u)
+    pts = []
+    for (lo, hi, n, rmin, rmax, sp) in ((0.53, 0.75, 44, 0.012, 0.016, 0.038), (0.75, 0.97, 36, 0.009, 0.012, 0.03)):
+        mm, pp = fl.spots(rs, n, rmin, rmax, sp, (lo, hi, 0.07, 0.96),
+                          weight_fn=lambda uu, vv: 0.3 + 0.7 * S(0.12, 0.35, vv), existing=None)
+        m = np.maximum(m, mm)
+        pts += pp
+    cv.blend(m, "#B65A38")
+    cv.blend(m * S(0.75, 1.0, u), "#A04A30", 0.4)
+    # dark lip line
+    dark_mouth(cv, fl, u1=0.035, v0=0.5, v1=0.58, color="#8C7A30", op=0.5)
 
 
 def fins_cardinal(cv):
-    grey = "#E4E2DE"
-    FL.paint_fin_slot(cv, 0, base="#D8B840", alpha=0.85, rays=7, ray_color="#9A7A20", spine_count=7,
-                      margin="#E0702A", margin_w=0.14, incise=0.22)
-    FL.paint_fin_slot(cv, 1, base=grey, alpha=0.5, rays=10, ray_color="#8A8580", margin="#E8E8E8",
-                      margin_w=0.06, base_fn=lambda T, Sx, rgb: rgb * (1 - 0.4 * (1 - S(0.0, 0.4, Sx)))[..., None])
-    FL.paint_fin_slot(cv, 2, base=grey, alpha=0.5, rays=10, ray_color="#8A8580", margin="#E8E8E8", margin_w=0.06)
-    FL.paint_fin_slot(cv, 3, base="#B8B4B0", alpha=0.55, rays=18, ray_color="#6E6A66", margin="#DDDDDD",
-                      margin_w=0.05)
-    FL.paint_fin_slot(cv, 4, base=grey, alpha=0.35, rays=12, ray_color="#A8A49F")
-    FL.paint_fin_slot(cv, 5, base="#E8A830", alpha=0.92, rays=6, ray_color="#C07A20", margin="#D0302A",
-                      margin_w=0.14)
+    clear = "#E2E0DD"
+    def dark_lead(w, col):
+        def f(T, Sx, rgb):
+            m = (1 - S(w - 0.04, w + 0.04, T))[..., None]
+            return rgb * (1 - m) + hex2rgb(col) * m
+        return f
+    # first dorsal VII: yellow with the bar running up its front spines (FishBase: bar 'extends onto the first dorsal')
+    FL.paint_fin_slot(cv, 0, base="#E6CC3A", alpha=0.9, rays=7, ray_color="#9A7A20", spine_count=7,
+                      margin="#E07A2A", margin_w=0.08, incise=0.1, base_fn=dark_lead(0.38, "#3A2A1C"))
+    # second dorsal I,9 and anal II,9-10: tall, translucent grey with a dusky leading edge and a white rim
+    FL.paint_fin_slot(cv, 1, base=clear, alpha=0.45, rays=10, ray_color="#8A8580", margin="#F2F2F2",
+                      margin_w=0.05, base_fn=dark_lead(0.1, "#5A5450"))
+    FL.paint_fin_slot(cv, 2, base=clear, alpha=0.45, rays=10, ray_color="#8A8580", margin="#F2F2F2",
+                      margin_w=0.05, base_fn=dark_lead(0.08, "#6A6460"))
+    # forked caudal: translucent, faintly dusky
+    FL.paint_fin_slot(cv, 3, base="#C8C3C0", alpha=0.5, rays=18, ray_color="#6E6A66", margin="#E6E6E6",
+                      margin_w=0.04)
+    FL.paint_fin_slot(cv, 4, base=clear, alpha=0.28, rays=12, ray_color="#B8B4AF")
+    # long pelvics: yellow with an orange-red trailing rim and a dark leading spine (Tee's fish b_04, ref photo)
+    FL.paint_fin_slot(cv, 5, base="#EDCB3A", alpha=0.95, rays=6, ray_color="#C8902A", margin="#D8522A",
+                      margin_w=0.16, base_fn=dark_lead(0.14, "#5A3A1E"))
 
 
 def paint_wrasse(cv, fl):
@@ -781,22 +812,26 @@ SPECIES = {
         paint=paint_tang, fins=fins_tang, irid=0.35, rough=0.3, length_cm=6.5,
     ),
     "cardinal": dict(
-        # S. nematoptera: snout short but pointed, head depth at the eye ~0.7 of the body depth
-        profile=[(0, 0.08, 0.035, 0.035), (0.04, 0.21, 0.065, 0.026), (0.12, 0.34, 0.095, 0.012), (0.27, 0.44, 0.115, 0.0),
-                 (0.42, 0.46, 0.115, 0.0), (0.58, 0.41, 0.105, 0.0), (0.72, 0.31, 0.09, 0.0), (0.84, 0.21, 0.065, 0.0),
-                 (0.93, 0.16, 0.045, 0.0), (1.0, 0.155, 0.035, 0.0)],
-        body_tris=3400, ring=32, p_exp=0.7, belly_bias=0.05,
-        dorsal=dict(u0=0.30, u1=0.42, h=[(0.30, 0.06), (0.32, 0.19), (0.36, 0.15), (0.40, 0.08), (0.42, 0.02)],
-                    rake=22, n=10),
-        dorsal2=dict(u0=0.52, u1=0.70, h=[(0.52, 0.05), (0.53, 0.34), (0.545, 0.2), (0.56, 0.15), (0.62, 0.13), (0.67, 0.08),
-                                          (0.70, 0.02)], rake=55, n=16),
-        anal=dict(u0=0.55, u1=0.72, h=[(0.55, 0.04), (0.58, 0.14), (0.64, 0.13), (0.70, 0.07), (0.72, 0.02)],
-                  rake=38, n=12),
-        caudal=dict(length=0.24, span=0.34, shape="forked"),
-        pectoral=dict(u=0.27, length=0.16, width=0.08, zf=-0.05, shape="pointed"),
-        pelvic=dict(u=0.36, length=0.16),
-        eye=dict(u=0.11, zf=0.24, r=0.072, iris="#D8401E", ring="#E85A2A", outer="#C8A040", pupil=0.4, ring_w=0.14),
-        paint=paint_cardinal, fins=fins_cardinal, irid=0.15, rough=0.35, length_cm=5.0,
+        # S. nematoptera (FishBase morphology): deep and compressed, body depth 1.8-2.0 in SL (0.50-0.56 SL), a
+        # straight dorsal head profile rising to the first dorsal, a big head (opercle ~0.33 SL), terminal oblique
+        # mouth, long slender peduncle; D VII + I,9 with the second dorsal's front rays prolonged, A II,9-10.
+        # Measured on Tee's fish (b_04) and ref_cardinal.jpg: depth 0.50-0.54 at the first dorsal, eye at 0.15 SL.
+        # (u, depth, width, centre): top contour a straight line from the snout to the first dorsal, belly rounder
+        profile=[(0, 0.06, 0.03, 0.0), (0.04, 0.13, 0.06, -0.005), (0.10, 0.22, 0.09, -0.015), (0.18, 0.32, 0.115, -0.02),
+                 (0.30, 0.45, 0.138, -0.015), (0.42, 0.535, 0.15, 0.002), (0.54, 0.50, 0.14, 0.0), (0.66, 0.38, 0.118, 0.0),
+                 (0.78, 0.245, 0.088, 0.0), (0.88, 0.17, 0.062, 0.0), (0.95, 0.152, 0.048, 0.0), (1.0, 0.155, 0.038, 0.0)],
+        body_tris=3400, ring=32, p_exp=0.7, belly_bias=0.05, gill=(0.31, 0.4, 0.06, 0.26),
+        dorsal=dict(u0=0.385, u1=0.485, h=[(0.385, 0.08), (0.40, 0.27), (0.43, 0.23), (0.46, 0.13), (0.485, 0.03)],
+                    rake=28, n=10),
+        dorsal2=dict(u0=0.56, u1=0.72, h=[(0.56, 0.06), (0.57, 0.36), (0.59, 0.28), (0.63, 0.20), (0.68, 0.12),
+                                          (0.72, 0.03)], rake=50, n=16),
+        anal=dict(u0=0.58, u1=0.74, h=[(0.58, 0.05), (0.59, 0.25), (0.63, 0.20), (0.68, 0.13), (0.74, 0.03)],
+                  rake=42, n=12),
+        caudal=dict(length=0.30, span=0.42, shape="forked"),
+        pectoral=dict(u=0.33, length=0.17, width=0.08, zf=-0.05, shape="pointed"),
+        pelvic=dict(u=0.35, length=0.30, base=0.09),
+        eye=dict(u=0.15, zf=0.3, r=0.072, iris="#D8401E", ring="#E85A2A", outer="#D8C060", pupil=0.42, ring_w=0.14),
+        paint=paint_cardinal, fins=fins_cardinal, irid=0.15, rough=0.35, length_cm=7.0,
     ),
     "wrasse": dict(
         profile=[(0, 0.03, 0.03, 0.0), (0.08, 0.12, 0.09, 0.0), (0.2, 0.19, 0.12, 0.0), (0.45, 0.21, 0.13, 0.0),
@@ -1002,7 +1037,7 @@ def build_geometry(sid):
         p = sp["pelvic"]
         for side, nm in ((-1, "FinPelvicL"), (1, "FinPelvicR")):
             fins.append((nm, FL.paired_fin(prof, "pelvic", p["u"], side, p["length"], p["length"] * 0.5,
-                                           shape="pelvic", out_deg=25, n=6, ns=5)))
+                                           shape="pelvic", out_deg=25, n=6, ns=5, pelvic_base=p.get("base", 0.045))))
     for nm, (fv, ff, fuv, fc) in fins:
         fb.add(nm, fv, ff, fuv, fc, "fin", "fin")
 

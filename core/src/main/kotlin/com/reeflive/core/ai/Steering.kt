@@ -167,11 +167,16 @@ class Steering(private val c: Ctx) {
             desired.length() > 0.2 * cruise -> desired.normalized()
             else -> null
         }
-        if (wantDir != null) o.heading = Vec3.rotateToward(o.heading, wantDir.normalized(o.heading), turnRate * dt)
+        if (wantDir != null) {
+            val mp0 = it.maxPitch
+            val w = wantDir.normalized(o.heading).let { d -> if (mp0 != null && abs(d.y) > mp0) clampPitch(d, mp0) else d }
+            o.heading = Vec3.rotateToward(o.heading, w, turnRate * dt)
+        }
         // C-start stage 1: the head snaps round away from the threat far faster than a routine turn
         if (cStartT in 0.0..C_STAGE1 && o.isFish) o.heading = Vec3.rotateAbout(cHeading, Vec3.Y, cSign * cAngle * smoothstep(0.0, C_STAGE1, cStartT)).normalized(o.heading)
-        val pitchMax = if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
-        if (abs(o.heading.y) > pitchMax) o.heading = clampPitch(o.heading, pitchMax)
+        val pitchMax = it.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
+        // a behaviour's tighter limit levels the body out at the turn rate (no snap when it starts)
+        if (abs(o.heading.y) > pitchMax) o.heading = if (it.maxPitch != null) Vec3.rotateToward(o.heading, clampPitch(o.heading, pitchMax), turnRate * dt) else clampPitch(o.heading, pitchMax)
 
         // Body constraint: velocity mostly along the heading (fish cannot crab sideways fast)
         val fwd = vRaw dot o.heading
@@ -437,7 +442,9 @@ class Steering(private val c: Ctx) {
             }
         }
         o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0
-        o.appendagePhase = (o.appendagePhase + dt * 2 * PI * 0.3) % 1000.0
+        // radians, wrapped at a whole number of turns so sin(phase) never jumps (the renderer's antennae and legs
+        // read it as an angle; a wrap at 1000 rad snapped them once every ~9 min)
+        o.appendagePhase = (o.appendagePhase + dt * 2 * PI * 0.3) % com.reeflive.core.sim.Organism.APPENDAGE_WRAP
         o.pitchBias = it.pitchBias
     }
 

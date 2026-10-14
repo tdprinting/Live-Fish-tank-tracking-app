@@ -40,3 +40,28 @@ NOTE: No footage was watched. Wikimedia Commons video downloads (candidates foun
 1. Loose clump hover by cover, very low speed in daytime.
 2. Day/night flip: more active at dusk/night.
 3. Weak-cohesion shoal (not tight school).
+
+## Look and behaviour pass, 2026-10-14 (critters thread)
+Sources read this pass: [FishBase morphology](https://www.fishbase.se/physiology/Sphaeramia_nematoptera) (F1),
+[Fishes of Australia](https://fishesofaustralia.net.au/home/species/4237) (F2), Tee's own fish in
+`/mnt/project-files/reeftank/reference/b_04.jpg` (T-b04, **[H]**) and `ref_cardinal.jpg` (aquarium photo, [M]).
+YouTube is blocked from this network; no footage was watched.
+
+| Trait | Finding | Conf. | Sim / model now |
+|---|---|---|---|
+| Body depth | "Greatest body depth 1.8-2.0 in SL" = 0.50-0.56 SL; compressed | [M] F1 | profile depth 0.535 SL at the first dorsal (was 0.46) |
+| Head | "more or less straight dorsal head profile", terminal mouth; head long (opercle ~0.33 SL on T-b04) | [M] F1, [H] | straight forehead line snout -> first dorsal; eye at 0.15 SL; gill mask moved to 0.31 |
+| Fins | D VII + I,9 (2nd dorsal tip elongate), A II,9-10 | [M] F1 | tall yellow first dorsal (0.27 SL), 2nd dorsal front rays 0.36 SL, anal 0.25 SL, forked caudal 0.30 SL |
+| Bar | dark brown bar on the anterior body, running onto the first dorsal; on Tee's fish it leans back slightly toward the belly and is ~0.12 SL wide | [M] F1, [H] | bar at u 0.385-0.505 with a 0.035 lean, scale net; leading first-dorsal spines dark |
+| Head colour | yellow head (F1, F2); Tee's is lemon-yellow with a paler throat and silvery cheek | [M]/[H] | lemon yellow `#E2CB3A` -> `#EFE6A6`, cream cheek |
+| Rear spots | "purple"/red-brown spots on the rear body (F1, F2); Tee's are orange-brown, round, ~0.035 SL across, smaller toward the tail | [M]/[H] | 80 spots, r 0.012-0.016 front, 0.009-0.012 on the peduncle, `#B65A38` |
+| Pelvics | F1/F2 say dark; Tee's fish and the reference photo show long yellow pelvics with an orange-red rim | [H] wins | long (0.30 SL), broad base, yellow with orange-red rim and dark leading spine |
+| Iris | "red bar through the iris" (F2) | [M] | red-orange iris ring kept |
+| Size | 9 cm TL max (F2); 8.5 cm (FishBase summary) | [M] | model default 7 cm (Tee's ~6 cm) |
+| Habit | "Groups hover near branching corals in sheltered bays" (F2); hides by day, feeds at night (S1) | [M] | level hover (pitch <= 10 deg), quarter-cruise station changes every 8-20 s, faces into the flow so a group lines up; night forage at 0.8 cruise |
+| Mouthbrooding | males brood (F2) | [M] | unchanged (`mouthbrooding` flag) |
+
+Deviations found in the sim before this pass: the day hover pitched nose-up/down to the 35 deg clamp at almost
+every sample (it steered straight at random 3-D points), and at night it hovered for hours against settled food or
+pods wedged at the rock base (unreachable, no give-up in Night foraging). Both fixed (CardinalBrain HoverCover,
+NocturnalForage, `SteerIntent.maxPitch`).

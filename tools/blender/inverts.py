@@ -141,27 +141,48 @@ def build_shrimp(kind="banded"):
     banded = kind == "banded"
     at = Atlas(512, 256, 4)
     if banded:
-        # strip 0: body bands along spine (rostrum -> telson)
-        at.paint_strip(0, lambda cv: bands(cv, [
-            (0.08, "#F4F2EE"), (0.2, "#C8281E"), (0.28, "#F4F2EE"), (0.42, "#C8281E"), (0.5, "#F4F2EE"),
-            (0.58, "#C8281E"), (0.64, "#F4F2EE"), (0.73, "#C8281E"), (0.79, "#F4F2EE"), (0.86, "#C8281E"),
-            (1.0, "#F4F2EE")]))
-        # strip 1: claws 4 bands each
+        # strip 0: body bands along the spine (rostrum -> telson), set on the segments: white rostrum and front of the
+        # carapace, red band behind the eyes, white mid-carapace band, red rear carapace, white abdominal segments 1-2,
+        # the broad red band over the humped 3rd segment, white 4, red 5, white 6 (ADW/Wikipedia S. hispidus [M]: red and
+        # white bands on carapace, abdomen and claws, "sometimes bordered in purple"; Tee's b_02/b_03 [H]). The white
+        # is a translucent milky white, the red a deep scarlet.
+        RED, WH, PUR = "#C21E1A", "#F3EEE8", "#6E2450"
+        stops = [(0.10, WH), (0.21, RED), (0.27, WH), (0.41, RED), (0.53, WH), (0.66, RED), (0.73, WH), (0.82, RED),
+                 (0.89, WH), (1.0, WH)]
+
+        def body_bands(cv):
+            bands(cv, stops)
+            t0 = 0.0
+            for t1, col in stops:  # thin purple rims on the red bands
+                if col == RED:
+                    cv.blend(P.band(cv.u, t0 - 0.006, t0 + 0.004, 0.003) + P.band(cv.u, t1 - 0.004, t1 + 0.006, 0.003), PUR, 0.6)
+                t0 = t1
+            for tb in (0.47, 0.55, 0.63, 0.71, 0.79, 0.87):  # abdominal segment joints
+                cv.blend(P.band(cv.u, tb - 0.004, tb + 0.004, 0.003), "#000000", 0.18)
+            cv.blend(P.value_noise(cv.h, cv.w, 60, 12, 9) * 0.5, "#FFFFFF", 0.25)
+        at.paint_strip(0, body_bands)
+        # strip 1: claws (merus, carpus, palm, fingers) banded
         at.paint_strip(1, lambda cv: bands(cv, [
-            (0.12, "#F4F2EE"), (0.25, "#C8281E"), (0.37, "#F4F2EE"), (0.5, "#C8281E"), (0.62, "#F4F2EE"),
-            (0.75, "#C8281E"), (0.85, "#F4F2EE"), (0.95, "#C8281E"), (1.0, "#F4F2EE")]))
+            (0.12, WH), (0.25, RED), (0.37, WH), (0.5, RED), (0.62, WH),
+            (0.75, RED), (0.85, WH), (0.95, RED), (1.0, WH)]))
         # strip 2: legs / antennae white with faint translucency
         at.paint_strip(2, lambda cv: cv.vgrad("#E8E4DC", "#F8F6F2"))
-        # strip 3: tail fan white with a red band in the middle
-        at.paint_strip(3, lambda cv: (cv.vgrad("#F4F2EE", "#F4F2EE"),
-                                      cv.blend(P.band(cv.u, 0.45, 0.75, 0.03), "#C8281E")))
+        # strip 3: tail fan white with a red band across the middle, white tips
+        at.paint_strip(3, lambda cv: (cv.vgrad(WH, WH),
+                                      cv.blend(P.band(cv.u, 0.42, 0.74, 0.03), RED)))
     else:  # skunk cleaner
         def body(cv):
+            # Aquarium of the Pacific [M]: "pale amber body ... one white band down the carapace center separates two
+            # red bands on each side"; the white stripe runs from the rostrum to the telson, the red bands are as wide
+            # as the white one or wider, the flanks below are translucent amber-yellow
             v = cv.v  # flank height: 0 belly -> 1 dorsal
-            cv.vgrad("#F2D9A8", "#E8B848", 0.0, 0.7)
-            cv.blend(S(0.68, 0.72, v), "#C62B2B")
-            cv.blend(S(0.9, 0.93, v), "#F4F4F0")
+            cv.vgrad("#F4DDB0", "#EBB94A", 0.0, 0.66)
+            cv.blend(S(0.64, 0.68, v), "#C4242A")
+            cv.blend(S(0.66, 0.70, v) * (1 - S(0.70, 0.86, v)), "#D63A30", 0.4)
+            cv.blend(S(0.86, 0.885, v), "#F6F5F0")
             cv.blend(P.band(cv.u, -0.1, 0.06, 0.02), "#F4F4F0", 0.6)  # pale rostrum
+            for tb in (0.47, 0.55, 0.63, 0.71, 0.79, 0.87):  # abdominal segment joints
+                cv.blend(P.band(cv.u, tb - 0.004, tb + 0.004, 0.003) * (1 - S(0.84, 0.88, v)), "#7A3A10", 0.25)
             n = P.fbm(cv.h, cv.w, 40, 3, 5)
             cv.multiply(0.94 + 0.12 * n)
         at.paint_strip(0, body)
@@ -169,10 +190,12 @@ def build_shrimp(kind="banded"):
         at.paint_strip(2, lambda cv: cv.vgrad("#F2F0EC", "#FAFAF8"))
 
         def tail(cv):
+            # red tail fan with a white spot on each uropod/telson lobe near its tip and a pale rim (Aquarium of the
+            # Pacific: "tail red with white spots" [M]); the fan's UV runs base -> tip only, so the spot is one short
+            # band that each separate lobe shows as a spot
             cv.vgrad("#C62B2B", "#D13B2F")
-            for x in (0.3, 0.55, 0.8):
-                cv.blend(np.exp(-(((cv.u - x) / 0.04) ** 2 + ((cv.v - 0.5) / 0.15) ** 2) * 3) > 0.5, "#F4F4F0")
-            cv.blend(S(0.88, 0.95, cv.u), "#F4F4F0")
+            cv.blend(P.band(cv.u, 0.6, 0.74, 0.03), "#F4F4F0")
+            cv.blend(S(0.93, 0.98, cv.u), "#F0E0D0", 0.7)
         at.paint_strip(3, tail)
     tex = os.path.join(C.BUILD, f"{kind}_shrimp_atlas.png")
     at.cv.save(tex)
@@ -185,31 +208,33 @@ def build_shrimp(kind="banded"):
                                   unit="body length 1.0 = rostrum..telson, facing +X", iridescence=0.0,
                                   roughness=0.5 if banded else 0.3))
     # --- body spine (x forward, z up) ------------------------------------------
+    # both: carapace ~0.4 of rostrum-telson, abdomen arched with its high point over the 3rd segment and bent down
+    # behind it (the caridean "hump" is strong in Lysmata, milder in the straighter Stenopus) [M photos, research 17]
     if banded:
-        keys = [(0.62, 0, 0.07), (0.5, 0, 0.05), (0.42, 0, 0.02), (0.2, 0, 0.02), (0.02, 0, 0.0),
-                (-0.12, 0, -0.03), (-0.24, 0, -0.08), (-0.32, 0, -0.15), (-0.36, 0, -0.22)]
-        rad = [(0.0, 0.004), (0.1, 0.02), (0.14, 0.06), (0.3, 0.11), (0.45, 0.105), (0.55, 0.095), (0.75, 0.075),
-               (0.95, 0.05), (1.0, 0.04)]
+        keys = [(0.62, 0, 0.07), (0.5, 0, 0.05), (0.42, 0, 0.025), (0.2, 0, 0.025), (0.04, 0, 0.035),
+                (-0.1, 0, 0.0), (-0.22, 0, -0.06), (-0.31, 0, -0.13), (-0.36, 0, -0.2)]
+        rad = [(0.0, 0.004), (0.1, 0.02), (0.14, 0.06), (0.3, 0.105), (0.45, 0.105), (0.58, 0.1), (0.75, 0.078),
+               (0.95, 0.05), (1.0, 0.042)]
         squash = 0.85
     else:
-        keys = [(0.66, 0, 0.06), (0.52, 0, 0.04), (0.42, 0, 0.02), (0.2, 0, 0.03), (0.0, 0, 0.04),
-                (-0.15, 0, 0.0), (-0.26, 0, -0.06), (-0.34, 0, -0.12), (-0.38, 0, -0.17)]
-        rad = [(0.0, 0.004), (0.12, 0.016), (0.16, 0.05), (0.3, 0.09), (0.45, 0.092), (0.6, 0.085), (0.8, 0.065),
-               (0.95, 0.045), (1.0, 0.036)]
-        squash = 0.78
+        keys = [(0.66, 0, 0.06), (0.52, 0, 0.04), (0.42, 0, 0.03), (0.22, 0, 0.04), (0.05, 0, 0.07),
+                (-0.1, 0, 0.04), (-0.22, 0, -0.04), (-0.31, 0, -0.12), (-0.36, 0, -0.19)]
+        rad = [(0.0, 0.004), (0.12, 0.016), (0.16, 0.055), (0.3, 0.098), (0.45, 0.1), (0.6, 0.092), (0.8, 0.07),
+               (0.95, 0.048), (1.0, 0.04)]
+        squash = 0.8
     gb = G.Geo()
     V, F, UV, COL, spine, R = shrimp_body(at, 0, keys, rad, n=48, sides=14, squash=squash)
     gb.add(V, F, UV, COL)
     # tail fan
     end = spine[-1]
     d = spine[-1] - spine[-3]
-    for (Vf, Ff, k) in tail_fan(end, d, 0.13, lobes=5, spread=90, w=0.04):
+    for (Vf, Ff, k) in tail_fan(end, d, 0.13, lobes=5, spread=90 if banded else 110, w=0.04 if banded else 0.05):
         tl = np.linalg.norm(Vf - end, axis=1) / 0.13
         gb.add(Vf, Ff, at.uv(3, tl, np.full(len(Vf), 0.5)), [(0, 0, 0, 1.0)] * len(Vf))
     # spines (banded only): 60 small white cones on the carapace and the abdomen top
     if banded:
         rs = np.random.default_rng(3)
-        for _ in range(60):
+        for _ in range(50):
             i = rs.integers(6, 30)
             ang = rs.uniform(-1.3, 1.3)
             p = spine[i]
@@ -302,6 +327,24 @@ def build_shrimp(kind="banded"):
                 Vf, Ff, tf, af = G.tube(fp, np.linspace(0.016, 0.003, 6), 6)
                 gc.add(Vf, Ff, at.uv(1, 0.9 + 0.1 * tf, af), [(CLAW / 8, 0, min(1.0, (arm_len + 0.07 + 0.13 * t) / full), 0) for t in tf])
                 n += len(Vf)
+            # rows of short white spines along the arm and palm (S. hispidus "body and claws spined" [M]; Tee b_03 [H])
+            rs = np.random.default_rng(11 if side > 0 else 12)
+            for _ in range(20):
+                tt = rs.uniform(0.1, 1.0)
+                k = int(tt * 13)
+                p = pts[k] * (1 - (tt * 13 - k)) + pts[min(k + 1, 13)] * (tt * 13 - k)
+                tang = pts[min(k + 1, 13)] - pts[k]
+                tang /= np.linalg.norm(tang)
+                a = rs.uniform(0, 2 * math.pi)
+                ref = np.array([0.0, 0.0, 1.0])
+                e1 = np.cross(tang, ref)
+                e1 /= np.linalg.norm(e1)
+                e2 = np.cross(tang, e1)
+                nrm = math.cos(a) * e1 + math.sin(a) * e2
+                base = p + nrm * 0.026
+                Vc, Fc = G.cone(base, base + nrm * 0.016 + tang * 0.008, 0.004, 3)
+                gc.add(Vc, Fc, at.uv(2, np.full(len(Vc), 0.5)), [(CLAW / 8, 0, tt * arm_len / full, 0)] * len(Vc))
+                n += len(Vc)
             bases.append((gc, n, 0.12))
         geo_obj("Claws", gc, root, "leg", [mshell], extras={"claw": True})
 

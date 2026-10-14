@@ -48,3 +48,26 @@ NOTE (2026-10-13 footage pass): no footage watched, no [H] rows; [M] sourcing pa
 1. Long white antennae sweeping from a ledge perch.
 2. Hide in cave 1-2 days after molt, spawn exuvia.
 3. Aggression toward other shrimp of any kind in territory.
+
+## Look and behaviour pass, 2026-10-14 (critters thread)
+Sources: [ADW Stenopus hispidus](https://animaldiversity.org/accounts/Stenopus_hispidus/) (A1, read), Wikipedia (M2),
+Esaka 2016 (M1), Tee's photos `reference/b_02.jpg`, `b_03.jpg` (upside down under the left ledge, **[H]**) and
+tee_tank_day P1/T96. No footage watched (YouTube blocked).
+
+| Trait | Finding | Conf. | Sim / model now |
+|---|---|---|---|
+| Colour | red and white bands on body and claws, "sometimes bordered in purple"; body and walking legs partly translucent | [M] A1 | bands set on the segments, thin purple rims, milky white |
+| Antennae | two pairs of long white antennae "larger than their body" | [M] A1 | unchanged (2.0 BL antennae + 4 antennule whips) |
+| Claws | 3rd pair enlarged, spined; can be shed and regrow unequal | [M] A1, [H] b_03 | rows of white spines on both claws |
+| Size | to 6.2 cm, females larger | [M] A1 | unchanged |
+| Range | "never observed moving more than half a meter unless disturbed"; pairs stay together | [M] A1 | night foray radius 30 cm around the ledge; walks, hops only when the walk stalls or it is off the rock |
+| Station | perches at the opening of its cave/ledge and waves its antennae to attract fish; cleans while staying in contact with the substrate | [M] A1 | Hang: antenna wave + slow side sway when a slow fish is within 12 cm; Clean stays on its surface |
+| Orientation | hangs upside down under the ledge with antennae and claws out | [H] b_02/b_03, research 02 | perch resolved on the real ledge underside (normal y < -0.45), posture 2 (inverted), walks inverted on ceilings at night |
+| Activity | nocturnal under 12:12 LD (M1) | [M] | unchanged (forayDrive) |
+| Molt | every 3-8 weeks | [M] A1 | unchanged (ShrimpBreeding 25.5 d at 26 C) |
+
+Deviations found in the 24 h diagnostic run before this pass: the shrimp never reached a ledge. The skunk-cleaner
+keep-apart rule (30 cm) moved it from the left ledge (Tee's) to the right one, and the surface walk stalled on a
+vertical wall at x 69 for the whole day and night (posture 0, up = +X, "Hanging under the ledge" while walking in
+place). Anchor normals in anchors.json also differ from the baked SDF's. Fixed by ShrimpNav (stall detection and
+swim hops), perch resolution on the SDF, and a 20 cm keep-apart.

@@ -258,7 +258,7 @@ def caudal_fin(prof, ub, length, span, shape="rounded", n=21, ns=6, slot=None):
 
 
 def paired_fin(prof, kind, u, side, length, width, zf=-0.15, out_deg=35, down_deg=15, shape="round",
-               n=10, ns=6, fingers=False, slot=None, attach_w=0.85):
+               n=10, ns=6, fingers=False, slot=None, attach_w=0.85, pelvic_base=0.045):
     """Pectoral (fan from a short vertical base) or pelvic (from a short longitudinal base)."""
     H, W, zc = prof.H(u), prof.W(u), prof.Zc(u)
     t = np.linspace(0, 1, n)
@@ -290,7 +290,7 @@ def paired_fin(prof, kind, u, side, length, width, zf=-0.15, out_deg=35, down_de
                         side * (W * attach_w + L * math.sin(oa)),
                         zc + zf * H + (t - 0.5) * width - L * math.sin(da)], -1)
     else:  # pelvic
-        ub = u + t * 0.045
+        ub = u + t * pelvic_base
         base = np.stack([ub, np.full(n, side * W * 0.3), prof.Zc(ub) - prof.H(ub) * 0.88], -1)
         L = length * ext
         tip = np.stack([ub + L * 0.62, side * (W * 0.3 + L * math.sin(oa) * 0.6),

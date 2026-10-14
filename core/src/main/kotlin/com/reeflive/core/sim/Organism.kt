@@ -290,6 +290,11 @@ class Organism(
     }
 
     override fun toString() = "$nickname(${species.id})"
+
+    companion object {
+        /** [appendagePhase] wraps here (rad): 159 whole turns (≈ 999 rad), so a sine of the phase is continuous. */
+        const val APPENDAGE_WRAP = 2 * kotlin.math.PI * 159
+    }
 }
 
 /**

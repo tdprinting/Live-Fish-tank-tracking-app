@@ -55,13 +55,18 @@ class SteerIntent {
     var splineOverride: List<Vec3>? = null
     var posture = 0
     var ignoreRock = false
+    /**
+     * Swimmers: largest |heading.y| this tick (null = the default 0.57, ~35°). Hoverers keep the body level and change
+     * depth with the fins (the pajama cardinal), instead of pointing nose-up or nose-down at every small move.
+     */
+    var maxPitch: Double? = null
 
     fun reset() {
         target = null; speed = 0.0; arriveRadius = 2.0; urgency = 0.0; faceDir = null; hover = false; wander = 0.0
         fleeFrom = null; allowGlass = false; separation = 1.0; waddleAmp = 0.0; waddleHz = 1.3; pitchBias = 0.0
         rollExtra = 0.0; ampMul = 1.0; pectoral = null; tailMul = 1.0; kinematic = false; kinPos = null; kinHeading = null
         kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; armGait = 0; splineOverride = null
-        posture = 0; ignoreRock = false
+        posture = 0; ignoreRock = false; maxPitch = null
     }
 
     fun seek(t: Vec3, speed: Double, arrive: Double = 2.0, urgency: Double = 0.3) {
