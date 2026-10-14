@@ -9,7 +9,9 @@ There is no second copy of the sim, the shaders or the models.
 | 3D renderer, camera, gestures | `app/src/main/java/com/reeflive/app/render` | compiled unchanged; `android.opengl.GLES30` runs on WebGL 2 |
 | Shaders, GLB models, textures, rock SDF | `app/src/main/assets` | copied to `assets/` and loaded on demand |
 | Species / interactions JSON | `core/src/main/resources` | copied to `res/` |
-| Page UI (tabs, sandbox buttons, tracker) | `web/site` | plain HTML/CSS/JS |
+| Sandbox table, tips, sound mix, fish-card state | `app/.../ui/live/SandboxParams.kt`, `LiveTips.kt`, `LiveUiState.kt`, `app/.../audio/TankSoundMix.kt` | compiled unchanged (plain Kotlin) |
+| Tank sounds | `app/src/main/res/raw/*.ogg` | copied to `sounds/`, plus `.m4a` copies for Safari when ffmpeg is present |
+| Page UI (live screen, tracker) | `web/site` (`live.js`, `app.js`) | plain HTML/CSS/JS |
 
 ## How it works
 
@@ -19,6 +21,14 @@ There is no second copy of the sim, the shaders or the models.
   `java.lang.*` is on the JVM. Images decode asynchronously: a texture shows grey for a moment, then the picture.
 - `com.reeflive.web.ReefLive` is the host: it builds the sim from `DefaultStock`, steps it at 20 Hz, draws with
   `TankRenderer` every animation frame and turns pointer events into `MotionEvent`s for the shared `TouchController`.
+- `com.reeflive.web.ReefSandbox` plays the Android `LiveTankViewModel` + `SimulationHolder`: Watch shows the real tank
+  at 1x (faster time plays on a copy), Sandbox forks it into a pretend tank where every lever works and Reset tank
+  restores the fork. The page mirrors the Android live screen: Watch / Sandbox, clock, Tank happy meter, Hermie, the
+  water strip, the menu rail (Watch, Supplies, Add life, Tank, Trouble, More with the grown-up sliders), the 3D supply
+  shelf, fish card and follow, auto tour, lamp looks, torch, clean glass, microscope with the bacteria panel,
+  time-lapse with per-species verdicts, and the tank sounds. When an Android live-screen action is added, add it to
+  `ReefSandbox.act` and a tile in `web/site/live.js`. The time-lapse setup tables and the supply list are small copies
+  of `TimelapseSheet.kt` / `SupplyShelf.kt` (Compose files); keep them in step.
 - Excluded from the web build: `core/care`, `core/extras`, `core/io` (they use `java.time`; the web tracker keeps its own
   simple log) and the Android-only views (`TankGlView`, `TankView`, `DebugHud`).
 - Updates: every push to `main` (the same pushes that release the APK) rebuilds and republishes the web app; the

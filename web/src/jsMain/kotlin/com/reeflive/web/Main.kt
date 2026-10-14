@@ -23,7 +23,10 @@ import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
+import com.reeflive.core.sim.Stocking
 import com.reeflive.core.sim.WaterState
+import com.reeflive.app.render.GlassStroke
+import com.reeflive.app.render.SupplyShelfControl
 import java.util.concurrent.AssetPrefetch
 import kotlinx.browser.window
 import kotlinx.coroutines.await
@@ -44,8 +47,14 @@ import kotlin.math.min
  */
 @JsExport
 object ReefLive {
-    private var sim: Simulation? = null
-    private var renderer: TankRenderer? = null
+    /** The sim on screen: [reality] in Watch mode, the sandbox fork in Sandbox mode (see [ReefSandbox]). */
+    internal var sim: Simulation? = null
+    /** The tank as logged (default stock + the tracker's readings); runs at 1x. */
+    internal var reality: Simulation? = null
+    internal var species: SpeciesCatalog? = null
+    internal var rock: RockData? = null
+    internal var renderer: TankRenderer? = null
+    internal val shelf = SupplyShelfControl()
     private var touch: TouchController? = null
     private var canvas: HTMLCanvasElement? = null
     private var listener: dynamic = null
@@ -54,7 +63,7 @@ object ReefLive {
     private var lastFrame = -1.0
     private var running = false
     private var applied: Map<String, Double> = emptyMap()
-    private val scenarioQueue = ArrayList<Pair<Double, Command>>()
+    internal val scenarioQueue = ArrayList<Pair<Double, Command>>()
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -73,19 +82,20 @@ object ReefLive {
                 val boot = ArrayList<String>()
                 files["shaders"]?.forEach { boot += "assets/shaders/$it" }
                 boot += listOf("assets/sim/rock_sdf.bin", "assets/sim/anchors.json", "res/sim/interactions.json")
-                val speciesIds = (DefaultStock.all.map { it.speciesId }).distinct()
                 val have = fetchJson("res/species/index.json")
-                // Only ids with a species file (the rest are skipped by SpeciesCatalog, as on Android).
+                // Every species with a sheet: the default stock plus everything Add life can release in the sandbox.
                 val known = (have.species.unsafeCast<Array<String>?>() ?: emptyArray()).toSet()
-                speciesIds.filter { known.isEmpty() || it in known }.forEach { id -> boot += "res/species/$id.json" }
+                val speciesIds = (DefaultStock.all.map { it.speciesId } + Stocking.CATALOG.map { it.speciesId } + known)
+                    .distinct().filter { known.isEmpty() || it in known }
+                speciesIds.forEach { id -> boot += "res/species/$id.json" }
                 fetchAll(boot)
                 AssetPrefetch.fetcher = { path, done -> MainScope().launch { fetchWithRetry("assets/$path"); done() } }
 
                 status("Building the reef…")
-                val species = SpeciesCatalog.fromClasspath(speciesIds)
+                val species = SpeciesCatalog.fromClasspath(speciesIds).also { this@ReefLive.species = it }
                 val rock = runCatching {
                     RockData.fromFiles(kotlin.Resources.get("assets/sim/rock_sdf.bin")!!, kotlin.Resources.get("assets/sim/anchors.json")!!.decodeToString())
-                }.getOrElse { RockData.defaultTank() }
+                }.getOrElse { RockData.defaultTank() }.also { this@ReefLive.rock = it }
                 val now = js("new Date()")
                 val secOfDay = (now.getHours() as Int) * 3600.0 + (now.getMinutes() as Int) * 60.0 + (now.getSeconds() as Int)
                 val config = TankConfig()
@@ -95,7 +105,7 @@ object ReefLive {
                 )
                 s.speed = 1.0
                 s.stepWall(0.0)
-                sim = s
+                sim = s; reality = s
 
                 val gl = cnv.getContext("webgl2", js("({antialias: true, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance'})"))
                     ?: throw IllegalStateException("This browser has no WebGL 2")
@@ -109,9 +119,15 @@ object ReefLive {
                     override fun onPick(id: String?) { emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
                     override fun onFollowLost(id: String) { emit("onFollow", null) }
-                    override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)) }
-                    override fun onLongPress(worldPoint: Vec3) { sim?.enqueue(Command.Feed(FoodKind.FLAKE, 0.1, worldPoint)) }
+                    override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
+                    // as on Android (LiveTankScreen): a long press drops a pinch of pellets where the finger is
+                    override fun onLongPress(worldPoint: Vec3) { sim?.enqueue(Command.Feed(FoodKind.PELLET, 1.0, worldPoint)); emit("onFed", "PELLET") }
+                    override fun onScrape(stroke: GlassStroke) { ReefSandbox.scrape(stroke); emit("onScrape", stroke.lengthCm) }
+                    override fun onFlipperTap() { emit("onFlipperTap", null) }
                 }
+                shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
+                r.shelf = shelf
+                r.bursts = ReefSandbox.bursts
                 renderer = r
                 r.onSurfaceCreated(null, null)
                 resize()
@@ -141,7 +157,7 @@ object ReefLive {
 
     private fun status(text: String) { emit("onStatus", text) }
 
-    private fun emit(event: String, arg: Any?) {
+    internal fun emit(event: String, arg: Any?) {
         val l = listener ?: return
         val f = l[event]
         if (f != null) f.call(l, arg)
@@ -255,17 +271,16 @@ object ReefLive {
 
     // ------------------------------------------------------------------ sandbox controls (called from the page)
 
-    fun feed(kind: String) {
-        val k = runCatching { FoodKind.valueOf(kind.uppercase()) }.getOrDefault(FoodKind.FLAKE)
-        sim?.enqueue(Command.Feed(k, if (k == FoodKind.NORI) 1.0 else 0.1))
-    }
-    fun setParam(id: String, value: Double) { sim?.enqueue(Command.SetParam(id, value)) }
-    fun dose(id: String, delta: Double) { sim?.enqueue(Command.Dose(id, delta)) }
-    fun lights(mode: String) { sim?.enqueue(Command.Lights(when (mode) { "on" -> true; "off" -> false; else -> null })) }
-    fun pumps(on: Boolean) { sim?.enqueue(Command.Powerheads(on)) }
-    fun waterChange(percent: Double) { sim?.enqueue(Command.WaterChange(percent / 100.0)) }
-    fun setSpeed(speed: Double) { sim?.speed = speed }
+    /** 0 pauses. Watch mode runs the real tank at 1x; faster time is a sandbox thing (as on Android). */
+    fun setSpeed(speed: Double) { sim?.speed = speed.coerceIn(0.0, 1000.0) }
     fun follow(id: String?) { renderer?.follow(id) }
+    /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON. */
+    fun setViewLight(name: String) { renderer?.viewLight = runCatching { com.reeflive.app.render.ViewLight.valueOf(name) }.getOrDefault(com.reeflive.app.render.ViewLight.REAL) }
+    /** The 3D supply shelf beside the tank: the camera swings over to it; tapping a prop calls `onShelfPick(id)`. */
+    fun shelfOpen(on: Boolean) { shelf.setOpen(on, false) }
+    fun shelfRow(row: Int) { shelf.focusRow(row) }
+    fun shelfPick(id: String) { shelf.pick(id) }
+    fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }
     fun resetCamera() { renderer?.resetCamera() }
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
@@ -274,20 +289,12 @@ object ReefLive {
         resize()
     }
 
-    fun scenario(name: String) {
-        val s = sim ?: return
-        val sc = runCatching { Scenario.valueOf(name) }.getOrNull() ?: return
-        for (step in sc.steps()) scenarioQueue += (s.simTimeSec + step.atSimSec) to step.command
-        scenarioQueue.sortBy { it.first }
-    }
-    fun scenarios(): String = Scenario.entries.joinToString("\n") { "${it.name}\t${it.label}" }
-
     /** Logged readings from the tracker (base units, temperature in °F) → the live tank, like the Android reality pick-up. */
     fun applyReadings(json: String) {
         val o = JSON.parse<dynamic>(json)
         val latest = HashMap<String, Double>()
         for (k in js("Object").keys(o).unsafeCast<Array<String>>()) (o[k] as? Double)?.let { latest[k] = it }
-        RealityInit.changedCommands(applied, latest).forEach { sim?.enqueue(it) }
+        RealityInit.changedCommands(applied, latest).forEach { reality?.enqueue(it) }
         applied = latest
     }
 
@@ -367,6 +374,6 @@ object ReefLive {
     private const val TICK = 0.05
 }
 
-private fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }
+internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }
 
 fun main() {}
