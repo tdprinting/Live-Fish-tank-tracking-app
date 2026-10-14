@@ -105,6 +105,23 @@
     "diseaseSusceptibility": {},
     "hardiness": 0.7,
     "starvationDays": 21.0,
+    "lifeStages": {
+        "stages": [
+            {
+                "id": "juvenile",
+                "fromCm": 0,
+                "label": "Juvenile"
+            },
+            {
+                "id": "adult",
+                "fromCm": 3.5,
+                "label": "Adult"
+            }
+        ],
+        "blendCm": 1.0,
+        "sexSystem": "GONOCHORISTIC",
+        "maturityCm": 4.0
+    },
     "model": "models/tailspot_blenny.glb",
     "colors": {},
     "iridescence": 0.1,

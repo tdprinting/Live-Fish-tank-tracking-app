@@ -97,6 +97,18 @@ enum class PodPredator(
      * rarely picks rock). Intake at the mandarin's order (est.); it drains a small sand bed.
      */
     SAND_SIFTER(1500.0, true, false, true, doubleArrayOf(0.9, 0.0, 0.6, 0.8, 0.0, 0.2, 0.8, 0.6, 0.0, 0.0, 0.0, 0.7, 0.3, 0.4, 0.3, 0.0), sandAccess = 1.0, hiddenAccess = 0.25, halfSat = 2000.0),
+    /**
+     * Leopard wrasse (*Macropharyngodon*, research video fish_leopard_wrasse): picks small crustaceans, forams and tiny
+     * snails off rock, coral branches and sand all day (fishprofiles, FishBase: amphipods, copepods, forams, snails).
+     * A constant picker, between the generalists and the mandarin (est.); it searches well, so its half-saturation is low.
+     */
+    LEOPARD_WRASSE(1000.0, true, false, true, doubleArrayOf(0.9, 0.2, 0.7, 1.0, 0.5, 0.4, 0.6, 0.6, 0.0, 0.0, 0.0, 0.2, 0.9, 0.1, 0.8, 0.3), sandAccess = 0.6, hiddenAccess = 0.12, halfSat = 2500.0),
+    /**
+     * Bobtail squid (research cephalopod_squid): a night ambush hunter of mysids, amphipods and other small crustaceans, caught with
+     * the tentacles over the sand and the rock face (Hanlon 1997: large mysids the best food); ignores copepods once
+     * past the hatchling stage. Intake and search efficiency est.
+     */
+    BOBTAIL_SQUID(250.0, false, true, false, doubleArrayOf(0.05, 0.0, 0.05, 0.9, 0.5, 1.0, 0.05, 0.3, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.6, hiddenAccess = 0.03, halfSat = 3000.0),
     ;
 
     companion object {
@@ -119,6 +131,8 @@ enum class PodPredator(
                 BrainKind.SALLY_CRAB -> CRAB
                 BrainKind.BRITTLE_STAR -> BRITTLE_STAR
                 BrainKind.DIAMOND_GOBY -> SAND_SIFTER
+                BrainKind.LEOPARD_WRASSE -> LEOPARD_WRASSE
+                BrainKind.BOBTAIL_SQUID -> BOBTAIL_SQUID
                 else -> null
             }
         }
@@ -297,19 +311,52 @@ class MicrofaunaModel(private val config: TankConfig) {
      * [PodPredator.SAND_SIFTER]-weighted pod-equivalents per cm² of sand (adults plus juveniles at [JUV_MASS]) over the
      * same sum at the reference capacity. 0 = sterile sand (new tank, dry rock), ≈ 1 = established bed.
      */
-    fun sandPreyIndex(): Double {
-        if (!initialized) return 1.0   // before the first step: a mature tank's starting bed
-        val w = PodPredator.SAND_SIFTER.weights
-        val h = MicroHabitat.SAND.ordinal
+    fun sandPreyIndex(): Double = preyIndex(PodPredator.SAND_SIFTER, MicroHabitat.SAND)
+
+    /**
+     * Prey a picker finds on the rock (and the lower glass band) now, relative to a mature tank: the [PodPredator.LEOPARD_WRASSE]
+     * weighted pod-equivalents over the same sum at the reference capacity. Feeds the leopard wrasse's picks.
+     */
+    fun rockPreyIndex(): Double = preyIndex(PodPredator.LEOPARD_WRASSE, MicroHabitat.ROCK, MicroHabitat.GLASS, MicroHabitat.SAND)
+
+    /** [pt]-weighted pod-equivalents in [habitats] now over the same sum at the reference capacity (0 = sterile, ≈ 1 = mature). */
+    fun preyIndex(pt: PodPredator, vararg habitats: MicroHabitat): Double {
+        if (!initialized) return 1.0   // before the first step: a mature tank's starting fauna
+        val w = pt.weights
+        var now = 0.0
+        var ref = 0.0
+        for (hab in habitats) {
+            val h = hab.ordinal
+            for (gi in 0 until ng) {
+                val wi = w[gi]
+                if (wi <= 0) continue
+                val eq = P[gi].podEq
+                val i = gi * nh + h
+                now += wi * eq * (adults[i] + juveniles[i] * JUV_MASS)
+                ref += wi * eq * kRef(gi, h) * P[gi].start * (if (MicroGroup.entries[gi].hasJuveniles) 0.75 + 0.25 * JUV_MASS else 1.0)
+            }
+        }
+        return if (ref > 0) now / ref else 0.0
+    }
+
+    /**
+     * Prey a pod predator [row] can find now, over every habitat, relative to a mature tank's starting stock (0 = none,
+     * 1 = a mature tank). The bobtail squid's hunting success follows it (research cephalopod_squid).
+     */
+    fun podPreyIndex(row: PodPredator): Double {
+        if (!initialized) return 1.0
+        val w = row.weights
         var now = 0.0
         var ref = 0.0
         for (gi in 0 until ng) {
             val wi = w[gi]
             if (wi <= 0) continue
             val eq = P[gi].podEq
-            val i = gi * nh + h
-            now += wi * eq * (adults[i] + juveniles[i] * JUV_MASS)
-            ref += wi * eq * kRef(gi, h) * P[gi].start * (if (MicroGroup.entries[gi].hasJuveniles) 0.75 + 0.25 * JUV_MASS else 1.0)
+            for (h in 0 until nh) {
+                val i = gi * nh + h
+                now += wi * eq * (adults[i] + juveniles[i] * JUV_MASS)
+                ref += wi * eq * kRef(gi, h) * P[gi].start * (if (MicroGroup.entries[gi].hasJuveniles) 0.75 + 0.25 * JUV_MASS else 1.0)
+            }
         }
         return if (ref > 0) now / ref else 0.0
     }

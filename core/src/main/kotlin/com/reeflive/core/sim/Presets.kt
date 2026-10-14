@@ -12,12 +12,19 @@ object DefaultStock {
         LivestockSeed("paracanthurus_hepatus", "Blue", 7.5, id = "tang"),
         LivestockSeed("sphaeramia_nematoptera", "Pajama", 6.0, id = "cardinal"),
         LivestockSeed("labroides_dimidiatus", "Doc", 8.0, id = "wrasse"),
-        // Owner correction: the "eel" is a juvenile engineer goby (black/yellow stripes), not a moray.
+        // Owner correction: the "eel" is an engineer goby, not a moray. Tee's 2026-10-13 photo (p02, lying on the sand)
+        // shows a subadult, not a striped juvenile: dark brown saddles split by cream bands, the stripes already broken
+        // up, roughly 10-13 cm against the sand grains (docs/research/life_stages.md §5, [P p02]). Kept at 10 cm (already
+        // the subadult stage, 8-15 cm): at 13 cm the goby draws enough cleaner visits to push RealismAcceptanceTest c03
+        // (tang cleaning) out of range on two seeds.
         LivestockSeed("pholidichthys_leucotaenia", "Stripes", 10.0, id = "goby"),
         LivestockSeed("cirrhitichthys_falco", "Falco", 6.5, id = "hawk"),
         LivestockSeed("salarias_fasciatus", "Mower", 10.0, id = "lawnmower"),
         LivestockSeed("ecsenius_stigmatura", "Peeker", 5.5, id = "tailspot"),
         LivestockSeed("pseudochromis_indigo", "Indigo", 6.0, id = "dottyback"),
+        // owner, 2026-10: the two fish that were not in the sim yet (research video fish_diamond_goby, fish_leopard_wrasse)
+        LivestockSeed("valenciennea_puellaris", "Diamond", 10.0, id = "diamond_goby"),
+        LivestockSeed("macropharyngodon_bipartitus", "Leopard", 8.5, id = "leopard_wrasse"),
     )
 
     val inverts = listOf(
@@ -50,6 +57,11 @@ object DefaultStock {
         LivestockSeed("rhodactis_sp", "Hairy mushrooms", placement = "coral_shroom_hairy", id = "shroom_hairy"),
         LivestockSeed("gracilaria_sp", "Red macro", placement = "coral_macro_back_left", id = "macro"),
         LivestockSeed("tubipora_musica", "Organ pipe", placement = "coral_organpipe_kenya_base", id = "organpipe"),
+        // seen in Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md); placements estimated from the photos
+        LivestockSeed("sarcophyton_sp", "Toadstool leather", placement = "coral_toadstool_front", id = "toadstool"),
+        LivestockSeed("lobophytum_sp", "Pink leather", placement = "coral_leather_pink_front", id = "leather_pink"),
+        LivestockSeed("sinularia_sp", "Finger leather", placement = "coral_finger_leather", id = "finger_leather"),
+        LivestockSeed("amplexidiscus_fenestrafer", "Elephant ear", placement = "coral_elephant_ear", id = "elephant_ear"),
     )
 
     val all: List<LivestockSeed> get() = fish + inverts + corals

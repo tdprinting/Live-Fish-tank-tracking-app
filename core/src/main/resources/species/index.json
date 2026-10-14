@@ -10,6 +10,7 @@
     "ecsenius_stigmatura",
     "pseudochromis_indigo",
     "valenciennea_puellaris",
+    "macropharyngodon_bipartitus",
     "stenopus_hispidus",
     "lysmata_amboinensis",
     "clibanarius_tricolor",
@@ -20,6 +21,7 @@
     "nassarius_sp",
     "lithopoma_tectum",
     "asterina_sp",
+    "euprymna_berryi",
     "capnella_sp",
     "briareum_sp",
     "zoanthus_sp",
@@ -27,6 +29,10 @@
     "discosoma_sp",
     "rhodactis_sp",
     "tubipora_musica",
+    "sarcophyton_sp",
+    "lobophytum_sp",
+    "sinularia_sp",
+    "amplexidiscus_fenestrafer",
     "gracilaria_sp"
   ]
 }

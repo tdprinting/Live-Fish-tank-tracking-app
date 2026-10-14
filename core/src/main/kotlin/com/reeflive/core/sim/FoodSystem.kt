@@ -11,6 +11,8 @@ class FoodParticle(
     var vel: Vec3,
     val bornAt: Double,
     val feedId: Int,
+    /** Sim time the particle entered the water ([bornAt] carries a random expiry offset); drives the renderer's thaw / flutter / dispersal. */
+    val spawnedAt: Double = bornAt,
 ) {
     val grams: Double = kind.gramsPerParticle
     var settled = false
@@ -57,7 +59,9 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             p = rock.clampToWater(p, 0.5)
             if (surface) p = p.withY(rock.waterLevelCm - 0.3)
             val vy = if (surface && kind.floats) 0.0 else -kind.sinkCmS
-            particles += FoodParticle(nextId++, kind, p, Vec3(0.0, vy, 0.0), simTime + rng.nextDouble() * 10, fid)
+            // a loose pinch is caught by the current it lands in at once (video T97: the return sweeps it away)
+            val w = if (kind.floats && surface) Vec3.ZERO else flow.velocityFast(p)
+            particles += FoodParticle(nextId++, kind, p, Vec3(w.x, vy + w.y, w.z), simTime + rng.nextDouble() * 10, fid, spawnedAt = simTime)
         }
         if (count > 0) feeds += FeedRecord(fid, count, count, simTime)
         return fid
@@ -122,6 +126,22 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
 
     fun clear() { particles.clear(); nori = null; feeds.clear() }
 
+    /**
+     * Per live particle, in [export] order: seconds since it entered the water, 1 when settled on rock / sand (else 0),
+     * and a stable 0..1 seed from its id ([META_STRIDE] floats each). Visual only: the renderer uses it for each food's
+     * look (a frozen cube thawing, a flake tumbling, a cloud of phyto spreading out).
+     */
+    fun exportMeta(t: Double): FloatArray {
+        val live = particles.filter { !it.eaten }
+        val out = FloatArray(live.size * META_STRIDE)
+        live.forEachIndexed { i, f ->
+            out[i * META_STRIDE] = (t - f.spawnedAt).coerceAtLeast(0.0).toFloat()
+            out[i * META_STRIDE + 1] = if (f.settled) 1f else 0f
+            out[i * META_STRIDE + 2] = ((f.id * 2654435761L) ushr 8 and 0xFFFFL).toFloat() / 65535f
+        }
+        return out
+    }
+
     /** Flattened xyz and kinds for the snapshot. */
     fun export(): Pair<FloatArray, ByteArray> {
         val live = particles.filter { !it.eaten }
@@ -134,5 +154,9 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
         return xyz to kinds
     }
 
-    companion object { const val MAX = 400 }
+    companion object {
+        const val MAX = 400
+        /** Floats per particle in [exportMeta]: age (s), settled, seed. */
+        const val META_STRIDE = 3
+    }
 }

@@ -5,7 +5,7 @@
     /tmp/claude-0/bpyenv/bin/python tools/blender/build_all.py --preview       # + docs/preview renders
 
 Order: fishlib self-test -> textures -> fish -> inverts -> rockscape (+anchors) -> rock SDF -> tank
-(needs the SDF for sand mounds) -> corals (need the rock) -> equipment -> details (rock + sand) -> species cards
+(needs the SDF for sand mounds) -> corals (need the rock) -> equipment -> details (rock + sand) -> supply shelf -> species cards
 -> validate.
 Prints per-asset triangle counts, fails (exit 1) if any asset is > 15 % over its budget, and prints the
 rendered-triangle estimates at High (<= 220k) and Medium (<= 140k, LOD1 files + halved instances) (tools/validate_glb.py).
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "sdf"))
 
 STEPS = ["selftest", "textures", "fish", "inverts", "rockscape", "sdf", "tank", "corals", "equipment", "details",
-         "cards"]
+         "supplies", "cards"]
 
 
 def run(step, args):
@@ -42,6 +42,8 @@ def run(step, args):
         import microfauna
         for k, fn in microfauna.MICRO_BUILDERS.items():
             fn()
+        import squid  # sandbox bobtail squid (docs/research/cephalopod_squid.md)
+        squid.build_all()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)
@@ -60,6 +62,9 @@ def run(step, args):
     elif step == "details":
         import details
         details.build()
+    elif step == "supplies":
+        import supplies
+        supplies.build()
     elif step == "cards":
         import render_cards
         render_cards.build()

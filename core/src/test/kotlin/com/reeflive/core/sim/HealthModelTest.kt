@@ -28,7 +28,8 @@ class HealthModelTest {
     @Test
     fun healthyTankNoDeaths() {
         val sim = TestTank.sim(DefaultStock.all)
-        sim.organisms.filter { it.brainKind == BrainKind.WRASSE }.forEach { it.acceptsPrepared = true }
+        // scheduled feeding only keeps the fish that take prepared food: both wrasses are set to take it
+        sim.organisms.filter { it.brainKind == BrainKind.WRASSE || it.brainKind == BrainKind.LEOPARD_WRASSE }.forEach { it.acceptsPrepared = true }
         sim.advanceAbstract(90 * 86400.0)
         val dead = sim.eventLog.filterIsInstance<SimEvent.Died>()
         assertTrue("deaths: $dead", dead.isEmpty())

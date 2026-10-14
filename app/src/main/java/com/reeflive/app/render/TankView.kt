@@ -40,17 +40,25 @@ fun TankView(
     onFollowLost: (String) -> Unit = {},
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
     projection: TankProjection? = null,
+    /** In-tank feedback for actions (dye plumes, bubbles, pump jets): the screen emits, the renderer draws. */
+    bursts: TankBursts? = null,
+    /** Watch-mode lamp look (render only). */
+    viewLight: ViewLight = ViewLight.REAL,
+    /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
+    shelf: SupplyShelfControl? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFollow = onFollow, projection = projection,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, projection = projection,
+        bursts = bursts, viewLight = viewLight, shelf = shelf,
     )
 }
 
@@ -74,13 +82,18 @@ fun TankView(
     /** Clean-glass mode: the camera faces the front glass and one-finger drags slide the Flipper ([onScrape]). */
     cleaning: Boolean = false,
     onScrape: (GlassStroke) -> Unit = {},
+    onFlipperTap: () -> Unit = {},
     /** Double tap on a fish (follow it), a tap on another fish while following, or null to stop following. */
     onFollow: (String?) -> Unit = {},
     projection: TankProjection? = null,
+    bursts: TankBursts? = null,
+    viewLight: ViewLight = ViewLight.REAL,
+    shelf: SupplyShelfControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
     val scrape by rememberUpdatedState(onScrape)
+    val flipperTap by rememberUpdatedState(onFlipperTap)
     val glass by rememberUpdatedState(onTapGlass)
     val press by rememberUpdatedState(onLongPress)
     val lost by rememberUpdatedState(onFollowLost)
@@ -92,6 +105,7 @@ fun TankView(
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
+            override fun onFlipperTap() = flipperTap()
             override fun onFollowRequest(id: String?) = followReq(id)
         }
     }
@@ -107,6 +121,9 @@ fun TankView(
                         v.listener = listener
                         v.setSnapshotProvider { currentProvider() }
                         v.projection = projection
+                        v.bursts = bursts
+                        v.viewLight = viewLight
+                        v.shelf = shelf
                         view = v
                     }
                 },
@@ -116,6 +133,9 @@ fun TankView(
                     v.demoWhenEmpty = demoWhenEmpty
                     v.setCleaning(cleaning)
                     v.projection = projection
+                    v.bursts = bursts
+                    v.viewLight = viewLight
+                    v.shelf = shelf
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

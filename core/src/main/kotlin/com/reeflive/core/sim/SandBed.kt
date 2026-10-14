@@ -215,6 +215,40 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         version++
     }
 
+    /** Sand dives (sand-sleeping wrasses going in) and emergences counted since the start (tests, captions). */
+    var dives = 0L; private set
+    var emergences = 0L; private set
+
+    /**
+     * A sand-diving wrasse goes in head-first at (x, z), travelling along ([hx], [hz]) (research video fish_leopard_wrasse:
+     * plunge, then body waves until covered, 1–3 s, Halichoeres proxy). The bed shows a shallow crater over the fish with
+     * the displaced sand thrown up as a low rim ahead and to the sides; volume is conserved (pit = rim). [bodyCm] is the
+     * fish length; the crater volume scales with it ([DIVE_CM3_PER_CM]).
+     */
+    fun sandDive(x: Double, z: Double, hx: Double, hz: Double, bodyCm: Double) {
+        val l = sqrt(hx * hx + hz * hz)
+        val ux = if (l > 1e-6) hx / l else 1.0; val uz = if (l > 1e-6) hz / l else 0.0
+        val vol = DIVE_CM3_PER_CM * bodyCm
+        val r = max(1.0, 0.18 * bodyCm)
+        dig(x, z, vol, r)
+        // rim: half thrown ahead of the dive, the rest to both sides
+        deposit(x + ux * 1.6 * r, z + uz * 1.6 * r, vol * 0.5, r * 1.1)
+        deposit(x - uz * 1.4 * r, z + ux * 1.4 * r, vol * 0.25, r)
+        deposit(x + uz * 1.4 * r, z - ux * 1.4 * r, vol * 0.25, r)
+        freshen(x, z, 2.2 * r, 1.0)
+        dives++
+    }
+
+    /** The buried fish pushes out at (x, z): a small pit where the head breaks the surface, the sand shrugged aside. */
+    fun sandEmerge(x: Double, z: Double, bodyCm: Double) {
+        val vol = 0.4 * DIVE_CM3_PER_CM * bodyCm
+        val r = max(0.8, 0.12 * bodyCm)
+        dig(x, z, vol, r)
+        deposit(x + 1.5 * r, z, vol * 0.5, r)
+        deposit(x - 1.5 * r, z, vol * 0.5, r)
+        emergences++
+    }
+
     /**
      * A sifter works the sand around (x, z): removes [fraction] of the cells' detritus and returns the load taken
      * (index × cm²). The rest of the mouthful's fines go up in the [puff].
@@ -423,6 +457,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         /** Sand volume one cloud particle stands for (cm³). */
         const val GRAIN_CM3 = 0.004
         const val DETRITUS_PER_PARTICLE = 0.01
+        /** Sand displaced by a sand-diving wrasse per cm of body length (cm³/cm): a ~9 cm fish leaves a ~1 cm³ crater. */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val DIVE_CM3_PER_CM = 0.12
         /** Jet decay time of a puff (s) and the relaxation of a particle's drift toward the flow (s). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val JET_TAU_S = 0.25
         const val DRIFT_TAU_S = 0.8

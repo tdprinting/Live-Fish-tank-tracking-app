@@ -108,7 +108,7 @@ private fun DrawScope.foodAt(k: FoodKind, x: Float, y: Float, w: Float) {
 /** Food particle colours, matching the renderer's particle tints (FoodPalette). */
 internal fun foodColors(k: FoodKind): List<Color> = when (k) {
     FoodKind.FLAKE -> listOf(FoodPalette.flakeOrange, FoodPalette.flakeRed, FoodPalette.flakeGreen, FoodPalette.flakeTan)
-    FoodKind.PELLET -> listOf(FoodPalette.pelletBrown, FoodPalette.pelletLight)
+    FoodKind.PELLET -> listOf(FoodPalette.granule, FoodPalette.granuleShade)
     FoodKind.FLOATING_PELLET -> listOf(FoodPalette.pelletLight, FoodPalette.flakeTan)
     FoodKind.ALGAE_WAFER -> listOf(FoodPalette.waferGreen, FoodPalette.waferSpeck)
     FoodKind.NORI -> listOf(FoodPalette.noriGreen)
@@ -122,11 +122,12 @@ internal fun foodColors(k: FoodKind): List<Color> = when (k) {
     FoodKind.PODS -> listOf(FoodPalette.podTan)
 }
 
-/** How each food goes in. */
-internal enum class FeedTool { SHAKER, CUBE, CLIP, PIPETTE }
+/** How each food goes in. [PINCH]: by hand, as Tee feeds her granules beside the return (video T97). */
+internal enum class FeedTool { PINCH, SHAKER, CUBE, CLIP, PIPETTE }
 
 internal fun feedTool(k: FoodKind): FeedTool = when (k) {
-    FoodKind.FLAKE, FoodKind.PELLET, FoodKind.FLOATING_PELLET, FoodKind.ALGAE_WAFER -> FeedTool.SHAKER
+    FoodKind.PELLET -> FeedTool.PINCH
+    FoodKind.FLAKE, FoodKind.FLOATING_PELLET, FoodKind.ALGAE_WAFER -> FeedTool.SHAKER
     FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL, FoodKind.PRAWN, FoodKind.CYCLOPS -> FeedTool.CUBE
     FoodKind.NORI -> FeedTool.CLIP
     FoodKind.CORAL_FOOD, FoodKind.PLANKTON, FoodKind.PODS -> FeedTool.PIPETTE
@@ -451,6 +452,7 @@ internal fun DrawScope.drawFx(fx: TankFx, f: FxFrame) {
     faded(f.alpha) {
         when (fx.kind) {
             FxKind.FEED -> when (feedTool(fx.food ?: FoodKind.FLAKE)) {
+                FeedTool.PINCH -> feedPinch(fx, f)
                 FeedTool.SHAKER -> feedShaker(fx, f)
                 FeedTool.CUBE -> feedCube(fx, f)
                 FeedTool.CLIP -> feedClip(f)
@@ -543,6 +545,53 @@ private fun DrawScope.feedShaker(fx: TankFx, f: FxFrame) {
         }
     }
     box(cx, cy, u, tilt) { shakerBottle(food, cols[0], f.pal.ink, f.pal.glass.copy(alpha = 0.9f)) }
+}
+
+/**
+ * Hand pinch (video T97): thumb and finger come down over the drop point beside the return, rub open twice to let the
+ * granules go (each rub a little shower that the return then carries off), and lift away. The sim command goes out as
+ * the first granules land (FxKind.FEED.impactMs), so the real particles carry on from there.
+ */
+private fun DrawScope.feedPinch(fx: TankFx, f: FxFrame) {
+    val food = fx.food ?: FoodKind.PELLET
+    val u = f.unit
+    val enter = easeOutBack(f.span(0f, 450f))
+    val leave = ease(f.span(1900f, 2500f))
+    // the rub: fingertips part twice between 800 and 1600 ms
+    var open = 0f
+    if (f.ms in 800f..1600f) { val ph = ((f.ms - 800f) % 400f) / 400f; open = sin(ph * PI.toFloat()) }
+    val tipX = f.ax
+    val tipY = f.ay - u * 0.55f - (1f - enter) * u * 0.9f - leave * u * 1.1f
+    val r = u * 0.085f
+    val cols = foodColors(food)
+    // granules: two showers of 8, falling to the surface, then drifting off with the current (+x on screen)
+    for (shower in 0 until 2) for (j in 0 until 8) {
+        val born = 900f + shower * 400f + j * 25f
+        val age = f.ms - born
+        if (age < 0f) continue
+        val id = shower * 8 + j
+        val fall = 380f
+        val sx = tipX + (hash(id) - 0.5f) * r * 2f
+        val gr = 2.2f * density
+        val col = cols[id % cols.size]
+        if (age < fall) {
+            val q = age / fall
+            drawCircle(col, gr, o(sx, tipY + r + (f.ay - tipY - r) * q * q))
+        } else {
+            val q = ((age - fall) / 700f).coerceIn(0f, 1f)
+            if (q < 1f) drawCircle(col.copy(alpha = 1f - q), gr, o(sx + q * (0.8f + hash(id + 9)) * 4f * f.ppcm, f.ay + q * (1f + hash(id + 3)) * 2f * f.ppcm))
+            if (j == 0) surfaceRipples(sx, f.ay, u * 0.7f, q, f.pal.water)
+        }
+    }
+    // the hand: index finger from the upper right, thumb from the right below it, tips meeting over the drop point
+    val spread = open * r * 1.6f
+    fun finger(fromX: Float, fromY: Float, toX: Float, toY: Float, w: Float) {
+        drawLine(f.pal.ink, o(fromX, fromY), o(toX, toY), w + 3f * density, StrokeCap.Round)
+        drawLine(FoodPalette.skin, o(fromX, fromY), o(toX, toY), w, StrokeCap.Round)
+        drawCircle(FoodPalette.skinShade, w * 0.28f, o(toX - (toX - fromX) * 0.08f, toY - (toY - fromY) * 0.08f))
+    }
+    finger(tipX + u * 0.75f, tipY - u * 0.85f, tipX + spread * 0.3f, tipY - r * 0.4f - spread, r * 2f)
+    finger(tipX + u * 0.9f, tipY - u * 0.15f, tipX + spread, tipY + r * 0.5f + spread * 0.3f, r * 2.3f)
 }
 
 /** Frozen cube: pops out above the water, drops in with a splash, then floats and thaws as bits drift down. */
@@ -670,7 +719,7 @@ private fun DrawScope.waterChange(fx: TankFx, f: FxFrame) {
     val inWater = f.project(FxSpots.SIPHON.x, FxSpots.SIPHON.y, FxSpots.SIPHON.z) ?: o(f.ax, f.ay)
     val rim = f.project(FxSpots.SIPHON.x + 6f, 64f, FxSpots.SIPHON.z) ?: o(inWater.x, inWater.y - u)
     val bk = f.project(FxSpots.BUCKET.x, FxSpots.BUCKET.y, FxSpots.BUCKET.z) ?: o(rim.x + u, rim.y)
-    val bx = bk.x.coerceAtMost(size.width - u * 0.55f); val by = bk.y.coerceIn(u * 0.8f, size.height - u)
+    val bx = bk.x.coerceAtMost(size.width - u * 0.55f); val by = bk.y.clampSafe(u * 0.8f, size.height - u)
     val hoseIn = ease(f.span(0f, 350f)) * (1f - ease(f.span(1600f, 1900f)))
     if (hoseIn > 0f) {
         val end = o(rim.x + (inWater.x - rim.x) * hoseIn, rim.y + (inWater.y - rim.y) * hoseIn)

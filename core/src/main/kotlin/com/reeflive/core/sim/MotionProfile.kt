@@ -25,6 +25,11 @@ enum class Gait {
     /** Muscular foot or tube feet gliding (snails, asterina). */
     GLIDE,
     SESSILE,
+    /**
+     * Cephalopod: hovers and cruises on undulating fins, escapes and lunges with the mantle jet (bobtail squid,
+     * research cephalopod_squid). Moved by the swim integrator; fin, mantle and arm motion come from its [SquidRig].
+     */
+    FIN_JET,
 }
 
 /**
@@ -144,6 +149,10 @@ object MotionProfiles {
         // settles back onto the sand as soon as it stops beating
         BrainKind.DIAMOND_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 2.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
             glideS = 0.4, beatsPerBout = 2.0, sinkCmS = 2.0, bankGain = 0.5, cStartDeg = 110.0),
+        // leopard wrasse: slow labriform rower (rowing-type labrid fin, Wainwright et al. 2002 [M]) that hovers and pivots
+        // head-down among coral branches to pick; bobbing-and-weaving travel (LiveAquaria [M]); pecs 3–5.5 Hz [L]
+        BrainKind.LEOPARD_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 3.0, pecHzMax = 5.5, rowBodyAmp = 0.02,
+            bobPitch = 0.06, bobHz = 1.6, bankGain = 1.0, cStartDeg = 120.0),
         // body-caudal darter, tail 3–4 Hz, burst-and-coast between rock cover [L]
         BrainKind.DOTTYBACK to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.5, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
             glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),
@@ -164,6 +173,9 @@ object MotionProfiles {
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
+        // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
+        // jet speeds live in the species sheet (burstBL) and SquidRig
+        BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),
         BrainKind.GENERIC_INVERT to MotionProfile(Gait.WALK),
     )
 

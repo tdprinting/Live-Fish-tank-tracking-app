@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>ReefLive</title>
+<meta name="description" content="Track your reef tank and watch a live simulation of it.">
+<meta name="theme-color" content="#061327">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ReefLive">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="dot"></span>ReefLive</div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="live" role="tab">Live tank</button>
+    <button class="tab" data-tab="params" role="tab">Parameters</button>
+  </nav>
+</header>
+
+<main>
+  <section id="live" class="view active">
+    <canvas id="tank" aria-label="Live 3D view of the reef tank"></canvas>
+    <div id="torch" class="torch hidden"></div>
+    <div id="loading" class="loading"><div class="spinner"></div><p id="loadText">Loading the tank…</p></div>
+
+    <div class="chrome" id="chrome">
+      <div class="top">
+        <div class="seg glass" role="tablist" aria-label="Mode">
+          <button data-mode="watch" class="on">👀 Watch</button><button data-mode="sandbox">🧪 Sandbox</button>
+        </div>
+        <div class="pill glass" id="clock">Day 1 · --:--</div>
+        <button class="pill glass" id="happy" aria-label="Tank happy meter"><span id="happyFace">😊</span><span class="hide-sm">Tank happy</span> <b id="happyVal">--</b><i class="meter"><i id="happyBar"></i></i></button>
+        <button class="pill glass hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
+      </div>
+      <div class="strip" id="strip"></div>
+
+      <div class="side">
+        <button class="round glass" id="soundBtn" aria-label="Sound">🔇</button>
+        <button class="round glass" id="microBtn" aria-label="Look closer">🔬</button>
+        <button class="round glass" id="cleanBtn" aria-label="Clean glass">🧽</button>
+        <button class="round glass" id="hideBtn" aria-label="Hide buttons">🙈</button>
+      </div>
+
+      <div class="card glass hidden" id="card"></div>
+      <div class="fish glass hidden" id="fish"></div>
+      <div class="follow glass hidden" id="follow"></div>
+      <div class="shelfbar glass hidden" id="shelfbar"></div>
+      <nav class="rail glass" id="rail"></nav>
+    </div>
+    <button class="pill glass showchrome hidden" id="showChrome">👁 Show buttons</button>
+    <div class="cleanhint glass hidden" id="cleanHint">Drag the Flipper across the glass <button class="btn small" id="cleanDone">Done</button></div>
+    <div class="toast glass hidden" id="toast"></div>
+
+    <div class="overlay hidden" id="micro">
+      <div class="ov-head"><strong>🔬 Look closer</strong><button class="btn small ghost" id="microClose">Back to tank</button></div>
+      <div class="pills" id="microScenes"></div>
+      <div class="pills" id="microZooms"></div>
+      <canvas id="microCanvas"></canvas>
+      <div class="micro-info" id="microInfo"></div>
+    </div>
+
+    <div class="overlay hidden" id="lapse">
+      <div class="ov-head"><strong>⏱ Time-lapse</strong><button class="btn small ghost" id="lapseClose">Close</button></div>
+      <div id="lapseBody"></div>
+    </div>
+
+    <dialog id="tips" class="glass">
+      <h2 id="tipsTitle"></h2>
+      <ol id="tipsList" class="tips"></ol>
+      <form method="dialog" class="row-gap end"><button class="btn">Got it</button></form>
+    </dialog>
+  </section>
+
+  <section id="params" class="view">
+    <div class="wrap">
+      <div class="row-between">
+        <h1>Water parameters</h1>
+        <button class="btn" id="logBtn">＋ Log a test</button>
+      </div>
+      <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
+      <div id="paramGrid" class="grid"></div>
+      <h2>History</h2>
+      <div id="history" class="history"></div>
+      <div class="row-gap">
+        <button class="btn ghost" id="exportBtn">Export backup</button>
+        <label class="btn ghost">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="logDialog" class="glass">
+  <form method="dialog" id="logForm">
+    <h2>Log a test</h2>
+    <label class="field">When<input type="datetime-local" id="logWhen" required></label>
+    <div id="logFields" class="fields"></div>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save" id="logSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="install" class="install glass hidden">
+  <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>
+  <button class="icon-btn" id="installClose" aria-label="Dismiss">✕</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -60,36 +60,38 @@ import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.Disease
-import com.reeflive.core.sim.FoodGroup
+import com.reeflive.app.render.ViewLight
 import com.reeflive.core.sim.FoodKind
-import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.PestController
 import kotlinx.coroutines.delay
 
 /*
- * The live-tank menu (UI_STYLE §10.1): a few big candy bubbles, one per kid-friendly category. Landscape: a slim rail
+ * The live-tank menu (UI_STYLE §10.1): a few big candy bubbles. Supplies (feed, care, clean glass, test kit, ...) live
+ * on the 3D supply shelf beside the tank (SupplyShelf.kt), so the Supplies bubble swings the camera there instead of
+ * opening a card; the sandbox adds Add life, Tank (lights, pumps, water sliders, medicine) and Trouble. Landscape: a slim rail
  * of bubbles down the left edge (≈ 84 dp), so the tank keeps the rest of the screen; tapping a bubble opens a compact
  * glass card beside it (at most ~35 % of the width). Portrait: a dock of the same bubbles above the app's bottom bar,
  * the card opening above it. Cards are big tiles first; a "More" button folds out the grown-up sliders. A card closes
- * itself after a one-tap action (so the animation in the tank can be watched), after 12 s without a touch, on its ×,
+ * itself after a one-tap action (so the animation in the tank can be watched), after 25 s without a touch, on its ×,
  * or when the bubble is tapped again. The rail tucks away to a single bubble.
  */
 
 /** Menu categories, each with its candy tone in [LiveTheme]. */
 enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: String) {
-    FEED("Feed", ReefGlyphs.feedTin, "Feed the fish"),
-    WATER("Water", ReefGlyphs.droplet, "Water"),
-    LIGHT("Light", ReefGlyphs.sun, "Light & flow"),
+    /** Not a card: swings the camera to the supply shelf ([LiveTools.onSupplies]). */
+    SUPPLIES("Supplies", ReefGlyphs.feedTin, "Supply shelf"),
     LIFE("Add life", ReefGlyphs.fish, "Add life"),
-    CLEAN("Clean", ReefGlyphs.flipper, "Clean & care"),
+    LIGHT("Tank", ReefGlyphs.sun, "Light, water & gear"),
     TROUBLE("Trouble", ReefGlyphs.whatIf, "Tank trouble"),
     MORE("More", ReefGlyphs.sparkleTip, "More"),
+    /** Watch mode only: lamps look, torch, follow a fish, auto tour, cinematic, sound, time slider. */
+    VIEW("Watch", ReefGlyphs.eye, "Watch the tank"),
     ;
 
     companion object {
-        /** Watch mode can only feed, clean the glass and look: the rest needs the pretend tank. */
-        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.toList() else listOf(FEED, CLEAN, MORE)
+        /** Watch mode can watch, use the shelf (feed, clean the glass, test, look) and More: the rest needs the pretend tank. */
+        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.filter { it != VIEW } else listOf(VIEW, SUPPLIES, MORE)
     }
 }
 
@@ -112,6 +114,22 @@ class LiveTools(
     val readouts: List<WaterReadout>,
     /** Things that make a fish ill ask first; the menu only reports the pick. */
     val onHeatWave: () -> Unit = {},
+    // ---- time slider (both modes) and the Watch card
+    val speed: Double = 1.0,
+    val simTimeSec: Double = 0.0,
+    val onSpeed: (Double) -> Unit = {},
+    val viewLight: ViewLight = ViewLight.REAL,
+    val onViewLight: (ViewLight) -> Unit = {},
+    val torchOn: Boolean = false,
+    val onTorch: () -> Unit = {},
+    val touring: Boolean = false,
+    val onTour: () -> Unit = {},
+    /** Fish to follow: id to name. */
+    val fish: List<Pair<String, String>> = emptyList(),
+    val onFollowFish: (String) -> Unit = {},
+    val onOpenFeed: () -> Unit = {},
+    /** The Supplies bubble: look at the supply shelf beside the tank. */
+    val onSupplies: () -> Unit = {},
 )
 
 /**
@@ -135,16 +153,16 @@ fun LiveMenu(
 ) {
     val reduce = ReefTheme.reduceMotion
     val cats = LiveCategory.shown(tools.sandbox)
-    val shownOpen = open?.takeIf { it in cats && !(it == LiveCategory.CLEAN && !tools.sandbox) }
+    val shownOpen = open?.takeIf { it in cats && it != LiveCategory.SUPPLIES }
     // auto-dismiss: any touch inside the card restarts the timer
     var touches by remember { mutableIntStateOf(0) }
     var more by remember(shownOpen) { mutableStateOf(false) }
     LaunchedEffect(shownOpen, touches, more) {
-        if (shownOpen != null) { delay(if (more) 30_000 else 12_000); onOpen(null) }
+        if (shownOpen != null) { delay(if (more) CARD_IDLE_MORE_MS else CARD_IDLE_MS); onOpen(null) }
     }
     val tap: (LiveCategory) -> Unit = { c ->
         when {
-            c == LiveCategory.CLEAN && !tools.sandbox -> tools.onCleanGlass()
+            c == LiveCategory.SUPPLIES -> { onOpen(null); tools.onSupplies() }
             c == shownOpen -> onOpen(null)
             else -> onOpen(c)
         }
@@ -177,7 +195,7 @@ fun LiveMenu(
                     enter = enterCard(TransformOrigin(0f, 0.3f)),
                     exit = exitCard(TransformOrigin(0f, 0.3f)),
                 ) {
-                    val cat = shownOpen?.takeIf { it != LiveCategory.MORE } ?: LiveCategory.FEED
+                    val cat = shownOpen?.takeIf { it != LiveCategory.MORE } ?: LiveCategory.LIGHT
                     MenuCard(cat, more, { more = it }, close, panel, actions, tools, cardModifier.width(cardW).fillMaxHeight().padding(vertical = 8.dp), onTuck = { onRailShown(false) })
                 }
             }
@@ -267,7 +285,7 @@ private fun Rail(
             AnimatedVisibility(shown, enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce), initialScale = 0.3f), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + scaleOut(liveSpec(reduce), targetScale = 0.3f)) {
                 LiveRailButton(
                     c.glyph, c.label, s.tone(c), onClick = { onTap(c) },
-                    selected = c == open || (c == LiveCategory.CLEAN && tools.cleaning),
+                    selected = c == open || (c == LiveCategory.SUPPLIES && tools.cleaning),
                     size = bubble,
                     showLabel = labels,
                     compactLabel = compact,
@@ -301,7 +319,7 @@ private fun Rail(
         // tucked: one bubble to bring the dock back
         Box(modifier.fillMaxWidth().padding(6.dp), contentAlignment = Alignment.CenterEnd) { tuck() }
     } else {
-        // the dock: one slot per category across the width (the mode toggle or a tap on the water tucks it away)
+        // the dock: one slot per category across the width (it stays out; More → Hide buttons clears the screen)
         BoxWithConstraints(modifier.fillMaxWidth()) {
             val per = (maxWidth - 12.dp) / n
             val compact = per < 76.dp
@@ -383,15 +401,17 @@ private fun MenuCard(
     }
 }
 
-private fun hasMore(c: LiveCategory, sandbox: Boolean) = sandbox && c in setOf(LiveCategory.WATER, LiveCategory.LIGHT, LiveCategory.LIFE, LiveCategory.CLEAN, LiveCategory.TROUBLE)
+private fun hasMore(c: LiveCategory, sandbox: Boolean) = sandbox && c in setOf(LiveCategory.LIGHT, LiveCategory.LIFE, LiveCategory.TROUBLE)
 
 @Composable
 private fun MoreBody(c: LiveCategory, panel: SandboxPanelState, actions: SandboxActions) {
     when (c) {
-        LiveCategory.WATER -> WaterMore(panel, actions)
-        LiveCategory.LIGHT -> LightMore(panel, actions)
+        LiveCategory.LIGHT -> {
+            LightMore(panel, actions)
+            WaterMore(panel, actions, withMode = false)
+            CleanMore(actions)
+        }
         LiveCategory.LIFE -> LifeMore(panel, actions)
-        LiveCategory.CLEAN -> CleanMore(actions)
         LiveCategory.TROUBLE -> TroubleMore(panel, actions)
         else -> Unit
     }
@@ -442,36 +462,19 @@ private fun ColumnScope.CardBody(
     fun flip(id: String) { row(id)?.let { d -> actions.onSet(d, if (isOn(id)) d.min else d.max) } }
     fun bump(id: String, delta: Double) { row(id)?.let { d -> actions.onSet(d, d.spec.snap(d.valueIn(now) + delta)) } }
     when (c) {
-        LiveCategory.FEED -> {
-            LiveHelp("Tap a food to drop it in. Watch it go into the tank!")
-            val groups = FoodGroup.entries
-            groups.forEach { g ->
-                val foods = FoodKind.entries.filter { it.group == g }
-                if (foods.isNotEmpty()) {
-                    LiveSectionTitle(g.label)
-                    Tiles(tone, close, foods.map { k -> T(k.label, null, icon = { FoodPicture(k, size = 36.dp) }) { tools.onFeed(k) } })
-                }
-            }
-        }
-        LiveCategory.WATER -> {
+        // never a card: the bubble opens the 3D supply shelf (feed, care and tools live there)
+        LiveCategory.SUPPLIES -> Unit
+        LiveCategory.LIGHT -> {
             if (tools.readouts.isNotEmpty()) WaterStrip(tools.readouts)
+            LiveHelp("Feeding, water changes, doses and cleaning are on the supply shelf.")
             LiveSectionTitle("Water")
             Tiles(tone, close, listOf(
-                T("Change water", ReefGlyphs.waveSparkle, sub = "25 %") { actions.onWaterChange(0.25) },
-                T("Small change", ReefGlyphs.droplet, sub = "10 %") { actions.onWaterChange(0.10) },
                 T("Warmer", ReefGlyphs.flame, closes = false) { bump("temp", 1.0) },
                 T("Cooler", ReefGlyphs.snowflake, closes = false) { bump("temp", -1.0) },
                 T("Saltier", ReefGlyphs.dropPlus, closes = false) { bump("sal", 0.002) },
                 T("Less salty", ReefGlyphs.dropMinus, closes = false) { bump("sal", -0.002) },
+                T("Medicine", ReefGlyphs.bottle, closes = false) { onMore() },
             ))
-            LiveSectionTitle("Coral minerals")
-            Tiles(tone, close, listOf(
-                T("Shell builder", ReefGlyphs.shell, sub = "Alk +1") { actions.onDose("alk", 1.0) },
-                T("Calcium", ReefGlyphs.branch, sub = "+20") { actions.onDose("ca", 20.0) },
-                T("Magnesium", ReefGlyphs.rings, sub = "+50") { actions.onDose("mg", 50.0) },
-            ))
-        }
-        LiveCategory.LIGHT -> {
             LiveSectionTitle("Lamps")
             Tiles(tone, close, listOf(
                 T("Lights on", ReefGlyphs.sun) { actions.onLights(true) },
@@ -490,7 +493,7 @@ private fun ColumnScope.CardBody(
             ))
         }
         LiveCategory.LIFE -> {
-            StockGallery(panel.stock, { card, n -> actions.onAddMany(card.speciesId, n) }, actions.onReset)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
@@ -498,18 +501,6 @@ private fun ColumnScope.CardBody(
                 T("Peppermint shrimp", ReefGlyphs.shrimp) { actions.onAddPestControl(PestController.PEPPERMINT_SHRIMP) },
                 T("Berghia slugs", ReefGlyphs.slug) { actions.onAddPestControl(PestController.BERGHIA) },
                 T("Spare shells", ReefGlyphs.shell) { actions.onAddSpareShells() },
-            ))
-        }
-        LiveCategory.CLEAN -> {
-            Tiles(tone, close, listOf(
-                T("Clean glass", ReefGlyphs.flipper, on = tools.cleaning) { tools.onCleanGlass() },
-                T("New sock", ReefGlyphs.sock) { actions.onMaintain(MaintenanceTask.CHANGE_SOCK) },
-                T("Fresh carbon", ReefGlyphs.carbon) { actions.onMaintain(MaintenanceTask.REPLACE_CARBON) },
-                T("Trim algae", ReefGlyphs.refugium) { actions.onMaintain(MaintenanceTask.HARVEST_MACRO) },
-                T("Zap pest", ReefGlyphs.pestAnemone) { actions.onRemoveAiptasia() },
-                T("Move rocks", ReefGlyphs.rocks) { actions.onRearrangeRock() },
-                T("Settle in", ReefGlyphs.heart, sub = "Get used to now") { actions.onAcclimateAll() },
-                T("Medicine", ReefGlyphs.bottle, closes = false) { onMore() },
             ))
         }
         LiveCategory.TROUBLE -> {
@@ -530,12 +521,31 @@ private fun ColumnScope.CardBody(
                 T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },
             ))
         }
+        LiveCategory.VIEW -> {
+            LiveSectionTitle("Time")
+            TimeSlider(tools.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
+            LiveHelp("Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
+            LiveSectionTitle("Lamps")
+            Tiles(tone, close, ViewLight.entries.map { v ->
+                T(v.label, viewLightGlyph(v), on = tools.viewLight == v, closes = false) { tools.onViewLight(v) }
+            } + T("Torch", ReefGlyphs.led, on = tools.torchOn, closes = false, sub = "Drag to aim") { tools.onTorch() })
+            LiveSectionTitle("Look around")
+            Tiles(tone, close, listOf(
+                T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
+                T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
+                T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
+                T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
+            ))
+            if (tools.fish.isNotEmpty()) {
+                LiveSectionTitle("Follow a fish")
+                Tiles(tone, close, tools.fish.map { (id, name) -> T(name, ReefGlyphs.fish) { tools.onFollowFish(id) } })
+            }
+        }
         LiveCategory.MORE -> {
             if (tools.sandbox) {
                 LiveSectionTitle("Time")
-                Tiles(tone, close, panel.speeds.map { x ->
-                    T(speedName(x), ReefGlyphs.timelapse, on = x == panel.speed, sub = formatSpeed(x), closes = false) { actions.onSpeed(x) }
-                })
+                // one slider from real time to 1000x (was four speed tiles)
+                TimeSlider(panel.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
                 LiveHelp(SandboxFriendly.speedHelp(panel.speed))
                 Tiles(tone, close, listOf(
                     T(if (panel.timelapseStatus == null) "Time-lapse" else "See time-lapse", ReefGlyphs.timelapse, sub = panel.timelapseStatus) { actions.onTimelapse() },
@@ -546,12 +556,12 @@ private fun ColumnScope.CardBody(
             }
             LiveSectionTitle("Tools")
             Tiles(tone, close, listOfNotNull(
+                T("What can I do?", ReefGlyphs.help) { tools.onHelp() },
                 onTuck?.let { t -> T(if (tucked) "Show menu" else "Tuck menu", ReefGlyphs.chevronUp) { t() } },
                 T("Look closer", ReefGlyphs.microscope) { tools.onMicroscope() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
                 T("Knock glass", ReefGlyphs.touch) { tools.onTapGlass() },
                 T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
-                T("Tips", ReefGlyphs.help) { tools.onHelp() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
             ))
@@ -559,9 +569,14 @@ private fun ColumnScope.CardBody(
     }
 }
 
-private fun speedName(x: Double): String = when {
-    x <= 1.0 -> "Real time"
-    x <= 60.0 -> "Fast"
-    x <= 240.0 -> "Faster"
-    else -> "Super fast"
+/** A card left alone closes itself after this long (longer with the grown-up sliders out): long enough to read. */
+private const val CARD_IDLE_MS = 25_000L
+private const val CARD_IDLE_MORE_MS = 45_000L
+
+private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
+    ViewLight.REAL -> ReefGlyphs.clockSun
+    ViewLight.DAY -> ReefGlyphs.sun
+    ViewLight.DUSK -> ReefGlyphs.sun
+    ViewLight.NIGHT -> ReefGlyphs.moon
+    ViewLight.MOON -> ReefGlyphs.moon
 }

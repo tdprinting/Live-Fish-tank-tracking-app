@@ -120,8 +120,8 @@ fun LiveOverlay(
 }
 
 /**
- * Watch / Sandbox segmented pill. Selecting Sandbox opens the inline sandbox panel; tapping Sandbox again while it is
- * selected collapses / expands it (the screen decides, [onModeChange] fires on every tap). Sandbox shows coral text
+ * Watch / Sandbox segmented pill. [onModeChange] fires on every tap; the live screen switches mode, and a tap on the
+ * side already picked only brings a tucked menu back (it never hides anything). Sandbox shows coral text
  * to signal "not real" (UI_STYLE §10). Each option carries its glyph: an eye for Watch, a bucket for Sandbox.
  */
 @Composable
@@ -269,7 +269,7 @@ fun SoundButton(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
-/** Glass pill shown while the controls are hidden: brings them back (tapping empty water does too). */
+/** Glass pill shown while the controls are hidden: brings them back (tapping the water or Back does too). */
 @Composable
 fun ShowControlsPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
     LivePill(

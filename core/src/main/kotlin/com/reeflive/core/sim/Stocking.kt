@@ -7,6 +7,18 @@ import kotlin.math.min
 /** Gallery groups of the sandbox "Add life" tab. */
 enum class StockGroup(val label: String) { FISH("Fish"), INVERTS("Inverts"), CORALS("Corals") }
 
+/**
+ * Size of the animals one "Add life" tap releases. Shops sell most reef fish as juveniles, so that is the default:
+ * a juvenile blue tang is ~5-8 cm, not the 25 cm adult. Fraction of the species' typical adult length, floored so
+ * tiny species still read on screen (never above the adult size).
+ */
+enum class StockSize(val label: String, val fraction: Double, val floorCm: Double) {
+    JUVENILE("Juvenile", 0.3, 3.0), YOUNG("Young", 0.6, 4.0), ADULT("Adult", 1.0, 0.0);
+
+    /** Length in cm for a species whose typical adult is [adultCm]. */
+    fun lengthCm(adultCm: Double): Double = max(adultCm * fraction, min(floorCm, adultCm))
+}
+
 /** One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. */
 data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double)
 
@@ -36,8 +48,9 @@ object Stocking {
         StockEntry("salarias_fasciatus", StockGroup.FISH, "Lawnmower blenny", 11.0),
         StockEntry("ecsenius_stigmatura", StockGroup.FISH, "Tailspot blenny", 5.5),
         StockEntry("pseudochromis_indigo", StockGroup.FISH, "Indigo dottyback", 6.5),
-        // not in the owner's tank: a sandbox option to see a sand sifter at work (research 16)
+        // research 16: sand sifter (in the owner's tank since 2026-10)
         StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),
+        StockEntry("macropharyngodon_bipartitus", StockGroup.FISH, "Blue star leopard wrasse", 10.0),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
@@ -48,6 +61,8 @@ object Stocking {
         StockEntry("nassarius_sp", StockGroup.INVERTS, "Nassarius snail", 1.5),
         StockEntry("lithopoma_tectum", StockGroup.INVERTS, "Astrea snail", 3.5),
         StockEntry("asterina_sp", StockGroup.INVERTS, "Asterina starfish", 1.2),
+        // not in the owner's tank: the closest thing to a reef squid, to see what it does with this stock (research cephalopod_squid)
+        StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
@@ -55,6 +70,11 @@ object Stocking {
         StockEntry("discosoma_sp", StockGroup.CORALS, "Green mushroom", 5.0),
         StockEntry("rhodactis_sp", StockGroup.CORALS, "Hairy green mushroom", 6.0),
         StockEntry("tubipora_musica", StockGroup.CORALS, "Organ pipe coral", 15.0),
+        // Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md)
+        StockEntry("sarcophyton_sp", StockGroup.CORALS, "Toadstool leather", 12.0),
+        StockEntry("lobophytum_sp", StockGroup.CORALS, "Pink lobed leather", 10.0),
+        StockEntry("sinularia_sp", StockGroup.CORALS, "Finger leather", 12.0),
+        StockEntry("amplexidiscus_fenestrafer", StockGroup.CORALS, "Elephant ear mushroom", 13.0),
     )
 
     fun entry(speciesId: String): StockEntry? = CATALOG.firstOrNull { it.speciesId == speciesId }
@@ -71,6 +91,7 @@ object Stocking {
         CoralKind.CLOVE to listOf("coral_clove_kenya_front", "coral_clove_kenya_base"),
         CoralKind.MUSHROOM to listOf("coral_shroom_center", "coral_shroom_front_left"),
         CoralKind.ORGAN_PIPE to listOf("coral_organpipe_kenya_base"),
+        CoralKind.LEATHER to listOf("coral_toadstool_front", "coral_finger_leather", "coral_leather_pink_front"),
     )
 
     /** Same fallback spot as [Simulation.addFromSeed] when a coral has no anchor. */
@@ -79,7 +100,7 @@ object Stocking {
     /** Clear space around a new colony (cm), by how wide the model is. */
     fun spacingCm(k: CoralKind): Double = when (k) {
         CoralKind.KENYA -> 16.0
-        CoralKind.GSP -> 12.0
+        CoralKind.GSP, CoralKind.LEATHER -> 12.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -88,6 +109,10 @@ object Stocking {
     /** Species with a model of their own built around a different anchor than their kind's. */
     private val SPECIES_HOME_ANCHORS: Map<String, List<String>> = mapOf(
         "rhodactis_sp" to listOf("coral_shroom_hairy"),
+        "sarcophyton_sp" to listOf("coral_toadstool_front"),
+        "lobophytum_sp" to listOf("coral_leather_pink_front"),
+        "sinularia_sp" to listOf("coral_finger_leather"),
+        "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
     fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =
@@ -96,10 +121,12 @@ object Stocking {
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
 
     /** Adds up to [count] of [speciesId]; returns how many were added (caps: per add and whole tank). */
-    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0): Int {
+    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
         sim.species.ensure(speciesId)
         val sp = sim.species[speciesId]
-        return if (sp.isCoral) addCorals(sim, sp, count) else addAnimals(sim, sp, count, sizeCm)
+        if (sp.isCoral) return addCorals(sim, sp, count)
+        val cm = if (sizeCm > 0) sizeCm else size.lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
+        return addAnimals(sim, sp, count, cm)
     }
 
     private fun nextNumber(existing: Int, i: Int) = existing + i + 1

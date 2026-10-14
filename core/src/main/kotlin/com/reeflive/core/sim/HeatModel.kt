@@ -69,6 +69,9 @@ object HeatModel {
     val TUBE_WORM = Profile("feather duster (est.)", 36.0, 30.5, 90.0, 1.0, 0.0, 15.0)
     // Diamond goby (est.): a lagoon sand goby, taken as a cooler-water burrower than the reef-flat blennies.
     val SAND_GOBY = Profile("diamond goby (est.)", 37.5, 32.0, 1440.0, 0.9, 0.8, 25.0)
+    // Bobtail squid (est., research cephalopod_squid): cultured at 20–25 °C (Hanlon 1997, Jolly 2022); taken as heat-sensitive as the
+    // shrimp (no acclimation reserve, short LOE), with a sand refuge.
+    val CEPHALOPOD = Profile("bobtail squid (est.)", 33.5, 28.5, 20.0, 1.2, 0.5, 10.0, acclimates = false, pLethargic = 0.5, pLoe = 0.9)
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
@@ -76,12 +79,13 @@ object HeatModel {
         BrainKind.ASTREA -> TURBO_SNAIL
         BrainKind.TANG -> TANG
         BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE -> CLEANER_WRASSE
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
         BrainKind.DIAMOND_GOBY -> SAND_GOBY
+        BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL

@@ -96,6 +96,27 @@
   "size": {
     "lod0Tris": 3500
   },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile",
+        "depthScale": 1.05
+      },
+      {
+        "id": "adult",
+        "fromCm": 3.5,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 2.0,
+    "sexSystem": "PROTOGYNOUS",
+    "bidirectional": true,
+    "maturityCm": 4.5,
+    "sexChangeDays": 16,
+    "reverseChangeDays": 30
+  },
   "model": "models/wrasse.glb",
   "colors": {
     "primary": "#3A7BD5",

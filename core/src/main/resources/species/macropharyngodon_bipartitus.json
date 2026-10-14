@@ -1,0 +1,140 @@
+{
+  "id": "macropharyngodon_bipartitus",
+  "kind": "FISH",
+  "common": "Blue star leopard wrasse",
+  "scientific": "Macropharyngodon bipartitus",
+  "family": "Labridae",
+  "maxLengthCm": 13,
+  "typicalAdultCm": 10,
+  "growthCmPerYear": 2.5,
+  "lifespanYears": 5,
+  "depthRatio": 0.36,
+  "massCoeff": 0.016,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.8,
+    "burstBL": 5.0,
+    "tailHzCruise": 3.0,
+    "turnRateDeg": 260,
+    "waveLen": 0.85,
+    "ampCruise": 0.03,
+    "ampBurst": 0.08
+  },
+  "zone": {
+    "yMin": 0.05,
+    "yMax": 0.55,
+    "openWater": 0.3,
+    "coverAffinity": 0.7
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.05,
+    "boldness": 0.35,
+    "curiosity": 0.5,
+    "skittishness": 0.7
+  },
+  "diet": [
+    "PODS",
+    "MYSIS",
+    "FLAKE",
+    "PELLET"
+  ],
+  "feedsPerDay": 3,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28.5,
+      "lethalLo": 19,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.022,
+      "optHi": 1.026,
+      "tolLo": 1.02,
+      "tolHi": 1.027,
+      "lethalLo": 1.016,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.5,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.01,
+      "lethalHi": 0.05
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.15,
+      "lethalHi": 1.0
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 35,
+      "lethalHi": 80
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 2.5
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.5,
+    "VELVET": 0.6,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.4,
+  "starvationDays": 18,
+  "size": {
+    "lod0Tris": 4600
+  },
+  "model": "models/leopard_wrasse.glb",
+  "colors": {
+    "primary": "#A0602A",
+    "secondary": "#0C0E16",
+    "accent": "#A8D4FA"
+  },
+  "iridescence": 0.25,
+  "brain": "leopard_wrasse",
+  "minTankGallons": 55,
+  "careLevel": "Expert",
+  "reefSafe": "Yes",
+  "dietSummary": "Picks copepods, amphipods, forams and tiny snails off rock, coral and sand all day; needs a mature tank full of pods. Offer frozen mysis and cyclops two or three times a day until it takes them.",
+  "temperamentSummary": "Peaceful, shy wrasse. Hovers head-down among the coral picking every few seconds, dives into the sand to sleep at lights-out and comes out a while after the lights come on.",
+  "careNotes": [
+    "Needs at least 5-8 cm of fine, soft sand: it sleeps buried and dives into the sand when scared. Coarse or sharp sand injures it.",
+    "A new fish can stay buried for several days. Leave the sand alone and it will come out.",
+    "Lives on the tank's pods; in a young tank it starves unless it learns to take frozen food. Add it to an established tank.",
+    "Sensitive to copper and to swings in water chemistry. Hawkfish and dottybacks can bully it; add it before them where possible.",
+    "Jumps when startled: keep a lid on the tank."
+  ],
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "initial",
+        "fromCm": 4.0,
+        "form": "female",
+        "label": "Initial phase"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "PROTOGYNOUS",
+    "maturityCm": 6.0,
+    "sexChangeDays": 14,
+    "maleForm": "male"
+  }
+}

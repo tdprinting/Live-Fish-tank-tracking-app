@@ -1,0 +1,139 @@
+{
+  "id": "euprymna_berryi",
+  "kind": "INVERT",
+  "common": "Hummingbird bobtail squid",
+  "scientific": "Euprymna berryi",
+  "family": "Sepiolidae",
+  "maxLengthCm": 9,
+  "typicalAdultCm": 6,
+  "growthCmPerYear": 8,
+  "lifespanYears": 0.5,
+  "depthRatio": 0.45,
+  "massCoeff": 0.09,
+  "locomotion": {
+    "mode": "FIN_JET",
+    "cruiseBL": 0.6,
+    "burstBL": 8.0,
+    "tailHzCruise": 1.5,
+    "turnRateDeg": 300,
+    "waveLen": 1.0,
+    "ampCruise": 0.0,
+    "ampBurst": 0.0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.6,
+    "openWater": 0.6,
+    "coverAffinity": 0.5
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.1,
+    "boldness": 0.25,
+    "curiosity": 0.5,
+    "skittishness": 0.8
+  },
+  "diet": [
+    "PODS",
+    "MYSIS",
+    "KRILL",
+    "PRAWN"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 20,
+      "optHi": 25.5,
+      "tolLo": 18,
+      "tolHi": 27.5,
+      "lethalLo": 14,
+      "lethalHi": 30.5
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.022,
+      "tolHi": 1.027,
+      "lethalLo": 1.018,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.6,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.01,
+      "lethalHi": 0.05
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.5,
+      "lethalHi": 1.5
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 100
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.5
+    }
+  },
+  "diseaseSusceptibility": {
+    "BACTERIAL": 0.5
+  },
+  "hardiness": 0.35,
+  "starvationDays": 6,
+  "size": {
+    "lod0Tris": 4600
+  },
+  "body": {
+    "shape": "capsule",
+    "note": "Collision body for the body-collision pass: a capsule along the mantle and head (arms excluded), from the arm crown (u 0.27) to the mantle apex, centred 0.135 BL behind the model origin. Stations are (u, top, bottom, halfWidth) in body lengths, u = 0.5 - x of the unit model (0 = arm tips, 1 = mantle apex), measured from models/bobtail_squid.glb (tools/blender/squid.py stations()); u 0 and 0.15 are the bundled arms.",
+    "lengthCm": 4.4,
+    "radiusCm": 1.15,
+    "stations": [
+      [0.0, 0.02, -0.02, 0.03],
+      [0.15, 0.05, -0.05, 0.06],
+      [0.3, 0.084, -0.061, 0.091],
+      [0.4, 0.096, -0.119, 0.1],
+      [0.5, 0.164, -0.143, 0.176],
+      [0.6, 0.182, -0.16, 0.198],
+      [0.7, 0.182, -0.162, 0.199],
+      [0.8, 0.168, -0.155, 0.186],
+      [0.9, 0.135, -0.129, 0.151],
+      [1.0, 0.055, -0.062, 0.065]
+    ]
+  },
+  "model": "models/bobtail_squid.glb",
+  "colors": {
+    "primary": "#E8D3BC",
+    "secondary": "#7A3B1A",
+    "accent": "#3FD0C8"
+  },
+  "iridescence": 0.45,
+  "brain": "bobtail_squid",
+  "buoyantWhenDead": false,
+  "minTankGallons": 20,
+  "careLevel": "Expert only",
+  "reefSafe": "Coral safe; eats small shrimp, hunted by hawkfish",
+  "onePerTank": false,
+  "copperSensitive": true,
+  "dietSummary": "Live mysids, amphipods and small shrimp caught at night with two shooting tentacles; some learn to take thawed shrimp or mysis from tongs in about a week.",
+  "temperamentSummary": "Shy and nocturnal. Spends the day buried in the sand with only its eyes out, hovers on rippling ear-shaped fins at night, glows faintly from a bacterial light organ and jets away in a puff of ink when frightened.",
+  "careNotes": [
+    "Not reef-safe with predatory or busy fish: a hawkfish, dottyback or moray hunts or harasses it, and active fish take its food and keep it hiding.",
+    "Eats small and freshly molted shrimp, tiny hermits and crabs; corals, snails and larger shrimp are left alone.",
+    "Lives about 4 to 8 months, breeds once and dies; plan on replacements from captive-bred stock.",
+    "Needs a fine sand bed several centimetres deep to bury in every day; without it the skin of the underside gets sore.",
+    "Prefers 20 to 25 °C; most reef tanks run warmer. No copper, and keep pump intakes and overflows screened."
+  ]
+}

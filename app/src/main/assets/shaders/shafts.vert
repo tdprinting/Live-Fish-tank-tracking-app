@@ -19,6 +19,8 @@ void main() {
     float y = mix(uWaterLevel, sand, depth);
     // spread outward with depth (cone), drift slowly
     vec2 off = aShaft.xz * (1.0 + depth * 1.6) + vec2(sin(uTime * 0.07 + aShaft.w * 6.0), cos(uTime * 0.05 + aShaft.w * 4.0)) * 2.0;
+    // refraction at the moving surface tilts each shaft: offset grows with depth below the water line
+    off += surfaceSlope(lp.xz + aShaft.xz) * (uWaterLevel - y) * 0.6;
     vec3 center = vec3(lp.x + off.x, y, clamp(lp.z + off.y, 1.0, uTank.z - 1.0));
     vec3 toCam = uCamPos.xyz - center;
     vec3 right = normalize(vec3(toCam.z, 0.0, -toCam.x) + vec3(1e-4, 0.0, 0.0));

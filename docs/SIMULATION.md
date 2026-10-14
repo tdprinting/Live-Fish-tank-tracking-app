@@ -1338,3 +1338,81 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - it retreats fast when disturbed and sheds an arm when bitten;
 - the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
 - the crab's legs step in an alternating tetrapod.
+
+## 20. Hummingbird bobtail squid, sandbox only (`ai/BobtailSquidBrain.kt`, `sim/SquidRig.kt`, research cephalopod_squid)
+
+*Euprymna berryi* is an optional species in the stocking gallery (invertebrates). It is not in the owner's tank preset. The verdict, the sources and the [M]/[L] tags are in `docs/research/cephalopod_squid.md`.
+
+### 20.1 Body, motion and tolerances
+
+- **Kind.** `BrainKind.BOBTAIL_SQUID` (genera *Euprymna*, *Sepiola*, *Sepietta*, *Rondeletiola*; brain alias `bobtail_squid`). It is not a fish: `isFish = false`, so the spline is rigid.
+- **Gait.** `Gait.FIN_JET` is moved by the swim integrator:
+  - fins at 1.5–3 Hz, cruise 0.6 BL/s, burst 8 BL/s;
+  - no body wave and no C-start;
+  - `toPose` sends motion mode 4 with the [SquidRig] limbs.
+- **Collision body.** `body` block in the JSON: a capsule 4.4 × 1.15 cm, with stations measured from the GLB.
+- **Temperature.**
+  - The HealthModel override sets an optimum of 20–25.5 °C and a tolerance of 18–27.5 °C.
+  - HeatModel `CEPHALOPOD` sets the onset at 28.5 °C and the CTmax at 33.5 °C. It does not acclimate.
+  - Dissolved oxygen: optimum ≥ 6 mg/L.
+
+### 20.2 Brain
+
+| Behaviour | When | What it does |
+|---|---|---|
+| `Buried` | Day | Travels to its sand bed, then buries for 8 s, puffing sand. Sits at posture 5: mantle 0.32 of its depth below the surface, eyes out. Ignores weak or distant taps. |
+| `Hover` | Night | Waypoints over the sand and the rock face, away from hawks. Arms spread, passing clouds. |
+| `Hunt` | Night, hungry | Stalk → poise (dorsal arms up) → tentacle strike. Pods come from `MicrofaunaModel.podPreyIndex(BOBTAIL_SQUID)`: 60 % hit, 40 min of hunger relief per catch, then 1–3 min handling. Shrimp under 0.75 × its length (molting under 1.1 ×) and hermits under 0.35 × are killed with `sim.eaten`. Fish are never prey. |
+| `TargetFed` | Any time | Thawed food, for the 50 % that accept prepared food. |
+| `Jet` | Threat or startle | Blanch, then ink if the startle is above 0.3 or a predator is near and the ink reserve is above 0.3. Kinematic jet backwards 6–10 BL facing the threat, then hide dark. Jets again if the threat stays within 2 BL. Ink refills in 1 h. |
+
+- **Light organ.** At lights-on the squid vents 90 % of its symbionts, which regrow over about 6 h. Night glow = symbionts × (0.25 + 0.75 · smoothstep(0, 0.05, light)).
+- **Abstract mode.** At night, hunger falls at a rate set by the pod index. The rate uses the sim clock, because the behaviour dt is capped.
+- **Predation.**
+  - The hawkfish's threat radius and prey weight are 0 while the squid is buried (posture 5). Once exposed, it is prey of weight 0.5.
+  - The squid's own threat table:
+
+    | Threat | Radius |
+    |---|---|
+    | Hawk or eel | 3.5 BL |
+    | Dottyback | 2 BL |
+    | Banded shrimp at night | 1.2 BL |
+
+### 20.3 Render signals (`SquidRig`, 5 × vec4)
+
+| Entry | x | y | z | w |
+|---|---|---|---|---|
+| `[0]` | fin phase | fin stroke | mantle contraction | fin wrap |
+| `[1]` | arm phase | spread | dorsal-pair raise | tentacle |
+| `[2]` | cloud phase | chromatophore expansion | cloud strength | glow |
+| `[3]` | 0 | ink centre x | ink centre y | ink centre z |
+| `[4]` | 0 | ink age | ink radius | ink density |
+
+These signals drive three parts of the renderer:
+- `fish.vert`: `squidPose` handles part 0 (mantle), part 1 (fins) and part 3 (arms by class, tentacles).
+- `fish.frag`: `uChroma` = (expansion, cloud, glow, 1 + cloud phase) drives procedural chromatophores and the ventral glow.
+- `InkCloudRenderer`: draws the ink puff as particles.
+
+### 20.4 Warnings and tests
+
+- **Warnings** (`Compatibility.kt`):
+
+  | Code | Severity | When |
+  |---|---|---|
+  | `squid_predator_fish` | Severe | With a hawkfish, dottyback or eel, in either order of adding |
+  | `squid_eats_crustaceans` | Warning | With shrimp, hermits or a crab |
+  | `squid_busy_fish` | Warning | With any other fish |
+  | `squid_short_life` | Info | Always |
+
+- **Tests.** `sim/BobtailSquidTest.kt` has 11 tests:
+  - sheet and catalog;
+  - the warnings for the owner's tank;
+  - burial by day with the eyes out;
+  - emerging at night with fins and glow;
+  - pod hunting with tentacle strikes;
+  - eating a small shrimp but not an adult cleaner;
+  - ink and a backward jet when startled;
+  - shyness of the hawkfish and safety while buried;
+  - venting at dawn;
+  - living on pods but starving on dry rock;
+  - adding from the stocking gallery.
