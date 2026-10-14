@@ -71,3 +71,14 @@ class PriorityQueue<T>(private val cmp: Comparator<in T>) : AbstractMutableColle
     override fun iterator(): MutableIterator<T> = heap.iterator()
     private fun swap(a: Int, b: Int) { val t = heap[a]; heap[a] = heap[b]; heap[b] = t }
 }
+
+class Optional<T : Any> private constructor(private val value: T?) {
+    fun orElse(other: T?): T? = value ?: other
+    fun isPresent(): Boolean = value != null
+    fun get(): T = value ?: throw NoSuchElementException("No value present")
+    companion object {
+        fun <T : Any> ofNullable(v: T?): Optional<T> = Optional(v)
+        fun <T : Any> of(v: T): Optional<T> = Optional(v)
+        fun <T : Any> empty(): Optional<T> = Optional(null)
+    }
+}

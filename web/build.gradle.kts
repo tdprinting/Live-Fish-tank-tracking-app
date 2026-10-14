@@ -17,7 +17,10 @@ kotlin {
             kotlin.srcDir("../core/src/main/kotlin")
             // The Android 3D renderer, unchanged: android.opengl.GLES30 & co. are mapped onto WebGL2 by shims/.
             kotlin.srcDir("../app/src/main/java")
-            kotlin.include("com/reeflive/core/**", "com/reeflive/app/render/**", "com/reeflive/web/**", "shims/**", "java/**", "android/**", "javax/**")
+            kotlin.include("com/reeflive/core/**", "com/reeflive/app/render/**", "com/reeflive/web/**", "shims/**",
+                // Plain-Kotlin pieces of the Android live screen, shared so both apps offer the same sandbox.
+                "com/reeflive/app/ui/live/SandboxParams.kt", "com/reeflive/app/ui/live/LiveTips.kt",
+                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
             kotlin.exclude(
                 "com/reeflive/core/care/**", "com/reeflive/core/extras/**", "com/reeflive/core/io/**",
                 "com/reeflive/app/render/TankGlView.kt", "com/reeflive/app/render/TankView.kt",
@@ -56,11 +59,33 @@ val assetIndexTask = tasks.register("assetIndex") {
 
 val buildStamp = providers.gradleProperty("webBuild").orElse(providers.environmentVariable("GITHUB_SHA")).orElse("dev")
 
+/**
+ * Safari can't decode every Ogg file, so the tank sounds also ship as AAC (.m4a) when ffmpeg is available (it is on
+ * GitHub's Ubuntu runners). The page tries .m4a first and falls back to the .ogg.
+ */
+val soundsM4a = layout.buildDirectory.dir("generated/sounds")
+val soundsTask = tasks.register("webSounds") {
+    val src = rootProject.layout.projectDirectory.dir("app/src/main/res/raw")
+    val out = soundsM4a
+    inputs.dir(src)
+    outputs.dir(out)
+    doLast {
+        val dir = out.get().asFile.apply { mkdirs() }
+        val ffmpeg = listOf("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg").map(::File).firstOrNull { it.canExecute() }
+        if (ffmpeg == null) { logger.warn("ffmpeg not found: web sounds ship as .ogg only"); return@doLast }
+        src.asFile.listFiles().orEmpty().filter { it.extension == "ogg" }.forEach { f ->
+            val dst = File(dir, f.nameWithoutExtension + ".m4a")
+            val p = ProcessBuilder(ffmpeg.path, "-y", "-loglevel", "error", "-i", f.path, "-c:a", "aac", "-b:a", "96k", dst.path).inheritIO().start()
+            if (p.waitFor() != 0) logger.warn("ffmpeg failed on ${f.name}")
+        }
+    }
+}
+
 tasks.register<Sync>("site") {
     group = "build"
     description = "Assembles the installable web app (PWA) in build/site."
     val compile = tasks.named("compileProductionExecutableKotlinJs")
-    dependsOn(compile, assetIndexTask)
+    dependsOn(compile, assetIndexTask, soundsTask)
     into(layout.buildDirectory.dir("site"))
     from(layout.projectDirectory.dir("site")) {
         exclude("sw.js")
@@ -76,4 +101,6 @@ tasks.register<Sync>("site") {
     from(appAssets) { into("assets") }
     from(assetIndex) { into("assets") }
     from(coreResources) { into("res") }
+    from(rootProject.layout.projectDirectory.dir("app/src/main/res/raw")) { into("sounds") }
+    from(soundsM4a) { into("sounds") }
 }

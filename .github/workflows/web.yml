@@ -29,6 +29,10 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
+      # Safari can't play every .ogg: the build also encodes the tank sounds to .m4a with ffmpeg.
+      - name: ffmpeg for the web sounds
+        run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+
       # Same :core sim and app render sources as the APK, compiled to JavaScript; -PcoreOnly skips the Android SDK.
       - name: Build web app
         run: ./gradlew -PcoreOnly :web:site --stacktrace
