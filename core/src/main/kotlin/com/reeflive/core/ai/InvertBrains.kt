@@ -1472,14 +1472,18 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         override val targetVerb: String? get() = "picking at the remains of"
         override fun score(c: Ctx): Double {
             if (c.o.hunger < 0.2) return 0.0
-            body = c.sim.organisms.firstOrNull { !it.alive && it.deadSince != null && it.pos.distanceTo(c.o.pos) < 25.0 && it.pos.y < c.rock.sandTopCm + 15 }
+            // (a carcass bobs up off the bottom at about 1 cm/s: one right beside a crab perched on a ledge is still
+            // within its reach, whatever the height)
+            body = c.sim.organisms.firstOrNull { b -> val d = b.pos.distanceTo(c.o.pos); !b.alive && b.deadSince != null && d < 25.0 && (b.pos.y < c.rock.sandTopCm + 15 || d < NEAR_CARCASS_CM) }
             return if (body != null) 0.5 + 0.3 * c.o.hunger else 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val b = body ?: run { finished = true; return }
             if (b.alive || b !in c.sim.organisms) { finished = true; return }
             c.o.focusId = b.id
-            if (c.o.pos.distanceTo(b.pos) > 2.0) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
+            // the claws reach about a third of a body length: arrival is judged along the surface, so a carcass bobbing
+            // a few cm above the rock it walks on is picked at from beneath it
+            if (c.o.pos.distanceTo(b.pos) > max(2.0, 0.35 * c.o.lengthCm)) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
             c.o.appendagePhase += c.dt * 6
             legs.pick = 1.0
@@ -1521,6 +1525,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
 
     companion object {
         /** Leg span (cm) above which a crab may take live prey. */
+        const val NEAR_CARCASS_CM = 10.0
         const val GRAB_MIN_CM = 5.0
         const val GRAB_HUNGER = 0.85
         const val GRAB_TRY_PER_HOUR = 0.15
