@@ -238,6 +238,8 @@ class SnapshotInterpolator {
     private var currentAtNs = 0L
     private var intervalNs = 50_000_000L
     val rigs = LinkedHashMap<String, FishRig>()
+    private val prevById = HashMap<String, OrganismPose>()
+    private var prevByIdFor: SimSnapshot? = null
 
     fun push(s: SimSnapshot?, nowNs: Long) {
         if (s == null || s === current) return
@@ -257,7 +259,10 @@ class SnapshotInterpolator {
     fun update(nowNs: Long): Collection<FishRig> {
         val cur = current ?: return emptyList<FishRig>().also { rigs.clear() }
         val t = alpha(nowNs)
-        val prevById = previous?.organisms?.associateBy { it.id } ?: emptyMap()
+        val prevSnap = previous
+        if (prevSnap !== prevByIdFor) {   // the previous snapshot changes at the sim rate (20 Hz), not every frame
+            prevById.clear(); prevSnap?.organisms?.forEach { prevById[it.id] = it }; prevByIdFor = prevSnap
+        }
         for (r in rigs.values) r.touched = false
         for (p in cur.organisms) {
             val rig = rigs.getOrPut(p.id) { FishRig(p.id) }

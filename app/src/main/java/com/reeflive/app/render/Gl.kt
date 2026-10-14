@@ -29,6 +29,12 @@ object Gl {
         }
     }
 
+    /** [check] for a call site with a variable [arg]: the label is only built when debugging (no garbage per call). */
+    fun check(op: String, arg: Any?) { if (debug) check("$op($arg)") }
+
+    /** The program bound by [ShaderProgram.use], so rebinding the same one is skipped; 0 after a context loss. */
+    @JvmField var currentProgram = 0
+
     private val tmp = IntArray(1)
 
     fun genBuffer(): Int { GLES30.glGenBuffers(1, tmp, 0); check("glGenBuffers"); return tmp[0] }
