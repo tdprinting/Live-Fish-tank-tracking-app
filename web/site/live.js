@@ -59,6 +59,10 @@ export function startLive(applyReadings) {
 }
 export function setLiveVisible(v) { live.setVisible(v); if (!v) stopLoops(); }
 
+// keep the side rail and fish card below however many rows the top HUD wraps to
+try { const top = document.querySelector('#live .top'), chrome = $('chrome');
+  if (top && window.ResizeObserver) new ResizeObserver(() => chrome.style.setProperty('--topH', `${top.offsetHeight + 8}px`)).observe(top); } catch (e) { /* keep CSS fallback */ }
+
 // ================================================================ periodic refresh
 function tick() {
   P = JSON.parse(SB.panel());
