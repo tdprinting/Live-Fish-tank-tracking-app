@@ -6,6 +6,7 @@ import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.BrittleArms
 import com.reeflive.core.sim.CrabLegs
 import com.reeflive.core.sim.FoodParticle
+import com.reeflive.core.sim.HermitLegs
 import com.reeflive.core.sim.Organism
 import com.reeflive.core.sim.SimEvent
 import kotlin.math.PI
@@ -441,6 +442,19 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this))
+    }
+
+    /** Walking legs, chelae, shell roll and retraction (sim/LimbRig.kt HermitLegs). */
+    val legs: HermitLegs? = o.limbRig as? HermitLegs
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        val l = legs ?: return
+        // claws work the surface while it stands picking; antennules flick nonstop while it follows a food scent
+        when (utility.current?.name) {
+            "pick" -> if (o.vel.length() < 0.5) l.pick = 1.0
+            "scavenge" -> { l.searching = true; if (o.vel.length() < 0.5) l.pick = 0.8 }
+        }
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {

@@ -49,6 +49,7 @@ abstract class LimbRig(val count: Int = LIMBS) {
         fun forKind(kind: BrainKind, seed: Long): LimbRig? = when (kind) {
             BrainKind.BRITTLE_STAR -> BrittleArms(seed)
             BrainKind.SALLY_CRAB -> CrabLegs()
+            BrainKind.HERMIT -> HermitLegs(seed)
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> ShrimpLimbs()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             else -> null
@@ -348,6 +349,100 @@ class CrabLegs : LimbRig() {
         const val METACHRONAL = 0.06
         /** Claw picking rate per chela (Hz); the two alternate, so strokes reach the mouth at twice this [L]. */
         const val PICK_HZ = 1.6
+    }
+}
+
+/**
+ * Hermit crab (Clibanarius tricolor, Paguristes cadenati; docs/research/hermit_crab_motion.md). Only the chelipeds and
+ * the two walking-leg pairs (pereiopods 2–3) are outside the shell; the reduced 4th–5th pairs grip the columella.
+ * It walks forward, not sideways: the legs step as diagonal pairs (left P2 with right P3), and the shell rolls
+ * from side to side with each shift of load and bobs twice per stride. A startled hermit snaps into the shell in a
+ * fraction of a second; it comes back out slowly, eyestalks and antennae first, the walking legs last.
+ *
+ * Layout ([out], 10 × vec4, `fish.vert` hermitLimb, motion mode 5):
+ * - legs k = 2 pair + (0 left, 1 right), pair 0 = P2: (step phase, fore-aft stroke (rad), foot lift, retract);
+ * - chelae 4 left, 5 right: (pick phase, pick 0..1, walking support 0..1, retract);
+ * - 6 shell: (stride phase, roll amplitude (rad), pitch bob (rad), 0);
+ * - 7 shield and eyestalks: (eye scan phase, scan 0..1, body bob, retract);
+ * - 8 antennae: (sweep phase, sweep 0..1, 0, retract); 9 antennules: (flick phase, flick 0..1, 0, retract).
+ */
+class HermitLegs(seed: Long = 0L) : LimbRig() {
+    private val rng = Rng(seed xor 0x4E2A1L)
+    var clock = 0.0; private set
+    private var moving = 0.0
+    private var pickS = 0.0
+    private var clawClock = 0.0
+    private var lastClaw = 0.0
+    private var scan = 0.0
+    private var sweep = 0.0
+    private var flick = 0.0
+    private var flickAmt = 0.0
+    private var burstLeft = 0.0
+    private var nextBurst = 1.0
+    /** 0 out .. 1 fully withdrawn into the shell. */
+    var retract = 0.0; private set
+    /** Completed claw strokes (both chelae), for tests. */
+    var pickStrokes = 0L; private set
+    /** Stride frequency of the last step (Hz). */
+    var strideHz = 0.0; private set
+
+    // ---- set by the brain each tick ----
+    /** Claws picking film, algae or a food crumb to the mouth 0..1. */
+    var pick = 0.0
+    /** Following a scent (antennules flick continuously). */
+    var searching = false
+
+    override fun step(o: Organism, dt: Double, speed: Double) {
+        val L = max(o.lengthCm, 1.0)
+        val m = smoothstep(0.15, 1.0, speed)
+        moving += (m - moving) * min(1.0, dt * 6)
+        strideHz = (speed / (STRIDE_L * L)).coerceIn(0.8, 3.5)
+        if (moving > 0.02) clock = (clock + strideHz * dt * moving) % 1000.0
+        // withdraw fast (≈ 0.15 s), re-emerge slowly (≈ 3 s)
+        val want = (1.0 - o.extension).coerceIn(0.0, 1.0)
+        retract += (want - retract) * min(1.0, dt * (if (want > retract) 12.0 else 0.35))
+        val r = retract
+        val rFront = smoothstep(0.45, 1.0, r)     // eyes and antennae: first out
+        val rClaw = smoothstep(0.2, 0.8, r)
+        val rLeg = smoothstep(0.0, 0.6, r)        // walking legs: last out
+        val stroke = (0.28 + 0.12 * min(1.0, speed / (2 * L))) * moving
+        val lift = 0.9 * moving
+        for (k in 0 until 4) {
+            val pair = k / 2
+            val right = k % 2
+            val ph = frac(clock + 0.5 * ((pair + right) % 2) + METACHRONAL * pair)
+            put(k, ph, stroke, lift, rLeg)
+        }
+        pickS += (max(pick, min(1.0, o.mouth)) - pickS) * min(1.0, dt * 5)
+        if (pickS > 0.05) clawClock = (clawClock + PICK_HZ * (0.6 + 0.4 * pickS) * dt) % 1000.0
+        if (floor(clawClock * 2) != floor(lastClaw * 2) && pickS > 0.3) pickStrokes++
+        lastClaw = clawClock
+        put(4, frac(clawClock), pickS, moving, rClaw)
+        put(5, frac(clawClock + 0.5), pickS, moving, smoothstep(0.1, 0.7, r))
+        put(6, frac(clock), ROLL * moving, 0.03 * moving * sin(4 * PI * clock), 0.0)
+        scan = (scan + dt * (0.15 + 0.1 * pickS)) % 1000.0
+        put(7, frac(scan), 1.0 - 0.6 * moving, 0.6 * moving * sin(4 * PI * clock + 0.6), rFront)
+        sweep = (sweep + dt * (if (searching || pickS > 0.3) 0.8 else 0.35)) % 1000.0
+        put(8, frac(sweep), 0.5 + 0.5 * (if (searching) 1.0 else moving), 0.0, rFront)
+        // antennule flicking comes in bursts with pauses (Waldrop & Koehl 2016); continuous while tracking a scent
+        nextBurst -= dt
+        if (nextBurst <= 0) { burstLeft = rng.range(1.0, 2.5); nextBurst = burstLeft + rng.range(2.0, 6.0) }
+        burstLeft -= dt
+        val on = if (searching || burstLeft > 0) 1.0 else 0.0
+        flickAmt += (on - flickAmt) * min(1.0, dt * 8)
+        flick = (flick + dt * FLICK_HZ) % 1000.0
+        put(9, frac(flick), flickAmt * (1 - rFront), 0.0, rFront)
+        pick = 0.0; searching = false; travel = Vec3.ZERO
+    }
+
+    companion object {
+        /** Stride length as a fraction of shell length (INFERENCE from small decapod walking, docs/research). */
+        const val STRIDE_L = 0.3
+        const val METACHRONAL = 0.08
+        /** Shell roll per stride at full walking (rad, ≈ 6°). */
+        const val ROLL = 0.1
+        const val PICK_HZ = 1.2
+        const val FLICK_HZ = 2.5
     }
 }
 

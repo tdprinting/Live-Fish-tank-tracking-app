@@ -371,95 +371,257 @@ def build_shrimp(kind="banded"):
 
 
 # ----------------------------------------------------------------------------
-# hermit crabs
+# Hermit crabs (docs/research/hermit_crab_motion.md): blue-leg Clibanarius tricolor (≈ 2 cm, blue walking legs
+# banded red-orange and yellow at the joints, orange antennae, near-equal chelae, usually in a Cerithium shell) and
+# scarlet Paguristes cadenati (≈ 3 cm, bright red and hairless, yellow eyestalks with yellow-green corneas, deep red
+# antennae, left chela slightly larger, Cerithium / Vasum shells). Only the chelipeds and two walking-leg pairs
+# (P2-P3) show; the soft abdomen stays coiled in the shell. Unit: shell apex -> claw tips 1.0, faces +X, feet on z = 0.
+# Limb rig (SIMULATION §19.5, core HermitLegs): COLOR_0 R = t along the limb, G = eye mask, B = limb / 9
+# (legs k = 2 pair + (0 left, 1 right), 4/5 chelae, 6 shell, 7 shield + eyestalks, 8 antennae, 9 antennules);
+# extras.limbPivots: legs/chelae = coxa, 6 = shell rock point on the ground, 7 = withdrawal point just inside the
+# aperture (w = shield length), 8/9 = antenna / antennule base (w = length).
 # ----------------------------------------------------------------------------
+HERMIT_SHELLS = {   # helix_shell(steep, turns, r0, r1), nodules per whorl, nodule amplitude
+    "blue": (8.5, 8.0, 0.02, 0.088, 9, 0.08),        # Cerithium: tall slender spire of ~8 whorls, beaded cords
+    "scarlet": (4.6, 5.0, 0.016, 0.12, 7, 0.14),     # Vasum-like: heavier, knobbed shoulders
+}
+
+
+def _hermit_colors(blue):
+    if blue:
+        return dict(leg="#2F63C8", leg_dark="#1E3F8A", ring="#D2462A", ring2="#E8C040", tip="#F0E6C8",
+                    claw="#2C3A52", claw_hi="#4A6890", claw_tip="#EADFC0", shield="#7A6A4A", shield_hi="#A8946A",
+                    stalk="#C8803A", stalk_ring="#F2EDE0", cornea="#101418", ant="#E8762A", antl="#E89040")
+    return dict(leg="#C81E1E", leg_dark="#8E1010", ring="#A01414", ring2="#D83A2A", tip="#F2E4D0",
+                claw="#C42020", claw_hi="#E04030", claw_tip="#F4E8D8", shield="#B81C1C", shield_hi="#E04838",
+                stalk="#F2C230", stalk_ring="#F6DA60", cornea="#4E6A2A", ant="#8E1212", antl="#B82020")
+
+
+def _rot_to(src_a, src_b, dst_a, dst_b):
+    """Rotation matrix taking the orthonormal pair (src_a, src_b) onto (dst_a, dst_b)."""
+    def basis(a, b):
+        a = a / np.linalg.norm(a)
+        b = b - a * (a @ b)
+        b = b / np.linalg.norm(b)
+        return np.stack([a, b, np.cross(a, b)], -1)
+    return basis(np.asarray(dst_a, float), np.asarray(dst_b, float)) @ basis(np.asarray(src_a, float), np.asarray(src_b, float)).T
+
+
 def build_hermit(kind="blue"):
     C.reset_scene()
     blue = kind == "blue"
     sid = "hermit_blue" if blue else "hermit_scarlet"
-    at = Atlas(256, 256, 4)
-    leg_bands = ([(0.22, "#3A6FD0"), (0.27, "#C8282C"), (0.5, "#3A6FD0"), (0.55, "#C8282C"), (0.8, "#3A6FD0"),
-                  (0.85, "#C8282C"), (1.0, "#2E5CB8")] if blue else
-                 [(0.25, "#D32F2F"), (0.3, "#B71C1C"), (0.55, "#D32F2F"), (0.6, "#B71C1C"), (0.85, "#D32F2F"),
-                  (1.0, "#E8E0D0")])
-    at.paint_strip(0, lambda cv: bands(cv, leg_bands, 0.01))
-    at.paint_strip(1, lambda cv: cv.vgrad("#C88060", "#E0A07A") if blue else cv.vgrad("#E8B828", "#F2C230"))
+    K = _hermit_colors(blue)
+    at = Atlas(256, 256, 8)
+    joints = (0.12, 0.45, 0.63, 0.82)          # coxa-basis, merus/carpus, carpus/propodus, propodus/dactyl
+
+    def leg(cv):
+        cv.vgrad(K["leg_dark"], K["leg"])
+        for j in joints:
+            cv.blend(1 - S(0.012, 0.03, np.abs(cv.u - j)), K["ring"])
+            if blue:
+                cv.blend(1 - S(0.004, 0.012, np.abs(cv.u - j - 0.032)), K["ring2"], 0.9)
+        cv.blend(S(0.9, 0.99, cv.u), K["tip"], 0.85)
+        if blue:   # sparse dark setae tufts along the propodus and dactyl
+            cv.blend(S(0.55, 0.75, P.value_noise(cv.h, cv.w, 48, 6, 3)) * S(0.6, 0.9, cv.u), "#162238", 0.5)
+    at.paint_strip(0, leg)
+
+    def shield(cv):
+        cv.vgrad(K["shield"], K["shield_hi"])
+        cv.multiply(0.88 + 0.24 * P.value_noise(cv.h, cv.w, 24, 8, 5))
+        if blue:
+            cv.blend(S(0.6, 0.8, P.value_noise(cv.h, cv.w, 32, 10, 9)), "#3E5A8A", 0.35)
+    at.paint_strip(1, shield)
 
     def shell(cv):
         rs = 11 if blue else 12
-        cv.vgrad("#6E5E4E", "#9A8A74") if blue else cv.vgrad("#8A6A52", "#B89A7A")
-        n = P.fbm(cv.h, cv.w, 16, 4, rs)
-        cv.blend(S(0.5, 0.6, n), "#4A3E32", 0.6)
-        stripes = 0.5 + 0.5 * np.sin(cv.v * 60)
-        cv.multiply(0.9 + 0.1 * stripes)
+        if blue:
+            cv.vgrad("#5E5246", "#B8AC98")
+            n = P.fbm(cv.h, cv.w, 24, 4, rs)
+            cv.blend(S(0.45, 0.6, n), "#3A3028", 0.65)
+            cv.blend(S(0.62, 0.72, n), "#E4DCCC", 0.5)
+            # spiral rows of beads, alternately dark and pale (Cerithium)
+            beads = (0.5 + 0.5 * np.sin(2 * np.pi * cv.u * 8.0 * 9)) * (0.5 + 0.5 * np.sin(2 * np.pi * cv.v * 3))
+            cv.blend(S(0.55, 0.8, beads), "#2E2620", 0.45)
+            cv.blend(S(0.55, 0.8, (1 - beads)) * S(0.3, 0.7, n), "#EEE8DA", 0.35)
+        else:
+            cv.vgrad("#6A5038", "#C2A27A")
+            n = P.fbm(cv.h, cv.w, 16, 4, rs)
+            cv.blend(S(0.5, 0.62, n), "#4A3424", 0.6)
+            cv.blend(S(0.4, 0.5, np.abs(np.sin(cv.u * 40))), "#8A6A4A", 0.3)
+        cv.blend(S(0.55, 0.85, P.fbm(cv.h, cv.w, 8, 3, rs + 4)), "#4E5A3A", 0.25)   # coralline / film patches
+        cv.blend(S(0.97, 1.0, cv.u), "#D8CCB8", 0.6)                                 # pale lip at the aperture
     at.paint_strip(2, shell)
-    at.paint_strip(3, lambda cv: cv.vgrad("#2E5CB8", "#4A80E0") if blue else cv.vgrad("#E8B828", "#F2C230"))
+
+    def claw(cv):
+        cv.vgrad(K["claw"], K["claw_hi"])
+        if not blue:   # small white tubercles on the scarlet's palms
+            cv.blend(S(0.78, 0.84, P.value_noise(cv.h, cv.w, 96, 24, 21)), "#F0C8B8", 0.35)
+        cv.blend(S(0.84, 0.96, cv.u), K["claw_tip"], 0.95)
+    at.paint_strip(3, claw)
+    at.paint_strip(4, lambda cv: (cv.vgrad(K["stalk"], K["stalk"]),
+                                  cv.blend(1 - S(0.03, 0.07, np.abs(cv.u - 0.86)), K["stalk_ring"], 0.9)))
+    at.paint_strip(5, lambda cv: (cv.vgrad(K["ant"], K["ant"]),
+                                  cv.blend(1 - S(0.0, 0.5, np.abs(((cv.u * 30) % 1.0) - 0.5) * 2), K["antl"], 0.35)))
+    at.paint_strip(6, lambda cv: cv.vgrad("#3A2A26", "#5A4036"))       # soft abdomen glimpsed in the aperture
+    at.paint_strip(7, lambda cv: cv.vgrad(K["cornea"], K["cornea"]))
     tex = os.path.join(C.BUILD, f"{sid}_atlas.png")
     at.cv.save(tex)
-    img = C.load_image(tex, name=sid)
-    mat = C.material(f"{sid}_mat", rough=0.5, image=img)
-    meye = C.material(f"{sid}_eye", color="#0A0A0A", rough=0.1)
-    root = make_root("Root", dict(species=sid, lengthCm=2.0 if blue else 3.5,
-                                  unit="shell length 1.0, crab faces +X", iridescence=0.0, roughness=0.5))
-    # shell: conical helix lying on its side, apex toward -X/up, aperture at the front-bottom
-    Vs, Fs, ts, as_, apc, apt = G.helix_shell(1.7, 3.6, 0.01, 0.2, n=56, sides=12)
-    Rm = G.rot_y(math.radians(-100))
-    Vs = Vs @ Rm.T + np.array([0.3, 0.0, 0.15])
-    apc = apc @ Rm.T + np.array([0.3, 0.0, 0.15])
+    mat = C.material(f"{sid}_mat", rough=0.5, image=C.load_image(tex, name=sid))
+    meye = C.material(f"{sid}_eye", color=K["cornea"], rough=0.08)
+
+    def col(t, k, V, eye=0.0):
+        V = np.asarray(V)
+        return np.stack([np.asarray(t, float) * np.ones(len(V)), np.full(len(V), eye), np.full(len(V), k / 9.0),
+                         np.zeros(len(V))], -1)
+
+    piv = [None] * 10
+    pw = [0.0] * 10
+    # ---- shell: spire back and up ~25 deg, aperture facing down and forward, resting on the substrate ----
+    steep, turns, r0, r1, knobs, kamp = HERMIT_SHELLS[kind]
+    ns, sides = 80, 12
+    Vs, Fs, ts, as_, apc, apt = G.helix_shell(steep, turns, r0, r1, n=ns, sides=sides)
+    ring = Vs[:ns * sides].reshape(ns, sides, 3)
+    cen = ring.mean(axis=1, keepdims=True)
+    th = np.linspace(0, 2 * math.pi * turns, ns)[:, None]
+    ang = (np.arange(sides) / sides)[None, :]
+    nod = (0.5 + 0.5 * np.cos(th * knobs)) * (0.6 + 0.4 * np.cos(2 * math.pi * ang * 3)) if blue else \
+        (0.5 + 0.5 * np.cos(th * knobs)) * np.exp(-((ang - 0.25) / 0.12) ** 2)
+    ring = cen + (ring - cen) * (1 + kamp * nod[..., None] * np.linspace(0.3, 1.0, ns)[:, None, None])
+    Vs[:ns * sides] = ring.reshape(-1, 3)
+    axis = np.array([-math.cos(math.radians(25)), 0, math.sin(math.radians(25))])
+    down = np.array([0.45, 0, -1.0])
+    Rm = _rot_to(np.array([0, 0, 1.0]), apt, axis, down)
+    Vs = Vs @ Rm.T
+    apc = apc @ Rm.T
+    T = apt @ Rm.T
+    sh = np.array([-apc[0], -apc[1], 0.0]) + np.array([0, 0, -Vs[:, 2].min() + 0.012])
+    Vs, apc = Vs + sh, apc + sh
+    rho = 0.95 * r1
     gs = G.Geo()
-    gs.add(Vs, Fs, at.uv(2, ts, as_), np.stack([np.zeros(len(Vs))] * 3 + [ts], -1))
-    shell_o = geo_obj("Shell", gs, root, "shell", [mat])
-    ap = apc + np.array([0.02, 0, -0.05])  # aperture center
-    # body (cephalothorax) peeking out of the aperture
+    gs.add(Vs, Fs, at.uv(2, ts, as_), col(0, 6, Vs))
+    Va, Fa = G.ellipsoid(apc - T * rho * 0.55, (rho * 0.8, rho * 0.8, rho * 0.8), 10, 6)
+    gs.add(Va, Fa, at.uv(6, np.full(len(Va), 0.5)), col(0, 6, Va))
+    piv[6] = np.array([Vs[:, 0].mean(), 0.0, 0.0])
+    piv[7] = apc - T * rho * 0.25
+    # ---- shield (hard anterior carapace) and the soft thorax bridging to the aperture ----
+    SL = 0.2 if blue else 0.21
+    pw[7] = SL
+    sc = apc + T * 0.03 + np.array([0.13, 0, 0.06])
     gb = G.Geo()
-    Vb, Fb = G.ellipsoid(ap + np.array([0.12, 0, -0.02]), (0.11, 0.09, 0.07), 10, 6)
-    gb.add(Vb, Fb, at.uv(1, np.full(len(Vb), 0.5)), [(0, 0, 0, 0)] * len(Vb))
+    Vb, Fb = G.ellipsoid(sc, (SL * 0.5, SL * 0.4, SL * 0.24), 12, 7, rot=G.rot_y(math.radians(12)))
+    Vb[:, 2] = np.where(Vb[:, 2] > sc[2], sc[2] + (Vb[:, 2] - sc[2]) * 0.8, Vb[:, 2])
+    x0, y0, x1, y1 = at.rect(1)
+    uvb = np.stack([(0.05 + 0.9 * np.clip((Vb[:, 0] - sc[0]) / SL + 0.5, 0, 1)) * (x1 - x0) / at.w,
+                    1 - (y0 + np.clip((Vb[:, 1]) / (SL * 0.8) + 0.5, 0, 1) * (y1 - y0)) / at.h], -1)
+    gb.add(Vb, Fb, uvb, col(0.2, 7, Vb))
+    th_pts = smooth_path([apc - T * 0.02, apc + T * 0.03 + np.array([0.04, 0, 0.02]), sc - np.array([SL * 0.3, 0, 0.01])], 6)
+    Vt, Ft, tv, av = G.tube(th_pts, np.linspace(rho * 0.75, SL * 0.3, 6), 10, cap_end=False)
+    gb.add(Vt, Ft, at.uv(6, tv, av), col(0.0, 7, Vt))
+    root = make_root("Root", {})
     body_o = geo_obj("Body", gb, root, "body", [mat])
-    front = ap + np.array([0.2, 0, -0.02])
-    # legs: 2 pairs of walking legs + 2 claws
-    gl = G.Geo()
-    k = 0
-    for i, x in enumerate((0.0, -0.06)):
-        for side in (1, -1):
-            b = ap + np.array([0.14 + x, side * 0.07, -0.06])
-            pts = smooth_path([b, b + [0.08, side * 0.14, 0.06], b + [0.18, side * 0.22, -0.04],
-                               b + [0.24, side * 0.26, -0.16]], 9)
-            Vt, Ft, tv, av = G.tube(pts, np.linspace(0.028, 0.012, 9), 6)
-            gl.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)),
-                                                        np.full(len(Vt), k / 3), tv], -1))
-            k += 1
-    geo_obj("Legs", gl, root, "leg", [mat], extras={"count": k})
-    gc = G.Geo()
-    for side, big in ((1, 1.0 if blue else 1.25), (-1, 0.85)):
-        b = front + np.array([0.0, side * 0.05, -0.02])
-        pts = smooth_path([b, b + [0.08, side * 0.06, 0.0], b + [0.14, side * 0.05, -0.04]], 6)
-        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.035, 0.03, 6) * big, 7, cap_end=False)
-        gc.add(Vt, Ft, at.uv(0, tv * 0.6, av), [(0, 0, 0.5 + 0.5 * side, 0.5)] * len(Vt))
-        Vc, Fc = G.ellipsoid(pts[-1] + np.array([0.05, 0, -0.01]) * big, (0.07 * big, 0.045 * big, 0.035 * big), 8, 6)
-        gc.add(Vc, Fc, at.uv(0, np.full(len(Vc), 0.9)), [(0, 0, 0.5 + 0.5 * side, 1.0)] * len(Vc))
-    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True})
-    # eyestalks + antennae
+    front = sc + np.array([SL * 0.45, 0, -0.005])
+    # ---- eyestalks: long, yellow / orange, dark (scarlet: yellow-green) corneas ----
     ge = G.Geo()
-    for side in (1, -1):
-        b = front + np.array([0.0, side * 0.03, 0.04])
-        tip = b + np.array([0.04, side * 0.03, 0.12])
-        Vt, Ft, tv, av = G.tube([b, tip], [0.015, 0.013], 6, cap_end=False)
-        ge.add(Vt, Ft, at.uv(3, tv, av), [(0, 0, 0, 0)] * len(Vt), mat=0)
-        Ve, Fe = G.ellipsoid(tip, (0.022, 0.022, 0.022), 8, 5)
-        ge.add(Ve, Fe, None, [(0, 0, 0, 0)] * len(Ve), mat=1)
+    for sd in (1, -1):
+        b = front + np.array([0.0, sd * 0.022, 0.02])
+        tip = b + np.array([0.1, sd * 0.045, 0.14]) * (SL / 0.2)
+        Vt, Ft, tv, av = G.tube([b, (b + tip) / 2 + [0.0, 0, 0.005], tip], [0.016, 0.0145, 0.0135], 7, cap_end=False)
+        ge.add(Vt, Ft, at.uv(4, tv, av), col(tv, 7, Vt, 1.0), mat=0)
+        Ve, Fe = G.ellipsoid(tip + (tip - b) * 0.06, (0.021, 0.021, 0.024), 8, 5)
+        ge.add(Ve, Fe, at.uv(7, np.full(len(Ve), 0.5)), col(1.0, 7, Ve, 1.0), mat=1)
     geo_obj("Eyes", ge, root, "eye", [mat, meye])
+    # ---- antennae (8): long flagella sweeping out; antennules (9): short, flicking ----
     ga = G.Geo()
-    for i, side in enumerate((1, -1)):
-        b = front + np.array([0.02, side * 0.02, 0.02])
-        pts = G.bezier(b, b + [0.15, side * 0.05, 0.12], b + [0.3, side * 0.15, 0.15], b + [0.4, side * 0.25, 0.1], 14)
-        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.008, 0.002, 14), 4, cap_end=False)
-        ga.add(Vt, Ft, at.uv(0, tv, av), np.stack([np.zeros(len(Vt)), np.zeros(len(Vt)), np.full(len(Vt), i), tv], -1))
-    geo_obj("Antennae", ga, root, "antenna", [mat], extras={"count": 2})
+    alen = 0.5 * (SL / 0.2)
+    for sd in (1, -1):
+        b = front + np.array([-0.005, sd * 0.045, -0.012])
+        pts = G.bezier(b, b + [0.12, sd * 0.06, 0.08], b + [0.3, sd * 0.2, 0.12], b + [0.42, sd * 0.32, 0.04], 16) * 1.0
+        pts = b + (pts - b) * (alen / 0.5)
+        tt = np.linspace(0, 1, 16)
+        Vt, Ft, tv, av = G.tube(pts, np.where(tt < 0.18, 0.009, 0.006 * (1 - tt) + 0.0015), 4, cap_end=False)
+        ga.add(Vt, Ft, at.uv(5, tv, av), col(np.repeat(tt, 4), 8, Vt))
+    piv[8] = front + np.array([-0.005, 0, -0.012]); pw[8] = alen
+    for sd in (1, -1):
+        b = front + np.array([0.005, sd * 0.012, 0.0])
+        pts = smooth_path([b, b + [0.035, sd * 0.012, 0.05], b + [0.07, sd * 0.02, 0.085], b + [0.1, sd * 0.03, 0.07]], 7)
+        tt = np.linspace(0, 1, 7)
+        Vt, Ft, tv, av = G.tube(pts, np.linspace(0.008, 0.004, 7), 4, cap_end=True)
+        ga.add(Vt, Ft, at.uv(5, np.r_[np.repeat(tt, 4), 1.0], None), col(np.r_[np.repeat(tt, 4), 1.0], 9, Vt))
+    piv[9] = front + np.array([0.005, 0, 0.0]); pw[9] = 0.12
+    geo_obj("Antennae", ga, root, "antenna", [mat], extras={"count": 4})
+    # ---- chelipeds (4 left, 5 right): merus forward-down, carpus raised, flattened palm before the face, fingers
+    # pointing down to the substrate; the scarlet's left chela is a little larger ----
+    gc = G.Geo()
+    for sd, k in ((1, 4), (-1, 5)):
+        big = (1.12 if sd > 0 else 1.0) if not blue else (1.04 if sd > 0 else 1.0)
+        b = sc + np.array([SL * 0.32, sd * SL * 0.3, -SL * 0.22])
+        p1 = b + np.array([0.07, sd * 0.03, -0.03]) * big          # merus: forward, out and down
+        p2 = p1 + np.array([0.045, -sd * 0.005, 0.03]) * big       # carpus: raised
+        pd = np.array([0.8, -sd * 0.28, -0.52]); pd /= np.linalg.norm(pd)
+        pc = p2 + pd * 0.04 * big
+        pts = smooth_path([b, p1, p2, pc], 8)
+        tt = np.linspace(0, 0.6, 8)
+        Vt, Ft, tv, av = G.tube(pts, np.r_[0.017, 0.018, 0.019, 0.02, 0.022, 0.023, 0.024, 0.024] * big, 7,
+                                cap_start=True, cap_end=False)
+        gc.add(Vt, Ft, at.uv(3, np.r_[np.repeat(tt, 7), 0.0], av), col(np.r_[np.repeat(tt, 7), 0.0], k, Vt))
+        # palm (propodus): swollen oval, flattened side to side, tapering into the fingers
+        Rz = _rot_to(np.array([1.0, 0, 0]), np.array([0, 0, 1.0]), pd, np.array([0, sd * 1.0, 0.0]))
+        Vp, Fp = G.ellipsoid((0, 0, 0), (0.052 * big, 0.036 * big, 0.026 * big), 10, 6)
+        Vp[:, 0] *= np.where(Vp[:, 0] > 0, 1.0, 0.8)
+        Vp[:, 1:] *= np.where(Vp[:, 0] > 0, 1 - 0.35 * Vp[:, 0] / (0.052 * big), 1.0)[:, None]
+        Vp = Vp @ Rz.T + pc
+        gc.add(Vp, Fp, at.uv(3, np.clip(0.62 + 0.2 * (Vp - pc) @ pd / (0.052 * big), 0, 1)), col(0.75, k, Vp))
+        for fy, fl in ((0.011, 0.05), (-0.011, 0.046)):   # dactyl above, fixed finger below, gaping a little
+            fb = pc + pd * 0.036 * big + Rz[:, 1] * fy * big
+            ft = pc + pd * (0.036 + fl) * big + Rz[:, 1] * fy * 0.15 * big
+            Vf, Ff = G.cone(fb, ft, 0.011 * big, 6)
+            gc.add(Vf, Ff, at.uv(3, np.r_[np.full(6, 0.82), 0.97]), col(np.r_[np.full(6, 0.9), 1.0], k, Vf))
+        piv[k] = b; pw[k] = 0.2 * big
+    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True})
+    # ---- walking legs P2 (pair 0) and P3 (pair 1): arched, knees high, long curved dactyls on the substrate ----
+    gl = G.Geo()
+    for pair, (adeg, L) in enumerate(((52.0, 0.44), (84.0, 0.42))):
+        for sd in (1, -1):
+            k = 2 * pair + (0 if sd > 0 else 1)
+            a = math.radians(adeg)
+            d = np.array([math.cos(a), sd * math.sin(a), 0.0])
+            base = sc + np.array([SL * (0.12 - 0.22 * pair), sd * SL * 0.33, -SL * 0.2])
+            L = L * (SL / 0.2)
+            pts = smooth_path([base, base + d * 0.3 * L + [0, 0, 0.07], base + d * 0.5 * L + [0, 0, 0.075],
+                               base + d * 0.78 * L + [0, 0, 0.0], base + d * 0.92 * L + [0.02, 0, -base[2] * 0.6],
+                               base + d * 0.98 * L + [0.035, 0, -base[2] + 0.004]], 11)
+            tt = np.linspace(0, 1, 11)
+            R = 0.021 * (1 - 0.62 * tt) * np.where(tt < 0.45, 1.1, 1.0)
+            Vt, Ft, tv, av = G.tube(pts, R, 6, squash=0.75)
+            ts_ = np.r_[np.repeat(tt, 6), 1.0]
+            gl.add(Vt, Ft, at.uv(0, ts_, av), col(ts_, k, Vt))
+            piv[k] = base; pw[k] = L
+    legs_o = geo_obj("Legs", gl, root, "leg", [mat], extras={"count": 4})
+    shell_o = geo_obj("Shell", gs, root, "shell", [mat])
     objs = [o for o in C.all_descendants(root) if o.type == 'MESH']
-    _normalize_unit(objs, along="x")
+    # unit: shell apex .. claw tips = 1, centred in x/y, feet on z = 0
+    span = np.vstack([C.get_verts(o) for o in objs if o.name in ("Shell", "Body", "Claws")])
+    lo, hi = span.min(axis=0), span.max(axis=0)
+    sc_ = 1.0 / (hi[0] - lo[0])
+    off = np.array([-(lo[0] + hi[0]) / 2, 0.0, 0.0])
+    for o in objs:
+        V = (C.get_verts(o) + off) * sc_
+        V[:, 2] = np.maximum(V[:, 2], 0.0)
+        o.data.vertices.foreach_set("co", V.ravel())
+        o.data.update()
+    pivots = []
+    for k in range(10):
+        pv = (np.asarray(piv[k], float) + off) * sc_
+        pivots += gltf_pt(pv) + [float(pw[k] * sc_)]
+    for o in objs:
+        C.set_extras(o, limbPivots=pivots)
+    C.set_extras(root, species=sid, lengthCm=2.0 if blue else 3.5,
+                 unit="shell apex to claw tips 1.0, crab faces +X and walks forward", iridescence=0.0,
+                 roughness=0.5, gait="forward", limbRig="hermit_legs", limbPivots=pivots)
     for o in (shell_o, body_o):
         C.recalc_normals(o)
-    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 2500)
+    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 4000)
 
 
 def _normalize_unit(objs, along="x", sit=True):
