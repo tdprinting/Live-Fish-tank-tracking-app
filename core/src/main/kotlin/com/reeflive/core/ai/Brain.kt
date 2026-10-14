@@ -53,6 +53,8 @@ abstract class SpeciesBrain(val c: Ctx) {
     var touchUntil = -1e9
     /** Bumped by every [onTouch], so a running reaction restarts on a new tap. */
     var touchSerial = 0
+    /** Glass nips at a resting finger ([TouchReact] FOLLOW); tests and captions. */
+    var touchNips = 0
 
     /** World position of a matrix anchor (host, cave, hole, perch, station, ...) for this animal, or null. */
     open fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "body") o.pos else o.homePos
@@ -141,7 +143,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         if (kind == com.reeflive.core.sim.TouchReaction.DUCK) { onTap(c, at, 0.4 + 0.3 * s); return }
         val delay = when {
             kind == com.reeflive.core.sim.TouchReaction.CHECK && o.brainKind == BrainKind.NASSARIUS -> c.rng.range(4.0, 12.0)
-            kind == com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(0.05, 0.2)
+            kind == com.reeflive.core.sim.TouchReaction.FREEZE || kind == com.reeflive.core.sim.TouchReaction.TUCK -> c.rng.range(0.05, 0.2)
             else -> c.rng.range(0.2, 1.2)
         }
         val dur = when (kind) {
@@ -150,6 +152,10 @@ abstract class SpeciesBrain(val c: Ctx) {
             com.reeflive.core.sim.TouchReaction.PEEK -> c.rng.range(4.0, 9.0)
             com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(2.0, 5.0) * (0.6 + 0.6 * s)
             com.reeflive.core.sim.TouchReaction.CHECK -> c.rng.range(20.0, 45.0)
+            // held until the finger lifts (the sim then shortens it to a short linger)
+            com.reeflive.core.sim.TouchReaction.FOLLOW -> 600.0
+            com.reeflive.core.sim.TouchReaction.RISE -> c.rng.range(4.0, 9.0) * (0.6 + 0.6 * s)
+            com.reeflive.core.sim.TouchReaction.TUCK -> c.rng.range(5.0, 15.0) * (0.6 + 0.6 * s)
             else -> 0.0
         }
         touchKind = kind; touchFrom = at; touchStartAt = c.t + delay; touchUntil = c.t + delay + dur; touchSerial++

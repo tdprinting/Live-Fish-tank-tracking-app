@@ -205,6 +205,19 @@ class Camera {
         distLogGoal = max(distLogGoal + ln(0.4f), ln(FOCUS_DISTANCE))
     }
 
+    /**
+     * A tap on a coral: a gentle closer look at [x], [y], [z] (about 30 % closer, never nearer than [FOCUS_DISTANCE]).
+     * Unlike [focusOn] it never toggles back out; already close in, it only re-aims.
+     */
+    fun peekAt(x: Float, y: Float, z: Float) {
+        if (followId != null || shelfOn) return
+        glide()
+        target[0] = x.coerceIn(TARGET_LO[0], TARGET_HI[0])
+        target[1] = y.coerceIn(TARGET_LO[1], TARGET_HI[1])
+        target[2] = z.coerceIn(TARGET_LO[2], TARGET_HI[2])
+        distLogGoal = max(distLogGoal + ln(0.7f), ln(FOCUS_DISTANCE))
+    }
+
     /** Starts (id != null) or stops following. Stopping keeps the current view and resumes orbiting around it. */
     fun follow(id: String?) {
         if (id == followId) return

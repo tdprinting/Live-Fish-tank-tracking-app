@@ -28,8 +28,11 @@
  *   MEDIUM/HIGH. `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
  * - Gestures: drag orbits (fling coasts), two fingers pan / pinch / twist, double tap zooms to the point (or follows
  *   the fish under the finger), double-tap-and-drag zooms with one finger, a tap on a fish picks it, a tap anywhere
- *   else touches the tank there (`onTouchTank`: glass, sand or rock), two-finger tap knocks on the glass,
- *   long press drops food. Limits are soft and ease back. See [GestureTracker] and [Camera].
+ *   else touches the tank there (`onTouchTank`: glass, sand, rock, a coral (the camera also leans in for a closer
+ *   look) or the water's top), two-finger tap knocks on the glass. A long press on the glass or the water's top
+ *   puts a fingertip there (`onFinger`): slide it and the fish follow, flick it as it lifts for a puff of water
+ *   (`onFlick`); a long press on rock or sand drops food (`onLongPress`). Limits are soft and ease back. See
+ *   [GestureTracker] and [Camera].
  * - `setQuality(RenderQuality)`: HIGH (4x MSAA FBO + bloom + light shafts), MEDIUM (2x MSAA, shafts),
  *   LOW (no MSAA, no shafts, no normal maps, half particles, textures ≤ 512²). Fish beyond 60 cm use LOD1.
  * - `resetCamera()`, `listener = TankViewListener` (pick / tap glass / long press / follow lost / scrape; main thread).
@@ -105,8 +108,19 @@ interface TankViewListener {
      * following. The host should route it to its follow state (it comes back through `follow` / `followId`).
      */
     fun onFollowRequest(id: String?) {}
-    /** Long press: the first rock/sand/water point under the finger (cm), e.g. to drop food. */
+    /** Long press on rock or sand (or while following): the first rock / sand / water point under the finger (cm), e.g. to drop food. */
     fun onLongPress(worldPoint: Vec3) {}
+    /**
+     * Long press on the glass or the water's top, then the finger held there: where it is on the pane (world cm),
+     * how fast it moves along it (cm/s) and which it is on ([surface] GLASS or SURFACE). Sent when it goes down, as it
+     * slides (≤ 20 Hz) and every 0.25 s while it rests; null when it lifts. Hosts send it on as `Command.Finger`.
+     */
+    fun onFinger(worldPoint: Vec3?, speedCmS: Float, surface: TouchSurface) {}
+    /**
+     * The held finger was flicked as it lifted: a puff of water from [worldPoint] at [velocity] (cm/s, along the pane and
+     * a little into the water). Hosts send it on as `Command.WaterPuff`.
+     */
+    fun onFlick(worldPoint: Vec3, velocity: Vec3) {}
     /** The followed organism is gone from the snapshot (removed, eaten); the camera returned to orbit. */
     fun onFollowLost(id: String) {}
     /** Clean-glass mode: the Flipper slid along [stroke] on the front glass (sent every ~[GlassStroke.MIN_CM] of travel). */

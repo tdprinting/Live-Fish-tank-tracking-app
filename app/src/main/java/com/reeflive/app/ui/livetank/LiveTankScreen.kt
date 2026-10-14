@@ -395,6 +395,7 @@ fun LiveTankScreen(
             if (touring) { touring = false; vm.follow(null) }
             chromeHidden = false
             vm.select(id)
+            vm.touchAnimal(id)   // a snail or crab tapped right on tucks in; a fish only gets picked (TankTouch.animalReaction)
         } else {
             undoTap(waterTap())
         }
@@ -408,12 +409,37 @@ fun LiveTankScreen(
             val glass = surface == TouchSurface.GLASS
             audio.knock(if (glass) 1f else 0.7f)
             haptics.tick()
-            val kind = if (surface == TouchSurface.SAND) BurstKind.SAND_PUFF else BurstKind.GLASS_RIPPLE
+            val kind = when (surface) {
+                TouchSurface.SAND -> BurstKind.SAND_PUFF
+                TouchSurface.SURFACE -> BurstKind.SURFACE_RIPPLE
+                else -> BurstKind.GLASS_RIPPLE
+            }
             bursts.emit(TankBurst(kind, p.x.toFloat(), p.y.toFloat(), p.z.toFloat(), amount = if (glass) 1f else 0.7f))
         } else {
             undoTap(tap)
         }
     }
+    // a fingertip held on the glass or the water's top (UI_STYLE §10.8): slide it and bold fish follow, rest it and they
+    // nip. The same #53 rule as a tap: with something open to undo, the hold only undoes it and the finger is ignored
+    val fingerIgnored = remember { BooleanArray(1) }
+    val onFinger: (Vec3?, Float, TouchSurface) -> Unit = { p, speed, surface ->
+        if (p == null) {
+            if (!fingerIgnored[0]) vm.finger(null, 0f, surface)
+            fingerIgnored[0] = false
+        } else if (!fingerIgnored[0]) {
+            val down = !vm.fingerDown
+            if (down) {
+                val tap = waterTap()
+                if (tap != WaterTap.TOUCH) { undoTap(tap); fingerIgnored[0] = true }
+            }
+            if (!fingerIgnored[0]) {
+                vm.finger(p, speed, surface)
+                if (down) { haptics.tick(); audio.knock(0.4f) }
+            }
+        }
+    }
+    // the held finger flicked as it lifted: a puff of water that sways the corals, the nori and the sand
+    val onFlick: (Vec3, Vec3) -> Unit = { p, v -> vm.puff(p, v) }
     // long press on the tank: the usual pinch of food dropped right there
     val onLongPress: (Vec3) -> Unit = { p ->
         tick()
@@ -804,6 +830,8 @@ fun LiveTankScreen(
             bottomPad = BottomBarClearance,
             shelf = shelf,
             onTouchTank = onTouchTank,
+            onFinger = onFinger,
+            onFlick = onFlick,
         )
         // speech bubbles over a few animals: same bounds as the tank view, draws only, touches go through
         if (thoughtsOn && !micro && !supplies && carry == null && !cleaning) {
@@ -984,6 +1012,8 @@ private fun TankArea(
     bottomPad: Dp,
     shelf: SupplyShelfControl,
     onTouchTank: (Vec3, TouchSurface) -> Unit,
+    onFinger: (Vec3?, Float, TouchSurface) -> Unit,
+    onFlick: (Vec3, Vec3) -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
         TankView(
@@ -997,6 +1027,8 @@ private fun TankArea(
             onFollowLost = { vm.follow(null) },
             onFollow = vm::follow,
             onTouchTank = onTouchTank,
+            onFinger = onFinger,
+            onFlick = onFlick,
             cleaning = cleaning,
             onScrape = onScrape,
             onFlipperTap = onFlipperTap,

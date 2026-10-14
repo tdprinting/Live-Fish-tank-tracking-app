@@ -190,7 +190,8 @@ enum class FoodKind(val gramsPerParticle: Double, val sinkCmS: Double, val float
      * sinking ~1-2 cm/s once the return current has spread them). A 1 g pinch makes ~60 particles.
      */
     PELLET(1.0 / 60, 1.5, 0.0, 1.0),
-    NORI(0.0, 0.0, 0.0, 0.3),
+    /** One sheet per Feed on the clip ([NoriCloth]); torn pieces drift as particles that sink slowly (wet nori, est.). */
+    NORI(0.0, 0.25, 0.0, 0.3),
     /** Live copepods/"pods" (sandbox, cleaner wrasse rescue: SIMULATION §3.4) and plankton dosing. */
     PODS(1.0 / 200, 0.3, 0.0, 0.2),
     /** Raw prawn chunk for Nassarius and other scavengers (research 04 §15 item 9, [GS-NAS]); sinks fast. */

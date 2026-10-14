@@ -21,6 +21,20 @@ sealed class Command {
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
      */
     data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
+    /**
+     * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
+     * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
+     * it rests; a fast-moving finger makes them hang back. [point] null = the finger lifted.
+     */
+    data class Finger(val point: Vec3?, val speedCmS: Double = 0.0, val surface: TouchSurface = TouchSurface.GLASS) : Command()
+    /**
+     * A flick of the finger in the water: a gentle puff at [point] moving at [velocity] (cm/s, capped at
+     * [com.reeflive.core.geom.FlowGust.MAX_SPEED]) that sways corals, the nori and sand grains, retracts polyps it hits
+     * and makes shy animals in its path flinch ([TankTouch.puffReaction]).
+     */
+    data class WaterPuff(val point: Vec3, val velocity: Vec3) : Command()
+    /** A tap right on an animal ([id]): snails, crabs and hermits tuck in, shrimp freeze, dusters snap shut; fish ignore it. */
+    data class TouchAnimal(val id: String) : Command()
     data class SetSpeed(val speed: Double) : Command()
     data class ResetToReality(val water: WaterState, val livestock: List<LivestockSeed>) : Command()
     /** Sandbox: set an organism's length (the "grow fish" slider, SIMULATION §4.5 tang). */
@@ -325,6 +339,10 @@ data class SimSnapshot(
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
      */
     val pumps: FloatArray = FloatArray(0),
+    /** The nori sheet on its clip as a cloth (node positions and material per cell), null when there is none. */
+    val nori: NoriPose? = null,
+    /** Live touch puffs in the water, [com.reeflive.core.geom.FlowGust.STRIDE] floats each (coral sway, burst specks). */
+    val gusts: FloatArray = FloatArray(0),
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
@@ -335,6 +353,23 @@ data class SimSnapshot(
         const val PUMP_STRIDE = 8
     }
 }
+
+/**
+ * The nori cloth for the renderer ([NoriCloth]): [cols] × [rows] node positions (xyz, row-major from the clip edge)
+ * and the material left in each of the (cols − 1) × (rows − 1) cells (0 = gone), plus the clip and the pane normal.
+ */
+class NoriPose(
+    val cols: Int,
+    val rows: Int,
+    val nodes: FloatArray,
+    val cells: FloatArray,
+    val clipX: Float,
+    val clipY: Float,
+    val clipZ: Float,
+    val inX: Float,
+    val inY: Float,
+    val inZ: Float,
+)
 
 /** Live stats for the fish card (DESIGN §5.6). */
 data class OrganismStats(

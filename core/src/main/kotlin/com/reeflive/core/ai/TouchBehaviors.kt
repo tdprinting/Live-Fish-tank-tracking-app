@@ -13,6 +13,9 @@ import kotlin.math.sin
  * INVESTIGATE swims to the glass by the spot and hovers facing it, mouth working as if for food; AVOID turns away and
  * drifts to cover; PEEK holds a blenny further out of its hole (or still on its perch) watching the spot; FREEZE holds a
  * shrimp or crab where it stands with its antennae drawn in; CHECK brings a sand-sifter or nassarius to the sand puff.
+ * FOLLOW tracks a finger held on the glass ([com.reeflive.core.sim.Simulation.finger]): hovering just inside the pane
+ * at the fingertip, nipping the glass when it rests, hanging back while it whisks fast; RISE comes up under a tap on
+ * the water surface, mouth working; TUCK holds a snail or crab where it is, pulled in (legs tucked, foot in).
  * Startles (≥ 0.95) and committed behaviours still win.
  */
 class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
@@ -26,6 +29,8 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
     private var holdUp: Vec3 = Vec3.Y
     private var holdPosture = 0
     private var wasAttached = false
+    private var nextNip = 0.0
+    private var nipUntil = -1.0
 
     override val label: String
         get() = when (kind) {
@@ -34,6 +39,9 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
             TouchReaction.PEEK -> "Peeking out at the tap"
             TouchReaction.FREEZE -> "Freezing still"
             TouchReaction.CHECK -> "Checking the sand puff"
+            TouchReaction.FOLLOW -> "Following your finger"
+            TouchReaction.RISE -> "Coming up for food"
+            TouchReaction.TUCK -> "Pulled in"
             else -> "Reacting to a tap"
         }
 
@@ -41,8 +49,10 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
         val k = b.touchKind
         if (k == TouchReaction.NONE || k == TouchReaction.DUCK || c.t < b.touchStartAt || c.t > b.touchUntil) return 0.0
         return when (k) {
-            TouchReaction.FREEZE -> 0.9
+            TouchReaction.FREEZE, TouchReaction.TUCK -> 0.9
             TouchReaction.AVOID -> 0.85
+            TouchReaction.FOLLOW -> 0.82
+            TouchReaction.RISE -> 0.8
             TouchReaction.INVESTIGATE, TouchReaction.PEEK -> 0.8
             TouchReaction.CHECK -> 0.75
             else -> 0.0
@@ -61,17 +71,22 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
             }
             TouchReaction.AVOID -> c.coverPoint(at, 25.0)
             TouchReaction.CHECK -> if (o.isFish) c.safe(Vec3(at.x, c.rock.sandTopCm + 1.0 + 0.3 * c.L, at.z), 0.8) else at.withY(c.rock.sandTopCm)
+            TouchReaction.RISE -> c.safe(Vec3(at.x, c.rock.waterLevelCm - 1.5 - 0.3 * c.L, at.z), 1.0)
             else -> o.pos
         }
+        nextNip = c.t + com.reeflive.core.sim.TankTouch.NIP_AFTER_S
+        nipUntil = -1.0
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
         if (b.touchSerial != serial || c.t > b.touchUntil) {
             finished = true
-            if (kind == TouchReaction.FREEZE || kind == TouchReaction.PEEK && wasAttached) hold(out)
+            if (kind == TouchReaction.FREEZE || kind == TouchReaction.TUCK || kind == TouchReaction.PEEK && wasAttached) hold(out)
             return
         }
+        // a finger being followed moves: the sim keeps touchFrom on the fingertip
+        if (kind == TouchReaction.FOLLOW) at = b.touchFrom
         val toTap = (at - o.pos).normalized(o.heading)
         when (kind) {
             TouchReaction.INVESTIGATE -> {
@@ -115,8 +130,55 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
                     o.extension = 1.0
                 }
             }
+            TouchReaction.FOLLOW -> follow(c, out, toTap)
+            TouchReaction.RISE -> {
+                out.seek(goal, o.cruiseSpeed * 1.3, arrive = 2.0, urgency = 0.45)
+                out.hover = true; out.faceDir = (goal + Vec3.Y * 3.0 - o.pos).normalized(o.heading)
+                if (o.pos.distanceTo(goal) < 5.0) { out.pitchBias = 0.35; o.mouth = max(o.mouth, 0.4 + 0.35 * sin(c.t * 8.0)) }
+            }
+            TouchReaction.TUCK -> {
+                hold(out)
+                // the foot and tentacles (a crab: its legs) draw in at once and stay in
+                o.extension = (o.extension - c.dt * 4.0).coerceAtLeast(0.05)
+                o.walkAmt = 0.0
+                (b as? SallyCrabBrain)?.legs?.tucked = true
+            }
             else -> finished = true
         }
+    }
+
+    override fun exit(c: Ctx) { if (kind == TouchReaction.TUCK) c.o.extension = 1.0 }
+
+    /**
+     * FOLLOW: hover just inside the pane at the fingertip, facing it, mouth working; when the finger rests the fish
+     * nips at the glass under it (a quick lunge to touching distance and a snap) every 0.7–1.4 s. A fast-moving finger
+     * reads as a lunging hand: it hangs back a hand's width off the glass (research 02 §1C).
+     */
+    private fun follow(c: Ctx, out: SteerIntent, toTap: Vec3) {
+        val o = c.o
+        val f = c.sim.finger
+        val inward = com.reeflive.core.sim.TankTouch.inwardAt(at, c.rock)
+        val fast = f != null && f.speedCmS > com.reeflive.core.sim.TankTouch.FINGER_FAST_CM_S
+        val nipping = c.t < nipUntil
+        val off = when {
+            fast -> 10.0 + 0.5 * c.L
+            nipping -> 0.5 * c.L + 0.4
+            else -> 0.5 * c.L + 2.0
+        }
+        val spot = c.safe(at + inward * off, 0.6)
+        out.seek(spot, o.cruiseSpeed * (if (nipping) 1.6 else 1.3), arrive = 1.2, urgency = if (nipping) 0.55 else 0.4)
+        out.allowGlass = true; out.hover = true
+        out.faceDir = toTap
+        out.separation = 0.6
+        val near = o.pos.distanceTo(spot) < 3.0 + 0.2 * c.L
+        if (near && !fast) o.mouth = max(o.mouth, 0.3 + 0.2 * sin(c.t * 6.0))
+        val resting = f != null && f.stillFor(c.t) >= com.reeflive.core.sim.TankTouch.NIP_AFTER_S
+        if (resting && near && !fast && c.t >= nextNip) {
+            nipUntil = c.t + 0.3
+            nextNip = c.t + c.rng.range(0.7, 1.4)
+            b.touchNips++
+        }
+        if (nipping) { o.mouth = 1.0; out.pitchBias = 0.1 }
     }
 
     /** Stay exactly where it was when the tap came (kinematic, same pose and posture). */

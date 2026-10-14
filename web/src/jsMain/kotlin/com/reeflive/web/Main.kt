@@ -68,6 +68,7 @@ object ReefLive {
     private var pendingTouch: Pair<Vec3, TouchSurface>? = null
     /** Screensaver camera while on (same director as the Android screensaver). */
     private var director: com.reeflive.app.render.CinemaDirector? = null
+    private var fingerDown = false
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -120,7 +121,8 @@ object ReefLive {
                 r.snapshotProvider = { sim?.latest }
                 r.demoWhenEmpty = false
                 r.listener = object : TankViewListener {
-                    override fun onPick(id: String?) { emit("onPick", id) }
+                    // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
+                    override fun onPick(id: String?) { if (id != null) sim?.enqueue(Command.TouchAnimal(id)); emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
                     override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
@@ -128,6 +130,14 @@ object ReefLive {
                     override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
                     // as on Android (LiveTankScreen): a long press drops a pinch of pellets where the finger is
                     override fun onLongPress(worldPoint: Vec3) { sim?.enqueue(Command.Feed(FoodKind.PELLET, 1.0, worldPoint)); emit("onFed", "PELLET") }
+                    // hold on the glass: a fingertip the fish follow (mouse: hold the button still, then drag); the page
+                    // only hears when it goes down and when it lifts
+                    override fun onFinger(worldPoint: Vec3?, speedCmS: Float, surface: TouchSurface) {
+                        sim?.enqueue(Command.Finger(worldPoint, speedCmS.toDouble(), surface))
+                        val down = worldPoint != null
+                        if (down != fingerDown) { fingerDown = down; emit("onFinger", if (down) surface.name else null) }
+                    }
+                    override fun onFlick(worldPoint: Vec3, velocity: Vec3) { sim?.enqueue(Command.WaterPuff(worldPoint, velocity)); emit("onFlick", null) }
                     override fun onScrape(stroke: GlassStroke) { ReefSandbox.scrape(stroke); emit("onScrape", stroke.lengthCm) }
                     override fun onFlipperTap() { emit("onFlipperTap", null) }
                 }
