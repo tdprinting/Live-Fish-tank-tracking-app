@@ -16,6 +16,9 @@ import kotlin.math.sqrt
 interface Sdf {
     fun dist(p: Vec3): Double
 
+    /** [dist] at (x, y, z) without building a [Vec3]: the baked grid answers allocation-free (camera hot path). */
+    fun distAt(x: Double, y: Double, z: Double): Double = dist(Vec3(x, y, z))
+
     /** Outward unit normal (central differences). */
     fun gradient(p: Vec3, h: Double = 0.5): Vec3 {
         val dx = dist(Vec3(p.x + h, p.y, p.z)) - dist(Vec3(p.x - h, p.y, p.z))
@@ -150,6 +153,7 @@ class AnalyticSdf(
 /** No rock at all (flow/unit tests). */
 object EmptySdf : Sdf {
     override fun dist(p: Vec3) = 1000.0
+    override fun distAt(x: Double, y: Double, z: Double) = 1000.0
     override fun gradient(p: Vec3, h: Double) = Vec3.Y
     override fun cover(p: Vec3) = 0.0
 }
@@ -169,8 +173,10 @@ class SdfGrid(
         return d[(z * ny + y) * nx + x]
     }
 
-    override fun dist(p: Vec3): Double {
-        val fx = (p.x - origin.x) / cell; val fy = (p.y - origin.y) / cell; val fz = (p.z - origin.z) / cell
+    override fun dist(p: Vec3): Double = distAt(p.x, p.y, p.z)
+
+    override fun distAt(x: Double, y: Double, z: Double): Double {
+        val fx = (x - origin.x) / cell; val fy = (y - origin.y) / cell; val fz = (z - origin.z) / cell
         val x0 = floor(fx).toInt(); val y0 = floor(fy).toInt(); val z0 = floor(fz).toInt()
         val tx = fx - x0; val ty = fy - y0; val tz = fz - z0
         val c00 = lerp(at(x0, y0, z0).toDouble(), at(x0 + 1, y0, z0).toDouble(), tx)
@@ -179,9 +185,9 @@ class SdfGrid(
         val c11 = lerp(at(x0, y0 + 1, z0 + 1).toDouble(), at(x0 + 1, y0 + 1, z0 + 1).toDouble(), tx)
         var v = lerp(lerp(c00, c10, ty), lerp(c01, c11, ty), tz)
         // Outside the grid: add the distance to the grid box so queries stay conservative.
-        val ex = max(0.0, max(origin.x - p.x, p.x - (origin.x + (nx - 1) * cell)))
-        val ey = max(0.0, max(origin.y - p.y, p.y - (origin.y + (ny - 1) * cell)))
-        val ez = max(0.0, max(origin.z - p.z, p.z - (origin.z + (nz - 1) * cell)))
+        val ex = max(0.0, max(origin.x - x, x - (origin.x + (nx - 1) * cell)))
+        val ey = max(0.0, max(origin.y - y, y - (origin.y + (ny - 1) * cell)))
+        val ez = max(0.0, max(origin.z - z, z - (origin.z + (nz - 1) * cell)))
         if (ex + ey + ez > 0) v += sqrt(ex * ex + ey * ey + ez * ez)
         return v
     }

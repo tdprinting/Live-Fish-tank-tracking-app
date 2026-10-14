@@ -259,4 +259,49 @@ class CameraFeelTest {
         val aimX = cam.eye[0] + dir[0] * t
         assertTrue("aim $aimX ahead of mid $mid", aimX > mid + 0.5f)
     }
+
+    /** A rock slab (z 22..26, below y 40) between the viewer and a wagging fish: the eye never gets near it. */
+    @Test fun followCameraNeverEntersRock() {
+        val slab = object : com.reeflive.core.geom.Sdf {
+            override fun dist(p: com.reeflive.core.geom.Vec3) = distAt(p.x, p.y, p.z)
+            override fun distAt(x: Double, y: Double, z: Double) = maxOf(22.0 - z, z - 26.0, y - 40.0)
+            override fun cover(p: com.reeflive.core.geom.Vec3) = 0.0
+        }
+        val cam = Camera()
+        repeat(12) { cam.update(1f / 60f, 1080, 1920, slab, { null }) { } }
+        val rig = straightRig("f", 30f, 30f, 16f, 8f)
+        cam.follow("f")
+        var x = 30f
+        var worst = Float.MAX_VALUE
+        repeat(600) { f ->
+            x += 12f / 60f * (if ((f / 150) % 2 == 0) 1f else -1f)
+            val wag = kotlin.math.sin(f * 0.6f) * 0.8f
+            for (i in 0 until 16) { rig.spine[i * 4] = x - i * 8f / 15f; rig.spine[i * 4 + 2] = 16f + wag * (i / 15f - 0.3f) }
+            cam.touching = f % 90 == 0
+            if (cam.touching) cam.orbit(300f, -80f, 1920f)
+            if (f == 300) cam.nudgeZoom(-2f)
+            cam.update(1f / 60f, 1080, 1920, slab, { rig }) { }
+            worst = minOf(worst, slab.distAt(cam.eye[0].toDouble(), cam.eye[1].toDouble(), cam.eye[2].toDouble()).toFloat())
+        }
+        val corner = com.reeflive.core.geom.EyeCollider.nearCornerDistance(cam.near, cam.fovY, 1080f / 1920f)
+        assertTrue("eye kept off the rock ($worst cm) by more than the near-plane corner ($corner cm)", worst > corner + 0.5f)
+    }
+
+    @Test fun zoomButtonsMoveTheFollowCamera() {
+        val cam = Camera()
+        val rig = straightRig("f", 60f, 30f, 16f, 8f)
+        cam.follow("f")
+        // eye distance from the fish's body centre once the camera has settled
+        fun dist(): Float {
+            repeat(120) { cam.update(1f / 60f, 1080, 1920, null, { rig }) { } }
+            val dx = cam.eye[0] - rig.spine[20]; val dy = cam.eye[1] - 30f; val dz = cam.eye[2] - 16f
+            return sqrt(dx * dx + dy * dy + dz * dz)
+        }
+        val d0 = dist()
+        cam.nudgeZoom(1f)
+        val d1 = dist()
+        assertTrue("closer: $d1 < $d0", d1 < d0 - 1f)
+        cam.nudgeZoom(-2f)
+        assertTrue("further: ${dist()} > $d1", dist() > d1 + 1f)
+    }
 }

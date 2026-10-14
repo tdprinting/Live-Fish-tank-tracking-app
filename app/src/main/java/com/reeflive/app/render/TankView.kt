@@ -60,6 +60,8 @@ fun TankView(
     shelf: SupplyShelfControl? = null,
     /** Submarine mode: ride inside the sub instead of chasing it. */
     subFirstPerson: Boolean = false,
+    /** The follow camera's on-screen buttons (zoom, swing round); null = gestures only. */
+    followCam: FollowCamControl? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -68,7 +70,7 @@ fun TankView(
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
-        bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson,
+        bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson, followCam = followCam,
     )
 }
 
@@ -104,6 +106,7 @@ fun TankView(
     viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
     subFirstPerson: Boolean = false,
+    followCam: FollowCamControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -148,6 +151,7 @@ fun TankView(
                         v.bursts = bursts
                         v.viewLight = viewLight
                         v.shelf = shelf
+                        if (followCam != null) v.followCam = followCam
                         view = v
                     }
                 },
@@ -161,6 +165,7 @@ fun TankView(
                     v.viewLight = viewLight
                     v.shelf = shelf
                     v.subFirstPerson = subFirstPerson
+                    if (followCam != null) v.followCam = followCam
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )
