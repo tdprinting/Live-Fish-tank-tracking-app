@@ -125,6 +125,26 @@ class SupplyShelfTest {
             assertEquals("${item.id} centre", SupplyShelfLayout.propX(item.slot, n), (lo + hi) / 2f, 1.5f)
             assertTrue("${item.id} fits its slot: ${hi - lo}", hi - lo <= SupplyShelfLayout.slotWidth(n))
             assertTrue("${item.id} has a tag", item.tag.isNotBlank())
+            assertTrue("${item.id} names its product", item.product.isNotBlank())
+        }
+    }
+
+    @Test fun aPickedPropClearsTheBoardAbove() {
+        // a picked prop rises LIFT_CM and grows SCALE_UP about its base: it must not poke through the board above
+        val glb = GlbLoader.parse(File("src/main/assets/models/supply_shelf.glb").readBytes(), "supply_shelf")
+        val tmp = FloatArray(3)
+        for (item in SupplyItem.entries) {
+            val r = item.row.ordinal
+            val node = glb.nodes.first { it.name == SupplyShelfLayout.NODE_PREFIX + item.id }
+            var top = -Float.MAX_VALUE
+            for (pr in node.primitives) for (cx in 0..1) for (cz in 0..1) {
+                M.transformPoint(node.world, if (cx == 0) pr.bmin[0] else pr.bmax[0], pr.bmax[1], if (cz == 0) pr.bmin[2] else pr.bmax[2], tmp)
+                top = maxOf(top, tmp[1])
+            }
+            val board = SupplyShelfLayout.ROW_Y[r]
+            val ceiling = if (r == 0) SupplyShelfLayout.TOP_Y else SupplyShelfLayout.ROW_Y[r - 1] - SupplyShelfLayout.BOARD
+            val lifted = board + (top - board) * (1f + SupplyShelfScene.SCALE_UP) + SupplyShelfScene.LIFT_CM
+            assertTrue("${item.id} lifted top $lifted under $ceiling", lifted <= ceiling + 0.05f)
         }
     }
 }

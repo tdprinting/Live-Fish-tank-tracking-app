@@ -91,7 +91,9 @@ enum class ShelfRow(val label: String, val glyph: ReefGlyph, val tone: Color) {
 
 /**
  * One prop on the shelf. [id] is its node in supply_shelf.glb (`Supply_<id>`, tools/blender/supplies.py);
- * [sandboxOnly] props work only in the pretend tank (only Move rocks now; care props work in Watch too).
+ * [sandboxOnly] props work only in the pretend tank (only Move rocks now; care props work in Watch too). [product] is
+ * the real reef-keeping product the prop is modelled on (its packaging is printed on the 3D prop; supply_labels.py),
+ * shown small under the name when the prop is picked; the name tag itself stays a short plain name.
  */
 enum class SupplyItem(
     val id: String,
@@ -100,37 +102,38 @@ enum class SupplyItem(
     val sandboxOnly: Boolean = false,
     val food: FoodKind? = null,
     private val note: String? = null,
+    val product: String = "",
 ) {
-    FLAKE("flake", ShelfRow.FEED, food = FoodKind.FLAKE),
-    PELLET("pellet", ShelfRow.FEED, food = FoodKind.PELLET),
-    FLOATING_PELLET("floating_pellet", ShelfRow.FEED, food = FoodKind.FLOATING_PELLET),
-    ALGAE_WAFER("algae_wafer", ShelfRow.FEED, food = FoodKind.ALGAE_WAFER),
-    MYSIS("mysis", ShelfRow.FEED, food = FoodKind.MYSIS),
-    BRINE("brine", ShelfRow.FEED, food = FoodKind.BRINE),
-    KRILL("krill", ShelfRow.FEED, food = FoodKind.KRILL),
-    PRAWN("prawn", ShelfRow.FEED, food = FoodKind.PRAWN),
-    CYCLOPS("cyclops", ShelfRow.FEED, food = FoodKind.CYCLOPS),
-    NORI("nori", ShelfRow.FEED, food = FoodKind.NORI),
-    CORAL_FOOD("coral_food", ShelfRow.FEED, food = FoodKind.CORAL_FOOD),
-    PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON),
-    PODS("pods", ShelfRow.FEED, food = FoodKind.PODS),
+    FLAKE("flake", ShelfRow.FEED, food = FoodKind.FLAKE, product = "Ocean Nutrition Formula Two Flakes"),
+    PELLET("pellet", ShelfRow.FEED, food = FoodKind.PELLET, product = "Ocean Nutrition Formula One Pellets"),
+    FLOATING_PELLET("floating_pellet", ShelfRow.FEED, food = FoodKind.FLOATING_PELLET, product = "Hikari Marine S"),
+    ALGAE_WAFER("algae_wafer", ShelfRow.FEED, food = FoodKind.ALGAE_WAFER, product = "Hikari Mini Algae Wafers"),
+    MYSIS("mysis", ShelfRow.FEED, food = FoodKind.MYSIS, product = "Hikari Bio-Pure Mysis Shrimp"),
+    BRINE("brine", ShelfRow.FEED, food = FoodKind.BRINE, product = "San Francisco Bay Brand Brine Shrimp"),
+    KRILL("krill", ShelfRow.FEED, food = FoodKind.KRILL, product = "BRS Krill Superba"),
+    PRAWN("prawn", ShelfRow.FEED, food = FoodKind.PRAWN, product = "Fresh frozen prawn"),
+    CYCLOPS("cyclops", ShelfRow.FEED, food = FoodKind.CYCLOPS, product = "Hikari Bio-Pure Cyclops"),
+    NORI("nori", ShelfRow.FEED, food = FoodKind.NORI, product = "Two Little Fishies Sea Veggies"),
+    CORAL_FOOD("coral_food", ShelfRow.FEED, food = FoodKind.CORAL_FOOD, product = "Polyp Lab Reef-Roids"),
+    PLANKTON("plankton", ShelfRow.FEED, food = FoodKind.PLANKTON, product = "Reef Nutrition Phyto-Feast"),
+    PODS("pods", ShelfRow.FEED, food = FoodKind.PODS, product = "AlgaeBarn 5280 Pods"),
 
-    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", note = "Swap 25 % for fresh salt water"),
-    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", note = "Swap 10 % of the water"),
-    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", note = "Alkalinity +1 for coral skeletons"),
-    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", note = "Calcium +20"),
-    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", note = "Magnesium +50"),
-    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", note = "Swap the dirty filter sock"),
-    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", note = "New carbon keeps the water clear"),
-    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", note = "Snip the algae garden"),
-    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", note = "Get rid of a pest anemone"),
-    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", note = "Everyone gets used to the water now"),
+    WATER_CHANGE("water_change", ShelfRow.CARE, "Change water", note = "Mix fresh salt water and swap 25 %", product = "Red Sea Coral Pro Salt"),
+    WATER_SMALL("water_small", ShelfRow.CARE, "Small change", note = "Mix a little salt water and swap 10 %", product = "Instant Ocean Sea Salt"),
+    DOSE_ALK("dose_alk", ShelfRow.CARE, "Shell builder", note = "Alkalinity +1 for coral skeletons", product = "Red Sea Reef Foundation B"),
+    DOSE_CA("dose_ca", ShelfRow.CARE, "Calcium", note = "Calcium +20 for corals and coralline", product = "Red Sea Reef Foundation A"),
+    DOSE_MG("dose_mg", ShelfRow.CARE, "Magnesium", note = "Magnesium +50 keeps calcium in balance", product = "Red Sea Reef Foundation C"),
+    NEW_SOCK("new_sock", ShelfRow.CARE, "New sock", note = "Swap the dirty filter sock for a clean felt one", product = "BRS felt filter sock"),
+    FRESH_CARBON("fresh_carbon", ShelfRow.CARE, "Fresh carbon", note = "New carbon keeps the water clear", product = "Seachem Matrix Carbon"),
+    TRIM_ALGAE("trim_algae", ShelfRow.CARE, "Trim algae", note = "Snip the algae garden", product = "Curved aquascaping scissors"),
+    ZAP_PEST("zap_pest", ShelfRow.CARE, "Zap pest", note = "Get rid of a pest anemone", product = "Red Sea Aiptasia-X"),
+    SETTLE_IN("settle_in", ShelfRow.CARE, "Settle in", note = "Everyone gets used to the water now", product = "Drip acclimation kit"),
 
-    GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass"),
-    TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water"),
-    MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank"),
-    KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?"),
-    MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork"),
+    GLASS_CLEANER("glass_cleaner", ShelfRow.TOOLS, "Clean glass", note = "Slide the Flipper over the front glass", product = "Flipper Edge magnet"),
+    TEST_KIT("test_kit", ShelfRow.TOOLS, "Test kit", note = "Read the water", product = "API Reef Master + Salifert KH"),
+    MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank", product = "Student microscope"),
+    KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?", product = "Rubber mallet"),
+    MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork", product = "CaribSea LifeRock"),
     ;
 
     val label: String get() = food?.label ?: title.orEmpty()
@@ -527,6 +530,9 @@ private fun ShelfLabel(p: ShelfPick, modifier: Modifier = Modifier) {
         tint = if (p.locked) Candy.purple else item.row.tone,
     ) {
         Text(item.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (item.product.isNotEmpty()) {
+            Text(item.product, style = s.buttonText.copy(fontSize = 11.sp, lineHeight = 13.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
         val line = if (p.locked) "Pretend tank only: switch to Sandbox to use it" else item.blurb
         if (line.isNotEmpty()) {
             Text(line, style = s.buttonText.copy(fontSize = 12.sp, lineHeight = 15.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
