@@ -127,4 +127,4 @@ Hand-off artifacts: B → C: GLBs + `validate_glb.py` green + `anchors.json` + `
 | Fish AI looks robotic | utility hysteresis + wander jitter + per-individual temperament noise (±15% on sheet values seeded per organism) |
 | Performance on low-end devices | quality presets; instance counts halve at Medium, quarter at Low; LOD1 beyond 60 cm |
 | Species IDs wrong (hawkfish, blenny) | `verified=false` badge; species switchable in livestock edit; models for flame hawkfish/midas blenny can be added later as new sheets + GLBs without code changes |
-| Tee's tank differs from the assumed 48x13x24 | all dimensions in seed/config; the rockscape scales by tank length/height but the layout is fixed to this tank; an "unknown tank" would use the same scape |
+| Tee's tank differed from the assumed 48x13x24 (measured 48x18x16 on 2026-10-13; resized via `TankDims`) | all dimensions in seed/config; the rockscape scales by tank length/height but the layout is fixed to this tank; an "unknown tank" would use the same scape |

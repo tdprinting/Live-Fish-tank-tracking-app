@@ -139,10 +139,16 @@ object PairMatrix {
     }
 
     // ------------------------------------------------------------------ crowding (06 §3.4)
-    /** Σ BL² / footprint for the default stock (the 06 baseline at current sizes). */
-    const val CROWDING_BASE = 0.14
-    /** Aggression gain per unit crowding above baseline; 8 reproduces the §5.6 #19 band (tang 7.5 → 15 cm ≈ +30 %). */
-    const val CROWDING_GAIN = 8.0
+    /**
+     * Σ BL² / footprint for the default stock (the 06 baseline at current sizes). Calibrated as 0.14 on the earlier
+     * 121.9 × 33 cm footprint; the default stock in Tee's measured tank is the baseline, so it scales with the depth.
+     */
+    const val CROWDING_BASE = 0.14 * 33.0 / com.reeflive.core.sim.TankDims.DEPTH_CM
+    /**
+     * Aggression gain per unit crowding above baseline; 8 on the 33 cm-deep footprint reproduced the §5.6 #19 band
+     * (tang 7.5 → 15 cm ≈ +30 %), scaled with the footprint so the same growth gives the same gain.
+     */
+    const val CROWDING_GAIN = 8.0 * com.reeflive.core.sim.TankDims.DEPTH_CM / 33.0
     /** Tactile cleaning damping (S:Cheney08: chases cut by two-thirds). */
     const val AGG_DAMP = 0.35
     const val AGG_DAMP_S = 20 * 60.0

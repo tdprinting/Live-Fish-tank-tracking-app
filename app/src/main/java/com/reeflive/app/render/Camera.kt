@@ -2,6 +2,7 @@ package com.reeflive.app.render
 
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.TankDims
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -586,10 +587,12 @@ class Camera {
     }
 
     companion object {
-        val TANK = floatArrayOf(121.9f, 61f, 33f)
-        const val SAND_Y = 3f
-        const val WATER_Y = 56f
-        val DEFAULT_TARGET = floatArrayOf(61f, 27f, 16f)
+        /** Tank interior (cm): x length, y height, z depth (back glass z = 0); core [TankDims] is the source of truth. */
+        val TANK = floatArrayOf(TankDims.LENGTH_F, TankDims.HEIGHT_F, TankDims.DEPTH_F)
+        const val SAND_Y = TankDims.SAND_TOP_F
+        const val WATER_Y = TankDims.WATER_LEVEL_F
+        /** Orbit target: mid-length, a little under mid-water, mid-depth. */
+        val DEFAULT_TARGET = floatArrayOf(TankDims.LENGTH_F / 2f, 19f, TankDims.DEPTH_F / 2f)
         const val DEFAULT_DISTANCE = 150f
         const val DEFAULT_PITCH = 0.08f
         /** Closest orbit (user units; ≈ 10 cm from the target in portrait): right up to the rockwork. */

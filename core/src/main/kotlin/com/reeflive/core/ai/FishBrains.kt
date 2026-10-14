@@ -25,9 +25,9 @@ import kotlin.math.sin
 // Ocellaris clownfish (SIMULATION §4.5 ClownBrain)
 // =====================================================================================
 class ClownBrain(c: Ctx) : SpeciesBrain(c) {
-    /** The owner's clowns host the hairy green mushrooms (Rhodactis) beside the arch (HOST_SHROOM). */
+    /** The owner's clowns host the hairy green mushrooms (Rhodactis) on the low rock under the right shelf (HOST_SHROOM). */
     private val hostName = o.hostAnchor ?: "HOST_SHROOM"
-    fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, if (flatHost) Vec3(82.3, 20.3, 15.2) else Vec3(72.0, 40.0, 15.0))
+    fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, if (flatHost) Vec3(81.5, 11.5, 21.0) else Vec3(82.0, 16.0, 21.0))
     /**
      * A flat host (corallimorph discs on rock) rather than a branching soft coral or an anemone: the pair hugs the
      * discs, belly 1–3 cm over the tentacles (owner observation), instead of weaving up through branches.
@@ -214,7 +214,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
-            Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(36.0, 25.0, 9.0)) }, "Darting to cover"),
+            Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
             TangSleep(), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
     }
 
@@ -285,7 +285,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             val p = if (L > 15) c.o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)
             else {
                 goRight = !goRight
-                Vec3(if (goRight) c.rng.range(95.0, 108.0) else c.rng.range(12.0, 25.0), c.zoneY(c.rng.range(0.35, 0.9)), c.rng.range(21.0, 29.0))
+                // right turn over the GSP mound, past the clowns' rock under the shelf (resized layout)
+                Vec3(if (goRight) c.rng.range(96.0, 110.0) else c.rng.range(12.0, 25.0), c.zoneY(c.rng.range(0.35, 0.9)), c.rock.widthCm * c.rng.range(0.5, 0.8))
             }
             wp = c.safe(p)
         }
@@ -397,7 +398,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 // Pajama cardinal (CardinalBrain) — crepuscular hoverer
 // =====================================================================================
 class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
-    private val spots = listOf(Vec3(62.0, 17.0, 15.0), Vec3(28.0, 22.0, 26.0), Vec3(43.0, 22.0, 27.0))
+    private val spots = listOf(Vec3(60.0, 13.0, 22.0), Vec3(28.0, 15.0, 34.0), Vec3(50.0, 15.0, 36.0))
     private var spot: Vec3 = spots[0]
     /** The shade pocket it hovers beside by day (06 §1.3 SHADE_CARD). */
     val shadePocket: Vec3 get() = spot
@@ -416,7 +417,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
-        if (night) Rest(c.safe(c.rock.anchors.pos("CAVE_SMALL", Vec3(62.0, 12.0, 8.0)) + Vec3(0.0, 0.0, 6.0)), Vec3.Z * -1.0)
+        if (night) Rest(c.safe(c.rock.anchors.pos("CAVE_SMALL", Vec3(56.0, 11.8, 7.8)) + Vec3(0.0, 0.0, 6.0)), Vec3.Z * -1.0)
         else Rest(c.safe(spot), Vec3.Z)
 
     override fun preTick(c: Ctx) {
@@ -594,7 +595,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 // Cleaner wrasse (WrasseBrain)
 // =====================================================================================
 class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
-    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(62.0, 20.0, 18.0)), 0.6 * o.collisionLength + 1.0)
+    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(38.0, 10.0, 14.0)), 0.6 * o.collisionLength + 1.0)
     val station = CleaningStation(o, stationPos, isShrimp = false)
 
     init {
@@ -608,7 +609,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         if (!night) return Rest(stationPos, Vec3.Z)
-        val cave = c.rock.anchors.pos("CAVE_SMALL", Vec3(62.0, 12.0, 8.0))
+        val cave = c.rock.anchors.pos("CAVE_SMALL", Vec3(56.0, 11.8, 7.8))
         return Rest(c.safe(cave, 0.6), Vec3.X, posture = 4)
     }
 
@@ -986,7 +987,7 @@ fun finishClean(c: Ctx, client: Organism, isShrimp: Boolean, feed: Boolean = tru
 // =====================================================================================
 class EelBrain(c: Ctx) : SpeciesBrain(c) {
     val cave: Anchor? = c.rock.anchors["CAVE_EEL"]
-    val mouth: Vec3 = cave?.pos ?: Vec3(69.0, 5.0, 23.0)
+    val mouth: Vec3 = cave?.pos ?: Vec3(62.0, 3.8, 32.5)
     /** Direction from the mouth into the den. */
     val inDir: Vec3 = (cave?.dir ?: Vec3(0.5, 0.1, -0.85)).normalized()
     val outDir: Vec3 = (inDir * -1.0).let { Vec3(it.x, 0.05, it.z).normalized(Vec3.Z) }
@@ -1072,7 +1073,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + c.rng.range(8.0, 20.0)
                 val targets = c.rock.anchors.ofType("CAVE") + c.rock.anchors.ofType("HOLE") + c.rock.anchors.ofType("GRAZE").filter { it.pos.y < 15 }
                 val p = if (targets.isNotEmpty() && c.rng.chance(0.6)) targets[c.rng.nextInt(targets.size)].pos
-                else Vec3(c.rng.range(8.0, 114.0), c.rock.sandTopCm + 4, if (c.rng.chance(0.5)) c.rng.range(26.0, 30.0) else c.rng.range(14.0, 30.0))
+                else Vec3(c.rng.range(8.0, 114.0), c.rock.sandTopCm + 4, c.rock.widthCm * (if (c.rng.chance(0.5)) c.rng.range(0.79, 0.91) else c.rng.range(0.42, 0.91)))
                 wp = c.safe(p.withY(min(p.y, c.zoneY(0.35))))
             }
             out.seek(wp, o.cruiseSpeed, arrive = 6.0)
@@ -1152,8 +1153,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 // Falco hawkfish (HawkBrain)
 // =====================================================================================
 class HawkBrain(c: Ctx) : SpeciesBrain(c) {
-    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
-    var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
+    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(43.0, 20.1, 28.8), normal = Vec3.Y)) }
+    var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(43.0, 20.1, 28.8)) }
     /** Night rest on open sand at the rock base (ai/HawkNight.kt; Tee's footage T89 [H]). */
     val sandRest = SandRest(this)
 
@@ -1401,7 +1402,7 @@ open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3,
 // =====================================================================================
 class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     val hole: Anchor? = c.rock.anchors["HOLE_LAWNMOWER"] ?: c.rock.anchors["HOLE_BLENNY"]
-    val territory: Vec3 get() = hole?.pos ?: Vec3(30.0, 10.0, 11.0)
+    val territory: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
 
     init {
         install(RockGraze(),
@@ -1561,7 +1562,7 @@ class BlennyRival(val b: SpeciesBrain, val radius: Double, val centre: Vec3) : B
 class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     // the rebuilt rockscape names the tailspot's own hole HOLE_TAILSPOT; HOLE_BLENNY is the lawnmower's
     var hole: Anchor? = c.rock.anchors["HOLE_TAILSPOT"] ?: c.rock.anchors["HOLE_BLENNY"]; private set
-    val holePos: Vec3 get() = hole?.pos ?: Vec3(25.0, 18.0, 24.0)
+    val holePos: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
     private val inHole = TailFirstHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
@@ -1741,7 +1742,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 // Indigo dottyback (Pseudochromis): secretive cave darter, territorial
 // =====================================================================================
 class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
-    val cave: Vec3 = c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(42.0, 18.0, 6.0)))
+    val cave: Vec3 = c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(106.0, 7.5, 13.0)))
     val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
 
     init {
@@ -1829,7 +1830,7 @@ class GenericFishBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun initialPlace(c: Ctx) {
         val z = o.species.zone
-        o.homePos = c.safe(Vec3(c.rng.range(20.0, 100.0), c.zoneY((z.yMin + z.yMax) / 2), c.rng.range(12.0, 26.0)))
+        o.homePos = c.safe(Vec3(c.rng.range(20.0, 100.0), c.zoneY((z.yMin + z.yMax) / 2), c.rock.widthCm * c.rng.range(0.36, 0.79)))
         o.placeAt(o.homePos, Vec3.X)
     }
 }

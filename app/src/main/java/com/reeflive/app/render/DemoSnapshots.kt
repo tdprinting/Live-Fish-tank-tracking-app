@@ -2,6 +2,7 @@ package com.reeflive.app.render
 
 import com.reeflive.core.sim.OrganismPose
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.WaterState
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -27,8 +28,8 @@ object DemoSnapshots {
     fun at(timeSec: Double, ich: Float = 0f): SimSnapshot {
         val poses = FISH.mapIndexed { i, (id, sp, bl) ->
             val radius = 18f + i * 6f
-            val cx = 61f; val cz = 16f
-            val cy = 22f + i * 7f
+            val cx = TankDims.LENGTH_F / 2f; val cz = TankDims.DEPTH_F / 2f
+            val cy = 9f + i * 6f
             val omega = 0.25f / (1f + i * 0.2f) * (if (i % 2 == 0) 1f else -1f)
             circlePose(id, sp, bl, timeSec.toFloat(), cx, cy, cz, radius, omega, phase = i * 1.3f, ich = if (i == 0) ich else 0f)
         }

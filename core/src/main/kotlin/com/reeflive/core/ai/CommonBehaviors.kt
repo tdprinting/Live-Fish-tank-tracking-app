@@ -449,10 +449,16 @@ class SurfaceGasp(val b: SpeciesBrain) : Behavior("gasp", "Gasping at the surfac
         return if (sDo > 0.5 || o.gillRate > 2.4 || Symptom.GASPING in o.symptoms) 0.95 else 0.0
     }
     override fun update(c: Ctx, out: SteerIntent) {
-        val hob = c.rock.anchors.pos("HOB_OUTFLOW", Vec3(71.0, 55.0, 1.0))
-        val spot = c.safe(Vec3(hob.x + c.rng.signed() * 3, c.rock.waterLevelCm - 1.5 - 0.2 * c.L, hob.z + 6 + 0.5 * c.L), 1.0)
-        out.seek(spot, c.o.cruiseSpeed, arrive = 3.0)
+        val hob = c.rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, c.rock.waterLevelCm - 1, 1.0))
+        // in the surface ripple a hand's width in front of the return, above its downward jet rather than in it (the
+        // resized tank's nozzle sits 0.7 cm under the surface and its jet only drops ~4 cm over the first 10 cm)
+        val spot = c.safe(Vec3(hob.x + c.rng.signed() * 3, c.rock.waterLevelCm - 1.5 - 0.2 * c.L, hob.z + 12 + 0.5 * c.L), 1.0)
+        // from under an overhang (the R4 / R6 shelves beside the return) the way up is around the rock, not through it
+        out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = 3.0)
         out.hover = true; out.pitchBias = 0.3
+        // gasping is done at the surface film: the steering's glass / surface stand-off (0.5 L + 1 cm below the
+        // surface) would otherwise hold it ~5 cm down
+        out.allowGlass = true
         c.o.mouth = 0.5 + 0.5 * sin(c.t * 8)
         if (c.t - lastEvent > 1800) { lastEvent = c.t; c.sim.emit(SimEvent.Gasping(c.o.id, c.sim.simTimeSec)) }
     }

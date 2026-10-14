@@ -1,5 +1,6 @@
 package com.reeflive.core.geom
 
+import com.reeflive.core.sim.TankDims
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -39,9 +40,9 @@ data class Pump(
          * SIMULATION §9.7). Positions match FlowField.defaultJets / anchors.
          */
         fun defaults(): List<Pump> = listOf(
-            Pump("PH-A", Vec3(84.0, 48.0, 1.5), Vec3(-0.6, -0.35, 0.72), gph = 850.0, nozzleCm = 3.2),
-            Pump("PH-B", Vec3(1.5, 42.0, 10.0), Vec3(0.95, -0.2, 0.25), gph = 600.0, nozzleCm = 2.8),
-            Pump("HOB", Vec3(71.0, 55.0, 2.0), Vec3(0.0, -0.5, 0.87), gph = 200.0, nozzleCm = 6.0, intake = Vec3(62.0, 40.0, 2.5)),
+            Pump("PH-A", Vec3(77.0, 32.0, 1.5), Vec3(-0.6, -0.35, 0.72), gph = 850.0, nozzleCm = 3.2),
+            Pump("PH-B", Vec3(1.5, 28.0, 13.0), Vec3(0.95, -0.2, 0.25), gph = 600.0, nozzleCm = 2.8),
+            Pump("HOB", Vec3(73.0, 37.4, 2.0), Vec3(0.0, -0.4, 0.92), gph = 200.0, nozzleCm = 6.0, intake = Vec3(114.5, 19.0, 5.0)),
         )
     }
 }
@@ -68,10 +69,10 @@ data class Pump(
  * Not thread-safe: step and sample from the simulation thread; the renderer gets [snapshotGrid] copies.
  */
 class FluidSim(
-    val lengthCm: Double = 121.9,
-    val depthCm: Double = 33.0,
-    val sandCm: Double = 3.0,
-    val waterCm: Double = 56.0,
+    val lengthCm: Double = TankDims.LENGTH_CM,
+    val depthCm: Double = TankDims.DEPTH_CM,
+    val sandCm: Double = TankDims.SAND_TOP_CM,
+    val waterCm: Double = TankDims.WATER_LEVEL_CM,
     quality: FluidQuality = FluidQuality.MEDIUM,
     var pumps: List<Pump> = Pump.defaults(),
     solidAt: ((Vec3) -> Boolean)? = null,

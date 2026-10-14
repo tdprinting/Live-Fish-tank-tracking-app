@@ -58,6 +58,7 @@ import com.reeflive.app.ui.components.Glyph
 import com.reeflive.app.ui.theme.ReefTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.reeflive.core.sim.TankDims
 
 /*
  * Carrying a supply from the shelf into the tank (UI_STYLE §10.6): after a prop is picked the camera glides back to
@@ -68,9 +69,9 @@ import kotlin.math.roundToInt
  */
 
 /** Tank interior on the front glass (cm): the drop zone. */
-private const val GLASS_Z = 33.8f
-private const val TANK_L = 121.9f
-private const val TANK_TOP = 61f
+private const val GLASS_Z = TankDims.DEPTH_F + 0.8f
+private const val TANK_L = TankDims.LENGTH_F
+private const val TANK_TOP = TankDims.HEIGHT_F
 
 /**
  * Solves which front-glass point (tank cm x, y on z = [z]) is under view pixel ([sx], [sy]) with a few Newton steps
@@ -168,7 +169,7 @@ fun SupplyCarryLayer(
                 frame
                 val path = Path()
                 var ok = true
-                val pts = arrayOf(0f to 3f, TANK_L to 3f, TANK_L to 56f, 0f to 56f)
+                val pts = arrayOf(0f to TankDims.SAND_TOP_F, TANK_L to TankDims.SAND_TOP_F, TANK_L to TankDims.WATER_LEVEL_F, 0f to TankDims.WATER_LEVEL_F)
                 pts.forEachIndexed { i, (x, y) ->
                     if (!projection.project(x, y, GLASS_Z, corner)) ok = false
                     if (i == 0) path.moveTo(corner[0], corner[1]) else path.lineTo(corner[0], corner[1])
@@ -187,7 +188,7 @@ fun SupplyCarryLayer(
                         val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
                         layout(c.maxWidth, c.maxHeight) {
                             frame
-                            if (projection.project(TANK_L / 2, 56f, GLASS_Z, corner)) {
+                            if (projection.project(TANK_L / 2, TankDims.WATER_LEVEL_F, GLASS_Z, corner)) {
                                 val x = (corner[0] - p.width / 2f).roundToInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
                                 val y = (corner[1] + 8.dp.toPx()).roundToInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
                                 p.place(x, y)

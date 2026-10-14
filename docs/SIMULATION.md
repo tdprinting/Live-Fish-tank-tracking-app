@@ -363,7 +363,7 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - Threat: eel within 12 cm → tail-flip escape (burst 40 cm/s for 0.5 s, backwards), then hide deeper in the ledge crevice.
 
 ### 4.6 Feeding system (`FoodSystem`)
-- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` at the left glass, y 35) simulated as a cloth (`NoriCloth`, below).
+- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` on the left glass at the front corner, y 27, z 40: clear of the left rock so grazers reach its open side) simulated as a cloth (`NoriCloth`, below).
 - Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`; floating kinds hold `sink = 0` at the surface for `floatSeconds`, then sink at `sinkCmS`. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after `lifeSeconds` uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles. Suspended kinds (pods, phyto, coral food, cyclops) barely sink and ride the flow.
 - Fish bite radius 1.2 cm; competition: a particle targeted by two fish goes to the first to reach it; clowns and tang get burst speed when hunger > 0.4.
 - "Frenzy" score: all diet-matching fish with hunger > 0.2 get `Feed` ≥ 0.6 immediately on spawn (perception event), producing the rush.
@@ -426,10 +426,10 @@ It is read-only: it never draws from an rng, never writes to an organism or a br
 Loaded from `assets/sim/rock_sdf.bin` + `anchors.json`. The sim module gets a `RockData` constructed by the app from the files; tests use an analytic `RockData.ofSpheres(...)` builder.
 
 ### 5.2 SDF file format
-Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 122×33×61 tank at 1 cm: 245,586 cells → ~740 KB. As baked (ASSETS §3.5): nx = 122, ny = 61, nz = 33 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
+Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 121.9×40.6×45.7 tank at 1 cm: 122·41·46 = 230,092 cells → ~690 KB. As baked (ASSETS §3.5): nx = 122, ny = 41, nz = 46 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
 
 ### 5.3 Flow field (`FlowField`)
-Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 84, y 48, z 1), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 42, z 10), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** at the back center top (x 61, y 55, z 2), aiming forward-down (0, −0.5, 0.87) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 20) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
+Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 77, y 32, z 1; resized tank), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 28, z 13), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** nozzle at the back middle (x 73, y 37.4, z 2; piped from the HOB filter on the right, video T97), aiming forward and a little down (0, −0.4, 0.92) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 0.36 × water level) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
 
 **Gusts** (`FlowGust`, a flick of the finger): `addGust(pos, vel, t)` adds up to 4 short puffs on top of the jets, never baked into the cached grid. Each is a travelling Gaussian blob: centre `pos + dir × speed × τ(1 − e^(−age/τ))` with τ 0.8 s, radius 3.5 cm + 0.35 × distance travelled, speed `speed × e^(−age/τ)`, faded out over the last second of its 4 s life; launch speed ≤ 45 cm/s. `velocity()` and `velocityFast()` add them, so corals, sand, particles and the nori all feel the same puff; the snapshot carries them (`gusts`, stride 8) for the renderer's coral sway and flow motes.
 
@@ -691,13 +691,13 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 ### 9.7 Water physics: flow solver, scalar transport, surface, optics (owner request)
 
-**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–56, z 0–33).
+**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–38.1, z 0–45.7; sizes from `TankDims`).
 
 | `FluidQuality` | grid | cell | projection iterations |
 |---|---|---|---|
-| LOW | 32 × 14 × 9 | 3.8 cm | 30 |
-| MEDIUM | 48 × 21 × 13 | 2.54 cm | 45 |
-| HIGH | 64 × 28 × 18 | 1.9 cm | 60 |
+| LOW | 32 × 10 × 12 | 3.8 cm | 30 |
+| MEDIUM | 48 × 14 × 18 | 2.54 cm | 45 |
+| HIGH | 64 × 19 × 24 | 1.9 cm | 60 |
 
 - **Step**, with dt ≤ 0.1 s:
   1. Pump forcing.
@@ -760,7 +760,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
 
 **Pair matrix (`ai/PairMatrix.kt`, `sim/interactions.json`, 06 §5.3).**
 - *Scan.* Every 0.5 s each actor scans its rows. A target entering the trigger radius opens an entry. After `lingerS` the entry rolls once a minute with probability `p`.
-- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step), tactile damping, and rank.
+- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step; `CROWDING_BASE` and `CROWDING_GAIN` were calibrated on the 33 cm-deep footprint and scale with `TankDims.DEPTH_CM`, so the default stock in Tee's measured tank stays the ×1 baseline), tactile damping, and rank.
 - *Hourly cap.* A token bucket that refills at `floor + (max − floor)(1 − fam)`, scaled by the modifiers below, and holds max(1, ¼ h of the cap).
 - **Host-defence sensitisation:**
   - repeated intrusions raise p up to ×2;
@@ -788,7 +788,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
   - Inspection length is lognormal with mean 6.7 s × area^¼.
   - Cheating runs at 0.025/s, or 0.17/s when hunger > 0.6 (S:Pinto11).
   - The rest between bouts is 15–75 s × (1.3 − hunger).
-- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A client still unreachable after 20 s is skipped for 5 min.
+- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A swimmer in a crawl space under a low rock roof (e.g. beneath R9 by the dottyback cave) first slides out sideways to a spot with open water above it, since it cannot climb from where it is. A client still unreachable after 20 s is skipped for 5 min.
 - The shrimp counts approaches every tick (`preTick`, c16).
 
 **Newcomers.** A tailspot added to the tank prospects holes and grazing patches for its first day (c09). Engineer goby adults patrol on about 5 % of nights (07 gap 3).
@@ -1090,9 +1090,10 @@ interpolates them and `fish.vert` reads them as `uMotion`:
 ### 15.5 Hairy mushroom host (owner, 2026-10)
 
 The clowns host a cluster of hairy green mushrooms (`rhodactis_sp`, *Rhodactis* sp., `CoralKind.MUSHROOM`). The
-cluster sits where the `mushroom_hairy.glb` model is built, on a ledge of the arch's left leg. The anchor
-`HOST_SHROOM` and the coral anchor `coral_shroom_hairy` are at (82.3, 20.3, 15.2), the centroid of the model's
-disc tufts, next to `HOST_ARCH_CLOWNS`. The owner's
+cluster sits where the `mushroom_hairy.glb` model is built: on top of the low purple-coralline R10 rock in front of
+the right recess, under the shelf's front edge (resized tank, ≈ (81, 13, 21); evidence in docs/specs/tank_design.md
+§1 v3 note: [P p14], [P full], night clip T84). The anchor `HOST_SHROOM` and its alias `coral_shroom_hairy` are that
+snapped point, with `HOST_ARCH_CLOWNS` ~4 cm above it. The owner's
 research docs on `claude/project-thread-r6d0sa` were not reachable when this was written. The specs below come
 from the coordinator's summary of them.
 

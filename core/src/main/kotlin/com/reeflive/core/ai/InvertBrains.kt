@@ -247,14 +247,14 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         val key = a?.name ?: "fallback"
         if (perchFor != key) {
             perchFor = key
-            val near = a?.pos ?: Vec3(88.0, 35.0, 15.0)
+            val near = a?.pos ?: Vec3(39.9, 26.2, 16.6)
             val taken = c.sim.organisms.filter { it !== o && it.brainKind == com.reeflive.core.sim.BrainKind.BANDED_SHRIMP }
                 .mapNotNull { (c.sim.agentOf(it)?.brain as? BandedShrimpBrain)?.perchPoint }
             perch = shrimpPerch(c, near, 10.0, 2, taken, Vec3(0.2, 0.0, 1.0),
                 accept = { _, n -> n.y < -0.45 },
                 score = { q, n -> q.distanceTo(near) + 6.0 * (1 - c.rock.sdf.cover(q + n * 2.0)) + 3.0 * (1 + n.y) })
         }
-        return perch ?: hangPose(c, a, Vec3(88.0, 35.0, 15.0), inverted = true)
+        return perch ?: hangPose(c, a, Vec3(39.9, 26.2, 16.6), inverted = true)
     }
     /** The surface point under the hang spot (for a mate's spacing). */
     val perchPoint: Vec3? get() = perch?.let { it.pos - (it.up ?: Vec3.Y) * shrimpStance(o) }
@@ -445,7 +445,7 @@ private const val ADVERT_CM = 12.0
 // =====================================================================================
 class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     val anchor: Anchor? = c.rock.anchors["STATION_SHRIMP"]
-    private val anchorPos: Vec3 = anchor?.pos ?: Vec3(50.0, 18.0, 26.0)
+    private val anchorPos: Vec3 = anchor?.pos ?: Vec3(106.0, 28.0, 16.0)
     val nav = ShrimpNav(o)
     private var perch: Rest? = null
 
@@ -462,7 +462,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         val r = shrimpPerch(c, anchorPos, 14.0, 1, taken, Vec3(0.0, 0.6, 0.8),
             accept = { _, n -> n.y > -0.3 && n.z > -0.35 },
             score = { q, n -> q.distanceTo(anchorPos) + 4.0 * max(0.0, -n.z) + 2.0 * c.rock.sdf.cover(q + n * 3.0) })
-            ?: hangPose(c, anchor, Vec3(50.0, 18.0, 26.0), inverted = false).let { h -> Rest(h.pos, Vec3.Y.rejectFrom(h.up!!).normalized(h.heading), h.up, 1) }
+            ?: hangPose(c, anchor, Vec3(106.0, 28.0, 16.0), inverted = false).let { h -> Rest(h.pos, Vec3.Y.rejectFrom(h.up!!).normalized(h.heading), h.up, 1) }
         perch = r
         // clients pose in open water just in front of the shrimp
         station.pos = c.safe(r.pos + (r.up ?: Vec3.Y) * 3.5, 2.0)
@@ -642,7 +642,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 // Hermit crabs: walk rock and sand, pick/graze, scavenge, retreat into the shell
 // =====================================================================================
 class HermitBrain(c: Ctx) : SpeciesBrain(c) {
-    private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 28.0) else g[o.rng.nextInt(g.size)].pos }
+    private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 38.0) else g[o.rng.nextInt(g.size)].pos }
 
     init {
         install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this))
@@ -725,7 +725,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 // disturbed, sheds an arm tip when bitten and regrows it. The disc never turns: BrittleArms reassigns the lead arm.
 // =====================================================================================
 class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
-    val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(95.0, 4.0, 15.0))
+    val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(36.0, 5.5, 10.4))
     /** The five-arm gait rig (sim/LimbRig.kt); the behaviours only say which arms reach where. */
     val arms: BrittleArms = o.limbRig as BrittleArms
     /** Arm-tip photoreception: withdraw from a light step or a shadow (ai/BrittleLight.kt; AIZ01 analogy). */
@@ -937,7 +937,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
 // Brown feather duster: sessile, crown filters, snaps into tube on shadow/touch/food above
 // =====================================================================================
 class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
-    val tube: Vec3 = c.rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0))
+    val tube: Vec3 = c.rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3))
     val crown: Vec3 get() = Vec3(tube.x, c.rock.sandTopCm + 0.6 * o.lengthCm, tube.z)
 
     init { install(Filter(), Snap(), OutOfTube()) }
@@ -1159,17 +1159,17 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
 
     init { install(GlassGraze(this), Flipped()) }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 30.0, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 0.55 * c.rock.waterLevelCm, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
         else Rest(o.homePos, o.heading, o.up)
 
     override fun initialPlace(c: Ctx) {
         var onFront = o.rng.chance(0.5)
-        var p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+        var p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, c.rock.waterLevelCm - 6), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
         // never start where rock leans on the back pane
         var tries = 0
         while (c.rock.sdf.dist(p) < 2.0 && tries++ < 20) {
             onFront = onFront || tries > 10
-            p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+            p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, c.rock.waterLevelCm - 6), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
         }
         o.homePos = p
         o.placeAt(p, Vec3.Y)
@@ -1323,7 +1323,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
      * Where it presses in. A cave anchor marks the middle of the cave, open water a crawler cannot reach, so a home
      * more than [HOME_SNAP_CM] off the rock is moved onto the nearest wall.
      */
-    val home: Vec3 = (crevice?.pos ?: Vec3(63.0, 12.0, 8.0)).let { p ->
+    val home: Vec3 = (crevice?.pos ?: Vec3(56.0, 11.8, 7.8)).let { p ->
         if (c.rock.sdf.dist(p) > HOME_SNAP_CM) c.rock.sdf.project(p, 0.5, iterations = 24) else p
     }
 

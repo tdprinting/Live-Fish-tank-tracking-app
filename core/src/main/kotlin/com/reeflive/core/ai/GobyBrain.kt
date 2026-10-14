@@ -28,7 +28,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val OVERRIDE_SETTLE_S = 0.8
     }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
-    val mouth: Vec3 = burrow?.pos ?: Vec3(69.0, 5.0, 23.0)
+    val mouth: Vec3 = burrow?.pos ?: Vec3(62.0, 3.8, 32.5)
     val inDir: Vec3 = (burrow?.dir ?: Vec3(0.5, 0.1, -0.85)).normalized()
     val outDir: Vec3 = (inDir * -1.0).let { Vec3(it.x, 0.05, it.z).normalized(Vec3.Z) }
     val tunnel: List<Vec3> = (c.rock.anchors["burrow_path"] ?: c.rock.anchors["den_path"])?.points

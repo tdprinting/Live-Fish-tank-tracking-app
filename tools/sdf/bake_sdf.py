@@ -7,15 +7,16 @@ Loads models/rockscape.glb with bpy, builds a BVH, and writes assets/sim/rock_sd
     nx*ny*nz uint8 cover score (0 open .. 255 fully enclosed)
 
 Index order: x fastest, then y, then z  ->  i = x + nx * (y + ny * z).
-Grid: 1 cm cells over the tank interior (121.9 x 61 x 33 cm), sample points at cell centres,
-origin = (0.5, 0.5, 0.5), dims 122 x 61 x 33.
+Grid: 1 cm cells over the tank interior (common.TANK: 121.9 x 40.6 x 45.7 cm), sample points at cell centres,
+origin = (0.5, 0.5, 0.5), dims 122 x 41 x 46.
 
-Inside test: sign of dot(p - nearest, face normal) (the rock mesh is closed except the flat
-cut at y = 0.4, which is below the sand). Cover: fraction of 26 directions (unit-cube
+Inside test: within 0.75 cm of the surface the sign of dot(p - nearest, face normal); farther out a 10-ray vote
+(the nearest-face sign flips where the nearest point is an edge or vertex). The rock mesh is closed. Cover: fraction of 26 directions (unit-cube
 neighbourhood) that hit rock within 20 cm, computed on a 2 cm grid and trilinearly upsampled.
 
 Run: /tmp/claude-0/bpyenv/bin/python tools/sdf/bake_sdf.py
 """
+import math
 import os
 import struct
 import sys
@@ -29,7 +30,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "blender"))
 import common as C  # noqa: E402
 from common import bpy, w2b  # noqa: E402
 
-NX, NY, NZ = 122, 61, 33
+NX, NY, NZ = (int(math.ceil(v)) for v in C.TANK)
 CELL = 1.0
 ORIGIN = (0.5, 0.5, 0.5)
 COVER_CELL = 2.0
@@ -54,6 +55,23 @@ def load_bvh(path):
     return BVHTree.FromPolygons(verts, polys), len(polys)
 
 
+VOTE_DIRS = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1), (0.577, 0.577, 0.577),
+             (-0.577, -0.577, 0.577), (0.577, -0.577, -0.577), (-0.577, 0.577, -0.577)]
+
+
+def inside_vote(bvh, pb):
+    """Ray vote: a point is inside the closed rock when most rays leave through a back face (hit normal along the
+    ray). Robust where the nearest point is an edge / vertex whose face normal gives the wrong sign."""
+    from mathutils import Vector
+    o = Vector(pb)
+    n_in = 0
+    for d in VOTE_DIRS:
+        loc, nrm, idx, dist = bvh.ray_cast(o, Vector(d))
+        if loc is not None and nrm.dot(Vector(d)) > 0:
+            n_in += 1
+    return n_in * 2 > len(VOTE_DIRS)
+
+
 def sample_dist(bvh, pts):
     out = np.empty(len(pts), np.float32)
     for i, p in enumerate(pts):
@@ -61,6 +79,9 @@ def sample_dist(bvh, pts):
         loc, nrm, idx, d = bvh.find_nearest(pb)
         if loc is None:
             out[i] = 60.0
+            continue
+        if d > 0.75:  # away from the surface the nearest-face sign can flip at edges: vote with rays
+            out[i] = -d if inside_vote(bvh, pb) else d
             continue
         s = (pb[0] - loc[0]) * nrm[0] + (pb[1] - loc[1]) * nrm[1] + (pb[2] - loc[2]) * nrm[2]
         out[i] = -d if s < 0 else d
@@ -129,7 +150,7 @@ def bake(glb=None, out=None):
     d = sample_dist(bvh, [tuple(p) for p in pts])
     d = np.clip(d, -60, 60)
     t1 = time.time()
-    cshape = (int(np.ceil(122 / COVER_CELL)), int(np.ceil(61 / COVER_CELL)), int(np.ceil(33 / COVER_CELL)))
+    cshape = tuple(int(np.ceil(n / COVER_CELL)) for n in (NX, NY, NZ))
     cpts = grid_points(*cshape, (COVER_CELL / 2,) * 3, COVER_CELL)
     cd = sample_dist(bvh, [tuple(p) for p in cpts])
     cov = sample_cover(bvh, [tuple(p) for p in cpts], cd < 0)

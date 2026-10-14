@@ -82,12 +82,12 @@ class MicroCrittersTest {
             val head = Vec3(p.spine[i0].toDouble(), p.spine[i0 + 1].toDouble(), p.spine[i0 + 2].toDouble())
             when (p.kind) {
                 // mysids hover; amphipods may be mid side-swim between perches
-                CritterKind.MYSID, CritterKind.AMPHIPOD, CritterKind.PLANKTON -> assertTrue("${p.id} in the water", sdf.dist(head) > -1.0 && head.y < 54)
+                CritterKind.MYSID, CritterKind.AMPHIPOD, CritterKind.PLANKTON -> assertTrue("${p.id} in the water", sdf.dist(head) > -1.0 && head.y < TankDims.WATER_LEVEL_CM - 2)
                 else -> {
                     // on rock, sand or the front glass (within a few mm of the surface)
                     val onRock = abs(sdf.dist(head)) < 0.6
                     val onSand = abs(head.y - f.sandY(head.x, head.z)) < 0.6
-                    val onGlass = abs(head.z - 33.0) < 0.3
+                    val onGlass = abs(head.z - TankDims.DEPTH_CM) < 0.3
                     assertTrue("${p.id} at $head is on a surface", onRock || onSand || onGlass)
                 }
             }
