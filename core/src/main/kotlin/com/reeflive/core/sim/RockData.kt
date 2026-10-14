@@ -155,7 +155,7 @@ object DefaultScape {
             a("PERCH_3", "PERCH", 103.8, 28.9, 6.8, normal = v(-0.34, 0.91, -0.24)),
             a("PERCH_4", "PERCH", 66.3, 15.5, 27.6, normal = v(-0.45, 0.84, -0.32)),
             a("PERCH_5", "PERCH", 47.9, 35.4, 12.8, normal = v(0.47, 0.56, 0.69)),
-            a("STATION_CLEANER", "STATION", 52.0, 11.0, 32.0),
+            a("STATION_CLEANER", "STATION", 38.0, 10.0, 14.0),
             a("SHRIMP_LEDGE", "LEDGE", 40.0, 26.2, 16.6, normal = v(-0.05, -0.97, 0.23)),
             a("SLEEP_TANG", "SLEEP", 38.0, 9.1, 5.2, dir = v(-0.7, 0.2, -0.7)),
             a("SURFACE_FEED", "FEED", 41.0, 37.5, 23.4),
@@ -177,7 +177,7 @@ object DefaultScape {
             // ---- Track C additions (new livestock, 04_more_species); Track B: please add to anchors.json ----
             a("coral_organpipe_kenya_base", "CORAL", 71.8, 15.5, 25.2, normal = v(-0.08, 0.84, 0.53)),
             a("HOLE_LAWNMOWER", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 7.0),
-            a("STATION_SHRIMP", "STATION", 52.0, 11.0, 32.0, normal = v(0.0, 0.0, 1.0)),
+            a("STATION_SHRIMP", "STATION", 38.0, 10.0, 14.0, normal = v(0.0, 0.0, 1.0)),
             a("DUSTER_TUBE", "TUBE", 86.0, 7.0, 27.3, normal = v(0.0, 1.0, 0.0)),
             a("BRITTLE_HOME", "CAVE", 36.0, 5.5, 10.4),
             a("CAVE_DOTTYBACK", "CAVE", 106.0, 7.5, 13.0),

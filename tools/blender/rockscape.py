@@ -137,7 +137,7 @@ ANCHORS = [
     ("PERCH_SHELF", "PERCH", (48, 35.5, 13.0), dict(normal=[0, 1, 0.2]), "surface"),
     ("PERCH_R9", "PERCH", (104, 28, 7), dict(normal=[0, 1, 0]), "surface"),
     ("PERCH_CORALLINE_LOW", "PERCH", (57, 8.5, 20.5), dict(normal=[0, 1, 0.6]), "surface"),
-    ("STATION_CLEANER", "STATION", (52, 11, 32), dict(species="wrasse,skunk_shrimp"), None),
+    ("STATION_CLEANER", "STATION", (38, 10, 14), dict(species="wrasse,skunk_shrimp"), None),
     ("SHRIMP_LEDGE_L", "LEDGE", (40, 24.9, 16.9), dict(normal=[0, -1, 0.3]), "surface"),
     ("SHRIMP_LEDGE_R", "LEDGE", (95, 22.5, 12), dict(normal=[0, -1, 0.3]), "surface"),
     ("HOVER_CARDINAL", "HOVER", (26, 14, 23), dict(radius=6, species="cardinal"), None),

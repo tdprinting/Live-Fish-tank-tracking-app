@@ -296,10 +296,10 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     val anchor: Anchor? = c.rock.anchors["STATION_SHRIMP"]
-    fun sit(c: Ctx) = hangPose(c, anchor, Vec3(52.0, 11.0, 32.0), inverted = false).let { r ->
+    fun sit(c: Ctx) = hangPose(c, anchor, Vec3(38.0, 10.0, 14.0), inverted = false).let { r ->
         Rest(r.pos, Vec3.Y.rejectFrom(r.up!!).normalized(r.heading), r.up, 1)
     }
-    val station = CleaningStation(o, (anchor?.pos ?: Vec3(52.0, 11.0, 32.0)) + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
+    val station = CleaningStation(o, (anchor?.pos ?: Vec3(38.0, 10.0, 14.0)) + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
 
     init {
         c.p.stations += station

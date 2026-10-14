@@ -200,7 +200,7 @@ Positions are the base point on the rock/sand (snap to the nearest surface withi
  {"name":"PERCH_SHELF","type":"PERCH","pos":[48,52,10],"normal":[0,1,0.2]},
  {"name":"PERCH_R9","type":"PERCH","pos":[104,51,6],"normal":[0,1,0]},
  {"name":"PERCH_CORALLINE_LOW","type":"PERCH","pos":[52,10,9],"normal":[0,1,0.6],"note":"hawkfish under the pink overhang near the sand (a_04.jpg)"},
- {"name":"STATION_CLEANER","type":"STATION","pos":[40,14,20],"note":"lane in front of the big cave mouth"},
+ {"name":"STATION_CLEANER","type":"STATION","pos":[38,10,14],"note":"in the big cave mouth under the left shelf, behind the tang's front lane (z 23–37)"},
  {"name":"SHRIMP_LEDGE_L","type":"LEDGE","pos":[40,36,13],"normal":[0,-1,0.3]},
  {"name":"SHRIMP_LEDGE_R","type":"LEDGE","pos":[95,38,11],"normal":[0,-1,0.3]},
  {"name":"HOVER_CARDINAL","type":"HOVER","pos":[26,20,15],"radius":6,"note":"gap between the left pillar and the left stack"},

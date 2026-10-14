@@ -167,9 +167,7 @@ class AiTest {
         var maxDist = 0.0
         sim.advance(3600.0, behaviorDt = 0.1) { maxDist = maxOf(maxDist, goby.pos.distanceTo(mouth)) }
         assertTrue("no sand piles after an hour", sim.sandPiles.isNotEmpty())
-        // resized tank: the cleaning station is ~10 cm from the burrow mouth, and a client's retaliation chase after a
-        // cheating cleaner (PoseForCleaner) can carry the goby ~30 cm out (seed 1: 30.2 cm) before it returns
-        assertTrue("goby strayed $maxDist cm from its burrow", maxDist < 33.0)
+        assertTrue("goby strayed $maxDist cm from its burrow", maxDist < 30.0)
         val night = fullTank(hour = 22.5)
         night.advance(300.0, behaviorDt = 0.1)
         val g = night.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }

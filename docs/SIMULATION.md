@@ -748,7 +748,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
   - Inspection length is lognormal with mean 6.7 s × area^¼.
   - Cheating runs at 0.025/s, or 0.17/s when hunger > 0.6 (S:Pinto11).
   - The rest between bouts is 15–75 s × (1.3 − hunger).
-- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A client still unreachable after 20 s is skipped for 5 min.
+- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A swimmer in a crawl space under a low rock roof (e.g. beneath R9 by the dottyback cave) first slides out sideways to a spot with open water above it, since it cannot climb from where it is. A client still unreachable after 20 s is skipped for 5 min.
 - The shrimp counts approaches every tick (`preTick`, c16).
 
 **Newcomers.** A tailspot added to the tank prospects holes and grazing patches for its first day (c09). Engineer goby adults patrol on about 5 % of nights (07 gap 3).

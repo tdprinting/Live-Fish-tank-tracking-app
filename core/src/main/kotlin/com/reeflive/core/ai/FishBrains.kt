@@ -518,7 +518,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 // Cleaner wrasse (WrasseBrain)
 // =====================================================================================
 class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
-    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(52.0, 11.0, 32.0)), 0.6 * o.collisionLength + 1.0)
+    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(38.0, 10.0, 14.0)), 0.6 * o.collisionLength + 1.0)
     val station = CleaningStation(o, stationPos, isShrimp = false)
 
     init {
