@@ -217,7 +217,18 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun stopTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StopTreatment(kind)) }
     /** Infects a random fish with [disease] (test aid). */
     fun infect(disease: Disease) = sandbox { holder.enqueue(Command.Infect(null, disease)) }
-    fun maintain(task: MaintenanceTask) = holder.enqueue(Command.Maintain(task))
+    fun maintain(task: MaintenanceTask) {
+        holder.enqueue(Command.Maintain(task))
+        // a fresh sock or fresh carbon fits one when none was running (WaterSim.maintain): keep the sandbox's
+        // equipment switches in step with the tank
+        if (mode.value != SimMode.SANDBOX) return
+        val row = when (task) {
+            MaintenanceTask.CHANGE_SOCK -> "eq_sock"
+            MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
+            MaintenanceTask.HARVEST_MACRO -> null
+        }
+        if (row != null) _extras.value = _extras.value + (row to 1.0)
+    }
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
     fun micro(action: MicroAction) = sandbox { holder.enqueue(Command.Micro(action)) }

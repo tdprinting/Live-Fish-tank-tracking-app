@@ -1040,7 +1040,7 @@ class Simulation(
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
         surface.impulse(at.x, at.z, 0.08, 2.5)
-        water.addFeed(grams * kind.nutrientFactor)
+        water.addFeed(grams * kind.nutrientFactor, kind.po4Factor, kind.docFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
