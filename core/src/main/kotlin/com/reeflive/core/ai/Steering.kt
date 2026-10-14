@@ -3,6 +3,7 @@ package com.reeflive.core.ai
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.lerp
 import com.reeflive.core.geom.smoothstep
+import com.reeflive.core.sim.BodyShapes
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Gait
 import com.reeflive.core.sim.Organism
@@ -77,6 +78,9 @@ class Steering(private val c: Ctx) {
         val relax = 4.0 * (1 - sp / (0.6 * max(o.cruiseSpeed, 0.5))).coerceIn(0.0, 1.0) + 0.15
         o.spline.update(o.pos, o.heading, dt, if (o.brainKind == BrainKind.EEL) relax * 0.15 else relax)
         animate(o, intent, dt, sp)
+        // the whole body, not just the snout, stays out of the rock, sand, glass and surface (SIMULATION §4.3)
+        val settle = o.isFish && (intent.kinematic || sp < 0.4 * max(o.cruiseSpeed, 0.5))
+        c.sim.bodies.resolveEnv(o, dt, rockOn = !intent.ignoreRock, settle = settle)
     }
 
     // ---------------------------------------------------------------- swimming
@@ -88,6 +92,12 @@ class Steering(private val c: Ctx) {
         val burst = max(o.burstSpeed, cruise)
         val maxSpeed = if (it.urgency > 0.7) burst else min(burst, max(cruise * 1.4, it.speed))
         val flow = if (o.brainKind == BrainKind.EEL) Vec3.ZERO else c.sim.flow.velocityFast(o.pos)
+        // the snout's stand-off from the rock (0.45 collision length), relaxed on the final approach to a target that
+        // sits on the rock (food lying on it, a graze patch): the mouth reaches it, the body collision keeps the body out
+        var snoutClear = 0.45 * Lc
+        it.target?.let { t ->
+            if (t.distanceTo(o.pos) < 1.5 * L + 4.0) snoutClear = min(snoutClear, max(SNOUT_MIN_CLEAR, rock.sdf.dist(t) - 0.3))
+        }
 
         // ---- desired velocity ----
         var desired = Vec3.ZERO
@@ -122,10 +132,22 @@ class Steering(private val c: Ctx) {
         }
         if (it.separation > 0) {
             var sep = Vec3.ZERO
+            val myTail = tailOf(o)
+            val myHalf = BodyShapes.of(o.species).maxRadius * L
             for (n in c.p.neighbors(o.pos, L * 2.5 + 6)) {
                 if (n === o || !n.isFish) continue
-                val r = 1.2 * (L + n.lengthCm) / 2
-                val d = o.pos - n.pos
+                // personal space between the bodies (not the snouts): ~0.3 BL inside a school, little between mates of
+                // a pair (clowns nestle together in the host), 0.6 BL from other fish
+                val k = when {
+                    n.brainKind != o.brainKind -> PERSONAL_SPACE
+                    o.species.schooling -> PERSONAL_SPACE_SCHOOL
+                    else -> PERSONAL_SPACE_MATE
+                }
+                val space = k * min(L, n.lengthCm)
+                val r = myHalf + BodyShapes.of(n.species).maxRadius * n.lengthCm + space
+                val nTail = tailOf(n)
+                val (s0, t0) = com.reeflive.core.sim.BodyCollision.closestParams(o.pos, myTail, n.pos, nTail)
+                val d = (o.pos + (myTail - o.pos) * s0) - (n.pos + (nTail - n.pos) * t0)
                 val dl = d.length()
                 if (dl in 1e-6..r) sep += d / (dl * dl) * r
             }
@@ -142,11 +164,13 @@ class Steering(private val c: Ctx) {
         var a = Vec3.ZERO
         if (!it.ignoreRock) {
             val look = o.pos + o.vel * 0.4
-            val clearance = 0.6 * Lc + 1.0
+            val clearance = min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
             val d = rock.sdf.dist(look)
             if (d < clearance) a += rock.sdf.gradient(look) * ((clearance - d) * 40)
+            a += feelers(o, it)
         }
         if (!it.allowGlass) a += glassAvoid(o.pos, 0.5 * Lc.coerceAtMost(8.0) + 1)
+        a += floorAvoid(o, it)
         a = a.clampLength(maxAccel * 2)
         val steer = (desired - o.vel) * 3.0
         a += steer.clampLength(max(0.0, maxAccel * 2 - a.length()))
@@ -186,7 +210,7 @@ class Steering(private val c: Ctx) {
         if (sink > 0.0) p -= Vec3.Y * (sink * (1 - effort) * dt)
         // ---- hard resolve ----
         if (!it.ignoreRock) {
-            val minD = 0.45 * Lc
+            val minD = snoutClear
             for (iter in 0 until 4) {
                 val d = rock.sdf.dist(p)
                 if (d >= minD) break
@@ -197,9 +221,11 @@ class Steering(private val c: Ctx) {
             }
         }
         val gm = if (it.allowGlass) 0.6 else (0.25 * L).coerceIn(0.6, 4.0)
-        p = Vec3(p.x.coerceIn(gm, rock.lengthCm - gm), p.y.coerceIn(rock.sandTopCm + max(0.6, 0.2 * L.coerceAtMost(8.0)), rock.waterLevelCm - 0.6), p.z.coerceIn(gm, rock.widthCm - gm))
+        val px = p.x.coerceIn(gm, rock.lengthCm - gm); val pz = p.z.coerceIn(gm, rock.widthCm - gm)
+        // the snout stays just off the sand; the belly and fins are the body collision's (they rest on the sand there)
+        p = Vec3(px, p.y.coerceIn(rock.floorY(px, pz) + SNOUT_FLOOR_CLEAR, rock.waterLevelCm - 0.6), pz)
         // The glass clamp can push back into rock in a tight gap: then hold position (never penetrate).
-        if (!it.ignoreRock && rock.sdf.dist(p) < 0.34 * Lc && rock.sdf.dist(o.pos) >= rock.sdf.dist(p)) { p = o.pos; v = Vec3.ZERO }
+        if (!it.ignoreRock && rock.sdf.dist(p) < snoutClear * (0.34 / 0.45) && rock.sdf.dist(o.pos) >= rock.sdf.dist(p)) { p = o.pos; v = Vec3.ZERO }
         o.vel = v
         o.pos = p
         val upBase = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
@@ -222,7 +248,49 @@ class Steering(private val c: Ctx) {
         fun push(dist: Double, dir: Vec3) { if (dist < margin) a += dir * ((margin - dist) * 30) }
         push(p.x, Vec3.X); push(r.lengthCm - p.x, Vec3.X * -1.0)
         push(p.z, Vec3.Z); push(r.widthCm - p.z, Vec3.Z * -1.0)
-        push(p.y - r.sandTopCm, Vec3.Y); push(r.waterLevelCm - 1 - p.y, Vec3.Y * -1.0)
+        push(p.y - r.floorY(p.x, p.z), Vec3.Y); push(r.waterLevelCm - 1 - p.y, Vec3.Y * -1.0)
+        return a
+    }
+
+    /**
+     * Look-ahead feelers (Reynolds 1999 "containment"): points along the heading out to half a body length plus 0.6 s
+     * of travel, each needing the body's half-depth plus 1 cm of water to the rock. A fish turns away before its
+     * head reaches the rock instead of being stopped by the hard resolve.
+     */
+    private fun feelers(o: Organism, it: SteerIntent): Vec3 {
+        if (it.urgency > 0.95 && it.fleeFrom == null) return Vec3.ZERO
+        val rock = c.rock
+        val L = o.lengthCm
+        val half = BodyShapes.of(o.species).maxRadius * L
+        val need = half + 1.0
+        // arriving at a spot on the rock (a perch, a graze patch): feel only as far as the target
+        val toTarget = it.target?.distanceTo(o.pos) ?: Double.MAX_VALUE
+        val reach = min(0.5 * L + o.vel.length() * 0.6, max(0.0, toTarget - need))
+        if (reach < 0.2) return Vec3.ZERO
+        var a = Vec3.ZERO
+        for (k in FEELER_STEPS) {
+            val q = o.pos + o.heading * (reach * k)
+            val d = rock.sdf.dist(q)
+            if (d < need) a += rock.sdf.gradient(q) * ((need - d) * FEELER_GAIN * (1.2 - 0.6 * k))
+        }
+        return a
+    }
+
+    /** Tail end of [o]'s collision body (its last refresh), or a straight body behind the head before the first. */
+    private fun tailOf(o: Organism): Vec3 = if (o.body.radius > 0) o.body.p[com.reeflive.core.sim.BodyState.N - 1] else o.pos - o.heading * o.lengthCm
+
+    /** Keeps the belly a body's depth off the sand (look-ahead along the heading so a dive levels out). */
+    private fun floorAvoid(o: Organism, it: SteerIntent): Vec3 {
+        // diving to a target on or near the sand (food, a burrow mouth, a resting spot): the hard resolve keeps the belly out
+        it.target?.let { t -> if (t.distanceTo(o.pos) < 1.5 * o.lengthCm + 4.0) return Vec3.ZERO }
+        val r = c.rock
+        val sole = BodyShapes.of(o.species).sole * o.lengthCm
+        var a = Vec3.ZERO
+        for (k in FLOOR_PROBES) {
+            val q = o.pos + o.heading * (k * o.lengthCm) + o.vel * (0.3 * k)
+            val gap = q.y - r.floorY(q.x, q.z) - sole - 0.5
+            if (gap < 0) a += Vec3.Y * (-gap * FEELER_GAIN)
+        }
         return a
     }
 
@@ -287,12 +355,13 @@ class Steering(private val c: Ctx) {
         val d = r.envDist(p)
         if (d > it.surfaceOffset + 3) p -= Vec3.Y * min(d, 2.0 * dt * 10)   // fell off: drop (gravity)
         else p -= envNormal(p) * (d - it.surfaceOffset)
-        p = r.clampToWater(p, 0.2).let { q -> if (q.y < r.sandTopCm + it.surfaceOffset) q.withY(r.sandTopCm + it.surfaceOffset) else q }
+        p = r.clampToWater(p, 0.2).let { q -> val fy = r.floorY(q.x, q.z); if (q.y < fy + it.surfaceOffset) q.withY(fy + it.surfaceOffset) else q }
         o.vel = (p - o.pos) / max(dt, 1e-6)
         o.pos = p
         // leg stride clock for the renderer: one stride ≈ a quarter body length (research 17, INFERENCE),
         // stepping eases in and out so a stop-go pause plants the feet
-        val walkSpeed = o.vel.length()
+        // (along the surface only: the press into it is no travel, and the body collision removes it from vel)
+        val walkSpeed = o.vel.rejectFrom(envNormal(p)).length()
         o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
         o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)
         val nn = envNormal(p)
@@ -440,6 +509,18 @@ class Steering(private val c: Ctx) {
     }
 
     companion object {
+        /** Personal space between bodies, in body lengths of the smaller fish: schoolmates, everyone else (Partridge 1980: 0.3–1 BL), mates of a pair. */
+        const val PERSONAL_SPACE_SCHOOL = 0.3
+        const val PERSONAL_SPACE = 0.6
+        const val PERSONAL_SPACE_MATE = 0.1
+        /** Feeler stations as fractions of the look-ahead reach, and the avoidance gain (cm/s² per cm of intrusion). */
+        private val FEELER_STEPS = doubleArrayOf(0.35, 0.7, 1.0)
+        private val FLOOR_PROBES = doubleArrayOf(0.0, 0.5, 1.0)
+        const val FEELER_GAIN = 30.0
+        /** Closest the snout comes to the rock when it reaches for something lying on it (cm). */
+        const val SNOUT_MIN_CLEAR = 0.2
+        /** Lowest the snout swims over the sand (cm). */
+        const val SNOUT_FLOOR_CLEAR = 0.4
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
         const val C_STAGE1 = 0.12
         const val C_STAGE2 = 0.12

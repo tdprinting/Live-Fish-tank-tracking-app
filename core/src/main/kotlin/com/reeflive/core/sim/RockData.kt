@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.geom.AnalyticSdf
 import com.reeflive.core.geom.Ellipsoid
+import com.reeflive.core.geom.HeightField
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.SdfGrid
 import com.reeflive.core.geom.Tunnel
@@ -13,6 +14,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.min
 
 /** Named point of interest in the rockscape (ASSETS §3.4 anchors.json). */
 data class Anchor(
@@ -72,19 +74,41 @@ class RockData(
     val sandTopCm: Double = 3.0,
     val waterLevelCm: Double = 56.0,
 ) {
+    /**
+     * The drawn sand surface without the animals' digging (tank.glb's sand mesh, rasterized by the app; see
+     * [HeightField.fromGlb]). Null = the sand bed's linear slope. The Simulation hands it to its [SandBed].
+     */
+    var sandBase: HeightField? = null
+
+    /**
+     * Sand surface height at (x, z) the animals stand on: set by the Simulation to its dynamic sand bed
+     * ([SandBed.surfaceY]); null = the flat [sandTopCm] (tests, tools).
+     */
+    @Volatile var floorAt: ((Double, Double) -> Double)? = null
+
+    /**
+     * A copy sharing the rock, anchors and modelled sand ([sandBase]) with its own [floorAt]: each Simulation stands its
+     * animals on its own sand bed (a time-lapse fork must not read its parent's sand). Keep in step with the constructor.
+     */
+    fun forSimulation(): RockData = RockData(sdf, anchors, lengthCm, widthCm, sandTopCm, waterLevelCm).also { it.sandBase = sandBase }
+
+    /** Height of the sand floor (cm) at (x, z). */
+    fun floorY(x: Double, z: Double): Double = floorAt?.invoke(x, z) ?: sandTopCm
+
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
-        sdf.dist(p), p.y - sandTopCm, waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
+        sdf.dist(p), p.y - floorY(p.x, p.z), waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
     )
 
     fun inWater(p: Vec3, margin: Double = 0.0) =
-        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (sandTopCm + margin)..(waterLevelCm - margin)
+        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (floorY(p.x, p.z) + margin)..(waterLevelCm - margin)
 
-    fun clampToWater(p: Vec3, margin: Double): Vec3 = Vec3(
-        p.x.coerceIn(margin, lengthCm - margin),
-        p.y.coerceIn(sandTopCm + margin, waterLevelCm - margin),
-        p.z.coerceIn(margin, widthCm - margin),
-    )
+    fun clampToWater(p: Vec3, margin: Double): Vec3 {
+        val x = p.x.coerceIn(margin, lengthCm - margin)
+        val z = p.z.coerceIn(margin, widthCm - margin)
+        val lo = floorY(x, z) + margin
+        return Vec3(x, p.y.coerceIn(min(lo, waterLevelCm - margin), waterLevelCm - margin), z)
+    }
 
     companion object {
         /** Analytic stand-in for an arbitrary set of spheres (tests). */

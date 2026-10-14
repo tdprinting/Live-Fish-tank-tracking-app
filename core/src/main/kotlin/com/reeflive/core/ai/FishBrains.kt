@@ -549,7 +549,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val dancing = c.t < danceUntil
             val bob = if (dancing) DANCE_BOB_CM * sin(2 * PI * DANCE_HZ * c.t) else 0.0
-            out.seek(stationPos + Vec3(sin(c.t * 0.5) * 1.5, sin(c.t * 0.31) + bob, 0.0), c.o.cruiseSpeed * (if (dancing) 0.9 else 0.5), arrive = if (dancing) 0.8 else 2.0)
+            // back to the station over the rock, not into it: a body that cannot pass through rock needs a way round
+            val spot = stationPos + Vec3(sin(c.t * 0.5) * 1.5, sin(c.t * 0.31) + bob, 0.0)
+            out.seek(if (c.o.pos.distanceTo(stationPos) > 8) c.viaOpenWater(spot) else spot, c.o.cruiseSpeed * (if (dancing) 0.9 else 0.5), arrive = if (dancing) 0.8 else 2.0)
             out.hover = true; out.faceDir = Vec3.Z
             val near = c.p.neighbors(stationPos, 35.0).filter { it.isFish && it !== c.o && it.alive && it.brainKind != BrainKind.EEL }
             val newcomer = near.firstOrNull { it.pos.distanceTo(stationPos) < GREET_CM && it !== greeted }
@@ -660,7 +662,10 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
                     out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
                     // a client wedged in a crevice is worked from the mouth: arriving at the (rock-clamped) approach point counts
-                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0)) {
+                    // (the wrasse's body does not fit into the crevice: held at its mouth a little farther out counts too)
+                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0) ||
+                        (phaseT > 3.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 5.0 && o.vel.length() < 0.3 * o.cruiseSpeed) ||
+                        (phaseT > 8.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 6.0)) {
                         phase = if (wantsTactile(cl, c)) 1 else 2
                         if (phase == 1) encounters.advertised++
                         phaseT = 0.0
@@ -1018,6 +1023,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 // moray strike: a fast lunge (≈ 1 m/s), resolved the moment the jaws reach the prey
                 out.seek(p.pos, STRIKE_SPEED, arrive = 0.2, urgency = 1.0)
                 o.mouth = 1.0
+                o.focusId = p.id   // the jaws may reach the prey's body (BodyCollision.touchAllowed)
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
                     if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
@@ -1027,6 +1033,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                         p.startle = max(p.startle, 0.4)
                     }
                     strikeAt = -1.0
+                    if (o.focusId == p.id) o.focusId = null
                     cooldown = c.t + 15
                     finished = true
                 }

@@ -137,8 +137,16 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
     }
 
-    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it. */
-    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z)
+    /**
+     * The modelled (undisturbed) sand surface: the drawn sand mesh rasterized ([com.reeflive.core.sim.RockData.sandBase],
+     * set by the app from tank.glb) when there is one, else the linear front-to-back slope [baseY].
+     */
+    var base: com.reeflive.core.geom.HeightField? = null
+
+    fun modelY(x: Double, z: Double): Double = base?.at(x, z) ?: baseY(z)
+
+    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it (static.vert lifts the mesh the same way). */
+    fun surfaceY(x: Double, z: Double): Double = modelY(x, z) + heightAt(x, z)
 
     fun freshAt(x: Double, z: Double): Double = fresh[index(x, z)].toDouble()
     fun detritusAt(x: Double, z: Double): Double = detritus[index(x, z)].toDouble()
@@ -461,7 +469,7 @@ class SandWork(private val sand: SandBed, private val rock: RockData) {
             val t = tracks.getOrPut(o.id) { Track(p.x, p.z, o.posture, 0.0, 0) }
             val dx = p.x - t.x; val dz = p.z - t.z
             val moved = sqrt(dx * dx + dz * dz)
-            val onSand = p.y < rock.sandTopCm + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
+            val onSand = p.y < rock.floorY(p.x, p.z) + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
             if (moved > 6.0) { t.x = p.x; t.z = p.z; t.acc = 0.0; t.posture = o.posture; continue }   // placed, not walked
             if (kind == BrainKind.NASSARIUS && onSand && (t.posture == 5) != (o.posture == 5)) {
                 // burying or emerging: a small crater, the spoil around it and a little puff

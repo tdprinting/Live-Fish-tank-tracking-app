@@ -87,8 +87,9 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             if (!f.kind.suspended) {
                 if (rock.sdf.dist(p) < 0.3) {
                     p = rock.sdf.project(p, 0.3); f.settled = true; f.vel = Vec3.ZERO
-                } else if (p.y <= rock.sandTopCm + 0.35) {
-                    p = p.withY(rock.sandTopCm + 0.3); f.settled = true; f.vel = Vec3.ZERO
+                } else if (p.y <= rock.floorY(p.x, p.z) + 0.35) {
+                    // settles on the sand that is there (the drawn bed plus the animals' digging), not inside it
+                    p = p.withY(rock.floorY(p.x, p.z) + 0.3); f.settled = true; f.vel = Vec3.ZERO
                 }
             }
             f.pos = p

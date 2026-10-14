@@ -36,7 +36,12 @@ class AiTest {
         assertTrue("clowns near host ${"%.3f".format(frac)}", frac >= 0.95)
     }
 
-    /** SIMULATION §8.7: every tick, swimmers keep sdf > 0.3 L (collision length); attached animals sdf ≥ 0. */
+    /**
+     * SIMULATION §8.7: every tick no snout is in the rock: swimmers sdf > 0, attached animals sdf ≥ −1 mm (the
+     * baked grid's interpolation under a crawler's sole). The 0.3 L stand-off this test used to ask of swimmers is
+     * gone: the whole body now collides (BodyCollisionTest checks every body surface), so a fish may put its mouth to
+     * food lying on the rock or to a client resting against it.
+     */
     @Test
     fun noRockPenetration() {
         for ((seed, hour) in listOf(1L to 9.5, 2L to 12.0, 3L to 21.0)) {
@@ -51,7 +56,7 @@ class AiTest {
                 for (o in sim.organisms) {
                     if (!o.alive) continue
                     val d = sim.rock.sdf.dist(o.pos)
-                    val ok = if (o.attached) d >= -0.05 else d > 0.3 * o.collisionLength
+                    val ok = if (o.attached) d >= -0.1 else d > 0.0
                     if (!ok) { fails++; if (worst.isEmpty()) worst = "${o.nickname} ${o.behaviorName} sdf=${"%.2f".format(d)} at ${o.pos} attached=${o.attached} tick=$ticks" }
                 }
             }

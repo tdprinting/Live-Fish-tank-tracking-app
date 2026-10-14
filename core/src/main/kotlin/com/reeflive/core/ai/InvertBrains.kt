@@ -54,7 +54,15 @@ fun sandSpot(c: Ctx, xr: ClosedFloatingPointRange<Double>, zr: ClosedFloatingPoi
     return p
 }
 
-fun surfaceOffset(c: Ctx) = 0.5 * c.o.species.depthRatio * c.L + 0.2
+/**
+ * Height of the crawling animal's spine point above the surface it walks on: the model's sole (legs, foot) sits on
+ * the surface ([BodyShapes]: 0 for snails, hermits, stars and the crab, whose models stand on their spine point; the
+ * shrimp stand on their legs about a quarter body length below it), plus a hair of clearance.
+ */
+fun surfaceOffset(c: Ctx) = com.reeflive.core.sim.BodyShapes.of(c.o.species).sole * c.L + CRAWL_SKIN_CM
+
+/** Gap between a crawler's sole and the surface (cm). */
+const val CRAWL_SKIN_CM = 0.08
 
 /** Wander along surfaces around a centre. */
 open class CrawlWander(val b: SpeciesBrain, val centre: (Ctx) -> Vec3, val radius: Double, val weight: (Ctx) -> Double, label: String = "Wandering") : Behavior("crawl", label) {
@@ -519,7 +527,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     /** The disc keeps whatever heading it has (a brittle star has no front to turn). */
     private fun flatHeading() = o.heading.horizontal().normalized(Vec3.X)
 
-    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.sandTopCm + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
+    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.floorY(home.x, home.z) + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
 
     /** The open side of the hide (most clearance, a little toward the front glass), where the day arm tips poke out. */
     fun caveMouth(c: Ctx): Vec3 = mouthDir ?: run {
@@ -818,7 +826,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val p = if (buryAt == Vec3.ZERO) o.homePos else buryAt
-        return Rest(Vec3(p.x, c.rock.sandTopCm + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
+        return Rest(Vec3(p.x, c.rock.floorY(p.x, p.z) + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
     }
 
     override fun initialPlace(c: Ctx) {
@@ -852,7 +860,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
                 val tilt = Math.toRadians(SIPHON_TILT_DEG)
                 val head = h * kotlin.math.cos(tilt) + Vec3.Y * kotlin.math.sin(tilt)
                 val up = h * -kotlin.math.sin(tilt) + Vec3.Y * kotlin.math.cos(tilt)
-                out.rest(Rest(r.pos.withY(c.rock.sandTopCm - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
+                out.rest(Rest(r.pos.withY(c.rock.floorY(r.pos.x, r.pos.z) - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
             }
             c.o.extension = 0.6 + 0.2 * sin(c.t * 0.5 + c.o.appendagePhase)   // siphon
         }
@@ -1238,7 +1246,10 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val b = body ?: run { finished = true; return }
             if (b.alive || b !in c.sim.organisms) { finished = true; return }
             c.o.focusId = b.id
-            if (c.o.pos.distanceTo(b.pos) > 2.0) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
+            // the remains are the whole body, not the snout point (a carcass lies on its side, the body off the sand),
+            // and the claws reach a little past the carapace
+            val reach = (0 until com.reeflive.core.sim.BodyState.N).minOf { b.body.p[it].distanceTo(c.o.pos) }
+            if (reach > 2.0 + 0.3 * c.L) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
             c.o.appendagePhase += c.dt * 6
             legs.pick = 1.0

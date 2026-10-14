@@ -5,6 +5,7 @@ import com.reeflive.app.data.repo.Clock
 import com.reeflive.app.data.repo.LightScheduleRepository
 import com.reeflive.app.data.repo.LivestockRepository
 import com.reeflive.app.data.repo.MeasurementRepository
+import com.reeflive.core.geom.HeightField
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.RealityInit
@@ -231,7 +232,14 @@ class SimulationHolder(
             rock = runCatching {
                 val am = assets ?: error("no assets")
                 RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() })
-            }.getOrElse { RockData.defaultTank() }
+            }.getOrElse { RockData.defaultTank() }.also { r ->
+                // the animals stand on the sand that is drawn: tank.glb's sand mesh (slope, mounds at the rock feet, lanes,
+                // spoil fan, rubble), rasterized once; the sim's dynamic sand bed adds its digging on top like static.vert
+                r.sandBase = runCatching {
+                    val am = assets ?: error("no assets")
+                    HeightField.fromGlb(am.open("models/tank.glb").use { it.readBytes() }, r.lengthCm, r.widthCm)
+                }.getOrNull()
+            }
         }
     }
 

@@ -57,7 +57,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Where the excavated sand comes from: the dig zone at the burrow mouth (a pit in the sand bed, SIMULATION §16). */
     val digPoint: Vec3 get() = c.rock.anchors["SAND_GOBY_DIG"]?.pos ?: outside(1.0)
 
-    fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.sandTopCm + 1.0), mouth.z) + outDir * k
+    fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.floorY(mouth.x, mouth.z) + 1.0), mouth.z) + outDir * k
     fun inside(k: Double) = mouth + inDir * k
 
     /** Body trailing back down the tunnel from the head. */
@@ -89,7 +89,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             val night = c.p.night
-            if (o.posture != 3 && o.pos.distanceTo(mouth) > 4) {
+            if (o.posture != 3 && o.pos.distanceTo(outside(0.0)) > 4) {
                 out.seek(outside(1.0), o.cruiseSpeed, arrive = 2.0, urgency = 0.5)
                 return
             }

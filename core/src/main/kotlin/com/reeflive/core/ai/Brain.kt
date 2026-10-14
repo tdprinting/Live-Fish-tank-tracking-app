@@ -281,6 +281,8 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
             val m = safe(mid)
             if (sdf.segmentClear(o.pos, m, 0.5) && sdf.segmentClear(m, above, 0.5)) return m
         }
+        // already at that height and still blocked: the climb point is the swimmer itself, so climb higher
+        if (up.distanceTo(o.pos) < 1.0) continue
         return up
     }
     // under an overhang: a doorway beside the goal that the swimmer can see

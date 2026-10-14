@@ -27,20 +27,22 @@ import kotlin.math.min
 class Simulation(
     config: TankConfig,
     val species: SpeciesCatalog,
-    val rock: RockData,
+    rock: RockData,
     seed: Long = config.seed,
     startTimeSec: Double = 12 * 3600.0,
     initialWater: WaterState = WaterState(volumeL = config.systemLiters),
     livestock: List<LivestockSeed> = emptyList(),
     val lights: LightSchedule = LightSchedule(),
 ) {
+    /** This simulation's view of the rockscape: shared rock and anchors, the floor is its own [sand] bed. */
+    val rock: RockData = rock.forSimulation()
     var config: TankConfig = config; private set
     val rng = Rng(seed)
     var water = WaterSim(config, initialWater); private set
     val organisms = ArrayList<Organism>()
     val corals = ArrayList<Coral>()
-    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
-    val food = FoodSystem(rock, flow, rng.fork(7))
+    val flow = FlowField(config.powerheads, this.rock.sdf, config.lengthCm, config.waterLevelCm)
+    val food = FoodSystem(this.rock, flow, rng.fork(7))
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
     val repro = Reproduction(this)
@@ -121,9 +123,14 @@ class Simulation(
     val sandPiles = ArrayList<SandPile>()
 
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
-    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
+    val sand = SandBed(this.rock.lengthCm, this.rock.widthCm, this.rock.sandTopCm, seed).also { sb ->
+        sb.base = this.rock.sandBase
+        this.rock.floorAt = sb::surfaceY
+    }
+    /** Body-vs-geometry and body-vs-body collision (SIMULATION §4.3). */
+    val bodies = BodyCollision(this.rock)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
-    val sandWork = SandWork(sand, rock)
+    val sandWork = SandWork(sand, this.rock)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
@@ -148,13 +155,13 @@ class Simulation(
 
     // ---- water physics (SIMULATION §9.7): optional Navier–Stokes flow + surface waves ----
     var fluid: com.reeflive.core.geom.FluidSim? = null; private set
-    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm)
+    val surface = com.reeflive.core.geom.WaterSurface(this.rock.lengthCm, this.rock.widthCm)
     private var fluidAcc = 0.0
     private var lastFlowGridAt = -1e9
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
     /** Parameter id the fluid's dose tracer currently represents. */
     var doseTracerParam: String? = null; private set
-    val heaterPos = Vec3(rock.lengthCm - 1.5, 30.0, 8.0)
+    val heaterPos = Vec3(this.rock.lengthCm - 1.5, 30.0, 8.0)
 
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
@@ -403,6 +410,8 @@ class Simulation(
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
         }
+        // bodies apart: animal against animal, then each moved body out of the rock and sand again
+        bodies.resolvePairs(organisms, perception.stations, dt)
         sandWork.step(organisms)
     }
 
@@ -420,11 +429,12 @@ class Simulation(
             a.steering.apply(a.intent)
             o.attached = true
         }
+        bodies.resolvePairs(organisms, perception.stations, dt)
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
         val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
-        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.sandTopCm + 0.6
+        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.floorY(o.pos.x, o.pos.z) + 0.6
         val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
         val vy = if (buoyant) 1.2 else -2.0
         var p = o.pos + (f + Vec3(0.0, vy, 0.0)) * dt
@@ -436,6 +446,8 @@ class Simulation(
         o.vel = Vec3.ZERO; o.amp = 0.0; o.tailHz = 0.0
         o.spline.override = null
         o.spline.update(o.pos, o.heading, dt, 2.0)
+        // a carcass rests on the sand or the rock, never in it (a floating one breaks the surface)
+        bodies.resolveEnv(o, dt, surfaceOn = !buoyant)
     }
 
     // ============================================================== chemistry / health tick

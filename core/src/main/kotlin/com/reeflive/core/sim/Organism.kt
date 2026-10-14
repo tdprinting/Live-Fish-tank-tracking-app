@@ -188,6 +188,8 @@ class Organism(
 
     /** The brittle star's disc never bends or turns with its path (its arms do the steering), so it is rigid too. */
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
+    /** Collision body (elliptic-section capsule chain along [spline], [BodyShapes]); refreshed by [BodyCollision]. */
+    val body = BodyState()
     lateinit var brain: UtilityBrain
     /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
     val behaviorName: String get() = when {
