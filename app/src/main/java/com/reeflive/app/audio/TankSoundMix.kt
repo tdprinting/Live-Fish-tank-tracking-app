@@ -28,10 +28,12 @@ object TankSoundMix {
     /** Light intensity (0..1.5 in the snapshot) at and above which the ambience is at full daytime level. */
     const val DAY_LIGHT = 0.5f
 
-    private const val FLOW_BASE = 0.45f
-    private const val HUM_BASE = 0.08f
-    private const val HOB_BASE = 0.40f
-    private const val BUBBLES_BASE = 0.30f
+    // a calm room-tone bed under the cues: the water should be felt more than heard (Tee 2026-10-14: the old mix was
+    // "scratchy, loud and overpowering")
+    private const val FLOW_BASE = 0.20f
+    private const val HUM_BASE = 0.05f
+    private const val HOB_BASE = 0.10f
+    private const val BUBBLES_BASE = 0.16f
 
     /**
      * Ambience for the current sim state.
