@@ -236,6 +236,8 @@ class Steering(private val c: Ctx) {
         if (it.posture !in 3..5) {
             val d = c.rock.sdf.dist(np)
             if (d < 0.1) np += c.rock.sdf.gradient(np).normalized(Vec3.Y) * (0.1 - d)
+            // one gradient step is not enough in a thin wedge of rock (a hop arc cutting a corner)
+            if (d < 0.1 && c.rock.sdf.dist(np) < 0.0) np = c.rock.sdf.project(np, 0.1)
         }
         o.vel = (np - o.pos) / max(dt, 1e-6)
         o.pos = np

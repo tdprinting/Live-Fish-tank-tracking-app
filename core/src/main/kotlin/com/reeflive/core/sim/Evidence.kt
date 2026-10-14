@@ -104,6 +104,12 @@ object EvidenceLedger {
         EvidenceEntry("valenciennea_puellaris", "starves on a young or small sand bed", "prey index", S, "16 §2 aquariadise (direction); rates D"),
         EvidenceEntry("valenciennea_puellaris", "sand on low corals", "puff within 7 cm, coral < 8 cm over the sand", S, "16 §2 aquariadise, aquariumsource (direction); distances D"),
         EvidenceEntry("valenciennea_puellaris", "DiamondGobyBrain.SIFT_YIELD_MIN", "0.3 min per mouthful at prey index 1", D, "16 §4", "condition over 3 weeks on a young vs mature bed"),
+        // ------------------------------------------------------------ leopard wrasse (research video fish_leopard_wrasse)
+        EvidenceEntry("macropharyngodon_bipartitus", "sleeps buried in sand; dives when scared", "behaviour", S, "fish_leopard_wrasse S1 Seatizens, S2 fishprofiles, S4 Fenner TFH"),
+        EvidenceEntry("macropharyngodon_bipartitus", "dive kinematics", "head-first, 1.05-3.06 s", A, "fish_leopard_wrasse S6 Halichoeres bivittatus (SICB P2-191)"),
+        EvidenceEntry("macropharyngodon_bipartitus", "LeopardWrasseBrain.EMERGE_LAG", "15-60 min after lights-on", D, "fish_leopard_wrasse S7 (H. trimaculatus, direction only)", "minutes from lights-on to the wrasse showing"),
+        EvidenceEntry("macropharyngodon_bipartitus", "newcomer stays buried", "1-4 days", D, "fish_leopard_wrasse S4 Fenner TFH ('for days')", "days to first sighting after adding one"),
+        EvidenceEntry("macropharyngodon_bipartitus", "LeopardWrasseBrain.PICK rate and yield", "10-20 picks/min; 0.17 min per pick at prey index 1", D, "fish_leopard_wrasse H1 (owner clip), rate not measured", "picks per minute counted on video"),
         EvidenceEntry("euprymna_berryi", "buried by day, eyes exposed; hunts at night", "behaviour", S, "cephalopod_squid §5 Jolly 2022, Hanlon 1997, Shears 1988"),
         EvidenceEntry("euprymna_berryi", "backward jet escape with inking", "behaviour", S, "cephalopod_squid §5 Hanlon 1997 (paralarvae)"),
         EvidenceEntry("euprymna_berryi", "light organ output follows downwelling light; symbionts vented at dawn", "glow, 90 % vented", S, "cephalopod_squid §5 Jones & Nishiguchi 2004, Nyholm & McFall-Ngai 2021"),

@@ -695,5 +695,109 @@
   "b": "valenciennea_puellaris",
   "risk": "M",
   "note": "Unpaired diamond gobies fight; a mated pair added together shares a burrow"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "No overlap: the clowns stay at their host"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "The tang may push it off food; otherwise no conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Peaceful tankmates"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse cleans the leopard; no rivalry between the two genera"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish may chase a newly added leopard wrasse into the sand",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "salarias_fasciatus",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "ecsenius_stigmatura",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "Dottyback harasses a newcomer; add the leopard first where possible",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "valenciennea_puellaris",
+  "risk": "L",
+  "note": "Both work the sand fauna; the goby's sifting can disturb the wrasse's sleeping spot"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "lysmata_amboinensis",
+  "risk": "L",
+  "note": "Shrimp may clean the wrasse"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "nassarius_sp",
+  "risk": "L",
+  "note": "May pick at tiny snails, not adult nassarius"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "lithopoma_tectum",
+  "risk": "L",
+  "note": "Eats only tiny snails; adults safe"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "asterina_sp",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "sabellastarte_sp",
+  "risk": "L",
+  "note": "No conflict"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "macropharyngodon_bipartitus",
+  "risk": "M",
+  "note": "Protogynous: two males fight; one per tank in most aquaria"
  }
 ]

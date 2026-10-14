@@ -87,17 +87,15 @@
       "forms": {
         "juvenile": "textures/stages/diamond_goby_juvenile.png"
       }
+    },
+    "models/leopard_wrasse.glb": {
+      "species": "macropharyngodon_bipartitus",
+      "base": "female",
+      "forms": {
+        "juvenile": "textures/stages/leopard_wrasse_juvenile.png",
+        "male": "textures/stages/leopard_wrasse_male.png"
+      }
     }
   },
-  "pending": {
-    "leopard_wrasse": {
-      "species": "macropharyngodon_bipartitus",
-      "forms": [
-        "female",
-        "juvenile",
-        "male"
-      ],
-      "todo": "model not built yet"
-    }
-  }
+  "pending": {}
 }

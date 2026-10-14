@@ -124,13 +124,13 @@ class SandBedTest {
         return sim
     }
 
-    @Test fun diamondGobyIsASandboxSpeciesWithItsOwnBrain() {
+    @Test fun diamondGobyHasItsOwnBrainAndIsInTheOwnersTank() {
         val cat = SpeciesCatalog.fromClasspath(listOf(diamond))
         assertEquals(BrainKind.DIAMOND_GOBY, cat[diamond].brainKind)
         assertEquals("models/diamond_goby.glb", cat[diamond].model)
         assertTrue(cat[diamond].maxLengthCm in 14.0..18.0)
         assertTrue(Stocking.entry(diamond) != null)
-        assertTrue("not in the owner's tank", DefaultStock.all.none { it.speciesId == diamond })
+        assertTrue("in the owner's tank (2026-10)", DefaultStock.all.count { it.speciesId == diamond } == 1)
         assertTrue(compatibilityWarnings(diamond, emptyList(), 110.0).any { it.code == "sand_sifter_tank_size" })
         assertTrue(compatibilityWarnings(diamond, listOf(diamond, diamond), 400.0).any { it.code == "diamond_goby_pair" })
         assertTrue(compatibilityWarnings(diamond, listOf(diamond), 400.0).none { it.code == "diamond_goby_pair" })

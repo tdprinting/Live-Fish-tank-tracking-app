@@ -79,7 +79,7 @@ object HeatModel {
         BrainKind.ASTREA -> TURBO_SNAIL
         BrainKind.TANG -> TANG
         BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE -> CLEANER_WRASSE
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH

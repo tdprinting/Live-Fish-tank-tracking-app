@@ -14,7 +14,8 @@ import kotlin.math.abs
 class LifeStagesTest {
     private val prod = SpeciesCatalog.fromClasspath(
         listOf("amphiprion_ocellaris", "paracanthurus_hepatus", "sphaeramia_nematoptera", "labroides_dimidiatus", "pholidichthys_leucotaenia",
-            "cirrhitichthys_falco", "salarias_fasciatus", "ecsenius_stigmatura", "pseudochromis_indigo", "valenciennea_puellaris"),
+            "cirrhitichthys_falco", "salarias_fasciatus", "ecsenius_stigmatura", "pseudochromis_indigo", "valenciennea_puellaris",
+            "macropharyngodon_bipartitus"),
     )
 
     private fun org(sid: String, cm: Double, id: String = "x", role: String? = null, cat: SpeciesCatalog = prod) =
@@ -39,10 +40,13 @@ class LifeStagesTest {
         assertEquals(SexSystem.PROTOGYNOUS, prod["labroides_dimidiatus"].lifeStages!!.system)
         assertEquals(SexSystem.UNKNOWN, prod["pholidichthys_leucotaenia"].lifeStages!!.system)
         assertEquals(SexSystem.GONOCHORISTIC, prod["paracanthurus_hepatus"].lifeStages!!.system)
-        // the leopard wrasse sheet is not on main yet: its spec comes from the pending table
-        val leo = LifeStageSpec.of(SimSpecies("macropharyngodon_bipartitus", maxLengthCm = 13.0))
+        // blue star leopard wrasse: juvenile, initial-phase female from 4 cm, terminal male by a 14-day change
+        val leo = prod["macropharyngodon_bipartitus"].lifeStages!!
         assertEquals("male", leo.maleForm)
         assertEquals(SexSystem.PROTOGYNOUS, leo.system)
+        assertEquals("female", leo.stageAt(8.5).formName)
+        assertEquals("juvenile", leo.stageAt(3.0).id)
+        assertEquals(14.0, leo.sexChangeDays, 0.0)
     }
 
     @Test

@@ -92,24 +92,10 @@ data class LifeStageSpec(
         )
 
         /**
-         * Specs for species whose sheet is not on main yet. TODO(life-stages): the blue star leopard wrasse sheet
-         * (`macropharyngodon_bipartitus.json`, branch claude/leopard-goby) should carry this block itself; once it
-         * does, this entry is only a fallback. Its stage textures (juvenile / initial female / terminal male) are
-         * painted by `tools/blender/life_stages.py` once `models/leopard_wrasse.glb` exists (see `PENDING_MODELS`).
+         * Specs for species whose sheet does not carry a `lifeStages` block yet (none at present: the blue star leopard
+         * wrasse sheet now carries its own, docs/research/life_stages.md §10).
          */
-        val PENDING: Map<String, LifeStageSpec> = mapOf(
-            "macropharyngodon_bipartitus" to LifeStageSpec(
-                stages = listOf(
-                    StageSpec("juvenile", 0.0, label = "Juvenile"),
-                    StageSpec("initial", 4.0, form = "female", label = "Initial phase"),
-                ),
-                blendCm = 1.5,
-                sexSystem = "PROTOGYNOUS",
-                maturityCm = 6.0,
-                sexChangeDays = 14.0,
-                maleForm = "male",
-            ),
-        )
+        val PENDING: Map<String, LifeStageSpec> = emptyMap()
 
         fun of(sp: SimSpecies): LifeStageSpec = sp.lifeStages ?: PENDING[sp.id] ?: generic(sp)
     }

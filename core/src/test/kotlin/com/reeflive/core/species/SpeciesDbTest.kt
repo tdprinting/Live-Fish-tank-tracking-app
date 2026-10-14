@@ -14,11 +14,11 @@ class SpeciesDbTest {
     @Test
     fun loadsEverySheet() {
         // 10 fish species (9 kinds incl. a clown pair), 9 inverts, 6 corals, 1 macroalga per Tee's confirmed list,
-        // plus the diamond goby (sandbox "Add life" only, research 16) and the hairy mushroom the clowns host,
-        // plus 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger leather, elephant ear),
-        // plus the bobtail squid (sandbox only, research cephalopod_squid).
-        assertEquals(33, db.size)
-        assertEquals(10, db.all.count { it.kind == SpeciesKind.FISH })
+        // plus the diamond goby (research 16) and blue star leopard wrasse (both added to the tank 2026-10), the
+        // hairy mushroom the clowns host, 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger
+        // leather, elephant ear), and the bobtail squid (sandbox only, research cephalopod_squid).
+        assertEquals(34, db.size)
+        assertEquals(11, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(11, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(11, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
@@ -45,7 +45,7 @@ class SpeciesDbTest {
         val shipped = setOf(
             "algae_tufts", "asterina", "astrea", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
-            "kenya", "lawnmower_blenny", "macro_red", "mushroom", "mushroom_hairy", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
+            "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {

@@ -199,8 +199,15 @@ class Organism(
 
     val massG: Double get() = ChemFns.massGrams(lengthCm, species.massCoeff)
     val isFish: Boolean get() = brainKind.isFish
-    /** Collision length: real BL, capped at 6 cm for eels so the clearance follows body girth, not length (SIMULATION §8.7). */
-    val collisionLength: Double get() = when (brainKind) { BrainKind.EEL -> lengthCm.coerceAtMost(6.0); BrainKind.ENGINEER_GOBY -> lengthCm.coerceAtMost(3.0); else -> lengthCm }
+    /**
+     * Collision length: real BL, capped at 6 cm for eels so the clearance follows body girth, not length (SIMULATION §8.7);
+     * the burrowing gobies are capped at 3 cm so they can reach their burrow mouth under the rock.
+     */
+    val collisionLength: Double get() = when (brainKind) {
+        BrainKind.EEL -> lengthCm.coerceAtMost(6.0)
+        BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY -> lengthCm.coerceAtMost(3.0)
+        else -> lengthCm
+    }
     /** Per-species gait and kinematics (SIMULATION §14). */
     val motion: MotionProfile = MotionProfiles.of(brainKind)
     /**

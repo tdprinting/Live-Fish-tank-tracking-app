@@ -23,7 +23,13 @@ import org.junit.Test
 class RealismAcceptanceTest {
 
     // ------------------------------------------------------------------ helpers
-    private fun tank(stock: List<LivestockSeed> = DefaultStock.all, seed: Long = 1L, hour: Double = 10.5) =
+    /**
+     * The 06 acceptance numbers were calibrated on the owner's stock before the diamond goby and the leopard wrasse
+     * joined it (research video fish_diamond_goby, fish_leopard_wrasse); those two have their own tests.
+     */
+    private val calibratedStock = DefaultStock.all.filter { it.id !in setOf("diamond_goby", "leopard_wrasse") }
+
+    private fun tank(stock: List<LivestockSeed> = calibratedStock, seed: Long = 1L, hour: Double = 10.5) =
         TestTank.sim(stock, seed = seed, startHour = hour)
 
     private fun Simulation.org(kind: BrainKind) = organisms.first { it.brainKind == kind }
@@ -45,7 +51,7 @@ class RealismAcceptanceTest {
         return events
     }
 
-    private fun stockWithout(vararg ids: String) = DefaultStock.all.filter { it.id !in ids }
+    private fun stockWithout(vararg ids: String) = calibratedStock.filter { it.id !in ids }
 
     /**
      * The 06 heat checks (#22, #25) are about the stress filters and the aggression rule in a tank with
