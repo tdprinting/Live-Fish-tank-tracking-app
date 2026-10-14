@@ -537,7 +537,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant) ?: continue
                 val lod1 = ModelRegistry.lod1(path)
                 val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
-                fishUniforms(pf, r, m.rigid)
+                fishUniforms(pf, r, m.rigid, m.limbPivots)
                 for (part in m.parts) {
                     if (part.kind != MaterialKind.FISH_SKIN) continue
                     val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }

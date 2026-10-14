@@ -1340,6 +1340,16 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
   - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It takes a detour when stuck, tucks on arrival and counts `darts`.
   - `NightGrab` and the `crab_predation` sandbox toggle are unchanged.
 
+### 19.5 Hermit crab legs, chelae and shell (`HermitLegs`, research [hermit_crab_motion](research/hermit_crab_motion.md))
+
+- **Rig.** `LimbRig.forKind(HERMIT)` is a `HermitLegs`; `motionMode` 5. Every part of the model (shell, shield, eyestalks, limbs) carries its limb index in `COLOR_0.b`, and `fish.vert` `hermitLimb` poses it about `extras.limbPivots`.
+- **Legs** (k = 2 pair + (0 left, 1 right), pair 0 = P2). Forward walking in diagonal pairs: left P2 steps with right P3, half a cycle against the other two, with a 0.08-cycle lag from P2 to P3. Stride = 0.3 shell lengths, 0.8–3.5 Hz. The pose is (phase, fore-aft stroke rad, foot lift, withdrawal); the foot swings forward lifted in the first 40 % of the cycle and pushes back planted in the rest.
+- **Chelae 4/5** (pick phase, pick, walking support, withdrawal): alternate strokes to the mouth at `PICK_HZ` 1.2 Hz each while the brain's `pick` is set (`Pick` at its spot: 1; `Scavenge` once slowed: 0.8) or `mouth` is up.
+- **Shell 6**: rolls ±0.1 rad once per stride and bobs twice per stride while walking.
+- **Shield and eyestalks 7**: eyestalks scan out of step; the shield bobs with the stride. **Antennae 8** sweep (faster while `searching`), **antennules 9** flick at 2.5 Hz in 1–2.5 s bursts every 2–6 s, nonstop while following a scent.
+- **Withdrawal.** `retract` follows 1 − `Organism.extension` (Retreat sets 0): in at 12/s (≈ 0.15 s), out at 0.35/s. Eyestalks and antennae come out first, then the chelae, the walking legs last. In the shader every part but the shell shrinks toward `limbPivots[7]`, just inside the aperture; the left chela stays at the opening.
+- **Tests.** `ai/HermitLegsTest.kt`: diagonal pairs and shell roll; snaps in within 0.25 s and comes out eyes first; alternating claw strokes while picking in the sim.
+
 ### 19.4 Tests
 
 `ai/CrawlerTest.kt` has 8 tests:
