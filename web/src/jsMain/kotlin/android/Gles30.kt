@@ -219,6 +219,10 @@ object GLES30 {
     fun glDeleteRenderbuffers(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteRenderbuffer(it) }
     fun glBindRenderbuffer(t: Int, id: Int) = gl.bindRenderbuffer(t, Names.get(id))
     fun glRenderbufferStorageMultisample(t: Int, samples: Int, fmt: Int, w: Int, h: Int) = gl.renderbufferStorageMultisample(t, samples, fmt, w, h)
+    fun glInvalidateFramebuffer(t: Int, n: Int, atts: IntArray, off: Int) {
+        val a = js("[]"); for (i in 0 until n) a.push(atts[off + i])
+        gl.invalidateFramebuffer(t, a)
+    }
     fun glBlitFramebuffer(sx0: Int, sy0: Int, sx1: Int, sy1: Int, dx0: Int, dy0: Int, dx1: Int, dy1: Int, mask: Int, filter: Int) =
         gl.blitFramebuffer(sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1, mask, filter)
 
