@@ -84,7 +84,7 @@ class SupplyShelfTest {
         val proj = TankProjection()
         proj.publish(cam.viewProj, cam.proj, 1920, 1080)
         val px = FloatArray(3)
-        assertTrue(proj.project(30f, 20f, 33.8f, px))
+        assertTrue(proj.project(30f, 20f, com.reeflive.core.sim.TankDims.DEPTH_F + 0.8f, px))  // the front glass, as glassPointAt uses
         val out = FloatArray(2)
         assertTrue(glassPointAt(proj, px[0], px[1], out))
         assertEquals(30f, out[0], 0.2f); assertEquals(20f, out[1], 0.2f)
