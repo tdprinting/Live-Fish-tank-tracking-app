@@ -131,7 +131,11 @@ class RealismAcceptanceTest {
     fun c02_hostDefenceSensitisation() {
         var lat1 = 0.0; var lat3 = 0.0; var nLat = 0
         var bouts1 = 0; var bouts3 = 0
-        for (seed in 1L..10L) {
+        // pooled over 60 seeds: the claim (sensitisation shortens the latency) is about the mean. The clownF_host hourly
+        // token bucket (burst 5, 20/h) blocks the third entry whenever entries 1 + 2 happen to produce >= 6 bouts, so a
+        // 10-seed draw swings widely (latency ratio 0.30 on main's layout, 0.47 on the 48 x 18 in tank with identical
+        // per-roll odds). Pooled over seeds 1-60 main gives 0.23 and the resized tank 0.33 (bouts 170 vs 42, 161 vs 73).
+        for (seed in 1L..60L) {
             val sim = tank(stockWithout("tang", "wrasse", "cardinal", "hawk", "lawnmower", "tailspot", "goby"), seed = seed)
             val dotty = sim.org(BrainKind.DOTTYBACK)
             val female = sim.organisms.first { it.brainKind == BrainKind.CLOWN && it.role == "FEMALE" }
