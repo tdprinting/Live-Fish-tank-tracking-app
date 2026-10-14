@@ -101,9 +101,23 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     private val sand: SandBed get() = c.sim.sand
 
     /** Hover height of the head over the sand at (x, z). */
-    private fun hoverY(x: Double, z: Double) = sand.surfaceY(x, z) + 0.5 * o.species.depthRatio * o.lengthCm + 0.2
+    /** Belly height over the sand at a head position (x, z): the highest bed under the body (the mounds it dumps), not just under the head. */
+    private fun hoverY(x: Double, z: Double): Double {
+        val h = horizontalHeading(o.heading, Vec3.X)
+        var g = sand.surfaceY(x, z)
+        for (k in 1..4) { val f = o.lengthCm * k / 4.0; g = max(g, sand.surfaceY(x - h.x * f, z - h.z * f)) }
+        return g + 0.5 * o.species.depthRatio * o.lengthCm + 0.2
+    }
 
     /** Sifting at the rock foot and lying in the burrow under it, the fish is kept a few mm off the rock face (the burrow is in the sand). */
+    /** [p] (the head, facing [fwd]) moved so the whole body, tail included, stays inside the glass. */
+    private fun inGlass(p: Vec3, fwd: Vec3): Vec3 {
+        val m = 0.6
+        val tail = p - fwd * o.lengthCm
+        fun shift(h: Double, t: Double, hi: Double) = max(m - min(h, t), 0.0) - max(max(h, t) - (hi - m), 0.0)
+        return Vec3(p.x + shift(p.x, tail.x, c.rock.lengthCm), p.y, p.z + shift(p.z, tail.z, c.rock.widthCm))
+    }
+
     private fun offRock(p: Vec3): Vec3 = if (c.rock.sdf.dist(p) < ROCK_GAP_CM) c.rock.sdf.project(p, ROCK_GAP_CM) else p
 
     /** Glide low over the sand toward [to] (kinematic: it hugs the bed and the rock foot without the free-swimmer clearance). */
@@ -257,7 +271,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 1 -> { // nose into the sand
                     val head = Vec3(s.x, sand.surfaceY(s.x, s.z) + 0.3, s.z)
-                    out.place(offRock(head), Vec3(fwd.x, -0.6, fwd.z).normalized(fwd), Vec3.Y, 5.0)
+                    out.place(offRock(inGlass(head, fwd)), Vec3(fwd.x, -0.6, fwd.z).normalized(fwd), Vec3.Y, 5.0)
                     o.mouth = 1.0
                     if (timer >= SCOOP_S) {
                         sand.dig(s.x, s.z, MOUTHFUL_CM3, 1.0)
@@ -268,7 +282,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 2 -> { // hover and sift: cheeks working, gills flared, drifting forward
                     val p = s + fwd * (timer * 0.6)
-                    out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
+                    out.place(offRock(inGlass(Vec3(p.x, hoverY(p.x, p.z), p.z), fwd)), fwd, Vec3.Y, 3.0)
                     o.mouth = 0.3 + 0.2 * sin(c.t * 9.0)
                     o.gill = 0.8 + 0.2 * sin(c.t * 7.0)
                     o.gillRate = 2.5
@@ -276,7 +290,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 else -> { // expel from the gill openings
                     val p = s + fwd * (chew * 0.6)
-                    out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
+                    out.place(offRock(inGlass(Vec3(p.x, hoverY(p.x, p.z), p.z), fwd)), fwd, Vec3.Y, 3.0)
                     o.gill = 1.0
                     if (timer >= 0.15 && timer - c.dt < 0.15) {
                         val g = o.pos - o.heading * (0.22 * o.lengthCm)
@@ -358,6 +372,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                     }
                 }
             }
+            // at the burrow mouth (under the rock, in its own pit) it is working the burrow: an allowed contact
+            if (o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
         }
     }
 

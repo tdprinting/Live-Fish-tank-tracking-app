@@ -68,6 +68,8 @@ class BodyState {
     private var shape: BodyShape? = null
     /** The shape the last [refresh] used. */
     val currentShape: BodyShape? get() = shape
+    /** Escaping a sealed hollow of the rock ([BodyCollision.sealedIn]). */
+    var escaping = false
 
     fun refresh(o: Organism) {
         if (o.species !== shapeOf || shape == null) { shape = BodyShapes.of(o.species); shapeOf = o.species }
@@ -158,12 +160,35 @@ class BodyCollision(private val rock: RockData) {
     var envCalls = 0L; private set
     var wedgeRestores = 0L; private set
     /** Wedge holds per species id (tests). */
-    val wedgeBy = java.util.TreeMap<String, Long>()
+    val wedgeBy = HashMap<String, Long>()
     var pairPushes = 0L; private set
 
     /** True when this animal's body is deliberately allowed into the geometry (see class doc). */
     fun exempt(o: Organism): Boolean =
         o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible
+
+    private val openWater = arrayOfNulls<OpenWater>(OpenWater.LEVELS.size)
+    /** Sealed-hollow escapes so far (tests). */
+    var sealedEscapes = 0L; private set
+
+    /** Whether [o]'s body is in a sealed hollow of the rock ([OpenWater.sealedIn]). */
+    fun sealedIn(o: Organism): Boolean {
+        o.body.refresh(o)
+        // the gap a body passes is set by its slimmest cross-section at its thickest station
+        val sh = o.body.currentShape ?: BodyShapes.of(o.species)
+        var thick = 0.0
+        for (i in sh.u.indices) thick = max(thick, min(sh.halfWidth[i], 0.5 * (sh.top[i] - sh.bottom[i])))
+        val need = thick * o.lengthCm + 0.2
+        var lv = OpenWater.LEVELS.indexOfFirst { it >= need }
+        if (lv < 0) lv = OpenWater.LEVELS.size - 1
+        val w = openWater[lv] ?: OpenWater.of(rock, OpenWater.LEVELS[lv]).also { openWater[lv] = it }
+        val b = o.body
+        // latched: once sealed in, the body passes the rock until its middle is back in the open water
+        if (b.escaping) { if (w.open(b.centre)) b.escaping = false }
+        else if (w.sealedIn(b.centre)) b.escaping = true
+        if (b.escaping) sealedEscapes++
+        return b.escaping
+    }
 
     /** Floor (sand surface) height and its outward normal at (x, z). */
     fun floorNormal(x: Double, z: Double): Vec3 {
@@ -182,6 +207,8 @@ class BodyCollision(private val rock: RockData) {
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
         if (!enabled) return 0.0
         if (exempt(o)) { o.spline.dropSafe(); return 0.0 }
+        // a body in a sealed hollow of the rock passes through the rock until it is back in the open water
+        @Suppress("NAME_SHADOWING") val rockOn = rockOn && !sealedIn(o)
         envCalls++
         var worst = 0.0
         var clear = false
@@ -197,7 +224,7 @@ class BodyCollision(private val rock: RockData) {
             body.refresh(o)
             if (iter == 0) {
                 val dc = if (rockOn) rock.sdf.dist(body.centre) - body.radius else Double.POSITIVE_INFINITY
-                java.util.Arrays.fill(rockGap, dc)
+                rockGap.fill(dc)
             }
             var any = false
             var best = 0.0

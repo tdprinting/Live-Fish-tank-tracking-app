@@ -69,6 +69,9 @@ object BodyShapes {
         BrainKind.TANG to BodyShape.of(0.00, 0.084, -0.076, 0.031, 0.10, 0.173, -0.166, 0.050, 0.20, 0.263, -0.201, 0.056, 0.30, 0.291, -0.230, 0.056, 0.40, 0.292, -0.280, 0.056, 0.50, 0.292, -0.281, 0.056, 0.60, 0.280, -0.271, 0.051, 0.70, 0.247, -0.241, 0.041, 0.80, 0.065, -0.065, 0.029, 0.90, 0.107, -0.107, 0.010, 1.00, 0.123, -0.123, 0.010),
         BrainKind.CARDINAL to BodyShape.of(0.00, 0.116, -0.079, 0.029, 0.10, 0.162, -0.153, 0.043, 0.20, 0.180, -0.180, 0.046, 0.30, 0.319, -0.211, 0.046, 0.40, 0.319, -0.259, 0.047, 0.50, 0.222, -0.233, 0.044, 0.60, 0.290, -0.250, 0.039, 0.70, 0.324, -0.102, 0.031, 0.80, 0.074, -0.074, 0.019, 0.90, 0.122, -0.122, 0.010, 1.00, 0.137, -0.137, 0.010),
         BrainKind.WRASSE to BodyShape.of(0.00, 0.041, -0.041, 0.033, 0.10, 0.079, -0.079, 0.051, 0.20, 0.131, -0.087, 0.054, 0.30, 0.139, -0.123, 0.056, 0.40, 0.140, -0.100, 0.057, 0.50, 0.139, -0.128, 0.055, 0.60, 0.132, -0.127, 0.049, 0.70, 0.119, -0.113, 0.041, 0.80, 0.101, -0.094, 0.030, 0.90, 0.074, -0.074, 0.015, 1.00, 0.087, -0.087, 0.010),
+        // leopard wrasse (Macropharyngodon): the cleaner wrasse's profile at its deeper body (depth 0.36 vs 0.22 BL, [I]);
+        // its night sand-dive is posture 5, exempt
+        BrainKind.LEOPARD_WRASSE to BodyShape.of(0.000, 0.067, -0.067, 0.041, 0.100, 0.129, -0.129, 0.064, 0.200, 0.214, -0.142, 0.068, 0.300, 0.227, -0.201, 0.070, 0.400, 0.229, -0.164, 0.071, 0.500, 0.227, -0.209, 0.069, 0.600, 0.216, -0.208, 0.061, 0.700, 0.195, -0.185, 0.051, 0.800, 0.165, -0.154, 0.037, 0.900, 0.121, -0.121, 0.019, 1.000, 0.142, -0.142, 0.013),
         BrainKind.ENGINEER_GOBY to BodyShape.of(0.00, 0.038, -0.038, 0.023, 0.10, 0.044, -0.057, 0.027, 0.20, 0.046, -0.046, 0.039, 0.30, 0.075, -0.046, 0.041, 0.40, 0.075, -0.046, 0.035, 0.50, 0.073, -0.064, 0.036, 0.60, 0.070, -0.064, 0.036, 0.70, 0.065, -0.060, 0.032, 0.80, 0.057, -0.052, 0.022, 0.90, 0.043, -0.039, 0.024, 1.00, 0.010, -0.010, 0.019),
         BrainKind.HAWK to BodyShape.of(0.00, 0.052, -0.087, 0.037, 0.10, 0.119, -0.128, 0.055, 0.20, 0.219, -0.147, 0.060, 0.30, 0.265, -0.207, 0.060, 0.40, 0.265, -0.207, 0.059, 0.50, 0.259, -0.177, 0.056, 0.60, 0.200, -0.190, 0.048, 0.70, 0.181, -0.175, 0.039, 0.80, 0.071, -0.071, 0.029, 0.90, 0.094, -0.094, 0.021, 1.00, 0.103, -0.103, 0.010),
         BrainKind.LAWNMOWER_BLENNY to BodyShape.of(0.00, 0.137, -0.082, 0.059, 0.10, 0.162, -0.120, 0.066, 0.20, 0.173, -0.108, 0.066, 0.30, 0.170, -0.090, 0.064, 0.40, 0.163, -0.096, 0.061, 0.50, 0.152, -0.130, 0.052, 0.60, 0.147, -0.124, 0.044, 0.70, 0.134, -0.111, 0.033, 0.80, 0.119, -0.091, 0.023, 0.90, 0.088, -0.088, 0.013, 1.00, 0.088, -0.088, 0.010),
@@ -92,7 +95,7 @@ object BodyShapes {
 
     /** The body of [s] (species-level: a new species with its own brain falls back to its depth ratio). */
     /**
-     * Shapes keyed by species id, for kinds that land on other branches (their BrainKind is not here yet).
+     * Shapes keyed by species id, measured from the species' JSON `body` block.
      * Hummingbird bobtail squid: mantle and head capsule from euprymna_berryi.json `body` (arms bundled at u 0–0.15);
      * its daytime sand burial is posture 5, which the collision already exempts.
      */
@@ -113,6 +116,7 @@ object BodyShapes {
 
     fun of(s: SimSpecies): BodyShape {
         BY_ID[s.id]?.let { return it }
+        if (s.brainKind == BrainKind.BOBTAIL_SQUID) BY_ID["euprymna_berryi"]?.let { return it }
         TABLE[s.brainKind]?.let { return it }
         return synchronized(cache) { cache.getOrPut(s.id) { fallback(s) } }
     }

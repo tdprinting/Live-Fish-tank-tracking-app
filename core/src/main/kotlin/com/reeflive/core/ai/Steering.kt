@@ -50,6 +50,8 @@ class Steering(private val c: Ctx) {
         val o = c.o
         val dt = c.dt
         o.posture = intent.posture
+        // sealed in a hollow of the rock (placed there, see OpenWater): swim out through it rather than stay forever
+        if (!intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o)) intent.ignoreRock = true
         // a walker / glider given an empty intent (a behaviour that just finished) stays on its surface
         // instead of dropping into the swim integrator for a tick
         if (!intent.kinematic && !intent.crawl && intent.target == null && intent.fleeFrom == null && intent.wander == 0.0 &&
