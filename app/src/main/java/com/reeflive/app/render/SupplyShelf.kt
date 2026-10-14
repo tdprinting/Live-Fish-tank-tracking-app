@@ -1,8 +1,11 @@
 package com.reeflive.app.render
 
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -90,12 +93,16 @@ class SupplyShelfControl {
 
 /**
  * GL-thread side of the shelf: per-prop pick boxes, the lift / glow of the picked prop, and the draw. The shelf sits
- * outside the water, beside the tank, so it is drawn with the generic program and a soft self-glow (props stay
- * readable at night); the picked prop rises [LIFT_CM], grows a little and brightens.
+ * outside the water, beside the tank, so it is drawn with the shelf program (shelf.frag): its own room light rig
+ * (key, fill, the warm pucks under the boards, the tank's spill), analytic soft shadows and contact occlusion from
+ * the props' footprints ([foot] / [footY]), and per-material shading ([kindOf]). The room dims at night while the
+ * sign and pucks stay lit; the picked prop rises [LIFT_CM], grows a little and brightens.
  */
 internal class SupplyShelfScene {
     private class Prop(val id: String, val box: FloatArray) {
         var lift = 0f
+        /** Footprint slot (rows feed, care, tools in slot order) in [foot] / [footY], or -1. */
+        var index = -1
     }
 
     private var model: GpuModel? = null
@@ -107,6 +114,12 @@ internal class SupplyShelfScene {
     private val liftM = M.identity()
     private val modelM = FloatArray(16)
     private val tmp = FloatArray(3)
+    /** Per part of [model]: its shading kind (KIND_*) and footprint slot (-1 for the rack). */
+    private var kinds = FloatArray(0)
+    private var selves = FloatArray(0)
+    /** Per prop slot: centre x, centre z, half width, half depth; then base y, top y (lifted), lift, 0 (shelf.frag). */
+    private val foot = FloatArray(4 * PROPS)
+    private val footY = FloatArray(4 * PROPS)
 
     /** Applies the UI's open / row requests to [cam]. */
     fun apply(c: SupplyShelfControl?, cam: Camera) {
@@ -125,6 +138,7 @@ internal class SupplyShelfScene {
         if (m === model) return
         model = m
         props.clear(); byNode.clear(); picked = null
+        foot.fill(0f); footY.fill(0f)
         for (part in m.parts) {
             val name = part.node.name
             if (!name.startsWith(SupplyShelfLayout.NODE_PREFIX)) continue
@@ -135,6 +149,31 @@ internal class SupplyShelfScene {
                 M.transformPoint(part.node.world, if (cx == 0) pr.bmin[0] else pr.bmax[0], if (cy == 0) pr.bmin[1] else pr.bmax[1], if (cz == 0) pr.bmin[2] else pr.bmax[2], tmp)
                 for (k in 0 until 3) { prop.box[k] = min(prop.box[k], tmp[k]); prop.box[k + 3] = max(prop.box[k + 3], tmp[k]) }
             }
+        }
+        for (p in props) {
+            val i = slotOf(p.box)
+            if (foot[i * 4 + 2] > 0f) continue // two props in one slot: the first keeps it
+            p.index = i
+            val b = p.box
+            foot[i * 4] = (b[0] + b[3]) * 0.5f; foot[i * 4 + 1] = (b[2] + b[5]) * 0.5f
+            foot[i * 4 + 2] = max((b[3] - b[0]) * 0.5f, 0.01f); foot[i * 4 + 3] = (b[5] - b[2]) * 0.5f
+            footY[i * 4] = b[1]; footY[i * 4 + 1] = b[4]
+        }
+        kinds = FloatArray(m.parts.size) { kindOf(m.parts[it]) }
+        selves = FloatArray(m.parts.size) { (byNode[m.parts[it].node.name]?.index ?: -1).toFloat() }
+    }
+
+    /** Shading kind of a part: the rack's tagged materials (`extras.shelf`, supplies.py), prints, metal, plain. */
+    private fun kindOf(part: DrawPart): Float {
+        val tag = (part.material.src.extras["shelf"] as? JsonPrimitive)?.contentOrNullSafe()
+        return when {
+            tag == "lamp" -> KIND_LAMP
+            part.material.albedo != null -> if (part.node.name == BACK_NODE) KIND_BACKDROP else KIND_PRINT
+            tag == "board" -> KIND_BOARD
+            tag == "wood" -> KIND_WOOD
+            tag == "glass" -> KIND_GLASS
+            part.material.src.metallic > 0.5f -> KIND_METAL
+            else -> KIND_PLAIN
         }
     }
 
@@ -179,12 +218,25 @@ internal class SupplyShelfScene {
         out[2] = (b.box[2] + b.box[5]) * 0.5f
     }
 
-    /** Draws the shelf with [p] (the generic program). Returns the number of draw calls. */
+    /** Draws the shelf with [p] (the shelf program). Returns the number of draw calls. */
     fun draw(m: GpuModel, p: ShaderProgram, white: Texture, locked: Set<String>): Int {
         bind(m)
         p.use()
+        // footprints follow the pick: the lifted prop's shadow rises and softens with it
+        for (prop in props) {
+            val i = prop.index
+            if (i < 0) continue
+            val b = prop.box
+            val y0 = b[1] + LIFT_CM * prop.lift
+            footY[i * 4] = y0
+            footY[i * 4 + 1] = y0 + (b[4] - b[1]) * (1f + SCALE_UP * prop.lift)
+            footY[i * 4 + 2] = prop.lift
+        }
+        p.set4fv("uFoot", foot)
+        p.set4fv("uFootY", footY)
         var calls = 0
-        for (part in m.parts) {
+        for (pi in m.parts.indices) {
+            val part = m.parts[pi]
             if (part.material.blended) continue
             val prop = byNode[part.node.name]
             val lift = prop?.lift ?: 0f
@@ -194,10 +246,14 @@ internal class SupplyShelfScene {
             val c = part.material.src.baseColor
             val k = if (dim) DIM else 1f
             if (dim) p.set4f("uBaseColor", c[0] * k + GREY, c[1] * k + GREY, c[2] * k + GREY, c.getOrElse(3) { 1f })
-            // self-glow so the shelf reads at night, brighter (and gently pulsing) on the picked prop; printed labels
-            // (textured) glow less so their print keeps its contrast, and the "Supplies" sign is lit
+            val kind = kinds[pi]
+            p.set1f("uKind", kind)
+            p.set1f("uSelf", selves[pi])
+            // the room lights the shelf (shelf.frag); the emissive (x the print in the shader) is only the lit pucks
+            // and sign, a faint floor so nothing goes black, and the picked prop's gentle pulse
             val base = when {
-                part.node.name == SupplyShelfLayout.SIGN_NODE -> SIGN_GLOW
+                kind == KIND_LAMP -> LAMP_GLOW
+                part.node.name == SupplyShelfLayout.SIGN_NODE && part.material.albedo != null -> SIGN_GLOW
                 dim -> GLOW_DIM
                 part.material.albedo != null -> GLOW_PRINT
                 else -> GLOW
@@ -226,14 +282,40 @@ internal class SupplyShelfScene {
         const val SCALE_UP = 0.1f
         const val LIFT_RATE = 12f
         const val PICK_PAD = 0.8f
-        const val GLOW = 0.32f
-        const val GLOW_DIM = 0.12f
-        const val GLOW_PRINT = 0.18f
+        const val GLOW = 0.02f
+        const val GLOW_DIM = 0f
+        const val GLOW_PRINT = 0f
         const val SIGN_GLOW = 0.9f
+        const val LAMP_GLOW = 2.4f
+        const val BACK_NODE = "ShelfBack"
+        /** Props on the shelf (footprint slots, the size of shelf.frag's uFoot / uFootY arrays). */
+        val PROPS = SupplyShelfLayout.ROW_COUNT.sum()
+        /** shelf.frag `uKind`. */
+        const val KIND_PLAIN = 0f
+        const val KIND_BOARD = 1f
+        const val KIND_WOOD = 2f
+        const val KIND_PRINT = 3f
+        const val KIND_GLASS = 4f
+        const val KIND_BACKDROP = 5f
+        const val KIND_LAMP = 6f
+        const val KIND_METAL = 7f
         const val PICK_GLOW = 0.35f
         /** Locked (sandbox-only in Watch mode) props: colour × DIM + GREY, a faded grey-blue. */
         const val DIM = 0.35f
         const val GREY = 0.06f
+
+        /** Footprint slot of a prop standing on a row board: row by its base height, slot by its centre x. */
+        internal fun slotOf(box: FloatArray): Int {
+            var row = 0
+            for (r in 1 until SupplyShelfLayout.ROWS) {
+                if (abs(box[1] - SupplyShelfLayout.ROW_Y[r]) < abs(box[1] - SupplyShelfLayout.ROW_Y[row])) row = r
+            }
+            val n = SupplyShelfLayout.ROW_COUNT[row]
+            val slot = floor(((box[0] + box[3]) * 0.5f - SupplyShelfLayout.SLOT_X0) / SupplyShelfLayout.slotWidth(n)).toInt().coerceIn(0, n - 1)
+            var base = 0
+            for (r in 0 until row) base += SupplyShelfLayout.ROW_COUNT[r]
+            return base + slot
+        }
 
         /** Slab test: entry t (≥ 0) of the ray into the box padded by [pad], or null. */
         fun rayBox(o: FloatArray, d: FloatArray, box: FloatArray, pad: Float): Float? {
