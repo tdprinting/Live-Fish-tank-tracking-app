@@ -711,11 +711,13 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(95.0, 4.0, 15.0))
     /** The five-arm gait rig (sim/LimbRig.kt); the behaviours only say which arms reach where. */
     val arms: BrittleArms = o.limbRig as BrittleArms
+    /** Arm-tip photoreception: withdraw from a light step or a shadow (ai/BrittleLight.kt; AIZ01 analogy). */
+    val lightShy = LightWithdraw(this)
     /** Arm tips this individual leaves out of its hide by day (1–3; research 17 §2.3). */
     val tipsOut: Int = 1 + Math.floorMod(o.id.hashCode(), 3)
 
     init {
-        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract())
+        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract(), lightShy)
     }
 
     /** Centre-arm reassignments while travelling (coordinated arm roles; Astley 2012). */
@@ -769,7 +771,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
             out.rest(r, 1.0)
             // disc wedged under the rock, 1–3 arm tips out of the mouth of the hide, sweeping slowly (research 17 §2.3)
             arms.outArms = tipsOut; arms.outDir = caveMouth(c); arms.snake = 0.25
-            c.o.extension = 0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)
+            c.o.extension = (0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)) * LightWithdraw.dayReach(c.p.light)
         }
     }
 
