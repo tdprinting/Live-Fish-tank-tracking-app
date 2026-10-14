@@ -15,6 +15,10 @@ import com.reeflive.core.sim.TankDims
  * every [STATIC_REFRESH_FRAMES] frames; Low has no pass. The depth texture always exists (1×1, cleared to far on Low)
  * so `uShadowMap` (a sampler2DShadow on [UNIT]) is never bound to an incomplete texture.
  *
+ * On High the static casters (rock, equipment, still reef details) go to a second depth target only when the scene
+ * changes or the periodic refresh is due ([staticStale]); each frame [begin] copies that depth in and only the moving
+ * casters (corals, fish, the magnet cleaner) are drawn again. The result is the same map at a fraction of the vertices.
+ *
  * The pass reuses the casters' own vertex shaders (static.vert / fish.vert + shadow.frag) by swapping the Frame UBO's
  * `uViewProj` for [matrix] ([FrameUniforms.overrideViewProj]) while it draws.
  */
@@ -36,12 +40,18 @@ class ShadowMap(quality: RenderQuality) {
     val cmPerTexel: Float = if (width > 0) (X1 - X0) / width else 1f
 
     private val tex: Int = Gl.genTexture()
-    private val fbo: Int
+    private val fbo: Int = initTarget(tex)
+    /** High only: the static casters' depth, copied into [fbo] each frame (0 when unavailable: drawn every frame). */
+    private val staticTex: Int = if (dynamic && fbo != 0) Gl.genTexture() else 0
+    private val staticFbo: Int = if (staticTex != 0) initTarget(staticTex) else 0
     private var signature = Long.MIN_VALUE
     private var framesSince = 0
+    private var staticSignature = Long.MIN_VALUE
+    private var staticFrames = 0
 
-    init {
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex); Gl.check("bind shadow tex")
+    /** Allocates depth storage for [t] and, when the map is enabled, a depth-only FBO on it (0 if incomplete). */
+    private fun initTarget(t: Int): Int {
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t); Gl.check("bind shadow tex")
         val w = maxOf(width, 1); val h = maxOf(height, 1)
         val far = if (enabled) null else ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()).apply { putInt(-1); position(0) }
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_DEPTH_COMPONENT24, w, h, 0, GLES30.GL_DEPTH_COMPONENT, GLES30.GL_UNSIGNED_INT, far)
@@ -52,16 +62,15 @@ class ShadowMap(quality: RenderQuality) {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE); Gl.check("shadow wrapT")
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_COMPARE_MODE, GLES30.GL_COMPARE_REF_TO_TEXTURE); Gl.check("shadow compare")
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_COMPARE_FUNC, GLES30.GL_LEQUAL); Gl.check("shadow func")
-        fbo = if (enabled) {
-            val f = Gl.genFramebuffer()
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, f); Gl.check("bind shadow fbo")
-            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_ATTACHMENT, GLES30.GL_TEXTURE_2D, tex, 0); Gl.check("attach shadow depth")
-            GLES30.glDrawBuffers(1, intArrayOf(GLES30.GL_NONE), 0); Gl.check("shadow drawBuffers")
-            GLES30.glReadBuffer(GLES30.GL_NONE); Gl.check("shadow readBuffer")
-            val ok = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); Gl.check("unbind shadow fbo")
-            if (ok) f else { Gl.deleteFramebuffer(f); 0 }
-        } else 0
+        if (!enabled) return 0
+        val f = Gl.genFramebuffer()
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, f); Gl.check("bind shadow fbo")
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_ATTACHMENT, GLES30.GL_TEXTURE_2D, t, 0); Gl.check("attach shadow depth")
+        GLES30.glDrawBuffers(1, intArrayOf(GLES30.GL_NONE), 0); Gl.check("shadow drawBuffers")
+        GLES30.glReadBuffer(GLES30.GL_NONE); Gl.check("shadow readBuffer")
+        val ok = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); Gl.check("unbind shadow fbo")
+        return if (ok) f else { Gl.deleteFramebuffer(f); 0 }
     }
 
     /** True when the map holds valid depth (and shaders should sample it). */
@@ -81,13 +90,40 @@ class ShadowMap(quality: RenderQuality) {
         return false
     }
 
-    /** Binds the depth target, clears it and sets depth-only state; draw the casters, then call [end]. */
+    /** True when the static casters are cached in their own target ([staticStale], [beginStatic]). */
+    val cachesStatic: Boolean get() = staticFbo != 0
+
+    /** High: whether the cached static layer must be redrawn (scene changed, never drawn, or periodic refresh). */
+    fun staticStale(sceneSignature: Long): Boolean {
+        if (sceneSignature != staticSignature || ++staticFrames >= STATIC_REFRESH_FRAMES) {
+            staticSignature = sceneSignature; staticFrames = 0
+            return true
+        }
+        return false
+    }
+
+    /** Binds and clears the static target; draw the static casters next, then call [begin]. */
+    fun beginStatic() = bindTarget(staticFbo, clear = true)
+
+    /**
+     * Binds the depth target and sets depth-only state: cleared, or on High the cached static layer copied in. Draw the
+     * (remaining) casters, then call [end].
+     */
     fun begin() {
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo); Gl.check("bind shadow fbo")
+        if (staticFbo == 0) { bindTarget(fbo, clear = true); return }
+        GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, staticFbo); Gl.check("read static shadow")
+        GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, fbo); Gl.check("draw shadow")
+        GLES30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GLES30.GL_DEPTH_BUFFER_BIT, GLES30.GL_NEAREST)
+        Gl.check("blit static shadow")
+        bindTarget(fbo, clear = false)
+    }
+
+    private fun bindTarget(target: Int, clear: Boolean) {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, target); Gl.check("bind shadow fbo")
         GLES30.glViewport(0, 0, width, height); Gl.check("shadow viewport")
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         GLES30.glColorMask(false, false, false, false); Gl.check("shadow colorMask")
-        GLES30.glClear(GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("shadow clear")
+        if (clear) { GLES30.glClear(GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("shadow clear") }
         // never sample the map while it is the render target
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT); Gl.check("shadow active")
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0); Gl.check("shadow unbind")
@@ -117,6 +153,8 @@ class ShadowMap(quality: RenderQuality) {
     fun release() {
         Gl.deleteFramebuffer(fbo)
         Gl.deleteTexture(tex)
+        Gl.deleteFramebuffer(staticFbo)
+        Gl.deleteTexture(staticTex)
     }
 
     companion object {
