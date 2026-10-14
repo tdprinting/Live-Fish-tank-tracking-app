@@ -126,7 +126,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         val step = min(v.length(), o.cruiseSpeed * speedMul * c.dt)
         val dir = v.normalized(o.heading)
         val n = o.pos + dir * step
-        out.place(offRock(Vec3(n.x, hoverY(n.x, n.z), n.z)), horizontalHeading(dir, o.heading), Vec3.Y, 30.0)
+        val hd = horizontalHeading(dir, o.heading)
+        out.place(offRock(inGlass(Vec3(n.x, hoverY(n.x, n.z), n.z), hd)), hd, Vec3.Y, 30.0)
         out.ampMul = 0.8
     }
 

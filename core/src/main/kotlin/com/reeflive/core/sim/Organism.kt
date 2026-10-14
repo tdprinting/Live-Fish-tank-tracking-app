@@ -65,6 +65,8 @@ class Organism(
     var waryLevel = 0.0
     /** Id of the organism the current behavior is about (chase target, cleaning client, prey…); null = none. */
     var focusId: String? = null
+    /** Sim time since which the swimmer's current goal has had no route round the rock (−1 = it has one) ([Navigation]). */
+    var noRouteSince = -1.0
     /** Per-individual utility noise amplitude (temperament seed): some individuals are more capricious. */
     val whim: Double = 0.025 + 0.03 * rng.nextDouble()
     /** Acclimated temperature / SG / pH (rate-of-change shock, SIMULATION §9.6); NaN until the first chem tick. */

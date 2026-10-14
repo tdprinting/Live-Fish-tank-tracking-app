@@ -129,6 +129,8 @@ class Simulation(
     }
     /** Body-vs-geometry and body-vs-body collision (SIMULATION §4.3). */
     val bodies = BodyCollision(this.rock)
+    /** Path-finding round the rock for bodies that cannot pass through it (SIMULATION §4.3). */
+    val nav = Navigation(this.rock)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, this.rock)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
@@ -398,6 +400,7 @@ class Simulation(
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
         // lights-on startle (SIMULATION §4.7)
+        nav.step()
         for (o in organisms.toList()) {
             if (o !in organisms) continue   // eaten during this tick
             val a = agents[o] ?: continue

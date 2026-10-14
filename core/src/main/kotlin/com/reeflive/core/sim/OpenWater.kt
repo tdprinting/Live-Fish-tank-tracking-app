@@ -14,9 +14,9 @@ import kotlin.math.floor
  * middle sits in a hollow ([sealedIn]) is let through the rock until it is back in the open water.
  */
 class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
-    private val nx = (rock.lengthCm / CELL).toInt() + 1
-    private val ny = (rock.waterLevelCm / CELL).toInt() + 1
-    private val nz = (rock.widthCm / CELL).toInt() + 1
+    internal val nx = (rock.lengthCm / CELL).toInt() + 1
+    internal val ny = (rock.waterLevelCm / CELL).toInt() + 1
+    internal val nz = (rock.widthCm / CELL).toInt() + 1
     /** 0 = blocked (rock, sand), 1 = water not reached from the surface, 2 = open water. */
     private val state = ByteArray(nx * ny * nz)
 
@@ -49,6 +49,10 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
     }
 
     private fun idx(ix: Int, iy: Int, iz: Int) = (iz * ny + iy) * nx + ix
+
+    /** Whether fine cell (ix, iy, iz) is open water (no bounds check beyond the grid). */
+    internal fun openCell(ix: Int, iy: Int, iz: Int): Boolean =
+        ix in 0 until nx && iy in 0 until ny && iz in 0 until nz && state[idx(ix, iy, iz)] == 2.toByte()
 
     private fun cellOf(p: Vec3): Int {
         val ix = floor(p.x / CELL).toInt().coerceIn(0, nx - 1)

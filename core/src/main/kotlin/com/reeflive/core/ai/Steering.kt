@@ -22,6 +22,10 @@ import kotlin.math.sqrt
  */
 class Steering(private val c: Ctx) {
     private var wanderDir: Vec3 = Vec3.X
+    // path-finding round the rock (Navigation): the goal last routed, when, and the point to steer for
+    private var navFor: Vec3? = null
+    private var navAt = -1e9
+    private var navWay: Vec3? = null
     private var lateralAccel = 0.0
     private var waddleT = c.rng.nextDouble() * 10
 
@@ -85,6 +89,22 @@ class Steering(private val c: Ctx) {
         c.sim.bodies.resolveEnv(o, dt, rockOn = !intent.ignoreRock, settle = settle)
     }
 
+    /** The point to steer for on the way to [t]: [t] in clear view, else the next point of the route round the rock. */
+    private fun routed(o: Organism, t: Vec3): Vec3 {
+        val sim = c.sim
+        if (!sim.bodies.enabled) return t
+        val now = c.t
+        val way = navWay
+        val moved = navFor?.let { it.distanceTo(t) > NAV_RETARGET_CM } ?: true
+        if (moved || now - navAt > NAV_REFRESH_S || (way != null && way.distanceTo(o.pos) < 1.0)) {
+            navFor = t; navAt = now
+            val r = sim.nav.route(sim.bodies.levelOf(o), o.pos, t)
+            navWay = if (r === t) null else r
+            if (sim.nav.unreachable) { if (o.noRouteSince < 0) o.noRouteSince = now } else if (r != null) o.noRouteSince = -1.0
+        }
+        return navWay ?: t
+    }
+
     // ---------------------------------------------------------------- swimming
     private fun swim(o: Organism, it: SteerIntent, dt: Double) {
         val rock = c.rock
@@ -100,15 +120,21 @@ class Steering(private val c: Ctx) {
         it.target?.let { t ->
             if (t.distanceTo(o.pos) < 1.5 * L + 4.0) snoutClear = min(snoutClear, max(SNOUT_MIN_CLEAR, rock.sdf.dist(t) - 0.3))
         }
+        // a goal behind rock is reached round it: head for the next point of the route in view. A route threads gaps
+        // the body fits (Navigation), so on one the snout's stand-off and the feelers shrink to the body's own clearance
+        val way = it.target?.let { t -> if (it.ignoreRock) t else routed(o, t) }
+        val onRoute = navWay != null && way === navWay
+        if (onRoute) snoutClear = min(snoutClear, NAV_SNOUT_CLEAR)
 
         // ---- desired velocity ----
         var desired = Vec3.ZERO
         it.target?.let { t ->
-            val d = t - o.pos
-            val dist = d.length()
-            if (dist > 1e-6) {
+            val d = (way ?: t) - o.pos
+            val dl = d.length()
+            val dist = t.distanceTo(o.pos)
+            if (dl > 1e-6) {
                 val arrive = (dist / max(it.arriveRadius, 0.1)).coerceAtMost(1.0)
-                desired += d / dist * (min(it.speed, maxSpeed) * arrive)
+                desired += d / dl * (min(it.speed, maxSpeed) * arrive)
             }
         }
         it.fleeFrom?.let { f ->
@@ -169,7 +195,7 @@ class Steering(private val c: Ctx) {
             val clearance = min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
             val d = rock.sdf.dist(look)
             if (d < clearance) a += rock.sdf.gradient(look) * ((clearance - d) * 40)
-            a += feelers(o, it)
+            if (!onRoute) a += feelers(o, it)
         }
         if (!it.allowGlass) a += glassAvoid(o.pos, 0.5 * Lc.coerceAtMost(8.0) + 1)
         a += floorAvoid(o, it)
@@ -531,6 +557,10 @@ class Steering(private val c: Ctx) {
         /** Closest the snout comes to the rock when it reaches for something lying on it (cm). */
         const val SNOUT_MIN_CLEAR = 0.2
         /** Lowest the snout swims over the sand (cm). */
+        /** Route refresh (s) and how far the goal may move before it is routed again (cm). */
+        const val NAV_REFRESH_S = 0.4
+        const val NAV_SNOUT_CLEAR = 0.5
+        const val NAV_RETARGET_CM = 1.5
         const val SNOUT_FLOOR_CLEAR = 0.4
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
         const val C_STAGE1 = 0.12

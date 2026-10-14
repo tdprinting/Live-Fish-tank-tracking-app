@@ -698,11 +698,13 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 // approach to 1 BL at 1.8 BL/s
                 0 -> {
-                    val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    val raw = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    // a client in a crevice the wrasse's body does not fit is worked from the nearest water it reaches
+                    val goal = if (c.sim.bodies.enabled) c.sim.nav.approach(c.sim.bodies.levelOf(o), raw) ?: raw else raw
                     out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
                     // a client wedged in a crevice is worked from the mouth: arriving at the (rock-clamped) approach point counts
                     // (the wrasse's body does not fit into the crevice: held at its mouth a little farther out counts too)
-                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0) ||
+                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 8.0) ||
                         (phaseT > 3.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 5.0 && o.vel.length() < 0.3 * o.cruiseSpeed) ||
                         (phaseT > 8.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 6.0)) {
                         phase = if (wantsTactile(cl, c)) 1 else 2
@@ -710,7 +712,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                         phaseT = 0.0
                     }
                     // no path-finding: a client it cannot reach (rock in the way) is left alone for a while
-                    if (phaseT > APPROACH_GIVE_UP_S) { encounters.failedApproaches++; unreachableUntil[cl.id] = c.t + UNREACHABLE_S; done(c, cl, false) }
+                    // ...and one with no way round the rock to it at all is given up at once
+                    if (phaseT > APPROACH_GIVE_UP_S || (phaseT > 1.0 && o.noRouteSince >= 0 && c.t - o.noRouteSince > 1.0)) { encounters.failedApproaches++; unreachableUntil[cl.id] = c.t + UNREACHABLE_S; done(c, cl, false) }
                 }
                 // tactile dance: pitch ±20° at 2 Hz within 15 cm, stroking with the pelvic fins
                 1 -> {

@@ -171,16 +171,23 @@ class BodyCollision(private val rock: RockData) {
     /** Sealed-hollow escapes so far (tests). */
     var sealedEscapes = 0L; private set
 
-    /** Whether [o]'s body is in a sealed hollow of the rock ([OpenWater.sealedIn]). */
-    fun sealedIn(o: Organism): Boolean {
-        o.body.refresh(o)
-        // the gap a body passes is set by its slimmest cross-section at its thickest station
+    /**
+     * Thickness class of [o]'s body ([OpenWater.LEVELS] index): the gap a body passes is set by its slimmest
+     * cross-section at its thickest station, plus 2 mm.
+     */
+    fun levelOf(o: Organism): Int {
         val sh = o.body.currentShape ?: BodyShapes.of(o.species)
         var thick = 0.0
         for (i in sh.u.indices) thick = max(thick, min(sh.halfWidth[i], 0.5 * (sh.top[i] - sh.bottom[i])))
         val need = thick * o.lengthCm + 0.2
-        var lv = OpenWater.LEVELS.indexOfFirst { it >= need }
-        if (lv < 0) lv = OpenWater.LEVELS.size - 1
+        val lv = OpenWater.LEVELS.indexOfFirst { it >= need }
+        return if (lv < 0) OpenWater.LEVELS.size - 1 else lv
+    }
+
+    /** Whether [o]'s body is in a sealed hollow of the rock ([OpenWater.sealedIn]). */
+    fun sealedIn(o: Organism): Boolean {
+        o.body.refresh(o)
+        val lv = levelOf(o)
         val w = openWater[lv] ?: OpenWater.of(rock, OpenWater.LEVELS[lv]).also { openWater[lv] = it }
         val b = o.body
         // latched: once sealed in, the body passes the rock until its middle is back in the open water
@@ -225,6 +232,9 @@ class BodyCollision(private val rock: RockData) {
             if (iter == 0) {
                 val dc = if (rockOn) rock.sdf.dist(body.centre) - body.radius else Double.POSITIVE_INFINITY
                 rockGap.fill(dc)
+                // broad phase: a body whose bounding sphere is clear of the rock, the sand, the glass and the surface
+                // (most swimmers in open water, most of the time) needs no station checks
+                if (dc > SKIN && clearOfBounds(body, surfaceOn)) { clear = true; break }
             }
             var any = false
             var best = 0.0
@@ -366,6 +376,16 @@ class BodyCollision(private val rock: RockData) {
     }
 
     /** Worst depth of the body's rims (twelve points around every station) in the rock, sand, glass or surface. */
+    private fun clearOfBounds(body: BodyState, surfaceOn: Boolean): Boolean {
+        val c = body.centre
+        val r = body.radius + SKIN
+        if (c.x < r || c.x > rock.lengthCm - r || c.z < r || c.z > rock.widthCm - r) return false
+        if (surfaceOn && c.y + r > rock.waterLevelCm) return false
+        val head = body.p[0]; val tail = body.p[BodyState.N - 1]
+        val floor = max(rock.floorY(c.x, c.z), max(rock.floorY(head.x, head.z), rock.floorY(tail.x, tail.z)))
+        return c.y - r > floor + BROAD_FLOOR_MARGIN
+    }
+
     private fun rimDepth(o: Organism, rockOn: Boolean, surfaceOn: Boolean): Double {
         val body = o.body
         body.refresh(o)
@@ -644,6 +664,8 @@ class BodyCollision(private val rock: RockData) {
         const val PAIR_PASSES = 6
         /** Contact gap the resolve leaves (cm): a body comes to rest 0.5 mm off the surface. */
         const val SKIN = 0.05
+        /** Sand slope allowance (cm) of the broad phase: the bed under the body may rise this much between head, middle and tail. */
+        const val BROAD_FLOOR_MARGIN = 1.5
         /** How fast a resting fish's body settles onto the slope under its belly (1/s). */
         const val SETTLE_RATE = 4.0
 
