@@ -27,15 +27,21 @@ interface Sdf {
     /** "How enclosed" a point is: fraction of 26 rays that hit rock within 20 cm (0 open … 1 cave). */
     fun cover(p: Vec3): Double
 
-    /** Moves [p] onto the surface (sdf = [offset]) along the gradient. */
+    /**
+     * Moves [p] onto the surface (sdf = [offset]) along the gradient. In a crease the finite-difference gradient can
+     * point the wrong way and the steps wander off; the iterate nearest the surface is returned, never one worse than [p].
+     */
     fun project(p: Vec3, offset: Double = 0.0, iterations: Int = 8): Vec3 {
         var q = p
+        var best = p
+        var bestErr = Double.MAX_VALUE
         repeat(iterations) {
             val d = dist(q) - offset
             if (kotlin.math.abs(d) < 0.02) return q
+            if (kotlin.math.abs(d) < bestErr) { bestErr = kotlin.math.abs(d); best = q }
             q = q - gradient(q) * d
         }
-        return q
+        return if (kotlin.math.abs(dist(q) - offset) <= bestErr) q else best
     }
 
     /** Sphere-traced ray hit distance within [maxDist], or null. */

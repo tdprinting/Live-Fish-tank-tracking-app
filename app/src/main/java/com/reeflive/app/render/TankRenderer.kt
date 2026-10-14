@@ -44,6 +44,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
     private val shelfScene = SupplyShelfScene()
+    /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
+    @Volatile var subFirstPerson = false
+    private val subScene = SubmarineScene()
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -178,6 +181,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         shadowMap?.release(); shadowMap = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
+        subScene.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -208,11 +212,15 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val cur = interp.current
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
-        // 2. camera (+ input)
+        // 2. camera (+ input); in Submarine mode the camera rides with the sub
+        val fp = subFirstPerson
+        camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
+        if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
+        handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
         micro.update(cur, sdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
@@ -259,6 +267,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
+        if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         algae?.let { drawAlgae(it, progs) }
@@ -284,6 +293,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
         inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
+        white?.let { w ->
+            if (!subScene.visible) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost sub, see-through
+            Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
+            drawCalls += subScene.drawBeam(progs.generic, w)
+            Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        }
         if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -615,6 +630,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     private val flowScratch = FloatArray(3)
+    private val gustScratch = FloatArray(3)
 
     private fun coralUniforms(p: ShaderProgram, m: GpuModel, c: CoralPose?, defaultExtension: Float = 1f) {
         // branching trees (Kenya, extras.swayMode = 1): smaller, measured sway in treeSway (common.glsl) + fish ripple,
@@ -634,9 +650,18 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val flow = c?.flow ?: 8f
         val v = flowScratch
         ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f + ox, b[4] + oy, (b[2] + b[5]) * 0.5f + oz, 0f, v)
+        // a touch puff passing the colony leans it over and makes it sway harder
+        var puff = 0f
+        val gusts = interp.current?.gusts
+        if (gusts != null && gusts.isNotEmpty()) {
+            val g = gustScratch
+            BurstField.gustAt(gusts, (b[0] + b[3]) * 0.5f + ox, (b[1] + b[4]) * 0.5f + oy, (b[2] + b[5]) * 0.5f + oz, g)
+            v[0] += g[0] * 3f; v[2] += g[2] * 3f
+            puff = sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2])
+        }
         val l = sqrt(v[0] * v[0] + v[2] * v[2])
         if (l > 1e-3f) p.set3f("uSwayDir", v[0] / l, 0f, v[2] / l) else p.set3f("uSwayDir", 0.95f, 0f, 0.3f)
-        val amp = (if (tree) TREE_SWAY else 0.08f) * minOf(height, 25f) * (flow / 12f).coerceIn(0.15f, 1.5f)
+        val amp = (if (tree) TREE_SWAY else 0.08f) * minOf(height, 25f) * ((flow + puff) / 12f).coerceIn(0.15f, 2.2f)
         p.set1f("uSwayAmp", amp)
         p.set1f("uBodySwayAmp", amp)
         p.set1f("uSwayMode", if (tree) 1f else 0f)
@@ -867,7 +892,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (camera.shelfMix <= 0f) return
         val m = store.model(SupplyShelfLayout.MODEL) ?: return
         val w = white ?: return
-        drawCalls += shelfScene.draw(m, progs.generic, w, shelf?.locked ?: emptySet())
+        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet())
         triangles += m.triangles
     }
 
@@ -900,10 +925,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
                 if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
-                else if (id == null && following == null && !cleaning) {
+                // Submarine mode: no fingertip on the tank while the sub is out (the stick steers, taps only pick)
+                else if (id == null && following == null && !cleaning && !camera.rideOn) {
                     // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
                     // (not in clean-glass mode, where the finger is on the Flipper)
                     val hit = touchHit(o, dir)
+                    // a coral: lean in for a closer look as its polyps pull in
+                    if (hit != null && hit.second == TouchSurface.CORAL) camera.peekAt(hit.first.x.toFloat(), hit.first.y.toFloat(), hit.first.z.toFloat())
                     if (hit != null) main.post { l?.onTouchTank(hit.first, hit.second) } else main.post { l?.onPick(null) }
                 }
                 else main.post { l?.onPick(id) }
@@ -924,6 +952,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onTapGlass(p) }
             }
             CameraInput.TapKind.LONG_PRESS -> {
+                // on the glass or the water's top: a fingertip held there (slide, rest, flick); on rock / sand: food
+                // (nothing while the submarine is out: the hold would only fight the sub's own controls)
+                if (camera.rideOn) { holdMode = HOLD_ORBIT; return }
+                val hit = if (camera.followId == null && !cleaning) touchHit(o, dir) else null
+                if (hit != null && (hit.second == TouchSurface.GLASS || hit.second == TouchSurface.SURFACE)) { startFinger(hit.first, hit.second); return }
+                holdMode = HOLD_ORBIT
                 val p = surfacePoint(o, dir) ?: return
                 main.post { l?.onLongPress(p) }
             }
@@ -956,12 +990,164 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val g = sdf
         if (g != null) {
             val tr = t0 + Camera.marchClear(g, o[0] + d[0] * t0, o[1] + d[1] * t0, o[2] + d[2] * t0, d[0], d[1], d[2], t1 - t0, 0f)
-            if (tr < t1 - 0.05f) { val r = at(tr); return r to (if (r.y <= Camera.SAND_Y + 0.6) TouchSurface.SAND else TouchSurface.ROCK) }
+            if (tr < t1 - 0.05f) {
+                val r = at(tr)
+                // from above, the finger meets the water before the rock under it
+                if (o[1] + d[1] * t0 >= Camera.WATER_Y - 0.01f) return at(t0).let { Vec3(it.x, Camera.WATER_Y.toDouble(), it.z) } to TouchSurface.SURFACE
+                return r to (if (r.y <= Camera.SAND_Y + 0.6) TouchSurface.SAND else if (onCoral(r)) TouchSurface.CORAL else TouchSurface.ROCK)
+            }
         }
         val end = at(t1)
-        if (end.y <= Camera.SAND_Y + 0.5) return end to TouchSurface.SAND
         val entry = at(t0)
+        // through the top face, or the glass right at the waterline: a tap on the water's surface
+        if (entry.y >= Camera.WATER_Y - SURFACE_BAND_CM) return Vec3(entry.x, Camera.WATER_Y.toDouble(), entry.z.coerceIn(0.0, Camera.TANK[2].toDouble())) to TouchSurface.SURFACE
+        if (end.y <= Camera.SAND_Y + 0.5) return end to TouchSurface.SAND
         return Vec3(entry.x.coerceIn(0.0, Camera.TANK[0].toDouble()), entry.y.coerceIn(Camera.SAND_Y + 0.5, Camera.WATER_Y - 0.5), entry.z) to TouchSurface.GLASS
+    }
+
+    /** True when [p] lies on a drawn coral colony (its model bounds, moved by a copy's offset, padded a little). */
+    private fun onCoral(p: Vec3): Boolean {
+        val x = p.x.toFloat(); val y = p.y.toFloat(); val z = p.z.toFloat()
+        for ((m, c) in coralModels(interp.current)) {
+            val b = m.bounds
+            val ox = c?.offsetX ?: 0f; val oy = c?.offsetY ?: 0f; val oz = c?.offsetZ ?: 0f
+            if (x >= b[0] + ox - CORAL_PAD && x <= b[3] + ox + CORAL_PAD && y >= b[1] + oy - CORAL_PAD && y <= b[4] + oy + CORAL_PAD &&
+                z >= b[2] + oz - CORAL_PAD && z <= b[5] + oz + CORAL_PAD) return true
+        }
+        return false
+    }
+
+    // ------------------------------------------------------------------ a fingertip held on the glass
+
+    private var holdMode = HOLD_NONE
+    private var fingerSurface = TouchSurface.GLASS
+    private val fingerAt = FloatArray(3)
+    private val fingerSent = FloatArray(3)
+    private val fingerTrail = FloatArray(3)
+    private var fingerSentNs = 0L
+    private var fingerMovedNs = 0L
+    private var fingerSpeed = 0f
+    private val heldBuf = FloatArray(6)
+    private val rayBuf = FloatArray(3)
+
+    /** A long press landed on the glass or the water's top: the finger is on the tank there until it lifts. */
+    private fun startFinger(p: Vec3, surface: TouchSurface) {
+        holdMode = HOLD_FINGER
+        fingerSurface = surface
+        fingerAt[0] = p.x.toFloat(); fingerAt[1] = p.y.toFloat(); fingerAt[2] = p.z.toFloat()
+        fingerAt.copyInto(fingerSent); fingerAt.copyInto(fingerTrail)
+        fingerSpeed = 0f
+        val now = System.nanoTime()
+        fingerSentNs = now; fingerMovedNs = now
+        val kind = if (surface == TouchSurface.SURFACE) BurstKind.SURFACE_RIPPLE else BurstKind.GLASS_RIPPLE
+        particles.burst(TankBurst(kind, fingerAt[0], fingerAt[1], fingerAt[2], amount = 0.6f), interp.current)
+        val l = listener
+        main.post { l?.onFinger(p, 0f, surface) }
+    }
+
+    /**
+     * The held finger this frame ([CameraInput.drainHeld]). A fingertip: follow it over the pane, ripple a trail every
+     * [TRAIL_CM], report it (≤ 20 Hz moving, 4 Hz resting), and on lift a fast enough release is a flick (a puff of
+     * water along the pane and a little into the tank). Any other hold (food dropped, the shelf, no long press seen)
+     * drags and flings the camera exactly as a plain drag would.
+     */
+    private fun handleHeld(now: Long, cur: SimSnapshot?) {
+        val r = input.drainHeld(heldBuf)
+        val l = listener
+        if (holdMode != HOLD_FINGER) {
+            if (r and 1 != 0) camera.orbit(heldBuf[0], heldBuf[1], height.toFloat())
+            if (r and 2 != 0) {
+                val vx = heldBuf[4]; val vy = heldBuf[5]
+                if (vx * vx + vy * vy >= GestureTracker.MIN_FLING * GestureTracker.MIN_FLING) camera.fling(vx, vy, height.toFloat())
+                holdMode = HOLD_NONE
+            }
+            return
+        }
+        if (r and 1 != 0 && fingerPoint(heldBuf[2], heldBuf[3], rayBuf)) {
+            val dx = rayBuf[0] - fingerAt[0]; val dy = rayBuf[1] - fingerAt[1]; val dz = rayBuf[2] - fingerAt[2]
+            val dtS = ((now - fingerMovedNs) / 1e9f).coerceAtLeast(1e-3f)
+            val inst = sqrt(dx * dx + dy * dy + dz * dz) / dtS
+            fingerSpeed += (inst - fingerSpeed) * (dtS * 8f).coerceAtMost(1f)
+            fingerMovedNs = now
+            rayBuf.copyInto(fingerAt)
+            val tx = fingerAt[0] - fingerTrail[0]; val ty = fingerAt[1] - fingerTrail[1]; val tz = fingerAt[2] - fingerTrail[2]
+            if (tx * tx + ty * ty + tz * tz >= TRAIL_CM * TRAIL_CM) {
+                fingerAt.copyInto(fingerTrail)
+                val kind = if (fingerSurface == TouchSurface.SURFACE) BurstKind.SURFACE_RIPPLE else BurstKind.GLASS_RIPPLE
+                particles.burst(TankBurst(kind, fingerAt[0], fingerAt[1], fingerAt[2], amount = 0.3f), cur)
+            }
+        } else if (now - fingerMovedNs > 120_000_000L) fingerSpeed *= 0.5f   // resting: the speed falls away
+        if (r and 2 != 0) {
+            holdMode = HOLD_NONE
+            flick(heldBuf[2], heldBuf[3], heldBuf[4], heldBuf[5], cur)
+            val surface = fingerSurface
+            main.post { l?.onFinger(null, 0f, surface) }
+            return
+        }
+        val sx = fingerAt[0] - fingerSent[0]; val sy = fingerAt[1] - fingerSent[1]; val sz = fingerAt[2] - fingerSent[2]
+        val moved = sx * sx + sy * sy + sz * sz > 0.09f
+        if (moved && now - fingerSentNs >= 50_000_000L || now - fingerSentNs >= 250_000_000L) {
+            fingerAt.copyInto(fingerSent)
+            fingerSentNs = now
+            val p = Vec3(fingerAt[0].toDouble(), fingerAt[1].toDouble(), fingerAt[2].toDouble())
+            val sp = fingerSpeed; val surface = fingerSurface
+            main.post { l?.onFinger(p, sp, surface) }
+        }
+    }
+
+    /** A release at ([x], [y]) moving ([vx], [vy]) px/s: fast enough over the pane, a puff of water that way. */
+    private fun flick(x: Float, y: Float, vx: Float, vy: Float, cur: SimSnapshot?) {
+        if (vx * vx + vy * vy < GestureTracker.MIN_FLING * GestureTracker.MIN_FLING) return
+        val a = FloatArray(3); val b = FloatArray(3)
+        if (!fingerPoint(x, y, a) || !fingerPoint(x + vx * FLICK_LOOK_S, y + vy * FLICK_LOOK_S, b)) return
+        var wx = (b[0] - a[0]) / FLICK_LOOK_S; var wy = (b[1] - a[1]) / FLICK_LOOK_S; var wz = (b[2] - a[2]) / FLICK_LOOK_S
+        val along = sqrt(wx * wx + wy * wy + wz * wz)
+        if (along < FLICK_MIN_CM_S) return
+        // the hand pushes water along the pane and a little into the tank
+        val inn = inwardOf(a)
+        wx += inn[0] * 0.4f * along; wy += inn[1] * 0.4f * along; wz += inn[2] * 0.4f * along
+        val sp = sqrt(wx * wx + wy * wy + wz * wz)
+        val k = minOf(1f, FLICK_MAX_CM_S / sp)
+        wx *= k; wy *= k; wz *= k
+        // start a little inside the water, in front of the pane
+        val px = a[0] + inn[0] * 1.5f; val py = a[1] + inn[1] * 1.5f; val pz = a[2] + inn[2] * 1.5f
+        particles.burst(TankBurst(BurstKind.SWISH, px, py, pz, r = wx / FLICK_MAX_CM_S, g = wy / FLICK_MAX_CM_S, b = wz / FLICK_MAX_CM_S, amount = (sp * k / FLICK_MAX_CM_S).coerceIn(0.3f, 1f)), cur)
+        val p = Vec3(px.toDouble(), py.toDouble(), pz.toDouble()); val v = Vec3(wx.toDouble(), wy.toDouble(), wz.toDouble())
+        val l = listener
+        main.post { l?.onFlick(p, v) }
+    }
+
+    /** Unit vector into the water from the pane (or the surface) nearest [p]. */
+    private fun inwardOf(p: FloatArray): FloatArray {
+        val dz0 = p[2]; val dz1 = Camera.TANK[2] - p[2]; val dx0 = p[0]; val dx1 = Camera.TANK[0] - p[0]; val dy1 = Camera.WATER_Y - p[1]
+        val m = minOf(minOf(dz0, dz1), minOf(minOf(dx0, dx1), dy1))
+        return when (m) {
+            dy1 -> floatArrayOf(0f, -1f, 0f)
+            dz1 -> floatArrayOf(0f, 0f, -1f)
+            dz0 -> floatArrayOf(0f, 0f, 1f)
+            dx0 -> floatArrayOf(1f, 0f, 0f)
+            else -> floatArrayOf(-1f, 0f, 0f)
+        }
+    }
+
+    /** Where the ray under screen point ([x], [y]) enters the water box (the pane the finger is on), into [out]. */
+    private fun fingerPoint(x: Float, y: Float, out: FloatArray): Boolean {
+        val d = FloatArray(3)
+        camera.ray(x, y, width, height, d)
+        val o = camera.eye
+        var t0 = 0f; var t1 = 1000f
+        val lo = floatArrayOf(0f, Camera.SAND_Y, 0f); val hi = floatArrayOf(Camera.TANK[0], Camera.WATER_Y, Camera.TANK[2])
+        for (k in 0 until 3) {
+            if (kotlin.math.abs(d[k]) < 1e-6f) { if (o[k] < lo[k] || o[k] > hi[k]) return false; continue }
+            var a = (lo[k] - o[k]) / d[k]; var b = (hi[k] - o[k]) / d[k]
+            if (a > b) { val q = a; a = b; b = q }
+            t0 = maxOf(t0, a); t1 = minOf(t1, b)
+        }
+        if (t0 > t1) return false
+        out[0] = (o[0] + d[0] * t0).coerceIn(0.3f, Camera.TANK[0] - 0.3f)
+        out[1] = if (fingerSurface == TouchSurface.SURFACE) Camera.WATER_Y else (o[1] + d[1] * t0).coerceIn(Camera.SAND_Y + 0.5f, Camera.WATER_Y - 0.5f)
+        out[2] = (o[2] + d[2] * t0).coerceIn(0f, Camera.TANK[2])
+        return true
     }
 
     /** First rock / sand / water-surface point along a ray, for food drops. */
@@ -1053,6 +1239,18 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
          * fish ripple: reach from the colony bounds and the speed that gives full strength.
          */
         const val TREE_SWAY = 0.035f
+        /** A tap within this band below the waterline (cm) counts as a tap on the water's surface. */
+        const val SURFACE_BAND_CM = 2.5f
+        /** Padding (cm) around a coral model's bounds for a tap to count as on the coral. */
+        const val CORAL_PAD = 1.0f
+        private const val HOLD_NONE = 0
+        private const val HOLD_ORBIT = 1
+        private const val HOLD_FINGER = 2
+        /** Fingertip trail ripple spacing (cm), flick look-ahead (s), slowest flick and strongest puff (cm/s). */
+        const val TRAIL_CM = 1.5f
+        const val FLICK_LOOK_S = 0.05f
+        const val FLICK_MIN_CM_S = 20f
+        const val FLICK_MAX_CM_S = 45f
         const val TREE_FLUTTER = 0.12f
         const val WAKE_RANGE_CM = 6f
         const val WAKE_SPEED_CM_S = 10f

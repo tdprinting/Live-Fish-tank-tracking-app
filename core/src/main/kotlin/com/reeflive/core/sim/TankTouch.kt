@@ -4,8 +4,8 @@ import com.reeflive.core.geom.Vec3
 import kotlin.math.exp
 import kotlin.math.max
 
-/** What a fingertip tap on the tank landed on (the renderer's hit test, [Command.TouchTank]). */
-enum class TouchSurface { GLASS, SAND, ROCK, CORAL }
+/** What a fingertip tap on the tank landed on (the renderer's hit test, [Command.TouchTank]); SURFACE = the water's top. */
+enum class TouchSurface { GLASS, SAND, ROCK, CORAL, SURFACE }
 
 /**
  * How one animal answers a gentle tap ([TankTouch.reaction]), shown by the shared `TouchReact` behaviour:
@@ -15,8 +15,11 @@ enum class TouchSurface { GLASS, SAND, ROCK, CORAL }
  * - [FREEZE]: a shrimp or crab stops still and draws its antennae in for a few seconds.
  * - [CHECK]: a sand-sifter or nassarius comes over to see what stirred the sand.
  * - [DUCK]: hides at once (the species' own startle: shrimp tail-flip, hermit retreat, blenny darts home, duster crown).
+ * - [FOLLOW]: tracks a finger held on the glass, hovering at it and nipping the glass when it rests ([Command.Finger]).
+ * - [RISE]: comes up under a tap on the water surface, mouth working, expecting food.
+ * - [TUCK]: a snail, crab or other slow invert tapped right on the body pulls in where it is for a few seconds.
  */
-enum class TouchReaction { NONE, INVESTIGATE, AVOID, PEEK, FREEZE, CHECK, DUCK }
+enum class TouchReaction { NONE, INVESTIGATE, AVOID, PEEK, FREEZE, CHECK, DUCK, FOLLOW, RISE, TUCK }
 
 /**
  * The rules for a gentle tap (research 02 / 04 "Human at glass" lines per species, 06 §2 habituation):
@@ -111,6 +114,13 @@ object TankTouch {
                 k == BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
                 else -> TouchReaction.NONE
             }
+            // the water's top: fed fish learn that a disturbance up there means food (the lid, the feeding ring)
+            TouchSurface.SURFACE -> when {
+                night && o.isFish -> TouchReaction.NONE
+                bold(o) -> if (d < SEE_CM && o.stress < 0.5) TouchReaction.RISE else TouchReaction.NONE
+                shy(o, night) -> if (d < FEEL_CM * 0.7) TouchReaction.AVOID else TouchReaction.NONE
+                else -> TouchReaction.NONE
+            }
             TouchSurface.ROCK, TouchSurface.CORAL -> when {
                 d >= ROCK_CM -> TouchReaction.NONE
                 k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
@@ -122,6 +132,70 @@ object TankTouch {
 
     /** Shrimp and the sally crab stop dead; a hermit pulls into its shell (04 §5C "withdraws into shell"). */
     private fun still(k: BrainKind): TouchReaction = if (k == BrainKind.HERMIT) TouchReaction.DUCK else TouchReaction.FREEZE
+
+    /** Finger held on the glass: who notices it from how far, and the speed (cm/s) past which it reads as a lunging hand. */
+    @Ev(Evidence.DESIGN_ESTIMATE, "02 §1C clown: retreats when hand-level motion is fast") const val FINGER_FAST_CM_S = 35.0
+    /** Seconds a finger rests (moves < [FINGER_STILL_CM]) before followers start nipping the glass at it. */
+    @Ev(Evidence.DESIGN_ESTIMATE, "hobby reports: tangs and clowns peck at a fingertip on the glass") const val NIP_AFTER_S = 1.5
+    const val FINGER_STILL_CM = 1.0
+    /** Followers keep watching this long after the finger lifts. */
+    const val FINGER_LINGER_S = 2.5
+    /** Reach of a water puff for flinching animals and retracting polyps (cm from the puff's path). */
+    const val PUFF_CM = 12.0
+    /** Polyp retraction from a puff that reaches a colony. */
+    const val PUFF_DISTURB = 0.4
+
+    /**
+     * The reaction of [o] to a finger put on [surface] (glass or the water's top) [d] cm away: the tap rules, except
+     * that the fish that would come to look ([TouchReaction.INVESTIGATE] / [TouchReaction.RISE]) now follow the finger.
+     */
+    fun fingerReaction(o: Organism, surface: TouchSurface, d: Double, night: Boolean): TouchReaction =
+        when (val r = reaction(o, surface, d, night)) {
+            TouchReaction.INVESTIGATE, TouchReaction.RISE -> TouchReaction.FOLLOW
+            else -> r
+        }
+
+    /** A finger whisked past fast: shy fish and crustaceans close by react as to a lunge; nobody new comes to follow. */
+    fun fastFingerReaction(o: Organism, d: Double, night: Boolean): TouchReaction = when {
+        !o.alive || o.molting || d >= FEEL_CM -> TouchReaction.NONE
+        o.brainKind in BLENNIES -> TouchReaction.DUCK
+        o.isFish && shy(o, night) -> TouchReaction.AVOID
+        o.brainKind in CRUSTACEANS -> still(o.brainKind)
+        else -> TouchReaction.NONE
+    }
+
+    /**
+     * A tap right on the animal (research 04 §5C hermit "withdraws into shell", 02 / 04 crustaceans freeze; a snail
+     * touched clamps its shell down and pulls its foot and tentacles in, design estimate): snails, the crab and other
+     * slow inverts pull in ([TouchReaction.TUCK]),
+     * hermits withdraw into the shell, shrimp freeze, dusters, brittle stars and the squid hide. Fish just get picked.
+     */
+    fun animalReaction(o: Organism): TouchReaction {
+        if (!o.alive || o.molting || o.isFish) return TouchReaction.NONE
+        return when (o.brainKind) {
+            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
+            BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> TouchReaction.FREEZE
+            else -> TouchReaction.TUCK
+        }
+    }
+
+    /** A puff of water [d] cm from its path: shy fish flinch away, crustaceans freeze, dusters snap shut. */
+    fun puffReaction(o: Organism, d: Double, night: Boolean): TouchReaction = when {
+        !o.alive || o.molting || d >= PUFF_CM -> TouchReaction.NONE
+        o.brainKind == BrainKind.FEATHER_DUSTER -> TouchReaction.DUCK
+        o.isFish && shy(o, night) -> TouchReaction.AVOID
+        o.brainKind in CRUSTACEANS -> TouchReaction.FREEZE
+        else -> TouchReaction.NONE
+    }
+
+    /** Into the water from the pane (or the surface) nearest [p]. */
+    fun inwardAt(p: Vec3, rock: RockData): Vec3 {
+        val d = listOf(
+            p.z to Vec3.Z, rock.widthCm - p.z to Vec3(0.0, 0.0, -1.0), p.x to Vec3.X, rock.lengthCm - p.x to Vec3(-1.0, 0.0, 0.0),
+            rock.waterLevelCm - p.y to Vec3(0.0, -1.0, 0.0),
+        )
+        return d.minBy { it.first }.second
+    }
 
     /** Strength 0..1 of the reaction at [d] cm for a tap of [strength] (linear fall-off to the reaction's reach). */
     fun falloff(d: Double, reach: Double, strength: Double): Double = (strength * (1 - d / reach)).coerceIn(0.0, 1.0)
@@ -164,6 +238,29 @@ class TouchMemory {
     }
 
     fun clear() { habit.clear(); habitAt.clear(); run.clear() }
+}
+
+/**
+ * A finger held on the glass ([Command.Finger]): where it is, how fast it moves, since when it has rested, who has
+ * been considered this time (each animal answers once per hold) and who follows it.
+ */
+class FingerState(var pos: Vec3, val surface: TouchSurface, val downAt: Double) {
+    var speedCmS = 0.0; private set
+    var lastAt = downAt; private set
+    private var stillAt = pos
+    private var stillSince = downAt
+    val considered = HashSet<String>()
+    val followers = LinkedHashSet<String>()
+    /** Who answered the finger and how (tests). */
+    val reactions = LinkedHashMap<String, TouchReaction>()
+
+    fun move(p: Vec3, speed: Double, t: Double) {
+        if (p.distanceTo(stillAt) > TankTouch.FINGER_STILL_CM) { stillAt = p; stillSince = t }
+        pos = p; speedCmS = speed; lastAt = t
+    }
+
+    /** Seconds the finger has rested in one spot. */
+    fun stillFor(t: Double): Double = t - stillSince
 }
 
 /** What the last [Command.TouchTank] did ([Simulation.lastTouch]): who answered how, or that it became a knock. */

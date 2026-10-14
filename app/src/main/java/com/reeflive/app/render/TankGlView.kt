@@ -46,6 +46,10 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
 
     /** Clean-glass mode: drags slide the Flipper over the front glass (strokes go to [TankViewListener.onScrape]). */
     fun setCleaning(on: Boolean) = renderer.setCleaning(on)
+    /** Submarine mode: first-person ride (true) or chase camera. */
+    var subFirstPerson: Boolean
+        get() = renderer.subFirstPerson
+        set(v) { renderer.subFirstPerson = v }
 
     var listener: TankViewListener?
         get() = renderer.listener

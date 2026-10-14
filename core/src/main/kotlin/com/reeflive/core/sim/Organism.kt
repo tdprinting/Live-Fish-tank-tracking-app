@@ -264,13 +264,14 @@ class Organism(
         intent: String = behaviorName.replaceFirstChar { it.lowercase() },
         intentTargetId: String? = focusId,
         relations: List<RelationInfo> = emptyList(),
+        thought: Thought = Thought.NONE,
     ): OrganismStats = OrganismStats(
         id, nickname, species.id, species.common, health.toFloat(), hunger.toFloat(), stress.toFloat(), mood,
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
         sex = sexLabel(), mouthbrooding = mouthbrooding,
-        ageYears = ageYears.toFloat(),
+        ageYears = ageYears.toFloat(), thought = thought,
     )
 
     /** "Female", "Male", "Changing sex" or "" when the sheet gives no sex. */

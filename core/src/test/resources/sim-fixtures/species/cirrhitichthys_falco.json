@@ -37,6 +37,7 @@
     },
     "diet": [
         "MYSIS",
+        "KRILL",
         "PELLET",
         "FLAKE"
     ],

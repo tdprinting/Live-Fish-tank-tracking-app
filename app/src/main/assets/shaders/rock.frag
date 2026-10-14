@@ -126,7 +126,11 @@ void main() {
             albedo = mix(albedo, gh.x > 0.5 ? SHELL_PINK : SHELL_GREY, step(0.975, gh.y) * grain * wv * 0.8);
             float layer = sin(wp2.y * 4.2 + vnoise(vec3(wp2.x * 0.25, wp2.y * 0.6, 3.0)) * 4.0);
             albedo *= 1.0 + 0.07 * layer * wall;
-            float deep = smoothstep(uParams2.w + 0.5, -0.5, wp2.y);
+            // depth darkening starts a cm below the bed's top edge, so the top of the skirt carries the bed's own tone and
+            // the sand meets the front glass without a dark seam
+            float deep = smoothstep(uParams2.w - 0.8, -0.5, wp2.y);
+            float topEdge = wall * smoothstep(uParams2.w - 1.2, uParams2.w + 0.4, wp2.y);
+            albedo = mix(albedo, albedo * vec3(1.12, 1.1, 1.04), topEdge * 0.5);
             albedo *= mix(1.0, 0.85, deep * wall);
             rough = mix(rough, rough * 0.7, deep * wall);
             float worm = 1.0 - abs(2.0 * vnoise(vec3(wp2.x * 0.32, wp2.y * 0.85, 11.0)) - 1.0);
@@ -136,7 +140,7 @@ void main() {
             float burrow = max(smoothstep(0.92, 0.96, worm) * colony, pod) * smoothstep(uParams2.w + 0.2, uParams2.w - 1.0, wp2.y);
             albedo *= 1.0 - 0.6 * burrow * wall * (1.0 - smoothstep(0.1, 0.35, fp));
             float film = smoothstep(uParams2.w - 0.3, uParams2.w + 1.8, wp2.y) * (0.3 + 0.7 * vnoise(vec3(wp2 * 0.4, 31.0)));
-            albedo = mix(albedo, vec3(0.16, 0.17, 0.07), film * wall * 0.3);
+            albedo = mix(albedo, vec3(0.16, 0.17, 0.07), film * wall * 0.18);
         }
         // shell / rubble chips: a round, jittered blob in ~1 of 25 half-cm cells (spheres cut by the bed surface)
         vec3 cp = vWorld * 2.2;

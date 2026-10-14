@@ -20,7 +20,7 @@ kotlin {
             kotlin.include("com/reeflive/core/**", "com/reeflive/app/render/**", "com/reeflive/web/**", "shims/**",
                 // Plain-Kotlin pieces of the Android live screen, shared so both apps offer the same sandbox.
                 "com/reeflive/app/ui/live/SandboxParams.kt", "com/reeflive/app/ui/live/LiveTips.kt",
-                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
+                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/ui/live/ThoughtLines.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
             kotlin.exclude(
                 "com/reeflive/core/care/**", "com/reeflive/core/extras/**", "com/reeflive/core/io/**",
                 "com/reeflive/app/render/TankGlView.kt", "com/reeflive/app/render/TankView.kt",

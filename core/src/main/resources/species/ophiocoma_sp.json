@@ -36,7 +36,8 @@
   "diet": [
     "DETRITUS",
     "MYSIS",
-    "PLANKTON"
+    "PLANKTON",
+    "MEATY"
   ],
   "feedsPerDay": 1,
   "tolerance": {

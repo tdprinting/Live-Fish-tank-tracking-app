@@ -25,7 +25,8 @@ There is no second copy of the sim, the shaders or the models.
   at 1x (faster time plays on a copy), Sandbox forks it into a pretend tank where every lever works and Reset tank
   restores the fork. The page mirrors the Android live screen: Watch / Sandbox, clock, Tank happy meter, Hermie, the
   water strip, the menu rail (Watch, Supplies, Add life, Tank, Trouble, More with the grown-up sliders), the 3D supply
-  shelf, fish card and follow, auto tour, lamp looks, torch, clean glass, microscope with the bacteria panel,
+  shelf, fish card and follow (with the "Thinking…" lines), More → Thought bubbles (`ReefSandbox.bubbles`, the
+  shared `ThoughtLines.kt` picker drawn as HTML bubbles), auto tour, lamp looks, torch, clean glass, microscope with the bacteria panel,
   time-lapse with per-species verdicts, and the tank sounds. When an Android live-screen action is added, add it to
   `ReefSandbox.act` and a tile in `web/site/live.js`. The time-lapse setup tables and the supply list are small copies
   of `TimelapseSheet.kt` / `SupplyShelf.kt` (Compose files); keep them in step.

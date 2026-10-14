@@ -2,6 +2,7 @@ package com.reeflive.app.render
 
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodSystem
+import com.reeflive.core.sim.NoriPose
 import com.reeflive.core.sim.SimSnapshot
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -42,7 +43,8 @@ fun interface PointSink {
  * is (sink speed, floating time, settling, drift: FoodKind / FoodSystem) and fish target those positions; this adds
  * the look on top: a shape per kind, colours, small visual-only motion (a flake tumbling, a pod hopping, a brine shrimp
  * wiggling, at most ~0.6 cm off the sim point and zero on the first frame), thawing cubes for frozen food, haze clouds
- * for phyto and coral powder, and the nori sheet on its clip, torn as fish graze it.
+ * for phyto and coral powder, and the nori sheet on its clip skinned over the sim's flow-driven cloth, thinning and
+ * fraying as fish graze it.
  *
  * Everything is packed as points into the shared particle buffer: [packBodies] writes exactly one point per food
  * particle (in snapshot order), [packExtras] the cubes, clouds and the nori sheet.
@@ -51,7 +53,8 @@ class FoodVisuals {
     private val cubeX = FloatArray(FoodKind.entries.size); private val cubeY = FloatArray(FoodKind.entries.size)
     private val cubeZ = FloatArray(FoodKind.entries.size); private val cubeAge = FloatArray(FoodKind.entries.size)
     private val cubeN = IntArray(FoodKind.entries.size)
-    private val noriOrder: IntArray = noriTileOrder()
+    /** Per tile: the material its cell must keep for the tile to show (free edges and bottom go first). */
+    private val tileThreshold: FloatArray = noriTileThresholds()
 
     /** One point per food particle, in snapshot order (at most [max]). */
     fun packBodies(snap: SimSnapshot, time: Float, max: Int, sink: PointSink) {
@@ -163,26 +166,36 @@ class FoodVisuals {
                 c[0], c[1], c[2], 1f, Shape.CUBE, ord * 0.13f, time * 0.4f + ord, thaw,
             )
         }
-        packNori(snap.noriRemaining, snap.flowStrength, time, solid)
+        packNori(snap.nori, time, solid)
     }
 
-    private fun packNori(remaining: Float, flow: Float, time: Float, sink: PointSink) {
-        if (remaining <= 0.005f) return
-        // the clip on the left glass
-        sink.put(NORI_CLIP[0] + 0.6f, NORI_CLIP[1] + 0.8f, NORI_CLIP[2], 1.8f, 0.10f, 0.32f, 0.12f, 1f, Shape.SPHERE, 0.3f, 0f, 0f)
-        val total = NORI_COLS * NORI_ROWS
-        val shown = (remaining.coerceIn(0f, 1f) * total).toInt()
-        val sway = 0.6f + 0.6f * flow.coerceIn(0f, 2f)
-        for (rank in 0 until shown) {
-            val t = noriOrder[rank]
+    /**
+     * The nori sheet skinned over the sim's cloth ([NoriPose]): each of the [NORI_COLS] × [NORI_ROWS] tiles sits at its
+     * bilinear spot between the four cloth nodes around it, so the sheet streams, flutters and tugs exactly as the sim
+     * moves it. A tile shows while its cell still has more material than the tile's own threshold, so a bitten cell
+     * thins out tile by tile into a ragged edge, and a torn-off cell is simply gone (its piece drifts as food).
+     */
+    private fun packNori(n: NoriPose?, time: Float, sink: PointSink) {
+        if (n == null || n.cols < 2 || n.rows < 2 || n.nodes.size < n.cols * n.rows * 3) return
+        // the clip on its pane, just out from the glass
+        sink.put(n.clipX + n.inX * 0.4f, n.clipY + 0.6f, n.clipZ + n.inZ * 0.4f, 1.8f, 0.10f, 0.32f, 0.12f, 1f, Shape.SPHERE, 0.3f, 0f, 0f)
+        val cc = n.cols - 1; val cr = n.rows - 1
+        for (t in 0 until NORI_COLS * NORI_ROWS) {
             val col = t % NORI_COLS; val row = t / NORI_COLS
-            val u = (col + 0.5f) / NORI_COLS; val v = (row + 0.5f) / NORI_ROWS
-            val wave = sin(time * 1.3f + v * 2.2f + u * 0.8f)
-            val x = NORI_CLIP[0] + 1.2f + v * 4.5f + wave * v * 1.4f * sway
-            val y = NORI_CLIP[1] - v * NORI_H + abs(wave) * v * 0.6f
-            val z = NORI_CLIP[2] + (u - 0.5f) * NORI_W + sin(time * 0.9f + v * 1.7f + u * 3f) * v * 0.7f * sway
-            val shade = 0.85f + 0.15f * sin(u * 9f + v * 5f)
-            sink.put(x, y, z, 1.9f, NORI_COLOR[0] * shade, NORI_COLOR[1] * shade, NORI_COLOR[2] * shade, 0.92f, Shape.NORI, (t * 0.37f) % 1f, wave * 0.15f, 0f)
+            val gu = (col + 0.5f) / NORI_COLS * cc; val gv = (row + 0.5f) / NORI_ROWS * cr
+            val ci = gu.toInt().coerceIn(0, cc - 1); val cj = gv.toInt().coerceIn(0, cr - 1)
+            val left = n.cells.getOrElse(cj * cc + ci) { 0f }
+            if (left <= tileThreshold[t]) continue
+            val fu = gu - ci; val fv = gv - cj
+            val a = (cj * n.cols + ci) * 3; val b = a + 3; val c = a + n.cols * 3; val d = c + 3
+            val w0 = (1 - fu) * (1 - fv); val w1 = fu * (1 - fv); val w2 = (1 - fu) * fv; val w3 = fu * fv
+            val x = n.nodes[a] * w0 + n.nodes[b] * w1 + n.nodes[c] * w2 + n.nodes[d] * w3
+            val y = n.nodes[a + 1] * w0 + n.nodes[b + 1] * w1 + n.nodes[c + 1] * w2 + n.nodes[d + 1] * w3
+            val z = n.nodes[a + 2] * w0 + n.nodes[b + 2] * w1 + n.nodes[c + 2] * w2 + n.nodes[d + 2] * w3
+            // thinned, chewed tiles look lighter and a touch smaller
+            val shade = (0.85f + 0.15f * sin(col * 9f / NORI_COLS + row * 5f / NORI_ROWS)) * (0.8f + 0.2f * left)
+            sink.put(x, y, z, 1.9f * (0.8f + 0.2f * left), NORI_COLOR[0] * shade, NORI_COLOR[1] * shade, NORI_COLOR[2] * shade, 0.92f,
+                Shape.NORI, (t * 0.37f) % 1f, sin(time * 0.9f + t * 1.3f) * 0.12f, 0f)
         }
     }
 
@@ -190,10 +203,7 @@ class FoodVisuals {
         /** Seconds a frozen cube takes to thaw and let its food go. */
         const val THAW_S = 6f
         val FROZEN = setOf(FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL, FoodKind.CYCLOPS)
-        /** NORI_CLIP anchor (anchors.json) and the sheet's size on it (cm). */
-        val NORI_CLIP = floatArrayOf(2f, 35f, 20f)
-        const val NORI_W = 9f
-        const val NORI_H = 11f
+        /** Nori tiles across and down the sheet (the cloth itself comes from the sim: NoriPose). */
         const val NORI_COLS = 7
         const val NORI_ROWS = 9
         /** Wet nori: very dark, slightly translucent green (#24401C linear-ish). */
@@ -236,14 +246,15 @@ class FoodVisuals {
             return (s - floor(s)) * 2f - 1f
         }
 
-        /** Tiles in the order they survive grazing: fish tear at the free bottom and side edges first. */
-        private fun noriTileOrder(): IntArray {
-            val score = FloatArray(NORI_COLS * NORI_ROWS) { t ->
-                val u = (t % NORI_COLS + 0.5f) / NORI_COLS; val v = (t / NORI_COLS + 0.5f) / NORI_ROWS
-                val h = sin(t * 91.7f) * 43758.5f
-                (1f - v * 0.75f - abs(u - 0.5f) * 0.6f) + (h - floor(h)) * 0.3f
-            }
-            return (0 until score.size).sortedByDescending { score[it] }.toIntArray()
+        /**
+         * Per tile, the material left in its cell below which the tile is gone: tiles toward the free bottom and side
+         * edges go first, with a little noise so a bitten cell frays rather than shrinking as a square.
+         */
+        private fun noriTileThresholds(): FloatArray = FloatArray(NORI_COLS * NORI_ROWS) { t ->
+            val u = (t % NORI_COLS + 0.5f) / NORI_COLS; val v = (t / NORI_COLS + 0.5f) / NORI_ROWS
+            val h = sin(t * 91.7f) * 43758.5f
+            val keep = (1f - v * 0.75f - abs(u - 0.5f) * 0.6f) * 0.6f + (h - floor(h)) * 0.4f
+            (0.92f - 0.85f * keep).coerceIn(0.02f, 0.9f)
         }
 
         /** Screen-space angle of world direction ([dx], [dy], [dz]) at ([x], [y], [z]) under [m] (column-major view-proj). */

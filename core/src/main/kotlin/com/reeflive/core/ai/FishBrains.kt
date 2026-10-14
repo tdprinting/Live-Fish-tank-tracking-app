@@ -65,6 +65,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
         private var spot = Vec3.ZERO
         private var next = 0.0
         private var dartUntil = -1.0
+        private var dartTo = Vec3.ZERO
         private var nextDart = 0.0
         private var nextWiggle = 0.0
         private var wiggleUntil = -1.0
@@ -100,6 +101,9 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > nextDart) {
                 nextDart = c.t + c.rng.range(6.0, 15.0)
                 dartUntil = c.t + 0.9
+                // one dart, one spot (a fresh random spot every tick made the clown jitter on the spot for 0.9 s)
+                val d = if (flatHost) Vec3(c.rng.range(-3.0, 3.0), FLAT_LO, c.rng.range(-2.0, 1.5)) else c.rng.unitVector() * 3.0 + Vec3(0.0, 1.5, 0.0)
+                dartTo = c.safe(h + d, 1.0)
             }
             if (c.t > nextWiggle) {
                 // hosting bout: the clown drops onto the host and shimmies its body against it (the "host-wiggle"
@@ -126,8 +130,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             if (c.t < dartUntil) {
-                val d = if (flatHost) Vec3(c.rng.range(-3.0, 3.0), FLAT_LO, c.rng.range(-2.0, 1.5)) else c.rng.unitVector() * 3.0 + Vec3(0.0, 1.5, 0.0)
-                out.seek(c.safe(h + d, 1.0), c.o.burstSpeed * 0.5, arrive = 1.0, urgency = 0.5)
+                out.seek(dartTo, c.o.burstSpeed * 0.5, arrive = 1.0, urgency = 0.5)
             } else {
                 out.seek(spot, c.o.cruiseSpeed * 0.8, arrive = if (flatHost) 0.5 * L else L)
             }
@@ -614,6 +617,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         private var phase = 0
         private var phaseT = 0.0
         private var inspectS = 6.7
+        /** Per client, the quantile its last inspection length was drawn at (see [drawInspection]). */
+        private val inspectU = HashMap<String, Double>()
         private var danceS = 1.5
         private var nextScan = 0.0
         private var cheatAcc = 0.0
@@ -668,6 +673,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 if (overdue) w *= OVERDUE_WEIGHT * (1 + (c.t - f.lastCleanerContactAt - OVERDUE_S) / DUE_S)
                 // infested clients seek the cleaner out and are served first (06 §5.7: ich visits at ×3 weight; S:Grutter99)
                 if (ich > 0.05) w *= 3.0
+                // a client whose next full pose is due again is worth seeking out: poses then come soon after the
+                // minimum spacing rather than whenever the two next happen to meet
+                if (c.t - (lastPoseAt[f.id] ?: -1e9) > POSE_MIN_GAP_S) w *= POSE_DUE_WEIGHT
                 w /= 1 + d / SEARCH_CM
                 if (w > bw) { bw = w; best = f }
             }
@@ -679,10 +687,6 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             phase = 0; phaseT = 0.0; cheatAcc = 0.0
             // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a
             // larger client, ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I])
-            val mean = 6.7 * sqrt(sqrt(client?.let { clientArea(it) } ?: 1.0)).coerceIn(0.8, 1.25)
-            val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
-            val mu = ln(mean) - sigma2 / 2
-            inspectS = exp(mu + sqrt(sigma2) * c.rng.gaussian()).coerceIn(2.0, 20.0)
             danceS = c.rng.range(1.0, 2.0)
             if (client == null) finished = true else encounters.approaches++
         }
@@ -734,10 +738,14 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     // the other contacts stay brief passes ("tang 1–3 full poses/h plus several brief passes", 06 §5.5)
                     val sincePose = c.t - (lastPoseAt[cl.id] ?: -1e9)
                     val ichS = if (cl.disease == Disease.ICH) cl.diseaseStage else 0.0
+                    // ... and within [POSE_MIN_GAP_S] of its last full pose an uninfested client only takes a brief pass: the
+                    // pose count no longer rides on how often the two happen to meet (a busy morning gave the tang 3.2/h)
+                    if (sincePose < POSE_MIN_GAP_S && ichS < 0.05) { encounters.refused++; done(c, cl, false); return }
                     val keen = (sincePose / POSE_REFRACT_S).coerceAtMost(1.0)
-                    val need = (keen * keen + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
+                    val need = (0.6 + keen + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
                     if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0) * need)) { encounters.refused++; done(c, cl, false); return }
                     encounters.accepted++
+                    inspectS = drawInspection(c, cl)
                     lastPoseAt[cl.id] = c.t
                     cl.poseFor = o; cl.poseUntil = c.t + inspectS + 1.0
                     cl.counters.add(Counters.K.POSE, c.t)
@@ -771,6 +779,23 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     }
                 }
             }
+        }
+
+        /**
+         * Inspection length, lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a larger client,
+         * ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I]). Drawn when the client poses, at the
+         * quantile u = u₀ + k·φ (mod 1) of the client's k-th pose with a random u₀: each length is still lognormal,
+         * but a client's handful of poses in a few hours averages close to the mean instead of wandering past 10 s
+         * on an unlucky run (independent draws did on one seed in five).
+         */
+        private fun drawInspection(c: Ctx, cl: Organism): Double {
+            val mean = 6.7 * sqrt(sqrt(clientArea(cl))).coerceIn(0.8, 1.25)
+            val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
+            val mu = ln(mean) - sigma2 / 2
+            val u0 = inspectU.getOrPut(cl.id) { c.rng.nextDouble() }
+            val u = (u0 + GOLDEN) % 1.0
+            inspectU[cl.id] = u
+            return exp(mu + sqrt(sigma2) * normalQuantile(u.coerceIn(1e-6, 1 - 1e-6))).coerceIn(2.0, 20.0)
         }
 
         private fun jolt(c: Ctx, cl: Organism) {
@@ -836,8 +861,17 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val DANCE_BOB_CM = 0.8
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
         const val CLIENT_COOLDOWN_S = 60.0
-        /** A client's keenness to pose recovers (quadratically: it saturates, so poses come at a steady pace) over this long after its last full pose [I]. */
+        /** A client's keenness to pose recovers linearly over this long after its last full pose, past [POSE_MIN_GAP_S] [I]. */
         const val POSE_REFRACT_S = 2250.0
+        /**
+         * Shortest spacing of a client's full poses (21.5 min): at most 15 in a 5 h day, 3 per hour, inside the tang's 1–3/h
+         * (06 §5.5), however often the cleaner and client meet [I].
+         */
+        const val POSE_MIN_GAP_S = 1290.0
+        /** Client weight factor once a full pose is due again (past [POSE_MIN_GAP_S]) [I]. */
+        const val POSE_DUE_WEIGHT = 3.0
+        /** Golden-ratio step of the per-client inspection quantile sequence. */
+        const val GOLDEN = 0.6180339887498949
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
         /** Juvenile cleaners search a smaller radius around the station (life_stages.md §4: DESIGN ESTIMATE [L]). */
@@ -1070,7 +1104,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 o.focusId = p.id   // the jaws may reach the prey's body (BodyCollision.touchAllowed)
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
-                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
+                    // the kill roll is unsourced (realism_gaps X7): only behind the evidence gate; otherwise an attack
+                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55 && c.sim.unsourcedPredation) {
                         c.sim.eaten(o, p)
                     } else {
                         c.sim.agentOf(p)?.let { it.brain.onAttacked(it.ctx, o.pos, 1.0) }
@@ -1092,10 +1127,13 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
     var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
+    /** Night rest on open sand at the rock base (ai/HawkNight.kt; Tee's footage T89 [H]). */
+    val sandRest = SandRest(this)
 
     init {
-        install(PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
+        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
     }
+
 
     fun perchPose(a: Anchor): Rest {
         val n = (a.normal ?: Vec3.Y).normalized(Vec3.Y)
@@ -1168,7 +1206,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "perch") current.pos else super.anchorPos(c, anchor)
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = perchPose(if (night) lowestSheltered() else current)
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (night) sandRest.restPose(c) ?: perchPose(lowestSheltered()) else perchPose(current)
 
     /** Sit on a perch on the pectorals (20–120 s, head turns), then hop to another perch. */
     inner class PerchHop : Behavior("perch", "Perched") {
@@ -1340,9 +1378,11 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(RockGraze(),
-            InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
+            TailFirstHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
+            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
+            // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
+            NibbleNori(this, 0.75, quiet = true))
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
@@ -1497,7 +1537,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     val holePos: Vec3 get() = hole?.pos ?: Vec3(25.0, 18.0, 24.0)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
-    private val inHole = InHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
+    private val inHole = TailFirstHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
         { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else 0.45) + (if (c.o.health < 0.5) 0.3 else 0.0) },
         // head-out inspection by day; a full retreat (head in) while threatened, freshly startled or timid (research 10 §7)
         { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) })
@@ -1505,7 +1545,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(),
+            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(), GlassCurious(this),
             Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
@@ -1558,6 +1598,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
         /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
         const val PROSPECT_S = 86400.0
+        /** Longest committed trip to a prospecting site (s) [L]. */
+        const val PROSPECT_TRIP_S = 25.0
     }
 
     /**
@@ -1570,6 +1612,11 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         private var stand = Vec3.ZERO
         private var stay = 30.0
         private var arrived = -1.0
+        /**
+         * The trip out to a site is one inspection: only an urgent behaviour (flee) breaks it off on the way, not a
+         * plankton snap (research 10 §7 inspect → excursion → return) [I].
+         */
+        override val committed: Boolean get() = !finished && arrived < 0 && elapsed < PROSPECT_TRIP_S
         override fun score(c: Ctx): Double {
             if (c.p.night || c.t - c.o.arrivalTime > PROSPECT_S) return 0.0
             return 0.55
@@ -1671,7 +1718,8 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
     val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
 
     init {
-        install(CaveDart(), DottyFeed(),
+        // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
+        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             Sleep(this, "Resting in its cave"), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
@@ -1761,3 +1809,21 @@ class GenericFishBrain(c: Ctx) : SpeciesBrain(c) {
 
 @Suppress("unused")
 private fun absD(v: Double) = abs(v)
+
+/** Standard normal quantile Φ⁻¹(p), 0 < p < 1 (Acklam's rational approximation, relative error < 1.2e-9). */
+internal fun normalQuantile(p: Double): Double {
+    val a = doubleArrayOf(-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.383577518672690e2, -3.066479806614716e1, 2.506628277459239)
+    val b = doubleArrayOf(-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1)
+    val cc = doubleArrayOf(-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783)
+    val d = doubleArrayOf(7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416)
+    fun tail(q: Double) = (((((cc[0] * q + cc[1]) * q + cc[2]) * q + cc[3]) * q + cc[4]) * q + cc[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    return when {
+        p < 0.02425 -> tail(sqrt(-2 * ln(p)))
+        p > 1 - 0.02425 -> -tail(sqrt(-2 * ln(1 - p)))
+        else -> {
+            val q = p - 0.5
+            val r = q * q
+            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+        }
+    }
+}
