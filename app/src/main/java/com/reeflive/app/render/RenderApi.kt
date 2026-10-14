@@ -27,7 +27,8 @@
  *   pinch moves closer; a lens effect (soft background blur, vignette, slight chromatic aberration) fades in on
  *   MEDIUM/HIGH. `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
  * - Gestures: drag orbits (fling coasts), two fingers pan / pinch / twist, double tap zooms to the point (or follows
- *   the fish under the finger), double-tap-and-drag zooms with one finger, two-finger tap knocks on the glass,
+ *   the fish under the finger), double-tap-and-drag zooms with one finger, a tap on a fish picks it, a tap anywhere
+ *   else touches the tank there (`onTouchTank`: glass, sand or rock), two-finger tap knocks on the glass,
  *   long press drops food. Limits are soft and ease back. See [GestureTracker] and [Camera].
  * - `setQuality(RenderQuality)`: HIGH (4x MSAA FBO + bloom + light shafts), MEDIUM (2x MSAA, shafts),
  *   LOW (no MSAA, no shafts, no normal maps, half particles, textures ≤ 512²). Fish beyond 60 cm use LOD1.
@@ -46,6 +47,7 @@
 package com.reeflive.app.render
 
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.TouchSurface
 
 /** Quality presets (ARCHITECTURE §8.7). */
 enum class RenderQuality(
@@ -92,6 +94,12 @@ interface TankViewListener {
     fun onPick(id: String?) {}
     /** Two-finger tap: the world point (cm) on the front glass under the fingers. */
     fun onTapGlass(worldPoint: Vec3) {}
+    /**
+     * Single tap with no animal under the finger (and no follow): what the finger landed on ([surface]: the first rock
+     * or sand point along the ray, else the glass) and where (world cm; for GLASS the point on the pane it entered by).
+     * Hosts send it on as `Command.TouchTank`. The default treats it as a tap on empty water: [onPick] (null).
+     */
+    fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { onPick(null) }
     /**
      * Double tap on an organism (id), a tap on another organism while following one (id), or null to stop
      * following. The host should route it to its follow state (it comes back through `follow` / `followId`).

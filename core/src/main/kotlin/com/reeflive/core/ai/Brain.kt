@@ -46,6 +46,13 @@ abstract class SpeciesBrain(val c: Ctx) {
     var yieldUntil = -1e9
     var yieldTo: Organism? = null
     var yieldBackS = 1.0
+    /** The latest gentle tap this animal answers ([onTouch], shown by [TouchReact]): what, where, from when to when. */
+    var touchKind = com.reeflive.core.sim.TouchReaction.NONE
+    var touchFrom: Vec3 = Vec3.ZERO
+    var touchStartAt = -1e9
+    var touchUntil = -1e9
+    /** Bumped by every [onTouch], so a running reaction restarts on a new tap. */
+    var touchSerial = 0
 
     /** World position of a matrix anchor (host, cave, hole, perch, station, ...) for this animal, or null. */
     open fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "body") o.pos else o.homePos
@@ -75,6 +82,8 @@ abstract class SpeciesBrain(val c: Ctx) {
             if (o.isFish) add(KeepClear(this@SpeciesBrain))
             add(Unwell(this@SpeciesBrain))
             add(HeatResponse(this@SpeciesBrain))
+            // a gentle tap on the tank (Command.TouchTank); scores 0 and draws no rng until a tap arrives
+            add(TouchReact(this@SpeciesBrain))
         }
         utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility
@@ -121,6 +130,33 @@ abstract class SpeciesBrain(val c: Ctx) {
     }
 
     open fun onTap(c: Ctx, at: Vec3, s: Double) { startleAt = c.t; startleFrom = at; startleMag = s }
+
+    /**
+     * A gentle tap at [at] that this animal answers with [kind] ([com.reeflive.core.sim.TankTouch]); [s] 0..1 is its
+     * strength after distance and habituation. DUCK goes through the species' own startle ([onTap]); the others are
+     * played by [TouchReact] for a few seconds, a little after the tap (a nassarius takes longer: it smells for it).
+     */
+    open fun onTouch(c: Ctx, at: Vec3, kind: com.reeflive.core.sim.TouchReaction, s: Double) {
+        if (kind == com.reeflive.core.sim.TouchReaction.NONE) return
+        if (kind == com.reeflive.core.sim.TouchReaction.DUCK) { onTap(c, at, 0.4 + 0.3 * s); return }
+        val delay = when {
+            kind == com.reeflive.core.sim.TouchReaction.CHECK && o.brainKind == BrainKind.NASSARIUS -> c.rng.range(4.0, 12.0)
+            kind == com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(0.05, 0.2)
+            else -> c.rng.range(0.2, 1.2)
+        }
+        val dur = when (kind) {
+            com.reeflive.core.sim.TouchReaction.INVESTIGATE -> c.rng.range(5.0, 12.0) * (0.6 + 0.6 * s)
+            com.reeflive.core.sim.TouchReaction.AVOID -> c.rng.range(8.0, 20.0) * (0.5 + o.skittishness)
+            com.reeflive.core.sim.TouchReaction.PEEK -> c.rng.range(4.0, 9.0)
+            com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(2.0, 5.0) * (0.6 + 0.6 * s)
+            com.reeflive.core.sim.TouchReaction.CHECK -> c.rng.range(20.0, 45.0)
+            else -> 0.0
+        }
+        touchKind = kind; touchFrom = at; touchStartAt = c.t + delay; touchUntil = c.t + delay + dur; touchSerial++
+    }
+
+    /** A blenny's head-further-out pose at its hole for a peek at a tap ([TouchReact] PEEK); null = no hole. */
+    open fun peekRest(c: Ctx): Rest? = null
 
     open fun onShadow(c: Ctx, at: Vec3) {
         shadowAt = c.t

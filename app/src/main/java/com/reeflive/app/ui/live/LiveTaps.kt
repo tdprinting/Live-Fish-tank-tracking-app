@@ -1,13 +1,17 @@
 package com.reeflive.app.ui.live
 
-/** What one tap on empty water (no fish under the finger) does on the live screen (UI_STYLE §10.8). */
-enum class WaterTap { NOTHING, SHOW_CONTROLS, CLOSE_CARD, DESELECT }
+/**
+ * What one tap on empty water (no fish under the finger) does on the live screen (UI_STYLE §10.8). [TOUCH] is the
+ * ordinary case: a fingertip on the tank there (`Command.TouchTank`), with nothing open to undo first.
+ */
+enum class WaterTap { NOTHING, SHOW_CONTROLS, CLOSE_CARD, DESELECT, TOUCH }
 
 /**
  * Plain rules for taps on the tank, kept out of Compose so they can be tested. A tap on the water never hides
  * anything: hiding the buttons is only ever a choice made from More → Hide buttons, so a missed fish cannot make the
- * whole screen go blank. The water tap only undoes things: it brings hidden buttons back, shuts an open card, or
- * puts down the picked fish. While a fish is being followed it does nothing (the follow bar's button and Back leave).
+ * whole screen go blank. While something is open the water tap only undoes it: it brings hidden buttons back, shuts an
+ * open card, or puts down the picked fish. With nothing to undo it touches the tank ([WaterTap.TOUCH]: who comes to
+ * look). While a fish is being followed it does nothing (the follow bar's button and Back leave).
  */
 object LiveTaps {
     fun emptyWater(
@@ -22,7 +26,7 @@ object LiveTaps {
         following -> WaterTap.NOTHING
         cardOpen -> WaterTap.CLOSE_CARD
         fishPicked -> WaterTap.DESELECT
-        else -> WaterTap.NOTHING
+        else -> WaterTap.TOUCH
     }
 }
 

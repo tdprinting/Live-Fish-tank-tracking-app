@@ -39,6 +39,7 @@ export function startLive(applyReadings) {
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
+    onTouch: (surface) => touchTank(surface),
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
@@ -173,7 +174,7 @@ $('rail').addEventListener('click', (e) => {
   renderRail();
 });
 function closeCard() { ui.card = null; $('card').classList.add('hidden'); renderRail(); }
-$('tank').addEventListener('pointerdown', () => { if (ui.card) closeCard(); });
+$('tank').addEventListener('pointerdown', () => { if (ui.card) { closeCard(); ui.cardClosedAt = performance.now(); } });
 
 const tile = (attrs, ico, label, on = false, lock = false) =>
   `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${ico}</span>${esc(label)}</button>`;
@@ -804,6 +805,27 @@ function cue(name, gain = 0.8) {
   if (!b) return;
   const src = actx.createBufferSource(); src.buffer = b;
   const g = actx.createGain(); g.gain.value = gain * ui.volume;
+  src.connect(g).connect(actx.destination); src.start();
+}
+// a tap with no fish under it (Android LiveTaps): undo what is open first, else touch the tank there
+let touchSaidAt = 0;
+function touchTank(surface) {
+  if (ui.chromeHidden) { setChrome(false); return; }
+  if (performance.now() - (ui.cardClosedAt || 0) < 700) return;
+  if (ui.picked && !ui.following) { select(null); return; }
+  if (!live.touchTank()) return;
+  knockSound(surface === 'GLASS' ? 1 : 0.7);
+  try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
+  if (performance.now() - touchSaidAt > 9000) {
+    touchSaidAt = performance.now();
+    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?' }[surface] || 'Soft corals pull in, the shy ones duck.');
+  }
+}
+function knockSound(gain) {
+  const b = ui.sound && actx && buffers[CUES.PELLET];
+  if (!b) return;
+  const src = actx.createBufferSource(); src.buffer = b; src.playbackRate.value = 0.5 + Math.random() * 0.08;
+  const g = actx.createGain(); g.gain.value = 0.55 * gain * ui.volume;
   src.connect(g).connect(actx.destination); src.start();
 }
 function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.min(1, cm / 1.5)) / 0.45)); }

@@ -120,6 +120,14 @@ class TankAudio(context: Context) {
         if (active()) play(Cue.TICK, rate = 1f, gain = 0.6f)
     }
 
+    /**
+     * A fingertip tap on the tank: a soft, dull knock (the pellet tick pitched well down), [strength] 0..1. Rate-limited
+     * with the pellet ticks, so a burst of taps never machine-guns.
+     */
+    fun knock(strength: Float = 1f) {
+        if (active()) play(Cue.PELLET, rate = 0.5f + Random.nextFloat() * 0.08f, gain = 0.9f * strength.coerceIn(0f, 1f))
+    }
+
     /** Clean-glass mode: the Flipper slid [cm] over the glass. A soft felt-on-glass swish, rate-limited. */
     fun scrape(cm: Float) {
         if (!active() || scrapeId !in loaded) return
