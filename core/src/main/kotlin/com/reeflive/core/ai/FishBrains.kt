@@ -1061,7 +1061,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 o.mouth = 1.0
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
-                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
+                    // the kill roll is unsourced (realism_gaps X7): only behind the evidence gate; otherwise an attack
+                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55 && c.sim.unsourcedPredation) {
                         c.sim.eaten(o, p)
                     } else {
                         c.sim.agentOf(p)?.let { it.brain.onAttacked(it.ctx, o.pos, 1.0) }

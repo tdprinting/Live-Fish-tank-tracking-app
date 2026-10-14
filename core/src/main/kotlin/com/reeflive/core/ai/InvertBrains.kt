@@ -1300,7 +1300,13 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     val crevice: Anchor? = c.rock.anchors[o.hostAnchor ?: "CREVICE_CRAB"] ?: c.rock.anchors["CREVICE_CRAB"] ?: c.rock.anchors["CAVE_SMALL"]
-    val home: Vec3 = crevice?.pos ?: Vec3(63.0, 12.0, 8.0)
+    /**
+     * Where it presses in. A cave anchor marks the middle of the cave, open water a crawler cannot reach, so a home
+     * more than [HOME_SNAP_CM] off the rock is moved onto the nearest wall.
+     */
+    val home: Vec3 = (crevice?.pos ?: Vec3(63.0, 12.0, 8.0)).let { p ->
+        if (c.rock.sdf.dist(p) > HOME_SNAP_CM) c.rock.sdf.project(p, 0.5, iterations = 24) else p
+    }
 
     init {
         install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })
@@ -1494,7 +1500,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             prey = null
             if (!c.rng.chance(GRAB_TRY_PER_HOUR)) return 0.0
             // live fish only in the opt-in sandbox scenario (research 11 §3: Percnon is primarily a grazer)
-            prey = nearestOther(c, 15.0) { Predation.preyWeight(o, it, true) > 0 && (!it.isFish || c.sim.crabLiveFishScenario) }
+            prey = nearestOther(c, 15.0) { Predation.preyWeight(o, it, true) > 0 && (if (it.isFish) c.sim.crabLiveFishScenario else c.sim.unsourcedPredation) }
             return if (prey != null) 0.85 else 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1519,6 +1525,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val GRAB_SUCCESS = 0.3
         /** Two days soft after a molt [L]. */
         const val SOFT_SHELL_S = 48 * 3600.0
+        /** A home farther than this from rock is moved onto the nearest wall (cm) [L]. */
+        const val HOME_SNAP_CM = 3.0
         /** Share of night grazing bouts spent on the glass film [L]. */
         const val GLASS_GRAZE_P = 0.15
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
