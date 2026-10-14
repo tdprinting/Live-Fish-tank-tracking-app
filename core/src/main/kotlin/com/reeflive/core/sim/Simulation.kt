@@ -450,6 +450,7 @@ class Simulation(
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
+        SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(CHEM_DT / 60.0)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
@@ -1177,7 +1178,11 @@ class Simulation(
         }
     }
 
-    fun snapshot(): SimSnapshot {
+    // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
+    fun snapshot(): SimSnapshot =
+        buildSnapshot().copy(lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
+
+    private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
         return SimSnapshot(
