@@ -98,7 +98,8 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         if (c.t - b.foodAlertAt < 30 && o.hunger > 0.2) s = max(s, 0.62)
         val app = com.reeflive.core.sim.HealthModel.appetite(o)
         if (app < 0.3) return 0.0
-        return (s * scoreMul(c, f) * app).coerceAtMost(0.93)
+        // a frightened animal comes to food less eagerly (Mind.kt X4; 1 when calm)
+        return (s * scoreMul(c, f) * app * b.mind.mood.feedFactor).coerceAtMost(0.93)
     }
 
     override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null }
@@ -310,9 +311,20 @@ open class Flee(val b: SpeciesBrain, val cover: (Ctx, Vec3) -> Vec3, label: Stri
         flinch = t == null && b.startleMag <= 0.35
         dur = if (flinch) 0.4 else c.rng.range(10.0, 40.0) * (0.4 + c.o.skittishness)
         hide = cover(c, from)
+        // a refuge it has used before, when it is nearer than the species' own cover and not toward the threat: the
+        // nearest familiar shelter (Mind.kt X2)
+        if (!flinch && remembersRefuges) b.mind.refugeFor(c, from)?.let { r ->
+            if (r.distanceTo(c.o.pos) < hide.distanceTo(c.o.pos)) hide = c.safe(r, 1.0)
+        }
+        reached = false
         if (!flinch) c.o.startle = max(c.o.startle, 0.15)
         b.startleAt = -1e9
     }
+    private var reached = false
+    /** The hawkfish ducks to a perch it picks itself ([HawkBrain.DuckToPerch]); everyone else may use a remembered refuge. */
+    open val remembersRefuges: Boolean get() = b.o.brainKind != BrainKind.HAWK
+    /** Where the last full flee was headed (tests). */
+    val hideTarget: Vec3 get() = hide
     override fun update(c: Ctx, out: SteerIntent) {
         val t = b.threat
         if (t != null) from = t.pos
@@ -321,6 +333,7 @@ open class Flee(val b: SpeciesBrain, val cover: (Ctx, Vec3) -> Vec3, label: Stri
         } else {
             out.seek(hide, c.o.burstSpeed * 0.7, arrive = 2.0, urgency = 0.6)
             out.hover = true
+            if (!reached && c.o.pos.distanceTo(hide) < 4.0) { reached = true; b.mind.onRefuge(c, hide) }
             if (t != null && t.pos.distanceTo(c.o.pos) < 6) { out.fleeFrom = t.pos; out.urgency = 1.0 }
         }
         if (elapsed > dur && (t == null || !t.alive)) finished = true
@@ -405,7 +418,7 @@ class GlassCurious(val b: SpeciesBrain) : Behavior("glass", "Curious at the glas
     override fun score(c: Ctx): Double {
         val o = c.o
         val tap = c.p.taps.lastOrNull { c.t - it.time in 3.0..20.0 && it.point.distanceTo(o.pos) < 60 } ?: return 0.0
-        if (o.curiosity <= 0.5 || o.stress > 0.3 || tap.night) return 0.0
+        if (o.curiosity <= 0.5 || o.stress > 0.3 || tap.night || b.mind.mood.fear > 0.3) return 0.0
         point = tap.point
         return 0.4 + 0.2 * o.curiosity
     }

@@ -1061,7 +1061,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 o.mouth = 1.0
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
-                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
+                    // the kill roll is unsourced (realism_gaps X7): only behind the evidence gate; otherwise an attack
+                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55 && c.sim.unsourcedPredation) {
                         c.sim.eaten(o, p)
                     } else {
                         c.sim.agentOf(p)?.let { it.brain.onAttacked(it.ctx, o.pos, 1.0) }
@@ -1082,10 +1083,13 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
     var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
+    /** Night rest on open sand at the rock base (ai/HawkNight.kt; Tee's footage T89 [H]). */
+    val sandRest = SandRest(this)
 
     init {
-        install(PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
+        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
     }
+
 
     fun perchPose(a: Anchor): Rest {
         val n = (a.normal ?: Vec3.Y).normalized(Vec3.Y)
@@ -1158,7 +1162,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "perch") current.pos else super.anchorPos(c, anchor)
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = perchPose(if (night) lowestSheltered() else current)
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (night) sandRest.restPose(c) ?: perchPose(lowestSheltered()) else perchPose(current)
 
     /** Sit on a perch on the pectorals (20–120 s, head turns), then hop to another perch. */
     inner class PerchHop : Behavior("perch", "Perched") {
@@ -1330,7 +1334,7 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(RockGraze(),
-            InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
+            TailFirstHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
             Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
             // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
@@ -1489,7 +1493,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     val holePos: Vec3 get() = hole?.pos ?: Vec3(25.0, 18.0, 24.0)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
-    private val inHole = InHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
+    private val inHole = TailFirstHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
         { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else 0.45) + (if (c.o.health < 0.5) 0.3 else 0.0) },
         // head-out inspection by day; a full retreat (head in) while threatened, freshly startled or timid (research 10 §7)
         { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) })
@@ -1497,7 +1501,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(),
+            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(), GlassCurious(this),
             Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
@@ -1550,6 +1554,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
         /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
         const val PROSPECT_S = 86400.0
+        /** Longest committed trip to a prospecting site (s) [L]. */
+        const val PROSPECT_TRIP_S = 25.0
     }
 
     /**
@@ -1562,6 +1568,11 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         private var stand = Vec3.ZERO
         private var stay = 30.0
         private var arrived = -1.0
+        /**
+         * The trip out to a site is one inspection: only an urgent behaviour (flee) breaks it off on the way, not a
+         * plankton snap (research 10 §7 inspect → excursion → return) [I].
+         */
+        override val committed: Boolean get() = !finished && arrived < 0 && elapsed < PROSPECT_TRIP_S
         override fun score(c: Ctx): Double {
             if (c.p.night || c.t - c.o.arrivalTime > PROSPECT_S) return 0.0
             return 0.55
@@ -1663,7 +1674,8 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
     val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
 
     init {
-        install(CaveDart(), DottyFeed(),
+        // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
+        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             Sleep(this, "Resting in its cave"), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }

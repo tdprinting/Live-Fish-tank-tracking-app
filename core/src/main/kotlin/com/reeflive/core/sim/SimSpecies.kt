@@ -45,8 +45,12 @@ data class SimSpecies(
     val buoyantWhenDead: Boolean? = null,
     /** Juvenile / adult stages and sex system (LifeStages.kt, docs/research/life_stages.md); null = generic fallback. */
     val lifeStages: LifeStageSpec? = null,
+    /** Sensing channels (Senses.kt, SIMULATION §21.1); null = defaults by brain and activity. */
+    val senses: SensesSpec? = null,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
+    /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
+    val sensesOrDefault: SensesSpec by lazy { senses ?: SensesSpec.defaultFor(this) }
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
     val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true)
     val coralKind: CoralKind get() = CoralKind.resolve(id)
@@ -98,7 +102,8 @@ data class SimSpecies(
         food == FoodKind.ALGAE_WAFER && has("ALGAE") -> 0.4
         food == FoodKind.ALGAE_WAFER && eats(FoodKind.PELLET) -> 0.25
         food == FoodKind.CORAL_FOOD && eats(FoodKind.FLAKE) -> 0.3
-        // hermits and brittle stars scavenge any meaty chunk that reaches the sand, though their sheets don't list it
+        // hermits and brittle stars scavenge any meaty chunk that reaches the sand; the shipped sheets list MEATY, this
+        // covers older sheets that do not
         food == FoodKind.PRAWN && (brainKind == BrainKind.HERMIT || brainKind == BrainKind.BRITTLE_STAR) -> 0.8
         else -> 0.0
     }

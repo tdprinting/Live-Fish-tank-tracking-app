@@ -70,6 +70,13 @@ class Simulation(
      * species-confirmed corallivory for the owner's unidentified stars. SetParam id `asterina_coral` (1 = on).
      */
     @Ev(Evidence.DESIGN_ESTIMATE, "11 §7") var asterinaCorallivoryScenario = false
+    /**
+     * Evidence gate (research realism_gaps X7): predation rolls with no supporting source stay off even in the sandbox
+     * until this is on: the Sally Lightfoot's snail rolls and grabs (PUC06, PIZ25 support grazing and scavenging, not a
+     * kill rate) and the moray's kill roll (SIMULATION §9.2 numbers are unsourced). Off, the eel's strike still lands as
+     * an attack that startles. SetParam id `unsourced_predation` (1 = on). Crab-on-fish keeps its own `crab_predation`.
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "realism_gaps X7; 11 §3") var unsourcedPredation = false
     /** Shrimp pairing, molt-linked mating and egg carrying (research 12). */
     val shrimpBreeding = ShrimpBreeding(this)
     /** Sim time of the last [Command.RearrangeRock]; territorial bouts run hot for a day after it (06 §3.3). */
@@ -342,6 +349,8 @@ class Simulation(
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
                 val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
+                // the crab's snail rolls have no source (realism_gaps X7): behind the evidence gate
+                if (a.brainKind == BrainKind.SALLY_CRAB && !crabOnFish && !unsourcedPredation) continue
                 val eligible = organisms.filter { t -> t !== a && t.alive && r.targets.contains(t.brainKind.name) && nightEligible(r, a, t) }
                 if (eligible.isEmpty()) continue
                 // one roll per actor and row per night, on the nearest eligible target: the row's pEvent is a
@@ -978,6 +987,7 @@ class Simulation(
         "roomtemp" -> config.roomC
         "crab_predation" -> if (crabLiveFishScenario) 1.0 else 0.0
         "asterina_coral" -> if (asterinaCorallivoryScenario) 1.0 else 0.0
+        "unsourced_predation" -> if (unsourcedPredation) 1.0 else 0.0
         else -> water.s.get(id)
     }
 
@@ -1002,6 +1012,7 @@ class Simulation(
             k == "photoperiod" -> lights.photoperiodHours = value.coerceIn(4.0, 16.0)
             k == "crab_predation" -> crabLiveFishScenario = value > 0.5
             k == "asterina_coral" -> asterinaCorallivoryScenario = value > 0.5
+            k == "unsourced_predation" -> unsourcedPredation = value > 0.5
             k.startsWith("spectrum.") -> lights.setGain(k.removePrefix("spectrum."), value)
             k.startsWith("pump.") -> setPump(id.substring(5), value > 0.5)
             else -> water.setParam(id, value)
@@ -1057,6 +1068,8 @@ class Simulation(
         surface.impulse(at.x, at.z, 0.08, 2.5)
         water.addFeed(grams * kind.nutrientFactor, kind.po4Factor, kind.docFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
+        // every animal that eats this food learns the time, the place and the keeper (ai/Mind.kt, realism_gaps X3)
+        for (a in agents.values) a.brain.mind.onKeeperFeed(simTimeSec, at, a.ctx.o.species.dietMatch(kind) > 0 || kind == FoodKind.NORI && a.ctx.o.species.grazer)
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
         for (a in agents.values) a.brain.onFood(a.ctx, kind, at)

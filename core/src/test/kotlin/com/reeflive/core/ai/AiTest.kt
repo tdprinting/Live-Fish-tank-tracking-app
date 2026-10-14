@@ -67,6 +67,7 @@ class AiTest {
         for (seed in seeds) {
             val sim = TestTank.sim(listOf(MORAY, TestTank.seed("banded")), seed = seed, startHour = 23.0)
             sim.predationEnabled = true
+            sim.unsourcedPredation = true   // the eel's kill roll is unsourced (realism_gaps X7)
             val eel = sim.organisms.first { it.brainKind == BrainKind.EEL }
             val shrimp = sim.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
             eel.hunger = 0.9

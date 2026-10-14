@@ -711,11 +711,13 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(95.0, 4.0, 15.0))
     /** The five-arm gait rig (sim/LimbRig.kt); the behaviours only say which arms reach where. */
     val arms: BrittleArms = o.limbRig as BrittleArms
+    /** Arm-tip photoreception: withdraw from a light step or a shadow (ai/BrittleLight.kt; AIZ01 analogy). */
+    val lightShy = LightWithdraw(this)
     /** Arm tips this individual leaves out of its hide by day (1–3; research 17 §2.3). */
     val tipsOut: Int = 1 + Math.floorMod(o.id.hashCode(), 3)
 
     init {
-        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract())
+        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract(), lightShy)
     }
 
     /** Centre-arm reassignments while travelling (coordinated arm roles; Astley 2012). */
@@ -769,7 +771,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
             out.rest(r, 1.0)
             // disc wedged under the rock, 1–3 arm tips out of the mouth of the hide, sweeping slowly (research 17 §2.3)
             arms.outArms = tipsOut; arms.outDir = caveMouth(c); arms.snake = 0.25
-            c.o.extension = 0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)
+            c.o.extension = (0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)) * LightWithdraw.dayReach(c.p.light)
         }
     }
 
@@ -1300,7 +1302,13 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     val crevice: Anchor? = c.rock.anchors[o.hostAnchor ?: "CREVICE_CRAB"] ?: c.rock.anchors["CREVICE_CRAB"] ?: c.rock.anchors["CAVE_SMALL"]
-    val home: Vec3 = crevice?.pos ?: Vec3(63.0, 12.0, 8.0)
+    /**
+     * Where it presses in. A cave anchor marks the middle of the cave, open water a crawler cannot reach, so a home
+     * more than [HOME_SNAP_CM] off the rock is moved onto the nearest wall.
+     */
+    val home: Vec3 = (crevice?.pos ?: Vec3(63.0, 12.0, 8.0)).let { p ->
+        if (c.rock.sdf.dist(p) > HOME_SNAP_CM) c.rock.sdf.project(p, 0.5, iterations = 24) else p
+    }
 
     init {
         install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })
@@ -1494,7 +1502,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             prey = null
             if (!c.rng.chance(GRAB_TRY_PER_HOUR)) return 0.0
             // live fish only in the opt-in sandbox scenario (research 11 §3: Percnon is primarily a grazer)
-            prey = nearestOther(c, 15.0) { Predation.preyWeight(o, it, true) > 0 && (!it.isFish || c.sim.crabLiveFishScenario) }
+            prey = nearestOther(c, 15.0) { Predation.preyWeight(o, it, true) > 0 && (if (it.isFish) c.sim.crabLiveFishScenario else c.sim.unsourcedPredation) }
             return if (prey != null) 0.85 else 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1519,6 +1527,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val GRAB_SUCCESS = 0.3
         /** Two days soft after a molt [L]. */
         const val SOFT_SHELL_S = 48 * 3600.0
+        /** A home farther than this from rock is moved onto the nearest wall (cm) [L]. */
+        const val HOME_SNAP_CM = 3.0
         /** Share of night grazing bouts spent on the glass film [L]. */
         const val GLASS_GRAZE_P = 0.15
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
