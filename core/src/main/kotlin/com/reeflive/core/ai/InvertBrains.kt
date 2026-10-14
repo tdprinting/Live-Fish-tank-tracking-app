@@ -756,7 +756,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     /** The disc keeps whatever heading it has (a brittle star has no front to turn). */
     private fun flatHeading() = o.heading.horizontal().normalized(Vec3.X)
 
-    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.sandTopCm + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
+    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.sim.sand.surfaceY(home.x, home.z) + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
 
     /** The open side of the hide (most clearance, a little toward the front glass), where the day arm tips poke out. */
     fun caveMouth(c: Ctx): Vec3 = mouthDir ?: run {
@@ -1055,7 +1055,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val p = if (buryAt == Vec3.ZERO) o.homePos else buryAt
-        return Rest(Vec3(p.x, c.rock.sandTopCm + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
+        return Rest(Vec3(p.x, c.sim.sand.surfaceY(p.x, p.z) + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
     }
 
     override fun initialPlace(c: Ctx) {
@@ -1070,7 +1070,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) {
             val p = c.o.pos
             // only bury in open sand; a snail up on the rock walks back down to its sand patch first
-            buryAt = if (p.y < c.rock.sandTopCm + 1.5 && c.rock.sdf.dist(p) > 2.0) p else o.homePos
+            buryAt = if (p.y < c.sim.sand.surfaceY(p.x, p.z) + 1.5 && c.rock.sdf.dist(p) > 2.0) p else o.homePos
             sink = 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1089,7 +1089,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
                 val tilt = Math.toRadians(SIPHON_TILT_DEG)
                 val head = h * kotlin.math.cos(tilt) + Vec3.Y * kotlin.math.sin(tilt)
                 val up = h * -kotlin.math.sin(tilt) + Vec3.Y * kotlin.math.cos(tilt)
-                out.rest(Rest(r.pos.withY(c.rock.sandTopCm - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
+                out.rest(Rest(r.pos.withY(c.sim.sand.surfaceY(r.pos.x, r.pos.z) - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
             }
             c.o.extension = 0.6 + 0.2 * sin(c.t * 0.5 + c.o.appendagePhase)   // siphon
         }
@@ -1190,7 +1190,7 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
             return 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
-            out.rest(Rest(c.o.pos.withY(c.rock.sandTopCm + 0.6), c.o.heading, Vec3.Y * -1.0, 7), 1.0)
+            out.rest(Rest(c.o.pos.withY(c.sim.sand.surfaceY(c.o.pos.x, c.o.pos.z) + 0.6), c.o.heading, Vec3.Y * -1.0, 7), 1.0)
             c.o.startle = max(c.o.startle, 0.1)
             if (c.t >= nextAttempt) {
                 // a righting attempt: the foot reaches out and twists (visible as an appendage flick)

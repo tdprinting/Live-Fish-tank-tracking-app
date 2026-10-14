@@ -1129,7 +1129,7 @@ Sources: [research 16, diamond goby](research/16_diamond_goby.md). The sand used
 
 `SandBed` is 64 × 24 cells over the 121.9 × 33 cm floor (≈ 1.9 × 1.4 cm). Each cell holds three values:
 
-- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound).
+- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound) on open sand; under rock it can be dug almost to the glass (§16.8).
 - **freshness**: 0…1. Turned sand is the damp, darker layer from below. It fades with τ = 6 h.
 - **detritus**: a mulm index of 0…1.5. It starts at 0.25 and relaxes over 2 days toward the water-column detritus (less in strong flow).
 
@@ -1156,9 +1156,10 @@ All of this uses its own `Rng`, so the behaviour random streams and the existing
 | Nassarius | Ploughs a trail every 0.6 cm crawled on sand (0.1 cm deep). Burying or emerging (posture 5) leaves a crater with a spoil ring and a small puff. |
 | Hermits, Sally Lightfoot | Scratch: freshen plus a faint furrow every cm walked, and a puff every 12 marks. |
 | Brittle star | A shallow, wide furrow where its arms drag. |
-| Engineer goby | Each mouthful is dug at the burrow mouth (`GobyBrain.digPoint`, anchor `SAND_GOBY_DIG`) and spat out as a mound (`depositSand`). In abstract mode this happens at the day rate. |
+| Engineer goby | Digs tunnels under the rock mouthful by mouthful and spits the spoil at the entrance (§16.8). In abstract mode one mouthful every ~3 daylight minutes. |
 | Diamond goby | Scoops pits at its feeding stations, puffs sand and fines out of its gills, digs its burrow, and sifts detritus away (§16.5). |
-| Pump flow | Smooths the bed (§16.1). |
+| Pump flow | Smooths the bed (§16.1) and refills burrows (§16.8). |
+| Every body | Rests on the live surface and pushes sand aside where it touches it (§16.9). |
 
 Teleports (more than 6 cm in one tick) are ignored.
 
@@ -1212,11 +1213,14 @@ The diamond goby is not in the owner's tank. It is in the stocking gallery (`Sto
 
 `SimSnapshot.sandGrid` (`SandGridSnapshot`: dims, cell size, height/fresh/detritus arrays, version) is rebuilt at most every 0.25 s × speed. It is shared until the bed changes. `SimSnapshot.sandClouds` holds the live cloud particles at stride 4 (x, y, z, kind + age/60).
 
+`SandGridSnapshot.cavity` (0…1 per cell) marks sand dug out from under rock: the gap over 2 cm, more where it was dug beyond the bed's starting gap.
+
 In the app:
 
 - `SandFx` packs the grid into a 64 × 24 RGBA16F texture on sampler unit 13 (`uSandMap`). It uploads only on a version change, at most 5×/s.
 - `static.vert` (`SAND`) lifts the top vertices of the sand by the height.
-- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, and brightens freshly sifted patches.
+- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, brightens freshly sifted patches, and shadows the floor of dug burrows (alpha = cavity).
+- Dug tunnels need no extra geometry: the sand mesh under the rock is lowered by the height, which opens the gap to the rock's underside. Spoil piles are the same lift upward, and each spit throws a `puff` that the cloud renderer draws.
 - `SandCloudRenderer` draws each cloud particle as three jittered points with the particles program. Sand is a pale burst, silt a faint spreading haze, detritus brown flecks.
 
 The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
@@ -1232,6 +1236,60 @@ The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
 - nassarius trails and burial craters, both direct and fed in a live run;
 - the engineer goby's pit and mound;
 - the diamond goby: catalogue and compatibility, sifting (mouthfuls, puffs, stations, sifted load, level bed), pair burrow, dusting of low corals, decline without sand fauna, and the prey index on a sterile bed.
+
+`sim/SandBurrowTest.kt`:
+
+- the rock roof read from the SDF;
+- mass conservation through mouthfuls, spits, plumes, bow waves, impressions and three days of `relax`;
+- an undug burrow does not fit the body; it fits to its length once dug, and refills over days when left alone;
+- a live goby on a fresh bed never has its head beyond the dug face, and its burrow gets longer;
+- no head (and no spine midpoint, 0.3 cm tolerance) below the sand surface unless burrowing, over 30 min of the full tank at dusk; contacts moved sand;
+- burrows and the bed carry over into a time-lapse fork.
+
+### 16.8 Tunnels under rock and the engineer goby's burrows
+
+Sources: [research video fish_engineer_goby](research/video/fish_engineer_goby.md), [sand_bioturbation](research/video/sand_bioturbation.md); Wikipedia (*Pholidichthys leucotaenia*: adults excavate with the mouth, "eject mouthfuls of debris", a colony's maze of tunnels ≈ 6 m); Shedd Aquarium (scoop up sand or gravel and spit it at the tunnel entrance); hobbyist guides (rock resting on sand rather than glass gets undermined; they dig and re-dig constantly). No footage was watched (YouTube blocked).
+
+**Roof.** `SandBed.attachRock(sdf)` sphere-traces each cell's centre column from 0.5 cm above the glass. The first rock hit within `ROOF_RANGE` (8 cm) over the modelled bed is the cell's `roof`. Rock at the bottom marks the cell `SOLID` (nothing to dig under); no rock marks it `OPEN`. A roofed cell can be dug to 0.5 cm above the glass (`floorH`).
+
+- `gapAt(x, z)` = roof − live surface (∞ in open water, 0 where sand meets rock).
+- `fits(x, z, dir, bodyH, bodyW)` needs the gap ≥ body height at the midline and at both flanks (± half the width across the heading).
+- `maxGapAt` is the most a gap could ever open (roof − floor).
+
+**Mass.** `takeMouthful` takes sand from the cell that holds the surface up most at that point. It never goes below the floor, and the sand is counted as `carriedCm3` until `spit` drops it. `spit` deposits it with `depositExact`, which spills to a wider ring instead of losing sand to the mound clamp, and throws a plume. `sandVolumeCm3()` is the grid plus suspended sand plus carried sand. It stays constant through digging, spitting, clouds, bow waves, impressions, slumping, smoothing and infill. Puffs never take sand a cell does not have, grains landing are never clamped away, and coarse grains that time out drop where they are.
+
+**Burrows.** A `Burrow` is a straight tunnel from a mouth at the rock edge into the rock. The live gap is not stored: `reach(b, h, w)` walks it in 0.4 cm steps. `nextDig` gives the next mouthful:
+
+1. the face (the first point where the body does not fit);
+2. any stretch lower than the chamber height (`CHAMBER` 1.4 × the fit height), i.e. sand that trickled back;
+3. one more cm of tunnel, up to 1.6 body lengths, while the rock allows;
+4. the mouth apron.
+
+**Refill.** `relax` slumps sand under rock only past tan 2.0 (≈ 63°; roof-confined, mucus-bound walls). Every neighbour pair with a roofed cell evens out with τ = 3 days at 1× flow (faster in strong flow). A tunnel left alone shallows by about a third in three days, so the goby must keep digging.
+
+**GobyBrain.** The fit height is body depth × 1.15; the width is 0.65 × that.
+
+- **Burrows.** It plans a primary burrow from `BURROW_GOBY` along its direction (1.2 body lengths), plus up to two rock-edge sites within 24 cm (`burrowSites`) that it can swim to in a straight line. Fish built with the tank have the primary burrow already open to its length (an established home, sand moved to the spoil pile). The others start undug.
+- **Excavate** (trip timing unchanged: adults every 0.7–2 h, juveniles every 25–120 s):
+  1. swims to the mouth;
+  2. slides in head first at 0.5 BL/s, only as far as `reach`;
+  3. digs at the face for 2–5 s with the head in the sand (`Organism.inSand`) and the body wriggling;
+  4. takes a mouthful of 0.6 cm³ × (L/10 cm)², backs out at 0.7 BL/s still facing in, turns, swims to the spoil pile about half a body length outside the entrance, and spits (mound plus plume, `Simulation.spitSand`). If interrupted, it drops what it carries.
+- **InBurrow.** By day the head peeks out with the body lying in the tunnel. At night the head is deep and facing in. Both are limited to the dug length; with a short tunnel more of the body stays outside.
+- The rare night patrol, the hover and the flee are unchanged.
+
+### 16.9 Bodies against the sand (`sim/SandContact.kt`)
+
+After every behaviour tick (and in abstract placement), `SandContact.step` lifts any body whose reference point is below `surfaceY + clearance`, where clearance is half the body depth for fish and 0.15 cm for crawlers. It also clears downward velocity and re-anchors the spline head. `Steering.crawl` still re-attaches crawlers to the flat `RockData.sandTopCm` plane, so on sand the clamp lifts them back onto the live surface each tick (the collision layer is the place to make the walk itself read `surfaceY`). `Ctx.safe` lifts any target point above `surfaceY` + clearance, so no swimmer is sent to a point it cannot reach. An engineer goby away from its burrow mouth slides along the bed to it when the way is clear: the open-water swim holds a 20 cm body off the rock it lives against.
+
+Exempt (`SandContact.exempt`): posture 5 (buried nassarius, sleeping leopard wrasse, bobtail squid), `Organism.inSand` (a goby's head in its dig face), and the feather duster (its tube is set in the sand).
+
+Contact moves sand (mass-conserving):
+
+- **Bow wave.** Each 0.25 BL (≥ 0.6 cm) travelled in contact pushes a 0.2 mm layer over the body width (plus what a pressed-in body overlapped) 60 % ahead and 20 % to each side. Nassarius, hermits, the Sally Lightfoot and the brittle star keep their `SandWork` trails instead.
+- **Impression.** After 20 s still in contact, a brittle star leaves one disc impression and a goby three along its body (0.12 cm deep, with a rim).
+
+Swap point: when the shared collision layer lands (`BodyCollision.resolveEnv` reading `SandBed.surfaceY` live), `clamp` becomes its sand term and `exempt` its per-cell rule. The displacement half stays.
 
 ## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
 

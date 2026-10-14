@@ -317,6 +317,12 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
         if (rock.sdf.dist(q) >= clear) break
         q = rock.clampToWater(rock.sdf.project(q, clear), m)
     }
+    // never under the live sand (SandContact holds bodies on SandBed.surfaceY, so a point below it cannot be reached)
+    val floor = sim.sand.surfaceY(q.x, q.z) + com.reeflive.core.sim.SandContact.clearance(o) + 0.2
+    if (q.y < floor) {
+        val up = q.withY(min(floor, rock.waterLevelCm - m))
+        if (rock.sdf.dist(up) >= min(clear, rock.sdf.dist(q))) q = up
+    }
     return q
 }
 

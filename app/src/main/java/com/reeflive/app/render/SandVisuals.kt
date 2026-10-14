@@ -6,8 +6,9 @@ import java.nio.FloatBuffer
 
 /**
  * Dynamic sand bed on the GPU (SIMULATION §16). [SimSnapshot.sandGrid] (64 × 24 cells: height offset cm, freshness,
- * detritus) is packed into a small RGBA16F texture on unit 13 (`uSandMap`): static.vert lifts the sand's top vertices
- * by the height (pits, mounds, trails) and rock.frag shades the slope, darkens freshly turned damp sand and tints mulm.
+ * detritus, dug cavity under rock) is packed into a small RGBA16F texture on unit 13 (`uSandMap`): static.vert lifts
+ * the sand's top vertices by the height (pits, mounds, trails, tunnels dug under the rock, spoil piles) and rock.frag
+ * shades the slope, darkens freshly turned damp sand, tints mulm and shadows the floor of dug burrows (alpha).
  * Uploads only when the grid's version changes, at most every [UPLOAD_INTERVAL_NS] (≈ 25 KB each).
  */
 class SandFx {
@@ -56,11 +57,13 @@ class SandFx {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT); Gl.check("glActiveTexture(sand)")
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex); Gl.check("glBindTexture(sand)")
         if (g.nx != w || g.nz != h) allocate(g.nx, g.nz)
+        val cav = g.cavity
+        val hasCavity = cav.size >= n
         for (i in 0 until n) {
             data[i * 4] = g.height[i]
             data[i * 4 + 1] = g.fresh[i]
             data[i * 4 + 2] = g.detritus[i]
-            data[i * 4 + 3] = 0f
+            data[i * 4 + 3] = if (hasCavity) cav[i] else 0f
         }
         upload()
         extentX = g.nx * g.cellXCm; extentZ = g.nz * g.cellZCm
