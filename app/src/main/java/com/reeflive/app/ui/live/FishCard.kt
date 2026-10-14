@@ -69,7 +69,11 @@ fun FishCard(
             CloseDot(onClose, "Close fish card")
         }
         Spacer(Modifier.height(10.dp))
-        Text(state.behavior, style = MaterialTheme.typography.bodyMedium, color = c.text)
+        if (state.alive && state.thought.now.isNotBlank()) {
+            ThinkingBlock(state.id, state.thought, Modifier.fillMaxWidth())
+        } else {
+            Text(state.behavior, style = MaterialTheme.typography.bodyMedium, color = c.text)
+        }
         if (state.symptoms.isNotEmpty()) {
             Text(state.symptoms.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = c.cautionText)
         }
@@ -173,6 +177,10 @@ private val previewFish = FishCardState(
     id = "f1", speciesName = "Ocellaris clownfish", name = "Pixel",
     health = 0.82f, stress = 0.28f, hunger = 0.64f, mood = "Hungry",
     behavior = "Hovering in the anemone, watching the surface for food",
+    thought = com.reeflive.core.sim.Thought(
+        now = "Pixel is hungry and watching the surface for food.", next = "Next: nibble the nori clip.",
+        feeling = "Feeling: hungry (its tummy is rumbling).", mood = "hungry", planKey = "host|",
+    ),
     relationships = listOf(
         RelationshipUi("Coral", "Ocellaris clownfish", RelationKind.MATE, 0.9f, "pair bonded"),
         RelationshipUi("Kiwi", "Yellow tang", RelationKind.NEUTRAL, 0.0f),

@@ -373,7 +373,34 @@ data class OrganismStats(
     val mouthbrooding: Boolean = false,
     /** Chronological age in years (LifeCycle). */
     val ageYears: Float = 0f,
+    /** "What is it thinking?" readout (ai/Thoughts.kt); [Thought.NONE] when the readout is off. */
+    val thought: Thought = Thought.NONE,
 )
+
+/**
+ * An animal's plan in plain English (ai/Thoughts.kt, SIMULATION §4.10), for the fish card, follow mode and the thought
+ * bubbles. Every line is a finished, kid-friendly sentence; nothing here feeds back into the sim.
+ */
+data class Thought(
+    /** The current plan as a sentence: "Nemo is heading home to the hairy mushrooms to rest." */
+    val now: String = "",
+    /** The runner-up or time-of-day plan: "Next: graze the nori clip." ("" when there is none). */
+    val next: String = "",
+    /** "Feeling: a bit stressed (water is warm)." */
+    val feeling: String = "",
+    /** One mood word or two: happy, relaxed, hungry, curious, busy, feisty, scared, sleepy, stressed, unwell, too hot. */
+    val mood: String = "",
+    /** The top driver in a few words: "it is hungry", "Falco the hawkfish is close". */
+    val why: String = "",
+    /** A short first-person caption for a speech bubble: "Yum, mysis!", "Eek! Hide!", "Zzz…". */
+    val bubble: String = "",
+    /** Stable id of the current plan (behaviour + target): the UI holds a line until this changes. */
+    val planKey: String = "",
+    /** 0 (asleep, hidden) .. 3 (eating, fleeing, cleaning, hunting): which animals get a bubble first. */
+    val interest: Int = 0,
+) {
+    companion object { val NONE = Thought() }
+}
 
 /**
  * An egg clutch for the renderer (coverage B-1): world position and the rock normal it sits on,

@@ -132,6 +132,9 @@ class LiveTools(
     val onSupplies: () -> Unit = {},
     /** Full-screen screensaver: slow cinematic moves and fish follows with soft transitions. */
     val onScreensaver: () -> Unit = {},
+    /** More → "Thought bubbles": speech bubbles over a few animals saying what they are thinking. */
+    val thoughtsOn: Boolean = false,
+    val onThoughts: () -> Unit = {},
 )
 
 /**
@@ -567,6 +570,7 @@ private fun ColumnScope.CardBody(
                 T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
+                T("Thought bubbles", ReefGlyphs.bubbles, on = tools.thoughtsOn, closes = false, sub = "What fish think") { tools.onThoughts() },
             ))
         }
     }

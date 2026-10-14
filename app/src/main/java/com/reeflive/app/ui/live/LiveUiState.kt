@@ -2,6 +2,7 @@ package com.reeflive.app.ui.live
 
 import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.RelationInfo
+import com.reeflive.core.sim.Thought
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.status.Status
 import java.util.Locale
@@ -68,6 +69,8 @@ data class FishCardState(
     val relationships: List<RelationshipUi> = emptyList(),
     /** Life stage and sex, e.g. "Juvenile" or "Adult · Female" (core LifeStages; docs/research/life_stages.md). */
     val lifeStage: String = "",
+    /** "What is it thinking?" (core ai/Thoughts.kt): plan, next plan and feeling, shown under "Thinking…". */
+    val thought: Thought = Thought.NONE,
 )
 
 /** Maps core social memory one-to-one: label drives [RelationKind], fear/harassment/familiarity drive [RelationshipUi.affinity]. */
@@ -97,6 +100,7 @@ fun OrganismStats.toFishCardState(relationships: List<RelationshipUi> = relation
     behavior = intent.ifBlank { behavior },
     alive = alive, symptoms = symptoms.map { it.label }, relationships = relationships,
     lifeStage = LifeStageLabels.of(speciesId, lengthCm.toDouble(), sex),
+    thought = thought,
 )
 
 /** Stage labels from the species sheets on the classpath (cached per species; "" for non-fish or a missing sheet). */
@@ -115,6 +119,7 @@ object LifeStageLabels {
 fun OrganismStats.toFollowState(index: Int, count: Int) = FollowState(
     fishName = nickname.ifBlank { common }, speciesName = common,
     behaviorLine = caption.ifBlank { intent.ifBlank { behavior } }, index = index, count = count,
+    id = id, thought = thought,
 )
 
 data class FollowState(
@@ -123,6 +128,9 @@ data class FollowState(
     val behaviorLine: String,
     val index: Int = 0,
     val count: Int = 1,
+    val id: String = "",
+    /** Shown as the "Thinking…" lines in place of [behaviorLine] when present. */
+    val thought: Thought = Thought.NONE,
 )
 
 /** Water strip helper: temp, salinity, NO3, PO4 from [w] against the [SandboxParams] zones, plus live light % and flow. */

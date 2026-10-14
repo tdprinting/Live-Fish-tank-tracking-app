@@ -370,6 +370,12 @@ Written for someone who has never seen the app (a partner, a child): nothing a s
 - The **microscope** takes every touch while it is open, so nothing reaches the hidden tank under it (taps there used to pick fish, knock the glass or start cleaning).
 - Action pictures and their captions clamp to the screen without ever throwing (`clampSafe`), so a tiny split-screen window cannot crash the draw pass.
 
+### 10.9 What is it thinking (`ui/live/ThoughtViews.kt`, `ThoughtLines.kt`; core `ai/Thoughts.kt`)
+
+- **Fish card and follow bar**: a "Thinking…" label (display face, dim) over three lines from core `Thought`: the plan ("Nemo is hungry and watching the surface for food."), the next plan in secondary text ("Next: nibble the nori clip.") and the feeling ("Feeling: hungry (its tummy is rumbling)."). It replaces the old behaviour line when present. `ThoughtHold` keeps each line ≥ 1.5 s unless the plan key changes (new behaviour or new target) or another animal is picked, and each line cross-fades (`liveSpec`, a 100 ms fade with Reduce Motion), so the 4 Hz HUD never flickers it.
+- **More → Thought bubbles** (off by default, both modes; the web page has it too): white candy speech bubbles with the navy arcade outline, depth shadow and a tail pointing at the animal, over at most three animals in the 3D view. `ThoughtBubblePicker` adds one bubble per 250 ms at most, preferring a fresh change of plan, then `Thought.interest`, then animals nearer the camera; it skips animals off screen or within 140 px of a bubble already up. Each fades in and out over 0.4 s, stays ~4.5 s (a new plan while it shows swaps the words and extends it), then that animal waits 6 s. Words are first-person and short ("Yum, mysis!", "Eek! Hide!", "Cleaning time!", "Zzz…"). The layer draws only (a frame clock read in the draw phase, positions from the full-rate snapshot through `TankProjection`), never recomposes the screen and takes no touches. Hidden in the microscope, on the shelf, while carrying a prop and in clean-glass mode.
+- Kid wording: one idea per sentence, the animal's own name first, its neighbours as "Blue the tang", no reef jargon or raw names (tested in core).
+
 ---
 
 ## 11. Empty states and copy voice

@@ -112,7 +112,7 @@ class Simulation(
     private val pendingEvents = ArrayList<SimEvent>()
     val eventLog = ArrayDeque<SimEvent>()
     private var chemAccum = 0.0
-    private var tickCount = 0L
+    var tickCount = 0L; private set
     private var lastLight = 0.0
     private var grazeAccum = 0.0
     private var idCounter = 1
@@ -1225,11 +1225,25 @@ class Simulation(
     // ============================================================== snapshot
     private fun statsAll(): List<OrganismStats> {
         val byId = organisms.associateBy { it.id }
-        return organisms.map { o ->
+        val out = organisms.map { o ->
             val d = com.reeflive.core.ai.Caption.describe(o, this)
-            o.stats(d.caption, d.intent, d.targetId ?: o.focusId, com.reeflive.core.ai.Social.summarize(o, byId, simTimeSec))
+            val target = (d.targetId ?: o.focusId)?.let { byId[it] }
+            val thought = if (thoughtsEnabled) thoughtBook.thought(o, this, target) else Thought.NONE
+            o.stats(d.caption, d.intent, d.targetId ?: o.focusId, com.reeflive.core.ai.Social.summarize(o, byId, simTimeSec), thought)
         }
+        if (thoughtsEnabled) thoughtBook.endSnapshot(this, byId.keys)
+        return out
     }
+
+    /**
+     * The "what is it thinking" readout in [OrganismStats.thought] (ai/Thoughts.kt). Read-only: turning it off changes
+     * nothing in the sim (ThoughtsTest), only the snapshot's words.
+     */
+    var thoughtsEnabled = true
+    private val thoughtBook = com.reeflive.core.ai.ThoughtBook()
+
+    /** Minutes until the lights go out (null while dark), from the last light update. */
+    val minutesUntilLightsOff: Double? get() = cachedUntilOff
 
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
     fun snapshot(): SimSnapshot =

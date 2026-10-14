@@ -13,6 +13,7 @@ object LiveTips {
     /** One line per tip, in the order the card shows them (the card pairs each with a glyph). */
     val watch = listOf(
         "Tap a fish to meet it. Tap Follow on its card to swim along with it.",
+        "A fish's card says what it is thinking. Thought bubbles in More shows it in the tank.",
         "Tap the glass and see who comes to look. Tap the sand or a rock too.",
         "Drag to look around. Pinch to zoom in and out.",
         "Supplies opens the shelf: tap a food or tool, then tap the tank to use it.",
@@ -36,6 +37,7 @@ object LiveTips {
         "Drag to look around, pinch to zoom.",
         "Supplies has food. Tap one, then tap the water.",
         "Tap the magnet on the glass to clean it.",
+        "What are the fish thinking? Try Thought bubbles in More!",
         "Tap Sandbox at the top to play. Your real tank stays safe.",
         "Lost? More has a What can I do? button.",
     )
@@ -46,6 +48,7 @@ object LiveTips {
         "Try Trouble, then speed up time in More.",
         "Every card has a More button with the grown-up sliders.",
         "Tap the tank while something animates to skip it.",
+        "Thought bubbles in More show what the fish plan to do.",
         "Made a mess? More has a big Reset button.",
         "Tap Watch at the top to see your real tank again.",
     )

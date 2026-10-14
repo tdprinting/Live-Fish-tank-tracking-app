@@ -137,6 +137,7 @@ import com.reeflive.app.ui.live.TankGaugeLayer
 import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
+import com.reeflive.app.ui.live.ThoughtBubbleLayer
 import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.WaterTap
 import com.reeflive.app.ui.live.liveSpec
@@ -264,6 +265,8 @@ fun LiveTankScreen(
     var railShown by rememberSaveable { mutableStateOf(true) }
     var hermieOn by rememberSaveable { mutableStateOf(true) }
     var meterOn by rememberSaveable { mutableStateOf(true) }
+    // More → "Thought bubbles": what a few animals are thinking, over the 3D view (off by default: a calm tank)
+    var thoughtsOn by rememberSaveable { mutableStateOf(false) }
     var micro by rememberSaveable { mutableStateOf(false) }
     var preset by rememberSaveable { mutableStateOf<SandboxPreset?>(null) }
     var controlMode by rememberSaveable { mutableStateOf(SandboxControlMode.SET) }
@@ -627,6 +630,12 @@ fun LiveTankScreen(
         onHermie = { tick(); hermieOn = !hermieOn },
         meterOn = meterOn,
         onMeter = { tick(); meterOn = !meterOn },
+        thoughtsOn = thoughtsOn,
+        onThoughts = {
+            tick(); thoughtsOn = !thoughtsOn
+            banner.show(Feedback(if (thoughtsOn) "Thought bubbles on" else "Thought bubbles off", if (thoughtsOn) "Up to three animals say what they are thinking" else "The fish keep their thoughts to themselves"), Candy.purple)
+            if (thoughtsOn && hermieOn) hermie.say("Look! Now you can see what the fish are thinking.", HermieMood.HAPPY)
+        },
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
@@ -796,6 +805,10 @@ fun LiveTankScreen(
             shelf = shelf,
             onTouchTank = onTouchTank,
         )
+        // speech bubbles over a few animals: same bounds as the tank view, draws only, touches go through
+        if (thoughtsOn && !micro && !supplies && carry == null && !cleaning) {
+            ThoughtBubbleLayer(vm.snapshots, projection, Modifier.fillMaxSize())
+        }
         TankGaugeLayer(
             visible = !chromeHidden && !micro && !supplies && carry == null && !cleaning,
             projection = projection,
