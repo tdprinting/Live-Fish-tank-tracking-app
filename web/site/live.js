@@ -41,8 +41,11 @@ export function startLive(applyReadings) {
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
-    onPick: (id) => { if (id) select(id); else if (!ui.following) select(null); },
+    // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
+    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
+    // pressed and held right on an animal: ride along with it
+    onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
@@ -115,6 +118,7 @@ const clockText = (sec) => {
 
 // ================================================================ Hermie, toasts
 let hermieTimer = 0, tipIndex = 0;
+function buzz(ms) { try { navigator.vibrate?.(ms); } catch { /* not on iOS */ } }
 function say(text) {
   if (!ui.hermie) { toast(text); return; }
   $('hermieText').textContent = text;

@@ -129,6 +129,8 @@ object ReefLive {
                     // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
                     override fun onPick(id: String?) { if (id != null) sim?.enqueue(Command.TouchAnimal(id)); emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
+                    // pressed and held on an animal: follow it (the page buzzes and says who)
+                    override fun onHoldAnimal(id: String) { r.follow(id); emit("onFollow", id); emit("onHold", id) }
                     override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
@@ -153,6 +155,7 @@ object ReefLive {
                 r.onSurfaceCreated(null, null)
                 resize()
                 touch = TouchController(Context(AssetManager(files)), View(), r.input)
+                resize()   // TouchController sets its own finger size from the slop; the page's px are device px
                 attachPointers(cnv)
                 window.addEventListener("resize", { resize() })
                 running = true
@@ -214,6 +217,8 @@ object ReefLive {
         val h = (c.clientHeight * dpr).toInt().coerceAtLeast(1)
         if (c.width != w || c.height != h) { c.width = w; c.height = h }
         renderer?.onSurfaceChanged(null, w, h)
+        // a fingertip's radius for forgiving picks: ~22 CSS px (the Android 24 dp, a bit under half a 48 px target)
+        renderer?.input?.fingerPx = (22.0 * dpr).toFloat()
     }
 
     private fun frame(t: Double) {
