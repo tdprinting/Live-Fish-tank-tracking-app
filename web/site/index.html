@@ -17,6 +17,7 @@
 </head>
 <body>
 <header class="bar">
+  <button class="back" data-tab="live" aria-label="Back to the tank">‹ Tank</button>
   <div class="brand"><span class="dot"></span>ReefLive</div>
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="live" role="tab">Live tank</button>
@@ -35,10 +36,15 @@
         <div class="seg glass" role="tablist" aria-label="Mode">
           <button data-mode="watch" class="on">👀 Watch</button><button data-mode="sandbox">🧪 Sandbox</button>
         </div>
-        <div class="pill glass" id="clock">Day 1 · --:--</div>
-        <button class="pill glass" id="happy" aria-label="Tank happy meter"><span id="happyFace">😊</span><span class="hide-sm">Tank happy</span> <b id="happyVal">--</b><i class="meter"><i id="happyBar"></i></i></button>
-        <button class="pill glass hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
-        <div class="strip" id="strip"></div>
+        <span class="spacer"></span>
+          <button class="round glass hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
+        <button class="round glass tests" data-tab="params" aria-label="Water tests">📋</button>
+        <div class="row2">
+          <div class="pill glass" id="clock">Day 1 · --:--</div>
+          <button class="pill glass" id="happy" aria-label="Tank happy meter"><span id="happyFace">😊</span> <b id="happyVal">--</b><i class="meter"><i id="happyBar"></i></i></button>
+          <button class="pill glass" id="waterBtn" aria-label="Show water readings">💧 <span id="waterSum">Water</span></button>
+        </div>
+        <div class="strip hidden" id="strip"></div>
       </div>
 
       <div class="side">
@@ -48,7 +54,7 @@
         <button class="round glass" id="hideBtn" aria-label="Hide buttons">🙈</button>
       </div>
 
-      <div class="card glass hidden" id="card"></div>
+      <div class="sheet glass hidden" id="card"></div>
       <div class="fish glass hidden" id="fish"></div>
       <div class="follow glass hidden" id="follow"></div>
       <div class="shelfbar glass hidden" id="shelfbar"></div>

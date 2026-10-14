@@ -21,7 +21,7 @@ const ui = {
   picked: null, following: null, tour: false, shelf: false, shelfRow: 0, cleaning: false, chromeHidden: false,
   torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
-  hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
+  water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
@@ -72,6 +72,10 @@ function tick() {
   animals = JSON.parse(SB.animals());
   const s = JSON.parse(live.state());
   if (s) $('clock').textContent = `${clockText(s.time)} · ${s.phase}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
+  const worst = P.readouts.some((r) => r.status === 'DANGER') ? 'danger' : P.readouts.some((r) => r.status === 'CAUTION') ? 'caution' : 'good';
+  $('waterBtn').className = `pill glass water-${worst}${ui.water ? ' on' : ''}`;
+  $('waterSum').textContent = worst === 'good' ? 'Water OK' : worst === 'caution' ? 'Water: check' : 'Water: help!';
+  $('strip').classList.toggle('hidden', !ui.water);
   $('strip').innerHTML = P.readouts.map((r) => `<span class="chip ${r.status.toLowerCase()}">${esc(r.label)} ${esc(r.text)}</span>`).join('');
   $('happy').classList.toggle('hidden', !ui.happy);
   $('happyVal').textContent = `${P.happy}%`;
@@ -101,6 +105,7 @@ function say(text) {
   clearTimeout(hermieTimer);
   hermieTimer = setTimeout(() => $('hermie').classList.remove('talk'), 6000);
 }
+$('waterBtn').addEventListener('click', () => { ui.water = !ui.water; store.set('reeflive.water', ui.water); cue('TICK'); tick(); });
 $('hermie').addEventListener('click', () => {
   const list = ui.mode === 'sandbox' ? C.tips.hermieSandbox : C.tips.hermieWatch;
   say(list[tipIndex++ % list.length]);
