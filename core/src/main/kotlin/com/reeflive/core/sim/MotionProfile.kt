@@ -168,7 +168,7 @@ object MotionProfiles {
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
         BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
         // foot gliding 0.5–1 cm/s; the food rush races at 3–5 cm/s [M][L]
-        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.7, walkBurstCmS = 4.0),
+        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.03, walkBurstCmS = 0.07),
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 0.8),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
