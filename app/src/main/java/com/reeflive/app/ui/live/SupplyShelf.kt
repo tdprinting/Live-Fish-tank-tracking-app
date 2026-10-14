@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -69,6 +70,7 @@ import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
+import com.reeflive.core.sim.WaterState
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.max
@@ -175,6 +177,51 @@ enum class SupplyItem(
         else -> ReefGlyphs.feedTin
     }
 
+    /**
+     * What the prop changes in the tank and by how much, shown under its blurb in the pick label (docs/research/
+     * shelf_audit.md). Foods read theirs off the sim's own numbers (FoodKind.properties: sink / float, who eats it,
+     * waste); the care props and tools name the sim effect they drive.
+     */
+    val properties: String get() = food?.properties ?: when (this) {
+        WATER_CHANGE -> "Swaps 25 %: nitrate and phosphate −25 %. Coral Pro mixes rich: alk about +1 dKH, Ca +6, Mg +18"
+        WATER_SMALL -> "Swaps 10 %: nitrate and phosphate −10 %. Instant Ocean is close to sea water: minerals barely move"
+        DOSE_ALK -> "Alkalinity +1 dKH over 10 min. More than 1 dKH a day stresses corals"
+        DOSE_CA -> "Calcium +20 ppm over 20 min. With high alk it falls out as white crust"
+        DOSE_MG -> "Magnesium +50 ppm. Holds calcium and alk in the water (no crust)"
+        NEW_SOCK -> "Fits a clean felt sock: traps drifting muck. Left in past 2-3 days it rots back to ammonia"
+        FRESH_CARBON -> "Fresh carbon: clears yellow water and coral toxins in a day. Slowly strips iodine too"
+        TRIM_ALGAE -> "Cuts the red macro by a third and the refugium by half: the nitrate in it leaves too"
+        ZAP_PEST -> "Kills the biggest pest anemone. One in five leaves a baby behind"
+        SETTLE_IN -> "Resets everyone's comfort point to today's water: shock from swings fades"
+        GLASS_CLEANER -> "Wipes the algae film off the front glass where you drag"
+        TEST_KIT -> "Reads KH, Ca, NO3, PO4 like a real kit: colour cards round, drops are ±1"
+        MICROSCOPE -> "Pods, worms and plankton living in the rock, sand and water"
+        KNOCKER -> "A hard knock: nearby fish startle and hide, and stress a little"
+        MOVE_ROCKS -> "Territories reset for a day (more squabbles); can tear a pest anemone in two"
+        else -> ""
+    }
+
+    /** The salt a water-change prop mixes (its product): Coral Pro for the big change, Instant Ocean for the small. */
+    val saltMix: WaterState? get() = when (this) {
+        WATER_CHANGE -> WaterState.CORAL_PRO_MIX
+        WATER_SMALL -> WaterState.INSTANT_OCEAN_MIX
+        else -> null
+    }
+
+    /** Share of the water a water-change prop swaps. */
+    val changeFraction: Double get() = when (this) {
+        WATER_CHANGE -> 0.25
+        WATER_SMALL -> 0.10
+        else -> 0.0
+    }
+
+    /** The salt's short name for the banner ("Coral Pro"). */
+    val saltName: String get() = when (this) {
+        WATER_CHANGE -> "Coral Pro"
+        WATER_SMALL -> "Instant Ocean"
+        else -> ""
+    }
+
     /** The prop stays on the shelf when picked (it shows something there) instead of taking you back to the tank. */
     val staysOnShelf: Boolean get() = this == TEST_KIT
 
@@ -182,13 +229,13 @@ enum class SupplyItem(
 
     /**
      * Sends this supply's action through the same paths as the old menu tiles, so it plays the same in-tank picture
-     * and Hermie line ([SandboxActions] cue them). The glass cleaner enters clean-glass mode like the old button.
+     * and Hermie line ([SandboxActions] cue them). The glass cleaner enters clean-glass mode like the old button. The
+     * water changes go with their own salt ([saltMix]).
      */
     fun use(actions: SandboxActions, tools: LiveTools) {
         food?.let { actions.onFeed(it); return }
         when (this) {
-            WATER_CHANGE -> actions.onWaterChange(0.25)
-            WATER_SMALL -> actions.onWaterChange(0.10)
+            WATER_CHANGE, WATER_SMALL -> actions.onSaltChange(changeFraction, saltMix ?: WaterState.FRESH_MIX, saltName)
             DOSE_ALK -> actions.onDose("alk", 1.0)
             DOSE_CA -> actions.onDose("ca", 20.0)
             DOSE_MG -> actions.onDose("mg", 50.0)
@@ -536,6 +583,11 @@ private fun ShelfLabel(p: ShelfPick, modifier: Modifier = Modifier) {
         val line = if (p.locked) "Pretend tank only: switch to Sandbox to use it" else item.blurb
         if (line.isNotEmpty()) {
             Text(line, style = s.buttonText.copy(fontSize = 12.sp, lineHeight = 15.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+        // what it changes and by how much (the sim effect behind the prop), set apart by a thin rule
+        if (item.properties.isNotEmpty()) {
+            Box(Modifier.padding(vertical = 4.dp).fillMaxWidth().height(1.dp).background(s.labelDim.copy(alpha = 0.25f)))
+            Text(item.properties, style = s.buttonText.copy(fontSize = 11.sp, lineHeight = 14.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }

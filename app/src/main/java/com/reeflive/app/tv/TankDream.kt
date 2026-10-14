@@ -14,7 +14,7 @@ class TankDream : DreamService() {
         isInteractive = false
         isFullscreen = true
         isScreenBright = true
-        val w = TankWatch(this, interactive = false)
+        val w = TankWatch(this, hint = null, phone = !isTv(this))
         watch = w
         setContentView(w.root)
     }

@@ -166,6 +166,8 @@ data class SandboxActions(
     val onMicro: (MicroAction) -> Unit = {},
     /** Shows the sandbox tips again. */
     val onHelp: () -> Unit = {},
+    /** A shelf water change with its own salt: swap [fraction] for [mix], the salt named [salt] in the banner. */
+    val onSaltChange: (fraction: Double, mix: WaterState, salt: String) -> Unit = { _, _, _ -> },
 )
 
 /** One dose button: [paramId] for Command.Dose, [delta] in sim units. */

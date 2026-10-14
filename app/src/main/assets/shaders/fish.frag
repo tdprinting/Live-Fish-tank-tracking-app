@@ -88,11 +88,20 @@ void main() {
         vec2 g = vUv * vec2(70.0, 38.0);
         g.x += 0.5 * mod(floor(g.y), 2.0);
         vec2 f = fract(g) - vec2(0.5, 0.35);
-        float scale = 1.0 - smoothstep(0.15, 0.36, dot(f, f));
+        // soft dome per scale: a wide falloff keeps the edge slopes gentle, so up close the scale rows read as relief
+        // in the diffuse light instead of a bright net of specular glints along every scale edge
+        float scale = 1.0 - smoothstep(0.05, 0.4, dot(f, f));
         float vis = (1.0 - smoothstep(0.2, 0.5, length(fwidth(g)))) * step(uPart, 0.5);
-        N = bumpH(N, vWorld, scale * vis * 0.012);
+        N = bumpH(N, vWorld, scale * vis * 0.006);
     }
-    float ndv = max(dot(N, V), 0.0);
+    // view-angle terms (rim, fresnel, iridescence, clear coat) use the smooth body normal: on the scale relief they
+    // light up every scale edge as a white grid when the camera is close
+    vec3 Ng = normalize(vNormal);
+#ifdef FIN
+    if (!gl_FrontFacing) Ng = -Ng;
+#endif
+    if (dot(Ng, V) < 0.0) Ng = -Ng;
+    float ndv = max(dot(Ng, V), 0.0);
     float specScale = mix(1.0, 0.25, uNight) * (1.0 - 0.7 * uDead);
 #ifdef FIN
     vec3 col = shadeLit(albedo, N, V, vWorld, max(uRoughness, 0.4), 1.0, 0.03, 0.5, specScale * 0.5);
@@ -112,15 +121,16 @@ void main() {
     float shade = shadowAt(vWorld, N);
     col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0)) * shade;
     // wet skin / shell: a tight clear-coat highlight over the body's own roughness
-    col += wetCoat(N, V, vWorld, 0.14, 0.55 * specScale) * shade;
+    col += wetCoat(Ng, V, vWorld, 0.14, 0.55 * specScale) * shade;
     // Fish were nearly invisible against the rock and the blue water. A soft camera-side fill lets the body
     // pattern read in the shade, and a stronger rim (light colour plus a little of the fish's own colour)
     // separates the silhouette from the background. Both follow the light, so night stays dark.
     vec3 lightSum = (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5;
     col += albedo * 0.10 * (0.15 + lightIntensity());
-    float rim = pow(1.0 - ndv, 2.2);
+    // up close the silhouette needs no help and an unattenuated rim reads as a pale outline: ease it in with distance
+    float rim = pow(1.0 - ndv, 2.2) * mix(0.45, 1.0, smoothstep(15.0, 60.0, distance(uCamPos.xyz, vWorld)));
     // the rim is brightest on the top edge (light from the fixtures above) and picks up the water colour below
-    float top = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+    float top = clamp(Ng.y * 0.5 + 0.5, 0.0, 1.0);
     col += rim * (0.40 * lightSum * (0.6 + 0.8 * top) + 0.30 * albedo * lightIntensity() + uFog.rgb * 0.6 * (1.0 - top));
     alpha = 1.0;
     // counter-illumination: a faint blue-green glow from the ventral light organ, strongest seen from below

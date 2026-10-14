@@ -140,3 +140,13 @@ fun waterReadouts(w: WaterState, lightPct: Double, flowStrength: Double): List<W
         r("flow", "Flow", flowPct, f(flowPct, 0) + "%"),
     )
 }
+
+/**
+ * The shelf test kit's cells for the water strip (core TestKit: API Reef Master colour cards and calcium drops, the
+ * Salifert KH syringe). What a hobby kit shows, not the sim's exact numbers: one test per pick ([rnd]), so a second
+ * test can read a swatch or a drop differently, and the status is judged from what the kit shows.
+ */
+fun testKitReadouts(w: WaterState, rnd: kotlin.random.Random): List<WaterReadout> =
+    com.reeflive.core.sim.TestKit.read(w, rnd).map { k ->
+        WaterReadout(k.id, k.label, k.text, SandboxParams.byId(k.id)?.zones?.status(k.value) ?: Status.UNKNOWN)
+    }
