@@ -167,6 +167,10 @@ class BodyCollision(private val rock: RockData) {
     fun exempt(o: Organism): Boolean =
         o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible
 
+    /** Corals, decor and equipment as solids (set by the Simulation; null = none). */
+    var obstacles: StaticObstacles? = null
+    /** Station pushes off the static obstacles (tests). */
+    var obstaclePushes = 0L; private set
     private val openWater = arrayOfNulls<OpenWater>(OpenWater.LEVELS.size)
     /** Sealed-hollow escapes so far (tests). */
     var sealedEscapes = 0L; private set
@@ -217,6 +221,7 @@ class BodyCollision(private val rock: RockData) {
         // a body in a sealed hollow of the rock passes through the rock until it is back in the open water
         @Suppress("NAME_SHADOWING") val rockOn = rockOn && !sealedIn(o)
         envCalls++
+        val mask = StaticObstacles.passMask(o)
         var worst = 0.0
         var clear = false
         var lastPush = 0.0
@@ -234,7 +239,7 @@ class BodyCollision(private val rock: RockData) {
                 rockGap.fill(dc)
                 // broad phase: a body whose bounding sphere is clear of the rock, the sand, the glass and the surface
                 // (most swimmers in open water, most of the time) needs no station checks
-                if (dc > SKIN && clearOfBounds(body, surfaceOn)) { clear = true; break }
+                if (dc > SKIN && clearOfBounds(body, surfaceOn) && obstacles?.push(body.centre, body.radius + SKIN, mask) == null) { clear = true; break }
             }
             var any = false
             var best = 0.0
@@ -290,6 +295,11 @@ class BodyCollision(private val rock: RockData) {
                             if (dMin < -SKIN * 0.5) { val nr = grad(at); q += nr * (-dMin + SKIN); noteContact(o, nr, i, rigid, body) }
                         }
                     }
+                }
+                // corals, decor and equipment ([StaticObstacles]): the section's bounding sphere is pushed off their capsules
+                obstacles?.let { ob ->
+                    val cc = q + body.up[i] * body.ctr[i]
+                    ob.push(cc, max(body.a[i], body.b[i]) + SKIN, mask)?.let { v -> q += v; obstaclePushes++ }
                 }
                 // the sand is a height field, not a distance field: a steep mound beside the station can reach the body
                 // even when the sand under the centre is far below, so the lowest point of the section is checked too
