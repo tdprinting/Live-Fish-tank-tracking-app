@@ -31,6 +31,9 @@ data class SubPose(
     /** False = the fish cannot see it ("invisible" mode); the renderer draws it as a faint ghost. */
     val visible: Boolean,
     val headlight: Boolean,
+    /** Animals investigating or guarding against it right now, and those keeping clear, frozen or hiding. */
+    val curious: Int = 0,
+    val wary: Int = 0,
 )
 
 /**
@@ -112,7 +115,15 @@ class Submarine {
         return Vec3(x, y, z)
     }
 
-    fun pose(): SubPose = SubPose(pos, yaw, pitch, -yawRate * 0.18, prop, speed, visible, headlight)
+    fun pose(reactions: Map<String, SubReaction> = emptyMap()): SubPose {
+        var curious = 0; var wary = 0
+        for (r in reactions.values) when (r) {
+            SubReaction.INVESTIGATE, SubReaction.POSTURE -> curious++
+            SubReaction.NONE -> Unit
+            else -> wary++
+        }
+        return SubPose(pos, yaw, pitch, -yawRate * 0.18, prop, speed, visible, headlight, curious, wary)
+    }
 
     fun reset() { active = false; visible = true; headlight = true; controls = SubControls.IDLE; vel = Vec3.ZERO; pos = SPAWN; yaw = 0.0 }
 

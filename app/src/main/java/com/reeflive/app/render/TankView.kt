@@ -58,6 +58,8 @@ fun TankView(
     viewLight: ViewLight = ViewLight.REAL,
     /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
     shelf: SupplyShelfControl? = null,
+    /** Submarine mode: ride inside the sub instead of chasing it. */
+    subFirstPerson: Boolean = false,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -66,7 +68,7 @@ fun TankView(
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
-        bursts = bursts, viewLight = viewLight, shelf = shelf,
+        bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson,
     )
 }
 
@@ -101,6 +103,7 @@ fun TankView(
     bursts: TankBursts? = null,
     viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
+    subFirstPerson: Boolean = false,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -157,6 +160,7 @@ fun TankView(
                     v.bursts = bursts
                     v.viewLight = viewLight
                     v.shelf = shelf
+                    v.subFirstPerson = subFirstPerson
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

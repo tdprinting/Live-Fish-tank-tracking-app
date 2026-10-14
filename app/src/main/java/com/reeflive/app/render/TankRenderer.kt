@@ -44,6 +44,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
     private val shelfScene = SupplyShelfScene()
+    /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
+    @Volatile var subFirstPerson = false
+    private val subScene = SubmarineScene()
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -178,6 +181,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         shadowMap?.release(); shadowMap = null
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
+        subScene.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -208,7 +212,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val cur = interp.current
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
-        // 2. camera (+ input)
+        // 2. camera (+ input); in Submarine mode the camera rides with the sub
+        val fp = subFirstPerson
+        camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
+        if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
@@ -260,6 +267,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
+        if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         algae?.let { drawAlgae(it, progs) }
@@ -285,6 +293,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
         inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
+        white?.let { w ->
+            if (!subScene.visible) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost sub, see-through
+            Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
+            drawCalls += subScene.drawBeam(progs.generic, w)
+            Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        }
         if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -911,7 +925,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
                 if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
-                else if (id == null && following == null && !cleaning) {
+                // Submarine mode: no fingertip on the tank while the sub is out (the stick steers, taps only pick)
+                else if (id == null && following == null && !cleaning && !camera.rideOn) {
                     // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
                     // (not in clean-glass mode, where the finger is on the Flipper)
                     val hit = touchHit(o, dir)
@@ -938,6 +953,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             CameraInput.TapKind.LONG_PRESS -> {
                 // on the glass or the water's top: a fingertip held there (slide, rest, flick); on rock / sand: food
+                // (nothing while the submarine is out: the hold would only fight the sub's own controls)
+                if (camera.rideOn) { holdMode = HOLD_ORBIT; return }
                 val hit = if (camera.followId == null && !cleaning) touchHit(o, dir) else null
                 if (hit != null && (hit.second == TouchSurface.GLASS || hit.second == TouchSurface.SURFACE)) { startFinger(hit.first, hit.second); return }
                 holdMode = HOLD_ORBIT

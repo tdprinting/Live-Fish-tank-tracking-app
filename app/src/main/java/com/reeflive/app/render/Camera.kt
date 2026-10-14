@@ -78,6 +78,16 @@ class Camera {
     // ---- supply shelf (SupplyShelf.kt): a second framing beside the tank, blended over the tank view ----
     /** True while the camera looks at (or travels to) the supply shelf; drags then look along the shelf rows. */
     var shelfOn = false; private set
+    /**
+     * Submarine mode ([SubmarineScene]): while on, the eye and aim ease to [rideEye] / [rideAim] (set every frame) in
+     * place of the orbit or follow camera; turning it off glides back to the default tank view.
+     */
+    var rideOn = false
+    val rideEye = FloatArray(3)
+    val rideAim = FloatArray(3)
+    private var riding = false
+    private val rideEyeS = Spring3(RIDE_OMEGA)
+    private val rideAimS = Spring3(RIDE_OMEGA * 1.5f)
     /** Travel progress: 0 = the tank view, 1 = the shelf view (eased with smoothstep, arcing up and back). */
     var shelfMix = 0f; private set
     private val shelfGoal = floatArrayOf(SupplyShelfLayout.START_X, SupplyShelfLayout.START_Y)
@@ -338,7 +348,16 @@ class Camera {
         if (!initialized) {
             yawS.snap(yawGoal); pitchS.snap(pitchGoal); distLogS.snap(distLogGoal); targetS.snap(target)
         }
-        if (followId != null && rig != null) {
+        if (rideOn) {
+            if (!riding) { rideEyeS.snap(if (initialized) eye else rideEye); rideAimS.snap(if (initialized) aim else rideAim); riding = true }
+            rideEyeS.step(rideEye, step, eye)
+            rideAimS.step(rideAim, step, aim)
+            initialized = true
+        } else if (riding) {
+            riding = false
+            releaseFollow(); reset()
+            advanceOrbit(step); orbitEye(eye); targetS.valueInto(aim)
+        } else if (followId != null && rig != null) {
             advanceFollowInput(step)
             followTarget(rig, sdf, desiredEye, desiredAim, step)
             if (!initialized) { eyeS.snap(desiredEye); aimS.snap(desiredAim); initialized = true }
@@ -600,6 +619,8 @@ class Camera {
         val FOLLOW_MIN_ZOOM_LOG = ln(0.3f)
         val FOLLOW_MAX_ZOOM_LOG = ln(3f)
         /** Fly-in: the follow springs stiffen from [FLY_OMEGA] to [FOLLOW_OMEGA] over this many seconds. */
+        /** Submarine ride camera stiffness (rad/s). */
+        const val RIDE_OMEGA = 7f
         const val FLY_IN_S = 1.4f
         const val FLY_OMEGA = 2.4f
         const val FOLLOW_OMEGA = 6.5f

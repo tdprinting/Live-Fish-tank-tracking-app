@@ -456,6 +456,8 @@ Surface SURFACE (a tap at the water's top): food-conditioned bold fish within 50
 
 `TouchAnimal(id)` is a tap right on an animal: snails, crabs, stars and other walkers TUCK (stop, pull in for 5–15 s), hermits, dusters, brittle stars DUCK, shrimp FREEZE, fish NONE (the tap only picks them). Habituation as for taps.
 
+**Submarine mode.** `SubmarineMode(on, visible, headlight)` launches a toy sub (`sim/Submarine.kt`, 4.6 cm, radius 1.4 cm, 12 cm/s) steered by `SteerSubmarine(SubControls)`. It moves on wall time (`stepWall`) and is pushed clear of the glass, surface, live sand (`SandBed.surfaceY`) and rock SDF; its pose is `SimSnapshot.submarine`. Every 0.25 s `ai.SubmarineSense` gives animals within 40 cm a `SubmarineRules.reaction`: STARTLE (closing > 7 cm/s within 9 + 10 × skittishness cm: the species flee via `onTap`), INVESTIGATE (curious clowns, tangs, wrasse, dottybacks; they follow it), POSTURE (clown within 14 cm of its host, dottyback at its cave: darts; hawkfish and eel watch), AVOID (cardinal, shy tangs, burrowers), HIDE (gobies, blennies, hermits, dusters, shrimp up close), FREEZE (shrimp, crab). `SubmarineReact` (noiseless, no rng while idle) plays the held ones. Loitering builds habituation over 200 s (ignored at 0.75, τ 20 min, a startle takes 0.2 back). Invisible: nothing is evaluated, so the run is identical to one without the sub (`SubmarineTest`).
+
 ---
 
 ## 6. Snapshot and events

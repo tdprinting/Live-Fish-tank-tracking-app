@@ -1377,7 +1377,7 @@ class Simulation(
     fun snapshot(): SimSnapshot =
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
-            submarine = if (submarine.active) submarine.pose() else null,
+            submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
         )
 
     private fun buildSnapshot(): SimSnapshot {
