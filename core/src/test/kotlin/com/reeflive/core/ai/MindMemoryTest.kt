@@ -82,9 +82,11 @@ class MindMemoryTest {
             s.advance(5.0, behaviorDt = 0.1)
             val a = s.agent(BrainKind.TANG)
             a.brain.mind.keeperAssoc = assoc
-            // the back glass, away from the tang's front-lane patrol
-            val glass = Vec3(30.0, 30.0, 0.5)
-            a.ctx.o.pos = s.rock.clampToWater(Vec3(95.0, 30.0, 25.0), 3.0)
+            // the back glass, away from the tang's front-lane patrol. Resized tank: the back glass at (30, 30) is behind
+            // the left shelf rock now, so the cue is on the open back glass at x 85 (clear of the HOB return at x 73)
+            // and the tang starts the same ~65 cm away at the left
+            val glass = Vec3(85.0, 33.0, 0.5)
+            a.ctx.o.pos = s.rock.clampToWater(Vec3(20.0, 30.0, 25.0), 3.0)
             a.brain.mind.onKeeperCue(a.ctx, glass)
             var best = 1e9
             s.advance(40.0, behaviorDt = 0.1) { best = minOf(best, a.ctx.o.pos.distanceTo(glass)) }

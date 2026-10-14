@@ -27,7 +27,7 @@ uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x bod
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
-uniform vec4 uLimb[10];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs)
+uniform vec4 uLimb[15];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs / HermitLegs; only the hermit sends 15)
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
@@ -161,14 +161,30 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
 // the substrate and come back to the mouth, alternating. 6 = shell: rolls and bobs about its ground point with the
 // stride. 7 = shield and eyestalks (COLOR_0.g = 1: the stalks scan out of step). 8 antennae sweep, 9 antennules
 // flick. uLimb.w pulls every part but the shell toward uLimbPivot[7], just inside the aperture (the larger left
-// chela stays at the opening).
+// chela stays at the opening). Seated on a surface (core CrawlerSeat), uLimb[10..13] plant the walking legs on their
+// footholds, cap the chelae's dip at the surface and 6.w / 8.z / 9.z bend the eyestalks and feelers away from rock.
 void hermitLimb(int k, inout vec3 local, inout vec3 n) {
     vec4 P = uLimbPivot[k];
     vec4 A = uLimb[k];
     vec3 off = local - P.xyz;
     float t = clamp(aColor.r, 0.0, 1.0);
     float side = local.z >= 0.0 ? 1.0 : -1.0;
-    if (k < 4) {
+    bool planted = uLimb[14].w > 0.5;
+    if (k < 4 && planted) {
+        // planted on the surface by the sim (core CrawlerSeat): rotate the rest leg about the hip onto its foothold
+        // (axis x angle), shorten it toward the hip by the flex and raise the knee by as much as the leg folds
+        vec4 IK = uLimb[10 + k];
+        float ang = length(IK.yzw);
+        if (ang > 1e-5) {
+            vec3 ax = IK.yzw / ang;
+            off = rotAxis(off, ax, ang);
+            n = rotAxis(n, ax, ang);
+        }
+        float flex = (IK.x - 0.3) / 0.5;
+        off *= 1.0 - flex * t;
+        float r = 1.0 - flex;
+        off.y += 0.35 * sqrt(max(1.0 - r * r, 0.0)) * P.w * sin(PI * t);
+    } else if (k < 4) {
         float ph = A.x;
         float sw = 1.0 - step(0.4, ph);
         float q = ph / 0.4;
@@ -181,6 +197,8 @@ void hermitLimb(int k, inout vec3 local, inout vec3 n) {
         float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the substrate
         float sd = k == 4 ? -1.0 : 1.0;
         float down = A.y * (0.55 * w - 0.15) + 0.1 * A.z;
+        // never below the surface under the claw (the sim's limit, uLimb[14].y left / .z right)
+        if (planted) down = min(down, k == 4 ? uLimb[14].y : uLimb[14].z);
         off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
         n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);
         off.x -= 0.25 * P.w * A.y * (1.0 - w) * t;
@@ -193,18 +211,32 @@ void hermitLimb(int k, inout vec3 local, inout vec3 n) {
         n = rotAxis(n, vec3(0.0, 0.0, 1.0), A.z);
     } else if (k == 7) {
         off.y += A.z * 0.02 * P.w;
-        float a = A.y * 0.3 * sin(2.0 * PI * A.x + side * 1.7) * step(0.5, aColor.g);
+        float em = step(0.5, aColor.g);
+        float a = A.y * 0.3 * sin(2.0 * PI * A.x + side * 1.7) * em;
         off.z += t * a * P.w;
         off.x -= t * abs(a) * 0.3 * P.w;
+        // eyestalks lean back and down, away from rock just ahead or overhead (uLimb[6].w, core CrawlerSeat)
+        float eb = uLimb[6].w * em;
+        off.x -= t * eb * 0.5 * P.w;
+        off.y -= t * eb * 0.25 * P.w;
     } else if (k == 8) {
         float ph = 2.0 * PI * A.x + side * 1.3;
         float h2 = t * t;
         off.y += h2 * A.y * 0.18 * P.w * sin(ph - t * 3.0);
         off.z += h2 * A.y * 0.14 * P.w * cos(0.7 * ph - t * 2.5) * side;
         off.x += h2 * A.y * 0.08 * P.w * sin(0.5 * ph);
+        // bent up and back from the rock they would reach into (A.z, core CrawlerSeat)
+        if (A.z > 0.0) {
+            off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z * 1.1);
+            off = rotAxis(off, vec3(0.0, 1.0, 0.0), -side * A.z * 0.6);
+        }
     } else {
         float f = pow(max(sin(2.0 * PI * A.x + side * 0.9), 0.0), 8.0);
         off.y -= t * t * A.y * f * 0.3 * P.w;
+        if (A.z > 0.0) {
+            off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z * 1.1);
+            off = rotAxis(off, vec3(0.0, 1.0, 0.0), -side * A.z * 0.6);
+        }
     }
     vec3 v = P.xyz + off;
     if (k != 6) {

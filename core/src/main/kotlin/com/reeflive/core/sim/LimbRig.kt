@@ -377,8 +377,12 @@ class CrabLegs : LimbRig() {
  * - 6 shell: (stride phase, roll amplitude (rad), pitch bob (rad), 0);
  * - 7 shield and eyestalks: (eye scan phase, scan 0..1, body bob, retract);
  * - 8 antennae: (sweep phase, sweep 0..1, 0, retract); 9 antennules: (flick phase, flick 0..1, 0, retract).
+ *
+ * Surface contact ([CrawlerSeat], written after [step] each tick; all zero when the crab is not seated): 6.w eyestalk
+ * bend, 8.z antenna bend, 9.z antennule bend (0..1, away from rock); 10–13 planted legs: leg k = (0.3 + 0.5 flex,
+ * hip rotation as axis × angle in model space); 14 = (0, left / right chela max dip (rad), 1 = legs planted).
  */
-class HermitLegs(seed: Long = 0L) : LimbRig() {
+class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
     private val rng = Rng(seed xor 0x4E2A1L)
     var clock = 0.0; private set
     private var moving = 0.0
@@ -460,6 +464,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig() {
         const val FLICK_HZ = 2.5
         /** Stride rate (Hz) above which the eyestalk bob shrinks, keeping it smooth at the 20 Hz pose rate. */
         const val BOB_MAX_HZ = 1.5
+        /** Pose entries: the ten limb entries plus four for the planted legs and one for the chelae and the planting flag ([CrawlerSeat]). */
+        const val COUNT = 15
     }
 }
 

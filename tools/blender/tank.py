@@ -7,7 +7,7 @@ top frame: closed swept L-profile with inner lip, centre brace, corner caps), Ri
 (walnut slab) and the room props StandBody, StandMesh, StandBins, Floor, Wall, SideWall, SwitchPlate (all
 extras.hidden: preview only; the runtime does not draw them).
 
-World coordinates (cm, Y up, z = 0 back glass inner face, z = 33 front glass inner face); geometry is authored
+World coordinates (cm, Y up, z = 0 back glass inner face, z = TANK[2] = 45.7 front glass inner face; common.TANK); geometry is authored
 in world space and converted to Blender with W2B (a proper rotation, so face winding is preserved). Every mesh
 is closed; build() prints the non-manifold edge count per object (must be 0).
 """
@@ -22,10 +22,11 @@ import noise3d as N
 import paintlib as P
 from common import bpy
 
-TANK = (121.9, 61.0, 33.0)
+TANK = C.TANK             # (121.9, 40.6, 45.7): 48 x 16 x 18 in interior (core TankDims.kt)
+SAND_GLASS_INSET = 0.05  # cm between the sand bed's skirt and the inner glass faces
 GT = 0.635                # glass thickness (6.35 mm)
-SAND_Y = 3.5              # front glass; 6.0 at the back glass (rockscape.sand_base)
-WATER_Y = 56.0
+SAND_Y = C.SAND_Y         # front glass; C.SAND_Y_BACK at the back glass (rockscape.sand_base)
+WATER_Y = C.WATER_Y       # 2.5 cm under the top of the glass (open top)
 W2B = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float)
 S = P.smoothstep
 
@@ -166,7 +167,7 @@ def sand_geo():
     import rockscape as R
     L, _, D = TANK
     xs = np.r_[np.arange(0, L - 0.1, 1.5), L]
-    zs = np.r_[np.arange(0, 30, 2.0), 30.0, 31.0, 31.8, 32.4, D]
+    zs = np.r_[np.arange(0, D - 3.5, 2.6), D - 3.0, D - 2.0, D - 1.2, D - 0.6, D]
     X, Z = np.meshgrid(xs, zs)
     sdf = read_sdf()
     if sdf is not None:
@@ -177,7 +178,9 @@ def sand_geo():
     pts = np.stack([X.ravel(), np.zeros(X.size), Z.ravel()], -1)
     H += 0.7 * (N.fbm3(pts, 4.0, 3, 17).reshape(X.shape) - 0.5)  # fBm 0.35 cm at 4 cm
     nz_, nx_ = X.shape
-    top = np.stack([X.ravel(), H.ravel(), Z.ravel()], -1)
+    # keep the bed 0.5 mm inside the panes: a skirt coplanar with the glass z-fights with the inner pane face
+    E = SAND_GLASS_INSET
+    top = np.stack([np.clip(X.ravel(), E, L - E), H.ravel(), np.clip(Z.ravel(), E, D - E)], -1)
     F = []
     for j in range(nz_ - 1):
         for i in range(nx_ - 1):
@@ -190,16 +193,26 @@ def sand_geo():
     bot = top[ring].copy()
     bot[:, 1] = -0.5
     nb = len(bot)
-    V = np.concatenate([top, bot, [[L / 2, -0.5, D / 2]]])
+    # skirt (the cross-section seen through the glass) on its own vertices: wall-projected uv (along the pane, down
+    # the wall) instead of the bed's planar xz uv, which is constant down the wall and smeared it into vertical
+    # streaks, and its own normals instead of ones averaged with the bed's top ring
+    sk_top = top[ring].copy()
+    sk_bot = bot.copy()
+    V = np.concatenate([top, bot, [[L / 2, -0.5, D / 2]], sk_top, sk_bot])
+    s0, s1 = nt + nb + 1, nt + 2 * nb + 1
     for k in range(nb):
-        a, b = ring[k], ring[(k + 1) % nb]
-        F.append((a, nt + k, nt + (k + 1) % nb, b))
-        F.append((nt + nb, nt + (k + 1) % nb, nt + k))
+        k1 = (k + 1) % nb
+        F.append((s0 + k, s1 + k, s1 + k1, s0 + k1))
+        F.append((nt + nb, nt + k1, nt + k))
     UV = np.c_[V[:, 0] / 30.475, 1 - V[:, 2] / 30.475]
+    sk = V[s0:]
+    on_side = (sk[:, 0] <= E + 1e-4) | (sk[:, 0] >= L - E - 1e-4)
+    along = np.where(on_side, sk[:, 2], sk[:, 0])
+    UV[s0:] = np.c_[along / 30.475, 1 - sk[:, 1] / 30.475]
     # COLOR_0.r = front algae film: first 2 cm of sand along the front glass, strongest x 30-70 and x 0-15
     xv, zv = V[:, 0], V[:, 2]
     strong = np.maximum(S(26, 32, xv) * (1 - S(68, 74, xv)), 1 - S(13, 18, xv))
-    film = S(31.0, 32.8, zv) * (0.45 + 0.55 * strong) * (0.8 + 0.2 * np.sin(xv * 0.37))
+    film = S(D - 2.0, D - 0.2, zv) * (0.45 + 0.55 * strong) * (0.8 + 0.2 * np.sin(xv * 0.37))
     COL = np.zeros((len(V), 4))
     COL[:, 0] = np.clip(film, 0, 1)
     COL[:, 3] = 1
@@ -236,16 +249,18 @@ def rubble_geo(seed=23, count=44):
     import rockscape as R
     rs = np.random.default_rng(seed)
     sdf = read_sdf()
+    D = TANK[2]
     g = WGeo()
     placed = 0
     tries = 0
     while placed < count and tries < 4000:
         tries += 1
-        x, z = rs.uniform(4, 118), rs.uniform(3, 31)
+        x, z = rs.uniform(4, 118), rs.uniform(3, D - 2)
         d = float(np.minimum.reduce([sdf(x, y, z) for y in (4.0, 5.5, 7.0)])) if sdf is not None else 99.0
         if d < 1.2 or (d > 9.0 and rs.uniform() > 0.12):
             continue
-        if (abs(x - 66) < 7 and z > 23) or (abs(x - 72) < 6 and z > 26):  # burrow mouth / front magnet / zoa
+        bm = R.BURROW_MOUTH
+        if (abs(x - bm[0]) < 7 and z > bm[1] - 2) or (abs(x - 68) < 6 and z > D - 9):  # burrow mouth / magnet / zoa
             continue
         h = float(R.sand_height(x, z, d))
         r = rs.uniform(0.45, 1.4)
@@ -287,18 +302,19 @@ def rim_geos():
     L, Hh, D = TANK
     x0, x1, z0, z1 = -GT, L + GT, -GT, D + GT
     a, b = 0.4, 0.1  # skirt outer / inner face (3 mm skirt, 1 mm outside the glass)
-    top = [(a, 57.6), (a, 61.4), (-2.4, 61.4), (-2.4, 60.9), (b, 60.9), (b, 57.9), (-0.6, 57.9), (-0.6, 57.6)]
+    R = Hh + 0.4     # lip top (C.RIM_Y); the profile below is relative to it
+    top = [(a, R - 3.8), (a, R), (-2.4, R), (-2.4, R - 0.5), (b, R - 0.5), (b, R - 3.5), (-0.6, R - 3.5), (-0.6, R - 3.8)]
     top = rounded(top, 0.1, 2, 1)   # inner lip edge r 1 mm
     top = rounded(top, 0.3, 1, 3)   # outer top edge r 3 mm
     gt = WGeo()
     V, F = sweep_rect(top[::-1], x0, x1, z0, z1)
     gt.add(V, F)
     gb = WGeo()
-    V, F = box((58.9, 60.4, -0.3), (64.9, 61.4, D + 0.3))  # centre brace, 60 mm
+    V, F = box((L / 2 - 2.05, R - 1.0, -0.3), (L / 2 + 3.95, R, D + 0.3))  # centre brace, 60 mm
     gb.add(V, F)
     for cx in (x0 - a, x1 + a - 1.2):  # corner caps 12 x 12 mm, 1 mm proud
         for cz in (z0 - a, z1 + a - 1.2):
-            V, F = box((cx, 61.4, cz), (cx + 1.2, 61.5, cz + 1.2))
+            V, F = box((cx, R, cz), (cx + 1.2, R + 0.1, cz + 1.2))
             gb.add(V, F)
     bot = [(a, -3.6), (a, 0.6), (b, 0.6), (b, -3.3), (-0.8, -3.3), (-0.8, -3.6)]
     bot = rounded(bot, 0.2, 1, 2)
@@ -321,45 +337,45 @@ def mesh_tex(path, size=64):
 
 def stand_geos():
     """Stand body (white, X-lattice door, two open bays with shelves), wire-mesh card, bins (spec §1.8)."""
-    L = TANK[0]
+    L, D = TANK[0], TANK[2]
     body = WGeo()
     white, inside = 0, 1
     for lo, hi, m in (
-            ((-2.01, -79.01, -2.01), (0, -7.6, 35.01), white), ((122, -79, -2), (124, -7.6, 35), white),   # sides
+            ((-2.01, -79.01, -2.01), (0, -7.6, D + 2.01), white), ((122, -79, -2), (124, -7.6, D + 2), white),  # sides
             ((-2, -79, -2), (124, -7.6, -0.5), inside),                                         # back
-            ((0, -79, -0.5), (122, -76, 35), inside), ((0, -9.6, -0.5), (122, -7.6, 35), white),  # floor / top
-            ((30, -79, -0.5), (32, -7.6, 35), white), ((78, -79, -0.5), (80, -7.6, 35), white),   # dividers
-            ((32, -46, -0.5), (78, -44, 34), inside), ((80, -46, -0.5), (122, -44, 34), inside),  # shelves
-            ((-2, -12.6, 33), (124, -7.6, 35), white), ((-2, -79, 33), (124, -74, 35), white),    # face rails
-            ((-2, -79, 33), (1, -7.6, 35), white), ((27, -79, 33), (32, -7.6, 35), white),        # door stiles
-            ((78, -79, 33), (80, -7.6, 35), white), ((121, -79, 33), (124, -7.6, 35), white)):
+            ((0, -79, -0.5), (122, -76, D + 2), inside), ((0, -9.6, -0.5), (122, -7.6, D + 2), white),  # floor / top
+            ((30, -79, -0.5), (32, -7.6, D + 2), white), ((78, -79, -0.5), (80, -7.6, D + 2), white),   # dividers
+            ((32, -46, -0.5), (78, -44, D + 1), inside), ((80, -46, -0.5), (122, -44, D + 1), inside),  # shelves
+            ((-2, -12.6, D), (124, -7.6, D + 2), white), ((-2, -79, D), (124, -74, D + 2), white),    # face rails
+            ((-2, -79, D), (1, -7.6, D + 2), white), ((27, -79, D), (32, -7.6, D + 2), white),        # door stiles
+            ((78, -79, D), (80, -7.6, D + 2), white), ((121, -79, D), (124, -7.6, D + 2), white)):
         e = 0.002 + 0.003 * (len(body.V) // 8)  # unique tiny inset per piece: touching pieces share no edge
         V, F = box(np.add(lo, e), np.subtract(hi, e))
         body.add(V, F, mat=m)
     # door X-lattice: 3 cm bars corner-to-corner over the inner opening x 1-27, y -74..-12.6
     (ax, ay), (bx, by) = (1, -74), (27, -12.6)
     for p, q in (((ax, ay), (bx, by)), ((ax, by), (bx, ay))):
-        c = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 34.2)
+        c = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, D + 1.2)
         d = (q[0] - p[0], q[1] - p[1], 0)
         ln = math.hypot(d[0], d[1])
         V, F = obox(c, (ln, 3.0, 1.2), d, (0, 0, 1) if False else (-d[1], d[0], 0))
         body.add(V, F, mat=white)
     for fx in (-2, 120):  # feet 4 x 4 x 2
-        for fz in (-2, 31):
+        for fz in (-2, D - 2):
             V, F = box((fx, -81, fz), (fx + 4, -79, fz + 4))
             body.add(V, F, mat=white)
     mesh = WGeo()
-    lo, hi = (1, -74, 33.4), (27, -12.6, 33.6)
+    lo, hi = (1, -74, D + 0.4), (27, -12.6, D + 0.6)
     V, F = box(lo, hi)
     mesh.add(V, F, np.c_[V[:, 0] / 4.0, V[:, 1] / 4.0])
-    bins = boxes(((40, -76, 4), (75, -56, 29)), ((84, -44, 4), (119, -24, 29)))
+    bins = boxes(((40, -76, 4), (75, -56, D - 4)), ((84, -44, 4), (119, -24, D - 4)))
     return body, mesh, bins
 
 
 def room_geos():
     floor = boxes(((-120, -82, -8), (240, -81, 220)))
     wall = boxes(((-120, -81, -8), (240, 160, -6)), mat=0)
-    side = boxes(((-16, -81, -8), (-14, 160, 60)))
+    side = boxes(((-16, -81, -8), (-14, 160, TANK[2] + 27)))
     sw = boxes(((12, 80, -6), (24, 100, -5.4)))
     for tx in (15.5, 20.5):
         V, F = box((tx - 0.5, 88.75, -5.4), (tx + 0.5, 91.25, -4.8))
@@ -371,7 +387,7 @@ def build():
     C.reset_scene()
     L, Hh, D = TANK
     root = C.empty("Root")
-    C.set_extras(root, units="cm", interior=[L, Hh, D], sandY=SAND_Y, sandYBack=6.0, waterY=WATER_Y,
+    C.set_extras(root, units="cm", interior=[L, Hh, D], sandY=SAND_Y, sandYBack=C.SAND_Y_BACK, waterY=WATER_Y,
                  glassThickness=GT, spec="docs/specs/tank_design.md")
     glass = C.material("glass", "#DDEFE4", rough=0.02, alpha=0.12, blend=True, double=True)
     backing = C.material("backing", "#070808", rough=0.9)
@@ -407,7 +423,7 @@ def build():
     objs.append(seams_geo().obj("Seams", root, "glass", [silicone], smooth=True))
     fy = SAND_Y - 0.2
     objs.append(boxes(((0, fy, D - 0.05), (L, fy + 1.4, D))).obj("GlassFilm", root, "glass", [film]))
-    objs.append(boxes(((-1, -1, -1.0), (123, 62, -0.7))).obj("Backing", root, "backglass", [backing]))
+    objs.append(boxes(((-1, -1, -1.0), (L + 1.1, Hh + 1.0, -0.7))).obj("Backing", root, "backglass", [backing]))
     gt, gb, gbot = rim_geos()
     objs.append(gt.obj("RimTop", root, "rim", [rim]))
     objs.append(gb.obj("RimBrace", root, "rim", [rim]))
@@ -417,7 +433,8 @@ def build():
     objs.append(boxes(((0, 0, 0), (L, WATER_Y, D))).obj(
         "WaterVolume", root, "water", [wvol],
         extras={"hidden": True, "volume": {"absorption": "#2E8A78", "densityPerCm": 0.045, "ior": 1.333}}))
-    nx, nz = 61, 17
+    nx = 52                          # ~2.3 cm cells, same quad count as the old 61 x 17 grid
+    nz = max(4, round(nx * D / L))
     xs, zs = np.linspace(0, L, nx + 1), np.linspace(0, D, nz + 1)
     X, Z = np.meshgrid(xs, zs)
     V = np.stack([X.ravel(), np.full(X.size, WATER_Y), Z.ravel()], -1)

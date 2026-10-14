@@ -2,7 +2,7 @@
 
   python tools/blender/preview.py --fish all          -> docs/preview/fish.png (contact sheet)
   python tools/blender/preview.py --fish tang         -> build/blender/preview_tang.png
-  python tools/blender/preview.py --scene [--view all] [--size 1600x1200] [--samples 64]
+  python tools/blender/preview.py --scene [--view all] [--size 1600x1200] [--samples 64] [--outdir DIR]
                                                       -> docs/preview/scene.png (+ scene_<view>.png)
 """
 import argparse
@@ -225,6 +225,7 @@ def main(argv):
     ap.add_argument("--samples", type=int, default=None)
     ap.add_argument("--view", default="front", help="front|left34|right34|top|left_end|right_end|all")
     ap.add_argument("--size", default="1600x1200")
+    ap.add_argument("--outdir", default=None, help="write scene_<view>.png here instead of docs/preview/")
     a = ap.parse_args(argv)
     if a.fish:
         if a.fish == "all":
@@ -242,7 +243,10 @@ def main(argv):
         w, h = (int(v) for v in a.size.split("x"))
         views = list(scene_preview.VIEWS) if a.view == "all" else a.view.split(",")
         for v in views:
-            scene_preview.render_scene(samples=a.samples, w=w, h=h, view=v)
+            out = os.path.join(a.outdir, f"scene_{v}.png") if a.outdir else None
+            if out:
+                os.makedirs(a.outdir, exist_ok=True)
+            scene_preview.render_scene(samples=a.samples, w=w, h=h, view=v, out=out)
 
 
 if __name__ == "__main__":

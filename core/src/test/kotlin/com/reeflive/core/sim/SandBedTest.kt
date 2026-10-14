@@ -80,15 +80,15 @@ class SandBedTest {
     @Test fun nassariusPloughsATrailAndBuryingThrowsACrater() {
         val sim = TestTank.sim(listOf(TestTank.seed("nass1")))
         val o = sim.organisms.first { it.brainKind == BrainKind.NASSARIUS }
-        val z = 26.0
+        val z = 31.0  // the open sand lane in front of the left stack (rockscape LANES[0])
         o.posture = 0
         for (i in 0..40) {
-            o.pos = Vec3(30.0 + i * 0.25, sim.rock.sandTopCm + 0.4, z)
+            o.pos = Vec3(21.0 + i * 0.25, sim.rock.sandTopCm + 0.4, z)
             sim.sandWork.step(listOf(o))
         }
         assertTrue(sim.sandWork.nassariusMarks >= 10)
-        assertTrue("trail is freshly turned: ${sim.sand.freshAt(35.0, z)}", sim.sand.freshAt(35.0, z) > 0.3)
-        assertTrue("trail centre is ploughed down", sim.sand.cellHeight(35.0, z) < 0.0)
+        assertTrue("trail is freshly turned: ${sim.sand.freshAt(26.0, z)}", sim.sand.freshAt(26.0, z) > 0.3)
+        assertTrue("trail centre is ploughed down", sim.sand.cellHeight(26.0, z) < 0.0)
         o.posture = 5
         sim.sandWork.step(listOf(o))
         assertEquals(1L, sim.sandWork.buryEvents)

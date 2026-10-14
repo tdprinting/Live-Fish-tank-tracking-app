@@ -55,7 +55,7 @@ class HermitLegsTest {
         s.advance(900.0, behaviorDt = 0.1)
         val rig = o.limbRig as HermitLegs
         assertEquals(5, o.toPose().motionMode)
-        assertEquals(LimbRig.LIMBS * 4, o.toPose().limbs.size)
+        assertEquals(HermitLegs.COUNT * 4, o.toPose().limbs.size)
         assertTrue("claw strokes ${rig.pickStrokes}", rig.pickStrokes > 20)
         // the two chelae work half a cycle apart
         val dph = abs(((rig.out[4 * 4] - rig.out[5 * 4] + 1.5f) % 1f) - 0.5f)

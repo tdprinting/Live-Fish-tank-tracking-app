@@ -28,10 +28,10 @@ class FishRig(val id: String) {
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
-     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 10 × vec4; [limbCount] entries are valid,
+     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 15 × vec4 (the hermit: 10 + 5 surface-contact entries); [limbCount] entries are valid,
      * 0 = none. Crawlers send 10 (posed about model pivots), the shrimp one (stride, stepping, signal, grooming).
      */
-    val limbs = FloatArray(40)
+    val limbs = FloatArray(60)
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false

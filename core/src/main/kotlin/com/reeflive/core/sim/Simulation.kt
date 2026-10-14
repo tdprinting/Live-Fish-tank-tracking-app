@@ -129,6 +129,8 @@ class Simulation(
 
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
     val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
+    /** Rock, live sand and glass for the crawlers' surface seat ([CrawlerSeat]). */
+    val crawlSurface = CrawlSurface(rock, sand)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
@@ -161,7 +163,7 @@ class Simulation(
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
     /** Parameter id the fluid's dose tracer currently represents. */
     var doseTracerParam: String? = null; private set
-    val heaterPos = Vec3(rock.lengthCm - 1.5, 30.0, 8.0)
+    val heaterPos = Vec3(rock.lengthCm - 2.4, (rock.sandTopCm + rock.waterLevelCm) / 2, 2.5)   // equipment.glb Heater, back-right corner
 
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
@@ -420,6 +422,7 @@ class Simulation(
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
+            o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
     }
@@ -437,6 +440,7 @@ class Simulation(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
+            o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
     }
 
@@ -829,9 +833,9 @@ class Simulation(
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
         null -> rock.anchors.pos("HAND_FEED", HAND_FEED).withY(rock.waterLevelCm - 0.3)
-        "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(69.0, 5.0, 23.0)) + Vec3(-2.0, 7.0, 5.0)
-        "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0)) + Vec3(2.0, 12.0, 1.0)
-        else -> rock.anchors.pos(anchor, Vec3(41.0, 50.0, 20.0))
+        "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(62.0, 3.8, 32.5)) + Vec3(-2.0, 7.0, 5.0)
+        "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3)) + Vec3(2.0, 12.0, 1.0)
+        else -> rock.anchors.pos(anchor, Vec3(41.0, rock.waterLevelCm - 6, 26.0))
     }
 
     /**
@@ -898,7 +902,7 @@ class Simulation(
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
-                fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(71.0, 54.0, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
+                fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, rock.waterLevelCm - 1, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
             }
             is Command.Lights -> { lights.forcedOn = c.on; c.overrideIntensity?.let { lights.intensityOverride = it } }
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
@@ -1498,7 +1502,7 @@ class Simulation(
 
     companion object {
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
-        val HAND_FEED = Vec3(68.0, 55.0, 4.5)
+        val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
         /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */
         const val FINGER_TIMEOUT_S = 6.0
         private val EMPTY_FLOATS = FloatArray(0)

@@ -18,6 +18,7 @@ import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.components.drawGlyph
 import com.reeflive.app.ui.theme.FoodPalette
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.TankDims
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -697,10 +698,11 @@ private fun DrawScope.waterChange(fx: TankFx, f: FxFrame) {
     val dropCm = (frac / 0.25f * 3f).coerceIn(1.2f, 6f)
     val down = ease(f.span(300f, 1500f)) * (1f - ease(f.span(1900f, 3100f)))
     val d = dropCm * down
-    val wy = 55.7f
+    val wy = TankDims.WATER_LEVEL_F - 0.4f
+    val gz = TankDims.DEPTH_F; val gl = TankDims.LENGTH_F
     // 1) the waterline band on the front glass
-    val a0 = f.project(0f, wy, 33f); val a1 = f.project(121.9f, wy, 33f)
-    val b0 = f.project(0f, wy - d, 33f); val b1 = f.project(121.9f, wy - d, 33f)
+    val a0 = f.project(0f, wy, gz); val a1 = f.project(gl, wy, gz)
+    val b0 = f.project(0f, wy - d, gz); val b1 = f.project(gl, wy - d, gz)
     if (a0 != null && a1 != null && b0 != null && b1 != null && d > 0.05f) {
         val band = Path().apply { moveTo(a0.x, a0.y); lineTo(a1.x, a1.y); lineTo(b1.x, b1.y); lineTo(b0.x, b0.y); close() }
         drawPath(band, Color(0xFF02101E).copy(alpha = 0.45f))
@@ -873,7 +875,7 @@ private fun DrawScope.freshPour(f: FxFrame) {
 private fun DrawScope.pumpFx(fx: TankFx, f: FxFrame) {
     val pal = f.pal
     val u = f.unit
-    val mirror = fx.at.x > 61f
+    val mirror = fx.at.x > TankDims.LENGTH_F / 2f
     val on = fx.kind == FxKind.PUMP_ON
     // blade angle: integrate a speed that ramps up (on) or down (off)
     val t = f.ms / 1000f

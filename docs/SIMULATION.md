@@ -363,7 +363,7 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - Threat: eel within 12 cm → tail-flip escape (burst 40 cm/s for 0.5 s, backwards), then hide deeper in the ledge crevice.
 
 ### 4.6 Feeding system (`FoodSystem`)
-- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` at the left glass, y 35) simulated as a cloth (`NoriCloth`, below).
+- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` on the left glass at the front corner, y 27, z 40: clear of the left rock so grazers reach its open side) simulated as a cloth (`NoriCloth`, below).
 - Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`; floating kinds hold `sink = 0` at the surface for `floatSeconds`, then sink at `sinkCmS`. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after `lifeSeconds` uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles. Suspended kinds (pods, phyto, coral food, cyclops) barely sink and ride the flow.
 - Fish bite radius 1.2 cm; competition: a particle targeted by two fish goes to the first to reach it; clowns and tang get burst speed when hunger > 0.4.
 - "Frenzy" score: all diet-matching fish with hunger > 0.2 get `Feed` ≥ 0.6 immediately on spawn (perception event), producing the rush.
@@ -426,10 +426,10 @@ It is read-only: it never draws from an rng, never writes to an organism or a br
 Loaded from `assets/sim/rock_sdf.bin` + `anchors.json`. The sim module gets a `RockData` constructed by the app from the files; tests use an analytic `RockData.ofSpheres(...)` builder.
 
 ### 5.2 SDF file format
-Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 122×33×61 tank at 1 cm: 245,586 cells → ~740 KB. As baked (ASSETS §3.5): nx = 122, ny = 61, nz = 33 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
+Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 121.9×40.6×45.7 tank at 1 cm: 122·41·46 = 230,092 cells → ~690 KB. As baked (ASSETS §3.5): nx = 122, ny = 41, nz = 46 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
 
 ### 5.3 Flow field (`FlowField`)
-Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 84, y 48, z 1), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 42, z 10), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** at the back center top (x 61, y 55, z 2), aiming forward-down (0, −0.5, 0.87) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 20) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
+Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 77, y 32, z 1; resized tank), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 28, z 13), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** nozzle at the back middle (x 73, y 37.4, z 2; piped from the HOB filter on the right, video T97), aiming forward and a little down (0, −0.4, 0.92) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 0.36 × water level) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
 
 **Gusts** (`FlowGust`, a flick of the finger): `addGust(pos, vel, t)` adds up to 4 short puffs on top of the jets, never baked into the cached grid. Each is a travelling Gaussian blob: centre `pos + dir × speed × τ(1 − e^(−age/τ))` with τ 0.8 s, radius 3.5 cm + 0.35 × distance travelled, speed `speed × e^(−age/τ)`, faded out over the last second of its 4 s life; launch speed ≤ 45 cm/s. `velocity()` and `velocityFast()` add them, so corals, sand, particles and the nori all feel the same puff; the snapshot carries them (`gusts`, stride 8) for the renderer's coral sway and flow motes.
 
@@ -691,13 +691,13 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 ### 9.7 Water physics: flow solver, scalar transport, surface, optics (owner request)
 
-**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–56, z 0–33).
+**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–38.1, z 0–45.7; sizes from `TankDims`).
 
 | `FluidQuality` | grid | cell | projection iterations |
 |---|---|---|---|
-| LOW | 32 × 14 × 9 | 3.8 cm | 30 |
-| MEDIUM | 48 × 21 × 13 | 2.54 cm | 45 |
-| HIGH | 64 × 28 × 18 | 1.9 cm | 60 |
+| LOW | 32 × 10 × 12 | 3.8 cm | 30 |
+| MEDIUM | 48 × 14 × 18 | 2.54 cm | 45 |
+| HIGH | 64 × 19 × 24 | 1.9 cm | 60 |
 
 - **Step**, with dt ≤ 0.1 s:
   1. Pump forcing.
@@ -760,7 +760,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
 
 **Pair matrix (`ai/PairMatrix.kt`, `sim/interactions.json`, 06 §5.3).**
 - *Scan.* Every 0.5 s each actor scans its rows. A target entering the trigger radius opens an entry. After `lingerS` the entry rolls once a minute with probability `p`.
-- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step), tactile damping, and rank.
+- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step; `CROWDING_BASE` and `CROWDING_GAIN` were calibrated on the 33 cm-deep footprint and scale with `TankDims.DEPTH_CM`, so the default stock in Tee's measured tank stays the ×1 baseline), tactile damping, and rank.
 - *Hourly cap.* A token bucket that refills at `floor + (max − floor)(1 − fam)`, scaled by the modifiers below, and holds max(1, ¼ h of the cap).
 - **Host-defence sensitisation:**
   - repeated intrusions raise p up to ×2;
@@ -788,7 +788,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
   - Inspection length is lognormal with mean 6.7 s × area^¼.
   - Cheating runs at 0.025/s, or 0.17/s when hunger > 0.6 (S:Pinto11).
   - The rest between bouts is 15–75 s × (1.3 − hunger).
-- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A client still unreachable after 20 s is skipped for 5 min.
+- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A swimmer in a crawl space under a low rock roof (e.g. beneath R9 by the dottyback cave) first slides out sideways to a spot with open water above it, since it cannot climb from where it is. A client still unreachable after 20 s is skipped for 5 min.
 - The shrimp counts approaches every tick (`preTick`, c16).
 
 **Newcomers.** A tailspot added to the tank prospects holes and grazing patches for its first day (c09). Engineer goby adults patrol on about 5 % of nights (07 gap 3).
@@ -1090,9 +1090,10 @@ interpolates them and `fish.vert` reads them as `uMotion`:
 ### 15.5 Hairy mushroom host (owner, 2026-10)
 
 The clowns host a cluster of hairy green mushrooms (`rhodactis_sp`, *Rhodactis* sp., `CoralKind.MUSHROOM`). The
-cluster sits where the `mushroom_hairy.glb` model is built, on a ledge of the arch's left leg. The anchor
-`HOST_SHROOM` and the coral anchor `coral_shroom_hairy` are at (82.3, 20.3, 15.2), the centroid of the model's
-disc tufts, next to `HOST_ARCH_CLOWNS`. The owner's
+cluster sits where the `mushroom_hairy.glb` model is built: on top of the low purple-coralline R10 rock in front of
+the right recess, under the shelf's front edge (resized tank, ≈ (81, 13, 21); evidence in docs/specs/tank_design.md
+§1 v3 note: [P p14], [P full], night clip T84). The anchor `HOST_SHROOM` and its alias `coral_shroom_hairy` are that
+snapped point, with `HOST_ARCH_CLOWNS` ~4 cm above it. The owner's
 research docs on `claude/project-thread-r6d0sa` were not reachable when this was written. The specs below come
 from the coordinator's summary of them.
 
@@ -1376,6 +1377,20 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - **Shield and eyestalks 7**: eyestalks scan out of step; the shield bobs with the stride. **Antennae 8** sweep (faster while `searching`), **antennules 9** flick at 2.5 Hz in 1–2.5 s bursts every 2–6 s, nonstop while following a scent.
 - **Withdrawal.** `retract` follows 1 − `Organism.extension` (Retreat sets 0): in at 12/s (≈ 0.15 s), out at 0.35/s. Eyestalks and antennae come out first, then the chelae, the walking legs last. In the shader every part but the shell shrinks toward `limbPivots[7]`, just inside the aperture; the left chela stays at the opening.
 - **Tests.** `ai/HermitLegsTest.kt`: diagonal pairs and shell roll; snaps in within 0.25 s and comes out eyes first; alternating claw strokes while picking in the sim.
+
+### 19.6 Crawler surface seat and planted feet (`sim/CrawlerSeat.kt`)
+
+The crawler models stand on their own y = 0 plane, but the sim walks `Organism.pos` at the brain's `surfaceOffset` (0.5 × depthRatio × L + 0.2 cm) above the nearest surface along one normal, against the flat `sandTopCm` plane. Drawn there, a hermit stood about 0.5 cm off a rock face with legs and antennae crossing into the mesh, and hung over the sand slope (owner clip C 1.5–7 s). The seat fixes the drawn pose only; `pos`, `up` and every behaviour are unchanged.
+
+- **Surface** (`CrawlSurface`): min of the rock SDF, the live sand bed (`SandBed.surfaceY`, the sand the renderer draws: 3.5 cm at the front glass to 6 cm at the back, plus digging) and the four glass panes.
+- **Seat.** Step from `pos` onto the surface, fit the body up to a plane through four footprint samples cast down onto it (70 % fit, 30 % normal under the body; eased at 4 rad/s and kept from tick to tick), then a rigid contact solve over the model's contact points (hermit: 26 shell points, shield, coxae and chela bases, from the GLBs): points inside are pushed out along their own normal as a translation plus a small rotation about the body centre (a shell against a wall tips up it), and with nothing inside the body settles until its lowest point touches (0.02 cm). A final pass lifts it clear of anything still inside, then settles as far as nothing goes in. If that leaves no clean rest (a slot narrower than the shell), it retries from the bare normal, the last tilt and four tipped starts, and else holds the last clean seat within a body length. `Organism.toPose` draws the rigid body at `seatPos` / `seatUp`; `blend` eases 0 ↔ 1 at 3/s when the animal leaves or regains a surface.
+- **Hermit legs** (`HermitLegs` entries 10–13, `fish.vert` hermitLimb with `uLimb[14].w` = 1): each foot has a foothold cast onto the surface from above its stance point (the rest tip swung by the stroke). It stays there through the stance (re-planted if it leaves 0.45–1.08 of the hip-to-tip reach), swings to the next foothold in the first 40 % of the cycle with the rig's lift, and a rotate-about-the-hip IK (axis × angle) plus a flex that shortens the leg and raises the knee reaches it. If the tip, knee or propodus would be inside, the foot searches the surface around the hip (3 reaches × 5 swings) and then folds up beside the body; a leg with no clear pose at all is pulled into the shell over two ticks.
+- **Chelae** (`uLimb[14].y/.z`): the dip is capped so the claw tip and palm stay on or above the surface under them. **Antennae, antennules** (8.z, 9.z) pitch up and sweep out and back, **eyestalks** (6.w) lean back and down, by the smallest of 0, 0.2 … 1 that keeps them 0.04 cm off rock and glass (raised by ≤ 0.45 per tick, relaxed at 0.8/s).
+- **Continuity.** Each tick first carries the last seat along with the sim's motion along the surface and keeps it if it is still clean (nothing inside, ≤ 0.1 cm gap, within one body length of `pos`); then the last seat unmoved; only then a fresh solve (fitted up, bare normal, four 0.6 rad tilts). A seat that would hop more than 10 cm/s × dt beyond the sim's own move, or turn faster than 6 rad/s, is approached by a limited step when that step is clean. Leg IK, claw limits and feeler bends change by at most 0.45 per tick; a leg whose eased sweep would cross rock is drawn shortened, else pulled in.
+- **Sim follows the seat** (hermits). A clean seat whose point raised by the brain's `surfaceOffset` is more than 0.3 cm from `pos` (and itself clear of rock, sand and glass) is written back into `pos`, and the sim's `up` eases toward the seat's (3 rad/s, ≤ 0.4 rad a tick), so the single-normal crawl step stops thrashing on overhangs and in crevices. Seat changes under 0.1 cm / 0.05 rad are not drawn (the last seat is held while clean). A seat that keeps hopping (+1 a hop, −0.25 a clean tick, at 4) reports `wedged`: `HermitBrain` ends its pick or wander and does not settle to pick for 20 s, so it walks off.
+- **Other crawlers**: shapes exist for the Sally Lightfoot (carapace underside + dactyl tips), brittle star (disc + arms at 30 %) and astrea (sole + shell lip), but `SEAT_OTHER_CRAWLERS` is off: their seats added body pops and speed spikes in `FishGlitchTest` and have no no-clip test yet.
+- **Cost.** About 100–200 distance samples per seated hermit per tick (a few hundred when a leg has to search); no collections are built per tick.
+- **Tests.** `sim/HermitSeatTest.kt`: the full stock for 3 h at 20 Hz (from dusk) and 4 h at 10×, every tick, every seated hermit: the lowest body contact point is ≤ 0.3 cm off the surface and none is more than 0.1 cm inside; no planted foot tip or knee is more than 0.1 cm inside.
 
 ### 19.4 Tests
 

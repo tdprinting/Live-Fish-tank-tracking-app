@@ -1,5 +1,6 @@
 package com.reeflive.core.geom
 
+import com.reeflive.core.sim.TankDims
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -21,10 +22,11 @@ import kotlin.math.sqrt
  * caustics and the view from below.
  */
 class WaterSurface(
-    val lengthCm: Double = 121.9,
-    val depthCm: Double = 33.0,
+    val lengthCm: Double = TankDims.LENGTH_CM,
+    val depthCm: Double = TankDims.DEPTH_CM,
     val sx: Int = 96,
-    val sz: Int = 26,
+    /** Square-ish cells: ≈ 1.27 cm along both axes. */
+    val sz: Int = kotlin.math.max(4, kotlin.math.round(sx * depthCm / lengthCm).toInt()),
     seed: Long = 7L,
 ) {
     val dx = lengthCm / sx
@@ -35,7 +37,7 @@ class WaterSurface(
     private val rng = Rng(seed)
     var waveSpeed = 23.0
     var damping = 1.2           // 1/s
-    var hobPos: Vec3? = Vec3(71.0, 56.0, 2.0)
+    var hobPos: Vec3? = Vec3(73.0, TankDims.WATER_LEVEL_CM, 2.0)   // equipment.glb ReturnNozzle `outflow` (back middle, video T97)
     var hobOn = true
     /** Surface agitation from the pumps (0..2, set from the flow solver or pump strength). */
     var agitation = 1.0

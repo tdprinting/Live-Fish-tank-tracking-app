@@ -14,6 +14,7 @@ COLOR_0 for coral meshes (data, linear):
   polyp: r = 0, g = 0, b = tentacle hinge (0 at the polyp base .. 1 at the tentacle tips), a = 1
   card : b = sway weight (0 root .. 1 tip)
 """
+import json
 import math
 import os
 
@@ -283,8 +284,8 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 # thick, pale cream stalk fans into 8 stout trunks just above the rock (3 near-upright in the middle, 5 in a ring at
 # 50-72 deg from vertical); each forks 4 more times into slender branches that arch upward in the middle and arch out
 # and sag at the tips round the lower ring; every outer branch carries short pinnate twigs and feathery polyp sprigs
-# (the fuzz of the clip). Warm pinkish tan, paler cream-white tips, pale translucent stalk. Footprint as v2: crown top
-# y = 48, crown 26 x 20 cm about (73, 17). Body and Tufts carry extras.swayMode = 1 (tree sway in static.vert and
+# (the fuzz of the clip). Warm pinkish tan, paler cream-white tips, pale translucent stalk. Footprint: crown top
+# 4 cm under the surface of the resized 16 in tank, crown 26 x 20 cm about coral_kenya_main. Body and Tufts carry extras.swayMode = 1 (tree sway in static.vert and
 # polyp.vert: trunk still, tips lag, sprigs ride their branch, local ripple around a passing fish).
 MAXD = 5                  # 0 stalk, 1 trunks, 2..5 forks; pinnate twig tubes hang off depth 3..5 (LOD0 only)
 KENYA_TRUNKS_UP = 3
@@ -392,7 +393,10 @@ def kenya(rock, A):
     grow(pos - n * 0.6, trunk_dir, 2.4, 2.2, 0, 0.0)
     allp = np.vstack([b[0] for b in branches])
     lo, hi = allp.min(0), allp.max(0)
-    sy = (48.0 - pos[1]) / (hi[1] - pos[1])
+    # Tee's clip sets the 26 x 20 cm crown; the measured 16 in tank caps the height (~17 cm colony, crown 4 cm
+    # under the surface)
+    top = min(pos[1] + 17.0, C.WATER_Y - 4.0)
+    sy = (top - pos[1]) / (hi[1] - pos[1])
     # the whole colony above the stalk (sagging lower ring included) fits the 26 x 20 cm crown footprint
     crown = allp[allp[:, 1] > pos[1] + 0.12 * (hi[1] - pos[1])]
     clo, chi = crown.min(0), crown.max(0)
@@ -406,12 +410,12 @@ def kenya(rock, A):
         w = S(0.04, 0.22, h)
         q = pts.copy()
         q[:, 1] = pos[1] + (pts[:, 1] - pos[1]) * sy
-        q[:, 0] = pts[:, 0] + w * ((73.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
-        q[:, 2] = pts[:, 2] + w * ((17.0 + (pts[:, 2] - cz) * sz) - pts[:, 2])
+        q[:, 0] = pts[:, 0] + w * ((pos[0] + 1.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
+        q[:, 2] = pts[:, 2] + w * ((pos[2] + (pts[:, 2] - cz) * sz) - pts[:, 2])
         b[0], b[1] = q, rad * (1 + (rsc - 1) * (1 - 0.5 * h))
     allp = np.vstack([b[0] for b in branches])
-    _q = allp[allp[:, 1] > 23.0]
-    _h = (_q[:, 1] - 23.0) / 25.0
+    _q = allp[allp[:, 1] > pos[1] + 2.0]
+    _h = (_q[:, 1] - pos[1] - 2.0) / max(1.0, top - pos[1] - 2.0)
     _w = [np.ptp(_q[(_h > lo_) & (_h < lo_ + 0.1), 0]) if np.any((_h > lo_) & (_h < lo_ + 0.1)) else 0 for lo_ in (0.3, 0.5, 0.7, 0.85)]
     print("[coral] kenya silhouette widths@.35/.55/.75/.9", np.round(_w, 1), "top-x", round(float(_q[_h > 0.7, 0].mean()), 1))
     print("[coral] kenya bbox", np.round(allp.min(0), 1), np.round(allp.max(0), 1))
@@ -771,28 +775,35 @@ def gsp_dome(rock, A, anchor, radii, count, seed, name):
 
 
 # ----------------------------------------------------------------------------
-# New corals from Tee's photos 2026-10-13 (tee_tank_photos.md). Their anchors are new: raw positions here, snapped
-# to the rock at build time (mode "nearest" = closest rock point, "top" = first rock hit straight down). The snapped
-# positions are mirrored in core RockData.anchorsRaw() for the sim; rockscape.py / anchors.json do not list them yet.
+# New corals from Tee's photos 2026-10-13 (tee_tank_photos.md). Their anchors live in rockscape.py ANCHORS and are
+# snapped to the rock there (anchors.json, mirrored in core RockData DefaultScape). The raw points below are only a
+# fallback for an anchors.json written before they were added (mode "nearest" = closest rock point, "top" = first
+# rock hit straight down).
 # ----------------------------------------------------------------------------
 NEW_ANCHORS = {
-    # [P p04] toadstool on a low front ledge at the sand line, the pink leather plate at its left foot
-    "coral_toadstool_front": ((52.0, 8.6, 27.1), "nearest"),
-    "coral_leather_pink_front": ((46.6, 8.2, 27.6), "nearest"),
-    # [P p14] tan finger leather high on the arch's left top, above the clowns' host
-    "coral_finger_leather": ((78.3, 42.8, 9.3), "nearest"),
-    # [P p05] big corallimorph on the front edge of the high back-left rock, a few cm under the surface
-    "coral_elephant_ear": ((37.0, 60.0, 18.0), "top"),
+    # [P p04] toadstool on the low front-left top of the R5 mound near the sand, the pink plate at its left foot
+    "coral_toadstool_front": ((60.5, 9.3, 29.0), "nearest"),
+    "coral_leather_pink_front": ((57.8, 9.0, 32.0), "nearest"),
+    # [P p14] tan finger leather on the arch's left top (R6 back pier), up and left of the clowns' host
+    "coral_finger_leather": ((76.0, 27.3, 12.0), "nearest"),
+    # [P p05] big corallimorph on the front edge of the high back-left rock, ~3 cm under the surface
+    "coral_elephant_ear": ((41.0, 45.0, 16.5), "top"),
 }
 
 
 def new_anchor(rock, name):
-    raw, mode = NEW_ANCHORS[name]
-    raw = np.array(raw, float)
-    if mode == "top":
-        hit, hn = rock.ray(raw, np.array([0, -1.0, 0]), 80.0)
+    path = os.path.join(C.SIM, "anchors.json")
+    snapped = {a["name"]: a for a in json.load(open(path))["anchors"]} if os.path.exists(path) else {}
+    if name in snapped:
+        hit = np.array(snapped[name]["pos"], float)
+        hn = np.array(snapped[name].get("normal", [0, 1, 0]), float)
     else:
-        hit, hn, _ = rock.nearest(raw)
+        raw, mode = NEW_ANCHORS[name]
+        raw = np.array(raw, float)
+        if mode == "top":
+            hit, hn = rock.ray(raw, np.array([0, -1.0, 0]), 80.0)
+        else:
+            hit, hn, _ = rock.nearest(raw)
     hn = unit(hn if hn[1] > -0.2 else hn + UP)
     print(f"[anchor] {name}: pos {np.round(hit, 2).tolist()} normal {np.round(hn, 2).tolist()}")
     return hit, hn
@@ -1167,9 +1178,9 @@ def zoa(rock, A):
     # mouth (was a cream-centred brown morph). No emissive: it is one flat colour and would tint the brown column green
     mB = ptex("zoa_polyp_brown", "#3E2A1C", "#5E3C22", "#D9C238", "#7CC23A", tip="#C8AE7E", mouth="#2A3418")
     mC = ptex("paly_polyp_brown", "#5A4030", "#7A5A36", "#7A5A36", "#D8C8A0")
-    # paly colony (C4b): 20 brown polyps at R2's right foot + a 10-polyp orange patch at (24, 5, 25)
+    # paly colony (C4b): 20 brown polyps at R2's right foot + a 10-polyp orange patch at (17, 5, 30)
     instC, instD = Instances(24), Instances(25)
-    for cen, cnt, inst_, rad in ((A["coral_paly_left_foot"][0], 20, instC, 2.2), (np.array([24.0, 5.0, 25.0]), 10, instD, 1.4)):
+    for cen, cnt, inst_, rad in ((A["coral_paly_left_foot"][0], 20, instC, 2.2), (np.array([17.0, 5.0, 30.0]), 10, instD, 1.4)):
         placed, tries = [], 0
         while len(placed) < cnt and tries < 3000:
             tries += 1
@@ -1401,12 +1412,15 @@ def proto_hairy(h=0.24):
 
 
 def mushroom_hairy(rock, A):
-    """Rhodactis clump on the rock under HOST_ARCH_CLOWNS (the clowns' host spot)."""
-    import json
+    """Rhodactis carpet on the low R10 rock under the right shelf (HOST_SHROOM, snapped to the rock by rockscape; the clowns'
+    host spot, HOST_ARCH_CLOWNS hovers just above it)."""
     anchors_all = {a["name"]: a for a in json.load(open(os.path.join(C.SIM, "anchors.json")))["anchors"]}
     host = np.array(anchors_all["HOST_ARCH_CLOWNS"]["pos"], float)
     hit, hn = None, None
-    for d in ((0, -1, 0), (0, -0.6, -0.8), (0, 0, -1), (-0.6, -0.6, -0.5), (0.6, -0.6, -0.5)):
+    if "HOST_SHROOM" in anchors_all:
+        hit = np.array(anchors_all["HOST_SHROOM"]["pos"], float)
+        hn = unit(np.array(anchors_all["HOST_SHROOM"].get("normal", [0, 1, 0]), float))
+    for d in (() if hit is not None else ((0, -1, 0), (0, -0.6, -0.8), (0, 0, -1), (-0.6, -0.6, -0.5), (0.6, -0.6, -0.5))):
         p_, n_ = rock.ray(host, unit(np.array(d, float)), 30.0)
         if p_ is not None and (hit is None or np.linalg.norm(p_ - host) < np.linalg.norm(hit - host)):
             hit, hn = p_, n_
@@ -1477,7 +1491,7 @@ def mushroom_hairy(rock, A):
     pol_m = C.material("mushroom_hairy_polyp", rough=0.55, image=tex("mushroom_hairy_polyp", pc), emissive="#8CF060",
                        emissive_strength=0.1, double=True)
     root = C.empty("Root")
-    C.set_extras(root, anchor="HOST_ARCH_CLOWNS", species="rhodactis_sp", fluorescent=0.6,
+    C.set_extras(root, anchor="coral_shroom_hairy", species="rhodactis_sp", fluorescent=0.6,
                  hostFor="clown_orange,clown_darwin", discs=HAIRY_DISCS)
     body = g.obj("Body", root, "body", [disc_m], smooth=True)
     pol = polyp_node("Polyps", root, proto, [pol_m], inst)
@@ -1618,10 +1632,10 @@ def algae_tufts(rock, A):
         spots.append((hit, nn))
     # crests: top surfaces found by vertical rays on a jittered 4 cm grid, Poisson-thinned to 5 cm
     for x in np.arange(3, 120, 4.0):
-        for z in np.arange(2, 32, 4.0):
-            q = np.array([x + rs.uniform(-1.5, 1.5), 60.0, z + rs.uniform(-1.5, 1.5)])
+        for z in np.arange(2, C.TANK[2] - 1, 4.0):
+            q = np.array([x + rs.uniform(-1.5, 1.5), C.WATER_Y + 5, z + rs.uniform(-1.5, 1.5)])
             hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
-            if hit is None or nn[1] < 0.6 or hit[1] < 9 or hit[1] > 55:
+            if hit is None or nn[1] < 0.6 or hit[1] < 7 or hit[1] > C.WATER_Y - 1:
                 continue
             if all(np.linalg.norm(hit - h) > 5.0 for h, _ in spots):
                 spots.append((hit, nn))
@@ -1738,14 +1752,15 @@ def strip(g, pts, side, widths, col_rg, tip_b=1.0):
 
 def long_tufts(rock, root, count=16):
     rs = RS(161)
-    avoid = [(np.array(p, float), r) for p, r in (((20, 39, 15), 7.0), ((36.6, 41.1, 14), 5.0),
-                                                  ((42.8, 51.5, 13.1), 5.0), ((103.1, 39.3, 8.8), 3.0))]
+    # keep clear of the upper-left GSP, the two red macro tufts and the Sally crab's crevice
+    avoid = [(np.array(p, float), r) for p, r in (((20, 27.6, 18.2), 7.0), ((36.6, 28.9, 16.0), 5.0),
+                                                  ((42.8, 33.5, 13.5), 5.0), ((101.5, 22.0, 11.5), 3.0))]
     spots = []
     for x in np.arange(4, 119, 3.0):
-        for z in np.arange(2, 32, 3.0):
-            q = np.array([x + rs.uniform(-1, 1), 60.0, z + rs.uniform(-1, 1)])
+        for z in np.arange(2, C.TANK[2] - 1, 3.0):
+            q = np.array([x + rs.uniform(-1, 1), C.WATER_Y + 5, z + rs.uniform(-1, 1)])
             hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
-            if hit is None or nn[1] < 0.55 or not (34.0 <= hit[1] <= 48.0) or hit[2] < 9.0:
+            if hit is None or nn[1] < 0.55 or not (23.5 <= hit[1] <= 33.0) or hit[2] < 11.7:
                 continue
             if any(np.linalg.norm(hit - p) < r for p, r in avoid):
                 continue
@@ -1774,7 +1789,7 @@ def long_tufts(rock, root, count=16):
             p0 = hit - nn * 0.1 + rs.normal(0, 0.3, 3)
             pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
             for _ in range(8):
-                if all(0.6 < p[0] < 121.3 and p[1] < 54.5 and 0.6 < p[2] < 32.4 for p in pts):
+                if all(0.6 < p[0] < C.TANK[0] - 0.6 and p[1] < C.WATER_Y - 1.5 and 0.6 < p[2] < C.TANK[2] - 0.6 for p in pts):
                     break
                 L *= 0.8
                 pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
