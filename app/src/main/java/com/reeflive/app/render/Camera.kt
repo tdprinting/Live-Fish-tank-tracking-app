@@ -374,15 +374,29 @@ class Camera {
             initialized = true
         }
         blendShelf(step)
-        // Keep the eye out of rock and out of the sand bed.
-        if (sdf != null) pushOut(eye, sdf, CLEARANCE)
-        if (eye[0] > 0f && eye[0] < TANK[0] && eye[2] > 0f && eye[2] < TANK[2] && eye[1] < SAND_Y + 1.5f) eye[1] = SAND_Y + 1.5f
+        // Eye collision: outside the rock SDF, inside the glass box (never straddling a pane) and above the sand. The
+        // glass / sand clamp runs between two rock passes so neither can push the eye into the other. Allocation-free
+        // apart from the SDF's own Vec3 queries.
+        clampEye(eye, sdf)
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
         val dx = aim[0] - eye[0]; val dy = aim[1] - eye[1]; val dz = aim[2] - eye[2]
         near = (sqrt(dx * dx + dy * dy + dz * dz) * 0.03f).coerceIn(0.25f, 1f)
         M.perspective(fovY, aspect, near, far, proj)
         M.mul(proj, view, viewProj)
         M.invert(viewProj, invViewProj)
+    }
+
+    private fun clampEye(e: FloatArray, sdf: Sdf?) {
+        if (sdf != null) pushOut(e, sdf, EYE_CLEARANCE)
+        val m = EYE_GLASS_MARGIN
+        // within the tank's footprint (plus the margin band outside the panes): stay inside, a margin off the glass
+        if (e[0] > -m && e[0] < TANK[0] + m && e[2] > -m && e[2] < TANK[2] + m && e[1] < WATER_Y + m) {
+            e[0] = e[0].coerceIn(m, TANK[0] - m)
+            e[2] = e[2].coerceIn(m, TANK[2] - m)
+            if (e[1] < SAND_Y + 1.5f) e[1] = SAND_Y + 1.5f
+            if (e[1] > WATER_Y - m) e[1] = WATER_Y - m
+            if (sdf != null) pushOut(e, sdf, EYE_CLEARANCE)
+        }
     }
 
     private fun advanceOrbit(dt: Float) {
@@ -630,6 +644,9 @@ class Camera {
         /** Fish velocity smoothing rate (1/s). */
         const val VEL_SMOOTH = 4f
         const val CLEARANCE = 1.5f
+        /** Eye-to-rock margin (cm): above the largest near plane so the rock never fills the screen edge. */
+        const val EYE_CLEARANCE = 3f
+        const val EYE_GLASS_MARGIN = 1.5f
         /** Follow-heading spring stiffness (rad/s); critically damped, settles in ≈ 4.7 / ω ≈ 1.3 s. */
         const val FOLLOW_YAW_OMEGA = 3.5f
         /** Cross to the other flank once the kept one would view from behind by more than this (cos of the angle off +Z). */
@@ -687,7 +704,7 @@ class Camera {
         }
 
         fun pushOut(p: FloatArray, sdf: Sdf, clearance: Float) {
-            repeat(4) {
+            repeat(6) {
                 val v = Vec3(p[0].toDouble(), p[1].toDouble(), p[2].toDouble())
                 val d = sdf.dist(v).toFloat()
                 if (d >= clearance) return
