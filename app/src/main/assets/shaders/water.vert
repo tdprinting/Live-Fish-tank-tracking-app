@@ -1,6 +1,6 @@
 #version 300 es
 #include "common.glsl"
-// Water surface grid at y = 56, displaced by the simulated heightfield (SIMULATION §9.7).
+// Water surface grid at the water level (TankDims.WATER_LEVEL_CM, 38.1), displaced by the simulated heightfield (SIMULATION §9.7).
 
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;

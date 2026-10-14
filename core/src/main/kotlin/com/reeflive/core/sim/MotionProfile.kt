@@ -167,8 +167,8 @@ object MotionProfiles {
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
         BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
-        // foot gliding 0.5–1 cm/s; the food rush races at 3–5 cm/s [M][L]
-        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.7, walkBurstCmS = 4.0),
+        // idle foot crawl 1–3 cm/min (~0.05 cm/s); races at ~0.4 cm/s to food or a puff (docs/research/video/SIM_CHANGES.md §2.1) [M][L]
+        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.4),
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 0.8),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),

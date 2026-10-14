@@ -73,7 +73,7 @@ main { flex: 1; position: relative; min-height: 0; }
 .tool .ico { font-size: 24px; line-height: 1; }
 .tool.active, .tool:active { background: var(--glassHi); color: var(--foam); }
 
-.card, .shelfbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 86px);
+#card, .shelfbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 86px);
   width: min(520px, calc(100% - 16px)); max-height: calc(100% - 190px); display: flex; flex-direction: column; padding: 12px; }
 /* the shelf's name tags: one scrolling row, so the 3D shelf above stays in view */
 .shelfbar { bottom: calc(var(--safe-bottom) + 86px); padding: 8px 10px; }
@@ -122,8 +122,8 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .rel.good { color: var(--good); } .rel.danger { color: var(--danger); }
 .follow { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 86px); display: flex; align-items: center; gap: 8px; padding: 8px 10px; max-width: calc(100% - 16px); }
 .fcap { min-width: 0; } .fcap .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-.showchrome { position: absolute; top: 10px; right: 10px; }
-.cleanhint { position: absolute; left: 50%; transform: translateX(-50%); top: 10px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.showchrome { position: absolute; top: calc(var(--safe-top) + 10px); right: 10px; }
+.cleanhint { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 10px); padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 96px); padding: 8px 14px; font-size: 13px; max-width: calc(100% - 32px); }
 .torch { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
   background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,244,216,.55), rgba(255,230,176,.18) 18vmin, rgba(2,6,12,.25) 30vmin); }
@@ -140,8 +140,9 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .verdict svg { width: 120px; height: 30px; color: var(--lagoonBright); }
 .loading.inline { position: static; background: none; padding: 40px 0; }
 .tips { padding-left: 20px; } .tips li { margin: 6px 0; }
+.news li small { display: block; opacity: .6; font-size: 12px; }
 .good { color: var(--good); } .danger { color: var(--danger); }
-@media (max-width: 430px) { .hide-sm { display: none; } .fish { top: calc(var(--topH, 96px) + 110px); max-height: calc(100% - var(--topH, 96px) - 210px); } }
+@media (max-width: 430px) { .hide-sm { display: none; } .fish { top: calc(var(--topH, 96px) + 56px); max-height: calc(100% - var(--topH, 96px) - 160px); } }
 
 .btn { border: 0; background: var(--lagoon); color: #fff; padding: 9px 16px; border-radius: 12px; cursor: pointer; font-weight: 600; }
 .btn.small { padding: 6px 12px; font-size: 13px; }
@@ -179,7 +180,7 @@ dialog::backdrop { background: rgba(3,9,18,.6); }
 @media (orientation: landscape) and (max-height: 500px) {
   .bar { padding-top: 4px; padding-bottom: 4px; }
   .rail { bottom: calc(var(--safe-bottom) + 4px); }
-  .card, .shelfbar { bottom: calc(var(--safe-bottom) + 76px); max-height: calc(100% - 120px); }
+  #card, .shelfbar { bottom: calc(var(--safe-bottom) + 76px); max-height: calc(100% - 120px); }
 }
 
 /* screensaver: covers the chrome, takes every tap (tap = exit); the tank shows through */
@@ -203,3 +204,56 @@ body.saver-on .saver { position: fixed; }
 .subud { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-bottom) + 28px); display: flex; flex-direction: column; gap: 14px; }
 .subud .round { width: 58px; height: 58px; font-size: 24px; touch-action: none; }
 .subud .round.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.45); }
+
+/* ---- calmer, touch-first live screen (2026-10-14 design pass): the tank fills the phone, the HUD is two slim rows,
+   menus are bottom sheets with big tiles. The app bar only shows on the water tests page. */
+.back { display: none; border: 0; background: var(--glass); border-radius: 999px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+body.on-live header.bar { display: none; }
+body:not(.on-live) .back { display: inline-flex; }
+body:not(.on-live) .brand { display: none; }
+.top { top: calc(var(--safe-top) + 8px); left: 10px; right: 10px; gap: 8px; justify-content: space-between; }
+.top .tests { width: 40px; height: 40px; font-size: 18px; }
+.row2 { flex: 1 0 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; position: relative; }
+.row2 > * { pointer-events: auto; }
+.seg button { padding: 8px 14px; font-size: 15px; }
+.pill { padding: 6px 11px; min-height: 32px; }
+#clock { font-weight: 500; color: var(--mist); }
+#waterBtn { font-weight: 600; }
+#waterBtn.water-good { color: var(--good); } #waterBtn.water-caution { color: var(--caution); } #waterBtn.water-danger { color: var(--danger); border-color: var(--danger); }
+#waterBtn.on { background: rgba(31,166,201,.3); }
+.strip { flex: 1 0 100%; }
+.chip { font-size: 13px; padding: 4px 10px; }
+.side { right: 10px; gap: 10px; }
+.side .round { width: 42px; height: 42px; font-size: 18px; background: rgba(6,19,39,.45); }
+
+.rail { padding: 6px 8px; border-radius: 24px; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.tool { min-width: 66px; padding: 7px 8px; font-size: 12px; font-weight: 600; border-radius: 16px; }
+.tool .ico { font-size: 26px; }
+.tool.active { background: rgba(31,166,201,.35); color: #fff; }
+
+/* menus slide up from the bottom like an iPhone sheet, leaving the top of the tank in view */
+#card { border-radius: 24px; padding: 8px 14px 14px; max-height: min(58%, calc(100% - var(--topH, 96px) - 110px));
+  box-shadow: 0 -8px 40px rgba(0,0,0,.45); background: rgba(6,19,39,.82); animation: sheetUp .22s ease-out; }
+#card::before { content: ''; display: block; width: 38px; height: 5px; border-radius: 3px; background: var(--glassBorder); margin: 0 auto 8px; flex: none; }
+@keyframes sheetUp { from { transform: translate(-50%, 24px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.card-head strong { font-size: 17px; }
+.card-head .icon-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--glass); font-size: 14px; }
+h4 { margin: 16px 0 8px; font-size: 13px; letter-spacing: .3px; text-transform: none; color: var(--mist); font-weight: 600; }
+.options { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.opt { min-height: 80px; padding: 10px 6px; border-radius: 18px; font-size: 13px; justify-content: center; background: rgba(255,255,255,.06); }
+.opt .ico { font-size: 28px; }
+.opt.on { box-shadow: 0 0 0 1px var(--lagoonBright) inset; }
+.pillbtn { padding: 7px 13px; font-size: 14px; }
+.btn.small { min-height: 34px; }
+
+/* water tests page: roomier cards and a clear way back to the tank */
+#params .wrap { padding-top: 8px; }
+#params h1 { font-size: 26px; }
+#params .card { border-radius: 20px; padding: 14px; }
+#params .card .val { font-size: 26px; }
+.top .spacer { flex: 1; }
+.top .hermie { width: 40px; height: 40px; position: relative; }
+.top .hermie.talk #hermieText { left: auto; right: -48px; top: calc(100% + 6px); font-size: 14px; }
+body:not(.on-live) .tabs { display: none; }
+.top .hermie.talk { z-index: 5; }
+.top .hermie { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(6,19,39,.78); }

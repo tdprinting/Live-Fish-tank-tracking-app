@@ -21,13 +21,15 @@ fun straightRig(id: String, x: Float, y: Float, z: Float, bl: Float): FishRig {
 
 class LightingStateTest {
     @Test fun fixturesHangOverTheTank() {
-        // AI Prime lens centres (equipment.glb AiPrimeL/R_Lens `lightPos`): pucks 29 cm over the 61.4 cm rim
+        // AI Prime lens centres (equipment.glb AiPrimeL/R_Lens `lightPos`): pucks ~29 cm over the 41 cm rim of the
+        // 48 x 16 x 18 in tank, on goosenecks from behind (lens a little behind the centre line)
         assertEquals(2, LightingState.LIGHT_POS.size)
         assertEquals(32f, LightingState.LIGHT_POS[0][0], 1e-4f)
-        assertEquals(91f, LightingState.LIGHT_POS[1][0], 1e-4f)
+        assertEquals(88f, LightingState.LIGHT_POS[1][0], 1e-4f)
         for (p in LightingState.LIGHT_POS) {
-            assertEquals(90f, p[1], 1e-4f)
-            assertEquals(16f, p[2], 1e-4f)
+            assertEquals(69.6f, p[1], 1e-4f)
+            assertTrue(p[1] - (Camera.TANK[1] + 0.4f) in 25f..35f)
+            assertEquals(20f, p[2], 1e-4f)
             assertTrue(p[0] in 0f..Camera.TANK[0] && p[2] in 0f..Camera.TANK[2])
         }
     }
@@ -278,7 +280,7 @@ class ParticleFieldTest {
         val (start, n) = f.ambientRange
         for (i in start until start + n) {
             val y = f.out[i * ParticleField.FLOATS + 1]
-            assertTrue(y in 2.9f..56.1f)
+            assertTrue(y in (Camera.SAND_Y - 0.1f)..(Camera.WATER_Y + 0.1f))
         }
         assertTrue(abs(f.out[(f.foodRange.first) * ParticleField.FLOATS] - 10f) < 1e-4f)
     }

@@ -18,7 +18,8 @@ class HeatModelTest {
     }
 
     private fun Simulation.o2Sat() = HeatModel.o2Sat(water.s)
-    private fun Simulation.atSurface(o: Organism) = o.pos.y >= rock.waterLevelCm - 5
+    // the top 4 cm of the 35 cm water column (48 x 18 x 16 in tank; a fish crossing the upper water on its way home is not gasping)
+    private fun Simulation.atSurface(o: Organism) = o.pos.y >= rock.waterLevelCm - 4
 
     /** One chem minute, abstract or with the behaviour layer at [dt]; [sample] once per simulated second. */
     private fun Simulation.minute(full: Boolean, dt: Double = 0.25, sample: (() -> Unit)? = null) {

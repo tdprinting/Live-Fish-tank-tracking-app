@@ -269,7 +269,9 @@ class Navigation(private val rock: RockData) {
         const val DESCENT = 24
         const val LINE_STEP = 0.5
         const val END_SKIP = 1.0
-        private val GRIDS = HashMap<OpenWater, Grid>()
+        private val GRIDS = object : LinkedHashMap<OpenWater, Grid>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<OpenWater, Grid>?) = size > 16
+        }
 
     }
 }

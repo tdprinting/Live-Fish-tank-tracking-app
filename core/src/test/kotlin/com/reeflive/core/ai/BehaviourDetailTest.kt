@@ -292,7 +292,12 @@ class BehaviourDetailTest {
         val card = s.org(BrainKind.CARDINAL)
         val ev = ArrayList<SimEvent>()
         HealthModel.kill(card, "test", s.simTimeSec, ev)
-        card.pos = crab.pos + Vec3(6.0, 0.0, 0.0)
+        // in the 48x18x16 layout CREVICE_SALLY sits ~22 cm up, above the low-carcass band (sand + 15), and a body
+        // floated 6 cm from the den rises out of reach before the crab turns to it: start the crab on the rock
+        // near the sand under its den, with the carcass 4 cm away in open water (one offset alone can be inside rock)
+        crab.pos = s.rock.sdf.project(Vec3(crab.pos.x, s.rock.sandTopCm + 5.0, crab.pos.z + 3.0), 0.3)
+        card.pos = listOf(Vec3(4.0, 0.0, 0.0), Vec3(-4.0, 0.0, 0.0), Vec3(0.0, 0.0, 4.0), Vec3(0.0, 0.0, -4.0), Vec3(0.0, 4.0, 0.0))
+            .map { s.rock.sdf.project(crab.pos + it, 1.5) }.first { s.rock.inWater(it, 0.5) && it.distanceTo(crab.pos) > 2.5 }
         s.advance(180.0, behaviorDt = 0.1) { crab.hunger = maxOf(crab.hunger, 0.6) }
         val cb = s.brainOf(BrainKind.SALLY_CRAB) as SallyCrabBrain
         assertTrue("carcass bites ${cb.carcassBites}", cb.carcassBites > 0)

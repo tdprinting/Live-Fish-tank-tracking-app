@@ -53,3 +53,11 @@ https://tdprinting.github.io/Live-Fish-tank-tracking-app/ once Settings → Page
 
 Shared code that starts using a new JVM-only or Android API breaks the web build (CI's "Web app" job shows it).
 Prefer `kotlin.math` / Kotlin stdlib in `:core`; if a JVM API is needed, add a small shim next to the others.
+
+## What's new popup
+
+When the page opens it shows the updates merged to `main` since this browser last opened it (`reeflive.newsSeen` in
+localStorage), and More → ✨ What's new lists the latest ones any time. The list is `whats-new.json`, written by the
+`:web:whatsNew` task from `git log --first-parent` on main, so every thread's merged PR appears with its title.
+To reword a title in plain language, or hide a behind-the-scenes change with `""`, add it by PR number to
+`docs/whats-new.json`.

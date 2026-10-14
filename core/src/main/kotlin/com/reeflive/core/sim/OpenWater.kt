@@ -88,14 +88,19 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
         /** Clearances a body is matched to: the first at least its slimmest half-thickness plus 2 mm. */
         val LEVELS = doubleArrayOf(0.4, 0.8, 1.2, 1.6)
 
-        private val cache = HashMap<Triple<Sdf, Any?, Double>, OpenWater>()
+        /** Key of a grid: the rock field, the tank box, the drawn sand (by content) and the clearance. */
+        private data class Key(val sdf: Sdf, val l: Double, val w: Double, val water: Double, val sandTop: Double, val sand: Long?, val clear: Double)
+        /** The grids of the last few rocks (a test suite builds many simulations; a resized tank never reuses the old box). */
+        private val cache = object : LinkedHashMap<Key, OpenWater>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, OpenWater>?) = size > 16
+        }
 
         /**
          * Shared by every simulation on the same rock and drawn sand. The floor is the modelled sand ([modelFloor]),
          * not a simulation's dug bed, so the grid (and every route on it) is the same whichever simulation builds it.
          */
         fun of(rock: RockData, clear: Double = CLEAR): OpenWater =
-            synchronized(cache) { cache.getOrPut(Triple(rock.sdf, rock.sandBase, clear)) { OpenWater(rock, clear) } }
+            synchronized(cache) { cache.getOrPut(Key(rock.sdf, rock.lengthCm, rock.widthCm, rock.waterLevelCm, rock.sandTopCm, rock.sandBase?.fingerprint, clear)) { OpenWater(rock, clear) } }
 
         /** The drawn sand surface without digging ([SandBed.modelY]): tank.glb's sand, else the bed's front-to-back slope. */
         fun modelFloor(rock: RockData, x: Double, z: Double): Double =

@@ -1,5 +1,5 @@
 {
-  "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 33.0, "heightCm": 61.0,
+  "tank": {"name": "Tee's Reef", "lengthCm": 121.9, "widthCm": 45.7, "heightCm": 40.6,
            "displayGallons": 60, "sumpGallons": 0, "reefType": "SOFT", "sandDepthCm": 3.0},
   "livestock": [
     {"speciesId": "amphiprion_ocellaris", "nickname": "Orange", "variant": "classic", "sizeCm": 7.0, "role": "FEMALE", "placement": "HOST_SHROOM"},

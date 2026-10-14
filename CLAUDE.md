@@ -26,3 +26,4 @@ for the section you need (`grep -n "^#" docs/X.md`, then read that range).
 ## Conventions
 - One feature per PR; every merge to `main` publishes an APK and the web site.
 - Asset sources: `tools/blender/*.py` → committed GLBs in `app/src/main/assets/models`.
+- PR titles become the web app's "What's new" popup (built from main's merge history). Write them so Tee understands them, or add a plain line (or `""` to hide) keyed by PR number in `docs/whats-new.json`.

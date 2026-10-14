@@ -210,7 +210,7 @@ class CritterField(
         var tries = 0
         while (pts.size < 260 && tries < 3000) {
             tries++
-            val p = Vec3(rng.range(3.0, L - 3), rng.range(config.sandTopCm + 1, 42.0), rng.range(2.0, W - 2))
+            val p = Vec3(rng.range(3.0, L - 3), rng.range(config.sandTopCm + 1, 0.75 * config.waterLevelCm), rng.range(2.0, W - 2))
             if (abs(sdf.dist(p)) > 12) continue
             val q = sdf.project(p)
             if (abs(sdf.dist(q)) > 0.3 || !inTank(q) || q.y < sandY(q.x, q.z) + 0.4) continue

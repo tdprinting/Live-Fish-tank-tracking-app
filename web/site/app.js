@@ -11,10 +11,11 @@ const store = {
 
 // ---------------------------------------------------------------- tabs
 let started = false;
-document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t && (t.classList.contains('tab') || t.classList.contains('tests') || t.classList.contains('back'))) showTab(t.dataset.tab); });
 function showTab(name) {
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === name));
+  document.body.classList.toggle('on-live', name === 'live');
   store.set('reeflive.tab', name);
   if (name === 'live') startLive(() => applyLatestReadings());
   else renderParams();

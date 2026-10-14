@@ -22,6 +22,12 @@ class HeightField(val lengthCm: Double, val widthCm: Double, val nx: Int, val nz
     init { require(nx >= 2 && nz >= 2 && h.size >= nx * nz) }
     val cellX = lengthCm / nx
     val cellZ = widthCm / nz
+    /** Content fingerprint (size and heights): two fields parsed from the same mesh share caches built on them. */
+    val fingerprint: Long by lazy {
+        var k = (lengthCm.toBits() * 31 + widthCm.toBits()) * 31 + nx * 131 + nz
+        for (i in 0 until nx * nz) k = k * 1_000_003 + h[i].toBits()
+        k
+    }
 
     /** Height (cm) at (x, z), bilinear between cell centres, clamped at the edges. */
     fun at(x: Double, z: Double): Double {

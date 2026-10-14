@@ -192,6 +192,16 @@ class Organism(
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
     /** Collision body (elliptic-section capsule chain along [spline], [BodyShapes]); refreshed by [BodyCollision]. */
     val body = BodyState()
+
+    /**
+     * Surface seat for crawlers whose model stands on its y = 0 plane (hermits, Sally Lightfoot, brittle star, astrea;
+     * [CrawlerSeat], SIMULATION §19.6). While [seatOn], [toPose] draws the body at [seatPos] with up [seatUp] instead of
+     * [pos] / [up], which stay the sim's own.
+     */
+    val seat: CrawlerSeat? = CrawlerSeat.forOrganism(brainKind, species.id)
+    var seatOn = false
+    var seatPos = Vec3.ZERO
+    var seatUp = Vec3.Y
     lateinit var brain: UtilityBrain
     /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
     val behaviorName: String get() = when {
@@ -239,6 +249,20 @@ class Organism(
 
     fun toPose(): OrganismPose {
         spline.sample(up, spinePos, spineRot)
+        if (seatOn) {
+            // a rigid crawler body on its seat: straight back from the seat point, tangent to the seated surface
+            val seg = spline.length / (BodySpline.POINTS - 1)
+            // (the seat's own forward: the one its contact points were solved with)
+            val f = seat?.fwd ?: heading.rejectFrom(seatUp).normalized(heading)
+            val q = Quat.fromForwardUp(f, seatUp)
+            // (while the seat fades in or out the whole body blends from the sim's own spine, not just its head)
+            val b = seat?.blend ?: 1.0
+            for (i in 0 until BodySpline.POINTS) {
+                val sp = seatPos - f * (seg * i)
+                if (b >= 1.0) { spinePos[i] = sp; spineRot[i] = q }
+                else { spinePos[i] = spinePos[i].lerp(sp, b); spineRot[i] = spineRot[i].nlerp(q, b) }
+            }
+        }
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
         for (i in 0 until BodySpline.POINTS) {

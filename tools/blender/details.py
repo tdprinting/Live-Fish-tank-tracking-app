@@ -6,7 +6,7 @@ hair-algae items that should move with the flow live in `algae_tufts.glb` instea
 
 Nodes (all under `Root`):
   CorallineLow    part "body"       alpha-masked coralline crust layer draped 0.12 cm over the lower-left rock under
-                                    the clowns (the R5 mound's right flank); the coat is a texture, not geometry
+                                    the clowns (the R10 rock under the right shelf); the coat is a texture, not geometry
   EncrustYellow   part "body"       lemon-yellow lumpy encrusting colony (~6 x 5 cm) beside the clowns' sleep spot
   MushroomsRed    part "body"       three small rust-red mushroom clumps on the open front sand
   MagCleaner      part "equipment"  dark grey oval magnet cleaner (inner half) on the left glass, algae fringe
@@ -33,11 +33,11 @@ unit = K.unit
 tex = K.tex
 
 # placements (world cm); see ASSETS.md §4.1
-CORALLINE_CENTER = np.array([76.0, 9.0, 26.0])
-CORALLINE_RADII = np.array([7.5, 6.5, 6.5])
-ENCRUST_SITE = np.array([80.0, 17.8, 21.8])  # R5/arch-leg face 7 cm left-front of the clowns' hairy-mushroom clump
-MUSHROOM_CLUMPS = ((27.0, 30.0, 5), (47.5, 29.6, 4), (96.0, 29.2, 5))  # (x, z, discs)
-MAG_CENTER = (22.0, 11.0)  # (y, z) on the left pane, behind the Flipper's line of sight
+CORALLINE_CENTER = np.array([79.0, 7.5, 23.5])   # the clowns' R10 rock under the shelf and the R5 mound's right foot
+CORALLINE_RADII = np.array([8.0, 5.5, 6.5])
+ENCRUST_SITE = np.array([75.5, 8.0, 25.5])  # R10 / R5 seam ~6 cm left of the clowns' hairy-mushroom carpet (T84)
+MUSHROOM_CLUMPS = ((27.0, 39.0, 5), (47.5, 38.5, 4), (87.0, 38.0, 5))  # (x, z, discs) on the open front sand
+MAG_CENTER = (15.0, 14.0)  # (y, z) on the left pane, behind the Flipper's line of sight
 GLASS_T = 0.635
 
 
@@ -260,7 +260,7 @@ def mushrooms(sand):
         sites.append((cx, sand.height(cx, cz), cz))
         pts = P.poisson(rs, nd, 1.5, box=(-1.8, 1.8, -1.4, 1.4))
         for di, (ox, oz) in enumerate(pts):
-            x, z = cx + ox, min(cz + oz, 31.6)
+            x, z = cx + ox, min(cz + oz, C.TANK[2] - 1.4)
             y0 = sand.height(x, z)
             r = rs.uniform(0.6, 1.1)
             h = rs.uniform(0.35, 0.9)
@@ -374,7 +374,7 @@ def mag_cleaner():
 # 4. green haze on the back glass
 # ----------------------------------------------------------------------------
 def back_film():
-    x0, x1, y0, y1, z = 0.3, 121.6, 3.2, 55.6, 0.06
+    x0, x1, y0, y1, z = 0.3, C.TANK[0] - 0.3, 3.2, C.WATER_Y - 0.5, 0.06
     V = np.array([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)])
     F = [(0, 3, 2, 1)]  # faces +z (into the tank)
     UV = np.array([(0, 0), (1, 0), (1, 1), (0, 1)], float)

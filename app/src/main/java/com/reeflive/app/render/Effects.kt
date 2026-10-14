@@ -75,7 +75,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
             det[i * 3 + 2] += v[2] * strength * 0.3f * dt * ff
             if (det[i * 3 + 1] < Camera.SAND_Y + 0.2f || !inWater(det, i)) { respawn(det, i); det[i * 3 + 1] = Camera.WATER_Y - 2f - rnd.nextFloat() * 30f }
         }
-        // HOB return (equipment.glb `outflow` (72, 55, 2.3)): bubbles plunge, slow down, then rise
+        // HOB return (equipment.glb ReturnNozzle `outflow` (73, 37.4, 2.3), back middle, video T97): bubbles plunge, slow down, then rise
         bubbleAcc += dt * 8f
         while (bubbleAcc >= 1f && bubbles < MAX_BUBBLES) {
             bubbleAcc -= 1f
@@ -158,7 +158,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         /** Cubes (one per frozen kind), the nori sheet (clip + tiles). */
         private const val MAX_FOOD_EXTRA = 16 + FoodVisuals.NORI_COLS * FoodVisuals.NORI_ROWS
         const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP
-        val HOB = floatArrayOf(72f, 55f, 2.3f)
+        val HOB = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2.3f)
         private val NULL_SINK = PointSink { _, _, _, _, _, _, _, _, _, _, _, _ -> }
 
         /** How much faster suspended specks drift at sim [speed] (log-scaled, capped so they stay readable). */

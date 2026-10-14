@@ -512,27 +512,21 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0)
         if (!sm.needsUpdate(signature)) return
         fu.overrideViewProj(sm.matrix)
-        sm.begin()
+        // High: rock, equipment and still details live in a cached layer, redrawn only when the scene changes
+        if (sm.cachesStatic) {
+            if (sm.staticStale(signature)) { sm.beginStatic(); drawStaticShadowCasters(progs) }
+            sm.begin()
+        } else { sm.begin(); drawStaticShadowCasters(progs) }
+        // the magnet cleaner moves with the finger
         val p = progs.shadow
         p.use()
-        for (key in SHADOW_STATIC) {
-            val m = store.model(key) ?: continue
-            for (part in m.parts) {
-                if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part)) continue
-                p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
-                part.mesh.draw(); drawCalls++
+        store.model(EQUIPMENT)?.parts?.forEach { part ->
+            if (part.node.name == FLIPPER_NODE && (part.kind == MaterialKind.ROCK || part.kind == MaterialKind.GENERIC) && castsShadow(part)) {
+                p.setMat4("uModel", flipperMatrix(part.node.world)); part.mesh.draw(); drawCalls++
             }
         }
         val pc = progs.shadowCoral
         pc.use()
-        store.model(DETAILS)?.let { m ->
-            for (part in m.parts) {
-                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
-                pc.setMat4("uModel", part.node.world)
-                staticCoralUniforms(pc, part)
-                part.mesh.draw(); drawCalls++
-            }
-        }
         for ((m, c) in coralModels(cur)) {
             val copy = c != null && c.isCopy
             if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
@@ -566,6 +560,30 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         sm.end()
         fu.overrideViewProj(null)
         sm.bind()
+    }
+
+    /** Shadow casters that never move: rock, equipment (bar the magnet cleaner) and the still reef details. */
+    private fun drawStaticShadowCasters(progs: Programs) {
+        val p = progs.shadow
+        p.use()
+        for (key in SHADOW_STATIC) {
+            val m = store.model(key) ?: continue
+            for (part in m.parts) {
+                if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part) || part.node.name == FLIPPER_NODE) continue
+                p.setMat4("uModel", part.node.world)
+                part.mesh.draw(); drawCalls++
+            }
+        }
+        val pc = progs.shadowCoral
+        pc.use()
+        store.model(DETAILS)?.let { m ->
+            for (part in m.parts) {
+                if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
+                pc.setMat4("uModel", part.node.world)
+                staticCoralUniforms(pc, part)
+                part.mesh.draw(); drawCalls++
+            }
+        }
     }
 
     private fun castsShadow(part: DrawPart): Boolean =
@@ -948,7 +966,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             CameraInput.TapKind.GLASS -> {
                 val tz = Picker.rayPlaneZ(o, dir, Camera.TANK[2]) ?: return
-                val p = Vec3((o[0] + dir[0] * tz).toDouble().coerceIn(0.0, 121.9), (o[1] + dir[1] * tz).toDouble().coerceIn(3.0, 56.0), Camera.TANK[2].toDouble())
+                val p = Vec3((o[0] + dir[0] * tz).toDouble().coerceIn(0.0, Camera.TANK[0].toDouble()), (o[1] + dir[1] * tz).toDouble().coerceIn(Camera.SAND_Y.toDouble(), Camera.WATER_Y.toDouble()), Camera.TANK[2].toDouble())
                 main.post { l?.onTapGlass(p) }
             }
             CameraInput.TapKind.LONG_PRESS -> {
