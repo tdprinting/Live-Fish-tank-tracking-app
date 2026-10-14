@@ -165,15 +165,23 @@ class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0, private val quie
 
     /**
      * Present cells from the most downstream back, the first whose station ([back] cm downstream of it) is open water
-     * (the clearance check moves it less than 1.5 cm); −1 when rock or glass blocks every downstream side.
+     * (the clearance check moves it less than 1.5 cm). When rock or glass crowds every station (a sheet hanging close
+     * to the rockwork), the cell whose station is moved least while staying on its downstream side, so the grazer still
+     * comes in from downstream and snouts in where it can; −1 only when no cell can be reached from downstream at all.
      */
     private fun pickCell(c: Ctx, cloth: com.reeflive.core.sim.NoriCloth, down: Vec3, back: Double): Int {
         val order = (0 until cloth.cellCount).filter { cloth.present(it) }.sortedByDescending { (cloth.cellCentre(it) dot down) + (if (cloth.isEdge(it)) 1.5 else 0.0) }
+        var fallback = -1
+        var fallbackMove = Double.MAX_VALUE
         for (k in order) {
-            val want = cloth.cellCentre(k) + down * back
-            if (c.safe(want).distanceTo(want) < 1.5) return k
+            val at = cloth.cellCentre(k)
+            val want = at + down * back
+            val got = c.safe(want)
+            val moved = got.distanceTo(want)
+            if (moved < 1.5) return k
+            if (((got - at) dot down) > 0.25 * back && moved < fallbackMove) { fallback = k; fallbackMove = moved }
         }
-        return -1
+        return fallback
     }
     override fun score(c: Ctx): Double {
         val n = c.food.nori ?: return 0.0
