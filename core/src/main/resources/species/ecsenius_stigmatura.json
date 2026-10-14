@@ -27,6 +27,12 @@
     "coverAffinity": 0.9
   },
   "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 120,
+    "darkVision": 0.12,
+    "lateralBL": 1.5,
+    "chem": 0.6
+  },
   "territorialRadius": 12,
   "homeRadiusCm": 25,
   "temperament": {

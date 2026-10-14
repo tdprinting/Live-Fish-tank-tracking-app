@@ -184,8 +184,10 @@ abstract class SpeciesBrain(val c: Ctx) {
         for (n in c.p.neighbors(o.pos, 40.0)) {
             if (n === o || !n.alive) continue
             // night vision: prey notice a predator later in the dark
-            val r = Predation.threatRadius(n, o) * (if (c.p.night && !o.isFish) 0.6 else 1.0)
-            if (r <= 0) continue
+            val r0 = Predation.threatRadius(n, o)
+            if (r0 <= 0) continue
+            // sight fades in the dark; the lateral line still feels a close approach (Perceive.kt, realism_gaps X6)
+            val r = r0 * Perceive.threatScale(c, o, r0)
             val d = n.pos.distanceTo(o.pos)
             if (d >= r || d >= bd) continue
             // a predator only alarms when it moves toward me, or when it is very close (SIMULATION §4.4)
@@ -369,7 +371,7 @@ fun Ctx.isPrepared(f: FoodParticle) = !f.kind.suspended
 /** Nearest diet-matching food this animal accepts within [radius], optionally with a line-of-sight check. */
 fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
     val f = food.nearest(o.pos, radius) { f ->
-        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f)
+        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f)
     } ?: return null
     if (los && !rock.sdf.segmentClear(o.pos, f.pos, 0.2)) {
         // try the second nearest without LOS cost explosion: accept if near
