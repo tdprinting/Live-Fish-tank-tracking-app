@@ -492,7 +492,8 @@ void main() {
         local.z += bend * 0.55 * (e * e - 0.04);
         dzdu += bend * 0.55 * 2.0 * e;
     }
-    n = normalize(vec3(n.x - dzdu * n.z, n.y, n.z));
+    // u runs snout → tail (u = 0.5 - x), so dz/dx = -dz/du and the surface normal tilts by +dz/du
+    n = normalize(vec3(n.x + dzdu * n.z, n.y, n.z));
 
     vec3 sp;
     vec4 q;

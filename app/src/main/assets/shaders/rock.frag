@@ -273,12 +273,12 @@ void main() {
     // the cross-section against the glass is lit by light scattered through the bed and the pane: wrap it
     vec3 col = shadeLit(albedo, N, V, vWorld, rough, ao, 0.04, wall * 0.7, 1.0);
     if (glint > 0.0) {
-        // sparkle: a tight specular lobe on the grain's own facet, from both fixtures
+        // sparkle: a tight specular lobe on the grain's own facet, from both fixtures (none in rock/fish shadow)
         for (int i = 0; i < 2; i++) {
             vec3 L;
             vec3 rad = fixtureLight(i, vWorld, L);
             float s = pow(max(dot(glintN, normalize(V + L)), 0.0), 90.0);
-            col += rad * s * glint * 1.6;
+            col += rad * s * glint * 1.6 * gShadow;
         }
     }
 #else
