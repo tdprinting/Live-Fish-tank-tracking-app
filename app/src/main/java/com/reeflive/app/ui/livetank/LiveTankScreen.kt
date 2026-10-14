@@ -227,7 +227,7 @@ fun LiveTankScreen(
         if (settings.loaded) audio.setUserSettings(settings.tankSounds, settings.tankVolume)
     }
     LaunchedEffect(audio) {
-        // full-rate snapshots: the 10 Hz HUD flow would drop events
+        // full-rate snapshots: the throttled HUD flow would drop events
         vm.snapshots.collect { snap -> audio.onSnapshot(snap, powerheadShare(vm.extras.value)) }
     }
     val soundOn = settings.tankSounds

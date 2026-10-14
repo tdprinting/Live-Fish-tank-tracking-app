@@ -43,7 +43,7 @@ enum class LiveQuality { LOW, MEDIUM, HIGH }
 
 /**
  * State and actions for the Live Tank tab (ARCHITECTURE §5.2). Wraps the app-wide [SimulationHolder]:
- * the renderer reads [snapshots] (full rate), the overlay reads [hud] (10 Hz).
+ * the renderer reads [snapshots] (full rate), the overlay reads [hud] (4 Hz).
  */
 @OptIn(FlowPreview::class)
 class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
@@ -65,7 +65,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Full-rate snapshots for the renderer. */
     val snapshots: StateFlow<SimSnapshot> = holder.snapshots
 
-    /** HUD snapshot throttled to 10 Hz. */
+    /** HUD snapshot throttled to 4 Hz: every collector recomposes the whole live screen, and readouts need no more. */
     val hud: StateFlow<SimSnapshot> = holder.snapshots.sample(HUD_PERIOD_MS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SimSnapshot.EMPTY)
 
@@ -266,7 +266,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
 
     companion object {
-        const val HUD_PERIOD_MS = 100L   // 10 Hz
+        const val HUD_PERIOD_MS = 250L   // 4 Hz
         const val REAL_SAMPLE_MS = 500L
         val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")
         /** On/off sandbox rows (equipment, unproven scenarios) → default; the skimmer is the only one that starts on. */
