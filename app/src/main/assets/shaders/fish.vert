@@ -15,7 +15,7 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
@@ -155,6 +155,41 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
     local = P.xyz + off;
 }
 
+// Bobtail squid (mode 4, core SquidRig): uLimb[0] fins (x wave phase, y stroke, z mantle contraction, w wrap),
+// uLimb[1] arms (x wave phase, y spread, z dorsal-pair raise, w tentacle strike). The ear fins (part 1, B = hinge)
+// beat in a wave running along the fin and wrap against the mantle in a jet; the mantle behind the collar narrows as
+// it contracts; the arms (part 3, COLOR_0.r = class / 8, g = index / 8, b = hinge) flare or bundle into a cone, the
+// dorsal pair rises in alarm or to aim, and the two tentacles shoot forward and are drawn back.
+void squidPose(float part, float hinge, inout vec3 local) {
+    vec4 Fn = uLimb[0];
+    vec4 Ar = uLimb[1];
+    if (part < 0.5) {
+        local.yz *= 1.0 - 0.14 * Fn.z * smoothstep(0.36, 0.5, aColor.a);
+    } else if (part < 1.5) {
+        float side = local.z >= 0.0 ? 1.0 : -1.0;
+        local.y += 0.07 * Fn.y * hinge * sin(2.0 * PI * Fn.x + local.x * 18.0) * (1.0 - Fn.w);
+        local.z -= side * hinge * 0.1 * Fn.w;
+        local.y -= hinge * 0.03 * Fn.w;
+    } else {
+        float k = floor(aColor.g * 8.0 + 0.5);
+        float h = hinge;
+        float rl = length(local.yz);
+        vec2 rd = rl > 1e-4 ? local.yz / rl : vec2(0.0);
+        if (aColor.r < 0.19) {
+            float dors = step(k, 1.5);
+            local.yz += rd * h * (Ar.y - 0.3) * 0.14;
+            local.y += dors * Ar.z * h * 0.14;
+            local.x -= dors * Ar.z * h * 0.04;
+            local.y += 0.012 * h * h * sin(2.0 * PI * Ar.x + k * 0.8 - h * 3.0);
+            local.z += 0.01 * h * h * cos(2.0 * PI * Ar.x + k * 1.1 - h * 2.5);
+        } else {
+            local.x += Ar.w * 0.55 * h;
+            local.yz *= 1.0 - 0.6 * Ar.w * h;
+            local.y += 0.008 * h * sin(2.0 * PI * Ar.x + k * 2.0) * (1.0 - Ar.w);
+        }
+    }
+}
+
 void main() {
     vec3 local = aPos;
     vec3 n = aNormal;
@@ -209,7 +244,9 @@ void main() {
     // Offset of this vertex from its spine station along the body axis (fins/eyes carry the u of their base).
     local.x -= (0.5 - u);
 
-    if (part < 0.5) {
+    if (mode > 3.5 && (part < 1.5 || part > 2.5)) {
+        squidPose(part, hinge, local);
+    } else if (part < 0.5) {
         // body: wrasse thinness and gill flare (opercular mask in G)
         local.yz *= 1.0 - 0.25 * uShape.x;
         float flare = 0.03 * uFin.z * aColor.g * (0.5 + 0.5 * sin(time * uFin.w * 2.0 * PI));
@@ -351,7 +388,7 @@ void main() {
     // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
     // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
     float bend = uMotion.z;
-    if (mode > 1.5) {
+    if (mode > 1.5 && mode < 3.5) {
         float ab = max(uw - 0.4, 0.0);
         local.y -= 0.9 * max(bend, 0.0) * ab * ab;
         local.x -= 0.4 * max(bend, 0.0) * ab * ab;

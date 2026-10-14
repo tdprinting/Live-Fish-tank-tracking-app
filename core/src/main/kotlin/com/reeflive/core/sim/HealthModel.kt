@@ -191,6 +191,12 @@ object HealthModel {
                 m["do"] = ToleranceRange(optLo = 5.5, tolLo = 4.5, lethalLo = 3.2)
             }
             BrainKind.EEL -> m["nh3Free"] = ToleranceRange(optHi = 0.03, tolHi = 0.09, lethalHi = 0.8)
+            // research cephalopod_squid: bobtail squid are cultured at 20–25 °C and use a lot of oxygen; a warm reef (26 °C+) is the top
+            // of their range (temperature bounds above 25 °C and the oxygen row are design estimates)
+            BrainKind.BOBTAIL_SQUID -> {
+                m["temp"] = ToleranceRange(20.0, 25.5, 18.0, 27.5, 14.0, 30.5)
+                m["do"] = ToleranceRange(optLo = 6.0, tolLo = 5.0, lethalLo = 3.5)
+            }
             // Crustaceans need iodine to molt; the Sally Lightfoot also tolerates salinity swings poorly (SIMULATION §9.6).
             BrainKind.SALLY_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> {
                 m["i"] = CRUSTACEAN_IODINE
