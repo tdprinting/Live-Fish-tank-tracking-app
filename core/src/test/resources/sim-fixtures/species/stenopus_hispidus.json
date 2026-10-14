@@ -28,7 +28,7 @@
     "activity": "NOCTURNAL",
     "schooling": false,
     "territorialRadius": 0.0,
-    "homeRadiusCm": 40.0,
+    "homeRadiusCm": 25.0,
     "temperament": {
         "aggression": 0.3,
         "boldness": 0.4,
