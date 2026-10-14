@@ -128,7 +128,10 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         else if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
         if (c.t - progressAt > STUCK_S) { giveUpUntil = c.t + GIVE_UP_S; finished = true; return }
         val reach = 1.2 + 0.1 * o.lengthCm
-        if (d < reach) {
+        // the mouth is half a body length ahead of the body centre: a particle settled on rock is picked off from as
+        // close as the rock clearance lets the body come (a wrasse stalled 4 cm short of mysis on a ledge, never eating)
+        val mouthD = (o.pos + o.heading * (0.5 * o.lengthCm)).distanceTo(f.pos)
+        if (d < reach || mouthD < reach) {
             c.bite(f)
             target = null
             if (o.hunger < 0.05) finished = true

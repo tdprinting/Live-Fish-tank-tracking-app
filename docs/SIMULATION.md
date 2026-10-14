@@ -1563,3 +1563,98 @@ Two crawler fixes ride with it: `Sdf.project` returns the iterate nearest the su
 ### 21.8 Deferred
 
 Engineer-goby juvenile schooling (the goby and sand code belong to the sand-bed work), the cleaner's audience effect and cortisol-driven cheating (P2; c03/c04 sensitive), clown host learning and size hierarchy, lawnmower graze-patch memory (the algae model has no spatial film value yet), nassarius and brittle-star plume emergence, astrea and asterina day/night rhythms, the asterina fission identity gate, and every hermit item (owned by the hermit rebuild). The pajama cardinal and both shrimp are being reworked elsewhere.
+## 21. Glitch guard and motion smoothing (`FishGlitchTest`, `ai/Steering.kt`, `geom/BodySpline.kt`, `render/FishRig.kt`)
+
+A reviewer said the fish "glitch out a lot". `FishGlitchTest` measures that. It runs the default stock for 5 sim hours: dawn, midday and dusk at the live 20 Hz tick on seeds 1–3, and 2 h at 10× (0.5 s ticks) on seed 4. Every tick it checks each animal's pose, as the renderer receives it, against these causes:
+
+| Cause | What it flags |
+|---|---|
+| `NAN` | Any non-finite pose value. |
+| `TELEPORT`, `SPEED_SPIKE` | The head moves faster than 1.5 × burst + 12 cm/s. |
+| `BODY_POP` | A spine station moves more than the head's travel plus a rigid swing. |
+| `HEADING_FLIP`, `TURN_RATE` | A flip, or a turn too fast for the species. Thresholds scale with dt; a C-start is exempt. |
+| `UP_FLIP` | The up vector rolls more than 60° in a tick, or more than 250°/s. |
+| `OSCILLATION` | 6 or more yaw reversals of at least 8° within 3 s. Yaw is measured about the animal's own up, so a crab on a wall is not judged in world yaw. |
+| `BEHAVIOUR_THRASH`, `POSTURE_THRASH` | 6 or more behaviour or posture changes within 10 s. A behaviour's own phase captions (the diamond goby's sift cycle) do not count. |
+| `POSE_JUMP` | The bend or a limb scalar jumps in one tick. |
+
+The test prints a ranked table by species and by behaviour, and writes every hit to `core/build/glitch-hits.txt`. Penetration of rock, sand, glass and the surface is printed but not asserted; the body-collision work owns it. The budgets in the test are a regression guard.
+
+Root causes fixed:
+
+- **Engineer goby burrow path** (`GobyBrain.tunnelSpline`). The body path ran from the head to the mouth and then down the tunnel whichever way the goby faced. A goby going in head first to dig folded back on itself, and its body flipped 20 cm in one tick as the head passed the mouth. Facing in, the body now trails out through the mouth.
+- **Body spline.** A hole, den or burrow override polyline snapped the head to the path's first point. The override is now anchored at the head and blended in and out at 6/s (`BodySpline.overrideMix`).
+- **Kinematic placement.**
+  - A perch or hole picked across the tank was crossed in a few ticks. The step is now capped at max(1.2 × burst, 6 cm/s).
+  - A step that ended deep in rock was pushed out the far side. From outside, it now stops at the surface along the step.
+  - The up vector turns at most 240°/s.
+  - The push out of rock runs up to four passes. A single pass left a creeping step 0.05 cm inside a curved face.
+- **Swim heading.**
+  - The heading used to follow the raw velocity. Now the course is low-passed (`wantSmooth`), at a rate that drops when the fish is hovering or barely driven.
+  - A slow, unhurried fish no longer pitches its nose at a vertical course or yaws at its tiny horizontal residual.
+  - Urgent moves (urgency ≥ 0.7, C-start, walkers) turn as before.
+- **Waddle and separation.**
+  - The labriform waddle is now a direct sideways offset, not a desired velocity. As a velocity it spun a hovering clown ±100°.
+  - Separation keeps its full r/d strength until 0.9 r and eases to zero by 1.1 r (`SEP_EDGE`). It used to cut from unit strength to 0 as a neighbour crossed r. A fade wholly inside the edge weakened spacing, and one wholly outside it strengthened spacing. Either changed who meets whom on the rock enough to move the single-seed c01 (clowns near host) and c09 (blenny entries) checks. Over seeds 1–16, c09 entries fell from 4.3 per run to 2.7 with the inner fade.
+  - The clown's dart target is picked once per dart.
+- **Feeding reach.** A bite is measured from the mouth, half a body length ahead of the centre, as well as from the centre. Rock avoidance holds a swimmer's centre about 0.6 L + 1 cm off the rock. Before this change, a wrasse after mysis settled on a ledge hovered 4 cm short and never ate. It now eats on every seed tested in `AiTest.feedingReducesHunger`; it failed 2 of 6 seeds once the smoother turning changed which particles it chased.
+- **Fast forward.** At 10× a 0.5 s tick overshot the steering integrator every tick. Swim now integrates in substeps of at most 0.1 s.
+- **Swim roll.** The up vector rolls at most 5 rad/s. A tang rolled upright from "playing dead" or sleeping in one tick.
+- **Leaving a hole.** A fish that starts a tick deep in rock is eased out at max(burst, 10 cm/s) instead of being shoved its whole depth at once (a blenny popped 3–7 cm). It is always put past the hold band (0.34 L).
+- **Wedged between rock and glass.** The hold-position rule (never step closer to rock inside 0.34 L) used to freeze a fish that the glass clamp held against a rock face. It now lets the fish slide along the face on its wanted course, at up to half cruise and no closer than 0.2 L. Before, an engineer goby stayed stuck all night 1 cm off a ledge, its burrow a few cm away (c14). A kinematic step pressed flat against a face slides along it in the same way, instead of stopping.
+- **Crawlers.**
+  - Wander and the walking course are low-passed.
+  - A forward walker turns before it walks. A crab walks the smoothed course.
+  - On a corner whose raw course points back each tick, an attached walker that the re-attach would throw backwards stays put.
+  - Re-attach is capped at max(1.5 × walk speed, 8 cm/s); push-out from rock stays uncapped.
+  - A post-crawl projection that would jump further than a tick's walk is replaced by the step slid along the rock face. If that slide is blocked too, the step is undone. After 2 s wedged, the walker takes the projection (one hop beats freezing in a crevice). A projection that did not converge is never taken.
+  - Arrival is judged along the surface, so food just off the glass is reached from under it instead of being circled. Near a target, the smoothed course may turn on a radius of half the remaining distance (at least 1.5 cm).
+  - A target straight above or below leaves only a small tangent residual whose sign flips. The walker only follows as much of it as the surface leads toward the target. Urgent dashes are exempt.
+  - The leg stride clock runs after the projection, so an undone step takes no stride.
+  - The up vector turns at most 240°/s.
+- **Limb rig.**
+  - The hermit crab's eyestalk and antenna bob runs once per stride, not twice, and shrinks above 1.5 strides/s. At twice per stride it reached 7 Hz, faster than the 20 Hz pose stream can carry, and flicked between its extremes on each snapshot (about 1 900 `POSE_JUMP` hits per run).
+  - Crab legs swap leading and trailing roles over about 0.4 s, and only on a clear change of side (hysteresis ±0.25).
+  - The shrimp signal and grooming values ease in.
+- **Appendage phase.** It uses the core wrap `Organism.APPENDAGE_WRAP` (2π·159) from main, and the renderer interpolates it across that wrap.
+- **Render interpolation** (`SnapshotInterpolator`).
+  - The blend used to restart at 0 whenever a snapshot arrived. Every early snapshot jumped the fish forward and every late one froze it.
+  - Snapshots now sit on a smoothed timeline stamped by sim time, so a skipped snapshot leaves a two-tick gap rather than a double-speed tick.
+  - The scene is drawn one interval plus twice the measured jitter behind the newest stamp.
+  - After a pause the blend restarts from the held pose.
+  - Each snapshot's id map is built once per snapshot, not once per frame.
+
+Hits over the 5-hour run:
+
+| Cause | Before | After |
+|---|---|---|
+| `OSCILLATION` | ~45 900 | ~600–2 600 |
+| `HEADING_FLIP` | ~37 900 | 0 |
+| `UP_FLIP` | ~12 600 | 0 |
+| `POSE_JUMP` | ~8 500 | 0–1 |
+| `BODY_POP` | 870 | 0–2 |
+| `SPEED_SPIKE` | 224 | ~10–30 |
+| `TURN_RATE` | 112 | 0–2 |
+| `TELEPORT` | 9–14 | 0–4 |
+| `NAN` | 0 | 0 |
+
+**Clown host defence (`ai/PairMatrix.kt`).** The tailspot's hole (`HOLE_TAILSPOT`) lies 16 cm from the anemone, inside the clowns' 22 cm halo. Every time a newcomer tailspot left its hole, the clowns counted it as a host intruder and nipped it back in (10 female and 4 male chases in 3 h on seed 1). Its prospecting trips rarely reached the lawnmower, so c09 depended on luck. Two changes:
+
+- A fish whose own shelter (`homePos`) lies inside a host's halo is a resident there, not an intruder, while it stays within 4 cm plus half its length of that shelter. A harmless resident is also let be anywhere in the outer halo, and chased only into the 10 cm core (06 §5.3, core / halo 10 / 22). A resident with its own row against the clowns, such as the dottyback's standoff, is a rival and is still defended against throughout the halo, so c02 holds.
+- A host defender breaks off the chase once the intruder is out of the halo. It does not leave its anemone.
+
+c09 entries over seeds 1–8 are now 4–9 per 3 h (they were 0–7), and almost every entry draws a chase.
+
+The cleaner wrasse's pose scheduling was also made robust, for c03 on seeds 1–5:
+
+- A client poses at most once per `POSE_MIN_GAP_S` (1290 s) unless it carries ich.
+- A client that is due a pose is weighted 3× when the wrasse picks its next client.
+- Each inspection length is drawn when the client poses. It is the lognormal quantile u₀ + k·φ (mod 1) of that client's k-th pose, with a random u₀. Each length is still lognormal, but a client's few poses average near the mean. Independent draws pushed the tang's mean past 10 s on one seed in five.
+
+What remains sits mostly in the collision code:
+
+- The dottyback ping-pongs on the look-ahead avoidance (`rock.sdf.gradient(pos + vel·0.4)` × 40) where it is wedged near rock at 10×.
+- A blenny is pushed up to 3 cm out of its hole in one tick by the hard rock resolve.
+- A grazing snail circles where it cannot reach its target.
+- 0–4 `TELEPORT` hops of 4–10 cm per run come from two sources. One is a crawler wedged in a crevice for 2 s that takes the projection out. The other is the swim hard resolve pushing a clown or blenny out of rock.
+- The clowns wiggle in the host.

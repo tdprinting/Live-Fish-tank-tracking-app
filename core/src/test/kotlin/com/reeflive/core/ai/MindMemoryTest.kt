@@ -102,9 +102,13 @@ class MindMemoryTest {
         s.advance(5.0, behaviorDt = 0.1)
         val a = s.agent(BrainKind.WRASSE)
         val o = a.ctx.o
-        val refuge = a.ctx.coverPoint(o.pos + Vec3(30.0, 0.0, 0.0), 30.0)
+        // threat on one side; a remembered refuge on the other, nearer than the species' own cover (Flee only prefers
+        // a remembered refuge when it is the nearer shelter)
+        val from = o.pos - Vec3(15.0, 0.0, 0.0)
+        val ownDist = a.ctx.coverPoint(from).distanceTo(o.pos)
+        val refuge = a.ctx.safe(o.pos + Vec3(minOf(12.0, ownDist * 0.6), 0.0, 0.0), 1.0)
+        assertTrue("test setup: refuge nearer than own cover", refuge.distanceTo(o.pos) < ownDist)
         a.brain.mind.places.note(PlaceKind.REFUGE, refuge, 1.0, s.simTimeSec)
-        val from = o.pos + (o.pos - refuge).normalized() * 15.0
         a.brain.onAttacked(a.ctx, from, 0.9)
         s.advance(0.2, behaviorDt = 0.1)
         val flee = a.brain.utility.behaviors.filterIsInstance<Flee>().first()
