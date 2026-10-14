@@ -89,6 +89,20 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     val detritus = FloatArray(nx * nz) { 0.25f }
     /** Bumped on every change; the snapshot copies the grid only when it moved on. */
     var version = 0L; private set
+
+    // where the bed rose since the last [takeRaised] (x0, z0, x1, z1; empty when x0 > x1): a body resolved against the
+    // old surface earlier in the step may now be under the new one
+    private var rx0 = Double.POSITIVE_INFINITY; private var rz0 = Double.POSITIVE_INFINITY
+    private var rx1 = Double.NEGATIVE_INFINITY; private var rz1 = Double.NEGATIVE_INFINITY
+    private fun raised(x0: Double, z0: Double, x1: Double, z1: Double) {
+        rx0 = min(rx0, x0); rz0 = min(rz0, z0); rx1 = max(rx1, x1); rz1 = max(rz1, z1)
+    }
+
+    /** The rectangle (x0, z0, x1, z1) where the sand rose since the last call, or null; clears it. */
+    fun takeRaised(): DoubleArray? {
+        if (rx0 > rx1) return null
+        return doubleArrayOf(rx0, rz0, rx1, rz1).also { rx0 = Double.POSITIVE_INFINITY; rz0 = Double.POSITIVE_INFINITY; rx1 = Double.NEGATIVE_INFINITY; rz1 = Double.NEGATIVE_INFINITY }
+    }
     private val rng = Rng(seed xor 0x5A4DL)
 
     // ---- counters (tests, HUD; no SimEvents) ----
@@ -185,6 +199,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             fresh[i] = max(fresh[i], (0.6 + 0.4 * w).toFloat())
         }
         movedCm3 += abs(cm3)
+        if (cm3 > 0) raised(x - r - cellX, z - r - cellZ, x + r + cellX, z + r + cellZ)
         version++
     }
 
@@ -206,6 +221,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             height[i] = (height[i] + dh.toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
             if (s2 < 2.5) fresh[i] = max(fresh[i], (freshness * (1 - s2 / 2.5)).toFloat())
         }
+        raised(x - 2.5 * width - cellX, z - 2.5 * width - cellZ, x + 2.5 * width + cellX, z + 2.5 * width + cellZ)
         version++
     }
 
@@ -333,7 +349,10 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 when (kind) {
                     Grain.DETRITUS -> detritus[c] = min(MAX_DETRITUS, detritus[c] + DETRITUS_PER_PARTICLE.toFloat())
                     Grain.SILT -> {}
-                    else -> height[c] = (height[c] + (GRAIN_CM3 / cellArea).toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+                    else -> {
+                        height[c] = (height[c] + (GRAIN_CM3 / cellArea).toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+                        raised(px[i] - cellX, pz[i] - cellZ, px[i] + cellX, pz[i] + cellZ)
+                    }
                 }
                 remove = true
             } else if (page[i] > MAX_AGE_S) {
@@ -415,6 +434,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             if (fresh[a] < 0.002f) fresh[a] = 0f
             detritus[a] += (target - detritus[a]) * kd
         }
+        raised(0.0, 0.0, lengthCm, widthCm)   // slumps and smoothing raise the low cells anywhere
         version++
     }
 

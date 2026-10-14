@@ -24,7 +24,7 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
         val sdf = rock.sdf
         for (iz in 0 until nz) for (iy in 0 until ny) for (ix in 0 until nx) {
             val x = (ix + 0.5) * CELL; val y = (iy + 0.5) * CELL; val z = (iz + 0.5) * CELL
-            val water = y > rock.floorY(x, z) && sdf.dist(Vec3(x, y, z)) > clear
+            val water = y > modelFloor(rock, x, z) && sdf.dist(Vec3(x, y, z)) > clear
             state[idx(ix, iy, iz)] = if (water) 1 else 0
         }
         val stack = IntArray(nx * ny * nz)
@@ -62,7 +62,7 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
     }
 
     /**
-     * Whether [p] is in a sealed hollow: water the open tank does not reach, with no open water within [NEAR] cells (3 cm)
+     * Whether [p] is in a sealed hollow: water the open tank does not reach, with no open water within [NEAR] cells (5 cm)
      * (a body pressed against the rock or in a narrow gap has open water beside it and is not sealed in).
      */
     fun sealedIn(p: Vec3): Boolean {
@@ -83,14 +83,22 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
         const val CELL = 0.5
         /** Narrowest gap a body is taken to pass (cm from the rock at the cell centre: a 0.8 cm opening). */
         const val CLEAR = 0.4
-        const val NEAR = 6
+        const val NEAR = 10
 
         /** Clearances a body is matched to: the first at least its slimmest half-thickness plus 2 mm. */
         val LEVELS = doubleArrayOf(0.4, 0.8, 1.2, 1.6)
 
-        private val cache = HashMap<Pair<Sdf, Double>, OpenWater>()
+        private val cache = HashMap<Triple<Sdf, Any?, Double>, OpenWater>()
 
-        /** Shared by every simulation on the same rock (the sand under it is the modelled bed at first use). */
-        fun of(rock: RockData, clear: Double = CLEAR): OpenWater = synchronized(cache) { cache.getOrPut(rock.sdf to clear) { OpenWater(rock, clear) } }
+        /**
+         * Shared by every simulation on the same rock and drawn sand. The floor is the modelled sand ([modelFloor]),
+         * not a simulation's dug bed, so the grid (and every route on it) is the same whichever simulation builds it.
+         */
+        fun of(rock: RockData, clear: Double = CLEAR): OpenWater =
+            synchronized(cache) { cache.getOrPut(Triple(rock.sdf, rock.sandBase, clear)) { OpenWater(rock, clear) } }
+
+        /** The drawn sand surface without digging ([SandBed.modelY]): tank.glb's sand, else the bed's front-to-back slope. */
+        fun modelFloor(rock: RockData, x: Double, z: Double): Double =
+            rock.sandBase?.at(x, z) ?: (SandBed.BASE_FRONT + (SandBed.BASE_BACK - SandBed.BASE_FRONT) * ((rock.widthCm - z) / rock.widthCm).coerceIn(0.0, 1.0))
     }
 }

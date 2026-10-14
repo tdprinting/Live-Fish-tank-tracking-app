@@ -63,7 +63,7 @@ class Steering(private val c: Ctx) {
         val dt = c.dt
         o.posture = intent.posture
         // sealed in a hollow of the rock (placed there, see OpenWater): swim out through it rather than stay forever
-        if (!intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o)) intent.ignoreRock = true
+        if (!intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o, c.t)) intent.ignoreRock = true
         // a walker / glider given an empty intent (a behaviour that just finished) stays on its surface
         // instead of dropping into the swim integrator for a tick
         if (!intent.kinematic && !intent.crawl && intent.target == null && intent.fleeFrom == null && intent.wander == 0.0 &&
@@ -122,6 +122,16 @@ class Steering(private val c: Ctx) {
         if (intent.kinematic || intent.crawl) wantSmooth = null
         if (!intent.crawl) crawlDirS = null
         if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
+        // a free swimmer's body is never pitched past its limit nor rolled past 40°, whatever the avoidance or a wedge's
+        // restored pose did to it: it slides along a surface level instead (tee-clips #4, #8: a clown near-vertical, a
+        // wrasse pitched up, a fish standing on its nose on the rock)
+        if (o.isFish && !intent.kinematic && !intent.crawl && intent.posture == 0 && intent.splineOverride == null) {
+            val pm = intent.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
+            if (abs(o.heading.y) > pm + 0.02) o.heading = clampPitch(o.heading, pm)
+            val level = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
+            val u = o.up.rejectFrom(o.heading).normalized(level)
+            if ((u dot level) < MAX_ROLL_COS) o.up = Vec3.rotateToward(u, level, Vec3.angle(u, level) - kotlin.math.acos(MAX_ROLL_COS), o.heading)
+        }
         o.spline.override = intent.splineOverride
         val sp = o.vel.length()
         if (intent.kinematic || intent.crawl) relSpeed = sp
@@ -744,6 +754,8 @@ class Steering(private val c: Ctx) {
         /** Lowest the snout swims over the sand (cm). */
         /** Route refresh (s) and how far the goal may move before it is routed again (cm). */
         const val NAV_REFRESH_S = 0.4
+        /** cos of the largest roll a free swimmer ends a tick with (40°). */
+        const val MAX_ROLL_COS = 0.766
         const val NAV_SNOUT_CLEAR = 0.5
         const val NAV_RETARGET_CM = 1.5
         const val SNOUT_FLOOR_CLEAR = 0.4

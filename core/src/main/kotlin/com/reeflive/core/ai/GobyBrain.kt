@@ -166,6 +166,8 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 0 -> { // into the mouth
                     out.seek(outside(0.5), o.cruiseSpeed, arrive = 1.0)
+                    // nosing into the mouth: the body follows the tunnel, it does not clip the rock lip
+                    if (o.pos.distanceTo(mouth) < 0.8 * o.lengthCm) out.posture = 3
                     if (o.pos.distanceTo(outside(0.5)) < 2.0) { phase = 1; timer = 0.0 }
                 }
                 1 -> { // digging inside, out of sight for a few seconds
@@ -181,6 +183,10 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                 2 -> { // carry the mouthful out: cheeks full, head a little down, short wriggling swim
                     o.mouth = 0.45
                     out.seek(dump, o.cruiseSpeed * 0.8, arrive = 1.0, urgency = 0.4)
+                    // the tail is still in the tunnel until the body is out of the mouth (in the burrow, posture 3): within
+                    // 0.8 L, and up to 1.5 L while any of the body is still in the sand or rock round the mouth
+                    val dm = o.pos.distanceTo(mouth)
+                    if (dm < 0.8 * o.lengthCm || dm < 1.5 * o.lengthCm && o.posture == 3 && c.sim.bodies.sectionDepth(o) > 0.0) out.posture = 3
                     out.ampMul = 1.3
                     out.pitchBias = -0.15
                     if (o.pos.distanceTo(dump) < 2.0 || timer > 10) { phase = 3; timer = 0.0 }

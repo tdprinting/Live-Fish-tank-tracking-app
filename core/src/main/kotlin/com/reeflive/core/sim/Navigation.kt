@@ -36,7 +36,7 @@ class Navigation(private val rock: RockData) {
                     val m = clear + BOUND_MARGIN
                     val x = (ix + 0.5) * CELL; val y = (iy + 0.5) * CELL; val z = (iz + 0.5) * CELL
                     p = x > m && x < rock.lengthCm - m && z > m && z < rock.widthCm - m &&
-                        y > rock.floorY(x, z) + m + FLOOR_EXTRA && y < rock.waterLevelCm - m
+                        y > OpenWater.modelFloor(rock, x, z) + m + FLOOR_EXTRA && y < rock.waterLevelCm - m
                 }
                 pass[idx(ix, iy, iz)] = p
                 if (p) {

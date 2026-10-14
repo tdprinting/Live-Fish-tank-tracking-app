@@ -305,6 +305,11 @@ class Simulation(
             chemAccum -= CHEM_DT
             chemTick()
         }
+        // the sand rose this step after bodies were resolved against it (a mouthful, a settling cloud): out of it again
+        sand.takeRaised()?.let { if (useBehavior) bodies.afterSandRaised(organisms, it, dtB) }
+        // every body matches its animal (pose, growth) at the end of the step, so a later read of o.body (a brain's next
+        // tick, a test, the pair hash) never sees a stale one and the run does not depend on who looked at it
+        for (o in organisms) o.body.refresh(o)
         tickCount++
     }
 

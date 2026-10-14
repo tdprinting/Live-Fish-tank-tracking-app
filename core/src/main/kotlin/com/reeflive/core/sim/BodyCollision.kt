@@ -25,6 +25,9 @@ class BodyState {
     /** Heading and up of the spline's remembered clear pose ([BodySpline.saveSafe]). */
     var safeHeading = Vec3.X
     var safeUp = Vec3.Y
+    /** Swim wave and bend of that pose (they widen the body's sections, [refresh]). */
+    var safeAmp = 0.0
+    var safeBend = 0.0
     /** Consecutive resolves that held the body at its clear pose. */
     var held = 0
     var centre = Vec3.ZERO; private set
@@ -70,6 +73,12 @@ class BodyState {
     val currentShape: BodyShape? get() = shape
     /** Escaping a sealed hollow of the rock ([BodyCollision.sealedIn]). */
     var escaping = false
+    /** The last resolve left this pose clear of the environment (committed as the clear pose at the end of the tick). */
+    var clearPose = false
+    /** Normal of the contact under the belly at the last resolve (null: none), for a resting fish's settle. */
+    var bellyN: Vec3? = null
+    /** Sim time the body's middle first read sealed in (−1: it does not). */
+    var sealedSince = -1.0
 
     fun refresh(o: Organism) {
         if (o.species !== shapeOf || shape == null) { shape = BodyShapes.of(o.species); shapeOf = o.species }
@@ -188,15 +197,26 @@ class BodyCollision(private val rock: RockData) {
         return if (lv < 0) OpenWater.LEVELS.size - 1 else lv
     }
 
-    /** Whether [o]'s body is in a sealed hollow of the rock ([OpenWater.sealedIn]). */
-    fun sealedIn(o: Organism): Boolean {
+    /**
+     * Whether [o]'s body is escaping a sealed hollow of the rock ([OpenWater.sealedIn]). Latched: once sealed in, the
+     * body passes the rock until its middle is back in the open water. Only a clock ([now], the sim time: the
+     * steering's once-a-tick call) starts an escape, and only after the middle has read sealed for [SEALED_DELAY_S]: a
+     * fish brushing the edge of a pocket too narrow for it (one tick in a crevice cell) does not drop the rock.
+     */
+    fun sealedIn(o: Organism, now: Double = Double.NaN): Boolean {
         o.body.refresh(o)
-        val lv = levelOf(o)
+        // water even the thinnest body (level 0) cannot reach from the open tank: a closed shell of the bake. A cave
+        // whose mouth is only narrower than this fish is not one: the fish stays in it like any other wedge (no clip)
+        val lv = 0
         val w = openWater[lv] ?: OpenWater.of(rock, OpenWater.LEVELS[lv]).also { openWater[lv] = it }
         val b = o.body
-        // latched: once sealed in, the body passes the rock until its middle is back in the open water
-        if (b.escaping) { if (w.open(b.centre)) b.escaping = false }
-        else if (w.sealedIn(b.centre)) b.escaping = true
+        if (b.escaping) { if (w.open(b.centre)) { b.escaping = false; b.sealedSince = -1.0 } }
+        else if (w.sealedIn(b.centre)) {
+            if (!now.isNaN()) {
+                if (b.sealedSince < 0) b.sealedSince = now
+                if (now - b.sealedSince >= SEALED_DELAY_S) b.escaping = true
+            }
+        } else b.sealedSince = -1.0
         if (b.escaping) sealedEscapes++
         return b.escaping
     }
@@ -217,9 +237,16 @@ class BodyCollision(private val rock: RockData) {
      */
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
         if (!enabled) return 0.0
-        if (exempt(o)) { o.spline.dropSafe(); return 0.0 }
-        // a body in a sealed hollow of the rock passes through the rock until it is back in the open water
-        @Suppress("NAME_SHADOWING") val rockOn = rockOn && !sealedIn(o)
+        if (exempt(o)) {
+            o.spline.dropSafe(); o.body.clearPose = false
+            // a burrow, a den or the sand lets a body into the rock and sand, never through the glass (a goby's tail in
+            // a burrow by the front pane, tee-clips #6)
+            if (o.posture == 3 || o.posture == 5) keepInsideGlass(o)
+            return 0.0
+        }
+        // a swimmer in a sealed hollow of the rock passes through the rock until it is back in the open water (a
+        // crawler on the rock is always against it: never counted sealed in)
+        @Suppress("NAME_SHADOWING") val rockOn = rockOn && !(o.isFish && !o.attached && sealedIn(o))
         envCalls++
         val mask = StaticObstacles.passMask(o)
         var worst = 0.0
@@ -231,11 +258,18 @@ class BodyCollision(private val rock: RockData) {
         // how far each station was from the rock on the first pass, and how far the body has moved since: a station
         // that started farther from the rock than the body has moved cannot have reached it (distance is 1-Lipschitz)
         var moved = 0.0
+        if (settle && o.isFish) o.body.bellyN?.let { n ->
+            val k = min(1.0, dt * SETTLE_RATE)
+            val flat = o.heading.rejectFrom(n).normalized(o.heading)
+            // (not past a swimmer's pitch limit: on a steep face it rests level against the slope, it does not stand on it)
+            if (abs(flat.y) <= SETTLE_MAX_PITCH) o.heading = o.heading.lerp(flat, k).normalized(o.heading)
+            o.up = o.up.lerp(n.rejectFrom(o.heading).normalized(o.up), k).normalized(Vec3.Y)
+        }
         for (iter in 0 until MAX_ITERATIONS) {
             val body = o.body
             body.refresh(o)
             if (iter == 0) {
-                val dc = if (rockOn) rock.sdf.dist(body.centre) - body.radius else Double.POSITIVE_INFINITY
+                val dc = if (rockOn) rock.sdf.dist(body.centre) / SDF_LIP - body.radius else Double.POSITIVE_INFINITY
                 rockGap.fill(dc)
                 // broad phase: a body whose bounding sphere is clear of the rock, the sand, the glass and the surface
                 // (most swimmers in open water, most of the time) needs no station checks
@@ -258,23 +292,27 @@ class BodyCollision(private val rock: RockData) {
                     val vn = o.vel dot n
                     if (vn < 0 && (i == 0 || rigid)) o.vel -= n * vn
                 }
+                // the halfway section to the next station reaches half a segment farther from this centre
+                val boundH = if (i < BodyState.N - 1) max(bound, abs(body.ctr[i + 1]) + max(body.a[i + 1], body.b[i + 1]) + SKIN) + 0.5 * p0.distanceTo(body.p[i + 1]) else bound
                 if (rockOn && rockGap[i] < moved + SKIN) {
                     val d = rock.sdf.dist(q)
-                    if (iter == 0) rockGap[i] = d - bound
-                    if (d < bound) {
+                    if (iter == 0) rockGap[i] = d / SDF_LIP - boundH
+                    if (d < SDF_LIP * boundH) {
                         // planar contact at the centre, refined at the section's deepest point (curved and concave rock)
-                        val n = grad(q)
-                        contact(n, d)
-                        val e = body.extreme(i, -n) + (q - p0)
-                        val de = rock.sdf.dist(e)
-                        if (de < -SKIN * 0.5) { val ne = grad(e); q += ne * (-de + SKIN); noteContact(o, ne, i, rigid, body) }
+                        if (d < bound) {
+                            val n = grad(q)
+                            contact(n, d)
+                            val e = body.extreme(i, -n) + (q - p0)
+                            val de = rock.sdf.dist(e)
+                            if (de < -SKIN * 0.5) { val ne = grad(e); q += ne * (-de + SKIN); noteContact(o, ne, i, rigid, body) }
+                        }
                         // concave rock (a ridge, a crevice lip) can reach a side of the section the centre's normal does
                         // not face: the deepest of twelve rim points is pushed out along its own normal
-                        if (d < bound - SKIN) {
+                        if (d < SDF_LIP * boundH - SKIN) {
                             val off = q - p0
                             val c = p0 + body.up[i] * body.ctr[i] + off
                             var dMin = 0.0; var at = c
-                            for (k in 0 until RIM) {
+                            if (d < SDF_LIP * bound - SKIN) for (k in 0 until RIM) {
                                 val r = c + body.up[i] * (body.a[i] * RIM_COS[k]) + body.side[i] * (body.b[i] * RIM_SIN[k])
                                 val dr = rock.sdf.dist(r)
                                 if (dr < dMin) { dMin = dr; at = r }
@@ -305,7 +343,7 @@ class BodyCollision(private val rock: RockData) {
                 // even when the sand under the centre is far below, so the lowest point of the section is checked too
                 val fy = rock.floorY(q.x, q.z)
                 val low = body.extreme(i, DOWN) + (q - p0)
-                if (q.y - fy < bound || low.y - rock.floorY(low.x, low.z) < SKIN) {
+                if (q.y - fy < boundH + SAND_SLOPE_CM || low.y - rock.floorY(low.x, low.z) < SKIN) {
                     val n = floorNormal(q.x, q.z)
                     contact(n, (q.y - rock.floorY(q.x, q.z)) * n.y)
                     // the sand curves (mounds against the rock feet, rubble, pits): check the height under the section's
@@ -317,6 +355,15 @@ class BodyCollision(private val rock: RockData) {
                     under(body.extreme(i, DOWN) + off)
                     val cc = q + body.up[i] * body.ctr[i]
                     for (k in 0 until RIM) under(cc + body.up[i] * (body.a[i] * RIM_COS[k]) + body.side[i] * (body.b[i] * RIM_SIN[k]))
+                    // and halfway to the next station (a mound between two stations)
+                    if (i < BodyState.N - 1) {
+                        val j = i + 1
+                        val hu = (body.up[i] + body.up[j]).normalized(body.up[i])
+                        val hs = (body.side[i] + body.side[j]).normalized(body.side[i])
+                        val ha = 0.5 * (body.a[i] + body.a[j]); val hb = 0.5 * (body.b[i] + body.b[j])
+                        val hc = (body.p[i] + body.p[j]) * 0.5 + hu * (0.5 * (body.ctr[i] + body.ctr[j])) + off
+                        for (k in 0 until RIM) under(hc + hu * (ha * RIM_COS[k]) + hs * (hb * RIM_SIN[k]))
+                    }
                     if (deficit > -SKIN * 0.5) { q += Vec3.Y * (deficit + SKIN); noteContact(o, n, i, rigid, body) }
                 }
                 if (q.x < bound) contact(Vec3.X, q.x)
@@ -324,6 +371,27 @@ class BodyCollision(private val rock: RockData) {
                 if (q.z < bound) contact(Vec3.Z, q.z)
                 if (rock.widthCm - q.z < bound) contact(Vec3(0.0, 0.0, -1.0), rock.widthCm - q.z)
                 if (surfaceOn && rock.waterLevelCm - q.y < bound) contact(Vec3(0.0, -1.0, 0.0), rock.waterLevelCm - q.y)
+                // the halfway section to the next station against the glass and the surface (a body crossing a pane
+                // corner-on reaches it between two stations)
+                if (i < BodyState.N - 1) {
+                    val j = i + 1
+                    val hp = (p0 + body.p[j]) * 0.5 + (q - p0)
+                    if (hp.x < boundH || rock.lengthCm - hp.x < boundH || hp.z < boundH || rock.widthCm - hp.z < boundH || surfaceOn && rock.waterLevelCm - hp.y < boundH) {
+                        val hu = (body.up[i] + body.up[j]).normalized(body.up[i])
+                        val hs = (body.side[i] + body.side[j]).normalized(body.side[i])
+                        val ha = 0.5 * (body.a[i] + body.a[j]); val hb = 0.5 * (body.b[i] + body.b[j])
+                        val hc = hp + hu * (0.5 * (body.ctr[i] + body.ctr[j]))
+                        // support of the section's ellipse along each wall's inward normal: |up·n|·a + |side·n|·b
+                        fun wall(nx: Double, ny: Double, nz: Double, gap: Double) {
+                            val sup = abs(hu.x * nx + hu.y * ny + hu.z * nz) * ha + abs(hs.x * nx + hs.y * ny + hs.z * nz) * hb
+                            val pen = sup - gap + SKIN
+                            if (pen > 0) q += Vec3(nx, ny, nz) * pen
+                        }
+                        wall(1.0, 0.0, 0.0, hc.x); wall(-1.0, 0.0, 0.0, rock.lengthCm - hc.x)
+                        wall(0.0, 0.0, 1.0, hc.z); wall(0.0, 0.0, -1.0, rock.widthCm - hc.z)
+                        if (surfaceOn) wall(0.0, -1.0, 0.0, rock.waterLevelCm - hc.y)
+                    }
+                }
                 val dq = q - p0
                 if (dq.lengthSq() > 1e-12) {
                     any = true
@@ -350,42 +418,57 @@ class BodyCollision(private val rock: RockData) {
             applyDeltas(o, body, if (rigid || iter >= BEND_ITERATIONS) null else deltas, translate)
         }
         lastClear = clear || lastPush <= WEDGE_LIMIT
+        o.body.clearPose = clear
         if (clear) {
-            o.spline.saveSafe(); o.body.safeHeading = o.heading; o.body.safeUp = o.up
+            // remembered as the pose to hold to only once it is clear of the other bodies too ([commitSafe])
             if (wedgeFallback) o.body.held = 0   // (not the re-settle of a held pose: that is still the same hold)
-        } else if (wedgeFallback && lastPush > WEDGE_LIMIT && o.body.held >= HOLD_MAX) {
-            // held this long, the behaviour keeps pressing into the same wedge: find clear water instead of freezing
-            o.body.held = 0
-            o.spline.dropSafe()
-            unstick(o, rockOn, surfaceOn)
-        } else if (wedgeFallback && lastPush > WEDGE_LIMIT && o.spline.restoreSafe()) {
-            o.body.held++
-            // a wedge the pushes cannot clear (a crevice narrower than the body, rock against sand): the body stays
-            // where it last fitted instead of passing into the geometry
-            o.pos = o.spline.headPos; o.heading = o.body.safeHeading; o.up = o.body.safeUp
-            o.vel = Vec3.ZERO
-            wedgeRestores++
-            wedgeBy.merge(o.species.id, 1L) { x, y -> x + y }
-            // the swim wave and bend have moved on since that pose was saved: settle it against them once more
-            resolveEnv(o, dt, rockOn, surfaceOn, false, wedgeFallback = false)
-            // still caught (the pose fitted a body that has since bent or grown): back out to clear water
-            if (!lastClear) unstick(o, rockOn, surfaceOn)
-            return worst
         } else if (wedgeFallback && lastPush > WEDGE_LIMIT) {
+            // held this long, the behaviour keeps pressing into the same wedge: find clear water instead of freezing
+            if (o.body.held >= HOLD_MAX && unstick(o, rockOn, surfaceOn)) { o.body.held = 0; return worst }
+            if (restoreHeld(o)) {
+                // a wedge the pushes cannot clear (a crevice narrower than the body, rock against sand): the body stays
+                // where it last fitted instead of passing into the geometry. The swim wave and bend have moved on since
+                // that pose was saved: settle it against them once more, and if that cannot clear it, the saved pose
+                // itself (it was clear) stands
+                resolveEnv(o, dt, rockOn, surfaceOn, false, wedgeFallback = false)
+                if (!lastClear) {
+                    restoreHeld(o, count = false)
+                    // the saved pose is no longer clear either (the sand rose under it, an obstacle moved): hop out now
+                    if (rimDepth(o, rockOn, surfaceOn) > SKIN) {
+                        o.body.held = 0
+                        // nowhere clear to hop to either: forget that pose and push out from where the body is
+                        if (!unstick(o, rockOn, surfaceOn)) { o.spline.dropSafe(); resolveEnv(o, dt, rockOn, surfaceOn, false, wedgeFallback = false) }
+                    }
+                }
+                return worst
+            }
             // wedged with no clear pose to return to (a fresh placement): back out along the body or lift clear
             unstick(o, rockOn, surfaceOn)
         }
-        if (settle && o.isFish && bellyCount >= 2) {
-            val n = bellyN.normalized(Vec3.Y)
-            val k = min(1.0, dt * SETTLE_RATE)
-            val flat = o.heading.rejectFrom(n).normalized(o.heading)
-            o.heading = o.heading.lerp(flat, k).normalized(o.heading)
-            o.up = o.up.lerp(n.rejectFrom(o.heading).normalized(o.up), k).normalized(Vec3.Y)
-        }
+        // the contact under the belly, for the next resolve's settle (applied before its pushes, so a settle that tips
+        // the tail toward the sand is pushed out like any other move, never left in it)
+        o.body.bellyN = if (bellyCount >= 2) bellyN.normalized(Vec3.Y) else null
         return worst
     }
 
     /** Worst depth of the body's rims (twelve points around every station) in the rock, sand, glass or surface. */
+    /** Translates [o]'s body back inside the glass if any station's section reaches through it. */
+    private fun keepInsideGlass(o: Organism) {
+        val body = o.body
+        body.refresh(o)
+        var hiX = 0.0; var loX = 0.0; var hiZ = 0.0; var loZ = 0.0
+        for (i in 0 until BodyState.N) {
+            val c = body.p[i] + body.up[i] * body.ctr[i]
+            val r = max(body.a[i], body.b[i]) + SKIN
+            hiX = max(hiX, r - c.x); loX = min(loX, rock.lengthCm - r - c.x)
+            hiZ = max(hiZ, r - c.z); loZ = min(loZ, rock.widthCm - r - c.z)
+        }
+        val t = Vec3(hiX + loX, 0.0, hiZ + loZ)
+        if (t.lengthSq() < 1e-10) return
+        applyDeltas(o, body, null, t)
+        o.pos = o.spline.headPos
+    }
+
     private fun clearOfBounds(body: BodyState, surfaceOn: Boolean): Boolean {
         val c = body.centre
         val r = body.radius + SKIN
@@ -399,22 +482,92 @@ class BodyCollision(private val rock: RockData) {
     private fun rimDepth(o: Organism, rockOn: Boolean, surfaceOn: Boolean): Double {
         val body = o.body
         body.refresh(o)
+        val mask = StaticObstacles.passMask(o)
+        val ob = obstacles
         var worst = Double.NEGATIVE_INFINITY
-        for (i in 0 until BodyState.N) {
-            val c = body.p[i] + body.up[i] * body.ctr[i]
-            for (k in 0 until RIM) {
-                val r = c + body.up[i] * (body.a[i] * RIM_COS[k]) + body.side[i] * (body.b[i] * RIM_SIN[k])
+        // every station and halfway between stations (the sections the resolve keeps clear), rim points and centre
+        for (h in 0 until 2 * BodyState.N - 1) {
+            val i = h / 2; val j = if (h % 2 == 1) i + 1 else i; val f = if (h % 2 == 1) 0.5 else 0.0
+            val p = body.p[i] + (body.p[j] - body.p[i]) * f
+            val up = (body.up[i] + (body.up[j] - body.up[i]) * f).normalized(Vec3.Y)
+            val side = (body.side[i] + (body.side[j] - body.side[i]) * f).normalized(Vec3.Z)
+            val a = body.a[i] + (body.a[j] - body.a[i]) * f
+            val b = body.b[i] + (body.b[j] - body.b[i]) * f
+            val c = p + up * (body.ctr[i] + (body.ctr[j] - body.ctr[i]) * f)
+            for (k in 0..RIM) {
+                val r = if (k == RIM) c else c + up * (a * RIM_COS[k]) + side * (b * RIM_SIN[k])
                 if (rockOn) worst = max(worst, -rock.sdf.dist(r))
                 worst = max(worst, rock.floorY(r.x, r.z) - r.y)
                 worst = max(worst, max(-r.x, r.x - rock.lengthCm))
                 worst = max(worst, max(-r.z, r.z - rock.widthCm))
                 if (surfaceOn) worst = max(worst, r.y - rock.waterLevelCm)
+                if (ob != null) worst = max(worst, ob.depth(r, 0.0, mask))
             }
         }
         return worst
     }
 
-    private fun unstick(o: Organism, rockOn: Boolean, surfaceOn: Boolean) {
+    private fun saveSafe(o: Organism) {
+        o.spline.saveSafe(); o.body.safeHeading = o.heading; o.body.safeUp = o.up; o.body.safeAmp = o.amp; o.body.safeBend = o.bend
+    }
+
+    /**
+     * The sand rose inside [r] (x0, z0, x1, z1: [SandBed.takeRaised]) after these bodies were resolved this step (a
+     * mouthful spat out, grains settling out of a cloud, a slump): a body over it whose section is now under the new
+     * surface is pushed out again. Bodies elsewhere cost a bounds test.
+     */
+    fun afterSandRaised(animals: List<Organism>, r: DoubleArray, dt: Double) {
+        if (!enabled) return
+        for (o in animals) {
+            if (!o.alive || exempt(o)) continue
+            val body = o.body
+            body.refresh(o)
+            val c = body.centre; val rad = body.radius + SKIN
+            if (c.x + rad < r[0] || c.x - rad > r[2] || c.z + rad < r[1] || c.z - rad > r[3]) continue
+            if (c.y - rad > rock.floorY(c.x, c.z) + BROAD_FLOOR_MARGIN + MAX_MOUND_STEP_CM) continue
+            if (sandDepth(body) <= 0.0) continue
+            sandRepushes++
+            resolveEnv(o, dt, rockOn = !body.escaping)
+        }
+    }
+    var sandRepushes = 0L; private set
+
+    /** Deepest point of the body's sections (stations and halfway) under the sand (cm, ≤ 0 = clear). */
+    private fun sandDepth(body: BodyState): Double {
+        var worst = Double.NEGATIVE_INFINITY
+        for (h in 0 until 2 * BodyState.N - 1) {
+            val i = h / 2; val j = if (h % 2 == 1) i + 1 else i; val f = if (h % 2 == 1) 0.5 else 0.0
+            val p = body.p[i] + (body.p[j] - body.p[i]) * f
+            val up = (body.up[i] + (body.up[j] - body.up[i]) * f).normalized(Vec3.Y)
+            val side = (body.side[i] + (body.side[j] - body.side[i]) * f).normalized(Vec3.Z)
+            val a = body.a[i] + (body.a[j] - body.a[i]) * f
+            val b = body.b[i] + (body.b[j] - body.b[i]) * f
+            val c = p + up * (body.ctr[i] + (body.ctr[j] - body.ctr[i]) * f)
+            for (k in 0 until RIM) {
+                val q = c + up * (a * RIM_COS[k]) + side * (b * RIM_SIN[k])
+                worst = max(worst, rock.floorY(q.x, q.z) - q.y)
+            }
+        }
+        return worst
+    }
+
+    /** Back to the last clear pose (a wedge hold); false when there is none. */
+    private fun restoreHeld(o: Organism, count: Boolean = true): Boolean {
+        if (!o.spline.restoreSafe()) return false
+        o.pos = o.spline.headPos; o.heading = o.body.safeHeading; o.up = o.body.safeUp
+        // the same body as when it was saved: the swim wave and bend widen the sections (a wider tail beat in the wedge)
+        o.amp = o.body.safeAmp; o.bend = o.body.safeBend
+        o.vel = Vec3.ZERO
+        if (count) {
+            o.body.held++
+            wedgeRestores++
+            wedgeBy.merge(o.species.id, 1L) { x, y -> x + y }
+        }
+        return true
+    }
+
+    /** Hops the body to the nearest clear spot along or above it; false (and the body left where it was) when none. */
+    private fun unstick(o: Organism, rockOn: Boolean, surfaceOn: Boolean): Boolean {
         val L = o.lengthCm
         val dirs = listOf(o.heading, o.heading * -1.0, Vec3.Y, o.up)
         var moved = Vec3.ZERO
@@ -434,8 +587,8 @@ class BodyCollision(private val rock: RockData) {
                 moved = t
                 if (rimDepth(o, rockOn, surfaceOn) < 0.0) {
                     o.vel = Vec3.ZERO
-                    o.spline.saveSafe(); o.body.safeHeading = o.heading; o.body.safeUp = o.up
-                    return
+                    o.body.clearPose = true
+                    return true
                 }
             }
         }
@@ -443,6 +596,7 @@ class BodyCollision(private val rock: RockData) {
         for (j in 0 until BodySpline.POINTS) deltas[j] = moved * -1.0
         o.spline.displace(deltas)
         o.pos = o.spline.headPos
+        return false
     }
 
     /** Whether moving the [axis] points by [t] passes deeper into rock than they start (through a wall). */
@@ -518,8 +672,46 @@ class BodyCollision(private val rock: RockData) {
      */
     fun resolvePairs(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double) {
         if (!enabled) return
+        pinned.clear()
         for (pass in 0 until PAIR_PASSES) if (!pairPass(animals, stations, dt, holdAttached = pass < PAIR_PASSES / 2)) break
+        commitSafe(animals, stations)
     }
+
+    /**
+     * Remembers each body's pose as its clear pose (the one a wedge holds it to) when its last resolve left it clear of
+     * the environment and it overlaps no other body: a pose saved while two bodies overlapped would be restored into
+     * that overlap again by every hold.
+     */
+    private fun commitSafe(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>) {
+        val live = ArrayList<Organism>(animals.size)
+        for (o in animals) if (o.alive && !exempt(o)) {
+            o.body.refresh(o)
+            if (o.body.centre.isFinite() && o.body.radius < 4 * o.lengthCm + 20) live += o
+        }
+        overlapping.clear()
+        if (live.size >= 2) {
+            hash.rebuild(live)
+            var maxR = 0.0
+            for (o in live) maxR = max(maxR, o.body.radius)
+            val near = ArrayList<Organism>()
+            for (a in live) {
+                if (!a.body.clearPose) continue
+                near.clear()
+                hash.neighbors(a.body.centre, a.body.radius + maxR, near)
+                for (b in near) {
+                    if (b === a || a.body.centre.distanceTo(b.body.centre) > a.body.radius + b.body.radius) continue
+                    if (touchAllowed(a, b, stations)) continue
+                    if (pairPenetration(a, b) > 0.0) { overlapping += a; break }
+                }
+            }
+        }
+        for (o in live) if (o.body.clearPose && o !in overlapping) saveSafe(o)
+        for (o in animals) o.body.clearPose = false
+    }
+    private val overlapping = HashSet<Organism>()
+
+    /** Bodies the environment pushed back against their pair push this tick (against the rock, a coral): they yield no more. */
+    private val pinned = HashSet<Organism>()
 
     private fun pairPass(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double, holdAttached: Boolean): Boolean {
         val live = ArrayList<Organism>(animals.size)
@@ -551,9 +743,15 @@ class BodyCollision(private val rock: RockData) {
         if (pairDelta.isEmpty()) return false
         for ((o, d) in pairDelta) {
             pairPushes++
+            val before = o.pos
             o.spline.displace(d)
             o.pos = o.spline.headPos
+            val pushed = o.pos
             resolveEnv(o, dt)
+            // the environment took back most of the push (the body is against the rock or a coral on that side): from
+            // now on the other body of the pair moves instead, or the two would trade the same overlap pass after pass
+            val want = pushed - before
+            if (want.lengthSq() > 1e-6 && ((o.pos - before) dot want) < 0.5 * want.lengthSq()) pinned += o
         }
         return true
     }
@@ -599,8 +797,10 @@ class BodyCollision(private val rock: RockData) {
      * the first passes; when the swimmer is pinned between it and the rock, the later passes move both by mass.
      */
     private fun weights(a: Organism, b: Organism, holdAttached: Boolean): Pair<Double, Double> {
-        val ma = if (a.attached && holdAttached) 1e6 else a.lengthCm * a.lengthCm * a.lengthCm
-        val mb = if (b.attached && holdAttached) 1e6 else b.lengthCm * b.lengthCm * b.lengthCm
+        // a body the environment is holding (wedged against the rock, [BodyState.held]) cannot yield: pushed, it is put
+        // back where it fitted, into the other body again; the other one takes the whole push
+        val ma = if (a.attached && holdAttached || a.body.held > 0 || a in pinned) 1e6 else a.lengthCm * a.lengthCm * a.lengthCm
+        val mb = if (b.attached && holdAttached || b.body.held > 0 || b in pinned) 1e6 else b.lengthCm * b.lengthCm * b.lengthCm
         return (mb / (ma + mb)) to (ma / (ma + mb))
     }
 
@@ -632,6 +832,13 @@ class BodyCollision(private val rock: RockData) {
         return worst
     }
 
+    /**
+     * Deepest point of [o]'s body sections (every station and halfway, rim and centre) in the rock, sand, glass,
+     * surface or a static obstacle (cm, ≤ 0 = clear): what the no-overlap checks measure. A burrower leaving its hole
+     * keeps its burrow posture until this reads clear.
+     */
+    fun sectionDepth(o: Organism, rockOn: Boolean = true): Double = rimDepth(o, rockOn, true)
+
     /** Overlap of two bodies (cm, ≤ 0 = clear), station against station. */
     fun pairPenetration(a: Organism, b: Organism): Double {
         a.body.refresh(a); b.body.refresh(b)
@@ -658,8 +865,8 @@ class BodyCollision(private val rock: RockData) {
         const val ITERATIONS = 6
         private val DOWN = Vec3(0.0, -1.0, 0.0)
         private const val RIM = 12
-        /** A push still this large after the last iteration (the skin plus 1 mm of overlap) means the body is wedged (cm). */
-        const val WEDGE_LIMIT = 0.15
+        /** A push still this large after the last iteration (the skin plus 0.3 mm of overlap) means the body is wedged (cm). */
+        const val WEDGE_LIMIT = 0.08
         private const val UNSTICK_STEPS = 8
         /** Resolves in a row a wedged body is held before it backs out to clear water instead (~1 s at 20 Hz). */
         private const val HOLD_MAX = 20
@@ -672,12 +879,27 @@ class BodyCollision(private val rock: RockData) {
         const val BEND_ITERATIONS = 3
         /** Animal-vs-animal passes per tick (each followed by the environment resolve of the bodies it moved). */
         const val PAIR_PASSES = 6
+        /**
+         * How much faster than 1 cm per cm the baked rock distance can change (the trilinear blend of a 1 cm float16
+         * grid: up to ~1.5 measured across the reef). A reading of d promises only d / SDF_LIP cm of clear water, so
+         * every skip (broad phase, a station far from the rock, the rim checks) uses that; at 1.0 a fin edge the
+         * centre read as clear sat 3 mm in the rock.
+         */
+        const val SDF_LIP = 1.75
+        /** A mound beside the body's middle can stand this much above the sand under it (cm): the sand re-push's bounds. */
+        const val MAX_MOUND_STEP_CM = 3.0
+        /** How much higher the sand under a section's rim can be than under its centre (a mound, a pile's flank) (cm). */
+        const val SAND_SLOPE_CM = 1.0
+        /** How long a body's middle reads sealed in before it starts to pass the rock to get out (s). */
+        const val SEALED_DELAY_S = 1.0
         /** Contact gap the resolve leaves (cm): a body comes to rest 0.5 mm off the surface. */
         const val SKIN = 0.05
         /** Sand slope allowance (cm) of the broad phase: the bed under the body may rise this much between head, middle and tail. */
         const val BROAD_FLOOR_MARGIN = 1.5
         /** How fast a resting fish's body settles onto the slope under its belly (1/s). */
         const val SETTLE_RATE = 4.0
+        /** Steepest slope (sin of pitch) a resting fish's body follows. */
+        const val SETTLE_MAX_PITCH = 0.57
 
         /** Parameters (s, t) of the closest points of segments p1–q1 and p2–q2 (Ericson, Real-Time Collision Detection 5.1.9). */
         fun closestParams(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3): Pair<Double, Double> {

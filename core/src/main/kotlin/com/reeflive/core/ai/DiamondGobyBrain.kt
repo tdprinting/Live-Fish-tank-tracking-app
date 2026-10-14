@@ -374,7 +374,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
             }
             // at the burrow mouth (under the rock, in its own pit) it is working the burrow: an allowed contact
-            if (o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
+            // (and on the way out, up to 1.5 L, while any of the body is still in the sand or rock round the mouth)
+            val db = o.pos.distanceTo(burrow)
+            if (db < 0.8 * o.lengthCm || db < 1.5 * o.lengthCm && o.posture == 3 && c.sim.bodies.sectionDepth(o) > 0.0) out.posture = 3
         }
     }
 
