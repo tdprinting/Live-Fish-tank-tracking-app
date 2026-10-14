@@ -254,7 +254,8 @@ def diamond_juvenile(cv, fl):
     cv.blend(orange, "#F4E6DA", 0.35)
 
 
-# ---------------------------------------------------------------- blue star leopard wrasse (model pending)
+# ---------------------------------------------------------------- blue star leopard wrasse
+# the initial-phase female is the GLB's own photo-based painter (fish_species.paint_leopard_wrasse, Tee's fish [P p06])
 def leopard_juvenile(cv, fl):
     """Juvenile M. bipartitus: white with orange mottling (the black spots are on the dorsal and anal fins)
     [M seatizens.sc after Lieske & Myers]."""
@@ -262,21 +263,6 @@ def leopard_juvenile(cv, fl):
     n = P.value_noise(cv.h, cv.w, 70, 18, 201)
     cv.blend(S(0.48, 0.62, n), "#E07A34", 0.85)
     FS.mucus(cv, 0.03, 202)
-
-
-def leopard_female(cv, fl):
-    """Initial phase / female: orange-red with white spots of varying size, a large black ventral patch holding a
-    bright blue network and spots [M seatizens.sc; FishBase photos]. Tee's fish is this phase [P p06]."""
-    u, v = cv.u, cv.v
-    cv.vgrad("#B8561E", "#C8682A", 0.0, 1.0)
-    rs = np.random.default_rng(203)
-    m, _ = fl.spots(rs, 140, 0.003, 0.008, 0.012, (0.04, 0.96, 0.3, 0.98))
-    cv.blend(m, "#F4F2F0")
-    patch = P.band(u, 0.16, 0.74, 0.04) * (1 - S(0.28, 0.4, v))
-    cv.blend(patch, "#0C0E18")
-    net = P.hex_net(cv, 11, 1.4)
-    cv.blend(patch * net, "#3AA0FF", 0.85)
-    FS.mucus(cv, 0.03, 204)
 
 
 def leopard_male(cv, fl):
@@ -314,16 +300,14 @@ FORMS = {
     "tailspot_blenny": ("ecsenius_stigmatura", {"juvenile": tailspot_juvenile, "adult": FS.paint_tailspot}),
     "dottyback": ("pseudochromis_indigo", {"juvenile": dottyback_juvenile, "adult": FS.paint_dottyback}),
     "diamond_goby": ("valenciennea_puellaris", {"juvenile": diamond_juvenile, "adult": FS.paint_diamond_goby}),
+    "leopard_wrasse": ("macropharyngodon_bipartitus", {"juvenile": leopard_juvenile, "female": FS.paint_leopard_wrasse, "male": leopard_male}),
 }
 # model -> {form: fin-sheet painter}; the form whose painter is the GLB's own fin painter is the fin `base`
 FIN_FORMS = {
     "engineer_goby": {"juvenile": goby_fins_juvenile, "subadult": FS.fins_engineer_goby, "adult": goby_fins_adult},
 }
-# TODO(life-stages): built once models/leopard_wrasse.glb and its fish_species.SPECIES entry exist (branch
-# claude/leopard-goby). Until then only flat previews are painted, on the cleaner wrasse's profile.
-PENDING_MODELS = {
-    "leopard_wrasse": ("macropharyngodon_bipartitus", {"juvenile": leopard_juvenile, "female": leopard_female, "male": leopard_male}),
-}
+# models whose GLB is not built yet: only flat previews are painted, on the cleaner wrasse's profile (none at present)
+PENDING_MODELS = {}
 
 
 def species_sheet(sid):

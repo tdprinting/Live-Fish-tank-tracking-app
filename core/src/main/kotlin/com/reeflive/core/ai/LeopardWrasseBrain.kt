@@ -28,6 +28,8 @@ import kotlin.math.sin
  */
 class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
+        /** No closer to its picking stand by 1 cm in this long: it cannot get there, pick another site (design estimate, as Feed). */
+        const val STUCK_S = 8.0
         /** Seconds between picks while foraging: 10–20 picks a minute (owner clip H1; rate [L]). */
         @Ev(Evidence.DESIGN_ESTIMATE, "fish_leopard_wrasse: constant picking [H]; rate not measured") const val PICK_MIN_S = 3.0
         const val PICK_MAX_S = 6.0
@@ -230,7 +232,11 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     out.seek(if (o.pos.distanceTo(above) > 10) c.viaOpenWater(above) else above,
                         if (urgent) o.burstSpeed * 0.7 else o.cruiseSpeed, arrive = 1.5, urgency = if (urgent) 0.8 else 0.4)
                     out.hover = true
-                    if (o.pos.distanceTo(above) < 3.0 || timer > 40) {
+                    if (o.pos.distanceTo(above) >= 3.0 && timer > 40) {
+                        // could not get over that patch (a rock bump in the way): take the open sand nearest to it
+                        // instead of plunging from where it is (the kinematic dive would cut through the rock)
+                        sleepSpot = findSleepSpot(c, Vec3(o.pos.x, 0.0, o.pos.z)); timer = 0.0
+                    } else if (o.pos.distanceTo(above) < 3.0) {
                         phase = 1; timer = 0.0
                         diveS = c.rng.range(DIVE_MIN_S, DIVE_MAX_S)
                         diveDir = horizontalHeading(o.heading, Vec3.X)
@@ -321,9 +327,12 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
             if (dusk(c)) return 0.0
             return ((0.55 + 0.3 * o.hunger) * max(c.activity, 0.3)).coerceAtMost(0.8)
         }
+        private var bestD = Double.MAX_VALUE
+        private var progressAt = 0.0
         override fun enter(c: Ctx) { newSite(c); nextPick = c.t + c.rng.range(1.0, 2.5) }
 
         private fun newSite(c: Ctx) {
+            bestD = Double.MAX_VALUE; progressAt = c.t
             left = PICKS_PER_SITE_MIN + c.rng.nextInt(PICKS_PER_SITE_MAX - PICKS_PER_SITE_MIN + 1)
             onSand = c.rng.chance(0.25)
             if (onSand) {
@@ -342,6 +351,9 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
         override fun update(c: Ctx, out: SteerIntent) {
             val d = o.pos.distanceTo(stand)
+            // progress guard: a stand it cannot get to (behind a rock bump, the clearance holds it off) is given up
+            if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
+            if (d > 2.5 && c.t - progressAt > STUCK_S) { newSite(c); return }
             if (d > 2.5) {
                 out.seek(if (d > 12) c.viaOpenWater(stand) else stand, o.cruiseSpeed, arrive = 1.5)
                 out.hover = true

@@ -25,7 +25,7 @@ months of sim time (growth runs at `growthCmPerYear` in `Simulation.growth`).
 | Lawnmower blenny | juvenile 0, adult 4.5 | paler, clearer bars [L] | gonochoristic | ♂ long anal spines; courtship spots | — |
 | Tailspot blenny | juvenile 0, adult 3.5 | paler [L] | gonochoristic | ♂ brighter in courtship | — |
 | Indigo dottyback (Electric Indigo, *P. fridmani × sankeyi*) | juvenile 0, adult 3.5 | black band less defined [L] | protogynous, bidirectional (genus) | none (monochromatic) | ♀→♂ 37 d, ♂→♀ 72 d |
-| Blue star leopard wrasse (sheet pending) | juvenile 0, initial phase 4 | white with orange mottling → orange-red, white spots, black-blue belly | protogynous | terminal ♂: green head bands, yellow saddle, red blotches | ♀→♂ 14 d [L] |
+| Blue star leopard wrasse | juvenile 0, initial phase 4 | white with orange mottling → orange-red, white spots, black-blue belly | protogynous | terminal ♂: green head bands, yellow saddle, red blotches | ♀→♂ 14 d [L] |
 | Diamond goby | juvenile 0, adult 5 | long 3rd dorsal spine < 40 mm SL; fainter spots [L] | gonochoristic, monogamous | none | — |
 
 ---
@@ -176,7 +176,7 @@ male→female 52–93 days; in the dichromatic species colour followed sex, and 
 **Sim rule.** Mature ≥ 4 cm, start female; pair of females → larger becomes male over 37 days; pair of males → smaller
 becomes female over 72 days (midpoints of S20). Texture `dottyback_juvenile`.
 
-## 10. Blue star leopard wrasse, *Macropharyngodon bipartitus* (sheet on branch claude/leopard-goby)
+## 10. Blue star leopard wrasse, *Macropharyngodon bipartitus*
 
 | | Juvenile (< 4 cm [L]) | Initial phase (female) | Terminal phase (male) |
 |---|---|---|---|
@@ -191,14 +191,12 @@ with the bluehead wrasse: after the terminal male was removed the largest female
 colour change began within a day and was clear within four days, sperm after ~8 days [M S24 Warner & Swearer 1991];
 dominant females court like males within ~2 days [M S31]. Sim: 14 days for the full colour change [L].
 
-**Sim rule (data only until the sheet lands).** `LifeStageSpec.PENDING["macropharyngodon_bipartitus"]`: juvenile 0,
-initial (form `female`) from 4 cm, blend 1.5, protogynous, maturity 6 cm, change 14 days, `maleForm "male"` (the renderer
-mixes the female texture toward the male one by the change progress). Textures: painters `leopard_juvenile`,
-`leopard_female`, `leopard_male` in `tools/blender/life_stages.py` under `PENDING_MODELS`; they are written to the
-assets automatically once `models/leopard_wrasse.glb` and its `fish_species.SPECIES["leopard_wrasse"]` entry exist.
-**TODO hooks:** (1) copy the PENDING block into `macropharyngodon_bipartitus.json` as `lifeStages`; (2) rerun
-`life_stages.py` after the GLB is built; (3) if its brain resolves to `BrainKind.WRASSE`, `Reproduction.wrasseHarem`
-will drive its sex change instead of `SexRoles` (same rule, 14 days).
+**Sim rule.** `macropharyngodon_bipartitus.json` `lifeStages`: juvenile 0, initial (form `female`) from 4 cm, blend 1.5,
+protogynous, maturity 6 cm, change 14 days, `maleForm "male"` (the renderer mixes the female texture toward the male one
+by the change progress). Its brain is `BrainKind.LEOPARD_WRASSE`, so `SexRoles` (not `Reproduction.wrasseHarem`)
+drives the change. Textures (`tools/blender/life_stages.py`, model `leopard_wrasse`): `juvenile` and `male` are painted
+stage forms (`textures/stages/leopard_wrasse_<form>.png`); the `female` base is the GLB's own photo-based texture
+(`fish_species.paint_leopard_wrasse`, Tee's fish [P p06]), which replaced the literature-based female painter.
 
 ## 11. Diamond goby, *Valenciennea puellaris*
 
@@ -229,8 +227,8 @@ will drive its sex change instead of `SexRoles` (same rule, 14 days).
 | Lawnmower blenny | 10 cm | adult | |
 | Tailspot blenny | 5.5 cm | adult | |
 | Indigo dottyback | 6.0 cm | adult, female (alone) | |
-| Leopard wrasse | (other branch) | initial phase (female) | [P p06] |
-| Diamond goby | (other branch) | adult | [P p07, p08]: adult spotting |
+| Leopard wrasse | 8.5 cm | initial phase (female) | [P p06] |
+| Diamond goby | 10 cm | adult | [P p07, p08]: adult spotting |
 
 Fish added from the sandbox at the juvenile stock size (0.3 × typical adult, floor 3 cm) land in the juvenile stage for
 every species except the engineer goby, whose 10.5 cm is already in the stripes-breaking blend (§5): realistic for the
@@ -238,8 +236,8 @@ size, by design.
 
 ## Implementation map
 
-- Data: `lifeStages` in `core/src/main/resources/species/*.json` (and the sim fixtures); `LifeStageSpec.PENDING` for the
-  leopard wrasse.
+- Data: `lifeStages` in `core/src/main/resources/species/*.json` (and the sim fixtures); `LifeStageSpec.PENDING` is the
+  fallback for a sheet without a block (empty now).
 - Core: `LifeStages` (stage, blend, sex role, card label), `SexRoles` (protogynous and reverse changes not covered by
   `Reproduction`), `LifeFormChannel` (per-snapshot `LifeForm` by organism id; a side channel because `SimTypes.kt` is
   being changed elsewhere: TODO move into `OrganismPose`).

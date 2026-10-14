@@ -116,5 +116,25 @@
     "Lives on the tank's pods; in a young tank it starves unless it learns to take frozen food. Add it to an established tank.",
     "Sensitive to copper and to swings in water chemistry. Hawkfish and dottybacks can bully it; add it before them where possible.",
     "Jumps when startled: keep a lid on the tank."
-  ]
+  ],
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "initial",
+        "fromCm": 4.0,
+        "form": "female",
+        "label": "Initial phase"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "PROTOGYNOUS",
+    "maturityCm": 6.0,
+    "sexChangeDays": 14,
+    "maleForm": "male"
+  }
 }
