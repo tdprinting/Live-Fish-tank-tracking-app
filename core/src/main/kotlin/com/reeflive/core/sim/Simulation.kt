@@ -1068,6 +1068,8 @@ class Simulation(
         surface.impulse(at.x, at.z, 0.08, 2.5)
         water.addFeed(grams * kind.nutrientFactor, kind.po4Factor, kind.docFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
+        // every animal that eats this food learns the time, the place and the keeper (ai/Mind.kt, realism_gaps X3)
+        for (a in agents.values) a.brain.mind.onKeeperFeed(simTimeSec, at, a.ctx.o.species.dietMatch(kind) > 0 || kind == FoodKind.NORI && a.ctx.o.species.grazer)
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
         for (a in agents.values) a.brain.onFood(a.ctx, kind, at)
