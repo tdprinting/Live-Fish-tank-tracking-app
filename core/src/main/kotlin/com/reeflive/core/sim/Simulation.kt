@@ -437,7 +437,12 @@ class Simulation(
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
-            o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.seat?.let { st ->
+                val p0 = o.pos; val u0 = o.up
+                st.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+                // the seat moved the animal onto where its shell rests: that pose goes through the body collision too
+                if (o.pos != p0 || o.up != u0) bodies.resolveEnv(o, dt)
+            }
         }
         // bodies apart: animal against animal, then each moved body out of the rock and sand again
         bodies.resolvePairs(organisms, perception.stations, dt)
@@ -457,7 +462,11 @@ class Simulation(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
-            o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.seat?.let { st ->
+                val p0 = o.pos; val u0 = o.up
+                st.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+                if (o.pos != p0 || o.up != u0) bodies.resolveEnv(o, dt)
+            }
         }
         bodies.resolvePairs(organisms, perception.stations, dt)
     }

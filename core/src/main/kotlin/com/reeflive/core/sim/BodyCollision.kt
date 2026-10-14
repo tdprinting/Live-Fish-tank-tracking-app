@@ -75,6 +75,10 @@ class BodyState {
     var escaping = false
     /** The last resolve left this pose clear of the environment (committed as the clear pose at the end of the tick). */
     var clearPose = false
+    /** Coming out of a burrow / the sand: resolves left that it is still let into the geometry (0: not emerging). */
+    var emerging = 0
+    /** The last exempt resolve was in a burrow, a hole or the sand (posture 3 / 5). */
+    internal var inBurrow = false
     /** Normal of the contact under the belly at the last resolve (null: none), for a resting fish's settle. */
     var bellyN: Vec3? = null
     /** Sim time the body's middle first read sealed in (−1: it does not). */
@@ -174,7 +178,7 @@ class BodyCollision(private val rock: RockData) {
 
     /** True when this animal's body is deliberately allowed into the geometry (see class doc). */
     fun exempt(o: Organism): Boolean =
-        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible
+        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible || o.body.emerging > 0
 
     /** Corals, decor and equipment as solids (set by the Simulation; null = none). */
     var obstacles: StaticObstacles? = null
@@ -237,11 +241,20 @@ class BodyCollision(private val rock: RockData) {
      */
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
         if (!enabled) return 0.0
+        // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
+        // stays let in (inside the glass) until it is out, for at most [EMERGE_TICKS] resolves
+        val bs = o.body
+        if (o.posture == 3 || o.posture == 5) { bs.inBurrow = true; bs.emerging = 0 }
+        else if (bs.inBurrow) {
+            if (bs.emerging == 0) bs.emerging = EMERGE_TICKS + 1
+            bs.emerging--
+            if (bs.emerging <= 0 || rimDepth(o, rockOn, surfaceOn) <= 0.0) { bs.emerging = 0; bs.inBurrow = false }
+        }
         if (exempt(o)) {
             o.spline.dropSafe(); o.body.clearPose = false
             // a burrow, a den or the sand lets a body into the rock and sand, never through the glass (a goby's tail in
             // a burrow by the front pane, tee-clips #6)
-            if (o.posture == 3 || o.posture == 5) keepInsideGlass(o)
+            if (o.posture == 3 || o.posture == 5 || bs.emerging > 0) keepInsideGlass(o)
             return 0.0
         }
         // a swimmer in a sealed hollow of the rock passes through the rock until it is back in the open water (a
@@ -312,10 +325,15 @@ class BodyCollision(private val rock: RockData) {
                             val off = q - p0
                             val c = p0 + body.up[i] * body.ctr[i] + off
                             var dMin = 0.0; var at = c
-                            if (d < SDF_LIP * bound - SKIN) for (k in 0 until RIM) {
-                                val r = c + body.up[i] * (body.a[i] * RIM_COS[k]) + body.side[i] * (body.b[i] * RIM_SIN[k])
-                                val dr = rock.sdf.dist(r)
-                                if (dr < dMin) { dMin = dr; at = r }
+                            if (d < SDF_LIP * bound - SKIN) {
+                                for (k in 0 until RIM) {
+                                    val r = c + body.up[i] * (body.a[i] * RIM_COS[k]) + body.side[i] * (body.b[i] * RIM_SIN[k])
+                                    val dr = rock.sdf.dist(r)
+                                    if (dr < dMin) { dMin = dr; at = r }
+                                }
+                                // and the centre (a thin rock edge can pass between the rim points)
+                                val dc0 = rock.sdf.dist(c)
+                                if (dc0 < dMin) { dMin = dc0; at = c }
                             }
                             // and halfway to the next station (a rock edge between two stations)
                             if (i < BodyState.N - 1) {
@@ -329,6 +347,8 @@ class BodyCollision(private val rock: RockData) {
                                     val dr = rock.sdf.dist(r)
                                     if (dr < dMin) { dMin = dr; at = r }
                                 }
+                                val dh = rock.sdf.dist(hc)
+                                if (dh < dMin) { dMin = dh; at = hc }
                             }
                             if (dMin < -SKIN * 0.5) { val nr = grad(at); q += nr * (-dMin + SKIN); noteContact(o, nr, i, rigid, body) }
                         }
@@ -673,8 +693,12 @@ class BodyCollision(private val rock: RockData) {
     fun resolvePairs(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double) {
         if (!enabled) return
         pinned.clear()
-        for (pass in 0 until PAIR_PASSES) if (!pairPass(animals, stations, dt, holdAttached = pass < PAIR_PASSES / 2)) break
-        commitSafe(animals, stations)
+        overlapping.clear()
+        var settled = false
+        for (pass in 0 until PAIR_PASSES) if (!pairPass(animals, stations, dt, holdAttached = pass < PAIR_PASSES / 2)) { settled = true; break }
+        // the passes ran out with bodies still being pushed apart: those may still overlap
+        if (settled) overlapping.clear()
+        commitSafe(animals)
     }
 
     /**
@@ -682,32 +706,13 @@ class BodyCollision(private val rock: RockData) {
      * the environment and it overlaps no other body: a pose saved while two bodies overlapped would be restored into
      * that overlap again by every hold.
      */
-    private fun commitSafe(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>) {
-        val live = ArrayList<Organism>(animals.size)
-        for (o in animals) if (o.alive && !exempt(o)) {
-            o.body.refresh(o)
-            if (o.body.centre.isFinite() && o.body.radius < 4 * o.lengthCm + 20) live += o
+    private fun commitSafe(animals: List<Organism>) {
+        for (o in animals) {
+            if (o.body.clearPose && o.alive && o !in overlapping) saveSafe(o)
+            o.body.clearPose = false
         }
-        overlapping.clear()
-        if (live.size >= 2) {
-            hash.rebuild(live)
-            var maxR = 0.0
-            for (o in live) maxR = max(maxR, o.body.radius)
-            val near = ArrayList<Organism>()
-            for (a in live) {
-                if (!a.body.clearPose) continue
-                near.clear()
-                hash.neighbors(a.body.centre, a.body.radius + maxR, near)
-                for (b in near) {
-                    if (b === a || a.body.centre.distanceTo(b.body.centre) > a.body.radius + b.body.radius) continue
-                    if (touchAllowed(a, b, stations)) continue
-                    if (pairPenetration(a, b) > 0.0) { overlapping += a; break }
-                }
-            }
-        }
-        for (o in live) if (o.body.clearPose && o !in overlapping) saveSafe(o)
-        for (o in animals) o.body.clearPose = false
     }
+    /** Bodies the last pair pass pushed (still overlapping when the passes ran out). */
     private val overlapping = HashSet<Organism>()
 
     /** Bodies the environment pushed back against their pair push this tick (against the rock, a coral): they yield no more. */
@@ -715,7 +720,8 @@ class BodyCollision(private val rock: RockData) {
 
     private fun pairPass(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double, holdAttached: Boolean): Boolean {
         val live = ArrayList<Organism>(animals.size)
-        for (o in animals) if (o.alive && !exempt(o)) {
+        // (a body coming out of a burrow is let into the rock and sand, not into another animal)
+        for (o in animals) if (o.alive && (!exempt(o) || o.body.emerging > 0 && o.posture != 3 && o.posture != 5 && o.spline.override == null && o.visible)) {
             o.body.refresh(o)
             // a body that is not finite or absurdly large (a broken trail) is skipped rather than hashed
             if (o.body.centre.isFinite() && o.body.radius < 4 * o.lengthCm + 20) live += o
@@ -741,7 +747,9 @@ class BodyCollision(private val rock: RockData) {
             }
         }
         if (pairDelta.isEmpty()) return false
+        overlapping.clear()
         for ((o, d) in pairDelta) {
+            overlapping += o
             pairPushes++
             val before = o.pos
             o.spline.displace(d)
@@ -862,6 +870,8 @@ class BodyCollision(private val rock: RockData) {
     fun touchAllowedForTest(a: Organism, b: Organism, stations: List<com.reeflive.core.ai.CleaningStation>) = touchAllowed(a, b, stations)
 
     companion object {
+        /** Resolves (≈ 2 s at 20 Hz) a body leaving a burrow or the sand may take to come clear of it. */
+        const val EMERGE_TICKS = 40
         const val ITERATIONS = 6
         private val DOWN = Vec3(0.0, -1.0, 0.0)
         private const val RIM = 12
@@ -878,7 +888,7 @@ class BodyCollision(private val rock: RockData) {
         /** Iterations that bend the spine before the remaining ones translate the body. */
         const val BEND_ITERATIONS = 3
         /** Animal-vs-animal passes per tick (each followed by the environment resolve of the bodies it moved). */
-        const val PAIR_PASSES = 6
+        const val PAIR_PASSES = 10
         /**
          * How much faster than 1 cm per cm the baked rock distance can change (the trilinear blend of a 1 cm float16
          * grid: up to ~1.5 measured across the reef). A reading of d promises only d / SDF_LIP cm of clear water, so

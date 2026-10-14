@@ -227,6 +227,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             val night = c.p.night
             if (o.posture != 3 && o.pos.distanceTo(mouth(0.5)) > 3) {
                 glide(c, out, mouth(0.5), 1.2)
+                // nosing into the mouth under the rock: in the burrow (an allowed contact, as in [DigBurrow])
+                if (o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
                 return
             }
             // head just inside the mouth by day, deeper at night (the pair shares the burrow)
