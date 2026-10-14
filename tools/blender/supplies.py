@@ -32,10 +32,11 @@ Nodes (direct children of Root, extras.part = "equipment"):
 
 Layout constants are mirrored in SupplyShelf.kt (X0..X1, SLOT_X0..SLOT_X1, ROW_Y, Z_PROP, ROW_COUNT); keep them in
 sync. Props stand on their row board at z = Z_PROP, centred in equal slots (prop_xs) and no wider than a slot. The
-runtime adds a soft self-glow so the shelf reads at night (less on printed labels, more on the sign), and lifts /
-brightens a picked prop.
+runtime lights the shelf with its own room rig (shaders/shelf.frag: key, fill, the LED pucks, soft analytic shadows),
+shades the rack by its material tags (mat(kind=...) -> material extras.shelf: board, wood, glass, lamp) and reads the
+baked vertex AO in COLOR_0.r (bake_vertex_ao); it lifts / brightens a picked prop.
 
-  python3 tools/blender/supplies.py [--preview]      # builds the GLB (+ docs/preview/supply_shelf_v3.png)
+  python3 tools/blender/supplies.py [--preview]      # builds the GLB (+ docs/preview/supply_shelf_v4.png, Cycles)
 """
 import math
 import os
@@ -76,11 +77,17 @@ _mats = {}
 _label_mat = []
 
 
-def mat(hexc, rough=0.55, metal=0.0):
-    key = (hexc, rough, metal)
+def mat(hexc, rough=0.55, metal=0.0, kind=None):
+    """Shared material per (colour, roughness, metal, kind). `kind` tags rack materials for the runtime shelf shader
+    (material extras.shelf, SupplyShelfScene.kindOf): "board" (plank grain along x), "wood" (driftwood grain along y),
+    "glass" (frosted sea glass), "lamp" (the warm LED pucks, drawn lit)."""
+    key = (hexc, rough, metal, kind)
     if key not in _mats:
-        name = "shelf_" + hexc.strip("#").lower() + ("" if rough == 0.55 else f"_{int(rough * 100)}") + ("_m" if metal else "")
-        _mats[key] = C.material(name, hexc, rough=rough, metal=metal)
+        name = "shelf_" + (kind + "_" if kind else "") + hexc.strip("#").lower() + ("" if rough == 0.55 else f"_{int(rough * 100)}") + ("_m" if metal else "")
+        m = C.material(name, hexc, rough=rough, metal=metal)
+        if kind:
+            m["shelf"] = kind
+        _mats[key] = m
     return _mats[key]
 
 
@@ -112,8 +119,8 @@ class Prop:
             self.cols.append(m)
         return self.cols.index(m)
 
-    def add(self, V, F, hexc, rough=0.55, metal=0.0):
-        self.g.add(self._xf(V), F, col=(1, 1, 1, 1), mat=self._slot(mat(hexc, rough, metal)))
+    def add(self, V, F, hexc, rough=0.55, metal=0.0, kind=None):
+        self.g.add(self._xf(V), F, col=(1, 1, 1, 1), mat=self._slot(mat(hexc, rough, metal, kind)))
 
     def add_uv(self, V, F, UV):
         self.g.add(self._xf(V), F, UV=UV, col=(1, 1, 1, 1), mat=self._slot(label_mat()))
@@ -541,6 +548,57 @@ def obox_(c, size):
 
 
 # ---- the rack ----
+def bevel_box(p, lo, hi, b, hexc, rough, kind=None):
+    """Axis-aligned box with chamfered edges (b cm): 6 faces, 12 edge strips and 8 corner triangles (44 tris), each
+    with its own vertices so the normals stay flat and the 45-degree strips catch the light along every edge."""
+    lo, hi = np.asarray(lo, float), np.asarray(hi, float)
+    c = (lo + hi) / 2
+
+    def pt(a, s, signs):
+        """Point on the face of axis a, side s, at the inset corner given by signs (one per axis, a's ignored)."""
+        q = np.empty(3)
+        for k in range(3):
+            if k == a:
+                q[k] = hi[k] if s > 0 else lo[k]
+            else:
+                q[k] = hi[k] - b if signs[k] > 0 else lo[k] + b
+        return q
+
+    polys = []
+    for a in range(3):
+        u, v = [k for k in range(3) if k != a]
+        for s in (-1, 1):
+            quad = []
+            for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                sg = [0, 0, 0]; sg[u] = su; sg[v] = sv
+                quad.append(pt(a, s, sg))
+            polys.append(quad)
+    for a in range(3):
+        for k in range(a + 1, 3):
+            m = 3 - a - k
+            for s in (-1, 1):
+                for t in (-1, 1):
+                    quad = []
+                    for sm in (-1, 1):
+                        sg = [0, 0, 0]; sg[k] = t; sg[m] = sm
+                        quad.append(pt(a, s, sg))
+                    for sm in (1, -1):
+                        sg = [0, 0, 0]; sg[a] = s; sg[m] = sm
+                        quad.append(pt(k, t, sg))
+                    polys.append(quad)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                sg = [sx, sy, sz]
+                polys.append([pt(0, sx, sg), pt(1, sy, sg), pt(2, sz, sg)])
+    for poly in polys:
+        V = np.array(poly)
+        n = np.cross(V[1] - V[0], V[2] - V[0])
+        if np.dot(n, V.mean(axis=0) - c) < 0:
+            V = V[::-1]
+        p.add(V, [tuple(range(len(V)))], hexc, rough, kind=kind)
+
+
 def driftwood(p, x, z, y0, y1, r, seed, col):
     """A gently crooked driftwood upright from y0 to y1."""
     rng = np.random.default_rng(seed)
@@ -548,7 +606,7 @@ def driftwood(p, x, z, y0, y1, r, seed, col):
     pts = [(x + rng.uniform(-0.35, 0.35), y0 + (y1 - y0) * k / (n - 1), z + rng.uniform(-0.35, 0.35)) for k in range(n)]
     radii = [r * rng.uniform(0.88, 1.12) for _ in range(n)]
     V, F, _, _ = G.tube(np.array(pts), radii, 9, cap_start=True, cap_end=True, up=(1, 0, 0))
-    p.add(V, F, col, 0.8)
+    p.add(V, F, col, 0.8, kind="wood")
 
 
 def rack(parent):
@@ -559,15 +617,12 @@ def rack(parent):
         for j, zz in enumerate((Z0 + 1.4, Z1 - 1.4)):
             driftwood(frame, xx, zz, FOOT_Y, TOP_Y + BOARD + 0.6, 1.25, 3 + 2 * k + j, wood if j else wood_dark)
         for y in (ROW_Y[2] - BOARD - 1.5, ROW_Y[1] - BOARD - 1.5, ROW_Y[0] - BOARD - 1.5):
-            frame.add(*cyl((xx, y, Z0 + 1.4), (xx, y, Z1 - 1.4), 0.7, 8), wood_dark, 0.8)
-    # boards: warm planks with a darker grain stripe on the front edge
+            frame.add(*cyl((xx, y, Z0 + 1.4), (xx, y, Z1 - 1.4), 0.7, 8), wood_dark, 0.8, kind="wood")
+    # boards: warm planks with chamfered edges (the plank grain is drawn by the runtime shader, extras.shelf = board)
     for y in ROW_Y:
-        frame.add(*T.box((X0 + 0.4, y - BOARD, Z0), (X1 - 0.4, y, Z1 - 0.2)), board, 0.75)
-        for g in range(3):
-            gy = y - BOARD + 0.35 + 0.5 * g
-            frame.add(*T.box((X0 + 0.6 + 7 * g, gy, Z1 - 0.21), (X1 - 0.6 - 5 * g, gy + 0.12, Z1 - 0.15)), wood_dark, 0.8)
-    frame.add(*T.box((X0 - 1.0, TOP_Y, Z0 - 1.0), (X1 + 1.0, TOP_Y + BOARD, Z1 + 1.0)), wood, 0.75)
-    frame.add(*T.box((X0 + POST, FOOT_Y, Z1 - 3.0), (X1 - POST, ROW_Y[2] - BOARD, Z1 - 1.0)), wood_dark, 0.8)
+        bevel_box(frame, (X0 + 0.4, y - BOARD, Z0), (X1 - 0.4, y, Z1 - 0.2), 0.3, board, 0.7, "board")
+    bevel_box(frame, (X0 - 1.0, TOP_Y, Z0 - 1.0), (X1 + 1.0, TOP_Y + BOARD, Z1 + 1.0), 0.35, wood, 0.7, "board")
+    bevel_box(frame, (X0 + POST, FOOT_Y, Z1 - 3.0), (X1 - POST, ROW_Y[2] - BOARD, Z1 - 1.0), 0.25, wood_dark, 0.75, "board")
     o = frame.obj("ShelfFrame", parent, {})
 
     # back panel: the soft lagoon backdrop print, a few sea-glass pebbles
@@ -582,7 +637,7 @@ def rack(parent):
         row = k % 3
         py = ROW_Y[row] + rng.uniform(12.0, 14.5)
         col = ["#7FD1C7", "#A8E6CF", "#5FB7D4", "#CDEBF0"][k % 4]
-        bp.add(*blob((px, py, Z0 + 0.8), (rng.uniform(0.8, 1.4), rng.uniform(0.6, 1.0), 0.3), 8, 4), col, 0.2)
+        bp.add(*blob((px, py, Z0 + 0.8), (rng.uniform(0.8, 1.4), rng.uniform(0.6, 1.0), 0.3), 8, 4), col, 0.2, kind="glass")
     ob = bp.obj("ShelfBack", parent, {})
 
     # sea-glass edging along every board front, tinted by row
@@ -591,11 +646,11 @@ def rack(parent):
         t = Prop()
         V, F, _, _ = G.tube(np.array([(X0 + 0.6, y + 0.3, Z1 - 0.2), (X1 - 0.6, y + 0.3, Z1 - 0.2)]), 0.75, 8,
                             cap_start=True, cap_end=True, up=(0, 1, 0))
-        t.add(V, F, SEA_GLASS[r], 0.15)
+        t.add(V, F, SEA_GLASS[r], 0.15, kind="glass")
         # rounded sea-glass beads along it
         for k in range(12):
             bx = X0 + 4 + (X1 - X0 - 8) * k / 11
-            t.add(*blob((bx, y + 0.3, Z1 + 0.5), (1.1, 0.9, 0.5), 7, 4), ["#BFEDE2", "#9FD9E8", "#D9F2C9"][(k + r) % 3], 0.15)
+            t.add(*blob((bx, y + 0.3, Z1 + 0.5), (1.1, 0.9, 0.5), 7, 4), ["#BFEDE2", "#9FD9E8", "#D9F2C9"][(k + r) % 3], 0.15, kind="glass")
         trims.append(t.obj(f"ShelfLip{r}", parent, {"row": r}))
 
     # scalloped crest over the top: half-pebbles in sea-glass colours
@@ -606,7 +661,7 @@ def rack(parent):
         if abs(cx - (X0 + X1) / 2) < 17:
             continue  # the sign stands there
         col = ["#7FD1C7", "#5FD7FF", "#A8E6CF"][k % 3]
-        crest.add(*blob((cx, TOP_Y + BOARD + 0.4, Z1 - 1.0), (3.4, 2.4, 1.1), 10, 5), col, 0.25)
+        crest.add(*blob((cx, TOP_Y + BOARD + 0.4, Z1 - 1.0), (3.4, 2.4, 1.1), 10, 5), col, 0.25, kind="glass")
     oc = crest.obj("ShelfCrest", parent, {})
 
     # the lit "Supplies" sign on the crest, and warm puck lights under each board (drawn lit: SIGN_NODE)
@@ -616,13 +671,64 @@ def rack(parent):
     fbox(sign, (mx, sy, Z1 - 1.6), (31.0, 8.2, 1.0), "#E8B04A", 0.4)
     plate(sign, "sign", (mx, sy, Z1 - 1.08), 30.0, 7.5)
     for s in (-1, 1):
-        sign.add(*cyl((mx + 12 * s, TOP_Y + BOARD, Z1 - 1.6), (mx + 12 * s, sy - 4.1, Z1 - 1.6), 0.3, 6), "#9C7450", 0.8)
+        sign.add(*cyl((mx + 12 * s, TOP_Y + BOARD, Z1 - 1.6), (mx + 12 * s, sy - 4.1, Z1 - 1.6), 0.3, 6), "#9C7450", 0.8, kind="wood")
     for y in (TOP_Y, ROW_Y[0] - BOARD, ROW_Y[1] - BOARD):
         for k in range(4):
             px = X0 + 14 + (X1 - X0 - 28) * k / 3
-            sign.add(*cyl((px, y, Z1 - 5.0), (px, y - 0.35, Z1 - 5.0), 1.3, 12), "#FFF2C8", 0.3)
+            sign.add(*cyl((px, y, Z1 - 5.0), (px, y - 0.35, Z1 - 5.0), 1.3, 12), "#FFF2C8", 0.3, kind="lamp")
     os_ = sign.obj("ShelfSign", parent, {})
     return [o, ob, oc, os_] + trims
+
+
+def bake_vertex_ao(objs, rays=48, reach=4.0, strength=0.8, floor=0.4, seed=5):
+    """Ambient occlusion per vertex into COLOR_0 (rgb; the runtime shelf shader multiplies its room ambient and
+    reflections by it, ASSETS.md §5.1): `rays` cosine-weighted rays per vertex against every shelf mesh, a hit within
+    `reach` cm occluding by (1 - (d / reach)^2). The boards, the back panel and the lit sign keep 1 (their faces are
+    too coarse for vertex AO; the shader darkens their creases and the props' contact shadows analytically)."""
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    rng = np.random.default_rng(seed)
+    verts, polys = [], []
+    for o in objs:
+        mw = o.matrix_world
+        b = len(verts)
+        verts += [mw @ v.co for v in o.data.vertices]
+        polys += [[b + i for i in pl.vertices] for pl in o.data.polygons]
+    tree = BVHTree.FromPolygons(verts, polys, epsilon=0.0)
+    # cosine-weighted unit hemisphere (z up), rotated randomly about each vertex normal
+    u1, u2 = (np.arange(rays) + 0.5) / rays, rng.permutation(rays) / rays
+    r, phi = np.sqrt(u1), 2 * math.pi * u2
+    H = np.c_[r * np.cos(phi), r * np.sin(phi), np.sqrt(1 - u1)]
+    for o in objs:
+        if o.name in ("ShelfBack", "ShelfSign"):
+            continue
+        me = o.data
+        skip = set()
+        for pl in me.polygons:
+            m = o.material_slots[pl.material_index].material if o.material_slots else None
+            if m is not None and m.get("shelf") == "board":
+                skip.update(pl.vertices)
+        mw = o.matrix_world
+        cols = C.get_cols(o)
+        for v in me.vertices:
+            if v.index in skip:
+                continue
+            n = (mw.to_3x3() @ v.normal).normalized()
+            t = n.orthogonal().normalized()
+            bt = n.cross(t)
+            a = rng.uniform(0, 2 * math.pi)
+            ca, sa = math.cos(a), math.sin(a)
+            t, bt = t * ca + bt * sa, bt * ca - t * sa
+            org = mw @ v.co + n * 0.03
+            occ = 0.0
+            for hx, hy, hz in H:
+                d = t * hx + bt * hy + n * hz
+                hit = tree.ray_cast(org, d, reach)
+                if hit[0] is not None:
+                    occ += 1.0 - (hit[3] / reach) ** 2
+            ao = max(1.0 - strength * occ / rays, floor)
+            cols[v.index, :3] = ao
+        C.set_cols(o, cols)
 
 
 def prop_xs(n):
@@ -664,6 +770,7 @@ def build():
     for o in objs:
         C.recalc_normals(o)
         C.triangulate(o)
+    bake_vertex_ao(objs)
     path = os.path.join(C.MODELS, "supply_shelf.glb")
     C.export_glb(path, C.all_descendants(root))
     tris = sum(C.tri_count(o) for o in objs)
@@ -675,21 +782,62 @@ def build():
     return tris
 
 
+def _preview_grain(objs):
+    """Preview only: the runtime shader's plank / driftwood grain (shelf.frag) as a wave texture on the tagged wood."""
+    done = set()
+    for o in objs:
+        if o.type != 'MESH':
+            continue
+        for m in o.data.materials:
+            if m is None or m.name in done or not m.node_tree or m.get("shelf") not in ("board", "wood"):
+                continue
+            done.add(m.name)
+            nt = m.node_tree
+            bsdf = nt.nodes.get("Principled BSDF")
+            if bsdf is None:
+                continue
+            base = C.lin("#" + m.name.split("_")[2][:6])   # shelf_<kind>_<hex>_<rough> (the importer rewires the colour)
+            wave = nt.nodes.new("ShaderNodeTexWave")
+            wave.wave_type = 'BANDS'
+            wave.bands_direction = 'Z' if m["shelf"] == "board" else 'X'   # blender z = world y (rings across the plank)
+            wave.inputs["Scale"].default_value = 0.35 if m["shelf"] == "board" else 1.2
+            wave.inputs["Distortion"].default_value = 9.0
+            wave.inputs["Detail"].default_value = 3.0
+            ramp = nt.nodes.new("ShaderNodeValToRGB")
+            ramp.color_ramp.elements[0].color = tuple(c * 1.08 for c in base[:3]) + (1.0,)
+            ramp.color_ramp.elements[1].color = tuple(c * 0.68 for c in base[:3]) + (1.0,)
+            ramp.color_ramp.elements[0].position = 0.45
+            nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+            nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+            bump = nt.nodes.new("ShaderNodeBump")
+            bump.inputs["Strength"].default_value = 0.15
+            nt.links.new(wave.outputs["Fac"], bump.inputs["Height"])
+            nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
+
 def render_preview(out=None, w=1600, h=1000, samples=48, view="all"):
-    """Cycles render of the exported shelf (docs/preview/supply_shelf_v3.png): front view of the whole rack, or a
-    close-up of one row (view = feed / care / tools)."""
+    """Cycles render of the exported shelf (docs/preview/supply_shelf_v4.png): front view of the whole rack, or a
+    close-up of one row (view = feed / care / tools). The lights follow the runtime rig in shelf.frag: a soft key
+    from the front left above, a cool fill from the front right, the warm LED pucks under the boards and a faint
+    blue spill from the tank on the left, in a dim room."""
     import preview as PV
     C.reset_scene()
     PV.setup_cycles(w, h, samples)
-    PV.world((0.33, 0.38, 0.44), 0.9)
+    PV.world((0.11, 0.105, 0.10), 1.0)
     objs = PV.import_glb(os.path.join(C.MODELS, "supply_shelf.glb"))
+    _preview_grain(objs)
     for o in objs:
         if o.type == 'MESH':
             for m in o.data.materials:
                 if m and m.node_tree and "labels" in m.name:
                     bsdf = m.node_tree.nodes.get("Principled BSDF")
                     if bsdf:
-                        bsdf.inputs["Roughness"].default_value = 0.45
+                        bsdf.inputs["Roughness"].default_value = 0.5
+                if m and m.node_tree and m.get("shelf") == "lamp":
+                    bsdf = m.node_tree.nodes.get("Principled BSDF")
+                    if bsdf:
+                        bsdf.inputs["Emission Color"].default_value = (1.0, 0.85, 0.6, 1.0)
+                        bsdf.inputs["Emission Strength"].default_value = 6.0
     cx = (X0 + X1) / 2
     if view == "all":
         tgt, dist, lens, rise = (cx, 28.5, 13.0), 178.0, 50, 5.0
@@ -698,13 +846,19 @@ def render_preview(out=None, w=1600, h=1000, samples=48, view="all"):
         tgt, dist, lens, rise = (cx, ROW_Y[r] + 6.0, 13.0), 96.0, 50, 3.0
     eye = (tgt[0], tgt[1] + rise, tgt[2] + dist)
     PV.camera(C.w2b(eye), C.w2b(tgt), lens=lens)
-    PV.add_light('AREA', C.w2b((cx - 60, 90, 140)), 150000, size=120, color=(1.0, 0.97, 0.92))
-    PV.add_light('AREA', C.w2b((cx + 90, 40, 120)), 50000, size=80, color=(0.9, 0.95, 1.0))
-    PV.add_light('AREA', C.w2b((cx, 20, 30)), 14000, size=60, color=(1.0, 0.95, 0.88))
-    for o in bpy.context.scene.objects:
-        if o.type == 'LIGHT':
-            PV.look_at(o, C.w2b((cx, 20, 13)))
-    out = out or os.path.join(C.PREVIEW, "supply_shelf_v3.png")
+    aim = C.w2b((cx, 20, 13))
+    key = (-0.3506, 0.5009, 0.7913)
+    PV.look_at(PV.add_light('AREA', C.w2b((cx + key[0] * 220, 20 + key[1] * 220, 13 + key[2] * 220)), 260000, size=90,
+                            color=(1.0, 0.95, 0.87)), aim)
+    PV.look_at(PV.add_light('AREA', C.w2b((cx + 120, 50, 190)), 60000, size=110, color=(0.8, 0.88, 1.0)), aim)
+    PV.look_at(PV.add_light('AREA', C.w2b((112, 34, 16)), 9000, size=40, color=(0.55, 0.75, 1.0)), C.w2b((150, 25, 13)))
+    for y in (TOP_Y, ROW_Y[0] - BOARD, ROW_Y[1] - BOARD):
+        for k in range(4):
+            px = X0 + 14 + (X1 - X0 - 28) * k / 3
+            lo = PV.add_light('SPOT', C.w2b((px, y - 0.5, Z1 - 5.0)), 900, size=1.0, color=(1.0, 0.75, 0.48), spot=150)
+            PV.look_at(lo, C.w2b((px, y - 10, Z1 - 5.0)))
+            lo.data.shadow_soft_size = 1.2
+    out = out or os.path.join(C.PREVIEW, "supply_shelf_v4.png")
     PV.render_to(out)
     if os.path.dirname(os.path.abspath(out)) == os.path.abspath(C.PREVIEW):
         # keep the committed preview small: 1200 px wide, 256 colours

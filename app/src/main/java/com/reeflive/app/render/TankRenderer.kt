@@ -867,7 +867,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (camera.shelfMix <= 0f) return
         val m = store.model(SupplyShelfLayout.MODEL) ?: return
         val w = white ?: return
-        drawCalls += shelfScene.draw(m, progs.generic, w, shelf?.locked ?: emptySet())
+        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet())
         triangles += m.triangles
     }
 

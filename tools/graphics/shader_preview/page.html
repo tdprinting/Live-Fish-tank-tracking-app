@@ -128,7 +128,7 @@ async function loadModel(path) {
       albedo = imgTex[src];
     }
     const es = (m.extensions && m.extensions.KHR_materials_emissive_strength && m.extensions.KHR_materials_emissive_strength.emissiveStrength) || 1;
-    return { name: m.name || '', albedo, baseColor: pbr.baseColorFactor || [1, 1, 1, 1], roughness: pbr.roughnessFactor ?? 1,
+    return { name: m.name || '', albedo, shelf: (m.extras || {}).shelf, metallic: pbr.metallicFactor ?? 1, baseColor: pbr.baseColorFactor || [1, 1, 1, 1], roughness: pbr.roughnessFactor ?? 1,
       emissive: (m.emissiveFactor || [0, 0, 0]).map((v) => v * es), blended: m.alphaMode === 'BLEND',
       alphaCutoff: m.alphaMode === 'MASK' ? (m.alphaCutoff ?? 0.5) : 0 };
   }
@@ -243,7 +243,7 @@ window.preview = {
     st.lowQ = quality === '0';
     st.progs.rock = await program('rock', 'static.vert', 'rock.frag', q);
     st.progs.sand = await program('sand', 'static.vert', 'rock.frag', { ...q, SAND: '1' });
-    if (scene === 'full') {
+    if (scene !== 'rocksand') {
       st.progs.generic = await program('generic', 'static.vert', 'generic.frag', q);
       st.progs.softCoral = await program('softcoral', 'static.vert', 'softcoral.frag', { ...q, SOFTCORAL: '1' });
       st.progs.card = await program('card', 'static.vert', 'softcoral.frag', { ...q, SOFTCORAL: '1', CARD: '1' });
@@ -262,6 +262,7 @@ window.preview = {
         st.progs.shadowCoral = await program('shadow_coral', 'static.vert', 'shadow.frag', { ...q, SOFTCORAL: '1' });
         st.progs.shadowFish = await program('shadow_fish', 'fish.vert', 'shadow.frag', q);
       }
+      if (await exists('/shaders/shelf.frag')) st.progs.shelf = await program('shelf', 'static.vert', 'shelf.frag', q);
     }
     if (st.errors.length || compileOnly) return { errors: st.errors, parts: [] };
     st.tex.white = texture(new Uint8Array([255, 255, 255, 255]), false);
@@ -288,16 +289,17 @@ window.preview = {
     st.tex.shadow = dt;
     st.shadowOn = !!st.progs.shadow && smq >= 1;
 
-    const list = scene === 'full' ? [...SCENE, ...CORALS] : ['models/tank.glb', 'models/rockscape.glb'];
+    const list = scene !== 'rocksand' ? [...SCENE, ...CORALS] : ['models/tank.glb', 'models/rockscape.glb'];
     for (const p of list) st.models[p] = await loadModel(p);
-    if (scene !== 'full') for (const p of list) st.models[p].parts = st.models[p].parts.filter((x) => x.kind === 'ROCK' || x.kind === 'SAND');
+    if (scene === 'rocksand') for (const p of list) st.models[p].parts = st.models[p].parts.filter((x) => x.kind === 'ROCK' || x.kind === 'SAND');
+    if (scene === 'shelf') st.shelf = prepareShelf(st.models['models/supply_shelf.glb'] = await loadModel('models/supply_shelf.glb'));
     st.fish = [];
-    if (scene === 'full') for (const [path, head, dir, len] of FISH) {
+    if (scene !== 'rocksand') for (const [path, head, dir, len] of FISH) {
       if (!st.models[path]) st.models[path] = await loadModel(path);
       st.fish.push({ m: st.models[path], head, dir, len });
     }
     // shafts geometry (LightShafts): 6 quads per fixture
-    if (scene === 'full') {
+    if (scene !== 'rocksand') {
       let seed = 11; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
       const v = [], idx = []; let base = 0;
       for (let light = 0; light < 2; light++) for (let s = 0; s < 6; s++) {
@@ -321,7 +323,7 @@ window.preview = {
   },
 
   render({ w, h, frame, quality, light }) {
-    const full = st.scene === 'full';
+    const full = st.scene !== 'rocksand';
     const SS = 2; // supersampling (stands in for the app's MSAA)
     const W = w * SS, H = h * SS;
     const target = makeTarget(W, H, true);
@@ -362,6 +364,7 @@ window.preview = {
     const M = st.models;
     state(true, true, 'none');
     for (const p of SCENE) if (M[p]) drawStatic(M[p], true, null, light);
+    if (st.shelf) drawShelf(st.shelf);
     if (full) {
       for (const p of CORALS) drawCoral(M[p], false);
       for (const p of CORALS) drawCoral(M[p], true);
@@ -478,6 +481,64 @@ function drawStatic(m, opaque, only, light) { // TankRenderer.drawStatic
     } else if (part.kind === 'EMITTER') {
       const lc = light.lightColor;
       gl.uniform3f(p.u('uEmissive'), lc[0] * 3, lc[1] * 3, lc[2] * 3);
+    }
+    drawMesh(part);
+  }
+}
+
+// ---- supply shelf (SupplyShelf.kt: SupplyShelfLayout + SupplyShelfScene.bind / draw, nothing picked) ----------------
+const SHELF = { ROW_Y: [36.4, 17.4, -3.6], SLOT_X0: 136.4, SLOT_X1: 233.6, ROW_COUNT: [13, 10, 5], PROPS: 28 };
+const SHELF_KIND = { plain: 0, board: 1, wood: 2, print: 3, glass: 4, backdrop: 5, lamp: 6, metal: 7 };
+function shelfKind(part) { // SupplyShelfScene.kindOf
+  const tag = part.mat.shelf;
+  if (tag === 'lamp') return SHELF_KIND.lamp;
+  if (part.mat.albedo) return part.name === 'ShelfBack' ? SHELF_KIND.backdrop : SHELF_KIND.print;
+  if (tag && SHELF_KIND[tag] !== undefined) return SHELF_KIND[tag];
+  return part.mat.metallic > 0.5 ? SHELF_KIND.metal : SHELF_KIND.plain;
+}
+function prepareShelf(m) {
+  const boxes = {};
+  for (const part of m.parts) {
+    if (!part.name.startsWith('Supply_')) continue;
+    const b = boxes[part.name] || (boxes[part.name] = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]);
+    for (let k = 0; k < 3; k++) { b[k] = Math.min(b[k], part.bmin[k], part.bmax[k]); b[3 + k] = Math.max(b[3 + k], part.bmin[k], part.bmax[k]); }
+  }
+  const foot = new Float32Array(SHELF.PROPS * 4), footY = new Float32Array(SHELF.PROPS * 4), index = {};
+  for (const [name, b] of Object.entries(boxes)) {
+    const i = shelfSlot(b);
+    if (i < 0) continue;
+    index[name] = i;
+    foot.set([(b[0] + b[3]) / 2, (b[2] + b[5]) / 2, (b[3] - b[0]) / 2, (b[5] - b[2]) / 2], i * 4);
+    footY.set([b[1], b[4], 0, 0], i * 4);
+  }
+  return { m, foot, footY, index };
+}
+function shelfSlot(b) { // SupplyShelfScene.slotOf
+  let row = 0;
+  for (let r = 1; r < 3; r++) if (Math.abs(b[1] - SHELF.ROW_Y[r]) < Math.abs(b[1] - SHELF.ROW_Y[row])) row = r;
+  const n = SHELF.ROW_COUNT[row], pitch = (SHELF.SLOT_X1 - SHELF.SLOT_X0) / n;
+  const s = Math.min(Math.max(Math.floor(((b[0] + b[3]) / 2 - SHELF.SLOT_X0) / pitch), 0), n - 1);
+  return SHELF.ROW_COUNT.slice(0, row).reduce((a, c) => a + c, 0) + s;
+}
+function drawShelf(sh) {
+  const p = st.progs.shelf || st.progs.generic;
+  gl.useProgram(p);
+  if (st.progs.shelf) { gl.uniform4fv(p.u('uFoot'), sh.foot); gl.uniform4fv(p.u('uFootY'), sh.footY); }
+  for (const part of sh.m.parts) {
+    if (part.mat.blended) continue;
+    gl.uniformMatrix4fv(p.u('uModel'), false, part.world);
+    applyMaterial(p, part);
+    const c = part.mat.baseColor;
+    if (st.progs.shelf) {
+      const kind = shelfKind(part);
+      gl.uniform1f(p.u('uKind'), kind);
+      gl.uniform1f(p.u('uSelf'), sh.index[part.name] ?? -1);
+      const g = kind === SHELF_KIND.lamp ? 2.4 : part.name === 'ShelfSign' && part.mat.albedo ? 0.9 : part.mat.albedo ? 0.0 : 0.02;
+      gl.uniform3f(p.u('uEmissive'), c[0] * g, c[1] * g, c[2] * g);
+    } else { // before: generic program with the old self-glow
+      gl.uniform1f(p.u('uLedDies'), 0);
+      const g = part.name === 'ShelfSign' ? 0.9 : part.mat.albedo ? 0.18 : 0.32;
+      gl.uniform3f(p.u('uEmissive'), c[0] * g, c[1] * g, c[2] * g);
     }
     drawMesh(part);
   }
