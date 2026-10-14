@@ -3,6 +3,7 @@ package com.reeflive.app.render
 import android.opengl.GLES30
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import com.reeflive.core.sim.TankDims
 
 /**
  * Real-time shadows from the two AI Primes: one orthographic depth pass looking straight down over the tank interior
@@ -122,11 +123,11 @@ class ShadowMap(quality: RenderQuality) {
         /** Texture unit of `uShadowMap` ([ShaderProgram.SAMPLER_UNITS]). */
         const val UNIT = 14
         /** Shadow footprint (cm): the tank interior plus 1 cm. */
-        const val X0 = -1f; const val X1 = 122.9f
-        const val Z0 = -1f; const val Z1 = 34f
-        const val Y_BOTTOM = -1f; const val Y_TOP = 60f
+        const val X0 = -1f; const val X1 = TankDims.LENGTH_F + 1f
+        const val Z0 = -1f; const val Z1 = TankDims.DEPTH_F + 1f
+        const val Y_BOTTOM = -1f; const val Y_TOP = TankDims.HEIGHT_F - 1f
         /** Casters whose centre is above this (fixtures, rim, gooseneck) are left out. */
-        const val CASTER_MAX_Y = 56f
+        const val CASTER_MAX_Y = TankDims.WATER_LEVEL_F
         /** How dark a full shadow gets (ambient, caustic bounce and scatter still reach in). */
         const val STRENGTH = 0.85f
         /** World-space lift toward the light before the depth compare (cm). */

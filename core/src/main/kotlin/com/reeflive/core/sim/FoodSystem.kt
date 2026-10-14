@@ -48,7 +48,7 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
         val fid = nextFeed++
         lastFeedTime = simTime; lastFeedPos = at; lastFeedKind = kind
         if (kind == FoodKind.NORI) {
-            nori = NoriSheet(rock.anchors.pos("NORI_CLIP", Vec3(2.0, 35.0, 18.0)), 1.0, simTime)
+            nori = NoriSheet(rock.anchors.pos("NORI_CLIP", Vec3(2.0, 24.3, 26.0)), 1.0, simTime)
             return fid
         }
         val count = minOf((grams / kind.gramsPerParticle).toInt().coerceAtLeast(1), MAX - particles.size).coerceAtLeast(0)

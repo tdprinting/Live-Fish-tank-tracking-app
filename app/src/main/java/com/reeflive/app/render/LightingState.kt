@@ -41,7 +41,7 @@ class LightingState private constructor(
         val WEIGHTS = floatArrayOf(4f, 4f, 4f, 1f, 1f, 1f, 1f, 1f).map { it / 16f }.toFloatArray()
 
         /** Fixture lens centres (cm) and cone (ARCHITECTURE §8.5); must equal equipment.glb `AiPrimeL/R_Lens` `lightPos`. */
-        val LIGHT_POS: Array<FloatArray> = arrayOf(floatArrayOf(32f, 90f, 16f), floatArrayOf(91f, 90f, 16f))
+        val LIGHT_POS: Array<FloatArray> = arrayOf(floatArrayOf(32f, 69.6f, 20f), floatArrayOf(88f, 69.6f, 20f))
         const val CONE_DEG = 120f
         private val FOG_TINT = floatArrayOf(0x0E / 255f, 0x3B / 255f, 0x5A / 255f)
         private val FOG_FLOOR = floatArrayOf(0x02 / 255f, 0x06 / 255f, 0x0C / 255f)

@@ -51,16 +51,15 @@ needs added in the pictures."
 | Elephant ear | `MUSHROOM` kind (genus `amplexidiscus` added); low flow, medium light | M7, M8 [M] |
 | GSP | Same `GSP` kind; long-polyp form only changes the model and polyp animation (polyps longer under dimmer light, M9) | [P p12], M9 [M] |
 
-## Anchors added (sim: `RockData.anchorsRaw()`; model: `corals.py NEW_ANCHORS`)
-Positions are on the current rockscape and must be re-snapped after the tank resize. Not yet in rockscape.py /
-anchors.json (the sim fills them from the Kotlin defaults).
+## Anchors added (`rockscape.py` ANCHORS -> anchors.json -> core `RockData` DefaultScape; `corals.py` builds from them)
+Re-snapped on the resized 48 x 18 x 16 in rockscape (surface snap; `corals.py NEW_ANCHORS` keeps raw fallbacks only).
 
 | Anchor | Pos (cm) | Normal | From |
 |---|---|---|---|
-| `coral_toadstool_front` | 52.0, 8.57, 27.09 | -0.12, 0.97, 0.21 | [P p04] low front ledge at the sand line |
-| `coral_leather_pink_front` | 46.58, 8.21, 27.63 | -0.58, 0.19, 0.79 | [P p04] left foot of the toadstool |
-| `coral_finger_leather` | 78.3, 42.81, 9.3 | 0.13, 0.79, 0.6 | [P p14] high on the arch's left top |
-| `coral_elephant_ear` | 37.0, 48.27, 18.0 | -0.04, 0.96, 0.28 | [P p05] front edge of the high back-left rock |
+| `coral_toadstool_front` | 60.5, 9.4, 29.0 | 0.05, 0.91, 0.41 | [P p04] low front-left top of the R5 mound near the sand |
+| `coral_leather_pink_front` | 58.1, 8.7, 31.8 | -0.43, 0.75, 0.5 | [P p04] at the toadstool's left foot |
+| `coral_finger_leather` | 76.6, 26.9, 11.9 | 0.16, 0.9, 0.4 | [P p14] the arch's left top (R6 back pier), up and left of the clowns' host |
+| `coral_elephant_ear` | ~39.5, 34.8, 16.5 | upward-front | [P p05] front edge of the high back-left rock, ~3 cm under the surface |
 
 ## Previews
 `/mnt/project-files/reeftank/previews/corals_photos/`: `before_*` (old GSP and zoa) and `after_*` (Cycles close-ups of each new or
@@ -76,7 +75,6 @@ changed model, plus `after_app_front_day.png` from the WebGL2 shader preview wit
 ## Follow-ups (not done here)
 - Elephant ear predation: fold shut on a fish or shrimp that rests on the disc (M7, M8: closes in seconds and eats
   clown-sized fish). Worth a rule once Tee confirms the ID.
-- Re-snap the four new anchors after the 48x18x16 in resize; add them to rockscape.py ANCHORS / anchors.json.
 - Leather shedding has no visual yet beyond closing (a glazed cap would need a shader input).
 
 ## Sources

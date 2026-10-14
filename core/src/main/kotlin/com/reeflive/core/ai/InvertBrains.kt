@@ -173,7 +173,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     private val requested: Anchor? = c.rock.anchors[o.hostAnchor ?: "SHRIMP_LEDGE"] ?: c.rock.anchors["SHRIMP_LEDGE"]
     var ledge: Anchor? = requested; private set
     private var nextLedgeCheck = 0.0
-    fun hang(c: Ctx) = hangPose(c, ledge, Vec3(88.0, 35.0, 15.0), inverted = true)
+    fun hang(c: Ctx) = hangPose(c, ledge, Vec3(39.9, 26.2, 16.6), inverted = true)
 
     /**
      * Banded and skunk shrimp keep apart (06 §2.14, §5.6 #15): with a skunk cleaner in the tank the
@@ -245,7 +245,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         return 1 - 0.85 * com.reeflive.core.geom.smoothstep(0.08, 0.45, local)
     }
 
-    inner class NightForage : CrawlWander(this, { ledge?.pos ?: Vec3(88.0, 35.0, 15.0) }, 30.0, { c -> 0.45 * forayDrive(c) }, "Foraging")
+    inner class NightForage : CrawlWander(this, { ledge?.pos ?: Vec3(39.9, 26.2, 16.6) }, 30.0, { c -> 0.45 * forayDrive(c) }, "Foraging")
 
     /** Fish visits to the shrimp and how many it cleaned (research 12: 5.6 % of visits at Taiwanese stations). */
     class VisitStats { var visits = 0; var cleans = 0 }
@@ -296,10 +296,10 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     val anchor: Anchor? = c.rock.anchors["STATION_SHRIMP"]
-    fun sit(c: Ctx) = hangPose(c, anchor, Vec3(50.0, 18.0, 26.0), inverted = false).let { r ->
+    fun sit(c: Ctx) = hangPose(c, anchor, Vec3(52.0, 11.0, 32.0), inverted = false).let { r ->
         Rest(r.pos, Vec3.Y.rejectFrom(r.up!!).normalized(r.heading), r.up, 1)
     }
-    val station = CleaningStation(o, (anchor?.pos ?: Vec3(50.0, 18.0, 26.0)) + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
+    val station = CleaningStation(o, (anchor?.pos ?: Vec3(52.0, 11.0, 32.0)) + (anchor?.normal ?: Vec3.Z) * 4.0, isShrimp = true)
 
     init {
         c.p.stations += station
@@ -437,7 +437,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 // Hermit crabs: walk rock and sand, pick/graze, scavenge, retreat into the shell
 // =====================================================================================
 class HermitBrain(c: Ctx) : SpeciesBrain(c) {
-    private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 28.0) else g[o.rng.nextInt(g.size)].pos }
+    private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 38.0) else g[o.rng.nextInt(g.size)].pos }
 
     init {
         install(CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering"), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this))
@@ -490,7 +490,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 // disturbed, sheds an arm tip when bitten and regrows it. The disc never turns: BrittleArms reassigns the lead arm.
 // =====================================================================================
 class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
-    val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(95.0, 4.0, 15.0))
+    val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(36.0, 5.5, 10.4))
     /** The five-arm gait rig (sim/LimbRig.kt); the behaviours only say which arms reach where. */
     val arms: BrittleArms = o.limbRig as BrittleArms
     /** Arm tips this individual leaves out of its hide by day (1–3; research 17 §2.3). */
@@ -700,7 +700,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
 // Brown feather duster: sessile, crown filters, snaps into tube on shadow/touch/food above
 // =====================================================================================
 class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
-    val tube: Vec3 = c.rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0))
+    val tube: Vec3 = c.rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3))
     val crown: Vec3 get() = Vec3(tube.x, c.rock.sandTopCm + 0.6 * o.lengthCm, tube.z)
 
     init { install(Filter(), Snap(), OutOfTube()) }
@@ -922,17 +922,17 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
 
     init { install(GlassGraze(this), Flipped()) }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 30.0, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 0.55 * c.rock.waterLevelCm, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
         else Rest(o.homePos, o.heading, o.up)
 
     override fun initialPlace(c: Ctx) {
         var onFront = o.rng.chance(0.5)
-        var p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+        var p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, c.rock.waterLevelCm - 6), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
         // never start where rock leans on the back pane
         var tries = 0
         while (c.rock.sdf.dist(p) < 2.0 && tries++ < 20) {
             onFront = onFront || tries > 10
-            p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, 45.0), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
+            p = Vec3(o.rng.range(10.0, 110.0), o.rng.range(10.0, c.rock.waterLevelCm - 6), if (onFront) c.rock.widthCm - surfaceOffset(c) else surfaceOffset(c))
         }
         o.homePos = p
         o.placeAt(p, Vec3.Y)
@@ -1082,7 +1082,7 @@ class GenericInvertBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     val crevice: Anchor? = c.rock.anchors[o.hostAnchor ?: "CREVICE_CRAB"] ?: c.rock.anchors["CREVICE_CRAB"] ?: c.rock.anchors["CAVE_SMALL"]
-    val home: Vec3 = crevice?.pos ?: Vec3(63.0, 12.0, 8.0)
+    val home: Vec3 = crevice?.pos ?: Vec3(56.0, 11.8, 7.8)
 
     init {
         install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })

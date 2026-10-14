@@ -403,9 +403,9 @@ class BurstField(seed: Int = 23) {
         private const val WOBBLE = 512
         private const val BUOY_SLOW = 1024
         private const val SINK_FAST = 2048
-        /** HOB return outlet and intake (anchors.json HOB_OUTFLOW (72, 55, 1)). */
-        val HOB_OUT = floatArrayOf(72f, 54f, 2f)
-        val HOB_IN = floatArrayOf(62f, 52f, 2f)
+        /** HOB return outlet and intake (equipment.glb: ReturnNozzle outflow (73, 37.4, 2.3) at the back middle, HobFilter intake x 114.5 at the right). */
+        val HOB_OUT = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2f)
+        val HOB_IN = floatArrayOf(114.5f, Camera.WATER_Y - 3f, 2f)
 
         private fun lin(c: Float) = c.coerceIn(0f, 1f).pow(2.2f)
         private fun rgb(r: Int, g: Int, b: Int) = floatArrayOf(lin(r / 255f), lin(g / 255f), lin(b / 255f))

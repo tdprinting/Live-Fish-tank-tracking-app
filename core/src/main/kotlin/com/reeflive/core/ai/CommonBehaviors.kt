@@ -351,7 +351,7 @@ class SurfaceGasp(val b: SpeciesBrain) : Behavior("gasp", "Gasping at the surfac
         return if (sDo > 0.5 || o.gillRate > 2.4 || Symptom.GASPING in o.symptoms) 0.95 else 0.0
     }
     override fun update(c: Ctx, out: SteerIntent) {
-        val hob = c.rock.anchors.pos("HOB_OUTFLOW", Vec3(71.0, 55.0, 1.0))
+        val hob = c.rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, c.rock.waterLevelCm - 1, 1.0))
         val spot = c.safe(Vec3(hob.x + c.rng.signed() * 3, c.rock.waterLevelCm - 1.5 - 0.2 * c.L, hob.z + 6 + 0.5 * c.L), 1.0)
         out.seek(spot, c.o.cruiseSpeed, arrive = 3.0)
         out.hover = true; out.pitchBias = 0.3

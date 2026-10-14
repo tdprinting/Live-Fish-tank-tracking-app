@@ -899,7 +899,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             CameraInput.TapKind.GLASS -> {
                 val tz = Picker.rayPlaneZ(o, dir, Camera.TANK[2]) ?: return
-                val p = Vec3((o[0] + dir[0] * tz).toDouble().coerceIn(0.0, 121.9), (o[1] + dir[1] * tz).toDouble().coerceIn(3.0, 56.0), Camera.TANK[2].toDouble())
+                val p = Vec3((o[0] + dir[0] * tz).toDouble().coerceIn(0.0, Camera.TANK[0].toDouble()), (o[1] + dir[1] * tz).toDouble().coerceIn(Camera.SAND_Y.toDouble(), Camera.WATER_Y.toDouble()), Camera.TANK[2].toDouble())
                 main.post { l?.onTapGlass(p) }
             }
             CameraInput.TapKind.LONG_PRESS -> {

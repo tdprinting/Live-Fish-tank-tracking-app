@@ -8,12 +8,27 @@ Supersedes ASSETS.md §3.1/§3.4/§5 where they disagree.
 
 - Units **cm**. Origin = inside bottom-front-left corner of the glass box. **+X right, +Y up, +Z toward the viewer**
   (Blender Z-up scene: Blender Z = world Y, Blender -Y = world Z; export `export_yup=True`).
-- Interior: **L 121.9 × D 33.0 × H 61.0** (60 gal, 48 × 13 × 24 in, 6.35 mm glass). Interior volume: x 0–121.9, y 0–61.0, z 0–33.0.
-  Back glass inner face z = 0, front glass inner face z = 33.0.
-- **Waterline y = 56.0** (5 cm below the glass top, 1.2 cm below the rim's inner lip). Sand surface y = 3.5 front → 6.0 back (see §1.6).
-- **Scaling rule** if real dims differ: scale every *position* listed below by (L/121.9, H/61.0, D/33.0). Keep *fixed* (do not scale):
-  glass and frame profiles (mm), equipment body sizes, coral sizes, sand depth. Water level = H − 5. Rock heights scale with H
-  only if H ≠ 61 ± 3; otherwise keep rock absolute and re-mound sand.
+- Interior (**owner-measured 2026-10-13: 48 in long × 18 in front-to-back × 16 in tall**): **L 121.9 × D 45.7 × H 40.6**
+  (60 gal display volume for the chemistry, 6.35 mm glass). Interior volume: x 0–121.9, y 0–40.6, z 0–45.7.
+  Back glass inner face z = 0, front glass inner face z = 45.7. One source of truth: `core/.../sim/TankDims.kt`, mirrored
+  by `tools/blender/common.py` (`TANK`, `WATER_Y`, `SAND_Y`, `SAND_Y_BACK`, `RIM_Y`); every script derives from those.
+- **Waterline y = 38.1** (2.5 cm below the glass top; rim top y = 41.0). Sand surface y = 3.5 front → 6.0 back (see §1.6).
+- **v3 resize note**: the tables in §1–§3 were written for the earlier assumed 48 × 13 × 24 in box (D 33, H 61, water 56).
+  Glass, rim, water and stand are now built parametrically from `TANK`. The rock was re-laid to the photo
+  (`reference/tank_full_2026-10-13.jpg`): low wide scape rising to the left (left back stack breaks the surface at x 28–34),
+  a central arch/cave under the back shelf at x 47–67, the Kenya tree on the centre mound (x ≈ 67), a right shelf over a dark
+  recess (x 78–100), the clowns' hairy-mushroom carpet on a low purple-coralline rock (R10) in front of that recess, under
+  the shelf's front edge (`HOST_SHROOM` ≈ (81, 13, 21)), and the big lime GSP mat on the low R7 mound front right
+  (`coral_gsp_lower_right` ≈ (107, 14, 32)). Host evidence: [P p14] (clowns in front of a dark folded mushroom mass under a
+  pink-coralline shelf, the finger leather up and to its left), [P full] (clowns and tang right of the Kenya at x ≈ 79–86, in
+  front of the dark recess; the front-right lime mound is GSP), the [P p14] note in `corals.py`, and night clip T84 ("lower-left
+  purple-coralline rock" = lower left of that clip's frame, panning along the front glass, beside a yellow encrusting patch).
+  Tailspot hole `HOLE_BLENNY_2` in the front of the R4 shelf's right end (62.5, 29.5, 13.3), lawnmower hole `HOLE_BLENNY` in the
+  front of the R2 pillar (10, 13, 32.3): ≥ 50 cm apart (06 §5.6 #9), and the tailspot outside the clowns' 22 cm and the
+  dottyback's 25 cm defence radii.
+  As-built positions live in `rockscape.py` (`ROCKS`, `CARVES`, `ANCHORS`) and `equipment.py`; equipment: HOB filter back right
+  (x 98.5–118.4, intake x 114.5) with its return piped to a white ring nozzle at the back middle (outflow (73, 37.4, 2.3), aimed (0, −0.4, 0.92), `HOB_OUTFLOW`; video T97: Tee hand-feeds right beside it, `Simulation.HAND_FEED` (74, 37.1, 4.5); the photo shows the pipes behind the rim at x ≈ 73–77), powerhead mid-back (77, 32), left-glass powerhead (y 28, z 18), heater on the right
+  (x 119.5, y 8–34), two AI Prime pucks at x 32 / 88, lens y 69.6 (≈ 29 cm above the rim), z 20 (`LightingState.LIGHT_POS`).
 - Every object below is a **closed, manifold mesh** (boxes, swept profiles, capped tubes). No single-quad walls anywhere except
   the `WaterSurface` quad, which is explicitly two-sided. Verify with `bmesh` non-manifold edge count = 0 per object.
 - Rendered-view coordinates in this doc were read off `tank_full.jpg` with: x_cm = (px − 40)/15.9, y_cm = 3 + (1095 − py)·0.105 (2000 px wide display).
@@ -103,6 +118,7 @@ Silhouette rule from the photo (front view): the scape is an **inverted-U on the
 | **R6c** | Right column | T8 | c (95, 20, 6) r (6, 17, 6) | 38 | 0–12 | Stack of two rocks between arch and the right stack; dark olive, coralline on its left face (x 89–91, y 18–30: `#C27090`). |
 | **R9** | Right back stack | T9 | c (105, 30, 6) r (6, 14, 6), c (104, 46, 5) r (5, 5, 5) | 51 | 0–12 | Greenish boulders behind the GSP mound, pale slab top at y 48–51. Perch at (104, 51, 6). |
 | **R7** | **GSP mound** | T9 | dome c (107, 8, 24) r (9, 9, 9) flattened (y scale 0.9) | **25** at (106, 25, 22) | 14–33 | Low, wide dome fully carpeted by the big GSP mat on its top and front (x 99–115, y 6–25). The clown gap is between R5/ARCH and this mound: x 84–99, y 10–34, z 14–30. |
+| **R10** (v3) | **Clowns' rock** | T7 | c (82, 5.5, 22) r (7, 4, 6) + top c (81.5, 9, 21) r (5, 2.5, 4.5) | 13 | 16–28 | Low purple-coralline rock (zone Z8) in front of the right recess, under the shelf's front edge; carries the hairy-mushroom host (`HOST_SHROOM`), the coralline crust and the yellow encrusting patch at its left (T84). The duster sits at its right foot. |
 | **R8** | Far-right corner rock | T10 | c (115, 6, 25) r (7, 5, 7) | 12 | 18–33 | Dark maroon/purple rock pressed into the front-right corner (`#5E2E45` base, 60 % coralline). Red macroalgae tuft at (118, 7, 27). Pink-coralline knob c (109, 27, 14) r (4, 3, 4) sits on R7's back-top (the pink/yellow-tipped lump in the photo). |
 
 Openings where the black background must be visible from the front camera: CAVE_BIG (x 27–44, y 6–31), under R4 (x 44–64, y 6–36, behind R3), ARCH (x 82–90, y 6–38), and a slit between R9 and R6s at x 101–103, y 36–46.
@@ -164,7 +180,7 @@ Positions are the base point on the rock/sand (snap to the nearest surface withi
 | **Skimmer** | right of the HOB, hangs on the back rim: body x 86…96, y 46…70, z −9…−1.035 (flush against the skirt) | Black pump block x 87…95, y 40…46 under the body; two rubber levelers on the glass at y 49; lid y 70…71 with two grey riser tubes r 1.6, y 71…92, at (89, –, −6) and (93, –, −6) (`#8A8F94`) with black collars; a black hanger saddle over the lip (x 87.5…94.5) with a front leg inside the glass and an intake leg r 1.0 dropping into the water at (91, 46…58, 3.4). These are the tall grey tubes above the rim right of center in the photo. |
 | **AtoBox** | on the top rim, left: box x 16…22, y 61.4…63.4, z 28…33 | Small black controller with a 3 mm red LED emissive `#FF2020` at (19, 63.4, 30) (the red dot on the left rim). |
 | **Jar** | on the right rim at x 102.5…110.5, y 61.4…71, z −4…4 (moved right to clear the AiPrimeR clamp) | Glass cylinder r 4 × 9.5, alpha 0.5, with a dark green-brown liquid fill 6 cm (`#4D4A2E`). Optional prop. |
-| **AiPrimeL / AiPrimeR** | pucks centered at **(32, 92, 16)** and **(91, 92, 16)**, horizontal; lens centre / `lightPos` (x, 90, 16) = `LightingState.LIGHT_POS` | Puck: rounded box 12.2 × 12.2 × 3.6 cm, black `#141414`, bottom face: a white lens plate 8 cm wide with a 4 × 4 cluster of 2.5 mm LED dots (emissive, color = §5 light color); top has a 1 cm raised heat-sink square; an arm socket on the rear edge. **Rim clamp**: a C-clamp 3.8 cm wide at x 38 (L) / 98.5 (R) wrapping the back rim: top plate on the lip (y 61.4…62.3, z −1.9…2.6), back leg down the skirt (y 57…61.4) with a thumb screw + knob, front leg inside the glass and a jaw foot under the lip with a screw pressing the lip underside and a thumb knob below. **Gooseneck arm**: black tube r 0.8 from a collar on the clamp, Bezier (cx, 62.3, 0.2) → (cx, 84, 0.2) → (x, 92, 1) → (x, 92, 9.4) into the socket. Power cable r 0.3 from the puck's rear, along the arm, behind the clamp and down the back of the tank. |
+| **AiPrimeL / AiPrimeR** | pucks centered at **(32, 71.6, 20)** and **(88, 71.6, 20)** (resized tank), horizontal; lens centre / `lightPos` (x, 69.6, 20) = `LightingState.LIGHT_POS` | Puck: rounded box 12.2 × 12.2 × 3.6 cm, black `#141414`, bottom face: a white lens plate 8 cm wide with a 4 × 4 cluster of 2.5 mm LED dots (emissive, color = §5 light color); top has a 1 cm raised heat-sink square; an arm socket on the rear edge. **Rim clamp**: a C-clamp 3.8 cm wide at x 38 (L) / 98.5 (R) wrapping the back rim: top plate on the lip (y 61.4…62.3, z −1.9…2.6), back leg down the skirt (y 57…61.4) with a thumb screw + knob, front leg inside the glass and a jaw foot under the lip with a screw pressing the lip underside and a thumb knob below. **Gooseneck arm**: black tube r 0.8 from a collar on the clamp, Bezier (cx, 62.3, 0.2) → (cx, 84, 0.2) → (x, 92, 1) → (x, 92, 9.4) into the socket. Power cable r 0.3 from the puck's rear, along the arm, behind the clamp and down the back of the tank. |
 
 ## 4. Fish hangout anchors (`anchors.json`; replace the list in ASSETS.md §3.4)
 ```json

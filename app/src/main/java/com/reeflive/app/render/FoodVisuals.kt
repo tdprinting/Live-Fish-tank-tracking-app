@@ -191,7 +191,7 @@ class FoodVisuals {
         const val THAW_S = 6f
         val FROZEN = setOf(FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL, FoodKind.CYCLOPS)
         /** NORI_CLIP anchor (anchors.json) and the sheet's size on it (cm). */
-        val NORI_CLIP = floatArrayOf(2f, 35f, 20f)
+        val NORI_CLIP = floatArrayOf(2f, 24.3f, 26f)
         const val NORI_W = 9f
         const val NORI_H = 11f
         const val NORI_COLS = 7

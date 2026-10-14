@@ -148,6 +148,7 @@ import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.OrganismStats
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.timelapse.TimelapseState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -164,8 +165,8 @@ private val NavClearance = 88.dp
 /** Height of the HUD's two top rows (mode / clock, then Hermie and the meter): the in-tank gauges stay below it. */
 private val GaugeTopClearance = 112.dp
 
-/** Point on the front glass, centre, for the "Tap glass" action (tank cm: 122 × 61 × 33). */
-private val FrontGlassCentre = Vec3(61.0, 30.0, 33.0)
+/** Point on the front glass, centre, for the "Tap glass" action (tank cm: [TankDims], 122 × 40.6 × 45.7). */
+private val FrontGlassCentre = Vec3(TankDims.LENGTH_CM / 2, 20.0, TankDims.DEPTH_CM)
 
 private fun summarize(stats: List<OrganismStats>): FishSummary {
     val alive = stats.filter { it.alive }
@@ -685,7 +686,7 @@ fun LiveTankScreen(
                 cue(LiveReactions.feed(k, FxPoint(fx, SURFACE_Y, FEED_Z))) { vm.feed(k, k.typicalDoseGrams, Vec3(fx.toDouble(), SURFACE_Y.toDouble(), FEED_Z.toDouble())) }
             }
             item == SupplyItem.KNOCKER -> {
-                val p = Vec3(gx.coerceIn(1f, 121f).toDouble(), gy.coerceIn(3f, 56f).toDouble(), FrontGlassCentre.z)
+                val p = Vec3(gx.coerceIn(1f, TankDims.LENGTH_F - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, TankDims.WATER_LEVEL_F).toDouble(), FrontGlassCentre.z)
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
@@ -863,8 +864,8 @@ private const val SHELF_LABEL_MS = 700L
 private const val SHELF_LABEL_REDUCED_MS = 300L
 private const val SHELF_TRAVEL_MS = 1000L
 /** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
-private const val SURFACE_Y = 55.7f
-private const val FEED_Z = 20f
+private const val SURFACE_Y = TankDims.WATER_LEVEL_F - 0.4f
+private const val FEED_Z = 23.4f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
 private const val SKIP_PICK_GUARD_MS = 700L

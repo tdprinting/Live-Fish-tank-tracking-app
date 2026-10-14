@@ -7,6 +7,7 @@ import com.reeflive.core.sim.DefaultStock
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.SimEvent
 import com.reeflive.core.sim.Simulation
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TestTank
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,7 +48,7 @@ class AiTest {
             sim.advance(600.0) {
                 ticks++
                 if (ticks == 200) sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.5))
-                if (ticks == 2400) sim.enqueue(Command.TapGlass(Vec3(60.0, 30.0, 33.0)))
+                if (ticks == 2400) sim.enqueue(Command.TapGlass(Vec3(60.0, 20.0, TankDims.DEPTH_CM)))
                 for (o in sim.organisms) {
                     if (!o.alive) continue
                     val d = sim.rock.sdf.dist(o.pos)
@@ -138,8 +139,8 @@ class AiTest {
         val cmds = listOf<(Simulation) -> Unit>(
             { it.enqueue(Command.Feed(FoodKind.FLAKE, 0.4)) },
             { it.enqueue(Command.Feed(FoodKind.NORI, 1.0)) },
-            { it.enqueue(Command.TapGlass(Vec3(30.0, 20.0, 33.0))) },
-            { it.enqueue(Command.Shadow(Vec3(15.0, 56.0, 27.0))) },
+            { it.enqueue(Command.TapGlass(Vec3(30.0, 20.0, TankDims.DEPTH_CM))) },
+            { it.enqueue(Command.Shadow(Vec3(15.0, TankDims.WATER_LEVEL_CM, 37.0))) },
             { it.enqueue(Command.Powerheads(false)) },
             { it.enqueue(Command.Powerheads(true)) },
             { it.enqueue(Command.Feed(FoodKind.PELLET, 0.3)) },
@@ -166,7 +167,9 @@ class AiTest {
         var maxDist = 0.0
         sim.advance(3600.0, behaviorDt = 0.1) { maxDist = maxOf(maxDist, goby.pos.distanceTo(mouth)) }
         assertTrue("no sand piles after an hour", sim.sandPiles.isNotEmpty())
-        assertTrue("goby strayed $maxDist cm from its burrow", maxDist < 30.0)
+        // resized tank: the cleaning station is ~10 cm from the burrow mouth, and a client's retaliation chase after a
+        // cheating cleaner (PoseForCleaner) can carry the goby ~30 cm out (seed 1: 30.2 cm) before it returns
+        assertTrue("goby strayed $maxDist cm from its burrow", maxDist < 33.0)
         val night = fullTank(hour = 22.5)
         night.advance(300.0, behaviorDt = 0.1)
         val g = night.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }

@@ -128,6 +128,8 @@ class GlassMaskTest {
         val snap = sim.latest
         assertNotNull(snap.algae.glassMask)
         assertTrue("film ${sim.water.s.film} vs $film0", sim.water.s.film < film0)
-        assertTrue(snap.algae.glassMask!![GlassMask.W * 6 + 32] < 0.5f)
+        // the mask row through the middle of the stroke (y 23), wherever the tank's sand and water lines put it
+        val row = ((23.0 - sim.rock.sandTopCm) / (sim.rock.waterLevelCm - sim.rock.sandTopCm) * GlassMask.H).toInt()
+        assertTrue(snap.algae.glassMask!![GlassMask.W * row + 32] < 0.5f)
     }
 }

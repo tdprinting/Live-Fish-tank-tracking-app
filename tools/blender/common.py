@@ -25,6 +25,14 @@ SIM = os.path.join(ASSETS, "sim")
 PREVIEW = os.path.join(REPO, "docs", "preview")
 BUILD = os.path.join(REPO, "build", "blender")  # scratch (git-ignored)
 
+# Tank interior (world cm): the one source of truth for the asset scripts. Must match core TankDims.kt
+# (owner's measurement 2026-10-13: 48 in long x 16 in tall x 18 in front-to-back, 60 US gal, open top).
+TANK = (121.9, 40.6, 45.7)   # (x length, y height, z depth); back glass z = 0, front glass z = TANK[2]
+WATER_Y = 38.1               # water line, ~2.5 cm under the top of the glass
+SAND_Y = 3.5                 # rendered sand top at the front glass (sim plane: 3.0)
+SAND_Y_BACK = 6.0            # sand top at the back glass
+RIM_Y = TANK[1] + 0.4        # top of the black rim lip
+
 for _d in (MODELS, TEXTURES, SIM, PREVIEW, BUILD):
     os.makedirs(_d, exist_ok=True)
 

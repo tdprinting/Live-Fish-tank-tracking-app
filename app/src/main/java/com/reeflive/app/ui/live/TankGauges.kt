@@ -65,6 +65,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import com.reeflive.core.sim.TankDims
 
 /*
  * In-tank gauges (UI_STYLE §10.7): small, tasteful read-outs stuck to the tank and its gear, drawn through the camera
@@ -119,17 +120,17 @@ fun TankGaugeLayer(
     AnimatedVisibility(visible, modifier.fillMaxSize(), enter = fadeIn(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce))) {
         val safe = GaugeSafe(safeTop, safeBottom, safeStart)
         Box(Modifier.fillMaxSize()) {
-            Anchored(projection, { frame }, 114f, 36f, 33.8f, safe) { Thermometer(r.tempC) }
-            Anchored(projection, { frame }, 7f, 30f, 33.8f, safe) {
+            Anchored(projection, { frame }, 114f, 24f, GAUGE_Z, safe) { Thermometer(r.tempC) }
+            Anchored(projection, { frame }, 119f, 12f, GAUGE_Z, safe) {
                 Badge(TankGauge.HEATER, if (r.heaterWorking) "Set ${TankGauge.HEATER.format(r.heaterSetC)}" else "Off", glow = if (r.heating()) Candy.orange else null, warn = !r.heaterWorking, onClick = onDial)
             }
-            Anchored(projection, { frame }, 18f, 50f, 33.8f, safe) {
+            Anchored(projection, { frame }, 18f, 31f, GAUGE_Z, safe) {
                 Badge(TankGauge.SALINITY, String.format(Locale.US, "%.3f", r.sg), warn = r.sg < 1.021 || r.sg > 1.028, onClick = onDial)
             }
-            Anchored(projection, { frame }, 61f, 63f, 30f, safe) {
+            Anchored(projection, { frame }, 61f, TankDims.HEIGHT_F + 2.4f, 24f, safe) {
                 Badge(TankGauge.LIGHT, TankGauge.LIGHT.format(r.lightPct), glow = if (r.lightPct > 1.0) Candy.yellow else null, onClick = onDial)
             }
-            Anchored(projection, { frame }, 112f, 50f, 33.8f, safe) {
+            Anchored(projection, { frame }, 96f, 31f, GAUGE_Z, safe) {
                 Badge(TankGauge.FLOW, TankGauge.FLOW.format(r.flowPct), spin = (r.flowPct / 100.0).toFloat(), warn = r.flowPct < 15.0, onClick = onDial)
             }
         }
@@ -323,3 +324,6 @@ private fun DialRing(g: TankGauge, v: Double, onChange: (Double) -> Unit) {
         drawCircle(s.outline, stroke * 0.75f, k, style = Stroke(3.dp.toPx()))
     }
 }
+
+/** Badges sit just outside the front glass of the resized tank (core TankDims; was z 33.8 on the old 13 in box). */
+private const val GAUGE_Z = TankDims.DEPTH_F + 0.8f

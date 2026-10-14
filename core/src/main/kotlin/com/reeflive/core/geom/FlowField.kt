@@ -1,5 +1,6 @@
 package com.reeflive.core.geom
 
+import com.reeflive.core.sim.TankDims
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.floor
@@ -30,8 +31,8 @@ data class Powerhead(
 class FlowField(
     jets: List<Powerhead>,
     private val sdf: Sdf,
-    private val tankLength: Double = 121.9,
-    private val waterLevel: Double = 56.0,
+    private val tankLength: Double = TankDims.LENGTH_CM,
+    private val waterLevel: Double = TankDims.WATER_LEVEL_CM,
     private val pulseAmp: Double = 0.12,
 ) {
     var jets: List<Powerhead> = jets
@@ -63,8 +64,8 @@ class FlowField(
     private fun globalCirculation(p: Vec3): Vec3 {
         val mid = tankLength / 2
         return when {
-            p.y < 20 -> Vec3(-1.5 * sign(p.x - mid), 0.0, 0.0)
-            p.y > waterLevel - 15 -> Vec3(1.5 * sign(p.x - mid + 1e-6), 0.0, 0.0)
+            p.y < 0.36 * waterLevel -> Vec3(-1.5 * sign(p.x - mid), 0.0, 0.0)
+            p.y > 0.73 * waterLevel -> Vec3(1.5 * sign(p.x - mid + 1e-6), 0.0, 0.0)
             else -> Vec3(0.0, if (p.x < mid) -0.4 else 0.4, 0.0)
         }
     }
@@ -90,7 +91,9 @@ class FlowField(
 
     // ---- coarse cached grid for cheap queries (ambient particles, renderer) ----
     private val cell = 4.0
-    private val gx = 32; private val gy = 16; private val gz = 10
+    private val gx = kotlin.math.ceil(tankLength / cell).toInt() + 1
+    private val gy = kotlin.math.ceil(waterLevel / cell).toInt() + 1
+    private val gz = kotlin.math.ceil(TankDims.DEPTH_CM / cell).toInt() + 1
     private var grid = FloatArray(gx * gy * gz * 3)
     @Volatile private var gridValid = false
 
@@ -123,11 +126,12 @@ class FlowField(
     }
 
     companion object {
-        /** Powerheads observed in Tee's tank photos (SIMULATION §5.3). HOB x = 71 to match ASSETS/anchors. */
+        /** Powerheads observed in Tee's tank photos (SIMULATION §5.3): equipment.glb PowerheadBack / PowerheadLeft and
+         *  the ReturnNozzle `outflow` (back middle, piped from the HobFilter), matching the FLOW_* / HOB_OUTFLOW anchors. */
         fun defaultJets(): List<Powerhead> = listOf(
-            Powerhead("PH-A", Vec3(84.0, 48.0, 1.0), Vec3(-0.6, -0.35, 0.72)),
-            Powerhead("PH-B", Vec3(1.0, 42.0, 10.0), Vec3(0.95, -0.2, 0.25)),
-            Powerhead("HOB", Vec3(71.0, 55.0, 2.0), Vec3(0.0, -0.5, 0.87), v0 = 25.0),
+            Powerhead("PH-A", Vec3(77.0, 32.0, 1.0), Vec3(-0.6, -0.35, 0.72)),
+            Powerhead("PH-B", Vec3(1.0, 28.0, 13.0), Vec3(0.95, -0.2, 0.25)),
+            Powerhead("HOB", Vec3(73.0, 37.4, 2.0), Vec3(0.0, -0.4, 0.92), v0 = 25.0),
         )
     }
 }

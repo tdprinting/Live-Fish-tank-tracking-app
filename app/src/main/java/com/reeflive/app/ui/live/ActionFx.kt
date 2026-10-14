@@ -31,6 +31,7 @@ import com.reeflive.app.render.TankProjection
 import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.TankDims
 import kotlinx.coroutines.flow.first
 
 /*
@@ -53,33 +54,35 @@ data class FxPoint(val x: Float, val y: Float, val z: Float)
 
 /** Where things happen, matched to the sim's own anchors (core RockData / Simulation) so pictures and particles agree. */
 object FxSpots {
+    /** Just under the waterline (core TankDims; the tank is 48 × 18 × 16 in). */
+    private const val WY = TankDims.WATER_LEVEL_F - 0.4f
     /** Hand-feed spot at the waterline, back middle beside the return (core Simulation.HAND_FEED, video T97). */
-    val FEED = FxPoint(68f, 55.7f, 4.5f)
+    val FEED = FxPoint(74f, WY, 4.5f)
     /** NORI_CLIP on the left glass (anchors.json). */
-    val NORI = FxPoint(2f, 35f, 20f)
+    val NORI = FxPoint(2f, 24.3f, 26f)
     /** HOB_OUTFLOW: `Command.Dose` enters here and spreads with the flow. */
-    val DOSE = FxPoint(71f, 55.7f, 3f)
+    val DOSE = FxPoint(73f, WY, 3f)
     /** Where AddOrganism / AddMany release fish (tank middle, just under the surface). */
-    val RELEASE = FxPoint(61f, 55.7f, 20f)
-    val SURFACE = FxPoint(61f, 55.7f, 18f)
-    val CENTRE = FxPoint(61f, 32f, 18f)
-    val HEATER = FxPoint(7f, 30f, 4f)
-    val THERMO = FxPoint(18f, 44f, 14f)
+    val RELEASE = FxPoint(61f, WY, 26f)
+    val SURFACE = FxPoint(61f, WY, 24f)
+    val CENTRE = FxPoint(61f, 21f, 24f)
+    val HEATER = FxPoint(7f, 20.5f, 5.5f)
+    val THERMO = FxPoint(18f, 29.6f, 18f)
     /** Powerheads as the sim places them (core FlowField.defaultJets): PH-B on the left wall, PH-A on the back glass. */
-    val PUMP_LEFT = FxPoint(1.5f, 42f, 10f)
-    val PUMP_RIGHT = FxPoint(84f, 48f, 1.5f)
+    val PUMP_LEFT = FxPoint(1.5f, 28f, 13f)
+    val PUMP_RIGHT = FxPoint(77f, 32f, 1.5f)
     /** Above the tank: the lamp. */
-    val LIGHT = FxPoint(61f, 66f, 16f)
+    val LIGHT = FxPoint(61f, TankDims.HEIGHT_F + 5f, 20f)
     /** The sump equipment lives under the tank, out of view: shown on the back-right corner above the water. */
-    val SUMP = FxPoint(108f, 62f, 3f)
-    val ROCK = FxPoint(72f, 28f, 15f)
+    val SUMP = FxPoint(108f, WY + 6f, 3f)
+    val ROCK = FxPoint(68f, 17f, 20f)
     /** coral_aiptasia_kenya_base. */
-    val AIPTASIA = FxPoint(68f, 37f, 14f)
-    val SAND = FxPoint(58f, 4f, 26f)
-    val GLASS = FxPoint(61f, 30f, 33f)
+    val AIPTASIA = FxPoint(64f, 17.5f, 21f)
+    val SAND = FxPoint(56f, 4f, 38f)
+    val GLASS = FxPoint(61f, 20f, TankDims.DEPTH_F)
     /** Water change: the siphon end in the water and the bucket outside the right-hand end. */
-    val SIPHON = FxPoint(104f, 44f, 20f)
-    val BUCKET = FxPoint(132f, 58f, 22f)
+    val SIPHON = FxPoint(104f, 28f, 28f)
+    val BUCKET = FxPoint(132f, 40f, 28f)
 }
 
 /** What picture to play, with its length and the moment the action "happens" (ms). */
@@ -325,7 +328,7 @@ private fun poseMs(k: FxKind): Float = when (k) {
 
 /** Without a camera: map tank x across the screen and height down it. */
 private fun DrawScope.fallback(x: Float, y: Float): Offset =
-    Offset(size.width * (0.12f + 0.76f * (x / 122f).coerceIn(0f, 1.1f)), size.height * (0.22f + 0.56f * (1f - y / 61f)))
+    Offset(size.width * (0.12f + 0.76f * (x / TankDims.LENGTH_F).coerceIn(0f, 1.1f)), size.height * (0.22f + 0.56f * (1f - y / TankDims.HEIGHT_F)))
 
 private fun DrawScope.drawCaption(layout: TextLayoutResult, cx: Float, top: Float, pal: FxPalette, alpha: Float) {
     val w = layout.size.width.toFloat()

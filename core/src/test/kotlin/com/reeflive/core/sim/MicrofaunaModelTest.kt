@@ -20,7 +20,10 @@ import kotlin.math.min
 class MicrofaunaModelTest {
     /** The microfauna model alone on a water state under the default light schedule, 15-min steps. */
     private class Bench(val w: WaterState = WaterState(tempC = 26.0), startHour: Double = 0.0) {
-        val m = MicrofaunaModel(TankConfig())
+        // The §6 check numbers (a 2,000 pod/day predator, 2 L of chaeto) were calibrated on the earlier 48 x 13 in
+        // footprint; the measured 48 x 18 in tank has 38 % more floor/glass and so ~38 % more pods for the same
+        // predator to eat. Keep the bench on the calibration footprint until the checks are re-derived.
+        val m = MicrofaunaModel(TankConfig(widthCm = 33.0))
         private val lights = LightSchedule()
         var t = startHour * 3600
         var hold: (WaterState) -> Unit = {}
