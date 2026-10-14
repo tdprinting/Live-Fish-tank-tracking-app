@@ -2,7 +2,6 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.ai.UtilityBrain
 import com.reeflive.core.geom.BodySpline
-import com.reeflive.core.geom.Quat
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
 import kotlin.math.pow
@@ -226,7 +225,6 @@ class Organism(
 
     /** Spine and frame buffers reused by [toPose]. */
     private val spinePos = Array(BodySpline.POINTS) { Vec3.ZERO }
-    private val spineRot = Array(BodySpline.POINTS) { Quat.IDENTITY }
 
     fun placeAt(p: Vec3, dir: Vec3) {
         pos = p; heading = dir.normalized(); vel = Vec3.ZERO
@@ -234,14 +232,9 @@ class Organism(
     }
 
     fun toPose(): OrganismPose {
-        spline.sample(up, spinePos, spineRot)
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
-        for (i in 0 until BodySpline.POINTS) {
-            val p = spinePos[i]; val q = spineRot[i]
-            sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
-            fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
-        }
+        spline.sampleInto(up, spinePos, sp, fr)
         return OrganismPose(
             id, species.id, sp, fr, swimPhase.toFloat(), amp.toFloat(), species.locomotion.waveLen.toFloat(),
             pectoral.toFloat(), finClamp.toFloat(), gill.toFloat(), gillRate.toFloat(), desat.toFloat(), ich.toFloat(),
