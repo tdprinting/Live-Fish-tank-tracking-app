@@ -220,7 +220,6 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
                 }
                 val got = load[i]
                 water.releaseWaste(got * EATEN_EXCRETED); eatenPpm += got
-                o.hunger = max(0.0, o.hunger - 0.01)
                 remove(i)
                 break
             }

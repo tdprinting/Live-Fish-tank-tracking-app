@@ -459,6 +459,12 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
                 val r = c.o.hoverRadius * kotlin.math.sqrt(c.rng.nextDouble())
                 p = c.safe(schoolTarget(c, spot + c.rng.unitVector() * r))
                 if (p.distanceTo(spot) > c.o.hoverRadius + 2) p = c.safe(spot)
+                // cut off from the pocket by rock (after a cleaner visit or a chase): go up and over instead of
+                // pressing into the rock face, retargeting soon
+                if (c.o.pos.distanceTo(spot) > c.o.hoverRadius + 2 && !c.rock.sdf.segmentClear(c.o.pos, p, 0.5)) {
+                    p = c.safe(Vec3((c.o.pos.x + spot.x) / 2, max(c.o.pos.y, spot.y) + 12.0, (c.o.pos.z + spot.z) / 2))
+                    next = c.t + 3.0
+                }
             }
             out.seek(p, c.o.cruiseSpeed * 0.3, arrive = 3.0)
             out.hover = true; out.ampMul = 0.3; out.pectoral = 1.0; out.tailMul = 0.4
