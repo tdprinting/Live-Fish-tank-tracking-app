@@ -408,6 +408,16 @@ Each organism keeps a trail of its head positions: a ring buffer sampled every `
 ### 4.9 Determinism
 `Rng` is xorshift128+ seeded from `tankId.hashCode()`; all behavior randomness goes through it so unit tests can assert trajectories.
 
+### 4.10 What is it thinking (`ai/Thoughts.kt`, `OrganismStats.thought`)
+Owner request (Tee): "see what the fish are thinking or planning on doing in plain english". Every snapshot's stats carry a `Thought` per animal, built by `Thoughts.of` and cached by `ThoughtBook` (rebuilt every 5 ticks, ~4 Hz at the 20 Hz wall tick):
+
+- **now**: the winning behaviour as a sentence with the animal's name and its target, e.g. "Nemo is heading home to the hairy mushrooms to rest.", "Doc is cleaning Blue the tang's gills.", "Stripes is backing into its burrow because Falco the hawkfish is close.". Every behaviour of every brain has its own wording (`Thoughts.line`, keyed by behaviour name, brain and the phase label); a fish idling with hunger > 0.65 "is hungry and watching the water for food". Targets come from `Caption` (focus id, else the likely nearby animal; cleaners only name fish); names read "Blue the tang", "Marlin" (same species), "Hermit 2" (the nickname already says it).
+- **next**: the runner-up behaviour by its last utility score (`UtilityBrain.lastScore`, ≥ 0.2, sticky within 0.08 so it does not flip every tick; reactions such as flee or a tap are never offered), else a time-of-day plan ("find a cozy spot before the lights go out" in the last 45 min of light, "wake up when the lights come on", "come out when it gets dark" for nocturnal animals). "Next: graze some algae."
+- **feeling** and **mood**: heat stage → too hot; sick → unwell; a fear plan → scared (and who); stress > 0.5 → stressed (with the worst water stress in words: "water is warm", "there is ammonia in the water"); asleep → sleepy; hunger > 0.65 → hungry; then feisty, proud, busy, curious, a bit stressed, peckish, happy, relaxed. "Feeling: a bit stressed (water is warm)."
+- **why** (the top driver: hunger, fear, curiosity, territory, family, home, cleaning job, getting cleaned, rest, water, health, growing, routine), a first-person **bubble** ("Yum, mysis!", "Eek! Hide!", "Zzz…"), a **planKey** (behaviour + target: the UI holds a line until it changes) and an **interest** 0..3 for the thought bubbles.
+
+It is read-only: it never draws from an rng, never writes to an organism or a brain (no `Counters` reads either: their roll mutates), and `Simulation.thoughtsEnabled = false` gives `Thought.NONE`. `ThoughtsTest` checks two same-seed runs are identical with it on and off, that every behaviour of every brain kind (default stock, moray, squid, both generic brains) has its own non-generic sentence with no raw names, and a dusk run reads as plain English.
+
 ---
 
 ## 5. Environment
