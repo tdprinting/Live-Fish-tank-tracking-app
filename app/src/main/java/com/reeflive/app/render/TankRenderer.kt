@@ -908,15 +908,21 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             val isFin = part.kind == MaterialKind.FIN_SHEET
             if ((pass == 1) != isFin) continue
             if (part.kind == MaterialKind.POLYP) {
-                // feather-duster crown (cm model): one polyp at the organism
                 val p = progs.polyp
                 p.use()
-                rigidModel(r, tmpModel)
-                p.setMat4("uModel", tmpModel)
-                part.material.apply(p, w, alphaTestOverride = 0.3f)
-                p.set1f("uExtension", r.extension); p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.4f)
-                p.set1f("uSwayMode", 0f)
-                p.set1f("uBleach", 0f); p.set1f("uBrown", 0f)
+                if (r.motionMode == ANEMONE_MODE) {
+                    // bubble-tip anemone: oral disc + instanced tentacles, shaped in polyp.vert (uSwayMode 2)
+                    anemoneUniforms(p, r, m)
+                    part.material.apply(p, w)
+                } else {
+                    // feather-duster crown (cm model): one polyp at the organism
+                    rigidModel(r, tmpModel)
+                    p.setMat4("uModel", tmpModel)
+                    part.material.apply(p, w, alphaTestOverride = 0.3f)
+                    p.set1f("uExtension", r.extension); p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.4f)
+                    p.set1f("uSwayMode", 0f)
+                    p.set1f("uBleach", 0f); p.set1f("uBrown", 0f)
+                }
                 part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
                 continue
             }
@@ -967,6 +973,39 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uRoughness", 0.5f)
         p.set1f("uIridStrength", 0f)
         mesh.draw(); drawCalls++; triangles += mesh.triangles
+    }
+
+    /**
+     * Bubble-tip anemone uniforms from its [com.reeflive.core.sim.AnemoneRig] pose (r.limbs): model frame from the disc axis
+     * (same basis as AnemoneRig.basis), scaled from the model's built span to the animal's, plus bubble / contraction /
+     * feeding curl, the fish pushing into it and bleaching.
+     */
+    private fun anemoneUniforms(p: ShaderProgram, r: FishRig, m: GpuModel) {
+        val l = r.limbs
+        var ux = l[13]; var uy = l[14]; var uz = l[15]
+        val ul = kotlin.math.sqrt(ux * ux + uy * uy + uz * uz)
+        if (ul < 1e-4f) { ux = 0f; uy = 1f; uz = 0f } else { ux /= ul; uy /= ul; uz /= ul }
+        // z = normalize(ref × up), x = up × z (ref = +X unless up is nearly along X)
+        val refX = if (kotlin.math.abs(ux) < 0.9f) 1f else 0f; val refZ = 1f - refX
+        var zx = -refZ * uy; var zy = refZ * ux - refX * uz; var zz = refX * uy
+        val zl = kotlin.math.sqrt(zx * zx + zy * zy + zz * zz).coerceAtLeast(1e-5f)
+        zx /= zl; zy /= zl; zz /= zl
+        val xx = uy * zz - uz * zy; val xy = uz * zx - ux * zz; val xz = ux * zy - uy * zx
+        val k = r.scale / (m.lengthCm ?: r.scale)
+        val o = tmpModel
+        o[0] = xx * k; o[1] = xy * k; o[2] = xz * k; o[3] = 0f
+        o[4] = ux * k; o[5] = uy * k; o[6] = uz * k; o[7] = 0f
+        o[8] = zx * k; o[9] = zy * k; o[10] = zz * k; o[11] = 0f
+        o[12] = r.spine[0]; o[13] = r.spine[1]; o[14] = r.spine[2]; o[15] = 1f
+        p.setMat4("uModel", o)
+        p.set1f("uSwayMode", 2f)
+        p.set1f("uExtension", 1f - l[1])
+        p.set4f("uAnem", l[0], l[1], l[2], l[3])
+        p.set4f("uAnemPush", l[5], l[6], l[7], l[9])
+        p.set4f("uAnemMisc", l[4], k, 0f, 0f)
+        val flow = interp.current?.flowStrength ?: 1f
+        p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.12f * flow.coerceIn(0f, 2f))
+        p.set1f("uBleach", l[8]); p.set1f("uBrown", 0f)
     }
 
     private fun rigidModel(r: FishRig, out: FloatArray) {
@@ -1413,6 +1452,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val TREE_SWAY = 0.035f
         /** A tap within this band below the waterline (cm) counts as a tap on the water's surface. */
         const val SURFACE_BAND_CM = 2.5f
+        /** OrganismPose.motionMode of the bubble-tip anemone (polyp.vert anemone mode). */
+        const val ANEMONE_MODE = 6
         /** Padding (cm) around a coral model's bounds for a tap to count as on the coral. */
         const val CORAL_PAD = 1.0f
         private const val HOLD_NONE = 0

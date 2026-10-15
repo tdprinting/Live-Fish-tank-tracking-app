@@ -204,6 +204,7 @@ object SubmarineRules {
         val k = o.brainKind
         if (k in INDIFFERENT) return SubReaction.NONE
         if (k == BrainKind.FEATHER_DUSTER) return if (d < 8.0 * (1 - 0.5 * habit)) SubReaction.HIDE else SubReaction.NONE
+        if (k == BrainKind.ANEMONE) return SubReaction.NONE
         // a charge: everything that can get away does
         if (closing > STARTLE_SPEED && d < startleReach(o, habit)) return when {
             o.isFish -> SubReaction.STARTLE

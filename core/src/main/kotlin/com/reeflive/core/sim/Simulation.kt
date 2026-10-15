@@ -59,6 +59,8 @@ class Simulation private constructor(
     val repro = Reproduction(this)
     /** Hermit shells, asterina-vs-organ-pipe and feather-duster crown cycle (research 04). */
     val invertEcology = InvertEcology(this)
+    /** Bubble-tip anemones and the clowns adopting them (research 40). */
+    val anemones = AnemoneModel(this)
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -751,6 +753,7 @@ class Simulation private constructor(
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
+        anemones.step(dtMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
