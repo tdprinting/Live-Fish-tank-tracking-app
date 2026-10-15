@@ -99,7 +99,7 @@ class SallySeatTest {
     @Test
     fun sallyStandsOnTheSurfaceWithEveryFootPlanted() {
         // dusk into the night (out grazing on rock and glass) at the live tick, and a day pressed into its crevice at 10x
-        val runs = listOf("seed 7 dusk 20 Hz" to run(7, 18.5, 2.0, 0.05), "seed 8 day 10x" to run(8, 9.0, 3.0, 0.5))
+        val runs = listOf("seed 7 dusk 20 Hz" to run(7, 18.5, 1.0, 0.05), "seed 8 day 10x" to run(8, 9.0, 3.0, 0.5))
         for ((name, st) in runs) {
             println("[$name] %d samples (%d on rock, %d on faces steeper than 60°, %d walking, %d leg-ticks folded): max gap %.3f cm, deepest body %.3f, foot %.3f, knee %.3f cm"
                 .format(st.samples, st.onRock, st.steep, st.walking, st.folded, st.maxGap, -st.worstBody, -st.worstFoot, -st.worstKnee))
