@@ -35,6 +35,8 @@ class FishRig(val id: String) {
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
+    /** Microfauna only: 0 fully visible .. 1 gone, as it shrinks toward a speck with distance (MicroCritterVisuals). */
+    var fade = 0f
 
     fun headX() = spine[0]; fun headY() = spine[1]; fun headZ() = spine[2]
 

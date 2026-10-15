@@ -21,6 +21,7 @@ uniform float uIchSpots;     // 0..1 white spot coverage (ich)
 uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
 uniform float uDead;
+uniform float uFade;         // microfauna: 0 full contrast .. 1 lost in the water (MicroCritterVisuals)
 uniform vec4 uChroma;        // bobtail squid (core SquidRig): x chromatophore expansion, y passing-cloud strength, z light-organ glow, w 1 + cloud phase (0 = off)
 // Life stages (LifeStageVisuals.kt, additive): a second body texture painted on the same UV layout, mixed in by
 // uStageMix while a fish grows from one stage's pattern into the next (or changes sex). 0 = unchanged.
@@ -139,5 +140,7 @@ void main() {
     col += vec3(0.35, 0.62, 0.95) * sqGlow * 0.06 * (0.3 + 0.7 * smoothstep(0.0, -0.7, N.y));
 #endif
     col = applyWater(col, vWorld);
+    // distant microfauna sink into the water colour, so specks melt away instead of popping out
+    col = mix(col, uFog.rgb, uFade * 0.85);
     fragColor = vec4(tonemap(col), alpha);
 }
