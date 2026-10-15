@@ -458,7 +458,10 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         val L = max(o.lengthCm, 1.0)
         // the disc tilts to the rock under it at a turning rate, not in a tick (rough rock jitters the surface normal,
         // which would swing the whole star and wrench its holding tips off their holds)
-        val target = o.up.normalized(Vec3.Y)
+        var target = o.up.normalized(Vec3.Y)
+        // the sim's up names no surface under the disc (walked off a wall onto the sand, out from under a ledge): the
+        // disc turns to rest on the nearest surface instead of standing on edge in the water
+        if (s.cast(o.pos, target * -1.0, SEAT_REACH_CM) < 0) target = s.normal(o.pos)
         upSm = if (!seated) target else {
             val ang = acos((upSm dot target).coerceIn(-1.0, 1.0))
             val maxA = UP_RATE * dt
@@ -504,10 +507,24 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
             t == 0.0 -> o.pos
             else -> o.pos - u * 0.4
         }
-        for (i in 0 until 4) {
-            val m = discMin(s, false)
+        var m = discMin(s, false)
+        val start = base
+        for (i in 0 until SEAT_ITERS) {
             if (m >= -0.005) break
-            base += u * (-m + 0.01)
+            // lifted along its up or pushed out along the surface normal at its deepest point, whichever leaves it
+            // clearer (lifting along the up alone walked a disc set against a wall or under a ledge through the sand);
+            // never moved to where it is buried deeper, nor far from where the sim has the animal
+            val b0 = base
+            val n = s.normal(discDeep)
+            base = b0 + u * (-m + 0.01)
+            val mu = discMin(s, false)
+            base = b0 + n * (-m + 0.01)
+            val mn = discMin(s, false)
+            val best = max(mu, mn)
+            if (best <= m) { base = b0; break }
+            if (mu > mn) base = b0 + u * (-m + 0.01)
+            if (base.distanceTo(start) > SEAT_SHIFT_CM) { base = b0; break }
+            m = best
         }
         discUnderCm = discMin(s, false)
         discTopClearCm = discMin(s, true)
@@ -517,13 +534,20 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
     private fun discMin(s: CrawlSurface, top: Boolean): Double {
         val y = if (top) 0.02 else DISC_FOOT_Y
         val r = if (top) 0.7 * DISC_R else DISC_R
-        var m = s.dist(world(0.0, if (top) 0.032 else DISC_FOOT_Y, 0.0))
+        var p = world(0.0, if (top) 0.032 else DISC_FOOT_Y, 0.0)
+        var m = s.dist(p)
+        discDeep = p
         for (i in 0 until 10) {
             val a = 2 * PI * i / 10
-            m = min(m, s.dist(world(r * cos(a), y, r * sin(a))))
+            p = world(r * cos(a), y, r * sin(a))
+            val d = s.dist(p)
+            if (d < m) { m = d; discDeep = p }
         }
         return m
     }
+
+    /** The deepest sample of the last [discMin]. */
+    private var discDeep = Vec3.ZERO
 
     /** Other animals lying on the substrate within the arms' reach (the arms drape over them). */
     private fun gatherOthers(o: Organism, s: CrawlSurface, others: List<Organism>, L: Double) {
@@ -641,6 +665,11 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
                 val h = stepHeight(s, psi, cx, cz, seg, sup, yDraw, free, L, maxUp, maxDown)
                 if (h > maxUp) continue
                 took = cand; supN = sup + h
+                // nothing under the step within its drop (off a rock edge, past a ceiling's rim): a lying arm is not
+                // held out level in the water along the disc's frame but hangs under its own weight onto what is below
+                if (free <= 0.0 && stepHung && h < maxUp && drape(s, k, a0 + shape + carry, cand, lo, hi, cx, cz, seg, yDraw, L)) {
+                    took = drapeTook; supN = drapeY * L
+                }
                 break
             }
             if (took.isNaN()) {
@@ -692,33 +721,127 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
 
     /**
      * Rise (cm, along the disc's up) of the surface under the step from (cx, cz) in direction [psi]: probed from the
-     * arm's own level where the step would land, then again where its run (shortened by that rise) lands; bodies lying
-     * there are climbed over. More than [maxUp]: a wall.
+     * arm's own level where the step would land, then again where its run (shortened by that rise) lands. When the two
+     * disagree the surface steps between them (an edge, a riser): the run whose probed rise gives back that run is
+     * bisected for, and at a sheer edge the step pivots on its root until it touches the edge (hanging down a face, or
+     * pitched up against a riser), so a step never ends where its height was not probed. Bodies lying there are climbed
+     * over. More than [maxUp]: a wall.
      */
     private fun stepHeight(
         s: CrawlSurface, psi: Double, cx: Double, cz: Double, seg: Double, sup: Double, yDraw: Double, free: Double,
         L: Double, maxUp: Double, maxDown: Double,
     ): Double {
         val c = cos(psi); val sn = sin(psi)
-        var w = world(cx + c * seg, 0.0, cz - sn * seg)
-        // (the support keeps a hair of clearance from the surface, so a skin-thick arm never shows through it)
-        var h = s.heightAt(w + uS * sup, uS, maxUp, maxDown + CLEAR_CM) + CLEAR_CM
+        val lift = max(free, 0.0)
+        stepHung = false
+        var h = probeRise(s, c, sn, cx, cz, seg, sup, maxUp, maxDown)
         if (h > maxUp) return h
-        val dy = (sup + h) / L + max(free, 0.0) - yDraw
-        val hz = sqrt(max(seg * seg - dy * dy, MIN_RUN * seg * seg))
-        w = world(cx + c * hz, 0.0, cz - sn * hz)
-        val h2 = s.heightAt(w + uS * sup, uS, maxUp, maxDown + CLEAR_CM) + CLEAR_CM
-        if (h2 > maxUp) return h2
-        h = h2
+        var hz = runOf(h, sup, L, lift, yDraw, seg)
+        if (hz < seg * (1 - RUN_TOL)) {
+            val h2 = probeRise(s, c, sn, cx, cz, hz, sup, maxUp, maxDown)
+            if (h2 > maxUp) return h2
+            val r2 = runOf(h2, sup, L, lift, yDraw, seg)
+            if (abs(r2 - hz) <= RUN_TOL * seg) { h = h2; hz = r2 } else {
+                // runOf(probe(r)) − r is ≥ 0 at the shortest run and ≤ 0 at the full one: bisect the bracket it changes in
+                var lo: Double; var hi: Double; var hLo: Double; var hHi: Double
+                if (r2 > hz) { lo = hz; hLo = h2; hi = seg; hHi = h } else { lo = sqrt(MIN_RUN) * seg; hLo = Double.NaN; hi = hz; hHi = h2 }
+                for (it in 0 until EDGE_ITERS) {
+                    val m = 0.5 * (lo + hi)
+                    val hm = probeRise(s, c, sn, cx, cz, m, sup, maxUp, maxDown)
+                    if (hm <= maxUp && runOf(hm, sup, L, lift, yDraw, seg) > m) { lo = m; hLo = hm } else { hi = m; hHi = hm }
+                }
+                if (hHi > maxUp) return maxUp + 1.0
+                if (hLo.isNaN()) { hLo = probeRise(s, c, sn, cx, cz, lo, sup, maxUp, maxDown); if (hLo > maxUp) return hLo }
+                val rLo = runOf(hLo, sup, L, lift, yDraw, seg)
+                if (rLo <= hi) { h = hLo; hz = rLo } else {
+                    // a sheer edge between lo and hi: the step's end rests against it, on its arc about the step's root
+                    hz = 0.5 * (lo + hi)
+                    val dyMax = sqrt(1.0 - MIN_RUN) * seg
+                    val dy = (if (hHi < hLo) -1.0 else 1.0) * sqrt(max(seg * seg - hz * hz, 0.0)).coerceAtMost(dyMax)
+                    h = ((yDraw - lift + dy) * L - sup).coerceIn(min(hLo, hHi), max(hLo, hHi))
+                    hz = runOf(h, sup, L, lift, yDraw, seg)
+                    stepHung = dy < 0
+                }
+            }
+        }
+        val w = world(cx + c * hz, 0.0, cz - sn * hz)
         // the step's middle must be clear too (a step can cut across a ridge or the corner of a block)
-        val mid = world(cx + 0.5 * c * hz, ARM_Y + 0.5 * (yDraw + (sup + h) / L + max(free, 0.0)), cz - 0.5 * sn * hz)
+        val mid = world(cx + 0.5 * c * hz, ARM_Y + 0.5 * (yDraw + (sup + h) / L + lift), cz - 0.5 * sn * hz)
         if (s.dist(mid) < -MID_TOL_CM) return maxUp + 1.0
+        if (h <= -maxDown + 1e-9) stepHung = true
         for (n in 0 until nOthers) {
             val top = topOf(otherPos[n]!!, otherR[n], w) - sup
-            if (top > h) { if (top <= 2 * maxUp) h = top else return maxUp + 1.0 }
+            if (top > h) { if (top <= 2 * maxUp) { h = top; stepHung = false } else return maxUp + 1.0 }
         }
         return h
     }
+
+    /** The last [stepHeight] found nothing under the step's end within its drop (it hangs over an edge). */
+    private var stepHung = false
+
+    /** Rise (cm) of the surface under the point [r] (model) along the step from (cx, cz), probed from the arm's level. */
+    private fun probeRise(
+        s: CrawlSurface, c: Double, sn: Double, cx: Double, cz: Double, r: Double, sup: Double, maxUp: Double, maxDown: Double,
+    ): Double {
+        // (the support keeps a hair of clearance from the surface, so a skin-thick arm never shows through it)
+        val w = world(cx + c * r, 0.0, cz - sn * r)
+        return s.heightAt(w + uS * sup, uS, maxUp, maxDown + CLEAR_CM) + CLEAR_CM
+    }
+
+    /** Run (model) of a step whose end lies [h] cm above the support [sup], as the march draws it. */
+    private fun runOf(h: Double, sup: Double, L: Double, lift: Double, yDraw: Double, seg: Double): Double {
+        val dy = (sup + h) / L + lift - yDraw
+        return sqrt(max(seg * seg - dy * dy, MIN_RUN * seg * seg))
+    }
+
+    /**
+     * A lying step with no surface under it within its drop (off a rock edge, past a ceiling's rim, over the top of a
+     * wall the disc is on) is not held out in the water along the disc's frame: of a small fan of directions
+     * (the [DRAPE_TURNS] bends, a turn toward straight down, and rises from the steepest drop along the disc's up to
+     * level, or up to the steepest rise when gravity points that way) it takes the one whose end lies nearest rock, sand,
+     * glass or an animal while still clear of it, a bend costing [DRAPE_BEND_COST] cm per rad and pointing away from
+     * straight down up to [DRAPE_G_COST] cm. So the arm wraps round the edge and lies on the face or on whatever is
+     * below. Sets [drapeTook] (the bend) and [drapeY] (the step-end height, model); false when no direction is clear.
+     */
+    private fun drape(
+        s: CrawlSurface, k: Int, psi0: Double, took0: Double, lo: Double, hi: Double, cx: Double, cz: Double,
+        seg: Double, yDraw: Double, L: Double,
+    ): Boolean {
+        val dyMax = sqrt(1.0 - MIN_RUN) * seg
+        // gravity in the disc frame (model x = fS, y = uS, z = rS)
+        val gf = -fS.y; val gr = -rS.y
+        val tookG = if (gf * gf + gr * gr < 0.04) took0 else wrap(atan2(-gr, gf) - psi0).coerceIn(-DEFL_MAX, DEFL_MAX).coerceIn(lo, hi)
+        val rises = if (uS.y < -0.2) DRAPE_RISES else DRAPE_RISES - 2
+        val need = ARM_Y * L + CLEAR_CM
+        var best = Double.MAX_VALUE
+        var lastT = Double.NaN
+        for (n in 0..DRAPE_TURNS.size) {
+            val t = (if (n == DRAPE_TURNS.size) tookG else took0 + DRAPE_TURNS[n] * pref[k]).coerceIn(-DEFL_MAX, DEFL_MAX).coerceIn(lo, hi)
+            if (t == lastT || (n == DRAPE_TURNS.size && abs(t - took0) < 1e-3)) continue
+            lastT = t
+            val cost = DRAPE_BEND_COST * abs(t - took0)
+            if (cost >= best) continue
+            val psi = psi0 + t
+            val c = cos(psi); val sn = sin(psi)
+            val runY = fS.y * c - rS.y * sn
+            for (m in 0 until rises) {
+                // rises: steepest drop, half drop, level, then (gravity along the up) half and full rise
+                val dy = dyMax * (0.5 * m - 1.0)
+                val hz = sqrt(max(seg * seg - dy * dy, MIN_RUN * seg * seg))
+                val g = DRAPE_G_COST * 0.5 * (1.0 + (runY * hz + uS.y * dy) / seg)
+                if (cost + g >= best) continue
+                val e = clearOf(s, world(cx + c * hz, ARM_Y + yDraw + dy, cz - sn * hz)) - need
+                if (e < 0.0 || e + cost + g >= best) continue
+                if (clearOf(s, world(cx + 0.5 * c * hz, ARM_Y + yDraw + 0.5 * dy, cz - 0.5 * sn * hz)) < need) continue
+                best = e + cost + g
+                drapeTook = t; drapeY = yDraw + dy
+            }
+        }
+        return best < Double.MAX_VALUE
+    }
+
+    private var drapeTook = 0.0
+    private var drapeY = 0.0
 
     /** Clearance (cm) of [p] from the surface and from the bodies the arms drape over. */
     private fun clearOf(s: CrawlSurface, p: Vec3): Double {
@@ -820,5 +943,19 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         /** Largest turn (rad) of a drawn step from one contact to the next. */
         const val PSI_STEP = 0.5
         const val MID_TOL_CM = 0.0
+        /** A step's two probes agree when the runs they give are within this share of a step; else the edge between
+         *  them is bisected this many times. */
+        const val RUN_TOL = 0.15
+        const val EDGE_ITERS = 2
+        /** Tries to lift or push a disc seated partly inside rock, sand or glass clear of it. */
+        const val SEAT_ITERS = 6
+        const val SEAT_SHIFT_CM = 1.2
+        /** The disc takes the sim's up only when a surface lies this close (cm) under it along that up. */
+        const val SEAT_REACH_CM = 1.5
+        /** A hanging step's fan ([drape]): bends tried (rad, preferred side positive), rises tried, costs (cm). */
+        private val DRAPE_TURNS = doubleArrayOf(0.0, 0.6, -0.6, 1.2, -1.2)
+        const val DRAPE_RISES = 5
+        const val DRAPE_BEND_COST = 0.15
+        const val DRAPE_G_COST = 0.2
     }
 }

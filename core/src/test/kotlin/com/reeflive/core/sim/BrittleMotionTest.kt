@@ -101,30 +101,46 @@ class BrittleMotionTest {
         assertTrue("a holding tip never skids far (max ${"%.3f".format(tipMax)} cm per tick)", tipMax < 2 * BrittleArms.GRIP_TOL * o.lengthCm)
     }
 
+    /**
+     * Over many paths (each seed roams its own way over rock, ledges, overhangs and sand): lying arms drape over rock
+     * edges onto whatever is below instead of standing out in the water, no arm point passes deep into rock, sand or
+     * glass (a long step straddling thin rock, a disc pulled through the sand), holding tips stay put and the disc rests
+     * on the surface. Every seed is checked and all the failures are reported together.
+     */
     @Test
     fun armsLieOnRockAndSandWithoutPassingIntoThem() {
-        val s = TestTank.sim(listOf(TestTank.seed("brittle")), seed = 3L, startHour = 23.0)
-        val c = Contact()
-        val o = s.star(); val arms = s.arms()
-        val lastTip = arrayOfNulls<Vec3>(BrittleArms.ARMS)
-        var tipSum = 0.0; var tipTicks = 0L
-        var rock = 0L
-        s.advance(1800.0, behaviorDt = 0.05) {
-            checkArms(s, c)
-            if (o.up.y < 0.7) rock++
-            for (k in 0 until BrittleArms.ARMS) {
-                if (!arms.gripping(k)) { lastTip[k] = null; continue }
-                val t = arms.tipContact(k)
-                lastTip[k]?.let { tipSum += it.distanceTo(t); tipTicks++ }
-                lastTip[k] = t
+        val fails = mutableListOf<String>()
+        val seen = StringBuilder()
+        for (seed in 1L..8L) {
+            val s = TestTank.sim(listOf(TestTank.seed("brittle")), seed = seed, startHour = 23.0)
+            val c = Contact()
+            val o = s.star(); val arms = s.arms()
+            val lastTip = arrayOfNulls<Vec3>(BrittleArms.ARMS)
+            var tipSum = 0.0; var tipTicks = 0L
+            var rock = 0L
+            s.advance(900.0, behaviorDt = 0.05) {
+                checkArms(s, c)
+                if (o.up.y < 0.7) rock++
+                for (k in 0 until BrittleArms.ARMS) {
+                    if (!arms.gripping(k)) { lastTip[k] = null; continue }
+                    val t = arms.tipContact(k)
+                    lastTip[k]?.let { tipSum += it.distanceTo(t); tipTicks++ }
+                    lastTip[k] = t
+                }
             }
+            val hover = c.hovering.toDouble() / max(1L, c.lying)
+            val tip = tipSum / max(1L, tipTicks)
+            seen.append("\n  seed $seed: hovering ${"%.2f".format(100 * hover)} %, inside ${"%.2f".format(100 * c.share)} %, " +
+                "deepest ${"%.2f".format(c.worst)} cm, tip ${"%.3f".format(tip)} cm/tick, disc ${"%.2f".format(arms.discUnderCm)} cm")
+            fun check(ok: Boolean, what: String) { if (!ok) fails += "seed $seed: $what" }
+            check(rock > 1000, "roamed over the rock too ($rock tilted ticks)")
+            check(c.share < 0.02, "arm skin inside rock/sand/glass: ${"%.2f".format(100 * c.share)} % of points")
+            check(c.worst < 1.5, "deepest clip ${"%.2f".format(c.worst)} cm: ${c.worstAt}")
+            check(c.hovering < 0.02 * c.lying, "lying arms rest on the surface (${c.hovering} of ${c.lying} points > 0.6 cm off it)")
+            check(tip < 0.15, "holding tips stay on their holds over rock (mean ${"%.3f".format(tip)} cm per tick)")
+            check(arms.discUnderCm > -0.1, "the disc rests on the surface (${"%.2f".format(arms.discUnderCm)} cm)")
         }
-        assertTrue("roamed over the rock too ($rock tilted ticks)", rock > 1000)
-        assertTrue("arm skin inside rock/sand/glass: ${"%.2f".format(100 * c.share)} % of points", c.share < 0.02)
-        assertTrue("deepest clip ${"%.2f".format(c.worst)} cm: ${c.worstAt}", c.worst < 1.5)
-        assertTrue("lying arms rest on the surface (${c.hovering} of ${c.lying} points > 0.6 cm off it)", c.hovering < 0.02 * c.lying)
-        assertTrue("holding tips stay on their holds over rock (mean ${"%.3f".format(tipSum / max(1L, tipTicks))} cm per tick)", tipSum / max(1L, tipTicks) < 0.15)
-        assertTrue("the disc rests on the surface (${"%.2f".format(arms.discUnderCm)} cm)", arms.discUnderCm > -0.1)
+        assertTrue(fails.joinToString("\n") + seen, fails.isEmpty())
     }
 
     @Test
