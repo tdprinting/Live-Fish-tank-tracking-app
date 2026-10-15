@@ -49,9 +49,6 @@ object DefaultStock {
     val corals = listOf(
         LivestockSeed("capnella_sp", "Kenya tree", placement = "coral_kenya_main", id = "kenya"),
         LivestockSeed("briareum_sp", "GSP (upper left)", placement = "coral_gsp_upper_left", id = "gsp1"),
-        // Tee's night video (2026-10-15): the lime mound at the lower right is hairy mushrooms with purple centres,
-        // not GSP (mushroom_hairy_mound.glb on the old GSP anchor)
-        LivestockSeed("rhodactis_sp", "Hairy mushroom mound", placement = "coral_gsp_lower_right", id = "shroom_mound"),
         LivestockSeed("zoanthus_sp", "Zoas", placement = "coral_zoa_front_center", id = "zoa"),
         LivestockSeed("clavularia_sp", "Clove polyps", placement = "coral_clove_kenya_base", id = "clove"),
         LivestockSeed("discosoma_sp", "Mushrooms", placement = "coral_shroom_front_left", id = "shroom"),
@@ -64,6 +61,10 @@ object DefaultStock {
         LivestockSeed("lobophytum_sp", "Pink leather", placement = "coral_leather_pink_front", id = "leather_pink"),
         LivestockSeed("sinularia_sp", "Finger leather", placement = "coral_finger_leather", id = "finger_leather"),
         LivestockSeed("amplexidiscus_fenestrafer", "Elephant ear", placement = "coral_elephant_ear", id = "elephant_ear"),
+        // Tee's night video (2026-10-15): the lime mound at the lower right is hairy mushrooms with purple centres,
+        // not GSP (mushroom_hairy_mound.glb on the old GSP anchor). Listed after
+        // shroom_hairy so the clowns' host stays the arch-ledge colony
+        LivestockSeed("rhodactis_sp", "Hairy mushroom mound", placement = "coral_gsp_lower_right", id = "shroom_mound"),
     )
 
     val all: List<LivestockSeed> get() = fish + inverts + corals
