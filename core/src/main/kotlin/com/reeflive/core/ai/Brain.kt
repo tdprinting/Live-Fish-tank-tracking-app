@@ -97,6 +97,9 @@ abstract class SpeciesBrain(val c: Ctx) {
         o.brain = utility
     }
 
+    /** After steering has moved the body this tick (a brain's last word on where it is). */
+    open fun postSteer(c: Ctx) {}
+
     open fun preTick(c: Ctx) {
         val dt = c.dt
         o.sleeping = false

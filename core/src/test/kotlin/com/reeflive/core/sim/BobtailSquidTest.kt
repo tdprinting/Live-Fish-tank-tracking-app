@@ -69,6 +69,25 @@ class BobtailSquidTest {
         assertTrue("no glow while buried", b.rig.glow < 0.05)
     }
 
+    @Test fun neverGoesIntoTheSandExceptByDiggingIn() {
+        // hovering and hunting before dawn, then burying at lights-on
+        val sim = squidSim(6.0)
+        val o = sim.squidOrg()
+        val b = sim.squidBrain()
+        var worst = Double.MAX_VALUE
+        sim.advance(4 * 3600.0) {
+            if (o.posture == 5) return@advance
+            val p = o.toPose()
+            for (i in 0 until p.spine.size / 3) {
+                val x = p.spine[i * 3].toDouble(); val z = p.spine[i * 3 + 2].toDouble()
+                worst = minOf(worst, p.spine[i * 3 + 1] - sim.sand.surfaceY(x, z))
+            }
+        }
+        assertTrue("its body went ${"%.2f".format(-worst)} cm into the sand while swimming", worst > 0.0)
+        assertTrue("buried by mid-morning", b.buried && b.burials >= 1)
+        assertTrue("in a trench it dug", sim.sand.buriedOf(o.id) != null)
+    }
+
     @Test fun emergesAtNightAndHoversWithFinsAndGlow() {
         val sim = squidSim(22.0)
         val o = sim.squidOrg()

@@ -771,6 +771,7 @@ class Simulation private constructor(
             a.brain.preTick(a.ctx)
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
+            a.brain.postSteer(a.ctx)
             o.attached = a.intent.kinematic || a.intent.crawl
         }
         sandWork.step(organisms)
