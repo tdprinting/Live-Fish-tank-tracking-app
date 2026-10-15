@@ -1845,6 +1845,28 @@ the behaviour time budget. `FishTraceDump` (`REEFLIVE_TRACE=<dir>`) writes paths
 
 AI cost: the probe's 30 sim-minutes take the same wall time as before (~13.5 s); the perch trace runs once at start-up.
 
+### 22.2 Part 2: clowns, tang, cardinal
+
+| Species | Measured before | Change |
+|---|---|---|
+| Ocellaris clowns | At the host 99 % of the day with no trips off it. | `Sortie`: 8–25 s trips 0.8–2 body lengths over the discs (never past 2.9 BL from the host), snapping at drifting plankton every 2–5 s. Trips come about once a minute in the first hours after lights-on and less than half as often through midday (`ClownBrain.diel`, juvenile ocellaris activity, research 30 §1). The male tags along a length behind and below the female, and goes up on his own about half as often. |
+| Blue tang | Patrol swept wall to wall along one lane at one speed. | `Patrol` is a circuit along the rock face, 1–2 body lengths off it: 12–30 cm legs on a height band that changes when it turns, a pace of 0.7–1.3× cruise per leg, a look-about hover on a fifth of the legs, and a 12 % chance of turning back early. |
+| Pajama cardinal | Held still by its cover all day (correct, research 30 §3) with nothing else. | Still rests by day, but turns to watch a fish passing within 18 cm and snaps at a drifting particle every 20–60 s. |
+| Falco hawkfish | A flee to a rock-top perch could hover at the approach point, a clearance above it, until the flee ended. | It clamps on at the approach point too. |
+
+`LivelierFishTest` checks the clown trips (more at dawn than midday, within the leash) and the tang's height spread.
+
+### 22.3 Part 3: gobies, dottyback, cleaner wrasse
+
+| Species | Measured before | Change |
+|---|---|---|
+| Engineer goby (juvenile) | Hovered by the burrow mouth 80–90 % of the day. | Every 30–70 s a 20–60 s plankton trip 1–2 body lengths up off the burrow and up to 1.5 out, snapping every 2–5 s, nose into the flow; straight back down when alarmed (research 30 §4: juveniles feed on plankton away from the burrow by day; the wild 50 m roam scaled to the tank). |
+| Diamond goby | Sifted 99 % of the day, about 14 mouthfuls a minute. | Half of its sifting bouts end in a 4–15 s rest on the sand, eyes turning, gills slowing (`SandRest`): about 10 mouthfuls a minute, near the measured ~9 counting rests (Myers et al. 2019). |
+| Indigo dottyback | Crevice-to-crevice route only. | Three rounds in ten start with a quick sweep into the open water in front of the cave and back (research 30 §3, hobby observations; DESIGN ESTIMATE). |
+| Cleaner wrasse | Service the same whatever its hunger. | A sated cleaner inspects for up to 20 % less time (Triki et al. 2025: satiated cleaners give poorer service). |
+
+`LivelierFishTest` also checks the diamond goby's mouthful rate and rests and the engineer goby's trips.
+
 ## 23. Fish waste (`sim/WasteSystem.kt`, `render/WasteVisuals.kt`, research 18_fish_waste)
 
 - **Guts.** 17 % of each fish's N output is fecal, not gill ammonia (feed N budget: 13 % in solids vs 62 % dissolved,

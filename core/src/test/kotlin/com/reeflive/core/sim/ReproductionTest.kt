@@ -31,7 +31,10 @@ class ReproductionTest {
         val c = sim.repro.clownClutch()
         assertNotNull("pair never spawned", c)
         assertEquals("clown_m", c!!.tenderId)
-        assertTrue("hatch window ${c.hatchDays}", c.hatchDays in 8.0..10.0)
+        // research 28 §1: ~7 d at 28.5 °C to ~10 d at 26 °C
+        val expect = (10.0 - 1.2 * (sim.water.s.tempC - 26.0)).coerceIn(6.5, 12.0)
+        assertTrue("hatch window ${c.hatchDays} at ${sim.water.s.tempC} °C", kotlin.math.abs(c.hatchDays - expect) < 0.5)
+        assertTrue("eggs ${c.eggs}", c.eggs in 80..1000)
         // the clutch is in the snapshot with position and age
         val pose = sim.snapshot().eggClutches.single()
         assertEquals(c.pos, pose.pos)

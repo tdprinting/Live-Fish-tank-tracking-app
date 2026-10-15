@@ -63,6 +63,9 @@ fun FishCard(
     onRename: ((String) -> Unit)? = null,
     onNetOut: (() -> Unit)? = null,
     netting: Boolean = false,
+    /** Breeding / nursery panel for a clown (core Brood), already filtered for the mode; null hides it. */
+    family: com.reeflive.core.sim.BroodPanel? = null,
+    onFamily: (String) -> Unit = {},
 ) {
     val c = ReefTheme.colors
     val s = LiveTheme.style
@@ -108,6 +111,10 @@ fun FishCard(
                 state.relationships.forEach { RelationshipRow(it) }
             }
         }
+        if (family != null && state.alive) {
+            Spacer(Modifier.height(14.dp))
+            FamilyBlock(family, onFamily)
+        }
         Spacer(Modifier.height(14.dp))
         if (state.alive || onNetOut == null) {
             LivePill(
@@ -137,6 +144,29 @@ fun FishCard(
                 LivePill("Give it a name", { draft = state.name; naming = true }, Modifier.fillMaxWidth(), tone = Candy.green, selected = false)
             }
         }
+    }
+}
+
+/** The clown parents' "Family" panel: eggs, larvae, the nursery tank and its buttons (core Brood). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun FamilyBlock(p: com.reeflive.core.sim.BroodPanel, onAction: (String) -> Unit) {
+    val c = ReefTheme.colors
+    Text(p.title, style = MaterialTheme.typography.titleMedium, color = c.text)
+    Spacer(Modifier.height(4.dp))
+    for (l in p.lines) Text(l, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+    Spacer(Modifier.height(8.dp))
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for (a in p.actions) {
+            LivePill(a.label, if (a.enabled) ({ onAction(a.id) }) else null, tone = Candy.orange, selected = a.enabled)
+        }
+    }
+    p.actions.firstOrNull { it.note.isNotBlank() && (!it.enabled || it.id == "RAISE_ON") }?.let {
+        Spacer(Modifier.height(4.dp))
+        Text(it.note, style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
     }
 }
 

@@ -133,6 +133,7 @@ object Thoughts {
             n == "anemone" && k == BrainKind.CLOWN -> Line(if (label.startsWith("Stung")) "zipping away from the anemone's sting" else "touching the new anemone to get used to it", "get used to the anemone", if (label.startsWith("Stung")) "Ouch, tingly!" else "Hello, new home?", Driver.HOME)
             n == "anemone" && k == BrainKind.ANEMONE -> anemoneLine(label)
             n == "feedanemone" -> Line("bringing a bite of food over to its anemone", "feed the anemone", "A snack for you!", Driver.HOME)
+            n == "sortie" -> Line("swimming up over ${e.host} to snap at plankton", "catch some plankton", "Snap! Got one.", Driver.HUNGER)
             n == "nestle" -> Line("snuggled into ${e.host}", "snuggle into ${e.host}", "Cozy!", Driver.HOME)
             n == "defend" -> Line("defending ${e.host} from ${tgt ?: "an intruder"}", "guard ${e.host}", "Stay away from my home!", Driver.TERRITORY, 3)
             // ---- tang
@@ -169,6 +170,7 @@ object Thoughts {
             n == "territory" -> Line("guarding its territory from ${tgt ?: "intruders"}", "guard its territory", "My cave!", Driver.TERRITORY, 3)
             // ---- engineer goby
             n == "burrow" -> Line(if (e.night) "asleep in its burrow" else "tucked away safe in its burrow", "rest in its burrow", if (e.night) "Zzz…" else "Safe and snug.", if (e.night) Driver.REST else Driver.HOME, 0)
+            n == "mouthhover" && label.startsWith("Picking") -> Line("swimming up over its burrow to snap at plankton", "catch some plankton", "Snap! Tiny snack.", Driver.HUNGER)
             n == "mouthhover" -> Line("hovering at its burrow door", "hang out by its burrow", "Home sweet home.", Driver.HOME)
             n == "dig" -> Line(if (k == BrainKind.DIAMOND_GOBY) "digging a cozy tunnel under a rock" else "carrying sand out of its burrow", "dig some more", "Dig dig dig!", Driver.HOME, 2)
             n == "nightpatrol" -> Line("patrolling around at night", "patrol in the dark", "Night walk!", Driver.CURIOSITY)
@@ -203,6 +205,7 @@ object Thoughts {
             n == "dart" -> Line("dashing for cover${e.because()}", "dash for cover", "Eek!", Driver.FEAR, 3)
             n == "grab" -> Line("grabbing at ${tgt ?: "a snack"}", "grab a snack", "Got you!", Driver.HUNGER, 3)
             // ---- diamond goby
+            n == "sandrest" -> Line("resting on the sand between sifting", "have a little rest", "Phew, break time.", Driver.ROUTINE)
             n == "sift" -> Line(siftNow(label), "sift the sand for critters", "Sifting sand…", Driver.HUNGER)
             // ---- leopard wrasse
             n == "sand" -> Line(sandNow(e, label), "dive into the sand to sleep", if (e.night) "Zzz…" else "Hiding!", if (e.night) Driver.REST else Driver.FEAR, if (label.startsWith("Diving") || label.startsWith("Pushing")) 3 else 0)

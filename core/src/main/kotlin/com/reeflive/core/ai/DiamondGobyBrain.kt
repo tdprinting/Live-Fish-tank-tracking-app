@@ -45,6 +45,11 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val SCOOP_S = 0.6
         @Ev(Evidence.DESIGN_ESTIMATE) const val SIFT_MIN_S = 1.5
         const val SIFT_MAX_S = 3.5
+        /** Chance a finished sifting bout is followed by a rest on the sand, and its length, s (DESIGN ESTIMATE to bring the
+         *  mouthful rate near the measured ~9/min, research 30 §5). */
+        const val REST_CHANCE = 0.5
+        const val REST_MIN_S = 4.0
+        const val REST_MAX_S = 15.0
         /** Mouthfuls per feeding station before moving on, and the hop to the next station (cm). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val MOUTHFULS_MIN = 3
         const val MOUTHFULS_MAX = 8
@@ -103,7 +108,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             burrow = p; inDir = d
         }
         nextBurrowAt = c.t + c.rng.range(300.0, 1800.0)
-        install(InBurrow(), Sift(), DigBurrow(), BottomFeed(),
+        install(InBurrow(), Sift(), SandRest(), DigBurrow(), BottomFeed(),
             BurrowDash(), SurfaceGasp(this))
     }
 
@@ -364,6 +369,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                             phase = 1; timer = 0.0
                         } else {
                             stations++
+                            // between sifting bouts it often settles on the sand for a while (research 30 §5: ~9 mouthfuls
+                            // a minute counting rests, Myers et al. 2019; perching between bouts, hobby observation)
+                            if (c.rng.chance(REST_CHANCE)) restUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S)
                             finished = true
                         }
                     }
@@ -384,6 +392,31 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             // interrupted with a mouthful: it lets the sand go where it is
             if (held > 0) { sand.expel(o.pos.x, o.pos.y, o.pos.z, held, 0.0, -1.0, 0.0, fines = 1, maxGrains = 10); held = 0.0 }
         }
+    }
+
+    /** When the current sand rest ends (set as a sifting bout finishes). */
+    private var restUntil = -1.0
+
+    /**
+     * Settled on the sand between sifting bouts, propped on the pelvic fins with the gills slowing, eyes turning to
+     * look about now and then (research 30 §5, hobby observation; durations DESIGN ESTIMATE).
+     */
+    inner class SandRest : Behavior("sandrest", "Resting on the sand") {
+        private var at = Vec3.ZERO
+        private var fwd = Vec3.X
+        private var nextLook = 0.0
+        override fun score(c: Ctx): Double = if (c.p.night || c.t >= restUntil || o.waryLevel > 0.4) 0.0 else 0.9
+        override fun enter(c: Ctx) {
+            fwd = horizontalHeading(o.heading, Vec3.X)
+            at = offRock(Vec3(o.pos.x, hoverY(o.pos.x, o.pos.z) - 0.2, o.pos.z))
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            out.place(at, fwd, Vec3.Y, 3.0)
+            o.gillRate = 0.8
+            if (c.t > nextLook) { nextLook = c.t + c.rng.range(1.5, 4.0); o.eyeYaw = c.rng.signed() * 0.4 }
+            if (c.t >= restUntil) finished = true
+        }
+        override fun exit(c: Ctx) { o.gillRate = 1.0; o.eyeYaw = 0.0 }
     }
 
     /** Burrow upkeep: duck in under the rock, come out with a mouthful and spit it a few cm away (a pit and a mound). */

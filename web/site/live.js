@@ -212,7 +212,7 @@ function showTips() {
 }
 
 // ================================================================ mode
-document.querySelectorAll('[data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
+document.querySelectorAll('.seg [data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
 function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
@@ -223,7 +223,7 @@ function setMode(m) {
   if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
   else { ui.speed = 1; live.setSpeed(1); }
   live.shelfLocked(editable() ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
-  document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+  document.querySelectorAll('.seg [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
   if (m === 'mine') {
     const info = JSON.parse(MY.info());
@@ -634,6 +634,22 @@ $('card').addEventListener('input', (e) => {
 
 // ================================================================ fish card, follow, tour
 function select(id) { ui.picked = id; renderFish(); }
+// the clown parents' "Family" panel (core Brood): eggs, larvae, the nursery tank and its buttons
+function familyHtml(f) {
+  return `<div class="family"><b>🥚 ${esc(f.title)}</b>${f.lines.map((l) => `<p class="muted">${esc(l)}</p>`).join('')}
+    <div class="row-gap wrap">${f.actions.map((x) => `<button class="btn small ${x.enabled ? '' : 'ghost'}" data-fam="${esc(x.id)}" ${x.enabled ? '' : 'disabled'} title="${esc(x.note)}">${esc(x.label)}</button>`).join('')}</div>
+    ${f.actions.filter((x) => x.note && (!x.enabled || x.id === 'RAISE_ON')).slice(0, 1).map((x) => `<p class="muted small">${esc(x.note)}</p>`).join('')}</div>`;
+}
+const FAMILY_SAYS = {
+  RAISE_ON: 'When the eggs hatch, a flashlight will lure the babies so you can scoop them into a nursery tank.',
+  ROTIFERS: 'Rotifers in! Tiny larvae can only eat food this small.',
+  BRINE: 'Baby brine shrimp in. Look at those little bellies turn orange!',
+  WATER_CHANGE: 'Fresh water for the babies.',
+  RELEASE: 'Off you go, little one! Welcome to the big tank.',
+  SPAWN_NOW: 'Watch the pair clean a spot on the rock. Eggs are coming!',
+  STOP_NURSERY: 'The fish store will take good care of them.',
+  FASTER: 'Nursery time sped up. Watch them grow!',
+};
 function renderFish() {
   // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
   let a = ui.picked && animals.find((x) => x.id === ui.picked);
@@ -650,6 +666,7 @@ function renderFish() {
     ${bar('Health', a.health, 'good')}${bar('Stress', a.stress, 'caution')}${bar('Hunger', a.hunger, 'hunger')}
     ${a.thinking ? thinkHtml(a) : `<p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>`}
     ${a.disease ? `<p class="warn">🤒 ${esc(a.disease)}${a.symptoms.length ? `: ${esc(a.symptoms.join(', '))}` : ''}</p>` : ''}
+    ${a.alive && a.family ? familyHtml(a.family) : ''}
     ${a.relations.length ? `<div class="rels">${a.relations.map((r) => `<span class="rel ${r.affinity > 0.15 ? 'good' : r.affinity < -0.15 ? 'danger' : ''}">${esc(r.label)} ${esc(r.name)}</span>`).join('')}</div>` : ''}
     ${!a.alive ? `<p class="muted">${ui.netting === a.id ? 'Here comes the net…' : `Oh no, ${esc(a.name)} didn't make it. Scoop them out to keep the water clean.`}</p>
     <div class="row-gap"><button class="btn small" data-fnet ${ui.netting === a.id ? 'disabled' : ''}>🥅 ${ui.netting === a.id ? 'Scooping…' : 'Scoop out with the net'}</button></div>` : `
@@ -662,6 +679,10 @@ $('fish').addEventListener('click', (e) => {
   if (!d) return;
   if ('fclose' in d) { ui.picked = null; ui.followInfo = false; renderFish(); renderFollow(); }
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
+  else if ('fam' in d) {
+    if (d.fam === 'VIEW_NURSERY') { ui.picked = null; live.nursery(true); say('Here is the nursery tank. Drag anywhere to go back to the big tank.'); }
+    else { SB.act('breed', d.fam, 0); cue('TICK'); if (FAMILY_SAYS[d.fam]) say(FAMILY_SAYS[d.fam]); setTimeout(() => { animals = JSON.parse(SB.animals()); renderFish(); }, 150); }
+  }
   else if ('fnet' in d) {
     // the card steps aside so the net can be watched; the goodbye plays once it is out
     const name = $('fish').querySelector('strong')?.textContent || 'them';
