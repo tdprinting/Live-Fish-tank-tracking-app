@@ -158,6 +158,9 @@ class BodyCollisionTest {
         var worstEnv = 0.0; var worstEnvWho = ""
         var worstPair = 0.0; var worstPairWho = ""
         var samples = 0L
+        var pairSamples = 0L
+        var envOver = 0L
+        var pairOver = 0L
         var ticks = 0L
         var nanos = 0L
         var restores = 0L
@@ -177,12 +180,15 @@ class BodyCollisionTest {
                 for (o in live) {
                     val v = ringPenetration(sim, o)
                     samples++
+                    if (v > tol) envOver++
                     if (v > worstEnv) { worstEnv = v; worstEnvWho = "$o posture ${o.posture} '${o.behaviorName}' at ${o.pos} t=${sim.simTimeSec} [$lastTerm]" }
                 }
                 for (i in live.indices) for (j in i + 1 until live.size) {
                     val a = live[i]; val b = live[j]
                     if (sim.bodies.touchAllowedForTest(a, b, sim.perception.stations)) continue
                     val v = sim.bodies.pairPenetration(a, b)
+                    pairSamples++
+                    if (v > tol) pairOver++
                     if (v > worstPair) { worstPair = v; worstPairWho = "$a '${a.behaviorName}' / $b '${b.behaviorName}' t=${sim.simTimeSec}" }
                 }
             }
@@ -202,9 +208,12 @@ class BodyCollisionTest {
         val on = cost(true); val off = cost(false)
         println("BodyCollisionTest: sim tick %.0f µs with bodies, %.0f µs without (collision %.0f µs per tick)".format(on, off, on - off))
         println("BodyCollisionTest: $armCheck")
-        assertTrue("body into geometry by %.3f cm: $worstEnvWho".format(worstEnv), worstEnv <= tol)
+        // Solid bodies ship as a setting with polish to follow (Tee chose "merge with caps", 2026-10-15): rare transients
+        // over [tol] are allowed up to the same per-check rate and depth ceilings as NoOverlapTest
+        println("BodyCollisionTest: $envOver of $samples body samples and $pairOver of $pairSamples pairs over $tol cm")
+        assertTrue("body into geometry by %.3f cm ($envOver of $samples over $tol): $worstEnvWho".format(worstEnv), worstEnv <= ENV_CEIL && envOver <= samples * ENV_RATE)
         armCheck.failure()?.let { throw AssertionError(it) }
-        assertTrue("bodies overlap by %.3f cm: $worstPairWho".format(worstPair), worstPair <= tol)
+        assertTrue("bodies overlap by %.3f cm ($pairOver of $pairSamples over $tol): $worstPairWho".format(worstPair), worstPair <= PAIR_CEIL && pairOver <= pairSamples * PAIR_RATE)
     }
 
     /**
@@ -259,5 +268,11 @@ class BodyCollisionTest {
         return worst
     }
 
-    private companion object { val TERMS = listOf("rock", "sand", "end glass", "front/back glass", "water surface") }
+    private companion object {
+        val TERMS = listOf("rock", "sand", "end glass", "front/back glass", "water surface")
+        const val ENV_CEIL = 1.5
+        const val ENV_RATE = 2e-4
+        const val PAIR_CEIL = 1.0
+        const val PAIR_RATE = 3e-5
+    }
 }
