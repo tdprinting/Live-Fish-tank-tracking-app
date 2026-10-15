@@ -193,20 +193,29 @@ object Social {
  */
 class KeepClear(val b: SpeciesBrain) : Behavior("keepclear", "Keeping clear") {
     private var spot: Vec3? = null
+    private var bout = 5.0
+    private var restUntil = -1e9
     override val targetVerb: String get() = "keeping clear of"
     override fun score(c: Ctx): Double {
-        c.o.wary ?: return 0.0
-        if (c.p.night || c.o.attached) return 0.0
+        val w = c.o.wary ?: return 0.0
+        if (finished || c.p.night || c.o.attached) return 0.0
+        // after a bout it gets on with its day unless the feared fish closes in again (a chased fish moves off and
+        // keeps its distance; it does not stand and stare for minutes: the tang spent a third of its day doing that)
+        if (c.t < restUntil && w.pos.distanceTo(c.o.pos) > 1.5 * c.L + 8) return 0.0
         return (0.35 + 0.5 * c.o.waryLevel).coerceAtMost(0.75)
     }
-    override fun enter(c: Ctx) { spot = null }
+    override fun enter(c: Ctx) { spot = null; bout = c.rng.range(3.0, 8.0) }
+    override fun exit(c: Ctx) { restUntil = c.t + c.rng.range(10.0, 30.0) * (1.2 - c.o.waryLevel).coerceIn(0.3, 1.0) }
     override fun update(c: Ctx, out: SteerIntent) {
         val w = c.o.wary ?: run { finished = true; return }
         c.o.focusId = w.id
-        if (spot == null || elapsed > 6) { spot = c.coverPoint(w.pos, 25.0); elapsed = 0.0 }
-        out.seek(spot!!, c.o.cruiseSpeed * 1.1, arrive = 3.0, urgency = 0.5)
-        out.hover = true
-        out.faceDir = (w.pos - c.o.pos).normalized(Vec3.X)   // keeps an eye on it
-        if (c.o.pos.distanceTo(w.pos) > 3 * c.L + 20) finished = true
+        if (spot == null) spot = c.coverPoint(w.pos, 25.0)
+        val s = spot!!
+        out.seek(s, c.o.cruiseSpeed * 1.1, arrive = 3.0, urgency = 0.5)
+        if (c.o.pos.distanceTo(s) < 4.0) {
+            out.hover = true
+            out.faceDir = (w.pos - c.o.pos).normalized(Vec3.X)   // keeps an eye on it
+        }
+        if (elapsed > bout || c.o.pos.distanceTo(w.pos) > 3 * c.L + 20) finished = true
     }
 }

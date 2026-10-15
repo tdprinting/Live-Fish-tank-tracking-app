@@ -1,15 +1,17 @@
 package com.reeflive.app.render
 
 import android.opengl.GLES30
+import com.reeflive.core.sim.SandBed
 import com.reeflive.core.sim.SimSnapshot
 import java.nio.FloatBuffer
 
 /**
- * Dynamic sand bed on the GPU (SIMULATION §16). [SimSnapshot.sandGrid] (64 × 24 cells: height offset cm, freshness,
+ * Dynamic sand bed on the GPU (SIMULATION §16). [SimSnapshot.sandGrid] (128 × 48 cells: height offset cm, freshness,
  * detritus, dug cavity under rock) is packed into a small RGBA16F texture on unit 13 (`uSandMap`): static.vert lifts
  * the sand's top vertices by the height (pits, mounds, trails, tunnels dug under the rock, spoil piles) and rock.frag
  * shades the slope, darkens freshly turned damp sand, tints mulm and shadows the floor of dug burrows (alpha).
- * Uploads only when the grid's version changes, at most every [UPLOAD_INTERVAL_NS] (≈ 25 KB each).
+ * Uploads only when the grid's version changes, at most every [UPLOAD_INTERVAL_NS] (≈ 98 KB each; the sim sends a
+ * new grid every 0.1 s only while grains fly or a slope pours, every 0.25 s otherwise).
  */
 class SandFx {
     private val tex = Gl.genTexture()
@@ -83,14 +85,17 @@ class SandFx {
     companion object {
         /** Fixed sampler unit of `uSandMap` (ShaderProgram.SAMPLER_UNITS). */
         const val UNIT = 13
-        const val UPLOAD_INTERVAL_NS = 200_000_000L
+        const val UPLOAD_INTERVAL_NS = 80_000_000L
     }
 }
 
 /**
- * Suspended sand and mulm clouds (SIMULATION §16): each of the sim's cloud particles ([SimSnapshot.sandClouds], stride
- * 4: x, y, z, kind + age/60) is drawn as [SPLAT] jittered GL_POINTS with the shared particles program. Coarse sand is a
- * pale, dense burst; silt a faint haze that spreads as it ages; detritus brown flecks.
+ * Sand grains and mulm clouds (SIMULATION §16): each of the sim's particles ([SimSnapshot.sandClouds], stride
+ * [SandBed.CLOUD_STRIDE]: x, y, z, kind + age/60, velocity, sand carried) drawn with the shared particles program. Sand
+ * and fine grains are crisp lit specks in the mixed aragonite tones (cream, white, pink, a grey fleck), a thrown clump
+ * as a few grains together; silt is a faint haze that spreads as it ages; detritus brown flecks. The scene is drawn a
+ * fraction of a tick behind the newest snapshot, so each particle is carried along its velocity by [aheadS] sim
+ * seconds from the older snapshot: grains fall smoothly at 60 fps from 20 Hz sim steps.
  */
 class SandCloudRenderer {
     private val vao = Gl.genVertexArray()
@@ -109,16 +114,38 @@ class SandCloudRenderer {
         GLES30.glBindVertexArray(0); Gl.check("unbind(sandClouds)")
     }
 
-    /** Uploads and draws [clouds]; returns the number of draw calls issued (0 or 1). */
-    fun draw(p: ShaderProgram, clouds: FloatArray?, viewportH: Int): Int {
-        if (clouds == null || clouds.size < 4) return 0
-        val n = minOf(clouds.size / 4, CAPACITY / SPLAT)
+    /** Uploads and draws [clouds] carried [aheadS] sim seconds along their velocity; returns the draw calls issued (0 or 1). */
+    fun draw(p: ShaderProgram, clouds: FloatArray?, viewportH: Int, aheadS: Float = 0f): Int {
+        val st = SandBed.CLOUD_STRIDE
+        if (clouds == null || clouds.size < st) return 0
+        val n = clouds.size / st
+        val t = aheadS.coerceIn(0f, MAX_AHEAD_S)
         var k = 0
         for (i in 0 until n) {
-            val x = clouds[i * 4]; val y = clouds[i * 4 + 1]; val z = clouds[i * 4 + 2]
-            val code = clouds[i * 4 + 3]
+            if (k + MAX_SPLAT > CAPACITY) break
+            val b = i * st
+            val x = clouds[b] + clouds[b + 4] * t; val y = clouds[b + 1] + clouds[b + 5] * t; val z = clouds[b + 2] + clouds[b + 6] * t
+            val code = clouds[b + 3]
             val kind = code.toInt().coerceIn(0, 3)
             val age = (code - kind).coerceIn(0f, 1f)   // age / 60 s
+            val mass = clouds[b + 7]
+            if (kind <= FINE && mass > 0f) {
+                // a grain (or a clump of a few): opaque lit specks, tone picked per particle so a spray is mixed sand
+                val grains = if (mass > 4f * SandBed.GRAIN_CM3.toFloat()) 3 else 1
+                val spread = if (grains > 1) 0.09f else 0f
+                for (s in 0 until grains) {
+                    val o = k * FLOATS
+                    val tone = (hash(i, s, 3) * TONES).toInt().coerceIn(0, TONES - 1) * 3
+                    out[o] = x + spread * jitter(i, s, 0)
+                    out[o + 1] = y + spread * 0.6f * jitter(i, s, 1)
+                    out[o + 2] = z + spread * jitter(i, s, 2)
+                    out[o + 3] = if (kind == FINE) 0.07f else 0.1f
+                    out[o + 4] = GRAIN_TONE[tone]; out[o + 5] = GRAIN_TONE[tone + 1]; out[o + 6] = GRAIN_TONE[tone + 2]
+                    out[o + 7] = 0.95f
+                    k++
+                }
+                continue
+            }
             val spread = SPREAD[kind] * (1f + 4f * age)
             val fade = 1f - 0.6f * age
             for (s in 0 until SPLAT) {
@@ -151,8 +178,13 @@ class SandCloudRenderer {
 
     private companion object {
         const val SPLAT = 3
+        const val MAX_SPLAT = 3
         const val FLOATS = 8
-        const val CAPACITY = 160 * SPLAT   // SandBed.MAX_PARTICLES × SPLAT
+        const val CAPACITY = SandBed.MAX_PARTICLES * 2
+        /** Grain.FINE's ordinal: SAND and FINE are grains, SILT and DETRITUS clouds. */
+        const val FINE = 1
+        /** Furthest a particle is carried past its snapshot (s): a late frame never flings grains far. */
+        const val MAX_AHEAD_S = 0.15f
         // per Grain ordinal: SAND, FINE, SILT, DETRITUS
         val SPREAD = floatArrayOf(0.12f, 0.2f, 0.45f, 0.3f)
         val SIZE = floatArrayOf(0.14f, 0.12f, 0.4f, 0.28f)
@@ -162,12 +194,23 @@ class SandCloudRenderer {
             0.62f, 0.6f, 0.54f, 0.22f,
             0.3f, 0.22f, 0.12f, 0.5f,
         )
+        /** Reef aragonite sand: cream, white, pale pink (coralline bits), tan and the odd grey shell fleck (linear rgb). */
+        const val TONES = 5
+        val GRAIN_TONE = floatArrayOf(
+            0.80f, 0.74f, 0.60f,
+            0.88f, 0.86f, 0.80f,
+            0.82f, 0.66f, 0.62f,
+            0.70f, 0.62f, 0.48f,
+            0.52f, 0.52f, 0.50f,
+        )
 
         /** Deterministic jitter in −1..1 per (particle, splat, axis), so a cloud does not shimmer between frames. */
-        fun jitter(i: Int, s: Int, axis: Int): Float {
+        fun jitter(i: Int, s: Int, axis: Int): Float = hash(i, s, axis) * 2f - 1f
+
+        fun hash(i: Int, s: Int, axis: Int): Float {
             var h = i * 73856093 xor (s * 19349663) xor (axis * 83492791)
             h = h xor (h ushr 13); h *= 0x5bd1e995; h = h xor (h ushr 15)
-            return ((h and 0xFFFF) / 32767.5f) - 1f
+            return (h and 0xFFFF) / 65535f
         }
     }
 }

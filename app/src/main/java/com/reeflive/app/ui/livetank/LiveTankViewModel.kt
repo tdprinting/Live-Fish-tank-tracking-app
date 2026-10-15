@@ -25,6 +25,8 @@ import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.TouchSurface
+import com.reeflive.core.sim.DryRockShape
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseSpec
@@ -179,6 +181,11 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.enqueue(Command.SubmarineMode(s.on, s.visible, s.light))
     }
     fun steerSubmarine(c: com.reeflive.core.sim.SubControls) = holder.enqueue(Command.SteerSubmarine(c))
+    /** Watch an animal from the sub (it glides over and keeps it company), or null to steer freely again. */
+    fun watchSubmarine(id: String?, mode: com.reeflive.core.sim.SubWatch = com.reeflive.core.sim.SubWatch.HOVER) =
+        holder.enqueue(Command.SubmarineWatch(id, mode))
+    /** The sub's ‹ ›: watch the next / previous fish, or the nearest one when none is watched. */
+    fun watchSubmarineNext(step: Int) = holder.enqueue(Command.SubmarineWatchNext(step))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner
@@ -256,6 +263,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
     fun runScenario(s: Scenario) = sandbox { holder.runScenario(s) }
 
+    // aquascape builder: on the tank on screen (your tank or the pretend copy); the rock layout is saved with the tank
+    /** Drops a dry rock over [at]; a tap that only met the glass drops it halfway back. */
+    fun placeRock(shape: DryRockShape, at: Vec3, surface: TouchSurface, turnDeg: Double) =
+        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) TankDims.DEPTH_CM / 2 else at.z, turnDeg))
+    /** Takes out the rock nearest [at] (null: the dry rock added last). */
+    fun removeRock(at: Vec3?) = holder.enqueue(Command.RemoveRock(at))
+    fun clearRocks() = holder.enqueue(Command.ClearRocks)
+
     // pests, treatments, maintenance (sandbox only)
     fun addAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.AddAiptasia(count)) }
     fun removeAiptasia(count: Int = 1) = holder.enqueue(Command.RemoveAiptasia(count))
@@ -273,9 +288,29 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         val row = when (task) {
             MaintenanceTask.CHANGE_SOCK -> "eq_sock"
             MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
-            MaintenanceTask.HARVEST_MACRO -> null
+            MaintenanceTask.HARVEST_MACRO, MaintenanceTask.EMPTY_SKIMMER, MaintenanceTask.TOP_OFF, MaintenanceTask.RINSE_FILTER, MaintenanceTask.SIPHON_SAND -> null
         }
         if (row != null) _extras.value = _extras.value + (row to 1.0)
+    }
+
+    /**
+     * Sends one "Fix my tank" step (core TankDoctor). Upkeep, doses and water changes work in both modes like the
+     * shelf's care props; switching gear back on (heater, pumps, skimmer) is a sandbox change, so Watch skips it.
+     */
+    fun care(commands: List<Command>) {
+        val sandboxOn = mode.value == SimMode.SANDBOX
+        for (c in commands) when (c) {
+            is Command.Maintain -> maintain(c.task)
+            is Command.Heater, is Command.Powerheads, is Command.SetParam -> if (sandboxOn) {
+                holder.enqueue(c)
+                when (c) {
+                    is Command.Powerheads -> _extras.value = _extras.value + PUMP_IDS.keys.associateWith { if (c.on) 1.0 else 0.0 }
+                    is Command.SetParam -> if (c.paramId == "skimmer") _extras.value = _extras.value + ("eq_skimmer" to c.value)
+                    else -> Unit
+                }
+            }
+            else -> holder.enqueue(c)
+        }
     }
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
@@ -306,6 +341,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
             // the top-off floods fresh water in over ~30 min, then the sim takes over again
             SandboxPreset.SALINITY_CRASH -> holder.enqueue(Command.RampParam("sal", 1.012, 30.0, hold = false))
             SandboxPreset.COPPER_OVERDOSE -> setParam("copper", 0.5)
+            SandboxPreset.ROCKSLIDE -> runScenario(Scenario.ROCKSLIDE)
         }
     }
 

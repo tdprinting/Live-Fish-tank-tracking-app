@@ -31,6 +31,8 @@ import com.reeflive.core.species.SpeciesDb
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private val Context.reefDataStore: DataStore<Preferences> by preferencesDataStore(name = "reeflive_settings")
 
@@ -56,10 +58,14 @@ class AppGraph(val app: Application) {
     val journal: JournalRepository by lazy { JournalRepository(db, db.journalDao(), events) }
     val lights: LightScheduleRepository by lazy { LightScheduleRepository(db.lightDao(), events) }
 
-    val simulationHolder: SimulationHolder by lazy { SimulationHolder(
-        measurements, livestock, lights, assets = app.assets, clock = clock,
-        customStore = com.reeflive.app.data.repo.CustomTankStore(java.io.File(app.filesDir, com.reeflive.app.data.repo.CustomTankStore.FILE_NAME)),
-    ) }
+    val simulationHolder: SimulationHolder by lazy {
+        SimulationHolder(
+            measurements, livestock, lights, assets = app.assets, clock = clock,
+            dynamicRocks = settings.settings.map { it.dynamicRocks }.distinctUntilChanged(),
+            rockStore = SimulationHolder.FileRockStore(java.io.File(app.filesDir, "rocks.txt")),
+            customStore = com.reeflive.app.data.repo.CustomTankStore(java.io.File(app.filesDir, com.reeflive.app.data.repo.CustomTankStore.FILE_NAME)),
+        )
+    }
 
     val seedInstaller: SeedInstaller by lazy { SeedInstaller(db, clock) }
     val extras: ExtrasRepository by lazy { ExtrasRepository(java.io.File(app.filesDir, ExtrasRepository.FILE_NAME), appScope, clock) }

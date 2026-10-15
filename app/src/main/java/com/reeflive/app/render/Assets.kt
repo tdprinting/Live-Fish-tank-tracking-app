@@ -11,6 +11,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+/** static.vert lifts sand vertices above this height (cm) by the sand map; the skirt down the glass sits below it. */
+private const val SAND_LIFT_Y = 0.5f
+
 /** One drawable node of a model: mesh + material + its GLB node. */
 class DrawPart(
     val node: GlbNode,
@@ -19,6 +22,8 @@ class DrawPart(
     val kind: MaterialKind,
     /** World-space centre of this part (polyps: mean instance position), for drawing one clump of a coral model. */
     val center: FloatArray = FloatArray(3),
+    /** CPU copy of the geometry (kept by the GLB), for splitting rock-attached parts by rock ([RockPoseDraw]). */
+    val prim: GlbPrimitive? = null,
 ) {
     val part: String get() = node.part
     /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
@@ -56,6 +61,8 @@ class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, p
     /** Root `iridescence` / `roughness` overrides for fish bodies, parsed once. */
     val iridescence: Float = glb.rootFloat("iridescence") ?: 0.1f
     val roughness: Float? = glb.rootFloat("roughness")
+    /** Organism models: the body length (or the anemone's tentacle span) the model was built at, cm. */
+    val lengthCm: Float? = glb.rootFloat("lengthCm")
     /** Organism models in cm (feather duster) are placed rigidly instead of spline-skinned. */
     val rigid: Boolean = glb.rootString("unit")?.startsWith("centimeters") == true
     /** Limb pivots of a limb-rigged crawler (brittle star, Sally Lightfoot; SIMULATION §19), or null. */
@@ -184,7 +191,10 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
                 val kind = if (organism) organismKind(node.part) else MaterialKind.forPart(node.part, src.blended)
                 if (kind == MaterialKind.UNLIT_HIDDEN) continue
                 val mat = Material(kind, src, texByImage[src.baseColorImage])
-                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table))
+                // the sand bed is lifted per vertex by the sim's ≈ 1 cm grid (SandFx): give it vertices that fine
+                val mesh = if (kind == MaterialKind.SAND) Mesh.subdivide(prim.vertices, prim.indices) { _, y, _ -> y > SAND_LIFT_Y }.let { (v, i) -> Mesh.create(v, i, inst) }
+                    else Mesh.from(prim, inst)
+                parts += DrawPart(node, mesh, mat, kind, partCenter(node, prim, table), prim)
             }
         }
         return GpuModel(p.path, glb, parts, texByImage.values.toList())

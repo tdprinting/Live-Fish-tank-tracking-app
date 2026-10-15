@@ -33,6 +33,8 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
     var bubbleRange = 0 to 0; private set
     /** Exactly one point per snapshot food particle, in snapshot order. */
     var foodRange = 0 to 0; private set
+    /** Fish feces pellets ([WasteVisuals]), after the food. */
+    var wasteRange = 0 to 0; private set
     /** Thawing cubes, the nori sheet and solid burst sprites (bubbles, streaks, sparkles, pods). */
     var fxRange = 0 to 0; private set
     /** Large soft clouds: phyto and powder food, dye plumes, silt. */
@@ -133,6 +135,9 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         val f0 = k
         if (snap != null) foodFx.packBodies(snap, time, MAX_FOOD, sink)
         foodRange = f0 to (k - f0)
+        val w0 = k
+        if (snap != null) WasteVisuals.pack(snap.waste, MAX_WASTE, sink)
+        wasteRange = w0 to (k - w0)
     }
 
     private fun put(
@@ -152,12 +157,13 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val DETRITUS = 40
         const val MAX_BUBBLES = 120
         const val MAX_FOOD = 400
+        const val MAX_WASTE = com.reeflive.core.sim.WasteSystem.MAX
         /** Haze puffs for fine foods (one per particle at most). */
         const val MAX_FOOD_HAZE = 160
         const val MAX_BURST_HAZE = 200
         /** Cubes (one per frozen kind), the nori sheet (clip + tiles). */
         private const val MAX_FOOD_EXTRA = 16 + FoodVisuals.NORI_COLS * FoodVisuals.NORI_ROWS
-        const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP
+        const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP + MAX_WASTE
         val HOB = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2.3f)
         private val NULL_SINK = PointSink { _, _, _, _, _, _, _, _, _, _, _, _ -> }
 
@@ -215,7 +221,7 @@ class ParticleRenderer {
 
     /** Uploads [f] and draws; returns the number of draw calls issued. */
     fun draw(p: ShaderProgram, f: ParticleField, viewportH: Int): Int {
-        val total = f.foodRange.first + f.foodRange.second
+        val total = f.wasteRange.first + f.wasteRange.second
         if (total == 0) return 0
         buffer.position(0); buffer.put(f.out, 0, total * ParticleField.FLOATS); buffer.position(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo); Gl.check("glBindBuffer(particles)")
@@ -230,6 +236,7 @@ class ParticleRenderer {
             f.bubbleRange to (2f to 8f),
             f.fxRange to (2f to 40f),
             f.foodRange to (2f to 32f),
+            f.wasteRange to (1.5f to 28f),
         )) {
             if (range.second == 0) continue
             p.set2f("uSizeClamp", clamp.first, clamp.second)

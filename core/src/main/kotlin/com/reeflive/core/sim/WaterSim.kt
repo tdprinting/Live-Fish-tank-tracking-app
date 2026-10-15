@@ -50,6 +50,15 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     // ---- filtration and export equipment (research 01 §3.5; coverage gap W-6) ----
     /** Protein skimmer: strips DOC and organics before they mineralise and adds aeration. On in Tee's tank. */
     var skimmer = true
+    /**
+     * Skimmer collection cup, 0 empty .. 1 full. Skimmate builds up from the organics the skimmer pulls out (about a
+     * week to fill at a mature tank's DOC); a cup near full stops the foam reaching it, so skimming fades to nothing
+     * (01 §3.5: empty and rinse the cup weekly). Emptied by [MaintenanceTask.EMPTY_SKIMMER] or the weekly routine.
+     */
+    var skimmerCup = 0.3
+        set(v) { field = v.coerceIn(0.0, 1.0) }
+    /** Share of normal skimming the cup still allows: full until 85 % full, nothing once it is brim full. */
+    val skimEfficiency: Double get() = if (!skimmer) 0.0 else ((1.0 - skimmerCup) / (1.0 - CUP_SLOWS)).coerceIn(0.0, 1.0)
     /** Filter sock: traps detritus; left in past ~2-3 days it rots and releases NH3/PO4 back (01 §3.5). */
     var filterSock = false
     /** Activated carbon: adsorbs DOC, soft-coral allelochemicals and some copper; exhausted over 2-4 weeks. */
@@ -61,6 +70,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     var uv = false
     /** Auto-maintenance cadence in days (0 = never): sock swap, carbon swap, refugium harvest (01 §3.5). */
     var sockChangeDays = 3.0
+    /** Routine skimmer-cup emptying (days, 0 = never; 01 §3.5 weekly). */
+    var skimmerEmptyDays = 7.0
     var carbonChangeDays = 21.0
     var refugiumHarvestDays = 45.0
     /** The display red macro is trimmed back to 70 % of this index when it outgrows it (0 = never trim). */
@@ -68,8 +79,21 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     var sockAgeH = 0.0; private set
     var carbonAgeH = 0.0; private set
     var refugiumAgeH = 0.0; private set
+    /** Hours since the cup was last emptied (the starting 0.3 fill is about three days of skimmate). */
+    var skimmerCupAgeH = 72.0; private set
     /** Detritus held in the sock (ppm TAN-equivalent of the tank volume). */
     var sockLoad = 0.0; private set
+
+    // ---- fish waste (research 18_fish_waste; WasteSystem) ----
+    /** Σ massG^0.8 × metabolicMult over the living, awake fish: the share of [bioMassIndex] that makes feces. */
+    var fecalBioIndex = 0.0
+    /** Fecal N made by the fish since [WasteSystem] last collected it (ppm TAN-eq), held outside the water. */
+    var fecalPending = 0.0; private set
+    /** Waste trapped in the HOB filter's floss and sponge (ppm TAN-eq); rots back into the water if never rinsed. */
+    var hobLoad = 0.0; private set
+    var hobMediaAgeH = 0.0; private set
+    /** Auto-rinse cadence of the HOB media in days (0 = never: the floss turns into a nitrate factory). */
+    var hobRinseDays = 7.0
     /** Allelochemical release by the soft corals this hour (index/h), set by Simulation from colony sizes (03 D). */
     var alleloSourcePerHour = 0.0
     /** Fraction of the light reaching the corals through DOC-yellowed water (1 = clear; carbon clears it). */
@@ -155,7 +179,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.sg = 1 + salt / v1
         s.alk *= k; s.ca *= k; s.mg *= k; s.k *= k; s.sr *= k; s.i *= k; s.copper *= k
         s.nh3Total *= k; s.no2 *= k; s.no3 *= k; s.po4 *= k; s.detritus *= k; s.silicate *= k
-        s.doc *= k; s.allelo *= k; sockLoad *= k; s.h2s *= k
+        s.doc *= k; s.allelo *= k; sockLoad *= k; hobLoad *= k; fecalPending *= k; s.h2s *= k
         bacteria.concentrate(k)
         pendingFeedTan *= k; pendingFeedPo4 *= k
         s.volumeL = v1
@@ -165,7 +189,10 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         val v = s.volumeL
         val tF = (1 + 0.07 * (s.tempC - 25)).coerceIn(0.3, 1.5) * (if (s.ph < 7.6) 0.5 else 1.0)
         // Inputs
-        val excretion = K_EXCRETION * bioMassIndex / v * h
+        val fecal = K_EXCRETION * min(fecalBioIndex, bioMassIndex) * FECAL_SHARE / v * h
+        val excretion = K_EXCRETION * bioMassIndex / v * h - fecal
+        fecalPending += fecal
+        nInputMg += fecal * N_TAN * v; nExportMg += fecal * N_TAN * v   // made, then held in the guts (export until released)
         val feedRelease = pendingFeedTan * (1 - exp(-h / 2.0))
         pendingFeedTan -= feedRelease
         val detritusDecay = s.detritus * (1 - exp(-0.02 * h))
@@ -192,7 +219,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.detritus -= detExport
         nExportMg += detExport * N_TAN * v
         // Export: corals and the skimmer's organics removal (macroalgae and algae uptake are stoichiometric: macroalgae(), AlgaeModel)
-        val export = min((0.004 * coralBiomass + (if (skimmer) 0.0015 * s.no3 * min(flowEff, 1.2) else 0.0)) * h, s.no3)
+        val export = min((0.004 * coralBiomass + 0.0015 * skimEfficiency * s.no3 * min(flowEff, 1.2)) * h, s.no3)
         s.no3 -= export
         nExportMg += export * N_NO3 * v
         // Bacteria: logistic growth on substrate, slow die-off without it
@@ -258,7 +285,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
      */
     private fun filtration(h: Double) {
         val v = s.volumeL
-        sockAgeH += h; carbonAgeH += h; refugiumAgeH += h
+        sockAgeH += h; carbonAgeH += h; refugiumAgeH += h; skimmerCupAgeH += h
         if (filterSock) {
             val cap = s.detritus * SOCK_CAPTURE * min(flowEff, 1.5) * h
             s.detritus -= cap; sockLoad += cap
@@ -269,13 +296,26 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             nInputMg += rel * N_TAN * v
             if (sockChangeDays > 0 && sockAgeH >= sockChangeDays * 24) changeSock()
         }
+        hobMediaAgeH += h
+        if (hobLoad > 0) {
+            // trapped feces and food break down in the floss within days: a rinsed filter exports them, an old one leaks
+            val rel = hobLoad * HOB_ROT * smooth(HOB_ROT_START_H, HOB_ROT_FULL_H, hobMediaAgeH) * h
+            hobLoad -= rel
+            s.nh3Total += rel; s.po4 += rel * 0.04
+            nInputMg += rel * N_TAN * v
+        }
+        if (hobRinseDays > 0 && hobMediaAgeH >= hobRinseDays * 24) rinseHobMedia()
         if (carbon && carbonChangeDays > 0 && carbonAgeH >= carbonChangeDays * 24) carbonAgeH = 0.0
         val ce = carbonEfficiency
         val docIn = DOC_EXUDATE * lightIntensity * coralBiomass * h
-        val docOut = s.doc * (DOC_DECAY + (if (skimmer) DOC_SKIM * min(flowEff, 1.2).coerceAtLeast(0.3) else 0.0) + DOC_CARBON * ce) * h
+        val skimRate = DOC_SKIM * skimEfficiency * min(flowEff, 1.2).coerceAtLeast(0.3)
+        val docOut = s.doc * (DOC_DECAY + skimRate + DOC_CARBON * ce) * h
+        // the cup fills with what the skimmer took (its share of the DOC that left this step), mg C over the tank
+        if (skimRate > 0 && docOut > 0) skimmerCup += min(docOut, s.doc) * skimRate / (DOC_DECAY + skimRate + DOC_CARBON * ce) * v / CUP_MG_C
+        if (skimmerEmptyDays > 0 && skimmerCupAgeH >= skimmerEmptyDays * 24) emptySkimmerCup()
         s.doc = max(0.0, s.doc + docIn - min(docOut, s.doc))
         oxygenDemandPerHour += (s.doc - 2.0).coerceAtLeast(0.0) * DOC_DECAY * 2.67   // mg O2 per mg C respired
-        val aOut = s.allelo * (ALLELO_DECAY + (if (skimmer) 0.01 else 0.0) + 0.1 * ce) * h
+        val aOut = s.allelo * (ALLELO_DECAY + 0.01 * skimEfficiency + 0.1 * ce) * h
         s.allelo = max(0.0, s.allelo + alleloSourcePerHour * h - min(aOut, s.allelo))
         if (ce > 0) s.copper = max(0.0, s.copper - s.copper * 0.01 * ce * h)
         // carbon also adsorbs iodine/iodide (01 §3.5 trace stripping): crustaceans then moult worse once it runs low
@@ -285,10 +325,12 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     /** Carries the equipment state over to a rebuilt or forked water model. */
     fun copyEquipmentFrom(o: WaterSim) {
         skimmer = o.skimmer; filterSock = o.filterSock; carbon = o.carbon; uv = o.uv
+        skimmerCup = o.skimmerCup; skimmerCupAgeH = o.skimmerCupAgeH; skimmerEmptyDays = o.skimmerEmptyDays
         refugium = o.refugium; s.chaeto = o.s.chaeto
         sockChangeDays = o.sockChangeDays; carbonChangeDays = o.carbonChangeDays; refugiumHarvestDays = o.refugiumHarvestDays
         macroTrimAbove = o.macroTrimAbove
         sockAgeH = o.sockAgeH; carbonAgeH = o.carbonAgeH; refugiumAgeH = o.refugiumAgeH; sockLoad = o.sockLoad
+        hobLoad = o.hobLoad; hobMediaAgeH = o.hobMediaAgeH; hobRinseDays = o.hobRinseDays; fecalPending = o.fecalPending
         alleloSourcePerHour = o.alleloSourcePerHour
         pendingFeedTan = o.pendingFeedTan; pendingFeedPo4 = o.pendingFeedPo4
         pendingDose.clear(); pendingDose.putAll(o.pendingDose)
@@ -296,6 +338,59 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     }
 
     fun changeSock() { sockLoad = 0.0; sockAgeH = 0.0 }
+
+    /** Lift the cup off, tip the skimmate out, rinse it and seat it again (01 §3.5). */
+    fun emptySkimmerCup() { skimmerCup = 0.0; skimmerCupAgeH = 0.0 }
+
+    /** Equipment and upkeep at a glance, for the tank check and the renderer (the cup's fill, the sock's dirt). */
+    fun careState(): CareState = CareState(
+        skimmerOn = skimmer, skimmerCup = skimmerCup.toFloat(),
+        sockOn = filterSock, sockAgeH = sockAgeH.toFloat(),
+        carbonOn = carbon, carbonLeft = carbonEfficiency.toFloat(),
+        heaterWorking = heaterWorking, heaterStuck = heaterStuckOn, heaterSetC = heaterSetC.toFloat(),
+        waterFull = (s.volumeL / config.systemLiters).toFloat(), ato = ato,
+    )
+
+    /** Rinse the HOB floss and sponge in old tank water: the trapped waste goes down the drain. */
+    fun rinseHobMedia() { hobLoad = 0.0; hobMediaAgeH = 0.0 }
+
+    /** [WasteSystem] collects the fecal N the fish made since the last call (ppm TAN-eq). */
+    fun takeFecalPending(): Double = fecalPending.also { fecalPending = 0.0 }
+
+    /**
+     * A fish swallowed food: [ppm] of the food's leachable N goes into its gut instead of the water (it comes out later
+     * as feces). Limited to what is still leaching; returns the amount moved.
+     */
+    fun divertFeedToGut(ppm: Double): Double {
+        val d = min(max(ppm, 0.0), pendingFeedTan)
+        pendingFeedTan -= d
+        nExportMg += d * N_TAN * s.volumeL
+        return d
+    }
+
+    /** Waste N leaching from feces (or excreted by an animal that ate them) back into the water as TAN. */
+    fun releaseWaste(ppm: Double) {
+        if (ppm <= 0) return
+        s.nh3Total += ppm; s.po4 += ppm * WASTE_PO4_PER_TAN
+        nInputMg += ppm * N_TAN * s.volumeL
+    }
+
+    /** Feces broken down into mulm on the sand or rock join the detritus pool. */
+    fun wasteToDetritus(ppm: Double) {
+        if (ppm <= 0) return
+        s.detritus += ppm
+        nInputMg += ppm * N_TAN * s.volumeL
+    }
+
+    /** Feces pulled into the HOB intake: caught in the floss (still counted outside the water until it rots). */
+    fun hobCapture(ppm: Double) { if (ppm > 0) hobLoad += ppm }
+
+    /** Gravel vac: [fraction] of the detritus pool leaves with the siphoned water (the water change itself is separate). */
+    fun siphonDetritus(fraction: Double) {
+        val d = s.detritus * fraction.coerceIn(0.0, 1.0)
+        s.detritus -= d
+        nExportMg += d * N_TAN * s.volumeL
+    }
 
     /**
      * Red macroalgae in the display and Chaetomorpha in the refugium (research 03 A1, C1; 01 §3.5). Logistic growth on
@@ -347,6 +442,11 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             MaintenanceTask.CHANGE_SOCK -> { filterSock = true; changeSock() }
             MaintenanceTask.REPLACE_CARBON -> { carbon = true; carbonAgeH = 0.0 }
             MaintenanceTask.HARVEST_MACRO -> harvestMacro()
+            MaintenanceTask.EMPTY_SKIMMER -> emptySkimmerCup()
+            MaintenanceTask.TOP_OFF -> topOff()
+
+            MaintenanceTask.RINSE_FILTER -> rinseHobMedia()
+            MaintenanceTask.SIPHON_SAND -> siphonDetritus(SIPHON_SHARE)
         }
     }
 
@@ -375,7 +475,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
      * the algae's: uptake into cells is export, dead cells back to detritus are input, N2 gas is export.
      */
     private fun bacteria(h: Double) {
-        bacteria.step(s, h, flowEff, skimmer, uv, algae)
+        bacteria.step(s, h, flowEff, skimEfficiency > 0.2, uv, algae)
         oxygenDemandPerHour += bacteria.o2DemandPerHour
         nExportMg += bacteria.nUptakeMg + bacteria.nDenitMg
         nInputMg += bacteria.nReleaseMg
@@ -409,7 +509,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
      * Nothing happens without a sock or skimmer: the cloud just settles again.
      */
     fun captureResuspended(fraction: Double) {
-        if (fraction <= 0 || (!filterSock && !skimmer)) return
+        if (fraction <= 0 || (!filterSock && skimEfficiency <= 0)) return
         val cap = s.detritus * fraction.coerceIn(0.0, 0.05)
         if (cap <= 0) return
         s.detritus -= cap
@@ -496,6 +596,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "detritus" -> { nInputMg += (value - s.detritus) * N_TAN * v; s.detritus = value }
 "gfo" -> s.gfoActive = value > 0.5
             "skimmer" -> skimmer = value > 0.5
+            "skimmercup" -> skimmerCup = value
             "sock", "filtersock" -> filterSock = value > 0.5
             "carbon" -> { if (value > 0.5 && !carbon) carbonAgeH = 0.0; carbon = value > 0.5 }
             "refugium" -> refugium = value > 0.5
@@ -573,11 +674,22 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val DO_PHOTO = 1.1
         // Equipment / DOC / macroalgae (W-6, C-7; est. unless noted)
         const val SOCK_CAPTURE = 0.03          // /h of suspended detritus caught at normal flow (tank turns over through it)
+        // Fish waste (research 18_fish_waste.md)
+        const val FECAL_SHARE = 0.17           // fecal N / (fecal + dissolved) = 13 / 75 of feed N (18_fish_waste §1)
+        const val WASTE_PO4_PER_TAN = 0.15     // feces are P-rich: most dietary P leaves in them
+        const val HOB_ROT = 0.03               // /h of the floss's load mineralised once it has sat for days
+        const val HOB_ROT_START_H = 48.0
+        const val HOB_ROT_FULL_H = 168.0
+        const val SIPHON_SHARE = 0.4           // detritus a gravel-vac pass takes out
         const val SOCK_ROT = 0.02              // /h of the sock's load released once it is older than ~2-5 days
         const val DOC_PER_G = 0.04             // g DOC leached per g food
         const val DOC_EXUDATE = 0.004          // mg/L/h per (light × coral biomass)
         const val DOC_DECAY = 0.01             // /h bacterial breakdown (τ ≈ 4 days)
         const val DOC_SKIM = 0.02              // /h skimmer removal at normal flow
+        /** mg of skimmed organic carbon that fill the cup (≈ 0.7 full after a week at DOC 1.5 mg/L, 227 L; 01 §3.5 weekly). */
+        const val CUP_MG_C = 1600.0
+        /** Cup fill above which the foam starts backing up and skimming fades. */
+        const val CUP_SLOWS = 0.85
         const val DOC_CARBON = 0.08            // /h fresh carbon
         const val CARBON_IODINE = 0.004        // /h iodine adsorbed by fresh carbon (τ ≈ 10 days; est.)
         const val ALLELO_DECAY = 0.02          // /h breakdown of terpenoids in water (τ ≈ 2 days)

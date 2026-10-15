@@ -25,11 +25,40 @@ sealed class Command {
     /** The pilot's stick for the sub; it holds until the next one, so hosts send it only when the input changes. */
     data class SteerSubmarine(val controls: SubControls) : Command()
     /**
+     * Watch an animal from the sub ([Submarine.watch]): the autopilot glides over and keeps it company at a polite
+     * distance in [mode]; the stick then moves the sub round the fish. [id] null = back to free steering.
+     */
+    data class SubmarineWatch(val id: String?, val mode: SubWatch = SubWatch.HOVER) : Command()
+    /**
+     * The sub's ‹ › buttons: watch the next ([step] > 0) or previous living fish after the one being watched, in tank
+     * order; with none watched, the fish nearest the sub. Keeps the current mode. Invertebrates and corals are skipped.
+     */
+    data class SubmarineWatchNext(val step: Int = 1) : Command()
+    /**
      * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
      * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
      */
     data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
+    /**
+     * Dynamic rockscape ([RockPhysics]): rocks can settle or topple when the sand under them is dug out. Off = static
+     * rock (no physics at all). Rocks that already moved stay where they came to rest either way.
+     */
+    data class DynamicRocks(val on: Boolean) : Command()
+    /**
+     * Sandbox "Rockslide": the sand is dug out from under one side of a rock that stands on sand (as a burrowing goby
+     * would, all at once), so with dynamic rocks on it settles or topples. [rock] picks it by name (null: any).
+     */
+    data class UndermineRock(val rock: String? = null) : Command()
+    /**
+     * Aquascape builder: drops a white dry rock of [shape] over (x, z), turned [yawDeg] about the vertical; it falls and
+     * settles on what is under it. [seed] varies the rock (−1: a new one each time).
+     */
+    data class PlaceRock(val shape: DryRockShape, val x: Double, val z: Double, val yawDeg: Double = 0.0, val seed: Int = -1) : Command()
+    /** Aquascape builder: takes out the rock nearest [at] (null: the dry rock added last). */
+    data class RemoveRock(val at: com.reeflive.core.geom.Vec3? = null) : Command()
+    /** Aquascape builder: empties the tank of rock, to build a scape from scratch. */
+    data object ClearRocks : Command()
     /**
      * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
      * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
@@ -154,8 +183,31 @@ data class LivestockSeed(
     val offset: Vec3? = null,
 )
 
-/** Routine maintenance jobs (research 01 §3.5). */
-enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO }
+/** Routine maintenance jobs (research 01 §3.5, §3.4): EMPTY_SKIMMER tips out the collection cup, TOP_OFF adds RO/DI for what evaporated,
+ * RINSE_FILTER rinses the HOB floss, SIPHON_SAND gravel-vacs fish waste and mulm (research 18_fish_waste). */
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO, EMPTY_SKIMMER, TOP_OFF, RINSE_FILTER, SIPHON_SAND }
+
+/**
+ * Equipment and upkeep at a glance ([WaterSim.careState]): the skimmer cup's fill (0..1), the sock's age, how much
+ * life the carbon has left (1 fresh .. 0 spent), the heater, and how full the tank is against its system volume
+ * (evaporation lowers it until a top-off). The tank check (core care TankDoctor) and the renderer read it.
+ */
+data class CareState(
+    val skimmerOn: Boolean = true,
+    val skimmerCup: Float = 0.3f,
+    val sockOn: Boolean = false,
+    val sockAgeH: Float = 0f,
+    val carbonOn: Boolean = false,
+    val carbonLeft: Float = 0f,
+    val heaterWorking: Boolean = true,
+    val heaterStuck: Boolean = false,
+    val heaterSetC: Float = 25.5f,
+    val waterFull: Float = 1f,
+    val ato: Boolean = false,
+) {
+    /** How dirty the sock looks: clean when new, brown after about three days in. */
+    val sockDirt: Float get() = (sockAgeH / 72f).coerceIn(0f, 1f)
+}
 
 /**
  * Fish diseases (research 01 §4.3). BROOKLYNELLA, URONEMA and FLUKES were added for the treatment model (W-4);
@@ -216,6 +268,13 @@ sealed class SimEvent {
     data class Hatched(val spec: String, val larvae: Int, val raising: Boolean, override val simTimeSec: Double) : SimEvent()
     data class Metamorphosed(val spec: String, val fry: Int, override val simTimeSec: Double) : SimEvent()
     data class BabyReleased(val id: String, override val simTimeSec: Double) : SimEvent()
+    /**
+     * A loose rock settled or toppled after the sand under it was dug out (dynamic rockscape, [RockPhysics]): [rock] is
+     * its name in the scape (R0…R10, glued rocks joined by '+'), moved [moveCm] and turned [turnDeg].
+     */
+    data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
+    /** The aquascape builder added ([added]) or took out a rock (save the tank's rock layout). */
+    data class RockscapeChanged(val rock: String, val added: Boolean, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -314,6 +373,8 @@ data class CoralPose(
      */
     val size: Float = 1f,
     val cover: Float = 0f,
+    /** The rock piece the colony grows on ([SimSnapshot.rockPoses] index), −1 none: drawn moved with that rock. */
+    val rockPiece: Int = -1,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }
@@ -373,6 +434,8 @@ data class SimSnapshot(
      * settled (1/0) and a stable 0..1 seed. Renderer only (thawing cubes, fluttering flakes, spreading plankton haze).
      */
     val foodMeta: FloatArray = FloatArray(0),
+    /** Fish feces pellets, [WasteSystem.STRIDE] floats each: x, y, z, length (cm), tint, settled (0 / 1 + breakdown), seed, tumble. */
+    val waste: FloatArray = FloatArray(0),
     /**
      * Water movers for the renderer, [PUMP_STRIDE] floats each: nozzle x, y, z (cm), unit jet axis x, y, z, the jet's
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
@@ -385,11 +448,23 @@ data class SimSnapshot(
     /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
     val bags: List<BagPose> = emptyList(),
     val bagHurry: Boolean = false,
+    /** Equipment upkeep (skimmer cup, sock, carbon, heater, water level) for the tank check and the renderer. */
+    val care: CareState = CareState(),
+    /**
+     * Rest → world 4×4 matrix (column-major) per rock piece ([RockData.pieces]) once any rock has moved, else null
+     * (every rock where it was built). Shared between snapshots until a rock moves again ([rockVersion]).
+     */
+    val rockPoses: FloatArray? = null,
+    val rockVersion: Long = 0,
     /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
     val net: NetPose? = null,
     val netFlush: NetFlush? = null,
     /** Larvae and fry ([Brood]): counts for the renderer, the parents' card panel for the UI. */
     val brood: BroodView = BroodView.EMPTY,
+    /** Dry rocks added with the aquascape builder (drawn from their shape at [rockPoses]), or null for none. */
+    val builtRocks: List<BuiltRock>? = null,
+    /** The live rock field once rocks have moved or been added / taken out (taps and the camera hit rocks where they are now). */
+    val rockSdf: com.reeflive.core.geom.Sdf? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

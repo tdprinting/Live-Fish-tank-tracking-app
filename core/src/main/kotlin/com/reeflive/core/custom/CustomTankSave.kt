@@ -44,6 +44,8 @@ data class CustomTankSave(
     val dormantCorals: List<SavedCoral> = emptyList(),
     /** Eggs on the rock and the nursery tank's larvae / fry (added after v1 as a defaulted field: no migration needed). */
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
+    /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
+    val rocks: String = "",
 )
 
 @Serializable
@@ -82,6 +84,8 @@ data class SavedAnimal(
     val diseaseStage: Double = 0.0,
     val hlle: Double = 0.0,
     val nutritionGreens: Double = 1.0,
+    /** Species state that is not on [Organism] (an anemone's foot and shape, a clown's anemone acclimation); keys are stable. */
+    val state: Map<String, Double> = emptyMap(),
 )
 
 @Serializable

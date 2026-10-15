@@ -100,7 +100,15 @@ class TailFlip(val b: SpeciesBrain, val nav: ShrimpNav? = null, val home: (Ctx) 
         b.threat?.let { return 0.96 }
         return if (b.startledRecently && b.startleMag > 0.3) 0.9 else 0.0
     }
-    override fun enter(c: Ctx) { from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset() }
+    override fun enter(c: Ctx) {
+        from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset()
+        // a cleaner that flees calls off the cleaning it offered: the client stops posing and the station is free (it was
+        // offered again on every return, so a hawkfish perched by the station posed in a climb-flee loop for minutes)
+        c.p.stations.firstOrNull { it.cleaner === c.o }?.let { st ->
+            st.client?.let { cl -> if (cl.poseFor === c.o) cl.poseUntil = min(cl.poseUntil, c.t) }
+            st.release()
+        }
+    }
     override fun update(c: Ctx, out: SteerIntent) {
         if (elapsed < 0.5) {
             out.fleeFrom = from; out.urgency = 1.0
@@ -222,7 +230,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
          * station, so the rule only moves it when the skunk sits practically next door (DESIGN ESTIMATE).
          */
         const val KEEP_APART_CM = 20.0
-        /** Intruder distance that raises the claw display, cm (DESIGN ESTIMATE). */
+        /** Intruder distance that raises the claws-up threat display, cm (DESIGN ESTIMATE; display documented, research 20). */
         const val DISPLAY_CM = 8.0
         /** Cleans per fish visit (SOURCED for its stations, research 12 NTOU thesis: 5.6 %; not a universal constant). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.SOURCED, "12 NTOU thesis") const val CLEAN_PER_VISIT = 0.056
@@ -287,6 +295,12 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 (it.brainKind == BrainKind.BANDED_SHRIMP && it.id != o.mateId || it.brainKind == BrainKind.CLEANER_SHRIMP || (it.isFish && it.vel.length() > 0.5 * it.cruiseSpeed))
         }
         o.clawDisplay += ((if (intruder && !o.molting) 1.0 else 0.0) - o.clawDisplay) * kotlin.math.min(1.0, c.dt * 3)
+        // now and then the claws-up stand-off ends in a grab at the fish (retailer reports, research 20; the
+        // fish is quick enough to get away). Its own random stream: brain rolls stay as they were.
+        if (o.clawDisplay > 0.7) {
+            val fish = c.p.neighbors(o.pos, ShrimpLimbs.STRIKE_CM).firstOrNull { it.isFish && it.alive && it.id != o.id }
+            if (fish != null) (o.limbRig as? ShrimpLimbs)?.considerStrike(o, fish, c.dt)
+        }
     }
 
     override fun abstractPose(c: Ctx, out: SteerIntent) {

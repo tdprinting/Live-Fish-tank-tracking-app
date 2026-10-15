@@ -36,7 +36,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** Silhouette family for the procedural species art. */
-enum class AvatarShape { FISH, ELONGATED, SHRIMP, STAR, SHELL, CRAB, DUSTER, CORAL, ALGAE }
+enum class AvatarShape { FISH, ELONGATED, SHRIMP, STAR, SHELL, CRAB, DUSTER, ANEMONE, CORAL, ALGAE }
 
 fun avatarShapeFor(speciesId: String, kind: SpeciesKind?): AvatarShape {
     val id = speciesId.lowercase()
@@ -47,6 +47,7 @@ fun avatarShapeFor(speciesId: String, kind: SpeciesKind?): AvatarShape {
         id.startsWith("nassarius") || id.startsWith("lithopoma") -> AvatarShape.SHELL
         id.startsWith("clibanarius") || id.startsWith("paguristes") || id.startsWith("percnon") -> AvatarShape.CRAB
         id.startsWith("sabellastarte") -> AvatarShape.DUSTER
+        id.startsWith("entacmaea") -> AvatarShape.ANEMONE
         kind == SpeciesKind.CORAL -> AvatarShape.CORAL
         kind == SpeciesKind.ALGAE -> AvatarShape.ALGAE
         kind == SpeciesKind.INVERT -> AvatarShape.SHELL
@@ -102,6 +103,7 @@ fun SpeciesAvatar(
                 AvatarShape.SHELL -> drawShell(primary, secondary)
                 AvatarShape.CRAB -> drawCrab(primary, secondary, accent)
                 AvatarShape.DUSTER -> drawDuster(primary, secondary)
+                AvatarShape.ANEMONE -> drawAnemone(primary, secondary, accent)
                 AvatarShape.CORAL -> drawCoral(primary, secondary, accent)
                 AvatarShape.ALGAE -> drawAlgae(primary, secondary)
             }
@@ -222,6 +224,22 @@ private fun DrawScope.drawDuster(tube: Color, crown: Color) {
         drawLine(crown.copy(alpha = 0.85f), top, Offset(top.x + r * cos(a), top.y + r * sin(a)), strokeWidth = 1.6.dp.toPx(), cap = StrokeCap.Round)
         drawLine(tube.copy(alpha = 0.7f), Offset(top.x + r * 0.5f * cos(a), top.y + r * 0.5f * sin(a)), Offset(top.x + r * 0.7f * cos(a), top.y + r * 0.7f * sin(a)), strokeWidth = 1.6.dp.toPx())
     }
+}
+
+private fun DrawScope.drawAnemone(tentacle: Color, disc: Color, tip: Color) {
+    val w = size.width
+    val h = size.height
+    val c = Offset(w * 0.5f, h * 0.66f)
+    // bubble-tipped tentacles fanning up from the disc
+    for (i in 0 until 9) {
+        val a = (-165f + i * 18.75f) * (PI.toFloat() / 180f)
+        val r = h * 0.30f
+        val end = Offset(c.x + r * cos(a), c.y + r * 0.9f * sin(a))
+        drawLine(tentacle, c, end, strokeWidth = w * 0.07f, cap = StrokeCap.Round)
+        drawCircle(tentacle, w * 0.065f, Offset(c.x + r * 0.72f * cos(a), c.y + r * 0.65f * sin(a)))
+        drawCircle(tip, w * 0.035f, end)
+    }
+    drawOval(disc, Offset(w * 0.30f, h * 0.60f), Size(w * 0.40f, h * 0.14f))
 }
 
 private fun DrawScope.drawCoral(base: Color, polyp: Color, tip: Color) {

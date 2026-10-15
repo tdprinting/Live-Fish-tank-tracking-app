@@ -128,6 +128,17 @@ class Camera {
     private var riding = false
     private val rideEyeS = Spring3(RIDE_OMEGA)
     private val rideAimS = Spring3(RIDE_OMEGA * 1.5f)
+    /** The sub's centre (the chase view's line of sight starts there) and velocity (cm/s, fed forward past the springs' lag). */
+    val rideAnchor = FloatArray(3)
+    val rideVel = FloatArray(3)
+    /** Riding inside the sub (first person): tighter springs and clearances, no line-of-sight pull-in. */
+    var rideFirstPerson = false
+    /** A drag while riding looks round (swings the chase view round the sub); it eases back when the finger lifts. */
+    private var rideYaw = 0f
+    private var ridePitch = 0f
+    private val rideYawS = Spring(OMEGA_TOUCH)
+    private val ridePitchS = Spring(OMEGA_TOUCH)
+    private var rideLos = 1f
     /** Travel progress: 0 = the tank view, 1 = the shelf view (eased with smoothstep, arcing up and back). */
     var shelfMix = 0f; private set
     private val shelfGoal = floatArrayOf(SupplyShelfLayout.START_X, SupplyShelfLayout.START_Y)
@@ -368,6 +379,11 @@ class Camera {
         if (shelfOn) { shelfDrag(dxPx, dyPx, viewHeightPx); return }
         if (nurseryOn) { nurseryOn = false; return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
+        if (rideOn) {
+            rideYaw -= dxPx * k
+            ridePitch = (ridePitch + dyPx * k).coerceIn(-RIDE_MAX_PITCH, RIDE_MAX_PITCH)
+            return
+        }
         if (followId != null) {
             touchFeel()
             followYaw -= dxPx * k
@@ -381,7 +397,7 @@ class Camera {
 
     /** One-finger release velocity (px/s): keeps the orbit turning and coasting to a stop. */
     fun fling(vxPx: Float, vyPx: Float, viewHeightPx: Float) {
-        if (shelfOn) return
+        if (shelfOn || rideOn) return
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         val wy = (-vxPx * k).coerceIn(-MAX_SPIN, MAX_SPIN)
         val wp = (vyPx * k * 0.6f).coerceIn(-MAX_SPIN, MAX_SPIN)
@@ -461,10 +477,18 @@ class Camera {
         }
         advanceZoomInertia(step)
         colliders.sdf = sdf
+        // riding: a coarse coral or kit box the sub is gliding through is water there, so the chase eye may follow it in
+        if (rideOn && !rideFirstPerson) colliders.passBoxesAround(rideAnchor[0], rideAnchor[1], rideAnchor[2]) else colliders.clearPass()
         if (rideOn) {
-            if (!riding) { rideEyeS.snap(if (initialized) eye else rideEye); rideAimS.snap(if (initialized) aim else rideAim); riding = true }
-            rideEyeS.step(rideEye, step, eye)
-            rideAimS.step(rideAim, step, aim)
+            if (!riding) {
+                rideEyeS.snap(if (initialized) eye else rideEye); rideAimS.snap(if (initialized) aim else rideAim); riding = true
+                rideYaw = 0f; ridePitch = 0f; rideYawS.snap(0f); ridePitchS.snap(0f); rideLos = 1f
+            }
+            rideTarget(step)
+            val w = if (rideFirstPerson) RIDE_FP_OMEGA else RIDE_OMEGA
+            rideEyeS.omega = w; rideAimS.omega = w * 1.5f
+            rideEyeS.step(desiredEye, step, eye)
+            rideAimS.step(desiredAim, step, aim)
             initialized = true
         } else if (riding) {
             riding = false
@@ -491,15 +515,23 @@ class Camera {
         // Clearances from the near plane this framing will get, so the near plane can never cut into anything solid.
         val pre = eyeAimDistance()
         val corner = EyeCollider.nearCornerDistance(nearFor(pre), fovY, aspect)
-        colliders.rockClearance = max(EYE_CLEARANCE, corner + 1f)
-        colliders.sandClearance = max(SAND_CLEARANCE, corner + 0.6f)
-        colliders.boxClearance = max(BOX_CLEARANCE, corner + 0.6f)
-        colliders.bodyClearance = max(BODY_CLEARANCE, corner + 0.4f)
+        if (rideOn && rideFirstPerson) {
+            // inside the hull, which keeps its own radius off everything: only the near plane needs room
+            colliders.rockClearance = max(0.6f, corner + 0.3f)
+            colliders.sandClearance = max(0.6f, corner + 0.3f)
+            colliders.boxClearance = max(0.5f, corner + 0.2f)
+            colliders.bodyClearance = max(0.4f, corner + 0.2f)
+        } else {
+            colliders.rockClearance = max(EYE_CLEARANCE, corner + 1f)
+            colliders.sandClearance = max(SAND_CLEARANCE, corner + 0.6f)
+            colliders.boxClearance = max(BOX_CLEARANCE, corner + 0.6f)
+            colliders.bodyClearance = max(BODY_CLEARANCE, corner + 0.4f)
+        }
         if (inNursery) {
             // the nursery tank sits outside the display: no display collision
             ballOn = false
-        } else if (rideOn || riding || shelfMix > 0f) {
-            // the sub's own camera and the shelf beside the tank: only the old rock / glass clamp
+        } else if (shelfMix > 0f) {
+            // the shelf beside the tank: only the old rock / glass clamp
             clampEye(eye, sdf)
             ballOn = false
         } else {
@@ -512,6 +544,50 @@ class Camera {
         M.perspective(fovY, aspect, near, far, proj)
         M.mul(proj, view, viewProj)
         M.invert(viewProj, invViewProj)
+    }
+
+    /**
+     * Ride camera goals into [desiredEye] / [desiredAim]: the sub's own framing ([rideEye] / [rideAim]) swung by the
+     * user's look-round drag, pulled in before anything between the sub and the chase eye, and fed forward by the sub's
+     * velocity times the springs' lag (2 / ω) so the camera keeps pace instead of trailing.
+     */
+    private fun rideTarget(dt: Float) {
+        if (!touching) {
+            val k = exp(-RIDE_RELAX * dt)
+            rideYaw *= k; ridePitch *= k
+        }
+        val yo = rideYawS.step(rideYaw, dt); val po = ridePitchS.step(ridePitch, dt)
+        val cy = cos(yo); val sy = sin(yo)
+        if (rideFirstPerson) {
+            // look round from the eye
+            desiredEye[0] = rideEye[0]; desiredEye[1] = rideEye[1]; desiredEye[2] = rideEye[2]
+            val dx = rideAim[0] - rideEye[0]; val dz = rideAim[2] - rideEye[2]
+            desiredAim[0] = rideEye[0] + dx * cy + dz * sy
+            desiredAim[2] = rideEye[2] - dx * sy + dz * cy
+            desiredAim[1] = rideAim[1] + sqrt(dx * dx + dz * dz) * po
+        } else {
+            // swing the chase eye round the sub
+            val dx = rideEye[0] - rideAnchor[0]; val dz = rideEye[2] - rideAnchor[2]
+            var ex = rideAnchor[0] + dx * cy + dz * sy
+            var ez = rideAnchor[2] - dx * sy + dz * cy
+            var ey = rideEye[1] + sqrt(dx * dx + dz * dz) * po
+            // line of sight from the sub: stop before anything in the way (in at once, out gently)
+            var lx = ex - rideAnchor[0]; var ly = ey - rideAnchor[1]; var lz = ez - rideAnchor[2]
+            val len = sqrt(lx * lx + ly * ly + lz * lz)
+            if (len > 1e-3f) {
+                lx /= len; ly /= len; lz /= len
+                val hit = colliders.cast(rideAnchor[0], rideAnchor[1], rideAnchor[2], lx, ly, lz, len, followOwnerTag)
+                val want = (hit / len).coerceIn(0f, 1f)
+                rideLos = if (want <= rideLos || dt <= 0f) want else want + (rideLos - want) * exp(-LOS_RELEASE * dt)
+                val t = max(len * rideLos, minOf(len, RIDE_MIN_CHASE))
+                ex = rideAnchor[0] + lx * t; ey = rideAnchor[1] + ly * t; ez = rideAnchor[2] + lz * t
+            }
+            desiredEye[0] = ex; desiredEye[1] = ey; desiredEye[2] = ez
+            desiredAim[0] = rideAim[0]; desiredAim[1] = rideAim[1]; desiredAim[2] = rideAim[2]
+        }
+        val w = if (rideFirstPerson) RIDE_FP_OMEGA else RIDE_OMEGA
+        val le = 2f / w; val la = 2f / (w * 1.5f)
+        for (i in 0 until 3) { desiredEye[i] += rideVel[i] * le; desiredAim[i] += rideVel[i] * la }
     }
 
     private fun eyeAimDistance(): Float {
@@ -538,9 +614,12 @@ class Camera {
         if (glassClamp(ball)) colliders.pushOut(ball)
         val dx = eye[0] - ball[0]; val dy = eye[1] - ball[1]; val dz = eye[2] - ball[2]
         val off = sqrt(dx * dx + dy * dy + dz * dz)
-        stuckS = if (off > max(STUCK_CM, eyeAimDistance() * 0.35f)) stuckS + dt else 0f
+        // riding: the goal is already clear in sight of the sub, so a ball wedged short of it (behind a rock or a piece of
+        // kit the sub glided past) cuts there quickly rather than leaving the sub to sail on out of view
+        val tol = if (rideOn) RIDE_STUCK_CM else max(STUCK_CM, eyeAimDistance() * 0.35f)
+        stuckS = if (off > tol) stuckS + dt else 0f
         // following and the fish is out of sight behind something: cut sooner
-        val limit = if (stuckS > 0f && followId != null && !sees(ball)) STUCK_HIDDEN_S else STUCK_S
+        val limit = if (rideOn || (stuckS > 0f && followId != null && !sees(ball))) STUCK_HIDDEN_S else STUCK_S
         if (stuckS > limit && colliders.free(eye[0], eye[1], eye[2]) >= 0f) {
             ball[0] = eye[0]; ball[1] = eye[1]; ball[2] = eye[2]
             glassClamp(ball)
@@ -870,6 +949,13 @@ class Camera {
         /** Fly-in: the follow springs stiffen from [FLY_OMEGA] to [FOLLOW_OMEGA] over this many seconds. */
         /** Submarine ride camera stiffness (rad/s). */
         const val RIDE_OMEGA = 7f
+        /** Inside the sub the view rides tighter (it is the pilot's eye). */
+        const val RIDE_FP_OMEGA = 16f
+        /** Look-round drag while riding: pitch range (as a slope) and how fast it eases back after the finger lifts (1/s). */
+        const val RIDE_MAX_PITCH = 0.9f
+        const val RIDE_RELAX = 1.2f
+        /** The chase view never pulls in closer to the sub than this (cm). */
+        const val RIDE_MIN_CHASE = 3.5f
         const val FLY_IN_S = 1.4f
         const val FLY_OMEGA = 2.4f
         const val FOLLOW_OMEGA = 6.5f
@@ -890,6 +976,8 @@ class Camera {
         const val STUCK_CM = 6f
         const val STUCK_S = 0.6f
         const val STUCK_HIDDEN_S = 0.25f
+        /** Riding: how far (cm) the collided eye may lag its sight-checked goal before it counts as wedged. */
+        const val RIDE_STUCK_CM = 3f
         /** Line-of-sight pull-in eases back out at this rate (1/s) once the view is clear again. */
         const val LOS_RELEASE = 2.5f
         /** Body-centre smoothing (rad/s): well under the tail-beat rate, quick next to a turn. */

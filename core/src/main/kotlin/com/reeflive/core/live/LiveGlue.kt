@@ -50,7 +50,8 @@ enum class Scenario(val label: String) {
     SALINITY_SWING("Salinity swing"),
     POWER_OUTAGE("Power outage"),
     ALGAE_BLOOM("Algae bloom"),
-    OVERFEEDING("Overfeeding");
+    OVERFEEDING("Overfeeding"),
+    ROCKSLIDE("Rockslide");
 
     fun steps(): List<ScenarioStep> = Scenarios.steps(this)
 }
@@ -87,6 +88,8 @@ object Scenarios {
         Scenario.OVERFEEDING -> List(6) { i ->
             ScenarioStep(i * 300.0, Command.Feed(if (i % 2 == 0) FoodKind.FLAKE else FoodKind.PELLET, 1.5))
         }
+        // a goby's worth of digging all at once under one side of a rock; it shifts if "Rocks can shift" is on
+        Scenario.ROCKSLIDE -> listOf(ScenarioStep(0.0, Command.DynamicRocks(true)), ScenarioStep(0.0, Command.UndermineRock()))
     }
 }
 

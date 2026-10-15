@@ -275,6 +275,10 @@ object LiveReactions {
         SandboxPreset.COPPER_OVERDOSE -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = "Copper overdose"), "Too much copper. Shrimp and corals hate it!", HermieMood.WORRIED).let {
             Reaction(it.fx, it.say, it.mood, it.feedback.withWatch("copper").withEffect("Copper floods in: deadly for shrimp and corals"))
         }
+        SandboxPreset.ROCKSLIDE -> Reaction(
+            TankFx(FxKind.ALERT, FxSpots.SAND, glyph = ReefGlyphs.rocks, tint = Color(0xFFB8A58A), caption = "Rockslide"), "Uh oh, the sand under a rock is gone. Watch it shift!", HermieMood.SURPRISED,
+            Feedback("Rockslide", "The sand under one side of a rock is dug out: it settles or topples", listOf(Feedback.burst(BurstKind.SILT, FxSpots.SAND, amount = 2f)), durationMs = 2600),
+        )
     }
 
     fun heatWave() = Reaction(TankFx(FxKind.THERMO_UP, FxSpots.THERMO, caption = "Heat wave"), "A heat wave! Warm water holds less air.", HermieMood.WORRIED).let {
@@ -382,6 +386,21 @@ object LiveReactions {
                 listOf(Feedback.burst(BurstKind.HAZE, FxSpots.DOSE, carbonDust, 0.4f), Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE)),
             ),
         )
+        MaintenanceTask.EMPTY_SKIMMER -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.skimmer, caption = "Skimmer cup emptied"), "Yuck, skimmer goo! The cup is clean, so the skimmer pulls muck out again.",
+            feedback = Feedback(
+                "Skimmer cup emptied", "A full cup stops skimming: empty and wipe it about once a week",
+                listOf(Feedback.burst(BurstKind.MICROBUBBLES, FxSpots.SUMP)),
+            ),
+        )
+        MaintenanceTask.TOP_OFF -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.droplet, caption = "Topped off"), "Fresh water in for what evaporated. Only fresh, never salty!",
+            feedback = Feedback(
+                "Topped off with RO water", "Evaporation leaves the salt behind: fresh water puts the salinity back",
+                listOf(Feedback.burst(BurstKind.FRESH, FxSpots.DOSE)),
+                watch = "sal",
+            ),
+        )
         MaintenanceTask.HARVEST_MACRO -> if (now != null && !SupplyPreview.canTrim(now)) {
             Reaction(
                 TankFx(FxKind.SPARKLE, FxSpots.ROCK, glyph = ReefGlyphs.refugium, tint = Color(0xFF8EE66B), caption = "Nothing to trim"),
@@ -400,6 +419,14 @@ object LiveReactions {
                 ),
             )
         }
+        MaintenanceTask.RINSE_FILTER -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Filter rinsed"), "The filter floss is clean. Trapped poop can't rot in there now.",
+            feedback = Feedback("Filter rinsed", "Waste caught in the filter is gone before it turns into nitrate", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.DOSE))),
+        )
+        MaintenanceTask.SIPHON_SAND -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SAND, glyph = ReefGlyphs.fishWaste, caption = "Sand siphoned"), "Slurp! Poop and gunk vacuumed off the sand.",
+            feedback = Feedback("Sand siphoned", "Fish waste and mulm sucked off the sand bed", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.SAND))),
+        )
     }
 
     fun shells() = Reaction(TankFx(FxKind.SHELLS, FxSpots.SAND, caption = "Spare shells"), "New shells for hermits like me! Moving day!", HermieMood.EXCITED)

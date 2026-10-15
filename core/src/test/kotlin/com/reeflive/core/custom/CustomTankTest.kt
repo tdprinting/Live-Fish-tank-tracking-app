@@ -65,6 +65,21 @@ class CustomTankTest {
      * A save exactly as version 1 wrote it, frozen: every later version must still open it. Also carries a field
      * from the future (ignored) and leaves fields out (defaults), the two ways a format drifts.
      */
+    @Test fun myTankKeepsItsOwnRockwork() {
+        val sim = CustomTank.fresh(TankBuilds.DEFAULT, catalog(), TestTank.rock, 12 * 3600.0, seed = 5L)
+        assertTrue("My tank's rocks can shift", sim.rockPhysics == null || sim.dynamicRocks)
+        val rp = sim.rockPhysics ?: return
+        sim.enqueue(Command.PlaceRock(com.reeflive.core.sim.DryRockShape.BOULDER, 50.0, 25.0, seed = 3))
+        sim.advance(8.0, 0.05)
+        val added = rp.added.single()
+        val text = CustomTankCodec.encode(CustomTank.capture(sim, CustomTankSave(seed = 5L), nowMs = 1L))
+        val re = CustomTank.restore(CustomTankCodec.decode(text)!!, catalog(), TestTank.rock)
+        val back = re.rockPhysics!!.added.single()
+        assertEquals(added.shape, back.shape)
+        assertEquals(added.pos[0], back.pos[0], 0.01)
+        assertEquals(added.pos[1], back.pos[1], 0.01)
+    }
+
     @Test fun versionOneSaveStillOpens() {
         val v1 = """
             {"version":1,"name":"Tee's nano","buildId":"nano_cube_20","createdAtMs":1760500000000,"savedAtMs":1760503600000,
