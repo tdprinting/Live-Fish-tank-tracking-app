@@ -17,8 +17,14 @@ import kotlin.math.sqrt
  * heading. An [override] polyline (eel in its den, blenny in its hole) replaces the trail.
  */
 class BodySpline(length: Double, val rigid: Boolean = false) {
+    /**
+     * Bumped by every change that can move a [sample] point (pose, length, override): equal versions sample alike, so a
+     * reader may keep what it sampled ([com.reeflive.core.sim.BodyState.refresh]). Every mutator below must bump it.
+     */
+    var version = 0L; private set
+
     var length: Double = length
-        set(v) { field = v.coerceAtLeast(0.1) }
+        set(v) { field = v.coerceAtLeast(0.1); version++ }
 
     private var head = Vec3.ZERO
     private var heading = Vec3.X
@@ -30,6 +36,10 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      * sliding into a hole or leaving it never pops the body shape or snaps the head to the path's end.
      */
     var override: List<Vec3>? = null
+        set(v) { field = v; version++ }
+
+    /** Whether an [override] path is set or still blending out: then a sample also reads that list (no [version] for it). */
+    val overridden: Boolean get() = override != null || lastOverride != null
     /** 0 = trail shape, 1 = override shape; eased in [update]. */
     private var overrideMix = 0.0
     /** The override being blended out after it was cleared. */
@@ -57,12 +67,14 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     /** Returns to the remembered clear pose; false when there is none. */
     fun restoreSafe(): Boolean {
         if (!safeValid) return false
+        version++
         head = safeHead; heading = safeHeading
         trail.clear(); trail.addAll(safeTrail)
         return true
     }
 
     fun reset(headPos: Vec3, headingDir: Vec3) {
+        version++
         safeValid = false
         head = headPos; heading = headingDir.normalized()
         trail.clear()
@@ -75,6 +87,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
 
     fun update(headPos: Vec3, headingDir: Vec3, dt: Double, relaxRate: Double) {
         if (!(headPos.x.isFinite() && headPos.y.isFinite() && headPos.z.isFinite())) return
+        version++
         head = headPos
         heading = headingDir.normalized(heading)
         // ease the body into and out of an override path instead of switching shape in one tick
@@ -138,7 +151,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     /** A copy of the pose (head, heading, trail), for a trial move that may be taken back with [setPose]. */
     class Pose internal constructor(internal val head: Vec3, internal val heading: Vec3, internal val trail: List<Vec3>)
     fun pose(): Pose = Pose(head, heading, ArrayList(trail))
-    fun setPose(p: Pose) { head = p.head; heading = p.heading; trail.clear(); trail.addAll(p.trail) }
+    fun setPose(p: Pose) { version++; head = p.head; heading = p.heading; trail.clear(); trail.addAll(p.trail) }
 
     /**
      * Slides the body [d] cm back along its own spine, the way it came in (a fish backing out of a slot it cannot turn
@@ -147,6 +160,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      */
     fun backUp(d: Double) {
         if (override != null) return
+        version++
         if (rigid || trail.isEmpty()) { head -= heading * d; return }
         var cur = head
         var prevPt = head
@@ -176,6 +190,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      */
     fun displace(deltas: Array<Vec3>) {
         if (override != null) return
+        version++
         val d0 = deltas[0]
         if (rigid || trail.isEmpty()) { head += d0; return }
         val seg = length / (POINTS - 1)
@@ -359,6 +374,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      */
     fun liftTrail(floor: Floor, maxLift: Double) {
         if (rigid) return
+        version++
         for (i in trail.indices) {
             val p = trail[i]
             val f = floor.y(p.x, p.z)

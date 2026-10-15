@@ -107,7 +107,7 @@ class Navigation(private val rock: RockData) {
             val bk = buckets ?: return 0
             var n = 0
             while (pending > 0 && n < budget) {
-                while (bk[cur].isEmpty()) { cur = (cur + 1) % NB; curDist++ }
+                while (bk[cur].isEmpty()) { cur++; if (cur == NB) cur = 0; curDist++ }
                 val i = bk[cur].pop(); pending--
                 if (dist[i] != curDist) continue
                 n++
@@ -121,7 +121,8 @@ class Navigation(private val rock: RockData) {
                         if (!pass[j]) continue
                         val w = stp[q] * cost[j]
                         val nd = curDist + w
-                        if (nd < dist[j]) { dist[j] = nd; bk[(cur + w) % NB].push(j); pending++ }
+                        // (cur + w < 2·NB: the bucket ring index without a division)
+                        if (nd < dist[j]) { dist[j] = nd; val b = cur + w; bk[if (b >= NB) b - NB else b].push(j); pending++ }
                     }
                     continue
                 }

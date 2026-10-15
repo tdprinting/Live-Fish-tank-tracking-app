@@ -92,6 +92,7 @@ class BodyState {
     var sealedSince = -1.0
 
     fun refresh(o: Organism) {
+        if (unchanged(o)) return
         if (o.species !== shapeOf || shape == null) { shape = BodyShapes.of(o.species); shapeOf = o.species }
         val s = shape!!
         val st = s.stations(N)
@@ -137,6 +138,35 @@ class BodyState {
         var r = 0.0
         for (i in 0 until N) r = max(r, centre.distanceTo(p[i]) + abs(ctr[i]) + max(a[i], b[i]))
         radius = r
+        remember(o)
+    }
+
+    // ---- what the last [refresh] read: the same again builds the same body, so it is kept (the collision refreshes a
+    // body many times a tick, mostly unmoved). Every input [refresh] reads must be here. ----
+    private var mValid = false
+    private var mSpline: BodySpline? = null
+    private var mVersion = 0L
+    private var mPos = Vec3.ZERO; private var mHeading = Vec3.X; private var mUp = Vec3.Y
+    private var mAmp = 0.0; private var mBend = 0.0; private var mLength = 0.0; private var mMode = 0
+    private var mSpecies: SimSpecies? = null
+    private var mSeat: CrawlerSeat? = null
+    private var mSeatFwd = Vec3.X; private var mSeatPos = Vec3.ZERO; private var mSeatUp = Vec3.Y; private var mSeatOff: Vec3? = null
+
+    private fun unchanged(o: Organism): Boolean {
+        if (!mValid || o.spline.overridden) return false
+        val seat = seatOf(o)
+        return o.spline === mSpline && o.spline.version == mVersion && o.pos == mPos && o.heading == mHeading && o.up == mUp &&
+            o.amp == mAmp && o.bend == mBend && o.lengthCm == mLength && o.species === mSpecies && o.toPoseMotionMode() == mMode &&
+            seat === mSeat && (seat == null || seat.fwd == mSeatFwd && o.seatPos == mSeatPos && o.seatUp == mSeatUp && seatOff == mSeatOff)
+    }
+
+    private fun remember(o: Organism) {
+        val seat = seatOf(o)
+        mValid = !o.spline.overridden
+        mSpline = o.spline; mVersion = o.spline.version
+        mPos = o.pos; mHeading = o.heading; mUp = o.up; mAmp = o.amp; mBend = o.bend; mLength = o.lengthCm
+        mSpecies = o.species; mMode = o.toPoseMotionMode(); mSeat = seat
+        if (seat != null) { mSeatFwd = seat.fwd; mSeatPos = o.seatPos; mSeatUp = o.seatUp; mSeatOff = seatOff }
     }
 
     companion object {
@@ -496,7 +526,7 @@ class BodyCollision(private val rock: RockData) {
                 val low = if (sandFar) q else body.extreme(i, DOWN) + (q - p0)
                 if (!seatedNow && !sandFar && (q.y - fy < boundH + SAND_SLOPE_CM || low.y - rock.floorY(low.x, low.z) < SKIN)) {
                     val n = floorNormal(q.x, q.z)
-                    contact(n, (q.y - rock.floorY(q.x, q.z)) * n.y)
+                    contact(n, (q.y - fy) * n.y)   // (q has not moved since fy was read)
                     // the sand curves (mounds against the rock feet, rubble, pits): check the height under the section's
                     // deepest points (along the slope normal, straight down, and twelve around its rim) and lift what is under
                     val off = q - p0
@@ -1033,16 +1063,24 @@ class BodyCollision(private val rock: RockData) {
         return false
     }
 
+    private val segMid = Array(BodyState.N - 1) { Vec3.ZERO }
+    private val segReach = DoubleArray(BodyState.N - 1)
+
     private fun pair(a: Organism, b: Organism, holdAttached: Boolean) {
         val A = a.body; val B = b.body
         val (wa, wb) = weights(a, b, holdAttached)
+        // (B's segment middles and reaches, once for the pair rather than once per segment of A)
+        for (j in 0 until BodyState.N - 1) {
+            segMid[j] = (B.p[j] + B.p[j + 1]) * 0.5
+            segReach[j] = B.p[j].distanceTo(B.p[j + 1]) * 0.5 + max(abs(B.ctr[j]) + max(B.a[j], B.b[j]), abs(B.ctr[j + 1]) + max(B.a[j + 1], B.b[j + 1]))
+        }
         for (i in 0 until BodyState.N - 1) {
             val ma = (A.p[i] + A.p[i + 1]) * 0.5
             val ha = A.p[i].distanceTo(A.p[i + 1]) * 0.5 + max(abs(A.ctr[i]) + max(A.a[i], A.b[i]), abs(A.ctr[i + 1]) + max(A.a[i + 1], A.b[i + 1]))
             if (ma.distanceTo(B.centre) > ha + B.radius) continue
             for (j in 0 until BodyState.N - 1) {
-                val mb = (B.p[j] + B.p[j + 1]) * 0.5
-                val hb = B.p[j].distanceTo(B.p[j + 1]) * 0.5 + max(abs(B.ctr[j]) + max(B.a[j], B.b[j]), abs(B.ctr[j + 1]) + max(B.a[j + 1], B.b[j + 1]))
+                val mb = segMid[j]
+                val hb = segReach[j]
                 if (ma.distanceTo(mb) > ha + hb + SKIN) continue
                 val (s, t) = closestParams(A.p[i], A.p[i + 1], B.p[j], B.p[j + 1])
                 val pa = A.p[i] + (A.p[i + 1] - A.p[i]) * s
