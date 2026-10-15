@@ -607,6 +607,9 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val cl = station.client
             if (cl == null || !cl.alive) { finished = true; station.release(); return }
+            // the client poses for this shrimp: it may still name the wrasse that last cleaned it, and then its
+            // VisitCleaner let go of the shrimp's station as it began to pose (a clean-visit loop every 1.5 s)
+            cl.poseFor = c.o
             if (elapsed < tap) {
                 // antennae on the client's flank before any physical cleaning
                 out.rest(Rest(c.o.pos, (cl.pos - c.o.pos).normalized(c.o.heading), c.o.up, 1), 2.0)

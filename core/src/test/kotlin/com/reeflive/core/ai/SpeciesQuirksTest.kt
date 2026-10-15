@@ -34,7 +34,9 @@ class SpeciesQuirksTest {
         s.advance(15 * 60.0, behaviorDt = 0.1) { if (hawk.behaviorName == "Resting on the sand") resting++ }
         assertTrue("settled: ${hb.sandRest.settles}, resting ticks $resting", hb.sandRest.settles >= 1 && resting > 0)
         assertEquals("Resting on the sand", hawk.behaviorName)
-        assertTrue("on the sand: y ${hawk.pos.y} sand ${s.rock.sandTopCm}", hawk.pos.y - s.rock.sandTopCm < 2.5)
+        // on the live sand bed (SandBed.surfaceY: 3.5 cm at the front glass to 6 cm at the back, not the flat sandTopCm plane)
+        val sandY = s.sand.surfaceY(hawk.pos.x, hawk.pos.z)
+        assertTrue("on the sand: y ${hawk.pos.y} sand $sandY", hawk.pos.y - sandY < 2.5)
         val gap = s.rock.sdf.dist(hawk.pos)
         assertTrue("within 10 cm of the rock base: $gap", gap <= SandRest.ROCK_GAP_CM + 1.0)
         val pitchDeg = Math.toDegrees(asin(hawk.heading.y))

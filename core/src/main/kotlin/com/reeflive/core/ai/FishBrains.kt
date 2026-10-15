@@ -307,7 +307,9 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
                 out.tailMul = 1.3
                 return
             }
-            out.seek(wp, o.cruiseSpeed * 1.1, arrive = 2 * c.L)
+            // out of a cave first, over the rock: a straight seek from a hiding pocket at the rock foot held the tang
+            // there, nose to the rock, for minutes (it never came back to a loitering sub, SubmarineTest)
+            out.seek(c.viaOpenWater(wp), o.cruiseSpeed * 1.1, arrive = 2 * c.L)
             out.wander = 0.15
         }
     }

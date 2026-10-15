@@ -31,8 +31,25 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         val pen = need - p.y
         if (pen <= 0.0) return 0.0
         var lift = pen
-        // never lift a body into rock: wedged between rock and sand (a crevice at the rock foot) the rock wins
         val sdf = rock
+        // a swimmer pinched between the sand and a rock overhang: the steering pushes it out of the rock, down onto the
+        // flat sandTopCm floor, and the lift puts it straight back, each tick (a tang frozen 95 min in the gap under a
+        // ledge at the back glass). The sand moves it aside instead, to the nearest spot it fits.
+        if (sdf != null && o.isFish && !o.attached) {
+            val clear = SWIM_ROCK_MIN * o.collisionLength
+            val dp = sdf.dist(p)
+            if (sdf.dist(p.withY(need)) < min(dp, clear)) {
+                val q = pinchExit(o, p, pen, min(dp, clear), sdf)
+                if (q != null) {
+                    o.pos = q
+                    if (o.vel.y < 0.0) o.vel = o.vel.withY(0.0)
+                    o.spline.update(o.pos, o.heading, 0.0, 0.0)
+                    lifts++
+                    return pen
+                }
+            }
+        }
+        // never lift a body into rock: wedged between rock and sand (a crevice at the rock foot) the rock wins
         if (sdf != null) {
             val keep = min(sdf.dist(p), ROCK_KEEP)
             if (sdf.dist(p.withY(need)) < keep) {
@@ -62,6 +79,27 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         o.spline.update(o.pos, o.heading, 0.0, 0.0)
         lifts++
         return pen
+    }
+
+    /** Nearest point within about [pen] of [p], resting on the sand, with [keep] cm to rock and off the glass; null if none. */
+    private fun pinchExit(o: Organism, p: com.reeflive.core.geom.Vec3, pen: Double, keep: Double, sdf: com.reeflive.core.geom.Sdf): com.reeflive.core.geom.Vec3? {
+        val m = (0.25 * o.lengthCm).coerceIn(0.6, 4.0)
+        val c = clearance(o)
+        for (k in 1..3) {
+            val r = max(0.5, 0.5 * k * pen)
+            var best: com.reeflive.core.geom.Vec3? = null
+            var bestD = keep
+            for (i in 0 until 8) {
+                val a = i * PI / 4
+                val x = p.x + kotlin.math.cos(a) * r; val z = p.z + kotlin.math.sin(a) * r
+                if (x < m || x > sand.lengthCm - m || z < m || z > sand.widthCm - m) continue
+                val q = com.reeflive.core.geom.Vec3(x, sand.surfaceY(x, z) + c, z)
+                val d = sdf.dist(q)
+                if (d >= bestD) { bestD = d; best = q }
+            }
+            if (best != null) return best
+        }
+        return null
     }
 
     private var floorClear = 0.0
@@ -152,6 +190,8 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         const val CONTACT_TOL = 0.12
         /** Clearance from rock a lift must not eat into (cm). */
         const val ROCK_KEEP = 0.3
+        /** A swimmer's rock clearance in body lengths (Steering's hard resolve, 0.45 L). */
+        const val SWIM_ROCK_MIN = 0.45
         /** Below this speed (cm/s) a body is resting. */
         const val MOVING_CM_S = 0.3
         /** Sand shoved per step of contact travel: a 0.2 mm layer over the body's width (cm). */
