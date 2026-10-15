@@ -225,7 +225,8 @@ class ModelRegistry(private val loader: ClassLoader? = ModelRegistry::class.java
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun entry(speciesId: String): Entry = cache.getOrPut(speciesId) {
-        val text = runCatching { loader?.getResourceAsStream("species/$speciesId.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
+        val sheetId = SHEET_ALIASES[speciesId] ?: speciesId
+        val text = runCatching { loader?.getResourceAsStream("species/$sheetId.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
         val o = text?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
         if (o == null) Entry(null, emptyMap(), "") else Entry(
             (o["model"] as? JsonPrimitive)?.contentOrNullSafe(),
@@ -247,6 +248,17 @@ class ModelRegistry(private val loader: ClassLoader? = ModelRegistry::class.java
     }
 
     companion object {
+        /**
+         * The default stock names three inverts by their old ids (`DefaultStock`), but their production sheets (and so
+         * their models) are filed under the ids below. Without this they had no model and drew as the flat coloured
+         * placeholder spindle (the brittle star showed as a big purple blob).
+         */
+        val SHEET_ALIASES: Map<String, String> = mapOf(
+            "ophiocoma_erinaceus" to "ophiocoma_sp",
+            "nassarius_vibex" to "nassarius_sp",
+            "astraea_tecta" to "lithopoma_tectum",
+        )
+
         fun lod1(path: String): String = path.removeSuffix(".glb") + "_lod1.glb"
 
         /**
