@@ -15,13 +15,16 @@ class Organism(
     val id: String,
     val species: SimSpecies,
     lengthCm: Double,
-    val nickname: String,
+    nickname: String,
     val role: String?,
     val rng: Rng,
     val placement: String? = null,
     val variant: String? = null,
 ) {
     val brainKind: BrainKind = species.brainKind
+
+    /** The keeper's name for this animal (a [Command.Rename] changes it). */
+    var nickname: String = nickname
 
     var lengthCm: Double = lengthCm
         set(v) { field = v.coerceAtLeast(0.3); spline.length = field }

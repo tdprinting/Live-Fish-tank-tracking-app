@@ -31,7 +31,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     private val q = mapOf("QUALITY" to quality.shaderLevel.toString())
     private fun p(name: String, v: String, f: String, extra: Map<String, String> = emptyMap()) = ShaderProgram.build(name, v, f, q + extra, source)
 
-    val rock = p("rock", "static.vert", "rock.frag")
+    val rock = p("rock", "static.vert", "rock.frag", mapOf("ROCK" to "1"))
     val sand = p("sand", "static.vert", "rock.frag", mapOf("SAND" to "1"))
     val generic = p("generic", "static.vert", "generic.frag")
     /** The supply shelf beside the tank (SupplyShelfScene): its own room light rig instead of the fixtures. */

@@ -176,8 +176,15 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         ),
     )
 
-    // ---- sandbox actions (ignored in REALITY mode) ----
-    private inline fun sandbox(block: () -> Unit) { if (mode.value == SimMode.SANDBOX) block() }
+    // ---- "My tank" (SimMode.CUSTOM): the keeper's own saved tank ----
+    val custom: StateFlow<com.reeflive.app.live.CustomTankInfo> = holder.custom
+    fun startCustomTank(build: com.reeflive.core.custom.TankBuild) = holder.startCustomTank(build)
+    fun startOverCustomTank() = holder.startOverCustomTank()
+    /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
+    fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
+
+    // ---- sandbox actions (ignored in REALITY mode; My tank has them all too) ----
+    private inline fun sandbox(block: () -> Unit) { if (mode.value != SimMode.REALITY) block() }
 
     fun setParam(paramId: String, value: Double) = sandbox { holder.enqueue(Command.SetParam(paramId, value)) }
 
@@ -247,7 +254,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.enqueue(Command.Maintain(task))
         // a fresh sock or fresh carbon fits one when none was running (WaterSim.maintain): keep the sandbox's
         // equipment switches in step with the tank
-        if (mode.value != SimMode.SANDBOX) return
+        if (mode.value == SimMode.REALITY) return
         val row = when (task) {
             MaintenanceTask.CHANGE_SOCK -> "eq_sock"
             MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
@@ -289,6 +296,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
 
     /** Restores the sandbox to the state it was forked from. */
     fun resetSandbox() = sandbox {
+        if (mode.value == SimMode.CUSTOM) return@sandbox
         _lightPct.value = 100.0
         _extras.value = DEFAULT_EXTRAS
         holder.enqueue(Command.Photoperiod(DEFAULT_EXTRAS.getValue("photoperiod")))

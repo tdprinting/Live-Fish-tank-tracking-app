@@ -45,7 +45,7 @@ class SpeciesDbTest {
         val shipped = setOf(
             "algae_tufts", "asterina", "astrea", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
-            "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
+            "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {
@@ -56,6 +56,7 @@ class SpeciesDbTest {
         assertEquals("models/clown_darwin.glb", db.require("amphiprion_ocellaris").modelFor("darwin_black"))
         assertEquals("models/clown_orange.glb", db.require("amphiprion_ocellaris").modelFor("classic"))
         assertEquals("models/gsp_neon.glb", db.require("briareum_sp").modelFor("neon"))
+        assertEquals("models/mushroom_hairy_mound.glb", db.require("rhodactis_sp").modelFor("mound"))
         assertEquals("species_amphiprion_ocellaris", db.require("amphiprion_ocellaris").cardDrawable)
     }
 

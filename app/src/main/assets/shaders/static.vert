@@ -30,6 +30,9 @@ out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUv;
 out vec4 vColor;
+#ifdef ROCK
+out vec3 vObj;   // object-space position: rock.frag pins its detail to the rock
+#endif
 
 void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
@@ -58,5 +61,8 @@ void main() {
     vNormal = normalize(mat3(uModel) * aNormal);
     vUv = aUv;
     vColor = aColor;
+#ifdef ROCK
+    vObj = aPos;
+#endif
     gl_Position = uViewProj * vec4(p, 1.0);
 }

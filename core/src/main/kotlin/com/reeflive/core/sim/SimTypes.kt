@@ -14,6 +14,8 @@ sealed class Command {
     data class Powerheads(val on: Boolean) : Command()
     data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
+    /** The keeper names an animal (My tank: the name is saved with it). Blank names are ignored. */
+    data class Rename(val id: String, val nickname: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
     /**
      * Submarine mode ([Submarine]): launch ([on]) or park the toy sub; [visible] false hides it from the animals
@@ -333,6 +335,8 @@ data class SimSnapshot(
     val sandPiles: FloatArray = FloatArray(0),
     /** Sandbox pump strength (0..2). */
     val flowStrength: Float = 1f,
+    /** A tank started from scratch (My tank, [Simulation.bareScape]): the renderer leaves out the owner's static colonies. */
+    val bareScape: Boolean = false,
     /** Water-surface heightfield (cm, sx × sz, x fastest) and its dims (SIMULATION §9.7). */
     val surfaceHeights: FloatArray = FloatArray(0),
     val surfaceDims: IntArray = IntArray(2),
