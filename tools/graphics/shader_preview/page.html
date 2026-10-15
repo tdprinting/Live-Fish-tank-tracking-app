@@ -241,7 +241,7 @@ window.preview = {
     const q = { QUALITY: quality };
     st.scene = scene;
     st.lowQ = quality === '0';
-    st.progs.rock = await program('rock', 'static.vert', 'rock.frag', q);
+    st.progs.rock = await program('rock', 'static.vert', 'rock.frag', { ...q, ROCK: '1' });
     st.progs.sand = await program('sand', 'static.vert', 'rock.frag', { ...q, SAND: '1' });
     if (scene !== 'rocksand') {
       st.progs.generic = await program('generic', 'static.vert', 'generic.frag', q);
