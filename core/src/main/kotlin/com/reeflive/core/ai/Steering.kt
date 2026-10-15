@@ -63,6 +63,8 @@ class Steering(private val c: Ctx) {
     fun apply(intent: SteerIntent) {
         val o = c.o
         val dt = c.dt
+        // where the animal was drawn at the end of the last tick (the body collision's push-out is rate-limited from it)
+        val startHeading = o.heading; val startUp = o.up
         o.posture = intent.posture
         // sealed in a hollow of the rock (placed there, see OpenWater): swim out through it rather than stay forever
         if (!intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o, c.t)) intent.ignoreRock = true
@@ -143,7 +145,61 @@ class Steering(private val c: Ctx) {
         animate(o, intent, dt, sp)
         // the whole body, not just the snout, stays out of the rock, sand, glass and surface (SIMULATION §4.3)
         val settle = o.isFish && (intent.kinematic || sp < 0.4 * max(o.cruiseSpeed, 0.5))
+        val shape0 = if (o.isFish && !intent.crawl) o.spline.pose() else null
         c.sim.bodies.resolveEnv(o, dt, rockOn = !intent.ignoreRock, settle = settle)
+        if (shape0 != null) limitPushOut(o, shape0, startHeading, startUp, dt, !intent.ignoreRock)
+    }
+
+    /**
+     * The body collision may move a fish a long way in one resolve (a wedge released, a body swung out of a slot): drawn,
+     * that is a hop, a speed spike or a snap of the heading. The push-out is eased in instead: the fish moves, turns and
+     * rolls from where it was drawn last tick by no more than a fish can, and the rest of the push follows on the next
+     * ticks (the body is still resolved every tick, so it is out of the rock within a few of them). The body shape
+     * follows the head by the same shift.
+     */
+    private fun limitPushOut(o: Organism, shape0: com.reeflive.core.geom.BodySpline.Pose, h0: Vec3, u0: Vec3, dt: Double, rockOn: Boolean) {
+        if (c.sim.abstractMode) return
+        val speed = max(max(o.burstSpeed, o.cruiseSpeed), 1.0)
+        val step = (PUSH_SPEED_FACTOR * speed + PUSH_SPEED_CM_S) * dt
+        // no part of the body (the head, the tail swung round a corner, a section pushed out of a slot) is moved more than the head may be
+        val shape1 = o.spline.pose()
+        val same = o.spline.override == null && shape1.trail.size == shape0.trail.size
+        var worst = shape1.head.distanceTo(shape0.head)
+        if (same) for (i in shape1.trail.indices) worst = max(worst, shape1.trail[i].distanceTo(shape0.trail[i]))
+        if (worst > step) {
+            var f = step / worst
+            // ...but never left in the rock, sand or glass for the sake of the easing: it takes as much of the push as
+            // that needs (a body wedged so that only the whole push frees it is moved all at once, as before)
+            fun at(t: Double) {
+                if (same) o.spline.setPose(com.reeflive.core.geom.BodySpline.Pose(shape0.head.lerp(shape1.head, t), shape1.heading,
+                    shape1.trail.indices.map { shape0.trail[it].lerp(shape1.trail[it], t) }))
+                else o.spline.setPose(shape1).also { o.spline.displace(Array(com.reeflive.core.geom.BodySpline.POINTS) { shape0.head.lerp(shape1.head, t) - shape1.head }) }
+                o.pos = o.spline.headPos
+            }
+            val bodies = c.sim.bodies
+            val guard = o.posture !in 3..5 && o.body.emerging == 0
+            val tol = if (guard) max(PUSH_OVERLAP_CM, bodies.sectionDepth(o, rockOn) + 0.01) else Double.MAX_VALUE
+            at(f)
+            if (bodies.sectionDepth(o, rockOn) > tol) {
+                var lo = f; var hi = 1.0
+                repeat(6) { val m = (lo + hi) / 2; at(m); if (bodies.sectionDepth(o, rockOn) > tol) lo = m else hi = m }
+                at(hi)
+            }
+        }
+        // the heading and the roll likewise, unless that puts the body back into the rock
+        val h1 = o.heading; val u1 = o.up
+        val turn = Math.toRadians(PUSH_TURN_FACTOR * max(2.2 * o.species.locomotion.turnRateDeg.coerceAtLeast(30.0), 260.0)) * dt
+        val maxTurn = max(turn, Math.toRadians(PUSH_MIN_TURN_DEG))
+        if (Vec3.angle(h0, h1) > maxTurn) o.heading = Vec3.rotateToward(h0, h1, maxTurn)
+        val roll = Math.toRadians(PUSH_ROLL_FACTOR * max(60.0, 250.0 * dt))
+        if (Vec3.angle(u0, u1) > roll) o.up = Vec3.rotateToward(u0, u1, roll, o.heading)
+        if ((o.heading != h1 || o.up != u1) && o.posture !in 3..5 && o.body.emerging == 0) {
+            val bodies = c.sim.bodies
+            val easedH = o.heading; val easedU = o.up
+            val easedDepth = bodies.sectionDepth(o, rockOn)
+            o.heading = h1; o.up = u1
+            if (easedDepth <= max(PUSH_OVERLAP_CM, bodies.sectionDepth(o, rockOn) + 0.01)) { o.heading = easedH; o.up = easedU }
+        }
     }
 
     /** The point to steer for on the way to [t]: [t] in clear view, else the next point of the route round the rock. */
@@ -777,6 +833,15 @@ class Steering(private val c: Ctx) {
     }
 
     companion object {
+        /** A fish's push-out from the rock, sand or glass moves its drawn head at most (factor × top speed + this) per second. */
+        const val PUSH_SPEED_FACTOR = 1.2
+        const val PUSH_SPEED_CM_S = 6.0
+        /** ...turns it at most this fraction of the fastest turn a fish is allowed (never less than this many degrees a tick), and rolls it this fraction of the largest legit roll. */
+        const val PUSH_TURN_FACTOR = 0.8
+        const val PUSH_MIN_TURN_DEG = 6.0
+        /** ...and may leave no more of the body than this in the rock, sand or glass (cm; the no-overlap check allows 1 mm). */
+        const val PUSH_OVERLAP_CM = 0.04
+        const val PUSH_ROLL_FACTOR = 0.8
         /** Personal space between bodies, in body lengths of the smaller fish: schoolmates, everyone else (Partridge 1980: 0.3–1 BL), mates of a pair. */
         const val PERSONAL_SPACE_SCHOOL = 0.3
         const val PERSONAL_SPACE = 0.6
