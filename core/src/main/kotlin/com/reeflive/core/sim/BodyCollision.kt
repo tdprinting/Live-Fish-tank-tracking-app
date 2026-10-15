@@ -286,7 +286,13 @@ class BodyCollision(private val rock: RockData) {
 
     /** True when this animal's body is deliberately allowed into the geometry (see class doc). */
     fun exempt(o: Organism): Boolean =
-        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.inSand || o.spline.override != null || !o.visible || o.body.emerging > 0
+        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.inSand || wedgedAsleep(o) || o.spline.override != null || !o.visible || o.body.emerging > 0
+
+    /**
+     * A tang asleep in its bed: wedged on its side under an overhang, in a pose its shelter search fitted to the rock
+     * (TangShelters), as a goby's burrow is let into the sand. Coming out it is held like a body leaving a burrow.
+     */
+    private fun wedgedAsleep(o: Organism): Boolean = o.sleeping && o.brainKind == BrainKind.TANG
 
     /** Decor and equipment as solids, coral as soft contacts (set by the Simulation; null = none). */
     var obstacles: StaticObstacles? = null
@@ -414,7 +420,7 @@ class BodyCollision(private val rock: RockData) {
         // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
         // stays let in (inside the glass) until it is out, for at most [EMERGE_TICKS] resolves
         val bs = o.body
-        if (o.posture == 3 || o.posture == 5 || o.inSand) { bs.inBurrow = true; bs.emerging = 0 }
+        if (o.posture == 3 || o.posture == 5 || o.inSand || wedgedAsleep(o)) { bs.inBurrow = true; bs.emerging = 0 }
         else if (bs.inBurrow) {
             if (bs.emerging == 0) bs.emerging = EMERGE_TICKS + 1
             bs.emerging--
@@ -451,7 +457,8 @@ class BodyCollision(private val rock: RockData) {
         // how far each station was from the rock on the first pass, and how far the body has moved since: a station
         // that started farther from the rock than the body has moved cannot have reached it (distance is 1-Lipschitz)
         var moved = 0.0
-        if (settle && o.isFish) o.body.bellyN?.let { n ->
+        // (not a fish propped on its fins, posture 1: its pitch is the pose it holds, a hawkfish head-up on the sand)
+        if (settle && o.isFish && o.posture != 1) o.body.bellyN?.let { n ->
             fresh = false
             val k = min(1.0, dt * SETTLE_RATE)
             val flat = o.heading.rejectFrom(n).normalized(o.heading)
@@ -647,7 +654,9 @@ class BodyCollision(private val rock: RockData) {
             // a rigid body (a shell, a carapace) on curved rock also tips: the small rotation that best serves the
             // station pushes (shape matching about the body centre), then the translation
             if (rigid && !seated && o.spline.override == null) tip(o, body)
-            applyDeltas(o, body, if (rigid || iter >= BEND_ITERATIONS) null else deltas, translate)
+            // (a fish propped on its fins, posture 1 (a hawkfish head-up on the sand, a blenny on its perch), holds its
+            // pose: it is lifted off what it rests on, not bent or tipped flat)
+            applyDeltas(o, body, if (rigid || iter >= BEND_ITERATIONS || o.isFish && o.posture == 1) null else deltas, translate)
         }
         // still pushing (the planar contacts over-push at a convex edge, and two faces can trade the body back and forth)
         // but every rim point is clear: the pose fits
