@@ -33,6 +33,8 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val ADULT_NIGHT_PATROL_P = 0.05
         /** Juvenile plankton trips off the burrow mouth: length and gap, s; hunger met per snap (DESIGN ESTIMATE, research 30 §4). */
         const val OUT_MIN_S = 20.0
+        /** Separation gain while it hovers at its burrow door (the steering default is 1). */
+        const val HOME_SEPARATION = 0.8
         const val OUT_MAX_S = 60.0
         const val OUT_GAP_MIN_S = 30.0
         const val OUT_GAP_MAX_S = 70.0
@@ -358,7 +360,8 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             out.seek(spot, o.cruiseSpeed * 0.5, arrive = 2.5)
             out.hover = true
             out.ampMul = 0.6
-            out.separation = if (tightSchool) 0.9 else 1.5
+            // (it holds its door: at 1.5 a diamond goby sifting past shoved it ahead along the sand, once 26 cm off)
+            out.separation = if (tightSchool) 0.9 else HOME_SEPARATION
             // pick drifting particles within a few cm
             val f = if (o.hunger > 0.05) c.food.nearest(o.pos, 6.0) { o.species.dietMatch(it.kind) > 0 } else null
             if (f != null) {
