@@ -1,5 +1,6 @@
 package com.reeflive.app.render
 
+import com.reeflive.core.geom.EyeCollider
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.TankDims
@@ -22,8 +23,15 @@ import kotlin.math.sqrt
  * resistance and the view eases back when the finger lifts. A one-finger release flings the orbit ([Inertia]).
  *
  * Follow mode flies in (slow spring that stiffens over [FLY_IN_S]), frames the fish in profile from the viewer's
- * side at ~3 body lengths, leads in its direction of travel, and lets the user swing round it and pinch closer.
- * The eye is collision-tested against the rock SDF so it never ends up inside rock. Pure Kotlin (no GL); GL thread.
+ * side at ~3 body lengths, and tracks a smoothed body centre (not the wagging head) with velocity feed-forward so the
+ * springs do not trail behind a swimming fish. The user can swing round it, pinch closer, and pinch / drag releases
+ * coast ([Inertia]); [nudgeZoom] / [nudgeOrbit] are the on-screen buttons.
+ *
+ * Collision ([colliders], an [EyeCollider]): the eye is a small ball that is carried from where it was to where the
+ * springs want it with a sphere trace that slides along surfaces, so it can never pass through rock, sand, corals,
+ * equipment or animals (the glass is clamped separately and may be looked through). The follow framing also casts
+ * from the fish toward the eye and pulls in before anything in the way. Clearances always exceed the near-plane
+ * corner distance, so nothing close can be cut open by the near plane. Pure Kotlin (no GL); GL thread.
  */
 class Camera {
     // ---- orbit goals (moved by gestures) ----
@@ -75,6 +83,34 @@ class Camera {
     private val fishVel = FloatArray(3)
     private val prevMid = FloatArray(3)
     private var hasPrevMid = false
+    /** Smoothed body centre of the followed fish (filters the swimming wag out of the framing). */
+    private val bodyS = Spring3(BODY_OMEGA)
+    private var hasBody = false
+    /**
+     * Line-of-sight pull-in as a fraction of the framing distance (1 = clear). It drops at once when something comes
+     * between the fish and the eye and eases back out at [LOS_RELEASE] when it is clear again, so the pull-in never
+     * pumps in and out as the view passes a coral branch. A ratio, so zooming does not lag behind it.
+     */
+    private var losRatio = 1f
+
+    // ---- collision ----
+    /** What the eye must not go into (rock, sand, corals, equipment, animals). The renderer fills it every frame. */
+    val colliders = EyeCollider().apply {
+        lengthX = TANK[0]; depthZ = TANK[2]
+        sandFront = com.reeflive.core.sim.SandBed.BASE_FRONT.toFloat(); sandBack = com.reeflive.core.sim.SandBed.BASE_BACK.toFloat()
+    }
+    /** The collided eye, carried from frame to frame. */
+    private val ball = FloatArray(3)
+    private var ballOn = false
+    private var stuckS = 0f
+    /** Followed animal's capsule tag in [colliders] (the line-of-sight cast starts inside it, so it skips it). */
+    var followOwnerTag = FOLLOW_OWNER
+
+    // ---- zoom inertia (pinch release) ----
+    private val zoomInertia = Inertia(ZOOM_FRICTION)
+    private var zoomPending = 0f
+    private var zoomRate = 0f
+    private var wasTouching = false
 
     // ---- supply shelf (SupplyShelf.kt): a second framing beside the tank, blended over the tank view ----
     /** True while the camera looks at (or travels to) the supply shelf; drags then look along the shelf rows. */
@@ -266,7 +302,10 @@ class Camera {
         followTime = 0f
         followHeading.reset()
         hasPrevMid = false
+        hasBody = false
+        losRatio = 1f
         fishVel.fill(0f)
+        fZoomS.omega = OMEGA_TOUCH; fYawS.omega = OMEGA_TOUCH; fPitchS.omega = OMEGA_TOUCH
         if (initialized) { eyeS.snap(eye); aimS.snap(aim) }
     }
 
@@ -280,7 +319,42 @@ class Camera {
 
     /** A finger touched down: catch any fling. */
     fun catchMotion() {
-        yawInertia.stop(); pitchInertia.stop(); fYawInertia.stop(); fPitchInertia.stop()
+        yawInertia.stop(); pitchInertia.stop(); fYawInertia.stop(); fPitchInertia.stop(); zoomInertia.stop()
+        zoomRate = 0f
+    }
+
+    /**
+     * On-screen zoom button: [steps] > 0 moves closer, < 0 further out (one step ≈ 30 %). It eases there, and pushing
+     * past the closest / furthest framing gives a little and bounces back, so a press always visibly does something.
+     */
+    fun nudgeZoom(steps: Float) {
+        if (steps == 0f || shelfOn) return
+        zoomInertia.stop()
+        val d = -steps * ZOOM_STEP_LOG
+        if (followId != null) {
+            fZoomS.omega = OMEGA_BUTTON
+            followZoomLog = SoftLimit.drag(followZoomLog, d, FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
+        } else {
+            glide()
+            distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE)
+        }
+    }
+
+    /** On-screen swing button: turns the view round the followed fish (or the orbit) by [radians], easing there. */
+    fun nudgeOrbit(radians: Float) {
+        if (radians == 0f || shelfOn) return
+        if (followId != null) {
+            fYawInertia.stop(); fYawS.omega = OMEGA_BUTTON
+            followYaw += radians
+        } else {
+            glide()
+            yawGoal = SoftLimit.drag(yawGoal, radians, -MAX_YAW, MAX_YAW, YAW_GIVE)
+        }
+    }
+
+    private fun touchFeel() {
+        if (fYawS.omega != OMEGA_TOUCH) { fYawS.omega = OMEGA_TOUCH; fPitchS.omega = OMEGA_TOUCH }
+        if (fZoomS.omega != OMEGA_TOUCH) fZoomS.omega = OMEGA_TOUCH
     }
 
     /** Glides to the nursery tank ([on]) or back to the tank view; stops any follow. */
@@ -295,6 +369,7 @@ class Camera {
         if (nurseryOn) { nurseryOn = false; return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         if (followId != null) {
+            touchFeel()
             followYaw -= dxPx * k
             followPitch = SoftLimit.drag(followPitch, dyPx * k, FOLLOW_MIN_PITCH, FOLLOW_MAX_PITCH, PITCH_GIVE)
         } else {
@@ -316,7 +391,7 @@ class Camera {
     /** Two-finger twist (radians, screen): turns the view about the vertical axis. */
     fun rotate(radians: Float) {
         if (shelfOn) return
-        if (followId != null) followYaw -= radians
+        if (followId != null) { touchFeel(); followYaw -= radians }
         else { snappy(); yawGoal = SoftLimit.drag(yawGoal, -radians, -MAX_YAW, MAX_YAW, YAW_GIVE) }
     }
 
@@ -324,7 +399,8 @@ class Camera {
     fun zoom(factor: Float) {
         if (factor <= 0f || shelfOn) return
         if (nurseryOn) { nurseryOn = false; return }
-        if (followId != null) followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
+        if (touching) zoomPending += -ln(factor)
+        if (followId != null) { touchFeel(); followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE) }
         else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE) }
     }
 
@@ -383,6 +459,8 @@ class Camera {
         if (!initialized) {
             yawS.snap(yawGoal); pitchS.snap(pitchGoal); distLogS.snap(distLogGoal); targetS.snap(target)
         }
+        advanceZoomInertia(step)
+        colliders.sdf = sdf
         if (rideOn) {
             if (!riding) { rideEyeS.snap(if (initialized) eye else rideEye); rideAimS.snap(if (initialized) aim else rideAim); riding = true }
             rideEyeS.step(rideEye, step, eye)
@@ -410,16 +488,115 @@ class Camera {
         }
         blendShelf(step)
         val inNursery = blendNursery(step)
-        // Eye collision: outside the rock SDF, inside the glass box (never straddling a pane) and above the sand. The
-        // glass / sand clamp runs between two rock passes so neither can push the eye into the other. Allocation-free
-        // apart from the SDF's own Vec3 queries.
-        if (!inNursery) clampEye(eye, sdf)
+        // Clearances from the near plane this framing will get, so the near plane can never cut into anything solid.
+        val pre = eyeAimDistance()
+        val corner = EyeCollider.nearCornerDistance(nearFor(pre), fovY, aspect)
+        colliders.rockClearance = max(EYE_CLEARANCE, corner + 1f)
+        colliders.sandClearance = max(SAND_CLEARANCE, corner + 0.6f)
+        colliders.boxClearance = max(BOX_CLEARANCE, corner + 0.6f)
+        colliders.bodyClearance = max(BODY_CLEARANCE, corner + 0.4f)
+        if (inNursery) {
+            // the nursery tank sits outside the display: no display collision
+            ballOn = false
+        } else if (rideOn || riding || shelfMix > 0f) {
+            // the sub's own camera and the shelf beside the tank: only the old rock / glass clamp
+            clampEye(eye, sdf)
+            ballOn = false
+        } else {
+            collide(step)
+        }
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
-        val dx = aim[0] - eye[0]; val dy = aim[1] - eye[1]; val dz = aim[2] - eye[2]
-        near = (sqrt(dx * dx + dy * dy + dz * dz) * 0.03f).coerceIn(0.25f, 1f)
+        // near plane: 3 % of the view distance, never so far out that its corners reach past the tightest clearance
+        val nearCap = (minOf(colliders.bodyClearance, colliders.boxClearance) - 0.2f) / max(EyeCollider.nearCornerDistance(1f, fovY, aspect), 1e-3f)
+        near = minOf(nearFor(eyeAimDistance()), max(nearCap, 0.1f))
         M.perspective(fovY, aspect, near, far, proj)
         M.mul(proj, view, viewProj)
         M.invert(viewProj, invViewProj)
+    }
+
+    private fun eyeAimDistance(): Float {
+        val dx = aim[0] - eye[0]; val dy = aim[1] - eye[1]; val dz = aim[2] - eye[2]
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+
+    private fun nearFor(viewDistance: Float): Float = (viewDistance * 0.03f).coerceIn(0.25f, 1f)
+
+    /**
+     * Carries the collided eye ([ball]) to where the springs put [eye] without passing through anything, then clamps it
+     * off the glass. If it stays blocked well short of a clear spot for [STUCK_S] (the fish swam round the far side of
+     * a rock), it cuts there instead of grinding along the rock face.
+     */
+    private fun collide(dt: Float) {
+        if (!ballOn) {
+            ball[0] = eye[0]; ball[1] = eye[1]; ball[2] = eye[2]
+            glassClamp(ball)
+            colliders.pushOut(ball)
+            ballOn = true
+            stuckS = 0f
+        }
+        colliders.move(ball, eye[0], eye[1], eye[2])
+        if (glassClamp(ball)) colliders.pushOut(ball)
+        val dx = eye[0] - ball[0]; val dy = eye[1] - ball[1]; val dz = eye[2] - ball[2]
+        val off = sqrt(dx * dx + dy * dy + dz * dz)
+        stuckS = if (off > max(STUCK_CM, eyeAimDistance() * 0.35f)) stuckS + dt else 0f
+        // following and the fish is out of sight behind something: cut sooner
+        val limit = if (stuckS > 0f && followId != null && !sees(ball)) STUCK_HIDDEN_S else STUCK_S
+        if (stuckS > limit && colliders.free(eye[0], eye[1], eye[2]) >= 0f) {
+            ball[0] = eye[0]; ball[1] = eye[1]; ball[2] = eye[2]
+            glassClamp(ball)
+            colliders.pushOut(ball)
+            stuckS = 0f
+        }
+        eye[0] = ball[0]; eye[1] = ball[1]; eye[2] = ball[2]
+    }
+
+    /** True when nothing solid lies between the aim point and [p] (the followed animal itself does not count). */
+    private fun sees(p: FloatArray): Boolean {
+        var dx = p[0] - aim[0]; var dy = p[1] - aim[1]; var dz = p[2] - aim[2]
+        val len = sqrt(dx * dx + dy * dy + dz * dz)
+        if (len < 1e-3f) return true
+        dx /= len; dy /= len; dz /= len
+        return colliders.cast(aim[0], aim[1], aim[2], dx, dy, dz, len, followOwnerTag) >= len - 0.5f
+    }
+
+    /**
+     * Inside the tank's footprint (or the margin band just outside the panes): stay inside, a margin off the glass and
+     * under the water's top. Outside it, nothing. Returns true when it moved [e].
+     */
+    private fun glassClamp(e: FloatArray): Boolean {
+        val m = EYE_GLASS_MARGIN
+        if (!(e[0] > -m && e[0] < TANK[0] + m && e[2] > -m && e[2] < TANK[2] + m && e[1] < WATER_Y + m)) return false
+        val x = e[0].coerceIn(m, TANK[0] - m)
+        val z = e[2].coerceIn(m, TANK[2] - m)
+        val y = minOf(max(e[1], SAND_Y + 1.5f), WATER_Y - m)
+        val moved = x != e[0] || y != e[1] || z != e[2]
+        e[0] = x; e[1] = y; e[2] = z
+        return moved
+    }
+
+    /** Pinch releases coast: the zoom rate while the fingers moved carries on and fades out. */
+    private fun advanceZoomInertia(dt: Float) {
+        if (touching) {
+            if (dt > 1e-4f) {
+                val a = 1f - exp(-ZOOM_RATE_SMOOTH * dt)
+                zoomRate += (zoomPending / dt - zoomRate) * a
+            }
+        } else if (wasTouching) {
+            if (kotlin.math.abs(zoomRate) > MIN_ZOOM_FLING) zoomInertia.kick(zoomRate.coerceIn(-MAX_ZOOM_FLING, MAX_ZOOM_FLING))
+            zoomRate = 0f
+        }
+        zoomPending = 0f
+        wasTouching = touching
+        if (touching || !zoomInertia.active) return
+        if (followId != null) {
+            val over = SoftLimit.overshoot(followZoomLog, FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG)
+            val d = zoomInertia.advance(dt, if (over > 0f) LIMIT_BRAKE else 0f)
+            if (d != 0f) followZoomLog = SoftLimit.drag(followZoomLog, d, FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
+        } else if (!shelfOn) {
+            val over = SoftLimit.overshoot(distLogGoal, ln(MIN_DISTANCE), ln(MAX_DISTANCE))
+            val d = zoomInertia.advance(dt, if (over > 0f) LIMIT_BRAKE else 0f)
+            if (d != 0f) distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE)
+        } else zoomInertia.stop()
     }
 
     private fun clampEye(e: FloatArray, sdf: Sdf?) {
@@ -484,26 +661,41 @@ class Camera {
     /**
      * Desired follow eye/aim for [rig]: profile view from the front-glass side, ~3 body lengths away, aimed a little
      * ahead of the fish along its (smoothed) velocity so the frame leads where it is going.
+     *
+     * It frames a spring-smoothed body centre (the mean of the front two thirds of the spine), so the head's side to
+     * side wag never shakes the view, and feeds the fish's velocity forward by the eye / aim springs' lag (2 / ω for a
+     * critically damped spring) so a cruising fish stays centred instead of trailing off the edge of the frame. The eye
+     * is then pulled in before anything between it and the fish ([colliders] cast; see [losRatio]).
      */
     internal fun followTarget(rig: FishRig, sdf: Sdf?, eyeOut: FloatArray, aimOut: FloatArray, dt: Float = 0f) {
         val bl = rig.scale
         val s = rig.spine
-        // forward = head − a point 1/3 down the body
-        var fx = s[0] - s[20]; var fy = s[1] - s[21]; var fz = s[2] - s[22]
+        // body axis: the front of the body minus the middle (both averaged, so the wag mostly cancels)
+        var fx = (s[0] + s[4] + s[8]) - (s[28] + s[32] + s[36])
+        var fy = (s[1] + s[5] + s[9]) - (s[29] + s[33] + s[37])
+        var fz = (s[2] + s[6] + s[10]) - (s[30] + s[34] + s[38])
         val fl = sqrt(fx * fx + fy * fy + fz * fz)
         if (fl < 1e-4f) { fx = 1f; fy = 0f; fz = 0f } else { fx /= fl; fy /= fl; fz /= fl }
-        // mid-body (spine index 6 ≈ 0.4 BL behind the head) and its smoothed velocity
-        val mx = s[24]; val my = s[25]; val mz = s[26]
+        // body centre: mean of spine points 1..9, then a critically damped spring on top
+        var cx = 0f; var cy = 0f; var cz = 0f
+        for (i in 1..9) { cx += s[i * 4]; cy += s[i * 4 + 1]; cz += s[i * 4 + 2] }
+        tmpTarget[0] = cx / 9f; tmpTarget[1] = cy / 9f; tmpTarget[2] = cz / 9f
+        if (!hasBody || dt <= 0f) { bodyS.snap(tmpTarget); hasBody = true }
+        else bodyS.step(tmpTarget, dt, tmpDir)
+        val mx = bodyS[0]; val my = bodyS[1]; val mz = bodyS[2]
+        // smoothed velocity of the raw centre (the springs' own lag is compensated below)
         if (hasPrevMid && dt > 1e-4f) {
             val a = 1f - exp(-VEL_SMOOTH * dt)
-            fishVel[0] += ((mx - prevMid[0]) / dt - fishVel[0]) * a
-            fishVel[1] += ((my - prevMid[1]) / dt - fishVel[1]) * a
-            fishVel[2] += ((mz - prevMid[2]) / dt - fishVel[2]) * a
+            fishVel[0] += ((tmpTarget[0] - prevMid[0]) / dt - fishVel[0]) * a
+            fishVel[1] += ((tmpTarget[1] - prevMid[1]) / dt - fishVel[1]) * a
+            fishVel[2] += ((tmpTarget[2] - prevMid[2]) / dt - fishVel[2]) * a
         }
-        prevMid[0] = mx; prevMid[1] = my; prevMid[2] = mz; hasPrevMid = true
-        var lx = fishVel[0] * LEAD_S; var ly = fishVel[1] * LEAD_S * 0.5f; var lz = fishVel[2] * LEAD_S
+        prevMid[0] = tmpTarget[0]; prevMid[1] = tmpTarget[1]; prevMid[2] = tmpTarget[2]; hasPrevMid = true
+        // aim: lead by LEAD_S of travel plus the aim spring's and the body spring's lag
+        val aimLag = LEAD_S + 2f / (FOLLOW_OMEGA * 1.4f) + 2f / BODY_OMEGA
+        var lx = fishVel[0] * aimLag; var ly = fishVel[1] * aimLag * 0.5f; var lz = fishVel[2] * aimLag
         val ll = sqrt(lx * lx + ly * ly + lz * lz)
-        val maxLead = bl * MAX_LEAD_BL
+        val maxLead = bl * MAX_LEAD_BL + MAX_LAG_COMP_CM
         if (ll > maxLead) { val k = maxLead / ll; lx *= k; ly *= k; lz *= k }
         aimOut[0] = mx + lx; aimOut[1] = my + ly; aimOut[2] = mz + lz
         // horizontal side vector (either flank); a fish heading straight up/down keeps the last heading
@@ -535,23 +727,28 @@ class Camera {
         val pitch = fPitchS.value
         val d = (bl * 3.2f).coerceIn(MIN_FOLLOW, MAX_FOLLOW) * exp(fZoomS.value)
         val cp = cos(pitch)
-        // orbit about a point half way to the lead, so the eye leads too but less than the aim
-        val ox = mx + lx * 0.5f; val oy = my + ly * 0.5f; val oz = mz + lz * 0.5f
+        // orbit about a point half way to the lead, plus the eye spring's lag, so the eye keeps pace too
+        val eyeLag = LEAD_S * 0.5f + 2f / FOLLOW_OMEGA + 2f / BODY_OMEGA
+        var ox = fishVel[0] * eyeLag; var oy = fishVel[1] * eyeLag * 0.5f; var oz = fishVel[2] * eyeLag
+        val ol = sqrt(ox * ox + oy * oy + oz * oz)
+        if (ol > maxLead) { val k = maxLead / ol; ox *= k; oy *= k; oz *= k }
+        ox += mx; oy += my; oz += mz
         var ex = ox + d * sin(base) * cp
         var ey = oy + d * sin(pitch)
         var ez = oz + d * cos(base) * cp
         // stay inside the tank sides/sand/surface, but may sit outside the front glass
         ex = ex.coerceIn(1f, TANK[0] - 1f); ey = ey.coerceIn(SAND_Y + 1f, WATER_Y - 1f); ez = ez.coerceIn(1f, TANK[2] + 60f)
-        if (sdf != null) {
-            // march from the aim point toward the eye; stop CLEARANCE before rock
-            var dx = ex - aimOut[0]; var dy = ey - aimOut[1]; var dz = ez - aimOut[2]
-            val len = sqrt(dx * dx + dy * dy + dz * dz)
-            if (len > 1e-3f) {
-                dx /= len; dy /= len; dz /= len
-                val hit = marchClear(sdf, aimOut[0], aimOut[1], aimOut[2], dx, dy, dz, len, CLEARANCE)
-                val t = max(minOf(hit, len), MIN_FOLLOW * 0.4f)
-                ex = aimOut[0] + dx * t; ey = aimOut[1] + dy * t; ez = aimOut[2] + dz * t
-            }
+        // line of sight: cast from the aim point toward the eye; stop before anything in the way (not the fish itself)
+        var dx = ex - aimOut[0]; var dy = ey - aimOut[1]; var dz = ez - aimOut[2]
+        val len = sqrt(dx * dx + dy * dy + dz * dz)
+        if (len > 1e-3f) {
+            dx /= len; dy /= len; dz /= len
+            colliders.sdf = sdf
+            val hit = colliders.cast(aimOut[0], aimOut[1], aimOut[2], dx, dy, dz, len, followOwnerTag)
+            val want = (hit / len).coerceIn(0f, 1f)
+            losRatio = if (want <= losRatio || dt <= 0f) want else want + (losRatio - want) * exp(-LOS_RELEASE * dt)
+            val t = max(len * losRatio, minOf(len, MIN_FOLLOW * 0.4f))
+            ex = aimOut[0] + dx * t; ey = aimOut[1] + dy * t; ez = aimOut[2] + dz * t
         }
         eyeOut[0] = ex; eyeOut[1] = ey; eyeOut[2] = ez
     }
@@ -681,9 +878,32 @@ class Camera {
         const val MAX_LEAD_BL = 0.8f
         /** Fish velocity smoothing rate (1/s). */
         const val VEL_SMOOTH = 4f
-        const val CLEARANCE = 1.5f
         /** Eye-to-rock margin (cm): above the largest near plane so the rock never fills the screen edge. */
         const val EYE_CLEARANCE = 3f
+        /** Least eye margins (cm) off the sand, coral / equipment boxes and animal bodies (raised to clear the near plane). */
+        const val SAND_CLEARANCE = 1.5f
+        const val BOX_CLEARANCE = 1f
+        const val BODY_CLEARANCE = 0.8f
+        /** Capsule tag of the followed animal in [colliders]. */
+        const val FOLLOW_OWNER = 1
+        /** Blocked this far (cm, or 35 % of the view distance) short of the springs' eye for this long: cut there. */
+        const val STUCK_CM = 6f
+        const val STUCK_S = 0.6f
+        const val STUCK_HIDDEN_S = 0.25f
+        /** Line-of-sight pull-in eases back out at this rate (1/s) once the view is clear again. */
+        const val LOS_RELEASE = 2.5f
+        /** Body-centre smoothing (rad/s): well under the tail-beat rate, quick next to a turn. */
+        const val BODY_OMEGA = 14f
+        /** Most the spring-lag feed-forward adds to the lead (cm). */
+        const val MAX_LAG_COMP_CM = 8f
+        /** Zoom button step (log distance, ≈ 30 %) and the stiffness buttons ease with. */
+        val ZOOM_STEP_LOG = ln(1.35f)
+        const val OMEGA_BUTTON = 6f
+        /** Pinch release coasting: friction (1/s), rate smoothing (1/s), least and most fling rates (log distance / s). */
+        const val ZOOM_FRICTION = 4f
+        const val ZOOM_RATE_SMOOTH = 14f
+        const val MIN_ZOOM_FLING = 0.4f
+        const val MAX_ZOOM_FLING = 3f
         const val EYE_GLASS_MARGIN = 1.5f
         /** Follow-heading spring stiffness (rad/s); critically damped, settles in ≈ 4.7 / ω ≈ 1.3 s. */
         const val FOLLOW_YAW_OMEGA = 3.5f

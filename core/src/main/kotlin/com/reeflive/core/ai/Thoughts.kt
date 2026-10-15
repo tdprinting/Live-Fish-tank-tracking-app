@@ -123,6 +123,9 @@ object Thoughts {
             n == "patrol" -> Line("swimming laps around the tank", "swim some laps", "Just keep swimming!", Driver.ROUTINE)
             n == "columnpick" -> Line("picking tiny plankton out of the water", "pick at plankton", "Tiny snacks!", Driver.HUNGER)
             n == "playdead" -> Line("lying on its side, playing dead (tangs do that!)", "play dead for a bit", "Shh, I'm asleep.", Driver.REST, 3)
+            n == "tanghide" -> Line("tucked under the rock until it feels safe again", "hide under the rock", "Nobody can see me here.", Driver.FEAR, 2)
+            n == "tangrub" -> Line("rubbing its side along the rock, just for fun", "give the rock a rub", "Wheee, scratchy!", Driver.CURIOSITY, 2)
+            n == "tangzoom" -> Line("racing across the tank as fast as it can", "race across the tank", "Zoom zoom!", Driver.CURIOSITY, 2)
             // ---- cardinal
             n == "hovercover" -> Line("hovering in its favourite shady spot", "hover in the shade", "Nice and shady.", Driver.HOME)
             n == "dusk" -> Line("out hunting tiny critters in the dark", "hunt for tiny critters tonight", "Night snacks!", Driver.HUNGER, 2)

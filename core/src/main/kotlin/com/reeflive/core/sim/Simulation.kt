@@ -451,7 +451,7 @@ class Simulation(
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
-            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
+            if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             a.brain.utility.tick(a.ctx, a.intent)
@@ -459,6 +459,7 @@ class Simulation(
             o.attached = a.intent.kinematic || a.intent.crawl
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
         sandWork.step(organisms)
         sandContact.step(organisms, dt, displace = true)
@@ -469,7 +470,7 @@ class Simulation(
         for (o in organisms) {
             val a = agents[o] ?: continue
             a.ctx.p = perception; a.ctx.dt = dt
-            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
+            if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
             if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
@@ -479,6 +480,7 @@ class Simulation(
             o.attached = true
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
         sandContact.step(organisms, dt, displace = false)
     }

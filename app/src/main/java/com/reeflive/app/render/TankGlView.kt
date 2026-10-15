@@ -41,6 +41,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
     /** Smoothly follow an organism close up (null returns to the orbit camera). */
     fun follow(id: String?) = renderer.follow(id)
 
+    /** The follow camera's on-screen buttons (zoom, swing round): pass the screen's own handle so its buttons reach the camera. */
+    var followCam: FollowCamControl
+        get() = renderer.followCam
+        set(v) { renderer.followCam = v }
+
     fun setQuality(q: RenderQuality) = renderer.setQuality(q)
     fun resetCamera() = renderer.resetCamera()
     fun lookAtNursery(on: Boolean) = renderer.lookAtNursery(on)
