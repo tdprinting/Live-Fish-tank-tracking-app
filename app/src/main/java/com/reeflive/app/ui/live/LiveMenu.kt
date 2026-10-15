@@ -138,6 +138,8 @@ class LiveTools(
     /** More → "Thought bubbles": speech bubbles over a few animals saying what they are thinking. */
     val thoughtsOn: Boolean = false,
     val onThoughts: () -> Unit = {},
+    /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
+    val myTank: Boolean = false,
 )
 
 /**
@@ -501,7 +503,7 @@ private fun ColumnScope.CardBody(
             ))
         }
         LiveCategory.LIFE -> {
-            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset, myTank = tools.myTank)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
@@ -560,7 +562,7 @@ private fun ColumnScope.CardBody(
                 LiveHelp(SandboxFriendly.speedHelp(panel.speed))
                 Tiles(tone, close, listOf(
                     T(if (panel.timelapseStatus == null) "Time-lapse" else "See time-lapse", ReefGlyphs.timelapse, sub = panel.timelapseStatus) { actions.onTimelapse() },
-                    T("Reset tank", ReefGlyphs.reset, danger = true) { actions.onReset() },
+                    T(if (tools.myTank) "Start over" else "Reset tank", ReefGlyphs.reset, danger = true) { actions.onReset() },
                 ))
             } else {
                 if (tools.readouts.isNotEmpty()) WaterStrip(tools.readouts)

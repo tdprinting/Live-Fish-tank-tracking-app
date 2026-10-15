@@ -100,8 +100,8 @@ class HermieState {
 
     private var tip = 0
     /** Tapping Hermie: the next tip. */
-    fun nextTip(sandbox: Boolean) {
-        val tips = if (sandbox) SandboxTips else WatchTips
+    fun nextTip(sandbox: Boolean, myTank: Boolean = false) {
+        val tips = if (myTank) LiveTips.hermieMyTank else if (sandbox) SandboxTips else WatchTips
         say(tips[tip % tips.size], HermieMood.HAPPY)
         tip++
     }
@@ -117,7 +117,7 @@ class HermieState {
  * Tapping him gives the next tip; the small × hides him (bring him back from More).
  */
 @Composable
-fun HermiePill(state: HermieState, sandbox: Boolean, onDismiss: () -> Unit, modifier: Modifier = Modifier, maxWidth: Dp = 300.dp) {
+fun HermiePill(state: HermieState, sandbox: Boolean, onDismiss: () -> Unit, modifier: Modifier = Modifier, maxWidth: Dp = 300.dp, myTank: Boolean = false) {
     val s = LiveTheme.style
     val reduce = ReefTheme.reduceMotion
     val haptics = rememberHaptics()
@@ -144,7 +144,7 @@ fun HermiePill(state: HermieState, sandbox: Boolean, onDismiss: () -> Unit, modi
             Modifier
                 .size(48.dp)
                 .pressSquash(interaction)
-                .clickable(interactionSource = interaction, indication = null, onClickLabel = "Ask Hermie for a tip") { haptics.tick(); state.nextTip(sandbox) },
+                .clickable(interactionSource = interaction, indication = null, onClickLabel = "Ask Hermie for a tip") { haptics.tick(); state.nextTip(sandbox, myTank) },
         ) {
             HermieArt(state.mood, hop, reduce, Modifier.size(48.dp))
         }

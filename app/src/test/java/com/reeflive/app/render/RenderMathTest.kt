@@ -79,6 +79,21 @@ class PickerTest {
         assertNull(Picker.pick(floatArrayOf(10f, 30f, 150f), d, listOf(far, near)))
     }
 
+    @Test fun aNearMissWithinAFingertipStillPicks() {
+        val fish = straightRig("fish", 60f, 30f, 20f, 8f)      // capsule radius 1.76 cm
+        val snail = straightRig("snail", 30f, 30f, 20f, 2f)    // floored at 1.2 cm
+        val d = floatArrayOf(0f, 0f, -1f)
+        // 3 cm off the fish's spine, 130 cm away: a 1.24 cm miss, ~0.0095 as a view angle
+        val o = floatArrayOf(57f, 33f, 150f)
+        assertNull(Picker.pick(o, d, listOf(fish, snail)))
+        assertEquals("fish", Picker.pick(o, d, listOf(fish, snail), slack = 0.02f))
+        assertNull("beyond the fingertip", Picker.pick(o, d, listOf(fish, snail), slack = 0.005f))
+        // a direct hit always wins over a closer near miss
+        assertEquals("snail", Picker.pick(floatArrayOf(29.5f, 30f, 150f), d, listOf(fish, snail), slack = 0.5f))
+        // a 24 px fingertip on a 1000 px view at fov 50°: tan(25°) · 2 · 0.024
+        assertEquals(0.02238f, Picker.fingerSlack(24f, 1000, 50f), 1e-4f)
+    }
+
     @Test fun capsuleMath() {
         val o = floatArrayOf(0f, 0f, 10f); val d = floatArrayOf(0f, 0f, -1f)
         val t = Picker.rayCapsule(o, d, -5f, 0f, 0f, 5f, 0f, 0f, 1f)

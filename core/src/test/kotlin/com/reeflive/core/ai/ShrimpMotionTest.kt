@@ -2,6 +2,7 @@ package com.reeflive.core.ai
 
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.BrainKind
+import com.reeflive.core.sim.ShrimpLimbs
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.TestTank
 import org.junit.Assert.assertEquals
@@ -40,7 +41,7 @@ class ShrimpMotionTest {
         assertTrue("display ${shrimp.clawDisplay}", shrimp.clawDisplay > 0.6)
         // the signal reaches the renderer as limb entry 0, z (ShrimpLimbs)
         val shown = s.snapshot().organisms.first { it.id == shrimp.id }
-        assertEquals(4, shown.limbs.size)
+        assertEquals(4 * ShrimpLimbs.ENTRIES, shown.limbs.size)
         assertTrue("pose signal ${shown.limbs[2]}", shown.limbs[2] > 0.5)
         s.advance(5.0, behaviorDt = 0.1) { tang.pos = Vec3(20.0, 45.0, 25.0); tang.vel = Vec3.ZERO }
         assertTrue("relaxed ${shrimp.clawDisplay}", shrimp.clawDisplay < 0.2)

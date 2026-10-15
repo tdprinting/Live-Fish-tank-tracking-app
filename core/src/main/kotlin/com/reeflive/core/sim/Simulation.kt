@@ -102,12 +102,22 @@ class Simulation private constructor(
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
     var behaviorEnabled = true
+    /** Started from scratch (core custom/CustomTank): the snapshot asks the renderer to draw no static colonies. */
+    var bareScape = false
 
     private val commands = ConcurrentLinkedQueue<Command>()
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
+
+    /**
+     * A restored tank (core `custom/CustomTank`) keeps its animals' ids: new ids handed out after it ("<species>#n",
+     * frag and bag numbers) must start past the saved ones so a newcomer never takes a saved animal's id.
+     */
+    fun reserveIds(nextOrganism: Int, nextFrag: Int, nextBag: Int) {
+        idCounter = max(idCounter, nextOrganism); fragCounter = max(fragCounter, nextFrag); bags.reserveIds(nextBag)
+    }
     /** Aiptasia controllers (AiptasiaModel). */
     val pests = PestState()
     /** Running disease treatments (W-4). */
@@ -419,6 +429,7 @@ class Simulation private constructor(
         drainCommands()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
+        net.stepWall(this, dtWall)
         val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
@@ -441,6 +452,7 @@ class Simulation private constructor(
             val dt = min(behaviorDt, left)
             submarine.step(dt, rock, sand)
             bags.stepWall(this, dt)
+            net.stepWall(this, dt)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -482,6 +494,7 @@ class Simulation private constructor(
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
+        net.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         stepRocks(simDt)
@@ -612,12 +625,13 @@ class Simulation private constructor(
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
@@ -629,7 +643,7 @@ class Simulation private constructor(
         for (o in organisms) {
             val a = agents[o] ?: continue
             a.ctx.p = perception; a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
             if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
@@ -637,6 +651,7 @@ class Simulation private constructor(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandContact.step(organisms, dt, displace = false)
@@ -1116,6 +1131,7 @@ class Simulation private constructor(
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
+            is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
             is Command.DynamicRocks -> setDynamicRocks(c.on)
@@ -1130,6 +1146,7 @@ class Simulation private constructor(
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
+            is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
@@ -1335,6 +1352,8 @@ class Simulation private constructor(
     val submarine = Submarine()
     /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
     val bags = AcclimationBags()
+    /** The fish net that takes dead animals out ([Command.NetOut]). */
+    val net = FishNet()
     val subSense = com.reeflive.core.ai.SubmarineSense()
     private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
 
@@ -1509,6 +1528,9 @@ class Simulation private constructor(
         }
     }
 
+    /** Animals near [point] dart off as from a shadow overhead (the fish net dipping in). */
+    internal fun scareFrom(point: Vec3) = shadow(point)
+
     private fun shadow(point: Vec3) {
         for (o in organisms) if (o.alive && o.pos.distanceTo(point) < 40) agents[o]?.brain?.onShadow(agents[o]!!.ctx, point)
         for (c in corals) if (c.pos.distanceTo(point) < 15) c.disturb = 0.6
@@ -1519,7 +1541,7 @@ class Simulation private constructor(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear(); bags.clear()
+        submarine.reset(); subSense.clear(); bags.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1605,9 +1627,12 @@ class Simulation private constructor(
     fun snapshot(): SimSnapshot =
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
+            bareScape = bareScape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
             rockPoses = rockPoses(),
             rockVersion = rockPhysics?.version ?: 0L,
+            net = net.pose(),
+            netFlush = net.lastFlush,
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
@@ -1716,6 +1741,8 @@ class Simulation private constructor(
         const val CORAL_ON_ROCK_CM = 4.0
         /** [undermineRock] digs this far past the rock's centre of mass (cm), so it no longer stands. */
         const val UNDERMINE_PAST_CM = 2.5
+        /** Longest animal name a [Command.Rename] keeps. */
+        const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */

@@ -232,6 +232,14 @@ body:not(.on-live) .brand, body:not(.on-live) .tabs { display: none; }
 .seg { padding: 3px; border-radius: 999px; }
 .seg button { padding: 7px 13px; font-size: 15px; font-weight: 600; color: var(--navy); border-radius: 999px; }
 .seg button.on { background: #5FD7FF; color: var(--navy); box-shadow: inset 0 0 0 2px var(--navy); }
+/* three modes on a phone: a little tighter, and My tank in candy green */
+.seg button { white-space: nowrap; }
+@media (max-width: 440px) { .seg button { padding: 7px 9px; font-size: 14px; } }
+.seg button[data-mode="mine"].on { background: #8EE66B; }
+.builds { display: grid; gap: 8px; margin: 10px 0; max-height: 60vh; overflow-y: auto; }
+.opt.build { align-items: flex-start; text-align: left; padding: 10px 12px; gap: 2px; font-size: 13px; }
+.opt.build strong { font-size: 15px; }
+.opt.build small { opacity: .75; }
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: 15px; font-weight: 600;
   font-variant-numeric: tabular-nums; cursor: pointer; position: relative; white-space: nowrap; }
 .status #happyFace { font-size: 18px; }

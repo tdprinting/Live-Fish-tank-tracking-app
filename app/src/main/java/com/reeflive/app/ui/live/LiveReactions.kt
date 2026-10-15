@@ -437,6 +437,13 @@ object LiveReactions {
         HermieMood.EXCITED,
     )
 
+    /** The fish net goes in for [name], a dead animal (core FishNet). */
+    fun netOut(name: String) = Reaction(
+        TankFx(FxKind.SPARKLE, FxSpots.SURFACE, tint = Color(0xFF8EE66B), caption = "Here comes the net!"),
+        "Here comes the net! Let's scoop $name out gently so the water stays clean.",
+        HermieMood.HAPPY,
+    )
+
     fun hurryBags(on: Boolean) = Reaction(
         TankFx(FxKind.SPEED, FxSpots.LIGHT, amount = if (on) 2f else 1f, caption = if (on) "Hurry up: 60×" else "Normal speed"),
         if (on) "Zoom! Time flies until the bags open." else "Back to your speed.",
