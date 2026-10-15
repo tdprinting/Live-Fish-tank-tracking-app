@@ -144,6 +144,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun setQuality(q: RenderQuality) { requestedQuality = q }
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
+    /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
+    @Volatile var followCam: FollowCamControl = FollowCamControl()
 
     /** Clean-glass mode on/off (any thread): drags slide the Flipper; the camera squares up to the front glass. */
     fun setCleaning(on: Boolean) {
@@ -239,6 +241,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
         netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
+        followCam.drain(camera)
+        fillColliders(rigs, cur)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
@@ -341,6 +345,63 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
         publishStats(now, rigs.size, light)
     }
+
+    // ------------------------------------------------------------------ camera collision
+
+    private var collidersCorals: List<Pair<GpuModel, CoralPose?>>? = null
+    private var collidersEquipment: GpuModel? = null
+
+    /**
+     * Fills the camera's [Camera.colliders] for this frame: the sand grid (by reference), coral and equipment part boxes
+     * (rebuilt only when the coral list or the loaded equipment changes) and three capsules per visible animal. No
+     * allocation beyond the collection iterators.
+     */
+    private fun fillColliders(rigs: Collection<FishRig>, cur: SimSnapshot?) {
+        val c = camera.colliders
+        val g = cur?.sandGrid
+        if (g != null) c.setSandGrid(g.height, g.nx, g.nz, g.cellXCm, g.cellZCm) else c.setSandGrid(null, 0, 0, 1f, 1f)
+        val corals = coralModels(cur)
+        val equipment = store.model(EQUIPMENT)
+        if (corals !== collidersCorals || equipment !== collidersEquipment) {
+            collidersCorals = corals; collidersEquipment = equipment
+            c.clearBoxes()
+            if (equipment != null) for (i in equipment.parts.indices) {
+                val part = equipment.parts[i]
+                if (part.node.hidden || !blocksEye(part.node.name)) continue
+                val b = part.worldBounds
+                c.addBox(b[0], b[1], b[2], b[3], b[4], b[5])
+            }
+            for (k in corals.indices) {
+                val (m, pose) = corals[k]
+                val copy = pose != null && pose.isCopy
+                val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
+                for (i in m.parts.indices) {
+                    val part = m.parts[i]
+                    if (part.kind == MaterialKind.POLYP) continue
+                    if (copy && !nearHome(part, pose!!)) continue
+                    val b = part.worldBounds
+                    if (b[3] - b[0] <= 0f && b[4] - b[1] <= 0f) continue
+                    c.addBox(b[0] + ox, b[1] + oy, b[2] + oz, b[3] + ox, b[4] + oy, b[5] + oz)
+                }
+            }
+        }
+        c.clearCapsules()
+        val fid = camera.followId
+        for (r in rigs) {
+            if (!r.visible) continue
+            val rad = maxOf(r.scale * Picker.RADIUS_FRACTION, 0.3f)
+            val owner = if (r.id == fid) Camera.FOLLOW_OWNER else 0
+            val s = r.spine
+            for (k in 0 until 3) {
+                val a = EYE_SEGMENTS[k] * 4; val b = EYE_SEGMENTS[k + 1] * 4
+                c.addCapsule(s[a], s[a + 1], s[a + 2], s[b], s[b + 1], s[b + 2], rad, owner)
+            }
+        }
+    }
+
+    /** Equipment the eye stays out of: not the long cable and hose (their boxes are mostly open water) or the Flipper on the glass. */
+    private fun blocksEye(name: String): Boolean =
+        !name.startsWith("Cable") && !name.startsWith("Hose") && !name.startsWith("Flipper")
 
     // ------------------------------------------------------------------ follow lens
 
@@ -1275,6 +1336,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
+        /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
+        private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
         const val ALGAE = "models/algae_tufts.glb"
         /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
         const val DETAILS = "models/reef_details.glb"

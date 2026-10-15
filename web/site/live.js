@@ -598,7 +598,8 @@ function renderFish() {
   // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
   let a = ui.picked && animals.find((x) => x.id === ui.picked);
   if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }
-  $('fish').classList.toggle('hidden', !a || ui.chromeHidden);
+  // while following, the big card stays out of the view unless the name bar was tapped for more
+  $('fish').classList.toggle('hidden', !a || ui.chromeHidden || (!!ui.following && !ui.followInfo));
   if (!a) return;
   if ($('fish').dataset.id === a.id && ui.fishDragging) return;
   $('fish').dataset.id = a.id;
@@ -619,7 +620,7 @@ function renderFish() {
 $('fish').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
-  if ('fclose' in d) { ui.picked = null; renderFish(); }
+  if ('fclose' in d) { ui.picked = null; ui.followInfo = false; renderFish(); renderFollow(); }
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
   else if ('fnet' in d) {
     // the card steps aside so the net can be watched; the goodbye plays once it is out
@@ -644,27 +645,62 @@ $('fish').addEventListener('input', (e) => {
   ui.sizeTimer = setTimeout(() => { SB.act('setSize', ui.picked, Number(e.target.value)); ui.fishDragging = false; }, 200);
 });
 function followFish(id) {
+  const was = ui.following;
   ui.following = id; if (id) ui.picked = id;
+  ui.followInfo = false;
   if (id && ui.card) closeCard();
   live.follow(id);
+  if (id && !was && !ui.tour) say('Drag to look around. Tap another fish to follow it!');
   renderFish(); renderFollow();
 }
+/** Sets innerHTML only when it changed, so a button under the finger is not swapped out mid-tap by the 2 Hz refresh. */
+function setHtml(el, html) { if (el._html !== html) { el._html = html; el.innerHTML = html; } }
 function renderFollow() {
   const i = animals.findIndex((x) => x.id === ui.following);
-  $('follow').classList.toggle('hidden', i < 0 || !!ui.card || ui.shelf || ui.chromeHidden && !ui.tour);
-  if (i < 0) return;
+  const hide = i < 0 || !!ui.card || ui.shelf || ui.chromeHidden && !ui.tour;
+  $('follow').classList.toggle('hidden', hide);
+  $('followCam').classList.toggle('hidden', hide);
+  $('chrome').classList.toggle('following', !hide);
+  if (hide) return;
   const a = animals[i];
-  $('follow').innerHTML = `<button class="icon-btn" data-fprev aria-label="Previous">◀</button>
-    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.thinking || a.caption || a.behavior)}</div></div>
-    <button class="icon-btn" data-fnext aria-label="Next">▶</button><button class="btn small ghost" data-fback>Back to tank</button>`;
+  const many = animals.length > 1;
+  const line = a.thinking || a.caption || a.behavior || '';
+  setHtml($('follow'), `<div class="fstoprow"><button class="fstop" data-fback>✕ Stop following</button></div>
+    <div class="fnav glass">${many ? '<button class="fbig" data-fprev aria-label="Previous fish">◀</button>' : ''}
+    <button class="fcap ${ui.followInfo ? 'open' : ''}" data-finfo aria-label="More about ${esc(a.name)}"><span class="fname"><strong>${esc(a.name)}</strong>${many ? `<span class="muted"> ${i + 1}/${animals.length}</span>` : ''}</span><span class="fline">${esc(line)}</span></button>
+    ${many ? '<button class="fbig" data-fnext aria-label="Next fish">▶</button>' : ''}</div>`);
 }
 $('follow').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
+  cue('TICK');
   const i = animals.findIndex((x) => x.id === ui.following);
   if ('fback' in d) { ui.tour = false; followFish(null); live.resetCamera(); }
   else if ('fprev' in d) followFish(animals[(i - 1 + animals.length) % animals.length].id);
   else if ('fnext' in d) followFish(animals[(i + 1) % animals.length].id);
+  else if ('finfo' in d) { ui.followInfo = !ui.followInfo; ui.picked = ui.following; renderFish(); renderFollow(); }
+});
+// keyboard while following: Esc stops, + / − zoom, arrows step to the previous / next fish, T turns
+document.addEventListener('keydown', (e) => {
+  if (!ui.following || e.target.closest?.('input, textarea, select')) return;
+  const i = animals.findIndex((x) => x.id === ui.following);
+  if (e.key === 'Escape') { ui.tour = false; followFish(null); live.resetCamera(); }
+  else if (e.key === '+' || e.key === '=') live.followZoom(1);
+  else if (e.key === '-' || e.key === '_') live.followZoom(-1);
+  else if (e.key === 't' || e.key === 'T') live.followOrbit(1);
+  else if (e.key === 'ArrowLeft' && animals.length > 1) followFish(animals[(i - 1 + animals.length) % animals.length].id);
+  else if (e.key === 'ArrowRight' && animals.length > 1) followFish(animals[(i + 1) % animals.length].id);
+  else return;
+  e.preventDefault();
+});
+// the follow camera's buttons: closer / further (eases there; bounces at the limits) and swing round the fish
+$('followCam').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  cue('TICK');
+  b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  if (b.dataset.zoom) live.followZoom(Number(b.dataset.zoom));
+  else if (b.dataset.orbit) live.followOrbit(Number(b.dataset.orbit));
 });
 function nextTour() {
   ui.tourTicks = 0;
