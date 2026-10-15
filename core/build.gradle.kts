@@ -28,6 +28,9 @@ dependencies {
 
 tasks.test {
     testLogging { events("passed", "skipped", "failed") }
+    // the long sim runs are independent: spread them over the CI runner's cores (one JVM per fork)
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
+    maxHeapSize = "1g"
 }
 
 // Track C: headless simulation runner for tuning (prints a 24 h scenario or a long health run).
