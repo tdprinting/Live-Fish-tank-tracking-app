@@ -70,6 +70,19 @@ object Compatibility {
                     "Leopard wrasses change sex: keep one, or one male with females in a large tank. Two males fight.")
             }
         }
+        if (kind == BrainKind.ANEMONE) {
+            // research 40: wanders until settled, stings what it touches, pumps are a hazard; clowns may move in
+            out += CompatibilityWarning("anemone_wanders", CompatibilityWarning.Severity.INFO,
+                "A new bubble tip anemone walks around for days until it finds a crevice with good light and flow. It stings corals and fish it touches, and powerhead intakes need a guard.")
+            if (others.any { it == BrainKind.CLOWN }) {
+                out += CompatibilityWarning("anemone_clowns", CompatibilityWarning.Severity.INFO,
+                    "Your clownfish may move into it. Ocellaris are not natural bubble tip hosts, so it can take days to weeks of testing touches, and some never do.")
+            }
+            if (others.count { it == BrainKind.ANEMONE } >= 1) {
+                out += CompatibilityWarning("anemone_war", CompatibilityWarning.Severity.WARN,
+                    "Anemones that are not clones of each other sting one another when they touch. Splits from the same anemone get along.")
+            }
+        }
         squidWarnings(kind, others, out)
         val minV = LifeCycle.minVolumeL(kind)
         if (minV > 0 && volumeL > 0 && volumeL < minV) {

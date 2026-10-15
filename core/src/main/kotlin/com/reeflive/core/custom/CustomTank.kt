@@ -52,7 +52,7 @@ object CustomTank {
     // ============================================================== save
 
     fun capture(sim: Simulation, base: CustomTankSave, nowMs: Long): CustomTankSave {
-        val animals = sim.organisms.filter { it.alive }.map { save(it) } + sim.bags.unreleased().map { save(it).copy(arrivalTime = sim.simTimeSec) }
+        val animals = sim.organisms.filter { it.alive }.map { save(it).copy(state = sim.anemones.saveState(it)) } + sim.bags.unreleased().map { save(it).copy(arrivalTime = sim.simTimeSec) }
         val corals = sim.corals.filter { it.tissue > 0.01 }.map { save(it) } + sim.bags.unopenedCorals().flatMap { (sp, n) ->
             (0 until n).map { i -> SavedCoral("$sp#bagged${sim.tickCount}_$i", sp, sim.species[sp].common) }
         }
@@ -145,7 +145,8 @@ object CustomTank {
             sim.corals += Coral(c.id, species[c.speciesId], c.nickname, "", Vec3(c.x, c.y, c.z), Vec3(c.nx, c.ny, c.nz), 0.0)
         }
         val byId = known.associateBy { it.id }
-        for (o in sim.organisms) byId[o.id]?.let { load(o, it) }
+        for (o in sim.organisms) byId[o.id]?.let { load(o, it); sim.anemones.loadState(o, it.state) }
+        sim.anemones.relinkHosts()
         val coralsById = anchored.associateBy { it.id }
         for (c in sim.corals) coralsById[c.id]?.let { s ->
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw

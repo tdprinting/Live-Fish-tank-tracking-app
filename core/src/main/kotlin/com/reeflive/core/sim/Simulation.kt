@@ -59,6 +59,8 @@ class Simulation private constructor(
     val repro = Reproduction(this)
     /** Hermit shells, asterina-vs-organ-pipe and feather-duster crown cycle (research 04). */
     val invertEcology = InvertEcology(this)
+    /** Bubble-tip anemones and the clowns adopting them (research 40). */
+    val anemones = AnemoneModel(this)
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -531,12 +533,31 @@ class Simulation private constructor(
     val dayIndex: Int get() = floor(simTimeSec / 86400).toInt()
     val minuteOfDay: Double get() = (simTimeSec / 60) % 1440
 
+    /** Hands the sub's autopilot where the watched animal is; a watched animal that died or left ends the watch. */
+    /** The fish the sub's ‹ › moves to ([Command.SubmarineWatchNext]), or null when there is none. */
+    private fun nextSubFish(step: Int): String? {
+        val fish = organisms.filter { it.alive && it.species.kind == "FISH" }
+        if (fish.isEmpty()) return null
+        val i = fish.indexOfFirst { it.id == submarine.watchId }
+        if (i < 0) return fish.minByOrNull { it.pos.distanceTo(submarine.pos) }?.id
+        val n = fish.size
+        return fish[((i + step) % n + n) % n].id
+    }
+
+    private fun feedSubWatch() {
+        val id = submarine.watchId ?: return
+        if (!submarine.active) return
+        val o = organisms.firstOrNull { it.id == id }
+        if (o == null || !o.alive) submarine.watch(null) else submarine.setTarget(o.pos, o.vel, o.lengthCm)
+    }
+
     // ============================================================== public API
     fun enqueue(cmd: Command) { commands.add(cmd) }
 
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
         drainCommands()
+        feedSubWatch()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
         net.stepWall(this, dtWall)
@@ -560,6 +581,7 @@ class Simulation private constructor(
         while (left > 1e-9) {
             drainCommands()
             val dt = min(behaviorDt, left)
+            feedSubWatch()
             submarine.step(dt, rock, sand)
             bags.stepWall(this, dt)
             net.stepWall(this, dt)
@@ -861,6 +883,7 @@ class Simulation private constructor(
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
+        anemones.step(dtMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
@@ -1260,6 +1283,8 @@ class Simulation private constructor(
                 if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
+            is Command.SubmarineWatch -> if (submarine.active) submarine.watch(c.id, c.mode)
+            is Command.SubmarineWatchNext -> if (submarine.active) nextSubFish(c.step)?.let { submarine.watch(it, submarine.watchMode) }
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
             is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
@@ -1800,6 +1825,7 @@ class Simulation private constructor(
                     cl.inward.x.toFloat(), cl.inward.y.toFloat(), cl.inward.z.toFloat())
             },
             gusts = gustArray(),
+            care = water.careState(),
         )
     }
 

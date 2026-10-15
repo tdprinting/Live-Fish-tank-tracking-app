@@ -58,6 +58,8 @@ class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, p
     /** Root `iridescence` / `roughness` overrides for fish bodies, parsed once. */
     val iridescence: Float = glb.rootFloat("iridescence") ?: 0.1f
     val roughness: Float? = glb.rootFloat("roughness")
+    /** Organism models: the body length (or the anemone's tentacle span) the model was built at, cm. */
+    val lengthCm: Float? = glb.rootFloat("lengthCm")
     /** Organism models in cm (feather duster) are placed rigidly instead of spline-skinned. */
     val rigid: Boolean = glb.rootString("unit")?.startsWith("centimeters") == true
     /** Limb pivots of a limb-rigged crawler (brittle star, Sally Lightfoot; SIMULATION §19), or null. */
