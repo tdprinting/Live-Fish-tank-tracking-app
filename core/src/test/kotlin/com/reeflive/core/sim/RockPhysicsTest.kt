@@ -101,4 +101,76 @@ class RockPhysicsTest {
         assertTrue("a rock moved", shifted.isNotEmpty())
         assertTrue("and came to rest", shifted.none { it.awake })
     }
+
+    @Test
+    fun aquascapeFromScratchStacksDryRockThatStaysThroughASave() {
+        val s = sim(dynamic = false)
+        val t0 = System.nanoTime()
+        s.enqueue(Command.ClearRocks)
+        s.advance(0.5, 0.05)
+        val rp = s.rockPhysics!!
+        assertTrue("the tank is empty", rp.bodies.isEmpty())
+        assertTrue("no rock left in the field", s.rock.sdf.dist(com.reeflive.core.geom.Vec3(40.2, 10.0, 29.7)) > 2.0)
+        assertTrue("old rock is hidden", s.latest.rockPoses != null)
+        s.enqueue(Command.PlaceRock(DryRockShape.SLAB, 60.0, 23.0, seed = 1))
+        s.advance(8.0, 0.05)
+        s.enqueue(Command.PlaceRock(DryRockShape.RUBBLE, 60.0, 23.0, yawDeg = 30.0, seed = 2))
+        s.advance(8.0, 0.05)
+        println("[rock] scape from scratch ${(System.nanoTime() - t0) / 1e6} ms")
+        val (slab, rub) = rp.added
+        println("[rock] slab ${slab.pos.toList()} rubble ${rub.pos.toList()} awake ${slab.awake} ${rub.awake}")
+        assertFalse(slab.awake); assertFalse(rub.awake)
+        run {
+            var gap = Double.MAX_VALUE
+            for (i in 0 until rub.np) {
+                val r = rub.rot
+                val x = rub.pos[0] + r[0] * rub.rx[i] + r[1] * rub.ry[i] + r[2] * rub.rz[i]
+                val y = rub.pos[1] + r[3] * rub.rx[i] + r[4] * rub.ry[i] + r[5] * rub.rz[i]
+                val z = rub.pos[2] + r[6] * rub.rx[i] + r[7] * rub.ry[i] + r[8] * rub.rz[i]
+                gap = minOf(gap, rp.field.pieceDist(slab.pieces[0], x, y, z))
+            }
+            println("[rock] rubble probe to slab gap $gap")
+            assertTrue("the small rock touches the slab (gap $gap)", gap < 1.2)
+        }
+        val sandY = s.sand.surfaceY(60.0, 23.0)
+        assertTrue("the slab rests on the sand (y ${slab.pos[1]}, sand $sandY)", slab.pos[1] in sandY..sandY + 5.0)
+        assertTrue("the small rock sits on top of the slab", rub.pos[1] > slab.pos[1] + 3.0)
+        assertTrue("the field has them", s.rock.sdf.dist(com.reeflive.core.geom.Vec3(rub.pos[0], rub.pos[1], rub.pos[2])) < 0.0)
+        val built = s.latest.builtRocks!!
+        assertEquals(2, built.size)
+        assertTrue("fresh dry rock is white", built.all { it.dryness > 0.99f })
+        // the same scape comes back in a new tank
+        val state = s.rockState()
+        val s2 = sim(dynamic = true)
+        s2.restoreRocks(state)
+        s2.advance(2.0, 0.05)
+        val back = s2.rockPhysics!!.added
+        assertEquals(2, back.size)
+        assertTrue(s2.rockPhysics!!.bodies.size == 2)
+        assertEquals(rub.pos[1], back[1].pos[1], 0.3)
+        assertTrue("nothing moved after loading", back.none { it.awake })
+        // undo takes out the last rock
+        s2.enqueue(Command.RemoveRock())
+        s2.advance(0.5, 0.05)
+        assertEquals(1, s2.rockPhysics!!.added.size)
+    }
+
+    @Test
+    fun aDroppedPillarStandsUp() {
+        val s = sim(dynamic = false)
+        s.clearRocks()
+        for ((i, x) in listOf(20.0, 50.0, 80.0, 105.0).withIndex()) s.placeRock(DryRockShape.PILLAR, x, 23.0, yawDeg = i * 45.0, seed = i)
+        s.advance(10.0, 0.05)
+        val up = s.rockPhysics!!.added.map { it.rot[4] }
+        println("[rock] pillar up-axis y $up")
+        assertTrue("every pillar still stands ($up)", up.all { it > 0.9 })
+        assertTrue("landing is no rockslide", s.latest.events.none { it is SimEvent.RockShifted })
+    }
+
+    @Test
+    fun dryRockCuresOverMonths() {
+        assertEquals(1.0, DryRock.dryness(0.0), 1e-9)
+        assertTrue(DryRock.dryness(30.0) in 0.5..0.7)
+        assertTrue(DryRock.dryness(180.0) < 0.06)
+    }
 }
