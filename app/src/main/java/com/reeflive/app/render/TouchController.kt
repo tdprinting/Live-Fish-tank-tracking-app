@@ -29,6 +29,11 @@ class TouchController(context: Context, private val view: View, private val inpu
     private val py = FloatArray(GestureTracker.MAX)
     private val tick = Runnable { schedule(tracker.timer(SystemClock.uptimeMillis())) }
 
+    init {
+        // a fingertip's radius: three touch slops (24 dp on Android, half of the 48 dp minimum touch target)
+        input.fingerPx = cfg.scaledTouchSlop * 3f
+    }
+
     fun onTouchEvent(ev: MotionEvent): Boolean {
         if (input.cleaning) {
             if (tracker.count > 0) tracker.cancel()
@@ -102,6 +107,8 @@ class CameraInput : GestureTracker.Sink {
     @Volatile var cleaning = false
     /** Supplies mode: taps pick a prop at once (no double-tap wait). Set by the GL thread, read by [TouchController]. */
     @Volatile var instantTaps = false
+    /** A fingertip's radius (px) for forgiving picks ([Picker.fingerSlack]); set by the host from its touch slop. */
+    @Volatile var fingerPx = 24f
     private var scrapeX = 0f; private var scrapeY = 0f; private var scrapeDown = false
 
     /** Clean-glass mode: where the finger is and whether it is on the screen. */

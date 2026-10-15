@@ -91,6 +91,11 @@ sealed class Command {
         val speciesId: String, val count: Int, val x: Double, val z: Double? = null,
         val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE,
     ) : Command()
+    /**
+     * Take the dead animal [id] out with the fish net ([FishNet]): it dips in, scoops the body and lifts it out, then
+     * the body leaves the sim. Ignored for a living animal; more taps queue up.
+     */
+    data class NetOut(val id: String) : Command()
     /** Fast-forward while bags float ([on]) or back to the chosen speed; [openNow] tips every floating bag at once. */
     data class HurryBags(val on: Boolean, val openNow: Boolean = false) : Command()
 
@@ -373,6 +378,9 @@ data class SimSnapshot(
     /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
     val bags: List<BagPose> = emptyList(),
     val bagHurry: Boolean = false,
+    /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
+    val net: NetPose? = null,
+    val netFlush: NetFlush? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

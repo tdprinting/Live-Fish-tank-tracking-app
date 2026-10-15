@@ -112,6 +112,7 @@ import com.reeflive.app.ui.live.LiveDialog
 import com.reeflive.app.ui.live.LiveMenu
 import com.reeflive.app.ui.live.LivePill
 import com.reeflive.app.ui.live.LiveReactions
+import com.reeflive.app.ui.live.ToiletFlush
 import com.reeflive.app.ui.live.LiveTheme
 import com.reeflive.app.ui.live.LiveTaps
 import com.reeflive.app.ui.live.LiveTools
@@ -253,6 +254,7 @@ fun LiveTankScreen(
     val toggleSound: () -> Unit = { scope.launch { settingsRepo.setTankSounds(!soundOn) } }
     val tick: () -> Unit = audio::uiTick
     val haptics = rememberHaptics()
+    var flushing by remember { mutableStateOf<com.reeflive.core.sim.NetFlush?>(null) }
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
@@ -409,6 +411,7 @@ fun LiveTankScreen(
         if (id != null) {
             if (touring) { touring = false; vm.follow(null) }
             chromeHidden = false
+            haptics.tick()       // every touch answers: a tick here, a ring around the animal in the tank (TankRenderer.touchRing)
             vm.select(id)
             vm.touchAnimal(id)   // a snail or crab tapped right on tucks in; a fish only gets picked (TankTouch.animalReaction)
         } else {
@@ -907,6 +910,13 @@ fun LiveTankScreen(
             happy = happy, meterOn = meterOn, onMeterOff = { meterOn = false },
             showTips = showTips && open == null && !supplies && carry == null && bagCarry == null, onDismissTips = dismissTips,
             start = hudStart, bottom = hudBottom,
+            onNetOut = { st ->
+                // the card steps aside so the net can be watched; the goodbye plays once it is out (ToiletFlush)
+                tick()
+                vm.netOut(st.id)
+                vm.select(null)
+                echo(LiveReactions.netOut(st.nickname.ifBlank { st.common }))
+            },
         )
         AnimatedVisibility(
             visible = menuUp,
@@ -990,6 +1000,15 @@ fun LiveTankScreen(
                     open = LiveCategory.LIFE
                 })
             }
+        }
+        // the net lifted a body out: the toilet goodbye (once per body)
+        LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }
+        flushing?.let { f ->
+            ToiletFlush(
+                f, onDone = { flushing = null },
+                onSplash = { audio.plop(); haptics.tick() },
+                onFlush = { audio.flush(); haptics.tick() },
+            )
         }
         if (lapse && sandbox) {
             TimelapseSheet(
@@ -1091,6 +1110,7 @@ private fun TankArea(
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
+        val haptics = rememberHaptics()
         TankView(
             snapshots = vm.snapshots,
             modifier = Modifier.fillMaxSize().skipFxOnTap(fx, onSkip).trackTorch(torch, torchOn),
@@ -1100,7 +1120,8 @@ private fun TankArea(
             onTapGlass = onTapGlass,
             onLongPress = onLongPress,
             onFollowLost = { vm.follow(null) },
-            onFollow = vm::follow,
+            // a follow started by a double tap or a press-and-hold on the animal: a firmer buzz than a tap
+            onFollow = { id -> if (id != null) haptics.confirm(); vm.follow(id) },
             onTouchTank = onTouchTank,
             onFinger = onFinger,
             onFlick = onFlick,
@@ -1169,6 +1190,7 @@ private fun HudLayer(
     onDismissTips: () -> Unit,
     start: Dp,
     bottom: Dp,
+    onNetOut: (OrganismStats) -> Unit,
 ) {
     val reduce = ReefTheme.reduceMotion
     val sandbox = hudState.mode != HudMode.WATCH
@@ -1260,8 +1282,11 @@ private fun HudLayer(
         ) {
             val card = st ?: lastCard
             if (card != null) {
-                FishCard(card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) },
-                    onRename = if (hudState.mode == HudMode.MY_TANK) ({ n: String -> vm.rename(card.id, n) }) else null)
+                FishCard(
+                    card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) },
+                    onRename = if (hudState.mode == HudMode.MY_TANK) ({ n: String -> vm.rename(card.id, n) }) else null,
+                    onNetOut = { onNetOut(card) },
+                )
             }
         }
         AnimatedVisibility(

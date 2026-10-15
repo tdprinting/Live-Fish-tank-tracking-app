@@ -255,6 +255,7 @@ class Simulation(
         drainCommands()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
+        net.stepWall(this, dtWall)
         val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
@@ -277,6 +278,7 @@ class Simulation(
             val dt = min(behaviorDt, left)
             submarine.step(dt, rock, sand)
             bags.stepWall(this, dt)
+            net.stepWall(this, dt)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -318,6 +320,7 @@ class Simulation(
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
+        net.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         sand.step(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
@@ -447,12 +450,13 @@ class Simulation(
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
@@ -464,7 +468,7 @@ class Simulation(
         for (o in organisms) {
             val a = agents[o] ?: continue
             a.ctx.p = perception; a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
             if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
@@ -472,6 +476,7 @@ class Simulation(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandContact.step(organisms, dt, displace = false)
@@ -966,6 +971,7 @@ class Simulation(
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
+            is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
@@ -1171,6 +1177,8 @@ class Simulation(
     val submarine = Submarine()
     /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
     val bags = AcclimationBags()
+    /** The fish net that takes dead animals out ([Command.NetOut]). */
+    val net = FishNet()
     val subSense = com.reeflive.core.ai.SubmarineSense()
     private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
 
@@ -1345,6 +1353,9 @@ class Simulation(
         }
     }
 
+    /** Animals near [point] dart off as from a shadow overhead (the fish net dipping in). */
+    internal fun scareFrom(point: Vec3) = shadow(point)
+
     private fun shadow(point: Vec3) {
         for (o in organisms) if (o.alive && o.pos.distanceTo(point) < 40) agents[o]?.brain?.onShadow(agents[o]!!.ctx, point)
         for (c in corals) if (c.pos.distanceTo(point) < 15) c.disturb = 0.6
@@ -1355,7 +1366,7 @@ class Simulation(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear(); bags.clear()
+        submarine.reset(); subSense.clear(); bags.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1443,6 +1454,8 @@ class Simulation(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             bareScape = bareScape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
+            net = net.pose(),
+            netFlush = net.lastFlush,
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))

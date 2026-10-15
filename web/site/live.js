@@ -4,6 +4,7 @@
 import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
+import { playFlush } from './flush.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -30,6 +31,16 @@ const ui = {
 let onReadingsNeeded = () => {};
 /** Every lever works: the pretend tank (Sandbox) and My tank (the keeper's own saved tank). */
 const editable = () => ui.mode !== 'watch';
+let statsEl = null;
+function statsBox() {
+  if (!statsEl) {
+    statsEl = document.createElement('pre');
+    statsEl.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top) + 8px);z-index:9999;margin:0;' +
+      'padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ef;font:11px/1.35 ui-monospace,monospace;pointer-events:none';
+    document.body.appendChild(statsEl);
+  }
+  return statsEl;
+}
 
 // ================================================================ start
 let started = false;
@@ -40,8 +51,11 @@ export function startLive(applyReadings) {
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
-    onPick: (id) => { if (id) select(id); else if (!ui.following) select(null); },
+    // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
+    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
+    // pressed and held right on an animal: ride along with it
+    onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
@@ -51,6 +65,8 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
+    ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
   }).then(() => {
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
@@ -91,6 +107,17 @@ function tick() {
   if (ui.tour && ++ui.tourTicks >= 24) nextTour();
   if (!$('micro').classList.contains('hidden')) drawMicro();
   if (sub.on) renderSubInfo();
+  checkFlush();
+}
+// the fish net lifted a body out (core FishNet): the toilet goodbye, once per body (flush.js)
+let flushSeen;
+function checkFlush() {
+  const f = JSON.parse(live.netFlush());
+  const key = f ? f.key : null;
+  if (flushSeen === undefined) { flushSeen = key; return; }   // never replay one from before the page looked
+  if (!f || key === flushSeen) return;
+  flushSeen = key;
+  playFlush(f, { onSplash: () => cue('FEED', 1), onFlush: () => cue('FLUSH', 0.9, 0.7, 1.7) });
 }
 const faceFor = (h) => (h >= 80 ? '😄' : h >= 60 ? '🙂' : h >= 40 ? '😐' : h >= 20 ? '😟' : '😫');
 const PHASE_ICON = { Night: '🌙', Dawn: '🌅', Morning: '☀️', Day: '☀️', Midday: '☀️', Afternoon: '☀️', Dusk: '🌇', Evening: '🌇' };
@@ -103,6 +130,7 @@ const clockText = (sec) => {
 
 // ================================================================ Hermie, toasts
 let hermieTimer = 0, tipIndex = 0;
+function buzz(ms) { try { navigator.vibrate?.(ms); } catch { /* not on iOS */ } }
 function say(text) {
   if (!ui.hermie) { toast(text); return; }
   $('hermieText').textContent = text;
@@ -567,7 +595,9 @@ $('card').addEventListener('input', (e) => {
 // ================================================================ fish card, follow, tour
 function select(id) { ui.picked = id; renderFish(); }
 function renderFish() {
-  const a = ui.picked && animals.find((x) => x.id === ui.picked);
+  // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
+  let a = ui.picked && animals.find((x) => x.id === ui.picked);
+  if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }
   $('fish').classList.toggle('hidden', !a || ui.chromeHidden);
   if (!a) return;
   if ($('fish').dataset.id === a.id && ui.fishDragging) return;
@@ -580,15 +610,24 @@ function renderFish() {
     ${a.thinking ? thinkHtml(a) : `<p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>`}
     ${a.disease ? `<p class="warn">🤒 ${esc(a.disease)}${a.symptoms.length ? `: ${esc(a.symptoms.join(', '))}` : ''}</p>` : ''}
     ${a.relations.length ? `<div class="rels">${a.relations.map((r) => `<span class="rel ${r.affinity > 0.15 ? 'good' : r.affinity < -0.15 ? 'danger' : ''}">${esc(r.label)} ${esc(r.name)}</span>`).join('')}</div>` : ''}
+    ${!a.alive ? `<p class="muted">${ui.netting === a.id ? 'Here comes the net…' : `Oh no, ${esc(a.name)} didn't make it. Scoop them out to keep the water clean.`}</p>
+    <div class="row-gap"><button class="btn small" data-fnet ${ui.netting === a.id ? 'disabled' : ''}>🥅 ${ui.netting === a.id ? 'Scooping…' : 'Scoop out with the net'}</button></div>` : `
     <div class="row-gap"><button class="btn small" data-ffollow>${ui.following === a.id ? 'Stop following' : 'Follow'}</button>
-      ${sb ? '<button class="btn small ghost" data-fremove>Take out</button>' : ''}${ui.mode === 'mine' ? '<button class="btn small ghost" data-fname>Name it</button>' : ''}</div>
-    ${sb ? `<label class="slider"><span>Size</span><output>${a.cm.toFixed(1)} cm</output><input type="range" data-fsize min="0.5" max="40" step="0.5" value="${a.cm}"></label>` : ''}`;
+      ${sb ? '<button class="btn small ghost" data-fremove>Take out</button>' : ''}${ui.mode === 'mine' ? '<button class="btn small ghost" data-fname>Name it</button>' : ''}</div>`}
+    ${sb && a.alive ? `<label class="slider"><span>Size</span><output>${a.cm.toFixed(1)} cm</output><input type="range" data-fsize min="0.5" max="40" step="0.5" value="${a.cm}"></label>` : ''}`;
 }
 $('fish').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
   if ('fclose' in d) { ui.picked = null; renderFish(); }
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
+  else if ('fnet' in d) {
+    // the card steps aside so the net can be watched; the goodbye plays once it is out
+    const name = $('fish').querySelector('strong')?.textContent || 'them';
+    SB.act('netOut', ui.picked, 0); cue('TICK');
+    say(`Here comes the net! Let's scoop ${name} out gently so the water stays clean.`);
+    ui.netting = ui.picked; ui.picked = null;
+  }
   else if ('fremove' in d) { if (confirm(ui.mode === 'mine' ? 'Take this animal out of your tank for good?' : 'Take this animal out of the pretend tank?')) { act('remove', ui.picked, 0, 'Out it goes, gently, in a cup.'); ui.picked = null; } }
   else if ('fname' in d) {
     const a = animals.find((x) => x.id === ui.picked);
@@ -909,7 +948,7 @@ function renderLapseResult() {
 // ================================================================ sound (TankSoundMix beds and cues, Web Audio)
 let actx = null; const buffers = {}; const loops = {};
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
+const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {
@@ -949,7 +988,7 @@ function updateSound() {
   s.cues.forEach((c) => cue(c));
 }
 const lastCue = {};
-function cue(name, gain = 0.8) {
+function cue(name, gain = 0.8, rate = 1, seconds = 0) {
   if (!ui.sound || !actx) return;
   const now = performance.now();
   if (now - (lastCue[name] || 0) < (name === 'TICK' ? 60 : 400)) return;
@@ -958,7 +997,9 @@ function cue(name, gain = 0.8) {
   if (!b) return;
   const src = actx.createBufferSource(); src.buffer = b;
   const g = actx.createGain(); g.gain.value = gain * ui.volume;
+  src.playbackRate.value = rate;
   src.connect(g).connect(actx.destination); src.start();
+  if (seconds > 0) src.stop(actx.currentTime + seconds);
 }
 // a tap with no fish under it (Android LiveTaps): undo what is open first, else touch the tank there
 let touchSaidAt = 0;
