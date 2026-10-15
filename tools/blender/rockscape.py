@@ -774,11 +774,13 @@ def build(bake=True, albedo_size=2048, verbose=True):
         apath = os.path.join(C.BUILD, "rock_albedo.png")
         C.write_png(apath, albedo)
         nmap = maps["normal"]
-        C.write_png(os.path.join(C.TEXTURES, "rock_normal.png"), quantize(nmap, 6, 2))  # step 6: the 2048 map with pore detail compresses poorly
+        # not shipped since the rock LOD pass: the decimated mesh's per-triangle UV islands broke the tangent frame into
+        # facets; rock.frag builds the relief procedurally (tools/blender/rock_surface.py). Kept as bake references.
+        C.write_png(os.path.join(C.BUILD, "rock_normal.png"), quantize(nmap, 6, 2))
         f = albedo_size // 1024
         rough_s = rough.reshape(1024, f, 1024, f).mean(axis=(1, 3))
         ra = np.stack([rough_s, maps["ao"], np.zeros_like(rough_s)], -1)
-        C.write_png(os.path.join(C.TEXTURES, "rock_rough_ao.png"), quantize(ra, 2, 3))
+        C.write_png(os.path.join(C.BUILD, "rock_rough_ao.png"), quantize(ra, 2, 3))
         img = C.load_image(apath, name="rock_albedo")
         mat = C.material("rock", rough=0.85, image=img)
         # LOD1 carries a half-resolution copy of the albedo (self-contained GLB, like the fish LOD1s)
