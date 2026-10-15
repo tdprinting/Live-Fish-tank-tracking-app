@@ -216,6 +216,10 @@ class BodyCollisionTest {
         b.refresh(o)
         val r = sim.rock
         var worst = 0.0
+        // a crawler on its seat: its rock, sand and glass are its seat's contact points (shell, shield, coxae; the
+        // sections are a coarse envelope of the mesh, legs included), as NoOverlapTest and HermitSeatTest measure it
+        val seat = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
+        if (seat != null) { worst = max(worst, seat.contactDepth(sim.crawlSurface, o.lengthCm)); lastTerm = "seat contact" }
         for (i in 0 until BodyState.N) for (half in 0..1) {
             if (half == 1 && i == BodyState.N - 1) continue
             val j = if (half == 1) i + 1 else i
@@ -228,7 +232,8 @@ class BodyCollisionTest {
             for (k in 0 until 12) {
                 val th = k * Math.PI / 6
                 val q = p + up * (c + a * cos(th)) + side * (w * sin(th))
-                val terms = doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm), q.y - r.waterLevelCm)
+                val terms = if (seat != null) doubleArrayOf(-1.0, -1.0, -1.0, -1.0, q.y - r.waterLevelCm)
+                    else doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm), q.y - r.waterLevelCm)
                 for (m in terms.indices) if (terms[m] > worst) { worst = terms[m]; lastTerm = "${TERMS[m]} station $i${if (half == 1) "+" else ""} at $q" }
             }
         }

@@ -13,6 +13,9 @@ import kotlin.math.sqrt
  * An animal's collision body for the current tick: [N] stations along the spine, each an elliptic cross-section
  * (SIMULATION §4.3, [BodyShape]) placed on the bent spine with the body's up and side axes. Rebuilt by [refresh].
  */
+/** Drawn rigid and centred on its spine head (the renderer's limb-rigged crawlers, TankRenderer uLimbOn). */
+internal fun drawnCentred(o: Organism): Boolean = (o.limbRig?.out?.size ?: 0) >= 40
+
 class BodyState {
     val p = Array(N) { Vec3.ZERO }
     val up = Array(N) { Vec3.Y }
@@ -103,13 +106,17 @@ class BodyState {
         val base = if (seat != null) seatOff?.let { o.pos + it } ?: o.seatPos else o.pos
         val h = if (seat != null) seat.fwd else o.heading.normalized(Vec3.X)
         val upRef = if (seat != null) o.seatUp else o.up
+        // a limb-rigged crawler (brittle star, Sally Lightfoot, hermit: ten or more limbs) is drawn rigid about spine
+        // station 0, its model centred there (fish.vert, uLimbOn: snout at +0.5 L, tail at -0.5 L), as its seat's
+        // contact points are; every other body runs from the head back along its spine
+        val centred = drawnCentred(o)
         // the renderer's lateral swim wave and C-start bend (fish.vert) widen the swept body; the shrimp tail-flip curls the tail down
         val amp = min(o.amp, MAX_WAVE_AMP)
         val mode = o.toPoseMotionMode()
         for (i in 0 until N) {
             val uu = s.uMin + (s.uMax - s.uMin) * i / (N - 1)
             u[i] = uu
-            p[i] = if (rigid) base - h * (uu * L) else spineAt(uu)
+            p[i] = if (!rigid) spineAt(uu) else if (centred) base - h * ((uu - 0.5) * L) else base - h * (uu * L)
         }
         var cx = 0.0; var cy = 0.0; var cz = 0.0
         for (i in 0 until N) {
@@ -180,6 +187,8 @@ class BodyCollision(private val rock: RockData) {
     private val pairDelta = LinkedHashMap<Organism, Array<Vec3>>()
     /** Summed falloff weight of the pushes on each spline station ([pairDelta]): overlapping segment pairs share one push. */
     private val pairWeight = HashMap<Organism, DoubleArray>()
+    /** Seated crawlers in a pair with another seated one this pass (one may climb onto the other's shell). */
+    private val climbers = HashSet<Organism>()
     private val order = HashMap<Organism, Int>()
 
     // ---- counters (tests / profiling) ----
@@ -277,10 +286,9 @@ class BodyCollision(private val rock: RockData) {
                 val fy = rock.floorY(o.pos.x, o.pos.z)
                 if (o.pos.y < fy) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
                 carrySeat(o, seat, sim0.pos + off + d - o.seatPos)
-                // a foot or the shell lip still under the sand after the push (the sections cleared, a contact point
-                // outside them did not): lift the seat by what is left
-                val left = seat.contactDepth(rock, o.lengthCm)
-                if (left > SKIN) carrySeat(o, seat, Vec3.Y * (left + SKIN))
+                // the seat's own contact points (shell, shield, coxae) are its rock and sand: one still inside after
+                // the seat's solve (sand heaped on it, a squeeze) is pushed out along that surface's normal
+                seat.contactPush(rock, o.lengthCm, SKIN)?.let { carrySeat(o, seat, it, slide = false) }
             }
         }
     }
@@ -295,7 +303,14 @@ class BodyCollision(private val rock: RockData) {
      * Moves the seat [o] is drawn on by [d] (the push its drawn body took), at most [SEAT_CARRY_CM] a resolve: the
      * seat's own contact solve settles the rest next tick, so the drawn body glides rather than hops.
      */
-    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3) { if (d.lengthSq() > 1e-18) seat.carry(o, d.clampLength(SEAT_CARRY_CM)) }
+    /**
+     * Moves a seated crawler's drawn body by [d] (at most [SEAT_CARRY_CM]). A shove ([slide]: another animal, the glass,
+     * equipment) slides it along the surface it holds on to, not off it: the seat's contact solve owns the normal.
+     */
+    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3, slide: Boolean = true) {
+        val m = if (slide) d - seat.up * (d dot seat.up) else d
+        if (m.lengthSq() > 1e-18) seat.carry(o, m.clampLength(SEAT_CARRY_CM), settle = slide)
+    }
 
     private fun resolveEnv0(o: Organism, dt: Double, rockOn: Boolean, surfaceOn: Boolean, settle: Boolean, wedgeFallback: Boolean): Double {
         // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
@@ -317,9 +332,9 @@ class BodyCollision(private val rock: RockData) {
         // a swimmer in a sealed hollow of the rock passes through the rock until it is back in the open water (a
         // crawler on the rock is always against it: never counted sealed in)
         // (a crawler on its seat: the seat's contact solve rests its shell and feet on the rock and sand, CrawlerSeat;
-        // the pushes here keep it off the glass, the surface, the equipment and the other animals, and push it out of
-        // the rock and sand only when the seat could not keep its contact points out: sand heaped on it, a squeeze)
-        val seatedNow = seatOf(o)?.let { it.contactDepth(rock, o.lengthCm) <= SKIN } ?: false
+        // the pushes here keep it off the glass, the surface, the equipment and the other animals, and resolveEnv pushes
+        // a contact point the seat left inside out along the surface normal)
+        val seatedNow = seatOf(o) != null
         @Suppress("NAME_SHADOWING") val rockOn = rockOn && !(o.isFish && !o.attached && sealedIn(o)) && !seatedNow
         envCalls++
         val mask = StaticObstacles.passMask(o)
@@ -837,6 +852,7 @@ class BodyCollision(private val rock: RockData) {
         for (o in live) maxR = max(maxR, o.body.radius)
         pairDelta.clear()
         pairWeight.clear()
+        climbers.clear()
         order.clear()
         for ((k, o) in live.withIndex()) order[o] = k
         val near = ArrayList<Organism>()
@@ -850,6 +866,7 @@ class BodyCollision(private val rock: RockData) {
                 if (a.body.centre.distanceTo(b.body.centre) > a.body.radius + b.body.radius) continue
                 if (touchAllowed(a, b, stations)) continue
                 pair(a, b, holdAttached)
+                if (seatOf(a) != null && seatOf(b) != null) { climbers += a; climbers += b }
             }
         }
         if (pairDelta.isEmpty()) return false
@@ -864,8 +881,10 @@ class BodyCollision(private val rock: RockData) {
             val before = o.body.centre
             val seat = seatOf(o)
             if (seat != null) {
-                // a seated crawler: its drawn body (the seat) takes the push, the sim position stays (see resolveEnv)
-                carrySeat(o, seat, d[0])
+                // a seated crawler: its drawn body (the seat) takes the push, the sim position stays (see resolveEnv);
+                // it slides along the surface it holds (what the push loses there is the other body's to take, below),
+                // except off another seated crawler, onto whose shell it may climb
+                carrySeat(o, seat, d[0], slide = o !in climbers)
             } else {
                 o.spline.displace(d)
                 o.pos = o.spline.headPos

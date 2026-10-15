@@ -17,8 +17,8 @@ import kotlin.math.sin
  * 1. **Body vs body**: no two bodies overlap ([BodyCollision.pairPenetration]) by more than [TOL].
  * 2. **Environment**: no point of any station's section (12 around each ellipse, at every station and halfway between
  *    stations) is inside the rock SDF, under the sand surface or through the glass by more than [TOL]. A crawler on
- *    its seat ([CrawlerSeat]: the hermits) rests on the rock and sand by the seat's contact solve: there its rock and
- *    sand are measured on the seat's contact points (shell, shield, hips, claw pivots), the measure HermitSeatTest
+ *    its seat ([CrawlerSeat]: the hermits) rests on the rock, sand and glass by the seat's contact solve: there those
+ *    are measured on the seat's contact points (shell, shield, hips, claw pivots), the measure HermitSeatTest
  *    holds it to.
  * 3. **Static obstacles**: no such point is inside a [StaticObstacles] solid (hard decor, equipment, the feather
  *    duster) by more than [TOL] beyond the obstacle's give, under the animal's [StaticObstacles.passMask]. Coral is
@@ -32,6 +32,9 @@ import kotlin.math.sin
  *   client, or an active cleaning station pair); the two clownfish together in their host (both within the host
  *   anchor's radius); mates in contact (the banded shrimp pair's [Organism.mateId]: mating, moult guarding); a predator's
  *   strike reaching its prey (open mouth on its focus).
+ * - Sand intake: a diamond goby taking a mouthful of sand (mouth open, [Organism.mouth] >= 0.9) has its snout, spine
+ *   station 0 only, in the bed by up to [MOUTH_INTAKE_CM] (where it digs at a rock foot the rock's distance field runs
+ *   under that sand, so the allowance covers rock there too), as a body in its burrow is let into the sand.
  * - Whole bodies: the explicit states [BodyCollision.exempt] lets into the geometry (in a hole, den or burrow, posture 3;
  *   buried in the sand, posture 5; a scripted den / hole path; the sessile feather duster; hidden animals) and dead ones.
  * - Obstacles: every coral colony (soft, see above); the pass rules documented on [StaticObstacles] (small crawlers
@@ -110,6 +113,7 @@ class NoOverlapTest {
         val r = sim.rock
         val mask = StaticObstacles.passMask(o)
         val seat = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
+        val intake = o.brainKind == BrainKind.DIAMOND_GOBY && o.mouth >= 0.9
         var worstEnv = Double.NEGATIVE_INFINITY; var envWhere = ""
         var worstObs = Double.NEGATIVE_INFINITY; var obsWhere = ""
         for (i in 0 until BodyState.N) for (half in 0..1) {
@@ -125,8 +129,11 @@ class NoOverlapTest {
             for (k in 0..RIM) {
                 // k = RIM: the section centre (a body wholly inside a thin obstacle has no rim point in it)
                 val q = if (k == RIM) p + up * c else p + up * (c + a * cos(k * 2 * Math.PI / RIM)) + side * (w * sin(k * 2 * Math.PI / RIM))
-                // (a seated crawler's rock and sand are its seat's, measured on its contact points below)
-                val terms = doubleArrayOf(if (seat != null) -1.0 else -r.sdf.dist(q), if (seat != null) -1.0 else r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm))
+                // (a seated crawler's rock, sand and glass are its seat's, measured on its contact points below)
+                val terms = if (seat != null) doubleArrayOf(-1.0, -1.0, -1.0, -1.0)
+                    else doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm))
+                // (a sand sifter's snout in the bed while it takes a mouthful, up to [MOUTH_INTAKE_CM]: see the class doc)
+                if (i == 0 && half == 0 && intake) { terms[0] -= MOUTH_INTAKE_CM; terms[1] -= MOUTH_INTAKE_CM }
                 for (m in terms.indices) if (terms[m] > worstEnv) { worstEnv = terms[m]; envWhere = "${TERMS[m]} station $i${if (half == 1) "+" else ""}" }
                 val d = sim.obstacles.depth(q, 0.0, mask)
                 if (d > worstObs) { worstObs = d; obsWhere = "${sim.obstacles.lastOwner} station $i${if (half == 1) "+" else ""}" }
@@ -163,6 +170,8 @@ class NoOverlapTest {
     private companion object {
         /** Allowed overlap (cm): 1 mm, twice the resolver's skin. */
         const val TOL = 0.1
+        /** How far a sand sifter's snout may press into the bed (sand round the rock foot) taking a mouthful (cm). */
+        const val MOUTH_INTAKE_CM = 0.3
         /** Sample every this many 20 Hz ticks (0.1 s). */
         const val EVERY = 2
         const val RIM = 12

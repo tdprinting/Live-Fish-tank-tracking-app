@@ -121,6 +121,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double, simOffset: Double = -1.0) {
+        surface = s
         val L = max(o.lengthCm, 0.3)
         val d0 = s.dist(o.pos)
         val onSurface = d0 < 0.5 * o.species.depthRatio * L + 0.2 + SURFACE_TOL_CM
@@ -269,10 +270,37 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
      * Moves the seated body [d] (the body collision pushed it: off another animal, out of a rock edge the contact
      * solve does not see); the sim position stays, and the next update warm-starts from there.
      */
-    internal fun carry(o: Organism, d: Vec3) {
+    internal fun carry(o: Organism, d: Vec3, settle: Boolean = true) {
         pos += d
+        val s = surface
+        val L = max(o.lengthCm, 0.3)
+        // shoves add up over a tick's passes: the drawn body stays within reach of the animal the sim walks
+        val off = pos - o.pos
+        val reach = max(CARRY_REACH_L * L, 1.0)
+        if (off.length() > reach) pos = o.pos + off.normalized(up) * reach
+        if (s != null) {
+            // still resting on the surface after a shove along it (round a curve, across a lip): back down onto it
+            // (toward the surface nearest the lowest contact, which on a ceiling or in a crevice is not along up)
+            // (not after a shove off another animal: it may climb onto it)
+            val g = if (settle) lowestContact(s, pos, L) else 0.0
+            if (g > CARRY_SETTLE_CM) {
+                val w = lowest; val e = 0.05
+                val n = Vec3(s.dist(w + Vec3(e, 0.0, 0.0)) - s.dist(w - Vec3(e, 0.0, 0.0)),
+                    s.dist(w + Vec3(0.0, e, 0.0)) - s.dist(w - Vec3(0.0, e, 0.0)),
+                    s.dist(w + Vec3(0.0, 0.0, e)) - s.dist(w - Vec3(0.0, 0.0, e))).normalized(up)
+                pos -= n * (g - FOOT_TOL_CM)
+            }
+            // the planted feet stay where they stand: the legs are solved again from the moved body (dt 0: no gait
+            // step, the bends do not relax)
+            val rig = o.limbRig as? HermitLegs
+            val m = hermit
+            if (rig != null && m != null && legsPlanted) poseHermit(o, rig, m, s, L, 0.0)
+        }
         o.seatPos = pos
     }
+
+    /** The surface of the last [update] ([carry] checks the legs against it). */
+    private var surface: CrawlSurface? = null
 
     /** Body forward on [up]: the sim heading in that plane, or the last forward when the heading is nearly along up. */
     private fun fwdOn(h: Vec3, up: Vec3, prev: Vec3, h0: Vec3): Vec3 {
@@ -420,6 +448,32 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
      * ≤ 0 = clear): the seated body's own no-clipping measure (the no-overlap checks, HermitSeatTest).
      */
     fun contactDepth(s: CrawlSurface, L: Double): Double = -lowestContact(s, pos, L)
+
+    /**
+     * The move that takes the deepest of the contact points out of [rock] (its distance field or the sand) by [skin],
+     * along that surface's normal; null when every point is clear.
+     */
+    fun contactPush(rock: RockData, L: Double, skin: Double): Vec3? {
+        val c = shape.contacts
+        var worst = skin; var at: Vec3? = null; var sand = false
+        var i = 0
+        while (i < c.size) {
+            val w = pos + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
+            val dr = -rock.sdf.dist(w); val ds = rock.floorY(w.x, w.z) - w.y
+            if (dr > worst) { worst = dr; at = w; sand = false }
+            if (ds > worst) { worst = ds; at = w; sand = true }
+            i += 3
+        }
+        val w = at ?: return null
+        if (sand) return Vec3.Y * (worst + skin)
+        val e = 0.05
+        val n = Vec3(
+            rock.sdf.dist(w + Vec3(e, 0.0, 0.0)) - rock.sdf.dist(w - Vec3(e, 0.0, 0.0)),
+            rock.sdf.dist(w + Vec3(0.0, e, 0.0)) - rock.sdf.dist(w - Vec3(0.0, e, 0.0)),
+            rock.sdf.dist(w + Vec3(0.0, 0.0, e)) - rock.sdf.dist(w - Vec3(0.0, 0.0, e)),
+        ).normalized(up)
+        return n * (worst + skin)
+    }
 
     /** [contactDepth] against [rock]'s distance field and floor (the body collision's view of the rock and sand). */
     fun contactDepth(rock: RockData, L: Double): Double {
@@ -779,6 +833,10 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val REST_CM = 0.02
         const val PEN_TOL_CM = 0.005
         const val FOOT_TOL_CM = 0.03
+        /** A carried body whose lowest contact is further than this off the surface is set back down onto it (cm). */
+        const val CARRY_SETTLE_CM = 0.1
+        /** Farthest a carried body may sit from the sim position (body lengths). */
+        const val CARRY_REACH_L = 0.6
         /** Foot tip radius (model units): the dactyl tips sit this far off the ground in the model. */
         const val FOOT_R = 0.004
         /** Stance / swing split of the step cycle (`fish.vert`: swing for the first 40 %). */
