@@ -272,6 +272,10 @@ class BodyCollision(private val rock: RockData) {
             if (seat != null && sim0 != null && off != null) {
                 val d = o.pos - sim0.pos
                 sim0.restore(o)
+                // the sim position stays out of the sand too (sand heaped over a resting crawler, a placement onto an
+                // old height): it is what the walk and the brain read
+                val fy = rock.floorY(o.pos.x, o.pos.z)
+                if (o.pos.y < fy) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
                 carrySeat(o, seat, sim0.pos + off + d - o.seatPos)
                 // a foot or the shell lip still under the sand after the push (the sections cleared, a contact point
                 // outside them did not): lift the seat by what is left

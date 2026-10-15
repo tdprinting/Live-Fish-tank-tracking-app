@@ -162,9 +162,12 @@ class AiTest {
                 // can be below the old flat sand plane: it only has to stay above the glass (SIMULATION §16.10); a goby
                 // down its burrow (posture 3, or in its dug tunnel) is under the bed on purpose
                 val burrowed = (o.posture == 3 || o.inSand) && o.pos.y < sim.rock.floorY(o.pos.x, o.pos.z) && o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y
-                val inside = if (o.posture == 5) o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y && sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.sandTopCm)), -0.5)
-                    else burrowed || sim.rock.inWater(o.pos, -0.5)
-                assertTrue("${o.nickname} outside ${o.pos}", inside)
+                val inside = if (o.posture == 5) o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y && sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.floorY(o.pos.x, o.pos.z))), -0.5)
+                    // (anything else on or over the live sand: the bed is below the old flat sand plane at the front,
+                    // where the leopard wrasse rests before it digs in)
+                    else burrowed || o.pos.y > sim.rock.floorY(o.pos.x, o.pos.z) - 0.5 &&
+                        sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.sandTopCm)), -0.5)
+                assertTrue("${o.nickname} outside ${o.pos} (posture ${o.posture}, inSand ${o.inSand}, sand %.2f, sdf %.2f)".format(sim.rock.floorY(o.pos.x, o.pos.z), sim.rock.sdf.dist(o.pos)), inside)
             }
         }
         val pose = sim.snapshot().organisms.first()
