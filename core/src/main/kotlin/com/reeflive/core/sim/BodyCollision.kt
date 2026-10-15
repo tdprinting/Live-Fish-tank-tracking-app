@@ -377,6 +377,10 @@ class BodyCollision(private val rock: RockData) {
                 // rock's surface, not in it (the body push and its tip move it as a whole; a crevice can close over it)
                 val dr = rock.sdf.dist(o.pos)
                 if (dr < 0.0) { o.pos = rock.sdf.project(o.pos, 0.02); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
+                // nor under the sand (sand that settled over it, a placement onto an old height), where a rock roof
+                // leaves the room to stand on it
+                val fy = rock.floorY(o.pos.x, o.pos.z)
+                if (o.pos.y < fy && rock.sdf.dist(o.pos.withY(fy)) > 0.0) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
             }
         }
     }
@@ -872,7 +876,10 @@ class BodyCollision(private val rock: RockData) {
         val axis0 = axis.map { if (rockOn) rock.sdf.dist(it) else 0.0 }
         val start = o.spline.pose()
         val h0 = o.heading
-        for (k in 1..UNSTICK_STEPS) {
+        // (a crawler on its rig of legs or arms only steps out: a hop of a few cm is no walk, and the pose it is held
+        // to is clear, so it keeps that until the next step out is)
+        val steps = if (o.attached && drawnCentred(o)) 1 else UNSTICK_STEPS
+        for (k in 1..steps) {
             val dist = min(L * 0.15, 0.75) * k
             // backing out along its own spine first, the way it came in: the body only passes where it already was
             // (and where the tail carries on straight behind it), so a fish nosed into a slot it cannot turn in backs out
@@ -1200,8 +1207,11 @@ class BodyCollision(private val rock: RockData) {
     fun touchAllowedForTest(a: Organism, b: Organism, stations: List<com.reeflive.core.ai.CleaningStation>) = touchAllowed(a, b, stations)
 
     companion object {
-        /** Resolves (≈ 2 s at 20 Hz) a body leaving a burrow or the sand may take to come clear of it. */
-        const val EMERGE_TICKS = 40
+        /**
+         * Resolves a body leaving a burrow or the sand may take to come clear of it (several a tick: ≈ 4-10 s at 20 Hz;
+         * at 40 a diamond goby's tail was still in its burrow when the hold ran out, and popped out in one tick).
+         */
+        const val EMERGE_TICKS = 200
         const val ITERATIONS = 6
         private val DOWN = Vec3(0.0, -1.0, 0.0)
         private const val RIM = 12

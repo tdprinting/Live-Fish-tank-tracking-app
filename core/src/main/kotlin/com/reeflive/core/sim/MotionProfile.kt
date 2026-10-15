@@ -173,7 +173,7 @@ object MotionProfiles {
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
-        BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
+        BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35, bodyUpRate = BrittleArms.UP_RATE),
         // idle foot crawl 1–3 cm/min (~0.05 cm/s); races at ~0.4 cm/s to food or a puff (docs/research/video/SIM_CHANGES.md §2.1) [M][L]
         BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.4),
         // a 2–3 cm reef snail crawls glass at several cm/min (research 17 microfauna morphology, Stomatella 1–3 mm/s is

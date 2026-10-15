@@ -1462,6 +1462,9 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         private var atPatch = false
         private var next = 0.0
         private var dur = 30.0
+        /** Closest it got to the patch on the way, and when (an approach that stopped closing in grazes where it is). */
+        private var bestD = Double.MAX_VALUE
+        private var bestAt = 0.0
         override fun score(c: Ctx): Double {
             val w = c.sim.water.s
             // hair algae and the film on rock and glass (research 17 §3.3: scrapes biofilm, tears off algae)
@@ -1477,13 +1480,20 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                 ?: c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
             dur = c.rng.range(15.0, 45.0)
             atPatch = false
+            bestD = Double.MAX_VALUE; bestAt = c.t
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val s = spot ?: run { finished = true; return }
             if (elapsed > dur + 40) { finished = true; return }   // unreachable spot
             // (once at the patch, a body the rock holds a little off the spot grazes on rather than scuttling back and forth)
             val d = c.o.pos.distanceTo(s.first)
-            if (if (atPatch) d > 1.5 + 0.5 * c.L else d > 1.5) { atPatch = false; scuttle(c, out, s.first, fast = false); return }
+            if (if (atPatch) d > 1.5 + 0.5 * c.L else d > 1.5) {
+                // (held off a step it shuffled to: it grazes on from here instead of re-approaching)
+                if (d < bestD - 0.5) { bestD = d; bestAt = c.t }
+                // (and an approach that stopped closing in, e.g. on the glass under a patch on the rock in front of it,
+                // grazes the film where it stands instead of circling under the patch until it gives up)
+                if (atPatch || c.t - bestAt > APPROACH_STALL_S) { spot = s.copy(first = c.o.pos) } else { scuttle(c, out, s.first, fast = false); return }
+            }
             atPatch = true
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c); out.allowGlass = true
             if (c.t > next) {
@@ -1491,8 +1501,9 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                 c.o.hunger = max(0.0, c.o.hunger - 0.004)
                 c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
                 c.o.mouth = 1.0
-                // shuffles a step or two sideways along the patch between bites
-                spot = s.copy(first = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2))
+                // shuffles a step or two sideways along the patch between bites, from where it stands (stepping from
+                // the old target walked the spot off the rock's curve until the rock held it off and it re-approached)
+                spot = s.copy(first = c.o.pos + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2))
             }
             legs.pick = 1.0      // quick alternating claw strokes to the mouth
             grazeSeconds += c.dt
@@ -1651,6 +1662,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val HOME_SNAP_CM = 3.0
         /** Share of night grazing bouts spent on the glass film [L]. */
         const val GLASS_GRAZE_P = 0.15
+        /** Seconds an approach to a grazing patch may go without closing in by 0.5 cm before it grazes where it is. */
+        const val APPROACH_STALL_S = 4.0
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
         const val MIN_HIDE_S = 8.0
         const val WARY_S = 60.0
