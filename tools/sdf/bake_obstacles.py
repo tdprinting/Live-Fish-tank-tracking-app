@@ -38,6 +38,7 @@ CORALS = {
     "gsp_neon": (2.0, True, None),
     "mushroom": (2.0, True, None),
     "mushroom_hairy": (1.5, True, None),
+    "mushroom_hairy_mound": (1.5, True, None),
     "clove": (2.0, True, None),
     "macro_red": (2.0, False, None),
     "toadstool_leather": (2.0, True, None),

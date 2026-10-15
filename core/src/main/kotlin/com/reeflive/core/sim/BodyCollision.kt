@@ -363,10 +363,20 @@ class BodyCollision(private val rock: RockData) {
                 val fy = rock.floorY(o.pos.x, o.pos.z)
                 if (o.pos.y < fy) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
                 // (what is left is equipment, decor and the water surface: it may climb onto them, so no slide)
-                carrySeat(o, seat, sim0.pos + off + d - o.seatPos, slide = false)
+                // (and set back down onto the surface unless that puts it deeper into the equipment it climbed, or it is
+                // climbing onto another hermit in this pair pass)
+                val ob = obstacles
+                val r = 0.3 * o.lengthCm
+                carrySeat(o, seat, sim0.pos + off + d - o.seatPos, slide = false,
+                    settle = if (o in climbers) null else { p -> ob == null || ob.depth(p, r) <= max(ob.depth(seat.pos, r), 0.0) + SKIN })
                 // the seat's own contact points (shell, shield, coxae) are its rock and sand: one still inside after
                 // the seat's solve (sand heaped on it, a squeeze) is pushed out along that surface's normal
                 seat.contactPush(rock, o.lengthCm, SKIN)?.let { carrySeat(o, seat, it, slide = false) }
+            } else if (o.attached && drawnCentred(o)) {
+                // a limb-rigged crawler on the rock: its sim position is the point its feet stand round, and stays on the
+                // rock's surface, not in it (the body push and its tip move it as a whole; a crevice can close over it)
+                val dr = rock.sdf.dist(o.pos)
+                if (dr < 0.0) { o.pos = rock.sdf.project(o.pos, 0.02); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
             }
         }
     }
@@ -385,16 +395,16 @@ class BodyCollision(private val rock: RockData) {
      * Moves a seated crawler's drawn body by [d] (at most [SEAT_CARRY_CM]). A shove off another animal ([slide]) slides
      * it along the surface it holds on to, not off it (the seat's contact solve owns the normal), and sets it back down.
      */
-    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3, slide: Boolean = true) {
+    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3, slide: Boolean = true, settle: ((Vec3) -> Boolean)? = null) {
         val m = if (slide) d - seat.up * (d dot seat.up) else d
-        if (m.lengthSq() > 1e-18) seat.carry(o, m.clampLength(SEAT_CARRY_CM), settle = slide)
+        if (m.lengthSq() > 1e-18) seat.carry(o, m.clampLength(SEAT_CARRY_CM), settle = if (slide) CrawlerSeat.ANY else settle)
     }
 
     private fun resolveEnv0(o: Organism, dt: Double, rockOn: Boolean, surfaceOn: Boolean, settle: Boolean, wedgeFallback: Boolean): Double {
         // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
         // stays let in (inside the glass) until it is out, for at most [EMERGE_TICKS] resolves
         val bs = o.body
-        if (o.posture == 3 || o.posture == 5) { bs.inBurrow = true; bs.emerging = 0 }
+        if (o.posture == 3 || o.posture == 5 || o.inSand) { bs.inBurrow = true; bs.emerging = 0 }
         else if (bs.inBurrow) {
             if (bs.emerging == 0) bs.emerging = EMERGE_TICKS + 1
             bs.emerging--

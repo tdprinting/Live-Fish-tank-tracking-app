@@ -270,7 +270,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
      * Moves the seated body [d] (the body collision pushed it: off another animal, out of a rock edge the contact
      * solve does not see); the sim position stays, and the next update warm-starts from there.
      */
-    internal fun carry(o: Organism, d: Vec3, settle: Boolean = true) {
+    internal fun carry(o: Organism, d: Vec3, settle: ((Vec3) -> Boolean)? = ANY) {
         pos += d
         val s = surface
         val L = max(o.lengthCm, 0.3)
@@ -281,14 +281,16 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         if (s != null) {
             // still resting on the surface after a shove along it (round a curve, across a lip): back down onto it
             // (toward the surface nearest the lowest contact, which on a ceiling or in a crevice is not along up)
-            // (not after a shove off another animal: it may climb onto it)
-            val g = if (settle) lowestContact(s, pos, L) else 0.0
-            if (g > CARRY_SETTLE_CM) {
+            // ([settle] null: not after a shove off another animal, it may climb onto it; [settle] refuses a settled
+            // position that would put the body into what pushed it, equipment it climbed)
+            val g = if (settle != null) lowestContact(s, pos, L) else 0.0
+            if (settle != null && g > CARRY_SETTLE_CM) {
                 val w = lowest; val e = 0.05
                 val n = Vec3(s.dist(w + Vec3(e, 0.0, 0.0)) - s.dist(w - Vec3(e, 0.0, 0.0)),
                     s.dist(w + Vec3(0.0, e, 0.0)) - s.dist(w - Vec3(0.0, e, 0.0)),
                     s.dist(w + Vec3(0.0, 0.0, e)) - s.dist(w - Vec3(0.0, 0.0, e))).normalized(up)
-                pos -= n * (g - FOOT_TOL_CM)
+                val to = pos - n * (g - FOOT_TOL_CM)
+                if (settle(to)) pos = to
             }
             // the planted feet stay where they stand: the legs are solved again from the moved body (dt 0: no gait
             // step, the bends do not relax)
@@ -836,6 +838,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val FOOT_TOL_CM = 0.03
         /** A carried body whose lowest contact is further than this off the surface is set back down onto it (cm). */
         const val CARRY_SETTLE_CM = 0.1
+        /** [carry]'s settle accepted wherever it lands. */
+        val ANY: (Vec3) -> Boolean = { true }
         /** Farthest a carried body may sit from the sim position (body lengths). */
         const val CARRY_REACH_L = 0.6
         /** Foot tip radius (model units): the dactyl tips sit this far off the ground in the model. */
