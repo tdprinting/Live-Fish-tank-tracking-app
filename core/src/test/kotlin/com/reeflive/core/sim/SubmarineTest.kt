@@ -135,4 +135,78 @@ class SubmarineTest {
         assertTrue("out of the rock: $worst", worst > Submarine.RADIUS_CM * 0.6)
         assertTrue("it actually moved: $travelled", travelled > 100.0)
     }
+
+    /** Tap a fish: the sub glides over, settles at a polite distance nose to it, and never startles anyone doing it. */
+    @Test
+    fun watchingGlidesOverPolitelyAndFollows() {
+        val s = tank(6L)
+        s.enqueue(Command.SubmarineMode(on = true))
+        s.advance(0.1)
+        val tang = s.o("tang")
+        s.enqueue(Command.SubmarineWatch("tang"))
+        var t = 0.0
+        var closest = 99.0
+        val polite = s.submarine.politeDistance(tang.lengthCm)
+        var near = 0; var samples = 0
+        while (t < 60.0) {
+            s.advance(0.1); t += 0.1
+            val d = s.submarine.pos.distanceTo(tang.pos)
+            closest = minOf(closest, d)
+            if (t > 20.0) { samples++; if (d < polite + 10.0) near++ }
+        }
+        val to = tang.pos - s.submarine.pos
+        val face = kotlin.math.abs(Math.IEEEremainder(atan2(-to.z, to.x) - s.submarine.yaw, 2 * Math.PI))
+        println("watch: polite=%.1f closest=%.1f near=%d/%d face=%.2f startles=%d".format(polite, closest, near, samples, face, s.subSense.startles))
+        assertEquals("still watching", "tang", s.snapshot().submarine?.watchId)
+        assertEquals("no startles while gliding over", 0, s.subSense.startles)
+        assertTrue("stays near the fish: $near/$samples", near > samples * 0.7)
+        assertTrue("keeps its distance: $closest", closest > Submarine.RADIUS_CM + 3.0)
+        assertTrue("nose to the fish: $face", face < 0.6)
+        // the stick pulls it round; null lets go
+        s.enqueue(Command.SubmarineWatch(null))
+        s.advance(0.2)
+        assertEquals(null, s.snapshot().submarine?.watchId)
+    }
+
+    /** ‹ › picks the nearest fish first, then steps through the fish only (no snails or corals), keeping the mode. */
+    @Test
+    fun nextFishStepsThroughFishOnly() {
+        val s = tank()
+        s.enqueue(Command.SubmarineMode(on = true)); s.advance(0.1)
+        val fish = s.organisms.filter { it.alive && it.species.kind == "FISH" }
+        val nearest = fish.minByOrNull { it.pos.distanceTo(s.submarine.pos) }!!.id
+        s.enqueue(Command.SubmarineWatchNext(1)); s.advance(0.1)
+        assertEquals(nearest, s.submarine.watchId)
+        s.enqueue(Command.SubmarineWatch(nearest, SubWatch.CIRCLE)); s.advance(0.1)
+        val seen = HashSet<String>()
+        repeat(fish.size) {
+            s.enqueue(Command.SubmarineWatchNext(1)); s.advance(0.1)
+            val id = s.submarine.watchId!!
+            assertTrue("$id is a fish", fish.any { it.id == id })
+            assertEquals(SubWatch.CIRCLE, s.submarine.watchMode)
+            seen += id
+        }
+        assertEquals("one lap visits every fish", fish.size, seen.size)
+        s.enqueue(Command.SubmarineWatchNext(-1)); s.advance(0.1)
+        val i = fish.indexOfFirst { it.id == nearest }
+        assertEquals(fish[(i - 1 + fish.size) % fish.size].id, s.submarine.watchId)
+    }
+
+    /** Circling and swimming alongside both stay with the fish; a removed fish ends the watch. */
+    @Test
+    fun circleAndAlongsideKeepCompany() {
+        for (mode in listOf(SubWatch.CIRCLE, SubWatch.ALONGSIDE)) {
+            val s = tank(7L)
+            s.enqueue(Command.SubmarineMode(on = true, visible = false))
+            s.advance(0.1)
+            val fish = s.o("clown_f")
+            s.enqueue(Command.SubmarineWatch("clown_f", mode))
+            var t = 0.0; var far = 0
+            while (t < 40.0) { s.advance(0.1); t += 0.1; if (t > 15.0 && s.submarine.pos.distanceTo(fish.pos) > 40.0) far++ }
+            assertTrue("$mode stays with the fish: far=$far", far < 30)
+            s.enqueue(Command.RemoveOrganism("clown_f"))
+            s.advance(0.3)
+            assertEquals("$mode watch ends with the fish gone", null, s.submarine.watchId)
+        }
+    }
 }

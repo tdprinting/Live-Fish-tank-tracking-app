@@ -21,13 +21,13 @@ uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
-// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 13 entries (core ShrimpLimbs), uLimb[0] = (x stride
+// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 15 entries (core ShrimpLimbs), uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
 // limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae, mode 5 hermit crab.
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
-uniform vec4 uLimb[19];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs / HermitLegs; the hermit sends 15, the Sally Lightfoot 19)
+uniform vec4 uLimb[40];    // per-limb pose (layout per animal: core BrittleArms (40) / CrabLegs (19) / ShrimpLimbs (15) / HermitLegs (15))
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
@@ -66,26 +66,54 @@ vec3 rotAxis(vec3 v, vec3 a, float ang) {
     return v * c + cross(a, v) * s + a * dot(a, v) * (1.0 - c);
 }
 
-// Brittle star arm direction angles at s (0 root .. 1 tip): yaw offset from the rest direction (rad, + = toward the
-// model's left, -Z) and pitch (rad, + = tip up). Base swing with a lagging distal part, a bend wave travelling root ->
-// tip, tip curl (loops round food when feeding), and coiling when the arm is drawn in (reach -> 0).
-void starAngles(int k, float s, out float yaw, out float pitch) {
-    vec4 A = uLimb[k];
-    vec4 X = uLimb[k + 5];
-    float alt = (k % 2 == 0) ? 1.0 : -1.0;
-    float coil = 1.0 - clamp(A.w, 0.0, 1.0);
-    yaw = A.y * (1.0 - 0.55 * s) + X.y * s * sin(2.0 * PI * (1.3 * s - A.x))
-        + X.z * smoothstep(0.5, 1.0, s) * 2.0 + alt * coil * 4.0 * s;
-    pitch = A.z * s * (0.4 + 0.6 * s) - coil * 0.15 * s;
+// Brittle star arms (mode 1, core BrittleArms; SIMULATION §19.2, §19.7). The sim marches each arm out from the disc in
+// STAR_N equal steps fitted to the rock, sand, glass and animals under it and sends, per arm k (uLimb[8k .. 8k + 7]),
+// each step's direction psi_j (rad from the arm's rest direction, + = toward the model's left, -Z) and the height y_j
+// of its end above the disc's ground plane (model units). Heights 1..8 ride in the x slots as 0.5 + 0.5 y (x is lerped
+// as a phase in [0, 1) by the renderer); the plain slots n = 0.. hold psi_1..15, then y_9..15, then the arm's length.
+const int STAR_N = 15;
+
+float starSlot(int k, int n) {
+    vec4 e = uLimb[8 * k + n / 3];
+    int c = n - 3 * (n / 3);
+    return c == 0 ? e.y : (c == 1 ? e.z : e.w);
 }
 
-vec3 starDir(float psi, float phi) {
-    return vec3(cos(phi) * cos(psi), sin(phi), -cos(phi) * sin(psi));
+float starPsi(int k, int j) { return starSlot(k, j - 1); }
+
+float starY(int k, int j) {
+    if (j <= 0) return 0.0;
+    if (j <= 8) return 2.0 * uLimb[8 * k + j - 1].x - 1.0;
+    return starSlot(k, j + 6);
 }
 
-// Poses one brittle star arm vertex: the rest arm is straight from the pivot along a0 = atan(-P.z, P.x); the bent
-// centreline is integrated from the direction angles, the cross-section rides on its frame. Vertices past the arm's
-// current length (autotomy, regrowth) collapse onto the stump.
+// Nodes j - 1 .. j + 2 of arm k's centreline relative to its root node 0 (the sim's BrittleArms.nodes), in one pass:
+// each step runs a step length, of which the height change takes its share (never less than 0.3 of the run, as a
+// steep climb keeps). The curve's end tangents are extrapolated (a node outside 0..STAR_N mirrors its neighbour).
+void starNodes(int k, int j, float a0, float seg, out vec3 p0, out vec3 p1, out vec3 p2, out vec3 p3) {
+    vec3 p = vec3(0.0);
+    float yPrev = 0.0;
+    p0 = p; p1 = p; p2 = p; p3 = p;
+    for (int i = 1; i <= STAR_N; i++) {
+        if (i > j + 2) break;
+        float psi = a0 + starPsi(k, i);
+        float y = starY(k, i);
+        float dy = y - yPrev;
+        float hz = sqrt(max(seg * seg - dy * dy, 0.09 * seg * seg));
+        p += vec3(cos(psi) * hz, dy, -sin(psi) * hz);
+        yPrev = y;
+        if (i == j - 1) p0 = p;
+        if (i == j) p1 = p;
+        if (i == j + 1) p2 = p;
+        if (i == j + 2) p3 = p;
+    }
+    if (j == 0) p0 = 2.0 * p1 - p2;
+    if (j + 2 > STAR_N) p3 = 2.0 * p2 - p1;
+}
+
+// Poses one brittle star arm vertex: the rest arm is straight from the pivot along a0 = atan(-P.z, P.x); the drawn
+// centreline is the Catmull-Rom curve through the sim's nodes (end tangents extrapolated), the cross-section rides on
+// its frame. Vertices past the arm's current length (autotomy, regrowth) collapse onto the stump.
 void starArm(int k, inout vec3 local, inout vec3 n) {
     vec4 P = uLimbPivot[k];
     float a0 = atan(-P.z, P.x);
@@ -95,24 +123,21 @@ void starArm(int k, inout vec3 local, inout vec3 n) {
     float along = dot(off, d0);
     float lat = dot(off, l0);
     float up = off.y;
-    float lenK = clamp(uLimb[k + 5].x, 0.1, 1.0);
+    float lenK = clamp(starSlot(k, 22), 0.1, 1.0);
     float s = clamp(aColor.r, 0.0, 1.0);
     float keep = 1.0 - step(lenK + 0.001, s);
     s = min(s, lenK);
     float ax = along - s * P.w;
-    // integrate the centreline (8 midpoint steps)
-    vec3 c = P.xyz;
-    float h = s / 8.0;
-    float yaw, pitch;
-    for (int i = 0; i < 8; i++) {
-        starAngles(k, (float(i) + 0.5) * h, yaw, pitch);
-        c += starDir(a0 + yaw, pitch) * (h * P.w);
-    }
-    c.y = max(c.y, 0.004);
-    starAngles(k, s, yaw, pitch);
-    float psi = a0 + yaw;
-    vec3 T = starDir(psi, pitch);
-    vec3 L = vec3(-sin(psi), 0.0, -cos(psi));
+    float seg = P.w / float(STAR_N);
+    float sN = s * float(STAR_N);
+    int j = int(min(floor(sN), float(STAR_N - 1)));
+    float t = sN - float(j);
+    vec3 p0, p1, p2, p3;
+    starNodes(k, j, a0, seg, p0, p1, p2, p3);
+    vec3 c = P.xyz + catmull(p0, p1, p2, p3, t);
+    float t2 = t * t;
+    vec3 T = normalize(0.5 * ((-p0 + p2) + 2.0 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t + 3.0 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t2) + d0 * 1e-4);
+    vec3 L = normalize(vec3(T.z, 0.0, -T.x) + l0 * 1e-4);
     vec3 U = cross(T, L);
     local = c + (T * ax + L * lat + U * up) * keep;
     n = T * dot(n, d0) + L * dot(n, l0) + U * n.y;
@@ -444,6 +469,8 @@ void main() {
             local.x += h * 0.012 * S.y * sin(2.0 * PI * S.x + pr * PI);
         } else if (cls < 3.5) {
             // banded cheliped: held raised; it swings up and out toward an intruder (display), draws in to feed
+            // The sim drives each claw tip while it probes crevices or strikes (uLimb[13] left, [14] right).
+            local += uLimb[side > 0.0 ? 14 : 13].yzw * h;
             float dsp = S.z;
             local.z += side * h * 0.12 * dsp;
             local.y += h * (0.07 * dsp + 0.008 * sin(time * 0.9 + side));

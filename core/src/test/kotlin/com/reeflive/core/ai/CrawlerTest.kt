@@ -31,9 +31,9 @@ class CrawlerTest {
         val out = (0 until BrittleArms.ARMS).count { b.arms.reachOf(it) > 0.6 }
         assertTrue("1-3 arm tips out, saw $out", out in 1..3)
         assertEquals("out arms = this individual's count", b.tipsOut, out)
-        // the pose carries 10 limbs and arms that are in sit coiled (reach w low)
+        // the pose carries the 40-entry arm layout (eight entries per arm: its 15 drawn step directions and heights)
         val pose = o.toPose()
-        assertEquals(LimbRig.LIMBS * 4, pose.limbs.size)
+        assertEquals(BrittleArms.COUNT * 4, pose.limbs.size)
         assertEquals(1, pose.motionMode)
     }
 
@@ -83,6 +83,7 @@ class CrawlerTest {
             listOf(p, p + Vec3(6.0, 0.0, 0.0), p + Vec3(12.0, 0.0, 0.0)).minOf { s.rock.sdf.dist(it) }
         }
         o.placeAt(start, Vec3.X)
+        o.up = Vec3.Y   // (lying flat on the sand: not still tilted to the rock face it was lifted off)
         val h0 = o.heading.horizontal().normalized()
         var maxTurn = 0.0
         val roleErr = ArrayList<Double>()

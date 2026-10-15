@@ -63,6 +63,8 @@ object Stocking {
         StockEntry("asterina_sp", StockGroup.INVERTS, "Asterina starfish", 1.2),
         // not in the owner's tank: the closest thing to a reef squid, to see what it does with this stock (research cephalopod_squid)
         StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
+        // research 40: walks until it finds a crevice, stings corals in reach, splits, and clowns may move in
+        StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),

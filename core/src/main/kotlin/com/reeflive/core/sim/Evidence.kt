@@ -88,6 +88,8 @@ object EvidenceLedger {
         EvidenceEntry("nassarius_sp", "longer fasted → faster cue response", "latency 20–240 s × (1.2 − hunger)", A, "11 §5 Lucena 2012 (direction); values D"),
         EvidenceEntry("lithopoma_tectum", "no death timer after inversion", "rule", S, "11 §6"),
         EvidenceEntry("lithopoma_tectum", "righting attempt every 10–40 min, success 0.12 (0.35 with rock/glass in reach)", "attempts", D, "11 §6", "righting time per substrate"),
+        EvidenceEntry("lithopoma_tectum", "glass grazing trail", "swath 0.35 × shell, one pass takes 60 % of the film", D, "SIMULATION §11.1; Steneck & Watling 1982 (rhipidoglossan sweeps, cannot excavate)", "trail width and how many passes clear it"),
+        EvidenceEntry("lithopoma_tectum", "crawl speed", "0.1 cm/s grazing, 0.3 cm/s hurrying", A, "17 microfauna morphology: reef snails cross glass at several cm/min", "time a snail over a measured stretch of glass"),
         EvidenceEntry("asterina_sp", "correlated random walk, shorter travel with food", "CRW", A, "11 §7 Lohmann 2016 (A. anomala)"),
         EvidenceEntry("asterina_sp", "organ-pipe corallivory", "sandbox scenario, off by default", D, "11 §7 'no species-confirmed evidence'"),
         EvidenceEntry("asterina_sp", "fission every ~30 d up to 4", "fissiparity", A, "11 §7 Ebert 2021 (only fissiparous taxa)"),

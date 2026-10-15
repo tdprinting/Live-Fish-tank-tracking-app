@@ -50,8 +50,40 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?) {
         return -1.0
     }
 
+    /**
+     * Height (cm, along the unit [up]) of the surface under or around [p], for a limb lying over it (SIMULATION §19.7):
+     * with [p] in the water, minus the drop to the surface below (cast along −[up], at most [maxDown]: over an edge the
+     * limb hangs [maxDown]); with [p] inside rock, sand or glass, the climb along [up] that clears it. A climb that
+     * does not clear within [maxUp] (a wall, a cave side) returns [maxUp] + 1, so the caller can tell it is blocked.
+     * Shared by the crawler limb contacts (brittle star arms, crab legs).
+     */
+    fun heightAt(p: Vec3, up: Vec3, maxUp: Double, maxDown: Double): Double {
+        val d = dist(p)
+        if (d >= 0.0) {
+            val t = cast(p, up * -1.0, maxDown)
+            return if (t < 0) -maxDown else -t
+        }
+        var h = 0.0
+        var dd = d
+        var i = 0
+        while (h <= maxUp && i < 24) {
+            h += max(-dd, CLIMB_STEP_CM)
+            dd = dist(p + up * h)
+            if (dd >= 0.0) {
+                // back down to the surface (the step overshoots by up to its own length)
+                var lo = h - max(-dd, CLIMB_STEP_CM); var hi = h
+                if (lo < 0) lo = 0.0
+                repeat(4) { val mid = 0.5 * (lo + hi); if (dist(p + up * mid) >= 0.0) hi = mid else lo = mid }
+                return if (hi <= maxUp) hi else maxUp + 1.0
+            }
+            i++
+        }
+        return maxUp + 1.0
+    }
+
     companion object {
         const val HIT_CM = 0.01
+        const val CLIMB_STEP_CM = 0.04
     }
 }
 
@@ -548,7 +580,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             out[14 * 4 + 1 + cI] = ease(out[14 * 4 + 1 + cI], min(cm.toFloat(), reach))
         }
         out[14 * 4] = 0f
-        out[14 * 4 + 3] = if (legsOut) 1f else 0f
+        out[HermitLegs.PLANTED_FLAG] = if (legsOut) 1f else 0f
         // antennae, antennules and eyestalks bend away from anything they would reach into
         val front = rig.retract < 0.5
         val wantAnt = if (front) bendNeeded { b -> antennaClear(s, m, rig, b, L) } else 0.0

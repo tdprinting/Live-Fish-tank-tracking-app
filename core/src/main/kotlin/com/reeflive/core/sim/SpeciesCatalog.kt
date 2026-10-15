@@ -134,6 +134,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("FIN_JET", 0.6, 8.0, 1.5, 300.0, 1.0, 0.0, 0.0), zone = Zone(0.0, 0.6, 0.6, 0.5),
                     temperament = Temperament(0.1, 0.25, 0.5, 0.8), diet = listOf("PODS", "MYSIS", "KRILL", "PRAWN"), feedsPerDay = 2.0,
                     hardiness = 0.35, starvationDays = 6.0, homeRadiusCm = 40.0, iridescence = 0.45, model = "models/bobtail_squid.glb", buoyantWhenDead = false)
+                BrainKind.ANEMONE -> base.copy(kind = "INVERT", common = "Bubble tip anemone", maxLengthCm = 40.0, typicalAdultCm = 20.0, depthRatio = 0.5, massCoeff = 0.02,
+                    locomotion = Locomotion("CRAWLING", 0.00005, 0.0002, 0.0, 5.0), diet = listOf("LIGHT", "MYSIS", "KRILL", "PRAWN", "PELLET"), feedsPerDay = 0.3,
+                    hardiness = 0.6, starvationDays = 120.0, homeRadiusCm = 15.0, model = "models/bubble_tip_anemone.glb")
                 BrainKind.GENERIC_FISH -> base
                 BrainKind.GENERIC_INVERT -> base.copy(kind = "INVERT", locomotion = Locomotion("CRAWLING", 0.05, 0.2))
             }

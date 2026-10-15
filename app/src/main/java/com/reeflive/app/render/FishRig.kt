@@ -28,10 +28,11 @@ class FishRig(val id: String) {
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
-     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 19 × vec4 (the hermit: 10 + 5 surface-contact entries, the Sally Lightfoot 10 + 9); [limbCount] entries are valid,
-     * 0 = none. Crawlers send 10 (posed about model pivots), the shrimp one (stride, stepping, signal, grooming).
+     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 40 × vec4 (the brittle star: 8 per arm; the
+     * hermit: 10 + 5 surface-contact entries; the Sally Lightfoot: 10 + 9 planted-leg entries); [limbCount] entries are
+     * valid, 0 = none. The shrimp sends one (stride, stepping, signal, grooming).
      */
-    val limbs = FloatArray(76)
+    val limbs = FloatArray(160)
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
@@ -102,7 +103,10 @@ class FishRig(val id: String) {
         touched = true
     }
 
-    /** x of each limb is a phase in [0, 1) cycles (interpolated across the 1 → 0 wrap); y, z, w are plain scalars. */
+    /**
+     * x of each limb is a phase in [0, 1) cycles (interpolated across the 1 → 0 wrap); y, z, w are plain scalars. (A rig
+     * that sends a plain value in x keeps it inside (0, 1) and changing by well under 0.5 a tick, as BrittleArms does.)
+     */
     private fun lerpLimbs(a: FloatArray, b: FloatArray, t: Float) {
         val n = minOf(limbs.size, b.size) / 4
         limbCount = n

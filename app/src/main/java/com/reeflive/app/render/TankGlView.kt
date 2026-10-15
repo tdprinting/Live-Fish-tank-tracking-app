@@ -41,6 +41,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
     /** Smoothly follow an organism close up (null returns to the orbit camera). */
     fun follow(id: String?) = renderer.follow(id)
 
+    /** The follow camera's on-screen buttons (zoom, swing round): pass the screen's own handle so its buttons reach the camera. */
+    var followCam: FollowCamControl
+        get() = renderer.followCam
+        set(v) { renderer.followCam = v }
+
     fun setQuality(q: RenderQuality) = renderer.setQuality(q)
     fun resetCamera() = renderer.resetCamera()
 
@@ -78,6 +83,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
     var shelf: SupplyShelfControl?
         get() = renderer.shelf
         set(v) { renderer.shelf = v }
+
+    /** "Fix my tank" upkeep shows, played one after another by the renderer. */
+    var care: CareShowControl?
+        get() = renderer.care
+        set(v) { renderer.care = v }
 
     val stats: StateFlow<RenderStats> get() = renderer.stats
 

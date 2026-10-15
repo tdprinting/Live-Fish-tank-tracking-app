@@ -27,6 +27,7 @@ uniform vec4 uMicro;
 in vec3 vObj;
 uniform mat4 uModel;
 #endif
+uniform float uDryRock;        // aquascape builder dry rock: 1 fresh white, 0 fully cured live rock
 #ifdef SAND
 // Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus, a dug cavity under rock.
 uniform sampler2D uSandMap;
@@ -409,6 +410,15 @@ void main() {
         albedo = mix(albedo, mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, smoothstep(0.6, 0.9, mid) * (1.0 - sky)) * (0.65 + 0.35 * grit), cb * 0.3 * (1.0 - pores));
         albedo = mix(albedo, vec3(0.62, 0.52, 0.58), margin * 0.3);
         rough = mix(rough, 0.42, 0.45 * smoothstep(0.45, 0.8, mid) * (1.0 - pores));
+    }
+    if (uDryRock > 0.0) {
+        // bleached white aragonite fresh from the bag; a tan bacterial / diatom film comes in partway through the cure,
+        // then the live-rock colour and coralline above take over
+        float dn = vnoise(vWorld * 0.4 + vec3(2.0, 5.0, 9.0));
+        vec3 dry = vec3(0.80, 0.77, 0.70) * (0.86 + 0.22 * dn);
+        dry = mix(dry, vec3(0.42, 0.33, 0.20), 4.0 * uDryRock * (1.0 - uDryRock) * 0.6 * smoothstep(0.3, 0.7, dn));
+        albedo = mix(albedo, dry, uDryRock);
+        rough = mix(rough, 0.85, uDryRock);
     }
     float hair = tex.a; // baked hair-algae mask in the albedo alpha
     float top = smoothstep(0.1, 0.7, N.y);

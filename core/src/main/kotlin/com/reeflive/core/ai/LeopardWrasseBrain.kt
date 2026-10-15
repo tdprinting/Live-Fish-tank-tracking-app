@@ -32,18 +32,26 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** No closer to its picking stand by 1 cm in this long: it cannot get there, pick another site (design estimate, as Feed). */
         const val STUCK_S = 8.0
-        /** Seconds between picks while foraging: 10–20 picks a minute (owner clip H1; rate [L]). */
-        @Ev(Evidence.DESIGN_ESTIMATE, "fish_leopard_wrasse: constant picking [H]; rate not measured") const val PICK_MIN_S = 3.0
-        const val PICK_MAX_S = 6.0
-        /** Picks at one site before moving on, and the forage range around its home (cm). */
-        const val PICKS_PER_SITE_MIN = 3
-        const val PICKS_PER_SITE_MAX = 8
+        /**
+         * Seconds between pecks in a bout at one spot, and pecks per spot. It works a surface in short bouts and glides on
+         * to the next spot a few cm along, "moving methodically across sand and rock" (research 30 §2, hobby accounts);
+         * about 13–18 pecks per foraging minute overall (owner clip H1; rate [L], unmeasured in the literature).
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE, "fish_leopard_wrasse: constant picking [H]; research 30 §2 rate unresolved") const val PICK_MIN_S = 1.0
+        const val PICK_MAX_S = 2.2
+        const val PICKS_PER_SITE_MIN = 1
+        const val PICKS_PER_SITE_MAX = 3
+        /** How far the next spot along its foraging path lies, cm (DESIGN ESTIMATE). */
+        const val STEP_MIN_CM = 5.0
+        const val STEP_MAX_CM = 12.0
+        /** A chase this hard or harder sends it under the sand; a milder one only makes it dart off (DESIGN ESTIMATE). */
+        const val BURY_SCARE_MAG = 0.5
         const val RANGE_CM = 40.0
         /**
          * Minutes of hunger rise one pick offsets at prey index 1. At ~9 picks per daylight minute (foraging about two thirds
          * of the day) this breaks even at a rock prey index ≈ 0.65, so a mature tank feeds it and a young one does not (est.).
          */
-        @Ev(Evidence.DESIGN_ESTIMATE, "fish_leopard_wrasse: starves on pod-poor rock [M]; yield [L]") const val PICK_YIELD_MIN = 0.17
+        @Ev(Evidence.DESIGN_ESTIMATE, "fish_leopard_wrasse: starves on pod-poor rock [M]; yield [L]") const val PICK_YIELD_MIN = 0.15
         /** Abstract mode: hunger relief per daylight minute, in units of the hunger rise, at prey index 1. */
         @Ev(Evidence.DESIGN_ESTIMATE) const val ABSTRACT_RELIEF = 1.5
         /** Dives into the sand when the evening light falls below this (dusk) or the lights go out. */
@@ -60,6 +68,11 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
         /** Share of the dive spent digging the slot; the cover is pulled back over the body from [COVER_FROM] on. */
         @Ev(Evidence.DESIGN_ESTIMATE, "SICB P2-191: plunge, then body waves until covered") const val DIG_SHARE = 0.85
         const val COVER_FROM = 0.55
+        /**
+         * Share of the sand it moves that flies as grains rather than being shoved: sand-diving wrasses fluidise the bed
+         * with body waves and the sand closes over them (SICB P2-191: body waves until covered); the share is not measured.
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE, "SICB P2-191: plunge, body waves, sand closes over") const val AIRBORNE = 0.35
         /** The fish lies on its side in the sand: slot width = body depth, thickness = body width (≈ 0.45 × depth). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val THICK_OF_DEPTH = 0.45
         /** Least cover over the body that hides it (cm). */
@@ -201,7 +214,9 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
     /** Big scares and chases: into the sand for a few minutes (it dives "when chased or startled", reefs.com [M]). */
     override fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: com.reeflive.core.sim.Organism?) {
         super.onAttacked(c, from, mag, by)
-        hideUntil = max(hideUntil, c.t + c.rng.range(SCARE_MIN_S, SCARE_MAX_S))
+        // a display charge from a clown guarding its mushroom makes it dart away and keep off that spot; a hard chase or
+        // nip buries it (it spent 2/3 of the afternoon under the sand after every mild clown charge)
+        if (mag >= BURY_SCARE_MAG) hideUntil = max(hideUntil, c.t + c.rng.range(SCARE_MIN_S, SCARE_MAX_S) * mag)
     }
 
     override fun onTap(c: Ctx, at: Vec3, s: Double) {
@@ -314,8 +329,10 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val k = (timer / diveS).coerceIn(0.0, 1.0)
                     val body = sand.buriedOf(o.id)
                     if (body != null) {
-                        val moved = sand.buryStep(body, k / DIG_SHARE, (k - COVER_FROM) / (1 - COVER_FROM))
-                        // the grains it kicks loose: a small plume that settles back (fines drift off with the flow)
+                        // the body wave flings the dug sand up and out as grains (to the side the tail sweeps), then
+                        // throws it back over itself; the grains build the rim and the cover where they land
+                        val moved = sand.buryStep(body, k / DIG_SHARE, (k - COVER_FROM) / (1 - COVER_FROM), AIRBORNE, sin(c.t * 30.0))
+                        // the fines it kicks loose: a small haze that settles back or drifts off with the flow
                         if (moved > 0.15 && c.rng.chance(0.5)) sand.puff(body.cx, sand.surfaceY(body.cx, body.cz) + 0.4, body.cz, 2, 3.0, diveDir.x, diveDir.z, finesShare = 0.4)
                     }
                     val g = sand.surfaceY(sleepSpot.x, sleepSpot.z)
@@ -351,7 +368,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                         phase = 3; timer = 0.0
                         emergeFrom = buriedPos()
                         // it bursts out head first: the cover over its head is thrown aside (a dimple with a low rim)
-                        if (sand.buriedOf(o.id) != null) sand.emergeFrom(o.id) else sand.sandEmerge(sleepSpot.x, sleepSpot.z, o.lengthCm)
+                        if (sand.buriedOf(o.id) != null) sand.emergeFrom(o.id, airborne = AIRBORNE) else sand.sandEmerge(sleepSpot.x, sleepSpot.z, o.lengthCm)
                         val g = sand.surfaceY(emergeFrom.x, emergeFrom.z)
                         sand.puff(emergeFrom.x, g + 0.3, emergeFrom.z, 4, 3.0, finesShare = 0.4)
                         o.visible = true
@@ -409,19 +426,50 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
         private var progressAt = 0.0
         override fun enter(c: Ctx) { newSite(c); nextPick = c.t + c.rng.range(1.0, 2.5) }
 
+        /** Heading of its foraging path (horizontal); it keeps roughly to it so the route reads as a sweep, not hops at random. */
+        private var pathDir = Vec3.X
+        private var scanUntil = -1e9
+
+        /** Somewhere to avoid: a guarded host or a fish that chased it lately. */
+        private fun unwelcome(c: Ctx, p: Vec3): Boolean {
+            for (n in c.p.neighbors(p, 16.0)) {
+                if (n === o || !n.alive || !n.isFish) continue
+                val fear = o.relations[n.id]?.fear ?: 0.0
+                if (fear > 0.1 && n.pos.distanceTo(p) < 14.0) return true
+                if (n.brainKind == com.reeflive.core.sim.BrainKind.CLOWN && n.pos.distanceTo(p) < 10.0) return true
+            }
+            return false
+        }
+
         private fun newSite(c: Ctx) {
             bestD = Double.MAX_VALUE; progressAt = c.t
             left = PICKS_PER_SITE_MIN + c.rng.nextInt(PICKS_PER_SITE_MAX - PICKS_PER_SITE_MIN + 1)
-            onSand = c.rng.chance(0.25)
-            if (onSand) {
-                val x = (forageCentre.x + c.rng.signed() * RANGE_CM * 0.7).coerceIn(6.0, c.rock.lengthCm - 6.0)
-                val z = c.rng.range(5.0, c.rock.widthCm - 3.0)
-                spot = Vec3(x, sand.surfaceY(x, z), z); normal = Vec3.Y
-                stand = c.safe(spot + Vec3(0.0, 0.35 * o.lengthCm + 1.0, 0.0), 0.5)
+            // a short look round now and then between spots (head up, pectorals sculling)
+            if (c.rng.chance(0.25)) scanUntil = c.t + c.rng.range(1.5, 4.0)
+            val wasSand = onSand
+            onSand = if (wasSand) c.rng.chance(0.7) else c.rng.chance(0.12)
+            for (attempt in 0 until 4) {
+                // the next spot a few cm on along its path, turning back toward home when it strays past its range
+                pathDir = Vec3.rotateAbout(pathDir, Vec3.Y, c.rng.signed() * 0.9).horizontal().normalized(Vec3.X)
+                val home = forageCentre - o.pos
+                if (home.horizontal().length() > RANGE_CM) pathDir = (pathDir + home.horizontal().normalized(Vec3.X) * 1.5).normalized(Vec3.X)
+                val centre = (if (spot == Vec3.ZERO) o.pos else spot) + pathDir * c.rng.range(STEP_MIN_CM, STEP_MAX_CM)
+                if (onSand) {
+                    val x = centre.x.coerceIn(6.0, c.rock.lengthCm - 6.0)
+                    val z = centre.z.coerceIn(5.0, c.rock.widthCm - 3.0)
+                    val sp = Vec3(x, sand.surfaceY(x, z), z)
+                    if (c.rock.sdf.dist(sp + Vec3.Y * 2.0) < 3.0 || attempt < 3 && unwelcome(c, sp)) { onSand = false; continue }
+                    spot = sp; normal = Vec3.Y
+                    stand = c.safe(spot + Vec3(0.0, 0.35 * o.lengthCm + 1.0, 0.0), 0.5)
+                    return
+                }
+                val sp = c.rockSurfacePoint(centre, 7.0) ?: continue
+                if (attempt < 3 && unwelcome(c, sp.first)) continue
+                spot = sp.first; normal = sp.second
+                stand = c.safe(spot + normal * (0.35 * o.lengthCm + 1.0), 0.6 * o.collisionLength)
                 return
             }
-            val centre = forageCentre + c.rng.unitVector() * (RANGE_CM * 0.5 * c.rng.nextDouble())
-            val sp = c.rockSurfacePoint(centre, 14.0) ?: c.rockSurfacePoint(o.pos, 20.0)
+            val sp = c.rockSurfacePoint(forageCentre + c.rng.unitVector() * (RANGE_CM * 0.5 * c.rng.nextDouble()), 14.0) ?: c.rockSurfacePoint(o.pos, 20.0)
             if (sp == null) { spot = c.safe(forageCentre); normal = Vec3.Y; stand = spot; return }
             spot = sp.first; normal = sp.second
             stand = c.safe(spot + normal * (0.35 * o.lengthCm + 1.0), 0.6 * o.collisionLength)
@@ -432,9 +480,19 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
             // progress guard: a stand it cannot get to (behind a rock bump, the clearance holds it off) is given up
             if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
             if (d > 2.5 && c.t - progressAt > STUCK_S) { newSite(c); return }
+            if (c.t < scanUntil) {
+                // a pause to look round: level, slowly turning, then on to the spot
+                out.seek(o.pos + o.heading * 0.3, o.cruiseSpeed * 0.2, arrive = 1.0)
+                out.hover = true; out.pectoral = 1.0
+                out.faceDir = Vec3.rotateAbout(o.heading.horizontal().normalized(Vec3.X), Vec3.Y, 0.6 * sin(c.t * 0.9))
+                progressAt = c.t
+                return
+            }
             if (d > 2.5) {
-                out.seek(if (d > 12) c.viaOpenWater(stand) else stand, o.cruiseSpeed, arrive = 1.5)
+                // glides low to the next spot, nose down toward the surface it is reading (methodical, not a dash)
+                out.seek(if (d > 12) c.viaOpenWater(stand) else stand, o.cruiseSpeed * (if (d > 12) 1.0 else 0.7), arrive = 1.5)
                 out.hover = true
+                if (d < 12) out.pitchBias = -0.25
                 return
             }
             // hang head-down toward the surface it is working, rowing on the pectorals
@@ -451,7 +509,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 if (onSand) sand.freshen(spot.x, spot.z, 0.8, 0.4)
                 left--
                 if (left <= 0) {
-                    if (elapsed > 60 + 60 * c.rng.nextDouble()) finished = true
+                    if (elapsed > 90 + 120 * c.rng.nextDouble()) finished = true
                     else newSite(c)
                 }
             }

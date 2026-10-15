@@ -15,6 +15,7 @@ import os
 import numpy as np
 
 import common as C
+import brittle_geom as BG
 import geomlib as G
 import paintlib as P
 from common import bpy, hex2rgb
@@ -684,10 +685,8 @@ def _normalize_unit(objs, along="x", sit=True):
 # COLOR_0 on arms: R = t along the arm (0 at the disc junction .. 1 tip), B = arm index / 9, A = 0.5 - x.
 # Root.extras / Arms.extras `limbPivots` = 10 x vec4 (glTF space): arm-root xyz, w = rest arm length.
 # ----------------------------------------------------------------------------
-BRITTLE_ROOT_R = 0.05      # disc-arm junction radius (fraction of span); core BrittleArms.ROOT_R
-BRITTLE_ARM_LEN = 0.45     # junction -> tip; core BrittleArms.ARM_LEN
-BRITTLE_DISC_R = 0.056     # disc radius: disc 25 mm, arms 100 mm (4 disc diameters), span 225 mm
-BRITTLE_ARM_Z = 0.0085     # arm centreline height above the substrate
+# (arm geometry and dimensions: brittle_geom.py, pure numpy, shared with tools that rebuild the arms without Blender)
+BRITTLE_DISC_R = BG.DISC_R
 
 
 def gltf_pt(p):
@@ -703,7 +702,7 @@ def build_brittle_star():
     uniformly charcoal black above, a little paler with pale plate marks and orange tube feet below."""
     C.reset_scene()
     at = Atlas(512, 256, 4)
-    nseg = 52   # visible arm segments (a real 10 cm arm has ~80-100)
+    nseg = BG.SEGMENTS
 
     def arm(cv):
         # strip u = along the arm (0 disc -> 1 tip), v = dorsal-ness (1 dorsal midline .. 0 ventral midline)
@@ -743,13 +742,7 @@ def build_brittle_star():
     at.cv.save(tex)
     mat = C.material("brittle_mat", rough=0.55, image=C.load_image(tex, name="brittle_star"))
 
-    pivots = []
-    for k in range(10):
-        if k < 5:
-            a = 2 * math.pi * k / 5
-            pivots += gltf_pt((BRITTLE_ROOT_R * math.cos(a), BRITTLE_ROOT_R * math.sin(a), BRITTLE_ARM_Z)) + [BRITTLE_ARM_LEN]
-        else:
-            pivots += [0.0, 0.0, 0.0, 0.0]
+    pivots = BG.pivots()
     root = make_root("Root", dict(species="brittle_star", lengthCm=15.0, unit="arm span 1.0, disc at origin",
                                   arms=5, roughness=0.55, limbRig="brittle_arms", limbPivots=pivots,
                                   discToSpan=round(2 * BRITTLE_DISC_R, 3)))
@@ -765,38 +758,13 @@ def build_brittle_star():
     xs = Vd[:, 0]
     gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1, vv), np.stack([0 * xs, 0 * xs, 0 * xs, np.clip(0.5 - xs, 0, 1)], -1))
     disc_o = geo_obj("Body", gd, root, "body", [mat])
-    # ---- arms: straight rest pose (the renderer curves them), flattened, tapering, segmented silhouette ----
-    ga = G.Geo()
-    n = 21
-    t = np.linspace(0, 1, n)
-    for i in range(5):
-        a = 2 * math.pi * i / 5
-        d = np.array([math.cos(a), math.sin(a), 0.0])
-        perp = np.array([-math.sin(a), math.cos(a), 0.0])
-        r0 = BRITTLE_ROOT_R - 0.012                 # start a little inside the disc so the joint is hidden
-        L = BRITTLE_ARM_LEN + (BRITTLE_ROOT_R - r0)
-        pts = (r0 + L * t)[:, None] * d + np.array([0, 0, BRITTLE_ARM_Z])
-        tt = np.clip((np.linalg.norm(pts[:, :2], axis=1) - BRITTLE_ROOT_R) / BRITTLE_ARM_LEN, 0, 1)
-        # O. erinaceus arms are robust: base half-width ~0.011 span, tapering to a fine whip tip
-        R = 0.0105 * (1 - 0.82 * tt ** 1.25) * (1 + 0.06 * np.cos(tt * nseg * math.pi / 2) ** 2)
-        Vt, Ft, tv, av = G.tube(pts, R, 5, squash=0.62, up=perp)
-        dors = 1 - np.abs(((av - 0.25 + 0.5) % 1.0) - 0.5) * 2      # 1 dorsal .. 0 ventral
-        tvv = np.r_[np.repeat(tt, 5), 1.0]          # t of each ring's station (+ the tip cap)
-        ga.add(Vt, Ft, at.uv(0, tvv, dors), np.stack([tvv, 0 * tvv, np.full(len(Vt), i / 9), np.clip(0.5 - Vt[:, 0], 0, 1)], -1))
-        # arm spines: a stout pair at every station, about 1.4 arm-widths long near the disc, shorter distally,
-        # held out to the sides and slightly forward/up (O. erinaceus: long, robust spines)
-        for kk in range(2, n - 1):
-            for sgn in (1, -1):
-                Ls = 0.012 + 0.018 * (1 - tt[kk])
-                b = pts[kk] + perp * sgn * R[kk] * 0.8
-                tip = b + perp * sgn * Ls * 0.88 + d * Ls * 0.35 + np.array([0, 0, Ls * 0.25])
-                Vc, Fc = G.cone(b, tip, max(0.0018, R[kk] * 0.2), 3)
-                ga.add(Vc, Fc, at.uv(2, np.full(len(Vc), 0.5), np.r_[np.zeros(3), 1.0]),
-                       [(tt[kk], 0, i / 9, float(np.clip(0.5 - v[0], 0, 1))) for v in Vc])
+    # ---- arms: straight rest pose (the renderer bends them along the sim's pose), flattened, tapering, a pair of
+    # spines at every ring ----
+    ga = BG.arms(at.uv)
     geo_obj("Arms", ga, root, "leg", [mat], extras={"count": 5, "limbPivots": pivots})
     objs = [o for o in C.all_descendants(root) if o.type == "MESH"]
     C.recalc_normals(disc_o)
-    return finish(root, objs, os.path.join(C.MODELS, "brittle_star.glb"), 1800)
+    return finish(root, objs, os.path.join(C.MODELS, "brittle_star.glb"), 2000)
 
 
 # ----------------------------------------------------------------------------

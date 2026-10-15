@@ -65,6 +65,19 @@ object Thoughts {
 
     // ------------------------------------------------------------------ the sentences
 
+    /** The bubble tip anemone's sentence follows what its body is doing (AnemoneBrain's label). */
+    private fun anemoneLine(label: String): Line = when {
+        label.startsWith("Passing") -> Line("rolling a piece of food into its mouth with its tentacles", "finish its meal", "Mmm, got one!", Driver.HUNGER, 3)
+        label.startsWith("Pulled") -> Line("pulling its tentacles in after being bumped", "open back up", "Hey, careful!", Driver.FEAR, 2)
+        label.startsWith("Deflated") -> Line("shrunk down small, flushing out old water and waste", "puff back up", "Just cleaning house.", Driver.HEALTH, 2)
+        label.startsWith("Healing") -> Line("healing after splitting into two anemones", "heal and grow", "There are two of me now!", Driver.GROWING, 3)
+        label.startsWith("Walking") -> Line("slowly walking on its sticky foot to a better spot", "find a crevice with good light", "Not quite right here…", Driver.HOME, 2)
+        label.startsWith("Looking") -> Line("looking for a rock crevice to tuck its foot into", "settle down in a crevice", "Where should I live?", Driver.HOME, 2)
+        label.startsWith("Partly") -> Line("partly closed up for the night", "open up when the lights come on", "Sleepy time.", Driver.REST)
+        label.startsWith("Bubbled") -> Line("sitting happily with its tentacle tips puffed into bubbles", "soak up the light", "Feeling bubbly!", Driver.ROUTINE)
+        else -> Line("waving its tentacles in the current and soaking up the light", "catch some food in the current", "Ahh, nice light.", Driver.ROUTINE)
+    }
+
     /** The sentence for behaviour [b] of the animal in [e]; null only for a behaviour this table does not know. */
     internal fun line(e: Env, b: Behavior): Line? {
         val k = e.o.brainKind
@@ -117,12 +130,19 @@ object Thoughts {
             n == "glassgraze" -> Line("cleaning algae off the glass", "clean some glass", "Scrub scrub.", Driver.HUNGER)
             // ---- clownfish
             n == "host" -> Line(if (label.startsWith("Wiggling")) "wiggling in ${e.host}" else "hanging around ${e.host}, its home", "go home to ${e.host}", if (label.startsWith("Wiggling")) "Wiggle wiggle!" else "Home sweet home.", Driver.HOME)
+            n == "anemone" && k == BrainKind.CLOWN -> Line(if (label.startsWith("Stung")) "zipping away from the anemone's sting" else "touching the new anemone to get used to it", "get used to the anemone", if (label.startsWith("Stung")) "Ouch, tingly!" else "Hello, new home?", Driver.HOME)
+            n == "anemone" && k == BrainKind.ANEMONE -> anemoneLine(label)
+            n == "feedanemone" -> Line("bringing a bite of food over to its anemone", "feed the anemone", "A snack for you!", Driver.HOME)
+            n == "sortie" -> Line("swimming up over ${e.host} to snap at plankton", "catch some plankton", "Snap! Got one.", Driver.HUNGER)
             n == "nestle" -> Line("snuggled into ${e.host}", "snuggle into ${e.host}", "Cozy!", Driver.HOME)
             n == "defend" -> Line("defending ${e.host} from ${tgt ?: "an intruder"}", "guard ${e.host}", "Stay away from my home!", Driver.TERRITORY, 3)
             // ---- tang
             n == "patrol" -> Line("swimming laps around the tank", "swim some laps", "Just keep swimming!", Driver.ROUTINE)
             n == "columnpick" -> Line("picking tiny plankton out of the water", "pick at plankton", "Tiny snacks!", Driver.HUNGER)
             n == "playdead" -> Line("lying on its side, playing dead (tangs do that!)", "play dead for a bit", "Shh, I'm asleep.", Driver.REST, 3)
+            n == "tanghide" -> Line("tucked under the rock until it feels safe again", "hide under the rock", "Nobody can see me here.", Driver.FEAR, 2)
+            n == "tangrub" -> Line("rubbing its side along the rock, just for fun", "give the rock a rub", "Wheee, scratchy!", Driver.CURIOSITY, 2)
+            n == "tangzoom" -> Line("racing across the tank as fast as it can", "race across the tank", "Zoom zoom!", Driver.CURIOSITY, 2)
             // ---- cardinal
             n == "hovercover" -> Line("hovering in its favourite shady spot", "hover in the shade", "Nice and shady.", Driver.HOME)
             n == "dusk" -> Line("out hunting tiny critters in the dark", "hunt for tiny critters tonight", "Night snacks!", Driver.HUNGER, 2)
@@ -481,6 +501,7 @@ object Thoughts {
         BrainKind.DIAMOND_GOBY -> "diamond goby"
         BrainKind.LEOPARD_WRASSE -> "leopard wrasse"
         BrainKind.BOBTAIL_SQUID -> "bobtail squid"
+        BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
     }
@@ -523,6 +544,7 @@ object Thoughts {
 
         /** The clown's host coral ("the hairy mushrooms"), else "its host". */
         val host: String by lazy {
+            if (sim.anemones.hostOf(o) != null) return@lazy "its bubble tip anemone"
             val anchor = o.hostAnchor?.let { sim.rock.anchors[it] }
             val at = anchor?.pos ?: o.homePos
             val coral = sim.corals.minByOrNull { it.pos.distanceTo(at) }?.takeIf { it.pos.distanceTo(at) < 15.0 }

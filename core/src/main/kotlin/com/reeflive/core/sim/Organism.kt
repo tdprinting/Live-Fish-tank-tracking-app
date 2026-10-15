@@ -156,6 +156,9 @@ class Organism(
     var up = Vec3.Y
     /** The fish a cleaner shrimp is standing on while it cleans it (its legs grip the body, core ShrimpLimbs). */
     var ridingOn: Organism? = null
+    /** Where this grazer's last trail mark on the front glass is (pane cm; NaN = not on the pane), [GlassTrails]. */
+    var trailX = Double.NaN
+    var trailY = Double.NaN
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
     /**
      * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
@@ -242,7 +245,11 @@ class Organism(
     /** Meal size in grams (one meal takes hunger down by 0.8): 0.012 × mass^0.8 (tune). */
     val mealGrams: Double get() = (0.012 * massG.pow(0.8)).coerceAtLeast(0.004)
 
+    /** Grams of food swallowed since the start, read by [WasteSystem] to fill the gut. */
+    var eatenG = 0.0
+
     fun eat(grams: Double) {
+        eatenG += grams
         hunger = (hunger - 0.8 * grams / mealGrams).coerceAtLeast(0.0)
     }
 
@@ -287,7 +294,7 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.out?.copyOf() ?: NO_LIMBS,
         )
     }
