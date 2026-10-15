@@ -985,7 +985,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             CameraInput.TapKind.PICK -> {
                 // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
                 if (!cleaning && camera.followId == null && hitsFlipper(o, dir)) { main.post { l?.onFlipperTap() }; return }
-                val id = Picker.pick(o, dir, rigs)
+                val id = Picker.pick(o, dir, rigs, fingerSlack())
+                if (id != null) touchRing(id, dir, rigs)
                 val following = camera.followId
                 // while following, tapping another fish switches the follow to it
                 if (following != null && id != null && id != following) main.post { l?.onFollowRequest(id) }
@@ -1003,7 +1004,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             CameraInput.TapKind.ZOOM -> {
                 // double tap: a fish → fly in and follow it; while following → closer / normal framing;
                 // otherwise glide in to the rock / sand / water point under the finger (again to glide back out)
-                val id = Picker.pick(o, dir, rigs)
+                val id = Picker.pick(o, dir, rigs, fingerSlack())
                 when {
                     id != null && id != camera.followId -> main.post { l?.onFollowRequest(id) }
                     camera.followId != null -> camera.toggleFollowCloseUp()
@@ -1019,12 +1020,39 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 // on the glass or the water's top: a fingertip held there (slide, rest, flick); on rock / sand: food
                 // (nothing while the submarine is out: the hold would only fight the sub's own controls)
                 if (camera.rideOn) { holdMode = HOLD_ORBIT; return }
+                // pressed and held right on an animal: ride along with it (the drag that follows orbits as usual)
+                if (camera.followId == null && !cleaning) {
+                    val id = Picker.pick(o, dir, rigs)
+                    if (id != null) {
+                        holdMode = HOLD_ORBIT
+                        touchRing(id, dir, rigs, strong = true)
+                        main.post { l?.onHoldAnimal(id) }
+                        return
+                    }
+                }
                 val hit = if (camera.followId == null && !cleaning) touchHit(o, dir) else null
                 if (hit != null && (hit.second == TouchSurface.GLASS || hit.second == TouchSurface.SURFACE)) { startFinger(hit.first, hit.second); return }
                 holdMode = HOLD_ORBIT
                 val p = surfacePoint(o, dir) ?: return
                 main.post { l?.onLongPress(p) }
             }
+        }
+    }
+
+    /** [Picker.fingerSlack] for this view: how far beside an animal a fingertip may land and still pick it. */
+    private fun fingerSlack(): Float = Picker.fingerSlack(input.fingerPx, height, camera.fovY)
+
+    /**
+     * Visible feedback for a fingertip that landed on an animal: a soft ring of glints around it, square to the view
+     * ([dir], the tap's ray), sized to the animal; [strong] (a press-and-hold to follow) is brighter and spins once.
+     */
+    private fun touchRing(id: String, dir: FloatArray, rigs: Collection<FishRig>, strong: Boolean = false) {
+        for (r in rigs) {
+            if (r.id != id) continue
+            val m = 7 * 4
+            particles.burst(TankBurst(if (strong) BurstKind.FOLLOW_RING else BurstKind.TOUCH_RING, r.spine[m], r.spine[m + 1], r.spine[m + 2],
+                r = dir[0], g = dir[1], b = dir[2], amount = (r.scale * 0.6f).coerceIn(1.2f, 6f)), interp.current)
+            return
         }
     }
 

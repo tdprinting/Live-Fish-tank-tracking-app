@@ -108,6 +108,11 @@ interface TankViewListener {
      * following. The host should route it to its follow state (it comes back through `follow` / `followId`).
      */
     fun onFollowRequest(id: String?) {}
+    /**
+     * Pressed and held right on an animal (not while following, cleaning or in the sub): ride along with it. The
+     * renderer has already drawn a ring around it; the default follows it like a double tap.
+     */
+    fun onHoldAnimal(id: String) = onFollowRequest(id)
     /** Long press on rock or sand (or while following): the first rock / sand / water point under the finger (cm), e.g. to drop food. */
     fun onLongPress(worldPoint: Vec3) {}
     /**
