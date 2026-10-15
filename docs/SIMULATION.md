@@ -1844,3 +1844,22 @@ the behaviour time budget. `FishTraceDump` (`REEFLIVE_TRACE=<dir>`) writes paths
 | Hermit crab legs | A startled hermit pulled its legs fully in within one tick. | Withdrawal capped at 4 retract units/s (`HermitLegs.WITHDRAW_MAX_PER_S`), fully in within ~0.25 s. |
 
 AI cost: the probe's 30 sim-minutes take the same wall time as before (~13.5 s); the perch trace runs once at start-up.
+
+## 23. Fish waste (`sim/WasteSystem.kt`, `render/WasteVisuals.kt`, research 18_fish_waste)
+
+- **Guts.** 17 % of each fish's N output is fecal, not gill ammonia (feed N budget: 13 % in solids vs 62 % dissolved,
+  Canary Is. sea bream); `WaterSim` diverts that share of the excretion term into `fecalPending`, which
+  `WasteSystem.collect` shares out by mass^0.8 over the awake fish. A swallowed meal (`Organism.eatenG`) moves 13 % of
+  its leachable N out of the water's leaching pool into the gut. Contents pass through over the transit time (5 h at
+  25 °C, Q10 2.2; damselfish retain food 6.5 h) and leave as a pellet of ~1.5 h of output at the vent.
+- **Pellets.** Up to 240, sinking 0.2-1.2 cm/s (sea bream feces 0.48 cm/s mean), carried by the flow, leaching 12 %/h
+  of their N as NH4 + PO4. Fates: the HOB intake strainer pulls in what drifts within 9 cm (`WaterSim.hobCapture`);
+  tangs, clowns, blennies, dottyback and cardinal mouth drifting pellets and spit most back out (coprophagy, Robertson
+  1982); hermits, nassarius, brittle star, crab and shrimp eat settled ones within reach; a current over 8 cm/s lifts
+  settled pellets again; after ~10 h lying still a pellet breaks down into mulm: the detritus pool plus a dark patch in
+  the sand grid (`SandBed.mulch`), so waste collects in the dead spots.
+- **Filter.** The HOB floss load rots from 2 to 7 days old (3 %/h when fully ripe) unless rinsed (`hobRinseDays`,
+  default 7; Maintain `RINSE_FILTER`). Maintain `SIPHON_SAND` takes the settled pellets, 40 % of the detritus pool and
+  40 % of the sand grid's mulm.
+- **Abstract mode** (high speed, behaviour off): ready guts go straight to fixed shares (25 % HOB, 15 % leached, rest
+  detritus). N is conserved: gut, pellet and floss contents sit on the export side until they return.

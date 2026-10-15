@@ -286,6 +286,21 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return taken
     }
 
+    /** Mulm from broken-down fish waste settling into the top of the bed around (x, z): adds [load] (index × cm²). */
+    fun mulch(x: Double, z: Double, load: Double, r: Double = 1.5) {
+        val ws = weightSum(x, z, r)
+        if (ws <= 0 || load <= 0) return
+        around(x, z, r) { i, w -> detritus[i] = min(MAX_DETRITUS, detritus[i] + (load * w / ws / cellArea).toFloat()) }
+        version++
+    }
+
+    /** A gravel vac pass: takes [fraction] of the bed's detritus out with the siphoned water. */
+    fun siphon(fraction: Double) {
+        val k = (1 - fraction.coerceIn(0.0, 1.0)).toFloat()
+        for (i in detritus.indices) detritus[i] *= k
+        version++
+    }
+
     /**
      * A puff of sand: [n] particles from (x, y, z) blown up at [upCmS] (jet speed) with a horizontal push along
      * ([hx], [hz]). Each sand particle stands for [GRAIN_CM3] of sand taken from the cell under it, so a cloud moves sand

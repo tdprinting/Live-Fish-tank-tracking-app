@@ -419,6 +419,14 @@ object LiveReactions {
                 ),
             )
         }
+        MaintenanceTask.RINSE_FILTER -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.sock, caption = "Filter rinsed"), "The filter floss is clean. Trapped poop can't rot in there now.",
+            feedback = Feedback("Filter rinsed", "Waste caught in the filter is gone before it turns into nitrate", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.DOSE))),
+        )
+        MaintenanceTask.SIPHON_SAND -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SAND, glyph = ReefGlyphs.fishWaste, caption = "Sand siphoned"), "Slurp! Poop and gunk vacuumed off the sand.",
+            feedback = Feedback("Sand siphoned", "Fish waste and mulm sucked off the sand bed", listOf(Feedback.burst(BurstKind.SUCTION, FxSpots.SAND))),
+        )
     }
 
     fun shells() = Reaction(TankFx(FxKind.SHELLS, FxSpots.SAND, caption = "Spare shells"), "New shells for hermits like me! Moving day!", HermieMood.EXCITED)

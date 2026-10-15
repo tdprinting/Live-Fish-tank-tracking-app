@@ -281,7 +281,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         val row = when (task) {
             MaintenanceTask.CHANGE_SOCK -> "eq_sock"
             MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
-            MaintenanceTask.HARVEST_MACRO, MaintenanceTask.EMPTY_SKIMMER, MaintenanceTask.TOP_OFF -> null
+            MaintenanceTask.HARVEST_MACRO, MaintenanceTask.EMPTY_SKIMMER, MaintenanceTask.TOP_OFF, MaintenanceTask.RINSE_FILTER, MaintenanceTask.SIPHON_SAND -> null
         }
         if (row != null) _extras.value = _extras.value + (row to 1.0)
     }

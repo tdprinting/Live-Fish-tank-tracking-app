@@ -147,6 +147,18 @@ void main() {
     } else if (shape == 15) {               // streak: a soft line along the sprite's x (jets, swirls, falling grains)
         float d = sdSeg(p, vec2(-0.9, 0.0), vec2(0.9, 0.0));
         m = (1.0 - smoothstep(0.0, 0.16, d)) * (0.35 + 0.65 * clamp(p.x * 0.5 + 0.5, 0.0, 1.0));
+    } else if (shape == 16) {               // fish feces: a short bent string with constrictions (param: bend; > 1 lying, crumbling)
+        float lying = step(1.0, param);
+        float decay = clamp(param - 1.0, 0.0, 1.0);
+        float bend = mix(param, 0.15, lying);
+        vec2 q = vec2(p.x, p.y + bend * 0.45 * (p.x * p.x - 0.3));
+        float t = clamp(q.x * 0.5 + 0.5, 0.0, 1.0);
+        float w = mix(0.17, 0.22, lying) * (0.8 + 0.2 * sin(t * 18.0 + seed * 9.0));   // segmented, pinched string
+        float d = sdSeg(q, vec2(-0.82, 0.0), vec2(0.82, 0.0)) - w;
+        d += decay * 0.12 * (hash2(floor(q * 6.0) + seed * 7.0) - 0.5);                 // ragged as it falls apart
+        m = fill(d);
+        base *= 0.85 + 0.25 * smoothstep(0.0, -w, d);
+        aMul = 0.95 - 0.35 * decay;
     } else {
         if (r2 > 1.0) discard;
         m = 1.0 - smoothstep(0.35, 1.0, r2);

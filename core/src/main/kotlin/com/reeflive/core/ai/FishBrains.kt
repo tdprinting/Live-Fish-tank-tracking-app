@@ -1488,12 +1488,14 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         private var baseYaw = 0.0
         private var nextPivot = 0.0
         private var retargeted = false
+        private var bestDist = 1e9
+        private var bestAt = 0.0
         override fun score(c: Ctx) = 0.5
         override fun enter(c: Ctx) {
             val pose = perchPose(current)
             state = if (c.o.pos.distanceTo(pose.pos) < 2) 0 else 1
             target = if (state == 1) perches.minBy { it.pos.distanceTo(c.o.pos) } else current
-            since = c.t; dwell = dwellFor(c); retargeted = false
+            since = c.t; dwell = dwellFor(c); retargeted = false; bestDist = 1e9; bestAt = c.t
         }
         private fun land(c: Ctx) {
             current = target; state = 0; since = c.t; dwell = dwellFor(c); events.landings++
@@ -1531,7 +1533,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
                         val next = nextPerch(c)
                         if (next != null) { target = next; state = 3; since = c.t } else { since = c.t; dwell = dwellFor(c) }
                     }
-                    if (c.p.night && current !== lowestSheltered()) { target = lowestSheltered(); state = 1 }
+                    if (c.p.night && current !== lowestSheltered()) { target = lowestSheltered(); state = 1; bestDist = 1e9; bestAt = c.t }
                 }
                 3 -> {
                     // turn on the perch to face the next one and crouch (0.4–0.8 s), then go
@@ -1541,7 +1543,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
                     val side = (to cross up).normalized(Vec3.Z)
                     out.place(pose.pos, Vec3.rotateAbout(to, side, 0.1), up, 7.0)
                     out.posture = 1; out.pectoral = 1.0; o.eyeYaw = 0.0
-                    if (c.t - since > 0.4 + 0.4 * o.whim / 0.055) { state = 1; since = c.t; retargeted = false; events.departures++ }
+                    if (c.t - since > 0.4 + 0.4 * o.whim / 0.055) { state = 1; since = c.t; retargeted = false; bestDist = 1e9; bestAt = c.t; events.departures++ }
                 }
                 1 -> {
                     val pose = perchPose(target)
@@ -1550,14 +1552,17 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
                     val dist = o.pos.distanceTo(land)
                     val arc = if (dist > 8) Vec3(0.0, 4.0, 0.0) else Vec3.ZERO
                     out.seek(c.viaOpenWater(c.safe(land + arc)), 3 * o.lengthCm, arrive = 2.0, urgency = 0.6)
-                    if (dist < 2.0 || c.t - since > 8 && dist < 6.0 || c.t - since > 18) { state = 2; since = c.t }
+                    // stalled short of the landing spot (pressed against rock, no progress for 1.5 s): settle, don't hover
+                    if (dist < bestDist - 0.3) { bestDist = dist; bestAt = c.t }
+                    val stalled = dist < 6.0 && c.t - bestAt > 1.5
+                    if (dist < 2.0 || stalled || c.t - since > 8 && dist < 6.0 || c.t - since > 18) { state = 2; since = c.t }
                     else if (c.t - since > 8 && !retargeted) {
                         // could not get there (no way round the rock it can find): remember it and settle on the nearest
                         // other perch instead; it only clamps on kinematically from close by (a 13 cm snap was a pop)
                         unreachable[target] = c.t
                         target = perches.filter { it !== target && PerchSites.valid(c.rock, it) && it !in unreachable }.ifEmpty { perches }
                             .minBy { it.pos.distanceTo(o.pos) }
-                        retargeted = true
+                        retargeted = true; bestDist = 1e9; bestAt = c.t
                     }
                 }
                 2 -> {
