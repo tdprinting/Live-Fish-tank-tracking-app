@@ -523,6 +523,8 @@ class Simulation private constructor(
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         if (useBehavior && !abstractMode) coralCatch(simDt)
+        // snails and stars on the front pane wear trails into the glass film (SIMULATION §11.1)
+        if (useBehavior && !abstractMode) glassTrails.step(organisms, water.algae.glassMask, rock.widthCm)
         // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
         nightRolls()
         chemAccum += simDt
@@ -552,6 +554,7 @@ class Simulation private constructor(
         }
     }
     private var coralCatchAcc = 0.0
+    private val glassTrails = GlassTrails()
 
     /** Demersal zooplankton rises from the rock after dark (S:Marnane02 context); pods drift and expire. */
     private fun nightPlankton(dt: Double) {
