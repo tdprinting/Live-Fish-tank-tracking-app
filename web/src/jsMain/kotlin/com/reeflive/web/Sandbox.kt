@@ -187,6 +187,8 @@ object ReefSandbox {
             }
             "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
+            // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
+            "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
         }
         if (!sandbox) return false
         when (name) {

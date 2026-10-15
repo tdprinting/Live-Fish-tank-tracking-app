@@ -53,6 +53,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
         }
     }
+    /** The fish net taking a dead animal out (FishNet); splashes as the hoop goes in and comes out. */
+    private val netScene = NetScene().also { ns ->
+        ns.onSplash = { kind, x, y, z, r ->
+            particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.PLOP, x, y, z, amount = 0.7f + r * 0.08f), interp.current)
+        }
+    }
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -195,6 +201,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         placeholder?.release(); placeholder = null
         subScene.release()
         bagScene.release()
+        netScene.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -230,6 +237,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
         if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
+        netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
@@ -285,6 +293,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
         if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
+        if (netScene.visible) white?.let { drawCalls += netScene.drawSolid(progs.generic, it) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         if (!bareAlgae) algae?.let { drawAlgae(it, progs) }
@@ -321,6 +330,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         // acclimation bags: see-through plastic over the animals riding in them
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
+        // the fish net's mesh bag, see-through over the body it carries
+        if (netScene.visible) drawCalls += netScene.drawMesh(progs.generic)
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }

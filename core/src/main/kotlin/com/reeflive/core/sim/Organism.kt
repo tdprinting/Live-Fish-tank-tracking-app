@@ -52,6 +52,8 @@ class Organism(
     var deadSince: Double? = null
     /** g of TAN-equivalent this carcass has leached into the water so far (bounded by its N content; see Simulation.corpses). */
     var carcassTanReleasedG = 0.0
+    /** The body is in the keeper's net ([FishNet]): the net moves it, not the sinking / floating carcass physics. */
+    var netted = false
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()
