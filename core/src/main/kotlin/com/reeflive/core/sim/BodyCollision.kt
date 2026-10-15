@@ -342,7 +342,8 @@ class BodyCollision(private val rock: RockData) {
             if (abs(flat.y) <= SETTLE_MAX_PITCH) o.heading = o.heading.lerp(flat, k).normalized(o.heading)
             o.up = o.up.lerp(n.rejectFrom(o.heading).normalized(o.up), k).normalized(Vec3.Y)
         }
-        tipLeft = MAX_TIP_RESOLVE
+        // (a fast body rolls over an edge as fast as it travels round it: a startled crab's dash home is not capped)
+        tipLeft = max(MAX_TIP_RESOLVE, o.vel.length() * dt / max(0.25 * o.lengthCm, 0.5))
         for (iter in 0 until MAX_ITERATIONS) {
             val body = o.body
             body.refresh(o)
@@ -1001,7 +1002,10 @@ class BodyCollision(private val rock: RockData) {
         private const val HOLD_MAX = 20
         /** Largest tip of a rigid body per resolve iteration (rad). */
         private const val MAX_TIP = 0.15
-        /** Largest tip of a rigid body over one resolve, all iterations (rad; 0.06 rad a tick is 69 deg/s at 20 Hz). */
+        /**
+         * Largest tip of a slow rigid body over one resolve, all iterations (rad; 0.06 rad a tick is 69 deg/s at 20 Hz);
+         * a faster one may tip by the arc it travels over a quarter of its length.
+         */
         private const val MAX_TIP_RESOLVE = 0.06
         private val RIM_COS = DoubleArray(RIM) { kotlin.math.cos(it * 2 * Math.PI / RIM) }
         private val RIM_SIN = DoubleArray(RIM) { kotlin.math.sin(it * 2 * Math.PI / RIM) }
