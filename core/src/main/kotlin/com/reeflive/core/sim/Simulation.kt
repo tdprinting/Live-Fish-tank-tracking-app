@@ -622,7 +622,23 @@ class Simulation private constructor(
             left -= dt
         }
         behaviorEnabled = prev
+        // the poses the host draws next are resolved again (the steps above ran without the body collision)
+        if (!bodies.posesLive) settleBodies(MAX_BEHAVIOR_DT)
         latest = snapshot()
+    }
+
+    /**
+     * Back to drawn poses after steps without the body collision ([BodyCollision.posesLive] off): the clear poses saved
+     * before them are stale (a wedge hold would snap an animal back to where it was hours ago), so they are dropped, and
+     * every live body is resolved once, so the first drawn pose is clear and saved as the new clear pose.
+     */
+    private fun settleBodies(dt: Double) {
+        bodies.posesLive = true
+        for (o in organisms) {
+            o.spline.dropSafe()
+            if (o.alive) bodies.resolveEnv(o, dt, rockOn = !o.body.escaping, wedgeFallback = false)
+        }
+        bodies.resolvePairs(organisms, perception.stations, dt)
     }
 
     fun drainEvents(): List<SimEvent> = synchronized(pendingEvents) { pendingEvents.toList().also { pendingEvents.clear() } }
@@ -640,6 +656,12 @@ class Simulation private constructor(
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
+        // the body collision runs on every step whose poses are drawn: all of stepWall (1x up to 1000x; above
+        // ABSTRACT_SPEED the parked poses are drawn too, and one step per wall tick costs no more than 1x), not on the
+        // headless 60 s steps of advanceAbstract (catch-up, the timelapse, health runs), whose poses nobody sees
+        val live = useBehavior
+        if (live && !bodies.posesLive) settleBodies(dtB)
+        bodies.posesLive = live
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
         net.keepClear(this)
@@ -803,7 +825,7 @@ class Simulation private constructor(
         // bodies apart: animal against animal, then each moved body out of the rock and sand again
         bodies.resolvePairs(organisms, perception.stations, dt)
         sandWork.step(organisms)
-        sandContact.pushOut = !bodies.enabled
+        sandContact.pushOut = !bodies.enabled || !bodies.posesLive
         sandContact.step(organisms, dt, displace = true)
     }
 
@@ -829,7 +851,7 @@ class Simulation private constructor(
             o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
         bodies.resolvePairs(organisms, perception.stations, dt)
-        sandContact.pushOut = !bodies.enabled
+        sandContact.pushOut = !bodies.enabled || !bodies.posesLive
         sandContact.step(organisms, dt, displace = false)
     }
 

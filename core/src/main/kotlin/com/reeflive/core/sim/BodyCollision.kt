@@ -277,6 +277,15 @@ class BodyCollision(private val rock: RockData) {
     // ---- counters (tests / profiling) ----
     /** Off only for cost measurements (the bodies then pass through everything as before). */
     var enabled = true
+    /**
+     * Whether the sim is stepping drawn poses (set by [Simulation] every step). Off on the headless steps of
+     * [Simulation.advanceAbstract] (catch-up after the app reopens, the timelapse, long health runs: 60 s steps with the
+     * behavior off, whose poses nobody sees): there the bodies pass through everything as with [enabled] off, and are
+     * resolved once when drawn poses resume. Every stepWall speed keeps it on: the sim takes one step per wall tick at
+     * any speed, so a fast time-lapse costs no more collision per wall second than 1x, and its poses are drawn.
+     */
+    var posesLive = true
+    private val on get() = enabled && posesLive
     var envPushes = 0L; private set
     var envCalls = 0L; private set
     var wedgeRestores = 0L; private set
@@ -354,7 +363,7 @@ class BodyCollision(private val rock: RockData) {
      * Returns the deepest penetration found before the resolve (cm).
      */
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
-        if (!enabled) return 0.0
+        if (!on) return 0.0
         // the body follows wherever the animal was put since its spline last moved (the crawler seat writes the seated
         // pose back into the position): pushed from a stale spline head, the position would snap back to it
         if (o.spline.headPos != o.pos && o.spline.override == null) o.spline.update(o.pos, o.heading, 0.0, 0.0)
@@ -830,7 +839,7 @@ class BodyCollision(private val rock: RockData) {
      * surface is pushed out again. Bodies elsewhere cost a bounds test.
      */
     fun afterSandRaised(animals: List<Organism>, r: DoubleArray, dt: Double) {
-        if (!enabled) return
+        if (!on) return
         for (o in animals) {
             if (!o.alive || exempt(o)) continue
             val body = o.body
@@ -1013,7 +1022,7 @@ class BodyCollision(private val rock: RockData) {
      * swimmer), then every moved body is pushed out of the environment again (the rock always wins).
      */
     fun resolvePairs(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double) {
-        if (!enabled) return
+        if (!on) return
         pinned.clear()
         overlapping.clear()
         var settled = false
