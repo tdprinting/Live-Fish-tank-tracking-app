@@ -132,7 +132,10 @@ class Simulation(
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
     val sand = SandBed(this.rock.lengthCm, this.rock.widthCm, this.rock.sandTopCm, seed).also { sb ->
         sb.base = this.rock.sandBase
+        sb.attachRock(this.rock.sdf)
         this.rock.floorAt = sb::surfaceY
+        // food comes to rest on the live sand surface, not inside it
+        food.groundY = { x, z -> sb.surfaceY(x, z) }
     }
     /** Path-finding round the rock for bodies that cannot pass through it (SIMULATION §4.3). */
     val nav = Navigation(this.rock)
@@ -144,6 +147,11 @@ class Simulation(
     val crawlSurface = CrawlSurface(this.rock, sand)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, this.rock)
+    /**
+     * Bodies push the sand they touch aside (SIMULATION §16.9). The body collision keeps them out of it ([bodies]);
+     * with the collision off this lifts them out instead ([SandContact.pushOut]).
+     */
+    val sandContact = SandContact(sand, this.rock.sdf)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
@@ -153,6 +161,20 @@ class Simulation(
         sand.deposit(at.x, at.z, cm3, 2.0)
         sand.puff(at.x, sand.surfaceY(at.x, at.z) + 0.6, at.z, 6, 4.0)
         val p = sandPiles.firstOrNull { it.pos.distanceTo(at) < 3.0 }
+        if (p != null) p.volume += cm3
+        else {
+            if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
+            sandPiles += SandPile(Vec3(at.x, rock.sandTopCm, at.z), cm3)
+        }
+    }
+
+    /**
+     * A digger spits the mouthful it carries ([SandBed.carriedCm3]) at [at], blowing along ([hx], [hz]): the spoil
+     * mound and its plume go into the sand bed (mass-conserving) and the legacy pile list merges it like [depositSand].
+     */
+    fun spitSand(at: Vec3, cm3: Double, hx: Double = 0.0, hz: Double = 0.0) {
+        sand.spit(at.x, sand.surfaceY(at.x, at.z) + 0.8, at.z, cm3, 1.4, plume = 6, hx = hx, hz = hz)
+        val p = sandPiles.firstOrNull { it.pos.distanceTo(at.withY(rock.sandTopCm)) < 3.0 }
         if (p != null) p.volume += cm3
         else {
             if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
@@ -234,7 +256,8 @@ class Simulation(
     fun stepWall(dtWall: Double) {
         drainCommands()
         submarine.step(dtWall, rock, sand)
-        val simDt = speed * dtWall
+        bags.stepWall(this, dtWall)
+        val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
@@ -255,6 +278,7 @@ class Simulation(
             drainCommands()
             val dt = min(behaviorDt, left)
             submarine.step(dt, rock, sand)
+            bags.stepWall(this, dt)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -295,6 +319,7 @@ class Simulation(
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
+        bags.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
@@ -448,6 +473,8 @@ class Simulation(
         // bodies apart: animal against animal, then each moved body out of the rock and sand again
         bodies.resolvePairs(organisms, perception.stations, dt)
         sandWork.step(organisms)
+        sandContact.pushOut = !bodies.enabled
+        sandContact.step(organisms, dt, displace = true)
     }
 
     private fun abstractPlacement(dt: Double) {
@@ -470,6 +497,8 @@ class Simulation(
             }
         }
         bodies.resolvePairs(organisms, perception.stations, dt)
+        sandContact.pushOut = !bodies.enabled
+        sandContact.step(organisms, dt, displace = false)
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
@@ -555,10 +584,14 @@ class Simulation(
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
         flatwormToxin()
-        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
+        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3), and fear, grudges and
+        // intrusion memory fade on their own half-lives (Social.perceive only runs on behaviour ticks)
         if (!behaviorEnabled || abstractMode) {
             val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
-            for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+            for (o in organisms) if (o.alive) {
+                for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+                com.reeflive.core.ai.Social.fadeMemories(o, CHEM_DT)
+            }
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
@@ -577,9 +610,9 @@ class Simulation(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.ENGINEER_GOBY) {
             val b = agents[o]?.brain as? com.reeflive.core.ai.GobyBrain ?: continue
             if (rng.chance(dtMin / 3.0)) {
-                val pit = b.digPoint
-                sand.dig(pit.x, pit.z, com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3, 1.5)
-                depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+                // same draws as before (the sim stream is unchanged): spoil distance and offsets
+                val k = rng.range(4.0, 9.0); val ox = rng.signed() * 4; val oz = rng.signed() * 2
+                b.abstractDig(k, ox, oz)
             }
         }
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
@@ -955,6 +988,8 @@ class Simulation(
                 if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
+            is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
+            is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1157,6 +1192,8 @@ class Simulation(
 
     /** The toy submarine (Submarine mode, [Command.SubmarineMode]) and the animals' perception of it. */
     val submarine = Submarine()
+    /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
+    val bags = AcclimationBags()
     val subSense = com.reeflive.core.ai.SubmarineSense()
     private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
 
@@ -1341,7 +1378,7 @@ class Simulation(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear()
+        submarine.reset(); subSense.clear(); bags.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1428,7 +1465,10 @@ class Simulation(
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
-        )
+        ).let { s ->
+            if (!bags.any) s
+            else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
+        }
 
     private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()

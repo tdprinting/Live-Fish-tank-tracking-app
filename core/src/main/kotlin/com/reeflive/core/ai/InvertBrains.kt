@@ -621,6 +621,9 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val cl = station.client
             if (cl == null || !cl.alive) { finished = true; station.release(); return }
+            // the client poses for this shrimp: it may still name the wrasse that last cleaned it, and then its
+            // VisitCleaner let go of the shrimp's station as it began to pose (a clean-visit loop every 1.5 s)
+            cl.poseFor = c.o
             if (elapsed < tap) {
                 // antennae on the client's flank before any physical cleaning
                 out.rest(Rest(c.o.pos, (cl.pos - c.o.pos).normalized(c.o.heading), c.o.up, 1), 2.0)
@@ -1087,7 +1090,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) {
             val p = c.o.pos
             // only bury in open sand; a snail up on the rock walks back down to its sand patch first
-            buryAt = if (p.y < c.rock.sandTopCm + 1.5 && c.rock.sdf.dist(p) > 2.0) p else o.homePos
+            buryAt = if (p.y < c.sim.sand.surfaceY(p.x, p.z) + 1.5 && c.rock.sdf.dist(p) > 2.0) p else o.homePos
             sink = 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1207,7 +1210,7 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
             return 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
-            out.rest(Rest(c.o.pos.withY(c.rock.sandTopCm + 0.6), c.o.heading, Vec3.Y * -1.0, 7), 1.0)
+            out.rest(Rest(c.o.pos.withY(c.sim.sand.surfaceY(c.o.pos.x, c.o.pos.z) + 0.6), c.o.heading, Vec3.Y * -1.0, 7), 1.0)
             c.o.startle = max(c.o.startle, 0.1)
             if (c.t >= nextAttempt) {
                 // a righting attempt: the foot reaches out and twists (visible as an appendage flick)

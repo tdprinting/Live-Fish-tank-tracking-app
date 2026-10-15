@@ -194,7 +194,7 @@ class BodyCollision(private val rock: RockData) {
 
     /** True when this animal's body is deliberately allowed into the geometry (see class doc). */
     fun exempt(o: Organism): Boolean =
-        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible || o.body.emerging > 0
+        o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.inSand || o.spline.override != null || !o.visible || o.body.emerging > 0
 
     /** Decor and equipment as solids, coral as soft contacts (set by the Simulation; null = none). */
     var obstacles: StaticObstacles? = null

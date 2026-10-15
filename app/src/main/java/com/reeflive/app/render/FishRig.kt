@@ -24,6 +24,8 @@ class FishRig(val id: String) {
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
     var alive = true; var visible = true; var posture = 0
+    /** Still riding in an acclimation bag: drawn, but not pickable. */
+    var bagged = false
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
@@ -34,6 +36,8 @@ class FishRig(val id: String) {
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
+    /** Microfauna only: 0 fully visible .. 1 gone, as it shrinks toward a speck with distance (MicroCritterVisuals). */
+    var fade = 0f
 
     fun headX() = spine[0]; fun headY() = spine[1]; fun headZ() = spine[2]
 
@@ -72,7 +76,7 @@ class FishRig(val id: String) {
         eyeCloud = lerp(pa.eyeCloud, b.eyeCloud, t); scale = lerp(pa.scale, b.scale, t).coerceAtLeast(0.1f)
         eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t, APPENDAGE_WRAP)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
-        alive = b.alive; visible = b.visible; posture = b.posture
+        alive = b.alive; visible = b.visible; posture = b.posture; bagged = b.bagged
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
         bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
         lerpLimbs(if (pa.limbs.size == b.limbs.size) pa.limbs else b.limbs, b.limbs, t)
@@ -93,7 +97,7 @@ class FishRig(val id: String) {
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage
         pectoral = 0f; finClamp = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
-        alive = true; visible = true; posture = 0
+        alive = true; visible = true; posture = 0; bagged = false
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0
         touched = true

@@ -125,8 +125,7 @@ object Social {
                 // co-residents become familiar at 0.15/day whether or not they meet (06 §3.3)
                 r.familiarity = min(1.0, r.familiarity + famGain)
                 if (d < 30.0 && n.visible) r.lastSeenAt = c.t
-                r.fear *= fearK; r.harassedBy *= grudgeK; r.harassed *= grudgeK; r.intrusions *= intrK
-                r.cleanerTrust += (TRUST_BASE - r.cleanerTrust) * trustK
+                fade(r, fearK, grudgeK, intrK, trustK)
             }
             // Wariness toward a specific individual: remembered fear, plus a prior for a much larger aggressive fish.
             if (n.isFish && n.visible && d < 2.5 * c.L + 15) {
@@ -137,6 +136,25 @@ object Social {
         }
         o.wary = if (waryScore > 0.12) wary else null
         o.waryLevel = waryScore
+    }
+
+    private fun fade(r: Relation, fearK: Double, grudgeK: Double, intrK: Double, trustK: Double) {
+        r.fear *= fearK; r.harassedBy *= grudgeK; r.harassed *= grudgeK; r.intrusions *= intrK
+        r.cleanerTrust += (TRUST_BASE - r.cleanerTrust) * trustK
+    }
+
+    /**
+     * Fades every remembered fear, grudge, intrusion count and cleaner trust of [o] over [dt] s while the behaviour layer
+     * is off ([com.reeflive.core.sim.Simulation.advanceAbstract]): [perceive] only runs on behaviour ticks, so without
+     * this a chase from before a 3-day skip was still feared at full strength afterwards.
+     */
+    fun fadeMemories(o: Organism, dt: Double) {
+        if (o.relations.isEmpty()) return
+        val fearK = exp(-dt * 0.693 / FEAR_HALF_LIFE_S)
+        val grudgeK = exp(-dt * 0.693 / GRUDGE_HALF_LIFE_S)
+        val intrK = exp(-dt * 0.693 / INTRUSION_HALF_LIFE_S)
+        val trustK = 1 - exp(-dt / TRUST_TAU_S)
+        for (r in o.relations.values) fade(r, fearK, grudgeK, intrK, trustK)
     }
 
     /** Called whenever [attacker] chases/nips [victim] (any behavior). */

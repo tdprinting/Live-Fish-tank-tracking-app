@@ -212,6 +212,14 @@ object ReefSandbox {
                 else send(Command.AddMany(e.speciesId, count))
                 burst(BurstKind.BUBBLES, RELEASE_SPOT)
             }
+            "bag" -> {
+                // arg = "speciesId:SIZE:x" (tank cm along the front glass), num = count: a shop bag floated there
+                val parts = (arg ?: return false).split(":")
+                val size = runCatching { StockSize.valueOf(parts.getOrElse(1) { "JUVENILE" }) }.getOrDefault(StockSize.JUVENILE)
+                val x = parts.getOrNull(2)?.toDoubleOrNull() ?: 60.0
+                send(Command.FloatBag(parts[0], num.toInt().coerceAtLeast(1), x, size = size))
+            }
+            "hurryBags" -> send(Command.HurryBags(num > 0))
             "addSized" -> {
                 // arg = "speciesId:SIZE", num = count
                 val (id, size) = (arg ?: return false).split(":").let { it[0] to StockSize.valueOf(it.getOrElse(1) { "JUVENILE" }) }
@@ -368,7 +376,7 @@ object ReefSandbox {
         val snap = s.latest
         val readouts = waterReadouts(snap.water, lightPct, snap.flowStrength.toDouble())
         return JSON.stringify(obj { o ->
-            o.sandbox = sandbox; o.predation = predation; o.speed = s.speed
+            o.sandbox = sandbox; o.predation = predation; o.speed = s.latest.speed
             o.values = obj { v ->
                 for (p in SandboxParams.all) {
                     val x = p.valueIn(r)

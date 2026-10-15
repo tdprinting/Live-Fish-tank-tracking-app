@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+Icons for the web live screen, from the same sources as the Android app (UI_STYLE §5.1 / §5.2):
+
+    web/site/glyphs.js   every ReefGlyphs.kt icon as inline SVG (ink = currentColor, accent = --gacc), plus a few
+                         web-only glyphs drawn in the same 24-unit, 1.75-stroke style (WEB_EXTRA below)
+    web/site/food/*.png  each FoodArt picture on a transparent 128 px square
+
+Species pictures come straight from app/src/main/res/drawable-nodpi at build time (web/build.gradle.kts).
+Re-run after changing ReefGlyphs.kt or the food art: python3 tools/graphics/web_glyphs.py
+"""
+import json
+import os
+import sys
+
+from PIL import Image
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import glyph_preview as gp  # noqa: E402
+
+OUT_JS = os.path.join(gp.ROOT, "web/site/glyphs.js")
+OUT_FOOD = os.path.join(gp.ROOT, "web/site/food")
+
+ink, inkFill, accent, accentFill, soft, accentSoft = (gp.ENV[k] for k in ("ink", "inkFill", "accent", "accentFill", "soft", "accentSoft"))
+dots, spark = gp.dots, gp.spark
+
+
+def web_extra(base):
+    """Glyphs the Android set has no picture for yet (web tiles only)."""
+    return {
+        "torch": [ink("M3.5 9.5h8l2.5-2.5h2.5v10H14l-2.5-2.5h-8Z"), soft("M3.5 9.5h8l2.5-2.5h2.5v10H14l-2.5-2.5h-8Z"),
+                  accent("M19.5 8.5l2-1.2M19.5 12h2.5M19.5 15.5l2 1.2")],
+        "sub": [ink("M3 14.5a5.5 4 0 0 1 5.5-4h8a4.5 4 0 0 1 0 8h-8A5.5 4 0 0 1 3 14.5Z"), ink("M10 10.5V7.5h4.5v3M12.5 7.5V4.5h2"),
+                accentFill(dots("12 14.5 1.3;16 14.5 1.3")), ink("M2 12.5v4")],
+        "film": [ink("M4 5.5h16v13H4Z"), inkFill(dots("6 8 .8;6 12 .8;6 16 .8;18 8 .8;18 12 .8;18 16 .8")), accentFill("M10 9v6l5-3Z")],
+        "camera": [ink("M4 8.5h3.2L8.8 6h6.4l1.6 2.5H20v10.5H4Z"), soft("M4 8.5h3.2L8.8 6h6.4l1.6 2.5H20v10.5H4Z"), accent(dots("12 13.5 3.3"))],
+        "dots": [inkFill(dots("5.5 12 2;12 12 2;18.5 12 2"))],
+        "zap": [accentSoft("M13.5 2.5L5 13.5h6.5l-1 8 8.5-11h-6.5Z"), ink("M13.5 2.5L5 13.5h6.5l-1 8 8.5-11h-6.5Z")],
+        "bulb": [accentSoft("M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.2 1.1 2v.7h5v-.7c0-.8.4-1.5 1.1-2A6 6 0 0 0 12 3Z"),
+                 ink("M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.2 1.1 2v.7h5v-.7c0-.8.4-1.5 1.1-2A6 6 0 0 0 12 3Z"), ink("M10 19h4M10.8 21.3h2.4")],
+        "heatWave": [ink(dots("12 8.5 3.6")), ink("M12 2v1.5M5.9 5.4l1.1 1.1M18.1 5.4 17 6.5"),
+                     accent("M3.5 15.5c1.8-1.5 2.8-1.5 4.2 0s2.6 1.5 4.3 0 2.7-1.5 4.2 0 2.6 1.5 4.3 0M3.5 19.5c1.8-1.5 2.8-1.5 4.2 0s2.6 1.5 4.3 0 2.7-1.5 4.2 0 2.6 1.5 4.3 0")],
+        "lampOut": base["sun"] + [accent("M4 4l16 16", 2.2)],
+        "sickFish": base["fish"] + [accentFill("M17 3.5h2v2h2v2h-2v2h-2v-2h-2v-2h2Z")],
+        "wrench": [ink("M14.5 4a4.5 4.5 0 0 0 4.3 6l-8.6 8.6a2 2 0 0 1-2.8-2.8L16 7.2A4.5 4.5 0 0 1 14.5 4Z"),
+                   accentFill(dots("8.8 17.2 1"))],
+        "brokenHeater": [ink("M9 3.5h6v14a3 3 0 0 1-6 0Z"), accent("M5 6l2.5 2.5M19 6l-2.5 2.5M12 0.8v1.8", 1.6),
+                         accent("M10.5 9.5l3 2.5-2 2 2.5 2.5", 1.6)],
+        "plate": [ink(dots("12 13 8")), soft(dots("12 13 5")), inkFill(dots("9.5 12 1;13 11 1;12 14.5 1;15 14 1"))],
+        "scissors": [ink(dots("7 17 2.6;17 17 2.6")), ink("M8.8 15.2 17 4M15.2 15.2 7 4"), accentFill(dots("12 10.6 1"))],
+        "heart2": base["heart"],
+        "stop": [ink("M6.5 6.5h11v11h-11Z"), accentSoft("M6.5 6.5h11v11h-11Z")],
+        "syringe": [ink("M14.5 4l5.5 5.5M17.2 6.8 9 15l-3-3 8.2-8.2M6 12l-2.5 2.5M9 15l-2 2-3-3M11 9.5l1.5 1.5M13 7.5l1.5 1.5"),
+                    accentSoft("M9 15l-3-3 8.2-8.2 3 3Z")],
+        "basket": [ink("M3.5 10h17l-2 9.5h-13Z"), soft("M3.5 10h17l-2 9.5h-13Z"), ink("M7.5 10l3-6M16.5 10l-3-6"),
+                   accent("M8.5 13v4M12 13v4M15.5 13v4", 1.5)],
+        "tank": [ink("M3.5 6.5h17v12h-17Z"), accentSoft("M3.5 9.5c2.8-1 5.6 1 8.5 0s5.7-1 8.5 0v9h-17Z"),
+                 ink("M7 18.5c0-2.5 1-4 2.5-5M14.5 18.5c.3-2 1.5-3.3 3-3.7", 1.5)],
+        "sparkle": base["sparkleTip"],
+    }
+
+
+def to_svg(parts):
+    out = []
+    for d, role, width in parts:
+        if role in ("INK", "ACCENT"):
+            col = "currentColor" if role == "INK" else "var(--gacc,#fff)"
+            out.append(f'<path d="{d}" fill="none" stroke="{col}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/>')
+        else:
+            col = "currentColor" if role in ("INK_FILL", "SOFT") else "var(--gacc,#fff)"
+            op = {"SOFT": 0.22, "ACCENT_SOFT": 0.35}.get(role)
+            out.append(f'<path d="{d}" fill="{col}"' + (f' fill-opacity="{op}"' if op else "") + "/>")
+    return "".join(out)
+
+
+def main():
+    base = dict(gp.load_glyphs(gp.GLYPHS_KT))
+    glyphs = dict(base)
+    glyphs.update(web_extra(base))
+    glyphs["powerheadRight"] = base["powerhead"]  # mirrored in CSS
+    with open(OUT_JS, "w", encoding="utf-8") as f:
+        f.write("// Generated by tools/graphics/web_glyphs.py from app/.../ui/components/ReefGlyphs.kt (UI_STYLE §5.1). Do not edit.\n")
+        f.write("export const GLYPHS = ")
+        json.dump({k: to_svg(v) for k, v in sorted(glyphs.items())}, f, indent=0, separators=(",", ":"))
+        f.write(";\n")
+    os.makedirs(OUT_FOOD, exist_ok=True)
+    for kind, _label, _group, fn in gp.FOODS:
+        size = 128
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        cv = gp.Canvas(img, 0, 0, size / 48, size, size)
+        fn(cv)
+        cv.done()
+        img.save(os.path.join(OUT_FOOD, f"{kind}.png"), optimize=True)
+    print(f"{len(glyphs)} glyphs -> {OUT_JS}; {len(gp.FOODS)} foods -> {OUT_FOOD}")
+
+
+if __name__ == "__main__":
+    main()

@@ -60,7 +60,7 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
     private val specs = HashMap<String, LifeStageSpec?>()
 
     private fun spec(speciesId: String): LifeStageSpec? = specs.getOrPut(speciesId) {
-        val text = runCatching { loader?.getResourceAsStream("species/$speciesId.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
+        val text = runCatching { loader?.getResourceAsStream("species/${ModelRegistry.SHEET_ALIASES[speciesId] ?: speciesId}.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
         val sp = text?.let { runCatching { SimSpecies.parse(it) }.getOrNull() } ?: return@getOrPut null
         if (!sp.kind.equals("FISH", true)) null else LifeStageSpec.of(sp)
     }

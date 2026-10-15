@@ -84,7 +84,9 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
     protected fun candidate(c: Ctx): FoodParticle? {
         if (c.t - cachedScoreAt < 0.4 && cached?.eaten == false) return cached
         cachedScoreAt = c.t
-        cached = c.findFood(radius) { accept(c, it) }
+        // a roused fish follows the scent round the rock out of its cave or burrow, so no line of sight is needed
+        val r = roused(c)
+        cached = c.findFood(radius, los = !r, roused = r) { accept(c, it) }
         return cached
     }
 
@@ -96,18 +98,37 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         val act = max(c.activity, 0.4)
         var s = 0.5 + 0.5 * o.hunger * match * act + bonus(c, f)
         if (c.t - b.foodAlertAt < 30 && o.hunger > 0.2) s = max(s, 0.62)
+        // food dropped after dark rouses the day fish that saw it from their night rest (Tee's moonlight feeding clip:
+        // tang, clowns, cleaner wrasse and both gobies came out to eat; the hawkfish, blennies and leopard wrasse stayed
+        // put). The floor clears every night-rest score (0.7-0.85); once the food is gone the rest wins again.
         val app = com.reeflive.core.sim.HealthModel.appetite(o)
         if (app < 0.3) return 0.0
         // a frightened animal comes to food less eagerly (Mind.kt X4; 1 when calm)
-        return (s * scoreMul(c, f) * app * b.mind.mood.feedFactor).coerceAtMost(0.93)
+        val night = if (roused(c) && o.hunger > 0.2) NIGHT_WAKE[o.brainKind]!! * (NIGHT_WAKE_FLOOR + 0.07 * o.hunger) * app * b.mind.mood.feedFactor else 0.0
+        return max(s * scoreMul(c, f) * app * b.mind.mood.feedFactor, night).coerceAtMost(0.93)
     }
 
     override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null }
+
+    protected fun roused(c: Ctx): Boolean = rousedBy(c, b)
 
     companion object {
         /** No closer by 1 cm in this long → the food is out of reach; ignore food for [GIVE_UP_S] (DESIGN ESTIMATES). */
         const val STUCK_S = 8.0
         const val GIVE_UP_S = 20.0
+        /** How long after a night feeding the food keeps the day fish up (owner clip IMG_0106: ~2.5 min of feeding). */
+        const val NIGHT_WAKE_S = 150.0
+        const val NIGHT_WAKE_FLOOR = 0.86
+        /** How readily food after dark wakes each kind, 0..1 ([H] tee_tank_night_feeding.md; unlisted kinds stay asleep). */
+        val NIGHT_WAKE = mapOf(BrainKind.TANG to 1.0, BrainKind.CLOWN to 1.0, BrainKind.WRASSE to 1.0,
+            BrainKind.ENGINEER_GOBY to 1.0, BrainKind.DIAMOND_GOBY to 1.0)
+
+        /** Night, a feeding within [NIGHT_WAKE_S], and a kind that wakes for it ([NIGHT_WAKE]). */
+        fun rousedBy(c: Ctx, b: SpeciesBrain): Boolean =
+            c.p.night && c.t - b.foodAlertAt < NIGHT_WAKE_S && (NIGHT_WAKE[c.o.brainKind] ?: 0.0) > 0
+
+        /** Multiplier on a night-rest score: it steps aside while a night feeding has a hungry fish up. */
+        fun nightRestDamp(c: Ctx, b: SpeciesBrain): Double = if (c.o.hunger > 0.2 && rousedBy(c, b)) 0.6 else 1.0
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
@@ -348,7 +369,7 @@ open class Sleep(val b: SpeciesBrain, label: String = "Sleeping", val nightWeigh
     override fun score(c: Ctx): Double {
         val o = c.o
         val sick = if (o.health < 0.6 || o.disease != null && o.diseaseStage > 0.3) 1.0 else 0.0
-        return (nightWeight * (1 - c.activity) + 0.25 * o.stress + 0.5 * sick * 0.6).coerceAtMost(0.9)
+        return (nightWeight * (1 - c.activity) * Feed.nightRestDamp(c, b) + 0.25 * o.stress + 0.5 * sick * 0.6).coerceAtMost(0.9)
     }
     override fun update(c: Ctx, out: SteerIntent) {
         val r = b.restSpot(c, c.p.night)
@@ -411,7 +432,12 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         if (c.t - o.lastCleanedAt < 2) { st.release(); finished = true }
         if (elapsed > 90) { if (st.client === o) st.release(); finished = true }
     }
-    override fun exit(c: Ctx) { station?.let { if (it.client === c.o) it.release() } }
+    override fun exit(c: Ctx) {
+        // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station
+        // there stopped the shrimp's clean at its antenna tap, the pose lapsed, the fish came back to visit, and the two
+        // looped every 1.5 s (a dottyback at the skunk shrimp for minutes)
+        station?.let { if (it.client === c.o && !(c.o.poseFor === it.cleaner && c.o.poseUntil > c.t)) it.release() }
+    }
 }
 
 /** Curious approach to a glass tap (clowns, tang, wrasse): hover at 4 cm for 5–15 s. */

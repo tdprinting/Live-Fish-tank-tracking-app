@@ -1,5 +1,8 @@
 {
   "_readme": "Plain-language lines for the web app's What's new popup, keyed by PR number. Every PR merged to main shows up automatically with its title; add a line here to reword it for Tee, or \"\" to hide a behind-the-scenes change.",
+  "95": "Fish are lit correctly as they swim, light glints show on the glass, and shadows stay dark",
+  "94": "The browser version stays smooth: sharpness eases down a notch only while the tank runs slow",
+  "89": "Smoother fish motion with fewer memory hiccups",
   "87": "",
   "85": "Shadows are cheaper to draw, so the tank runs smoother on High",
   "84": "Nassarius snails crawl at their real slow speed, and the banded shrimp roams more",

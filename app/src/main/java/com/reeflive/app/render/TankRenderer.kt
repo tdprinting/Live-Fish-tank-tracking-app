@@ -47,6 +47,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
     private val subScene = SubmarineScene()
+    /** Acclimation bags floating in the tank (sandbox Add life). */
+    private val bagScene = BagScene().also { bs ->
+        bs.onBurst = { kind, x, y, z, r ->
+            particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
+        }
+    }
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -75,6 +81,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
     private val micro = MicroCritterVisuals()
+    /** Fish drawn far → near for the blended fin pass (reused every frame, no per-frame list). */
+    private val finOrder = ArrayList<FishRig>()
+    private val farFirst = Comparator<FishRig> { a, b ->
+        val e = camera.eye
+        b.distanceTo(e[0], e[1], e[2]).compareTo(a.distanceTo(e[0], e[1], e[2]))
+    }
     private val lens = LensState()
     private var postFailed = false
     private var placeholder: Mesh? = null
@@ -182,6 +194,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         snow?.release(); snow = null
         placeholder?.release(); placeholder = null
         subScene.release()
+        bagScene.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -216,6 +229,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val fp = subFirstPerson
         camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
         if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
+        bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
@@ -275,8 +289,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         details?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
-        val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
-        for (r in sorted) drawOrganism(r, progs, pass = 1)
+        finOrder.clear(); finOrder.addAll(rigs); finOrder.sortWith(farFirst)
+        for (r in finOrder) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
         // transparent: back glass, then water (first when the eye is under the surface, so the underside never
         // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
@@ -302,6 +316,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (!waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         equipment?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
+        // acclimation bags: see-through plastic over the animals riding in them
+        if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
@@ -444,10 +460,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
             when (part.kind) {
                 MaterialKind.ROCK -> {
-                    (if (quality.normalMaps) store.texture(ROCK_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
-                    (store.texture(ROCK_ROUGH_AO) ?: neutralRough)?.bind(2)
-                    p.set1f("uNormalStrength", if (quality.normalMaps && store.texture(ROCK_NORMAL) != null) 1f else 0f)
-                    p.set1f("uDetailScale", 1f)
+                    // relief detail levels are procedural (rock.frag), cavity / ridge / AO ride in COLOR_0
+                    // (tools/blender/rock_surface.py); only the pods and forams on the rock come from the sim
+                    val life = micro.rockLife
+                    p.set4f("uMicro", life[0], life[1], life[2], 0f)
                 }
                 MaterialKind.SAND -> {
                     (if (quality.normalMaps) store.texture(SAND_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
@@ -857,6 +873,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4fv("uSpine", r.spine, 16)
         p.set4fv("uFrame", r.frames, 16)
         p.set1f("uScale", r.scale)
+        p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
@@ -1234,7 +1251,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
         val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
-            "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
+            "models/kenya.glb", "models/gsp_neon.glb", "models/mushroom_hairy_mound.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",
         )
         const val CAUSTIC = "textures/caustic_512.png"
@@ -1242,10 +1259,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROOM_ENV = "textures/room_env.png"
         const val WATER_N1 = "textures/water_n1.png"
         const val WATER_N2 = "textures/water_n2.png"
-        const val ROCK_NORMAL = "textures/rock_normal.png"
-        const val ROCK_ROUGH_AO = "textures/rock_rough_ao.png"
         const val SAND_NORMAL = "textures/sand_normal.png"
-        val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, ROCK_NORMAL, ROCK_ROUGH_AO, SAND_NORMAL)
+        val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, SAND_NORMAL)
         val IDENTITY = M.identity()
         /** Parts of a coral model within this distance of its home anchor make up one colony (sandbox copies). */
         const val COPY_RADIUS_CM = 25f

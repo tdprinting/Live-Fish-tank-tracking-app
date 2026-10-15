@@ -317,6 +317,13 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
         if (rock.sdf.dist(q) >= clear) break
         q = rock.clampToWater(rock.sdf.project(q, clear), m)
     }
+    // never under the live sand (SandContact holds bodies on SandBed.surfaceY, so a point inside it cannot be reached;
+    // only points actually in the sand move, so cave, cover and station choices above it are untouched)
+    val floor = sim.sand.surfaceY(q.x, q.z) + 0.2
+    if (q.y < floor) {
+        val up = q.withY(min(floor, rock.waterLevelCm - m))
+        if (rock.sdf.dist(up) >= min(clear, rock.sdf.dist(q))) q = up
+    }
     return q
 }
 
@@ -331,12 +338,15 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
     if (sim.bodies.enabled && sim.nav.route(sim.bodies.levelOf(o), o.pos, goal) != null) return goal
     val sdf = rock.sdf
     if (sdf.segmentClear(o.pos, goal, 0.5)) return goal
+    // a crossing that would only hold the swimmer where it is (already at that height, the way over blocked)
+    var held: Vec3? = null
+    var heldAbove: Vec3? = null
     for (h in listOf(8.0, 16.0, 24.0, 32.0)) {
         val above = safe(goal + Vec3.Y * h)
         if (!sdf.segmentClear(above, goal, 0.5)) continue
         if (sdf.segmentClear(o.pos, above, 0.5)) return above
         val up = safe(Vec3(o.pos.x, above.y, o.pos.z))
-        if (sdf.segmentClear(up, above, 0.5)) return up
+        if (sdf.segmentClear(up, above, 0.5) && (held == null || sdf.segmentClear(o.pos, up, 0.5))) return up
         // the climb alone leaves the swimmer pinned under a ridge: slide across at its own height first, along either axis
         for (mid in listOf(Vec3(above.x, up.y, o.pos.z), Vec3(o.pos.x, up.y, above.z))) {
             val m = safe(mid)
@@ -351,14 +361,26 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
                 if (sdf.segmentClear(o.pos, exit, 0.5) && sdf.segmentClear(exit, safe(Vec3(exit.x, above.y, exit.z)), 0.5)) return exit
             }
         }
-        // already at that height and still blocked: the climb point is the swimmer itself, so climb higher
-        if (up.distanceTo(o.pos) < 1.0) continue
-        return up
+        if (held == null) {
+            // `up` is somewhere to climb to: go there (as before). If it is the swimmer's own spot, look further first:
+            // a cardinal under a ledge held still there for 90 min on its way to the cleaner.
+            if (up.distanceTo(o.pos) > 1.0) return up
+            held = up; heldAbove = above
+        } else if (up.distanceTo(o.pos) > 1.0 && sdf.segmentClear(o.pos, up, 0.5)) return up
     }
     // under an overhang: a doorway beside the goal that the swimmer can see
     for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
         val door = safe(goal + dir * d)
         if (sdf.segmentClear(door, goal, 0.5) && sdf.segmentClear(o.pos, door, 0.5)) return door
+    }
+    val ha = heldAbove
+    if (held != null && ha != null) {
+        // pinned: a way out of the pocket from which the crossing is in clear view, else hold as before
+        for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
+            val out = safe(o.pos + dir * d)
+            if (sdf.segmentClear(o.pos, out, 0.5) && sdf.segmentClear(out, ha, 0.5)) return out
+        }
+        return held
     }
     return goal
 }
@@ -391,9 +413,9 @@ fun Ctx.standoff(a: Anchor, d: Double): Vec3 = a.pos + (a.normal ?: Vec3.Y).norm
 fun Ctx.isPrepared(f: FoodParticle) = !f.kind.suspended
 
 /** Nearest diet-matching food this animal accepts within [radius], optionally with a line-of-sight check. */
-fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
+fun Ctx.findFood(radius: Double, los: Boolean = true, roused: Boolean = false, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
     val f = food.nearest(o.pos, radius) { f ->
-        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f)
+        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f, roused)
     } ?: return null
     if (los && !rock.sdf.segmentClear(o.pos, f.pos, 0.2)) {
         // try the second nearest without LOS cost explosion: accept if near

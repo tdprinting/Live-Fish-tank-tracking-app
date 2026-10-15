@@ -152,6 +152,11 @@ class Organism(
     var heading = Vec3.X
     var up = Vec3.Y
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
+    /**
+     * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
+     * sand contact layer ([SandContact]) neither lifts it out nor pushes a bow wave. Set by the brain, cleared on exit.
+     */
+    var inSand = false
     var sleeping = false
     var hostAnchor: String? = placement
     var homePos: Vec3 = Vec3.ZERO
@@ -248,8 +253,11 @@ class Organism(
     }
 
     fun toPose(): OrganismPose {
-        spline.sample(up, spinePos, spineRot)
-        if (seatOn) {
+        val sp = FloatArray(BodySpline.POINTS * 3)
+        val fr = FloatArray(BodySpline.POINTS * 4)
+        if (!seatOn) spline.sampleInto(up, spinePos, sp, fr)   // allocation-free (most organisms)
+        else {
+            spline.sample(up, spinePos, spineRot)
             // a rigid crawler body on its seat: straight back from the seat point, tangent to the seated surface
             val seg = spline.length / (BodySpline.POINTS - 1)
             // (the seat's own forward: the one its contact points were solved with)
@@ -258,17 +266,15 @@ class Organism(
             // (while the seat fades in or out the whole body blends from the sim's own spine, not just its head)
             val b = seat?.blend ?: 1.0
             for (i in 0 until BodySpline.POINTS) {
-                val sp = seatPos - f * (seg * i)
-                if (b >= 1.0) { spinePos[i] = sp; spineRot[i] = q }
-                else { spinePos[i] = spinePos[i].lerp(sp, b); spineRot[i] = spineRot[i].nlerp(q, b) }
+                val at = seatPos - f * (seg * i)
+                if (b >= 1.0) { spinePos[i] = at; spineRot[i] = q }
+                else { spinePos[i] = spinePos[i].lerp(at, b); spineRot[i] = spineRot[i].nlerp(q, b) }
             }
-        }
-        val sp = FloatArray(BodySpline.POINTS * 3)
-        val fr = FloatArray(BodySpline.POINTS * 4)
-        for (i in 0 until BodySpline.POINTS) {
-            val p = spinePos[i]; val q = spineRot[i]
-            sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
-            fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+            for (i in 0 until BodySpline.POINTS) {
+                val p = spinePos[i]; val q = spineRot[i]
+                sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
+                fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+            }
         }
         return OrganismPose(
             id, species.id, sp, fr, swimPhase.toFloat(), amp.toFloat(), species.locomotion.waveLen.toFloat(),

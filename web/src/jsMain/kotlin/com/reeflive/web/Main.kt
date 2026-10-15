@@ -24,6 +24,7 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.WaterState
 import com.reeflive.app.render.GlassStroke
@@ -69,6 +70,9 @@ object ReefLive {
     /** Screensaver camera while on (same director as the Android screensaver). */
     private var director: com.reeflive.app.render.CinemaDirector? = null
     private var fingerDown = false
+    /** Camera projection the renderer publishes every frame (bag drops and the bag timers). */
+    private val projection = com.reeflive.app.render.TankProjection()
+    private val bagPt = FloatArray(3)
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -119,6 +123,7 @@ object ReefLive {
                 current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
+                r.projection = projection
                 r.demoWhenEmpty = false
                 r.listener = object : TankViewListener {
                     // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
@@ -164,12 +169,35 @@ object ReefLive {
 
     private var current = RenderQuality.HIGH
 
-    /** HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. */
+    /**
+     * HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. [scaleStep] trims
+     * it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
+     */
     private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
         RenderQuality.HIGH -> 3.0
         RenderQuality.MEDIUM -> 2.0
         RenderQuality.LOW -> 1.5
-    })
+    }) * SCALES[scaleStep]
+
+    private var scaleStep = 0
+    private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
+
+    /**
+     * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
+     * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
+     * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
+     * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
+     */
+    private fun adapt(dt: Double) {
+        if (dt <= 0.0) return
+        windowTime += min(dt, 0.1); windowFrames++
+        if (windowFrames < ADAPT_FRAMES) return
+        val mean = windowTime / windowFrames
+        windowTime = 0.0; windowFrames = 0
+        if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0 }
+        else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
+        else goodWindows = 0
+    }
 
     private fun status(text: String) { emit("onStatus", text) }
 
@@ -202,8 +230,9 @@ object ReefLive {
             }
             if (steps == 3) simAcc = 0.0
         }
+        adapt(dt)
         val c = canvas
-        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt() || c.height != (c.clientHeight * pixelRatio()).toInt())) resize()
+        if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
         director?.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
         window.requestAnimationFrame(::frame)
@@ -346,7 +375,7 @@ object ReefLive {
     fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v
+        current = v; scaleStep = 0; goodWindows = 0
         renderer?.setQuality(v)
         resize()
     }
@@ -369,13 +398,41 @@ object ReefLive {
         }
     }.toTypedArray())
 
+    /**
+     * Tank x (cm) of the front glass under canvas pixel ([px], [py]) for dropping a shop bag there, or -1 when the
+     * point is off the tank.
+     */
+    fun bagDropX(px: Double, py: Double): Double {
+        if (!projection.planePointAt(px.toFloat(), py.toFloat(), TankDims.DEPTH_F + 0.8f, bagPt)) return -1.0
+        return if (bagPt[0] in 0f..TankDims.LENGTH_F && bagPt[1] in 0f..TankDims.HEIGHT_F) bagPt[0].toDouble() else -1.0
+    }
+
+    /**
+     * The floating acclimation bags for the page's timers: canvas pixel (x, y) just under each bag, minutes left,
+     * progress 0..1, bag and tank temperature, phase, count and species; plus whether Hurry up is on.
+     */
+    fun bagState(): String {
+        val snap = sim?.latest ?: return "null"
+        val o: dynamic = js("({})")
+        o.hurry = snap.bagHurry
+        o.bags = snap.bags.map { b ->
+            val on = projection.project(b.x, b.y - b.radius * 1.8f, b.z, bagPt)
+            obj {
+                it.id = b.id; it.x = if (on) bagPt[0] else -1f; it.y = if (on) bagPt[1] else -1f
+                it.min = b.minutesLeft; it.progress = b.progress; it.bagT = b.bagTempC; it.tankT = b.tankTempC
+                it.phase = b.phase; it.count = b.count; it.name = b.common
+            }
+        }.toTypedArray()
+        return JSON.stringify(o)
+    }
+
     /** HUD state: clock, light phase, water and the organisms (id, name, species, health). */
     fun state(): String {
         val s = sim ?: return "null"
         val snap: SimSnapshot = s.latest
         val w = snap.water
         val o: dynamic = js("({})")
-        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = s.speed; o.light = snap.lightIntensity
+        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = snap.speed; o.light = snap.lightIntensity
         o.tempC = w.tempC; o.sg = w.sg; o.ph = w.ph; o.alk = w.alk; o.ca = w.ca; o.mg = w.mg
         o.no3 = w.no3; o.po4 = w.po4; o.nh3 = w.nh3Total; o.no2 = w.no2; o.flow = snap.flowStrength
         o.organisms = s.organisms.filter { it.alive }.map { a ->
@@ -434,6 +491,12 @@ object ReefLive {
     }
 
     private const val TICK = 0.05
+    /** Render-resolution multipliers tried in order while frames are slow (1 → ⅔ of the device pixel ratio). */
+    private val SCALES = doubleArrayOf(1.0, 0.9, 0.8, 0.72, 0.67)
+    private const val ADAPT_FRAMES = 45
+    private const val SLOW_DT = 1.0 / 48
+    private const val FAST_DT = 1.0 / 57
+    private const val GOOD_WINDOWS = 4
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }

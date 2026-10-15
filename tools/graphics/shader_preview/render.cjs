@@ -108,6 +108,8 @@ const VIEWS = {
   close_clown: { w: 800, h: 600, eye: [74, 27, 34], aim: [70, 24, 22] },
   close_tang: { w: 800, h: 600, eye: [50, 38, 32], aim: [44, 34, 18] },
   close_rock: { w: 800, h: 600, eye: [32, 18, 36], aim: [30, 14, 20] },
+  macro_rock: { w: 800, h: 600, eye: [31, 16, 28], aim: [30, 14, 20] },
+  micro_rock: { w: 800, h: 600, eye: [30.8, 15.2, 25], aim: [30, 14, 20] },
   // supply shelf (--scene shelf; Camera.kt shelf framing: eye (x, y + 0.16 d, Z_FRONT + d), aim (x, y, Z_PROP), d =
   // shelfDistance): landscape and portrait phones at the start look point, the whole rack, and the feed row up close
   shelf_land: { w: 1200, h: 600, eye: [185, 40, 74], aim: [185, 32, 13] },
