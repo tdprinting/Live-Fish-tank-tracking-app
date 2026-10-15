@@ -257,16 +257,41 @@ class BodyCollision(private val rock: RockData) {
      */
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
         if (!enabled) return 0.0
-        // a seated crawler's body is its drawn one: the seat moves with every push on the animal
+        // the body follows wherever the animal was put since its spline last moved (the crawler seat writes the seated
+        // pose back into the position): pushed from a stale spline head, the position would snap back to it
+        if (o.spline.headPos != o.pos && o.spline.override == null) o.spline.update(o.pos, o.heading, 0.0, 0.0)
+        // a seated crawler's body is its drawn one, on the seat: the pushes move the seat, not the sim position the
+        // crawl walks (moved, its walk would reattach to another face and flip the animal over), and no wedge hold
+        // applies (its seat keeps it on the surface it walks; a hold would snap it back to an old pose)
         val seat = seatOf(o)
+        val sim0 = if (seat != null) SimPose(o) else null
         if (seat != null) o.body.seatOff = o.seatPos - o.pos
-        try { return resolveEnv0(o, dt, rockOn, surfaceOn, settle, wedgeFallback) } finally {
-            o.body.seatOff?.let { off -> o.body.seatOff = null; seat?.let { carrySeat(o, it, o.pos + off - o.seatPos) } }
+        try { return resolveEnv0(o, dt, rockOn, surfaceOn, settle, wedgeFallback && seat == null) } finally {
+            val off = o.body.seatOff
+            o.body.seatOff = null
+            if (seat != null && sim0 != null && off != null) {
+                val d = o.pos - sim0.pos
+                sim0.restore(o)
+                carrySeat(o, seat, sim0.pos + off + d - o.seatPos)
+                // a foot or the shell lip still under the sand after the push (the sections cleared, a contact point
+                // outside them did not): lift the seat by what is left
+                val left = seat.contactDepth(rock, o.lengthCm)
+                if (left > SKIN) carrySeat(o, seat, Vec3.Y * (left + SKIN))
+            }
         }
     }
 
-    /** Moves the seat [o] is drawn on by [d] along with the animal. */
-    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3) { if (d.lengthSq() > 1e-18) seat.carry(o, d) }
+    /** The sim pose of an animal (position, heading, up, spline), to put back after a trial move. */
+    private class SimPose(o: Organism) {
+        val pos = o.pos; val heading = o.heading; val up = o.up; val spline = o.spline.pose()
+        fun restore(o: Organism) { o.spline.setPose(spline); o.pos = pos; o.heading = heading; o.up = up }
+    }
+
+    /**
+     * Moves the seat [o] is drawn on by [d] (the push its drawn body took), at most [SEAT_CARRY_CM] a resolve: the
+     * seat's own contact solve settles the rest next tick, so the drawn body glides rather than hops.
+     */
+    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3) { if (d.lengthSq() > 1e-18) seat.carry(o, d.clampLength(SEAT_CARRY_CM)) }
 
     private fun resolveEnv0(o: Organism, dt: Double, rockOn: Boolean, surfaceOn: Boolean, settle: Boolean, wedgeFallback: Boolean): Double {
         // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
@@ -287,7 +312,11 @@ class BodyCollision(private val rock: RockData) {
         }
         // a swimmer in a sealed hollow of the rock passes through the rock until it is back in the open water (a
         // crawler on the rock is always against it: never counted sealed in)
-        @Suppress("NAME_SHADOWING") val rockOn = rockOn && !(o.isFish && !o.attached && sealedIn(o))
+        // (a crawler on its seat: the seat's contact solve rests its shell and feet on the rock and sand, CrawlerSeat;
+        // the pushes here keep it off the glass, the surface, the equipment and the other animals, and push it out of
+        // the rock and sand only when the seat could not keep its contact points out: sand heaped on it, a squeeze)
+        val seatedNow = seatOf(o)?.let { it.contactDepth(rock, o.lengthCm) <= SKIN } ?: false
+        @Suppress("NAME_SHADOWING") val rockOn = rockOn && !(o.isFish && !o.attached && sealedIn(o)) && !seatedNow
         envCalls++
         val mask = StaticObstacles.passMask(o)
         var worst = 0.0
@@ -309,6 +338,7 @@ class BodyCollision(private val rock: RockData) {
             if (abs(flat.y) <= SETTLE_MAX_PITCH) o.heading = o.heading.lerp(flat, k).normalized(o.heading)
             o.up = o.up.lerp(n.rejectFrom(o.heading).normalized(o.up), k).normalized(Vec3.Y)
         }
+        tipLeft = MAX_TIP_RESOLVE
         for (iter in 0 until MAX_ITERATIONS) {
             val body = o.body
             body.refresh(o)
@@ -396,7 +426,7 @@ class BodyCollision(private val rock: RockData) {
                 // even when the sand under the centre is far below, so the lowest point of the section is checked too
                 val fy = rock.floorY(q.x, q.z)
                 val low = body.extreme(i, DOWN) + (q - p0)
-                if (q.y - fy < boundH + SAND_SLOPE_CM || low.y - rock.floorY(low.x, low.z) < SKIN) {
+                if (!seatedNow && (q.y - fy < boundH + SAND_SLOPE_CM || low.y - rock.floorY(low.x, low.z) < SKIN)) {
                     val n = floorNormal(q.x, q.z)
                     contact(n, (q.y - rock.floorY(q.x, q.z)) * n.y)
                     // the sand curves (mounds against the rock feet, rubble, pits): check the height under the section's
@@ -691,6 +721,9 @@ class BodyCollision(private val rock: RockData) {
         return false
     }
 
+    /** What is left of [MAX_TIP_RESOLVE] in the current resolve. */
+    private var tipLeft = 0.0
+
     private fun tip(o: Organism, body: BodyState) {
         val c = body.centre
         var wx = 0.0; var wy = 0.0; var wz = 0.0; var rr = 0.0
@@ -702,12 +735,15 @@ class BodyCollision(private val rock: RockData) {
             rr += r.lengthSq()
         }
         if (rr < 1e-9) return
-        var w = Vec3(wx, wy, wz) / rr
+        val w = Vec3(wx, wy, wz) / rr
         val ang = w.length()
         if (ang < 1e-4) return
-        if (ang > MAX_TIP) w = w * (MAX_TIP / ang)
         val axis = w.normalized(Vec3.Y)
-        val a = min(ang, MAX_TIP)
+        // per iteration and per resolve: the iterations of one tick add up, and the walk re-seats the animal on the
+        // face it tipped onto, so a large tip in one tick reads as a twitch (FishGlitchTest TURN_RATE / SPEED_SPIKE)
+        val a = min(min(ang, MAX_TIP), tipLeft)
+        if (a < 1e-4) return
+        tipLeft -= a
         val h0 = o.heading
         o.heading = Vec3.rotateAbout(o.heading, axis, a).normalized(h0)
         o.up = Vec3.rotateAbout(o.up, axis, a).normalized(Vec3.Y)
@@ -821,10 +857,14 @@ class BodyCollision(private val rock: RockData) {
             overlapping += o
             pairPushes++
             val before = o.body.centre
-            val p0 = o.pos
-            o.spline.displace(d)
-            o.pos = o.spline.headPos
-            seatOf(o)?.let { carrySeat(o, it, o.pos - p0) }
+            val seat = seatOf(o)
+            if (seat != null) {
+                // a seated crawler: its drawn body (the seat) takes the push, the sim position stays (see resolveEnv)
+                carrySeat(o, seat, d[0])
+            } else {
+                o.spline.displace(d)
+                o.pos = o.spline.headPos
+            }
             resolveEnv(o, dt)
             // the environment took back most of the push (the body is against the rock or the equipment on that side): from
             // now on the other body of the pair moves instead, or the two would trade the same overlap pass after pass
@@ -957,6 +997,8 @@ class BodyCollision(private val rock: RockData) {
         private const val HOLD_MAX = 20
         /** Largest tip of a rigid body per resolve iteration (rad). */
         private const val MAX_TIP = 0.15
+        /** Largest tip of a rigid body over one resolve, all iterations (rad; 0.06 rad a tick is 69 deg/s at 20 Hz). */
+        private const val MAX_TIP_RESOLVE = 0.06
         private val RIM_COS = DoubleArray(RIM) { kotlin.math.cos(it * 2 * Math.PI / RIM) }
         private val RIM_SIN = DoubleArray(RIM) { kotlin.math.sin(it * 2 * Math.PI / RIM) }
         const val MAX_ITERATIONS = 12
@@ -983,6 +1025,8 @@ class BodyCollision(private val rock: RockData) {
         const val BROAD_FLOOR_MARGIN = 1.5
         /** How fast a resting fish's body settles onto the slope under its belly (1/s). */
         const val SETTLE_RATE = 4.0
+        /** Largest move of a seated crawler's drawn body by one resolve (cm, [carrySeat]): a hop is the seat's to make. */
+        const val SEAT_CARRY_CM = 1.5
         /** Largest heading change of a back-out along the spine ([unstick]), rad. */
         const val BACKUP_TURN_RAD = 0.3
         /** Steepest slope (sin of pitch) a resting fish's body follows. */
@@ -1010,3 +1054,4 @@ class BodyCollision(private val rock: RockData) {
         }
     }
 }
+

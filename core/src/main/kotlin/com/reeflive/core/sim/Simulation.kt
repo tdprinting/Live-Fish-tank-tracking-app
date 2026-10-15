@@ -440,8 +440,9 @@ class Simulation(
             o.seat?.let { st ->
                 val p0 = o.pos; val u0 = o.up
                 st.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
-                // the seat moved the animal onto where its shell rests: that pose goes through the body collision too
-                if (o.pos != p0 || o.up != u0) bodies.resolveEnv(o, dt)
+                // the seat moved the animal onto where its shell rests, and it is drawn there: that pose goes through
+                // the body collision too
+                if (o.pos != p0 || o.up != u0 || o.seatOn) bodies.resolveEnv(o, dt)
             }
         }
         // bodies apart: animal against animal, then each moved body out of the rock and sand again
@@ -465,7 +466,7 @@ class Simulation(
             o.seat?.let { st ->
                 val p0 = o.pos; val u0 = o.up
                 st.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
-                if (o.pos != p0 || o.up != u0) bodies.resolveEnv(o, dt)
+                if (o.pos != p0 || o.up != u0 || o.seatOn) bodies.resolveEnv(o, dt)
             }
         }
         bodies.resolvePairs(organisms, perception.stations, dt)

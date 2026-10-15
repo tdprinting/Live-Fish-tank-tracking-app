@@ -16,7 +16,10 @@ import kotlin.math.sin
  *
  * 1. **Body vs body**: no two bodies overlap ([BodyCollision.pairPenetration]) by more than [TOL].
  * 2. **Environment**: no point of any station's section (12 around each ellipse, at every station and halfway between
- *    stations) is inside the rock SDF, under the sand surface or through the glass by more than [TOL].
+ *    stations) is inside the rock SDF, under the sand surface or through the glass by more than [TOL]. A crawler on
+ *    its seat ([CrawlerSeat]: the hermits) rests on the rock and sand by the seat's contact solve: there its rock and
+ *    sand are measured on the seat's contact points (shell, shield, hips, claw pivots), the measure HermitSeatTest
+ *    holds it to.
  * 3. **Static obstacles**: no such point is inside a [StaticObstacles] solid (hard decor, equipment, the feather
  *    duster) by more than [TOL] beyond the obstacle's give, under the animal's [StaticObstacles.passMask]. Coral is
  *    soft (Tee): bodies push through it and it bends, so a body in a colony is a contact
@@ -106,6 +109,7 @@ class NoOverlapTest {
         b.refresh(o)
         val r = sim.rock
         val mask = StaticObstacles.passMask(o)
+        val seat = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
         var worstEnv = Double.NEGATIVE_INFINITY; var envWhere = ""
         var worstObs = Double.NEGATIVE_INFINITY; var obsWhere = ""
         for (i in 0 until BodyState.N) for (half in 0..1) {
@@ -121,11 +125,16 @@ class NoOverlapTest {
             for (k in 0..RIM) {
                 // k = RIM: the section centre (a body wholly inside a thin obstacle has no rim point in it)
                 val q = if (k == RIM) p + up * c else p + up * (c + a * cos(k * 2 * Math.PI / RIM)) + side * (w * sin(k * 2 * Math.PI / RIM))
-                val terms = doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm))
+                // (a seated crawler's rock and sand are its seat's, measured on its contact points below)
+                val terms = doubleArrayOf(if (seat != null) -1.0 else -r.sdf.dist(q), if (seat != null) -1.0 else r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm))
                 for (m in terms.indices) if (terms[m] > worstEnv) { worstEnv = terms[m]; envWhere = "${TERMS[m]} station $i${if (half == 1) "+" else ""}" }
                 val d = sim.obstacles.depth(q, 0.0, mask)
                 if (d > worstObs) { worstObs = d; obsWhere = "${sim.obstacles.lastOwner} station $i${if (half == 1) "+" else ""}" }
             }
+        }
+        if (seat != null) {
+            val d = seat.contactDepth(sim.crawlSurface, o.lengthCm)
+            if (d > worstEnv) { worstEnv = d; envWhere = "seat contact" }
         }
         val who = "${o.id} '${o.behaviorName}' posture ${o.posture}"
         env.note(o.species.id, worstEnv) { "$who, $envWhere at ${fmt(o.pos)} seed $seed t=${"%.1f".format(t)}" }

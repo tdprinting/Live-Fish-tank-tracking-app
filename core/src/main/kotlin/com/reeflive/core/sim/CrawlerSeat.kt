@@ -262,11 +262,11 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     /**
-     * Carries the seated body [d] along with the animal (the body collision pushed it: off another animal, out of a
-     * rock edge the contact solve does not see); the next update warm-starts from there.
+     * Moves the seated body [d] (the body collision pushed it: off another animal, out of a rock edge the contact
+     * solve does not see); the sim position stays, and the next update warm-starts from there.
      */
     internal fun carry(o: Organism, d: Vec3) {
-        pos += d; oPrev += d
+        pos += d
         o.seatPos = pos
     }
 
@@ -409,6 +409,25 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             h += 0.04 * L
         }
         return null
+    }
+
+    /**
+     * How deep the seated body's contact points (shell, shield, hips, claw pivots) are in the rock and sand now (cm,
+     * ≤ 0 = clear): the seated body's own no-clipping measure (the no-overlap checks, HermitSeatTest).
+     */
+    fun contactDepth(s: CrawlSurface, L: Double): Double = -lowestContact(s, pos, L)
+
+    /** [contactDepth] against [rock]'s distance field and floor (the body collision's view of the rock and sand). */
+    fun contactDepth(rock: RockData, L: Double): Double {
+        val c = shape.contacts
+        var worst = Double.NEGATIVE_INFINITY
+        var i = 0
+        while (i < c.size) {
+            val w = pos + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
+            worst = max(worst, max(-rock.sdf.dist(w), rock.floorY(w.x, w.z) - w.y))
+            i += 3
+        }
+        return worst
     }
 
     /** Distance of the lowest contact point with the body origin at [p] (the point itself goes to [lowest]). */

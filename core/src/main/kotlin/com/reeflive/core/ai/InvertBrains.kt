@@ -60,7 +60,11 @@ fun sandSpot(c: Ctx, xr: ClosedFloatingPointRange<Double>, zr: ClosedFloatingPoi
  * the surface ([BodyShapes]: 0 for snails, hermits, stars and the crab, whose models stand on their spine point; the
  * shrimp stand on their legs about a quarter body length below it), plus a hair of clearance.
  */
-fun surfaceOffset(c: Ctx) = com.reeflive.core.sim.BodyShapes.of(c.o.species).sole * c.L + CRAWL_SKIN_CM
+fun surfaceOffset(c: Ctx) =
+    // a hermit is drawn on its seat (CrawlerSeat), not at its sim position: the sim walks half its depth off the surface,
+    // where the single-normal crawl step does not flip it between the faces of a crevice
+    if (c.o.brainKind == com.reeflive.core.sim.BrainKind.HERMIT) 0.5 * c.o.species.depthRatio * c.L + 0.2
+    else com.reeflive.core.sim.BodyShapes.of(c.o.species).sole * c.L + CRAWL_SKIN_CM
 
 /** Gap between a crawler's sole and the surface (cm). */
 const val CRAWL_SKIN_CM = 0.08
@@ -1390,6 +1394,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
 
     inner class Graze : Behavior("graze", "Grazing hair algae") {
         private var spot: Pair<Vec3, Vec3>? = null
+        private var atPatch = false
         private var next = 0.0
         private var dur = 30.0
         override fun score(c: Ctx): Double {
@@ -1406,11 +1411,15 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             spot = (if (night && c.rng.chance(GLASS_GRAZE_P)) glassSpot(c) else null)
                 ?: c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
             dur = c.rng.range(15.0, 45.0)
+            atPatch = false
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val s = spot ?: run { finished = true; return }
             if (elapsed > dur + 40) { finished = true; return }   // unreachable spot
-            if (c.o.pos.distanceTo(s.first) > 1.5) { scuttle(c, out, s.first, fast = false); return }
+            // (once at the patch, a body the rock holds a little off the spot grazes on rather than scuttling back and forth)
+            val d = c.o.pos.distanceTo(s.first)
+            if (if (atPatch) d > 1.5 + 0.5 * c.L else d > 1.5) { atPatch = false; scuttle(c, out, s.first, fast = false); return }
+            atPatch = true
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c); out.allowGlass = true
             if (c.t > next) {
                 next = c.t + 2
