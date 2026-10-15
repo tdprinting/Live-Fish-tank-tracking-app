@@ -236,8 +236,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
         // 2. camera (+ input); in Submarine mode the camera rides with the sub
         val fp = subFirstPerson
-        camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
-        if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
+        val subPose = cur?.submarine
+        val watchedId = subPose?.watchId
+        camera.rideOn = subScene.update(interp.previous?.submarine, subPose, interp.alpha(now), fp, dt, if (watchedId != null) interp.rigs[watchedId] else null)
+        camera.rideFirstPerson = fp
+        if (camera.rideOn) {
+            subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim)
+            subScene.anchor.copyInto(camera.rideAnchor); subScene.vel.copyInto(camera.rideVel)
+        }
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
         netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
@@ -296,7 +302,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
-        if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
+        if (subScene.active) subScene.nearFade(camera.eye, dt)
+        if (subScene.opaque) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         if (netScene.visible) white?.let { drawCalls += netScene.drawSolid(progs.generic, it) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
@@ -324,7 +331,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
         inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
         white?.let { w ->
-            if (!subScene.visible) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost sub, see-through
+            if (!subScene.opaque) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost (or faded) sub, see-through
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             drawCalls += subScene.drawBeam(progs.generic, w)
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -377,15 +384,24 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
                 for (i in m.parts.indices) {
                     val part = m.parts[i]
-                    if (part.kind == MaterialKind.POLYP) continue
+                    // polyps and alpha-card foliage (macroalgae blades, grass) are see-through: the eye passes through them
+                    if (part.kind == MaterialKind.POLYP || part.kind == MaterialKind.CARD) continue
                     if (copy && !nearHome(part, pose!!)) continue
                     val b = part.worldBounds
                     if (b[3] - b[0] <= 0f && b[4] - b[1] <= 0f) continue
+                    // one mesh spread over many small colonies (red macro 94 cm, aiptasia 62 cm, the Kenya trees 26 cm)
+                    // has a box that is nearly all open water: only compact bodies block the eye
+                    if (b[3] - b[0] > MAX_EYE_BOX_CM || b[4] - b[1] > MAX_EYE_BOX_CM || b[5] - b[2] > MAX_EYE_BOX_CM) continue
                     c.addBox(b[0] + ox, b[1] + oy, b[2] + oz, b[3] + ox, b[4] + oy, b[5] + oz)
                 }
             }
         }
         c.clearCapsules()
+        // the sub's hull, seen from behind: the chase eye keeps off it (its own line of sight starts inside it)
+        if (subScene.active && !subFirstPerson) {
+            val a = subScene.anchor; val m = subScene.halfAxis
+            c.addCapsule(a[0] - m[0], a[1] - m[1], a[2] - m[2], a[0] + m[0], a[1] + m[1], a[2] + m[2], SUB_HULL_R, Camera.FOLLOW_OWNER)
+        }
         val fid = camera.followId
         for (r in rigs) {
             if (!r.visible) continue
@@ -982,7 +998,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
-        input.instantTaps = camera.shelfOn
+        input.instantTaps = camera.shelfOn || camera.rideOn
         if (c != null) store.model(SupplyShelfLayout.MODEL)
         // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
         val req = c?.takePickRequest()
@@ -1052,6 +1068,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 // double tap: a fish → fly in and follow it; while following → closer / normal framing;
                 // otherwise glide in to the rock / sand / water point under the finger (again to glide back out)
                 val id = Picker.pick(o, dir, rigs, fingerSlack())
+                // riding the sub: a fish is a pick (the host sends the sub to watch it), nothing else zooms
+                if (camera.rideOn) { if (id != null) main.post { l?.onPick(id) }; return }
                 when {
                     id != null && id != camera.followId -> main.post { l?.onFollowRequest(id) }
                     camera.followId != null -> camera.toggleFollowCloseUp()
@@ -1333,11 +1351,16 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     companion object {
+    /** Largest coral part box (cm, any side) the eye treats as solid; bigger ones are spreads of small colonies. */
+    private const val MAX_EYE_BOX_CM = 20f
+
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
         /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
         private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
+        /** The sub's hull as a capsule for the eye (cm). */
+        private const val SUB_HULL_R = 1.1f
         const val ALGAE = "models/algae_tufts.glb"
         /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
         const val DETAILS = "models/reef_details.glb"

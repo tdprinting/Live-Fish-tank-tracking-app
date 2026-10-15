@@ -25,6 +25,16 @@ sealed class Command {
     /** The pilot's stick for the sub; it holds until the next one, so hosts send it only when the input changes. */
     data class SteerSubmarine(val controls: SubControls) : Command()
     /**
+     * Watch an animal from the sub ([Submarine.watch]): the autopilot glides over and keeps it company at a polite
+     * distance in [mode]; the stick then moves the sub round the fish. [id] null = back to free steering.
+     */
+    data class SubmarineWatch(val id: String?, val mode: SubWatch = SubWatch.HOVER) : Command()
+    /**
+     * The sub's ‹ › buttons: watch the next ([step] > 0) or previous living fish after the one being watched, in tank
+     * order; with none watched, the fish nearest the sub. Keeps the current mode. Invertebrates and corals are skipped.
+     */
+    data class SubmarineWatchNext(val step: Int = 1) : Command()
+    /**
      * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
      * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
