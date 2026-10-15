@@ -70,6 +70,13 @@ class Simulation(
      * species-confirmed corallivory for the owner's unidentified stars. SetParam id `asterina_coral` (1 = on).
      */
     @Ev(Evidence.DESIGN_ESTIMATE, "11 §7") var asterinaCorallivoryScenario = false
+    /**
+     * Evidence gate (research realism_gaps X7): predation rolls with no supporting source stay off even in the sandbox
+     * until this is on: the Sally Lightfoot's snail rolls and grabs (PUC06, PIZ25 support grazing and scavenging, not a
+     * kill rate) and the moray's kill roll (SIMULATION §9.2 numbers are unsourced). Off, the eel's strike still lands as
+     * an attack that startles. SetParam id `unsourced_predation` (1 = on). Crab-on-fish keeps its own `crab_predation`.
+     */
+    @Ev(Evidence.DESIGN_ESTIMATE, "realism_gaps X7; 11 §3") var unsourcedPredation = false
     /** Shrimp pairing, molt-linked mating and egg carrying (research 12). */
     val shrimpBreeding = ShrimpBreeding(this)
     /** Sim time of the last [Command.RearrangeRock]; territorial bouts run hot for a day after it (06 §3.3). */
@@ -82,12 +89,22 @@ class Simulation(
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
     var behaviorEnabled = true
+    /** Started from scratch (core custom/CustomTank): the snapshot asks the renderer to draw no static colonies. */
+    var bareScape = false
 
     private val commands = ConcurrentLinkedQueue<Command>()
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
+
+    /**
+     * A restored tank (core `custom/CustomTank`) keeps its animals' ids: new ids handed out after it ("<species>#n",
+     * frag and bag numbers) must start past the saved ones so a newcomer never takes a saved animal's id.
+     */
+    fun reserveIds(nextOrganism: Int, nextFrag: Int, nextBag: Int) {
+        idCounter = max(idCounter, nextOrganism); fragCounter = max(fragCounter, nextFrag); bags.reserveIds(nextBag)
+    }
     /** Aiptasia controllers (AiptasiaModel). */
     val pests = PestState()
     /** Running disease treatments (W-4). */
@@ -112,7 +129,7 @@ class Simulation(
     private val pendingEvents = ArrayList<SimEvent>()
     val eventLog = ArrayDeque<SimEvent>()
     private var chemAccum = 0.0
-    private var tickCount = 0L
+    var tickCount = 0L; private set
     private var lastLight = 0.0
     private var grazeAccum = 0.0
     private var idCounter = 1
@@ -121,9 +138,17 @@ class Simulation(
     val sandPiles = ArrayList<SandPile>()
 
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
-    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
+    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed).also { s ->
+        s.attachRock(rock.sdf)
+        // food comes to rest on the live sand surface, not inside it
+        food.groundY = { x, z -> s.surfaceY(x, z) }
+    }
+    /** Rock, live sand and glass for the crawlers' surface seat ([CrawlerSeat]). */
+    val crawlSurface = CrawlSurface(rock, sand)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
+    /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
+    val sandContact = SandContact(sand, rock.sdf)
     /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
     val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
@@ -135,6 +160,20 @@ class Simulation(
         sand.deposit(at.x, at.z, cm3, 2.0)
         sand.puff(at.x, sand.surfaceY(at.x, at.z) + 0.6, at.z, 6, 4.0)
         val p = sandPiles.firstOrNull { it.pos.distanceTo(at) < 3.0 }
+        if (p != null) p.volume += cm3
+        else {
+            if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
+            sandPiles += SandPile(Vec3(at.x, rock.sandTopCm, at.z), cm3)
+        }
+    }
+
+    /**
+     * A digger spits the mouthful it carries ([SandBed.carriedCm3]) at [at], blowing along ([hx], [hz]): the spoil
+     * mound and its plume go into the sand bed (mass-conserving) and the legacy pile list merges it like [depositSand].
+     */
+    fun spitSand(at: Vec3, cm3: Double, hx: Double = 0.0, hz: Double = 0.0) {
+        sand.spit(at.x, sand.surfaceY(at.x, at.z) + 0.8, at.z, cm3, 1.4, plume = 6, hx = hx, hz = hz)
+        val p = sandPiles.firstOrNull { it.pos.distanceTo(at.withY(rock.sandTopCm)) < 3.0 }
         if (p != null) p.volume += cm3
         else {
             if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
@@ -156,7 +195,7 @@ class Simulation(
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
     /** Parameter id the fluid's dose tracer currently represents. */
     var doseTracerParam: String? = null; private set
-    val heaterPos = Vec3(rock.lengthCm - 1.5, 30.0, 8.0)
+    val heaterPos = Vec3(rock.lengthCm - 2.4, (rock.sandTopCm + rock.waterLevelCm) / 2, 2.5)   // equipment.glb Heater, back-right corner
 
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
@@ -215,7 +254,10 @@ class Simulation(
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
         drainCommands()
-        val simDt = speed * dtWall
+        submarine.step(dtWall, rock, sand)
+        bags.stepWall(this, dtWall)
+        net.stepWall(this, dtWall)
+        val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
@@ -235,6 +277,9 @@ class Simulation(
         while (left > 1e-9) {
             drainCommands()
             val dt = min(behaviorDt, left)
+            submarine.step(dt, rock, sand)
+            bags.stepWall(this, dt)
+            net.stepWall(this, dt)
             advanceInternal(dt, dt)
             left -= dt
             onTick?.invoke()
@@ -266,12 +311,17 @@ class Simulation(
         simTimeSec += simDt
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
+        flow.now = simTimeSec
+        flow.pruneGusts(simTimeSec)
+        finger?.let { f -> if (simTimeSec - f.lastAt > FINGER_TIMEOUT_S * max(speed, 1.0)) liftFinger() }
         // every step (cheap), so the multiplier is right from the first bout and follows adds and deaths at once
         crowding = com.reeflive.core.ai.PairMatrix.crowding(this); crowdingMult = com.reeflive.core.ai.PairMatrix.crowdingMult(crowding)
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
+        bags.keepClear(this)
+        net.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
         food.step(min(simDt, 1.0), simTimeSec)
@@ -340,6 +390,8 @@ class Simulation(
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
                 val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
+                // the crab's snail rolls have no source (realism_gaps X7): behind the evidence gate
+                if (a.brainKind == BrainKind.SALLY_CRAB && !crabOnFish && !unsourcedPredation) continue
                 val eligible = organisms.filter { t -> t !== a && t.alive && r.targets.contains(t.brainKind.name) && nightEligible(r, a, t) }
                 if (eligible.isEmpty()) continue
                 // one roll per actor and row per night, on the nearest eligible target: the row's pEvent is a
@@ -393,20 +445,24 @@ class Simulation(
     private fun behaviorTick(dt: Double) {
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
+        if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
         for (o in organisms.toList()) {
             if (o !in organisms) continue   // eaten during this tick
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
+        sandContact.step(organisms, dt, displace = true)
     }
 
     private fun abstractPlacement(dt: Double) {
@@ -414,7 +470,7 @@ class Simulation(
         for (o in organisms) {
             val a = agents[o] ?: continue
             a.ctx.p = perception; a.ctx.dt = dt
-            if (!o.alive) { deadPhysics(o, dt); continue }
+            if (!o.alive) { if (!o.netted) deadPhysics(o, dt); continue }
             a.intent.reset()
             // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
             if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
@@ -422,7 +478,10 @@ class Simulation(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
+            (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
+        sandContact.step(organisms, dt, displace = false)
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
@@ -510,10 +569,14 @@ class Simulation(
         crustaceanMolts(dtMin)
         dinoToxin(dtMin)
         flatwormToxin()
-        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3)
+        // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3), and fear, grudges and
+        // intrusion memory fade on their own half-lives (Social.perceive only runs on behaviour ticks)
         if (!behaviorEnabled || abstractMode) {
             val gain = com.reeflive.core.ai.Social.FAMILIARITY_PER_DAY * CHEM_DT / 86400
-            for (o in organisms) if (o.alive) for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+            for (o in organisms) if (o.alive) {
+                for (r in o.relations.values) r.familiarity = min(1.0, r.familiarity + gain)
+                com.reeflive.core.ai.Social.fadeMemories(o, CHEM_DT)
+            }
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
@@ -532,9 +595,9 @@ class Simulation(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.ENGINEER_GOBY) {
             val b = agents[o]?.brain as? com.reeflive.core.ai.GobyBrain ?: continue
             if (rng.chance(dtMin / 3.0)) {
-                val pit = b.digPoint
-                sand.dig(pit.x, pit.z, com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3, 1.5)
-                depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+                // same draws as before (the sim stream is unchanged): spoil distance and offsets
+                val k = rng.range(4.0, 9.0); val ox = rng.signed() * 4; val oz = rng.signed() * 2
+                b.abstractDig(k, ox, oz)
             }
         }
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
@@ -818,9 +881,9 @@ class Simulation(
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
         null -> rock.anchors.pos("HAND_FEED", HAND_FEED).withY(rock.waterLevelCm - 0.3)
-        "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(69.0, 5.0, 23.0)) + Vec3(-2.0, 7.0, 5.0)
-        "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(15.0, 3.0, 27.0)) + Vec3(2.0, 12.0, 1.0)
-        else -> rock.anchors.pos(anchor, Vec3(41.0, 50.0, 20.0))
+        "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(62.0, 3.8, 32.5)) + Vec3(-2.0, 7.0, 5.0)
+        "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3)) + Vec3(2.0, 12.0, 1.0)
+        else -> rock.anchors.pos(anchor, Vec3(41.0, rock.waterLevelCm - 6, 26.0))
     }
 
     /**
@@ -890,7 +953,7 @@ class Simulation(
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
-                fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(71.0, 54.0, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
+                fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, rock.waterLevelCm - 1, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
             }
             is Command.Lights -> { lights.forcedOn = c.on; c.overrideIntensity?.let { lights.intensityOverride = it } }
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
@@ -902,8 +965,21 @@ class Simulation(
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
+            is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
+            is Command.Finger -> finger(c)
+            is Command.WaterPuff -> waterPuff(c)
+            is Command.TouchAnimal -> touchAnimal(c.id)
+            is Command.SubmarineMode -> {
+                submarine.setActive(c.on, rock, sand)
+                submarine.visible = c.visible; submarine.headlight = c.headlight
+                if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
+            }
+            is Command.SteerSubmarine -> submarine.controls = c.controls
+            is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
+            is Command.NetOut -> net.request(this, c.id)
+            is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -973,6 +1049,7 @@ class Simulation(
         "roomtemp" -> config.roomC
         "crab_predation" -> if (crabLiveFishScenario) 1.0 else 0.0
         "asterina_coral" -> if (asterinaCorallivoryScenario) 1.0 else 0.0
+        "unsourced_predation" -> if (unsourcedPredation) 1.0 else 0.0
         else -> water.s.get(id)
     }
 
@@ -997,6 +1074,7 @@ class Simulation(
             k == "photoperiod" -> lights.photoperiodHours = value.coerceIn(4.0, 16.0)
             k == "crab_predation" -> crabLiveFishScenario = value > 0.5
             k == "asterina_coral" -> asterinaCorallivoryScenario = value > 0.5
+            k == "unsourced_predation" -> unsourcedPredation = value > 0.5
             k.startsWith("spectrum.") -> lights.setGain(k.removePrefix("spectrum."), value)
             k.startsWith("pump.") -> setPump(id.substring(5), value > 0.5)
             else -> water.setParam(id, value)
@@ -1052,6 +1130,8 @@ class Simulation(
         surface.impulse(at.x, at.z, 0.08, 2.5)
         water.addFeed(grams * kind.nutrientFactor, kind.po4Factor, kind.docFactor)
         emit(SimEvent.Fed(kind, grams, simTimeSec))
+        // every animal that eats this food learns the time, the place and the keeper (ai/Mind.kt, realism_gaps X3)
+        for (a in agents.values) a.brain.mind.onKeeperFeed(simTimeSec, at, a.ctx.o.species.dietMatch(kind) > 0 || kind == FoodKind.NORI && a.ctx.o.species.grazer)
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
         food.spawn(kind, grams, at, simTimeSec)
         for (a in agents.values) a.brain.onFood(a.ctx, kind, at)
@@ -1100,6 +1180,15 @@ class Simulation(
         }
     }
 
+    /** The toy submarine (Submarine mode, [Command.SubmarineMode]) and the animals' perception of it. */
+    val submarine = Submarine()
+    /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
+    val bags = AcclimationBags()
+    /** The fish net that takes dead animals out ([Command.NetOut]). */
+    val net = FishNet()
+    val subSense = com.reeflive.core.ai.SubmarineSense()
+    private val agentOf: (Organism) -> com.reeflive.core.ai.Agent? = { agents[it] }
+
     /** Habituation and quick-tap runs for [Command.TouchTank]. */
     val touchMemory = TouchMemory()
     /** The last gentle tap's outcome (UI wording, tests). */
@@ -1114,6 +1203,7 @@ class Simulation(
         val p = c.point
         val night = perception.night
         val surface = if (c.surface == TouchSurface.ROCK && corals.any { it.pos.distanceTo(p) < TankTouch.ON_CORAL_CM }) TouchSurface.CORAL else c.surface
+        if (surface == TouchSurface.SURFACE) this.surface.impulse(p.x, p.z.coerceIn(0.0, rock.widthCm), 0.06, 2.5)
         if (touchMemory.tap(p, simTimeSec, TankTouch.RUN_WINDOW_S * max(1.0, speed))) {
             tapGlass(p)
             lastTouch = TouchOutcome(surface, p, true, emptyMap(), 0, simTimeSec)
@@ -1135,7 +1225,7 @@ class Simulation(
             val h = touchMemory.habituation(o.id, simTimeSec)
             if (h >= TankTouch.HABIT_IGNORE) continue
             val reach = when (r) {
-                TouchReaction.INVESTIGATE -> TankTouch.SEE_CM
+                TouchReaction.INVESTIGATE, TouchReaction.RISE -> TankTouch.SEE_CM
                 TouchReaction.CHECK -> 30.0
                 else -> if (surface == TouchSurface.GLASS) TankTouch.FEEL_CM else TankTouch.ROCK_CM
             }
@@ -1152,6 +1242,111 @@ class Simulation(
         lastTouch = TouchOutcome(surface, p, false, out, retracted, simTimeSec)
     }
 
+    /** The finger held on the glass after a long press ([Command.Finger]), or null. */
+    var finger: FingerState? = null; private set
+    /** The last tap right on an animal ([Command.TouchAnimal]): who and how it answered (tests, captions). */
+    var lastAnimalTouch: Pair<String, TouchReaction>? = null; private set
+
+    /** One animal answers a touch of kind [r] at [p] [d] cm away (reach [reach]), unless it has got used to them. */
+    private fun answerTouch(o: Organism, p: Vec3, r: TouchReaction, d: Double, reach: Double, strength: Double = 1.0): Boolean {
+        val h = touchMemory.habituation(o.id, simTimeSec)
+        if (h >= TankTouch.HABIT_IGNORE) return false
+        val s = TankTouch.falloff(d, reach, strength) * (1 - h)
+        if (s < 0.05) return false
+        touchMemory.reacted(o.id, simTimeSec)
+        if (r == TouchReaction.DUCK || r == TouchReaction.AVOID) {
+            o.startle = max(o.startle, 0.1 * s)
+            StressModel.addSocial(o, TAP_SOCIAL * 0.3 * s)
+        }
+        agents[o]?.let { a -> a.ctx.p = perception; a.brain.onTouch(a.ctx, p, r, s) }
+        return true
+    }
+
+    /**
+     * A finger on the glass ([Command.Finger], TankTouch finger rules): when it goes down the animals that would
+     * answer a tap there answer it, except that the fish that would come to look follow the fingertip instead for as
+     * long as it stays; animals it is dragged close to later get their turn. A finger whisked past fast startles the
+     * shy ones near it. Lifting it lets the followers linger a moment.
+     */
+    fun finger(c: Command.Finger) {
+        val p = c.point ?: run { liftFinger(); return }
+        val t = simTimeSec
+        val f = finger ?: FingerState(p, c.surface, t).also { finger = it }
+        f.move(p, c.speedCmS, t)
+        val night = perception.night
+        val fast = c.speedCmS > TankTouch.FINGER_FAST_CM_S
+        for (id in f.followers) organisms.firstOrNull { it.id == id }?.let { o -> agents[o]?.brain?.touchFrom = p }
+        for (o in organisms) {
+            if (!o.alive || o.id in f.considered) continue
+            val d = o.pos.distanceTo(p)
+            val r = if (fast) TankTouch.fastFingerReaction(o, d, night) else TankTouch.fingerReaction(o, f.surface, d, night)
+            if (r == TouchReaction.NONE) continue
+            f.considered += o.id
+            val reach = when (r) {
+                TouchReaction.FOLLOW -> TankTouch.SEE_CM
+                else -> TankTouch.FEEL_CM
+            }
+            if (!answerTouch(o, p, r, d, reach)) continue
+            f.reactions[o.id] = r
+            if (r == TouchReaction.FOLLOW) f.followers += o.id
+        }
+    }
+
+    /** The finger lifted: its followers watch the spot a moment longer, then go back to what they were doing. */
+    private fun liftFinger() {
+        val f = finger ?: return
+        finger = null
+        for (id in f.followers) organisms.firstOrNull { it.id == id }?.let { o ->
+            agents[o]?.brain?.let { b -> b.touchUntil = min(b.touchUntil, simTimeSec + TankTouch.FINGER_LINGER_S) }
+        }
+    }
+
+    /**
+     * A flick in the water ([Command.WaterPuff]): a puff added to the flow ([FlowField.addGust]) that every flow user
+     * feels (the nori cloth, food, sand clouds, the renderer's coral sway); polyps it reaches pull in a little, sand under
+     * it lifts, and shy animals, crustaceans and dusters in its path react ([TankTouch.puffReaction]).
+     */
+    fun waterPuff(c: Command.WaterPuff) {
+        val sp = c.velocity.length()
+        if (sp < 1e-6) return
+        val t = simTimeSec
+        flow.now = t
+        flow.addGust(c.point, c.velocity, t)
+        val dir = c.velocity / sp
+        val travel = sp.coerceAtMost(com.reeflive.core.geom.FlowGust.MAX_SPEED) * com.reeflive.core.geom.FlowGust.TAU_S
+        val end = c.point + dir * travel
+        fun distToPath(q: Vec3): Double {
+            val k = ((q - c.point) dot dir).coerceIn(0.0, travel)
+            return q.distanceTo(c.point + dir * k)
+        }
+        // sand under the puff's path lifts (a little cloud, pushed along)
+        for (k in 0..3) {
+            val q = c.point.lerp(end, k / 3.0)
+            val sy = sand.surfaceY(q.x.coerceIn(0.0, rock.lengthCm), q.z.coerceIn(0.0, rock.widthCm))
+            if (q.y - sy < 6.0) { sand.puff(q.x, sy + 0.5, q.z, 6, 3.0 + 0.1 * sp, dir.x * sp * 0.3, dir.z * sp * 0.3); break }
+        }
+        for (k in corals) {
+            if (!TankTouch.retracts(k.kind)) continue
+            val d = distToPath(k.pos)
+            if (d < TankTouch.PUFF_CM) k.disturb = max(k.disturb, TankTouch.PUFF_DISTURB * (1 - d / TankTouch.PUFF_CM))
+        }
+        val night = perception.night
+        for (o in organisms) {
+            val d = distToPath(o.pos)
+            val r = TankTouch.puffReaction(o, d, night)
+            if (r != TouchReaction.NONE) answerTouch(o, o.pos - dir * 5.0, r, d, TankTouch.PUFF_CM)
+        }
+    }
+
+    /** A tap right on an animal ([Command.TouchAnimal], [TankTouch.animalReaction]): snails and crabs tuck in, and so on. */
+    fun touchAnimal(id: String) {
+        val o = organisms.firstOrNull { it.id == id } ?: return
+        val r = TankTouch.animalReaction(o)
+        if (r == TouchReaction.NONE) { lastAnimalTouch = id to r; return }
+        val answered = answerTouch(o, o.pos + o.up * 2.0, r, 0.0, 1.0)
+        lastAnimalTouch = id to (if (answered) r else TouchReaction.NONE)
+    }
+
     private var lastScrapeStir = -1e9
 
     /** A Flipper stroke on the glass: clears the film it sweeps; nearby fish and corals react as to a passing hand. */
@@ -1165,6 +1360,9 @@ class Simulation(
         }
     }
 
+    /** Animals near [point] dart off as from a shadow overhead (the fish net dipping in). */
+    internal fun scareFrom(point: Vec3) = shadow(point)
+
     private fun shadow(point: Vec3) {
         for (o in organisms) if (o.alive && o.pos.distanceTo(point) < 40) agents[o]?.brain?.onShadow(agents[o]!!.ctx, point)
         for (c in corals) if (c.pos.distanceTo(point) < 15) c.disturb = 0.6
@@ -1174,6 +1372,8 @@ class Simulation(
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
+        finger = null; flow.gusts.clear()
+        submarine.reset(); subSense.clear(); bags.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1235,15 +1435,38 @@ class Simulation(
     // ============================================================== snapshot
     private fun statsAll(): List<OrganismStats> {
         val byId = organisms.associateBy { it.id }
-        return organisms.map { o ->
+        val out = organisms.map { o ->
             val d = com.reeflive.core.ai.Caption.describe(o, this)
-            o.stats(d.caption, d.intent, d.targetId ?: o.focusId, com.reeflive.core.ai.Social.summarize(o, byId, simTimeSec))
+            val target = (d.targetId ?: o.focusId)?.let { byId[it] }
+            val thought = if (thoughtsEnabled) thoughtBook.thought(o, this, target) else Thought.NONE
+            o.stats(d.caption, d.intent, d.targetId ?: o.focusId, com.reeflive.core.ai.Social.summarize(o, byId, simTimeSec), thought)
         }
+        if (thoughtsEnabled) thoughtBook.endSnapshot(this, byId.keys)
+        return out
     }
+
+    /**
+     * The "what is it thinking" readout in [OrganismStats.thought] (ai/Thoughts.kt). Read-only: turning it off changes
+     * nothing in the sim (ThoughtsTest), only the snapshot's words.
+     */
+    var thoughtsEnabled = true
+    private val thoughtBook = com.reeflive.core.ai.ThoughtBook()
+
+    /** Minutes until the lights go out (null while dark), from the last light update. */
+    val minutesUntilLightsOff: Double? get() = cachedUntilOff
 
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
     fun snapshot(): SimSnapshot =
-        buildSnapshot().copy(lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) })
+        buildSnapshot().copy(
+            lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
+            bareScape = bareScape,
+            submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
+            net = net.pose(),
+            netFlush = net.lastFlush,
+        ).let { s ->
+            if (!bags.any) s
+            else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
+        }
 
     private fun buildSnapshot(): SimSnapshot {
         val (xyz, kinds) = food.export()
@@ -1285,7 +1508,28 @@ class Simulation(
             foodMeta = food.exportMeta(simTimeSec),
             waste = waste.export(simTimeSec),
             pumps = pumpArray(),
+            nori = food.nori?.let { n ->
+                val cl = n.cloth
+                NoriPose(cl.cols, cl.rows, cl.exportNodes(), cl.exportCells(), n.pos.x.toFloat(), n.pos.y.toFloat(), n.pos.z.toFloat(),
+                    cl.inward.x.toFloat(), cl.inward.y.toFloat(), cl.inward.z.toFloat())
+            },
+            gusts = gustArray(),
         )
+    }
+
+    /** Live touch puffs for the renderer ([SimSnapshot.gusts]). */
+    private fun gustArray(): FloatArray {
+        val g = flow.gusts
+        if (g.isEmpty()) return EMPTY_FLOATS
+        val stride = com.reeflive.core.geom.FlowGust.STRIDE
+        val out = FloatArray(g.size * stride)
+        g.forEachIndexed { i, q ->
+            val o = i * stride
+            out[o] = q.pos.x.toFloat(); out[o + 1] = q.pos.y.toFloat(); out[o + 2] = q.pos.z.toFloat()
+            out[o + 3] = q.dir.x.toFloat(); out[o + 4] = q.dir.y.toFloat(); out[o + 5] = q.dir.z.toFloat()
+            out[o + 6] = q.speed.toFloat(); out[o + 7] = (simTimeSec - q.bornAt).toFloat()
+        }
+        return out
     }
 
     /** Jets for the renderer ([SimSnapshot.pumps]): powerheads follow the master switch and the flow slider, the HOB runs on its own. */
@@ -1320,7 +1564,12 @@ class Simulation(
 
     companion object {
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
-        val HAND_FEED = Vec3(68.0, 55.0, 4.5)
+        val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
+        /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */
+        const val FINGER_TIMEOUT_S = 6.0
+        /** Longest animal name a [Command.Rename] keeps. */
+        const val NAME_MAX = 24
+        private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35

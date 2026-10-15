@@ -14,6 +14,7 @@ COLOR_0 for coral meshes (data, linear):
   polyp: r = 0, g = 0, b = tentacle hinge (0 at the polyp base .. 1 at the tentacle tips), a = 1
   card : b = sway weight (0 root .. 1 tip)
 """
+import json
 import math
 import os
 
@@ -160,7 +161,15 @@ def polyp_node(name, root, proto, mats, inst, extras=None):
     return g.obj(name, root, "polyp", mats, smooth=True, extras=ex)
 
 
-def tex(name, cv, alpha=False):
+def tex(name, cv, alpha=False, jpeg=False):
+    """Bake a canvas to an image the GLB embeds. jpeg=True (opaque, noisy textures such as pore fields) stores it as
+    JPEG q 88, a third to a fifth of the PNG bytes (the APK assets are near their 45 MB cap)."""
+    if jpeg and not alpha:
+        from PIL import Image
+        path = os.path.join(C.BUILD, name + ".jpg")
+        os.makedirs(C.BUILD, exist_ok=True)
+        Image.fromarray((np.clip(cv.rgb, 0, 1) * 255 + 0.5).astype(np.uint8)).save(path, quality=88)
+        return C.load_image(path, name=name)
     path = os.path.join(C.BUILD, name + ".png")
     cv.save(path, alpha=alpha)
     return C.load_image(path, name=name)
@@ -283,15 +292,15 @@ def feather_canvas(stalk_bottom, stalk_top, tent_base, tent_tip, rachis, w=128, 
 # thick, pale cream stalk fans into 8 stout trunks just above the rock (3 near-upright in the middle, 5 in a ring at
 # 50-72 deg from vertical); each forks 4 more times into slender branches that arch upward in the middle and arch out
 # and sag at the tips round the lower ring; every outer branch carries short pinnate twigs and feathery polyp sprigs
-# (the fuzz of the clip). Warm pinkish tan, paler cream-white tips, pale translucent stalk. Footprint as v2: crown top
-# y = 48, crown 26 x 20 cm about (73, 17). Body and Tufts carry extras.swayMode = 1 (tree sway in static.vert and
+# (the fuzz of the clip). Warm pinkish tan, paler cream-white tips, pale translucent stalk. Footprint: crown top
+# 4 cm under the surface of the resized 16 in tank, crown 26 x 20 cm about coral_kenya_main. Body and Tufts carry extras.swayMode = 1 (tree sway in static.vert and
 # polyp.vert: trunk still, tips lag, sprigs ride their branch, local ripple around a passing fish).
 MAXD = 5                  # 0 stalk, 1 trunks, 2..5 forks; pinnate twig tubes hang off depth 3..5 (LOD0 only)
 KENYA_TRUNKS_UP = 3
 KENYA_TRUNKS_RING = 5
 KENYA_SPRIGS = 2200       # LOD0 polyp sprigs, 6 tris each: Kenya (body + sprigs) keeps its old share of the High budget
-KENYA_SPRIGS_LOD1 = 1100
-KENYA_LOD1_TRIS = 5000    # kenya_lod1.glb body: the branches without twigs, decimated to about this
+KENYA_SPRIGS_LOD1 = 650    # 2026-10-15: 1100 -> 650 keeps the Medium estimate under 142k with the remade leathers and the mushroom mound
+KENYA_LOD1_TRIS = 4700    # kenya_lod1.glb body: the branches without twigs, decimated to about this
 KENYA_TWIG_STEP = 0.95    # cm between pinnate twigs along a branch (alternate sides)
 
 
@@ -392,7 +401,10 @@ def kenya(rock, A):
     grow(pos - n * 0.6, trunk_dir, 2.4, 2.2, 0, 0.0)
     allp = np.vstack([b[0] for b in branches])
     lo, hi = allp.min(0), allp.max(0)
-    sy = (48.0 - pos[1]) / (hi[1] - pos[1])
+    # Tee's clip sets the 26 x 20 cm crown; the measured 16 in tank caps the height (~17 cm colony, crown 4 cm
+    # under the surface)
+    top = min(pos[1] + 17.0, C.WATER_Y - 4.0)
+    sy = (top - pos[1]) / (hi[1] - pos[1])
     # the whole colony above the stalk (sagging lower ring included) fits the 26 x 20 cm crown footprint
     crown = allp[allp[:, 1] > pos[1] + 0.12 * (hi[1] - pos[1])]
     clo, chi = crown.min(0), crown.max(0)
@@ -406,12 +418,12 @@ def kenya(rock, A):
         w = S(0.04, 0.22, h)
         q = pts.copy()
         q[:, 1] = pos[1] + (pts[:, 1] - pos[1]) * sy
-        q[:, 0] = pts[:, 0] + w * ((73.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
-        q[:, 2] = pts[:, 2] + w * ((17.0 + (pts[:, 2] - cz) * sz) - pts[:, 2])
+        q[:, 0] = pts[:, 0] + w * ((pos[0] + 1.0 + (pts[:, 0] - cx) * sx) - pts[:, 0])
+        q[:, 2] = pts[:, 2] + w * ((pos[2] + (pts[:, 2] - cz) * sz) - pts[:, 2])
         b[0], b[1] = q, rad * (1 + (rsc - 1) * (1 - 0.5 * h))
     allp = np.vstack([b[0] for b in branches])
-    _q = allp[allp[:, 1] > 23.0]
-    _h = (_q[:, 1] - 23.0) / 25.0
+    _q = allp[allp[:, 1] > pos[1] + 2.0]
+    _h = (_q[:, 1] - pos[1] - 2.0) / max(1.0, top - pos[1] - 2.0)
     _w = [np.ptp(_q[(_h > lo_) & (_h < lo_ + 0.1), 0]) if np.any((_h > lo_) & (_h < lo_ + 0.1)) else 0 for lo_ in (0.3, 0.5, 0.7, 0.85)]
     print("[coral] kenya silhouette widths@.35/.55/.75/.9", np.round(_w, 1), "top-x", round(float(_q[_h > 0.7, 0].mean()), 1))
     print("[coral] kenya bbox", np.round(allp.min(0), 1), np.round(allp.max(0), 1))
@@ -623,7 +635,7 @@ def gsp(rock, A, anchor, R, half, spacing, count, polyp_hex, tip_hex, seed, name
 # ----------------------------------------------------------------------------
 GSP_LONG_TENT = 1.7     # cm tentacle length at scale 1 ([P p12]: ~1.5-2 cm curling tentacles)
 GSP_TENTACLES = 6       # strands per polyp (the animal has 8; 6 ribbons keep the dome inside the triangle budget)
-GSP_TENT_SEGS = 4       # ribbon segments per strand (enough for the curled tip)
+GSP_TENT_SEGS = 3       # ribbon segments per strand (2026-10-15: 4 -> 3 pays for the remade leathers)
 
 
 def proto_long_tentacle(n=GSP_TENTACLES, stalk_h=0.35, stalk_r=0.08, tent=GSP_LONG_TENT, segs=GSP_TENT_SEGS,
@@ -674,10 +686,13 @@ def proto_long_tentacle(n=GSP_TENTACLES, stalk_h=0.35, stalk_r=0.08, tent=GSP_LO
 
 def gsp_long_materials(name, base_hex="#4A2E36"):
     """Base (brown-maroon stolon tissue) and polyp (brown stalk, lime tentacles with paler tips) materials."""
-    mat_cv = P.Canvas(64, 64, base_hex)
-    mat_cv.multiply(0.8 + 0.4 * P.fbm(64, 64, 5, 3, 17))
-    mat_cv.blend(S(0.6, 0.8, P.fbm(64, 64, 9, 2, 18)), "#6A4A3A", 0.5)
-    mat_m = C.material(name + "_mat", rough=0.8, image=tex(name + "_mat", mat_cv))
+    mat_cv = P.Canvas(128, 128, base_hex)
+    mat_cv.multiply(0.75 + 0.45 * P.fbm(128, 128, 5, 4, 17))
+    mat_cv.blend(S(0.6, 0.8, P.fbm(128, 128, 9, 2, 18)), "#6A4A3A", 0.5)
+    d, cr = PoreLattice(0.5, 0.045, 19, jitter=0.3).field(mat_cv.u - 0.5, mat_cv.v - 0.5)
+    mat_cv.blend((1 - S(0.15, 0.3, d)) * (cr > 0.3), "#2A1A1C", 0.6)          # retracted polyp holes in the mat
+    mat_cv.blend((1 - S(0.0, 0.12, np.abs(d - 0.32))) * (cr > 0.3), "#6E8A3A", 0.35)  # green rims of the holes
+    mat_m = C.material(name + "_mat", rough=0.8, image=tex(name + "_mat", mat_cv, jpeg=True))
     pc = P.Canvas(64, 64, "#5A3F38")
     st = pc.u < 0.5
     stalk = hex2rgb("#4E3434")[None, None] * (1 - pc.v[..., None]) + hex2rgb("#6E5A3A")[None, None] * pc.v[..., None]
@@ -756,9 +771,10 @@ def gsp_dome(rock, A, anchor, radii, count, seed, name):
         if inside_rock(rock, p, 0.25):
             continue
         # the lower flanks carry shorter polyps ([P p13]: the dome edge thins out onto the rock)
-        sc = rs.uniform(0.8, 1.2) * (0.7 + 0.3 * S(th_max, 0.4, th))
+        sc = rs.uniform(0.8, 1.2) * (0.75 + 0.25 * S(th_max, 0.4, th))
         ph_sway = (np.dot(p, flow) / 25.0 + rs.normal(0, 0.03)) % 1.0
-        inst.add(p + nn * 0.05, unit(nn + axis * 0.25), sc, phase=ph_sway)
+        # flank polyps lean out and slightly down so their tentacles drape over the bare base (2026-10-15)
+        inst.add(p + nn * 0.05, unit(nn + axis * (0.25 - 0.3 * S(0.9, th_max, th))), sc, phase=ph_sway)
     mat_m, pol_m = gsp_long_materials(name)
     root = C.empty("Root")
     C.set_extras(root, anchor=anchor, species="green_star_polyps", fluorescent=1, form="long_tentacle_dome")
@@ -771,28 +787,35 @@ def gsp_dome(rock, A, anchor, radii, count, seed, name):
 
 
 # ----------------------------------------------------------------------------
-# New corals from Tee's photos 2026-10-13 (tee_tank_photos.md). Their anchors are new: raw positions here, snapped
-# to the rock at build time (mode "nearest" = closest rock point, "top" = first rock hit straight down). The snapped
-# positions are mirrored in core RockData.anchorsRaw() for the sim; rockscape.py / anchors.json do not list them yet.
+# New corals from Tee's photos 2026-10-13 (tee_tank_photos.md). Their anchors live in rockscape.py ANCHORS and are
+# snapped to the rock there (anchors.json, mirrored in core RockData DefaultScape). The raw points below are only a
+# fallback for an anchors.json written before they were added (mode "nearest" = closest rock point, "top" = first
+# rock hit straight down).
 # ----------------------------------------------------------------------------
 NEW_ANCHORS = {
-    # [P p04] toadstool on a low front ledge at the sand line, the pink leather plate at its left foot
-    "coral_toadstool_front": ((52.0, 8.6, 27.1), "nearest"),
-    "coral_leather_pink_front": ((46.6, 8.2, 27.6), "nearest"),
-    # [P p14] tan finger leather high on the arch's left top, above the clowns' host
-    "coral_finger_leather": ((78.3, 42.8, 9.3), "nearest"),
-    # [P p05] big corallimorph on the front edge of the high back-left rock, a few cm under the surface
-    "coral_elephant_ear": ((37.0, 60.0, 18.0), "top"),
+    # [P p04] toadstool on the low front-left top of the R5 mound near the sand, the pink plate at its left foot
+    "coral_toadstool_front": ((60.5, 9.3, 29.0), "nearest"),
+    "coral_leather_pink_front": ((57.8, 9.0, 32.0), "nearest"),
+    # [P p14] tan finger leather on the arch's left top (R6 back pier), up and left of the clowns' host
+    "coral_finger_leather": ((76.0, 27.3, 12.0), "nearest"),
+    # [P p05] big corallimorph on the front edge of the high back-left rock, ~3 cm under the surface
+    "coral_elephant_ear": ((41.0, 45.0, 16.5), "top"),
 }
 
 
 def new_anchor(rock, name):
-    raw, mode = NEW_ANCHORS[name]
-    raw = np.array(raw, float)
-    if mode == "top":
-        hit, hn = rock.ray(raw, np.array([0, -1.0, 0]), 80.0)
+    path = os.path.join(C.SIM, "anchors.json")
+    snapped = {a["name"]: a for a in json.load(open(path))["anchors"]} if os.path.exists(path) else {}
+    if name in snapped:
+        hit = np.array(snapped[name]["pos"], float)
+        hn = np.array(snapped[name].get("normal", [0, 1, 0]), float)
     else:
-        hit, hn, _ = rock.nearest(raw)
+        raw, mode = NEW_ANCHORS[name]
+        raw = np.array(raw, float)
+        if mode == "top":
+            hit, hn = rock.ray(raw, np.array([0, -1.0, 0]), 80.0)
+        else:
+            hit, hn, _ = rock.nearest(raw)
     hn = unit(hn if hn[1] > -0.2 else hn + UP)
     print(f"[anchor] {name}: pos {np.round(hit, 2).tolist()} normal {np.round(hn, 2).tolist()}")
     return hit, hn
@@ -817,100 +840,359 @@ def revolve(profile, segs, wobble, axis, base, seed, uvf):
     return np.array(V), F, np.array(UV), q
 
 
+def grid_faces(rows, segs, centre=True):
+    """Faces of a polar grid: optional centre vertex 0, then `rows` rings of `segs` vertices (ring i at
+    centre + i * segs), wrapping round."""
+    o = 1 if centre else 0
+    F = [(0, o + (k + 1) % segs, o + k) for k in range(segs)] if centre else []
+    for i in range(rows - 1):
+        b0, b1 = o + i * segs, o + (i + 1) * segs
+        F += [(b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k) for k in range(segs)]
+    return F
+
+
+def orient_out(obj, inside_pt):
+    """Recalculate normals, then flip the whole mesh if most faces point toward inside_pt (world cm): open surfaces
+    (a plate on a stalk, a disc) can come out of recalc inside-out."""
+    import bmesh
+    C.recalc_normals(obj)
+    me = obj.data
+    c = np.array(C.w2b(inside_pt))
+    s = sum(float(np.dot(np.array(p.normal), np.array(p.center) - c)) * p.area for p in me.polygons)
+    if s < 0:
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+        bm.to_mesh(me)
+        bm.free()
+        me.update()
+
+
+class PoreLattice:
+    """Polyp pores on a jittered hex lattice over the square [-half, half]^2 (cm, planar texture space)."""
+
+    def __init__(self, half, spacing, seed, jitter=0.18):
+        self.half, self.sx, self.sy, self.jit = half, spacing, spacing * 0.866, jitter
+        self.nr, self.nc = int(2 * half / self.sy) + 3, int(2 * half / spacing) + 3
+        self.j = RS(seed).normal(0, 1, (self.nr, self.nc, 3)).astype(np.float32)
+
+    def centre(self, row, col):
+        j = self.j[np.clip(row + 1, 0, self.nr - 1), np.clip(col + 1, 0, self.nc - 1)]
+        off = (row % 2) * 0.5
+        return ((col + off + 0.5 + j[..., 0] * self.jit) * self.sx - self.half,
+                (row + 0.5 + j[..., 1] * self.jit) * self.sy - self.half, 0.5 + 0.5 * np.tanh(j[..., 2]))
+
+    def centres(self):
+        """All pore centres: (N, 3) array of x, z, rand."""
+        rr, cc = np.mgrid[-1:self.nr - 1, -1:self.nc - 1]
+        x, z, r = self.centre(rr, cc)
+        return np.c_[x.ravel(), z.ravel(), r.ravel()]
+
+    def field(self, X, Z):
+        """Distance to the nearest pore centre (in units of the spacing) and that pore's rand, at points X, Z."""
+        best, rnd = np.full(X.shape, 9.0, np.float32), np.zeros(X.shape, np.float32)
+        row0 = np.floor((Z + self.half) / self.sy).astype(int)
+        for dr in (-1, 0, 1):
+            row = row0 + dr
+            col0 = np.floor((X + self.half) / self.sx - (row % 2) * 0.5).astype(int)
+            for dc in (-1, 0, 1):
+                cx, cz, r = self.centre(row, col0 + dc)
+                d = np.hypot(X - cx, Z - cz) / self.sx
+                closer = d < best
+                best = np.where(closer, d, best)
+                rnd = np.where(closer, r, rnd)
+        return best, rnd
+
+
+def profile_shell(profile, segs, at, base, q):
+    """Closed-top surface of revolution with per-angle shaping: profile [(r, y)] from the top centre (r 0) outward
+    and round to the underside; at(i, r, y, a) -> (r, y) reshapes each point. Returns V (world), local points,
+    UV radius per vertex (arc length from the top centre, so a planar texture keeps its scale over the rim)."""
+    arc = np.r_[0, np.cumsum([math.hypot(profile[i + 1][0] - profile[i][0], profile[i + 1][1] - profile[i][1])
+                              for i in range(len(profile) - 1)])]
+    L, S_ = [], []
+    r0, y0 = at(0, profile[0][0], profile[0][1], 0.0)
+    L.append(np.array([0.0, y0, 0.0]))
+    S_.append((0.0, 0.0))
+    for i in range(1, len(profile)):
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            r, y = at(i, profile[i][0], profile[i][1], a)
+            L.append(np.array([r * math.cos(a), y, r * math.sin(a)]))
+            S_.append((arc[i], a))
+    V = np.array([q_rotate(q, p) for p in L]) + base
+    return V, np.array(L), np.array(S_), grid_faces(len(profile) - 1, segs)
+
+
+# Toadstool v2 (2026-10-15 remake; [P p04] close crop): a smooth, pale grey-cream, slightly translucent stalk ~5 cm
+# tall that flares into a broad bell at the foot, and a thick golden-tan cap ~6.8 cm across with a lumpy top, a
+# gently folded rolled margin and a brown underside, its top carpeted in short golden polyps with pale tips.
+TOAD_POLYPS = 240
+TOAD_SMAX = 5.6     # cm arc length from the cap centre to the end of the underside (planar cap texture half-width)
+
+
 def toadstool(rock, A):
-    """Sarcophyton toadstool leather [P p04]: pale cream-lavender stalk flaring at the foot and under the cap, a
-    golden-tan cap ~6.5 cm across with an irregular rolled rim, covered in short extended polyps."""
+    """Sarcophyton toadstool leather [P p04] on the low front-left top of the R5 mound."""
     import geomlib as G
     hit, hn = new_anchor(rock, "coral_toadstool_front")
     rs = RS(151)
     axis = unit(UP * 0.9 + hn * 0.15 + np.array([0.1, 0, 0.05]))
     g = T.WGeo()
     H = 4.6
-    pts = np.array([hit + axis * y for y in np.linspace(-0.4, H, 7)])
-    Vs, Fs, tv, av = G.tube(pts, [2.0, 1.6, 1.3, 1.2, 1.2, 1.35, 1.7], 14, cap_start=False, cap_end=False,
-                            up=(0, 0, 1))
-    Vs = Vs + rs.normal(0, 0.04, Vs.shape)
-    g.add(Vs, Fs, np.c_[av, tv], np.c_[np.full(len(Vs), 0.2), np.zeros(len(Vs)), tv * 0.3, np.ones(len(Vs))], mat=0)
-    top = hit + axis * (H - 0.2)
-    ph0 = rs.uniform(0, 6.28)
+    side = unit(np.cross(axis, [0, 0, 1.0]))
+    ys = np.linspace(-0.5, H, 9)
+    pts = np.array([hit + axis * y + side * 0.25 * math.sin(math.pi * y / H) for y in ys])  # a slight S-bend
+    rad = [2.7, 2.15, 1.7, 1.42, 1.3, 1.28, 1.36, 1.55, 1.8]                               # bell foot, waisted
+    Vs, Fs, tv, av = G.tube(pts, rad, 14, cap_start=False, cap_end=False, up=(0, 0, 1))
+    Vs = Vs + rs.normal(0, 0.025, Vs.shape)
+    g.add(Vs, Fs, np.c_[av, tv], np.c_[np.full(len(Vs), 0.6), np.zeros(len(Vs)), tv * 0.25, np.ones(len(Vs))],
+          mat=0)
+    top = hit + axis * (H - 0.25)
+    q = q_from_up(axis, rs.uniform(0, 6.28))
+    ph = rs.uniform(0, 6.28, 6)
+    prof = [(0.0, 1.62), (0.7, 1.6), (1.4, 1.56), (2.05, 1.5), (2.6, 1.4), (3.0, 1.22), (3.3, 0.98), (3.42, 0.7),
+            (3.3, 0.42), (2.95, 0.2), (2.4, 0.02), (1.7, -0.1)]
+    RIM = 7  # profile row of the outer rim
 
-    def wob(ph):
-        return 1 + 0.08 * math.sin(5 * ph + ph0) + 0.04 * math.sin(9 * ph + 2 * ph0)
-    prof = [(1.5, -0.1), (2.5, 0.0), (3.1, 0.25), (3.3, 0.6), (3.05, 0.95), (2.3, 1.2), (1.2, 1.35), (0.05, 1.4)]
-    RMAX = 3.3
-
-    def uvf(i, r, ph):  # top: radial disc in 0..0.8; underside and rim: outer ring 0.8..1
-        rr = r / RMAX * 0.8 if i >= 4 else 0.8 + 0.2 * (1 - i / 4)
-        return (0.5 + 0.5 * rr * math.cos(ph), 0.5 + 0.5 * rr * math.sin(ph))
-    Vc, Fc, UVc, q = revolve(prof, 28, wob, axis, top, 152, uvf)
-    colc = [(0.5, 0, 0.2 + 0.4 * min(1, i / 4), 1) for i in range(len(prof)) for _ in range(28)]
-    g.add(Vc, Fc, UVc, np.array(colc), mat=1)
-    # cap polyps on the top surface (profile rows 4..7)
-    top_r, top_y = [0.05, 1.2, 2.3, 3.05], [1.4, 1.35, 1.2, 0.95]
+    def at(i, r, y, a):
+        wob = 1 + 0.07 * math.sin(5 * a + ph[0]) + 0.035 * math.sin(9 * a + ph[1])
+        w = math.exp(-((i - RIM) / 2.2) ** 2)                                  # folds strongest at the margin
+        fold = 0.32 * w * math.sin(6 * a + ph[2]) + 0.12 * w * math.sin(11 * a + ph[3])
+        if i <= 5:   # lumpy top
+            x, z = r * math.cos(a), r * math.sin(a)
+            y += 0.1 * math.sin(1.7 * x + ph[4]) * math.sin(1.9 * z + ph[5]) * (r / 3.0)
+        return r * wob, y + fold
+    segs = 32
+    Vc, Lc, Sc, Fc = profile_shell(prof, segs, at, top, q)
+    UVc = np.c_[0.5 + 0.5 * Sc[:, 0] / TOAD_SMAX * np.cos(Sc[:, 1]), 0.5 + 0.5 * Sc[:, 0] / TOAD_SMAX * np.sin(Sc[:, 1])]
+    rows = np.r_[0, np.repeat(np.arange(1, len(prof)), segs)]
+    colc = np.c_[np.where(rows >= RIM, 0.45, 0.3), np.zeros(len(Vc)), 0.15 + 0.25 * np.clip(rows / RIM, 0, 1),
+                 np.ones(len(Vc))]
+    g.add(Vc, Fc, UVc, colc, mat=1)
+    arc_rim = float(np.r_[0, np.cumsum([math.hypot(prof[i + 1][0] - prof[i][0], prof[i + 1][1] - prof[i][1])
+                                         for i in range(len(prof) - 1)])][RIM])
+    # cap polyps: area-uniform over the lumpy top (profile rows 0..5), normals from the local surface
     inst = Instances(153)
-    for _ in range(220):
-        ph = rs.uniform(0, 2 * math.pi)
-        r = 3.0 * math.sqrt(rs.uniform())
-        y = float(np.interp(r, top_r, top_y))
-        lp = np.array([r * wob(ph) * math.cos(ph), y + 0.02, r * wob(ph) * 0.92 * math.sin(ph)])
-        nn = unit(q_rotate(q, unit(np.array([math.cos(ph) * r / RMAX * 0.6, 1.0, math.sin(ph) * r / RMAX * 0.6]))))
-        inst.add(q_rotate(q, lp) + top, nn, rs.uniform(0.75, 1.2))
-    st = P.Canvas(64, 64, "#CFC5BA")
-    st.blend(S(0.55, 0.75, P.fbm(64, 64, 6, 3, 154)), "#B9AFB8", 0.6)
-    st.blend(S(0.7, 0.85, P.fbm(64, 64, 10, 2, 155)), "#9C8C78", 0.4)
-    st.blend(S(0.8, 1.0, st.v), "#B8A88E", 0.5)
-    m_stalk = C.material("toadstool_stalk", rough=0.6, image=tex("toadstool_stalk", st))
-    cc = P.Canvas(128, 128, "#A8862C")
-    rr = np.hypot(cc.u - 0.5, cc.v - 0.5) * 2
-    cc.multiply(0.8 + 0.35 * P.fbm(128, 128, 16, 3, 156))
-    cc.blend(S(0.78, 0.84, rr), "#6F5A38", 0.9)
-    m_cap = C.material("toadstool_cap", rough=0.7, image=tex("toadstool_cap", cc))
-    pc = P.Canvas(64, 64, "#B08A2A")
-    pc.vgrad("#8A6A22", "#E2C860", 0.3, 1.0)
+    top_rows = np.where((rows >= 1) & (rows <= 6))[0]
+    tri_top = [f for f in Fc if all(rows[i] <= 6 for i in f)]
+    areas = np.array([np.linalg.norm(np.cross(Vc[f[1]] - Vc[f[0]], Vc[f[2]] - Vc[f[0]])) for f in tri_top])
+    for fi in rs.choice(len(tri_top), TOAD_POLYPS, p=areas / areas.sum()):
+        f = tri_top[fi]
+        w = rs.dirichlet((1, 1, 1))
+        p = sum(w[j] * Vc[f[j]] for j in range(3))
+        nn = unit(np.cross(Vc[f[1]] - Vc[f[0]], Vc[f[2]] - Vc[f[0]]))
+        if np.dot(nn, axis) < 0:
+            nn = -nn
+        inst.add(p + nn * 0.02, unit(nn + axis * 0.3), rs.uniform(0.8, 1.2), phase=rs.uniform())
+    del top_rows
+    # stalk: pale grey-cream, faint lengthwise striations, a creamier foot and a browner collar under the cap
+    st = P.Canvas(64, 128, "#B6AEA4")
+    st.blend(S(0.55, 0.75, P.fbm(128, 64, 6, 3, 154)), "#A29CAA", 0.5)
+    st.multiply(0.94 + 0.08 * np.sin(st.u * 2 * math.pi * 9 + 3 * P.fbm(128, 64, 3, 2, 158)))
+    st.blend(1 - S(0.0, 0.18, st.v), "#D8CFC0", 0.6)
+    st.blend(S(0.82, 1.0, st.v), "#A89878", 0.55)
+    m_stalk = C.material("toadstool_stalk", rough=0.5, image=tex("toadstool_stalk", st, jpeg=True))
+    # cap: golden polyp carpet on top (dense pale-tipped dots), olive-brown rolled margin, grey-brown underside
+    n = 256
+    cc = P.Canvas(n, n, "#A88A30")
+    X, Z = (cc.u - 0.5) * 2 * TOAD_SMAX, (cc.v - 0.5) * 2 * TOAD_SMAX
+    sr = np.hypot(X, Z)
+    cc.multiply(0.78 + 0.4 * P.fbm(n, n, 14, 3, 156))
+    d, cr = PoreLattice(TOAD_SMAX, 0.22, 157, jitter=0.25).field(X, Z)
+    cc.blend((1 - S(0.25, 0.42, d)) * (1 - S(arc_rim - 0.6, arc_rim, sr)), "#D9B848", 0.7)   # polyp bases
+    cc.blend((1 - S(0.06, 0.16, d)) * (1 - S(arc_rim - 0.6, arc_rim, sr)) * (cr > 0.4), "#F0E6B8", 0.8)
+    cc.blend(S(arc_rim - 0.7, arc_rim + 0.1, sr), "#7A6436", 0.85)          # margin
+    cc.blend(S(arc_rim + 0.5, arc_rim + 1.2, sr), "#8C7E6A", 0.9)           # underside
+    cc.blend(S(arc_rim + 1.6, TOAD_SMAX, sr), "#B4A894", 0.7)               # toward the stalk collar
+    m_cap = C.material("toadstool_cap", rough=0.65, image=tex("toadstool_cap", cc, jpeg=True))
+    pc = P.Canvas(32, 32, "#B08A2A")
+    t = np.clip((pc.u + pc.v) / 2, 0, 1)
+    pc.rgb = (hex2rgb("#7A5E22")[None, None] * (1 - S(0.15, 0.4, t))[..., None]
+              + hex2rgb("#C9A23A")[None, None] * (S(0.15, 0.4, t) * (1 - S(0.86, 0.97, t)))[..., None]
+              + hex2rgb("#EADFA8")[None, None] * S(0.86, 0.97, t)[..., None]).astype(np.float32)
     m_pol = C.material("toadstool_polyp", rough=0.6, image=tex("toadstool_polyp", pc), double=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_toadstool_front", species="sarcophyton_sp")
     body = g.obj("Body", root, "body", [m_stalk, m_cap], smooth=True)
-    C.recalc_normals(body)
-    proto = proto_feather(8, 0.12, 0.05, 0.36, 62, 0.05, 1)
+    orient_out(body, top + axis * 0.6)
+    proto = proto_feather(7, 0.16, 0.06, 0.24, 64, 0.06, 1)   # short, broad golden tentacles: a fuzzy carpet
     pol = polyp_node("Polyps", root, proto, [m_pol], inst)
+    print(f"[coral] toadstool: {g.tris()} body tris, {len(inst)} polyps")
     return root, [body, pol], {"Polyps": (len(inst), sum(len(f) - 2 for f in proto[1]))}
 
 
+# Pink lobed leather v2 (2026-10-15 remake; [P p04] close crop): not a smooth dome but a thick, lobed plate ~9 x 6.5 cm
+# held up on a short tan stalk. The top is gently domed and folded into broad meandering ridges (pale lavender-white
+# furrows between them), packed with salmon-pink polyp pores that run over the rounded, rolled rim; the underside and
+# stalk are smooth cream-tan. The pores are painted (planar UV; the rim is unrolled so they keep their size) and the
+# low polyp nubs are instanced so the surface reads textured and opens / closes with the colony.
+PINK_R = (4.4, 3.2)        # cm outline half-axes before lobing (old dome: 4.4 x 3.1)
+PINK_H = 2.5               # cm top-centre height above the attachment
+PINK_RIM = 0.55            # cm radius of the rolled rim
+PINK_UVR = 6.6             # cm half-width of the planar pore texture (unrolled rim included)
+PINK_POLYPS = 260
+
+
+def pink_ridge(x, z, ph):
+    """Lobe field: 0 along the narrow meandering furrows (zero lines of a warped two-wave pattern, lobes ~1.3 cm
+    across) .. 1 on the lobe tops (scalars or arrays)."""
+    wx = x + 0.55 * np.sin(0.9 * z + ph[0]) + 0.25 * np.sin(2.1 * z + ph[1])
+    wz = z + 0.55 * np.sin(0.8 * x + ph[2]) + 0.25 * np.sin(1.9 * x + ph[3])
+    n = np.sin(2.35 * (0.8 * wx + 0.6 * wz) + ph[4]) + 0.8 * np.sin(2.35 * (-0.45 * wx + 0.9 * wz) + ph[5])
+    return np.minimum(1.0, np.abs(n) / 0.75) ** 0.7
+
+
 def leather_pink(rock, A):
-    """[P p04] pink-lavender lobed leather plate (Lobophytum-like) beside the toadstool: a thick folded plate with
-    pink polyp pores (polyps retracted in the photo) on a cream-lavender skin. Texture only, no polyp instances."""
+    """[P p04] pink-lavender lobed leather (Lobophytum-like) at the toadstool's left foot."""
     hit, hn = new_anchor(rock, "coral_leather_pink_front")
-    axis = unit(UP * 0.7 + hn * 0.5)
-    c = hit + axis * 0.3
-    radii = (4.4, 1.9, 3.1)
-    V, F, _, _, q = dome_mesh(c, radii, axis, 161, 24, 9, sink=0.2)
-    qi = np.array([-q[0], -q[1], -q[2], q[3]])
-    loc = np.array([q_rotate(qi, v - c) for v in V])
-    UV = np.c_[loc[:, 0] / (2.2 * radii[0]) + 0.5, loc[:, 2] / (2.2 * radii[2]) + 0.5]  # top-projected pores
-    rad = np.hypot(loc[:, 0], loc[:, 2])
+    rs = RS(161)
+    axis = unit(UP * 0.75 + hn * 0.45)
+    q = q_from_up(axis, rs.uniform(0, 6.28))
+    ph = rs.uniform(0, 6.28, 9)
+    rx, rz = PINK_R
+    RIM = PINK_RIM
+
+    def outline(a):  # lobed outline radius (rim outer edge)
+        lobe = 1 + 0.09 * math.sin(3 * a + ph[6]) + 0.06 * math.sin(5 * a + ph[7]) + 0.03 * math.sin(8 * a + ph[8])
+        return lobe / math.sqrt((math.cos(a) / rx) ** 2 + (math.sin(a) / rz) ** 2)
+
+    def top_y(r, a, rt):  # top height at radius r along angle a (rt = top radius there)
+        t = min(r / rt, 1.0)
+        rid = float(pink_ridge(r * math.cos(a), r * math.sin(a), ph))
+        fold = 0.32 * t ** 2 * math.sin(2 * a + ph[0]) + 0.12 * t ** 3 * math.sin(5 * a + ph[1])  # wavy plate
+        relief = (0.12 * rid - 0.3 * (1 - rid) ** 2) * (1 - S(0.82, 1.0, t))  # rounded lobes, narrow furrows
+        return PINK_H - 0.45 * t ** 2 + fold + relief
+
+    def surf(ur, a):
+        """Top + rolled rim + underside in the local frame, by unrolled radius ur (= planar texture radius on the
+        top and the rim): 0 .. rt top, rt .. rt + RIM*pi rim, beyond that the underside fraction to the foot."""
+        rt = outline(a) - RIM
+        if ur <= rt:
+            return np.array([ur * math.cos(a), top_y(ur, a, rt), ur * math.sin(a)])
+        ye = top_y(rt, a, rt)
+        s = min((ur - rt) / RIM, math.pi)
+        r, y = rt + RIM * math.sin(s), ye - RIM + RIM * math.cos(s)
+        return np.array([r * math.cos(a), y, r * math.sin(a)])
+
+    segs = 40
+    ts = [0.0, 0.11, 0.22, 0.33, 0.44, 0.55, 0.65, 0.74, 0.82, 0.89, 0.95, 1.0]
+    psis = [45, 90, 135, 180]                                # rolled rim (deg round the rim, 0 = top edge)
+    under = [(0.74, 0.4), (0.5, 0.12), (0.42, -0.1), (0.47, -0.6)]  # (r fraction, y fraction or cm) to the foot
+    V, UV, COL, MAT = [], [], [], []
+
+    def put(p, ur, a, mat, sway):
+        V.append(q_rotate(q, p) + hit)
+        UV.append((0.5 + 0.5 * ur / PINK_UVR * math.cos(a), 0.5 + 0.5 * ur / PINK_UVR * math.sin(a)))
+        COL.append((0.35 if mat == 0 else 0.25, 0.0, sway, 1.0))
+        MAT.append(mat)
+    put(surf(0.0, 0.0), 0.0, 0.0, 0, 0.1)
+    for t in ts[1:]:
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            rt = outline(a) - RIM
+            put(surf(rt * t, a), rt * t, a, 0, 0.1 + 0.2 * t)
+    for psi in psis:
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            ur = outline(a) - RIM + RIM * math.radians(psi)
+            put(surf(ur, a), ur, a, 0 if psi <= 90 else 1, 0.3)
+    for rf, yf in under:
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            rt = outline(a) - RIM
+            y = yf * (top_y(rt, a, rt) - 2 * RIM) if yf >= 0 else yf
+            put(np.array([rt * rf * math.cos(a), y, rt * rf * math.sin(a)]), rt * rf, a, 1, 0.0)
+    nrings = len(ts) - 1 + len(psis) + len(under)
     g = T.WGeo()
-    g.add(V, F, UV, np.c_[np.full(len(V), 0.4), np.zeros(len(V)), np.clip(rad / radii[0], 0, 1) * 0.3, np.ones(len(V))])
-    cv = P.Canvas(256, 256, "#CDB8C6")
-    cv.multiply(0.85 + 0.25 * P.fbm(256, 256, 8, 3, 162))
-    u, v = cv.u * 34, cv.v * 34
-    du = (u + (np.floor(v) % 2) * 0.5) % 1 - 0.5
-    dv = v % 1 - 0.5
-    rp = np.hypot(du, dv) + 0.12 * (P.fbm(256, 256, 30, 1, 163) - 0.5)
-    cv.blend(1 - S(0.22, 0.32, rp), "#D07892", 0.9)
-    cv.blend(1 - S(0.08, 0.15, rp), "#8E4060", 0.8)
-    cv.blend(S(0.8, 0.95, np.hypot(cv.u - 0.5, cv.v - 0.5) * 2), "#D9CBB4", 0.8)
-    m = C.material("leather_pink", rough=0.65, image=tex("leather_pink", cv))
+    g.V, g.UV, g.COL = list(V), list(UV), list(COL)
+    for f in grid_faces(nrings, segs):  # the smooth underside / stalk material where all corners are underside
+        g.F.append(f)
+        g.FM.append(1 if all(MAT[i] == 1 for i in f) else 0)
+    # pores (planar texture space, cm): the texture paints every one; the ones on the crests carry a polyp nub
+    lat = PoreLattice(PINK_UVR, 0.3, 163, jitter=0.1)
+    inst = Instances(164)
+    e = 2e-3
+    cand = []
+    for x, z, r in lat.centres():
+        ur, a = math.hypot(x, z), math.atan2(z, x)
+        rt = outline(a) - RIM
+        if ur > rt * 0.97:
+            continue
+        rid = float(pink_ridge(x, z, ph)) if ur <= rt else 0.6
+        if rid < 0.45 or r < 0.2:
+            continue
+        cand.append((ur, a, r))
+    for i in np.sort(rs.choice(len(cand), min(PINK_POLYPS, len(cand)), replace=False)):
+        ur, a, r = cand[i]
+        p = surf(ur, a)
+        du, da = surf(ur + e, a) - surf(max(ur - e, 0.0), a), surf(ur, a + e) - surf(ur, a - e)
+        nl = unit(np.cross(da, du)) if ur > 0.05 else UP
+        if np.dot(nl, p - np.array([0, 1.0, 0])) < 0:
+            nl = -nl
+        inst.add(q_rotate(q, p + nl * 0.01) + hit, unit(q_rotate(q, nl)), 0.8 + 0.4 * r,
+                 phase=(0.05 * ur + rs.normal(0, 0.05)) % 1)
+    # top texture: lavender-white skin packed with salmon-pink pores (rose mouths, pale tentacle-tip specks); the
+    # narrow furrows between the lobes are paler with fewer pores; the unrolled rim keeps the pores
+    n = 512
+    cv = P.Canvas(n, n, "#D8C9D6")
+    X, Z = (cv.u - 0.5) * 2 * PINK_UVR, (cv.v - 0.5) * 2 * PINK_UVR
+    rid = pink_ridge(X, Z, ph).astype(np.float32)
+    furrow = (1 - S(0.12, 0.4, rid)) * (1 - S(4.0, 5.0, np.hypot(X, Z)))
+    cv.multiply(0.92 + 0.14 * P.fbm(n, n, 10, 3, 162))
+    cv.blend(furrow, "#ECE6F2", 0.7)
+    d, cr = lat.field(X, Z)
+    size = 0.92 + 0.16 * cr
+    keep = (cr > 0.05 + 0.9 * furrow).astype(np.float32)
+    ring = (1 - S(0.4, 0.47, d / size)) * keep
+    cv.blend(ring, "#D5838F", 0.92)
+    cv.blend(ring * S(0.55, 0.9, cr), "#E09A86", 0.4)              # some pores salmon-orange
+    cv.blend(ring * (1 - S(0.2, 0.36, d / size)), "#C06A7C", 0.5)  # deeper pink toward the mouth
+    cv.blend((1 - S(0.08, 0.14, d / size)) * keep, "#8A4258", 0.8)  # mouths
+    spark = (1 - S(0.02, 0.06, np.abs(d / size - 0.33))) * S(0.66, 0.76, P.fbm(n, n, 110, 1, 165)) * keep
+    cv.blend(spark, "#F8F0F4", 0.75)                                 # retracted tentacle tips
+    cv.blend(S(0.55, 0.85, P.fbm(n, n, 5, 2, 166)), "#C7A3C2", 0.15)  # broad lilac / cream blotches
+    m_top = C.material("leather_pink", rough=0.6, image=tex("leather_pink", cv, jpeg=True))
+    bc = P.Canvas(128, 128, "#BCA98F")
+    rr = np.hypot(bc.u - 0.5, bc.v - 0.5) * 2 * PINK_UVR
+    bc.blend(1 - S(1.5, 3.2, rr), "#8F7C66", 0.6)                   # darker foot
+    bc.blend(S(3.4, 4.4, rr), "#CBB5B6", 0.6)                       # paler lip under the rim
+    bc.multiply(0.9 + 0.18 * P.fbm(128, 128, 6, 3, 167))
+    m_base = C.material("leather_pink_base", rough=0.55, image=tex("leather_pink_base", bc, jpeg=True))
+    pc = P.Canvas(32, 32)
+    pc.vgrad("#C27A8A", "#EBCFD6", 0.2, 0.95)
+    m_pol = C.material("leather_pink_polyp", rough=0.55, image=tex("leather_pink_polyp", pc), double=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_leather_pink_front", species="lobophytum_sp")
-    body = g.obj("Body", root, "body", [m], smooth=True)
-    C.recalc_normals(body)
-    return root, [body], {}
+    body = g.obj("Body", root, "body", [m_top, m_base], smooth=True)
+    orient_out(body, hit + axis * 1.0)
+    proto = proto_bead(0.085, 0.11)  # low pink polyp nubs that fold down when the colony closes
+    pol = polyp_node("Polyps", root, proto, [m_pol], inst)
+    print(f"[coral] leather_pink: {g.tris()} body tris, {len(inst)} polyp nubs")
+    return root, [body, pol], {"Polyps": (len(inst), sum(len(f) - 2 for f in proto[1]))}
+
+
+# Finger leather v2 (2026-10-15 remake; [P p14] top left): not a ring of smooth tubes but a short, broad trunk that
+# splits into stout lobes, each forking again into 2-3 blunt, knobbly fingers with rounded pale tips, the whole
+# colony velvety tan with tiny polyps (painted speckle + an instanced polyp coat).
+FINGER_POLYPS = 240
+
+
+def finger_tube(pts, rads, sides, rs, knob=0.08):
+    """Knobbly tube with a rounded tip: radius jitter per ring, then 3 shrinking rings and a point past the end."""
+    import geomlib as G
+    pts = np.asarray(pts, float)
+    rads = np.asarray(rads, float) * (1 + rs.normal(0, knob, len(rads)))
+    tng = unit(pts[-1] - pts[-2])
+    r1 = rads[-1]
+    tip = [pts[-1] + tng * r1 * f for f in (0.45, 0.8)]
+    pts = np.vstack([pts, tip])
+    rads = np.r_[rads, r1 * 0.88, r1 * 0.55]
+    V, F, tv, av = G.tube(pts, rads, sides, cap_start=False, cap_end=True, up=(0, 0, 1))
+    return V, F, tv, av, pts, rads
 
 
 def finger_leather(rock, A):
-    """[P p14] tan finger leather (Sinularia-like): thick blunt finger lobes from a short trunk, fuzzy with tiny
-    extended polyps."""
+    """[P p14] tan finger leather (Sinularia-like) on the arch's left top."""
     import geomlib as G
     hit, hn = new_anchor(rock, "coral_finger_leather")
     rs = RS(171)
@@ -919,57 +1201,94 @@ def finger_leather(rock, A):
     t2 = np.cross(axis, t1)
     g = T.WGeo()
     inst = Instances(172)
-    trunk_top = hit + axis * 1.6
-    V, F, tv, av = G.tube(np.array([hit - axis * 0.4, hit + axis * 0.8, trunk_top]), [2.2, 1.9, 1.7], 10,
-                          cap_start=False, cap_end=True, up=(0, 0, 1))
+    trunk_top = hit + axis * 1.0
+    V, F, tv, av = G.tube(np.array([hit - axis * 1.2, hit - axis * 0.2, hit + axis * 0.5, trunk_top]),
+                          [2.0, 1.75, 1.5, 1.35], 12, cap_start=False, cap_end=True, up=(0, 0, 1))  # short, sunk foot
     g.add(V, F, np.c_[av, tv * 0.2], np.c_[np.full(len(V), 0.3), np.zeros(len(V)), np.zeros(len(V)), np.ones(len(V))])
-    nf, sides = 10, 6
-    per = 18
-    for k in range(nf):
-        a = 2 * math.pi * k / nf + rs.uniform(-0.25, 0.25)
+    skins = []   # (V, sides, phase) for the polyp coat
+    sides = 6
+    nlobes = 5
+    for k in range(nlobes):
+        a = 2 * math.pi * k / nlobes + rs.uniform(-0.3, 0.3)
         out = t1 * math.cos(a) + t2 * math.sin(a)
-        L = rs.uniform(3.2, 5.2) * (0.8 if k % 3 == 0 else 1.0)
-        base = trunk_top + out * rs.uniform(0.6, 1.3) - axis * 0.3
-        lean = rs.uniform(0.6, 1.2)
-        pts = G.bezier(base, base + (axis * 0.6 + out * lean * 1.5) * L * 0.33,
-                       base + (axis * 1.4 + out * lean * 1.3) * L * 0.45,
-                       base + unit(axis * 1.2 + out * lean + rs.normal(0, 0.25, 3)) * L, 7)
-        rads = np.linspace(0.62, 0.36, 7)
-        V, F, tv, av = G.tube(pts, rads, sides, cap_start=False, cap_end=True, up=tuple(axis))
-        g.add(V, F, np.c_[av, 0.2 + tv * 0.8], np.c_[np.full(len(V), 0.3), np.full(len(V), k / nf), tv, np.ones(len(V))])
-        # polyp fuzz: tiny feathery polyps on the finger surface (ring vertices i*sides + s sit around pts[i])
-        for _ in range(per):
-            i = int(rs.integers(1, len(pts)))
-            s = int(rs.integers(0, sides))
-            vtx = V[i * sides + s]
-            nrm = unit(vtx - pts[i])
-            inst.add(vtx + nrm * 0.02, nrm, rs.uniform(0.8, 1.2), phase=(k / nf + rs.normal(0, 0.04)) % 1)
-    cv = P.Canvas(64, 128, "#A8865A")
-    cv.multiply(0.85 + 0.3 * P.fbm(128, 64, 10, 3, 173))
-    cv.blend(S(0.6, 0.75, P.fbm(128, 64, 40, 1, 174)), "#D8C49A", 0.6)
-    cv.blend(S(0.9, 1.0, cv.v), "#C4A878", 0.5)
-    m = C.material("finger_leather", rough=0.7, image=tex("finger_leather", cv))
-    pc = P.Canvas(32, 32, "#CDB88E")
+        base = trunk_top + out * rs.uniform(0.5, 0.9) - axis * 0.35
+        lean = rs.uniform(0.45, 0.9)
+        L = rs.uniform(1.6, 2.2)
+        d0 = unit(axis * 1.0 + out * lean)
+        fork = base + d0 * L
+        lobe = G.bezier(base, base + d0 * L * 0.4, fork - d0 * L * 0.25, fork, 4)
+        r0 = rs.uniform(0.72, 0.85)
+        V, F, tv, av = G.tube(lobe, np.linspace(r0, r0 * 0.9, 4), sides, cap_start=False, cap_end=True, up=tuple(axis))
+        ph = k / nlobes
+        g.add(V, F, np.c_[av, 0.2 + tv * 0.3], np.c_[np.full(len(V), 0.3), np.full(len(V), ph), tv * 0.35, np.ones(len(V))])
+        skins.append((V[:-1], sides, ph, lobe, 0.0))
+        nf = 2 if rs.uniform() < 0.55 else 3
+        for j in range(nf):
+            b = (j - (nf - 1) / 2) * 0.9 + rs.normal(0, 0.15)
+            side = unit(np.cross(d0, axis) + 1e-6)
+            fd = unit(d0 * 1.0 + side * b * 0.75 + axis * rs.uniform(0.1, 0.4))
+            Lf = rs.uniform(2.2, 3.6) * (0.75 if j != nf // 2 else 1.0)
+            p0 = fork - d0 * 0.25 + side * b * 0.35
+            p3 = p0 + unit(fd + axis * 0.35 + rs.normal(0, 0.12, 3)) * Lf
+            pts = G.bezier(p0, p0 + fd * Lf * 0.35, p3 - unit(axis + fd) * Lf * 0.3, p3, 6)
+            rf = r0 * rs.uniform(0.62, 0.75)
+            V, F, tv, av, pts2, rads = finger_tube(pts, np.linspace(rf, rf * 0.82, 6), sides, rs)
+            g.add(V, F, np.c_[av, 0.5 + tv * 0.5], np.c_[np.full(len(V), 0.35), np.full(len(V), ph),
+                                                         0.35 + 0.65 * tv, np.ones(len(V))])
+            skins.append((V[:-1], sides, ph, pts2, 0.4))
+    # polyp coat: on the skin of lobes and fingers, by surface area (fingers carry most)
+    rings = []
+    for Vs, sd, ph, pts, w0 in skins:
+        nr = len(Vs) // sd
+        for i in range(1, nr):
+            for s_ in range(sd):
+                rings.append((Vs[i * sd + s_], Vs[i * sd + s_] - pts[min(i, len(pts) - 1)], ph, w0))
+    pick = rs.choice(len(rings), min(FINGER_POLYPS, len(rings)), replace=False)
+    for i in np.sort(pick):
+        v, nrm, ph, w0 = rings[i]
+        nrm = unit(nrm + rs.normal(0, 0.15, 3))
+        inst.add(v + nrm * 0.02, nrm, rs.uniform(0.8, 1.2), phase=(ph + rs.normal(0, 0.04)) % 1)
+    # skin: warm tan, velvety speckle of tiny polyps, darker grooves at the base, paler rounded tips
+    cv = P.Canvas(128, 256, "#A08560")
+    cv.multiply(0.86 + 0.28 * P.fbm(256, 128, 8, 3, 173))
+    sp = P.fbm(256, 128, 48, 1, 174)
+    cv.blend(S(0.58, 0.72, sp), "#D2BC92", 0.7)
+    cv.blend(1 - S(0.2, 0.36, sp), "#7E6440", 0.45)
+    cv.blend(1 - S(0.0, 0.3, cv.v), "#8C7250", 0.5)
+    cv.blend(S(0.88, 0.99, cv.v), "#D4C098", 0.7)
+    m = C.material("finger_leather", rough=0.75, image=tex("finger_leather", cv, jpeg=True))
+    pc = P.Canvas(32, 32)
+    t = np.clip((pc.u + pc.v) / 2, 0, 1)
+    pc.rgb = (hex2rgb("#8E7350")[None, None] * (1 - S(0.2, 0.7, t))[..., None]
+              + hex2rgb("#C8B48C")[None, None] * S(0.2, 0.7, t)[..., None]).astype(np.float32)
     m_p = C.material("finger_leather_polyp", rough=0.6, image=tex("finger_leather_polyp", pc), double=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_finger_leather", species="sinularia_sp")
     body = g.obj("Body", root, "body", [m], smooth=True)
     C.recalc_normals(body)
-    proto = proto_feather(6, 0.1, 0.035, 0.24, 62, 0.04, 1)
+    proto = proto_feather(6, 0.1, 0.04, 0.18, 70, 0.05, 1)
     pol = polyp_node("Polyps", root, proto, [m_p], inst)
-    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+    print(f"[coral] finger_leather: {g.tris()} body tris, {len(inst)} polyps, {len(skins)} lobes + fingers")
+    return root, [body, pol], {"Polyps": (len(inst), sum(len(f) - 2 for f in proto[1]))}
 
 
 EAR_R = 6.5  # cm disc radius ([P p05]: a ~13 cm disc, folded like a taco)
+EAR_BEADS = 400
 
 
-def ear_local(t, a, ph):
-    """Elephant-ear disc in its local frame (+Y up): back half curled up, sides cupped, ruffled rim."""
+def ear_local(t, a, ph, ys=1.0):
+    """Elephant-ear disc in its local frame (+Y up): the back half curls up into a tall, slightly overhanging wall
+    (the "taco" of [P p05]), the sides cup, the rim ruffles; the front rim band rolls down. ys squashes the height
+    above the disc floor (keeps the wall under the water surface)."""
     R = EAR_R
     x, z = R * t * math.cos(a), R * t * 0.9 * math.sin(a)
-    y = R * (0.12 + 0.10 * (x / R) ** 2 + 0.38 * max(0.0, -z / R) ** 2) \
-        + R * (0.05 * t ** 3 * math.sin(7 * a + ph) + 0.02 * t ** 2 * math.sin(13 * a))
-    return np.array([x, y, z])
+    back = max(0.0, -z / R)
+    y = R * (0.1 + 0.13 * (x / R) ** 2 + 0.95 * back ** 2.2) \
+        + R * (0.055 * t ** 3 * math.sin(7 * a + ph) + 0.022 * t ** 2 * math.sin(13 * a + 2 * ph))
+    y -= R * 0.07 * S(0.8, 1.0, t) * (1 - min(1.0, back * 2.5))       # the front band rolls down
+    z += R * 0.32 * back ** 3                                          # the wall's top curls forward over the centre
+    y0 = R * 0.1
+    return np.array([x * (1 - 0.12 * back ** 2), y0 + (y - y0) * ys, z])
 
 
 def proto_bead(h=0.24, r=0.13):
@@ -978,6 +1297,17 @@ def proto_bead(h=0.24, r=0.13):
     F = [(0, 4, 1), (1, 4, 2), (2, 4, 3), (3, 4, 0)]
     UV = [(0.5, 0.1)] * 4 + [(0.5, 0.95)]
     COL = [(0, 0, 0.2, 1)] * 4 + [(0, 0, 1, 1)]
+    return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
+
+
+def proto_knob(h=0.3, r=0.12):
+    """Bulb on a narrow foot (6 tris): foot point, a 3-vertex equator high up, a top point. Smooth-shaded it reads
+    as a round bead; UV v and the hinge run foot (0) -> crown (1)."""
+    V = [(0, 0, 0)] + [(r * math.cos(2 * math.pi * k / 3), 0.6 * h, r * math.sin(2 * math.pi * k / 3)) for k in range(3)]
+    V.append((0, h, 0))
+    F = [(0, 1 + (k + 1) % 3, 1 + k) for k in range(3)] + [(4, 1 + k, 1 + (k + 1) % 3) for k in range(3)]
+    UV = [(0.5, 0.05)] + [(0.5, 0.6)] * 3 + [(0.5, 0.97)]
+    COL = [(0, 0, 0.0, 1)] + [(0, 0, 0.6, 1)] * 3 + [(0, 0, 1, 1)]
     return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
 
 
@@ -991,24 +1321,51 @@ def elephant_ear(rock, A):
     ph = rs.uniform(0, 6.28)
     q = q_from_up(nrm, math.radians(rs.uniform(-20, 20)))
     c = hit - nrm * 0.2
-    rings, segs = 8, 40
-    V, UV, COL = [ear_local(0, 0, ph)], [(0.5, 0.5)], [(0.3, 0, 0.1, 1)]
+    rings, segs = 12, 40
+    # lift 0.5 cm, squash the wall until it stays 1.2 cm under the water surface, then drape: where the lumpy rock
+    # top pokes through the disc, raise the disc over it (a smoothed, never-lower height field over the polar grid)
+    lift = 0.5
+    c = c + nrm * lift
+    for ys in np.arange(1.0, 0.3, -0.05):
+        oral = np.array([q_rotate(q, ear_local(i / rings, 2 * math.pi * k / segs, ph, ys)) for i in range(rings + 1)
+                         for k in range(0, segs, 2)])
+        if (oral[:, 1] + c[1]).max() < C.WATER_Y - 1.2:
+            break
+    D = np.zeros((rings + 1, segs))
+    for i in range(rings + 1):
+        for k in range(segs):
+            p = q_rotate(q, ear_local(i / rings, 2 * math.pi * k / segs, ph, ys)) + c
+            if inside_rock(rock, p, 0.12):
+                h2, _ = rock.ray(p + nrm * 4.0, -nrm, 4.0)
+                if h2 is not None:
+                    D[i, k] = max(0.0, float(np.dot(h2 - p, nrm))) + 0.15
+    D[0] = D[0].max()
+    for _ in range(3):
+        nb = (np.roll(D, 1, 1) + np.roll(D, -1, 1) + np.r_[D[:1], D[:-1]] + np.r_[D[1:], D[-1:]]) / 4
+        D = np.maximum(D, 0.5 * D + 0.5 * nb)
+    print(f"[coral] elephant_ear: wall height x{ys:.2f}, drape max {D.max():.2f} cm over {int((D > 0).sum())} grid points")
+
+    def el(t, a, ph_):
+        fi = min(max(t, 0.0), 1.0) * rings
+        fk = (a % (2 * math.pi)) / (2 * math.pi) * segs
+        i0, k0 = min(int(fi), rings - 1), int(fk) % segs
+        u, w = fi - i0, fk - int(fk)
+        d = (D[i0, k0] * (1 - u) * (1 - w) + D[i0 + 1, k0] * u * (1 - w) + D[i0, (k0 + 1) % segs] * (1 - u) * w
+             + D[i0 + 1, (k0 + 1) % segs] * u * w)
+        return ear_local(t, a, ph_, ys) + np.array([0.0, d, 0.0])
+    V, UV, COL = [el(0, 0, ph)], [(0.5, 0.5)], [(0.3, 0, 0.1, 1)]
     for i in range(1, rings + 1):
         t = i / rings
         for k in range(segs):
             a = 2 * math.pi * k / segs
-            V.append(ear_local(t, a, ph))
+            V.append(el(t, a, ph))
             UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
             COL.append((0.5 + 0.4 * t, 0, 0.1 + 0.6 * t ** 2, 1))
-    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
-    for i in range(rings - 1):
-        b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
-        for k in range(segs):
-            F.append((b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k))
+    F = grid_faces(rings, segs)
     b = len(V)  # underside skirt down to the foot
     for k in range(segs):
         a = 2 * math.pi * k / segs
-        V.append(np.array([1.4 * math.cos(a), -0.3, 1.3 * math.sin(a)]))
+        V.append(np.array([1.6 * math.cos(a), -0.3, 1.45 * math.sin(a)]))
         UV.append((0.5 + 0.05 * math.cos(a), 0.5 + 0.05 * math.sin(a)))
         COL.append((0, 0, 0, 1))
     outer = 1 + (rings - 1) * segs
@@ -1017,68 +1374,96 @@ def elephant_ear(rock, A):
     mb = len(V)  # raised mouth cone
     for k in range(8):
         a = 2 * math.pi * k / 8
-        V.append(ear_local(0.07, a, ph) + np.array([0, 0.05, 0]))
+        V.append(el(0.07, a, ph) + np.array([0, 0.05, 0]))
         UV.append((0.5 + 0.02 * math.cos(a), 0.5 + 0.02 * math.sin(a)))
         COL.append((0.3, 0, 0.1, 1))
-    V.append(ear_local(0.0, 0.0, ph) + np.array([0, 0.45, 0]))
+    V.append(el(0.0, 0.0, ph) + np.array([0, 0.5, 0]))
     UV.append((0.5, 0.5))
     COL.append((0.3, 0, 0.1, 1))
     F += [(mb + k, mb + 8, mb + (k + 1) % 8) for k in range(8)]
+    for k in range(segs):  # the foot stays on the rock
+        V[b + k] = V[b + k] - np.array([0.0, lift, 0.0])
     g = T.WGeo()
-    g.add(np.array([q_rotate(q, v) for v in V]) + c, F, np.array(UV), np.array(COL))
+    W = np.array([q_rotate(q, v) for v in V]) + c
+    g.add(W, F, np.array(UV), np.array(COL))
+    # beads: area-uniform over the oral disc inside the rim band (t 0.09 .. 0.78), the curled back wall included;
+    # normals from the parametric surface, signed so they face the oral side
+    e = 0.01
+
+    def oral_n(t, a):
+        du = el(min(t + e, 1), a, ph) - el(max(t - e, 0), a, ph)
+        dv = el(t, a + e, ph) - el(t, a - e, ph)
+        return unit(np.cross(dv, du))
+    sgn = 1.0 if oral_n(0.3, 0.3)[1] > 0 else -1.0
     inst = Instances(182)
-    sp = 0.45
-    for j in range(int(2 * EAR_R / (sp * 0.866)) + 1):
-        for i in range(int(2 * EAR_R / sp) + 1):
-            x = -EAR_R + i * sp + (j % 2) * sp * 0.5 + rs.normal(0, sp * 0.15)
-            z = -EAR_R + j * sp * 0.866 + rs.normal(0, sp * 0.15)
-            t = math.hypot(x, z / 0.9) / EAR_R
-            if t > 0.8 or t < 0.09:
-                continue
-            a = math.atan2(z / 0.9, x)
-            e = 0.01
-            du = ear_local(min(t + e, 1), a, ph) - ear_local(max(t - e, 0), a, ph)
-            dv = ear_local(t, a + e, ph) - ear_local(t, a - e, ph)
-            ln = unit(np.cross(dv, du))
-            if ln[1] < 0:
-                ln = -ln
-            inst.add(q_rotate(q, ear_local(t, a, ph)) + c, unit(q_rotate(q, ln)), rs.uniform(0.8, 1.3) * (1.1 - 0.3 * t))
-    cv = P.Canvas(256, 256, "#3C2830")
-    rr = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
-    cv.multiply(0.85 + 0.3 * P.fbm(256, 256, 12, 3, 183))
-    band = S(0.8, 0.88, rr)
-    cv.blend(band, "#7C8294", 0.85)
-    cv.blend(band * S(0.55, 0.7, P.fbm(256, 256, 70, 1, 184)), "#4E5368", 0.6)
-    cv.blend(S(0.96, 1.0, rr), "#5E6478", 0.6)
-    spots = S(0.74, 0.78, P.fbm(256, 256, 22, 2, 185)) * S(0.45, 0.65, rr) * (1 - S(0.85, 0.9, rr))
-    cv.blend(spots, "#C9D640", 0.9)
-    cv.blend(1 - S(0.03, 0.05, rr), "#D88A3A", 0.9)
+    cand, area = [], []
+    for i in range(1, 200):
+        t = 0.09 + 0.69 * (i + 0.5) / 200
+        for k in range(120):
+            a = 2 * math.pi * (k + 0.5 * (i % 2)) / 120
+            cand.append((t, a))
+            dt, da = 0.69 / 200, 2 * math.pi / 120
+            area.append(np.linalg.norm(np.cross(el(t + dt, a, ph) - el(t, a, ph),
+                                                el(t, a + da, ph) - el(t, a, ph))))
+    area = np.array(area)
+    for j in np.sort(rs.choice(len(cand), EAR_BEADS, replace=False, p=area / area.sum())):
+        t, a = cand[j]
+        a += rs.normal(0, 0.01)
+        ln = oral_n(t, a) * sgn
+        inst.add(q_rotate(q, el(t, a, ph)) + c, unit(q_rotate(q, ln)), rs.uniform(0.85, 1.25) * (1.15 - 0.35 * t))
+    n = 512
+    cv = P.Canvas(n, n, "#3A2630")
+    du, dv = cv.u - 0.5, cv.v - 0.5
+    rr, ang = np.hypot(du, dv) * 2, np.arctan2(dv, du)
+    cv.multiply(0.8 + 0.35 * P.fbm(n, n, 12, 3, 183))
+    cv.blend(1 - S(0.08, 0.3, rr), "#2A1C24", 0.6)                          # dark hollow round the mouth
+    # rim band: blue-grey, radially striated, covered in fine brown-grey marginal bumps
+    band = S(0.76, 0.84, rr)
+    cv.blend(band, "#8790AA", 0.9)
+    stri = 0.5 + 0.5 * np.sin(ang * 140 + 6 * P.fbm(n, n, 8, 2, 186))
+    cv.blend(band * S(0.55, 0.9, stri), "#A8B2CA", 0.5)
+    bumps = S(0.6, 0.72, P.fbm(n, n, 90, 1, 184))
+    cv.blend(band * bumps, "#5A5068", 0.65)
+    cv.blend(S(0.97, 1.0, rr), "#6E7690", 0.6)
+    spots = S(0.7, 0.76, P.fbm(n, n, 18, 2, 185)) * S(0.55, 0.7, rr) * (1 - S(0.8, 0.86, rr))
+    cv.blend(spots, "#C4D23E", 0.9)                                          # yellow-green patches by the band
+    cv.blend(spots * S(0.5, 0.8, P.fbm(n, n, 40, 1, 187)), "#E0A43A", 0.5)
+    cv.blend(1 - S(0.03, 0.05, rr), "#D88A3A", 0.9)                          # orange mouth lip
     cv.blend(1 - S(0.015, 0.03, rr), "#2A1A1E", 0.9)
-    m = C.material("elephant_ear", rough=0.6, image=tex("elephant_ear", cv), emissive="#C9D640",
+    m = C.material("elephant_ear", rough=0.6, image=tex("elephant_ear", cv, jpeg=True), emissive="#C9D640",
                    emissive_strength=0.0, double=True)
-    bc = P.Canvas(32, 64, "#4A303A")
-    bc.vgrad("#3A2630", "#9A7C88", 0.3, 1.0)
-    m_b = C.material("elephant_ear_bead", rough=0.5, image=tex("elephant_ear_bead", bc))
+    bc = P.Canvas(16, 64)
+    bc.vgrad("#2E1E28", "#B898B4", 0.25, 1.0, 1.4)                           # plum foot -> lilac crown
+    m_b = C.material("elephant_ear_bead", rough=0.45, image=tex("elephant_ear_bead", bc))
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_elephant_ear", species="amplexidiscus_fenestrafer")
     body = g.obj("Body", root, "body", [m], smooth=True)
-    proto = proto_bead()
+    proto = proto_knob(0.32, 0.15)
     pol = polyp_node("Beads", root, proto, [m_b], inst)
-    return root, [body, pol], {"Beads": (len(inst), len(proto[1]))}
+    print(f"[coral] elephant_ear: {g.tris()} body tris, {len(inst)} beads")
+    return root, [body, pol], {"Beads": (len(inst), len(proto[1]))}  # all triangles
 
 
 # ----------------------------------------------------------------------------
 # Zoanthids (C4) on a rubble rock on the sand
 # ----------------------------------------------------------------------------
 def rubble(center, radii, seed, segs=14, rings=8, rough=0.35):
+    """Lumpy live-rock rubble: an ellipsoid with smooth low-frequency lumps (warped sines over the direction) plus a
+    little fine noise, its bottom flattened into the sand."""
     import geomlib as G
-    V, F = G.ellipsoid(center, radii, segs, rings)
-    rs = RS(seed)
     c = np.asarray(center, float)
+    V, F = G.ellipsoid((0, 0, 0), (radii[0], radii[2], radii[1]), segs, rings)
+    V = V[:, [0, 2, 1]] + c          # poles on the vertical axis (the top one smooth, the bottom one in the sand)
+    F = [f[::-1] for f in F]
+    rs = RS(seed)
     d = V - c
     nrm = unit(d / np.asarray(radii) ** 2)
-    noise = rs.normal(0, 1, len(V))
-    V = V + nrm * (noise[:, None] * rough * min(radii) * 0.25)
+    u = unit(d / np.asarray(radii))
+    ph = rs.uniform(0, 6.28, 6)
+    lump = (0.5 * np.sin(2.6 * u[:, 0] + 1.3 * u[:, 2] + ph[0]) * np.sin(2.2 * u[:, 1] + ph[1])
+            + 0.35 * np.sin(4.1 * u[:, 2] - 2.0 * u[:, 0] + ph[2]) + 0.25 * np.sin(6.3 * u[:, 1] + 3.1 * u[:, 0] + ph[3]))
+    noise = rs.normal(0, 1, len(V)) * 0.25
+    V = V + nrm * ((lump + noise)[:, None] * rough * min(radii) * 0.25)
     V[:, 1] = np.maximum(V[:, 1], c[1] - radii[1] * 0.4)  # flat-ish bottom buried in the sand
     return V, F
 
@@ -1088,7 +1473,9 @@ def zoa(rock, A):
     c = np.array([pos[0], pos[1] - 0.2, pos[2]])
     V, F = rubble(c, (3.2, 1.9, 2.2), 3, segs=24, rings=12)
     g = T.WGeo()
-    g.add(V, F, np.c_[(V[:, 0] - c[0]) / 6 + 0.5, (V[:, 2] - c[2]) / 6 + 0.5], (0.2, 0, 0, 1))
+    dd = V - c  # spherical UV (the rubble texture tiles), so the sides do not streak
+    g.add(V, F, np.c_[np.arctan2(dd[:, 2], dd[:, 0]) / (2 * math.pi) * 2 + 1.0,
+                      np.arctan2(dd[:, 1], np.hypot(dd[:, 0], dd[:, 2])) / math.pi + 0.5], (0.2, 0, 0, 1))
     rs = RS(21)
     instA, instB = Instances(22), Instances(23)
     k = 0
@@ -1110,66 +1497,85 @@ def zoa(rock, A):
         # colony: orange/green-centred (A) on one side, brown/cream (B) on the other
         (instA if (p[0] - c[0]) + rs.normal(0, 0.8) < 0.6 else instB).add(p, nn, rs.uniform(0.85, 1.15))
         k += 1
-    # polyp: column (8 sides) + oral disc (12) + 24 rim tentacles
+    # polyp (2026-10-15 remake, [P p08]): a waisted column (6 sides, 2 segments) flaring into a trumpet, a concave
+    # oral disc (12) with the mouth at the bottom of the cup, and 24 rim tentacles angled up and out; alternate
+    # tentacles take the left / right tentacle colour (u 0.15 / 0.35) so the rim reads striped
     def proto(r=0.5, h=0.5):
         Vp, Fp, UVp, COLp = [], [], [], []
-        for j, (y, rr) in enumerate(((0, r * 0.55), (h, r * 0.6))):
-            for s in range(8):
-                a = 2 * math.pi * s / 8
+        for j, (y, rr) in enumerate(((0, r * 0.5), (h * 0.55, r * 0.42), (h, r * 0.66))):
+            for s_ in range(6):
+                a = 2 * math.pi * (s_ + 0.5 * j) / 6
                 Vp.append((rr * math.cos(a), y, rr * math.sin(a)))
-                UVp.append((0.1, 0.1 + 0.2 * j))
-                COLp.append((0, 0, 0.1 * j, 1))
-        for s in range(8):
-            Fp.append((s, 8 + s, 8 + (s + 1) % 8, (s + 1) % 8))
+                UVp.append((0.1, 0.1 + 0.1 * j))
+                COLp.append((0, 0, 0.05 * j, 1))
+        for j in range(2):
+            for s_ in range(6):
+                b0, b1 = 6 * j, 6 * (j + 1)
+                Fp.append((b0 + s_, b1 + s_, b0 + (s_ + 1) % 6))
+                Fp.append((b0 + (s_ + 1) % 6, b1 + s_, b1 + (s_ + 1) % 6))
         b = len(Vp)
-        Vp.append((0, h + 0.03, 0))
+        Vp.append((0, h - 0.04, 0))
         UVp.append((0.75, 0.5))
         COLp.append((0, 0, 0.2, 1))
-        for s in range(12):
-            a = 2 * math.pi * s / 12
-            Vp.append((r * 0.62 * math.cos(a), h + 0.06, r * 0.62 * math.sin(a)))
+        for s_ in range(12):
+            a = 2 * math.pi * s_ / 12
+            Vp.append((r * 0.66 * math.cos(a), h + 0.07, r * 0.66 * math.sin(a)))
             UVp.append((0.75 + 0.24 * math.cos(a), 0.5 + 0.48 * math.sin(a)))
             COLp.append((0, 0, 0.3, 1))
-        for s in range(12):
-            Fp.append((b, b + 1 + (s + 1) % 12, b + 1 + s))
-        for s in range(24):
-            a = 2 * math.pi * (s + 0.5) / 24
+        for s_ in range(12):
+            Fp.append((b, b + 1 + (s_ + 1) % 12, b + 1 + s_))
+        for s_ in range(24):
+            a = 2 * math.pi * (s_ + 0.5) / 24
             dd = np.array([math.cos(a), 0, math.sin(a)])
             tg = np.array([-math.sin(a), 0, math.cos(a)])
-            base = np.array([0, h + 0.05, 0]) + dd * r * 0.6
-            tip = base + dd * r * 0.45 + UP * 0.1
+            base = np.array([0, h + 0.06, 0]) + dd * r * 0.64
+            tip = base + dd * r * 0.42 + UP * 0.17
             bb = len(Vp)
-            Vp += [tuple(base - tg * 0.07), tuple(base + tg * 0.07), tuple(tip)]
-            UVp += [(0.3, 0.6), (0.3, 0.6), (0.3, 0.9)]
+            u = 0.15 if s_ % 2 else 0.35
+            Vp += [tuple(base - tg * 0.075), tuple(base + tg * 0.075), tuple(tip)]
+            UVp += [(u, 0.6), (u, 0.6), (u, 0.9)]
             COLp += [(0, 0, 0.3, 1)] * 2 + [(0, 0, 1, 1)]
             Fp.append((bb, bb + 2, bb + 1))
         return np.array(Vp, float), Fp, np.array(UVp, float), np.array(COLp, float)
 
-    def ptex(name, column, rim, disc, center, tip=None, mouth=None, glow=0.0):
-        """u < 0.5: column (v 0.1-0.3) and rim tentacles (v 0.6 base -> 0.9 tip); u >= 0.5: oral disc."""
+    def ptex(name, column, rim, disc, center, tip=None, mouth=None, glow=0.0, rim2=None, rays=None):
+        """u < 0.5: column (v 0.1-0.3) and rim tentacles (v 0.6 base -> 0.9 tip; u < 0.25 / > 0.25 alternate
+        tentacles, rim2 colours every other one); u >= 0.5: oral disc (rays: radial streaks between the rim and
+        the centre ring)."""
         cv = P.Canvas(64, 64, column)
         cv.blend((cv.u < 0.5) * S(0.5, 0.7, cv.v), rim)
+        if rim2:
+            cv.blend((cv.u < 0.25) * S(0.5, 0.7, cv.v), rim2)
         if tip:  # pale tentacle tips (the brown rim reads striped cream-brown in [P p07] [P p08])
             cv.blend((cv.u < 0.5) * S(0.74, 0.88, cv.v), tip)
         rr = np.hypot((cv.u - 0.75) / 0.25, (cv.v - 0.5) / 0.5)
         cv.blend((cv.u >= 0.5) * 1.0, disc)
+        if rays:
+            ang = np.arctan2(cv.v - 0.5, (cv.u - 0.75) * 2)
+            cv.blend((cv.u >= 0.5) * S(0.45, 0.9, np.cos(ang * 18)) * S(0.45, 0.6, rr) * (1 - S(0.85, 0.95, rr)), rays, 0.6)
         cv.blend((cv.u >= 0.5) * (1 - S(0.3, 0.5, rr)), center)
         if mouth:
             cv.blend((cv.u >= 0.5) * (1 - S(0.08, 0.16, rr)), mouth)
         cv.blend((cv.u >= 0.5) * S(0.85, 1.0, rr), rim)
         return C.material(name, rough=0.55, image=tex(name, cv), emissive=center, emissive_strength=glow)
 
-    rock_cv = P.Canvas(64, 64, "#A89A80")
-    rock_cv.multiply(0.8 + 0.35 * P.fbm(64, 64, 6, 3, 9))
-    rm = C.material("zoa_rubble", rough=0.9, image=tex("zoa_rubble", rock_cv))
-    mA = ptex("zoa_polyp_orange", "#7A5A3A", "#E0792A", "#E0792A", "#5FBF5A")
+    # rubble: porous grey-tan live rock with pink-purple coralline crust patches and dark pits
+    rock_cv = P.Canvas(128, 128, "#A49880")
+    rock_cv.multiply(0.75 + 0.4 * P.fbm(128, 128, 6, 4, 9))
+    rock_cv.blend(S(0.58, 0.7, P.fbm(128, 128, 4, 3, 10)), "#A87894", 0.6)
+    rock_cv.blend(S(0.66, 0.74, P.fbm(128, 128, 9, 2, 11)), "#8A6A9A", 0.4)
+    f1, f2, _ = P.voronoi(128, 128, 60, 12)
+    rock_cv.blend(1 - S(1.5, 3.0, f1), "#4A4038", 0.55)
+    rm = C.material("zoa_rubble", rough=0.9, image=tex("zoa_rubble", rock_cv, jpeg=True))
+    mA = ptex("zoa_polyp_orange", "#7A5A3A", "#E0792A", "#E0792A", "#5FBF5A", rim2="#C8642A", rays="#F09A4A")
     # [P p02] [P p07-p09]: brown rim tentacles with pale tips, a bright yellow oral ring, a green centre and a dark
     # mouth (was a cream-centred brown morph). No emissive: it is one flat colour and would tint the brown column green
-    mB = ptex("zoa_polyp_brown", "#3E2A1C", "#5E3C22", "#D9C238", "#7CC23A", tip="#C8AE7E", mouth="#2A3418")
-    mC = ptex("paly_polyp_brown", "#5A4030", "#7A5A36", "#7A5A36", "#D8C8A0")
-    # paly colony (C4b): 20 brown polyps at R2's right foot + a 10-polyp orange patch at (24, 5, 25)
+    mB = ptex("zoa_polyp_brown", "#3E2A1C", "#5E3C22", "#D9C238", "#7CC23A", tip="#C8AE7E", mouth="#2A3418",
+             rim2="#B89A6A", rays="#A88A2E")
+    mC = ptex("paly_polyp_brown", "#5A4030", "#7A5A36", "#7A5A36", "#D8C8A0", rim2="#9A7A52")
+    # paly colony (C4b): 20 brown polyps at R2's right foot + a 10-polyp orange patch at (17, 5, 30)
     instC, instD = Instances(24), Instances(25)
-    for cen, cnt, inst_, rad in ((A["coral_paly_left_foot"][0], 20, instC, 2.2), (np.array([24.0, 5.0, 25.0]), 10, instD, 1.4)):
+    for cen, cnt, inst_, rad in ((A["coral_paly_left_foot"][0], 20, instC, 2.2), (np.array([17.0, 5.0, 30.0]), 10, instD, 1.4)):
         placed, tries = [], 0
         while len(placed) < cnt and tries < 3000:
             tries += 1
@@ -1230,15 +1636,18 @@ def clove(rock, A):
             q = hit + t1 * rs.normal(0, 0.6) + t2 * rs.normal(0, 0.6)
             h, hn, _ = rock.nearest(q)
             inst.add(h + hn * 0.1, unit(hn + n * 0.6 + UP * 0.3), rs.uniform(0.9, 1.3), phase=tuft / 3)
-    cv = P.Canvas(64, 64, "#6E6A3C")
+    cv = P.Canvas(64, 64, "#6A5A3E")
+    cv.multiply(0.85 + 0.3 * P.fbm(64, 64, 6, 3, 33))
     st = C.material("clove_stolon", rough=0.85, image=tex("clove_stolon", cv))
-    fc = feather_canvas("#8A7A66", "#A8957F", "#B8A38E", "#CBBBA6", "#E0D6C6", seed=3)
+    # [2026-10-15] brown translucent stalk, cream-tan feathery tentacles with a darker rachis and pale pinnules
+    fc = feather_canvas("#6E5A44", "#9A8468", "#A8917A", "#D2C4AE", "#7E6A54", pinnules=11, seed=3,
+                        tip_white="#E8DECC")
     pm = C.material("clove_polyp", rough=0.6, image=tex("clove_polyp", fc, alpha=True), image_alpha=True,
                     double=True, clip=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_clove_kenya_front", species="clove_polyps")
     body = g.obj("Stolons", root, "body", [st], smooth=True)
-    pr = proto_feather_quads(8, 0.35, 0.09, 0.8, 62, 0.11, 4, 0.35)
+    pr = proto_feather_quads(8, 0.5, 0.09, 0.8, 48, 0.13, 4, 0.55)   # tall stalk, tentacles cupped up then out
     pol = polyp_node("Polyps", root, pr, [pm], inst, extras={"alphaTest": 0.5})
     nt = sum(len(f) - 2 for f in pr[1])
     return root, [body, pol], {"Polyps": (len(inst), nt)}
@@ -1247,56 +1656,75 @@ def clove(rock, A):
 # ----------------------------------------------------------------------------
 # Mushroom (C5)
 # ----------------------------------------------------------------------------
-def shroom_disc(c, n, radius, seed):
-    """Ruffled corallimorph disc (radius cm) on a short stalk, oriented to normal n."""
+def shroom_disc(c, n, radius, seed, rings=7, segs=36):
+    """Ruffled corallimorph disc (radius cm) on a short stalk, oriented to normal n (2026-10-15 remake): a low dome
+    with a raised mouth cone, faint radial ribs, a margin that folds into 7-9 soft lobes and lifts on one side, and a
+    stalk skirt that flares into the rock. UV: polar (centre 0.5, 0.5 -> rim radius 0.47); the skirt maps to the
+    texture's outer ring (u radius 0.47 .. 0.5)."""
     rs = RS(seed)
     V, UV, COL, F = [], [], [], []
-    rings, segs = 6, 32
-    V.append((0, 0.36 * radius, 0))
+    ph = rs.uniform(0, 6.28, 4)
+    nl = int(rs.integers(7, 10))
+
+    def pt(t, a):
+        r = radius * t * (1 + 0.06 * t ** 2 * math.sin(nl * a + ph[0]))
+        ruffle = radius * (0.13 * t ** 2.5 * math.sin(nl * a + ph[0] + 0.6) + 0.045 * t ** 2 * math.sin(2 * nl * a + ph[1])
+                           + 0.12 * t ** 2 * math.cos(a - ph[2]))                       # one side lifts
+        rib = radius * 0.012 * t * math.sin(28 * a + ph[3])                               # faint radial ribs
+        y = radius * (0.34 - 0.16 * t ** 2) + ruffle + rib
+        return (r * math.cos(a), y, r * 0.92 * math.sin(a))
+    V.append((0, 0.34 * radius + 0.1, 0))
     UV.append((0.5, 0.5))
-    COL.append((0, 0, 0.3, 1))
-    ph = rs.uniform(0, 6)
+    COL.append((0.3, 0, 0.25, 1))
     for i in range(1, rings + 1):
-        t = i / rings
+        t = (i / rings) ** 0.85
         for k in range(segs):
             a = 2 * math.pi * k / segs
-            r = radius * t
-            ruffle = radius * (0.12 * t ** 3 * math.sin(8 * a + ph) + 0.04 * t ** 2 * math.sin(13 * a))
-            y = radius * (0.36 - 0.18 * t ** 2) + ruffle
-            V.append((r * math.cos(a), y, r * 0.9 * math.sin(a)))
-            UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
-            COL.append((0.8 * t, 0, t, 1))
+            V.append(pt(t, a))
+            UV.append((0.5 + 0.47 * t * math.cos(a), 0.5 + 0.47 * t * math.sin(a)))
+            COL.append((0.4 + 0.5 * t, 0, 0.25 + 0.75 * t, 1))
+    F += grid_faces(rings, segs)
+    # mouth cone: lift the first ring into a small raised oral cone
     for k in range(segs):
-        F.append((0, 1 + (k + 1) % segs, 1 + k))
-    for i in range(rings - 1):
-        b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
-        for k in range(segs):
-            F.append((b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k))
+        x, y, z = V[1 + k]
+        V[1 + k] = (x, y + 0.06 * radius, z)
     b = len(V)
-    for k in range(segs):
-        a = 2 * math.pi * k / segs
-        V.append((0.28 * radius * math.cos(a), 0.0, 0.25 * radius * math.sin(a)))
-        UV.append((0.5 + 0.1 * math.cos(a), 0.5 + 0.1 * math.sin(a)))
-        COL.append((0, 0, 0, 1))
+    for j, (rf, yf) in enumerate(((0.55, 0.12), (0.3, 0.0))):  # underside skirt -> stalk foot
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            V.append((rf * radius * math.cos(a), yf * radius, rf * 0.92 * radius * math.sin(a)))
+            UV.append((0.5 + (0.485 + 0.012 * j) * math.cos(a), 0.5 + (0.485 + 0.012 * j) * math.sin(a)))
+            COL.append((0.2, 0, 0.0, 1))
     outer = 1 + (rings - 1) * segs
     for k in range(segs):
         F.append((outer + k, outer + (k + 1) % segs, b + (k + 1) % segs, b + k))
+        F.append((b + k, b + (k + 1) % segs, b + segs + (k + 1) % segs, b + segs + k))
     V = np.array(V, float)
     q = q_from_up(unit(n), rs.uniform(0, 6.28))
     V = np.array([q_rotate(q, v) for v in V]) + np.asarray(c, float)
     return V, F, np.array(UV), np.array(COL)
 
 
-def shroom_tex(name, base, rim, plug, stripe, spot):
-    cv = P.Canvas(256, 256, base)
-    rr = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
-    cv.blend(S(0.7, 0.98, rr), rim)
-    cv.blend(1 - S(0.06, 0.14, rr), plug)
-    ang = np.arctan2(cv.v - 0.5, cv.u - 0.5)
-    cv.blend(0.25 * (0.5 + 0.5 * np.cos(ang * 36)) * S(0.15, 0.6, rr), stripe)
-    spots = (P.fbm(256, 256, 24, 2, 4) > 0.62) * S(0.2, 0.8, rr)
-    cv.blend(spots * 0.5, spot)
-    return tex(name, cv)
+def shroom_tex(name, base, rim, plug, stripe, spot, under):
+    """Polar mushroom texture: base colour with radial stripes and fine raised warts (paler, fluorescent-looking
+    dots), a darker margin band with a pale edge, a radially striped mouth plug; the outer ring (r > 0.94) is the
+    paler underside."""
+    n = 256
+    cv = P.Canvas(n, n, base)
+    du, dv = cv.u - 0.5, cv.v - 0.5
+    rr, ang = np.hypot(du, dv) / 0.47, np.arctan2(dv, du)
+    cv.multiply(0.85 + 0.3 * P.fbm(n, n, 10, 3, sum(map(ord, name)) % 997))
+    cv.blend(0.35 * (0.5 + 0.5 * np.cos(ang * 30 + 3 * P.fbm(n, n, 6, 2, 5))) * S(0.15, 0.6, rr), stripe)
+    d, cr = PoreLattice(0.5, 0.034, 4, jitter=0.3).field(du, dv)
+    warts = (1 - S(0.2, 0.32, d)) * (cr > 0.5) * S(0.18, 0.4, rr) * (1 - S(0.82, 0.95, rr))
+    cv.blend(warts, spot, 0.8)
+    cv.blend(S(0.72, 0.95, rr), rim, 0.85)
+    cv.blend(S(0.93, 1.0, rr) * (1 - S(1.0, 1.02, rr)), spot, 0.35)
+    cv.blend(1 - S(0.07, 0.15, rr), plug)
+    cv.blend((1 - S(0.04, 0.15, rr)) * (0.5 + 0.5 * np.cos(ang * 12)), stripe, 0.35)
+    cv.blend(1 - S(0.0, 0.035, rr), "#3A2A26", 0.8)
+    cv.blend(S(1.0, 1.03, rr), under)
+    return tex(name, cv, jpeg=True)
 
 
 def mushroom(rock, A):
@@ -1305,17 +1733,18 @@ def mushroom(rock, A):
     V, F, UV, COL = shroom_disc(pos - UP * 0.1, (0, 1, 0), 1.75, 61)
     g.add(V, F, UV, COL, mat=0)
     pos2, n2 = A["coral_shroom_small"]
-    V, F, UV, COL = shroom_disc(pos2 - unit(n2) * 0.1, n2, 1.25, 62)
+    V, F, UV, COL = shroom_disc(pos2 - unit(n2) * 0.1, n2, 1.25, 62, rings=6, segs=30)
     g.add(V, F, UV, COL, mat=1)
-    m1 = C.material("mushroom", rough=0.5, image=shroom_tex("mushroom", "#5DBD5E", "#2D7F6F", "#C8B48A", "#3AA868",
-                                                            "#8BF0A8"), emissive="#5DBD5E", emissive_strength=0.0,
-                    double=True)
-    m2 = C.material("mushroom_small", rough=0.5, image=shroom_tex("mushroom_small", "#8B3A4A", "#5E2434", "#B07A60",
-                                                                  "#7A2E3E", "#B05A6A"), double=True)
+    m1 = C.material("mushroom", rough=0.5, image=shroom_tex("mushroom", "#4FAE58", "#2A7266", "#C8B48A", "#3E9C66",
+                                                            "#9CF2B0", "#B8A9B8"), emissive="#5DBD5E",
+                    emissive_strength=0.0, double=True)
+    m2 = C.material("mushroom_small", rough=0.5, image=shroom_tex("mushroom_small", "#843646", "#561E30", "#B07A60",
+                                                                  "#6E2838", "#C46A7A", "#A88A8E"), double=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_shroom_center", species="mushroom", fluorescent=0.5)
     body = g.obj("Body", root, "body", [m1, m2], smooth=True, extras={"anchors": ["coral_shroom_center",
                                                                                     "coral_shroom_small"]})
+    print(f"[coral] mushroom: {g.tris()} body tris")
     return root, [body], {}
 
 
@@ -1324,25 +1753,24 @@ def mushroom(rock, A):
 # the oral surface densely covered in short branching ("hairy") tentacles: olive-green base, green tentacles
 # with a lighter, fluorescent tip glow; no visible mouth under the hair (a faint one at most).
 # ----------------------------------------------------------------------------
-HAIRY_DISCS = 5           # discs in the clump
-HAIRY_SPACING = 0.25      # cm between tentacle tufts (jittered); sets the instance count (~1100)
+HAIRY_DISCS = 6           # discs in the clump (2026-10-15: packed edge to edge, [T84] / coral_hairy_mushroom.md)
+HAIRY_SPACING = 0.3       # cm between tentacle tufts (jittered); sets the instance count (~850)
 
 
 def hairy_disc_local(radius, cup, ph, t, a):
     """Point on a hairy-mushroom disc in its local frame (cm, base at the origin, oral surface up +Y).
     t: 0 centre -> 1 rim, a: angle. Cupped: the rim rises by `cup` x radius, with a gentle 5-6 lobe wave."""
-    r = radius * t
-    wave = radius * (0.05 * t ** 3 * math.sin(5 * a + ph) + 0.025 * t ** 2 * math.sin(11 * a + 2 * ph))
+    r = radius * t * (1 + 0.05 * t ** 2 * math.sin(6 * a + ph))
+    wave = radius * (0.07 * t ** 3 * math.sin(5 * a + ph) + 0.03 * t ** 2 * math.sin(11 * a + 2 * ph))
     y = radius * (0.30 + cup * t ** 2) + wave
     return np.array([r * math.cos(a), y, r * 0.92 * math.sin(a)])
 
 
-def hairy_disc(c, n, radius, cup, seed, twist):
+def hairy_disc(c, n, radius, cup, seed, twist, rings=5, segs=24):
     """Disc mesh (oral surface + a short stalk skirt) placed at c, oriented to normal n.
     Returns V, F, UV, COL and the (q, ph) needed to place tentacles on the same surface."""
     rs = RS(seed)
     ph = rs.uniform(0, 6.28)
-    rings, segs = 5, 24
     V, UV, COL, F = [hairy_disc_local(radius, cup, ph, 0.0, 0.0)], [(0.5, 0.5)], [(0.2, 0, 0.25, 1)], []
     for i in range(1, rings + 1):
         t = i / rings
@@ -1371,7 +1799,7 @@ def hairy_disc(c, n, radius, cup, seed, twist):
     return V, F, np.array(UV), np.array(COL), q, ph
 
 
-def proto_hairy(h=0.24):
+def proto_hairy(h=0.17):
     """One branching tentacle tuft (10 tris): a short 3-sided stub (6 tris) splitting into 4 single-triangle
     branchlets that fork out and up. UV v runs base (0) -> tip (1) so the tips take the fluorescent colour."""
     V, F, UV, COL = [], [], [], []
@@ -1390,10 +1818,10 @@ def proto_hairy(h=0.24):
         tng = np.array([-math.sin(a), 0.0, math.cos(a)])
         base = np.array([0.0, stub, 0.0]) + d * 0.02
         L = h * (0.85 if k % 2 else 0.75)
-        sp = math.radians(52 if k % 2 else 40)
+        sp = math.radians(68 if k % 2 else 56)  # splayed wide: neighbouring tufts knit into a velvet mat
         tip = base + (d * math.sin(sp) + UP * math.cos(sp)) * L
         bi = len(V)
-        V += [tuple(base - tng * 0.055), tuple(base + tng * 0.055), tuple(tip)]
+        V += [tuple(base - tng * 0.075), tuple(base + tng * 0.075), tuple(tip)]
         UV += [(0.6, 0.45), (0.8, 0.45), (0.7, 0.98)]
         COL += [(0, 0, 0.45, 1), (0, 0, 0.45, 1), (0, 0, 1, 1)]
         F.append((bi, bi + 2, bi + 1))
@@ -1401,12 +1829,15 @@ def proto_hairy(h=0.24):
 
 
 def mushroom_hairy(rock, A):
-    """Rhodactis clump on the rock under HOST_ARCH_CLOWNS (the clowns' host spot)."""
-    import json
+    """Rhodactis carpet on the low R10 rock under the right shelf (HOST_SHROOM, snapped to the rock by rockscape; the clowns'
+    host spot, HOST_ARCH_CLOWNS hovers just above it)."""
     anchors_all = {a["name"]: a for a in json.load(open(os.path.join(C.SIM, "anchors.json")))["anchors"]}
     host = np.array(anchors_all["HOST_ARCH_CLOWNS"]["pos"], float)
     hit, hn = None, None
-    for d in ((0, -1, 0), (0, -0.6, -0.8), (0, 0, -1), (-0.6, -0.6, -0.5), (0.6, -0.6, -0.5)):
+    if "HOST_SHROOM" in anchors_all:
+        hit = np.array(anchors_all["HOST_SHROOM"]["pos"], float)
+        hn = unit(np.array(anchors_all["HOST_SHROOM"].get("normal", [0, 1, 0]), float))
+    for d in (() if hit is not None else ((0, -1, 0), (0, -0.6, -0.8), (0, 0, -1), (-0.6, -0.6, -0.5), (0.6, -0.6, -0.5))):
         p_, n_ = rock.ray(host, unit(np.array(d, float)), 30.0)
         if p_ is not None and (hit is None or np.linalg.norm(p_ - host) < np.linalg.norm(hit - host)):
             hit, hn = p_, n_
@@ -1418,9 +1849,10 @@ def mushroom_hairy(rock, A):
     # disc centres: one big disc in the middle and the rest around it, overlapping slightly like a clump
     t1 = unit(np.cross(hn, [0, 0, 1.0]) if abs(hn[2]) < 0.9 else np.cross(hn, [1.0, 0, 0]))
     t2 = np.cross(hn, t1)
-    radii = [2.9, 2.2, 1.9, 1.6, 1.5][:HAIRY_DISCS]  # 3-6 cm discs
+    radii = [2.8, 2.2, 1.9, 1.7, 1.5, 1.6][:HAIRY_DISCS]  # 3-6 cm discs
     offs = [(0, 0)] + [(math.cos(a) * rr, math.sin(a) * rr) for a, rr in
-                       zip(np.linspace(0, 2 * math.pi, HAIRY_DISCS - 1, endpoint=False) + 0.4, (3.9, 3.6, 3.4, 3.6))]
+                       zip(np.linspace(0, 2 * math.pi, HAIRY_DISCS - 1, endpoint=False) + 0.4 + rs.normal(0, 0.15, HAIRY_DISCS - 1),
+                           (4.0, 3.7, 3.6, 3.4, 3.5))]
     g = T.WGeo()
     inst = Instances(98)
     discs = []
@@ -1461,26 +1893,120 @@ def mushroom_hairy(rock, A):
                 inst.add(wp + wn * 0.02, wn, scale)
     # textures: disc = dark olive with a slightly paler rim and a faint dark centre; tentacles olive -> green ->
     # light fluorescent green tips
-    dc = P.Canvas(128, 128, "#2E4420")
+    dc = P.Canvas(128, 128, "#3C4C2A")
     rr = np.hypot(dc.u - 0.5, dc.v - 0.5) * 2
-    dc.blend(S(0.6, 1.0, rr), "#56743A", 0.7)
-    dc.blend(1 - S(0.04, 0.12, rr), "#26341A", 0.6)
+    dc.blend(S(0.6, 1.0, rr), "#7A8A5C", 0.7)                     # paler bare margin
+    dc.blend(1 - S(0.04, 0.12, rr), "#2A3420", 0.6)
     dc.multiply(0.85 + 0.3 * P.fbm(128, 128, 8, 3, 99))
-    disc_m = C.material("mushroom_hairy", rough=0.85, image=tex("mushroom_hairy", dc), emissive="#6FD45A",
+    dc.blend(S(0.6, 0.75, P.fbm(128, 128, 30, 1, 101)) * (1 - S(0.85, 1.0, rr)), "#5E7444", 0.5)
+    disc_m = C.material("mushroom_hairy", rough=0.85, image=tex("mushroom_hairy", dc, jpeg=True), emissive="#6FD45A",
                         emissive_strength=0.0, double=True)
     pc = P.Canvas(64, 64, "#4A6A2C")
     tt = pc.v
-    pc.rgb = (hex2rgb("#34481E")[None, None] * (1 - S(0.0, 0.55, tt))[..., None]
-              + hex2rgb("#4E8C2E")[None, None] * (S(0.0, 0.55, tt) * (1 - S(0.72, 0.97, tt)))[..., None]
-              + hex2rgb("#9CEB6C")[None, None] * S(0.72, 0.97, tt)[..., None])
+    pc.rgb = (hex2rgb("#3E4C2A")[None, None] * (1 - S(0.0, 0.5, tt))[..., None]
+              + hex2rgb("#6E8A48")[None, None] * (S(0.0, 0.5, tt) * (1 - S(0.75, 0.97, tt)))[..., None]
+              + hex2rgb("#A6DC78")[None, None] * S(0.75, 0.97, tt)[..., None])  # olive velvet, fluorescent tips
     pc.multiply(0.92 + 0.16 * P.fbm(64, 64, 6, 2, 100))
     pol_m = C.material("mushroom_hairy_polyp", rough=0.55, image=tex("mushroom_hairy_polyp", pc), emissive="#8CF060",
                        emissive_strength=0.1, double=True)
     root = C.empty("Root")
-    C.set_extras(root, anchor="HOST_ARCH_CLOWNS", species="rhodactis_sp", fluorescent=0.6,
+    C.set_extras(root, anchor="coral_shroom_hairy", species="rhodactis_sp", fluorescent=0.6,
                  hostFor="clown_orange,clown_darwin", discs=HAIRY_DISCS)
     body = g.obj("Body", root, "body", [disc_m], smooth=True)
     pol = polyp_node("Polyps", root, proto, [pol_m], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4))}
+
+
+# ----------------------------------------------------------------------------
+# Hairy-mushroom mound (2026-10-15): Tee's night video shows the big lime-green mound at the lower right is a colony
+# of green hairy mushrooms (Rhodactis) with purple oral centres, not green star polyps (the lawnmower blenny naps on
+# top of it). Built on the old GSP mound's anchor and footprint: a low olive-brown tissue dome (~15 x 13 cm, ~3 cm
+# high, a smooth top to rest on) tiled with ~12 overlapping lime discs, each fuzzy with short branched tentacles
+# except for its bare purple centre. rhodactis_sp variantModels "mound" -> this file (the renderer matches the anchor).
+# ----------------------------------------------------------------------------
+MOUND_DISCS = 16
+MOUND_SPACING = 0.56      # cm between tentacle tufts (~900 tufts, the old GSP mat's share of the budget)
+
+
+def mushroom_mound(rock, A):
+    pos, n = A["coral_gsp_lower_right"]
+    rs = RS(211)
+    hit, hn, _ = rock.nearest(pos)
+    axis = unit(UP * 0.85 + unit(n) * 0.3)
+    radii = (7.2, 3.0, 6.2)
+    c = hit - axis * 0.6
+    V, F, UV, surf, q = dome_mesh(c, radii, axis, 212, segs=20, rings=6, sink=0.3)
+    g = T.WGeo()
+    g.add(V, F, UV, (0.5, 0, 0, 1), mat=0)
+    th_max = math.acos(-0.3)
+    ga = math.pi * (3 - math.sqrt(5))
+    inst = Instances(213)
+    proto = proto_hairy()
+    nd = 0
+    for i in range(MOUND_DISCS):   # golden spiral, area-uniform over the cap; discs overlap like the real clump
+        th = math.acos(1 - (i + 0.5) / MOUND_DISCS * (1 - math.cos(th_max * 0.9)))
+        ph = (i * ga) % (2 * math.pi) + rs.normal(0, 0.1)
+        p = surf(th, ph)
+        e = 0.01
+        nn = axis if th < 0.05 else unit(np.cross(surf(th, ph + e) - surf(th, ph - e), surf(th + e, ph) - surf(th - e, ph)))
+        if np.dot(nn, p - c) < 0:
+            nn = -nn
+        if inside_rock(rock, p, 0.0):
+            continue
+        r = rs.uniform(2.5, 3.1) * (1.0 - 0.2 * th / th_max)
+        nrm = unit(nn * 0.8 + axis * 0.2)
+        cup = rs.uniform(0.02, 0.1)
+        base = p - nrm * 0.5
+        Vd, Fd, UVd, COLd, qd, phd = hairy_disc(base, nrm, r, cup, 220 + nd, rs.uniform(0, 6.28), rings=3, segs=18)
+        g.add(Vd, Fd, UVd, COLd, mat=1)
+        nd += 1
+        sp = MOUND_SPACING
+        for j in range(int(2 * r / (sp * 0.866)) + 1):
+            for k in range(int(2 * r / sp) + 1):
+                x = -r + k * sp + (j % 2) * sp * 0.5 + rs.normal(0, sp * 0.15)
+                z = -r + j * sp * 0.866 + rs.normal(0, sp * 0.15)
+                t = math.hypot(x, z / 0.92) / r
+                if t > 0.95 or t < 0.24:   # bare purple oral centre
+                    continue
+                a = math.atan2(z / 0.92, x)
+                lp = hairy_disc_local(r, cup, phd, t, a)
+                du = hairy_disc_local(r, cup, phd, min(t + e, 1), a) - hairy_disc_local(r, cup, phd, t - e, a)
+                dv = hairy_disc_local(r, cup, phd, t, a + e) - hairy_disc_local(r, cup, phd, t, a - e)
+                ln = unit(np.cross(dv, du))
+                if ln[1] < 0:
+                    ln = -ln
+                wn = unit(q_rotate(qd, unit(ln + UP * 0.3)))
+                inst.add(q_rotate(qd, lp) + base + wn * 0.02, wn, (1.3 + 0.4 * (1 - t)) * rs.uniform(0.85, 1.15))
+    # base tissue: olive-brown, darker toward the rock
+    bc = P.Canvas(64, 64, "#4E6030")
+    bc.multiply(0.8 + 0.35 * P.fbm(64, 64, 5, 3, 214))
+    m_base = C.material("mushroom_mound_base", rough=0.85, image=tex("mushroom_mound_base", bc, jpeg=True))
+    # discs: lime with a paler bare margin and a purple oral centre around a dark mouth
+    dc = P.Canvas(128, 128, "#5E9A30")
+    rr = np.hypot(dc.u - 0.5, dc.v - 0.5) * 2
+    dc.multiply(0.85 + 0.3 * P.fbm(128, 128, 8, 3, 215))
+    d_, cr_ = PoreLattice(0.5, 0.025, 217, jitter=0.35).field(dc.u - 0.5, dc.v - 0.5)
+    dc.blend((1 - S(0.15, 0.3, d_)) * (cr_ > 0.35), "#A8E060", 0.7)          # fuzz between the instanced tufts
+    dc.blend(S(0.8, 1.0, rr), "#9CC860", 0.7)
+    dc.blend(1 - S(0.16, 0.3, rr), "#6E3C82", 0.95)
+    dc.blend((1 - S(0.08, 0.2, rr)) * S(0.5, 0.7, P.fbm(128, 128, 20, 1, 216)), "#9A62AE", 0.5)
+    dc.blend(1 - S(0.02, 0.05, rr), "#2A1830", 0.9)
+    m_disc = C.material("mushroom_mound", rough=0.8, image=tex("mushroom_mound", dc, jpeg=True), emissive="#8CE050",
+                        emissive_strength=0.0, double=True)
+    pc = P.Canvas(64, 64)
+    tt = pc.v
+    pc.rgb = (hex2rgb("#4A6E26")[None, None] * (1 - S(0.0, 0.5, tt))[..., None]
+              + hex2rgb("#8CC83C")[None, None] * (S(0.0, 0.5, tt) * (1 - S(0.75, 0.97, tt)))[..., None]
+              + hex2rgb("#CFF07A")[None, None] * S(0.75, 0.97, tt)[..., None]).astype(np.float32)
+    pol_m = C.material("mushroom_mound_polyp", rough=0.55, image=tex("mushroom_mound_polyp", pc), emissive="#A8F060",
+                       emissive_strength=0.15, double=True)
+    root = C.empty("Root")
+    C.set_extras(root, anchor="coral_gsp_lower_right", species="rhodactis_sp", fluorescent=0.7, discs=nd,
+                 form="hairy_mound")
+    body = g.obj("Body", root, "body", [m_base, m_disc], smooth=True)
+    C.recalc_normals(body)
+    pol = polyp_node("Polyps", root, proto, [pol_m], inst)
+    print(f"[coral] mushroom_hairy_mound: {nd} discs, {len(inst)} tufts, {g.tris()} body tris")
     return root, [body, pol], {"Polyps": (len(inst), len(proto[1]) + sum(1 for f in proto[1] if len(f) == 4))}
 
 
@@ -1499,36 +2025,48 @@ def macro_red(rock, A):
             base, bn = pos, UP
         else:
             base, bn, _ = rock.nearest(pos)
-        for br in range(int(round(size * 1.9))):
+        # 2026-10-15 remake: fewer, fleshier Gracilaria stems (r 1.1 -> 0.5 mm) with irregular alternate side
+        # branches that fork again, tapering to paler tips
+        for br in range(int(round(size * 1.15))):
             d = unit(UP * 0.8 + bn * 0.6 + rs.normal(0, 0.45, 3))
-            L = rs.uniform(0.4, 1.0) * size
+            L = rs.uniform(0.45, 1.0) * size
             pts = []
-            p = base + rs.normal(0, 0.4, 3)
+            p = base + rs.normal(0, 0.45, 3)
             dd = d
             for k in range(7):
                 pts.append(p.copy())
-                dd = unit(dd + rs.normal(0, 0.18, 3) + UP * 0.05)
+                dd = unit(dd + rs.normal(0, 0.2, 3) + UP * 0.05)
                 p = p + dd * L / 6
             pts = np.array(pts)
-            rad = np.linspace(0.07, 0.04, len(pts))
+            rad = np.linspace(0.11, 0.05, len(pts))
             V, F, tv, av = G.tube(pts, rad, 3, cap_start=False, cap_end=True, up=(0, 0, 1))
-            g.add(V, F, np.c_[av, tv], np.c_[np.ones(len(V)), np.full(len(V), (tuft / 3 + br * 0.03) % 1), tv, np.ones(len(V))])
-            # 1-level side branches
-            for s in range(2):
-                k0 = rs.integers(2, 5)
+            ph = (tuft / 3 + br * 0.03) % 1
+            g.add(V, F, np.c_[av, tv], np.c_[np.ones(len(V)), np.full(len(V), ph), tv, np.ones(len(V))])
+            for s_ in range(3):  # side branches (alternate sides up the stem), some forking once more
+                k0 = int(rs.integers(1, 5))
+                side = unit(np.cross(unit(pts[k0 + 1] - pts[k0]), rs.normal(0, 1, 3)))
                 q = [pts[k0]]
-                dd2 = unit(unit(pts[k0 + 1] - pts[k0]) + rs.normal(0, 0.8, 3))
+                dd2 = unit(unit(pts[k0 + 1] - pts[k0]) + side * 1.1)
                 for k in range(3):
-                    q.append(q[-1] + dd2 * L * 0.12)
-                    dd2 = unit(dd2 + rs.normal(0, 0.2, 3))
+                    q.append(q[-1] + dd2 * L * 0.13)
+                    dd2 = unit(dd2 + rs.normal(0, 0.25, 3) + UP * 0.1)
                 q = np.array(q)
-                V, F, tv, av = G.tube(q, np.linspace(0.05, 0.03, 4), 3, cap_start=False, cap_end=True, up=(0, 0, 1))
-                w = (k0 / 6) + tv * 0.4
-                g.add(V, F, np.c_[av, 0.4 + tv * 0.6], np.c_[np.ones(len(V)), np.full(len(V), (tuft / 3) % 1), np.clip(w, 0, 1), np.ones(len(V))])
-    cv = P.Canvas(16, 128)
-    cv.vgrad("#7A1F3A", "#C23B5E", 0, 1, 0.8)
-    cv.blend(S(0.85, 1.0, cv.v), "#D0506A", 0.5)
-    m = C.material("macro_red", rough=0.6, image=tex("macro_red", cv))
+                r0 = rad[k0] * 0.75
+                V, F, tv, av = G.tube(q, np.linspace(r0, 0.035, 4), 3, cap_start=False, cap_end=True, up=(0, 0, 1))
+                w = (k0 / 6) + tv * 0.45
+                g.add(V, F, np.c_[av, 0.4 + tv * 0.6], np.c_[np.ones(len(V)), np.full(len(V), ph), np.clip(w, 0, 1), np.ones(len(V))])
+                if rs.uniform() < 0.5:
+                    j0 = int(rs.integers(1, 3))
+                    dd3 = unit(unit(q[j0 + 1] - q[j0]) + rs.normal(0, 0.9, 3))
+                    q3 = np.array([q[j0], q[j0] + dd3 * L * 0.1, q[j0] + dd3 * L * 0.19])
+                    V, F, tv, av = G.tube(q3, [r0 * 0.7, 0.04, 0.03], 3, cap_start=False, cap_end=True, up=(0, 0, 1))
+                    w = (k0 / 6) + 0.2 + tv * 0.4
+                    g.add(V, F, np.c_[av, 0.6 + tv * 0.4], np.c_[np.ones(len(V)), np.full(len(V), ph), np.clip(w, 0, 1), np.ones(len(V))])
+    cv = P.Canvas(32, 128)
+    cv.vgrad("#5E1830", "#B0304E", 0, 1, 0.8)                 # wine-red stems
+    cv.multiply(0.85 + 0.3 * P.fbm(128, 32, 4, 3, 42))
+    cv.blend(S(0.8, 1.0, cv.v), "#D8687E", 0.6)               # translucent pink tips
+    m = C.material("macro_red", rough=0.6, image=tex("macro_red", cv, jpeg=True))
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_macro_back_left", species="red_macroalgae",
                  anchors=[t[0] for t in tufts])
@@ -1540,66 +2078,72 @@ def macro_red(rock, A):
 # Organ pipe coral (Tubipora musica) replacing the aiptasia (C7)
 # ----------------------------------------------------------------------------
 def organ_pipe(rock, A):
+    """Organ pipe (2026-10-15 remake): a low mound ~6 x 5 cm of packed, slightly splaying red tubes of uneven height
+    tied by two irregular stolonal plates, the open colony a fuzzy cap of large pale grey-green feathery polyps
+    that hides most of the tops; the red skeleton shows at the flanks and the base."""
     import geomlib as G
     pos, n = A["coral_organpipe_kenya_base"]
-    # sits on a ledge left of the Kenya base: grow upward from the nearest rock under the anchor
     rs = RS(51)
     base, bn, _ = rock.nearest(pos + UP * 0.5)
     g = T.WGeo()
     inst = Instances(52)
     t1 = np.array([1.0, 0, 0])
     t2 = np.array([0, 0, 1.0])
-    # colony ~6 x 5 cm: ~46 parallel tubes (r 0.17 cm) of varying height, a dome profile, with two
-    # horizontal "platforms" (the stolonal plates that tie the pipes together)
-    pts = []
-    tries = 0
-    while len(pts) < 90 and tries < 8000:
-        tries += 1
-        a, b = rs.uniform(-3, 3), rs.uniform(-2.5, 2.5)
-        if (a / 3) ** 2 + (b / 2.5) ** 2 > 1:
-            continue
-        if any((a - x) ** 2 + (b - y) ** 2 < 0.4 ** 2 for x, y in pts):
-            continue
-        pts.append((a, b))
+    pts = []   # packed hex grid of pipes (a solid block, not a fence), clipped to a lobed ellipse
+    sp = 0.55
+    for j in range(-6, 7):
+        for i in range(-7, 8):
+            a = (i + 0.5 * (j % 2)) * sp + rs.normal(0, 0.03)
+            b = j * sp * 0.866 + rs.normal(0, 0.03)
+            if (a / 3) ** 2 + (b / 2.5) ** 2 <= 1 + 0.12 * math.sin(5 * math.atan2(b, a)):
+                pts.append((a, b))
+    plate_h = (1.0, 2.1)
     for a, b in pts:
         foot = base + t1 * a + t2 * b
         h, hn, _ = rock.nearest(foot + UP * 2)
-        foot = np.array([foot[0], h[1] - 0.2, foot[2]])
-        dome = 1 - ((a / 3) ** 2 + (b / 2.5) ** 2)
-        height = 1.2 + 2.6 * dome + rs.uniform(-0.3, 0.3)
-        lean = unit(UP + rs.normal(0, 0.06, 3))
+        foot = np.array([foot[0], h[1] - 0.25, foot[2]])
+        dome = max(0.0, 1 - ((a / 3) ** 2 + (b / 2.5) ** 2))
+        height = 1.1 + 2.5 * dome ** 0.8 + rs.uniform(-0.35, 0.35)
+        lean = unit(UP + (t1 * a / 3 + t2 * b / 2.5) * 0.18 + rs.normal(0, 0.05, 3))   # pipes splay at the edge
         top = foot + lean * height
-        line = np.array([foot, top])
-        V, F, tv, av = G.tube(line, [0.2, 0.18], 5, cap_start=False, cap_end=False, up=(1, 0, 0))
+        r = rs.uniform(0.21, 0.25)
+        V, F, tv, av = G.tube(np.array([foot, top]), [r * 1.05, r * 0.95], 5, cap_start=False, cap_end=False,
+                              up=(1, 0, 0))
         g.add(V, F, np.c_[av, tv * 0.8], (0.3, 0, 0, 1))
-        # rim cap (open top shown as a darker ring)
         ring = V[-5:]
-        c = top - lean * 0.05
+        c = top - lean * 0.06
         g.add(np.vstack([ring, [c]]), [(k, (k + 1) % 5, 5) for k in range(5)], np.full((6, 2), (0.9, 0.9)), (0.3, 0, 0, 1))
-        inst.add(top, lean, rs.uniform(0.8, 1.15))
-    for py in (1.0, 2.2):  # platforms: thin warped discs
-        segs = 14
-        ring = [base + UP * py + t1 * 3.1 * math.cos(2 * math.pi * k / segs) * (0.9 if py > 1.5 else 1)
-                + t2 * 2.6 * math.sin(2 * math.pi * k / segs) * (0.9 if py > 1.5 else 1) for k in range(segs)]
-        ring = [r + UP * 0.15 * math.sin(k * 1.7) for k, r in enumerate(ring)]
+        inst.add(top, unit(lean + rs.normal(0, 0.08, 3)), rs.uniform(0.85, 1.2) * (0.85 + 0.25 * dome))
+    for pi, py in enumerate(plate_h):  # stolonal plates: thin, wavy-edged, following the mound's outline
+        segs = 18
+        sh = 0.92 if pi else 1.0
+        ring = []
+        for k in range(segs):
+            th = 2 * math.pi * k / segs
+            rr = sh * (1 + 0.1 * math.sin(3 * th + pi) + rs.uniform(-0.05, 0.05))
+            ring.append(base + UP * (py + 0.12 * math.sin(2 * th + pi) + rs.uniform(-0.05, 0.05))
+                        + t1 * 3.15 * rr * math.cos(th) + t2 * 2.65 * rr * math.sin(th))
         V = np.vstack([ring, [base + UP * py]])
         F = [(segs, (k + 1) % segs, k) for k in range(segs)]
-        V2 = V - UP * 0.15
+        V2 = V - UP * 0.18
         F2 = [(segs + 1 + k, segs + 1 + (k + 1) % segs, segs + 1 + segs) for k in range(segs)]
         Fs = [(k, (k + 1) % segs, segs + 1 + (k + 1) % segs, segs + 1 + k) for k in range(segs)]
         g.add(np.vstack([V, V2]), F + F2 + Fs, np.full((2 * segs + 2, 2), (0.5, 0.5)), (0.5, 0, 0, 1))
+    # skeleton: deep red with lengthwise grain and darker pipe mouths
     cv = P.Canvas(64, 64, "#8A2424")
-    cv.vgrad("#7A1F1F", "#9A2A2A")
-    cv.multiply(0.85 + 0.3 * P.fbm(64, 64, 8, 3, 2))
-    cv.blend(S(0.85, 0.95, cv.u) * S(0.85, 0.95, cv.v), "#4A1010")
-    sk = C.material("organpipe_skeleton", rough=0.8, image=tex("organpipe_skeleton", cv))
-    fc = feather_canvas("#B8C97A", "#C7A16A", "#B8C97A", "#C9CFA0", "#E8E0C8", seed=5, tip_white="#E8E0C8")
+    cv.vgrad("#6A1A1C", "#A42C2C")
+    cv.multiply(0.8 + 0.35 * P.fbm(64, 64, 8, 3, 2))
+    cv.multiply(0.92 + 0.12 * np.sin(cv.u * 2 * math.pi * 10))
+    cv.blend(S(0.85, 0.95, cv.u) * S(0.85, 0.95, cv.v), "#3A0C0E")
+    sk = C.material("organpipe_skeleton", rough=0.8, image=tex("organpipe_skeleton", cv, jpeg=True))
+    fc = feather_canvas("#8E9A78", "#A9B496", "#B4C0A0", "#E2E8D2", "#8A9878", pinnules=10, seed=5,
+                        tip_white="#F0F2E6")
     pm = C.material("organpipe_polyp", rough=0.55, image=tex("organpipe_polyp", fc, alpha=True), image_alpha=True,
                     double=True, clip=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_organpipe_kenya_base", species="organ_pipe")
     body = g.obj("Skeleton", root, "body", [sk], smooth=False)
-    pr = proto_feather_quads(8, 0.12, 0.12, 0.35, 70, 0.07, 4, 0.4)
+    pr = proto_feather_quads(8, 0.15, 0.13, 0.55, 58, 0.13, 4, 0.45)   # big feathery polyps knit into a fuzzy cap
     pol = polyp_node("Polyps", root, pr, [pm], inst, extras={"alphaTest": 0.5})
     nt = sum(len(f) - 2 for f in pr[1])
     return root, [body, pol], {"Polyps": (len(inst), nt)}
@@ -1618,10 +2162,10 @@ def algae_tufts(rock, A):
         spots.append((hit, nn))
     # crests: top surfaces found by vertical rays on a jittered 4 cm grid, Poisson-thinned to 5 cm
     for x in np.arange(3, 120, 4.0):
-        for z in np.arange(2, 32, 4.0):
-            q = np.array([x + rs.uniform(-1.5, 1.5), 60.0, z + rs.uniform(-1.5, 1.5)])
+        for z in np.arange(2, C.TANK[2] - 1, 4.0):
+            q = np.array([x + rs.uniform(-1.5, 1.5), C.WATER_Y + 5, z + rs.uniform(-1.5, 1.5)])
             hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
-            if hit is None or nn[1] < 0.6 or hit[1] < 9 or hit[1] > 55:
+            if hit is None or nn[1] < 0.6 or hit[1] < 7 or hit[1] > C.WATER_Y - 1:
                 continue
             if all(np.linalg.norm(hit - h) > 5.0 for h, _ in spots):
                 spots.append((hit, nn))
@@ -1738,14 +2282,15 @@ def strip(g, pts, side, widths, col_rg, tip_b=1.0):
 
 def long_tufts(rock, root, count=16):
     rs = RS(161)
-    avoid = [(np.array(p, float), r) for p, r in (((20, 39, 15), 7.0), ((36.6, 41.1, 14), 5.0),
-                                                  ((42.8, 51.5, 13.1), 5.0), ((103.1, 39.3, 8.8), 3.0))]
+    # keep clear of the upper-left GSP, the two red macro tufts and the Sally crab's crevice
+    avoid = [(np.array(p, float), r) for p, r in (((20, 27.6, 18.2), 7.0), ((36.6, 28.9, 16.0), 5.0),
+                                                  ((42.8, 33.5, 13.5), 5.0), ((101.5, 22.0, 11.5), 3.0))]
     spots = []
     for x in np.arange(4, 119, 3.0):
-        for z in np.arange(2, 32, 3.0):
-            q = np.array([x + rs.uniform(-1, 1), 60.0, z + rs.uniform(-1, 1)])
+        for z in np.arange(2, C.TANK[2] - 1, 3.0):
+            q = np.array([x + rs.uniform(-1, 1), C.WATER_Y + 5, z + rs.uniform(-1, 1)])
             hit, nn = rock.ray(q, np.array([0, -1.0, 0]), 60)
-            if hit is None or nn[1] < 0.55 or not (34.0 <= hit[1] <= 48.0) or hit[2] < 9.0:
+            if hit is None or nn[1] < 0.55 or not (23.5 <= hit[1] <= 33.0) or hit[2] < 11.7:
                 continue
             if any(np.linalg.norm(hit - p) < r for p, r in avoid):
                 continue
@@ -1774,7 +2319,7 @@ def long_tufts(rock, root, count=16):
             p0 = hit - nn * 0.1 + rs.normal(0, 0.3, 3)
             pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
             for _ in range(8):
-                if all(0.6 < p[0] < 121.3 and p[1] < 54.5 and 0.6 < p[2] < 32.4 for p in pts):
+                if all(0.6 < p[0] < C.TANK[0] - 0.6 and p[1] < C.WATER_Y - 1.5 and 0.6 < p[2] < C.TANK[2] - 0.6 for p in pts):
                     break
                 L *= 0.8
                 pts = [p0 + d0 * L * t + f * L * 0.3 * t * t for t in np.linspace(0, 1, 5)]
@@ -1855,7 +2400,8 @@ BUILDERS = {
                                 "gsp_mat", mat_hex="#4A3038", raw=True, long=True, mound=2.2),
     "toadstool_leather": toadstool, "leather_pink": leather_pink, "finger_leather": finger_leather,
     "elephant_ear": elephant_ear,
-    "zoa": zoa, "clove": clove, "mushroom": mushroom, "mushroom_hairy": mushroom_hairy, "macro_red": macro_red,
+    "zoa": zoa, "clove": clove, "mushroom": mushroom, "mushroom_hairy": mushroom_hairy,
+    "mushroom_hairy_mound": mushroom_mound, "macro_red": macro_red,
     "organ_pipe": organ_pipe,
     "algae_tufts": algae_tufts, "aiptasia": aiptasia,
 }

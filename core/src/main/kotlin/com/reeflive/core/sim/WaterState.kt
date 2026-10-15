@@ -25,7 +25,7 @@ data class WaterState(
     var sr: Double = 8.0,
     var i: Double = 0.06,
     var copper: Double = 0.0,
-    var volumeL: Double = 227.0,
+    var volumeL: Double = TankDims.DISPLAY_LITERS,
     /** Hair-algae cover on rock (0..0.9). Algae covers are headline values of [AlgaeModel] (research 09 A6). */
     var algaeHair: Double = 0.06,
     var macro: Double = 0.3,
@@ -165,12 +165,13 @@ object ChemFns {
 data class FeedTime(val minuteOfDay: Int, val kind: FoodKind, val grams: Double, val anchor: String? = null, val everyDays: Int = 1)
 
 data class TankConfig(
-    val lengthCm: Double = 121.9,
-    val widthCm: Double = 33.0,
-    val heightCm: Double = 61.0,
-    val waterLevelCm: Double = 56.0,
-    val sandTopCm: Double = 3.0,
-    val systemLiters: Double = 227.0,
+    val lengthCm: Double = TankDims.LENGTH_CM,
+    /** Front-to-back depth (z). */
+    val widthCm: Double = TankDims.DEPTH_CM,
+    val heightCm: Double = TankDims.HEIGHT_CM,
+    val waterLevelCm: Double = TankDims.WATER_LEVEL_CM,
+    val sandTopCm: Double = TankDims.SAND_TOP_CM,
+    val systemLiters: Double = TankDims.DISPLAY_LITERS,
     val heaterSetC: Double = 25.5,
     val heaterWatts: Double = 200.0,
     val roomC: Double = 22.0,

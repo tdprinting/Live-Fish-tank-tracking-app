@@ -3,6 +3,8 @@ package com.reeflive.app.render
 import com.reeflive.core.sim.CritterPose
 import com.reeflive.core.sim.OrganismPose
 import com.reeflive.core.sim.SimSnapshot
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -21,16 +23,20 @@ class FishRig(val id: String) {
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
     var alive = true; var visible = true; var posture = 0
+    /** Still riding in an acclimation bag: drawn, but not pickable. */
+    var bagged = false
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
-     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 10 × vec4; [limbCount] entries are valid,
+     * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 15 × vec4 (the hermit: 10 + 5 surface-contact entries); [limbCount] entries are valid,
      * 0 = none. Crawlers send 10 (posed about model pivots), the shrimp one (stride, stepping, signal, grooming).
      */
-    val limbs = FloatArray(40)
+    val limbs = FloatArray(60)
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
+    /** Microfauna only: 0 fully visible .. 1 gone, as it shrinks toward a speck with distance (MicroCritterVisuals). */
+    var fade = 0f
 
     fun headX() = spine[0]; fun headY() = spine[1]; fun headZ() = spine[2]
 
@@ -67,9 +73,9 @@ class FishRig(val id: String) {
         gill = lerp(pa.gill, b.gill, t); gillRate = lerp(pa.gillRate, b.gillRate, t)
         desat = lerp(pa.desat, b.desat, t); ich = lerp(pa.ich, b.ich, t); thin = lerp(pa.thin, b.thin, t)
         eyeCloud = lerp(pa.eyeCloud, b.eyeCloud, t); scale = lerp(pa.scale, b.scale, t).coerceAtLeast(0.1f)
-        eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t)
+        eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t, APPENDAGE_WRAP)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
-        alive = b.alive; visible = b.visible; posture = b.posture
+        alive = b.alive; visible = b.visible; posture = b.posture; bagged = b.bagged
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
         bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
         lerpLimbs(if (pa.limbs.size == b.limbs.size) pa.limbs else b.limbs, b.limbs, t)
@@ -90,7 +96,7 @@ class FishRig(val id: String) {
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage
         pectoral = 0f; finClamp = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
-        alive = true; visible = true; posture = 0
+        alive = true; visible = true; posture = 0; bagged = false
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0
         touched = true
@@ -121,12 +127,15 @@ class FishRig(val id: String) {
         fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
         /** Phases are in cycles and may wrap (e.g. mod 1000); interpolate across the wrap. */
-        fun lerpPhase(a: Float, b: Float, t: Float): Float {
+        fun lerpPhase(a: Float, b: Float, t: Float, period: Float = 1000f): Float {
             var d = b - a
-            if (d > 500f) d -= 1000f
-            if (d < -500f) d += 1000f
+            if (d > 0.5f * period) d -= period
+            if (d < -0.5f * period) d += period
             return a + d * t
         }
+
+        /** The core's appendage phase wrap (rad, a whole number of turns: core Organism.APPENDAGE_WRAP). */
+        val APPENDAGE_WRAP = com.reeflive.core.sim.Organism.APPENDAGE_WRAP.toFloat()
 
         /** The pose's model variant (darwin_black clown, …) when the core exposes one. */
         fun variantOf(p: OrganismPose): String? = p.variant
@@ -229,45 +238,98 @@ class FishRig(val id: String) {
 }
 
 /**
- * Keeps the last two distinct snapshots and blends organisms between them. Feed it once per frame with
- * whatever the provider returns; [alpha] advances with wall time over the measured snapshot interval.
+ * Buffers the last few distinct snapshots and blends organisms between them on a smoothed timeline. Feed it once per
+ * frame with whatever the provider returns.
+ *
+ * Each snapshot gets a timeline stamp that follows its arrival time but is low-passed toward the steady snapshot
+ * interval, and the scene is drawn one interval behind the newest stamp. The drawn pose is therefore a continuous
+ * function of wall time: a snapshot that lands a few ms early or late changes how fast the blend runs, never where
+ * it is. (Restarting the blend at 0 whenever a snapshot arrived made every early snapshot jump the fish forward and
+ * every late one freeze it: visible judder on a phone whose sim thread and vsync drift against each other.)
  */
 class SnapshotInterpolator {
-    var previous: SimSnapshot? = null; private set
-    var current: SimSnapshot? = null; private set
-    private var currentAtNs = 0L
-    private var intervalNs = 50_000_000L
-    val rigs = LinkedHashMap<String, FishRig>()
-    private val prevById = HashMap<String, OrganismPose>()
-    private var prevByIdFor: SimSnapshot? = null
-
-    fun push(s: SimSnapshot?, nowNs: Long) {
-        if (s == null || s === current) return
-        if (current != null && s.tick != 0L && s.tick == current!!.tick && s.simTimeSec == current!!.simTimeSec) return
-        if (current != null) {
-            val dt = nowNs - currentAtNs
-            if (dt in 5_000_000L..500_000_000L) intervalNs = (intervalNs * 0.8 + dt * 0.2).toLong()
-        }
-        previous = current
-        current = s
-        currentAtNs = nowNs
+    private class Entry(val snap: SimSnapshot, var stampNs: Long) {
+        val byId: Map<String, OrganismPose> = snap.organisms.associateBy { it.id }
     }
 
-    fun alpha(nowNs: Long): Float = ((nowNs - currentAtNs).toFloat() / intervalNs).coerceIn(0f, 1f)
+    private val buf = ArrayList<Entry>(MAX_BUFFERED)
+    /** The snapshot before [current] (null until two have arrived). */
+    val previous: SimSnapshot? get() = if (buf.size >= 2) buf[buf.size - 2].snap else null
+    /** The newest snapshot (lights, flow and the HUD read it). */
+    val current: SimSnapshot? get() = buf.lastOrNull()?.snap
+    private var intervalNs = 50_000_000L
+    /** Wall ns per sim second between snapshots (1e9 at 1×), smoothed. */
+    private var nsPerSimSec = 1e9
+    /** Mean deviation of the arrivals from the steady cadence (ns). */
+    private var jitterNs = 0.0
+    /** How far behind the newest snapshot the scene is drawn: one interval plus room for a late arrival. */
+    private val delayNs: Long get() = intervalNs + min(2 * jitterNs, intervalNs.toDouble()).toLong()
+    private var lastArrivalNs = 0L
+    val rigs = LinkedHashMap<String, FishRig>()
+    fun push(s: SimSnapshot?, nowNs: Long) {
+        if (s == null) return
+        val cur = buf.lastOrNull()
+        if (cur != null && (s === cur.snap || s.tick != 0L && s.tick == cur.snap.tick && s.simTimeSec == cur.snap.simTimeSec)) return
+        var stamp = nowNs
+        if (cur != null) {
+            val dt = nowNs - lastArrivalNs
+            val simDt = s.simTimeSec - cur.snap.simTimeSec
+            if (dt in 5_000_000L..500_000_000L) {
+                intervalNs = (intervalNs * 0.8 + dt * 0.2).toLong()
+                if (simDt > 1e-6) nsPerSimSec = nsPerSimSec * 0.8 + dt / simDt * 0.2
+            }
+            // phase-lock to the arrivals: the steady cadence in sim time (a snapshot the provider skipped leaves a
+            // two-tick gap, not a double-speed tick), nudged an eighth of the way toward the actual arrival (and
+            // never more than an interval off it, so the clock cannot drift)
+            val step = if (simDt > 1e-6) (simDt * nsPerSimSec).toLong().coerceIn(intervalNs / 4, 4 * intervalNs) else intervalNs
+            val expected = cur.stampNs + step
+            stamp = (expected + (nowNs - expected) / 8).coerceIn(nowNs - intervalNs, nowNs + intervalNs / 2)
+            val stalled = stamp - cur.stampNs > 3 * intervalNs
+            // (a stall is not jitter: it would push the render clock back by a whole interval)
+            if (!stalled) jitterNs = jitterNs * 0.9 + min(abs(nowNs - expected).toDouble(), intervalNs.toDouble()) * 0.1
+            if (stalled) {
+                // after a stall (pause, a hitch) the blend restarts from the last pose, which is where the render
+                // clock now stands, and runs to the new one over one interval instead of jumping to it
+                cur.stampNs = nowNs - delayNs
+                stamp = cur.stampNs + intervalNs
+            }
+            // two snapshots in quick succession still get a spaced pair (no instant sweep between them)
+            stamp = maxOf(stamp, cur.stampNs + intervalNs / 4)
+        }
+        lastArrivalNs = nowNs
+        buf.add(Entry(s, stamp))
+        if (buf.size > MAX_BUFFERED) buf.removeAt(0)
+    }
+
+    /** Blend factor of the pair drawn at [nowNs] (0 = the older, 1 = the newer snapshot of [bracket]). */
+    fun alpha(nowNs: Long): Float = bracket(nowNs).second
+
+    /** Index of the newer snapshot of the drawn pair and the blend factor toward it. */
+    private fun bracket(nowNs: Long): Pair<Int, Float> {
+        val n = buf.size
+        if (n < 2) return Pair(n - 1, 1f)
+        val renderNs = nowNs - delayNs
+        for (i in 1 until n) {
+            val a = buf[i - 1].stampNs; val b = buf[i].stampNs
+            if (renderNs < b || i == n - 1) {
+                val span = (b - a).coerceAtLeast(1L)
+                return Pair(i, ((renderNs - a).toFloat() / span).coerceIn(0f, 1f))
+            }
+        }
+        return Pair(n - 1, 1f)
+    }
 
     /** Updates [rigs] for this frame and returns them (insertion order = snapshot order). */
     fun update(nowNs: Long): Collection<FishRig> {
-        val cur = current ?: return emptyList<FishRig>().also { rigs.clear() }
-        val t = alpha(nowNs)
-        val prevSnap = previous
-        if (prevSnap !== prevByIdFor) {   // the previous snapshot changes at the sim rate (20 Hz), not every frame
-            prevById.clear(); prevSnap?.organisms?.forEach { prevById[it.id] = it }; prevByIdFor = prevSnap
-        }
+        if (buf.isEmpty()) { rigs.clear(); return rigs.values }
+        val (bi, t) = bracket(nowNs)
+        val newer = buf[bi]
+        val older = if (bi > 0) buf[bi - 1] else null
         for (r in rigs.values) r.touched = false
-        for (p in cur.organisms) {
+        for (p in newer.snap.organisms) {
             val rig = rigs.getOrPut(p.id) { FishRig(p.id) }
             // Teleports (respawn, reset) snap instead of sweeping across the tank.
-            val prev = prevById[p.id]?.takeIf { pp -> pp.spine.size >= 3 && p.spine.size >= 3 &&
+            val prev = older?.byId?.get(p.id)?.takeIf { pp -> pp.spine.size >= 3 && p.spine.size >= 3 &&
                 sq(pp.spine[0] - p.spine[0]) + sq(pp.spine[1] - p.spine[1]) + sq(pp.spine[2] - p.spine[2]) < 900f }
             rig.set(prev, p, t)
         }
@@ -276,4 +338,9 @@ class SnapshotInterpolator {
     }
 
     private fun sq(v: Float) = v * v
+
+    companion object {
+        /** Snapshots kept: the drawn pair plus one or two that arrived ahead of the render clock. */
+        const val MAX_BUFFERED = 6
+    }
 }

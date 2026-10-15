@@ -13,10 +13,14 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="bar">
+  <button class="back" data-tab="live" aria-label="Back to the tank">‹ Tank</button>
   <div class="brand"><span class="dot"></span>ReefLive</div>
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="live" role="tab">Live tank</button>
@@ -32,31 +36,33 @@
 
     <div class="chrome" id="chrome">
       <div class="top">
-        <div class="seg glass" role="tablist" aria-label="Mode">
-          <button data-mode="watch" class="on">👀 Watch</button><button data-mode="sandbox">🧪 Sandbox</button>
+        <div class="seg" role="tablist" aria-label="Mode">
+          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button><button data-mode="mine" data-ico="fish">My tank</button>
         </div>
-        <div class="pill glass" id="clock">Day 1 · --:--</div>
-        <button class="pill glass" id="happy" aria-label="Tank happy meter"><span id="happyFace">😊</span><span class="hide-sm">Tank happy</span> <b id="happyVal">--</b><i class="meter"><i id="happyBar"></i></i></button>
-        <button class="pill glass hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
+        <button class="status" id="statusBtn" aria-label="How is the tank doing?">
+          <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
+        </button>
       </div>
-      <div class="strip" id="strip"></div>
+      <button class="hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
 
-      <div class="side">
-        <button class="round glass" id="soundBtn" aria-label="Sound">🔇</button>
-        <button class="round glass" id="microBtn" aria-label="Look closer">🔬</button>
-        <button class="round glass" id="cleanBtn" aria-label="Clean glass">🧽</button>
-        <button class="round glass" id="hideBtn" aria-label="Hide buttons">🙈</button>
-      </div>
-
-      <div class="card glass hidden" id="card"></div>
+      <div class="sheet glass hidden" id="card"></div>
       <div class="fish glass hidden" id="fish"></div>
       <div class="follow glass hidden" id="follow"></div>
-      <div class="shelfbar glass hidden" id="shelfbar"></div>
+      <div class="shelfbar glass hidden tone-orange" id="shelfbar"></div>
       <nav class="rail glass" id="rail"></nav>
     </div>
     <button class="pill glass showchrome hidden" id="showChrome">👁 Show buttons</button>
     <div class="saver hidden" id="saver" aria-label="Screensaver: tap to exit"><div class="saver-black" id="saverBlack"></div><div class="saver-caption" id="saverCaption"></div><div class="saver-hint" id="saverHint">Tap to exit</div></div>
     <div class="cleanhint glass hidden" id="cleanHint">Drag the Flipper across the glass <button class="btn small" id="cleanDone">Done</button></div>
+    <div class="subui hidden" id="subui">
+      <div class="subbar glass"><span id="subInfo">🟡 Submarine</span>
+        <button class="btn small ghost" id="subGhost">👻 Invisible</button>
+        <button class="btn small ghost" id="subCam">🎥 Inside view</button>
+        <button class="btn small ghost" id="subLight">💡 Light</button>
+        <button class="btn small" id="subDone">Done</button></div>
+      <div class="subjoy glass" id="subJoy" aria-label="Steer the submarine"><div class="knob" id="subKnob"></div></div>
+      <div class="subud"><button class="round glass" id="subUp" aria-label="Go up">⬆️</button><button class="round glass" id="subDown" aria-label="Go down">⬇️</button></div>
+    </div>
     <div class="toast glass hidden" id="toast"></div>
 
     <div class="overlay hidden" id="micro">
@@ -71,6 +77,19 @@
       <div class="ov-head"><strong>⏱ Time-lapse</strong><button class="btn small ghost" id="lapseClose">Close</button></div>
       <div id="lapseBody"></div>
     </div>
+
+    <dialog id="news" class="glass">
+      <h2 id="newsTitle">What's new</h2>
+      <ul id="newsList" class="tips news"></ul>
+      <form method="dialog" class="row-gap end"><button class="btn">Cool!</button></form>
+    </dialog>
+
+    <dialog id="mytank" class="glass">
+      <h2>Set up your own tank</h2>
+      <p class="muted">Pick a tank. It starts clean and empty, then add any animals you like from Add life. Everything is saved in this browser: names, personalities, how much they grow.</p>
+      <div id="mytankList" class="builds"></div>
+      <div class="row-gap end"><button class="btn ghost" id="mytankClose">Not now</button></div>
+    </dialog>
 
     <dialog id="tips" class="glass">
       <h2 id="tipsTitle"></h2>

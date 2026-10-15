@@ -80,6 +80,8 @@ class PostFx(source: (String) -> String, private val samples: Int, private val b
         GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, msFbo); Gl.check("read msFbo")
         GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, resolveFbo); Gl.check("draw resolve")
         GLES30.glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GLES30.GL_COLOR_BUFFER_BIT, GLES30.GL_NEAREST); Gl.check("blit resolve")
+        // the multisampled colour and depth are done: tiled GPUs can drop them instead of writing them back to memory
+        GLES30.glInvalidateFramebuffer(GLES30.GL_READ_FRAMEBUFFER, 2, MS_ATTACHMENTS, 0); Gl.check("invalidate msFbo")
         Gl.state(depthTest = false, depthWrite = false, blend = Gl.Blend.NONE, cull = false)
         GLES30.glBindVertexArray(emptyVao); Gl.check("bind empty vao")
         val hw = maxOf(1, w / 2); val hh = maxOf(1, h / 2)
@@ -126,6 +128,8 @@ class PostFx(source: (String) -> String, private val samples: Int, private val b
 
     private fun pass(fbo: Int, pw: Int, ph: Int, p: ShaderProgram, input: Int) {
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo); Gl.check("bind pass fbo")
+        // a full-screen pass overwrites every pixel: no need to load the old contents
+        GLES30.glInvalidateFramebuffer(GLES30.GL_FRAMEBUFFER, 1, MS_ATTACHMENTS, 0); Gl.check("invalidate pass fbo")
         GLES30.glViewport(0, 0, pw, ph); Gl.check("pass viewport")
         p.use()
         bindTex(9, input)
@@ -152,6 +156,7 @@ class PostFx(source: (String) -> String, private val samples: Int, private val b
     }
 
     companion object {
+        private val MS_ATTACHMENTS = intArrayOf(GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_DEPTH_ATTACHMENT)
         const val BLOOM_STRENGTH = 0.8f
         /** Lens blur tap spacing, in half-resolution texels (9 taps → about ±16 full-res px per pass pair). */
         const val LENS_STEP = 2f

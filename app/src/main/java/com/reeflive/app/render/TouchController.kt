@@ -11,7 +11,8 @@ import android.view.ViewConfiguration
 /**
  * Gestures (ARCHITECTURE §8.2): the raw MotionEvent stream goes to the pure [GestureTracker] (one-finger orbit +
  * fling, two-finger pan / pinch / twist, tap = pick, double tap = zoom to a point or follow a fish, double-tap-drag =
- * one-finger zoom, two-finger tap = tap the glass, long press = drop food). In clean-glass mode
+ * one-finger zoom, two-finger tap = tap the glass, long press = a fingertip held on the glass (slide it, flick it) or
+ * food dropped on rock / sand). In clean-glass mode
  * ([CameraInput.cleaning]) the first finger slides the Flipper instead and the other gestures are off.
  *
  * On every ACTION_DOWN the view asks its parent not to intercept: inside Compose (AndroidView) that makes the
@@ -27,6 +28,11 @@ class TouchController(context: Context, private val view: View, private val inpu
     private val px = FloatArray(GestureTracker.MAX)
     private val py = FloatArray(GestureTracker.MAX)
     private val tick = Runnable { schedule(tracker.timer(SystemClock.uptimeMillis())) }
+
+    init {
+        // a fingertip's radius: three touch slops (24 dp on Android, half of the 48 dp minimum touch target)
+        input.fingerPx = cfg.scaledTouchSlop * 3f
+    }
 
     fun onTouchEvent(ev: MotionEvent): Boolean {
         if (input.cleaning) {
@@ -81,7 +87,7 @@ class TouchController(context: Context, private val view: View, private val inpu
  * (camera): motion is summed between frames and applied once in [drain].
  */
 class CameraInput : GestureTracker.Sink {
-    /** PICK single tap, GLASS two-finger tap, LONG_PRESS hold, ZOOM double tap. */
+    /** PICK single tap, GLASS two-finger tap, LONG_PRESS hold (then [drainHeld]), ZOOM double tap. */
     enum class TapKind { PICK, GLASS, LONG_PRESS, ZOOM }
     class Tap(val kind: TapKind, val x: Float, val y: Float)
 
@@ -101,6 +107,8 @@ class CameraInput : GestureTracker.Sink {
     @Volatile var cleaning = false
     /** Supplies mode: taps pick a prop at once (no double-tap wait). Set by the GL thread, read by [TouchController]. */
     @Volatile var instantTaps = false
+    /** A fingertip's radius (px) for forgiving picks ([Picker.fingerSlack]); set by the host from its touch slop. */
+    @Volatile var fingerPx = 24f
     private var scrapeX = 0f; private var scrapeY = 0f; private var scrapeDown = false
 
     /** Clean-glass mode: where the finger is and whether it is on the screen. */
@@ -122,6 +130,32 @@ class CameraInput : GestureTracker.Sink {
     @Synchronized override fun rotate(radians: Float) { rotation += radians }
     @Synchronized override fun fling(vx: Float, vy: Float) { flingX = vx; flingY = vy; hasFling = true }
     @Synchronized override fun tap(kind: TapKind, x: Float, y: Float) { if (taps.size < 8) taps += Tap(kind, x, y) }
+
+    // ---- the held finger (after a long press): the GL thread decides whether it is a fingertip or an orbit
+    private var heldDx = 0f; private var heldDy = 0f
+    private var heldX = 0f; private var heldY = 0f
+    private var heldMoved = false
+    private var heldLifted = false
+    private var heldVx = 0f; private var heldVy = 0f
+
+    @Synchronized override fun heldMove(dx: Float, dy: Float, x: Float, y: Float) {
+        heldDx += dx; heldDy += dy; heldX = x; heldY = y; heldMoved = true
+    }
+    @Synchronized override fun heldUp(x: Float, y: Float, vx: Float, vy: Float) {
+        heldX = x; heldY = y; heldVx = vx; heldVy = vy; heldLifted = true
+    }
+
+    /**
+     * GL thread, after [drain] (so a long press in the same frame is handled first): what the held finger did since
+     * the last frame. [out] gets dx, dy, x, y, vx, vy; returns bit 1 = moved, bit 2 = lifted (0 = nothing).
+     */
+    @Synchronized fun drainHeld(out: FloatArray): Int {
+        if (!heldMoved && !heldLifted) return 0
+        out[0] = heldDx; out[1] = heldDy; out[2] = heldX; out[3] = heldY; out[4] = heldVx; out[5] = heldVy
+        val r = (if (heldMoved) 1 else 0) or (if (heldLifted) 2 else 0)
+        heldDx = 0f; heldDy = 0f; heldMoved = false; heldLifted = false; heldVx = 0f; heldVy = 0f
+        return r
+    }
 
     /** Older call sites: pinch about the view centre. */
     fun zoom(f: Float) = pinch(f, -1f, -1f)

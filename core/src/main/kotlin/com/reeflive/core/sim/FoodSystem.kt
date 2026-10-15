@@ -13,8 +13,9 @@ class FoodParticle(
     val feedId: Int,
     /** Sim time the particle entered the water ([bornAt] carries a random expiry offset); drives the renderer's thaw / flutter / dispersal. */
     val spawnedAt: Double = bornAt,
+    /** Food in this particle; a torn piece of nori carries its share of the sheet. */
+    val grams: Double = kind.gramsPerParticle,
 ) {
-    val grams: Double = kind.gramsPerParticle
     var settled = false
     var eaten = false
     /** Organism currently targeting this particle (first to arrive wins; others may still race). */
@@ -22,14 +23,39 @@ class FoodParticle(
     val onSurface: Boolean get() = !settled && vel.y == 0.0 && pos.y > 50
 }
 
-/** A nori sheet on the clip (SIMULATION §4.6): fish nibble it until [remaining] reaches 0. */
-class NoriSheet(val pos: Vec3, var remaining: Double, val bornAt: Double)
+/**
+ * A nori sheet on the clip (SIMULATION §4.6): a flow-driven [cloth] that fish bite at from downstream until nothing is
+ * left; [remaining] is the share of the sheet still on the clip.
+ */
+class NoriSheet(val pos: Vec3, val bornAt: Double, val cloth: NoriCloth) {
+    val remaining: Double get() = cloth.remaining
+
+    /** One bite seen from outside: where the biter was, where it bit, and the downstream direction then (tests). */
+    class Bite(val fishPos: Vec3, val at: Vec3, val downstream: Vec3)
+    val bites = ArrayList<Bite>()
+    var biteCount = 0; private set
+
+    /**
+     * A fish at [fishPos] bites [amount] of the whole sheet (0..1) near [at], tugging the bitten cell by [tug] cm/s.
+     * [downstream] is the water's direction at the sheet. Returns where the bite landed, or null if nothing is left.
+     */
+    fun bite(fishPos: Vec3, at: Vec3, amount: Double, tug: Vec3, downstream: Vec3): Vec3? {
+        val hit = cloth.bite(at, amount * cloth.total, tug) ?: return null
+        biteCount++
+        if (bites.size >= 64) bites.removeAt(0)
+        bites += Bite(fishPos, hit, downstream)
+        return hit
+    }
+}
 
 /**
  * Food particles (SIMULATION §4.6): spawn, sink/float with the flow, settle on rock or sand,
  * expire to detritus after [FoodKind.lifeSeconds] (20 min for most; a wafer lasts hours). Max 400 particles.
  */
 class FoodSystem(private val rock: RockData, private val flow: FlowField, private val rng: Rng) {
+    /** Live sand surface (cm) at (x, z) when the Simulation has a sand bed; else the flat [RockData.sandTopCm]. */
+    var groundY: ((Double, Double) -> Double)? = null
+
     val particles = ArrayList<FoodParticle>()
     var nori: NoriSheet? = null
     private var nextId = 1
@@ -48,7 +74,8 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
         val fid = nextFeed++
         lastFeedTime = simTime; lastFeedPos = at; lastFeedKind = kind
         if (kind == FoodKind.NORI) {
-            nori = NoriSheet(rock.anchors.pos("NORI_CLIP", Vec3(2.0, 35.0, 18.0)), 1.0, simTime)
+            val clip = rock.anchors.pos("NORI_CLIP", Vec3(2.0, 27.0, 40.0))
+            nori = NoriSheet(clip, simTime, NoriCloth(clip, rock))
             return fid
         }
         val count = minOf((grams / kind.gramsPerParticle).toInt().coerceAtLeast(1), MAX - particles.size).coerceAtLeast(0)
@@ -88,16 +115,46 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             var p = f.pos + f.vel * dt
             if (floating) p = p.withY(rock.waterLevelCm - 0.3)
             p = rock.clampToWater(p, 0.3)
-            if (!f.kind.suspended) {
+            if (f.kind.suspended) {
+                // drifting plankton stays in the water over the live sand (clampToWater's floor is the flat sand plane,
+                // under the raised bed: a diamond goby went for copepods it could never reach, 1.6 cm in the sand)
+                val g = groundY
+                if (g != null && p.y < g(p.x, p.z) + 0.3) {
+                    p = p.withY(g(p.x, p.z) + 0.3)
+                    // where the rock foot meets the sand, out of the rock and back over the sand
+                    if (rock.sdf.dist(p) < 0.3) { p = rock.sdf.project(p, 0.3); p = p.withY(kotlin.math.max(p.y, g(p.x, p.z) + 0.3)) }
+                    if (f.vel.y < 0) f.vel = f.vel.withY(0.0)
+                }
+            } else {
                 if (rock.sdf.dist(p) < 0.3) {
                     p = rock.sdf.project(p, 0.3); f.settled = true; f.vel = Vec3.ZERO
-                } else if (p.y <= rock.sandTopCm + 0.35) {
-                    p = p.withY(rock.sandTopCm + 0.3); f.settled = true; f.vel = Vec3.ZERO
+                } else {
+                    val ground = groundY?.let { g -> kotlin.math.max(rock.sandTopCm, g(p.x, p.z)) } ?: rock.sandTopCm
+                    if (p.y <= ground + 0.35) { p = p.withY(ground + 0.3); f.settled = true; f.vel = Vec3.ZERO }
                 }
             }
             f.pos = p
         }
-        nori?.let { if (it.remaining <= 0.01 || t - it.bornAt > 4 * 3600) nori = null }
+        stepNori(dt, t)
+    }
+
+    /**
+     * The sheet streams in the water (the full flow at time [t]: wavemaker pulse, pumps, touch puffs), torn pieces
+     * leave as drifting nori food, and the last scraps let go. A sheet left 4 h goes soft and is taken out (detritus).
+     */
+    private fun stepNori(dt: Double, t: Double) {
+        val n = nori ?: return
+        val cloth = n.cloth
+        cloth.step(dt, t) { p -> flow.velocity(p, t) }
+        if (cloth.remaining in 1e-12..SCRAPS) cloth.releaseAll()
+        for (b in cloth.bits) {
+            if (particles.size >= MAX) { expiredGrams += b.area / cloth.total * NoriCloth.SHEET_GRAMS; continue }
+            val g = b.area / cloth.total * NoriCloth.SHEET_GRAMS
+            particles += FoodParticle(nextId++, FoodKind.NORI, rock.clampToWater(b.pos, 0.5), b.vel, t, -1, spawnedAt = t, grams = g)
+        }
+        cloth.bits.clear()
+        if (cloth.remainingArea <= 1e-12) { nori = null; return }
+        if (t - n.bornAt > 4 * 3600) { expiredGrams += cloth.remaining * NoriCloth.SHEET_GRAMS; nori = null }
     }
 
     fun consume(f: FoodParticle) {
@@ -155,6 +212,8 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
 
     companion object {
         const val MAX = 400
+        /** Below this share of the sheet the last scraps let go of the clip. */
+        const val SCRAPS = 0.03
         /** Floats per particle in [exportMeta]: age (s), settled, seed. */
         const val META_STRIDE = 3
     }

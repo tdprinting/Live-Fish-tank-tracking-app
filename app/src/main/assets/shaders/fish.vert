@@ -15,19 +15,19 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
-// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send one entry, uLimb[0] = (x stride
+// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 13 entries (core ShrimpLimbs), uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
-// limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae.
+// limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae, mode 5 hermit crab.
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
-uniform vec4 uLimb[10];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs)
+uniform vec4 uLimb[15];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs / HermitLegs; only the hermit sends 15)
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
@@ -155,6 +155,98 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
     local = P.xyz + off;
 }
 
+// Hermit crab (mode 5, core HermitLegs). Walking legs (k 0..3; uLimb = step phase, fore-aft stroke, foot lift,
+// withdrawal): forward walking in diagonal pairs, the foot swung forward lifted for the first 40 % of the cycle and
+// pushed back planted for the rest. Chelae (4 left, 5 right; pick phase, pick, walking support, withdrawal): dip to
+// the substrate and come back to the mouth, alternating. 6 = shell: rolls and bobs about its ground point with the
+// stride. 7 = shield and eyestalks (COLOR_0.g = 1: the stalks scan out of step). 8 antennae sweep, 9 antennules
+// flick. uLimb.w pulls every part but the shell toward uLimbPivot[7], just inside the aperture (the larger left
+// chela stays at the opening). Seated on a surface (core CrawlerSeat), uLimb[10..13] plant the walking legs on their
+// footholds, cap the chelae's dip at the surface and 6.w / 8.z / 9.z bend the eyestalks and feelers away from rock.
+void hermitLimb(int k, inout vec3 local, inout vec3 n) {
+    vec4 P = uLimbPivot[k];
+    vec4 A = uLimb[k];
+    vec3 off = local - P.xyz;
+    float t = clamp(aColor.r, 0.0, 1.0);
+    float side = local.z >= 0.0 ? 1.0 : -1.0;
+    bool planted = uLimb[14].w > 0.5;
+    if (k < 4 && planted) {
+        // planted on the surface by the sim (core CrawlerSeat): rotate the rest leg about the hip onto its foothold
+        // (axis x angle), shorten it toward the hip by the flex and raise the knee by as much as the leg folds
+        vec4 IK = uLimb[10 + k];
+        float ang = length(IK.yzw);
+        if (ang > 1e-5) {
+            vec3 ax = IK.yzw / ang;
+            off = rotAxis(off, ax, ang);
+            n = rotAxis(n, ax, ang);
+        }
+        float flex = (IK.x - 0.3) / 0.5;
+        off *= 1.0 - flex * t;
+        float r = 1.0 - flex;
+        off.y += 0.35 * sqrt(max(1.0 - r * r, 0.0)) * P.w * sin(PI * t);
+    } else if (k < 4) {
+        float ph = A.x;
+        float sw = 1.0 - step(0.4, ph);
+        float q = ph / 0.4;
+        float e = sw > 0.5 ? -cos(PI * q) : 1.0 - 2.0 * (ph - 0.4) / 0.6;
+        float yaw = A.y * e * (P.z >= 0.0 ? 1.0 : -1.0);
+        off = rotAxis(off, vec3(0.0, 1.0, 0.0), yaw);
+        n = rotAxis(n, vec3(0.0, 1.0, 0.0), yaw);
+        off.y += A.z * sw * sin(PI * q) * smoothstep(0.25, 1.0, t) * 0.22 * P.w;
+    } else if (k < 6) {
+        float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the substrate
+        float sd = k == 4 ? -1.0 : 1.0;
+        float down = A.y * (0.55 * w - 0.15) + 0.1 * A.z;
+        // never below the surface under the claw (the sim's limit, uLimb[14].y left / .z right)
+        if (planted) down = min(down, k == 4 ? uLimb[14].y : uLimb[14].z);
+        off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);
+        off.x -= 0.25 * P.w * A.y * (1.0 - w) * t;
+        off.z -= sd * 0.1 * P.w * A.y * (1.0 - w) * t;
+    } else if (k == 6) {
+        float roll = A.y * sin(2.0 * PI * A.x);
+        off = rotAxis(off, vec3(1.0, 0.0, 0.0), roll);
+        n = rotAxis(n, vec3(1.0, 0.0, 0.0), roll);
+        off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), A.z);
+    } else if (k == 7) {
+        off.y += A.z * 0.02 * P.w;
+        float em = step(0.5, aColor.g);
+        float a = A.y * 0.3 * sin(2.0 * PI * A.x + side * 1.7) * em;
+        off.z += t * a * P.w;
+        off.x -= t * abs(a) * 0.3 * P.w;
+        // eyestalks lean back and down, away from rock just ahead or overhead (uLimb[6].w, core CrawlerSeat)
+        float eb = uLimb[6].w * em;
+        off.x -= t * eb * 0.5 * P.w;
+        off.y -= t * eb * 0.25 * P.w;
+    } else if (k == 8) {
+        float ph = 2.0 * PI * A.x + side * 1.3;
+        float h2 = t * t;
+        off.y += h2 * A.y * 0.18 * P.w * sin(ph - t * 3.0);
+        off.z += h2 * A.y * 0.14 * P.w * cos(0.7 * ph - t * 2.5) * side;
+        off.x += h2 * A.y * 0.08 * P.w * sin(0.5 * ph);
+        // bent up and back from the rock they would reach into (A.z, core CrawlerSeat)
+        if (A.z > 0.0) {
+            off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z * 1.1);
+            off = rotAxis(off, vec3(0.0, 1.0, 0.0), -side * A.z * 0.6);
+        }
+    } else {
+        float f = pow(max(sin(2.0 * PI * A.x + side * 0.9), 0.0), 8.0);
+        off.y -= t * t * A.y * f * 0.3 * P.w;
+        if (A.z > 0.0) {
+            off = rotAxis(off, vec3(0.0, 0.0, 1.0), A.z * 1.1);
+            off = rotAxis(off, vec3(0.0, 1.0, 0.0), -side * A.z * 0.6);
+        }
+    }
+    vec3 v = P.xyz + off;
+    if (k != 6) {
+        vec3 c = uLimbPivot[7].xyz;
+        float s = k == 4 ? 0.6 : (k == 5 ? 0.45 : (k < 4 ? 0.25 : 0.2));
+        v = mix(v, c + (v - c) * s, A.w);
+    }
+    local = v;
+}
+
 // Bobtail squid (mode 4, core SquidRig): uLimb[0] fins (x wave phase, y stroke, z mantle contraction, w wrap),
 // uLimb[1] arms (x wave phase, y spread, z dorsal-pair raise, w tentacle strike). The ear fins (part 1, B = hinge)
 // beat in a wave running along the fin and wrap against the mantle in a jet; the mantle behind the collar narrows as
@@ -210,7 +302,10 @@ void main() {
     float mode = uMotion.w;
     if (uLimbOn > 0.5) {
         // limb-rigged crawler: rigid body at the organism, limbs posed from the sim (no spline skinning)
-        if (part > 2.5) {
+        if (mode > 4.5) {
+            // hermit: every part (shell, shield, eyes, limbs) carries its limb index
+            hermitLimb(int(floor(aColor.b * 9.0 + 0.5)), local, n);
+        } else if (part > 2.5) {
             int k = int(floor(aColor.b * 9.0 + 0.5));
             if (mode < 1.5) starArm(k, local, n); else crabLimb(k, local, n);
         } else if (part > 1.5) {
@@ -294,14 +389,28 @@ void main() {
         if (cls < 1.5) {
             // walking legs: alternating gait, neighbours and opposite legs half a stride apart; the foot swings
             // forward lifted and pushes back planted. Idle legs shift their footing now and then.
+            // On a surface the sim plants each foot instead (uLimb[1..6] = swing lift, foot offset; uLimb[11].y =
+            // planted): the leg bends from its rest tip onto the foothold and the knee arches as it lifts or folds.
+            float pl = uLimb[11].y;
             float ph = 2.0 * PI * (S.x + 0.5 * mod(pr + (side > 0.0 ? 1.0 : 0.0), 2.0));
-            local.x += h * (0.05 * S.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
-            local.y += h * 0.03 * S.y * max(cos(ph), 0.0);
+            local.x += h * ((1.0 - pl) * 0.05 * S.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
+            local.y += h * (1.0 - pl) * 0.03 * S.y * max(cos(ph), 0.0);
+            if (pr > 1.5) {
+                vec4 W = uLimb[1 + int(pr - 2.0) * 2 + (side > 0.0 ? 1 : 0)];
+                local += W.yzw * h;
+                local.y += sin(PI * h) * (0.125 * W.x + 0.6 * max(W.z, 0.0));   // W.x = lift × 0.4
+            }
         } else if (cls < 2.5) {
             // picking legs (P1-P2): alternate left/right strokes to the mouth while feeding or cleaning; the
             // front pair rocks rapidly back and forth as the skunk cleaner's signal; P1 combs the antenna in grooming
+            // While cleaning or picking at rock the sim drives each claw tip (uLimb[7..10] = grip, tip offset,
+            // uLimb[11].x = weight): out to the skin, a tug, and back to the mouth.
+            float pk = uLimb[11].x;
+            vec4 C = uLimb[7 + int(min(pr, 1.0)) * 2 + (side > 0.0 ? 1 : 0)];
+            local += C.yzw * h;
+            local.y += sin(PI * h) * 0.03 * pk;
             float k = 0.5 + 0.5 * sin(2.0 * PI * 2.2 * time + (side > 0.0 ? 0.0 : PI) + pr * 1.3);
-            float pick = max(uPick, 0.0);
+            float pick = max(uPick, 0.0) * (1.0 - pk);
             local.x -= h * 0.06 * pick * k;
             local.y += h * 0.035 * pick * k;
             local.z -= side * h * 0.03 * pick * k;
@@ -324,6 +433,8 @@ void main() {
             // (advertising, cleaning); lash with the skunk cleaner's leg rock; grooming draws one down to the mouth
             float h2 = h * h;
             float ph = uSwim.w + pr * 2.1 + side * 1.3;
+            // lifted clear of rock just ahead, draped along a client's flank while cleaning (uLimb[11].z left, .w right)
+            local.y += h2 * 0.25 * (side > 0.0 ? uLimb[11].w : uLimb[11].z);
             local.y += h2 * (0.06 * sin(ph - h * 3.0) + 0.1 * S.z * sin(2.0 * PI * 3.0 * time - h * 6.0 + side));
             local.z += h2 * 0.07 * cos(0.7 * ph - h * 2.5);
             float g = S.w * step(0.0, side);
@@ -392,12 +503,19 @@ void main() {
         float ab = max(uw - 0.4, 0.0);
         local.y -= 0.9 * max(bend, 0.0) * ab * ab;
         local.x -= 0.4 * max(bend, 0.0) * ab * ab;
+    }
+    if (mode > 1.5 && mode < 2.5) {
+        // shrimp seated on its legs (core ShrimpLimbs, uLimb[12] = drop, pitch, roll): the body settles onto the
+        // footholds under it
+        vec4 St = uLimb[12];
+        local.y -= St.y + St.z * (local.x + 0.5 - uw + 0.1) + St.w * local.z;
     } else if (mode < 0.5 && abs(bend) > 0.001) {
         float e = uw - 0.35;
         local.z += bend * 0.55 * (e * e - 0.04);
         dzdu += bend * 0.55 * 2.0 * e;
     }
-    n = normalize(vec3(n.x - dzdu * n.z, n.y, n.z));
+    // u runs snout → tail (u = 0.5 - x), so dz/dx = -dz/du and the surface normal tilts by +dz/du
+    n = normalize(vec3(n.x + dzdu * n.z, n.y, n.z));
 
     vec3 sp;
     vec4 q;

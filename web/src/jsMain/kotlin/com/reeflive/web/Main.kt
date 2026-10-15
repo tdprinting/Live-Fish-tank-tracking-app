@@ -24,6 +24,7 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.WaterState
 import com.reeflive.app.render.GlassStroke
@@ -39,6 +40,8 @@ import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.pointerevents.PointerEvent
 import kotlin.js.Promise
 import kotlin.math.min
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Browser host for the shared simulation (:core) and 3D renderer (app/.../render), both compiled from the same
@@ -68,6 +71,10 @@ object ReefLive {
     private var pendingTouch: Pair<Vec3, TouchSurface>? = null
     /** Screensaver camera while on (same director as the Android screensaver). */
     private var director: com.reeflive.app.render.CinemaDirector? = null
+    private var fingerDown = false
+    /** Camera projection the renderer publishes every frame (bag drops and the bag timers). */
+    private val projection = com.reeflive.app.render.TankProjection()
+    private val bagPt = FloatArray(3)
 
     /**
      * Starts the live tank on [cnv]. [baseUrl] is where `assets/` and `res/` are served; [events] gets
@@ -118,16 +125,28 @@ object ReefLive {
                 current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
+                r.projection = projection
                 r.demoWhenEmpty = false
                 r.listener = object : TankViewListener {
-                    override fun onPick(id: String?) { emit("onPick", id) }
+                    // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
+                    override fun onPick(id: String?) { if (id != null) sim?.enqueue(Command.TouchAnimal(id)); emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
+                    // pressed and held on an animal: follow it (the page buzzes and says who)
+                    override fun onHoldAnimal(id: String) { r.follow(id); emit("onFollow", id); emit("onHold", id) }
                     override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
                     override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
                     // as on Android (LiveTankScreen): a long press drops a pinch of pellets where the finger is
                     override fun onLongPress(worldPoint: Vec3) { sim?.enqueue(Command.Feed(FoodKind.PELLET, 1.0, worldPoint)); emit("onFed", "PELLET") }
+                    // hold on the glass: a fingertip the fish follow (mouse: hold the button still, then drag); the page
+                    // only hears when it goes down and when it lifts
+                    override fun onFinger(worldPoint: Vec3?, speedCmS: Float, surface: TouchSurface) {
+                        sim?.enqueue(Command.Finger(worldPoint, speedCmS.toDouble(), surface))
+                        val down = worldPoint != null
+                        if (down != fingerDown) { fingerDown = down; emit("onFinger", if (down) surface.name else null) }
+                    }
+                    override fun onFlick(worldPoint: Vec3, velocity: Vec3) { sim?.enqueue(Command.WaterPuff(worldPoint, velocity)); emit("onFlick", null) }
                     override fun onScrape(stroke: GlassStroke) { ReefSandbox.scrape(stroke); emit("onScrape", stroke.lengthCm) }
                     override fun onFlipperTap() { emit("onFlipperTap", null) }
                 }
@@ -138,6 +157,7 @@ object ReefLive {
                 r.onSurfaceCreated(null, null)
                 resize()
                 touch = TouchController(Context(AssetManager(files)), View(), r.input)
+                resize()   // TouchController sets its own finger size from the slop; the page's px are device px
                 attachPointers(cnv)
                 window.addEventListener("resize", { resize() })
                 running = true
@@ -154,12 +174,35 @@ object ReefLive {
 
     private var current = RenderQuality.HIGH
 
-    /** HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. */
+    /**
+     * HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. [scaleStep] trims
+     * it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
+     */
     private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
         RenderQuality.HIGH -> 3.0
         RenderQuality.MEDIUM -> 2.0
         RenderQuality.LOW -> 1.5
-    })
+    }) * SCALES[scaleStep]
+
+    private var scaleStep = 0
+    private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
+
+    /**
+     * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
+     * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
+     * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
+     * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
+     */
+    private fun adapt(dt: Double) {
+        if (dt <= 0.0) return
+        windowTime += min(dt, 0.1); windowFrames++
+        if (windowFrames < ADAPT_FRAMES) return
+        val mean = windowTime / windowFrames
+        windowTime = 0.0; windowFrames = 0
+        if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0 }
+        else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
+        else goodWindows = 0
+    }
 
     private fun status(text: String) { emit("onStatus", text) }
 
@@ -176,6 +219,8 @@ object ReefLive {
         val h = (c.clientHeight * dpr).toInt().coerceAtLeast(1)
         if (c.width != w || c.height != h) { c.width = w; c.height = h }
         renderer?.onSurfaceChanged(null, w, h)
+        // a fingertip's radius for forgiving picks: ~22 CSS px (the Android 24 dp, a bit under half a 48 px target)
+        renderer?.input?.fingerPx = (22.0 * dpr).toFloat()
     }
 
     private fun frame(t: Double) {
@@ -183,6 +228,7 @@ object ReefLive {
         val dt = if (lastFrame < 0) 0.0 else ((t - lastFrame) / 1000.0).coerceIn(0.0, 0.25)
         lastFrame = t
         val s = sim
+        val t0 = if (statsOn) now() else 0.0
         if (s != null) {
             simAcc += dt
             var steps = 0
@@ -192,11 +238,32 @@ object ReefLive {
             }
             if (steps == 3) simAcc = 0.0
         }
+        val t1 = if (statsOn) now() else 0.0
+        adapt(dt)
         val c = canvas
-        if (c != null && (c.width != (c.clientWidth * pixelRatio()).toInt() || c.height != (c.clientHeight * pixelRatio()).toInt())) resize()
+        if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
         director?.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
+        if (statsOn) stats(dt, t1 - t0, now() - t1)
         window.requestAnimationFrame(::frame)
+    }
+
+    // ------------------------------------------------------------------ stats overlay (?stats in the page URL)
+    private val statsOn by lazy { listener?.onStats != null }
+    private fun now(): Double = js("performance.now()") as Double
+    private var stFrames = 0; private var stTime = 0.0; private var stSim = 0.0; private var stDraw = 0.0; private var stWorst = 0.0
+
+    /** Once a second: frame rate, worst frame, and the CPU ms per frame spent in the sim and in issuing draws. Frame
+     *  time well above sim + draw means the GPU (pixels / shaders) is the limit. */
+    private fun stats(dt: Double, simMs: Double, drawMs: Double) {
+        stFrames++; stTime += dt; stSim += simMs; stDraw += drawMs; stWorst = max(stWorst, dt)
+        if (stTime < 1.0) return
+        val c = canvas
+        fun f(v: Double) = ((v * 10).roundToInt() / 10.0).toString()
+        emit("onStats", "${(stFrames / stTime).roundToInt()} fps · worst ${(stWorst * 1000).roundToInt()} ms\n" +
+            "sim ${f(stSim / stFrames)} ms · draw ${f(stDraw / stFrames)} ms\n" +
+            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}")
+        stFrames = 0; stTime = 0.0; stSim = 0.0; stDraw = 0.0; stWorst = 0.0
     }
 
     /** Pause rendering and the sim while the page is hidden; on return the sim skips ahead like the Android app. */
@@ -318,9 +385,25 @@ object ReefLive {
         val d = director ?: return "null"
         return JSON.stringify(obj { it.fade = d.fade; it.caption = d.caption ?: ""; it.alpha = d.captionAlpha })
     }
+    /**
+     * Submarine mode (as the Android live menu): launch or park the toy sub; [visible] false hides it from the fish;
+     * [headlight] is its lamp. The camera rides with it while it is out.
+     */
+    fun submarine(on: Boolean, visible: Boolean, headlight: Boolean) {
+        if (on) renderer?.follow(null)
+        sim?.enqueue(Command.SubmarineMode(on, visible, headlight))
+    }
+    /** The pilot's stick, each axis -1..1 (send on change only). */
+    fun steerSub(thrust: Double, turn: Double, rise: Double, strafe: Double) {
+        sim?.enqueue(Command.SteerSubmarine(com.reeflive.core.sim.SubControls(thrust, turn, rise, strafe)))
+    }
+    /** Ride inside the sub (first person) or chase it from behind. */
+    fun subView(firstPerson: Boolean) { renderer?.subFirstPerson = firstPerson }
+    /** JSON {curious, wary} while the sub is out, else null: how many animals are reacting to it. */
+    fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v
+        current = v; scaleStep = 0; goodWindows = 0
         renderer?.setQuality(v)
         resize()
     }
@@ -343,13 +426,50 @@ object ReefLive {
         }
     }.toTypedArray())
 
+    /**
+     * Tank x (cm) of the front glass under canvas pixel ([px], [py]) for dropping a shop bag there, or -1 when the
+     * point is off the tank.
+     */
+    fun bagDropX(px: Double, py: Double): Double {
+        if (!projection.planePointAt(px.toFloat(), py.toFloat(), TankDims.DEPTH_F + 0.8f, bagPt)) return -1.0
+        return if (bagPt[0] in 0f..TankDims.LENGTH_F && bagPt[1] in 0f..TankDims.HEIGHT_F) bagPt[0].toDouble() else -1.0
+    }
+
+    /**
+     * The floating acclimation bags for the page's timers: canvas pixel (x, y) just under each bag, minutes left,
+     * progress 0..1, bag and tank temperature, phase, count and species; plus whether Hurry up is on.
+     */
+    fun bagState(): String {
+        val snap = sim?.latest ?: return "null"
+        val o: dynamic = js("({})")
+        o.hurry = snap.bagHurry
+        o.bags = snap.bags.map { b ->
+            val on = projection.project(b.x, b.y - b.radius * 1.8f, b.z, bagPt)
+            obj {
+                it.id = b.id; it.x = if (on) bagPt[0] else -1f; it.y = if (on) bagPt[1] else -1f
+                it.min = b.minutesLeft; it.progress = b.progress; it.bagT = b.bagTempC; it.tankT = b.tankTempC
+                it.phase = b.phase; it.count = b.count; it.name = b.common
+            }
+        }.toTypedArray()
+        return JSON.stringify(o)
+    }
+
+    /**
+     * The last body the fish net took out (core FishNet), for the page's toilet goodbye (flush.js): key (new per
+     * body), name, fish or not, and the cartoon colours; "null" before the first.
+     */
+    fun netFlush(): String {
+        val f = sim?.latest?.netFlush ?: return "null"
+        return JSON.stringify(obj { it.key = "${f.seq}:${f.id}"; it.name = f.name; it.isFish = f.isFish; it.body = f.body; it.accent = f.accent })
+    }
+
     /** HUD state: clock, light phase, water and the organisms (id, name, species, health). */
     fun state(): String {
         val s = sim ?: return "null"
         val snap: SimSnapshot = s.latest
         val w = snap.water
         val o: dynamic = js("({})")
-        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = s.speed; o.light = snap.lightIntensity
+        o.time = snap.simTimeSec; o.phase = snap.dayPhase; o.speed = snap.speed; o.light = snap.lightIntensity
         o.tempC = w.tempC; o.sg = w.sg; o.ph = w.ph; o.alk = w.alk; o.ca = w.ca; o.mg = w.mg
         o.no3 = w.no3; o.po4 = w.po4; o.nh3 = w.nh3Total; o.no2 = w.no2; o.flow = snap.flowStrength
         o.organisms = s.organisms.filter { it.alive }.map { a ->
@@ -408,6 +528,12 @@ object ReefLive {
     }
 
     private const val TICK = 0.05
+    /** Render-resolution multipliers tried in order while frames are slow (1 → ⅔ of the device pixel ratio). */
+    private val SCALES = doubleArrayOf(1.0, 0.9, 0.8, 0.72, 0.67)
+    private const val ADAPT_FRAMES = 45
+    private const val SLOW_DT = 1.0 / 48
+    private const val FAST_DT = 1.0 / 57
+    private const val GOOD_WINDOWS = 4
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }

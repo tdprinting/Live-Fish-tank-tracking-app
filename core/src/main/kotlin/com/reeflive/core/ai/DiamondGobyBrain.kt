@@ -152,7 +152,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             val x = (centre.x + kotlin.math.cos(a) * reach).coerceIn(6.0, r.lengthCm - 6.0)
             val z = (centre.z + sin(a) * reach * 0.6).coerceIn(5.0, r.widthCm - 2.5)
             if (Vec3(x, 0.0, z).distanceTo(Vec3(burrow.x, 0.0, burrow.z)) > RANGE_CM) continue
-            if (r.sdf.dist(Vec3(x, r.sandTopCm + 1.5, z)) < 2.5) continue
+            // clear of rock where it actually hovers (over the live sand, up to 3 cm above the flat plane at the back):
+            // checked at the plane, a station tucked under a rock foot left it 0.3 cm off the rock when it swam off to feed
+            if (r.sdf.dist(Vec3(x, hoverY(x, z), z)) < 2.5) continue
             return Vec3(x, hoverY(x, z), z)
         }
         return mouth(4.0)
@@ -204,7 +206,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Night (and after a scare): tucked into the burrow under the rock. */
     inner class InBurrow : Behavior("burrow", "In its burrow") {
         override fun score(c: Ctx): Double = when {
-            c.p.night -> 0.85
+            c.p.night -> 0.85 * Feed.nightRestDamp(c, this@DiamondGobyBrain)
             o.waryLevel > 0.3 || o.startle > 0.25 -> 0.7
             else -> 0.1
         }

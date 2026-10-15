@@ -10,8 +10,10 @@ import kotlin.math.sqrt
  * the raw pointer stream (ids, positions in px, event time in ms) and it reports camera motion and taps to [Sink]:
  *
  * - one finger: orbit once it has moved past [touchSlop] (the whole move since touch-down is applied, so nothing is
- *   lost to the slop); a release while moving flings. Holding still does not lock the drag out: after a long press
- *   fires, moving the same finger still orbits.
+ *   lost to the slop); a release while moving flings.
+ * - hold: after a long press fires the finger is "held" ([Sink.heldMove], [Sink.heldUp] with its release velocity). The
+ *   host decides what a hold is: by default (the interface defaults) a held drag still orbits and flings, so holding
+ *   still never locks the drag out; the tank turns a hold on the glass into a fingertip the fish follow and a flick.
  * - two or more fingers: pan (centroid), pinch (mean span ratio, about the centroid) and twist-to-rotate (after a
  *   small dead zone so a pinch does not also yaw). No minimum finger span. Every change in the number of fingers
  *   re-bases the deltas, so lifting one of two fingers carries straight on as a one-finger orbit, with no jump.
@@ -34,6 +36,13 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         /** Release velocity of a one-finger drag, px/s. */
         fun fling(vx: Float, vy: Float)
         fun tap(kind: CameraInput.TapKind, x: Float, y: Float)
+        /** The held finger (after a long press) moved by ([dx], [dy]) to ([x], [y]). Default: an orbit, as any drag. */
+        fun heldMove(dx: Float, dy: Float, x: Float, y: Float) { orbit(dx, dy) }
+        /**
+         * The held finger lifted at ([x], [y]) moving at ([vx], [vy]) px/s (zero when it rested, or a second finger
+         * took over). Default: a fling when fast enough, as any drag.
+         */
+        fun heldUp(x: Float, y: Float, vx: Float, vy: Float) { if (vx * vx + vy * vy >= MIN_FLING * MIN_FLING) fling(vx, vy) }
     }
 
     // ---- pointers currently down
@@ -51,6 +60,8 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
     private var secondTap = false
     private var longPressArmed = false
     private var longPressFired = false
+    /** A long press fired and its finger is still the only one down: moves and the lift go to the held callbacks. */
+    private var holding = false
     private var multiMoved = 0f
     private var multiT = 0L
     private var multiX = 0f; private var multiY = 0f
@@ -80,6 +91,7 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         if (indexOf(id) < 0 && count < MAX) { ids[count] = id; xs[count] = x; ys[count] = y; count++ }
         if (count > maxPointers) maxPointers = count
         if (count >= 2) {
+            endHold()
             longPressArmed = false
             quickZoom = false
             secondTap = false
@@ -100,7 +112,7 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         if (count == 0) return
         if (adopted) {
             if (count > maxPointers) maxPointers = count
-            if (count >= 2) { longPressArmed = false; quickZoom = false; secondTap = false }
+            if (count >= 2) { endHold(); longPressArmed = false; quickZoom = false; secondTap = false }
             rebase()
             return
         }
@@ -120,6 +132,9 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         lastX = x; lastY = y
         if (quickZoom) {
             sink.pinch(exp(dy * QUICK_ZOOM_PER_PX), downX, downY)
+        } else if (holding) {
+            if (dx != 0f || dy != 0f) sink.heldMove(dx, dy, x, y)
+            sample(x, y, t)
         } else {
             if (dx != 0f || dy != 0f) sink.orbit(dx, dy)
             sample(x, y, t)
@@ -163,6 +178,7 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
     }
 
     fun cancel() {
+        endHold()
         val was = count > 0
         count = 0
         pendingTap = false
@@ -183,6 +199,8 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
             if (t >= due) {
                 longPressArmed = false
                 longPressFired = true
+                holding = true
+                // a held finger is not yet a drag: the first move past the slop starts it (no jump from the press)
                 sink.tap(CameraInput.TapKind.LONG_PRESS, downX, downY)
             } else next = due
         }
@@ -212,6 +230,7 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         quickZoom = false
         longPressArmed = !secondTap
         longPressFired = false
+        holding = false
         multiMoved = 0f
         rotating = false; twist = 0f
         sCount = 0
@@ -221,6 +240,13 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         sink.touching(false)
         longPressArmed = false
         val held = t - downT
+        if (holding) {
+            holding = false
+            velocity(t)
+            sink.heldUp(xs[0], ys[0], vxOut, vyOut)
+            dragging = false; quickZoom = false; secondTap = false
+            return
+        }
         when {
             maxPointers >= 2 && multiMoved <= touchSlop && t - multiT <= TWO_FINGER_TAP_MS ->
                 sink.tap(CameraInput.TapKind.GLASS, multiX, multiY)
@@ -237,6 +263,13 @@ class GestureTracker(private val sink: Sink, var touchSlop: Float = 16f, var dou
         dragging = false
         quickZoom = false
         secondTap = false
+    }
+
+    /** A hold ends without a flick (a second finger came down, or the gesture was cancelled). */
+    private fun endHold() {
+        if (!holding) return
+        holding = false
+        sink.heldUp(lastX, lastY, 0f, 0f)
     }
 
     private fun rebase() {

@@ -1,7 +1,9 @@
 package com.reeflive.core.sim
 
 import com.reeflive.core.geom.Rng
+import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
@@ -66,6 +68,11 @@ class SandGridSnapshot(
     /** Detritus (mulm) load index (0 clean .. ~1.5 dirty). */
     val detritus: FloatArray,
     val version: Long,
+    /**
+     * Dug-out cavity under rock (0..1): the clear gap between the sand and the rock underside over 2 cm, 0 where the
+     * sand still meets the rock or there is no rock (SIMULATION §16.8). Empty for a bed without rock.
+     */
+    val cavity: FloatArray = FloatArray(0),
 )
 
 /**
@@ -137,8 +144,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
     }
 
-    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it. */
-    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z)
+    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it (and any body buried in it). */
+    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z) + inclusionAt(x, z)
 
     fun freshAt(x: Double, z: Double): Double = fresh[index(x, z)].toDouble()
     fun detritusAt(x: Double, z: Double): Double = detritus[index(x, z)].toDouble()
@@ -173,7 +180,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         if (cm3 == 0.0) return
         val ws = weightSum(x, z, r).coerceAtLeast(1e-6)
         around(x, z, r) { i, w ->
-            height[i] = (height[i] + (cm3 * w / ws / cellArea).toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+            height[i] = (height[i] + (cm3 * w / ws / cellArea).toFloat()).coerceIn(floorH[i], MAX_MOUND)
             fresh[i] = max(fresh[i], (0.6 + 0.4 * w).toFloat())
         }
         movedCm3 += abs(cm3)
@@ -195,7 +202,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             val across = (-uz * cx + ux * cz) / width
             val s2 = across * across
             val dh = -depth * (1 - 2 * s2) * exp(-s2) * sqrt(w)
-            height[i] = (height[i] + dh.toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+            height[i] = (height[i] + dh.toFloat()).coerceIn(floorH[i], MAX_MOUND)
             if (s2 < 2.5) fresh[i] = max(fresh[i], (freshness * (1 - s2 / 2.5)).toFloat())
         }
         version++
@@ -285,12 +292,14 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         for (k in 0 until n) {
             val slot = if (particleCount < MAX_PARTICLES) particleCount++ else ((stepCount + k) % MAX_PARTICLES).toInt()
             val u = rng.nextDouble()
-            val kind = when {
+            var kind = when {
                 u < dShare * 0.6 -> Grain.DETRITUS
                 u < dShare * 0.6 + finesShare * 0.45 -> Grain.SILT
                 u < dShare * 0.6 + finesShare -> Grain.FINE
                 else -> Grain.SAND
             }
+            // a cell dug to its floor has no sand left to throw: the puff is fines only (sand is never made from nothing)
+            if ((kind == Grain.SAND || kind == Grain.FINE) && height[i0] - GRAIN_CM3 / cellArea < floorH[i0]) kind = Grain.SILT
             px[slot] = (x + rng.signed() * 0.6).toFloat(); py[slot] = (y + rng.nextDouble() * 0.4).toFloat(); pz[slot] = (z + rng.signed() * 0.6).toFloat()
             pvy[slot] = (upCmS * (0.5 + 0.5 * rng.nextDouble())).toFloat()
             phx[slot] = (hx + rng.signed() * 0.4 * upCmS).toFloat(); phz[slot] = (hz + rng.signed() * 0.4 * upCmS).toFloat()
@@ -298,7 +307,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             page[slot] = 0f
             pkind[slot] = kind.ordinal.toByte()
             if (kind == Grain.DETRITUS) detritus[i0] = max(0f, detritus[i0] - DETRITUS_PER_PARTICLE.toFloat())
-            else if (kind != Grain.SILT) height[i0] = (height[i0] - (GRAIN_CM3 / cellArea).toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+            else if (kind != Grain.SILT) height[i0] = height[i0] - (GRAIN_CM3 / cellArea).toFloat()
         }
         version++
     }
@@ -340,11 +349,14 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 when (kind) {
                     Grain.DETRITUS -> detritus[c] = min(MAX_DETRITUS, detritus[c] + DETRITUS_PER_PARTICLE.toFloat())
                     Grain.SILT -> {}
-                    else -> height[c] = (height[c] + (GRAIN_CM3 / cellArea).toFloat()).coerceIn(-MAX_DEPTH, MAX_MOUND)
+                    // no upper clamp: a grain always lands (slope failure in [relax] spreads a heap), so sand is conserved
+                    else -> height[c] = height[c] + (GRAIN_CM3 / cellArea).toFloat()
                 }
                 remove = true
             } else if (page[i] > MAX_AGE_S) {
                 if (kind == Grain.DETRITUS) resuspendedPending += DETRITUS_PER_PARTICLE
+                // sand still up (a strong jet) drops where it is rather than vanishing
+                else if (kind != Grain.SILT) { val c = index(px[i].toDouble(), pz[i].toDouble()); height[c] = height[c] + (GRAIN_CM3 / cellArea).toFloat() }
                 remove = true
             }
             if (remove) { removeAt(i); continue }
@@ -392,11 +404,13 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val dtS = dtMin * 60
         // 1. avalanche: no slope steeper than the angle of repose of wet sand
         val maxStepX = (REPOSE_TAN * cellX).toFloat(); val maxStepZ = (REPOSE_TAN * cellZ).toFloat()
+        // sand under rock is held by the roof and bound by the burrower's mucus: tunnel walls stand far steeper
+        val confX = (CONFINED_REPOSE_TAN * cellX).toFloat(); val confZ = (CONFINED_REPOSE_TAN * cellZ).toFloat()
         repeat(2) {
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
-                if (i + 1 < nx) slump(a, a + 1, maxStepX)
-                if (k + 1 < nz) slump(a, a + nx, maxStepZ)
+                if (i + 1 < nx) slump(a, a + 1, if (roofed(a) || roofed(a + 1)) confX else maxStepX)
+                if (k + 1 < nz) slump(a, a + nx, if (roofed(a) || roofed(a + nx)) confZ else maxStepZ)
             }
         }
         // 2. smoothing: bioturbation background + flow (diffusion, explicit, unconditionally tiny steps)
@@ -404,15 +418,19 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val d = (D_BASE + D_FLOW * f * f) * dtS
         val ax = (d / (cellX * cellX)).coerceAtMost(0.2).toFloat(); val az = (d / (cellZ * cellZ)).coerceAtMost(0.2).toFloat()
         if (ax > 1e-7f) {
+            // on the visible surface: a buried body's volume holds its cover up instead of sand creeping in under it
             val h = height.copyOf()
+            if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
                 val c = h[a]
                 val l = if (i > 0) h[a - 1] else c; val r = if (i < nx - 1) h[a + 1] else c
                 val b = if (k > 0) h[a - nx] else c; val t = if (k < nz - 1) h[a + nx] else c
-                height[a] = c + ax * (l + r - 2 * c) + az * (b + t - 2 * c)
+                height[a] = height[a] + ax * (l + r - 2 * c) + az * (b + t - 2 * c)   // left to right: bit-identical to a bed with nothing buried
             }
         }
+        // 2b. burrows under rock slowly fill back in: grains trickle off the walls and the flow carries sand in
+        if (rockAttached) infill(dtMin, f)
         // 3. freshly turned sand fades back (biofilm and oxidised surface grains), detritus settles toward the column's load
         val kf = exp(-dtMin / FRESH_TAU_MIN).toFloat()
         val target = (waterDetritusPpm / DETRITUS_REF_PPM * (1 - 0.25 * min(f, 2.0))).coerceIn(0.0, MAX_DETRITUS.toDouble()).toFloat()
@@ -426,7 +444,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     }
 
     private fun slump(a: Int, b: Int, maxStep: Float) {
-        val dh = height[a] - height[b]
+        val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
         if (abs(dh) <= maxStep) return
         val move = (abs(dh) - maxStep) * 0.5f * (if (dh > 0) 1f else -1f)
         height[a] -= move; height[b] += move
@@ -436,8 +454,598 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun reset() {
         height.fill(0f); fresh.fill(0f); detritus.fill(0.25f)
         particleCount = 0; resuspendedPending = 0.0
+        burrows.clear(); carriedCm3 = 0.0; burrowEpoch++
+        inclusion.fill(0f); anyInclusion = false; buried.clear()
         version++
     }
+
+    // ============================================================== rock roof, tunnels and burrows (SIMULATION §16.8)
+    /**
+     * Rock underside over each cell (y, cm): the lowest rock above the deepest diggable sand, within [ROOF_RANGE] of the
+     * modelled bed. [OPEN] = open water above the sand; [SOLID] = the rock goes down to the glass (nothing to dig under).
+     * Filled by [attachRock]; all [OPEN] for a bed without rock.
+     */
+    val roof = FloatArray(nx * nz) { OPEN }
+    /** Lowest height offset each cell can be dug to (cm): −[MAX_DEPTH] on open sand, almost to the glass under rock. */
+    private val floorH = FloatArray(nx * nz) { -MAX_DEPTH }
+    var rockAttached = false; private set
+    /** The rock's distance field (set by [attachRock]): [fits] checks the body's real clearance from the rock with it. */
+    private var rockSdf: Sdf? = null
+
+    /**
+     * Reads the rock underside over every cell from [sdf] (sphere-traced up each cell's centre column from just above
+     * the glass). Called once by the Simulation; digging then opens real gaps between the sand and the rock.
+     */
+    fun attachRock(sdf: Sdf) {
+        for (k in 0 until nz) for (i in 0 until nx) {
+            val a = k * nx + i
+            val x = (i + 0.5) * cellX; val z = (k + 0.5) * cellZ
+            val base = baseY(z)
+            var y = GLASS_Y + FLOOR_MARGIN
+            var r = OPEN
+            var d = sdf.dist(Vec3(x, y, z))
+            if (d <= 0.0) r = SOLID
+            else while (y < base + ROOF_RANGE) {
+                y += max(ROOF_STEP, 0.9 * d)
+                d = sdf.dist(Vec3(x, y, z))
+                if (d <= 0.0) { r = y.toFloat(); break }
+            }
+            roof[a] = r
+            floorH[a] = if (r != OPEN && r != SOLID) min(-MAX_DEPTH, -(base - GLASS_Y - FLOOR_MARGIN).toFloat()) else -MAX_DEPTH
+        }
+        rockAttached = true
+        rockSdf = sdf
+        version++
+    }
+
+    /** True for a cell with rock over its sand that digging can get under (not [OPEN], not [SOLID]). */
+    fun roofed(a: Int): Boolean { val r = roof[a]; return r != OPEN && r != SOLID }
+    fun underRock(x: Double, z: Double): Boolean = roof[index(x, z)] != OPEN
+
+    /** Lowest height offset (cm) digging can reach at (x, z), bilinear like [heightAt]. */
+    fun floorAt(x: Double, z: Double): Double {
+        val fx = (x / cellX - 0.5).coerceIn(0.0, nx - 1.001)
+        val fz = (z / cellZ - 0.5).coerceIn(0.0, nz - 1.001)
+        val i = fx.toInt(); val k = fz.toInt()
+        val tx = fx - i; val tz = fz - k
+        val a = floorH[k * nx + i]; val b = floorH[k * nx + i + 1]
+        val c = floorH[(k + 1) * nx + i]; val d = floorH[(k + 1) * nx + i + 1]
+        return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
+    }
+
+    /** Clear height (cm) between the sand and the rock underside at (x, z): +∞ in open water, 0 where they meet. */
+    fun gapAt(x: Double, z: Double): Double {
+        val r = roof[index(x, z)]
+        if (r == OPEN) return Double.POSITIVE_INFINITY
+        if (r == SOLID) return 0.0
+        return max(0.0, r - surfaceY(x, z))
+    }
+
+    /** The most clearance digging could ever open at (x, z) (cm). */
+    fun maxGapAt(x: Double, z: Double): Double {
+        val r = roof[index(x, z)]
+        if (r == OPEN) return Double.POSITIVE_INFINITY
+        if (r == SOLID) return 0.0
+        return max(0.0, r - (baseY(z) + floorAt(x, z)))
+    }
+
+    /** Whether digging to the floor could ever clear a body [bodyH] × [bodyW] at (x, z) (roof and rock shape). */
+    fun diggable(x: Double, z: Double, bodyH: Double, bodyW: Double): Boolean {
+        if (maxGapAt(x, z) < bodyH) return false
+        val sdf = rockSdf ?: return true
+        if (roof[index(x, z)] == OPEN) return true
+        val floorY = baseY(z) + floorAt(x, z)
+        // somewhere between the floor and the roof the body's midline clears the rock
+        var y = floorY + 0.5 * bodyH
+        val top = roof[index(x, z)] - 0.5 * bodyH
+        while (y <= top) { if (sdf.dist(Vec3(x, y, z)) >= FIT_CLEAR * min(bodyH, bodyW)) return true; y += 0.2 }
+        return false
+    }
+
+    /**
+     * Whether a body [bodyH] tall and [bodyW] wide fits at (x, z) heading along ([dx], [dz]): the gap must clear the
+     * body at its midline and at both flanks. Open water always fits.
+     */
+    fun fits(x: Double, z: Double, dx: Double, dz: Double, bodyH: Double, bodyW: Double): Boolean {
+        val l = sqrt(dx * dx + dz * dz)
+        val px = if (l > 1e-9) -dz / l else 0.0; val pz = if (l > 1e-9) dx / l else 1.0
+        val hw = 0.5 * bodyW
+        if (!(gapAt(x, z) >= bodyH && gapAt(x + px * hw, z + pz * hw) >= bodyH && gapAt(x - px * hw, z - pz * hw) >= bodyH)) return false
+        // the rock's own shape inside the cell (a lump lower than the cell-centre roof, a wall at the side)
+        val sdf = rockSdf ?: return true
+        if (roof[index(x, z)] == OPEN) return true
+        return sdf.dist(Vec3(x, surfaceY(x, z) + 0.5 * bodyH, z)) >= FIT_CLEAR * min(bodyH, bodyW)
+    }
+
+    /** Sand (cm³) an animal has in its mouth between a bite and a spit (counted in [sandVolumeCm3]). */
+    var carriedCm3 = 0.0; private set
+    /** Centre of the cell the last mouthful came from (cm). */
+    var lastDigX = Double.NaN; private set
+    var lastDigZ = Double.NaN; private set
+    /** Mouthfuls taken out of tunnels and burrows (tests, captions). */
+    var mouthfuls = 0L; private set
+
+    /** Of the four cells that make up the bilinear surface at (x, z), the one whose digging lowers it most. */
+    private fun digCell(x: Double, z: Double): Int {
+        val fx = (x / cellX - 0.5).coerceIn(0.0, nx - 1.001)
+        val fz = (z / cellZ - 0.5).coerceIn(0.0, nz - 1.001)
+        val i = fx.toInt(); val k = fz.toInt()
+        val tx = fx - i; val tz = fz - k
+        var best = index(x, z); var bestW = -1.0
+        for (c in 0 until 4) {
+            val ci = i + (c and 1); val ck = k + (c shr 1)
+            val a = ck * nx + ci
+            val w = (if (c and 1 == 1) tx else 1 - tx) * (if (c shr 1 == 1) tz else 1 - tz)
+            val score = w * (height[a] - floorH[a])
+            if (score > bestW) { bestW = score; best = a }
+        }
+        return best
+    }
+
+    /**
+     * A digger takes a mouthful of up to [cm3] at (x, z), from the cell that holds the surface up there most. Never
+     * below the cell's floor. Returns what it took; that sand is [carriedCm3] until [spit] puts it down.
+     */
+    fun takeMouthful(x: Double, z: Double, cm3: Double): Double {
+        val a = digCell(x, z)
+        val take = min(cm3, max(0.0, (height[a] - floorH[a]).toDouble() * cellArea))
+        if (take <= 1e-9) return 0.0
+        height[a] = max(floorH[a], height[a] - (take / cellArea).toFloat())
+        fresh[a] = max(fresh[a], 0.95f)
+        lastDigX = (a % nx + 0.5) * cellX; lastDigZ = (a / nx + 0.5) * cellZ
+        carriedCm3 += take
+        movedCm3 += take
+        mouthfuls++
+        version++
+        return take
+    }
+
+    /**
+     * Spits [cm3] of carried sand onto a spoil pile at (x, z) (radius [r]): the coarse grains drop as a mound, a
+     * little goes up as a puff ([plume] particles) that settles nearby. Mass-conserving (see [depositExact]).
+     */
+    fun spit(x: Double, y: Double, z: Double, cm3: Double, r: Double = 1.4, plume: Int = 5, hx: Double = 0.0, hz: Double = 0.0) {
+        val v = min(cm3, carriedCm3).coerceAtLeast(0.0)
+        carriedCm3 -= v
+        depositExact(x, z, v, r)
+        if (plume > 0) puff(x, y, z, plume, 3.5, hx, hz, finesShare = 0.45)
+    }
+
+    /** Drops whatever sand is carried at (x, z) (an interrupted digger lets its mouthful fall). */
+    fun dropCarried(x: Double, z: Double) { if (carriedCm3 > 0) spit(x, 0.0, z, carriedCm3, 1.0, plume = 0) }
+
+    /**
+     * Adds exactly [cm3] around (x, z) within [r]: whatever would heap above [MAX_MOUND] spills to a wider ring
+     * (sand is neither lost to the clamp nor made by it).
+     */
+    fun depositExact(x: Double, z: Double, cm3: Double, r: Double) {
+        var left = cm3
+        var rr = r
+        var pass = 0
+        while (left > 1e-9 && pass < 6) {
+            val ws = weightSum(x, z, rr).coerceAtLeast(1e-6)
+            var placed = 0.0
+            val want = left
+            around(x, z, rr) { i, w ->
+                val add = min(want * w / ws / cellArea, max(0.0, (MAX_MOUND - height[i]).toDouble()))
+                if (add > 0) { height[i] += add.toFloat(); placed += add * cellArea; fresh[i] = max(fresh[i], (0.6 + 0.4 * w).toFloat()) }
+            }
+            left -= placed
+            rr *= 1.6; pass++
+        }
+        if (left > 1e-9) { val i = index(x, z); height[i] += (left / cellArea).toFloat() }
+        if (cm3 > 0) { movedCm3 += cm3; version++ }
+    }
+
+    /** Takes up to [cm3] from around (x, z) within [r], never below the floors; returns what it took. */
+    fun takeExact(x: Double, z: Double, cm3: Double, r: Double): Double {
+        if (cm3 <= 0) return 0.0
+        val ws = weightSum(x, z, r).coerceAtLeast(1e-6)
+        var taken = 0.0
+        around(x, z, r) { i, w ->
+            val t = min(cm3 * w / ws / cellArea, max(0.0, (height[i] - floorH[i]).toDouble()))
+            if (t > 0) { height[i] -= t.toFloat(); taken += t * cellArea; fresh[i] = max(fresh[i], (0.4 + 0.4 * w).toFloat()) }
+        }
+        if (taken > 0) version++
+        return taken
+    }
+
+    /**
+     * A body pushing over the sand at (x, z) along ([dx], [dz]): [cm3] is shoved out of a footprint of radius [r]
+     * into a low bow wave ahead (60 %) and to both sides. Mass-conserving.
+     */
+    fun bowWave(x: Double, z: Double, dx: Double, dz: Double, r: Double, cm3: Double) {
+        val l = sqrt(dx * dx + dz * dz)
+        val ux = if (l > 1e-9) dx / l else 1.0; val uz = if (l > 1e-9) dz / l else 0.0
+        val v = takeExact(x, z, cm3, r)
+        if (v <= 0) return
+        depositExact(x + ux * 1.4 * r, z + uz * 1.4 * r, v * 0.6, r)
+        depositExact(x - uz * 1.3 * r, z + ux * 1.3 * r, v * 0.2, r)
+        depositExact(x + uz * 1.3 * r, z - ux * 1.3 * r, v * 0.2, r)
+        bowWaves++
+    }
+
+    /** A resting body leaves an impression of [cm3] at (x, z) (radius [r]); the sand is pressed out to a low rim. */
+    fun impress(x: Double, z: Double, r: Double, cm3: Double) {
+        val v = takeExact(x, z, cm3, r)
+        if (v <= 0) return
+        val q = v / 4
+        depositExact(x + 1.5 * r, z, q, r); depositExact(x - 1.5 * r, z, q, r)
+        depositExact(x, z + 1.5 * r, q, r); depositExact(x, z - 1.5 * r, q, r)
+        impressions++
+    }
+
+    var bowWaves = 0L; private set
+    var impressions = 0L; private set
+
+    /** All the sand there is (cm³ relative to the modelled bed): the grid, the grains in suspension and the mouthfuls carried. */
+    fun sandVolumeCm3(): Double {
+        var s = 0.0
+        for (h in height) s += h
+        var g = 0
+        for (i in 0 until particleCount) { val k = pkind[i].toInt(); if (k == Grain.SAND.ordinal || k == Grain.FINE.ordinal) g++ }
+        return s * cellArea + g * GRAIN_CM3 + carriedCm3
+    }
+
+    /** Burrows dug under the rock, by owner (an engineer goby keeps a few; SIMULATION §16.8). */
+    val burrows = ArrayList<Burrow>()
+    /** Bumped when [burrows] changes (brains cache their own list). */
+    var burrowEpoch = 0; private set
+
+    fun burrowsOf(owner: String): List<Burrow> = burrows.filter { it.owner == owner }
+
+    /**
+     * Plans a burrow for [owner] from (mx, mz) into the rock along ([dx], [dz]): the mouth goes back to the rock edge
+     * (the last open-water point before the roof), and the tunnel may run on as long as digging could ever clear a
+     * body [bodyH] tall, up to [maxLen]. Null when there is no rock to dig under there.
+     */
+    fun planBurrow(owner: String, mx: Double, mz: Double, dx: Double, dz: Double, bodyH: Double, maxLen: Double, primary: Boolean): Burrow? {
+        if (!rockAttached) return null
+        val l = sqrt(dx * dx + dz * dz)
+        if (l < 1e-9) return null
+        val ux = dx / l; val uz = dz / l
+        var x = mx; var z = mz
+        // back out to the rock edge
+        var back = 0.0
+        while (underRock(x, z) && back < 10.0) { x -= ux * 0.4; z -= uz * 0.4; back += 0.4 }
+        if (underRock(x, z)) { x = mx; z = mz }
+        // then forward to the first roofed point (the mouth sits at the rock edge)
+        var fwd = 0.0
+        while (!underRock(x + ux * 0.4, z + uz * 0.4) && fwd < 10.0) { x += ux * 0.4; z += uz * 0.4; fwd += 0.4 }
+        if (x < 1.0 || z < 1.0 || x > lengthCm - 1.0 || z > widthCm - 1.0) return null
+        var s = 0.4
+        while (s <= maxLen) {
+            val px = x + ux * s; val pz = z + uz * s
+            if (px < 0.5 || pz < 0.5 || px > lengthCm - 0.5 || pz > widthCm - 0.5) break
+            if (!diggable(px, pz, bodyH, 0.65 * bodyH)) break
+            s += 0.4
+        }
+        val len = s - 0.4
+        if (len < 2.0) return null
+        return Burrow(owner, x, z, ux, uz, len, primary)
+    }
+
+    fun addBurrow(b: Burrow): Burrow { burrows += b; burrowEpoch++; version++; return b }
+
+    /**
+     * Rock-edge sites near (cx, cz) within [radius] where a burrow could run at least [minLen] under the rock for a
+     * body [bodyH] tall: open sand cells next to diggable roofed ones, the direction pointing into the rock. Best
+     * (longest) first, at least [spacing] cm apart and from [avoid].
+     */
+    fun burrowSites(owner: String, cx: Double, cz: Double, radius: Double, bodyH: Double, minLen: Double, maxLen: Double, spacing: Double, avoid: List<Burrow>, count: Int): List<Burrow> {
+        if (!rockAttached) return emptyList()
+        val cands = ArrayList<Burrow>()
+        for (k in 1 until nz - 1) for (i in 1 until nx - 1) {
+            val a = k * nx + i
+            if (roof[a] != OPEN) continue
+            val x = (i + 0.5) * cellX; val z = (k + 0.5) * cellZ
+            if ((x - cx) * (x - cx) + (z - cz) * (z - cz) > radius * radius) continue
+            var dx = 0.0; var dz = 0.0
+            for (o in intArrayOf(-1, 1)) {
+                if (roofed(a + o)) dx += o.toDouble()
+                if (roofed(a + o * nx)) dz += o.toDouble()
+            }
+            if (dx == 0.0 && dz == 0.0) continue
+            val b = planBurrow(owner, x, z, dx, dz, bodyH, maxLen, false) ?: continue
+            if (b.lengthCm >= minLen) cands += b
+        }
+        // cheapest to open first, then longest: a site where the rock foot sits deep in the sand needs centimetres of sand
+        // moved before the body fits, and its pit slumps back in about as fast as one goby carries it out
+        fun need(b: Burrow): Double {
+            var sum = 0.0; var n = 0; var t = 0.0
+            while (t <= b.lengthCm) {
+                val g = gapAt(b.x(t), b.z(t))
+                if (g.isFinite()) { sum += max(0.0, bodyH - g); n++ }
+                t += REACH_STEP
+            }
+            return if (n == 0) 0.0 else sum / n
+        }
+        cands.sortBy { need(it) - 0.05 * it.lengthCm }
+        val out = ArrayList<Burrow>()
+        for (b in cands) {
+            if (out.size >= count) break
+            fun far(o: Burrow) = (o.mouthX - b.mouthX).let { it * it } + (o.mouthZ - b.mouthZ).let { it * it } >= spacing * spacing
+            if (avoid.all(::far) && out.all(::far)) out += b
+        }
+        return out
+    }
+
+    /** How far (cm from the mouth) a body [bodyH] × [bodyW] can get into [b] now: the dig face. */
+    fun reach(b: Burrow, bodyH: Double, bodyW: Double): Double {
+        var s = 0.0
+        while (s <= b.lengthCm) {
+            if (!fits(b.x(s), b.z(s), b.dirX, b.dirZ, bodyH, bodyW)) return max(0.0, s - REACH_STEP)
+            s += REACH_STEP
+        }
+        return b.lengthCm
+    }
+
+    /**
+     * Where the next mouthful in [b] comes from (cm along the burrow; negative = the mouth apron), or null when there
+     * is nothing left to dig: first the face (the burrow is not yet open to its length for this body), then the floor
+     * of any stretch lower than [chamberH] (sand that trickled back in), then a longer tunnel, then the apron.
+     */
+    fun nextDig(b: Burrow, bodyH: Double, bodyW: Double, chamberH: Double, maxLen: Double): Double? {
+        val r = reach(b, bodyH, bodyW)
+        if (r < b.lengthCm) return min(b.lengthCm, r + REACH_STEP)
+        var worst = Double.NaN; var worstGap = chamberH
+        var s = 0.0
+        while (s <= b.lengthCm) {
+            val g = gapAt(b.x(s), b.z(s))
+            if (g < worstGap && maxGapAt(b.x(s), b.z(s)) > g + 0.05) { worstGap = g; worst = s }
+            s += REACH_STEP * 2
+        }
+        if (!worst.isNaN()) return worst
+        val ext = b.lengthCm + 1.0
+        if (ext <= maxLen && diggable(b.x(ext), b.z(ext), bodyH, bodyW) &&
+            b.x(ext) in 0.5..(lengthCm - 0.5) && b.z(ext) in 0.5..(widthCm - 0.5)) {
+            b.lengthCm = ext
+            return ext
+        }
+        val ax = b.x(-1.0); val az = b.z(-1.0)
+        return if (heightAt(ax, az) > floorAt(ax, az) + 0.05) -1.0 else null
+    }
+
+    /**
+     * Digs [b] out at once (an established burrow, or abstract time): mouthfuls of [mouthCm3] from [nextDig] spat onto
+     * the spoil pile at (sx, sz) until the body fits its length at [chamberH] or [budgetCm3] is spent. Mass-conserving.
+     */
+    fun excavate(b: Burrow, bodyH: Double, bodyW: Double, chamberH: Double, mouthCm3: Double, sx: Double, sz: Double, budgetCm3: Double): Double {
+        var spent = 0.0
+        var guard = 0
+        while (spent < budgetCm3 && guard++ < 2000) {
+            val s = nextDig(b, bodyH, bodyW, chamberH, b.lengthCm) ?: break
+            if (s < 0) break
+            val got = takeMouthful(b.x(s), b.z(s), min(mouthCm3, budgetCm3 - spent))
+            if (got <= 0) break
+            b.mouthfuls++
+            spit(sx, 0.0, sz, got, 1.6, plume = 0)
+            spent += got
+        }
+        return spent
+    }
+
+    /**
+     * Sand trickling back into the tunnels under rock ([relax]): every pair of neighbouring cells with one under rock
+     * evens out by a fraction set by [INFILL_TAU_MIN] (faster in strong flow). Pairwise, so sand is conserved.
+     */
+    private fun infill(dtMin: Double, flow: Double) {
+        val k = (dtMin / INFILL_TAU_MIN * (0.5 + 0.5 * flow)).coerceAtMost(0.2).toFloat()
+        if (k <= 0f) return
+        for (kk in 0 until nz) for (i in 0 until nx) {
+            val a = kk * nx + i
+            if (i + 1 < nx) evenOut(a, a + 1, k)
+            if (kk + 1 < nz) evenOut(a, a + nx, k)
+        }
+    }
+
+    private fun evenOut(a: Int, b: Int, k: Float) {
+        if (!roofed(a) && !roofed(b)) return
+        val m = (height[a] - height[b]) * 0.5f * k
+        if (m == 0f) return
+        // never below a floor
+        val mm = if (m > 0) min(m, max(0f, height[a] - floorH[a])) else max(m, -max(0f, height[b] - floorH[b]))
+        height[a] -= mm; height[b] += mm
+    }
+
+    /** Cavity shading for the renderer: dug gap under rock beyond the gap the bed started with, 0..1 per cell. */
+    private fun cavityArray(): FloatArray {
+        val out = FloatArray(nx * nz)
+        for (a in 0 until nx * nz) {
+            if (!roofed(a)) continue
+            val z = (a / nx + 0.5) * cellZ
+            val gap = roof[a] - (baseY(z) + height[a])
+            val start = roof[a] - baseY(z)
+            if (gap > 0.2 && height[a] < -0.1f) out[a] = (min(gap, 3.0) / 3.0 * min(1.0, (gap - max(start, 0.0)) / 1.0 + 0.3)).toFloat().coerceIn(0f, 1f)
+        }
+        return out
+    }
+
+    /** Copies the bed's state from [o] (a time-lapse fork); suspended particles are not carried over. */
+    fun copyFrom(o: SandBed) {
+        o.height.copyInto(height); o.fresh.copyInto(fresh); o.detritus.copyInto(detritus)
+        burrows.clear()
+        for (b in o.burrows) burrows += Burrow(b.owner, b.mouthX, b.mouthZ, b.dirX, b.dirZ, b.lengthCm, b.primary).also { it.mouthfuls = b.mouthfuls }
+        burrowEpoch++
+        carriedCm3 = 0.0
+        o.inclusion.copyInto(inclusion); anyInclusion = o.anyInclusion
+        buried.clear()
+        for ((k, b) in o.buried) buried[k] = b.copy()
+        version++
+    }
+
+    // ============================================================== bodies buried in the sand (SIMULATION §16.10)
+    /**
+     * A body lying in the sand: the cells of its slot with their weights, the trench depth dug there, the sand thrown to
+     * the rim spots, and the body volume it puts under the surface ([inclusion]).
+     */
+    class BuriedBody(
+        val owner: String, val headX: Double, val headZ: Double, val ux: Double, val uz: Double,
+        val lengthCm: Double, val widthCm: Double, val thickCm: Double, val coverCm: Double,
+        val cells: IntArray, val w: FloatArray, val bottomY: Double,
+    ) {
+        /** Share of the trench dug and of the cover pulled back over the body (0..1 each). */
+        var dug = 0.0
+        var covered = 0.0
+        /** Body volume added per cell so far (cm as height). */
+        val added = FloatArray(cells.size)
+        /** Sand thrown to the rim (cm³), per rim spot: ahead, left, right. */
+        val rim = DoubleArray(3)
+        fun rimX(k: Int) = when (k) { 0 -> headX + ux * 1.6; 1 -> cx - uz * (0.5 * widthCm + 1.6); else -> cx + uz * (0.5 * widthCm + 1.6) }
+        fun rimZ(k: Int) = when (k) { 0 -> headZ + uz * 1.6; 1 -> cz + ux * (0.5 * widthCm + 1.6); else -> cz - ux * (0.5 * widthCm + 1.6) }
+        val cx: Double get() = headX - ux * 0.5 * lengthCm
+        val cz: Double get() = headZ - uz * 0.5 * lengthCm
+        /** Centre height (cm) of the body lying on the trench floor. */
+        val bodyY: Double get() = bottomY + 0.5 * thickCm
+        /** Depth of the body's top under the surface it made (cm) once covered. */
+        val coveredBy: Double get() = covered * coverCm
+
+        fun copy(): BuriedBody = BuriedBody(owner, headX, headZ, ux, uz, lengthCm, widthCm, thickCm, coverCm, cells.copyOf(), w.copyOf(), bottomY).also {
+            it.dug = dug; it.covered = covered; added.copyInto(it.added); rim.copyInto(it.rim)
+        }
+    }
+
+    /** Body volume under the sand per cell (cm, as height): it lifts the visible surface but is not sand. */
+    private val inclusion = FloatArray(nx * nz)
+    private var anyInclusion = false
+    private val buried = HashMap<String, BuriedBody>()
+    fun buriedOf(owner: String): BuriedBody? = buried[owner]
+
+    /** Buried-body volume under (x, z) as height (cm), bilinear like [heightAt]. */
+    fun inclusionAt(x: Double, z: Double): Double {
+        if (!anyInclusion) return 0.0
+        val fx = (x / cellX - 0.5).coerceIn(0.0, nx - 1.001)
+        val fz = (z / cellZ - 0.5).coerceIn(0.0, nz - 1.001)
+        val i = fx.toInt(); val k = fz.toInt()
+        val tx = fx - i; val tz = fz - k
+        val a = inclusion[k * nx + i]; val b = inclusion[k * nx + i + 1]
+        val c = inclusion[(k + 1) * nx + i]; val d = inclusion[(k + 1) * nx + i + 1]
+        return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
+    }
+
+    /** Sand (not counting buried bodies) above the glass at (x, z) (cm). */
+    fun sandDepthAt(x: Double, z: Double): Double = baseY(z) + heightAt(x, z) - GLASS_Y
+
+    /** Cells of a body slot from the head at (hx, hz) back along −(ux, uz) for [len], [width] wide, weight 1 at the midline. */
+    private fun slot(hx: Double, hz: Double, ux: Double, uz: Double, len: Double, width: Double): Pair<IntArray, FloatArray> {
+        val r = max(0.5 * width, 0.55 * max(cellX, cellZ))
+        val ids = ArrayList<Int>(); val ws = ArrayList<Float>()
+        val i0 = ((min(hx, hx - ux * len) - r) / cellX).toInt().coerceIn(0, nx - 1)
+        val i1 = ((max(hx, hx - ux * len) + r) / cellX).toInt().coerceIn(0, nx - 1)
+        val k0 = ((min(hz, hz - uz * len) - r) / cellZ).toInt().coerceIn(0, nz - 1)
+        val k1 = ((max(hz, hz - uz * len) + r) / cellZ).toInt().coerceIn(0, nz - 1)
+        for (k in k0..k1) for (i in i0..i1) {
+            val px = (i + 0.5) * cellX - hx; val pz = (k + 0.5) * cellZ - hz
+            val t = (-(px * ux + pz * uz)).coerceIn(0.0, len)
+            val dx = px + ux * t; val dz = pz + uz * t
+            val q = (dx * dx + dz * dz) / (r * r)
+            if (q >= 1.0) continue
+            ids += k * nx + i; ws += (1 - q).toFloat()
+        }
+        if (ids.isEmpty()) { ids += index(hx, hz); ws += 1f }
+        return ids.toIntArray() to ws.toFloatArray()
+    }
+
+    /**
+     * Whether a body [len] × [width] × [thick] can bury itself with its head at (hx, hz) heading (ux, uz) under [cover]
+     * cm of sand: open sand (no rock over it, no other body in it) deep enough everywhere along the slot for the trench
+     * (thick + cover) above the cell's floor.
+     */
+    fun canBury(hx: Double, hz: Double, ux: Double, uz: Double, len: Double, width: Double, thick: Double, cover: Double): Boolean {
+        val (ids, _) = slot(hx, hz, ux, uz, len, width)
+        val d = (thick + cover).toFloat()
+        for (a in ids) {
+            if (roof[a] != OPEN || inclusion[a] > 0.01f) return false
+            if (height[a] - d < buryFloor(a)) return false
+        }
+        return true
+    }
+
+    /** Lowest a body slot can be dug to in cell [a] (height offset, cm): just above the glass (deeper than an open pit). */
+    private fun buryFloor(a: Int): Float = min(floorH[a], (GLASS_Y + FLOOR_MARGIN - baseY((a / nx + 0.5) * cellZ)).toFloat())
+
+    /** Starts a burial for [owner] (see [buryStep]); null when [canBury] says no. */
+    fun startBurial(owner: String, hx: Double, hz: Double, ux0: Double, uz0: Double, len: Double, width: Double, thick: Double, cover: Double): BuriedBody? {
+        val l = sqrt(ux0 * ux0 + uz0 * uz0)
+        val ux = if (l > 1e-9) ux0 / l else 1.0; val uz = if (l > 1e-9) uz0 / l else 0.0
+        if (!canBury(hx, hz, ux, uz, len, width, thick, cover)) return null
+        buried[owner]?.let { finishEmergence(it) }
+        val (ids, ws) = slot(hx, hz, ux, uz, len, width)
+        val cxm = hx - ux * 0.5 * len; val czm = hz - uz * 0.5 * len
+        val b = BuriedBody(owner, hx, hz, ux, uz, len, width, thick, cover, ids, ws, baseY(czm) + heightAt(cxm, czm) - thick - cover)
+        buried[owner] = b
+        dives++
+        version++
+        return b
+    }
+
+    /**
+     * The body works [b] down to [digTo] (share of the trench, 0..1) and pulls the sand back over itself up to
+     * [coverTo] (0..1). Digging lowers the slot and throws the sand to the rim (half ahead, a quarter to each side) while
+     * the body's own volume goes in under the surface; covering takes it back from the rim onto the body. Exact sand
+     * transfer: nothing made or lost. Returns the sand moved this step (cm³), for the plume.
+     */
+    fun buryStep(b: BuriedBody, digTo: Double, coverTo: Double): Double {
+        var moved = 0.0
+        val dDig = (digTo.coerceIn(0.0, 1.0) - b.dug).coerceAtLeast(0.0)
+        if (dDig > 0) {
+            val depth = b.thickCm + b.coverCm
+            var taken = 0.0
+            for ((j, a) in b.cells.withIndex()) {
+                val want = (dDig * depth * b.w[j]).toFloat()
+                val t = min(want, max(0f, height[a] - buryFloor(a)))
+                height[a] -= t; taken += t * cellArea
+                fresh[a] = max(fresh[a], 0.9f)
+                val add = (dDig * b.thickCm * b.w[j]).toFloat()
+                inclusion[a] += add; b.added[j] += add
+            }
+            anyInclusion = true
+            val share = doubleArrayOf(0.5, 0.25, 0.25)
+            for (k in 0 until 3) { depositExact(b.rimX(k), b.rimZ(k), taken * share[k], 1.0); b.rim[k] += taken * share[k] }
+            b.dug += dDig
+            moved += taken
+        }
+        val dCov = (coverTo.coerceIn(0.0, 1.0) - b.covered).coerceAtLeast(0.0)
+        if (dCov > 0) {
+            var wsum = 0.0
+            for (wj in b.w) wsum += wj
+            var want = 0.0
+            for (wj in b.w) want += dCov * b.coverCm * wj * cellArea
+            var got = 0.0
+            val rimTotal = b.rim.sum().coerceAtLeast(1e-9)
+            for (k in 0 until 3) {
+                val t = takeExact(b.rimX(k), b.rimZ(k), min(b.rim[k], want * b.rim[k] / rimTotal), 1.0)
+                b.rim[k] -= t; got += t
+            }
+            for ((j, a) in b.cells.withIndex()) { height[a] += (got * b.w[j] / wsum / cellArea).toFloat(); fresh[a] = max(fresh[a], 0.8f) }
+            b.covered += dCov
+            moved += got
+        }
+        if (moved > 0) { movedCm3 += moved; version++ }
+        return moved
+    }
+
+    /**
+     * The body pushes out of the sand: its volume leaves the slot, and the cover over its head end is thrown aside
+     * (a dimple with a low rim, [burstShare] of the cover). The dimple then relaxes like any pit. Returns sand moved.
+     */
+    fun emergeFrom(owner: String, burstShare: Double = 0.5): Double {
+        val b = buried.remove(owner) ?: return 0.0
+        for ((j, a) in b.cells.withIndex()) inclusion[a] = max(0f, inclusion[a] - b.added[j])
+        anyInclusion = buried.isNotEmpty() && inclusion.any { it > 0f }
+        if (!anyInclusion) inclusion.fill(0f)
+        val r = max(1.0, 0.6 * b.widthCm + 0.5)
+        val v = takeExact(b.headX - b.ux * 0.25 * b.lengthCm, b.headZ - b.uz * 0.25 * b.lengthCm, burstShare * b.coverCm * PI * r * r * 0.5, r)
+        if (v > 0) {
+            depositExact(b.headX - b.uz * 1.6 * r, b.headZ + b.ux * 1.6 * r, 0.5 * v, r)
+            depositExact(b.headX + b.uz * 1.6 * r, b.headZ - b.ux * 1.6 * r, 0.5 * v, r)
+        }
+        emergences++
+        version++
+        return v
+    }
+
+    private fun finishEmergence(b: BuriedBody) { emergeFrom(b.owner, 0.0) }
 
     // ============================================================== snapshot
     private var cached: SandGridSnapshot? = null
@@ -446,7 +1054,11 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun gridSnapshot(): SandGridSnapshot {
         val c = cached
         if (c != null && c.version == version) return c
-        return SandGridSnapshot(nx, nz, cellX.toFloat(), cellZ.toFloat(), height.copyOf(), fresh.copyOf(), detritus.copyOf(), version).also { cached = it }
+        // the renderer draws the visible surface: sand plus any body lying under it
+        val h = height.copyOf()
+        if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
+        return SandGridSnapshot(nx, nz, cellX.toFloat(), cellZ.toFloat(), h, fresh.copyOf(), detritus.copyOf(), version,
+            if (rockAttached) cavityArray() else FloatArray(0)).also { cached = it }
     }
 
     /** Mean height offset (cm): stays near zero because every edit moves sand rather than making it. */
@@ -484,7 +1096,42 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         /** Detritus on the bed follows the column's load over ~2 days; [DETRITUS_REF_PPM] reads as load 1. */
         @Ev(Evidence.DESIGN_ESTIMATE) const val DETRITUS_TAU_MIN = 2880.0
         const val DETRITUS_REF_PPM = 0.3
+
+        // ---- rock roof and burrows (SIMULATION §16.8) ----
+        /** Roof marker: open water over the cell. */
+        const val OPEN = Float.POSITIVE_INFINITY
+        /** Roof marker: the rock reaches the glass in this cell (nothing to dig under). */
+        const val SOLID = Float.NEGATIVE_INFINITY
+        /** Bottom glass (cm) and the sand a digger leaves on it. */
+        const val GLASS_Y = 0.0
+        const val FLOOR_MARGIN = 0.5
+        /** Rock lower than this over the modelled bed (cm) is a roof; higher is open water a fish swims under. */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val ROOF_RANGE = 8.0
+        const val ROOF_STEP = 0.1
+        const val REACH_STEP = 0.4
+        /** A body fits where its midline is at least this × min(body height, body width) clear of the rock. */
+        const val FIT_CLEAR = 0.45
+        /**
+         * Sand under rock, held by the roof and bound with the burrower's mucus, stands this steep (tan ≈ 63°) before it
+         * slumps; open sand keeps [REPOSE_TAN].
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val CONFINED_REPOSE_TAN = 2.0
+        /**
+         * Burrows under rock even out with their walls with this time constant at 1× flow (min): a dug tunnel loses about
+         * a third of its depth in three days unless it is maintained ("constantly dig and re-dig", hobbyist accounts).
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val INFILL_TAU_MIN = 4320.0
     }
+}
+
+/**
+ * A burrow under the rock (SIMULATION §16.8): a straight tunnel from the [mouthX]/[mouthZ] point at the rock edge along
+ * ([dirX], [dirZ]) for [lengthCm]. The gap is not stored: it is the live sand under the rock ([SandBed.reach]).
+ */
+class Burrow(val owner: String, val mouthX: Double, val mouthZ: Double, val dirX: Double, val dirZ: Double, var lengthCm: Double, val primary: Boolean) {
+    var mouthfuls = 0L
+    fun x(s: Double) = mouthX + dirX * s
+    fun z(s: Double) = mouthZ + dirZ * s
 }
 
 /**
@@ -512,7 +1159,7 @@ class SandWork(private val sand: SandBed, private val rock: RockData) {
             val t = tracks.getOrPut(o.id) { Track(p.x, p.z, o.posture, 0.0, 0) }
             val dx = p.x - t.x; val dz = p.z - t.z
             val moved = sqrt(dx * dx + dz * dz)
-            val onSand = p.y < rock.sandTopCm + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
+            val onSand = p.y < sand.surfaceY(p.x, p.z) + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
             if (moved > 6.0) { t.x = p.x; t.z = p.z; t.acc = 0.0; t.posture = o.posture; continue }   // placed, not walked
             if (kind == BrainKind.NASSARIUS && onSand && (t.posture == 5) != (o.posture == 5)) {
                 // burying or emerging: a small crater, the spoil around it and a little puff

@@ -65,6 +65,27 @@ def crab_pose(kind="walk"):
     return L.astype(np.float32).ravel()
 
 
+def hermit_pose(kind="walk"):
+    """HermitLegs.out: legs (phase, stroke, lift, retract); chelae 4/5 (pick phase, pick, support, retract);
+    6 shell (stride phase, roll, pitch, 0); 7 shield/eyes (scan phase, scan, bob, retract); 8 antennae, 9 antennules."""
+    L = np.zeros((10, 4))
+    clock = 0.15
+    moving = 1.0 if kind == "walk" else 0.0
+    r = 1.0 if kind == "retract" else 0.0
+    sm = lambda a, b, x: float(_smooth(a, b, np.array(x)))
+    for k in range(4):
+        pair, right = k // 2, k % 2
+        L[k] = ((clock + 0.5 * ((pair + right) % 2) + 0.08 * pair) % 1.0, 0.36 * moving, 0.9 * moving, sm(0, 0.6, r))
+    pick = 1.0 if kind == "pick" else 0.0
+    L[4] = (0.25, pick, moving, sm(0.2, 0.8, r))
+    L[5] = (0.75, pick, moving, sm(0.1, 0.7, r))
+    L[6] = (clock, 0.1 * moving, 0.0, 0.0)
+    L[7] = (0.3, 1.0 - 0.6 * moving, 0.0, sm(0.45, 1.0, r))
+    L[8] = (0.2, 0.5 + 0.5 * moving, 0.0, sm(0.45, 1.0, r))
+    L[9] = (0.1, 0.0, 0.0, sm(0.45, 1.0, r))
+    return L.astype(np.float32).ravel()
+
+
 # ---------------------------------------------------------------- shader mirror (glTF model space)
 def _star_angles(A, X, k, s):
     alt = 1.0 if k % 2 == 0 else -1.0
@@ -156,6 +177,69 @@ def pose_crab(V, N, col, piv, limbs):
     return V, N
 
 
+def pose_hermit(V, N, col, piv, limbs):
+    """Mirror of fish.vert hermitLimb (motion mode 5)."""
+    piv = np.asarray(piv, float).reshape(10, 4)
+    Lm = np.asarray(limbs, float).reshape(10, 4)
+    V, N = V.copy(), N.copy()
+    kk = np.floor(col[:, 2] * 9 + 0.5).astype(int)
+    yax, zax, xax = np.array([0, 1.0, 0]), np.array([0, 0, 1.0]), np.array([1.0, 0, 0])
+    for k in range(10):
+        m = kk == k
+        if not m.any():
+            continue
+        P, A = piv[k], Lm[k]
+        off = V[m] - P[:3]
+        n = N[m]
+        t = np.clip(col[m, 0], 0, 1)
+        side = np.where(V[m][:, 2] >= 0, 1.0, -1.0)
+        if k < 4:
+            ph = A[0]
+            sw = ph < 0.4
+            q, p = ph / 0.4, (ph - 0.4) / 0.6
+            e = -math.cos(PI * q) if sw else 1 - 2 * p
+            sgn = 1.0 if P[2] >= 0 else -1.0
+            yaw = np.full(len(t), A[1] * e * sgn)
+            off, n = _rot(off, yax, yaw), _rot(n, yax, yaw)
+            lift = A[2] * (1.0 if sw else 0.0) * math.sin(PI * q) * _smooth(0.25, 1.0, t)
+            off[:, 1] += lift * 0.22 * P[3]
+        elif k < 6:
+            w = 0.5 - 0.5 * math.cos(2 * PI * A[0])
+            sd = -1.0 if k == 4 else 1.0
+            down = np.full(len(t), A[1] * (0.55 * w - 0.15) + 0.1 * A[2])
+            off, n = _rot(off, zax, -down), _rot(n, zax, -down)
+            off[:, 0] -= 0.25 * P[3] * A[1] * (1 - w) * t
+            off[:, 2] -= sd * 0.1 * P[3] * A[1] * (1 - w) * t
+        elif k == 6:
+            roll = np.full(len(t), A[1] * math.sin(2 * PI * A[0]))
+            pitch = np.full(len(t), A[2])
+            off, n = _rot(off, xax, roll), _rot(n, xax, roll)
+            off, n = _rot(off, zax, pitch), _rot(n, zax, pitch)
+        elif k == 7:
+            off[:, 1] += A[2] * 0.02 * P[3]
+            eye = col[m, 1] > 0.5
+            a = A[1] * 0.3 * np.sin(2 * PI * A[0] + side * 1.7)
+            off[:, 2] += np.where(eye, t * a * P[3], 0)
+            off[:, 0] -= np.where(eye, t * np.abs(a) * 0.3 * P[3], 0)
+        elif k == 8:
+            ph = 2 * PI * A[0] + side * 1.3
+            h2 = t * t
+            off[:, 1] += h2 * A[1] * 0.18 * P[3] * np.sin(ph - t * 3)
+            off[:, 2] += h2 * A[1] * 0.14 * P[3] * np.cos(0.7 * ph - t * 2.5) * side
+            off[:, 0] += h2 * A[1] * 0.08 * P[3] * np.sin(0.5 * ph)
+        else:
+            f = np.maximum(np.sin(2 * PI * A[0] + side * 0.9), 0) ** 8
+            off[:, 1] -= t * t * A[1] * f * 0.3 * P[3]
+        v = P[:3] + off
+        if k != 6:
+            c = piv[7, :3]
+            s = 0.6 if k == 4 else 0.45 if k == 5 else 0.25 if k < 4 else 0.2
+            v = v + ((c + (v - c) * s) - v) * A[3]
+        V[m] = v
+        N[m] = n
+    return V, N
+
+
 # ---------------------------------------------------------------- Blender glue
 def pose_imported(objs, pose=None):
     """Poses the limb meshes of an imported crawler GLB in place (call before the COLOR_0 white-out).
@@ -170,7 +254,9 @@ def pose_imported(objs, pose=None):
     if rig is None:
         rig = "crab_legs" if any("claw" in o.keys() for o in objs) else "brittle_arms"
     star = rig == "brittle_arms"
-    limbs = brittle_pose(pose or "row") if star else crab_pose(pose or "walk")
+    hermit = rig == "hermit_legs"
+    limbs = brittle_pose(pose or "row") if star else hermit_pose(pose or "walk") if hermit else crab_pose(pose or "walk")
+    fn = pose_star if star else pose_hermit if hermit else pose_crab
     for o in meshes:
         me = o.data
         piv = list(o["limbPivots"])
@@ -195,7 +281,7 @@ def pose_imported(objs, pose=None):
             pass   # colors are linear floats in Blender either way; COLOR_0 values are data (0..1)
         Vg = np.stack([Vb[:, 0], Vb[:, 2], -Vb[:, 1]], -1)
         Ng = np.tile([0, 1.0, 0], (nv, 1))
-        Vg, _ = (pose_star if star else pose_crab)(Vg, Ng, col, piv, limbs)
+        Vg, _ = fn(Vg, Ng, col, piv, limbs)
         Vb2 = np.stack([Vg[:, 0], -Vg[:, 2], Vg[:, 1]], -1)
         me.vertices.foreach_set("co", Vb2.ravel())
         if getattr(me, "has_custom_normals", False):

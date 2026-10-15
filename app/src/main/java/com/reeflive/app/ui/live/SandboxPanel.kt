@@ -643,26 +643,28 @@ private fun PresetCard(p: SandboxPreset, active: Boolean, modifier: Modifier, on
  * Each is shown once (remembered in settings) and again from More → "What can I do?". Words in [LiveTips].
  */
 @Composable
-fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbox: Boolean = true) {
+fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbox: Boolean = true, myTank: Boolean = false) {
     val s = LiveTheme.style
     val reduce = ReefTheme.reduceMotion
     val hop = remember { androidx.compose.animation.core.Animatable(0f) }
     // one glyph per line of LiveTips (zip stops at the shorter list, so a missing glyph never crashes)
-    val glyphs = if (sandbox) {
+    val glyphs = if (myTank) {
+        listOf(ReefGlyphs.fish, ReefGlyphs.shell, ReefGlyphs.touch, ReefGlyphs.clockSun, ReefGlyphs.reset)
+    } else if (sandbox) {
         listOf(ReefGlyphs.touch, ReefGlyphs.whatIf, ReefGlyphs.sparkleTip, ReefGlyphs.reset, ReefGlyphs.eye)
     } else {
-        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
+        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
     }
     LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             HermieArt(HermieMood.EXCITED, hop, reduce, Modifier.size(56.dp))
             Spacer(Modifier.width(8.dp))
-            Text(if (sandbox) LiveTips.SANDBOX_TITLE else LiveTips.WATCH_TITLE, style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
+            Text(if (myTank) LiveTips.MY_TANK_TITLE else if (sandbox) LiveTips.SANDBOX_TITLE else LiveTips.WATCH_TITLE, style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
         }
         Spacer(Modifier.height(6.dp))
         // a long list scrolls inside the card instead of pushing "Got it" off a short landscape screen
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-            glyphs.zip(if (sandbox) LiveTips.sandbox else LiveTips.watch).forEach { (glyph, text) ->
+            glyphs.zip(if (myTank) LiveTips.myTank else if (sandbox) LiveTips.sandbox else LiveTips.watch).forEach { (glyph, text) ->
                 Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
                     Glyph(glyph, size = 20.dp, tint = s.label, accent = Candy.orange)
                     Spacer(Modifier.width(10.dp))

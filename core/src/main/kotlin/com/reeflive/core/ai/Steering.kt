@@ -21,6 +21,14 @@ import kotlin.math.sqrt
  */
 class Steering(private val c: Ctx) {
     private var wanderDir: Vec3 = Vec3.X
+    /** Kinematic placement's up before [SteerIntent.rollExtra] (the roll is an offset from it, not added every tick). */
+    private var kinBaseUp: Vec3? = null
+    /** Low-passed course the swimming head turns toward (null until the first swim step). */
+    private var wantSmooth: Vec3? = null
+    /** Low-passed wander course of a crawler. */
+    private var crawlWander: Vec3 = Vec3.X
+    /** Low-passed walking course of a crawler (null when not crawling). */
+    private var crawlDirS: Vec3? = null
     private var lateralAccel = 0.0
     private var waddleT = c.rng.nextDouble() * 10
 
@@ -44,6 +52,8 @@ class Steering(private val c: Ctx) {
     private var wasFleeing = false
     /** Stop-go walking clock (hermits, shrimp). */
     private var stopGoT = c.o.appendagePhase
+    /** Time a crawler's step has been undone in a row (wedged in a crevice). */
+    private var projStuckT = 0.0
 
     fun apply(intent: SteerIntent) {
         val o = c.o
@@ -58,18 +68,54 @@ class Steering(private val c: Ctx) {
             intent.surfaceOffset = max(intent.surfaceOffset, c.rock.envDist(o.pos).coerceAtMost(1.5))
         }
         updateCStart(o, intent, dt)
+        if (!intent.kinematic) kinBaseUp = null
         when {
             intent.kinematic -> kinematic(o, intent, dt)
             intent.crawl -> {
+                val before = o.pos
                 crawl(o, intent, dt)
-                // crawling over rock/glass junctions can dip into the rock SDF: project back onto its surface
+                // crawling over rock/glass junctions can dip into the rock SDF: project back onto its surface. In a
+                // crevice the nearest surface can be centimetres away: rather than jump there, the step is undone.
                 if (intent.posture !in 3..5) {
                     val d = c.rock.sdf.dist(o.pos)
-                    if (d < 0.05) o.pos = c.rock.sdf.project(o.pos, 0.08, iterations = 24)
+                    if (d < 0.05) {
+                        val q = c.rock.sdf.project(o.pos, 0.08, iterations = 24)
+                        val maxJump = 0.5 + max(max(o.cruiseSpeed, 1.0), (o.pos - before).length() / max(dt, 1e-6)) * dt
+                        // (a projection that did not converge, still inside the rock, is no way out either)
+                        val qOk = c.rock.sdf.dist(q) >= 0.0
+                        o.pos = if (qOk && q.distanceTo(o.pos) <= maxJump || c.rock.sdf.dist(before) < 0.0) { projStuckT = 0.0; q } else {
+                            // slide the step along the rock face instead; failing that stand still, and after a couple of
+                            // seconds wedged accept the projection (one hop beats being frozen in a crevice for good)
+                            val step = o.pos - before
+                            val nb = c.rock.sdf.gradient(before).normalized(Vec3.Y)
+                            val slid = before + (step - nb * min(0.0, step dot nb))
+                            projStuckT += dt
+                            when {
+                                c.rock.sdf.dist(slid) >= 0.05 && slid.distanceTo(before) > 1e-4 -> { projStuckT = 0.0; slid }
+                                projStuckT > PROJ_STUCK_S && qOk -> { projStuckT = 0.0; q }
+                                else -> before
+                            }
+                        }
+                        o.vel = (o.pos - before) / max(dt, 1e-6)
+                    }
                 }
+                // leg stride clock for the renderer: one stride ≈ a quarter body length (research 17, INFERENCE),
+                // stepping eases in and out so a stop-go pause plants the feet. Counted after the projection, so a
+                // step that was undone takes no stride.
+                val walkSpeed = o.vel.length()
+                o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
+                o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)
             }
-            else -> swim(o, intent, dt)
+            else -> {
+                // The swim integrator's steering and avoidance gains are stable up to ~0.15 s steps; the 0.5 s step of
+                // fast-forward made every swimmer's velocity overshoot and reverse each tick (heading flicking back and
+                // forth on screen), so long steps are split.
+                val n = if (dt > SWIM_MAX_DT + 1e-9) kotlin.math.ceil(dt / SWIM_MAX_DT).toInt() else 1
+                for (k in 0 until n) swim(o, intent, dt / n)
+            }
         }
+        if (intent.kinematic || intent.crawl) wantSmooth = null
+        if (!intent.crawl) crawlDirS = null
         if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
         o.spline.override = intent.splineOverride
         val sp = o.vel.length()
@@ -115,10 +161,13 @@ class Steering(private val c: Ctx) {
             wanderDir = Vec3(wanderDir.x, wanderDir.y * 0.4, wanderDir.z).normalized()
             desired += (wanderDir + bias).normalized() * (cruise * it.wander)
         }
+        // The waddle / shimmy is a sideways sway of the body, not a course: it moves the fish directly and never
+        // enters the velocity the heading follows (as a desired velocity it swung a hovering clown ±100° at 1.3 Hz).
+        var waddleVel = Vec3.ZERO
         if (it.waddleAmp > 0) {
             waddleT += dt
             val side = (o.heading cross Vec3.Y).normalized(Vec3.Z)
-            desired += side * (sin(2 * PI * it.waddleHz * waddleT) * it.waddleAmp * L)
+            waddleVel = side * (sin(2 * PI * it.waddleHz * waddleT) * it.waddleAmp * L)
         }
         if (it.separation > 0) {
             var sep = Vec3.ZERO
@@ -127,7 +176,9 @@ class Steering(private val c: Ctx) {
                 val r = 1.2 * (L + n.lengthCm) / 2
                 val d = o.pos - n.pos
                 val dl = d.length()
-                if (dl in 1e-6..r) sep += d / (dl * dl) * r
+                // full strength (r/dl) well inside, eased to zero across the edge (0.9 r → 1.1 r): the hard cut-off
+                // flicked two neighbours apart and back every tick as one crossed it
+                if (dl in 1e-6..(1 + SEP_EDGE) * r) sep += d / (dl * dl) * (r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r)))
             }
             desired += sep * (cruise * 0.6 * it.separation)
         }
@@ -167,26 +218,59 @@ class Steering(private val c: Ctx) {
             desired.length() > 0.2 * cruise -> desired.normalized()
             else -> null
         }
-        if (wantDir != null) o.heading = Vec3.rotateToward(o.heading, wantDir.normalized(o.heading), turnRate * dt)
+        // How much of a swimming fish's course its body follows: a slow, unhurried fish holds a level body and turns
+        // smoothly; at cruise it points where it goes (1 = old behaviour, always for urgent moves and walkers).
+        val urgent = it.urgency >= 0.7 || cStartT >= 0 || walker
+        val follow = if (urgent) 1.0 else smoothstep(0.3, 1.2, rawSpeed / cruise)
+        if (wantDir != null) {
+            // (a behaviour may cap the pitch it steers to)
+            val mp0 = it.maxPitch
+            var w = wantDir.normalized(o.heading).let { d -> if (mp0 != null && abs(d.y) > mp0) clampPitch(d, mp0) else d }
+            if (!urgent && o.brainKind != BrainKind.EEL) {
+                // repositioning up or down at low speed is done with the fins, not by pointing the nose there
+                val curH = Vec3(o.heading.x, 0.0, o.heading.z).normalized(Vec3.X)
+                val hz = Vec3(w.x, 0.0, w.z)
+                val hl = hz.length().coerceAtMost(1.0)
+                // on a mostly vertical course the small horizontal residual is noise: it must not spin the body round
+                val yawK = smoothstep(0.15, 0.7, hl)
+                val hdir = if (hl > 1e-6) (curH * (1 - yawK) + hz / hl * yawK).normalized(curH) else curH
+                w = (hdir * max(hl, 0.35) + Vec3.Y * (w.y * follow)).normalized(o.heading)
+            }
+            // low-pass the course the head turns to: velocity noise, a separation nudge or an arrive overshoot no
+            // longer flick the heading back and forth tick to tick
+            // a fish all but holding station has no real course: its want direction is noise, so it turns slowly
+            val drive = smoothstep(0.08, 0.5, max(rawSpeed, desired.length()) / cruise)
+            val rate = if (urgent) 1e9 else (2.5 + 10.0 * follow) * (0.15 + 0.85 * drive)
+            val prev = wantSmooth
+            val ws = if (prev == null) w else (prev + (w - prev) * (1 - exp(-rate * dt))).normalized(w)
+            wantSmooth = ws
+            o.heading = Vec3.rotateToward(o.heading, ws, turnRate * dt * (if (urgent) 1.0 else 0.3 + 0.7 * drive))
+        } else wantSmooth = o.heading
         // C-start stage 1: the head snaps round away from the threat far faster than a routine turn
         if (cStartT in 0.0..C_STAGE1 && o.isFish) o.heading = Vec3.rotateAbout(cHeading, Vec3.Y, cSign * cAngle * smoothstep(0.0, C_STAGE1, cStartT)).normalized(o.heading)
-        val pitchMax = if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
-        if (abs(o.heading.y) > pitchMax) o.heading = clampPitch(o.heading, pitchMax)
+        val pitchMax = it.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
+        // a behaviour's tighter limit levels the body out at the turn rate (no snap when it starts)
+        if (abs(o.heading.y) > pitchMax) o.heading = if (it.maxPitch != null) Vec3.rotateToward(o.heading, clampPitch(o.heading, pitchMax), turnRate * dt) else clampPitch(o.heading, pitchMax)
 
         // Body constraint: velocity mostly along the heading (fish cannot crab sideways fast)
         val fwd = vRaw dot o.heading
         val lateral = vRaw - o.heading * fwd
         val slip = if (o.brainKind == BrainKind.EEL) 0.2 else 0.55
-        var v = if (walker) vRaw else o.heading * max(fwd, -0.2 * cruise) + lateral * slip
+        // a slow fish sculls sideways and up/down with its pectorals, so it may drift off its body axis
+        val latY = Vec3.Y * lateral.y
+        val slipSide = if (o.brainKind == BrainKind.EEL) slip else lerp(0.85, slip, follow)
+        val slipUp = if (o.brainKind == BrainKind.EEL) slip else lerp(1.0, slip, follow)
+        var v = if (walker) vRaw else o.heading * max(fwd, -0.2 * cruise) + (lateral - latY) * slipSide + latY * slipUp
         relSpeed = (v - flow).length()
 
-        var p = o.pos + v * dt
+        var p = o.pos + (v + waddleVel) * dt
         // No swim bladder (hawkfish, blennies): the animal sinks whenever it stops swimming hard (SIMULATION §15).
         val sink = o.motion.sinkCmS
         if (sink > 0.0) p -= Vec3.Y * (sink * (1 - effort) * dt)
         // ---- hard resolve ----
         if (!it.ignoreRock) {
             val minD = 0.45 * Lc
+            val swum = p
             for (iter in 0 until 4) {
                 val d = rock.sdf.dist(p)
                 if (d >= minD) break
@@ -195,13 +279,37 @@ class Steering(private val c: Ctx) {
                 val vn = v dot n
                 if (vn < 0) v -= n * (vn * 1.2)
             }
+            // a fish that starts the tick deep in the rock (just out of its hole or den) is eased out at swimming
+            // speed, not shoved its whole depth in one tick (a blenny popped 3–7 cm leaving its hole). It is always
+            // put past the hold-position band below (0.34 L): a fish eased only to 0.3 L there was frozen in place for
+            // good, every later step counting as one toward the rock (an engineer goby stuck at a lip all night).
+            val push = p - swum
+            val pl = push.length()
+            val maxPush = max(o.burstSpeed, 10.0) * dt
+            if (rock.sdf.dist(o.pos) < HOLD_BAND * Lc && pl > maxPush) {
+                val clear = HOLD_BAND * Lc + 0.05
+                var f = maxPush / pl
+                while (f < 1.0 && rock.sdf.dist(swum + push * f) < clear) f = min(1.0, f + 0.1)
+                p = swum + push * f
+            }
         }
         val gm = if (it.allowGlass) 0.6 else (0.25 * L).coerceIn(0.6, 4.0)
         p = Vec3(p.x.coerceIn(gm, rock.lengthCm - gm), p.y.coerceIn(rock.sandTopCm + max(0.6, 0.2 * L.coerceAtMost(8.0)), rock.waterLevelCm - 0.6), p.z.coerceIn(gm, rock.widthCm - gm))
-        // The glass clamp can push back into rock in a tight gap: then hold position (never penetrate).
-        if (!it.ignoreRock && rock.sdf.dist(p) < 0.34 * Lc && rock.sdf.dist(o.pos) >= rock.sdf.dist(p)) { p = o.pos; v = Vec3.ZERO }
+        // The glass clamp can push back into rock in a tight gap: then hold position (never penetrate). Held there, it
+        // may still move along the rock face, so a fish wedged between rock and glass is not frozen for good (an engineer
+        // goby stuck all night 1 cm off a ledge against the back glass, its burrow a few cm away).
+        if (!it.ignoreRock && rock.sdf.dist(p) < HOLD_BAND * Lc && rock.sdf.dist(o.pos) >= rock.sdf.dist(p)) {
+            // (the wanted course, its rock-ward part removed, at up to half cruise; it may close in to WEDGE_CLEAR·L)
+            val n = rock.sdf.gradient(o.pos).normalized(Vec3.Y)
+            val tan = desired - n * min(0.0, desired dot n)
+            var q = o.pos + tan.clampLength(0.5 * cruise) * dt
+            q = Vec3(q.x.coerceIn(gm, rock.lengthCm - gm), q.y.coerceIn(rock.sandTopCm + max(0.6, 0.2 * L.coerceAtMost(8.0)), rock.waterLevelCm - 0.6), q.z.coerceIn(gm, rock.widthCm - gm))
+            if (q.distanceTo(o.pos) > 1e-4 && ((q - o.pos) dot desired) > 0 && rock.sdf.dist(q) >= WEDGE_CLEAR * Lc) { v = (q - o.pos) / max(dt, 1e-6); p = q }
+            else { p = o.pos; v = Vec3.ZERO }
+        }
         o.vel = v
         o.pos = p
+        val prevUp = o.up
         val upBase = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
         // bank into turns; labriform rowers add their rolling waddle and bobbing pitch (clown, wrasse)
         val mp = o.motion
@@ -214,6 +322,10 @@ class Steering(private val c: Ctx) {
             val side = (o.heading cross o.up).normalized(Vec3.Z)
             o.up = Vec3.rotateAbout(o.up, side, it.pitchBias + bob)
         }
+        // rolling upright out of a side-lying pose (playing dead, sleeping on the sand) or into one takes a moment:
+        // the body's up turns at a capped rate, never 90° in one tick (bank and wobble stay well under the cap)
+        val upT = o.up
+        o.up = Vec3.rotateToward(prevUp.normalized(upT), upT, SWIM_UP_RATE * dt, o.heading).rejectFrom(o.heading).normalized(upT)
     }
 
     private fun glassAvoid(p: Vec3, margin: Double): Vec3 {
@@ -231,20 +343,58 @@ class Steering(private val c: Ctx) {
         val target = it.kinPos ?: o.pos
         val k = 1 - exp(-it.kinRate * dt)
         var np = o.pos.lerp(target, k)
+        // A placement is an animal moving, not a cut: never faster than it can swim or walk (a perch or hole picked
+        // across the tank used to be crossed in a few ticks, which drew as a teleport). Abstract mode parks at will.
+        val maxStep = if (c.sim.abstractMode) Double.MAX_VALUE else max(1.2 * max(o.burstSpeed, o.cruiseSpeed), KIN_MIN_SPEED) * dt
+        run {
+            val step = np - o.pos
+            val sl = step.length()
+            if (sl > maxStep) np = o.pos + step * (maxStep / sl)
+        }
         // surface postures (perched, hanging, grabbing on rock) must stay on the surface, never inside it;
         // dens/holes/burrows (3), cocoons (4) and buried animals (5) are allowed in by design
         if (it.posture !in 3..5) {
-            val d = c.rock.sdf.dist(np)
-            if (d < 0.1) np += c.rock.sdf.gradient(np).normalized(Vec3.Y) * (0.1 - d)
-            // one gradient step is not enough in a thin wedge of rock (a hop arc cutting a corner)
-            if (d < 0.1 && c.rock.sdf.dist(np) < 0.0) np = c.rock.sdf.project(np, 0.1)
+            val sdf = c.rock.sdf
+            val d = sdf.dist(np)
+            if (d < 0.1) {
+                // pushed out along the gradient, a few passes (one pass left a creeping step 0.05 cm inside on a curved face)
+                var pushed = np
+                for (iter in 0 until 4) {
+                    val dq = sdf.dist(pushed)
+                    if (dq >= 0.1) break
+                    pushed += sdf.gradient(pushed).normalized(Vec3.Y) * (0.1 - dq + 0.005)
+                }
+                // a step deep into the rock (a client swimming past a ledge) popped the cleaner out the far side, 6 cm
+                // in one tick: from outside, stop at the surface along the step instead
+                np = if (pushed.distanceTo(o.pos) > maxStep + 0.5 && sdf.dist(o.pos) >= 0.1) {
+                    var lo = 0.0; var hi = 1.0
+                    repeat(10) { val m = (lo + hi) / 2; if (sdf.dist(o.pos.lerp(np, m)) >= 0.1) lo = m else hi = m }
+                    // pressed flat against the face (no headway along the step): slide along it instead of stopping
+                    // for good (a goby hauling sand stood frozen at a lip between it and its burrow)
+                    val stop = o.pos.lerp(np, lo)
+                    if (stop.distanceTo(o.pos) > 0.05 * maxStep) stop else {
+                        val n = sdf.gradient(o.pos).normalized(Vec3.Y)
+                        val step = np - o.pos
+                        val slid = o.pos + (step - n * min(0.0, step dot n))
+                        if (sdf.dist(slid) >= 0.1) slid else stop
+                    }
+                } else pushed
+                // one gradient step is not enough in a thin wedge of rock (a hop arc cutting a corner)
+                if (sdf.dist(np) < 0.0) np = sdf.project(np, 0.1)
+            }
         }
         o.vel = (np - o.pos) / max(dt, 1e-6)
         o.pos = np
         it.kinHeading?.let { h -> o.heading = Vec3.rotateToward(o.heading, h.normalized(o.heading), Math.toRadians(240.0) * dt) }
         val upT = it.kinUp ?: it.upOverride ?: Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
-        o.up = o.up.lerp(upT.rejectFrom(o.heading).normalized(upT), k.coerceAtLeast(0.1)).normalized(Vec3.Y)
-        if (it.rollExtra != 0.0) o.up = Vec3.rotateAbout(o.up, o.heading, it.rollExtra)
+        // the roll (a sway, a lean) is drawn about the placement's own up: applied to o.up itself it compounded every
+        // tick, and a resting cleaner shrimp swaying 0.12 rad turned its body ~85°/s against the up-rate cap
+        val base0 = (kinBaseUp ?: o.up).normalized(Vec3.Y)
+        val upL = base0.lerp(upT.rejectFrom(o.heading).normalized(upT), k.coerceAtLeast(0.1)).normalized(Vec3.Y)
+        // capped like a crawler's: at a long tick the lerp alone flipped a cleaner onto its back in one step
+        val base = Vec3.rotateToward(base0, upL, CRAWL_UP_RATE * dt, o.heading)
+        kinBaseUp = base
+        o.up = if (it.rollExtra != 0.0) Vec3.rotateAbout(base, o.heading, it.rollExtra) else base
     }
 
     // ---------------------------------------------------------------- surface crawling
@@ -260,15 +410,39 @@ class Steering(private val c: Ctx) {
         val r = c.rock
         val n = envNormal(o.pos)
         var dir = Vec3.ZERO
+        var targetDist = Double.MAX_VALUE
         it.target?.let { t ->
             val d = t - o.pos
             val dl = d.length()
-            if (dl > 0.2) dir = d.rejectFrom(n).normalized(o.heading) * (min(it.speed, if (it.urgency > 0.7) o.burstSpeed else o.cruiseSpeed * 1.5) * (dl / it.arriveRadius).coerceAtMost(1.0))
+            targetDist = dl
+            if (dl > 0.2) {
+                // a target straight above or below (on the wall over its head) leaves only a tiny, sign-flipping
+                // tangent residual: walk only as much as the surface actually leads toward it
+                val tangent = d.rejectFrom(n)
+                // (an urgent dash keeps scrabbling along the residual: a crab's crevice behind the face it clings to is only
+                // reached that way, with the brain's side-step detours)
+                val lead = if (it.urgency > 0.7) 1.0 else smoothstep(0.05, 0.3, tangent.length() / dl)
+                // arrival is judged along the surface: a target a few cm off it (food in the water by the glass) is
+                // reached once the walker is under it, instead of being circled at full speed
+                dir = tangent.normalized(o.heading) * (min(it.speed, if (it.urgency > 0.7) o.burstSpeed else o.cruiseSpeed * 1.5) * (tangent.length() / it.arriveRadius).coerceAtMost(1.0) * lead)
+            }
         }
         it.fleeFrom?.let { f -> dir += (o.pos - f).rejectFrom(n).normalized(o.heading) * o.burstSpeed }
         if (it.wander > 0) {
             wanderDir = Vec3.rotateAbout(wanderDir, n, 0.8 * sqrt(dt) * c.rng.gaussian()).rejectFrom(n).normalized(o.heading)
-            dir += wanderDir * (o.cruiseSpeed * it.wander)
+            // walk along a smoothed wander course: the raw random walk turns by ~10° a tick, which made every
+            // wandering crawler shiver left and right
+            crawlWander = (crawlWander + (wanderDir - crawlWander) * (1 - exp(-WANDER_SMOOTH_RATE * dt))).rejectFrom(n).normalized(wanderDir)
+            dir += crawlWander * (o.cruiseSpeed * it.wander)
+        }
+        // the walking course, low-passed: where two rock faces meet the raw course can flip between them every tick
+        if (dir.lengthSq() > 1e-9) {
+            val dn = dir.normalized()
+            val prev = crawlDirS ?: o.heading.rejectFrom(n).normalized(dn)
+            // (closing in fast on a target the course may turn on a radius of half the distance left, down to 1.5 cm:
+            // the fixed rate swung a scuttling crab round its food in circles; far off it stays smooth)
+            val rate = max(CRAWL_DIR_RATE, dir.length() / max(CRAWL_TURN_RADIUS_CM, 0.5 * targetDist))
+            crawlDirS = (prev + (dn - prev) * (1 - exp(-rate * dt))).rejectFrom(n).normalized(dn)
         }
         // stop-go walking (hermits drag the shell a few steps then pause; shrimp pause every 1–2 s)
         val mp = o.motion
@@ -279,6 +453,19 @@ class Steering(private val c: Ctx) {
             if (stopGoT > 1e6) stopGoT -= cycle * kotlin.math.floor(1e6 / cycle)
         }
         var v = dir
+        val forwardWalker = !it.sideways && it.armGait == 0 && it.urgency < 0.7 && it.fleeFrom == null
+        if (forwardWalker && dir.lengthSq() > 1e-9) {
+            // a walker goes where its body points: facing away from the way to go it turns first, then walks. Moving
+            // along any direction at once let it ping-pong between the two faces of a rock corner every tick.
+            val course = crawlDirS ?: dir.normalized()
+            val align = o.heading.rejectFrom(n).normalized(o.heading) dot course
+            v = dir * smoothstep(-0.1, 0.6, align) * smoothstep(-0.3, 0.5, course dot dir.normalized())
+        } else if (it.armGait == 0 && it.fleeFrom == null && dir.lengthSq() > 1e-9) {
+            // a crab walks the smoothed course too: on the two faces of a rock corner the raw course points back the
+            // way it came every tick, and a scuttling Sally shuttled 0.7 cm to and fro at 15 cm/s
+            val course = crawlDirS ?: dir.normalized()
+            v = course * (dir.length() * smoothstep(-0.3, 0.5, course dot dir.normalized()))
+        }
         o.limbRig?.let { lr ->
             // the rig reads the intended travel (lead arm, leading legs); a brittle star's disc moves in pulses
             lr.travel = dir
@@ -288,17 +475,24 @@ class Steering(private val c: Ctx) {
         // re-attach to the surface at the requested offset
         val d = r.envDist(p)
         if (d > it.surfaceOffset + 3) p -= Vec3.Y * min(d, 2.0 * dt * 10)   // fell off: drop (gravity)
-        else p -= envNormal(p) * (d - it.surfaceOffset)
+        else {
+            // settle onto the surface at walking pace: a landing or a step off an edge is not a 3 cm snap in one tick
+            // (pushing out of rock is not capped)
+            val maxC = max(1.5 * v.length(), REATTACH_CM_S) * dt
+            p -= envNormal(p) * (d - it.surfaceOffset).coerceAtMost(maxC)
+        }
         p = r.clampToWater(p, 0.2).let { q -> if (q.y < r.sandTopCm + it.surfaceOffset) q.withY(r.sandTopCm + it.surfaceOffset) else q }
+        // pressed against a wall it cannot climb, the re-attach throws a walker back past where it stood: it stays put
+        // instead of shuttling to and fro between the wall and the floor every tick
+        if (forwardWalker && d <= it.surfaceOffset + 3 && dir.lengthSq() > 1e-9 && ((p - o.pos) dot dir) < 0) p = o.pos
         o.vel = (p - o.pos) / max(dt, 1e-6)
         o.pos = p
-        // leg stride clock for the renderer: one stride ≈ a quarter body length (research 17, INFERENCE),
-        // stepping eases in and out so a stop-go pause plants the feet
-        val walkSpeed = o.vel.length()
-        o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
-        o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)
-        val nn = envNormal(p)
-        var hd = if (v.lengthSq() > 1e-6) v.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
+        // the body's up eases onto a new surface (over an edge, into a corner) instead of snapping to it each tick
+        val nTarget = if (mp.footprintBL > 0) footprintNormal(p, o, mp.footprintBL * o.lengthCm) else envNormal(p)
+        val nn = Vec3.rotateToward(o.up.normalized(Vec3.Y), nTarget, (if (mp.bodyUpRate > 0) mp.bodyUpRate else CRAWL_UP_RATE) * dt, o.heading)
+        // the body turns to the smoothed course (a crab's side to it), never to the raw per-tick one
+        val travel = if (it.armGait == 0 && v.lengthSq() > 1e-9 || forwardWalker && dir.lengthSq() > 1e-9) (crawlDirS ?: dir.normalized(o.heading)) * dir.length() else v
+        var hd = if (travel.lengthSq() > 1e-6) travel.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
         if (it.sideways && v.lengthSq() > 1e-6) {
             // crab gait: body across the travel direction, keep whichever side is closer to the current heading
             val side = nn.cross(hd).normalized(o.heading)
@@ -313,7 +507,25 @@ class Steering(private val c: Ctx) {
             val h = if (sa > 1e-6) Vec3.rotateAbout(o.heading, axis / sa, kotlin.math.atan2(sa, o.up dot nn)) else o.heading
             o.heading = h.rejectFrom(nn).normalized(hd)
         } else o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
-        o.up = (it.upOverride ?: nn).normalized(Vec3.Y)
+        o.up = (it.upOverride?.let { u -> Vec3.rotateToward(o.up.normalized(Vec3.Y), u.normalized(Vec3.Y), CRAWL_UP_RATE * dt, o.heading) } ?: nn).normalized(Vec3.Y)
+    }
+
+    /**
+     * Surface normal averaged under a walker's footprint: the local normal at [p] and at four points [span] cm fore and
+     * aft and [span]/2 to either side, each first stepped onto the surface (MotionProfile.footprintBL). Over a sharp
+     * corner the samples disagree and the mean leans the body part way, as legs straddling the edge would.
+     */
+    private fun footprintNormal(p: Vec3, o: Organism, span: Double): Vec3 {
+        val n0 = envNormal(p)
+        val f = o.heading.rejectFrom(n0).normalized(n0.cross(Vec3.Z).normalized(Vec3.X))
+        val l = n0 cross f
+        var sum = n0 * 2.0
+        for (k in 0 until 4) {
+            val off = when (k) { 0 -> f * span; 1 -> f * -span; 2 -> l * (0.5 * span); else -> l * (-0.5 * span) }
+            val q = p + off
+            sum += envNormal(q - envNormal(q) * c.rock.envDist(q).coerceIn(-span, span))
+        }
+        return sum.normalized(n0)
     }
 
     // ---------------------------------------------------------------- escape C-start
@@ -437,7 +649,9 @@ class Steering(private val c: Ctx) {
             }
         }
         o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0
-        o.appendagePhase = (o.appendagePhase + dt * 2 * PI * 0.3) % 1000.0
+        // radians, wrapped at a whole number of turns so sin(phase) never jumps (the renderer's antennae and legs
+        // read it as an angle; a wrap at 1000 rad snapped them once every ~9 min)
+        o.appendagePhase = (o.appendagePhase + dt * 2 * PI * 0.3) % com.reeflive.core.sim.Organism.APPENDAGE_WRAP
         o.pitchBias = it.pitchBias
     }
 
@@ -445,6 +659,30 @@ class Steering(private val c: Ctx) {
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
         const val C_STAGE1 = 0.12
         const val C_STAGE2 = 0.12
+        /** Half-width (fraction of the personal space) of the band across its edge where separation eases out. */
+        const val SEP_EDGE = 0.1
+        /** Rock clearance (× collision length) inside which a swimmer holds position rather than step closer. */
+        const val HOLD_BAND = 0.34
+        /** Closest (× collision length) a swimmer wedged between rock and glass may slide along the rock. */
+        const val WEDGE_CLEAR = 0.2
+        /** Longest swim integration step (s); longer behaviour steps (fast-forward) are split. */
+        const val SWIM_MAX_DT = 0.1
+        /** Rate (1/s) of the crawler's wander-course low-pass. */
+        const val WANDER_SMOOTH_RATE = 1.5
+        /** Fastest a crawler settles onto its surface (cm/s) beyond its own walking speed. */
+        const val REATTACH_CM_S = 8.0
+        /** Rate (1/s) of the crawler's walking-course low-pass. */
+        const val CRAWL_DIR_RATE = 4.0
+        /** Tightest turn (cm radius) of the smoothed walking course at speed. */
+        const val CRAWL_TURN_RADIUS_CM = 1.5
+        /** Seconds a crawler stays wedged before it takes the long projection out (s). */
+        const val PROJ_STUCK_S = 2.0
+        /** Fastest a crawler's up vector follows a change of surface (rad/s, 240°/s). */
+        const val CRAWL_UP_RATE = 4.19
+        /** Max roll rate of a swimming body's up vector (rad/s, ~290°/s). */
+        const val SWIM_UP_RATE = 5.0
+        /** Floor (cm/s) of the kinematic placement speed cap, for the slow walkers. */
+        const val KIN_MIN_SPEED = 6.0
     }
 }
 

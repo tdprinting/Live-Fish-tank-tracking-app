@@ -25,7 +25,8 @@ There is no second copy of the sim, the shaders or the models.
   at 1x (faster time plays on a copy), Sandbox forks it into a pretend tank where every lever works and Reset tank
   restores the fork. The page mirrors the Android live screen: Watch / Sandbox, clock, Tank happy meter, Hermie, the
   water strip, the menu rail (Watch, Supplies, Add life, Tank, Trouble, More with the grown-up sliders), the 3D supply
-  shelf, fish card and follow, auto tour, lamp looks, torch, clean glass, microscope with the bacteria panel,
+  shelf, fish card and follow (with the "Thinking…" lines), More → Thought bubbles (`ReefSandbox.bubbles`, the
+  shared `ThoughtLines.kt` picker drawn as HTML bubbles), auto tour, lamp looks, torch, clean glass, microscope with the bacteria panel,
   time-lapse with per-species verdicts, and the tank sounds. When an Android live-screen action is added, add it to
   `ReefSandbox.act` and a tile in `web/site/live.js`. The time-lapse setup tables and the supply list are small copies
   of `TimelapseSheet.kt` / `SupplyShelf.kt` (Compose files); keep them in step.
@@ -52,3 +53,19 @@ https://tdprinting.github.io/Live-Fish-tank-tracking-app/ once Settings → Page
 
 Shared code that starts using a new JVM-only or Android API breaks the web build (CI's "Web app" job shows it).
 Prefer `kotlin.math` / Kotlin stdlib in `:core`; if a JVM API is needed, add a small shim next to the others.
+
+## What's new popup
+
+When the page opens it shows the updates merged to `main` since this browser last opened it (`reeflive.newsSeen` in
+localStorage), and More → ✨ What's new lists the latest ones any time. The list is `whats-new.json`, written by the
+`:web:whatsNew` task from `git log --first-parent` on main, so every thread's merged PR appears with its title.
+To reword a title in plain language, or hide a behind-the-scenes change with `""`, add it by PR number to
+`docs/whats-new.json`.
+
+## Look and icons
+
+The live screen uses the Android "Sea-glass Arcade" live theme (UI_STYLE §10.1): navy outlines, candy-coloured
+bubbles and tiles per category, teal glass sheets, Outfit for labels (`web/site/style.css`, last block). Icons come
+from the app's own sets: `web/site/glyphs.js` is generated from `ReefGlyphs.kt` (plus a few web-only glyphs) and
+`web/site/food/*.png` from the FoodArt drawings by `python3 tools/graphics/web_glyphs.py`; species pictures are copied
+from `app/src/main/res/drawable-nodpi` at build time. New tiles take a glyph name, `food:KIND` or `species:id:glyph`.

@@ -84,10 +84,14 @@ fun FollowOverlay(
                     Column(Modifier.weight(1f).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(state.fishName, style = LiveTheme.style.titleText, color = LiveTheme.style.label, maxLines = 1)
                         Text(state.speciesName, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, maxLines = 1)
-                        Text(
-                            state.behaviorLine,
-                            style = MaterialTheme.typography.bodyMedium, color = c.text, textAlign = TextAlign.Center, maxLines = 2,
-                        )
+                        if (state.thought.now.isNotBlank()) {
+                            ThinkingBlock(state.id.ifBlank { state.fishName }, state.thought, Modifier.fillMaxWidth(), centered = true)
+                        } else {
+                            Text(
+                                state.behaviorLine,
+                                style = MaterialTheme.typography.bodyMedium, color = c.text, textAlign = TextAlign.Center, maxLines = 2,
+                            )
+                        }
                         if (state.count > 1) {
                             Text("${state.index + 1} / ${state.count}", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
                         }

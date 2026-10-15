@@ -31,9 +31,11 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     private val q = mapOf("QUALITY" to quality.shaderLevel.toString())
     private fun p(name: String, v: String, f: String, extra: Map<String, String> = emptyMap()) = ShaderProgram.build(name, v, f, q + extra, source)
 
-    val rock = p("rock", "static.vert", "rock.frag")
+    val rock = p("rock", "static.vert", "rock.frag", mapOf("ROCK" to "1"))
     val sand = p("sand", "static.vert", "rock.frag", mapOf("SAND" to "1"))
     val generic = p("generic", "static.vert", "generic.frag")
+    /** The supply shelf beside the tank (SupplyShelfScene): its own room light rig instead of the fixtures. */
+    val shelf = p("shelf", "static.vert", "shelf.frag")
     val softCoral = p("softcoral", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1"))
     val card = p("card", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1", "CARD" to "1"))
     val polyp = p("polyp", "polyp.vert", "polyp.frag")
@@ -49,7 +51,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
     val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
+    fun all() = listOf(rock, sand, generic, shelf, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 
@@ -181,8 +183,8 @@ class FrameUniforms {
         const val SHADOW_OFFSET = CASTER_OFFSET + MAX_CASTERS * 4
         const val FLOATS = SHADOW_OFFSET + 20
         const val FOG_DENSITY = 0.005f
-        const val WATER_LEVEL = 56f
-        const val SAND_TOP = 3f
+        const val WATER_LEVEL = Camera.WATER_Y
+        const val SAND_TOP = Camera.SAND_Y
         const val CAUSTIC_STRENGTH = 0.85f
         const val CAUSTIC_SCALE = 0.04f
         /**

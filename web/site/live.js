@@ -1,10 +1,14 @@
 // ReefLive web: the live tank screen, mirroring the Android live screen (LiveTankScreen + LiveMenu + SupplyShelf +
 // MicroscopeView + TimelapseSheet). The sim, renderer and the shared tables come from Kotlin (kotlin/ReefLive-web.mjs):
 // ReefLive drives the 3D view, ReefSandbox is the Android view model's actions and readings.
-import { ReefLive, ReefSandbox } from './kotlin/ReefLive-web.mjs';
+import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
+import { initBags, pickBag } from './bags.js';
+import { GLYPHS } from './glyphs.js';
+import { playFlush } from './flush.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
+const MY = ReefMyTank.getInstance();
 window.reeflive = live; window.reefsandbox = SB; // handy from the Safari console
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -21,10 +25,22 @@ const ui = {
   picked: null, following: null, tour: false, shelf: false, shelfRow: 0, cleaning: false, chromeHidden: false,
   torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
-  hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
+  water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
+/** Every lever works: the pretend tank (Sandbox) and My tank (the keeper's own saved tank). */
+const editable = () => ui.mode !== 'watch';
+let statsEl = null;
+function statsBox() {
+  if (!statsEl) {
+    statsEl = document.createElement('pre');
+    statsEl.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top) + 8px);z-index:9999;margin:0;' +
+      'padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ef;font:11px/1.35 ui-monospace,monospace;pointer-events:none';
+    document.body.appendChild(statsEl);
+  }
+  return statsEl;
+}
 
 // ================================================================ start
 let started = false;
@@ -35,26 +51,41 @@ export function startLive(applyReadings) {
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
-    onPick: (id) => { if (id) select(id); else if (!ui.following) select(null); },
+    // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
+    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
+    // pressed and held right on an animal: ride along with it
+    onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
+    // a fingertip held on the glass (UI_STYLE §10.8): slide it and fish follow; flick it as it lifts for a puff of current
+    onFinger: (surface) => { if (surface) { try { navigator.vibrate?.(6); } catch { /* not on iOS */ } fingerSay(); } },
+    onFlick: () => say('Whoosh! A puff of current.'),
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
+    ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
   }).then(() => {
     C = JSON.parse(SB.catalog());
+    initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     $('loading').classList.add('done');
     applyReadings();
     renderAll();
     setInterval(tick, 500);
     tick();
     say(C.tips.hello);
-    if (!store.get('reeflive.tipsSeen', false)) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
+    const firstVisit = !store.get('reeflive.tipsSeen', false);
+    if (firstVisit) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
+    checkNews(firstVisit);
   }).catch(() => {});
 }
 export function setLiveVisible(v) { live.setVisible(v); if (!v) stopLoops(); }
+
+// keep the side rail and fish card below however many rows the top HUD wraps to
+try { const top = document.querySelector('#live .top'), chrome = $('chrome');
+  if (top && window.ResizeObserver) new ResizeObserver(() => chrome.style.setProperty('--topH', `${top.offsetHeight + 8}px`)).observe(top); } catch (e) { /* keep CSS fallback */ }
 
 // ================================================================ periodic refresh
 function tick() {
@@ -62,20 +93,35 @@ function tick() {
   if (!P) return;
   animals = JSON.parse(SB.animals());
   const s = JSON.parse(live.state());
-  if (s) $('clock').textContent = `${clockText(s.time)} · ${s.phase}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
-  $('strip').innerHTML = P.readouts.map((r) => `<span class="chip ${r.status.toLowerCase()}">${esc(r.label)} ${esc(r.text)}</span>`).join('');
-  $('happy').classList.toggle('hidden', !ui.happy);
-  $('happyVal').textContent = `${P.happy}%`;
-  $('happyBar').style.width = `${P.happy}%`;
-  $('happyBar').className = P.happy >= 70 ? 'good' : P.happy >= 40 ? 'caution' : 'danger';
-  $('happyFace').textContent = P.happy >= 80 ? '😄' : P.happy >= 60 ? '🙂' : P.happy >= 40 ? '😐' : P.happy >= 20 ? '😟' : '😫';
+  ui.clockAt = s;
+  if (s) $('clock').textContent = `${PHASE_ICON[s.phase] ?? ''} ${hhmm(s.time)}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
+  ui.worst = P.readouts.some((r) => r.status === 'DANGER') ? 'danger' : P.readouts.some((r) => r.status === 'CAUTION') ? 'caution' : 'good';
+  $('waterDot').className = `warn ${ui.worst}${ui.worst === 'good' ? ' hidden' : ''}`;
+  $('happyFace').textContent = faceFor(P.happy);
+  $('happyFace').classList.toggle('hidden', !ui.happy);
+  if (ui.card === 'STATUS') $('statusBody').innerHTML = statusBody();
   renderFish();
   renderFollow();
   if (ui.card && document.activeElement?.type !== 'range' && !ui.dragging) refreshCardValues();
   updateSound();
   if (ui.tour && ++ui.tourTicks >= 24) nextTour();
   if (!$('micro').classList.contains('hidden')) drawMicro();
+  if (sub.on) renderSubInfo();
+  checkFlush();
 }
+// the fish net lifted a body out (core FishNet): the toilet goodbye, once per body (flush.js)
+let flushSeen;
+function checkFlush() {
+  const f = JSON.parse(live.netFlush());
+  const key = f ? f.key : null;
+  if (flushSeen === undefined) { flushSeen = key; return; }   // never replay one from before the page looked
+  if (!f || key === flushSeen) return;
+  flushSeen = key;
+  playFlush(f, { onSplash: () => cue('FEED', 1), onFlush: () => cue('FLUSH', 0.9, 0.7, 1.7) });
+}
+const faceFor = (h) => (h >= 80 ? '😄' : h >= 60 ? '🙂' : h >= 40 ? '😐' : h >= 20 ? '😟' : '😫');
+const PHASE_ICON = { Night: '🌙', Dawn: '🌅', Morning: '☀️', Day: '☀️', Midday: '☀️', Afternoon: '☀️', Dusk: '🌇', Evening: '🌇' };
+const hhmm = (sec) => { const t = Math.max(0, Math.floor(sec)); return `${String(Math.floor((t % 86400) / 3600)).padStart(2, '0')}:${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}`; };
 const clockText = (sec) => {
   const t = Math.max(0, Math.floor(sec));
   const d = Math.floor(t / 86400) + 1, h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60);
@@ -84,6 +130,7 @@ const clockText = (sec) => {
 
 // ================================================================ Hermie, toasts
 let hermieTimer = 0, tipIndex = 0;
+function buzz(ms) { try { navigator.vibrate?.(ms); } catch { /* not on iOS */ } }
 function say(text) {
   if (!ui.hermie) { toast(text); return; }
   $('hermieText').textContent = text;
@@ -91,10 +138,18 @@ function say(text) {
   clearTimeout(hermieTimer);
   hermieTimer = setTimeout(() => $('hermie').classList.remove('talk'), 6000);
 }
-$('hermie').addEventListener('click', () => {
-  const list = ui.mode === 'sandbox' ? C.tips.hermieSandbox : C.tips.hermieWatch;
+function nextTip() {
+  const list = ui.mode === 'mine' ? C.tips.hermieMyTank : editable() ? C.tips.hermieSandbox : C.tips.hermieWatch;
   say(list[tipIndex++ % list.length]);
   cue('TICK');
+}
+$('hermie').addEventListener('click', nextTip);
+$('statusBtn').addEventListener('click', () => {
+  cue('TICK');
+  if (ui.shelf) closeShelf();
+  if (ui.card === 'STATUS') { closeCard(); return; }
+  ui.card = 'STATUS'; ui.more = false;
+  renderCard(); renderRail();
 });
 let toastTimer = 0;
 function toast(text) {
@@ -115,28 +170,88 @@ function act(name, arg = null, num = 0, line = null) {
   return true;
 }
 
+// ---- What's new: updates merged since this browser last opened the app (whats-new.json, built from main's history)
+let news = [];
+async function checkNews(firstVisit) {
+  try { news = await (await fetch('whats-new.json', { cache: 'no-store' })).json(); } catch { return; }
+  if (!news.length) return;
+  const last = store.get('reeflive.newsSeen', 0);
+  store.set('reeflive.newsSeen', news[0].n);
+  if (firstVisit) return; // brand new: the tips come first, everything is new anyway
+  const fresh = last ? news.filter((e) => e.n > last) : news.slice(0, 8);
+  if (fresh.length) setTimeout(() => showNews(fresh, true), 1500);
+}
+function showNews(list = news.slice(0, 15), since = false) {
+  if (!list.length) { say('Nothing new yet.'); return; }
+  const shown = list.slice(0, 15);
+  $('newsTitle').textContent = since ? `New since your last visit (${list.length})` : "What's new";
+  $('newsList').innerHTML = shown.map((e) => `<li>${esc(e.text)}<small>${esc(niceDate(e.date))}</small></li>`).join('')
+    + (list.length > shown.length ? `<li class="muted">…and ${list.length - shown.length} more</li>` : '');
+  const d = $('news');
+  if (!d.open) d.showModal();
+}
+function niceDate(iso) {
+  const t = new Date(`${iso}T12:00:00`);
+  return isNaN(t) ? iso : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function showTips() {
-  const sb = ui.mode === 'sandbox';
-  $('tipsTitle').textContent = sb ? C.tips.sandboxTitle : C.tips.watchTitle;
-  $('tipsList').innerHTML = (sb ? C.tips.sandbox : C.tips.watch).map((t) => `<li>${esc(t)}</li>`).join('');
+  const sb = editable(), mine = ui.mode === 'mine';
+  $('tipsTitle').textContent = mine ? C.tips.myTankTitle : sb ? C.tips.sandboxTitle : C.tips.watchTitle;
+  $('tipsList').innerHTML = (mine ? C.tips.myTank : sb ? C.tips.sandbox : C.tips.watch).map((t) => `<li>${esc(t)}</li>`).join('');
   $('tips').showModal();
 }
 
 // ================================================================ mode
-document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+document.querySelectorAll('[data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
 function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
   ui.mode = m;
   SB.setMode(m);
-  ui.speed = 1; live.setSpeed(1);
-  live.shelfLocked(m === 'sandbox' ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
+  ui.picked = null; ui.following = null; live.follow(null); renderFish();
+  // My tank keeps the speed it was left at; the other two start at real time
+  if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
+  else { ui.speed = 1; live.setSpeed(1); }
+  live.shelfLocked(editable() ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
   document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
-  say(m === 'sandbox' ? 'This is a pretend tank. Nothing here changes your real one.' : 'Back to your real tank.');
+  if (m === 'mine') {
+    const info = JSON.parse(MY.info());
+    if (!info.exists) showMyTankSetup();
+    else say(`${info.name}: your very own ${info.build}. Everything you do here is saved.`);
+  } else {
+    if ($('mytank').open) $('mytank').close();
+    say(m === 'sandbox' ? 'This is a pretend tank. Nothing here changes your real one.' : 'Back to your real tank.');
+  }
   renderRail();
   tick();
 }
+
+// ================================================================ My tank: pick a tank, saved in this browser
+function showMyTankSetup() {
+  const builds = JSON.parse(MY.builds());
+  $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}"><strong>${icon('tank')} ${esc(b.label)}</strong>
+    <small>${b.gallons} gal · ${esc(b.size)}</small><span>${esc(b.blurb)}</span></button>`).join('');
+  const d = $('mytank');
+  if (!d.open) d.showModal();
+}
+$('mytankList').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-build]')?.dataset.build;
+  if (!id) return;
+  cue('TICK');
+  if (!MY.start(id)) return;
+  $('mytank').close();
+  // ask the browser to keep this site's storage (best effort; an installed home-screen app keeps it anyway)
+  try { navigator.storage?.persist?.(); } catch { /* not offered */ }
+  say('A brand new tank! Open Add life to bring in your first animals.');
+  ui.card = 'LIFE'; renderCard(); renderRail(); tick();
+});
+$('mytankClose').addEventListener('click', () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(MY.info()).exists) setMode('watch'); });
+// saved every 30 s while on screen, and whenever the page goes away
+setInterval(() => { if (ui.mode === 'mine') MY.save(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) MY.hidden(); else MY.visible(); });
+window.addEventListener('pagehide', () => MY.hidden());
 
 /** Watch mode runs the real tank at 1x; faster time plays on a pretend copy, like the Android app. */
 function setSpeed(v) {
@@ -150,17 +265,19 @@ function setSpeed(v) {
 }
 
 // ================================================================ menu rail and cards
+// candy tones from the Android live theme (UI_STYLE §10.1)
 const CATS = {
-  VIEW: { ico: '👀', label: 'Watch' },
-  SUPPLIES: { ico: '🧺', label: 'Supplies' },
-  LIFE: { ico: '🐠', label: 'Add life' },
-  TANK: { ico: '💡', label: 'Tank' },
-  TROUBLE: { ico: '⚡', label: 'Trouble' },
-  MORE: { ico: '⋯', label: 'More' },
+  VIEW: { ico: 'eye', label: 'View', tone: 'cyan' },
+  SUPPLIES: { ico: 'basket', label: 'Supplies', tone: 'orange' },
+  LIFE: { ico: 'fish', label: 'Add life', tone: 'pink' },
+  TANK: { ico: 'bulb', label: 'Tank', tone: 'yellow' },
+  TROUBLE: { ico: 'whatIf', label: 'Trouble', tone: 'purple' },
+  MORE: { ico: 'dots', label: 'More', tone: 'white' },
+  STATUS: { ico: 'tank', label: 'How is the tank?', tone: 'green' },
 };
 function renderRail() {
-  const cats = ui.mode === 'sandbox' ? ['SUPPLIES', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'MORE'];
-  $('rail').innerHTML = cats.map((c) => `<button class="tool ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${CATS[c].ico}</span><span>${CATS[c].label}</span></button>`).join('');
+  const cats = editable() ? ['SUPPLIES', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'MORE'];
+  $('rail').innerHTML = cats.map((c) => `<button class="tool tone-${CATS[c].tone} ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${icon(CATS[c].ico)}</span><span class="lbl">${CATS[c].label}</span></button>`).join('');
 }
 $('rail').addEventListener('click', (e) => {
   const c = e.target.closest('[data-cat]')?.dataset.cat;
@@ -176,14 +293,24 @@ $('rail').addEventListener('click', (e) => {
 function closeCard() { ui.card = null; $('card').classList.add('hidden'); renderRail(); }
 $('tank').addEventListener('pointerdown', () => { if (ui.card) { closeCard(); ui.cardClosedAt = performance.now(); } });
 
+/** An icon by name: a ReefGlyphs glyph, `food:KIND` (FoodArt picture), `species:id:fallbackGlyph` (species art), else text. */
+function icon(name) {
+  if (name.startsWith('food:')) return `<img class="art" src="food/${name.slice(5)}.png" alt="">`;
+  if (name.startsWith('species:')) {
+    const [, id, fb] = name.split(':');
+    return `<img class="art sp" src="species/${id}.webp" alt="" onerror="this.nextElementSibling.hidden=false;this.remove()"><span hidden>${icon(fb)}</span>`;
+  }
+  const g = GLYPHS[name];
+  return g ? `<svg class="gi${name === 'powerheadRight' ? ' flip' : ''}" viewBox="0 0 24 24" aria-hidden="true">${g}</svg>` : esc(name);
+}
 const tile = (attrs, ico, label, on = false, lock = false) =>
-  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${ico}</span>${esc(label)}</button>`;
+  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${icon(ico)}</span>${esc(label)}</button>`;
 const val = (id) => P?.values?.[id]?.v;
 const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
 function renderCard() {
   if (!ui.card) return;
-  const sb = ui.mode === 'sandbox';
+  const sb = editable();
   let h = '';
   switch (ui.card) {
     case 'VIEW': h = viewCard(); break;
@@ -191,9 +318,11 @@ function renderCard() {
     case 'TANK': h = tankCard(sb); break;
     case 'TROUBLE': h = troubleCard(sb); break;
     case 'MORE': h = moreCard(sb); break;
+    case 'STATUS': h = `<div id="statusBody">${statusBody()}</div>`; break;
   }
-  $('card').innerHTML = `<div class="card-head"><strong>${CATS[ui.card].ico} ${CATS[ui.card].label}</strong>
-    <span>${ui.card !== 'VIEW' && ui.card !== 'MORE' ? `<button class="btn small ghost" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
+  $('card').className = `sheet tone-${CATS[ui.card].tone}`;
+  $('card').innerHTML = `<div class="card-head"><strong><span class="hico">${icon(CATS[ui.card].ico)}</span>${CATS[ui.card].label}</strong>
+    <span>${['LIFE', 'TANK', 'TROUBLE'].includes(ui.card) ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
     <button class="icon-btn" data-close aria-label="Close">✕</button></span></div><div class="card-body">${h}</div>`;
   $('card').classList.remove('hidden');
 }
@@ -206,47 +335,48 @@ function timeSlider(stops) {
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
 function viewCard() {
-  const looks = [['REAL', '🕒', 'Real clock'], ['DAY', '☀️', 'Day'], ['DUSK', '🌇', 'Dusk'], ['NIGHT', '🌙', 'Night'], ['MOON', '🌕', 'Moonlight']];
+  const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight']];
   const fish = animals.slice(0, 12);
   return `${timeSlider(STOPS)}
     <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
-    <div class="options">${tile('data-torch', '🔦', 'Torch', ui.torch)}${tile('data-feedshelf', '🍤', 'Feed')}${tile('data-tour', '🎬', 'Auto tour', ui.tour)}
-      ${tile('data-hide', '🎞', 'Cinematic')}${tile('data-saver', '🌙', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
-    <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, '🐟', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
+    <div class="options">${tile('data-torch', 'torch', 'Torch', ui.torch)}${tile('data-feedshelf', 'feedTin', 'Feed')}${tile('data-tour', 'camera', 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
+      ${tile('data-hide', 'film', 'Cinematic')}${tile('data-saver', 'moon', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
+    <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
 }
 
 // ---- Add life
 function lifeCard(sb) {
-  const groups = [['FISH', '🐠', 'Fish'], ['INVERTS', '🦐', 'Inverts'], ['CORALS', '🪸', 'Corals']];
+  const groups = [['FISH', 'fish', 'Fish'], ['INVERTS', 'shrimp', 'Inverts'], ['CORALS', 'branch', 'Corals']];
   const list = C.stock.filter((s) => s.group === ui.addGroup);
-  let h = `<div class="pills">${groups.map(([g, i, n]) => `<button class="pillbtn ${ui.addGroup === g ? 'on' : ''}" data-group="${g}">${i} ${n}</button>`).join('')}</div>
-    <div class="pills"><span class="muted">How many</span>${[1, 5, 10, 25, 50].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
+  let h = `<div class="pills">${groups.map(([g, i, n]) => `<button class="pillbtn ${ui.addGroup === g ? 'on' : ''}" data-group="${g}">${icon(i)} ${n}</button>`).join('')}</div>
+    <p class="muted">Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and it floats until they are ready.</p>
+    <div class="pills"><span class="muted">How many</span>${[1, 2, 3, 5, 10].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
     ${ui.addGroup !== 'CORALS' ? `<div class="pills"><span class="muted">Size</span>${C.sizes.map((z) => `<button class="pillbtn ${ui.addSize === z.id ? 'on' : ''}" data-size="${z.id}">${esc(z.label)}</button>`).join('')}</div>` : ''}
-    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, STOCK_ICON[s.group], s.name, false, !sb)).join('')}</div>
+    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, `species:${s.id}:${STOCK_ICON[s.group]}`, s.name, false, !sb)).join('')}</div>
     <h4>Helpers</h4><div class="options">
-      ${tile('data-micro="DOSE_TISBE"', '🦠', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', '🟢', 'Phyto', false, !sb)}
-      ${tile('data-pest="PEPPERMINT_SHRIMP"', '🦐', 'Peppermint shrimp', false, !sb)}${tile('data-pest="BERGHIA"', '🐌', 'Berghia slugs', false, !sb)}
-      ${tile('data-shells', '🐚', 'Spare shells', false, !sb)}</div>`;
+      ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
+      ${tile('data-pest="PEPPERMINT_SHRIMP"', 'shrimp', 'Peppermint shrimp', false, !sb)}${tile('data-pest="BERGHIA"', 'slug', 'Berghia slugs', false, !sb)}
+      ${tile('data-shells', 'shell', 'Spare shells', false, !sb)}</div>`;
   if (ui.more) {
-    h += `<h4>More tiny life</h4><div class="options">${C.micro.filter((m) => !m.id.startsWith('TREAT') && m.id !== 'FLATWORM_FRAG').map((m) => tile(`data-micro="${m.id}"`, '🔬', m.label, false, !sb)).join('')}</div>
+    h += `<h4>More tiny life</h4><div class="options">${C.micro.filter((m) => !m.id.startsWith('TREAT') && m.id !== 'FLATWORM_FRAG').map((m) => tile(`data-micro="${m.id}"`, 'microscope', m.label, false, !sb)).join('')}</div>
       <p class="muted">Tap an animal in the tank to resize it or take it out.</p>`;
   }
   return h;
 }
-const STOCK_ICON = { FISH: '🐠', INVERTS: '🦀', CORALS: '🪸' };
+const STOCK_ICON = { FISH: 'fish', INVERTS: 'shrimp', CORALS: 'branch' };
 
 // ---- Tank
 function tankCard(sb) {
   const t = val('temp'), sg = val('sal');
   let h = `<div class="options">
-    ${tile('data-nudge="temp:1"', '🔥', `Warmer${t != null ? ` (${t.toFixed(1)}°C)` : ''}`, false, !sb)}${tile('data-nudge="temp:-1"', '❄️', 'Cooler', false, !sb)}
-    ${tile('data-nudge="sal:0.002"', '🧂', `Saltier${sg != null ? ` (${sg.toFixed(3)})` : ''}`, false, !sb)}${tile('data-nudge="sal:-0.002"', '💧', 'Less salty', false, !sb)}
-    ${tile('data-lights="on"', '☀️', 'Lights on', false, !sb)}${tile('data-lights="off"', '🌙', 'Lights off', false, !sb)}${tile('data-lights="auto"', '🕒', 'Normal day', false, !sb)}
-    ${tile('data-flip="pump_left"', '🌀', `Left pump ${isOn('pump_left') ? 'on' : 'off'}`, isOn('pump_left'), !sb)}
-    ${tile('data-flip="pump_right"', '🌀', `Right pump ${isOn('pump_right') ? 'on' : 'off'}`, isOn('pump_right'), !sb)}
-    ${tile('data-flip="eq_skimmer"', '🫧', 'Skimmer', isOn('eq_skimmer'), !sb)}${tile('data-flip="eq_sock"', '🧦', 'Filter sock', isOn('eq_sock'), !sb)}
-    ${tile('data-flip="eq_carbon"', '⚫', 'Carbon', isOn('eq_carbon'), !sb)}${tile('data-flip="eq_refugium"', '🌿', 'Algae garden', isOn('eq_refugium'), !sb)}
-    ${tile('data-flip="eq_uv"', '🟣', 'Germ zapper', isOn('eq_uv'), !sb)}${tile('data-opentreat', '💊', 'Medicine', false, !sb)}
+    ${tile('data-nudge="temp:1"', 'flame', `Warmer${t != null ? ` (${t.toFixed(1)}°C)` : ''}`, false, !sb)}${tile('data-nudge="temp:-1"', 'snowflake', 'Cooler', false, !sb)}
+    ${tile('data-nudge="sal:0.002"', 'salt', `Saltier${sg != null ? ` (${sg.toFixed(3)})` : ''}`, false, !sb)}${tile('data-nudge="sal:-0.002"', 'dropMinus', 'Less salty', false, !sb)}
+    ${tile('data-lights="on"', 'sun', 'Lights on', false, !sb)}${tile('data-lights="off"', 'moon', 'Lights off', false, !sb)}${tile('data-lights="auto"', 'clockSun', 'Normal day', false, !sb)}
+    ${tile('data-flip="pump_left"', 'powerhead', `Left pump ${isOn('pump_left') ? 'on' : 'off'}`, isOn('pump_left'), !sb)}
+    ${tile('data-flip="pump_right"', 'powerheadRight', `Right pump ${isOn('pump_right') ? 'on' : 'off'}`, isOn('pump_right'), !sb)}
+    ${tile('data-flip="eq_skimmer"', 'skimmer', 'Skimmer', isOn('eq_skimmer'), !sb)}${tile('data-flip="eq_sock"', 'sock', 'Filter sock', isOn('eq_sock'), !sb)}
+    ${tile('data-flip="eq_carbon"', 'carbon', 'Carbon', isOn('eq_carbon'), !sb)}${tile('data-flip="eq_refugium"', 'refugium', 'Algae garden', isOn('eq_refugium'), !sb)}
+    ${tile('data-flip="eq_uv"', 'uvLamp', 'Germ zapper', isOn('eq_uv'), !sb)}${tile('data-opentreat', 'bottle', 'Medicine', false, !sb)}
   </div>`;
   if (ui.more || ui.treat) h += tankMore(sb);
   return h;
@@ -260,11 +390,11 @@ function tankMore(sb) {
     ${ui.tab === 'LIGHT_FLOW' ? `<label class="slider"><span>Heater set point</span><output id="heaterOut">${(store.get('reeflive.heaterC', 25.5)).toFixed(1)} °C</output>
       <input type="range" data-heater min="20" max="32" step="0.5" value="${store.get('reeflive.heaterC', 25.5)}" ${sb ? '' : 'disabled'}></label>` : ''}
     <h4>Quick doses</h4><div class="options">
-      ${[['alk', 1, 'Alk +1'], ['ca', 20, 'Ca +20'], ['mg', 50, 'Mg +50'], ['no3', 5, 'NO3 +5'], ['po4', 0.05, 'PO4 +0.05']].map(([id, d, n]) => tile(`data-dose="${id}:${d}"`, '💉', n, false, !sb)).join('')}</div>
-    <h4>Medicine</h4><div class="options">${C.treatments.map((t) => tile(`data-treat="${t.id}:1"`, '💊', `Start ${t.label}`, false, !sb) + tile(`data-treat="${t.id}:0"`, '⏹', `Stop ${t.label}`, false, !sb)).join('')}</div>
+      ${[['alk', 1, 'Alk +1'], ['ca', 20, 'Ca +20'], ['mg', 50, 'Mg +50'], ['no3', 5, 'NO3 +5'], ['po4', 0.05, 'PO4 +0.05']].map(([id, d, n]) => tile(`data-dose="${id}:${d}"`, 'syringe', n, false, !sb)).join('')}</div>
+    <h4>Medicine</h4><div class="options">${C.treatments.map((t) => tile(`data-treat="${t.id}:1"`, 'bottle', `Start ${t.label}`, false, !sb) + tile(`data-treat="${t.id}:0"`, 'stop', `Stop ${t.label}`, false, !sb)).join('')}</div>
     <h4>Other levers</h4><div class="options">
       ${tile('data-predation', P?.predation ? '🦈' : '🕊', P?.predation ? 'Fish can eat fish' : 'No eating', P?.predation, !sb)}
-      ${tile('data-acclimate', '💚', 'Acclimate all', false, !sb)}${tile('data-rocks', '🪨', 'Rearrange rock', false, !sb)}</div>`;
+      ${tile('data-acclimate', 'heart', 'Acclimate all', false, !sb)}${tile('data-rocks', 'rocks', 'Rearrange rock', false, !sb)}</div>`;
 }
 function fmt(p, v) { return v == null ? '—' : `${Number(v).toFixed(p.decimals)}${p.unit ? ` ${p.unit}` : ''}`; }
 const toPos = (p, v) => { const f = Math.min(1, Math.max(0, (v - p.min) / (p.max - p.min))); return p.curve === 1 ? f : f ** (1 / p.curve); };
@@ -303,18 +433,18 @@ function refreshCardValues() {
 // ---- Trouble
 function troubleCard(sb) {
   let h = `<div class="options">
-    ${tile('data-heater-act="break"', '💥', 'Heater breaks', false, !sb)}${tile('data-heater-act="fix"', '🔧', 'Fix heater', false, !sb)}
-    ${tile('data-preset="HEATER_STUCK"', '🔥', 'Heater stuck on', false, !sb)}${tile('data-pumpfail', '🌀', 'Pumps stop tonight', false, !sb)}
-    ${tile('data-lights="off"', '💡', 'Lamp goes out', false, !sb)}${tile('data-preset="POWER_OUTAGE"', '🔌', 'Power cut', false, !sb)}
-    ${tile('data-heatwave', '🥵', 'Heat wave', false, !sb)}${tile('data-preset="SALINITY_CRASH"', '🧂', 'Salt crash', false, !sb)}
-    ${tile('data-preset="COPPER_OVERDOSE"', '🧪', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', '🍽️', 'Too much food', false, !sb)}
-    ${tile('data-preset="MISSED_WATER_CHANGES"', '📅', 'No water changes', false, !sb)}${tile('data-aip="1"', '🌱', 'Pest anemone', false, !sb)}
-    ${tile('data-aip="-1"', '⚡', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', '🤒', 'A fish gets sick', false, !sb)}
+    ${tile('data-heater-act="break"', 'brokenHeater', 'Heater breaks', false, !sb)}${tile('data-heater-act="fix"', 'wrench', 'Fix heater', false, !sb)}
+    ${tile('data-preset="HEATER_STUCK"', 'flame', 'Heater stuck on', false, !sb)}${tile('data-pumpfail', 'powerhead', 'Pumps stop tonight', false, !sb)}
+    ${tile('data-lights="off"', 'lampOut', 'Lamp goes out', false, !sb)}${tile('data-preset="POWER_OUTAGE"', 'plugOff', 'Power cut', false, !sb)}
+    ${tile('data-heatwave', 'heatWave', 'Heat wave', false, !sb)}${tile('data-preset="SALINITY_CRASH"', 'salt', 'Salt crash', false, !sb)}
+    ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}
+    ${tile('data-preset="MISSED_WATER_CHANGES"', 'calendarX', 'No water changes', false, !sb)}${tile('data-aip="1"', 'pestAnemone', 'Pest anemone', false, !sb)}
+    ${tile('data-aip="-1"', 'zap', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', 'sickFish', 'A fish gets sick', false, !sb)}
   </div>`;
-  if (ui.sickPick) h += `<h4>Which illness?</h4><div class="options">${C.diseases.map((d) => tile(`data-infect="${d.id}"`, '🦠', d.label, false, !sb)).join('')}</div>`;
+  if (ui.sickPick) h += `<h4>Which illness?</h4><div class="options">${C.diseases.map((d) => tile(`data-infect="${d.id}"`, 'sickFish', d.label, false, !sb)).join('')}</div>`;
   if (ui.more) {
     h += `<h4>What-if presets</h4><div class="presets">${C.presets.map((p) => `<button class="preset ${sb ? '' : 'lock'}" data-preset="${p.id}"><strong>${esc(p.label)}</strong><span>${esc(p.blurb)}</span><em>${esc(p.hint)}</em></button>`).join('')}</div>
-      <h4>Scenarios</h4><div class="options">${C.scenarios.map((s) => tile(`data-scenario="${s.id}"`, '🌊', s.label, false, !sb)).join('')}</div>
+      <h4>Scenarios</h4><div class="options">${C.scenarios.map((s) => tile(`data-scenario="${s.id}"`, 'waveSparkle', s.label, false, !sb)).join('')}</div>
       <p class="muted">Slow vs sudden: fish cope with a slow change far better than a jump. Under Tank → More, "Ramp over a day" makes any slider change slowly.</p>`;
   }
   return h;
@@ -322,16 +452,32 @@ function troubleCard(sb) {
 
 // ---- More
 function moreCard(sb) {
+  const row = (attr, ico, label, on) => `<button class="toggle-row" ${attr}><span class="rlbl">${icon(ico)} ${esc(label)}</span><span class="switch ${on ? 'on' : ''}"><i></i></span></button>`;
   return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
-    <div class="options">${tile('data-lapse', '⏱', 'Time-lapse')}${sb ? tile('data-reset', '♻️', 'Reset tank') : ''}</div>
-    <h4>Tools</h4><div class="options">
-      ${tile('data-tips', '❓', 'What can I do?')}${tile('data-microscope', '🔬', 'Look closer')}
-      ${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}${tile('data-knock', '✊', 'Knock glass')}
-      ${tile('data-clean', '🧽', 'Clean glass', ui.cleaning)}${tile('data-hide', '🙈', 'Hide buttons')}
-      ${tile('data-hermie-toggle', '🦀', ui.hermie ? 'Hermie on' : 'Hermie off', ui.hermie)}${tile('data-happy-toggle', '😊', ui.happy ? 'Happy meter on' : 'Happy meter off', ui.happy)}
-      ${tile('data-camreset', '🎥', 'Reset view')}</div>
-    <h4>Picture quality</h4><div class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</div>
-    <label class="slider"><span>Sound volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>`;
+    <div class="options">${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-microscope', 'microscope', 'Look closer')}
+      ${tile('data-clean', 'flipper', 'Clean glass', ui.cleaning)}${tile('data-knock', 'touch', 'Knock')}${tile('data-hide', 'eyeOff', 'Hide buttons')}
+      ${tile('data-camreset', 'eye', 'Reset view')}${sb ? tile('data-reset', 'reset', ui.mode === 'mine' ? 'Start over' : 'Reset tank') : ''}</div>
+    <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}</div>
+    <h4>Settings</h4><div class="rows">
+      ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
+      <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
+      ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
+      ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
+      <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>`;
+}
+
+// ---- How is the tank? (the status capsule's card)
+function statusBody() {
+  if (!P) return '';
+  const st = { GOOD: 'good', CAUTION: 'caution', DANGER: 'danger' };
+  const s = ui.clockAt;
+  const words = ui.worst === 'good' ? 'The water is just right.' : ui.worst === 'caution' ? 'Something in the water needs a look.' : 'The water needs help now!';
+  return `<div class="hero"><span class="big">${faceFor(P.happy)}</span><div class="grow">
+      <div class="hero-t">Tank happy <b>${P.happy}%</b></div><i class="meter wide"><i class="${P.happy >= 70 ? 'good' : P.happy >= 40 ? 'caution' : 'danger'}" style="width:${P.happy}%"></i></i>
+      <div class="muted">${s ? `${clockText(s.time)} · ${esc(s.phase)}` : ''}</div></div></div>
+    <h4>Water <span class="note ${ui.worst}">${words}</span></h4>
+    <div class="readings">${P.readouts.map((r) => `<div class="reading ${st[r.status] ?? 'unknown'}"><span>${esc(r.label)}</span><b>${esc(r.text)}</b></div>`).join('')}</div>
+    <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
 }
 
 // ---- card clicks
@@ -343,8 +489,8 @@ $('card').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   const d = b.dataset;
-  const sbOnly = (fn) => { if (ui.mode !== 'sandbox') { locked(); return; } fn(); };
-  if ('close' in d) { closeCard(); return; }
+  const sbOnly = (fn) => { if (!editable()) { locked(); return; } fn(); };
+  if ('close' in d || b.classList.contains('tests')) { closeCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);
@@ -352,16 +498,18 @@ $('card').addEventListener('click', (e) => {
   else if ('tour' in d) { ui.tour = !ui.tour; ui.tourTicks = 0; ui.tourIndex = -1; if (ui.tour) nextTour(); else { ui.following = null; live.follow(null); } }
   else if ('hide' in d) { setChrome(true); return; }
   else if ('saver' in d) { closeCard(); setSaver(true); return; }
+  else if ('sub' in d) { setSub(!sub.on); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.group) ui.addGroup = d.group;
   else if (d.count) ui.addCount = Number(d.count);
   else if (d.size) ui.addSize = d.size;
   else if (d.add) sbOnly(() => {
+    // new animals come in a shop bag: it goes in your hand, to drag onto the tank (bags.js)
     const s = C.stock.find((x) => x.id === d.add);
-    const n = ui.addCount;
-    act(s.group === 'CORALS' || ui.addSize === 'JUVENILE' && n === 1 ? 'add' : 'addSized', s.group === 'CORALS' || ui.addSize === 'JUVENILE' && n === 1 ? s.id : `${s.id}:${ui.addSize}`, n,
-      `${n === 1 ? `A new ${s.name}` : `${n} ${s.name}`} ${s.group === 'CORALS' ? 'settle on the rock.' : 'swim out of the bag!'}`);
+    closeCard(); cue('TICK');
+    pickBag(s, ui.addCount, s.group === 'CORALS' ? 'JUVENILE' : ui.addSize);
+    return;
   });
   else if (d.micro) act('micro', d.micro, 0, `${C.micro.find((m) => m.id === d.micro).label}. Look closer to see them!`);
   else if (d.pest) act('pestControl', d.pest, 0, d.pest === 'BERGHIA' ? 'Berghia slugs only eat pest anemones.' : 'Peppermint shrimp eat pest anemones. Yum!');
@@ -397,16 +545,23 @@ $('card').addEventListener('click', (e) => {
   else if ('heatwave' in d) act('heatWave', null, 0, 'A heat wave: the water warms 3 °C over a day.');
   else if (d.aip) act('aiptasia', null, Number(d.aip), Number(d.aip) > 0 ? 'A pest anemone popped up on the rock.' : 'Zap! One pest anemone gone.');
   else if ('sick' in d) sbOnly(() => { ui.sickPick = !ui.sickPick; });
-  else if (d.infect) { if (confirm('Make a fish sick? This is only the pretend tank.')) act('infect', d.infect, 0, 'A fish is getting sick. Watch its card.'); ui.sickPick = false; }
+  else if (d.infect) { if (confirm(ui.mode === 'mine' ? 'Make a fish in your tank sick? It is saved like everything else here.' : 'Make a fish sick? This is only the pretend tank.')) act('infect', d.infect, 0, 'A fish is getting sick. Watch its card.'); ui.sickPick = false; }
   else if (d.scenario) act('scenario', d.scenario, 0, `${C.scenarios.find((s) => s.id === d.scenario).label}. Speed up time to see it play out.`);
   else if ('lapse' in d) { closeCard(); openLapse(); return; }
-  else if ('reset' in d) { if (confirm('Reset the pretend tank to how your real tank is now?')) act('reset', null, 0, 'All fresh! The pretend tank matches your real one again.'); }
+  else if ('reset' in d) {
+    if (ui.mode === 'mine') {
+      if (confirm('Start My tank over? Every animal and coral in it goes, and you pick a new empty tank. This cannot be undone.')) { MY.startOver(); closeCard(); showMyTankSetup(); return; }
+    } else if (confirm('Reset the pretend tank to how your real tank is now?')) act('reset', null, 0, 'All fresh! The pretend tank matches your real one again.');
+  }
   else if ('tips' in d) showTips();
+  else if ('tip' in d) { closeCard(); nextTip(); return; }
+  else if ('news' in d) { closeCard(); showNews(); return; }
   else if ('microscope' in d) { closeCard(); openMicro(); return; }
   else if ('knock' in d) { act('knock'); cue('CLICK'); }
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }
   else if ('hermieToggle' in d) { ui.hermie = !ui.hermie; store.set('reeflive.hermie', ui.hermie); $('hermie').classList.toggle('hidden', !ui.hermie); }
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
+  else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);
   else if ('camreset' in d) { ui.following = null; ui.tour = false; live.follow(null); live.resetCamera(); }
   else if (d.quality) { ui.quality = d.quality; store.set('reeflive.quality', ui.quality); live.setQuality(ui.quality); }
   else return;
@@ -440,29 +595,45 @@ $('card').addEventListener('input', (e) => {
 // ================================================================ fish card, follow, tour
 function select(id) { ui.picked = id; renderFish(); }
 function renderFish() {
-  const a = ui.picked && animals.find((x) => x.id === ui.picked);
+  // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
+  let a = ui.picked && animals.find((x) => x.id === ui.picked);
+  if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }
   $('fish').classList.toggle('hidden', !a || ui.chromeHidden);
   if (!a) return;
   if ($('fish').dataset.id === a.id && ui.fishDragging) return;
   $('fish').dataset.id = a.id;
   const bar = (n, v, cls) => `<div class="stat"><span>${n}</span><i class="meter"><i class="${cls}" style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></i></div>`;
-  const sb = ui.mode === 'sandbox';
+  const sb = editable();
   $('fish').innerHTML = `<div class="card-head"><div><strong>${esc(a.name)}</strong><div class="muted">${esc(a.species)}${a.stage ? ` · ${esc(a.stage)}` : ''} · ${a.cm.toFixed(1)} cm</div></div>
       <button class="icon-btn" data-fclose aria-label="Close">✕</button></div>
     ${bar('Health', a.health, 'good')}${bar('Stress', a.stress, 'caution')}${bar('Hunger', a.hunger, 'hunger')}
-    <p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>
+    ${a.thinking ? thinkHtml(a) : `<p class="mood"><b>${esc(a.mood)}</b> · ${esc(a.behavior)}</p>`}
     ${a.disease ? `<p class="warn">🤒 ${esc(a.disease)}${a.symptoms.length ? `: ${esc(a.symptoms.join(', '))}` : ''}</p>` : ''}
     ${a.relations.length ? `<div class="rels">${a.relations.map((r) => `<span class="rel ${r.affinity > 0.15 ? 'good' : r.affinity < -0.15 ? 'danger' : ''}">${esc(r.label)} ${esc(r.name)}</span>`).join('')}</div>` : ''}
+    ${!a.alive ? `<p class="muted">${ui.netting === a.id ? 'Here comes the net…' : `Oh no, ${esc(a.name)} didn't make it. Scoop them out to keep the water clean.`}</p>
+    <div class="row-gap"><button class="btn small" data-fnet ${ui.netting === a.id ? 'disabled' : ''}>🥅 ${ui.netting === a.id ? 'Scooping…' : 'Scoop out with the net'}</button></div>` : `
     <div class="row-gap"><button class="btn small" data-ffollow>${ui.following === a.id ? 'Stop following' : 'Follow'}</button>
-      ${sb ? '<button class="btn small ghost" data-fremove>Take out</button>' : ''}</div>
-    ${sb ? `<label class="slider"><span>Size</span><output>${a.cm.toFixed(1)} cm</output><input type="range" data-fsize min="0.5" max="40" step="0.5" value="${a.cm}"></label>` : ''}`;
+      ${sb ? '<button class="btn small ghost" data-fremove>Take out</button>' : ''}${ui.mode === 'mine' ? '<button class="btn small ghost" data-fname>Name it</button>' : ''}</div>`}
+    ${sb && a.alive ? `<label class="slider"><span>Size</span><output>${a.cm.toFixed(1)} cm</output><input type="range" data-fsize min="0.5" max="40" step="0.5" value="${a.cm}"></label>` : ''}`;
 }
 $('fish').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
   if ('fclose' in d) { ui.picked = null; renderFish(); }
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
-  else if ('fremove' in d) { if (confirm('Take this animal out of the pretend tank?')) { act('remove', ui.picked, 0, 'Out it goes, gently, in a cup.'); ui.picked = null; } }
+  else if ('fnet' in d) {
+    // the card steps aside so the net can be watched; the goodbye plays once it is out
+    const name = $('fish').querySelector('strong')?.textContent || 'them';
+    SB.act('netOut', ui.picked, 0); cue('TICK');
+    say(`Here comes the net! Let's scoop ${name} out gently so the water stays clean.`);
+    ui.netting = ui.picked; ui.picked = null;
+  }
+  else if ('fremove' in d) { if (confirm(ui.mode === 'mine' ? 'Take this animal out of your tank for good?' : 'Take this animal out of the pretend tank?')) { act('remove', ui.picked, 0, 'Out it goes, gently, in a cup.'); ui.picked = null; } }
+  else if ('fname' in d) {
+    const a = animals.find((x) => x.id === ui.picked);
+    const n = a && prompt('Name this animal', a.name);
+    if (n && n.trim()) { MY.rename(a.id, n.trim().slice(0, 24)); say(`Hello, ${n.trim().slice(0, 24)}!`); setTimeout(tick, 150); }
+  }
   renderFish();
 });
 $('fish').addEventListener('input', (e) => {
@@ -484,7 +655,7 @@ function renderFollow() {
   if (i < 0) return;
   const a = animals[i];
   $('follow').innerHTML = `<button class="icon-btn" data-fprev aria-label="Previous">◀</button>
-    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.caption || a.behavior)}</div></div>
+    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.thinking || a.caption || a.behavior)}</div></div>
     <button class="icon-btn" data-fnext aria-label="Next">▶</button><button class="btn small ghost" data-fback>Back to tank</button>`;
 }
 $('follow').addEventListener('click', (e) => {
@@ -524,7 +695,7 @@ const SUPPLIES = [
   { id: 'knocker', row: 2, label: 'Knock glass', run: () => { closeShelf(); act('knock'); cue('CLICK'); } },
   { id: 'move_rocks', row: 2, label: 'Move rocks', sandbox: true, run: () => act('rearrangeRock', null, 0, 'Rocks shuffled! Watch everyone find a new spot.') },
 ];
-const ROWS = [['🍤', 'Feed'], ['💧', 'Care'], ['🧰', 'Tools']];
+const ROWS = [['feedTin', 'Feed'], ['droplet', 'Care'], ['flask', 'Tools']];
 function supplyLabel(s) { return s.food ? C.foods.find((f) => f.id === s.food)?.label ?? s.food : s.label; }
 function openShelf() {
   ui.shelf = true; closeCard();
@@ -536,14 +707,14 @@ function openShelf() {
 }
 function closeShelf() { ui.shelf = false; live.shelfOpen(false); $('shelfbar').classList.add('hidden'); renderRail(); }
 function renderShelf() {
-  const sb = ui.mode === 'sandbox';
-  $('shelfbar').innerHTML = `<div class="card-head"><div class="pills">${ROWS.map(([i, n], k) => `<button class="pillbtn ${ui.shelfRow === k ? 'on' : ''}" data-row="${k}">${i} ${n}</button>`).join('')}</div>
+  const sb = editable();
+  $('shelfbar').innerHTML = `<div class="card-head"><div class="pills">${ROWS.map(([i, n], k) => `<button class="pillbtn ${ui.shelfRow === k ? 'on' : ''}" data-row="${k}">${icon(i)} ${n}</button>`).join('')}</div>
     <button class="btn small ghost" data-back>Back to tank</button></div>
-    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? FOOD_ICON[s.food] ?? '🍤' : SUPPLY_ICON[s.id] ?? '🧰', supplyLabel(s), false, s.sandbox && !sb)).join('')}</div>`;
+    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, s.sandbox && !sb)).join('')}</div>`;
   $('shelfbar').classList.remove('hidden');
 }
 const FOOD_ICON = { FLAKE: '🟠', PELLET: '🟤', FLOATING_PELLET: '🟫', ALGAE_WAFER: '🟢', MYSIS: '🦐', BRINE: '🦐', KRILL: '🦐', PRAWN: '🍤', CYCLOPS: '🔴', NORI: '🥬', CORAL_FOOD: '🪸', PLANKTON: '✨', PODS: '🐛' };
-const SUPPLY_ICON = { water_change: '🪣', water_small: '💧', dose_alk: '🐚', dose_ca: '🦴', dose_mg: '⭕', new_sock: '🧦', fresh_carbon: '⚫', trim_algae: '✂️', siphon: '🧹', rinse_filter: '🚿', zap_pest: '⚡', settle_in: '💚', glass_cleaner: '🧽', test_kit: '🧪', microscope: '🔬', knocker: '✊', move_rocks: '🪨' };
+const SUPPLY_ICON = { water_change: 'bucket', water_small: 'droplet', dose_alk: 'shell', dose_ca: 'branch', dose_mg: 'rings', new_sock: 'sock', fresh_carbon: 'carbon', trim_algae: 'scissors', siphon: 'fishWaste', rinse_filter: 'sock', zap_pest: 'zap', settle_in: 'heart', glass_cleaner: 'flipper', test_kit: 'flask', microscope: 'microscope', knocker: 'touch', move_rocks: 'rocks' };
 $('shelfbar').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
@@ -555,7 +726,7 @@ $('shelfbar').addEventListener('click', (e) => {
 function useSupply(id) {
   const s = SUPPLIES.find((x) => x.id === id);
   if (!s) return;
-  if (s.sandbox && ui.mode !== 'sandbox') { locked(); return; }
+  if (s.sandbox && !editable()) { locked(); return; }
   if (s.food) {
     const f = C.foods.find((x) => x.id === s.food);
     SB.act('feed', s.food, 0);
@@ -607,7 +778,6 @@ function setChrome(hidden) {
   if (hidden) closeCard();
   renderFish(); renderFollow();
 }
-$('hideBtn').addEventListener('click', () => setChrome(true));
 $('showChrome').addEventListener('click', () => setChrome(false));
 function setTorch(on) {
   ui.torch = on;
@@ -625,13 +795,9 @@ function setCleaning(on) {
   ui.cleaning = on;
   SB.act('cleaning', null, on ? 1 : 0);
   $('cleanHint').classList.toggle('hidden', !on);
-  $('cleanBtn').classList.toggle('on', on);
   say(on ? 'Rub the glass with the scraper. Squeaky clean!' : 'Sparkly glass!');
 }
-$('cleanBtn').addEventListener('click', () => setCleaning(!ui.cleaning));
 $('cleanDone').addEventListener('click', () => setCleaning(false));
-$('microBtn').addEventListener('click', () => openMicro());
-$('soundBtn').addEventListener('click', () => setSoundOn(!ui.sound));
 
 // ================================================================ microscope
 const micro = { scene: 'ROCK', zoom: 'X10', bacteria: false, seed: 1, sprites: [] };
@@ -693,14 +859,14 @@ function drawMicro(resample) {
   for (let i = 0; i < m.cells; i++) { g.fillStyle = 'rgba(110,200,90,.8)'; g.beginPath(); g.arc(Math.random() * w, Math.random() * h, 1.5, 0, 6.28); g.fill(); }
   if (m.haze > 0) { g.fillStyle = `rgba(80,160,70,${m.haze * 0.6})`; g.fillRect(0, 0, w, h); }
   if (m.night) { g.fillStyle = 'rgba(0,0,20,.25)'; g.fillRect(0, 0, w, h); }
-  const sb = ui.mode === 'sandbox';
+  const sb = editable();
   const census = m.census.map((c) => `<span class="chip">${esc(c.label)} ${c.total >= 1000 ? `${(c.total / 1000).toFixed(1)}k` : Math.round(c.total)} ${c.trend > 0.01 ? '↑' : c.trend < -0.01 ? '↓' : ''}</span>`).join('');
   const inView = m.groups.map((gr) => `<span class="chip" style="color:${GROUP_COLOR[m.groups.indexOf(gr) % GROUP_COLOR.length]}">${esc(gr.label)} ${gr.sprites}${gr.nauplii ? ` + ${gr.nauplii} babies` : ''}</span>`).join('') || '<span class="muted">Nothing big enough to see at this zoom.</span>';
   const bact = micro.bacteria ? `<h4>Bacteria</h4><div class="rows">${m.bacteria.guilds.map((b) => `<div class="toggle-row"><span>${esc(b.short)} <small class="muted">${esc(b.amount)} · ${esc(b.effect)}</small></span><span class="${b.good === false ? 'danger' : 'good'}">${b.trend > 0.01 ? '↑' : b.trend < -0.01 ? '↓' : '·'}</span></div>`).join('')}</div>
     ${m.bacteria.cloudy ? '<p class="warn">Milky water: a bacterial bloom.</p>' : ''}${m.bacteria.h2s > 0.002 ? '<p class="warn">Smells of rotten eggs: hydrogen sulfide in the sand.</p>' : ''}
-    <div class="options">${C.bacteria.map((b) => tile(`data-baction="${b.id}"`, '🧫', b.label, false, !sb)).join('')}</div>` : '';
+    <div class="options">${C.bacteria.map((b) => tile(`data-baction="${b.id}"`, 'flask', b.label, false, !sb)).join('')}</div>` : '';
   $('microInfo').innerHTML = `<div class="chips">${inView}</div><h4>In the whole tank</h4><div class="chips">${census}<span class="chip">Phyto ${Math.round(m.phyto)}/mL</span></div>
-    <h4>Add or treat</h4><div class="options">${C.micro.map((a) => tile(`data-maction="${a.id}"`, a.id.startsWith('TREAT') ? '💊' : '🦠', a.label, false, !sb)).join('')}</div>${bact}`;
+    <h4>Add or treat</h4><div class="options">${C.micro.map((a) => tile(`data-maction="${a.id}"`, a.id.startsWith('TREAT') ? 'bottle' : 'bubbles', a.label, false, !sb)).join('')}</div>${bact}`;
 }
 let microAnim = 0;
 (function animateMicro() {
@@ -784,7 +950,7 @@ function renderLapseResult() {
 // ================================================================ sound (TankSoundMix beds and cues, Web Audio)
 let actx = null; const buffers = {}; const loops = {};
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
+const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {
@@ -799,7 +965,6 @@ async function loadSound(name) {
 }
 function setSoundOn(on) {
   ui.sound = on; store.set('reeflive.sound', on);
-  $('soundBtn').textContent = on ? '🔊' : '🔇';
   if (on) {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     actx.resume();
@@ -825,7 +990,7 @@ function updateSound() {
   s.cues.forEach((c) => cue(c));
 }
 const lastCue = {};
-function cue(name, gain = 0.8) {
+function cue(name, gain = 0.8, rate = 1, seconds = 0) {
   if (!ui.sound || !actx) return;
   const now = performance.now();
   if (now - (lastCue[name] || 0) < (name === 'TICK' ? 60 : 400)) return;
@@ -834,7 +999,9 @@ function cue(name, gain = 0.8) {
   if (!b) return;
   const src = actx.createBufferSource(); src.buffer = b;
   const g = actx.createGain(); g.gain.value = gain * ui.volume;
+  src.playbackRate.value = rate;
   src.connect(g).connect(actx.destination); src.start();
+  if (seconds > 0) src.stop(actx.currentTime + seconds);
 }
 // a tap with no fish under it (Android LiveTaps): undo what is open first, else touch the tank there
 let touchSaidAt = 0;
@@ -847,8 +1014,14 @@ function touchTank(surface) {
   try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
   if (performance.now() - touchSaidAt > 9000) {
     touchSaidAt = performance.now();
-    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?' }[surface] || 'Soft corals pull in, the shy ones duck.');
+    say({ GLASS: 'Tap tap! Who comes to look?', SAND: 'A little sand puff. Who comes to check?', SURFACE: 'Plip! Hungry fish come up to look.' }[surface] || 'Soft corals pull in, the shy ones duck.');
   }
+}
+let fingerSaidAt = 0;
+function fingerSay() {
+  if (performance.now() - fingerSaidAt < 20000) return;
+  fingerSaidAt = performance.now();
+  say('Slide your finger. Who follows? Rest it and they nibble.');
 }
 function knockSound(gain) {
   const b = ui.sound && actx && buffers[CUES.PELLET];
@@ -861,9 +1034,145 @@ function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.m
 // iOS only allows audio after a tap: resume the context on the first touch when sound was left on
 document.addEventListener('pointerdown', () => { if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume(); }, { once: false, passive: true });
 
+// ================================================================ what is it thinking (Android ThinkingBlock / ThoughtBubbleLayer)
+// The card's "Thinking…" lines come held from Kotlin (ThoughtHold); More → "Thought bubbles" puts speech bubbles over at
+// most three animals (ThoughtBubblePicker in Kotlin picks them, fades them; this only draws them where the camera sees them).
+function thinkHtml(a) {
+  return `<div class="think"><b>Thinking…</b><p>${esc(a.thinking)}</p>${a.thinkNext ? `<p class="muted">${esc(a.thinkNext)}</p>` : ''}${a.feeling ? `<p class="muted">${esc(a.feeling)}</p>` : ''}</div>`;
+}
+const thoughts = { on: store.get('reeflive.thoughts', false), raf: 0, layer: null, els: new Map() };
+(() => {
+  const css = document.createElement('style');
+  css.textContent = `.think{margin:8px 0 4px;font-size:13px}.think b{font-size:12px;opacity:.75}.think p{margin:2px 0}
+    .tbubbles{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1}
+    .tbubble{position:absolute;transform:translate(-50%,-100%);max-width:170px;padding:5px 10px;border-radius:999px;background:#F2F6FF;
+      color:#1B1340;border:2px solid #1B1340;box-shadow:0 3px 0 #1B1340;font:600 13px/16px system-ui,sans-serif;text-align:center;white-space:normal;transition:opacity .2s}
+    .tbubble::after{content:'';position:absolute;left:50%;bottom:-8px;margin-left:-6px;border:6px solid transparent;border-top:8px solid #1B1340;border-bottom:0}`;
+  document.head.appendChild(css);
+})();
+function setThoughts(on) {
+  thoughts.on = on; store.set('reeflive.thoughts', on);
+  say(on ? 'Look! Now you can see what the fish are thinking.' : 'The fish keep their thoughts to themselves.');
+  if (on) startThoughts(); else stopThoughts();
+}
+function startThoughts() {
+  if (thoughts.raf || !thoughts.on) return;
+  if (!thoughts.layer) { thoughts.layer = document.createElement('div'); thoughts.layer.className = 'tbubbles'; $('tank').after(thoughts.layer); }
+  const frame = () => {
+    thoughts.raf = requestAnimationFrame(frame);
+    const hide = ui.shelf || ui.cleaning || sub.on || !$('micro').classList.contains('hidden');
+    const list = hide ? [] : JSON.parse(SB.bubbles(true));
+    const cnv = $('tank'), k = cnv.clientWidth / Math.max(1, cnv.width), seen = new Set();
+    for (const b of list) {
+      let el = thoughts.els.get(b.id);
+      if (!el) { el = document.createElement('div'); el.className = 'tbubble'; thoughts.layer.appendChild(el); thoughts.els.set(b.id, el); }
+      if (el.textContent !== b.text) el.textContent = b.text;
+      el.style.left = `${Math.max(90, Math.min(cnv.clientWidth - 90, b.x * k))}px`;
+      el.style.top = `${Math.max(40, b.y * k - 10)}px`;
+      el.style.opacity = b.a.toFixed(2);
+      seen.add(b.id);
+    }
+    for (const [id, el] of thoughts.els) if (!seen.has(id)) { el.remove(); thoughts.els.delete(id); }
+  };
+  frame();
+}
+function stopThoughts() {
+  cancelAnimationFrame(thoughts.raf); thoughts.raf = 0; SB.bubbles(false);
+  for (const el of thoughts.els.values()) el.remove();
+  thoughts.els.clear();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopThoughts(); else startThoughts(); });
+// ================================================================ submarine (Android SubmarineControls)
+// Be a little submarine: a stick (or W A S D / arrows) steers, the up and down buttons (or Space / E and Shift / Q)
+// dive and climb. The fish see it by species and personality unless it is invisible.
+const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '' };
+function setSub(on) {
+  sub.on = on;
+  if (on) { closeCard(); if (ui.tour) ui.tour = false; ui.following = null; if (ui.cleaning) setCleaning(false); if (ui.shelf) closeShelf(); }
+  document.body.classList.toggle('subbing', on);
+  $('subui').classList.toggle('hidden', !on);
+  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = '';
+  live.submarine(on, sub.visible, sub.light);
+  live.subView(sub.inside);
+  if (on) live.steerSub(0, 0, 0, 0);
+  moveKnob(0, 0);
+  renderSub();
+  toast(on ? 'Dive dive! Steer with the yellow stick (or W A S D). Swim slowly and the curious fish come to look.' : 'The submarine is back in its dock.');
+  if (!on) { renderRail(); renderFollow(); }
+}
+function renderSub() {
+  $('subGhost').classList.toggle('on', !sub.visible);
+  $('subGhost').textContent = sub.visible ? '👻 Invisible' : '👻 Invisible: on';
+  $('subCam').classList.toggle('on', sub.inside);
+  $('subCam').textContent = sub.inside ? '🎥 Outside view' : '🎥 Inside view';
+  $('subLight').classList.toggle('on', sub.light);
+  $('subLight').textContent = sub.light ? '💡 Light on' : '💡 Light off';
+  renderSubInfo();
+}
+function renderSubInfo() {
+  let s = null;
+  try { s = JSON.parse(live.subState()); } catch { /* not out yet */ }
+  $('subInfo').textContent = !sub.visible ? '👻 The fish cannot see you'
+    : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+}
+const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+function steerSub() {
+  if (!sub.on) return;
+  const k = sub.keys;
+  const key = (...names) => (names.some((n) => k.has(n)) ? 1 : 0);
+  const thrust = clamp1(-sub.joy[1] + key('w', 'arrowup') - key('s', 'arrowdown'));
+  const turn = clamp1(sub.joy[0] + key('d', 'arrowright') - key('a', 'arrowleft'));
+  const rise = clamp1(sub.rise + key(' ', 'e') - key('shift', 'q'));
+  $('subUp').classList.toggle('on', rise > 0); $('subDown').classList.toggle('on', rise < 0);
+  const msg = `${thrust.toFixed(2)},${turn.toFixed(2)},${rise.toFixed(2)}`;
+  if (msg === sub.sent) return;
+  sub.sent = msg;
+  live.steerSub(thrust, turn, rise, 0);
+}
+function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px, ${y * 40}px)`; }
+(() => {
+  const joy = $('subJoy');
+  let id = null;
+  const at = (e) => {
+    const r = joy.getBoundingClientRect();
+    let x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2 - 14), y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2 - 14);
+    const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
+    sub.joy = [Math.abs(x) < 0.12 ? 0 : x, Math.abs(y) < 0.12 ? 0 : y];
+    moveKnob(x, y); steerSub();
+  };
+  joy.addEventListener('pointerdown', (e) => { id = e.pointerId; joy.setPointerCapture(id); at(e); e.preventDefault(); });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === id) at(e); });
+  const end = (e) => { if (e.pointerId !== id) return; id = null; sub.joy = [0, 0]; moveKnob(0, 0); steerSub(); };
+  joy.addEventListener('pointerup', end); joy.addEventListener('pointercancel', end);
+  for (const [btn, v] of [['subUp', 1], ['subDown', -1]]) {
+    const b = $(btn);
+    b.addEventListener('pointerdown', (e) => { b.setPointerCapture(e.pointerId); sub.rise = v; steerSub(); e.preventDefault(); });
+    const stop = () => { sub.rise = 0; steerSub(); };
+    b.addEventListener('pointerup', stop); b.addEventListener('pointercancel', stop);
+  }
+  $('subGhost').addEventListener('click', () => {
+    sub.visible = !sub.visible; live.submarine(true, sub.visible, sub.light); renderSub();
+    toast(sub.visible ? 'Peek-a-boo! The fish can see you again.' : 'Invisible! Now the fish do not notice you at all.');
+  });
+  $('subCam').addEventListener('click', () => { sub.inside = !sub.inside; live.subView(sub.inside); renderSub(); });
+  $('subLight').addEventListener('click', () => { sub.light = !sub.light; live.submarine(true, sub.visible, sub.light); renderSub(); });
+  $('subDone').addEventListener('click', () => setSub(false));
+  const KEYS = ['w', 'a', 's', 'd', 'q', 'e', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+  const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '');
+  addEventListener('keydown', (e) => {
+    if (!sub.on || typing(e)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { setSub(false); return; }
+    if (!KEYS.includes(k)) return;
+    e.preventDefault(); sub.keys.add(k); steerSub();
+  });
+  addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (sub.keys.delete(k)) steerSub(); });
+  addEventListener('blur', () => { if (sub.keys.size) { sub.keys.clear(); steerSub(); } });
+})();
+
 // ================================================================ render all
 function renderAll() {
-  $('soundBtn').textContent = ui.sound ? '🔊' : '🔇';
+  startThoughts();
   $('hermie').classList.toggle('hidden', !ui.hermie);
   live.shelfLocked(SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
   renderRail();

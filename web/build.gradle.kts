@@ -20,7 +20,7 @@ kotlin {
             kotlin.include("com/reeflive/core/**", "com/reeflive/app/render/**", "com/reeflive/web/**", "shims/**",
                 // Plain-Kotlin pieces of the Android live screen, shared so both apps offer the same sandbox.
                 "com/reeflive/app/ui/live/SandboxParams.kt", "com/reeflive/app/ui/live/LiveTips.kt",
-                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
+                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/ui/live/ThoughtLines.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
             kotlin.exclude(
                 "com/reeflive/core/care/**", "com/reeflive/core/extras/**", "com/reeflive/core/io/**",
                 "com/reeflive/app/render/TankGlView.kt", "com/reeflive/app/render/TankView.kt",
@@ -60,6 +60,40 @@ val assetIndexTask = tasks.register("assetIndex") {
 val buildStamp = providers.gradleProperty("webBuild").orElse(providers.environmentVariable("GITHUB_SHA")).orElse("dev")
 
 /**
+ * whats-new.json for the "What's new" popup: one line per update merged to main, newest first, read from main's
+ * merge history so every thread's feature shows up without anyone remembering to list it. docs/whats-new.json can
+ * reword a line in plain language ("87": "...") or hide a behind-the-scenes one ("69": "").
+ */
+val whatsNew = layout.buildDirectory.file("generated/whats-new/whats-new.json")
+val whatsNewTask = tasks.register("whatsNew") {
+    val repo = rootProject.layout.projectDirectory
+    val overridesFile = repo.file("docs/whats-new.json")
+    val out = whatsNew
+    inputs.file(overridesFile)
+    outputs.file(out)
+    outputs.upToDateWhen { false }
+    doLast {
+        val log = runCatching {
+            val p = ProcessBuilder("git", "log", "--first-parent", "-n", "150", "--format=%cs%x09%s", "HEAD")
+                .directory(repo.asFile).redirectErrorStream(true).start()
+            val text = p.inputStream.bufferedReader().readText()
+            if (p.waitFor() == 0) text else ""
+        }.getOrDefault("")
+        @Suppress("UNCHECKED_CAST")
+        val overrides = groovy.json.JsonSlurper().parse(overridesFile.asFile) as Map<String, Any?>
+        val pr = Regex("""\s*\(#(\d+)\)\s*$""")
+        val items = log.lines().mapNotNull { line ->
+            val (date, subject) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
+            val m = pr.find(subject) ?: return@mapNotNull null
+            val n = m.groupValues[1]
+            val text = (overrides[n] as? String) ?: subject.removeRange(m.range)
+            if (text.isBlank()) null else mapOf("n" to n.toInt(), "date" to date, "text" to text)
+        }
+        out.get().asFile.apply { parentFile.mkdirs(); writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(items)) + "\n") }
+    }
+}
+
+/**
  * Safari can't decode every Ogg file, so the tank sounds also ship as AAC (.m4a) when ffmpeg is available (it is on
  * GitHub's Ubuntu runners). The page tries .m4a first and falls back to the .ogg.
  */
@@ -85,7 +119,7 @@ tasks.register<Sync>("site") {
     group = "build"
     description = "Assembles the installable web app (PWA) in build/site."
     val compile = tasks.named("compileProductionExecutableKotlinJs")
-    dependsOn(compile, assetIndexTask, soundsTask)
+    dependsOn(compile, assetIndexTask, soundsTask, whatsNewTask)
     into(layout.buildDirectory.dir("site"))
     from(layout.projectDirectory.dir("site")) {
         exclude("sw.js")
@@ -100,7 +134,14 @@ tasks.register<Sync>("site") {
     }
     from(appAssets) { into("assets") }
     from(assetIndex) { into("assets") }
+    from(whatsNew)
     from(coreResources) { into("res") }
+    // the species pictures the Android app shows (UI_STYLE §5.2), for the Add life tiles
+    from(rootProject.layout.projectDirectory.dir("app/src/main/res/drawable-nodpi")) {
+        include("species_*.webp")
+        rename("species_(.*)", "$1")
+        into("species")
+    }
     from(rootProject.layout.projectDirectory.dir("app/src/main/res/raw")) { into("sounds") }
     from(soundsM4a) { into("sounds") }
 }

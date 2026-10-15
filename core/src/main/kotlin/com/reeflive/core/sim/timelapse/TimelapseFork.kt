@@ -32,7 +32,9 @@ object TimelapseFork {
             lights = lights,
         )
         dst.predationEnabled = src.predationEnabled
+        dst.bareScape = src.bareScape
         dst.crabLiveFishScenario = src.crabLiveFishScenario
+        dst.unsourcedPredation = src.unsourcedPredation
         dst.asterinaCorallivoryScenario = src.asterinaCorallivoryScenario
         val w = src.water
         dst.water.flowStrength = w.flowStrength; dst.water.heaterWorking = w.heaterWorking
@@ -65,6 +67,8 @@ object TimelapseFork {
             c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
         dst.copyPestsFrom(src)
+        // the sand bed as it is: pits, spoil mounds, mulm and the burrows dug under the rock (SIMULATION §16.8)
+        dst.sand.copyFrom(src.sand)
         // ramps and holds (a running hyposalinity or copper course) carry over
         dst.ramps.putAll(src.ramps)
         return dst

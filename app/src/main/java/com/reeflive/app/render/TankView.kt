@@ -46,6 +46,10 @@ fun TankView(
     onFollow: (String?) -> Unit = {},
     /** A tap with no animal under the finger: where and on what it landed ([TankViewListener.onTouchTank]); null = [onPick] (null). */
     onTouchTank: ((Vec3, TouchSurface) -> Unit)? = null,
+    /** A fingertip held on the glass or the water's top after a long press (null point = lifted; [TankViewListener.onFinger]). */
+    onFinger: (Vec3?, Float, TouchSurface) -> Unit = { _, _, _ -> },
+    /** The held finger flicked as it lifted: a puff of water ([TankViewListener.onFlick]). */
+    onFlick: (Vec3, Vec3) -> Unit = { _, _ -> },
     /** Receives the camera projection every frame (for overlays positioned in tank coordinates). */
     projection: TankProjection? = null,
     /** In-tank feedback for actions (dye plumes, bubbles, pump jets): the screen emits, the renderer draws. */
@@ -54,14 +58,17 @@ fun TankView(
     viewLight: ViewLight = ViewLight.REAL,
     /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
     shelf: SupplyShelfControl? = null,
+    /** Submarine mode: ride inside the sub instead of chasing it. */
+    subFirstPerson: Boolean = false,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
     TankView(
         provider = { latest.get() }, modifier = modifier, followId = followId, quality = quality, showHud = showHud,
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
-        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank, projection = projection,
-        bursts = bursts, viewLight = viewLight, shelf = shelf,
+        demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
+        onFinger = onFinger, onFlick = onFlick, projection = projection,
+        bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson,
     )
 }
 
@@ -90,10 +97,13 @@ fun TankView(
     onFollow: (String?) -> Unit = {},
     /** A tap with no animal under the finger: where and on what it landed ([TankViewListener.onTouchTank]); null = [onPick] (null). */
     onTouchTank: ((Vec3, TouchSurface) -> Unit)? = null,
+    onFinger: (Vec3?, Float, TouchSurface) -> Unit = { _, _, _ -> },
+    onFlick: (Vec3, Vec3) -> Unit = { _, _ -> },
     projection: TankProjection? = null,
     bursts: TankBursts? = null,
     viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
+    subFirstPerson: Boolean = false,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -101,6 +111,8 @@ fun TankView(
     val flipperTap by rememberUpdatedState(onFlipperTap)
     val glass by rememberUpdatedState(onTapGlass)
     val touch by rememberUpdatedState(onTouchTank)
+    val finger by rememberUpdatedState(onFinger)
+    val flick by rememberUpdatedState(onFlick)
     val press by rememberUpdatedState(onLongPress)
     val lost by rememberUpdatedState(onFollowLost)
     val currentProvider by rememberUpdatedState(provider)
@@ -113,6 +125,8 @@ fun TankView(
                 if (f != null) f(worldPoint, surface) else pick(null)
             }
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
+            override fun onFinger(worldPoint: Vec3?, speedCmS: Float, surface: TouchSurface) = finger(worldPoint, speedCmS, surface)
+            override fun onFlick(worldPoint: Vec3, velocity: Vec3) = flick(worldPoint, velocity)
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
             override fun onFlipperTap() = flipperTap()
@@ -146,6 +160,7 @@ fun TankView(
                     v.bursts = bursts
                     v.viewLight = viewLight
                     v.shelf = shelf
+                    v.subFirstPerson = subFirstPerson
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

@@ -53,6 +53,10 @@ abstract class SpeciesBrain(val c: Ctx) {
     var touchUntil = -1e9
     /** Bumped by every [onTouch], so a running reaction restarts on a new tap. */
     var touchSerial = 0
+    /** Glass nips at a resting finger ([TouchReact] FOLLOW); tests and captions. */
+    var touchNips = 0
+    /** Place memory, feeding clock, mood and personality drift (ai/Mind.kt; realism_gaps X2–X4). */
+    val mind = Mind(c.o)
 
     /** World position of a matrix anchor (host, cave, hole, perch, station, ...) for this animal, or null. */
     open fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "body") o.pos else o.homePos
@@ -84,6 +88,10 @@ abstract class SpeciesBrain(val c: Ctx) {
             add(HeatResponse(this@SpeciesBrain))
             // a gentle tap on the tank (Command.TouchTank); scores 0 and draws no rng until a tap arrives
             add(TouchReact(this@SpeciesBrain))
+            // the toy submarine (Submarine mode); scores 0 and draws no rng while the sub is away, hidden or off
+            add(SubmarineReact(this@SpeciesBrain))
+            // learned feeding times and the keeper as a food cue (Mind.kt); idle until learned, no rng
+            if (Mind.anticipates(o.brainKind)) { add(AnticipateFeed(this@SpeciesBrain)); add(ComeToKeeper(this@SpeciesBrain)) }
         }
         utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility
@@ -111,6 +119,7 @@ abstract class SpeciesBrain(val c: Ctx) {
             if (c.rng.chance(0.6)) { startleAt = c.t; startleFrom = o.pos + Vec3.Y * 10.0; startleMag = 0.2 }
             o.startle = max(o.startle, 0.05)
         }
+        mind.tick(c)
     }
 
     abstract fun restSpot(c: Ctx, night: Boolean): Rest
@@ -129,7 +138,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         if (o.species.dietMatch(kind) > 0 || o.species.grazer && kind == FoodKind.NORI) { foodAlertAt = c.t; foodAlertPos = at }
     }
 
-    open fun onTap(c: Ctx, at: Vec3, s: Double) { startleAt = c.t; startleFrom = at; startleMag = s }
+    open fun onTap(c: Ctx, at: Vec3, s: Double) { startleAt = c.t; startleFrom = at; startleMag = s; mind.onStartle(c, s) }
 
     /**
      * A gentle tap at [at] that this animal answers with [kind] ([com.reeflive.core.sim.TankTouch]); [s] 0..1 is its
@@ -138,10 +147,11 @@ abstract class SpeciesBrain(val c: Ctx) {
      */
     open fun onTouch(c: Ctx, at: Vec3, kind: com.reeflive.core.sim.TouchReaction, s: Double) {
         if (kind == com.reeflive.core.sim.TouchReaction.NONE) return
+        mind.onKeeperCue(c, at)
         if (kind == com.reeflive.core.sim.TouchReaction.DUCK) { onTap(c, at, 0.4 + 0.3 * s); return }
         val delay = when {
             kind == com.reeflive.core.sim.TouchReaction.CHECK && o.brainKind == BrainKind.NASSARIUS -> c.rng.range(4.0, 12.0)
-            kind == com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(0.05, 0.2)
+            kind == com.reeflive.core.sim.TouchReaction.FREEZE || kind == com.reeflive.core.sim.TouchReaction.TUCK -> c.rng.range(0.05, 0.2)
             else -> c.rng.range(0.2, 1.2)
         }
         val dur = when (kind) {
@@ -150,6 +160,10 @@ abstract class SpeciesBrain(val c: Ctx) {
             com.reeflive.core.sim.TouchReaction.PEEK -> c.rng.range(4.0, 9.0)
             com.reeflive.core.sim.TouchReaction.FREEZE -> c.rng.range(2.0, 5.0) * (0.6 + 0.6 * s)
             com.reeflive.core.sim.TouchReaction.CHECK -> c.rng.range(20.0, 45.0)
+            // held until the finger lifts (the sim then shortens it to a short linger)
+            com.reeflive.core.sim.TouchReaction.FOLLOW -> 600.0
+            com.reeflive.core.sim.TouchReaction.RISE -> c.rng.range(4.0, 9.0) * (0.6 + 0.6 * s)
+            com.reeflive.core.sim.TouchReaction.TUCK -> c.rng.range(5.0, 15.0) * (0.6 + 0.6 * s)
             else -> 0.0
         }
         touchKind = kind; touchFrom = at; touchStartAt = c.t + delay; touchUntil = c.t + delay + dur; touchSerial++
@@ -160,12 +174,14 @@ abstract class SpeciesBrain(val c: Ctx) {
 
     open fun onShadow(c: Ctx, at: Vec3) {
         shadowAt = c.t
+        mind.onKeeperCue(c, at)
         if (o.isFish && o.skittishness > 0.5) { startleAt = c.t; startleFrom = at; startleMag = 0.2 }
     }
 
     /** Hit by an attack (eel strike, hawk pounce, territorial charge) that it survived. */
     open fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: Organism? = null) {
         if (by != null) Social.recordAttack(by, o, mag)
+        mind.onAttacked(c, from, mag)
         startleAt = c.t; startleFrom = from; startleMag = max(0.5, mag)
         o.startle = max(o.startle, 0.3 * mag)
     }
@@ -176,8 +192,10 @@ abstract class SpeciesBrain(val c: Ctx) {
         for (n in c.p.neighbors(o.pos, 40.0)) {
             if (n === o || !n.alive) continue
             // night vision: prey notice a predator later in the dark
-            val r = Predation.threatRadius(n, o) * (if (c.p.night && !o.isFish) 0.6 else 1.0)
-            if (r <= 0) continue
+            val r0 = Predation.threatRadius(n, o)
+            if (r0 <= 0) continue
+            // sight fades in the dark; the lateral line still feels a close approach (Perceive.kt, realism_gaps X6)
+            val r = r0 * Perceive.threatScale(c, o, r0)
             val d = n.pos.distanceTo(o.pos)
             if (d >= r || d >= bd) continue
             // a predator only alarms when it moves toward me, or when it is very close (SIMULATION §4.4)
@@ -299,6 +317,13 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
         if (rock.sdf.dist(q) >= clear) break
         q = rock.clampToWater(rock.sdf.project(q, clear), m)
     }
+    // never under the live sand (SandContact holds bodies on SandBed.surfaceY, so a point inside it cannot be reached;
+    // only points actually in the sand move, so cave, cover and station choices above it are untouched)
+    val floor = sim.sand.surfaceY(q.x, q.z) + 0.2
+    if (q.y < floor) {
+        val up = q.withY(min(floor, rock.waterLevelCm - m))
+        if (rock.sdf.dist(up) >= min(clear, rock.sdf.dist(q))) q = up
+    }
     return q
 }
 
@@ -310,23 +335,49 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
 fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
     val sdf = rock.sdf
     if (sdf.segmentClear(o.pos, goal, 0.5)) return goal
+    // a crossing that would only hold the swimmer where it is (already at that height, the way over blocked)
+    var held: Vec3? = null
+    var heldAbove: Vec3? = null
     for (h in listOf(8.0, 16.0, 24.0, 32.0)) {
         val above = safe(goal + Vec3.Y * h)
         if (!sdf.segmentClear(above, goal, 0.5)) continue
         if (sdf.segmentClear(o.pos, above, 0.5)) return above
         val up = safe(Vec3(o.pos.x, above.y, o.pos.z))
-        if (sdf.segmentClear(up, above, 0.5)) return up
+        if (sdf.segmentClear(up, above, 0.5) && (held == null || sdf.segmentClear(o.pos, up, 0.5))) return up
         // the climb alone leaves the swimmer pinned under a ridge: slide across at its own height first, along either axis
         for (mid in listOf(Vec3(above.x, up.y, o.pos.z), Vec3(o.pos.x, up.y, above.z))) {
             val m = safe(mid)
             if (sdf.segmentClear(o.pos, m, 0.5) && sdf.segmentClear(m, above, 0.5)) return m
         }
-        return up
+        // under a low roof (a crawl space beneath a rock): the climb itself is blocked, so first leave sideways for a
+        // spot with open water above it
+        if (!sdf.segmentClear(o.pos, up, 0.5)) {
+            for (d in listOf(4.0, 8.0, 12.0)) for (dir in DOORWAYS) {
+                if (dir.y != 0.0) continue
+                val exit = safe(o.pos + dir * d)
+                if (sdf.segmentClear(o.pos, exit, 0.5) && sdf.segmentClear(exit, safe(Vec3(exit.x, above.y, exit.z)), 0.5)) return exit
+            }
+        }
+        if (held == null) {
+            // `up` is somewhere to climb to: go there (as before). If it is the swimmer's own spot, look further first:
+            // a cardinal under a ledge held still there for 90 min on its way to the cleaner.
+            if (up.distanceTo(o.pos) > 1.0) return up
+            held = up; heldAbove = above
+        } else if (up.distanceTo(o.pos) > 1.0 && sdf.segmentClear(o.pos, up, 0.5)) return up
     }
     // under an overhang: a doorway beside the goal that the swimmer can see
     for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
         val door = safe(goal + dir * d)
         if (sdf.segmentClear(door, goal, 0.5) && sdf.segmentClear(o.pos, door, 0.5)) return door
+    }
+    val ha = heldAbove
+    if (held != null && ha != null) {
+        // pinned: a way out of the pocket from which the crossing is in clear view, else hold as before
+        for (d in listOf(8.0, 16.0)) for (dir in DOORWAYS) {
+            val out = safe(o.pos + dir * d)
+            if (sdf.segmentClear(o.pos, out, 0.5) && sdf.segmentClear(out, ha, 0.5)) return out
+        }
+        return held
     }
     return goal
 }
@@ -359,9 +410,9 @@ fun Ctx.standoff(a: Anchor, d: Double): Vec3 = a.pos + (a.normal ?: Vec3.Y).norm
 fun Ctx.isPrepared(f: FoodParticle) = !f.kind.suspended
 
 /** Nearest diet-matching food this animal accepts within [radius], optionally with a line-of-sight check. */
-fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
+fun Ctx.findFood(radius: Double, los: Boolean = true, roused: Boolean = false, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
     val f = food.nearest(o.pos, radius) { f ->
-        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f)
+        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f, roused)
     } ?: return null
     if (los && !rock.sdf.segmentClear(o.pos, f.pos, 0.2)) {
         // try the second nearest without LOS cost explosion: accept if near
@@ -377,6 +428,7 @@ fun Ctx.bite(f: FoodParticle) {
     o.eat(f.grams * o.species.foodPreference(f.kind).coerceAtLeast(0.5))
     o.counters.add(com.reeflive.core.sim.Counters.K.FEED, t)
     o.mouth = 1.0
+    sim.agentOf(o)?.brain?.mind?.onBite(t)
 }
 
 /** Moving an anchor-relative rest into a kinematic placement. */

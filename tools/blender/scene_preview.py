@@ -1,11 +1,11 @@
 """Assembled-scene preview (docs/specs/tank_design.md §5, §6): Cycles CPU render of every committed GLB with the
-AI Prime lighting look, from the spec's verification cameras:
-  front      (61, 48, 215) -> (61, 30, 16), FOV 38   (matches tank_full.jpg framing)
-  left34     (-40, 70, 150) -> (50, 25, 16), FOV 40
-  right34    (170, 70, 150) -> (75, 25, 16), FOV 40
-  top        (61, 170, 16) -> (61, 0, 16),  FOV 40
-  left_end   (-150, 35, 16) -> (0, 30, 16), FOV 35
-  right_end  (272, 35, 16) -> (122, 30, 16), FOV 35
+AI Prime lighting look, from the spec's verification cameras (tank interior common.TANK = 121.9 x 40.6 x 45.7 cm):
+  front      (61, 26, 196) -> (61, 21, 23), FOV 32   (matches the owner's tank_full_2026-10-13.jpg framing)
+  left34     (-40, 62, 165) -> (50, 17, 23), FOV 40
+  right34    (170, 62, 165) -> (75, 17, 23), FOV 40
+  top        (61, 170, 23) -> (61, 0, 23),  FOV 40
+  left_end   (-150, 25, 23) -> (0, 20, 23), FOV 35
+  right_end  (272, 25, 23) -> (122, 20, 23), FOV 35
 `render_scene(view="front")` -> docs/preview/scene.png by default."""
 import math
 import os
@@ -16,36 +16,38 @@ import common as C
 import preview as PV
 from common import bpy, w2b
 
+L_, H_, D_ = C.TANK
+ZC = D_ / 2
 VIEWS = {
-    "front": ((61, 48, 215), (61, 30, 16), 38),
-    "left34": ((-40, 70, 150), (50, 25, 16), 40),
-    "right34": ((170, 70, 150), (75, 25, 16), 40),
-    "top": ((61, 170, 16.01), (61, 0, 16), 40),
-    "left_end": ((-150, 35, 16), (0, 30, 16), 35),
-    "right_end": ((272, 35, 16), (122, 30, 16), 35),
+    "front": ((61, 26, D_ + 150), (61, 21, ZC), 32),
+    "left34": ((-40, 62, D_ + 120), (50, 17, ZC), 40),
+    "right34": ((170, 62, D_ + 120), (75, 17, ZC), 40),
+    "top": ((61, 170, ZC + 0.01), (61, 0, ZC), 40),
+    "left_end": ((-150, 25, ZC), (0, 20, ZC), 35),
+    "right_end": ((272, 25, ZC), (122, 20, ZC), 35),
     # close-ups for the 2026-10-13 backlog details (ASSETS.md §4.1)
-    "clowns": ((80, 26, 95), (82, 14, 20), 26),
-    "left_glass": ((40, 30, 85), (2, 19, 13), 28),
-    "upper": ((50, 52, 95), (45, 42, 14), 34),
+    "clowns": ((84, 20, D_ + 62), (82, 13, 21), 26),
+    "left_glass": ((40, 22, D_ + 52), (2, 16, 18), 28),
+    "upper": ((50, 40, D_ + 62), (45, 30, 16), 34),
 }
 # fish placements for the preview: (id, lengthCm, world pos, heading deg about +Y (0 = +X), pitch)
 FISH_POSES = [
-    ("clown_orange", 7.0, (91, 27, 22), 160, 0), ("clown_darwin", 5.5, (84, 21, 24), 20, -5),
-    ("tang", 6.5, (40, 44, 24), 200, 0), ("cardinal", 5.0, (38, 15, 24), 200, 0),
-    ("wrasse", 7.0, (79, 12, 28), 10, -8), ("hawkfish", 5.0, (50, 30.2, 22), 200, 0),
-    ("lawnmower_blenny", 10.0, (24.5, 18.3, 27.0), -40, 5), ("tailspot_blenny", 5.5, (94, 30.6, 12.8), -80, 10),
-    ("dottyback", 6.5, (85, 14, 8), 160, 0), ("engineer_goby", 20.0, None, 0, 0),
+    ("clown_orange", 7.0, (79.5, 15.5, 23), 160, 0), ("clown_darwin", 5.5, (84.5, 14.5, 22.5), 20, -5),
+    ("tang", 6.5, (78, 21, 34), 200, 0), ("cardinal", 5.0, (36, 11, 35), 200, 0),
+    ("wrasse", 7.0, (84, 9, 37), 10, -8), ("hawkfish", 5.0, (43, 21.3, 28.6), 200, 0),
+    ("lawnmower_blenny", 10.0, (15.5, 13.6, 34.5), -40, 5), ("tailspot_blenny", 5.5, (62.5, 29.9, 14.1), -85, 10),
+    ("dottyback", 6.5, (84, 10, 6), 160, 0), ("engineer_goby", 20.0, None, 0, 0),
 ]
 INVERT_POSES = [
-    ("shrimp", 5.0, (95, 36.6, 13), 200), ("skunk_shrimp", 6.0, (40, 34.6, 15), 300),
-    ("hermit_blue", 2.0, (30, 4.1, 29.5), 160), ("hermit_scarlet", 3.5, (100, 4.0, 30), 20),
-    ("brittle_star", 15.0, (36, 5.5, 8), 0), ("nassarius", 1.5, (58, 4.6, 30), 90),
-    ("astrea", 3.0, (12, 20, 32.3), 0), ("feather_duster", 1.0, (86, 5.3, 21), 0),
-    ("sally_lightfoot", 5.0, (100.5, 40.5, 11.5), 250),
+    ("shrimp", 5.0, (95, 22.3, 13.5), 200), ("skunk_shrimp", 6.0, (40, 24.2, 19.5), 300),
+    ("hermit_blue", 2.0, (30, 4.1, 38), 160), ("hermit_scarlet", 3.5, (95, 4.0, 40), 20),
+    ("brittle_star", 15.0, (36, 6.0, 10.4), 0), ("nassarius", 1.5, (56, 4.6, 40), 90),
+    ("astrea", 3.0, (12, 20, D_ - 0.7), 0), ("feather_duster", 1.0, (86, 5.3, 27.3), 0),
+    ("sally_lightfoot", 5.0, (100.5, 27.5, 12.5), 250),
 ]
-CORALS = ("kenya", "gsp_neon", "gsp_mat", "zoa", "clove", "mushroom", "mushroom_hairy", "macro_red", "organ_pipe",
+CORALS = ("kenya", "gsp_neon", "mushroom_hairy_mound", "zoa", "clove", "mushroom", "mushroom_hairy", "macro_red", "organ_pipe",
           "algae_tufts", "aiptasia", "reef_details")
-POLYP_FILES = ("gsp_neon", "gsp_mat", "zoa", "clove", "kenya", "organ_pipe", "mushroom_hairy")
+POLYP_FILES = ("gsp_neon", "mushroom_hairy_mound", "zoa", "clove", "kenya", "organ_pipe", "mushroom_hairy")
 
 
 def place(objs, scale, pos, yaw_deg, pitch_deg=0.0):
@@ -61,8 +63,8 @@ def goby_in_burrow(objs):
     """Bend the engineer goby along the burrow path with its head out of the entrance (preview only)."""
     L = 20.0
     roots = [o for o in objs if o.parent is None]
-    pts = [(64.5, 6.0, 28.5), (66, 5.0, 25), (68, 4.8, 22.5), (70, 5.0, 20), (72.5, 5.5, 17.5), (75, 6, 15),
-           (79, 7, 10), (83, 8, 5)]
+    pts = [(60.5, 6.0, 37.0), (62, 5.0, 32.5), (64, 4.8, 29.2), (66, 5.0, 26.0), (68.5, 5.5, 22.8), (71, 6, 19.5),
+           (75, 6.5, 13), (79, 7, 6.5)]
     cu = bpy.data.curves.new("den", 'CURVE')
     cu.dimensions = '3D'
     sp = cu.splines.new('POLY')
@@ -94,7 +96,7 @@ def principled(name, color, rough, transmission=0.0, ior=1.45, alpha=1.0):
 
 
 def water_volume(density_abs=0.006, density_scatter=0.0008):
-    """Water: absorption (greenish #2E8A78) + 1 % scatter for light shafts, box x 0-121.9, y 0-56, z 0-33."""
+    """Water: absorption (greenish #2E8A78) + 1 % scatter for light shafts, box over the interior up to the water line."""
     me = bpy.data.meshes.new("water_vol")
     import bmesh
     bm = bmesh.new()
@@ -102,8 +104,8 @@ def water_volume(density_abs=0.006, density_scatter=0.0008):
     bm.to_mesh(me)
     bm.free()
     o = bpy.data.objects.new("WaterVol", me)
-    o.scale = (121.8, 32.9, 55.9)
-    o.location = w2b((60.95, 28.0, 16.5))
+    o.scale = (L_ - 0.1, D_ - 0.1, C.WATER_Y - 0.1)
+    o.location = w2b((L_ / 2, C.WATER_Y / 2, D_ / 2))
     C.link(o)
     m = bpy.data.materials.new("water_vol")
     m.use_nodes = True
@@ -222,15 +224,17 @@ def build_scene(samples, w, h, view):
             place(PV.import_glb(p), L, pos, yaw)
     # AI Prime HD x2 (spec §5): blue-heavy 16k look = blue #8FA9FF (85 %) + warm white #FFF1DC (15 %) per puck,
     # cone 110 deg, blend 0.4; projected caustics; faint violet wall-bounce fill; warm room light for the stand/wall
-    for x in (32.0, 91.0):
-        caustic_spot((x, 89.8, 16), 300000, C.lin("#8FA9FF"))
-        caustic_spot((x, 89.8, 16), 53000, C.lin("#FFF1DC"), caustics=False)
+    import equipment as EQ
+    lights = [(32.0, C.RIM_Y + 28.4, EQ.LIGHT_Z), (88.0, C.RIM_Y + 28.4, EQ.LIGHT_Z)]  # AiPrimeL/R_Lens lightPos
+    for p in lights:
+        caustic_spot(p, 300000 * 0.6, C.lin("#8FA9FF"))
+        caustic_spot(p, 53000 * 0.6, C.lin("#FFF1DC"), caustics=False)
     # the pucks' lens optics are collimated: two narrow high spots stand in for that so the sand (80 % luminance in
     # the photo) is not starved by inverse-square falloff from the puck height
-    for x in (32.0, 91.0):
-        caustic_spot((x, 420, 16), 2600000, C.lin("#A9BCFF"), cone=24, blend=0.5)
-    PV.add_light('AREA', w2b((61, 140, 60)), 60000, size=160, color=C.lin("#6A5BD6"))
-    PV.add_light('AREA', w2b((61, 150, 180)), 160000, size=220, color=C.lin("#FFE2C4"))
+    for x, _, z in lights:
+        caustic_spot((x, 400, z), 2600000, C.lin("#A9BCFF"), cone=24, blend=0.5)
+    PV.add_light('AREA', w2b((61, 120, 70)), 60000, size=160, color=C.lin("#6A5BD6"))
+    PV.add_light('AREA', w2b((61, 130, 190)), 160000, size=220, color=C.lin("#FFE2C4"))
     water_volume()
     loc, tgt, fov = VIEWS[view]
     cam = PV.camera(w2b(loc), w2b(tgt))

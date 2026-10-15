@@ -85,6 +85,13 @@ data class MotionProfile(
     /** Arm rowing (brittle star): stroke cycle at cruise (Hz) and arm sweep (rad). */
     val rowHz: Double = 0.5,
     val rowSweep: Double = 0.0,
+    /**
+     * Walkers on long legs (shrimp): the body's up follows the surface averaged under the whole footprint, fore/aft
+     * ± this many body lengths and half that to the sides, at [bodyUpRate] rad/s (0 = the 0.4 cm local normal at the
+     * crawl rate). A local normal tipped a shrimp on every rock bump (research 18: legs take up the relief).
+     */
+    val footprintBL: Double = 0.0,
+    val bodyUpRate: Double = 0.0,
 ) {
     /** Kinematics for a swimming speed through the water of [bl] body lengths per second. */
     fun stroke(bl: Double): Stroke {
@@ -158,8 +165,8 @@ object MotionProfiles {
             glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),
         BrainKind.GENERIC_FISH to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.5, pecHzMax = 5.0),
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
-        BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8),
-        BrainKind.CLEANER_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 25.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8),
+        BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
+        BrainKind.CLEANER_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 25.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
@@ -167,8 +174,8 @@ object MotionProfiles {
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
         BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
-        // foot gliding 0.5–1 cm/s; the food rush races at 3–5 cm/s [M][L]
-        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.7, walkBurstCmS = 4.0),
+        // idle foot crawl 1–3 cm/min (~0.05 cm/s); races at ~0.4 cm/s to food or a puff (docs/research/video/SIM_CHANGES.md §2.1) [M][L]
+        BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.4),
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 0.8),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),

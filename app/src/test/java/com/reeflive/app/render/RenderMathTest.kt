@@ -21,13 +21,15 @@ fun straightRig(id: String, x: Float, y: Float, z: Float, bl: Float): FishRig {
 
 class LightingStateTest {
     @Test fun fixturesHangOverTheTank() {
-        // AI Prime lens centres (equipment.glb AiPrimeL/R_Lens `lightPos`): pucks 29 cm over the 61.4 cm rim
+        // AI Prime lens centres (equipment.glb AiPrimeL/R_Lens `lightPos`): pucks ~29 cm over the 41 cm rim of the
+        // 48 x 16 x 18 in tank, on goosenecks from behind (lens a little behind the centre line)
         assertEquals(2, LightingState.LIGHT_POS.size)
         assertEquals(32f, LightingState.LIGHT_POS[0][0], 1e-4f)
-        assertEquals(91f, LightingState.LIGHT_POS[1][0], 1e-4f)
+        assertEquals(88f, LightingState.LIGHT_POS[1][0], 1e-4f)
         for (p in LightingState.LIGHT_POS) {
-            assertEquals(90f, p[1], 1e-4f)
-            assertEquals(16f, p[2], 1e-4f)
+            assertEquals(69.6f, p[1], 1e-4f)
+            assertTrue(p[1] - (Camera.TANK[1] + 0.4f) in 25f..35f)
+            assertEquals(20f, p[2], 1e-4f)
             assertTrue(p[0] in 0f..Camera.TANK[0] && p[2] in 0f..Camera.TANK[2])
         }
     }
@@ -75,6 +77,21 @@ class PickerTest {
         val d = floatArrayOf(0f, 0f, -1f)
         assertEquals("near", Picker.pick(floatArrayOf(57f, 30f, 150f), d, listOf(far, near)))
         assertNull(Picker.pick(floatArrayOf(10f, 30f, 150f), d, listOf(far, near)))
+    }
+
+    @Test fun aNearMissWithinAFingertipStillPicks() {
+        val fish = straightRig("fish", 60f, 30f, 20f, 8f)      // capsule radius 1.76 cm
+        val snail = straightRig("snail", 30f, 30f, 20f, 2f)    // floored at 1.2 cm
+        val d = floatArrayOf(0f, 0f, -1f)
+        // 3 cm off the fish's spine, 130 cm away: a 1.24 cm miss, ~0.0095 as a view angle
+        val o = floatArrayOf(57f, 33f, 150f)
+        assertNull(Picker.pick(o, d, listOf(fish, snail)))
+        assertEquals("fish", Picker.pick(o, d, listOf(fish, snail), slack = 0.02f))
+        assertNull("beyond the fingertip", Picker.pick(o, d, listOf(fish, snail), slack = 0.005f))
+        // a direct hit always wins over a closer near miss
+        assertEquals("snail", Picker.pick(floatArrayOf(29.5f, 30f, 150f), d, listOf(fish, snail), slack = 0.5f))
+        // a 24 px fingertip on a 1000 px view at fov 50°: tan(25°) · 2 · 0.024
+        assertEquals(0.02238f, Picker.fingerSlack(24f, 1000, 50f), 1e-4f)
     }
 
     @Test fun capsuleMath() {
@@ -278,7 +295,7 @@ class ParticleFieldTest {
         val (start, n) = f.ambientRange
         for (i in start until start + n) {
             val y = f.out[i * ParticleField.FLOATS + 1]
-            assertTrue(y in 2.9f..56.1f)
+            assertTrue(y in (Camera.SAND_Y - 0.1f)..(Camera.WATER_Y + 0.1f))
         }
         assertTrue(abs(f.out[(f.foodRange.first) * ParticleField.FLOATS] - 10f) < 1e-4f)
     }

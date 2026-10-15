@@ -7,6 +7,7 @@ import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.SupplyPreview
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.kitFmt
 import com.reeflive.core.sim.MaintenanceTask
@@ -427,6 +428,30 @@ object LiveReactions {
         ),
         if (count == 1) "Welcome, ${card.name}! Float the bag, then let it out." else "$count new ${card.name}s. That's a crowd!",
         HermieMood.EXCITED,
+    )
+
+    /** A shop bag dropped onto the water at tank x [x]: it floats 30 minutes before the animals come out. */
+    fun bagIn(card: StockCard, count: Int, x: Float) = Reaction(
+        TankFx(
+            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, TankDims.LENGTH_F - 8f), TankDims.WATER_LEVEL_F, TankDims.DEPTH_F * 0.5f),
+            tint = Color(0xFF5FD7FF),
+            caption = if (count == 1) "${card.name} is floating" else "$count × ${card.name} floating",
+        ),
+        "Plop! The bag floats so the water inside warms up. They come out in 30 minutes, or tap Hurry up.",
+        HermieMood.EXCITED,
+    )
+
+    /** The fish net goes in for [name], a dead animal (core FishNet). */
+    fun netOut(name: String) = Reaction(
+        TankFx(FxKind.SPARKLE, FxSpots.SURFACE, tint = Color(0xFF8EE66B), caption = "Here comes the net!"),
+        "Here comes the net! Let's scoop $name out gently so the water stays clean.",
+        HermieMood.HAPPY,
+    )
+
+    fun hurryBags(on: Boolean) = Reaction(
+        TankFx(FxKind.SPEED, FxSpots.LIGHT, amount = if (on) 2f else 1f, caption = if (on) "Hurry up: 60×" else "Normal speed"),
+        if (on) "Zoom! Time flies until the bags open." else "Back to your speed.",
+        if (on) HermieMood.EXCITED else HermieMood.HAPPY,
     )
 
     fun addSimple(name: String) = Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, caption = name), "Welcome, $name!", HermieMood.EXCITED)

@@ -67,12 +67,23 @@ enum class BurstKind {
     LIGHT_MOTES,
     /** Spare shells dropped in: shells sinking with a puff of sand. */
     SHELLS,
-    /** Torn nori bits drifting off the clip (spawned by the renderer itself). */
+    /** Torn nori bits drifting off the clip (the sim now tears real pieces off the cloth; kept for hosts that emit it). */
     NORI_BITS,
     /** A fingertip tap on the glass: a small ring of ripples spreading over the pane from the point. */
     GLASS_RIPPLE,
     /** A fingertip tap on the sand: a little puff of grains that lifts and settles. */
     SAND_PUFF,
+    /** A tap (or a held fingertip) on the water's top: rings spreading over the surface. */
+    SURFACE_RIPPLE,
+    /** A flick in the water: faint streaks along the puff ([TankBurst.r], g, b carry its direction × speed / 45 cm/s). */
+    SWISH,
+    /**
+     * A fingertip landed on an animal (a tap that picks it): a ring of glints around it, square to the view. [TankBurst.r],
+     * g, b carry the view direction (the tap's ray) and [TankBurst.amount] the ring's radius (cm).
+     */
+    TOUCH_RING,
+    /** Pressed and held on an animal to follow it: a brighter double ring that turns as it opens (as [TOUCH_RING]). */
+    FOLLOW_RING,
 }
 
 /** One burst request: what, where (tank cm), an sRGB tint (0..1) and a size factor. */
@@ -117,7 +128,6 @@ class BurstField(seed: Int = 23) {
     private val flags = IntArray(CAP)
     private var count = 0
     private val jetAcc = FloatArray(8)
-    private var lastNori = 0f
     private val v = FloatArray(3)
 
     val active: Int get() = count
@@ -262,6 +272,54 @@ class BurstField(seed: Int = 23) {
                 repeat(n(8)) { add(x + g(1.2f), sy + rnd.nextFloat() * 0.6f, z + g(1.2f), g(1.5f), 1.2f + rnd.nextFloat() * 1.5f, g(1.5f), 2.2f + rnd.nextFloat(), 0.6f, 2.6f, SILT_C, 0.18f, Shape.HAZE, DRAG or FLOW) }
                 repeat(n(16)) { add(x + g(0.8f), sy, z + g(0.8f), g(4f), 2.5f + rnd.nextFloat() * 3f, g(4f), 1.6f, 0.12f, 0.1f, SILT_C, 0.85f, Shape.DOT, SINK or DRAG) }
             }
+            BurstKind.SURFACE_RIPPLE -> {
+                // rings racing out over the surface, plus a few glints where the finger touched
+                val sy = Camera.WATER_Y - 0.3f
+                for (ring in 0 until 2) {
+                    val m = n(if (ring == 0) 20 else 12)
+                    val sp = if (ring == 0) 9f else 5.5f
+                    repeat(m) {
+                        val a = TAU * it / m + rnd.nextFloat() * 0.1f
+                        add(x + cos(a) * 0.4f, sy, z + sin(a) * 0.4f, cos(a) * sp, 0f, sin(a) * sp, 0.9f, 0.45f, 0.3f, CLEAR, if (ring == 0) 0.45f else 0.28f, Shape.STREAK, DRAG or ORIENT, delay = ring * 0.16f)
+                    }
+                }
+                repeat(n(4)) { add(x + g(0.6f), sy - 0.2f, z + g(0.6f), 0f, -0.5f, 0f, 0.6f, 0.4f, 0.2f, WHITE, 0.5f, Shape.GLOW, TWINKLE) }
+            }
+            BurstKind.SWISH -> {
+                val dx = b.r * 45f; val dy = b.g * 45f; val dz = b.b * 45f
+                repeat(n(14)) {
+                    val k = 0.5f + rnd.nextFloat() * 0.6f
+                    add(x + g(1.5f), y + g(1.5f), z + g(1.5f), dx * k, dy * k, dz * k, 0.8f + rnd.nextFloat() * 0.5f, 0.5f, 1.2f, CLEAR, 0.22f, Shape.STREAK, DRAG or ORIENT, delay = rnd.nextFloat() * 0.15f)
+                }
+                repeat(n(4)) { add(x + g(1f), y + g(1f), z + g(1f), dx * 0.3f, dy * 0.3f, dz * 0.3f, 1.4f, 0.22f, 0.18f, WHITE, 0.45f, Shape.BUBBLE, BUOY_SLOW or DRAG) }
+            }
+            BurstKind.TOUCH_RING, BurstKind.FOLLOW_RING -> {
+                // a basis square to the view: u = dir × up (or × x when looking straight down), v = u × dir
+                var dx = b.r; var dy = b.g; var dz = b.b
+                val dl = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1e-4f); dx /= dl; dy /= dl; dz /= dl
+                var ux = -dz; var uy = 0f; var uz = dx
+                if (ux * ux + uz * uz < 1e-3f) { ux = 0f; uy = dz; uz = -dy }
+                val ul = sqrt(ux * ux + uy * uy + uz * uz); ux /= ul; uy /= ul; uz /= ul
+                val wx = uy * dz - uz * dy; val wy = uz * dx - ux * dz; val wz = ux * dy - uy * dx
+                val rad = b.amount.coerceIn(0.8f, 8f)
+                val follow = b.kind == BurstKind.FOLLOW_RING
+                val c = if (follow) FOLLOW_C else TOUCH_C
+                for (ring in 0 until (if (follow) 2 else 1)) {
+                    val m = if (follow) 22 else 16
+                    val spin = if (follow) (if (ring == 0) 1.6f else -1.6f) else 0f
+                    repeat(m) {
+                        val a = TAU * it / m
+                        val ca = cos(a); val sa = sin(a)
+                        val ox = ux * ca + wx * sa; val oy = uy * ca + wy * sa; val oz = uz * ca + wz * sa
+                        // outward, plus a turn around the animal for the follow ring
+                        val tx = -ux * sa + wx * ca; val ty = -uy * sa + wy * ca; val tz = -uz * sa + wz * ca
+                        val out = rad * (if (follow) 1.1f else 0.9f)
+                        add(x + ox * rad, y + oy * rad, z + oz * rad, ox * out + tx * spin * rad, oy * out + ty * spin * rad, oz * out + tz * spin * rad,
+                            if (follow) 0.8f else 0.55f, if (follow) 0.38f else 0.3f, 0.12f, c, if (follow) 0.95f else 0.75f, Shape.GLOW, DRAG,
+                            delay = ring * 0.12f)
+                    }
+                }
+            }
             BurstKind.NORI_BITS -> repeat(n(3)) {
                 add(x + g(1.5f), y + g(3f), z + g(3f), 1f + g(1f), -0.6f, g(1f), 6f, 0.7f, 0.5f, FoodVisuals.NORI_COLOR, 0.9f, Shape.NORI, FLOW or SINK)
             }
@@ -272,14 +330,10 @@ class BurstField(seed: Int = 23) {
     fun step(dtIn: Float, time: Float, snap: SimSnapshot?) {
         val dt = dtIn.coerceIn(0f, 0.1f)
         emitJets(dt, snap)
-        snap?.let { s ->
-            if (s.noriRemaining < lastNori - 0.02f && s.noriRemaining > 0f) {
-                spawn(TankBurst(BurstKind.NORI_BITS, FoodVisuals.NORI_CLIP[0] + 3f, FoodVisuals.NORI_CLIP[1] - 6f, FoodVisuals.NORI_CLIP[2]), s)
-                lastNori = s.noriRemaining
-            } else if (s.noriRemaining > lastNori || s.noriRemaining <= 0f) lastNori = s.noriRemaining
-        }
+        // torn nori: the sim tears real pieces off its cloth (food particles), so nothing extra is spawned here
         val grid = snap?.flowGrid
         val strength = snap?.flowStrength ?: 1f
+        val gusts = snap?.gusts ?: NO_GUSTS
         var i = 0
         while (i < count) {
             age[i] += dt
@@ -308,7 +362,10 @@ class BurstField(seed: Int = 23) {
             if (f and HOP != 0 && rnd.nextFloat() < dt * 1.4f) { vx[i] += g(6f); vy[i] += g(4f); vz[i] += g(6f) }
             if (f and HOP != 0) { val d = exp(-5f * dt); vx[i] *= d; vz[i] *= d; vy[i] = vy[i] * d + (-0.8f) * (1f - d) }
             var fx = 0f; var fy = 0f; var fz = 0f
-            if (f and FLOW != 0) { ParticleField.flowAt(grid, px[i], py[i], pz[i], time, v); fx = v[0] * strength * 0.6f; fy = v[1] * strength * 0.4f; fz = v[2] * strength * 0.6f }
+            if (f and FLOW != 0) {
+                ParticleField.flowAt(grid, px[i], py[i], pz[i], time, v); fx = v[0] * strength * 0.6f; fy = v[1] * strength * 0.4f; fz = v[2] * strength * 0.6f
+                if (gusts.isNotEmpty()) { gustAt(gusts, px[i], py[i], pz[i], v); fx += v[0]; fy += v[1]; fz += v[2] }
+            }
             if (f and WOBBLE != 0) { fx += sin(time * 3f + seedA[i] * 20f) * 1.2f; fz += cos(time * 2.6f + seedA[i] * 13f) * 0.8f }
             px[i] += (vx[i] + fx) * dt; py[i] += (vy[i] + fy) * dt; pz[i] += (vz[i] + fz) * dt
             // keep inside the water: bubbles pop at the surface, the rest stop at the walls and the sand
@@ -424,14 +481,37 @@ class BurstField(seed: Int = 23) {
         private const val WOBBLE = 512
         private const val BUOY_SLOW = 1024
         private const val SINK_FAST = 2048
-        /** HOB return outlet and intake (anchors.json HOB_OUTFLOW (72, 55, 1)). */
-        val HOB_OUT = floatArrayOf(72f, 54f, 2f)
-        val HOB_IN = floatArrayOf(62f, 52f, 2f)
+        private val NO_GUSTS = FloatArray(0)
+
+        /**
+         * Velocity (cm/s) the snapshot's touch puffs ([SimSnapshot.gusts]) add at a point, into [out]; the same puff
+         * profile the sim uses ([com.reeflive.core.geom.FlowGust.strength]).
+         */
+        fun gustAt(g: FloatArray, x: Float, y: Float, z: Float, out: FloatArray) {
+            out[0] = 0f; out[1] = 0f; out[2] = 0f
+            val stride = com.reeflive.core.geom.FlowGust.STRIDE
+            var o = 0
+            while (o + stride <= g.size) {
+                val sp = com.reeflive.core.geom.FlowGust.strength(
+                    g[o].toDouble(), g[o + 1].toDouble(), g[o + 2].toDouble(), g[o + 3].toDouble(), g[o + 4].toDouble(), g[o + 5].toDouble(),
+                    g[o + 6].toDouble(), g[o + 7].toDouble(), x.toDouble(), y.toDouble(), z.toDouble(),
+                ).toFloat()
+                out[0] += g[o + 3] * sp; out[1] += g[o + 4] * sp; out[2] += g[o + 5] * sp
+                o += stride
+            }
+        }
+
+        /** HOB return outlet and intake (equipment.glb: ReturnNozzle outflow (73, 37.4, 2.3) at the back middle, HobFilter intake x 114.5 at the right). */
+        val HOB_OUT = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2f)
+        val HOB_IN = floatArrayOf(114.5f, Camera.WATER_Y - 3f, 2f)
 
         private fun lin(c: Float) = c.coerceIn(0f, 1f).pow(2.2f)
         private fun rgb(r: Int, g: Int, b: Int) = floatArrayOf(lin(r / 255f), lin(g / 255f), lin(b / 255f))
         private val WHITE = rgb(235, 245, 255)
         private val CLEAR = rgb(210, 235, 255)
+        // the live theme's lagoon cyan (a picked animal) and a warmer foam gold (following one)
+        private val TOUCH_C = rgb(140, 235, 255)
+        private val FOLLOW_C = rgb(255, 225, 140)
         private val MUCK = rgb(120, 92, 60)
         private val MUCK_LIGHT = rgb(170, 150, 120)
         private val SILT_C = rgb(196, 182, 150)

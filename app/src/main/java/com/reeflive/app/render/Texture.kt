@@ -74,6 +74,18 @@ class Texture private constructor(val id: Int, val width: Int, val height: Int) 
             return Texture(id, 1, 1)
         }
 
+        /** [w] × [h] straight-alpha RGBA8 pixels made in code (the fish net's mesh), repeating and mipmapped. */
+        fun rgba(w: Int, h: Int, pixels: ByteArray): Texture {
+            val id = Gl.genTexture()
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id); Gl.check("glBindTexture")
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1); Gl.check("glPixelStorei")
+            val px = ByteBuffer.allocateDirect(pixels.size).order(ByteOrder.nativeOrder()).put(pixels).apply { position(0) }
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, px); Gl.check("glTexImage2D(rgba)")
+            params(repeat = true, mipmap = true)
+            GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D); Gl.check("glGenerateMipmap")
+            return Texture(id, w, h)
+        }
+
         /** Single-channel float data texture (R16F, linear-filterable in ES 3.0), e.g. the water heightfield. */
         fun floatR(w: Int, h: Int): Texture {
             val id = Gl.genTexture()

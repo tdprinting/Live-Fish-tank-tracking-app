@@ -37,7 +37,8 @@
     "DETRITUS",
     "ALGAE",
     "CYANO",
-    "FLAKE"
+    "FLAKE",
+    "MEATY"
   ],
   "feedsPerDay": 2,
   "grazer": true,

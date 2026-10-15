@@ -14,13 +14,36 @@ sealed class Command {
     data class Powerheads(val on: Boolean) : Command()
     data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
+    /** The keeper names an animal (My tank: the name is saved with it). Blank names are ignored. */
+    data class Rename(val id: String, val nickname: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
+    /**
+     * Submarine mode ([Submarine]): launch ([on]) or park the toy sub; [visible] false hides it from the animals
+     * (they ignore it entirely; it still cannot pass through glass, sand or rock); [headlight] is its lamp.
+     */
+    data class SubmarineMode(val on: Boolean, val visible: Boolean = true, val headlight: Boolean = true) : Command()
+    /** The pilot's stick for the sub; it holds until the next one, so hosts send it only when the input changes. */
+    data class SteerSubmarine(val controls: SubControls) : Command()
     /**
      * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
      * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
      */
     data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
+    /**
+     * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
+     * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
+     * it rests; a fast-moving finger makes them hang back. [point] null = the finger lifted.
+     */
+    data class Finger(val point: Vec3?, val speedCmS: Double = 0.0, val surface: TouchSurface = TouchSurface.GLASS) : Command()
+    /**
+     * A flick of the finger in the water: a gentle puff at [point] moving at [velocity] (cm/s, capped at
+     * [com.reeflive.core.geom.FlowGust.MAX_SPEED]) that sways corals, the nori and sand grains, retracts polyps it hits
+     * and makes shy animals in its path flinch ([TankTouch.puffReaction]).
+     */
+    data class WaterPuff(val point: Vec3, val velocity: Vec3) : Command()
+    /** A tap right on an animal ([id]): snails, crabs and hermits tuck in, shrimp freeze, dusters snap shut; fish ignore it. */
+    data class TouchAnimal(val id: String) : Command()
     data class SetSpeed(val speed: Double) : Command()
     data class ResetToReality(val water: WaterState, val livestock: List<LivestockSeed>) : Command()
     /** Sandbox: set an organism's length (the "grow fish" slider, SIMULATION §4.5 tang). */
@@ -58,6 +81,23 @@ sealed class Command {
      * otherwise [size] picks it (juveniles by default, as shops sell them).
      */
     data class AddMany(val speciesId: String, val count: Int, val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE) : Command()
+
+    /**
+     * Sandbox "Add life" the way a keeper does it: [count] of [speciesId] arrive in sealed bags dropped onto the water
+     * at tank x [x] (and front-to-back [z], null = the middle). They float for 30 sim minutes, then tip and the
+     * animals come out ([AcclimationBags]).
+     */
+    data class FloatBag(
+        val speciesId: String, val count: Int, val x: Double, val z: Double? = null,
+        val sizeCm: Double = 0.0, val size: StockSize = StockSize.JUVENILE,
+    ) : Command()
+    /**
+     * Take the dead animal [id] out with the fish net ([FishNet]): it dips in, scoops the body and lifts it out, then
+     * the body leaves the sim. Ignored for a living animal; more taps queue up.
+     */
+    data class NetOut(val id: String) : Command()
+    /** Fast-forward while bags float ([on]) or back to the chosen speed; [openNow] tips every floating bag at once. */
+    data class HurryBags(val on: Boolean, val openNow: Boolean = false) : Command()
 
     /**
      * The owner slides the Flipper magnet scraper over [pane] from (x0, y0) to (x1, y1), in cm along the pane (x from
@@ -228,6 +268,8 @@ data class OrganismPose(
      * ([ShrimpLimbs]: stride phase, stepping, rock / claw-display signal, grooming).
      */
     val limbs: FloatArray = NO_LIMBS,
+    /** Still in an acclimation bag ([AcclimationBags]): drawn, but not pickable and not yet in the tank. */
+    val bagged: Boolean = false,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
@@ -298,6 +340,8 @@ data class SimSnapshot(
     val sandPiles: FloatArray = FloatArray(0),
     /** Sandbox pump strength (0..2). */
     val flowStrength: Float = 1f,
+    /** A tank started from scratch (My tank, [Simulation.bareScape]): the renderer leaves out the owner's static colonies. */
+    val bareScape: Boolean = false,
     /** Water-surface heightfield (cm, sx × sz, x fastest) and its dims (SIMULATION §9.7). */
     val surfaceHeights: FloatArray = FloatArray(0),
     val surfaceDims: IntArray = IntArray(2),
@@ -311,6 +355,8 @@ data class SimSnapshot(
     val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
     /** Bacterial guilds (research 18) for the Bacteria card: levels, trends and what each is doing to the tank. */
     val bacteria: BacteriaState = BacteriaState.EMPTY,
+    /** The toy submarine while Submarine mode is on (null = off). */
+    val submarine: SubPose? = null,
     /** Dynamic sand bed grid (SIMULATION §16); refreshed ≤ 4×/s and shared until it changes. Null = flat, untouched sand. */
     val sandGrid: SandGridSnapshot? = null,
     /** Suspended sand / detritus particles: x, y, z (cm) and `Grain.ordinal + age fraction` per particle. */
@@ -327,6 +373,16 @@ data class SimSnapshot(
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
      */
     val pumps: FloatArray = FloatArray(0),
+    /** The nori sheet on its clip as a cloth (node positions and material per cell), null when there is none. */
+    val nori: NoriPose? = null,
+    /** Live touch puffs in the water, [com.reeflive.core.geom.FlowGust.STRIDE] floats each (coral sway, burst specks). */
+    val gusts: FloatArray = FloatArray(0),
+    /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
+    val bags: List<BagPose> = emptyList(),
+    val bagHurry: Boolean = false,
+    /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
+    val net: NetPose? = null,
+    val netFlush: NetFlush? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()
@@ -337,6 +393,23 @@ data class SimSnapshot(
         const val PUMP_STRIDE = 8
     }
 }
+
+/**
+ * The nori cloth for the renderer ([NoriCloth]): [cols] × [rows] node positions (xyz, row-major from the clip edge)
+ * and the material left in each of the (cols − 1) × (rows − 1) cells (0 = gone), plus the clip and the pane normal.
+ */
+class NoriPose(
+    val cols: Int,
+    val rows: Int,
+    val nodes: FloatArray,
+    val cells: FloatArray,
+    val clipX: Float,
+    val clipY: Float,
+    val clipZ: Float,
+    val inX: Float,
+    val inY: Float,
+    val inZ: Float,
+)
 
 /** Live stats for the fish card (DESIGN §5.6). */
 data class OrganismStats(
@@ -375,7 +448,34 @@ data class OrganismStats(
     val mouthbrooding: Boolean = false,
     /** Chronological age in years (LifeCycle). */
     val ageYears: Float = 0f,
+    /** "What is it thinking?" readout (ai/Thoughts.kt); [Thought.NONE] when the readout is off. */
+    val thought: Thought = Thought.NONE,
 )
+
+/**
+ * An animal's plan in plain English (ai/Thoughts.kt, SIMULATION §4.10), for the fish card, follow mode and the thought
+ * bubbles. Every line is a finished, kid-friendly sentence; nothing here feeds back into the sim.
+ */
+data class Thought(
+    /** The current plan as a sentence: "Nemo is heading home to the hairy mushrooms to rest." */
+    val now: String = "",
+    /** The runner-up or time-of-day plan: "Next: graze the nori clip." ("" when there is none). */
+    val next: String = "",
+    /** "Feeling: a bit stressed (water is warm)." */
+    val feeling: String = "",
+    /** One mood word or two: happy, relaxed, hungry, curious, busy, feisty, scared, sleepy, stressed, unwell, too hot. */
+    val mood: String = "",
+    /** The top driver in a few words: "it is hungry", "Falco the hawkfish is close". */
+    val why: String = "",
+    /** A short first-person caption for a speech bubble: "Yum, mysis!", "Eek! Hide!", "Zzz…". */
+    val bubble: String = "",
+    /** Stable id of the current plan (behaviour + target): the UI holds a line until this changes. */
+    val planKey: String = "",
+    /** 0 (asleep, hidden) .. 3 (eating, fleeing, cleaning, hunting): which animals get a bubble first. */
+    val interest: Int = 0,
+) {
+    companion object { val NONE = Thought() }
+}
 
 /**
  * An egg clutch for the renderer (coverage B-1): world position and the rock normal it sits on,

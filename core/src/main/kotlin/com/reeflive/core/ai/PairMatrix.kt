@@ -71,6 +71,13 @@ object PairMatrix {
 
     fun row(id: String): PairRow? = rows.firstOrNull { it.id == id }
 
+    private val rivalKinds: Set<Pair<BrainKind, BrainKind>> by lazy {
+        rows.flatMap { r -> BrainKind.values().filter { it.name == r.actor }.flatMap { a -> r.targets.mapNotNull { k -> BrainKind.values().firstOrNull { it.name == k }?.let { a to it } } } }.toSet()
+    }
+
+    /** [t] has a row of its own against [o]'s kind (a dottyback's standoff with the clowns): a rival, not a bystander. */
+    fun isRival(t: Organism, o: Organism): Boolean = (t.brainKind to o.brainKind) in rivalKinds
+
     /** Behaviour rows (bouts run by [PairBouts]); predation/defensive rows are handled by their own code. */
     fun boutRowsFor(o: Organism, sim: Simulation): List<PairRow> =
         rows.filter { it.type != "predation" && it.type != "defensive" && actorMatches(it, o, sim) }
@@ -132,10 +139,16 @@ object PairMatrix {
     }
 
     // ------------------------------------------------------------------ crowding (06 §3.4)
-    /** Σ BL² / footprint for the default stock (the 06 baseline at current sizes). */
-    const val CROWDING_BASE = 0.14
-    /** Aggression gain per unit crowding above baseline; 8 reproduces the §5.6 #19 band (tang 7.5 → 15 cm ≈ +30 %). */
-    const val CROWDING_GAIN = 8.0
+    /**
+     * Σ BL² / footprint for the default stock (the 06 baseline at current sizes). Calibrated as 0.14 on the earlier
+     * 121.9 × 33 cm footprint; the default stock in Tee's measured tank is the baseline, so it scales with the depth.
+     */
+    const val CROWDING_BASE = 0.14 * 33.0 / com.reeflive.core.sim.TankDims.DEPTH_CM
+    /**
+     * Aggression gain per unit crowding above baseline; 8 on the 33 cm-deep footprint reproduced the §5.6 #19 band
+     * (tang 7.5 → 15 cm ≈ +30 %), scaled with the footprint so the same growth gives the same gain.
+     */
+    const val CROWDING_GAIN = 8.0 * com.reeflive.core.sim.TankDims.DEPTH_CM / 33.0
     /** Tactile cleaning damping (S:Cheney08: chases cut by two-thirds). */
     const val AGG_DAMP = 0.35
     const val AGG_DAMP_S = 20 * 60.0
@@ -237,6 +250,13 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
             val map = entries.getOrPut(r.id) { HashMap() }
             for (t in c.p.neighbors(a, radius)) {
                 if (t.posture == 3 && t.brainKind != BrainKind.CLOWN) continue   // safe in its own hole
+                // a neighbour whose own shelter lies in the host's halo is a resident there, not an intruder: it is let be
+                // at its shelter, and a harmless one (no rival of the clowns, unlike the dottyback's standoff) anywhere in
+                // the outer halo, chased only into the 10 cm core (06 §5.3 territory core / halo; a tailspot leaving its
+                // hole 16 cm from the anemone was nipped back in on most trips out) [I]
+                if (r.anchor == "host" && t !== o && t.homePos.distanceTo(a) < radius &&
+                    (t.pos.distanceTo(t.homePos) < OWN_SHELTER_CM + 0.5 * t.lengthCm ||
+                        t.pos.distanceTo(a) > HOST_CORE_CM && !PairMatrix.isRival(t, o))) continue
                 if (t.pos.distanceTo(a) > radius || !PairMatrix.targetMatches(r, o, t)) continue
                 // a settled standoff partitions the rock: past familiarity 0.6 only a close approach to the
                 // cave counts, the halo shrinking to 40 % at familiarity 1 (06 §2.3) [I]
@@ -387,7 +407,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 val contact = o.pos.distanceTo(t.pos) < 0.3 * c.L + 0.5 * t.lengthCm + 0.5
                 if (contact && !r.displayOnly) { nip = true; o.mouth = 1.0 }
                 val limit = if (r.displayOnly) 2 * c.L else len
-                if (contact || travelled > limit || phaseT > 1.5) { phase = 2; phaseT = 0.0 }
+                // a host defender breaks off once the intruder is out of the halo: it does not leave its anemone [I]
+                val fled = r.anchor == "host" && t.pos.distanceTo(anchorOf(c, r)) > r.triggerRadius + r.triggerBL * c.L
+                if (contact || fled || travelled > limit || phaseT > 1.5) { phase = 2; phaseT = 0.0 }
             }
             // 2: apply the outcome, then return to the anchor
             2 -> {
@@ -434,6 +456,10 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
 
     companion object {
         const val REROLL_S = 60.0
+        /** A resident within this (cm, plus half its length) of its own shelter is not a host intruder [I]. */
+        const val OWN_SHELTER_CM = 4.0
+        /** Host territory core (cm, 06 §5.3 "core / halo 10 / 22"): defended against residents of the halo too. */
+        const val HOST_CORE_CM = 10.0
         /** First re-roll interval of a sensitising (host-defence) row [I]. */
         const val REROLL_SENS_S = 20.0
         /** Re-roll delay after a roll the hourly cap blocked. */
@@ -488,7 +514,8 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
     }
     /** A perched (benthic) client poses where it sits instead of lifting off the rock. */
     private var perch: Rest? = null
-    override fun enter(c: Ctx) { perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null }
+    private var hold: Vec3? = null
+    override fun enter(c: Ctx) { perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null; hold = null }
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
         val w = o.poseFor ?: run { finished = true; return }
@@ -508,7 +535,14 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
         }
         // freeze head-up with fins spread, mouth agape and gill covers flared; only the pectorals scull to hold station
         out.hover = true; out.pitchBias = 0.44; out.pectoral = 1.0; out.ampMul = 0.1; out.tailMul = 0.3
-        out.seek(o.pos + o.heading * 0.2, o.cruiseSpeed * 0.1, arrive = 2.0)
+        // it holds the spot where it began to pose (seeking just ahead of itself, the separation from the cleaner working
+        // along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass at 6-9 cm/s)
+        val h = hold ?: o.pos.also { hold = it }
+        val pushed = o.pos.distanceTo(h) > 2.0
+        out.seek(if (pushed) h else o.pos + o.heading * 0.2, o.cruiseSpeed * (if (pushed) 0.5 else 0.1), arrive = 2.0)
+        // pushed off its spot, it gives way less: separation grows as r/d near the cleaner nosing along its flank, which
+        // outran the way back and herded a posing engineer goby 30 cm along the front glass at 4-5 cm/s
+        if (pushed) out.separation = 0.25
         o.mouth = 0.7
         o.finClamp = 0.0
         o.gill = max(o.gill, 0.9)

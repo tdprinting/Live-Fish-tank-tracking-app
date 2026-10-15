@@ -142,6 +142,36 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
     fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
+    /** True while a fingertip is held on the tank (between the first [finger] with a point and the one with null). */
+    var fingerDown = false
+        private set
+    /** A fingertip held on the glass or water top (null = lifted): bold fish follow it and nip when it rests. */
+    fun finger(point: Vec3?, speedCmS: Float, surface: TouchSurface) {
+        fingerDown = point != null
+        holder.enqueue(Command.Finger(point, speedCmS.toDouble(), surface))
+    }
+    /** A flick of the held finger: a short puff of current at [point] along [velocity] (cm/s). */
+    fun puff(point: Vec3, velocity: Vec3) = holder.enqueue(Command.WaterPuff(point, velocity))
+    /** A tap right on an animal: snails and crabs tuck in, shrimp freeze, a hermit ducks into its shell. */
+    fun touchAnimal(id: String) = holder.enqueue(Command.TouchAnimal(id))
+    /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
+    fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
+
+    /** The last net goodbye already shown (so a body flushed before this screen opened never replays). */
+    private var flushSeen: com.reeflive.core.sim.NetFlush? = holder.snapshots.value.netFlush
+    /** [f] if it is a goodbye not shown yet (marking it shown), else null. */
+    fun takeFlush(f: com.reeflive.core.sim.NetFlush?): com.reeflive.core.sim.NetFlush? =
+        if (f != null && f != flushSeen) { flushSeen = f; f } else null
+
+    private val _submarine = MutableStateFlow(com.reeflive.app.ui.live.SubUi())
+    /** Submarine mode (SubmarineControls): the toy sub is out, seen by the fish, ridden from inside, lamp on. */
+    val submarine: StateFlow<com.reeflive.app.ui.live.SubUi> = _submarine.asStateFlow()
+    fun setSubmarine(s: com.reeflive.app.ui.live.SubUi) {
+        _submarine.value = s
+        if (s.on) follow(null)
+        holder.enqueue(Command.SubmarineMode(s.on, s.visible, s.light))
+    }
+    fun steerSubmarine(c: com.reeflive.core.sim.SubControls) = holder.enqueue(Command.SteerSubmarine(c))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner
@@ -154,8 +184,15 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         ),
     )
 
-    // ---- sandbox actions (ignored in REALITY mode) ----
-    private inline fun sandbox(block: () -> Unit) { if (mode.value == SimMode.SANDBOX) block() }
+    // ---- "My tank" (SimMode.CUSTOM): the keeper's own saved tank ----
+    val custom: StateFlow<com.reeflive.app.live.CustomTankInfo> = holder.custom
+    fun startCustomTank(build: com.reeflive.core.custom.TankBuild) = holder.startCustomTank(build)
+    fun startOverCustomTank() = holder.startOverCustomTank()
+    /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
+    fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
+
+    // ---- sandbox actions (ignored in REALITY mode; My tank has them all too) ----
+    private inline fun sandbox(block: () -> Unit) { if (mode.value != SimMode.REALITY) block() }
 
     fun setParam(paramId: String, value: Double) = sandbox { holder.enqueue(Command.SetParam(paramId, value)) }
 
@@ -202,6 +239,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         sandbox { holder.enqueue(Command.AddOrganism(speciesId, sizeCm, nickname, role)) }
     /** Sandbox stocking test: [count] of [speciesId] at once (core caps it; corals settle on free rock or sand). */
     fun addMany(speciesId: String, count: Int, size: StockSize = StockSize.JUVENILE) = sandbox { holder.enqueue(Command.AddMany(speciesId, count, size = size)) }
+    /** Drops a shop bag of [count] × [speciesId] onto the water at tank x [x]; they come out after the float. */
+    fun floatBag(speciesId: String, count: Int, size: StockSize, x: Float) = sandbox { holder.enqueue(Command.FloatBag(speciesId, count, x.toDouble(), size = size)) }
+    /** Fast-forwards the clock while bags float ([on]), or back to the chosen speed. */
+    fun hurryBags(on: Boolean) = sandbox { holder.enqueue(Command.HurryBags(on)) }
     fun removeOrganism(id: String) = sandbox {
         holder.enqueue(Command.RemoveOrganism(id))
         if (_selectedOrganismId.value == id) select(null)
@@ -221,7 +262,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.enqueue(Command.Maintain(task))
         // a fresh sock or fresh carbon fits one when none was running (WaterSim.maintain): keep the sandbox's
         // equipment switches in step with the tank
-        if (mode.value != SimMode.SANDBOX) return
+        if (mode.value == SimMode.REALITY) return
         val row = when (task) {
             MaintenanceTask.CHANGE_SOCK -> "eq_sock"
             MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
@@ -263,6 +304,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
 
     /** Restores the sandbox to the state it was forked from. */
     fun resetSandbox() = sandbox {
+        if (mode.value == SimMode.CUSTOM) return@sandbox
         _lightPct.value = 100.0
         _extras.value = DEFAULT_EXTRAS
         holder.enqueue(Command.Photoperiod(DEFAULT_EXTRAS.getValue("photoperiod")))

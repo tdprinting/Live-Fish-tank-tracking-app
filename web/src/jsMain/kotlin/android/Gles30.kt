@@ -112,10 +112,12 @@ object GLES30 {
 
     private object Names {
         private var next = 1
-        private val objs = HashMap<Int, dynamic>()
+        // a plain JS array indexed by id: every bind and uniform call resolves its name here, and a Kotlin
+        // HashMap<Int, *> boxed and hashed each lookup
+        private val objs: dynamic = js("[]")
         fun add(o: dynamic): Int { if (o == null) return 0; val id = next++; objs[id] = o; return id }
         fun get(id: Int): dynamic = if (id == 0) null else objs[id]
-        fun remove(id: Int): dynamic = objs.remove(id)
+        fun remove(id: Int): dynamic { val o = objs[id]; objs[id] = null; return o }
     }
 
     private fun gen(n: Int, out: IntArray, off: Int, make: () -> dynamic) { for (i in 0 until n) out[off + i] = Names.add(make()) }
@@ -174,8 +176,10 @@ object GLES30 {
     }
     fun glBufferSubData(t: Int, offset: Int, size: Int, b: Buffer) = gl.bufferSubData(t, offset, data(b, size))
     fun glGenVertexArrays(n: Int, out: IntArray, off: Int) = gen(n, out, off) { gl.createVertexArray() }
-    fun glDeleteVertexArrays(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteVertexArray(it) }
-    fun glBindVertexArray(id: Int) = gl.bindVertexArray(Names.get(id))
+    fun glDeleteVertexArrays(n: Int, ids: IntArray, off: Int) { boundVao = -1; del(n, ids, off) { gl.deleteVertexArray(it) } }
+    // each draw binds its mesh's VAO; consecutive draws of one mesh (fins, shadow pass) skip the native call
+    private var boundVao = -1
+    fun glBindVertexArray(id: Int) { if (id != boundVao) { boundVao = id; gl.bindVertexArray(Names.get(id)) } }
     fun glEnableVertexAttribArray(i: Int) = gl.enableVertexAttribArray(i)
     fun glVertexAttribPointer(i: Int, size: Int, type: Int, norm: Boolean, stride: Int, offset: Int) = gl.vertexAttribPointer(i, size, type, norm, stride, offset)
     fun glVertexAttribDivisor(i: Int, d: Int) = gl.vertexAttribDivisor(i, d)
@@ -219,6 +223,10 @@ object GLES30 {
     fun glDeleteRenderbuffers(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteRenderbuffer(it) }
     fun glBindRenderbuffer(t: Int, id: Int) = gl.bindRenderbuffer(t, Names.get(id))
     fun glRenderbufferStorageMultisample(t: Int, samples: Int, fmt: Int, w: Int, h: Int) = gl.renderbufferStorageMultisample(t, samples, fmt, w, h)
+    fun glInvalidateFramebuffer(t: Int, n: Int, atts: IntArray, off: Int) {
+        val a = js("[]"); for (i in 0 until n) a.push(atts[off + i])
+        gl.invalidateFramebuffer(t, a)
+    }
     fun glBlitFramebuffer(sx0: Int, sy0: Int, sx1: Int, sy1: Int, dx0: Int, dy0: Int, dx1: Int, dy1: Int, mask: Int, filter: Int) =
         gl.blitFramebuffer(sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1, mask, filter)
 

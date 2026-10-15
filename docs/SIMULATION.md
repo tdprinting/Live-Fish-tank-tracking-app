@@ -320,7 +320,8 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - `Space` stress grows with size (sandbox "grow fish" slider shows the cramped behavior: more turning, shorter runs: waypoint spacing shrinks to 0.5 L when L > 15 cm).
 
 **Pajama cardinal (`CardinalBrain`)**
-- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1).
+- `HoverCover`: hover 5–15 cm from cover (coverScore 0.3–0.6), mid-water (y 0.3–0.6), just under the center arch or beside the left pillar; nearly motionless, pectoral sculling, tail idle (amp 0.1, pectoral 1). Since 2026-10-14 it hovers level: the drift target changes every 8–20 s with vertical offsets ×0.3, speed 0.25 cruise, and `SteerIntent.maxPitch` = 0.17 rad caps the body pitch (it was sitting at the 0.6 rad default clamp). It faces into the flow, or else away from the rock toward the front glass (research fish_pajama_cardinalfish, 2026-10-14).
+- `NocturnalForage` and `CardinalFeed` take only open-water food (`openWaterFood`: not settled, above the sand, and not touching rock). It is a mid-water picker; before this it hung for hours over pellets lodged in rock it could not reach. It gives up on a particle after `Feed.STUCK_S` without progress.
 - Crepuscular activity: at dawn/dusk `Wander` radius grows to 40 cm and it hunts drifting particles (`Feed` on mysis preferred, dietMatch flakes 0.5).
 - Shy: observer tap → retreat behind the pillar for 30 s; never `GlassCurious`.
 - Schooling hooks (cohere/align) active if more cardinals are added in the sandbox.
@@ -362,7 +363,7 @@ Activity curve `activity(t)`: DIURNAL = smoothstep over light intensity (0.05 �
 - Threat: eel within 12 cm → tail-flip escape (burst 40 cm/s for 0.5 s, backwards), then hide deeper in the ledge crevice.
 
 ### 4.6 Feeding system (`FoodSystem`)
-- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 4×6 cm sheet mesh at the clip anchor (`NORI_CLIP` at the left glass, y 35) that fish nibble (a `remaining` scalar scales the sheet).
+- `Feed(kind, grams, at?)`: spawns particles at `at` or at `SURFACE_FEED` (under the feeding ring at the left-front, x = 20, z = 25, y = waterLevel). Count = grams / `gramsPerParticle` (table below); nori = one 8×10 cm sheet at the clip anchor (`NORI_CLIP` on the left glass at the front corner, y 27, z 40: clear of the left rock so grazers reach its open side) simulated as a cloth (`NoriCloth`, below).
 - Particle physics: `v' = (flow(p) − v) × 2.0 + g_sink`; floating kinds hold `sink = 0` at the surface for `floatSeconds`, then sink at `sinkCmS`. Collide with SDF → settles on rock (`settled=true`, available to shrimp/blenny/eel); on sand → settles; after `lifeSeconds` uneaten → `detritus += massPerParticle`, particle removed. Max 400 particles. Suspended kinds (pods, phyto, coral food, cyclops) barely sink and ride the flow.
 - Fish bite radius 1.2 cm; competition: a particle targeted by two fish goes to the first to reach it; clowns and tang get burst speed when hunger > 0.4.
 - "Frenzy" score: all diet-matching fish with hunger > 0.2 get `Feed` ≥ 0.6 immediately on spawn (perception event), producing the rush.
@@ -407,6 +408,16 @@ Each organism keeps a trail of its head positions: a ring buffer sampled every `
 ### 4.9 Determinism
 `Rng` is xorshift128+ seeded from `tankId.hashCode()`; all behavior randomness goes through it so unit tests can assert trajectories.
 
+### 4.10 What is it thinking (`ai/Thoughts.kt`, `OrganismStats.thought`)
+Owner request (Tee): "see what the fish are thinking or planning on doing in plain english". Every snapshot's stats carry a `Thought` per animal, built by `Thoughts.of` and cached by `ThoughtBook` (rebuilt every 5 ticks, ~4 Hz at the 20 Hz wall tick):
+
+- **now**: the winning behaviour as a sentence with the animal's name and its target, e.g. "Nemo is heading home to the hairy mushrooms to rest.", "Doc is cleaning Blue the tang's gills.", "Stripes is backing into its burrow because Falco the hawkfish is close.". Every behaviour of every brain has its own wording (`Thoughts.line`, keyed by behaviour name, brain and the phase label); a fish idling with hunger > 0.65 "is hungry and watching the water for food". Targets come from `Caption` (focus id, else the likely nearby animal; cleaners only name fish); names read "Blue the tang", "Marlin" (same species), "Hermit 2" (the nickname already says it).
+- **next**: the runner-up behaviour by its last utility score (`UtilityBrain.lastScore`, ≥ 0.2, sticky within 0.08 so it does not flip every tick; reactions such as flee or a tap are never offered), else a time-of-day plan ("find a cozy spot before the lights go out" in the last 45 min of light, "wake up when the lights come on", "come out when it gets dark" for nocturnal animals). "Next: graze some algae."
+- **feeling** and **mood**: heat stage → too hot; sick → unwell; a fear plan → scared (and who); stress > 0.5 → stressed (with the worst water stress in words: "water is warm", "there is ammonia in the water"); asleep → sleepy; hunger > 0.65 → hungry; then feisty, proud, busy, curious, a bit stressed, peckish, happy, relaxed. "Feeling: a bit stressed (water is warm)."
+- **why** (the top driver: hunger, fear, curiosity, territory, family, home, cleaning job, getting cleaned, rest, water, health, growing, routine), a first-person **bubble** ("Yum, mysis!", "Eek! Hide!", "Zzz…"), a **planKey** (behaviour + target: the UI holds a line until it changes) and an **interest** 0..3 for the thought bubbles.
+
+It is read-only: it never draws from an rng, never writes to an organism or a brain (no `Counters` reads either: their roll mutates), and `Simulation.thoughtsEnabled = false` gives `Thought.NONE`. `ThoughtsTest` checks two same-seed runs are identical with it on and off, that every behaviour of every brain kind (default stock, moray, squid, both generic brains) has its own non-generic sentence with no raw names, and a dusk run reads as plain English.
+
 ---
 
 ## 5. Environment
@@ -415,10 +426,16 @@ Each organism keeps a trail of its head positions: a ring buffer sampled every `
 Loaded from `assets/sim/rock_sdf.bin` + `anchors.json`. The sim module gets a `RockData` constructed by the app from the files; tests use an analytic `RockData.ofSpheres(...)` builder.
 
 ### 5.2 SDF file format
-Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 122×33×61 tank at 1 cm: 245,586 cells → ~740 KB. As baked (ASSETS §3.5): nx = 122, ny = 61, nz = 33 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
+Header (little-endian): magic `RSDF`, uint32 nx ny nz, float32 originX/Y/Z, float32 cell; then nx·ny·nz float16 distances (cm); then nx·ny·nz uint8 cover scores. For the 121.9×40.6×45.7 tank at 1 cm: 122·41·46 = 230,092 cells → ~690 KB. As baked (ASSETS §3.5): nx = 122, ny = 41, nz = 46 (x, y-up, z), origin (0.5, 0.5, 0.5) = first cell centre, index = x + nx·(y + ny·z) (x fastest); cover byte 255 inside rock.
 
 ### 5.3 Flow field (`FlowField`)
-Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 84, y 48, z 1), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 42, z 10), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** at the back center top (x 61, y 55, z 2), aiming forward-down (0, −0.5, 0.87) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 20) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
+Two powerheads (from the photos): **PH-A** at the back glass upper-center-right (x 77, y 32, z 1; resized tank), aiming toward the front-left-down (dir (−0.6, −0.35, 0.72)); **PH-B** on the left glass upper (x 1, y 28, z 13), aiming right and slightly down (dir (0.95, −0.2, 0.25)); **HOB return** nozzle at the back middle (x 73, y 37.4, z 2; piped from the HOB filter on the right, video T97), aiming forward and a little down (0, −0.4, 0.92) at low speed. Each jet: velocity at point p: `u = axis·(p − src)`, `r = |(p − src) − u axis|`, `v = V0 × (R0/(R0 + 0.08 u))² × exp(−(r/(R0 + 0.12 u))²)` for u > 0, with `V0 = 60 cm/s`, `R0 = 2.5 cm` (powerheads, ~800 gph class), HOB `V0 = 25`. Plus a global slow return circulation `v_g = 1.5 cm/s × (−sign(x − 61), 0, 0)` near the bottom (y < 0.36 × water level) and `+x` near the top, and rock shadowing: `v × clamp(sdf(p)/8, 0.15, 1)`. Powerheads off → only `v_g × 0.2`. Flow speed is sampled by corals (sway amplitude, retraction) and by fish (station holding, surfing spots: points where speed 8–20 cm/s).
+
+**Gusts** (`FlowGust`, a flick of the finger): `addGust(pos, vel, t)` adds up to 4 short puffs on top of the jets, never baked into the cached grid. Each is a travelling Gaussian blob: centre `pos + dir × speed × τ(1 − e^(−age/τ))` with τ 0.8 s, radius 3.5 cm + 0.35 × distance travelled, speed `speed × e^(−age/τ)`, faded out over the last second of its 4 s life; launch speed ≤ 45 cm/s. `velocity()` and `velocityFast()` add them, so corals, sand, particles and the nori all feel the same puff; the snapshot carries them (`gusts`, stride 8) for the renderer's coral sway and flow motes.
+
+**Nori cloth** (`NoriCloth`): the clipped sheet is a 5×7-node mass-spring grid (24 cells), hung from one pinned node at the clip so it can swing and turn in any current. Position-based dynamics at 1/60 s substeps (≤ 8 per call), 6 constraint iterations: stretch, shear 0.6, bend 0.08 (compression only), a strain limit of 1.4× rest from the pin outward, sinking 2 cm/s². Each node reads `FlowField.velocity` (so the pump schedule, wavemaker pulse, pump off and gusts all reach it; no outlet is hard-coded) through anisotropic flat-plate drag, strong across the sheet and weak along it, plus a travelling-wave turbulence term (30 % of the local speed, no rng) that makes it flutter. Pane and rock contact use the rock SDF. Material per cell: a bite takes from the nearest cell, preferring ragged edges; an edge cell bitten below 30 % tears off with weak neighbours, a cell weakened below 55 % tears when strained past 1.3, and any cells no longer connected to the pin break away. Torn pieces become NORI `FoodParticle`s (grams by area, slow sink) that drift in the flow and get eaten like any food. Material is conserved: `remaining + eaten + torn = total`. The snapshot carries the pose (`NoriPose`: nodes and per-cell material) and the renderer skins its tiles over it.
+
+**Grazing the nori** (`NibbleNori`): grazers come at the sheet from downstream (flow at the sheet's centre, else straight out from the glass), face up-current and pick the most downstream cell whose station they can reach; tangs and others take a bite with a tug and a head shake, the lawnmower blenny rasps in quick bouts of small bites. A grazer that cannot get there in 8 s gives up for a minute.
 
 ### 5.4 Particulate
 300 ambient particles advected by `flow` plus Brownian jitter (1 cm/s), respawned when out of the box.
@@ -430,6 +447,16 @@ Computed per feed event: `u = remaining particles after 20 min / spawned`; influ
 `TapGlass(point)`: every fish within 30 cm gets `startle = skittishness × (1 − dist/30)`; `Flee` if startle > 0.35 else a flinch (0.3 s burst away 1 L); curious species may approach after 5 s.
 
 `TouchTank(point, surface, strength)` is the gentle single-finger tap (`TankTouch`, UI_STYLE §10.8). Surfaces GLASS / SAND / ROCK / CORAL (a rock tap within 5 cm of a colony). Per animal `TankTouch.reaction` picks INVESTIGATE (food-conditioned bold fish, glass, ≤ 50 cm, day), AVOID (shy fish, ≤ 28 cm), PEEK (blennies), FREEZE (shrimp, sally crab), CHECK (diamond goby, nassarius on sand), DUCK (hermits, dusters; crustaceans, blennies and hawkfish on rock: the species' own startle at 0.4–0.7) or NONE; strength falls off linearly with distance. The shared `TouchReact` behaviour (score 0.75–0.9, no utility noise and no rng until a tap, so it changes no other sequence) plays it for a few seconds. Polyp corals (GSP, zoa, clove) within 12 cm of a rock / coral tap get `disturb` 0.6 (0.8 on the tapped colony). Habituation per animal: +0.22 per answered tap, decays with τ 20 min, ignored at ≥ 0.75; a feed clears it. Three taps within 4 s (× speed) and 10 cm escalate to `TapGlass`.
+
+Surface SURFACE (a tap at the water's top): food-conditioned bold fish within 50 cm RISE to just under the surface for 4–9 s (not at night); shy fish close by AVOID; the surface gets a small ripple impulse.
+
+`Finger(point, speedCmS, surface)` is a fingertip held on the glass (null = lifted; no news for 6 s counts as lifted). Each animal is considered once per hold: bold fish that would INVESTIGATE FOLLOW instead: they track the finger along the pane (offset 0.5 L + 2 cm, 10 cm + 0.5 L while it moves faster than 35 cm/s) and, once it has rested 1.5 s, close in and nip every 0.7–1.4 s (`touchNips`). Lifting ends following after a 2.5 s linger. A finger moving faster than 35 cm/s only makes shy fish and crustaceans close by react. Holds habituate like taps.
+
+`WaterPuff(point, velocity)` is a flick: a `FlowGust` (§5.3), a sand puff where it passes within reach of the bed, polyp `disturb` 0.4 within 12 cm of its path, and shy fish and crustaceans in it flinch (AVOID / FREEZE / DUCK).
+
+`TouchAnimal(id)` is a tap right on an animal: snails, crabs, stars and other walkers TUCK (stop, pull in for 5–15 s), hermits, dusters, brittle stars DUCK, shrimp FREEZE, fish NONE (the tap only picks them). Habituation as for taps.
+
+**Submarine mode.** `SubmarineMode(on, visible, headlight)` launches a toy sub (`sim/Submarine.kt`, 4.6 cm, radius 1.4 cm, 12 cm/s) steered by `SteerSubmarine(SubControls)`. It moves on wall time (`stepWall`) and is pushed clear of the glass, surface, live sand (`SandBed.surfaceY`) and rock SDF; its pose is `SimSnapshot.submarine`. Every 0.25 s `ai.SubmarineSense` gives animals within 40 cm a `SubmarineRules.reaction`: STARTLE (closing > 7 cm/s within 9 + 10 × skittishness cm: the species flee via `onTap`), INVESTIGATE (curious clowns, tangs, wrasse, dottybacks; they follow it), POSTURE (clown within 14 cm of its host, dottyback at its cave: darts; hawkfish and eel watch), AVOID (cardinal, shy tangs, burrowers), HIDE (gobies, blennies, hermits, dusters, shrimp up close), FREEZE (shrimp, crab). `SubmarineReact` (noiseless, no rng while idle) plays the held ones. Loitering builds habituation over 200 s (ignored at 0.75, τ 20 min, a startle takes 0.2 back). Invisible: nothing is evaluated, so the run is identical to one without the sub (`SubmarineTest`).
 
 ---
 
@@ -479,8 +506,8 @@ Common behaviors (`ai/CommonBehaviors.kt`): HoverHome, Wander, Feed (frenzy on a
 | **Lawnmower blenny** | RockGraze (perch on rock and rasp 5–20 s, hop 5–15 cm, stays within 20 cm of `HOLE_LAWNMOWER`), InHole (night), BenthicFeed, BlennyRival (one blenny per tank, 04 §15) |
 | **Tailspot blenny** | InHole/Peek at `HOLE_BLENNY` (eye swivel), PlanktonDash (darts up for drifting food or plankton every 30–90 s), PerchNearHole (tail curled), Graze ×0.4, BlennyRival |
 | **Dottyback** | CaveDart (short rock-hugging darts around `CAVE_DOTTYBACK`, pauses in cover), Territorial (moderate to blennies, low to the cardinal, none to shrimp — 04 §13), Feed, Sleep in cave |
-| Banded shrimp | Hang (inverted under `SHRIMP_LEDGE`, leg shuffles, antenna phase), Scavenge, NightForage, cosmetic Clean, MoltHide, TailFlip |
-| **Skunk cleaner shrimp** | Station at `STATION_SHRIMP` (rocks side to side when clients are near), Climb (rides on the posing client 8–20 s), Scavenge, MoltHide (station closed while molting), TailFlip |
+| Banded shrimp | Hang (inverted under the left ledge, at a perch found on the SDF at run time; leg shuffles; sways at a passing fish), ShrimpForage, NightForage (walks rock tops, walls and ceilings within 30 cm), cosmetic Clean, MoltHide, TailFlip (then walks or swims home). See §19.5. |
+| **Skunk cleaner shrimp** | Station on a rock face near `STATION_SHRIMP` (perch found at run time; rocks side to side at 0.8 Hz when clients are within 30 cm), Climb (swims onto the posing client at ≤ 8 cm/s, rides it 8–20 s, swims home), ShrimpForage, MoltHide (station closed while molting), TailFlip. See §19.5. |
 | **Hermit crab** | CrawlWander, Pick (rasping rock), Scavenge, Retreat into shell (posture 6) |
 | **Brittle star** | HideUnder (`BRITTLE_HOME`, 1–3 arm tips out toward the cave mouth), Roam at night (arm rowing), RaceToFood (arms first, then the disc), ArmFeed (arm loops the item to the mouth), Retract (arms in, run home), autotomy when bitten. See §19. |
 | **Feather duster** | Filter (crown open, eats drifting particles within 8 cm plus a detritus baseline), Snap (retracts on shadow, tap, a fish touching the crown, or food dosed within 15 cm above; reopens over 10 s) |
@@ -525,7 +552,7 @@ Posture codes in `OrganismPose.posture`: 0 swim/crawl, 1 perched, 2 hanging, 3 i
 ### 9.5 Contract extensions (backward compatible, all defaulted)
 - `OrganismPose`: `brain`, `posture`, `eyeYaw`, `mouth`, `appendagePhase`, `extension`, `visible`, `nickname`.
 - `CoralPose`: `speciesId`, `anchor`, `flow`, `tissue`.
-- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`, `sandPiles`, `flowStrength`, `surfaceHeights`/`surfaceDims`, `flowGrid`.
+- `SimSnapshot`: `speed`, `lightIntensity`, `stats` (fish card), `tick`, `abstractMode`, `moltShells`, `noriRemaining`, `nori` (cloth pose), `gusts`, `sandPiles`, `flowStrength`, `surfaceHeights`/`surfaceDims`, `flowGrid`.
 - `OrganismStats` (FishCard, follow mode):
   - `caption`, `focusId`, `envStress` and `cause`.
   - `intent`: the caption without the name, e.g. "eyeing the skunk cleaner shrimp".
@@ -664,13 +691,13 @@ Eyes cloud after about a day above NH3 stress 0.5 (`eyeCloud`).
 
 ### 9.7 Water physics: flow solver, scalar transport, surface, optics (owner request)
 
-**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–56, z 0–33).
+**Flow** (`geom/FluidSim.kt`): a stable-fluids solver (Stam 1999) on a MAC grid with cubic cells over the water volume (x 0–121.9, y 3–38.1, z 0–45.7; sizes from `TankDims`).
 
 | `FluidQuality` | grid | cell | projection iterations |
 |---|---|---|---|
-| LOW | 32 × 14 × 9 | 3.8 cm | 30 |
-| MEDIUM | 48 × 21 × 13 | 2.54 cm | 45 |
-| HIGH | 64 × 28 × 18 | 1.9 cm | 60 |
+| LOW | 32 × 10 × 12 | 3.8 cm | 30 |
+| MEDIUM | 48 × 14 × 18 | 2.54 cm | 45 |
+| HIGH | 64 × 19 × 24 | 1.9 cm | 60 |
 
 - **Step**, with dt ≤ 0.1 s:
   1. Pump forcing.
@@ -733,7 +760,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
 
 **Pair matrix (`ai/PairMatrix.kt`, `sim/interactions.json`, 06 §5.3).**
 - *Scan.* Every 0.5 s each actor scans its rows. A target entering the trigger radius opens an entry. After `lingerS` the entry rolls once a minute with probability `p`.
-- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step), tactile damping, and rank.
+- *Modifiers on p:* habituation by familiarity, newcomer ×, sensitisation, hunger, size terms, temper, stress, crowding (computed every step; `CROWDING_BASE` and `CROWDING_GAIN` were calibrated on the 33 cm-deep footprint and scale with `TankDims.DEPTH_CM`, so the default stock in Tee's measured tank stays the ×1 baseline), tactile damping, and rank.
 - *Hourly cap.* A token bucket that refills at `floor + (max − floor)(1 − fam)`, scaled by the modifiers below, and holds max(1, ¼ h of the cap).
 - **Host-defence sensitisation:**
   - repeated intrusions raise p up to ×2;
@@ -761,7 +788,7 @@ Sources: `docs/research/06_interactions_analysis.md` (§4.1, §5.3, §5.5, §5.6
   - Inspection length is lognormal with mean 6.7 s × area^¼.
   - Cheating runs at 0.025/s, or 0.17/s when hunger > 0.6 (S:Pinto11).
   - The rest between bouts is 15–75 s × (1.3 − hunger).
-- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A client still unreachable after 20 s is skipped for 5 min.
+- *Getting there.* There is no path-finding. `Ctx.viaOpenWater` sends a swimmer over the rock, or to a doorway beside the goal under an overhang. A swimmer in a crawl space under a low rock roof (e.g. beneath R9 by the dottyback cave) first slides out sideways to a spot with open water above it, since it cannot climb from where it is. A client still unreachable after 20 s is skipped for 5 min.
 - The shrimp counts approaches every tick (`preTick`, c16).
 
 **Newcomers.** A tailspot added to the tank prospects holes and grazing patches for its first day (c09). Engineer goby adults patrol on about 5 % of nights (07 gap 3).
@@ -1063,9 +1090,10 @@ interpolates them and `fish.vert` reads them as `uMotion`:
 ### 15.5 Hairy mushroom host (owner, 2026-10)
 
 The clowns host a cluster of hairy green mushrooms (`rhodactis_sp`, *Rhodactis* sp., `CoralKind.MUSHROOM`). The
-cluster sits where the `mushroom_hairy.glb` model is built, on a ledge of the arch's left leg. The anchor
-`HOST_SHROOM` and the coral anchor `coral_shroom_hairy` are at (82.3, 20.3, 15.2), the centroid of the model's
-disc tufts, next to `HOST_ARCH_CLOWNS`. The owner's
+cluster sits where the `mushroom_hairy.glb` model is built: on top of the low purple-coralline R10 rock in front of
+the right recess, under the shelf's front edge (resized tank, ≈ (81, 13, 21); evidence in docs/specs/tank_design.md
+§1 v3 note: [P p14], [P full], night clip T84). The anchor `HOST_SHROOM` and its alias `coral_shroom_hairy` are that
+snapped point, with `HOST_ARCH_CLOWNS` ~4 cm above it. The owner's
 research docs on `claude/project-thread-r6d0sa` were not reachable when this was written. The specs below come
 from the coordinator's summary of them.
 
@@ -1101,7 +1129,7 @@ Sources: [research 16, diamond goby](research/16_diamond_goby.md). The sand used
 
 `SandBed` is 64 × 24 cells over the 121.9 × 33 cm floor (≈ 1.9 × 1.4 cm). Each cell holds three values:
 
-- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound).
+- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound) on open sand; under rock it can be dug almost to the glass (§16.8).
 - **freshness**: 0…1. Turned sand is the damp, darker layer from below. It fades with τ = 6 h.
 - **detritus**: a mulm index of 0…1.5. It starts at 0.25 and relaxes over 2 days toward the water-column detritus (less in strong flow).
 
@@ -1128,9 +1156,11 @@ All of this uses its own `Rng`, so the behaviour random streams and the existing
 | Nassarius | Ploughs a trail every 0.6 cm crawled on sand (0.1 cm deep). Burying or emerging (posture 5) leaves a crater with a spoil ring and a small puff. |
 | Hermits, Sally Lightfoot | Scratch: freshen plus a faint furrow every cm walked, and a puff every 12 marks. |
 | Brittle star | A shallow, wide furrow where its arms drag. |
-| Engineer goby | Each mouthful is dug at the burrow mouth (`GobyBrain.digPoint`, anchor `SAND_GOBY_DIG`) and spat out as a mound (`depositSand`). In abstract mode this happens at the day rate. |
+| Engineer goby | Digs tunnels under the rock mouthful by mouthful and spits the spoil at the entrance (§16.8). In abstract mode one mouthful every ~3 daylight minutes. |
 | Diamond goby | Scoops pits at its feeding stations, puffs sand and fines out of its gills, digs its burrow, and sifts detritus away (§16.5). |
-| Pump flow | Smooths the bed (§16.1). |
+| Leopard wrasse | Digs a body-sized slot at dusk, throws the sand to a rim, pulls it back over itself, and bursts out after lights-on (§16.10). |
+| Pump flow | Smooths the bed (§16.1) and refills burrows (§16.8). |
+| Every body | Rests on the live surface and pushes sand aside where it touches it (§16.9). |
 
 Teleports (more than 6 cm in one tick) are ignored.
 
@@ -1184,11 +1214,14 @@ The diamond goby is not in the owner's tank. It is in the stocking gallery (`Sto
 
 `SimSnapshot.sandGrid` (`SandGridSnapshot`: dims, cell size, height/fresh/detritus arrays, version) is rebuilt at most every 0.25 s × speed. It is shared until the bed changes. `SimSnapshot.sandClouds` holds the live cloud particles at stride 4 (x, y, z, kind + age/60).
 
+`SandGridSnapshot.cavity` (0…1 per cell) marks sand dug out from under rock: the gap over 2 cm, more where it was dug beyond the bed's starting gap.
+
 In the app:
 
 - `SandFx` packs the grid into a 64 × 24 RGBA16F texture on sampler unit 13 (`uSandMap`). It uploads only on a version change, at most 5×/s.
 - `static.vert` (`SAND`) lifts the top vertices of the sand by the height.
-- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, and brightens freshly sifted patches.
+- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, brightens freshly sifted patches, and shadows the floor of dug burrows (alpha = cavity).
+- Dug tunnels need no extra geometry: the sand mesh under the rock is lowered by the height, which opens the gap to the rock's underside. Spoil piles are the same lift upward, and each spit throws a `puff` that the cloud renderer draws.
 - `SandCloudRenderer` draws each cloud particle as three jittered points with the particles program. Sand is a pale burst, silt a faint spreading haze, detritus brown flecks.
 
 The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
@@ -1204,6 +1237,86 @@ The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
 - nassarius trails and burial craters, both direct and fed in a live run;
 - the engineer goby's pit and mound;
 - the diamond goby: catalogue and compatibility, sifting (mouthfuls, puffs, stations, sifted load, level bed), pair burrow, dusting of low corals, decline without sand fauna, and the prey index on a sterile bed.
+
+`sim/SandBurrowTest.kt`:
+
+- the rock roof read from the SDF;
+- mass conservation through mouthfuls, spits, plumes, bow waves, impressions and three days of `relax`;
+- an undug burrow does not fit the body; it fits to its length once dug, and refills over days when left alone;
+- a live goby on a fresh bed never has its head beyond the dug face, and its burrow gets longer;
+- no head (and no spine midpoint, 0.3 cm tolerance) below the sand surface unless burrowing, over 30 min of the full tank at dusk; contacts moved sand;
+- burrows and the bed carry over into a time-lapse fork.
+
+### 16.8 Tunnels under rock and the engineer goby's burrows
+
+Sources: [research video fish_engineer_goby](research/video/fish_engineer_goby.md), [sand_bioturbation](research/video/sand_bioturbation.md); Wikipedia (*Pholidichthys leucotaenia*: adults excavate with the mouth, "eject mouthfuls of debris", a colony's maze of tunnels ≈ 6 m); Shedd Aquarium (scoop up sand or gravel and spit it at the tunnel entrance); hobbyist guides (rock resting on sand rather than glass gets undermined; they dig and re-dig constantly). No footage was watched (YouTube blocked).
+
+**Roof.** `SandBed.attachRock(sdf)` sphere-traces each cell's centre column from 0.5 cm above the glass. The first rock hit within `ROOF_RANGE` (8 cm) over the modelled bed is the cell's `roof`. Rock at the bottom marks the cell `SOLID` (nothing to dig under); no rock marks it `OPEN`. A roofed cell can be dug to 0.5 cm above the glass (`floorH`).
+
+- `gapAt(x, z)` = roof − live surface (∞ in open water, 0 where sand meets rock).
+- `fits(x, z, dir, bodyH, bodyW)` needs the gap ≥ body height at the midline and at both flanks (± half the width across the heading).
+- `maxGapAt` is the most a gap could ever open (roof − floor).
+
+**Mass.** `takeMouthful` takes sand from the cell that holds the surface up most at that point. It never goes below the floor, and the sand is counted as `carriedCm3` until `spit` drops it. `spit` deposits it with `depositExact`, which spills to a wider ring instead of losing sand to the mound clamp, and throws a plume. `sandVolumeCm3()` is the grid plus suspended sand plus carried sand. It stays constant through digging, spitting, clouds, bow waves, impressions, slumping, smoothing and infill. Puffs never take sand a cell does not have, grains landing are never clamped away, and coarse grains that time out drop where they are.
+
+**Burrows.** A `Burrow` is a straight tunnel from a mouth at the rock edge into the rock. The live gap is not stored: `reach(b, h, w)` walks it in 0.4 cm steps. `nextDig` gives the next mouthful:
+
+1. the face (the first point where the body does not fit);
+2. any stretch lower than the chamber height (`CHAMBER` 1.4 × the fit height), i.e. sand that trickled back;
+3. one more cm of tunnel, up to 1.6 body lengths, while the rock allows;
+4. the mouth apron.
+
+**Refill.** `relax` slumps sand under rock only past tan 2.0 (≈ 63°; roof-confined, mucus-bound walls). Every neighbour pair with a roofed cell evens out with τ = 3 days at 1× flow (faster in strong flow). A tunnel left alone shallows by about a third in three days, so the goby must keep digging.
+
+**GobyBrain.** The fit height is body depth × 1.15; the width is 0.65 × that.
+
+- **Burrows.** It plans a primary burrow from `BURROW_GOBY` along its direction (1.2 body lengths), plus up to two rock-edge sites within 24 cm (`burrowSites`) that it can swim to in a straight line. Fish built with the tank have the primary burrow already open to its length (an established home, sand moved to the spoil pile). The others start undug. `burrowSites` ranks sites by the sand still to move (the mean shortfall of the gap below the body height along the tunnel), then by length. A site where the rock foot sits centimetres deep in the sand needs a pit that slumps back in about as fast as one goby can carry it out. In Tee's 48 x 18 x 16 in layout the `BURROW_GOBY` anchor is a natural cave a 10 cm goby already fits (2–3 cm under the rock), so the digging happens at the extra sites.
+- **Excavate** (trip timing unchanged: adults every 0.7–2 h, juveniles every 25–120 s):
+  1. swims to the mouth;
+  2. slides in head first at 0.5 BL/s, only as far as `reach`;
+  3. digs at the face for 2–5 s with the head in the sand (`Organism.inSand`) and the body wriggling;
+  4. takes a mouthful of 0.6 cm³ × (L/10 cm)², backs out at 0.7 BL/s still facing in, turns, swims to the spoil pile about half a body length outside the entrance, and spits (mound plus plume, `Simulation.spitSand`). If interrupted, it drops what it carries.
+- **InBurrow.** By day the head peeks out with the body lying in the tunnel. At night the head is deep and facing in. Both are limited to the dug length; with a short tunnel more of the body stays outside.
+- The rare night patrol, the hover and the flee are unchanged.
+
+### 16.9 Bodies against the sand (`sim/SandContact.kt`)
+
+After every behaviour tick (and in abstract placement), `SandContact.step` lifts any body whose reference point is below `surfaceY + clearance`, where clearance is half the body depth for fish and 0.15 cm for crawlers. It also clears downward velocity and re-anchors the spline head. `Steering.crawl` still re-attaches crawlers to the flat `RockData.sandTopCm` plane, so on sand the clamp lifts them back onto the live surface each tick (the collision layer is the place to make the walk itself read `surfaceY`). `Ctx.safe` lifts a target point that lies inside the live sand to `surfaceY` + 0.2 cm, so no swimmer is sent to a point it cannot reach. Points above the sand are left alone: an earlier floor of `surfaceY` + body clearance also moved cave, cover and station picks, and the dottyback then spent about 40 % of its time visiting the cleaner instead of patrolling (c20). Drifting plankton (`FoodKind.suspended`) is kept over the live sand in the same way, because the flat `clampToWater` floor left copepods 1.6 cm inside the bed where the diamond goby kept going for them. A lawnmower blenny perched low on a rock face lies along the face, because head-up there would hang its body into the sand. A clown coming back to its host with rock in the way goes over the rock (`HoverHost`), not into it. `viaOpenWater` no longer returns the swimmer's own position when the way over is blocked at its height: it tries a higher crossing, a doorway, then a way out of the pocket, and only then holds (a cardinal had held still under a ledge for 90 min on its way to the cleaner). A leopard wrasse picks sleep sand with open water above it and swims over the patch before dropping onto it. A client posing for a cleaner (`PoseForCleaner`) holds the spot where it began to pose and swims back to it if pushed more than 2 cm away. Before, it sought a point just ahead of itself, so separation from the cleaner working along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass. The rest of the body follows: `SandContact` raises spline trail points that lie under the live surface by up to 6 cm/s (`BodySpline.liftTrail`), and while a body is drawn along an override path (den, burrow), its trail is kept on that path. When the override is let go, the body therefore eases out of the shape it was drawn in, not out of the head's track through the sand. A goby leaving its burrow had its middle 1.7 cm under the mound at the mouth. The diamond goby checks a sifting station's rock clearance at the height it hovers over the live sand, not at the flat plane; a station under a rock foot left it 0.3 cm off the rock when it swam off to feed (`AiTest.noRockPenetration`). An engineer goby away from its burrow mouth slides along the bed to it when the way is clear: the open-water swim holds a 20 cm body off the rock it lives against. A swimmer pinched between the sand and a rock overhang is moved aside by the sand, to the nearest spot on the live surface (within about the lift height) with its swim clearance to rock (0.45 L) and off the glass. Before, the steering pushed it out of the rock down onto the flat `sandTopCm` floor and the lift put it straight back each tick: a blue tang was frozen for 95 min in the gap under a ledge at the back glass, out of reach of the cleaners (`RealismAcceptance` c04). A client pushed off its pose spot gives way less to its neighbours (separation 0.25 while it swims back): separation grows as r/d near a cleaner nosing along its flank, which outran the way back. A cleaner shrimp climbing onto a client sets the client's `poseFor` to itself, and `VisitCleaner` keeps the station's client when it hands over to a pose for that cleaner. A stale `poseFor` naming the wrasse that last cleaned it had let the visit release the shrimp's station as the pose began, a clean-visit loop every 1.5 s (`FishGlitchTest`). The tang's patrol leaves a rock pocket through `viaOpenWater`, because a straight seek held it nose to the rock for minutes (`SubmarineTest`). The hawkfish's night landing and rest spots are on `surfaceY` (3.5 to 6 cm), not the flat 3 cm plane that the clamp lifted it off every tick.
+
+Exempt (`SandContact.exempt`): posture 5 (buried nassarius, sleeping leopard wrasse, bobtail squid), `Organism.inSand` (a goby's head in its dig face), and the feather duster (its tube is set in the sand).
+
+Contact moves sand (mass-conserving):
+
+- **Bow wave.** Each 0.25 BL (≥ 0.6 cm) travelled in contact pushes a 0.2 mm layer over the body width (plus what a pressed-in body overlapped) 60 % ahead and 20 % to each side. Nassarius, hermits, the Sally Lightfoot and the brittle star keep their `SandWork` trails instead.
+- **Impression.** After 20 s still in contact, a brittle star leaves one disc impression and a goby three along its body (0.12 cm deep, with a rim).
+
+Wedged between rock and sand (a crevice at the rock foot, a diamond goby dashing into its burrow), the lift stops `ROCK_KEEP` (0.3 cm) short of the rock. The body then shoves the sand out from under itself (bow waves at least one cell wide, so the sand lands outside the cells the head reads). Sand that cannot move (bed at its floor) carries the head up inside that rock margin.
+
+Swap point: when the shared collision layer lands (`BodyCollision.resolveEnv` reading `SandBed.surfaceY` live), `clamp` becomes its sand term and `exempt` its per-cell rule. The displacement half stays.
+
+### 16.10 Sand physics shared by every species, and bodies buried in it
+
+Every species moves sand through the same `SandBed` operations, and all of them conserve mass: `sandVolumeCm3()` (grid + suspended sand grains + mouthfuls carried) changes only when fines drift out as silt.
+
+- **Transfer.** `takeExact`/`depositExact` (spill to wider rings past `MAX_MOUND`), `takeMouthful`/`spit` (§16.8), `bowWave` and `impress` (§16.9), `buryStep`/`emergeFrom` (below). No take goes below a cell's floor.
+- **Angle of repose.** `relax` slumps any step steeper than tan 32° (open sand) or tan 63° (roofed tunnel walls). It works on the *visible* surface, so a buried body's volume holds its cover up.
+- **Flow.** Diffusion grows with pump flow (ripples and pits flatten over hours to days). Roofed cells infill slowly (§16.8).
+- **Suspension.** A puff lifts grains out of the cell (sand where there is sand, silt at the floor). They drift with the local flow and settle back by fall speed. A sand grain that lands or times out goes back into the grid where it is.
+- **Brains.** Anything that rests on, burrows in or sleeps under the sand reads `SandBed.surfaceY`, not the flat `RockData.sandTopCm`: the gobies, nassarius rest and burial, brittle star rest, an overturned snail, the bobtail squid's fallback bed, the leopard wrasse, and food settling (`FoodSystem.groundY`). The renderer's sand mesh is coarser than this grid, so a pit can look slightly shallower than the body in it.
+
+**Bodies in the sand (`SandBed.BuriedBody`).** A body lying in the sand is a slot of cells along its length. `inclusion` holds the body's own volume as height per cell. It lifts `surfaceY` and the rendered surface but is not sand.
+
+- `canBury(head, dir, len, width, thick, cover)`: open sand only (no rock over it, no other body in it), and deep enough along the whole slot for thick + cover above a floor 0.5 cm over the glass. The 3.5 cm front of the bed is too shallow for a 10 cm wrasse (1.6 cm thick + 2.2 cm cover). The back (up to 6 cm) is not.
+- `buryStep(b, digTo, coverTo)`: digging lowers the slot by (thick + cover) × share and throws the sand to a rim: half ahead of the head, a quarter to each side. This makes a depression and a rim. The body volume goes in under the surface as it digs. Covering takes the rim sand back over the body. Exact transfer.
+- `emergeFrom(owner)`: the body volume leaves and the cover over the head end is thrown aside. This leaves a dimple about as deep as the body was thick, with a low rim. `relax` slowly flattens it.
+
+**Leopard wrasse (*Macropharyngodon bipartitus*).** It dives at dusk (light < 0.25, or lights out) at a sleep spot where `canBury` holds; spots on shallow or dug-out sand are skipped. It lies on its side: the slot is as wide as the body is deep (0.36 L), thick 0.45 × that, with cover `max(1, 3 − thick/2)` cm, so the body centre is 3 cm down (research: 2–5 cm).
+
+- **Dive.** Lasts 1.05–3.06 s (SICB P2-191, *H. bivittatus*). Digging runs over the first 85 % and covering from 55 %. Small puffs rise as it wriggles and settle back.
+- **Night.** It is placed at `BuriedBody.bodyY` under the surface it made.
+- **Emergence.** 15–60 min after lights-on it bursts out (`emergeFrom` plus a puff) and rises from that depth.
+
+Abstract mode (no dive) keeps it 3 cm under the live surface. Tests: `SandBurialTest`, `LeopardWrasseTest`.
 
 ## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
 
@@ -1337,8 +1450,32 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
   - `Graze` scores hair algae, film and diatoms. It shuffles sideways between bites with `pick` = 1, and at night it grazes a glass spot 15 % of the time (`glassSpot`).
   - `CrabScavenge` (pick 0.6) and `CarcassPick` (pick 1).
   - `HideCrevice`: legs tucked, with occasional picking. It gets +0.35 for 48 h after a molt (`softShell`) and +0.4 for 60 s after a dart.
-  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It takes a detour when stuck, tucks on arrival and counts `darts`.
+  - `Dart` is committed for at least 8 s (`MIN_HIDE_S`, or until it arrives, up to 15 s). It tucks on arrival and counts `darts`. When the straight dash stalls (2026-10-14), it plans a walking route with `RockData.surfaceRoute` (A* over 1.5 cm water cells near a surface; see §19.5). If it stalls on a waypoint it can see, it scrambles straight across to it. The old random side-step kept hitting the same wall.
   - `NightGrab` and the `crab_predation` sandbox toggle are unchanged.
+
+### 19.5 Hermit crab legs, chelae and shell (`HermitLegs`, research [hermit_crab_motion](research/hermit_crab_motion.md))
+
+- **Rig.** `LimbRig.forKind(HERMIT)` is a `HermitLegs`; `motionMode` 5. Every part of the model (shell, shield, eyestalks, limbs) carries its limb index in `COLOR_0.b`, and `fish.vert` `hermitLimb` poses it about `extras.limbPivots`.
+- **Legs** (k = 2 pair + (0 left, 1 right), pair 0 = P2). Forward walking in diagonal pairs: left P2 steps with right P3, half a cycle against the other two, with a 0.08-cycle lag from P2 to P3. Stride = 0.3 shell lengths, 0.8–3.5 Hz. The pose is (phase, fore-aft stroke rad, foot lift, withdrawal); the foot swings forward lifted in the first 40 % of the cycle and pushes back planted in the rest.
+- **Chelae 4/5** (pick phase, pick, walking support, withdrawal): alternate strokes to the mouth at `PICK_HZ` 1.2 Hz each while the brain's `pick` is set (`Pick` at its spot: 1; `Scavenge` once slowed: 0.8) or `mouth` is up.
+- **Shell 6**: rolls ±0.1 rad once per stride and bobs twice per stride while walking.
+- **Shield and eyestalks 7**: eyestalks scan out of step; the shield bobs with the stride. **Antennae 8** sweep (faster while `searching`), **antennules 9** flick at 2.5 Hz in 1–2.5 s bursts every 2–6 s, nonstop while following a scent.
+- **Withdrawal.** `retract` follows 1 − `Organism.extension` (Retreat sets 0): in at 12/s (≈ 0.15 s), out at 0.35/s. Eyestalks and antennae come out first, then the chelae, the walking legs last. In the shader every part but the shell shrinks toward `limbPivots[7]`, just inside the aperture; the left chela stays at the opening.
+- **Tests.** `ai/HermitLegsTest.kt`: diagonal pairs and shell roll; snaps in within 0.25 s and comes out eyes first; alternating claw strokes while picking in the sim.
+
+### 19.6 Crawler surface seat and planted feet (`sim/CrawlerSeat.kt`)
+
+The crawler models stand on their own y = 0 plane, but the sim walks `Organism.pos` at the brain's `surfaceOffset` (0.5 × depthRatio × L + 0.2 cm) above the nearest surface along one normal, against the flat `sandTopCm` plane. Drawn there, a hermit stood about 0.5 cm off a rock face with legs and antennae crossing into the mesh, and hung over the sand slope (owner clip C 1.5–7 s). The seat fixes the drawn pose only; `pos`, `up` and every behaviour are unchanged.
+
+- **Surface** (`CrawlSurface`): min of the rock SDF, the live sand bed (`SandBed.surfaceY`, the sand the renderer draws: 3.5 cm at the front glass to 6 cm at the back, plus digging) and the four glass panes.
+- **Seat.** Step from `pos` onto the surface, fit the body up to a plane through four footprint samples cast down onto it (70 % fit, 30 % normal under the body; eased at 4 rad/s and kept from tick to tick), then a rigid contact solve over the model's contact points (hermit: 26 shell points, shield, coxae and chela bases, from the GLBs): points inside are pushed out along their own normal as a translation plus a small rotation about the body centre (a shell against a wall tips up it), and with nothing inside the body settles until its lowest point touches (0.02 cm). A final pass lifts it clear of anything still inside, then settles as far as nothing goes in. If that leaves no clean rest (a slot narrower than the shell), it retries from the bare normal, the last tilt and four tipped starts, and else holds the last clean seat within a body length. `Organism.toPose` draws the rigid body at `seatPos` / `seatUp`; `blend` eases 0 ↔ 1 at 3/s when the animal leaves or regains a surface.
+- **Hermit legs** (`HermitLegs` entries 10–13, `fish.vert` hermitLimb with `uLimb[14].w` = 1): each foot has a foothold cast onto the surface from above its stance point (the rest tip swung by the stroke). It stays there through the stance (re-planted if it leaves 0.45–1.08 of the hip-to-tip reach), swings to the next foothold in the first 40 % of the cycle with the rig's lift, and a rotate-about-the-hip IK (axis × angle) plus a flex that shortens the leg and raises the knee reaches it. If the tip, knee or propodus would be inside, the foot searches the surface around the hip (3 reaches × 5 swings) and then folds up beside the body; a leg with no clear pose at all is pulled into the shell over two ticks.
+- **Chelae** (`uLimb[14].y/.z`): the dip is capped so the claw tip and palm stay on or above the surface under them. **Antennae, antennules** (8.z, 9.z) pitch up and sweep out and back, **eyestalks** (6.w) lean back and down, by the smallest of 0, 0.2 … 1 that keeps them 0.04 cm off rock and glass (raised by ≤ 0.45 per tick, relaxed at 0.8/s).
+- **Continuity.** Each tick first carries the last seat along with the sim's motion along the surface and keeps it if it is still clean (nothing inside, ≤ 0.1 cm gap, within one body length of `pos`); then the last seat unmoved; only then a fresh solve (fitted up, bare normal, four 0.6 rad tilts). A seat that would hop more than 10 cm/s × dt beyond the sim's own move, or turn faster than 6 rad/s, is approached by a limited step when that step is clean. Leg IK, claw limits and feeler bends change by at most 0.45 per tick; a leg whose eased sweep would cross rock is drawn shortened, else pulled in.
+- **Sim follows the seat** (hermits). A clean seat whose point raised by the brain's `surfaceOffset` is more than 0.3 cm from `pos` (and itself clear of rock, sand and glass) is written back into `pos` along the seat's up only (the walk along the surface stays the sim's: writing the whole seat pinned a hermit at a ledge), and the sim's `up` eases toward the seat's (3 rad/s, ≤ 0.4 rad a tick), so the single-normal crawl step stops thrashing on overhangs and in crevices. Seat changes under 0.1 cm / 0.05 rad are not drawn (the last seat is held while clean). A seat that keeps hopping (+1 a hop, −0.25 a clean tick, at 4) reports `wedged`: `HermitBrain` ends its pick or wander and does not settle to pick for 20 s, so it walks off.
+- **Other crawlers**: shapes exist for the Sally Lightfoot (carapace underside + dactyl tips), brittle star (disc + arms at 30 %) and astrea (sole + shell lip), but `SEAT_OTHER_CRAWLERS` is off: their seats added body pops and speed spikes in `FishGlitchTest` and have no no-clip test yet.
+- **Cost.** About 100–200 distance samples per seated hermit per tick (a few hundred when a leg has to search); no collections are built per tick.
+- **Tests.** `sim/HermitSeatTest.kt`: the full stock for 3 h at 20 Hz (from dusk) and 4 h at 10×, every tick, every seated hermit: the lowest body contact point is ≤ 0.3 cm off the surface and none is more than 0.1 cm inside; no planted foot tip or knee is more than 0.1 cm inside.
 
 ### 19.4 Tests
 
@@ -1351,6 +1488,35 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - it retreats fast when disturbed and sheds an arm when bitten;
 - the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
 - the crab's legs step in an alternating tetrapod.
+
+### 19.5 Shrimp navigation and perches (`ai/ShrimpNav.kt`, 2026-10-14)
+
+A 24-hour diagnostic run of the owner's stock found three problems:
+- The banded shrimp never reached its ledge. The skunk's keep-apart rule (30 cm) sent it to the right ledge, and the surface walk stalled on a wall at x ≈ 69 for the whole day, right side up.
+- The skunk's `STATION_SHRIMP` anchor sits 4 cm off the rock. The shrimp paced the sand, climbed the front glass and teleported onto clients.
+- The baked anchor normals disagree with the SDF gradients.
+
+What changed:
+- **Perches are found at run time.** `RockData.perchNear` is a deterministic grid search of SDF surface points that have open water in front of them.
+  - Banded shrimp: an underside (normal y < −0.45) near the left ledge (owner photos b_02–b_04). The score is distance + 6·(1 − cover) + 3·(1 + n.y).
+  - Skunk: an upright or vertical face near the station that does not face the back glass.
+  - Animals of the same species keep 3.5 cm apart.
+  - The body is laid flat on the surface with `bodyHeading`.
+  - The banded keep-apart distance is 20 cm, and the check excludes its mate.
+- **`ShrimpNav`** wraps `Steering.crawl`. The shrimp walks at stance height (0.21 BL off the surface). If the walk makes no 0.5 cm of progress for 6 s, or if the shrimp or its goal is off every surface, it plans a pleopod swim hop. The hop lifts 2 cm off the surface and takes the shortest SDF-clear route: direct, over the rock at +4…32 cm, or along the front glass. It lands at stance height and rolls belly-to-surface over the last 4 cm. Hop speed is 6 cm/s, a design estimate. There is no general collision; only clear segments are checked against the SDF, so this stays compatible with a capsule body layer.
+- **Banded shrimp at night:** `NightForage` picks waypoints on rock of any orientation (ceilings included) within `FORAY_CM` = 30 cm and dwells 4–15 s picking at each one. At dawn it walks back and hangs inverted (posture 2).
+- **Skunk:** `Climb` swims to the client's back at `MOUNT_CM_S` = 8 cm/s instead of being placed there. After `TailFlip`, both species navigate home.
+- **Antenna snap:** `appendagePhase` wrapped at 1000 rad, a non-multiple of 2π, which made the antennae snap about every 9 minutes. It now wraps at `Organism.APPENDAGE_WRAP` = 2π·159, and `FishRig.lerpPhase` uses the same period.
+
+Tests: `ai/CritterAccuracyTest.kt` checks that:
+- the banded shrimp hangs inverted under the left ledge with the full stock;
+- it gets home from the old stall point;
+- it forages on foot, including inverted, within its territory;
+- the skunk sits on rock at its station, not the sand;
+- two skunks take separate spots;
+- the skunk swims onto a client at a bounded speed and back;
+- the cardinal hovers level and slow;
+- the wrap period is a whole number of turns.
 
 ## 20. Hummingbird bobtail squid, sandbox only (`ai/BobtailSquidBrain.kt`, `sim/SquidRig.kt`, research cephalopod_squid)
 
@@ -1430,7 +1596,170 @@ These signals drive three parts of the renderer:
   - living on pods but starving on dry rock;
   - adding from the stocking gallery.
 
-## 21. Fish waste (`sim/WasteSystem.kt`, `render/WasteVisuals.kt`, research 18_fish_waste)
+## 21. Perception, memory, mood and species quirks (research realism_gaps, `ai/Perceive.kt`, `ai/Mind.kt`)
+
+Source: the realism gap analysis `realism_gaps.md` (project research files, 2026-10-14) with its keys: POH04, DIX12, HAZ96, AIZ01, REE02, TOM25, WIL94, SOA11, MRL23. Most numbers below are design estimates inside the direction of a source; each constant carries an `@Ev` tag and the main ones are rows in `EvidenceLedger` (species `"perception"`, `"mind"` and the species ids). Nothing in this section draws random numbers except where noted, so a fish that never meets a trigger behaves exactly as before.
+
+### 21.1 Perception channels (X1, X6)
+
+Each species sheet may carry a `senses` block (`sim/Senses.kt`, `SensesSpec`); without one, fish get the defaults below and invertebrates are ungated (the old radius search, so their tuned scavenging stays as it was).
+
+| Field | Default (fish) | Meaning | Evidence |
+|---|---|---|---|
+| `visionCm` | 120 | sight range in full light; covers the tank so daytime search is unchanged | DESIGN-ESTIMATE |
+| `darkVision` | 0.12 diurnal, 0.5 nocturnal/crepuscular | fraction of sight left in darkness; range = visionCm × (dark + (1 − dark) · smoothstep(0.02, 0.3, light)) | MRL23 (title only) direction; values [L] |
+| `lateralBL` | 1.5 | lateral-line reach in body lengths, light-independent | POH04 catfish analogy; value [L] |
+| `chem` | 0.6 | weight of smell | DIX12 goby, HAZ96 hermit analogies |
+| `gated` | true (false for invertebrates) | false = old search |  |
+
+- **Food** (`Ctx.findFood`): a particle is found if it is within sight, within the lateral line, or the animal is in its scent plume. Scent: inside √(4·D·age) of the particle (D 1.5 cm²/s, cap 25 cm), or downstream inside a cone of half-angle tan 0.25 whose front has travelled |u|·age along the local current, up to 90 cm; 3 s leach lag; weighted scent ≥ 0.15 counts. In the dark a diurnal fish upstream of food finds nothing until it drifts into the plume; downstream it smells it.
+- **Threats** (`SpeciesBrain.findThreat`): invertebrates keep the old ×0.6 at night. A fish's threat radius is scaled by its sight factor but never below its lateral-line reach.
+
+### 21.2 Place memory (X2)
+
+`PlaceMemory` holds a few entries per kind, each fading with a half-life; writing within 6 cm of an entry reinforces it.
+
+| Kind | Written by | Read by | Half-life | Cap |
+|---|---|---|---|---|
+| REFUGE | a flee that reached its cover | `Flee.enter`: a remembered refuge within 45 cm, not toward the threat or a threat site, replaces the computed cover when it is nearer: the nearest familiar shelter (not for the hawkfish, which picks its own perch) | 7 d | 3 |
+| THREAT | `onAttacked` | refuge choice | 6 h (as `Social.kt`) | 4 |
+| NIGHT | the hawkfish's sand spot | `SandRest` | 30 d | 1 |
+| PATROL | the dottyback's route | `CavePatrol` | 14 d | 6 |
+| GRAZE | (reserved) | | 1 d | 6 |
+
+### 21.3 Keeper and feeding clock (X3)
+
+- `Simulation.feed` (every mode, abstract included) calls `Mind.onKeeperFeed` for every animal whose diet matches. `FeedClock` keeps up to 3 slots (REE02: golden shiners learn up to three times and places). A feed within 90 min of a slot shifts it 30 % toward the new time and place and adds 0.15 × (1 − strength); feeds within 30 min are one meal. A slot whose time passes without food loses 20 % per missed day (REE02: anticipation outlasted withheld food by 3–10 days).
+- **`AnticipateFeed`** (fish except eel, hawkfish, cardinal, the two gobies and the leopard wrasse): from 60 min before to 30 min after a slot with strength ≥ 0.35, an awake, hungry, unafraid fish sweeps a slow figure-eight under the learned feeding spot, rising as the time nears, mouth working near the end. Score ≤ 0.55 (below the cleaner's work and any startle). From the third consistent daily feed.
+- **`ComeToKeeper`**: each meal raises a keeper association by 0.06 × (1 − a) (−10 % per day without food; TOM25 analogy: sea bream learned the diver who fed them over 12 days). A keeper cue (a gentle tap, a hand's shadow) with association ≥ 0.35 brings a calm, awake fish to the glass at that spot for 20–60 s (video fish_tailspot_blenny S2 "approaches the glass when the observer is near"). A knock (`TapGlass`) is a startle, not a cue. The app's torch is render-only and is not a cue.
+
+### 21.4 Mood and personality drift (X4)
+
+- `Mood.fear` (τ 29 min, ≈ 20 min half-life) rises 0.6 × magnitude per attack and 0.3 × per startle; `arousal` (τ 4.3 min) with feeds, startles and attacks. Feed scores × (1 − 0.5 · fear); glass curiosity and begging need fear < 0.3.
+- A tactile session with the cleaner (the dance that sets `aggressionDampUntil`) halves fear and arousal and trims social stress by 20 % (SOA11, *Ctenochaetus* cortisol analogy): the tang's P2 row.
+- Drift (WIL94 direction): +0.002 boldness per safe meal, −0.02 boldness and +0.01 skittishness per attack ≥ 0.4, −0.003 skittishness per tap not followed by an attack within a minute; capped at ±0.15 around the birth value (the ±15 % birth jitter is unchanged).
+
+### 21.5 Species quirks
+
+| Species | Sequence | Evidence |
+|---|---|---|
+| Falco hawkfish (`ai/HawkNight.kt` `SandRest`) | At dusk (activity < 0.3) it hops down from its perch in ≤ 3 BL ballistic hops at 3 BL/s with 1.5 s pauses on rock or sand, to an open-sand spot 2.5–10 cm from the rock base near its lowest perch (remembered, same spot every night). It settles propped on its pelvic fins, head up 17.5°, body still, head and eyes turning toward movement every 1–3 s. A lights-on flinch is ignored while resting. At dawn `PerchHop` hops it back up. Abstract mode parks it in the same pose. | Tee's night clip T89 [H] (sand, within 10 cm, pitch 15–20°, no flight); FishBase "rests at coral-head bases" (10 §5) |
+| Brittle star (`ai/BrittleLight.kt` `LightWithdraw`) | A light step (≥ 0.08 within ~30 s; lights forced on) or a shadow within 40 cm: all arms whip in and the disc freezes 3–8 s (score 0.93), then the old behaviours resume (by day it rows home). Slow dawn ramps do not trigger it. The day arm tips out of the hide reach × (1 − 0.5 · light). | AIZ01 calcite lenses (*O. wendtii*, ANALOGY for *O. erinaceus*); video invert_brittle_star S3; durations [L] |
+| Tailspot and lawnmower blennies (`ai/HoleEntry.kt` `TailFirstHole`) | Home is entered tail first: swim to a stand-off at the mouth, pivot to face out (6 rad/s), scull backwards along the tunnel axis at 0.8 BL/s with the body laid along the tunnel, then rest head-out (fully in at night). Leaving is head first. | owner direction 2026-10-14; head-out inspection, 10 §7; rates [L] |
+| Tailspot blenny | `GlassCurious` added (fear-gated), plus `ComeToKeeper`. A newcomer's trip out to a prospecting site is committed (only a flee breaks it off, at most `PROSPECT_TRIP_S` 25 s [L]) | video fish_tailspot_blenny S2 [M] |
+| Indigo dottyback (`ai/DottyPatrol.kt` `CavePatrol`) | A learned route of 4 crevice mouths within its territory (PATROL memory). Each round: dart along the rock to each stop, watch from the crevice mouth facing out 2–8 s, dart back to sit in the cave mouth 5–20 s. One stop is swapped every 6 rounds. | 10 §8 "record cave, patrol route, retreats"; video fish_indigo_dottyback "cave-mouth darts" [M]; numbers [L] |
+| Blue tang | Already present: `PlayDead` (side-roll 3–8 s after a hard startle) and `TangSleep` (wedged, rolled ~70°). New: cleaner contact lowers its fear and stress (21.4). | video fish_blue_tang S1, S3 [M]; SOA11 |
+
+### 21.6 Predation evidence gate (X7)
+
+`Simulation.unsourcedPredation` (SetParam `unsourced_predation`, default off, copied by the time-lapse fork) gates the predation rolls no source supports, even in the sandbox with predation on: the Sally Lightfoot's nightly snail rolls and its `NightGrab` on snails (PUC06, PIZ25 support grazing and scavenging only), and the moray's kill roll (the strike still lands as an attack that startles). Crab-on-fish keeps its own `crab_predation` scenario. The hawkfish's strike outcomes stay as they were (10 §5 separates approach, strike, contact and kill).
+
+Two crawler fixes ride with it: `Sdf.project` returns the iterate nearest the surface (in a rock crease the finite-difference gradient can point the wrong way, and the old last iterate could sit deeper in the rock than the input), and the Sally Lightfoot's home, which falls back to the `CAVE_SMALL` anchor in the middle of a cave, is moved onto the nearest wall when it lies more than 3 cm off the rock (`HOME_SNAP_CM` [L]); a crawler cannot reach open water.
+
+### 21.7 Tests
+
+`ai/PerceptionTest`, `ai/MindMemoryTest`, `ai/SpeciesQuirksTest` and `ai/PredationGateTest`: food in the dark found by smell downstream, not upstream, felt within the lateral line, seen by day; invertebrates ungated and the cardinal keeping more night sight; the clock learning a time and fading after missed days; a tang gathering under the feed spot before a learned 13:00 feed (control fed at 17:00); a keeper cue bringing a fed fish to the glass; a remembered refuge used under attack; a flee writing a refuge, fear fading and drift capped; the hawkfish's night sand pose and its return to a perch by day; the brittle star's withdrawal from a light step and a shadow but not from the dawn ramp; the tailspot backing tail first into its hole; the dottyback's patrol rounds; the predation gate.
+
+### 21.8 Deferred
+
+Engineer-goby juvenile schooling (the goby and sand code belong to the sand-bed work), the cleaner's audience effect and cortisol-driven cheating (P2; c03/c04 sensitive), clown host learning and size hierarchy, lawnmower graze-patch memory (the algae model has no spatial film value yet), nassarius and brittle-star plume emergence, astrea and asterina day/night rhythms, the asterina fission identity gate, and every hermit item (owned by the hermit rebuild). The pajama cardinal and both shrimp are being reworked elsewhere.
+## 21. Glitch guard and motion smoothing (`FishGlitchTest`, `ai/Steering.kt`, `geom/BodySpline.kt`, `render/FishRig.kt`)
+
+A reviewer said the fish "glitch out a lot". `FishGlitchTest` measures that. It runs the default stock for 5 sim hours: dawn, midday and dusk at the live 20 Hz tick on seeds 1–3, and 2 h at 10× (0.5 s ticks) on seed 4. Every tick it checks each animal's pose, as the renderer receives it, against these causes:
+
+| Cause | What it flags |
+|---|---|
+| `NAN` | Any non-finite pose value. |
+| `TELEPORT`, `SPEED_SPIKE` | The head moves faster than 1.5 × burst + 12 cm/s. |
+| `BODY_POP` | A spine station moves more than the head's travel plus a rigid swing. |
+| `HEADING_FLIP`, `TURN_RATE` | A flip, or a turn too fast for the species. Thresholds scale with dt; a C-start is exempt. |
+| `UP_FLIP` | The up vector rolls more than 60° in a tick, or more than 250°/s. |
+| `OSCILLATION` | 6 or more yaw reversals of at least 8° within 3 s. Yaw is measured about the animal's own up, so a crab on a wall is not judged in world yaw. |
+| `BEHAVIOUR_THRASH`, `POSTURE_THRASH` | 6 or more behaviour or posture changes within 10 s. A behaviour's own phase captions (the diamond goby's sift cycle) do not count. |
+| `POSE_JUMP` | The bend or a limb scalar jumps in one tick. |
+
+The test prints a ranked table by species and by behaviour, and writes every hit to `core/build/glitch-hits.txt`. Penetration of rock, sand, glass and the surface is printed but not asserted; the body-collision work owns it. The budgets in the test are a regression guard.
+
+Root causes fixed:
+
+- **Engineer goby burrow path** (`GobyBrain.tunnelSpline`). The body path ran from the head to the mouth and then down the tunnel whichever way the goby faced. A goby going in head first to dig folded back on itself, and its body flipped 20 cm in one tick as the head passed the mouth. Facing in, the body now trails out through the mouth.
+- **Body spline.** A hole, den or burrow override polyline snapped the head to the path's first point. The override is now anchored at the head and blended in and out at 6/s (`BodySpline.overrideMix`).
+- **Kinematic placement.**
+  - A perch or hole picked across the tank was crossed in a few ticks. The step is now capped at max(1.2 × burst, 6 cm/s).
+  - A step that ended deep in rock was pushed out the far side. From outside, it now stops at the surface along the step.
+  - The up vector turns at most 240°/s.
+  - The push out of rock runs up to four passes. A single pass left a creeping step 0.05 cm inside a curved face.
+- **Swim heading.**
+  - The heading used to follow the raw velocity. Now the course is low-passed (`wantSmooth`), at a rate that drops when the fish is hovering or barely driven.
+  - A slow, unhurried fish no longer pitches its nose at a vertical course or yaws at its tiny horizontal residual.
+  - Urgent moves (urgency ≥ 0.7, C-start, walkers) turn as before.
+- **Waddle and separation.**
+  - The labriform waddle is now a direct sideways offset, not a desired velocity. As a velocity it spun a hovering clown ±100°.
+  - Separation keeps its full r/d strength until 0.9 r and eases to zero by 1.1 r (`SEP_EDGE`). It used to cut from unit strength to 0 as a neighbour crossed r. A fade wholly inside the edge weakened spacing, and one wholly outside it strengthened spacing. Either changed who meets whom on the rock enough to move the single-seed c01 (clowns near host) and c09 (blenny entries) checks. Over seeds 1–16, c09 entries fell from 4.3 per run to 2.7 with the inner fade.
+  - The clown's dart target is picked once per dart.
+- **Feeding reach.** A bite is measured from the mouth, half a body length ahead of the centre, as well as from the centre. Rock avoidance holds a swimmer's centre about 0.6 L + 1 cm off the rock. Before this change, a wrasse after mysis settled on a ledge hovered 4 cm short and never ate. It now eats on every seed tested in `AiTest.feedingReducesHunger`; it failed 2 of 6 seeds once the smoother turning changed which particles it chased.
+- **Fast forward.** At 10× a 0.5 s tick overshot the steering integrator every tick. Swim now integrates in substeps of at most 0.1 s.
+- **Swim roll.** The up vector rolls at most 5 rad/s. A tang rolled upright from "playing dead" or sleeping in one tick.
+- **Leaving a hole.** A fish that starts a tick deep in rock is eased out at max(burst, 10 cm/s) instead of being shoved its whole depth at once (a blenny popped 3–7 cm). It is always put past the hold band (0.34 L).
+- **Wedged between rock and glass.** The hold-position rule (never step closer to rock inside 0.34 L) used to freeze a fish that the glass clamp held against a rock face. It now lets the fish slide along the face on its wanted course, at up to half cruise and no closer than 0.2 L. Before, an engineer goby stayed stuck all night 1 cm off a ledge, its burrow a few cm away (c14). A kinematic step pressed flat against a face slides along it in the same way, instead of stopping.
+- **Crawlers.**
+  - Wander and the walking course are low-passed.
+  - A forward walker turns before it walks. A crab walks the smoothed course.
+  - On a corner whose raw course points back each tick, an attached walker that the re-attach would throw backwards stays put.
+  - Re-attach is capped at max(1.5 × walk speed, 8 cm/s); push-out from rock stays uncapped.
+  - A post-crawl projection that would jump further than a tick's walk is replaced by the step slid along the rock face. If that slide is blocked too, the step is undone. After 2 s wedged, the walker takes the projection (one hop beats freezing in a crevice). A projection that did not converge is never taken.
+  - Arrival is judged along the surface, so food just off the glass is reached from under it instead of being circled. Near a target, the smoothed course may turn on a radius of half the remaining distance (at least 1.5 cm).
+  - A target straight above or below leaves only a small tangent residual whose sign flips. The walker only follows as much of it as the surface leads toward the target. Urgent dashes are exempt.
+  - The leg stride clock runs after the projection, so an undone step takes no stride.
+  - The up vector turns at most 240°/s.
+- **Limb rig.**
+  - The hermit crab's eyestalk and antenna bob runs once per stride, not twice, and shrinks above 1.5 strides/s. At twice per stride it reached 7 Hz, faster than the 20 Hz pose stream can carry, and flicked between its extremes on each snapshot (about 1 900 `POSE_JUMP` hits per run).
+  - Crab legs swap leading and trailing roles over about 0.4 s, and only on a clear change of side (hysteresis ±0.25).
+  - The shrimp signal and grooming values ease in.
+- **Appendage phase.** It uses the core wrap `Organism.APPENDAGE_WRAP` (2π·159) from main, and the renderer interpolates it across that wrap.
+- **Render interpolation** (`SnapshotInterpolator`).
+  - The blend used to restart at 0 whenever a snapshot arrived. Every early snapshot jumped the fish forward and every late one froze it.
+  - Snapshots now sit on a smoothed timeline stamped by sim time, so a skipped snapshot leaves a two-tick gap rather than a double-speed tick.
+  - The scene is drawn one interval plus twice the measured jitter behind the newest stamp.
+  - After a pause the blend restarts from the held pose.
+  - Each snapshot's id map is built once per snapshot, not once per frame.
+
+Hits over the 5-hour run:
+
+| Cause | Before | After |
+|---|---|---|
+| `OSCILLATION` | ~45 900 | ~600–2 600 |
+| `HEADING_FLIP` | ~37 900 | 0 |
+| `UP_FLIP` | ~12 600 | 0 |
+| `POSE_JUMP` | ~8 500 | 0–1 |
+| `BODY_POP` | 870 | 0–2 |
+| `SPEED_SPIKE` | 224 | ~10–30 |
+| `TURN_RATE` | 112 | 0–2 |
+| `TELEPORT` | 9–14 | 0–4 |
+| `NAN` | 0 | 0 |
+
+**Clown host defence (`ai/PairMatrix.kt`).** The tailspot's hole (`HOLE_TAILSPOT`) lies 16 cm from the anemone, inside the clowns' 22 cm halo. Every time a newcomer tailspot left its hole, the clowns counted it as a host intruder and nipped it back in (10 female and 4 male chases in 3 h on seed 1). Its prospecting trips rarely reached the lawnmower, so c09 depended on luck. Two changes:
+
+- A fish whose own shelter (`homePos`) lies inside a host's halo is a resident there, not an intruder, while it stays within 4 cm plus half its length of that shelter. A harmless resident is also let be anywhere in the outer halo, and chased only into the 10 cm core (06 §5.3, core / halo 10 / 22). A resident with its own row against the clowns, such as the dottyback's standoff, is a rival and is still defended against throughout the halo, so c02 holds.
+- A host defender breaks off the chase once the intruder is out of the halo. It does not leave its anemone.
+
+c09 entries over seeds 1–8 are now 4–9 per 3 h (they were 0–7), and almost every entry draws a chase.
+
+The cleaner wrasse's pose scheduling was also made robust, for c03 on seeds 1–5:
+
+- A client poses at most once per `POSE_MIN_GAP_S` (1290 s) unless it carries ich.
+- A client that is due a pose is weighted 3× when the wrasse picks its next client.
+- Each inspection length is drawn when the client poses. It is the lognormal quantile u₀ + k·φ (mod 1) of that client's k-th pose, with a random u₀. Each length is still lognormal, but a client's few poses average near the mean. Independent draws pushed the tang's mean past 10 s on one seed in five.
+
+What remains sits mostly in the collision code:
+
+- The dottyback ping-pongs on the look-ahead avoidance (`rock.sdf.gradient(pos + vel·0.4)` × 40) where it is wedged near rock at 10×.
+- A blenny is pushed up to 3 cm out of its hole in one tick by the hard rock resolve.
+- A grazing snail circles where it cannot reach its target.
+- 0–4 `TELEPORT` hops of 4–10 cm per run come from two sources. One is a crawler wedged in a crevice for 2 s that takes the projection out. The other is the swim hard resolve pushing a clown or blenny out of rock.
+- The clowns wiggle in the host.
+
+## 22. Fish waste (`sim/WasteSystem.kt`, `render/WasteVisuals.kt`, research 18_fish_waste)
 
 - **Guts.** 17 % of each fish's N output is fecal, not gill ammonia (feed N budget: 13 % in solids vs 62 % dissolved,
   Canary Is. sea bream); `WaterSim` diverts that share of the excretion term into `fecalPending`, which

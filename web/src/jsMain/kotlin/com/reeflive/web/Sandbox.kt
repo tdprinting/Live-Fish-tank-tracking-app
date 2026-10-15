@@ -13,6 +13,8 @@ import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
+import com.reeflive.app.ui.live.ThoughtBubblePicker
+import com.reeflive.app.ui.live.ThoughtHold
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.waterReadouts
 import com.reeflive.core.live.Scenario
@@ -53,7 +55,10 @@ import kotlin.math.floor
 @JsExport
 object ReefSandbox {
     private val live get() = ReefLive
+    /** Every lever works: the pretend tank or My tank ([mine]). */
     private var sandbox = false
+    /** My tank (ReefMyTank): the keeper's own saved tank. */
+    private var mine = false
     private var fork: Pair<WaterState, List<LivestockSeed>>? = null
     private var leftRealityAt = 0.0
     private var lightPct = 100.0
@@ -98,34 +103,47 @@ object ReefSandbox {
             t.watchTitle = LiveTips.WATCH_TITLE; t.sandboxTitle = LiveTips.SANDBOX_TITLE; t.hello = LiveTips.HELLO
             t.watch = LiveTips.watch.toTypedArray(); t.sandbox = LiveTips.sandbox.toTypedArray()
             t.hermieWatch = LiveTips.hermieWatch.toTypedArray(); t.hermieSandbox = LiveTips.hermieSandbox.toTypedArray()
+            t.myTankTitle = LiveTips.MY_TANK_TITLE; t.myTank = LiveTips.myTank.toTypedArray(); t.hermieMyTank = LiveTips.hermieMyTank.toTypedArray()
         }
     })
 
     // ------------------------------------------------------------------ mode
 
     fun isSandbox(): Boolean = sandbox
+    fun isMine(): Boolean = mine
 
-    /** "watch" or "sandbox". Leaving Sandbox drops the pretend tank; the real one skips ahead by the time away. */
+    /**
+     * "watch", "sandbox" or "mine". Leaving Sandbox drops the pretend tank; leaving My tank saves it; the real one skips
+     * ahead by the time away.
+     */
     fun setMode(m: String) {
-        val want = m == "sandbox"
-        if (want == sandbox) return
+        val wantMine = m == "mine"
+        val wantSandbox = m == "sandbox"
+        if (wantMine == mine && wantSandbox == (sandbox && !mine)) return
         val real = live.reality ?: return
         lightPct = 100.0; predation = true; extras.clear(); extras.putAll(DEFAULT_EXTRAS)
         live.scenarioQueue.clear()
-        if (want) {
-            leftRealityAt = now()
-            val sb = forkOf(real)
-            sb.speed = 1.0
-            sb.stepWall(0.0)
-            live.sim = sb
-        } else {
-            val away = (now() - leftRealityAt) / 1000.0
-            if (away > 5) real.advanceAbstract(minOf(away, 24 * 3600.0)) else real.stepWall(0.0)
-            real.speed = 1.0
-            live.sim = real
-            fork = null
+        val wasWatch = !sandbox
+        if (mine) ReefMyTank.leave()
+        if (wasWatch) leftRealityAt = now()
+        when {
+            wantSandbox -> {
+                val sb = forkOf(real)
+                sb.speed = 1.0
+                sb.stepWall(0.0)
+                live.sim = sb
+            }
+            wantMine -> { fork = null; mine = true; live.sim = ReefMyTank.enter() }
+            else -> {
+                val away = (now() - leftRealityAt) / 1000.0
+                if (away > 5) real.advanceAbstract(minOf(away, 24 * 3600.0)) else real.stepWall(0.0)
+                real.speed = 1.0
+                live.sim = real
+                fork = null
+            }
         }
-        sandbox = want
+        sandbox = wantSandbox || wantMine
+        mine = wantMine
     }
 
     private fun forkOf(real: Simulation): Simulation {
@@ -169,6 +187,8 @@ object ReefSandbox {
             }
             "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
+            // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
+            "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
         }
         if (!sandbox) return false
         when (name) {
@@ -210,6 +230,14 @@ object ReefSandbox {
                 else send(Command.AddMany(e.speciesId, count))
                 burst(BurstKind.BUBBLES, RELEASE_SPOT)
             }
+            "bag" -> {
+                // arg = "speciesId:SIZE:x" (tank cm along the front glass), num = count: a shop bag floated there
+                val parts = (arg ?: return false).split(":")
+                val size = runCatching { StockSize.valueOf(parts.getOrElse(1) { "JUVENILE" }) }.getOrDefault(StockSize.JUVENILE)
+                val x = parts.getOrNull(2)?.toDoubleOrNull() ?: 60.0
+                send(Command.FloatBag(parts[0], num.toInt().coerceAtLeast(1), x, size = size))
+            }
+            "hurryBags" -> send(Command.HurryBags(num > 0))
             "addSized" -> {
                 // arg = "speciesId:SIZE", num = count
                 val (id, size) = (arg ?: return false).split(":").let { it[0] to StockSize.valueOf(it.getOrElse(1) { "JUVENILE" }) }
@@ -330,7 +358,11 @@ object ReefSandbox {
     internal fun touch(p: com.reeflive.core.geom.Vec3, surface: com.reeflive.core.sim.TouchSurface) {
         send(Command.TouchTank(p, surface))
         val glass = surface == com.reeflive.core.sim.TouchSurface.GLASS
-        val kind = if (surface == com.reeflive.core.sim.TouchSurface.SAND) BurstKind.SAND_PUFF else BurstKind.GLASS_RIPPLE
+        val kind = when (surface) {
+            com.reeflive.core.sim.TouchSurface.SAND -> BurstKind.SAND_PUFF
+            com.reeflive.core.sim.TouchSurface.SURFACE -> BurstKind.SURFACE_RIPPLE
+            else -> BurstKind.GLASS_RIPPLE
+        }
         burst(kind, floatArrayOf(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()), amount = if (glass) 1f else 0.7f)
     }
 
@@ -362,7 +394,7 @@ object ReefSandbox {
         val snap = s.latest
         val readouts = waterReadouts(snap.water, lightPct, snap.flowStrength.toDouble())
         return JSON.stringify(obj { o ->
-            o.sandbox = sandbox; o.predation = predation; o.speed = s.speed
+            o.sandbox = sandbox; o.mine = mine; o.predation = predation; o.speed = s.latest.speed
             o.values = obj { v ->
                 for (p in SandboxParams.all) {
                     val x = p.valueIn(r)
@@ -392,12 +424,42 @@ object ReefSandbox {
             it.id = c.id; it.name = c.name; it.species = c.speciesName; it.speciesId = st.speciesId
             it.health = c.health; it.stress = c.stress; it.hunger = c.hunger; it.mood = c.mood; it.behavior = c.behavior
             it.alive = c.alive; it.stage = c.lifeStage; it.cm = st.lengthCm; it.caption = st.caption
+            // "Thinking…" lines (core ai/Thoughts.kt), each held ≥ 1.5 s like the Android card (ThoughtHold)
+            val held = holds.getOrPut(st.id) { ThoughtHold() }.update(st.id, st.thought, now().toLong())
+            it.thinking = held.now; it.thinkNext = held.next; it.feeling = held.feeling; it.moodWord = st.thought.mood
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
             it.relations = c.relationships.take(6).map { r ->
                 obj { o -> o.name = r.otherName; o.species = r.otherSpecies; o.label = r.labelOverride ?: r.kind.label; o.affinity = r.affinity; o.note = r.note }
             }.toTypedArray()
         }
+    }
+
+    private val holds = HashMap<String, ThoughtHold>()
+    private val bubblePicker = ThoughtBubblePicker()
+
+    /**
+     * More → "Thought bubbles" (as on Android, ThoughtBubbleLayer): at most three animals with a speech bubble, as
+     * JSON [{id, text, x, y, a}] with x, y in canvas pixels just above the animal. Call every animation frame while
+     * on; [on] false clears the picker.
+     */
+    fun bubbles(on: Boolean): String {
+        if (!on) { bubblePicker.clear(); return "[]" }
+        val s = sim ?: return "[]"
+        val r = live.renderer ?: return "[]"
+        val proj = r.projection ?: com.reeflive.app.render.TankProjection().also { r.projection = it }
+        val snap = s.latest
+        val canvas = kotlinx.browser.document.getElementById("tank") as? org.w3c.dom.HTMLCanvasElement ?: return "[]"
+        val w = canvas.width.toFloat()
+        val h = canvas.height.toFloat()
+        val anchor = FloatArray(3)
+        val pt = FloatArray(3)
+        val list = bubblePicker.update(snap.stats, now().toLong()) { id ->
+            if (ThoughtBubblePicker.anchorOf(snap, id, anchor) && proj.project(anchor[0], anchor[1], anchor[2], pt) &&
+                pt[0] in 0f..w && pt[1] in 0f..h
+            ) floatArrayOf(pt[0], pt[1], pt[2]) else null
+        }
+        return JSON.stringify(list.map { b -> obj { o -> o.id = b.id; o.text = b.text; o.x = b.x; o.y = b.y; o.a = b.alpha } }.toTypedArray())
     }
 
     /** "Tank happy" 0..100 (Hermie.kt tankHappiness): health and calm of the animals minus water and death penalties. */

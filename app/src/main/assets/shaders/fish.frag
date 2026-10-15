@@ -21,6 +21,7 @@ uniform float uIchSpots;     // 0..1 white spot coverage (ich)
 uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
 uniform float uDead;
+uniform float uFade;         // microfauna: 0 full contrast .. 1 lost in the water (MicroCritterVisuals)
 uniform vec4 uChroma;        // bobtail squid (core SquidRig): x chromatophore expansion, y passing-cloud strength, z light-organ glow, w 1 + cloud phase (0 = off)
 // Life stages (LifeStageVisuals.kt, additive): a second body texture painted on the same UV layout, mixed in by
 // uStageMix while a fish grows from one stage's pattern into the next (or changes sex). 0 = unchanged.
@@ -106,9 +107,11 @@ void main() {
 #ifdef FIN
     vec3 col = shadeLit(albedo, N, V, vWorld, max(uRoughness, 0.4), 1.0, 0.03, 0.5, specScale * 0.5);
     // back-lit fins glow a little (thin membrane)
-    vec3 Lb;
-    vec3 radB = fixtureLight(0, vWorld, Lb) + fixtureLight(1, vWorld, Lb);
-    col += albedo * radB * pow(clamp(dot(V, -Lb), 0.0, 1.0), 3.0) * 0.35;
+    // (each fixture with its own direction; none inside a shadow)
+    vec3 Lb0, Lb1;
+    vec3 rad0 = fixtureLight(0, vWorld, Lb0), rad1 = fixtureLight(1, vWorld, Lb1);
+    col += albedo * (rad0 * pow(clamp(dot(V, -Lb0), 0.0, 1.0), 3.0) + rad1 * pow(clamp(dot(V, -Lb1), 0.0, 1.0), 3.0))
+        * 0.35 * gShadow;
     alpha *= 0.75 + 0.25 * ndv;
     if (uIchSpots > 0.001) col = mix(col, vec3(0.8) * lightIntensity(), ichMask(vUv * 0.5) * uIchSpots * 0.6);
     if (alpha < 0.03) discard;
@@ -118,7 +121,7 @@ void main() {
     vec3 irid = toLinear(texture(uIridLut, vec2(ndv, 0.5)).rgb) * uIridStrength * (1.0 - uDesat);
     vec3 Lk;
     vec3 rad = fixtureLight(0, vWorld, Lk) + fixtureLight(1, vWorld, Lk);
-    float shade = shadowAt(vWorld, N);
+    float shade = gShadow;
     col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0)) * shade;
     // wet skin / shell: a tight clear-coat highlight over the body's own roughness
     col += wetCoat(Ng, V, vWorld, 0.14, 0.55 * specScale) * shade;
@@ -137,5 +140,7 @@ void main() {
     col += vec3(0.35, 0.62, 0.95) * sqGlow * 0.06 * (0.3 + 0.7 * smoothstep(0.0, -0.7, N.y));
 #endif
     col = applyWater(col, vWorld);
+    // distant microfauna sink into the water colour, so specks melt away instead of popping out
+    col = mix(col, uFog.rgb, uFade * 0.85);
     fragColor = vec4(tonemap(col), alpha);
 }

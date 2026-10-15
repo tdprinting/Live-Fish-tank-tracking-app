@@ -52,7 +52,7 @@ Research snapshot: 2026-10-13. Companion to the [master livestock research](15_m
 | ecsenius_stigmatura | `ai/Interactions.kt:PEEKER_BLENNY` to `LAWNMOWER_BLENNY` drive | 0.2 | DESIGN-ESTIMATE | none | hole use when a lawnmower is in view |
 | pseudochromis_indigo | `ai/Interactions.kt:DOTTYBACK` to `DOTTYBACK` drive | 0.7 | DESIGN-ESTIMATE | none; [ORA breeder account](https://www.orafarm.com/product/electric-indigo-dottyback/) calls the line "relatively peaceful", which conflicts with 0.7 | encounters per hour between two dottybacks, cave entrance vs. open water |
 | pseudochromis_indigo | `ai/FishBrains.kt:DottybackBrain.Territorial` drive | 0.5 + 0.4 × aggression, when a fish is within 18 cm of the cave | DESIGN-ESTIMATE | none (10 §8: no fixed attack count) | chases toward blennies and cardinals, with distance to cave |
-| pseudochromis_indigo | `ai/FishBrains.kt:DottybackBrain.CaveDart` pause | 2 to 8 s | DESIGN-ESTIMATE | none | pause length at a patrol waypoint |
+| pseudochromis_indigo | `ai/DottyPatrol.kt:CavePatrol` stop pause / cave pause / stops | 2 to 8 s / 5 to 20 s / 4 stops, one swapped per 6 rounds | DESIGN-ESTIMATE | none (10 §8 asks to record the patrol route; no numbers) | pause length at a patrol waypoint; crevices visited per round |
 | pseudochromis_indigo | `ai/Interactions.kt:DOTTYBACK` to `CLOWN` 0.2 and to `HAWK` 0.25 | 0.2 / 0.25 | DESIGN-ESTIMATE | none | challenges near the clownfish host |
 
 ## Mobile and tube-dwelling invertebrates
@@ -130,6 +130,27 @@ Research snapshot: 2026-10-13. Companion to the [master livestock research](15_m
 | gracilaria_sp | `sim/AlgaeModel.kt:GRAZE_CAP_G_M2_D` | 3.0 g per m² per day (generic cap, all algae groups) | DESIGN-ESTIMATE | none (code comment: est.) | frond biomass removal per week |
 | gracilaria_sp | flow and photosynthesis (no code constant) | water movement raised net photosynthesis in a tested red alga | ANALOGY | [PNAS 0912348107](https://doi.org/10.1073/pnas.0912348107) (*Gracilaria cornea*) | frond growth at high vs. low flow |
 | gracilaria_sp | nutrient uptake (no code constant) | uptake depends on light and supply | ANALOGY | [ScienceDirect S0304377018301906](https://www.sciencedirect.com/science/article/abs/pii/S0304377018301906) (*Gracilaria* experiment, species not this tank) | nitrate and phosphate change with and without the macroalga |
+
+## Perception, memory, mood and quirks (realism_gaps, SIMULATION §21)
+
+Keys are from the realism gap analysis (`realism_gaps.md`, 2026-10-14, section 8). Constants carry `@Ev` tags in code.
+
+| species id | constant (file:symbol) | value | label | source link or "none" | tank observation that could test it |
+|---|---|---|---|---|---|
+| all fish | `sim/Senses.kt:SensesSpec.darkVision` | 0.12 diurnal, 0.5 nocturnal or crepuscular | DESIGN-ESTIMATE | [MRL23](https://pmc.ncbi.nlm.nih.gov/articles/PMC10688437/) (title only: rod layers in nocturnal reef fish) | distance at which a fish reacts to food dropped after lights-out |
+| all fish | `sim/Senses.kt:SensesSpec.lateralBL` | 1.5 BL | ANALOGY | [Pohlmann et al. 2004](https://cob.silverchair.com/jeb/article/207/17/2971/14844/) (catfish; capture 0.66 → 0.17 without lateral line) | night strikes at food within a body length |
+| all fish | `ai/Perceive.kt:SCENT_D`, `PLUME_SPREAD`, `PLUME_MAX_CM` | 1.5 cm²/s, tan 0.25, 90 cm | DESIGN-ESTIMATE | direction from [Dixson & Hay 2012](https://www.sciencedaily.com/releases/2012/11/121108142740.htm) (gobies follow a chemical cue) | arrival order of fish up- and downstream of a night feed |
+| all fish | `ai/Mind.kt:FeedClock.GAIN`, `EXTINCT`, `LEAD_MIN` | 0.15 per feed, ×0.8 per missed day, 60 min | ANALOGY | [Reebs 2002](https://gambusia.bsp.ncsu.edu/readings/Reebs%202002.pdf) (goldfish, golden shiner: up to 3 feeding times and places, anticipation 3 to 10 days after food withheld) | activity at the feeding spot in the hour before the usual feed; days it lasts when a feed is skipped |
+| all fish | `ai/Mind.kt:Mind.KEEPER_GAIN`, `KEEPER_BEG` | 0.06 per meal, beg at 0.35 | ANALOGY | [Tomasek et al. 2025](https://www.mpg.de/24151953/wild-fish-can-recognize-individual-divers) (sea bream learned the diver who fed them over 12 days) | fish at the glass when the keeper's hand appears, before any food |
+| all fish | `ai/Mind.kt:Mood.FEAR_TAU_S`, `Mind.DRIFT_CAP` | 29 min, ±0.15 | DESIGN-ESTIMATE | WIL94 (title only: shy-bold trait) | latency to feed after a disturbance, compared across weeks |
+| all fish | `ai/Mind.kt:PlaceMemory.halfLife` | refuge 7 d, threat 6 h | DESIGN-ESTIMATE | none (R10 §2, §7 describe returning to a favoured shelter) | which crevice a startled fish uses over several startles |
+| paracanthurus_hepatus | `ai/Mind.kt:Mind.TACTILE_CALM`, `TACTILE_STRESS` | fear ×0.5, social stress ×0.8 after a cleaner's dance | ANALOGY | [Soares et al. 2011](https://www.nature.com/articles/ncomms1547) (*Ctenochaetus* cortisol after mechanical contact) | time to resume feeding after a chase, with and without a cleaner visit |
+| cirrhitichthys_falco | `ai/HawkNight.kt:SandRest.PITCH`, `ROCK_GAP_CM` | 17.5°, ≤ 10 cm from rock | SOURCED | owner footage `video/tee_tank_night.md` T89 [H]; FishBase "rests at coral-head bases" (10 §5) | night position and pitch over several nights |
+| cirrhitichthys_falco | `ai/HawkNight.kt:HawkHop`, `SandRest.PAUSE_S` | ≤ 3 BL hops at 3 BL/s, 1.5 s pauses | DESIGN-ESTIMATE | `video/fish_falco_hawkfish.md` "hop 2-4 BL then stop" [L] | hops and pauses on the way down at dusk |
+| ophiocoma_sp | `ai/BrittleLight.kt:LightWithdraw.RISE`, `HOLD_MIN_S`/`HOLD_MAX_S` | light step 0.08; freeze 3 to 8 s | ANALOGY | [Aizenberg et al. 2001](https://www.nature.com/articles/35090683) (*O. wendtii* calcite lenses; the tank's star is not this species) | arm retraction when the room light comes on or a hand passes over |
+| ecsenius_stigmatura, salarias_fasciatus | `ai/HoleEntry.kt:TailFirstHole.TURN_RATE`, `BACK_BL_S` | 6 rad/s, 0.8 BL/s | DESIGN-ESTIMATE | none (owner direction; 10 §7 head-out inspection) | entry direction and speed on video |
+| ecsenius_stigmatura | `GlassCurious` and `ComeToKeeper` on the tailspot | fear-gated | SOURCED (behaviour only) | `video/fish_tailspot_blenny.md` S2 [M] | approaches to the glass with the keeper near |
+| percnon_gibbesi | `sim/Simulation.kt:unsourcedPredation` | off by default: crab snail rolls and grabs, moray kill roll | DESIGN-ESTIMATE | realism_gaps X7; 11 §3 (Puccio 2006, Pizarro-Borrull 2025 support grazing, not kills) | none (do not induce predation to test) |
 
 ## Findings to resolve before any value is tuned
 

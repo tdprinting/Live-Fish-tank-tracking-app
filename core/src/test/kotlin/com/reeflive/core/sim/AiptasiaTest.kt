@@ -17,14 +17,16 @@ class AiptasiaTest {
     /** 03 C2: they spread by pedal laceration; three polyps become a colony within two months. */
     @Test
     fun spreadsByPedalLaceration() {
-        val sim = tank().seedAiptasia(3)
-        assertEquals(3, sim.aiptasiaCount)
-        sim.advanceAbstract(60 * 86400.0)
+        // budding is stochastic: judge the median of five tanks, not one seed's draw (one seed in ten ends near 6-7)
+        val sims = (1L..5L).map { s -> tank(seed = s).seedAiptasia(3).also { assertEquals(3, it.aiptasiaCount); it.advanceAbstract(60 * 86400.0) } }
+        val sim = sims.sortedBy { it.aiptasiaCount }[2]
         val n = sim.aiptasiaCount
-        println("C-4 aiptasia after 60 d: $n polyps (from 3)")
+        println("C-4 aiptasia after 60 d: ${sims.map { it.aiptasiaCount }} polyps (from 3), median $n")
         assertTrue("aiptasia spread: $n", n >= 8)
-        val lacerates = sim.corals.filter { it.kind == CoralKind.AIPTASIA && it.anchor.isEmpty() }
-        assertTrue("lacerates sit on rock near a parent", lacerates.all { sim.rock.sdf.dist(it.pos) < 1.0 && it.pos.y > sim.rock.sandTopCm })
+        for (s in sims) {
+            val lacerates = s.corals.filter { it.kind == CoralKind.AIPTASIA && it.anchor.isEmpty() }
+            assertTrue("lacerates sit on rock near a parent", lacerates.all { s.rock.sdf.dist(it.pos) < 1.0 && it.pos.y > s.rock.sandTopCm })
+        }
     }
 
     /** S3: disturbing them spreads them; chemical treatment can leave fragments; moving rock tears polyps. */

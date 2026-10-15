@@ -6,7 +6,7 @@ import kotlin.math.sqrt
 /**
  * Tap selection (ARCHITECTURE §8.2): a ray from the camera against each organism's bounding capsules
  * (4 segments along its spine, radius ∝ body length). Pure CPU math. Small animals get a minimum pick
- * radius so they stay tappable on a phone.
+ * radius, and a near miss within a fingertip's width still picks the closest animal, so they stay tappable on a phone.
  */
 object Picker {
     /** Capsule radius as a fraction of body length (fish depth/2 ≈ 0.2 BL), floored at [MIN_RADIUS_CM]. */
@@ -15,27 +15,60 @@ object Picker {
     private val SEGMENTS = intArrayOf(0, 5, 10, 15)
 
     /**
-     * Returns the id of the nearest organism whose capsules the ray (origin [o], unit direction [d]) hits,
-     * or null. Invisible organisms are skipped.
+     * Returns the id of the nearest organism whose capsules the ray (origin [o], unit direction [d]) hits, or null.
+     * Invisible organisms are skipped.
+     *
+     * [slack] makes small animals forgiving on a phone: a fingertip covers ~7 mm of glass, so when the ray misses every
+     * capsule, the animal whose capsule it passes closest to (as a view angle: miss distance / depth, compared with
+     * [slack], the tangent of the finger's angular radius from [fingerSlack]) is picked. A direct hit always wins; among
+     * near misses the smallest angular miss wins, so a tap beside a snail picks the snail, not the tang behind it.
      */
-    fun pick(o: FloatArray, d: FloatArray, rigs: Collection<FishRig>): String? {
+    fun pick(o: FloatArray, d: FloatArray, rigs: Collection<FishRig>, slack: Float = 0f): String? {
         var best: String? = null
         var bestT = Float.MAX_VALUE
+        var near: String? = null
+        var nearMiss = Float.MAX_VALUE
         for (r in rigs) {
-            if (!r.visible) continue
+            if (!r.visible || r.bagged) continue
             val rad = max(r.scale * RADIUS_FRACTION, MIN_RADIUS_CM)
             for (k in 0 until SEGMENTS.size - 1) {
                 val a = SEGMENTS[k] * 4; val b = SEGMENTS[k + 1] * 4
-                val t = rayCapsule(o, d, r.spine[a], r.spine[a + 1], r.spine[a + 2], r.spine[b], r.spine[b + 1], r.spine[b + 2], rad)
-                if (t != null && t < bestT) { bestT = t; best = r.id }
+                closest(o, d, r.spine[a], r.spine[a + 1], r.spine[a + 2], r.spine[b], r.spine[b + 1], r.spine[b + 2])
+                val dist = scratch[0]; val sc = scratch[1]
+                if (dist <= rad) {
+                    val t = max(0f, sc - sqrt(max(0f, rad * rad - dist * dist)))
+                    if (t < bestT) { bestT = t; best = r.id }
+                } else if (slack > 0f && sc > 1f) {
+                    val miss = (dist - rad) / sc
+                    if (miss <= slack && miss < nearMiss) { nearMiss = miss; near = r.id }
+                }
             }
         }
-        return best
+        return best ?: near
     }
+
+    /**
+     * The tangent of a fingertip's angular radius: [fingerPx] (radius, px) on a view [heightPx] tall seen through a
+     * vertical field of view [fovYDeg]. Multiply by depth (cm) for the finger's radius in the tank there.
+     */
+    fun fingerSlack(fingerPx: Float, heightPx: Int, fovYDeg: Float): Float =
+        if (heightPx <= 0 || fingerPx <= 0f) 0f
+        else 2f * kotlin.math.tan(Math.toRadians(fovYDeg / 2.0).toFloat()) * fingerPx / heightPx
 
     /** Ray (o, unit d) vs capsule (segment p→q, radius r): nearest t ≥ 0 or null (closest-approach test). */
     fun rayCapsule(o: FloatArray, d: FloatArray, px: Float, py: Float, pz: Float, qx: Float, qy: Float, qz: Float, r: Float): Float? {
-        // closest points between the ray and the segment
+        closest(o, d, px, py, pz, qx, qy, qz)
+        val dist = scratch[0]; val sc = scratch[1]
+        if (dist > r) return null
+        // back off to the entry point (approximate: the sphere at the closest segment point)
+        return max(0f, sc - sqrt(max(0f, r * r - dist * dist)))
+    }
+
+    /** Taps are handled on one thread (the GL thread), so one scratch pair serves every call without allocating. */
+    private val scratch = FloatArray(2)
+
+    /** Closest approach of the ray (o, unit d) to segment p→q: [scratch] = (distance, ray parameter there). */
+    private fun closest(o: FloatArray, d: FloatArray, px: Float, py: Float, pz: Float, qx: Float, qy: Float, qz: Float) {
         val ux = qx - px; val uy = qy - py; val uz = qz - pz
         val wx = o[0] - px; val wy = o[1] - py; val wz = o[2] - pz
         val a = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
@@ -57,10 +90,8 @@ object Picker {
         val cx = o[0] + d[0] * sc - (px + ux * tc)
         val cy = o[1] + d[1] * sc - (py + uy * tc)
         val cz = o[2] + d[2] * sc - (pz + uz * tc)
-        val dist2 = cx * cx + cy * cy + cz * cz
-        if (dist2 > r * r) return null
-        // back off to the entry point (approximate: the sphere at the closest segment point)
-        return max(0f, sc - sqrt(max(0f, r * r - dist2)))
+        scratch[0] = sqrt(cx * cx + cy * cy + cz * cz)
+        scratch[1] = sc
     }
 
     /** Ray vs axis-aligned plane, e.g. the front glass z = 33: returns t or null. */

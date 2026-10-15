@@ -56,7 +56,10 @@ class AppGraph(val app: Application) {
     val journal: JournalRepository by lazy { JournalRepository(db, db.journalDao(), events) }
     val lights: LightScheduleRepository by lazy { LightScheduleRepository(db.lightDao(), events) }
 
-    val simulationHolder: SimulationHolder by lazy { SimulationHolder(measurements, livestock, lights, assets = app.assets, clock = clock) }
+    val simulationHolder: SimulationHolder by lazy { SimulationHolder(
+        measurements, livestock, lights, assets = app.assets, clock = clock,
+        customStore = com.reeflive.app.data.repo.CustomTankStore(java.io.File(app.filesDir, com.reeflive.app.data.repo.CustomTankStore.FILE_NAME)),
+    ) }
 
     val seedInstaller: SeedInstaller by lazy { SeedInstaller(db, clock) }
     val extras: ExtrasRepository by lazy { ExtrasRepository(java.io.File(app.filesDir, ExtrasRepository.FILE_NAME), appScope, clock) }

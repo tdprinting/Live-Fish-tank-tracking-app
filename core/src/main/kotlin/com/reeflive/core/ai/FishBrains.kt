@@ -25,9 +25,9 @@ import kotlin.math.sin
 // Ocellaris clownfish (SIMULATION §4.5 ClownBrain)
 // =====================================================================================
 class ClownBrain(c: Ctx) : SpeciesBrain(c) {
-    /** The owner's clowns host the hairy green mushrooms (Rhodactis) beside the arch (HOST_SHROOM). */
+    /** The owner's clowns host the hairy green mushrooms (Rhodactis) on the low rock under the right shelf (HOST_SHROOM). */
     private val hostName = o.hostAnchor ?: "HOST_SHROOM"
-    fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, if (flatHost) Vec3(82.3, 20.3, 15.2) else Vec3(72.0, 40.0, 15.0))
+    fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, if (flatHost) Vec3(81.5, 11.5, 21.0) else Vec3(82.0, 16.0, 21.0))
     /**
      * A flat host (corallimorph discs on rock) rather than a branching soft coral or an anemone: the pair hugs the
      * discs, belly 1–3 cm over the tentacles (owner observation), instead of weaving up through branches.
@@ -65,6 +65,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
         private var spot = Vec3.ZERO
         private var next = 0.0
         private var dartUntil = -1.0
+        private var dartTo = Vec3.ZERO
         private var nextDart = 0.0
         private var nextWiggle = 0.0
         private var wiggleUntil = -1.0
@@ -100,6 +101,9 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > nextDart) {
                 nextDart = c.t + c.rng.range(6.0, 15.0)
                 dartUntil = c.t + 0.9
+                // one dart, one spot (a fresh random spot every tick made the clown jitter on the spot for 0.9 s)
+                val d = if (flatHost) Vec3(c.rng.range(-3.0, 3.0), FLAT_LO, c.rng.range(-2.0, 1.5)) else c.rng.unitVector() * 3.0 + Vec3(0.0, 1.5, 0.0)
+                dartTo = c.safe(h + d, 1.0)
             }
             if (c.t > nextWiggle) {
                 // hosting bout: the clown drops onto the host and shimmies its body against it (the "host-wiggle"
@@ -108,8 +112,9 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 wiggleUntil = c.t + c.rng.range(2.0, 4.0)
                 wiggleAt = c.safe(h + Vec3(c.rng.range(-2.0, 2.0), if (flatHost) FLAT_LO else 2.0, c.rng.range(-1.5, 1.0)), 1.0)
             }
-            // back from a cleaner visit or a chase across the tank: home over the rock, not into it
-            val away = c.o.pos.distanceTo(h) > 4 * L
+            // back from a cleaner visit or a chase across the tank: home over the rock, not into it (also from closer
+            // than 4 BL when rock stands between it and the host: a straight seek pinned it behind the rock for minutes)
+            val away = c.o.pos.distanceTo(h) > 4 * L || c.o.pos.distanceTo(h) > 1.5 * L && !c.rock.sdf.segmentClear(c.o.pos, spot, 0.5)
             if (away) {
                 out.seek(c.viaOpenWater(spot), c.o.cruiseSpeed, arrive = L)
                 out.waddleAmp = 0.3; out.waddleHz = 1.3
@@ -126,8 +131,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             if (c.t < dartUntil) {
-                val d = if (flatHost) Vec3(c.rng.range(-3.0, 3.0), FLAT_LO, c.rng.range(-2.0, 1.5)) else c.rng.unitVector() * 3.0 + Vec3(0.0, 1.5, 0.0)
-                out.seek(c.safe(h + d, 1.0), c.o.burstSpeed * 0.5, arrive = 1.0, urgency = 0.5)
+                out.seek(dartTo, c.o.burstSpeed * 0.5, arrive = 1.0, urgency = 0.5)
             } else {
                 out.seek(spot, c.o.cruiseSpeed * 0.8, arrive = if (flatHost) 0.5 * L else L)
             }
@@ -140,7 +144,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Night: nestled in the host, female closer to the centre. */
     inner class NestleHost : Behavior("nestle", "Nestled in host") {
-        override fun score(c: Ctx) = 0.8 * (1 - c.activity)
+        override fun score(c: Ctx) = 0.8 * (1 - c.activity) * Feed.nightRestDamp(c, this@ClownBrain)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
             val drift = if (flatHost) 0.5 else 0.8
@@ -211,7 +215,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
-            Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(36.0, 25.0, 9.0)) }, "Darting to cover"),
+            Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
             TangSleep(), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
     }
 
@@ -282,7 +286,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             val p = if (L > 15) c.o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)
             else {
                 goRight = !goRight
-                Vec3(if (goRight) c.rng.range(95.0, 108.0) else c.rng.range(12.0, 25.0), c.zoneY(c.rng.range(0.35, 0.9)), c.rng.range(21.0, 29.0))
+                // right turn over the GSP mound, past the clowns' rock under the shelf (resized layout)
+                Vec3(if (goRight) c.rng.range(96.0, 110.0) else c.rng.range(12.0, 25.0), c.zoneY(c.rng.range(0.35, 0.9)), c.rock.widthCm * c.rng.range(0.5, 0.8))
             }
             wp = c.safe(p)
         }
@@ -302,7 +307,9 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
                 out.tailMul = 1.3
                 return
             }
-            out.seek(wp, o.cruiseSpeed * 1.1, arrive = 2 * c.L)
+            // out of a cave first, over the rock: a straight seek from a hiding pocket at the rock foot held the tang
+            // there, nose to the rock, for minutes (it never came back to a loitering sub, SubmarineTest)
+            out.seek(c.viaOpenWater(wp), o.cruiseSpeed * 1.1, arrive = 2 * c.L)
             out.wander = 0.15
         }
     }
@@ -394,7 +401,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 // Pajama cardinal (CardinalBrain) — crepuscular hoverer
 // =====================================================================================
 class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
-    private val spots = listOf(Vec3(62.0, 17.0, 15.0), Vec3(28.0, 22.0, 26.0), Vec3(43.0, 22.0, 27.0))
+    private val spots = listOf(Vec3(60.0, 13.0, 22.0), Vec3(28.0, 15.0, 34.0), Vec3(50.0, 15.0, 36.0))
     private var spot: Vec3 = spots[0]
     /** The shade pocket it hovers beside by day (06 §1.3 SHADE_CARD). */
     val shadePocket: Vec3 get() = spot
@@ -413,7 +420,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
-        if (night) Rest(c.safe(c.rock.anchors.pos("CAVE_SMALL", Vec3(62.0, 12.0, 8.0)) + Vec3(0.0, 0.0, 6.0)), Vec3.Z * -1.0)
+        if (night) Rest(c.safe(c.rock.anchors.pos("CAVE_SMALL", Vec3(56.0, 11.8, 7.8)) + Vec3(0.0, 0.0, 6.0)), Vec3.Z * -1.0)
         else Rest(c.safe(spot), Vec3.Z)
 
     override fun preTick(c: Ctx) {
@@ -448,28 +455,74 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         return BASE_RADIUS * k
     }
 
-    /** Nearly motionless hover beside cover with pectoral sculling, within [dayRadius] of the pocket. */
+    /**
+     * Nearly motionless hover beside cover with pectoral sculling, within [dayRadius] of the pocket (research
+     * video/fish_pajama_cardinalfish; "groups hover near branching corals", Fishes of Australia [M]; Tee's tank T96 0:09 [H]).
+     * The body stays level ([HOVER_PITCH]): depth changes come from the fins, not from pointing the snout. It faces
+     * into the current (or out of the rock when the water is still) with a small per-bout yaw, so a group hangs
+     * roughly aligned. Station changes are small and slow: a new spot every 8–20 s at a quarter of cruise.
+     */
     inner class HoverCover : Behavior("hovercover", "Hovering by cover") {
         private var p = Vec3.ZERO
         private var next = 0.0
+        private var yaw = 0.0
+        private var bestD = 0.0
+        private var progressAt = 0.0
+        private var detour: Vec3? = null
         override fun score(c: Ctx) = 0.45
+        override fun enter(c: Ctx) { bestD = c.o.pos.distanceTo(spot); progressAt = c.t; detour = null }
         override fun update(c: Ctx, out: SteerIntent) {
             if (c.t > next) {
-                next = c.t + c.rng.range(5.0, 15.0)
+                next = c.t + c.rng.range(8.0, 20.0)
                 val r = c.o.hoverRadius * kotlin.math.sqrt(c.rng.nextDouble())
-                p = c.safe(schoolTarget(c, spot + c.rng.unitVector() * r))
+                val u = c.rng.unitVector()
+                p = c.safe(schoolTarget(c, spot + Vec3(u.x, 0.3 * u.y, u.z) * r))
                 if (p.distanceTo(spot) > c.o.hoverRadius + 2) p = c.safe(spot)
-                // cut off from the pocket by rock (after a cleaner visit or a chase): go up and over instead of
-                // pressing into the rock face, retargeting soon
-                if (c.o.pos.distanceTo(spot) > c.o.hoverRadius + 2 && !c.rock.sdf.segmentClear(c.o.pos, p, 0.5)) {
-                    p = c.safe(Vec3((c.o.pos.x + spot.x) / 2, max(c.o.pos.y, spot.y) + 12.0, (c.o.pos.z + spot.z) / 2))
-                    next = c.t + 3.0
-                }
+                yaw = c.rng.signed() * 0.5
             }
-            out.seek(p, c.o.cruiseSpeed * 0.3, arrive = 3.0)
+            // outside its zone with rock in the way (left on the far side of a ridge after a cleaner visit), the slow
+            // straight seek stalls against the rock: take a waypoint with a clear line both ways (over the ridge or
+            // around it), then hover on as before
+            val d = c.o.pos.distanceTo(spot)
+            if (d < bestD - 0.5) { bestD = d; progressAt = c.t }
+            if (d <= c.o.hoverRadius + 2) { bestD = d; progressAt = c.t; detour = null }
+            if (detour == null && c.t - progressAt > STALL_S) {
+                detour = detourTo(c, c.o.pos, spot)
+                progressAt = c.t; bestD = d
+            }
+            detour?.let { w ->
+                if (c.o.pos.distanceTo(w) < 2.0 || c.t - progressAt > 3 * STALL_S) detour = null
+                else { out.seek(w, c.o.cruiseSpeed * 0.6, arrive = 2.0); out.hover = true; out.maxPitch = HOVER_PITCH; return }
+            }
+            out.seek(p, c.o.cruiseSpeed * 0.25, arrive = 4.0)
             out.hover = true; out.ampMul = 0.3; out.pectoral = 1.0; out.tailMul = 0.4
+            out.maxPitch = HOVER_PITCH
+            out.faceDir = hoverFacing(c, yaw)
             if (c.o.brightExposed) out.ampMul = 0.2
         }
+    }
+
+    /** A waypoint from [a] toward [b] with open water on both legs (≥ 1 cm off rock between the ends): above, in front of
+     *  or beside the midpoint, nearest first. */
+    private fun detourTo(c: Ctx, a: Vec3, b: Vec3): Vec3? {
+        val mid = (a + b) * 0.5
+        for (k in 1..6) for (dir in DETOUR_DIRS) {
+            val w = c.safe(mid + dir * (5.0 * k))
+            if (clearLine(c, a, w) && clearLine(c, w, b)) return w
+        }
+        return null
+    }
+
+    private fun clearLine(c: Ctx, a: Vec3, b: Vec3): Boolean {
+        for (k in 2..17) if (c.rock.sdf.dist(a.lerp(b, k / 20.0)) < 1.0) return false
+        return true
+    }
+
+    /** Into the current when there is one, else away from the nearest rock toward the open front; turned by [yaw] rad. */
+    fun hoverFacing(c: Ctx, yaw: Double): Vec3 {
+        val f = c.sim.flow.velocityFast(c.o.pos).horizontal()
+        val base = if (f.length() > 0.5) f * -1.0 else (c.rock.sdf.gradient(c.o.pos).horizontal() + Vec3(0.0, 0.0, 0.6)).normalized(Vec3.Z)
+        return Vec3.rotateAbout(base.normalized(Vec3.Z), Vec3.Y, yaw)
     }
 
     /**
@@ -479,6 +532,10 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     inner class NocturnalForage : Behavior("dusk", "Night foraging") {
         private var wp = Vec3.ZERO
         private var next = 0.0
+        private var chasing: FoodParticle? = null
+        private var dropped: FoodParticle? = null
+        private var bestD = 0.0
+        private var progressAt = 0.0
         override fun score(c: Ctx): Double = if (c.p.light < FORAGE_LIGHT && !c.o.mouthbrooding) 0.55 else 0.0
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
@@ -486,19 +543,28 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + c.rng.range(4.0, 9.0)
                 wp = c.safe(schoolTarget(c, spot + c.rng.unitVector() * (forageRadius(c) * (0.3 + 0.7 * c.rng.nextDouble()))))
             }
-            val f = if (o.hunger > 0.05) c.food.nearest(o.pos, 15.0) { it.kind == FoodKind.PODS || o.species.dietMatch(it.kind) > 0 && o.acceptsPrepared } else null
+            // drifting plankton only: a particle on the sand or wedged against the rock is out of reach of a mid-water
+            // picker (the body cannot get its head there), and one it has chased for STUCK_S without closing is dropped
+            val f = if (o.hunger > 0.05) c.food.nearest(o.pos, 15.0) {
+                (it.kind == FoodKind.PODS || o.species.dietMatch(it.kind) > 0 && o.acceptsPrepared) && openWaterFood(c, it) && it !== dropped
+            } else null
             if (f != null) {
+                val d = o.pos.distanceTo(f.pos)
+                if (f !== chasing) { chasing = f; bestD = d; progressAt = c.t } else if (d < bestD - 0.5) { bestD = d; progressAt = c.t }
+                if (c.t - progressAt > Feed.STUCK_S) { dropped = f; chasing = null }
                 out.seek(f.pos, o.cruiseSpeed * 1.4, arrive = 0.8)
-                if (o.pos.distanceTo(f.pos) < 1.2 + 0.1 * c.L) c.bite(f)
-            } else out.seek(wp, o.cruiseSpeed, arrive = c.L)
+                if (d < 1.2 + 0.1 * c.L) c.bite(f)
+            } else out.seek(wp, o.cruiseSpeed * 0.8, arrive = c.L)
             out.ampMul = 0.6
+            // slow, deliberate night cruise: level body, pitching only to snap up a particle
+            out.maxPitch = if (f != null) 0.45 else 0.3
         }
     }
 
     /** By day faster tankmates leave it little (×0.4 unless the food drifts within 10 cm); dusk/night ×1.5 (06 §3.2). */
     inner class CardinalFeed : Feed(this@CardinalBrain, 60.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = if (f.kind == FoodKind.MYSIS || f.kind == FoodKind.PODS) 0.1 else 0.0
-        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface
+        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface && openWaterFood(c, f)
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
             c.p.light < FORAGE_LIGHT -> 1.5
             f.pos.distanceTo(c.o.pos) <= 10.0 -> 1.0
@@ -510,10 +576,19 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
      * How far it ranges from cover follows the light ramp, not a clock label (research 10 §3): half of
      * [FORAGE_RADIUS] when the light first drops below [FORAGE_LIGHT], all of it in darkness.
      */
+    /** A particle a hovering mid-water picker can reach: not settled and clear of the rock by its head room (swim resolve keeps 0.45 Lc). */
+    fun openWaterFood(c: Ctx, f: FoodParticle): Boolean =
+        !f.settled && f.pos.y > c.rock.sandTopCm + 1.0 && c.rock.sdf.dist(f.pos) > 0.45 * c.o.collisionLength - (1.2 + 0.1 * c.L)
+
     fun forageRadius(c: Ctx): Double = FORAGE_RADIUS * (0.5 + 0.5 * (1 - com.reeflive.core.geom.smoothstep(0.02, FORAGE_LIGHT, c.p.light)))
 
     companion object {
         const val BASE_RADIUS = 12.0
+        /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
+        const val HOVER_PITCH = 0.17
+        /** Seconds outside its zone without closing on the pocket before the hover takes a detour round the rock. */
+        const val STALL_S = 8.0
+        private val DETOUR_DIRS = listOf(Vec3.Y, Vec3.Z, Vec3(0.0, 0.7, 0.7).normalized(), Vec3.X, Vec3.X * -1.0, Vec3.Z * -1.0)
         const val FORAGE_RADIUS = 40.0
         const val FORAGE_LIGHT = 0.3
     }
@@ -523,7 +598,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 // Cleaner wrasse (WrasseBrain)
 // =====================================================================================
 class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
-    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(62.0, 20.0, 18.0)), 0.6 * o.collisionLength + 1.0)
+    val stationPos: Vec3 = c.safe(c.rock.anchors.pos("STATION_CLEANER", Vec3(38.0, 10.0, 14.0)), 0.6 * o.collisionLength + 1.0)
     val station = CleaningStation(o, stationPos, isShrimp = false)
 
     init {
@@ -537,7 +612,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         if (!night) return Rest(stationPos, Vec3.Z)
-        val cave = c.rock.anchors.pos("CAVE_SMALL", Vec3(62.0, 12.0, 8.0))
+        val cave = c.rock.anchors.pos("CAVE_SMALL", Vec3(56.0, 11.8, 7.8))
         return Rest(c.safe(cave, 0.6), Vec3.X, posture = 4)
     }
 
@@ -581,6 +656,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         private var phase = 0
         private var phaseT = 0.0
         private var inspectS = 6.7
+        /** Per client, the quantile its last inspection length was drawn at (see [drawInspection]). */
+        private val inspectU = HashMap<String, Double>()
         private var danceS = 1.5
         private var nextScan = 0.0
         private var cheatAcc = 0.0
@@ -635,6 +712,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 if (overdue) w *= OVERDUE_WEIGHT * (1 + (c.t - f.lastCleanerContactAt - OVERDUE_S) / DUE_S)
                 // infested clients seek the cleaner out and are served first (06 §5.7: ich visits at ×3 weight; S:Grutter99)
                 if (ich > 0.05) w *= 3.0
+                // a client whose next full pose is due again is worth seeking out: poses then come soon after the
+                // minimum spacing rather than whenever the two next happen to meet
+                if (c.t - (lastPoseAt[f.id] ?: -1e9) > POSE_MIN_GAP_S) w *= POSE_DUE_WEIGHT
                 w /= 1 + d / SEARCH_CM
                 if (w > bw) { bw = w; best = f }
             }
@@ -646,10 +726,6 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             phase = 0; phaseT = 0.0; cheatAcc = 0.0
             // inspection length lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a
             // larger client, ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I])
-            val mean = 6.7 * sqrt(sqrt(client?.let { clientArea(it) } ?: 1.0)).coerceIn(0.8, 1.25)
-            val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
-            val mu = ln(mean) - sigma2 / 2
-            inspectS = exp(mu + sqrt(sigma2) * c.rng.gaussian()).coerceIn(2.0, 20.0)
             danceS = c.rng.range(1.0, 2.0)
             if (client == null) finished = true else encounters.approaches++
         }
@@ -695,10 +771,14 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     // the other contacts stay brief passes ("tang 1–3 full poses/h plus several brief passes", 06 §5.5)
                     val sincePose = c.t - (lastPoseAt[cl.id] ?: -1e9)
                     val ichS = if (cl.disease == Disease.ICH) cl.diseaseStage else 0.0
+                    // ... and within [POSE_MIN_GAP_S] of its last full pose an uninfested client only takes a brief pass: the
+                    // pose count no longer rides on how often the two happen to meet (a busy morning gave the tang 3.2/h)
+                    if (sincePose < POSE_MIN_GAP_S && ichS < 0.05) { encounters.refused++; done(c, cl, false); return }
                     val keen = (sincePose / POSE_REFRACT_S).coerceAtMost(1.0)
-                    val need = (keen * keen + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
+                    val need = (0.6 + keen + 3 * ichS + cl.parasiteLoad).coerceIn(0.1, 1.0)
                     if (!c.rng.chance((0.3 + 0.6 * trust).coerceIn(0.0, 1.0) * need)) { encounters.refused++; done(c, cl, false); return }
                     encounters.accepted++
+                    inspectS = drawInspection(c, cl)
                     lastPoseAt[cl.id] = c.t
                     cl.poseFor = o; cl.poseUntil = c.t + inspectS + 1.0
                     cl.counters.add(Counters.K.POSE, c.t)
@@ -732,6 +812,23 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     }
                 }
             }
+        }
+
+        /**
+         * Inspection length, lognormal (mean 6.7 s, sd 4 s), clamped 2–20 s (D:Grutter96); longer on a larger client,
+         * ∝ area^¼ (duration scales with surface area, S:Grutter95; exponent [I]). Drawn when the client poses, at the
+         * quantile u = u₀ + k·φ (mod 1) of the client's k-th pose with a random u₀: each length is still lognormal,
+         * but a client's handful of poses in a few hours averages close to the mean instead of wandering past 10 s
+         * on an unlucky run (independent draws did on one seed in five).
+         */
+        private fun drawInspection(c: Ctx, cl: Organism): Double {
+            val mean = 6.7 * sqrt(sqrt(clientArea(cl))).coerceIn(0.8, 1.25)
+            val sigma2 = ln(1 + (4.0 / 6.7) * (4.0 / 6.7))
+            val mu = ln(mean) - sigma2 / 2
+            val u0 = inspectU.getOrPut(cl.id) { c.rng.nextDouble() }
+            val u = (u0 + GOLDEN) % 1.0
+            inspectU[cl.id] = u
+            return exp(mu + sqrt(sigma2) * normalQuantile(u.coerceIn(1e-6, 1 - 1e-6))).coerceIn(2.0, 20.0)
         }
 
         private fun jolt(c: Ctx, cl: Organism) {
@@ -797,8 +894,17 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         const val DANCE_BOB_CM = 0.8
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */
         const val CLIENT_COOLDOWN_S = 60.0
-        /** A client's keenness to pose recovers (quadratically: it saturates, so poses come at a steady pace) over this long after its last full pose [I]. */
+        /** A client's keenness to pose recovers linearly over this long after its last full pose, past [POSE_MIN_GAP_S] [I]. */
         const val POSE_REFRACT_S = 2250.0
+        /**
+         * Shortest spacing of a client's full poses (21.5 min): at most 15 in a 5 h day, 3 per hour, inside the tang's 1–3/h
+         * (06 §5.5), however often the cleaner and client meet [I].
+         */
+        const val POSE_MIN_GAP_S = 1290.0
+        /** Client weight factor once a full pose is due again (past [POSE_MIN_GAP_S]) [I]. */
+        const val POSE_DUE_WEIGHT = 3.0
+        /** Golden-ratio step of the per-client inspection quantile sequence. */
+        const val GOLDEN = 0.6180339887498949
         /** Search radius for clients (06 §5.5). */
         const val SEARCH_CM = 40.0
         /** Juvenile cleaners search a smaller radius around the station (life_stages.md §4: DESIGN ESTIMATE [L]). */
@@ -855,7 +961,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Night: motionless in a mucus cocoon in the small cave. */
     inner class Cocoon : Behavior("cocoon", "Sleeping in cocoon") {
-        override fun score(c: Ctx) = 0.85 * (1 - c.activity)
+        override fun score(c: Ctx) = 0.85 * (1 - c.activity) * Feed.nightRestDamp(c, this@WrasseBrain)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
             // the cave-mouth steering keeps the fish 4.5-7 cm off the spot, so settle from within 8 cm
@@ -884,7 +990,7 @@ fun finishClean(c: Ctx, client: Organism, isShrimp: Boolean, feed: Boolean = tru
 // =====================================================================================
 class EelBrain(c: Ctx) : SpeciesBrain(c) {
     val cave: Anchor? = c.rock.anchors["CAVE_EEL"]
-    val mouth: Vec3 = cave?.pos ?: Vec3(69.0, 5.0, 23.0)
+    val mouth: Vec3 = cave?.pos ?: Vec3(62.0, 3.8, 32.5)
     /** Direction from the mouth into the den. */
     val inDir: Vec3 = (cave?.dir ?: Vec3(0.5, 0.1, -0.85)).normalized()
     val outDir: Vec3 = (inDir * -1.0).let { Vec3(it.x, 0.05, it.z).normalized(Vec3.Z) }
@@ -970,7 +1076,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + c.rng.range(8.0, 20.0)
                 val targets = c.rock.anchors.ofType("CAVE") + c.rock.anchors.ofType("HOLE") + c.rock.anchors.ofType("GRAZE").filter { it.pos.y < 15 }
                 val p = if (targets.isNotEmpty() && c.rng.chance(0.6)) targets[c.rng.nextInt(targets.size)].pos
-                else Vec3(c.rng.range(8.0, 114.0), c.rock.sandTopCm + 4, if (c.rng.chance(0.5)) c.rng.range(26.0, 30.0) else c.rng.range(14.0, 30.0))
+                else Vec3(c.rng.range(8.0, 114.0), c.rock.sandTopCm + 4, c.rock.widthCm * (if (c.rng.chance(0.5)) c.rng.range(0.79, 0.91) else c.rng.range(0.42, 0.91)))
                 wp = c.safe(p.withY(min(p.y, c.zoneY(0.35))))
             }
             out.seek(wp, o.cruiseSpeed, arrive = 6.0)
@@ -1030,7 +1136,8 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 o.mouth = 1.0
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
-                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55) {
+                    // the kill roll is unsourced (realism_gaps X7): only behind the evidence gate; otherwise an attack
+                    if (hit && c.sim.predationEnabled && c.rng.nextDouble() >= 0.55 && c.sim.unsourcedPredation) {
                         c.sim.eaten(o, p)
                     } else {
                         c.sim.agentOf(p)?.let { it.brain.onAttacked(it.ctx, o.pos, 1.0) }
@@ -1049,12 +1156,15 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
 // Falco hawkfish (HawkBrain)
 // =====================================================================================
 class HawkBrain(c: Ctx) : SpeciesBrain(c) {
-    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(49.0, 29.0, 21.0), normal = Vec3.Y)) }
-    var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(49.0, 29.0, 21.0)) }
+    val perches: List<Anchor> = c.rock.anchors.ofType("PERCH").ifEmpty { listOf(Anchor("PERCH_X", "PERCH", Vec3(43.0, 20.1, 28.8), normal = Vec3.Y)) }
+    var current: Anchor = perches.minBy { it.pos.distanceTo(Vec3(43.0, 20.1, 28.8)) }
+    /** Night rest on open sand at the rock base (ai/HawkNight.kt; Tee's footage T89 [H]). */
+    val sandRest = SandRest(this)
 
     init {
-        install(PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
+        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
     }
+
 
     fun perchPose(a: Anchor): Rest {
         val n = (a.normal ?: Vec3.Y).normalized(Vec3.Y)
@@ -1127,7 +1237,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "perch") current.pos else super.anchorPos(c, anchor)
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = perchPose(if (night) lowestSheltered() else current)
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (night) sandRest.restPose(c) ?: perchPose(lowestSheltered()) else perchPose(current)
 
     /** Sit on a perch on the pectorals (20–120 s, head turns), then hop to another perch. */
     inner class PerchHop : Behavior("perch", "Perched") {
@@ -1295,13 +1405,15 @@ open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3,
 // =====================================================================================
 class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     val hole: Anchor? = c.rock.anchors["HOLE_LAWNMOWER"] ?: c.rock.anchors["HOLE_BLENNY"]
-    val territory: Vec3 get() = hole?.pos ?: Vec3(30.0, 10.0, 11.0)
+    val territory: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
 
     init {
         install(RockGraze(),
-            InHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
+            TailFirstHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
+            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
+            // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
+            NibbleNori(this, 0.75, quiet = true))
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
@@ -1338,8 +1450,14 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     fun perchOn(p: Vec3, n: Vec3): Rest {
-        val h = Vec3.Y.rejectFrom(n).let { if (it.length() < 0.2) Vec3.X.rejectFrom(n) else it }.normalized(Vec3.X)
-        return Rest(p + n * (0.5 * o.species.depthRatio * o.lengthCm + 0.3), h, n, posture = 1)
+        var h = Vec3.Y.rejectFrom(n).let { if (it.length() < 0.2) Vec3.X.rejectFrom(n) else it }.normalized(Vec3.X)
+        val at = p + n * (0.5 * o.species.depthRatio * o.lengthCm + 0.3)
+        // head-up low on a face would hang the body down into the sand (SandBed.surfaceY): lie along the face instead
+        if (at.y - o.lengthCm * h.y < c.sim.sand.surfaceY(at.x, at.z) + 0.5) {
+            val side = Vec3.Y.cross(n).let { if ((it dot o.heading) < 0) it * -1.0 else it }
+            if (side.length() > 0.2) h = side.normalized(h)
+        }
+        return Rest(at, h, n, posture = 1)
     }
 
     /**
@@ -1453,10 +1571,10 @@ class BlennyRival(val b: SpeciesBrain, val radius: Double, val centre: Vec3) : B
 class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     // the rebuilt rockscape names the tailspot's own hole HOLE_TAILSPOT; HOLE_BLENNY is the lawnmower's
     var hole: Anchor? = c.rock.anchors["HOLE_TAILSPOT"] ?: c.rock.anchors["HOLE_BLENNY"]; private set
-    val holePos: Vec3 get() = hole?.pos ?: Vec3(25.0, 18.0, 24.0)
+    val holePos: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
-    private val inHole = InHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
+    private val inHole = TailFirstHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
         { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else 0.45) + (if (c.o.health < 0.5) 0.3 else 0.0) },
         // head-out inspection by day; a full retreat (head in) while threatened, freshly startled or timid (research 10 §7)
         { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) })
@@ -1464,7 +1582,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(),
+            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(), GlassCurious(this),
             Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
@@ -1517,6 +1635,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
         /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
         const val PROSPECT_S = 86400.0
+        /** Longest committed trip to a prospecting site (s) [L]. */
+        const val PROSPECT_TRIP_S = 25.0
     }
 
     /**
@@ -1529,6 +1649,11 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         private var stand = Vec3.ZERO
         private var stay = 30.0
         private var arrived = -1.0
+        /**
+         * The trip out to a site is one inspection: only an urgent behaviour (flee) breaks it off on the way, not a
+         * plankton snap (research 10 §7 inspect → excursion → return) [I].
+         */
+        override val committed: Boolean get() = !finished && arrived < 0 && elapsed < PROSPECT_TRIP_S
         override fun score(c: Ctx): Double {
             if (c.p.night || c.t - c.o.arrivalTime > PROSPECT_S) return 0.0
             return 0.55
@@ -1626,11 +1751,12 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 // Indigo dottyback (Pseudochromis): secretive cave darter, territorial
 // =====================================================================================
 class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
-    val cave: Vec3 = c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(42.0, 18.0, 6.0)))
+    val cave: Vec3 = c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(106.0, 7.5, 13.0)))
     val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
 
     init {
-        install(CaveDart(), DottyFeed(),
+        // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
+        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             Sleep(this, "Resting in its cave"), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
@@ -1713,10 +1839,28 @@ class GenericFishBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun initialPlace(c: Ctx) {
         val z = o.species.zone
-        o.homePos = c.safe(Vec3(c.rng.range(20.0, 100.0), c.zoneY((z.yMin + z.yMax) / 2), c.rng.range(12.0, 26.0)))
+        o.homePos = c.safe(Vec3(c.rng.range(20.0, 100.0), c.zoneY((z.yMin + z.yMax) / 2), c.rock.widthCm * c.rng.range(0.36, 0.79)))
         o.placeAt(o.homePos, Vec3.X)
     }
 }
 
 @Suppress("unused")
 private fun absD(v: Double) = abs(v)
+
+/** Standard normal quantile Φ⁻¹(p), 0 < p < 1 (Acklam's rational approximation, relative error < 1.2e-9). */
+internal fun normalQuantile(p: Double): Double {
+    val a = doubleArrayOf(-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.383577518672690e2, -3.066479806614716e1, 2.506628277459239)
+    val b = doubleArrayOf(-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1)
+    val cc = doubleArrayOf(-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783)
+    val d = doubleArrayOf(7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416)
+    fun tail(q: Double) = (((((cc[0] * q + cc[1]) * q + cc[2]) * q + cc[3]) * q + cc[4]) * q + cc[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
+    return when {
+        p < 0.02425 -> tail(sqrt(-2 * ln(p)))
+        p > 1 - 0.02425 -> -tail(sqrt(-2 * ln(1 - p)))
+        else -> {
+            val q = p - 0.5
+            val r = q * q
+            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
+        }
+    }
+}

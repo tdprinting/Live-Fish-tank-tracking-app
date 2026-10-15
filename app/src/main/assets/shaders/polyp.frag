@@ -35,7 +35,7 @@ void main() {
     if (dot(N, V) < 0.0) N = -N;
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.03, 0.8, 0.5);
     // glossy oral discs / tentacle tips (High: second, tighter lobe)
-    if (uQuality >= 1.5) col += wetCoat(N, V, vWorld, 0.28, 0.3) * shadowAt(vWorld, N);
+    if (uQuality >= 1.5) col += wetCoat(N, V, vWorld, 0.28, 0.3) * gShadow;
     col += uEmissive * (0.4 + 2.4 * uBlueFraction) * lightIntensity() * (0.3 + 0.7 * vOpen) * (1.0 - uBleach);
     col = applyWater(col, vWorld);
     fragColor = vec4(tonemap(col), 1.0);

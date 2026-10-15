@@ -15,13 +15,16 @@ class Organism(
     val id: String,
     val species: SimSpecies,
     lengthCm: Double,
-    val nickname: String,
+    nickname: String,
     val role: String?,
     val rng: Rng,
     val placement: String? = null,
     val variant: String? = null,
 ) {
     val brainKind: BrainKind = species.brainKind
+
+    /** The keeper's name for this animal (a [Command.Rename] changes it). */
+    var nickname: String = nickname
 
     var lengthCm: Double = lengthCm
         set(v) { field = v.coerceAtLeast(0.3); spline.length = field }
@@ -49,6 +52,8 @@ class Organism(
     var deadSince: Double? = null
     /** g of TAN-equivalent this carcass has leached into the water so far (bounded by its N content; see Simulation.corpses). */
     var carcassTanReleasedG = 0.0
+    /** The body is in the keeper's net ([FishNet]): the net moves it, not the sinking / floating carcass physics. */
+    var netted = false
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()
@@ -149,7 +154,14 @@ class Organism(
     var vel = Vec3.ZERO
     var heading = Vec3.X
     var up = Vec3.Y
+    /** The fish a cleaner shrimp is standing on while it cleans it (its legs grip the body, core ShrimpLimbs). */
+    var ridingOn: Organism? = null
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
+    /**
+     * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
+     * sand contact layer ([SandContact]) neither lifts it out nor pushes a bow wave. Set by the brain, cleared on exit.
+     */
+    var inSand = false
     var sleeping = false
     var hostAnchor: String? = placement
     var homePos: Vec3 = Vec3.ZERO
@@ -188,6 +200,16 @@ class Organism(
 
     /** The brittle star's disc never bends or turns with its path (its arms do the steering), so it is rigid too. */
     val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
+
+    /**
+     * Surface seat for crawlers whose model stands on its y = 0 plane (hermits, Sally Lightfoot, brittle star, astrea;
+     * [CrawlerSeat], SIMULATION §19.6). While [seatOn], [toPose] draws the body at [seatPos] with up [seatUp] instead of
+     * [pos] / [up], which stay the sim's own.
+     */
+    val seat: CrawlerSeat? = CrawlerSeat.forOrganism(brainKind, species.id)
+    var seatOn = false
+    var seatPos = Vec3.ZERO
+    var seatUp = Vec3.Y
     lateinit var brain: UtilityBrain
     /** Heat stages from LETHARGIC on override the brain's label (abstract mode never ticks the brain). */
     val behaviorName: String get() = when {
@@ -238,13 +260,28 @@ class Organism(
     }
 
     fun toPose(): OrganismPose {
-        spline.sample(up, spinePos, spineRot)
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
-        for (i in 0 until BodySpline.POINTS) {
-            val p = spinePos[i]; val q = spineRot[i]
-            sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
-            fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+        if (!seatOn) spline.sampleInto(up, spinePos, sp, fr)   // allocation-free (most organisms)
+        else {
+            spline.sample(up, spinePos, spineRot)
+            // a rigid crawler body on its seat: straight back from the seat point, tangent to the seated surface
+            val seg = spline.length / (BodySpline.POINTS - 1)
+            // (the seat's own forward: the one its contact points were solved with)
+            val f = seat?.fwd ?: heading.rejectFrom(seatUp).normalized(heading)
+            val q = Quat.fromForwardUp(f, seatUp)
+            // (while the seat fades in or out the whole body blends from the sim's own spine, not just its head)
+            val b = seat?.blend ?: 1.0
+            for (i in 0 until BodySpline.POINTS) {
+                val at = seatPos - f * (seg * i)
+                if (b >= 1.0) { spinePos[i] = at; spineRot[i] = q }
+                else { spinePos[i] = spinePos[i].lerp(at, b); spineRot[i] = spineRot[i].nlerp(q, b) }
+            }
+            for (i in 0 until BodySpline.POINTS) {
+                val p = spinePos[i]; val q = spineRot[i]
+                sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
+                fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+            }
         }
         return OrganismPose(
             id, species.id, sp, fr, swimPhase.toFloat(), amp.toFloat(), species.locomotion.waveLen.toFloat(),
@@ -254,7 +291,7 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            motionMode = when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.out?.copyOf() ?: NO_LIMBS,
         )
     }
@@ -264,13 +301,14 @@ class Organism(
         intent: String = behaviorName.replaceFirstChar { it.lowercase() },
         intentTargetId: String? = focusId,
         relations: List<RelationInfo> = emptyList(),
+        thought: Thought = Thought.NONE,
     ): OrganismStats = OrganismStats(
         id, nickname, species.id, species.common, health.toFloat(), hunger.toFloat(), stress.toFloat(), mood,
         behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
         sex = sexLabel(), mouthbrooding = mouthbrooding,
-        ageYears = ageYears.toFloat(),
+        ageYears = ageYears.toFloat(), thought = thought,
     )
 
     /** "Female", "Male", "Changing sex" or "" when the sheet gives no sex. */
@@ -294,6 +332,11 @@ class Organism(
     }
 
     override fun toString() = "$nickname(${species.id})"
+
+    companion object {
+        /** [appendagePhase] wraps here (rad): 159 whole turns (≈ 999 rad), so a sine of the phase is continuous. */
+        const val APPENDAGE_WRAP = 2 * kotlin.math.PI * 159
+    }
 }
 
 /**

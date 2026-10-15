@@ -7,6 +7,7 @@ import com.reeflive.core.sim.DefaultStock
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.SimEvent
 import com.reeflive.core.sim.Simulation
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TestTank
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,7 +48,7 @@ class AiTest {
             sim.advance(600.0) {
                 ticks++
                 if (ticks == 200) sim.enqueue(Command.Feed(FoodKind.MYSIS, 0.5))
-                if (ticks == 2400) sim.enqueue(Command.TapGlass(Vec3(60.0, 30.0, 33.0)))
+                if (ticks == 2400) sim.enqueue(Command.TapGlass(Vec3(60.0, 20.0, TankDims.DEPTH_CM)))
                 for (o in sim.organisms) {
                     if (!o.alive) continue
                     val d = sim.rock.sdf.dist(o.pos)
@@ -67,6 +68,7 @@ class AiTest {
         for (seed in seeds) {
             val sim = TestTank.sim(listOf(MORAY, TestTank.seed("banded")), seed = seed, startHour = 23.0)
             sim.predationEnabled = true
+            sim.unsourcedPredation = true   // the eel's kill roll is unsourced (realism_gaps X7)
             val eel = sim.organisms.first { it.brainKind == BrainKind.EEL }
             val shrimp = sim.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
             eel.hunger = 0.9
@@ -138,8 +140,8 @@ class AiTest {
         val cmds = listOf<(Simulation) -> Unit>(
             { it.enqueue(Command.Feed(FoodKind.FLAKE, 0.4)) },
             { it.enqueue(Command.Feed(FoodKind.NORI, 1.0)) },
-            { it.enqueue(Command.TapGlass(Vec3(30.0, 20.0, 33.0))) },
-            { it.enqueue(Command.Shadow(Vec3(15.0, 56.0, 27.0))) },
+            { it.enqueue(Command.TapGlass(Vec3(30.0, 20.0, TankDims.DEPTH_CM))) },
+            { it.enqueue(Command.Shadow(Vec3(15.0, TankDims.WATER_LEVEL_CM, 37.0))) },
             { it.enqueue(Command.Powerheads(false)) },
             { it.enqueue(Command.Powerheads(true)) },
             { it.enqueue(Command.Feed(FoodKind.PELLET, 0.3)) },
@@ -150,7 +152,11 @@ class AiTest {
             sim.advanceAbstract(2400.0)
             for (o in sim.organisms) {
                 assertTrue("${o.nickname} NaN", o.pos.isFinite() && o.heading.isFinite() && o.up.isFinite())
-                assertTrue("${o.nickname} outside ${o.pos}", sim.rock.inWater(o.pos, -0.5))
+                // a body buried in the sand (posture 5) lies under the live surface (SandBed.surfaceY, 3.5-6 cm), which
+                // can be below the old flat sand plane: it only has to stay above the glass (SIMULATION §16.10)
+                val inside = if (o.posture == 5) o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y && sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.sandTopCm)), -0.5)
+                    else sim.rock.inWater(o.pos, -0.5)
+                assertTrue("${o.nickname} outside ${o.pos}", inside)
             }
         }
         val pose = sim.snapshot().organisms.first()

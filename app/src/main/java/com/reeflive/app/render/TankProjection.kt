@@ -47,4 +47,35 @@ class TankProjection {
         }
         return true
     }
+
+    private val gp = FloatArray(3)
+
+    /**
+     * Which point on the plane z = [z] (tank cm x, y) is under view pixel ([sx], [sy]): a few Newton steps on [project]
+     * (a homography, so it converges in 3–4). Writes x, y into [out]; false if it did not converge (point behind the
+     * camera or off at a grazing angle). Call from one thread at a time (it reuses a scratch buffer).
+     */
+    fun planePointAt(sx: Float, sy: Float, z: Float, out: FloatArray): Boolean {
+        val p = gp
+        var x = 121.9f / 2; var y = 61f / 2
+        val h = 1f
+        repeat(8) {
+            if (!project(x, y, z, p)) return false
+            val fx = p[0] - sx; val fy = p[1] - sy
+            if (kotlin.math.abs(fx) < 0.5f && kotlin.math.abs(fy) < 0.5f) { out[0] = x; out[1] = y; return true }
+            val px = p[0]; val py = p[1]
+            if (!project(x + h, y, z, p)) return false
+            val a = (p[0] - px) / h; val c = (p[1] - py) / h
+            if (!project(x, y + h, z, p)) return false
+            val b = (p[0] - px) / h; val d = (p[1] - py) / h
+            val det = a * d - b * c
+            if (kotlin.math.abs(det) < 1e-6f) return false
+            x -= (d * fx - b * fy) / det
+            y -= (-c * fx + a * fy) / det
+            x = x.coerceIn(-400f, 500f); y = y.coerceIn(-400f, 400f)
+        }
+        if (!project(x, y, z, p)) return false
+        out[0] = x; out[1] = y
+        return kotlin.math.abs(p[0] - sx) < 3f && kotlin.math.abs(p[1] - sy) < 3f
+    }
 }

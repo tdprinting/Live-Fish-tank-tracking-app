@@ -2,6 +2,7 @@ package com.reeflive.app.render
 
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.TankDims
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -78,6 +79,16 @@ class Camera {
     // ---- supply shelf (SupplyShelf.kt): a second framing beside the tank, blended over the tank view ----
     /** True while the camera looks at (or travels to) the supply shelf; drags then look along the shelf rows. */
     var shelfOn = false; private set
+    /**
+     * Submarine mode ([SubmarineScene]): while on, the eye and aim ease to [rideEye] / [rideAim] (set every frame) in
+     * place of the orbit or follow camera; turning it off glides back to the default tank view.
+     */
+    var rideOn = false
+    val rideEye = FloatArray(3)
+    val rideAim = FloatArray(3)
+    private var riding = false
+    private val rideEyeS = Spring3(RIDE_OMEGA)
+    private val rideAimS = Spring3(RIDE_OMEGA * 1.5f)
     /** Travel progress: 0 = the tank view, 1 = the shelf view (eased with smoothstep, arcing up and back). */
     var shelfMix = 0f; private set
     private val shelfGoal = floatArrayOf(SupplyShelfLayout.START_X, SupplyShelfLayout.START_Y)
@@ -205,6 +216,19 @@ class Camera {
         distLogGoal = max(distLogGoal + ln(0.4f), ln(FOCUS_DISTANCE))
     }
 
+    /**
+     * A tap on a coral: a gentle closer look at [x], [y], [z] (about 30 % closer, never nearer than [FOCUS_DISTANCE]).
+     * Unlike [focusOn] it never toggles back out; already close in, it only re-aims.
+     */
+    fun peekAt(x: Float, y: Float, z: Float) {
+        if (followId != null || shelfOn) return
+        glide()
+        target[0] = x.coerceIn(TARGET_LO[0], TARGET_HI[0])
+        target[1] = y.coerceIn(TARGET_LO[1], TARGET_HI[1])
+        target[2] = z.coerceIn(TARGET_LO[2], TARGET_HI[2])
+        distLogGoal = max(distLogGoal + ln(0.7f), ln(FOCUS_DISTANCE))
+    }
+
     /** Starts (id != null) or stops following. Stopping keeps the current view and resumes orbiting around it. */
     fun follow(id: String?) {
         if (id == followId) return
@@ -325,7 +349,16 @@ class Camera {
         if (!initialized) {
             yawS.snap(yawGoal); pitchS.snap(pitchGoal); distLogS.snap(distLogGoal); targetS.snap(target)
         }
-        if (followId != null && rig != null) {
+        if (rideOn) {
+            if (!riding) { rideEyeS.snap(if (initialized) eye else rideEye); rideAimS.snap(if (initialized) aim else rideAim); riding = true }
+            rideEyeS.step(rideEye, step, eye)
+            rideAimS.step(rideAim, step, aim)
+            initialized = true
+        } else if (riding) {
+            riding = false
+            releaseFollow(); reset()
+            advanceOrbit(step); orbitEye(eye); targetS.valueInto(aim)
+        } else if (followId != null && rig != null) {
             advanceFollowInput(step)
             followTarget(rig, sdf, desiredEye, desiredAim, step)
             if (!initialized) { eyeS.snap(desiredEye); aimS.snap(desiredAim); initialized = true }
@@ -342,15 +375,29 @@ class Camera {
             initialized = true
         }
         blendShelf(step)
-        // Keep the eye out of rock and out of the sand bed.
-        if (sdf != null) pushOut(eye, sdf, CLEARANCE)
-        if (eye[0] > 0f && eye[0] < TANK[0] && eye[2] > 0f && eye[2] < TANK[2] && eye[1] < SAND_Y + 1.5f) eye[1] = SAND_Y + 1.5f
+        // Eye collision: outside the rock SDF, inside the glass box (never straddling a pane) and above the sand. The
+        // glass / sand clamp runs between two rock passes so neither can push the eye into the other. Allocation-free
+        // apart from the SDF's own Vec3 queries.
+        clampEye(eye, sdf)
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
         val dx = aim[0] - eye[0]; val dy = aim[1] - eye[1]; val dz = aim[2] - eye[2]
         near = (sqrt(dx * dx + dy * dy + dz * dz) * 0.03f).coerceIn(0.25f, 1f)
         M.perspective(fovY, aspect, near, far, proj)
         M.mul(proj, view, viewProj)
         M.invert(viewProj, invViewProj)
+    }
+
+    private fun clampEye(e: FloatArray, sdf: Sdf?) {
+        if (sdf != null) pushOut(e, sdf, EYE_CLEARANCE)
+        val m = EYE_GLASS_MARGIN
+        // within the tank's footprint (plus the margin band outside the panes): stay inside, a margin off the glass
+        if (e[0] > -m && e[0] < TANK[0] + m && e[2] > -m && e[2] < TANK[2] + m && e[1] < WATER_Y + m) {
+            e[0] = e[0].coerceIn(m, TANK[0] - m)
+            e[2] = e[2].coerceIn(m, TANK[2] - m)
+            if (e[1] < SAND_Y + 1.5f) e[1] = SAND_Y + 1.5f
+            if (e[1] > WATER_Y - m) e[1] = WATER_Y - m
+            if (sdf != null) pushOut(e, sdf, EYE_CLEARANCE)
+        }
     }
 
     private fun advanceOrbit(dt: Float) {
@@ -540,10 +587,12 @@ class Camera {
     }
 
     companion object {
-        val TANK = floatArrayOf(121.9f, 61f, 33f)
-        const val SAND_Y = 3f
-        const val WATER_Y = 56f
-        val DEFAULT_TARGET = floatArrayOf(61f, 27f, 16f)
+        /** Tank interior (cm): x length, y height, z depth (back glass z = 0); core [TankDims] is the source of truth. */
+        val TANK = floatArrayOf(TankDims.LENGTH_F, TankDims.HEIGHT_F, TankDims.DEPTH_F)
+        const val SAND_Y = TankDims.SAND_TOP_F
+        const val WATER_Y = TankDims.WATER_LEVEL_F
+        /** Orbit target: mid-length, a little under mid-water, mid-depth. */
+        val DEFAULT_TARGET = floatArrayOf(TankDims.LENGTH_F / 2f, 19f, TankDims.DEPTH_F / 2f)
         const val DEFAULT_DISTANCE = 150f
         const val DEFAULT_PITCH = 0.08f
         /** Closest orbit (user units; ≈ 10 cm from the target in portrait): right up to the rockwork. */
@@ -587,6 +636,8 @@ class Camera {
         val FOLLOW_MIN_ZOOM_LOG = ln(0.3f)
         val FOLLOW_MAX_ZOOM_LOG = ln(3f)
         /** Fly-in: the follow springs stiffen from [FLY_OMEGA] to [FOLLOW_OMEGA] over this many seconds. */
+        /** Submarine ride camera stiffness (rad/s). */
+        const val RIDE_OMEGA = 7f
         const val FLY_IN_S = 1.4f
         const val FLY_OMEGA = 2.4f
         const val FOLLOW_OMEGA = 6.5f
@@ -596,6 +647,9 @@ class Camera {
         /** Fish velocity smoothing rate (1/s). */
         const val VEL_SMOOTH = 4f
         const val CLEARANCE = 1.5f
+        /** Eye-to-rock margin (cm): above the largest near plane so the rock never fills the screen edge. */
+        const val EYE_CLEARANCE = 3f
+        const val EYE_GLASS_MARGIN = 1.5f
         /** Follow-heading spring stiffness (rad/s); critically damped, settles in ≈ 4.7 / ω ≈ 1.3 s. */
         const val FOLLOW_YAW_OMEGA = 3.5f
         /** Cross to the other flank once the kept one would view from behind by more than this (cos of the angle off +Z). */
@@ -653,7 +707,7 @@ class Camera {
         }
 
         fun pushOut(p: FloatArray, sdf: Sdf, clearance: Float) {
-            repeat(4) {
+            repeat(6) {
                 val v = Vec3(p[0].toDouble(), p[1].toDouble(), p[2].toDouble())
                 val d = sdf.dist(v).toFloat()
                 if (d >= clearance) return

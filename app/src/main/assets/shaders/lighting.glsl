@@ -165,7 +165,9 @@ vec3 bumpH(vec3 N, vec3 p, float h) {
     vec3 r1 = cross(sy, N), r2 = cross(N, sx);
     float det = dot(sx, r1);
     vec3 g = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
-    return normalize(abs(det) * N - g);
+    vec3 r = abs(det) * N - g;
+    float l = dot(r, r);
+    return l > 1e-20 ? r * inversesqrt(l) : N;   // degenerate (edge-on / sub-pixel) triangles: no NaN speckles
 }
 
 // Wet clear-coat lobe (mucus / water film): a tight GGX highlight from both fixtures on top of the base response.
@@ -179,6 +181,10 @@ vec3 wetCoat(vec3 N, vec3 V, vec3 p, float rough, float strength) {
     }
     return s * strength;
 }
+
+// Shadow-map visibility from the last shadeLit call: extra light lobes added after it (glints, sheen, back-light)
+// reuse it instead of sampling the PCF kernel again.
+float gShadow = 1.0;
 
 // Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics; direct light and
 // caustics are dimmed under nearby fish (contact shadows).
@@ -198,7 +204,8 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
 #ifndef NO_CONTACT_SHADOW
     if (uCasterCount > 0.5) direct *= contactShadow(p);
 #endif
-    direct *= shadowAt(p, N);
+    gShadow = shadowAt(p, N);
+    direct *= gShadow;
     return col + direct;
 }
 
