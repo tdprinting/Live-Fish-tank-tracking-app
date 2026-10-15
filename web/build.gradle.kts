@@ -136,6 +136,12 @@ tasks.register<Sync>("site") {
     from(assetIndex) { into("assets") }
     from(whatsNew)
     from(coreResources) { into("res") }
+    // the species pictures the Android app shows (UI_STYLE §5.2), for the Add life tiles
+    from(rootProject.layout.projectDirectory.dir("app/src/main/res/drawable-nodpi")) {
+        include("species_*.webp")
+        rename("species_(.*)", "$1")
+        into("species")
+    }
     from(rootProject.layout.projectDirectory.dir("app/src/main/res/raw")) { into("sounds") }
     from(soundsM4a) { into("sounds") }
 }

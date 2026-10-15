@@ -61,3 +61,11 @@ localStorage), and More → ✨ What's new lists the latest ones any time. The l
 `:web:whatsNew` task from `git log --first-parent` on main, so every thread's merged PR appears with its title.
 To reword a title in plain language, or hide a behind-the-scenes change with `""`, add it by PR number to
 `docs/whats-new.json`.
+
+## Look and icons
+
+The live screen uses the Android "Sea-glass Arcade" live theme (UI_STYLE §10.1): navy outlines, candy-coloured
+bubbles and tiles per category, teal glass sheets, Outfit for labels (`web/site/style.css`, last block). Icons come
+from the app's own sets: `web/site/glyphs.js` is generated from `ReefGlyphs.kt` (plus a few web-only glyphs) and
+`web/site/food/*.png` from the FoodArt drawings by `python3 tools/graphics/web_glyphs.py`; species pictures are copied
+from `app/src/main/res/drawable-nodpi` at build time. New tiles take a glyph name, `food:KIND` or `species:id:glyph`.
