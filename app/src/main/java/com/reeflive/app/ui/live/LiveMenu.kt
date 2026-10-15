@@ -526,6 +526,7 @@ private fun ColumnScope.CardBody(
                 T("Salt crash", ReefGlyphs.dropDown, danger = true) { actions.onPreset(SandboxPreset.SALINITY_CRASH) },
                 T("Copper spill", ReefGlyphs.copperBottle, danger = true) { actions.onPreset(SandboxPreset.COPPER_OVERDOSE) },
                 T("Too much food", ReefGlyphs.crumbs) { actions.onPreset(SandboxPreset.OVERFEEDING) },
+                T("Rockslide", ReefGlyphs.rocks, danger = true) { actions.onPreset(SandboxPreset.ROCKSLIDE) },
                 T("No water changes", ReefGlyphs.calendarX) { actions.onPreset(SandboxPreset.MISSED_WATER_CHANGES) },
                 T("Pest anemone", ReefGlyphs.pestAnemone) { actions.onAddAiptasia() },
                 T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },

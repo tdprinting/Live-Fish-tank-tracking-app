@@ -1,7 +1,8 @@
 """Crawler limb pose for previews and species cards (SIMULATION §19): a numpy mirror of the limb branch of
 app/src/main/assets/shaders/fish.vert (starArm / crabLimb), so offline renders show the brittle star's arms and the
 Sally Lightfoot's legs posed the way the app poses them. Inputs are the model's `extras.limbPivots` (glTF space) and
-a 10 x vec4 limb pose in the core LimbRig layout (BrittleArms / CrabLegs); the presets below are typical frames.
+a limb pose in the core LimbRig layout (BrittleArms: 40 x vec4; CrabLegs / HermitLegs: 10 x vec4); the presets below
+are typical frames.
 """
 import math
 
@@ -22,30 +23,66 @@ def _rot(v, a, ang):
 
 
 # ---------------------------------------------------------------- pose presets (core layouts)
-def brittle_pose(kind="row"):
-    """BrittleArms.out: arm k = (wave phase, yaw, pitch, reach); 5 + k = (length, wave amp, curl, 0)."""
-    L = np.zeros((10, 4))
+STAR_N = 15       # steps per brittle star arm (core BrittleArms.SAMPLES)
+
+
+def brittle_pack(psi, y, length=None):
+    """BrittleArms.out from per-arm step directions psi (5 x 15, rad from the rest direction, + toward -Z), heights
+    y (5 x 15, model units above the disc's ground plane) and arm lengths (5): 8 vec4 per arm, heights 1..8 in the x
+    slots as 0.5 + 0.5 y, the plain slots n = 0.. holding psi 1..15, y 9..15, the length, 0."""
+    psi, y = np.asarray(psi, float), np.asarray(y, float)
+    length = np.ones(5) if length is None else np.asarray(length, float)
+    out = np.zeros((5, 32))
     for k in range(5):
-        L[k] = (k * 0.37 % 1.0, 0.0, -0.04, 1.0)
-        L[5 + k] = (1.0, 0.12, 0.25 if k % 2 == 0 else -0.25, 0.0)
-    if kind == "row":       # rowing, centre arm 0 leading, mid power stroke (Astley 2012)
-        L[0, 2] = 0.12
-        L[1, 1:3] = (0.42, -0.05)
-        L[4, 1:3] = (-0.38, -0.05)
-        L[2, 1] = 0.14
-        L[3, 1] = -0.14
-        L[2, 3] = L[3, 3] = 1.0
-        L[7, 1] = L[8, 1] = 0.06
-    elif kind == "hide":    # day: two tips out of the crevice, the rest coiled under the disc
-        for k in (2, 3, 4):
-            L[k, 2:4] = (-0.08, 0.22)
-            L[5 + k, 1] = 0.03
-        for k in (0, 1):
-            L[k, 2] = 0.08
-            L[5 + k, 1] = 0.22
-    elif kind == "feed":    # arm 0 loops a food item
-        L[5, 1:3] = (0.06, 0.25 + 2.4)
-    return L.astype(np.float32).ravel()
+        plain = list(psi[k]) + list(y[k, 8:]) + [length[k], 0.0]
+        for i in range(8):
+            out[k, 4 * i] = 0.5 + 0.5 * np.clip(y[k, i], -0.9, 0.9)
+        for n, v in enumerate(plain):
+            out[k, 4 * (n // 3) + 1 + n % 3] = v
+    return out.astype(np.float32).ravel()
+
+
+def brittle_unpack(limbs):
+    """Inverse of [brittle_pack]: (psi 5 x 15, y 5 x 15, length 5)."""
+    L = np.asarray(limbs, float).reshape(5, 32)
+    psi, y, length = np.zeros((5, STAR_N)), np.zeros((5, STAR_N)), np.zeros(5)
+    for k in range(5):
+        slot = lambda n: L[k, 4 * (n // 3) + 1 + n % 3]
+        for j in range(STAR_N):
+            psi[k, j] = slot(j)
+        for j in range(8):
+            y[k, j] = 2 * L[k, 4 * j] - 1
+        for j in range(8, STAR_N):
+            y[k, j] = slot(STAR_N + j - 8)
+        length[k] = slot(22)
+    return psi, y, length
+
+
+def brittle_pose(kind="row"):
+    """Typical BrittleArms frames: 'row' (arm 0 leading, its neighbours mid power stroke, the rear pair trailing; Astley
+    2012), 'hide' (day: two tips out of the crevice trawling, the rest folded in S-curves), 'feed' (arm 0's tip
+    looped round a food item), 'rest' (all out, lying in gentle S-curves)."""
+    s = (np.arange(STAR_N) + 0.5) / STAR_N
+    psi, y = np.zeros((5, STAR_N)), np.zeros((5, STAR_N))
+    wave = lambda amp, ph: amp * s * np.sin(2 * PI * (1.3 * s - ph))
+    for k in range(5):
+        psi[k] = wave(0.12, 0.37 * k) + (0.25 if k % 2 == 0 else -0.25) * 2 * _smooth(0.3, 1.0, s)
+    if kind == "row":
+        psi[0] = wave(0.15, 0.1)                                  # lead arm probing ahead, tip a little raised
+        y[0] = np.maximum(0, 0.08 * (s - 0.6))
+        for k, sg in ((1, 1), (4, -1)):                           # rowing pair: swept back, bent like an S
+            psi[k] = sg * (0.42 * (1 - 0.55 * s) - 0.5 * _smooth(0.4, 1.0, s)) + wave(0.1, 0.3)
+        for k, sg in ((2, 1), (3, -1)):                           # rear pair: trailing, pushing
+            psi[k] = sg * (0.14 * (1 - 0.55 * s) + 0.3 * s) + wave(0.08, 0.6)
+    elif kind == "hide":
+        for k in (2, 3, 4):                                       # drawn in: folded in S-curves under the rock
+            psi[k] = (1 if k % 2 == 0 else -1) * 0.78 * 1.5 * np.sin(2 * PI * 1.6 * s)
+        for k, sg in ((0, 1), (1, -1)):                           # tips out, sweeping
+            psi[k] = sg * 0.3 * s + wave(0.22, 0.2 * k)
+    elif kind == "feed":
+        psi[0] = wave(0.06, 0.0) + 2.4 * _smooth(0.6, 1.0, s)        # tip looped round the item
+        y[0] = 0.04 * _smooth(0.5, 0.9, s)
+    return brittle_pack(psi, y)
 
 
 def crab_pose(kind="walk"):
@@ -87,50 +124,49 @@ def hermit_pose(kind="walk"):
 
 
 # ---------------------------------------------------------------- shader mirror (glTF model space)
-def _star_angles(A, X, k, s):
-    alt = 1.0 if k % 2 == 0 else -1.0
-    coil = 1.0 - np.clip(A[3], 0, 1)
-    yaw = A[1] * (1 - 0.55 * s) + X[1] * s * np.sin(2 * PI * (1.3 * s - A[0])) \
-        + X[2] * _smooth(0.5, 1.0, s) * 2.0 + alt * coil * 4.0 * s
-    pitch = A[2] * s * (0.4 + 0.6 * s) - coil * 0.15 * s
-    return yaw, pitch
-
-
-def _star_dir(psi, phi):
-    return np.stack([np.cos(phi) * np.cos(psi), np.sin(phi), -np.cos(phi) * np.sin(psi)], -1)
+def _star_nodes(psi, y, a0, seg):
+    """Centreline nodes 0..STAR_N of one arm relative to its root (core BrittleArms.nodes)."""
+    p = np.zeros((STAR_N + 1, 3))
+    for j in range(1, STAR_N + 1):
+        dy = y[j - 1] - (y[j - 2] if j > 1 else 0.0)
+        hz = math.sqrt(max(seg * seg - dy * dy, 0.09 * seg * seg))
+        a = a0 + psi[j - 1]
+        p[j] = p[j - 1] + (math.cos(a) * hz, dy, -math.sin(a) * hz)
+    return p
 
 
 def pose_star(V, N, col, piv, limbs):
     """V, N: (n, 3) glTF positions / normals of arm vertices; col: (n, 4) COLOR_0. Returns posed V, N."""
     piv = np.asarray(piv, float).reshape(10, 4)
-    Lm = np.asarray(limbs, float).reshape(10, 4)
+    psiA, yA, lenA = brittle_unpack(limbs)
     V, N = V.copy(), N.copy()
     kk = np.floor(col[:, 2] * 9 + 0.5).astype(int)
     for k in range(5):
         m = kk == k
         if not m.any():
             continue
-        P, A, X = piv[k], Lm[k], Lm[k + 5]
+        P = piv[k]
         a0 = math.atan2(-P[2], P[0])
         d0 = np.array([math.cos(a0), 0, -math.sin(a0)])
         l0 = np.array([-math.sin(a0), 0, -math.cos(a0)])
         off = V[m] - P[:3]
         along, lat, up = off @ d0, off @ l0, off[:, 1]
-        lenK = float(np.clip(X[0], 0.1, 1.0))
+        lenK = float(np.clip(lenA[k], 0.1, 1.0))
         s = np.clip(col[m, 0], 0, 1)
         keep = (s < lenK + 0.001).astype(float)
         s = np.minimum(s, lenK)
         ax = along - s * P[3]
-        c = np.tile(P[:3], (len(s), 1))
-        h = s / 8
-        for i in range(8):
-            y, p = _star_angles(A, X, k, (i + 0.5) * h)
-            c += _star_dir(a0 + y, p) * (h * P[3])[:, None]
-        c[:, 1] = np.maximum(c[:, 1], 0.004)
-        y, p = _star_angles(A, X, k, s)
-        psi = a0 + y
-        T = _star_dir(psi, p)
-        Lv = np.stack([-np.sin(psi), 0 * psi, -np.cos(psi)], -1)
+        nodes = _star_nodes(psiA[k], yA[k], a0, P[3] / STAR_N)
+        ext = np.vstack([2 * nodes[0] - nodes[1], nodes, 2 * nodes[-1] - nodes[-2]])   # mirrored end nodes
+        sN = s * STAR_N
+        j = np.minimum(np.floor(sN), STAR_N - 1).astype(int)
+        t = (sN - j)[:, None]
+        p0, p1, p2, p3 = ext[j], ext[j + 1], ext[j + 2], ext[j + 3]
+        c = P[:3] + 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t ** 2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+        T = 0.5 * ((-p0 + p2) + 2 * (2 * p0 - 5 * p1 + 4 * p2 - p3) * t + 3 * (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 2) + d0 * 1e-4
+        T /= np.linalg.norm(T, axis=1, keepdims=True)
+        Lv = np.stack([T[:, 2], 0 * T[:, 0], -T[:, 0]], -1) + l0 * 1e-4
+        Lv /= np.linalg.norm(Lv, axis=1, keepdims=True)
         U = np.cross(T, Lv)
         V[m] = c + (T * ax[:, None] + Lv * lat[:, None] + U * up[:, None]) * keep[:, None]
         n = N[m]

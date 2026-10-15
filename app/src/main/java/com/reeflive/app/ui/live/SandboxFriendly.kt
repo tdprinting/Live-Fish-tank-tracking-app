@@ -133,6 +133,7 @@ object SandboxFriendly {
         SandboxPreset.MISSED_WATER_CHANGES -> ReefGlyphs.calendarX
         SandboxPreset.SALINITY_CRASH -> ReefGlyphs.dropDown
         SandboxPreset.COPPER_OVERDOSE -> ReefGlyphs.copperBottle
+        SandboxPreset.ROCKSLIDE -> ReefGlyphs.rocks
     }
 
     /** Glyph for a treatment row. */
