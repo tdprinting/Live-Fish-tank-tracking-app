@@ -49,7 +49,10 @@ import com.reeflive.core.status.Status
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Selected-fish card: names, live health/stress/hunger bars, behaviour line, relationships, Follow. */
+/**
+ * Selected-fish card: names, live health/stress/hunger bars, behaviour line, relationships, Follow. A dead animal
+ * gets a net button instead of Follow ([onNetOut]): the net scoops it out (core FishNet), [netting] while it does.
+ */
 @Composable
 fun FishCard(
     state: FishCardState,
@@ -58,6 +61,8 @@ fun FishCard(
     modifier: Modifier = Modifier,
     /** My tank: the keeper can name the animal (saved with it). Null hides the button. */
     onRename: ((String) -> Unit)? = null,
+    onNetOut: (() -> Unit)? = null,
+    netting: Boolean = false,
 ) {
     val c = ReefTheme.colors
     val s = LiveTheme.style
@@ -104,10 +109,23 @@ fun FishCard(
             }
         }
         Spacer(Modifier.height(14.dp))
-        LivePill(
-            "Follow", if (state.alive) onFollow else null, Modifier.fillMaxWidth(), tone = Candy.cyan, selected = state.alive,
-            leading = { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, tint = s.onCandy) },
-        )
+        if (state.alive || onNetOut == null) {
+            LivePill(
+                "Follow", if (state.alive) onFollow else null, Modifier.fillMaxWidth(), tone = Candy.cyan, selected = state.alive,
+                leading = { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, tint = s.onCandy) },
+            )
+        } else {
+            Text(
+                if (netting) "Here comes the net…" else "Oh no, ${state.name} didn't make it. Scoop them out to keep the water clean.",
+                style = MaterialTheme.typography.labelMedium, color = c.textSecondary,
+            )
+            Spacer(Modifier.height(8.dp))
+            LivePill(
+                if (netting) "Scooping…" else "Scoop out with the net", if (netting) null else onNetOut, Modifier.fillMaxWidth(),
+                tone = Candy.green, selected = !netting,
+                leading = { NetGlyph(s.onCandy) },
+            )
+        }
         if (onRename != null && state.alive) {
             Spacer(Modifier.height(8.dp))
             if (naming) {
@@ -119,6 +137,28 @@ fun FishCard(
                 LivePill("Give it a name", { draft = state.name; naming = true }, Modifier.fillMaxWidth(), tone = Candy.green, selected = false)
             }
         }
+    }
+}
+
+/** A little fish net: hoop, mesh and handle. */
+@Composable
+private fun NetGlyph(tint: Color) {
+    androidx.compose.foundation.Canvas(Modifier.width(20.dp).height(20.dp)) {
+        val w = size.width
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.09f)
+        val hoopC = androidx.compose.ui.geometry.Offset(w * 0.38f, w * 0.4f)
+        drawCircle(tint, radius = w * 0.3f, center = hoopC, style = stroke)
+        // mesh
+        val thin = w * 0.04f
+        for (k in -1..1) {
+            drawLine(tint.copy(alpha = 0.7f), androidx.compose.ui.geometry.Offset(hoopC.x + k * w * 0.13f, hoopC.y - w * 0.26f),
+                androidx.compose.ui.geometry.Offset(hoopC.x + k * w * 0.13f, hoopC.y + w * 0.26f), thin)
+            drawLine(tint.copy(alpha = 0.7f), androidx.compose.ui.geometry.Offset(hoopC.x - w * 0.26f, hoopC.y + k * w * 0.13f),
+                androidx.compose.ui.geometry.Offset(hoopC.x + w * 0.26f, hoopC.y + k * w * 0.13f), thin)
+        }
+        // handle
+        drawLine(tint, androidx.compose.ui.geometry.Offset(w * 0.6f, w * 0.62f), androidx.compose.ui.geometry.Offset(w * 0.95f, w * 0.97f), w * 0.11f,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round)
     }
 }
 
