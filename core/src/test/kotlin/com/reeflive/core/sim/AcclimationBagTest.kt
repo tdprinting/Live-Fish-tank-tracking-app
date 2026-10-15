@@ -3,6 +3,7 @@ package com.reeflive.core.sim
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.reeflive.core.geom.Vec3
 
 /** Sandbox "Add life" in bags: drop, float 30 sim minutes, tip out ([AcclimationBags], [Command.FloatBag]). */
 class AcclimationBagTest {
@@ -36,7 +37,7 @@ class AcclimationBagTest {
         val out = clowns(s)
         assertEquals(2, out.size)
         assertTrue(out.all { it.alive && s.rock.inWater(it.pos) && it.id.contains("#bag") })
-        s.advance(5.0, behaviorDt = 0.05)
+        s.advance(AcclimationBags.T_END + 1.0, behaviorDt = 0.05)
         val after = s.snapshot()
         assertTrue("bag lifted out", after.bags.isEmpty())
         assertEquals(0, after.organisms.count { it.bagged })
@@ -54,7 +55,7 @@ class AcclimationBagTest {
         // 30 sim minutes at 60x is 30 s of wall time
         repeat(20 * 32) { s.stepWall(0.05) }
         assertTrue(s.simTimeSec - t0 >= AcclimationBags.FLOAT_SEC)
-        repeat(20 * 3) { s.stepWall(0.05) }
+        repeat(20 * 10) { s.stepWall(0.05) }
         assertEquals(1, s.organisms.count { it.species.id == "paracanthurus_hepatus" })
         assertEquals("back to the chosen speed", 1.0, s.snapshot().speed, 1e-9)
     }
@@ -96,11 +97,88 @@ class AcclimationBagTest {
         repeat(20) { s.stepWall(0.05) }
         val corals0 = s.corals.size
         s.enqueue(Command.HurryBags(false, openNow = true))
-        repeat(20 * 8) { s.stepWall(0.05) }
+        // emptied one bag at a time, then the hermits sink from the net
+        repeat(20 * 24) { s.stepWall(0.05) }
         val hermits = s.organisms.filter { it.species.id == "clibanarius_tricolor" }
         assertEquals(3, hermits.size)
         assertTrue(hermits.all { s.rock.envDist(it.pos) < 2.0 })
         assertEquals(corals0 + 2, s.corals.size)
         assertTrue(s.snapshot().bags.isEmpty())
+    }
+
+    /** Spine points of a pose in a bag's own frame (cm). */
+    private fun local(b: BagPose, x: Float, y: Float, z: Float): Vec3 {
+        val m = DoubleArray(9)
+        BagFrame.rotation(b.tiltX.toDouble(), b.tiltZ.toDouble(), b.yaw.toDouble(), m)
+        val dx = x - b.x.toDouble(); val dy = y - b.y.toDouble(); val dz = z - b.z.toDouble()
+        return Vec3(m[0] * dx + m[3] * dy + m[6] * dz, m[1] * dx + m[4] * dy + m[7] * dz, m[2] * dx + m[5] * dy + m[8] * dz)
+    }
+
+    private fun spine(p: OrganismPose) = (0 until p.spine.size / 3).map { Vec3(p.spine[it * 3].toDouble(), p.spine[it * 3 + 1].toDouble(), p.spine[it * 3 + 2].toDouble()) }
+
+    private fun checkApart(snap: SimSnapshot, where: String) {
+        val bagged = snap.organisms.filter { it.bagged }
+        for (i in bagged.indices) for (j in i + 1 until bagged.size) {
+            val a = spine(bagged[i]); val q = spine(bagged[j])
+            val d = a.minOf { p -> q.minOf { it.distanceTo(p) } }
+            assertTrue("$where: ${bagged[i].id} and ${bagged[j].id} overlap (${"%.2f".format(d)} cm)", d > 0.25)
+        }
+    }
+
+    @Test fun baggedBodiesStayInsideTheBagAndTheNetAndApart() {
+        for ((sp, n) in listOf("amphiprion_ocellaris" to 6, "paracanthurus_hepatus" to 1, "clibanarius_tricolor" to 5, "lysmata_amboinensis" to 3)) {
+            val s = sim()
+            s.enqueue(Command.FloatBag(sp, n, x = 60.0))
+            var sawNet = false
+            repeat(20 * 20) { tick ->
+                if (tick == 20 * 8) s.enqueue(Command.HurryBags(false, openNow = true))
+                s.stepWall(0.05)
+                val snap = s.snapshot()
+                val b = snap.bags.firstOrNull() ?: return@repeat
+                if (b.phase == 1 || (b.phase == 2 && b.step <= AcclimationBags.STEP_CUT)) {
+                    val r = b.radius.toDouble()
+                    for (p in snap.organisms.filter { it.bagged }) for (q in spine(p)) {
+                        val l = local(b, q.x.toFloat(), q.y.toFloat(), q.z.toFloat())
+                        val out = l.distanceTo(Vec3(0.0, -AcclimationBags.BULB_C * r, 0.0)) - 0.97 * r
+                        assertTrue("$sp ${p.id} pokes ${"%.2f".format(out)} cm out of the bag", out < 0.0)
+                    }
+                    checkApart(snap, "$sp in the bag")
+                }
+                if (b.step == AcclimationBags.STEP_NET_IN) {
+                    sawNet = true
+                    // in the net's mesh bag (a ball under the hoop): nobody pokes through
+                    val f = Vec3(b.netFx.toDouble(), b.netFy.toDouble(), b.netFz.toDouble())
+                    val c = Vec3(b.netX.toDouble(), b.netY.toDouble(), b.netZ.toDouble()) - f * (AcclimationBags.NET_C * b.netR)
+                    for (p in snap.organisms.filter { it.bagged }) for (q in spine(p)) {
+                        val out = q.distanceTo(c) - b.netR
+                        assertTrue("$sp ${p.id} pokes ${"%.2f".format(out)} cm out of the net", out < 0.0)
+                    }
+                    checkApart(snap, "$sp in the net")
+                }
+            }
+            assertTrue("$sp went through the net", sawNet)
+        }
+    }
+
+    @Test fun bagWaterNeverReachesTheTank() {
+        val s = sim()
+        s.enqueue(Command.FloatBag("amphiprion_ocellaris", 2, x = 60.0))
+        repeat(20) { s.stepWall(0.05) }
+        s.enqueue(Command.HurryBags(false, openNow = true))
+        var poured = false
+        repeat(20 * 10) {
+            s.stepWall(0.05)
+            val b = s.snapshot().bags.firstOrNull() ?: return@repeat
+            if (b.streamR > 0) {
+                poured = true
+                val w = s.rock.waterLevelCm
+                assertTrue("the bag is out of the water when it pours", b.y - (AcclimationBags.BULB_C + 1) * b.radius > w)
+                assertTrue("the bucket hangs clear of the water", b.bucketY - b.bucketH > w)
+                assertTrue("it pours into the net", b.streamY1 > w && kotlin.math.abs(b.streamY1 - b.netY) < 0.01f)
+                assertTrue(b.cut)
+            }
+        }
+        assertTrue(poured)
+        assertEquals(2, clowns(s).size)
     }
 }

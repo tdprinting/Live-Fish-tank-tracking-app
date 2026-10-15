@@ -182,37 +182,45 @@ internal class NetScene {
         return 1
     }
 
-    /** Hoop / bag: Y = facing, Z = the handle side, X = Y × Z, scaled by the radius. Handle: Y along the handle. */
-    private fun buildModels() {
-        // Z: the handle direction with the facing taken out (falls back to any perpendicular)
-        var zx = hx; var zy = hy; var zz = hz
-        val d = zx * fx + zy * fy + zz * fz
-        zx -= fx * d; zy -= fy * d; zz -= fz * d
-        var zl = sqrt(zx * zx + zy * zy + zz * zz)
-        if (zl < 1e-3f) { zx = 0f; zy = 0f; zz = 1f; val e = fz; zx -= fx * e; zy -= fy * e; zz -= fz * e; zl = sqrt(zx * zx + zy * zy + zz * zz).coerceAtLeast(1e-5f) }
-        zx /= zl; zy /= zl; zz /= zl
-        val xx = fy * zz - fz * zy; val xy = fz * zx - fx * zz; val xz = fx * zy - fy * zx
-        model[0] = xx * r; model[1] = xy * r; model[2] = xz * r; model[3] = 0f
-        model[4] = fx * r; model[5] = fy * r; model[6] = fz * r; model[7] = 0f
-        model[8] = zx * r; model[9] = zy * r; model[10] = zz * r; model[11] = 0f
-        model[12] = x; model[13] = y; model[14] = z; model[15] = 1f
-        // the handle starts at the hoop rim on the handle side and runs out of the tank
-        val bx = x + zx * r; val by = y + zy * r; val bz = z + zz * r
-        // its own frame: Y = handle, X ⟂ handle in the horizontal plane
-        var ax = hz; var az = -hx
-        val al = sqrt(ax * ax + az * az)
-        if (al < 1e-4f) { ax = 1f; az = 0f } else { ax /= al; az /= al }
-        // C = A × H (A = (ax, 0, az))
-        val c0 = -az * hy; val c1 = az * hx - ax * hz; val c2 = ax * hy
-        val rad = HANDLE_RADIUS_CM; val len = HANDLE_LENGTH_CM
-        hModel[0] = ax * rad; hModel[1] = 0f; hModel[2] = az * rad; hModel[3] = 0f
-        hModel[4] = hx * len; hModel[5] = hy * len; hModel[6] = hz * len; hModel[7] = 0f
-        hModel[8] = c0 * rad; hModel[9] = c1 * rad; hModel[10] = c2 * rad; hModel[11] = 0f
-        hModel[12] = bx; hModel[13] = by; hModel[14] = bz; hModel[15] = 1f
-    }
+    private fun buildModels() = netModels(x, y, z, fx, fy, fz, hx, hy, hz, r, model, hModel)
 
     companion object {
         const val HANDLE_RADIUS_CM = 0.55f
         const val HANDLE_LENGTH_CM = 48f
     }
+}
+
+/**
+ * Net model matrices (shared by [NetScene] and the bag release in [BagScene]). Hoop / bag: Y = facing, Z = the handle
+ * side, X = Y × Z, scaled by the radius. Handle: Y along the handle.
+ */
+internal fun netModels(
+    x: Float, y: Float, z: Float, fx: Float, fy: Float, fz: Float, hx: Float, hy: Float, hz: Float, r: Float,
+    model: FloatArray, hModel: FloatArray,
+) {
+    // Z: the handle direction with the facing taken out (falls back to any perpendicular)
+    var zx = hx; var zy = hy; var zz = hz
+    val d = zx * fx + zy * fy + zz * fz
+    zx -= fx * d; zy -= fy * d; zz -= fz * d
+    var zl = sqrt(zx * zx + zy * zy + zz * zz)
+    if (zl < 1e-3f) { zx = 0f; zy = 0f; zz = 1f; val e = fz; zx -= fx * e; zy -= fy * e; zz -= fz * e; zl = sqrt(zx * zx + zy * zy + zz * zz).coerceAtLeast(1e-5f) }
+    zx /= zl; zy /= zl; zz /= zl
+    val xx = fy * zz - fz * zy; val xy = fz * zx - fx * zz; val xz = fx * zy - fy * zx
+    model[0] = xx * r; model[1] = xy * r; model[2] = xz * r; model[3] = 0f
+    model[4] = fx * r; model[5] = fy * r; model[6] = fz * r; model[7] = 0f
+    model[8] = zx * r; model[9] = zy * r; model[10] = zz * r; model[11] = 0f
+    model[12] = x; model[13] = y; model[14] = z; model[15] = 1f
+    // the handle starts at the hoop rim on the handle side and runs out of the tank
+    val bx = x + zx * r; val by = y + zy * r; val bz = z + zz * r
+    // its own frame: Y = handle, X ⟂ handle in the horizontal plane
+    var ax = hz; var az = -hx
+    val al = sqrt(ax * ax + az * az)
+    if (al < 1e-4f) { ax = 1f; az = 0f } else { ax /= al; az /= al }
+    // C = A × H (A = (ax, 0, az))
+    val c0 = -az * hy; val c1 = az * hx - ax * hz; val c2 = ax * hy
+    val rad = NetScene.HANDLE_RADIUS_CM; val len = NetScene.HANDLE_LENGTH_CM
+    hModel[0] = ax * rad; hModel[1] = 0f; hModel[2] = az * rad; hModel[3] = 0f
+    hModel[4] = hx * len; hModel[5] = hy * len; hModel[6] = hz * len; hModel[7] = 0f
+    hModel[8] = c0 * rad; hModel[9] = c1 * rad; hModel[10] = c2 * rad; hModel[11] = 0f
+    hModel[12] = bx; hModel[13] = by; hModel[14] = bz; hModel[15] = 1f
 }
