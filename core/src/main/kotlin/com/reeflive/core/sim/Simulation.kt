@@ -152,6 +152,7 @@ class Simulation(
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
+    private var sandRelaxPendingMin = 0.0
 
     /** A goby drops a mouthful of sand at [at]; nearby piles merge (max 8 piles). The sand bed gets the mound and a puff. */
     fun depositSand(at: Vec3, cm3: Double) {
@@ -879,7 +880,9 @@ class Simulation(
      * settling from the column, and fines that stayed suspended reaching the filter sock or skimmer.
      */
     private fun sandTick(dtMin: Double) {
-        sand.relax(dtMin, flowStrength, water.s.detritus)
+        // the bed's slow upkeep runs in batches: disturbed sand already pours in real time (SandBed.step)
+        sandRelaxPendingMin += dtMin
+        if (sandRelaxPendingMin >= SAND_RELAX_EVERY_MIN) { sand.relax(sandRelaxPendingMin, flowStrength, water.s.detritus); sandRelaxPendingMin = 0.0 }
         val up = sand.resuspendedPending
         if (up > 0) {
             water.captureResuspended((up * RESUSPEND_CAPTURE_PER_LOAD).coerceAtMost(RESUSPEND_CAPTURE_MAX_PER_MIN * dtMin))
@@ -1554,6 +1557,8 @@ class Simulation(
         const val MAX_BEHAVIOR_DT = 0.5
         /** Sand grid refresh for the renderer while grains fly or slopes pour (s); 0.25 s when the bed is still. */
         const val SAND_GRID_BUSY_S = 0.1
+        /** Sim minutes between the sand bed's slow upkeep passes (smoothing, freshness, detritus): a full-grid sweep. */
+        const val SAND_RELAX_EVERY_MIN = 3.0
         /** Nitrogen as a fraction of fish wet mass (~18 % protein × 16 % N ≈ 2-3 %). */
         const val CARCASS_N_FRACTION = 0.025
         /** Hours before a carcass starts leaching (autolysis), and the leach rate of what N is left (est.). */

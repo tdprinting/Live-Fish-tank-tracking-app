@@ -606,12 +606,12 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             var moved = 0.0
             for (k in z0..z1) for (i in max(0, x0 - 1)..xe) {
                 val a = k * nx + i
-                val m = shed(a, a + 1, if (roofed(a) || roofed(a + 1)) confX else stepX, rate)
+                val m = shed(a, a + 1, if (roofedCell[a] || roofedCell[a + 1]) confX else stepX, rate)
                 if (m > 0) { moved += m; if (i < x0) wakeTile(t - 1) else if (i + 1 > x1) wakeTile(t + 1) }
             }
             for (k in max(0, z0 - 1)..ze) for (i in x0..x1) {
                 val a = k * nx + i
-                val m = shed(a, a + nx, if (roofed(a) || roofed(a + nx)) confZ else stepZ, rate)
+                val m = shed(a, a + nx, if (roofedCell[a] || roofedCell[a + nx]) confZ else stepZ, rate)
                 if (m > 0) { moved += m; if (k < z0) wakeTile(t - tnx) else if (k + 1 > z1) wakeTile(t + tnx) }
             }
             if (moved > 1e-6) { movedAll += moved; tileLeft[t] = ACTIVE_HOLD_S.toFloat() }
@@ -668,8 +668,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         repeat(2) {
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
-                if (i + 1 < nx) slump(a, a + 1, if (roofed(a) || roofed(a + 1)) confX else maxStepX)
-                if (k + 1 < nz) slump(a, a + nx, if (roofed(a) || roofed(a + nx)) confZ else maxStepZ)
+                if (i + 1 < nx) slump(a, a + 1, maxStepX, confX)
+                if (k + 1 < nz) slump(a, a + nx, maxStepZ, confZ)
             }
         }
         // 2. smoothing: bioturbation background + flow (diffusion, explicit, unconditionally tiny steps)
@@ -678,7 +678,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val ax = (d / (cellX * cellX)).coerceAtMost(0.2).toFloat(); val az = (d / (cellZ * cellZ)).coerceAtMost(0.2).toFloat()
         if (ax > 1e-7f) {
             // on the visible surface: a buried body's volume holds its cover up instead of sand creeping in under it
-            val h = height.copyOf()
+            val h = relaxScratch
+            height.copyInto(h)
             if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
@@ -700,6 +701,15 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             detritus[a] += (target - detritus[a]) * kd
         }
         version++
+    }
+
+    /** Open-sand pairs slump past [maxStep], pairs under rock only past [confined] (steeper, checked only when needed). */
+    private fun slump(a: Int, b: Int, maxStep: Float, confined: Float) {
+        val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
+        if (abs(dh) <= maxStep) return
+        val lim = if (roofedCell[a] || roofedCell[b]) confined else maxStep
+        if (abs(dh) <= lim) return
+        slump(a, b, lim)
     }
 
     private fun slump(a: Int, b: Int, maxStep: Float) {
@@ -726,6 +736,11 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      * Filled by [attachRock]; all [OPEN] for a bed without rock.
      */
     val roof = FloatArray(nx * nz) { OPEN }
+    /** [roofed] per cell, and the cell box holding every roofed cell (empty when k1 < k0), both set by [attachRock]. */
+    private val roofedCell = BooleanArray(nx * nz)
+    private var roofI0 = 0; private var roofI1 = -1; private var roofK0 = 0; private var roofK1 = -1
+    /** [relax]'s copy of the visible surface, reused every tick. */
+    private val relaxScratch = FloatArray(nx * nz)
     /** Lowest height offset each cell can be dug to (cm): −[MAX_DEPTH] on open sand, almost to the glass under rock. */
     private val floorH = FloatArray(nx * nz) { -MAX_DEPTH }
     var rockAttached = false; private set
@@ -752,6 +767,13 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             }
             roof[a] = r
             floorH[a] = if (r != OPEN && r != SOLID) min(-MAX_DEPTH, -(base - GLASS_Y - FLOOR_MARGIN).toFloat()) else -MAX_DEPTH
+        }
+        roofI0 = nx; roofI1 = -1; roofK0 = nz; roofK1 = -1
+        for (a in 0 until nx * nz) {
+            roofedCell[a] = roofed(a)
+            if (!roofedCell[a]) continue
+            val i = a % nx; val k = a / nx
+            roofI0 = min(roofI0, i); roofI1 = max(roofI1, i); roofK0 = min(roofK0, k); roofK1 = max(roofK1, k)
         }
         rockAttached = true
         rockSdf = sdf
@@ -1095,8 +1117,9 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      */
     private fun infill(dtMin: Double, flow: Double) {
         val k = (dtMin / INFILL_TAU_MIN * (0.5 + 0.5 * flow)).coerceAtMost(0.2).toFloat()
-        if (k <= 0f) return
-        for (kk in 0 until nz) for (i in 0 until nx) {
+        if (k <= 0f || roofK1 < roofK0) return
+        // only pairs touching a roofed cell move: the box around them, in the same order as a full sweep
+        for (kk in max(0, roofK0 - 1)..roofK1) for (i in max(0, roofI0 - 1)..roofI1) {
             val a = kk * nx + i
             if (i + 1 < nx) evenOut(a, a + 1, k)
             if (kk + 1 < nz) evenOut(a, a + nx, k)
@@ -1104,7 +1127,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     }
 
     private fun evenOut(a: Int, b: Int, k: Float) {
-        if (!roofed(a) && !roofed(b)) return
+        if (!roofedCell[a] && !roofedCell[b]) return
         val m = (height[a] - height[b]) * 0.5f * k
         if (m == 0f) return
         // never below a floor
