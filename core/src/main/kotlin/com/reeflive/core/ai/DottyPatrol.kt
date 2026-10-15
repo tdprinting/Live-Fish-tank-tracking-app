@@ -25,9 +25,10 @@ class CavePatrol(val b: SpeciesBrain, val cave: () -> Vec3, val caveSafe: () -> 
     private var wp = Vec3.ZERO
     private var face = Vec3.Z
     private var leftAt = 0.0
+    private var sweeping = false
     /** Rounds completed (tests). */
     var rounds = 0; private set
-    override val label: String get() = if (stop < 0) "Watching from its cave" else "Patrolling its caves"
+    override val label: String get() = if (stop < 0 && !sweeping) "Watching from its cave" else "Patrolling its caves"
 
     override fun score(c: Ctx) = 0.2 + 0.35 * c.activity
 
@@ -50,6 +51,15 @@ class CavePatrol(val b: SpeciesBrain, val cave: () -> Vec3, val caveSafe: () -> 
         val o = c.o
         val stops = route(c)
         if (!moving && c.t > pauseUntil) {
+            if (stop < 0 && !sweeping && c.rng.chance(SWEEP_CHANCE)) {
+                // now and then a quick sweep out into the open water in front of the cave before the round (research 30
+                // §3: "darting from one refuge to another in search of food", hobby; a short look out, then back to cover)
+                val r = max(8.0, c.o.species.territorialRadius)
+                wp = c.safe(cave() + Vec3(c.rng.signed() * 0.6 * r, c.rng.range(3.0, 8.0), c.rng.range(0.5, 1.0) * r), 1.5)
+                sweeping = true; moving = true; leftAt = c.t
+                return update(c, out)
+            }
+            sweeping = false
             stop++
             if (stop >= stops.size) {
                 // back to the cave mouth to end the round
@@ -69,14 +79,18 @@ class CavePatrol(val b: SpeciesBrain, val cave: () -> Vec3, val caveSafe: () -> 
             if (o.pos.distanceTo(wp) < 1.5 || stuck) {
                 moving = false
                 // refresh the stop's memory each visit, then watch from the crevice (or the cave) for a while
-                if (stop >= 0 && !stuck) b.mind.places.note(PlaceKind.PATROL, wp, 1.0, c.t, mergeCm = 4.0)
-                pauseUntil = c.t + if (stop < 0) c.rng.range(CAVE_PAUSE_MIN_S, CAVE_PAUSE_MAX_S) else c.rng.range(STOP_PAUSE_MIN_S, STOP_PAUSE_MAX_S)
+                if (stop >= 0 && !stuck && !sweeping) b.mind.places.note(PlaceKind.PATROL, wp, 1.0, c.t, mergeCm = 4.0)
+                pauseUntil = c.t + when {
+                    sweeping -> c.rng.range(1.0, 3.0)
+                    stop < 0 -> c.rng.range(CAVE_PAUSE_MIN_S, CAVE_PAUSE_MAX_S)
+                    else -> c.rng.range(STOP_PAUSE_MIN_S, STOP_PAUSE_MAX_S)
+                }
                 face = (wp - cave()).horizontal().normalized(o.heading)
             }
         } else {
             // pause in the crevice mouth facing out, watching, before the next dart
             out.target = wp; out.speed = o.cruiseSpeed * 0.2; out.hover = true; out.ampMul = 0.4; out.pectoral = 1.0
-            out.faceDir = if (stop < 0) Vec3.Z else face
+            out.faceDir = if (stop < 0 || sweeping) Vec3.Z else face
         }
     }
 
@@ -89,6 +103,8 @@ class CavePatrol(val b: SpeciesBrain, val cave: () -> Vec3, val caveSafe: () -> 
         const val STOP_PAUSE_MAX_S = 8.0
         const val CAVE_PAUSE_MIN_S = 5.0
         const val CAVE_PAUSE_MAX_S = 20.0
+        /** Chance a round starts with a short sweep into the open water in front of the cave (DESIGN ESTIMATE). */
+        const val SWEEP_CHANCE = 0.3
         /** A dart that has not arrived after this long is abandoned (s). */
         const val DART_GIVE_UP_S = 10.0
     }

@@ -164,6 +164,8 @@ sealed class Command {
     data class Micro(val action: MicroAction, val amount: Double = 1.0) : Command()
     /** A bacteria-layer action (research 18): bottled nitrifiers, carbon dosing, antibiotic, UV, stir the sand, probiotic. */
     data class Bacteria(val action: BacteriaAction, val amount: Double = 1.0) : Command()
+    /** A breeding / nursery action ([Brood.Act] name: raise the babies, feed rotifers, move a baby to the tank…). */
+    data class Breed(val act: String) : Command()
 }
 
 /** One animal or coral to place in the tank (from the livestock table or the sandbox). */
@@ -261,6 +263,11 @@ sealed class SimEvent {
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
+    /** Breeding ([Brood], research 28): a clutch laid, larvae hatched (and whether the keeper is catching them), the nursery's larvae became fry, a baby moved to the display. */
+    data class EggsLaid(val spec: String, val eggs: Int, override val simTimeSec: Double) : SimEvent()
+    data class Hatched(val spec: String, val larvae: Int, val raising: Boolean, override val simTimeSec: Double) : SimEvent()
+    data class Metamorphosed(val spec: String, val fry: Int, override val simTimeSec: Double) : SimEvent()
+    data class BabyReleased(val id: String, override val simTimeSec: Double) : SimEvent()
     /**
      * A loose rock settled or toppled after the sand under it was dug out (dynamic rockscape, [RockPhysics]): [rock] is
      * its name in the scape (R0…R10, glued rocks joined by '+'), moved [moveCm] and turned [turnDeg].
@@ -452,6 +459,8 @@ data class SimSnapshot(
     /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
     val net: NetPose? = null,
     val netFlush: NetFlush? = null,
+    /** Larvae and fry ([Brood]): counts for the renderer, the parents' card panel for the UI. */
+    val brood: BroodView = BroodView.EMPTY,
     /** Dry rocks added with the aquascape builder (drawn from their shape at [rockPoses]), or null for none. */
     val builtRocks: List<BuiltRock>? = null,
     /** The live rock field once rocks have moved or been added / taken out (taps and the camera hit rocks where they are now). */
@@ -562,6 +571,7 @@ data class EggClutchPose(
     val ageDays: Float = 0f,
     val hatchDays: Float = 9f,
     val tenderId: String? = null,
+    val eggs: Int = 300,
 )
 
 /**

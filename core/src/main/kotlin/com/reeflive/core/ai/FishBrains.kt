@@ -1167,7 +1167,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val u0 = inspectU.getOrPut(cl.id) { c.rng.nextDouble() }
             val u = (u0 + GOLDEN) % 1.0
             inspectU[cl.id] = u
-            return exp(mu + sqrt(sigma2) * normalQuantile(u.coerceIn(1e-6, 1 - 1e-6))).coerceIn(2.0, 20.0)
+            // a well-fed cleaner gives poorer service (Triki et al. 2025, research 30 §1): shorter inspections when sated
+            val sated = SATED_SERVICE + (1 - SATED_SERVICE) * (c.o.hunger / 0.3).coerceIn(0.0, 1.0)
+            return (exp(mu + sqrt(sigma2) * normalQuantile(u.coerceIn(1e-6, 1 - 1e-6))) * sated).coerceIn(2.0, 20.0)
         }
 
         private fun jolt(c: Ctx, cl: Organism) {
@@ -1229,6 +1231,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** Greeting dance: trigger radius (DESIGN ESTIMATE), see-saw rate and the small vertical bob that goes with it. */
         const val GREET_CM = 15.0
+        /** Inspection length of a fully sated cleaner relative to a hungry one (direction SOURCED-snippet, size DESIGN ESTIMATE). */
+        const val SATED_SERVICE = 0.8
         const val DANCE_HZ = 2.0
         const val DANCE_BOB_CM = 0.8
         /** Per-client cooldown: 60 s, not 10 min (D:Grutter96). */

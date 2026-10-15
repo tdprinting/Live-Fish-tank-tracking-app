@@ -92,6 +92,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
     private val micro = MicroCritterVisuals()
+    /** Clownfish eggs, larvae and fry (core BroodField) and the nursery tank they are raised in. */
+    private val brood = BroodVisuals()
+    private val nursery = NurseryScene()
+    @Volatile private var nurseryRequest: Boolean? = null
     /** Fish drawn far → near for the blended fin pass (reused every frame, no per-frame list). */
     private val finOrder = ArrayList<FishRig>()
     private val farFirst = Comparator<FishRig> { a, b ->
@@ -151,6 +155,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun setQuality(q: RenderQuality) { requestedQuality = q }
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
+    /** Glide the camera to the nursery tank beside the display ([on]) or back. */
+    fun lookAtNursery(on: Boolean) { nurseryRequest = on }
     /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
     @Volatile var followCam: FollowCamControl = FollowCamControl()
 
@@ -212,6 +218,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         subScene.release()
         bagScene.release()
         netScene.release()
+        nursery.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
@@ -267,6 +274,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
+        nurseryRequest?.let { camera.lookAtNursery(it); nurseryRequest = null }
+        brood.update(cur, liveSdf, dt, quality)
         micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
             store.model(k.model)?.parts?.sumOf { it.mesh.triangles } ?: 0
         }
@@ -308,6 +317,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
+        val nurseryLit = light.intensity > 0.03f
+        if (brood.nurseryCount > 0) white?.let { drawCalls += nursery.drawSolid(progs.generic, it, nurseryLit, brood.field) }
         // corals: soft bodies then polyps
         val corals = coralModels(cur)
         updateWake(rigs, dt)
@@ -316,6 +327,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
+        for (r in brood.visible) drawOrganism(r, progs, pass = 0)
         if (subScene.active) subScene.nearFade(camera.eye, dt)
         if (subScene.opaque) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         if (netScene.visible) white?.let { drawCalls += netScene.drawSolid(progs.generic, it) }
@@ -329,6 +341,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         finOrder.clear(); finOrder.addAll(rigs); finOrder.sortWith(farFirst)
         for (r in finOrder) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
+        for (r in brood.visible) drawOrganism(r, progs, pass = 1)
         // transparent: back glass, then water (first when the eye is under the surface, so the underside never
         // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -364,6 +377,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
         // the fish net's mesh bag, see-through over the body it carries
         if (netScene.visible) drawCalls += netScene.drawMesh(progs.generic)
+        if (brood.nurseryCount > 0) white?.let { drawCalls += nursery.drawClear(progs.generic, it, cur?.brood?.rotifers ?: 0f, nurseryLit, brood.field) }
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }
@@ -708,7 +722,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             pf.use()
             for (r in rigs) {
                 if (!r.visible) continue
-                val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant) ?: continue
+                val path = CritterKind.of(r.speciesId)?.model ?: BroodVisuals.modelFor(r.speciesId) ?: registry.modelFor(r.speciesId, r.variant) ?: continue
                 val lod1 = ModelRegistry.lod1(path)
                 val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
                 fishUniforms(pf, r, m.rigid, m.limbPivots)
@@ -959,7 +973,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val w = white ?: return
         // life stage: body texture forms A/B and their mix, body depth/width scale (core LifeForm via LifeFormChannel)
         val sb = stageBinding
-        if (path != null && CritterKind.of(r.speciesId) == null) {
+        if (path != null && CritterKind.of(r.speciesId) == null && BroodVisuals.modelFor(r.speciesId) == null) {
             lifeStages.resolve(r.speciesId, path, r.scale, com.reeflive.core.sim.LifeFormChannel.of(interp.current)[r.id], sb)
         } else sb.clear()
         var uniformsSet: ShaderProgram? = null

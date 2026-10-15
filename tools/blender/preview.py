@@ -131,6 +131,8 @@ def render_fish(sid, w=640, h=380, samples=48):
     ctr = (lo + hi) / 2
     ext = hi - lo
     top_view = sid in ("brittle_star", "asterina")
+    if sid.startswith("brood_clown_eggs"):
+        top_view = True
     elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
                             "shrimp", "skunk_shrimp") else 0.16
     if top_view:

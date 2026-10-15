@@ -31,6 +31,12 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val GOBY_MOUTHFUL_CM3 = 0.6
         /** Chance an adult patrols outside on a given night: [I] ≈5 % (07 gap 3; 06 had 40 %, unsupported). */
         const val ADULT_NIGHT_PATROL_P = 0.05
+        /** Juvenile plankton trips off the burrow mouth: length and gap, s; hunger met per snap (DESIGN ESTIMATE, research 30 §4). */
+        const val OUT_MIN_S = 20.0
+        const val OUT_MAX_S = 60.0
+        const val OUT_GAP_MIN_S = 30.0
+        const val OUT_GAP_MAX_S = 70.0
+        const val PLANKTON_YIELD = 0.001
         /** Peeking head swivel, rad, and the head-shake rate while spitting sand, Hz (DESIGN ESTIMATES). */
         const val PEEK_YAW = 0.35
         const val SPIT_HZ = 6.0
@@ -300,12 +306,53 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun exit(c: Ctx) { c.o.visible = true; c.o.eyeYaw = 0.0 }
     }
 
-    /** Daytime: hover low in a loose group near the mouth, nose into the current, snapping at plankton. */
+    /**
+     * Daytime: hover low in a loose group near the mouth, nose into the current, snapping at plankton. Every half
+     * minute to a minute it swims out and up for a 20–60 s plankton trip a body length or two from the burrow, then
+     * comes back (research 30 §4: juveniles leave the burrow by day to feed on plankton and all return at dusk; the
+     * wild 50 m roam scaled to the tank, DESIGN ESTIMATE).
+     */
     inner class MouthHover : Behavior("mouthhover", "Hovering by its burrow") {
         private var nextSnap = 0.0
+        private var nextOut = -1.0
+        private var outUntil = -1.0
+        private var outSpot = Vec3.ZERO
+        private var nextSpot = 0.0
+        private var nextPlankton = 0.0
+        private var lastT = 0.0
+        /** On a plankton trip off the burrow mouth. */
+        val away: Boolean get() = outUntil > lastT
+        override val label: String get() = if (away) "Picking plankton above its burrow" else "Hovering by its burrow"
         override fun score(c: Ctx): Double = if (c.p.night || adult) 0.0 else 0.55 * (1 - 0.5 * c.o.waryLevel)
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
+            lastT = c.t
+            if (nextOut < 0) nextOut = c.t + c.rng.range(OUT_GAP_MIN_S, OUT_GAP_MAX_S)
+            if (c.t > nextOut && outUntil < c.t) {
+                outUntil = c.t + c.rng.range(OUT_MIN_S, OUT_MAX_S)
+                nextOut = outUntil + c.rng.range(OUT_GAP_MIN_S, OUT_GAP_MAX_S)
+                nextSpot = 0.0
+            }
+            if (o.waryLevel > 0.3) outUntil = min(outUntil, c.t)   // anything alarming: straight back down
+            if (c.t < outUntil) {
+                val L = o.lengthCm
+                if (c.t > nextSpot) {
+                    nextSpot = c.t + c.rng.range(4.0, 8.0)
+                    val u = c.rng.unitVector()
+                    outSpot = c.safe(outside(6.0) + Vec3(u.x * L, 0.0, u.z * 0.6 * L) * c.rng.range(0.5, 1.5) + Vec3(0.0, L * c.rng.range(1.0, 2.0), 0.0), 1.5)
+                }
+                out.seek(outSpot, o.cruiseSpeed * 0.6, arrive = 2.0)
+                out.hover = true; out.ampMul = 0.7
+                out.separation = if (tightSchool) 0.9 else 1.5
+                val fl = c.sim.flow.velocityFast(o.pos).horizontal()
+                if (fl.length() > 1.0 && o.pos.distanceTo(outSpot) < 3.0) out.faceDir = (fl * -1.0).normalized(o.heading)
+                if (c.t > nextPlankton) {
+                    nextPlankton = c.t + c.rng.range(2.0, 5.0)
+                    o.mouth = 1.0
+                    o.hunger = max(0.0, o.hunger - PLANKTON_YIELD)
+                }
+                return
+            }
             val k = if (tightSchool) 0.55 else 1.0
             val spot = c.safe(outside(6.0) + slot * k + Vec3(sin(c.t * 0.11 + slot.x) * 2.0 * k, sin(c.t * 0.07) * 1.0, 0.0), 1.0)
             out.seek(spot, o.cruiseSpeed * 0.5, arrive = 2.5)

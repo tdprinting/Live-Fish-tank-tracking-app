@@ -62,6 +62,8 @@ fun TankView(
     care: CareShowControl? = null,
     /** Submarine mode: ride inside the sub instead of chasing it. */
     subFirstPerson: Boolean = false,
+    /** Bumped for each "Look at the nursery" press: the camera glides to the nursery tank. */
+    nurseryRequest: Int = 0,
     /** The follow camera's on-screen buttons (zoom, swing round); null = gestures only. */
     followCam: FollowCamControl? = null,
 ) {
@@ -73,6 +75,7 @@ fun TankView(
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson, followCam = followCam,
+        nurseryRequest = nurseryRequest,
     )
 }
 
@@ -109,6 +112,7 @@ fun TankView(
     shelf: SupplyShelfControl? = null,
     care: CareShowControl? = null,
     subFirstPerson: Boolean = false,
+    nurseryRequest: Int = 0,
     followCam: FollowCamControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
@@ -170,6 +174,7 @@ fun TankView(
                     v.shelf = shelf
                     v.care = care
                     v.subFirstPerson = subFirstPerson
+                    v.nurseryRequest = nurseryRequest
                     if (followCam != null) v.followCam = followCam
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },

@@ -126,6 +126,11 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .rels { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .rel { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--glass); color: var(--mist); }
 .rel.good { color: var(--good); } .rel.danger { color: var(--danger); }
+/* the clown parents' Family panel: eggs, larvae, nursery (core Brood) */
+.family { margin-top: 10px; padding: 8px 10px; border-radius: 16px; background: var(--glass); }
+.family p { font-size: 12px; margin: 4px 0; }
+.family .row-gap { margin-top: 8px; gap: 6px; }
+.family p.small { font-size: 11px; }
 /* follow mode: the menu steps aside; a compact name bar at the bottom, big labelled camera buttons on the right */
 .chrome.following .rail, .chrome.following .side { display: none; }
 .follow { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 12px);

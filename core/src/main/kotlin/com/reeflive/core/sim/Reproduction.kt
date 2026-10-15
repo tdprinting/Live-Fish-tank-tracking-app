@@ -11,9 +11,11 @@ class EggClutch(
     val pos: Vec3,
     val normal: Vec3,
     val laidAt: Double,
-    /** Age in days at which the larvae hatch (research 02 §1C: about 8-10 days). */
+    /** Age in days at which the larvae hatch (research 28 §1: ~7 d at 28.5 °C to ~10 d at 26 °C). */
     val hatchDays: Double,
     var tenderId: String?,
+    /** Eggs laid (research 28 §1: 100-1000, more as the female grows). */
+    val eggs: Int = 300,
 ) {
     var untendedSec = 0.0
     fun ageDays(now: Double) = (now - laidAt) / 86400.0
@@ -43,11 +45,18 @@ class Reproduction(private val sim: Simulation) {
     var hatchedClutches = 0; private set
     var lostClutches = 0; private set
     private var clutchCounter = 1
+    /** The keeper asked for a spawning now (sandbox "Spawn now"): readiness, cooldown and fitness are skipped once. */
+    private var forced = false
+
+    /** A clutch from a My tank save (its male is found again on the next step). */
+    fun restoreClutch(c: SavedClutch) {
+        clutches += EggClutch("eggs#${clutchCounter++}", c.kind, Vec3(c.x, c.y, c.z), Vec3(c.nx, c.ny, c.nz), c.laidAt, c.hatchDays, null, c.eggs)
+    }
 
     fun clownClutch(): EggClutch? = clutches.firstOrNull { it.kind == CLOWN }
 
     fun poses(): List<EggClutchPose> = clutches.map {
-        EggClutchPose(it.id, it.kind, it.pos, it.normal, it.ageDays(sim.simTimeSec).toFloat(), it.hatchDays.toFloat(), it.tenderId)
+        EggClutchPose(it.id, it.kind, it.pos, it.normal, it.ageDays(sim.simTimeSec).toFloat(), it.hatchDays.toFloat(), it.tenderId, it.eggs)
     }
 
     fun step(dtSec: Double) {
@@ -94,7 +103,8 @@ class Reproduction(private val sim: Simulation) {
      */
     private fun clownSexChange(dtSec: Double) {
         val cl = clowns()
-        if (cl.size >= 2) for (o in cl) if (o.sexFemale == null) o.sexFemale = clownIsFemale(o)
+        // a baby stays undifferentiated until it is big enough to join the hierarchy (Buston 2003: the pair suppresses it)
+        if (cl.size >= 2) for (o in cl) if (o.sexFemale == null && o.lengthCm >= MALE_MATURE_CM) o.sexFemale = clownIsFemale(o)
         val males = cl.filter { it.sexFemale == false }
         val hasFemale = cl.any { it.sexFemale == true || it.sexFemale == null && clownIsFemale(it) }
         if (males.isEmpty()) return
@@ -119,31 +129,73 @@ class Reproduction(private val sim: Simulation) {
 
     private fun clownBreeding(now: Double, dt: Double) {
         val cl = clowns()
-        val f = cl.filter { it.sexFemale ?: clownIsFemale(it) }.maxByOrNull { it.lengthCm }
-        val m = cl.filter { it !== f && !(it.sexFemale ?: clownIsFemale(it)) }.maxByOrNull { it.lengthCm }
-        tendClutch(now, dt, m)
-        if (f == null || m == null) { if (clownPhase != Phase.IDLE) abortSpawning(); clownReadiness = maxOf(0.0, clownReadiness - dt / 86400.0); return }
-        if (clownClutch() != null) return
-        val ok = pairReady(f, m, now)
+        val (f, m) = clownPair(cl)
+        tendClutch(now, dt, m, f)
+        if (f == null || m == null) { if (clownPhase != Phase.IDLE) abortSpawning(); clownReadiness = maxOf(0.0, clownReadiness - dt / 86400.0); sim.brood.forceSpawn = false; return }
+        if (sim.brood.forceSpawn) {
+            sim.brood.forceSpawn = false
+            if (clownClutch() == null && clownPhase == Phase.IDLE) {
+                forced = true; clownReadiness = 1.0; clownCooldownUntil = 0.0
+                startCleaning(f, now, 0.3)
+                return
+            }
+        }
+        val ok = forced || pairReady(f, m, now)
+        // the female builds the next clutch while the male tends this one (research 28 §1: a 12-15 day cycle)
+        if (clownClutch() != null) {
+            clownReadiness = (clownReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
+            return
+        }
         when (clownPhase) {
             Phase.IDLE -> {
                 clownReadiness = (clownReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
-                if (clownReadiness >= 1.0 && now >= clownCooldownUntil && !sim.perception.night) {
-                    val host = sim.agentOf(f)?.brain?.anchorPos(sim.agentOf(f)!!.ctx, "host") ?: f.homePos
-                    pickSite(f, host)
-                    clownPhase = Phase.CLEANING
-                    clownPhaseUntil = now + rng.range(2.0, 4.0) * 3600
-                }
+                if (clownReadiness >= 1.0 && now >= clownCooldownUntil && !sim.perception.night) startCleaning(f, now, 1.0)
             }
             Phase.CLEANING -> if (!ok) abortSpawning() else if (now >= clownPhaseUntil) {
                 clownPhase = Phase.LAYING
                 clownPhaseUntil = now + rng.range(0.5, 1.0) * 3600
             }
-            Phase.LAYING -> if (!ok) abortSpawning() else if (now >= clownPhaseUntil) layClutch(now, m)
+            Phase.LAYING -> if (!ok) abortSpawning() else if (now >= clownPhaseUntil) layClutch(now, m, f)
         }
     }
 
-    private fun abortSpawning() { clownPhase = Phase.IDLE; clownReadiness = 0.5; site = null }
+    /** The breeding female (largest female) and male (largest mature non-female). */
+    private fun clownPair(cl: List<Organism>): Pair<Organism?, Organism?> {
+        val f = cl.filter { it.sexFemale ?: clownIsFemale(it) }.maxByOrNull { it.lengthCm }
+        val m = cl.filter { it !== f && it.lengthCm >= MALE_MATURE_CM && !(it.sexFemale ?: clownIsFemale(it)) }.maxByOrNull { it.lengthCm }
+        return f to m
+    }
+
+    fun hasClownPair(): Boolean = clownPair(clowns()).let { it.first != null && it.second != null }
+
+    private fun startCleaning(f: Organism, now: Double, speed: Double) {
+        val host = sim.agentOf(f)?.brain?.anchorPos(sim.agentOf(f)!!.ctx, "host") ?: f.homePos
+        pickSite(f, host)
+        clownPhase = Phase.CLEANING
+        clownPhaseUntil = now + rng.range(2.0, 4.0) * 3600 * speed
+    }
+
+    /** What the pair is waiting for, in the card's words. */
+    fun clownWaitLine(): String {
+        val now = sim.simTimeSec
+        val (f, m) = clownPair(clowns())
+        if (f == null || m == null) return if (clowns().size < 2) "Clownfish need a partner to breed." else "The clowns are too young to pair up yet."
+        val name = { o: Organism -> o.nickname.ifBlank { "the ${if (o === f) "female" else "male"}" } }
+        val why = buildList {
+            for (o in listOf(f, m)) {
+                if (o.lengthCm < (if (o === f) FEMALE_MATURE_CM else MALE_MATURE_CM)) add("${name(o)} is still growing")
+                else if (now - o.arrivalTime < PAIR_BOND_DAYS * 86400.0) add("${name(o)} is still settling in")
+                else if (o.hunger >= 0.55) add("${name(o)} is hungry")
+                else if (o.stress >= 0.35 || o.health <= 0.85 || o.disease != null) add("${name(o)} is not feeling great")
+            }
+            if (!inRange(sim.water.s)) add("the water is not right for spawning")
+        }
+        if (why.isNotEmpty()) return "Not ready to spawn: ${why.distinct().joinToString(", ")}."
+        val days = maxOf((1.0 - clownReadiness) * READY_DAYS, (clownCooldownUntil - now) / 86400.0)
+        return if (days < 1) "${name(f)} and ${name(m)} look ready to spawn soon." else "${name(f)} and ${name(m)} are a pair. Next eggs in about ${days.toInt() + 1} days."
+    }
+
+    private fun abortSpawning() { clownPhase = Phase.IDLE; clownReadiness = 0.5; site = null; forced = false }
 
     private fun pickSite(f: Organism, host: Vec3) {
         val ctx = sim.agentOf(f)?.ctx
@@ -152,14 +204,18 @@ class Reproduction(private val sim: Simulation) {
         siteNormal = hit?.second ?: Vec3.Y
     }
 
-    private fun layClutch(now: Double, male: Organism) {
+    private fun layClutch(now: Double, male: Organism, female: Organism) {
         val s = site ?: male.homePos
-        clutches += EggClutch("eggs#${clutchCounter++}", CLOWN, s, siteNormal, now, rng.range(HATCH_DAYS_MIN, HATCH_DAYS_MAX), male.id)
-        clownPhase = Phase.IDLE; clownReadiness = 0.0; site = null
+        val spec = BroodSpecs.CLOWN
+        val n = clutchCounter++
+        val eggs = sim.brood.clutchSize(spec, female.lengthCm, n)
+        clutches += EggClutch("eggs#$n", CLOWN, s, siteNormal, now, sim.brood.hatchDays(spec, sim.water.s.tempC), male.id, eggs)
+        clownPhase = Phase.IDLE; clownReadiness = 0.0; site = null; forced = false
+        sim.emit(SimEvent.EggsLaid(spec.key, eggs, now))
     }
 
     /** The male's fanning keeps the eggs alive; neglect for [UNTENDED_LOSS_HOURS] kills them. Hatching waits for night. */
-    private fun tendClutch(now: Double, dt: Double, male: Organism?) {
+    private fun tendClutch(now: Double, dt: Double, male: Organism?, female: Organism?) {
         val it = clutches.iterator()
         while (it.hasNext()) {
             val c = it.next()
@@ -168,10 +224,15 @@ class Reproduction(private val sim: Simulation) {
             val away = !sim.behaviorEnabled || sim.abstractMode
             val tended = male != null && (away || male.pos.distanceTo(c.pos) < 15.0)
             if (!tended) c.untendedSec += dt
-            if (c.untendedSec > UNTENDED_LOSS_HOURS * 3600) { it.remove(); lostClutches++; clownCooldownUntil = now + 3 * 86400.0; continue }
+            if (c.untendedSec > UNTENDED_LOSS_HOURS * 3600) {
+                it.remove(); lostClutches++; clownCooldownUntil = now + 3 * 86400.0
+                sim.water.addDetritusTanGrams(c.eggs * 0.00001)   // unguarded eggs fungus over and are picked off
+                continue
+            }
             if (c.ageDays(now) >= c.hatchDays && sim.perception.night) {
                 it.remove(); hatchedClutches++
                 clownCooldownUntil = now + rng.range(COOLDOWN_DAYS_MIN, COOLDOWN_DAYS_MAX) * 86400.0
+                sim.brood.hatch(BroodSpecs.CLOWN, c.eggs, c.pos + c.normal * 1.0, listOfNotNull(female, male))
             }
         }
     }
@@ -206,7 +267,7 @@ class Reproduction(private val sim: Simulation) {
                 b.mouthbrooding = false; brooder = null; lostBroods++; cardCooldownUntil = now + 5 * 86400.0
             } else if (now >= broodEndAt && sim.perception.night) {
                 b.mouthbrooding = false; brooder = null; hatchedBroods++
-                cardCooldownUntil = now + rng.range(COOLDOWN_DAYS_MIN, COOLDOWN_DAYS_MAX) * 86400.0
+                cardCooldownUntil = now + rng.range(CARD_COOLDOWN_DAYS_MIN, CARD_COOLDOWN_DAYS_MAX) * 86400.0
             }
             return
         }
@@ -234,10 +295,11 @@ class Reproduction(private val sim: Simulation) {
         const val PAIR_BOND_DAYS = 14.0
         const val FEMALE_MATURE_CM = 6.0
         const val MALE_MATURE_CM = 4.5
-        const val HATCH_DAYS_MIN = 8.0
-        const val HATCH_DAYS_MAX = 10.0
-        const val COOLDOWN_DAYS_MIN = 7.0
-        const val COOLDOWN_DAYS_MAX = 14.0
+        /** Cooldown after a clutch hatches: with incubation this gives the 12-15 day cycle (research 28 §1). */
+        const val COOLDOWN_DAYS_MIN = 2.0
+        const val COOLDOWN_DAYS_MAX = 5.0
+        const val CARD_COOLDOWN_DAYS_MIN = 7.0
+        const val CARD_COOLDOWN_DAYS_MAX = 14.0
         const val UNTENDED_LOSS_HOURS = 6.0
     }
 }

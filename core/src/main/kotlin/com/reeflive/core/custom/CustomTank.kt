@@ -72,6 +72,7 @@ object CustomTank {
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
             animals = animals,
             corals = corals,
+            brood = sim.brood.save(),
             rocks = sim.rockState(),
             nextIds = SavedIds(
                 organism = maxOf(base.nextIds.organism, nextNumber(animals.map { it.id } + corals.map { it.id }, "#")),
@@ -170,6 +171,7 @@ object CustomTank {
             val g = MicroGroup.entries.firstOrNull { it.name == name } ?: continue
             if (n.isFinite() && n >= 0) w.micro.setTotal(g, n)
         }
+        sim.brood.load(save.brood)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
         sim.reserveIds(save.nextIds.organism, save.nextIds.frag, save.nextIds.bag)
         return sim

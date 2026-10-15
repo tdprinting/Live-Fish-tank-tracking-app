@@ -87,6 +87,23 @@ class FishRig(val id: String) {
     private val bendScratch = FloatArray(64)
 
     /** Fills this rig from an in-tank microfauna pose (core [CritterPose]); critters are not interpolated. */
+    /** Clown eggs, larvae and fry (core BroodField): drawn like the microfauna, never picked. */
+    fun setBrood(p: com.reeflive.core.sim.BroodPose) {
+        speciesId = p.speciesId
+        variant = null
+        for (i in 0 until 16) {
+            spine[i * 4] = p.spine[i * 3]; spine[i * 4 + 1] = p.spine[i * 3 + 1]; spine[i * 4 + 2] = p.spine[i * 3 + 2]; spine[i * 4 + 3] = 0f
+            for (c in 0 until 4) frames[i * 4 + c] = p.frames[i * 4 + c]
+        }
+        phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = 0f
+        pectoral = 0.6f; finClamp = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
+        scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
+        alive = true; visible = true; posture = 0; bagged = false
+        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
+        limbCount = 0; fade = 0f
+        touched = true
+    }
+
     fun setCritter(p: CritterPose) {
         speciesId = p.kind.speciesId
         variant = null
