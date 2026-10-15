@@ -150,6 +150,11 @@ class Organism(
     var heading = Vec3.X
     var up = Vec3.Y
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
+    /**
+     * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
+     * sand contact layer ([SandContact]) neither lifts it out nor pushes a bow wave. Set by the brain, cleared on exit.
+     */
+    var inSand = false
     var sleeping = false
     var hostAnchor: String? = placement
     var homePos: Vec3 = Vec3.ZERO

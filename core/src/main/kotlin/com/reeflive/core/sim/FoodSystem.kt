@@ -53,6 +53,9 @@ class NoriSheet(val pos: Vec3, val bornAt: Double, val cloth: NoriCloth) {
  * expire to detritus after [FoodKind.lifeSeconds] (20 min for most; a wafer lasts hours). Max 400 particles.
  */
 class FoodSystem(private val rock: RockData, private val flow: FlowField, private val rng: Rng) {
+    /** Live sand surface (cm) at (x, z) when the Simulation has a sand bed; else the flat [RockData.sandTopCm]. */
+    var groundY: ((Double, Double) -> Double)? = null
+
     val particles = ArrayList<FoodParticle>()
     var nori: NoriSheet? = null
     private var nextId = 1
@@ -112,11 +115,22 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             var p = f.pos + f.vel * dt
             if (floating) p = p.withY(rock.waterLevelCm - 0.3)
             p = rock.clampToWater(p, 0.3)
-            if (!f.kind.suspended) {
+            if (f.kind.suspended) {
+                // drifting plankton stays in the water over the live sand (clampToWater's floor is the flat sand plane,
+                // under the raised bed: a diamond goby went for copepods it could never reach, 1.6 cm in the sand)
+                val g = groundY
+                if (g != null && p.y < g(p.x, p.z) + 0.3) {
+                    p = p.withY(g(p.x, p.z) + 0.3)
+                    // where the rock foot meets the sand, out of the rock and back over the sand
+                    if (rock.sdf.dist(p) < 0.3) { p = rock.sdf.project(p, 0.3); p = p.withY(kotlin.math.max(p.y, g(p.x, p.z) + 0.3)) }
+                    if (f.vel.y < 0) f.vel = f.vel.withY(0.0)
+                }
+            } else {
                 if (rock.sdf.dist(p) < 0.3) {
                     p = rock.sdf.project(p, 0.3); f.settled = true; f.vel = Vec3.ZERO
-                } else if (p.y <= rock.sandTopCm + 0.35) {
-                    p = p.withY(rock.sandTopCm + 0.3); f.settled = true; f.vel = Vec3.ZERO
+                } else {
+                    val ground = groundY?.let { g -> kotlin.math.max(rock.sandTopCm, g(p.x, p.z)) } ?: rock.sandTopCm
+                    if (p.y <= ground + 0.35) { p = p.withY(ground + 0.3); f.settled = true; f.vel = Vec3.ZERO }
                 }
             }
             f.pos = p

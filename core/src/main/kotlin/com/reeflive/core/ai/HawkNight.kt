@@ -122,7 +122,8 @@ class SandRest(val hawk: HawkBrain) : Behavior("sandrest", "Resting on the sand"
         val q = o.pos + (goal - o.pos).normalized(Vec3.Y) * max
         val off = 0.5 * o.species.depthRatio * o.lengthCm + 0.3
         val onRock = c.rock.sdf.project(q, off)
-        val onSand = Vec3(q.x, c.rock.sandTopCm + off, q.z)
+        // on the live sand (SandBed.surfaceY: 3.5-6 cm, not the flat 3 cm plane SandContact would lift it off every tick)
+        val onSand = Vec3(q.x, c.sim.sand.surfaceY(q.x, q.z) + off, q.z)
         val rockOk = c.rock.inWater(onRock, 1.0) && onRock.distanceTo(q) < 6 && c.rock.sdf.gradient(onRock).y > 0.2
         return if (rockOk && onRock.distanceTo(q) < onSand.distanceTo(q)) onRock else c.rock.clampToWater(onSand, 1.0)
     }
@@ -161,7 +162,8 @@ class SandRest(val hawk: HawkBrain) : Behavior("sandrest", "Resting on the sand"
             for (ring in 1..8) for (k in 0 until 16) {
                 val a = 2 * PI * k / 16
                 val r = ring * 4.0
-                val p = Vec3(base.x + cos(a) * r, c.rock.sandTopCm + off, base.z + sin(a) * r * 0.8)
+                val x = base.x + cos(a) * r; val z = base.z + sin(a) * r * 0.8
+                val p = Vec3(x, c.sim.sand.surfaceY(x, z) + off, z)
                 if (!c.rock.inWater(p, 1.5)) continue
                 val gap = c.rock.sdf.dist(p)
                 if (gap < 2.5 || gap > ROCK_GAP_CM) continue

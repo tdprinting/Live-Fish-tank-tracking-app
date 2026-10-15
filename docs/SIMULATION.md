@@ -1129,7 +1129,7 @@ Sources: [research 16, diamond goby](research/16_diamond_goby.md). The sand used
 
 `SandBed` is 64 × 24 cells over the 121.9 × 33 cm floor (≈ 1.9 × 1.4 cm). Each cell holds three values:
 
-- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound).
+- **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound) on open sand; under rock it can be dug almost to the glass (§16.8).
 - **freshness**: 0…1. Turned sand is the damp, darker layer from below. It fades with τ = 6 h.
 - **detritus**: a mulm index of 0…1.5. It starts at 0.25 and relaxes over 2 days toward the water-column detritus (less in strong flow).
 
@@ -1156,9 +1156,11 @@ All of this uses its own `Rng`, so the behaviour random streams and the existing
 | Nassarius | Ploughs a trail every 0.6 cm crawled on sand (0.1 cm deep). Burying or emerging (posture 5) leaves a crater with a spoil ring and a small puff. |
 | Hermits, Sally Lightfoot | Scratch: freshen plus a faint furrow every cm walked, and a puff every 12 marks. |
 | Brittle star | A shallow, wide furrow where its arms drag. |
-| Engineer goby | Each mouthful is dug at the burrow mouth (`GobyBrain.digPoint`, anchor `SAND_GOBY_DIG`) and spat out as a mound (`depositSand`). In abstract mode this happens at the day rate. |
+| Engineer goby | Digs tunnels under the rock mouthful by mouthful and spits the spoil at the entrance (§16.8). In abstract mode one mouthful every ~3 daylight minutes. |
 | Diamond goby | Scoops pits at its feeding stations, puffs sand and fines out of its gills, digs its burrow, and sifts detritus away (§16.5). |
-| Pump flow | Smooths the bed (§16.1). |
+| Leopard wrasse | Digs a body-sized slot at dusk, throws the sand to a rim, pulls it back over itself, and bursts out after lights-on (§16.10). |
+| Pump flow | Smooths the bed (§16.1) and refills burrows (§16.8). |
+| Every body | Rests on the live surface and pushes sand aside where it touches it (§16.9). |
 
 Teleports (more than 6 cm in one tick) are ignored.
 
@@ -1212,11 +1214,14 @@ The diamond goby is not in the owner's tank. It is in the stocking gallery (`Sto
 
 `SimSnapshot.sandGrid` (`SandGridSnapshot`: dims, cell size, height/fresh/detritus arrays, version) is rebuilt at most every 0.25 s × speed. It is shared until the bed changes. `SimSnapshot.sandClouds` holds the live cloud particles at stride 4 (x, y, z, kind + age/60).
 
+`SandGridSnapshot.cavity` (0…1 per cell) marks sand dug out from under rock: the gap over 2 cm, more where it was dug beyond the bed's starting gap.
+
 In the app:
 
 - `SandFx` packs the grid into a 64 × 24 RGBA16F texture on sampler unit 13 (`uSandMap`). It uploads only on a version change, at most 5×/s.
 - `static.vert` (`SAND`) lifts the top vertices of the sand by the height.
-- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, and brightens freshly sifted patches.
+- `rock.frag` (`SAND`) takes the slope from the height gradient, darkens and slightly glosses freshly turned sand, tints mulm brown, brightens freshly sifted patches, and shadows the floor of dug burrows (alpha = cavity).
+- Dug tunnels need no extra geometry: the sand mesh under the rock is lowered by the height, which opens the gap to the rock's underside. Spoil piles are the same lift upward, and each spit throws a `puff` that the cloud renderer draws.
 - `SandCloudRenderer` draws each cloud particle as three jittered points with the particles program. Sand is a pale burst, silt a faint spreading haze, detritus brown flecks.
 
 The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
@@ -1232,6 +1237,86 @@ The CPU cost is O(cells) per chemistry tick plus O(particles ≤ 160) per step.
 - nassarius trails and burial craters, both direct and fed in a live run;
 - the engineer goby's pit and mound;
 - the diamond goby: catalogue and compatibility, sifting (mouthfuls, puffs, stations, sifted load, level bed), pair burrow, dusting of low corals, decline without sand fauna, and the prey index on a sterile bed.
+
+`sim/SandBurrowTest.kt`:
+
+- the rock roof read from the SDF;
+- mass conservation through mouthfuls, spits, plumes, bow waves, impressions and three days of `relax`;
+- an undug burrow does not fit the body; it fits to its length once dug, and refills over days when left alone;
+- a live goby on a fresh bed never has its head beyond the dug face, and its burrow gets longer;
+- no head (and no spine midpoint, 0.3 cm tolerance) below the sand surface unless burrowing, over 30 min of the full tank at dusk; contacts moved sand;
+- burrows and the bed carry over into a time-lapse fork.
+
+### 16.8 Tunnels under rock and the engineer goby's burrows
+
+Sources: [research video fish_engineer_goby](research/video/fish_engineer_goby.md), [sand_bioturbation](research/video/sand_bioturbation.md); Wikipedia (*Pholidichthys leucotaenia*: adults excavate with the mouth, "eject mouthfuls of debris", a colony's maze of tunnels ≈ 6 m); Shedd Aquarium (scoop up sand or gravel and spit it at the tunnel entrance); hobbyist guides (rock resting on sand rather than glass gets undermined; they dig and re-dig constantly). No footage was watched (YouTube blocked).
+
+**Roof.** `SandBed.attachRock(sdf)` sphere-traces each cell's centre column from 0.5 cm above the glass. The first rock hit within `ROOF_RANGE` (8 cm) over the modelled bed is the cell's `roof`. Rock at the bottom marks the cell `SOLID` (nothing to dig under); no rock marks it `OPEN`. A roofed cell can be dug to 0.5 cm above the glass (`floorH`).
+
+- `gapAt(x, z)` = roof − live surface (∞ in open water, 0 where sand meets rock).
+- `fits(x, z, dir, bodyH, bodyW)` needs the gap ≥ body height at the midline and at both flanks (± half the width across the heading).
+- `maxGapAt` is the most a gap could ever open (roof − floor).
+
+**Mass.** `takeMouthful` takes sand from the cell that holds the surface up most at that point. It never goes below the floor, and the sand is counted as `carriedCm3` until `spit` drops it. `spit` deposits it with `depositExact`, which spills to a wider ring instead of losing sand to the mound clamp, and throws a plume. `sandVolumeCm3()` is the grid plus suspended sand plus carried sand. It stays constant through digging, spitting, clouds, bow waves, impressions, slumping, smoothing and infill. Puffs never take sand a cell does not have, grains landing are never clamped away, and coarse grains that time out drop where they are.
+
+**Burrows.** A `Burrow` is a straight tunnel from a mouth at the rock edge into the rock. The live gap is not stored: `reach(b, h, w)` walks it in 0.4 cm steps. `nextDig` gives the next mouthful:
+
+1. the face (the first point where the body does not fit);
+2. any stretch lower than the chamber height (`CHAMBER` 1.4 × the fit height), i.e. sand that trickled back;
+3. one more cm of tunnel, up to 1.6 body lengths, while the rock allows;
+4. the mouth apron.
+
+**Refill.** `relax` slumps sand under rock only past tan 2.0 (≈ 63°; roof-confined, mucus-bound walls). Every neighbour pair with a roofed cell evens out with τ = 3 days at 1× flow (faster in strong flow). A tunnel left alone shallows by about a third in three days, so the goby must keep digging.
+
+**GobyBrain.** The fit height is body depth × 1.15; the width is 0.65 × that.
+
+- **Burrows.** It plans a primary burrow from `BURROW_GOBY` along its direction (1.2 body lengths), plus up to two rock-edge sites within 24 cm (`burrowSites`) that it can swim to in a straight line. Fish built with the tank have the primary burrow already open to its length (an established home, sand moved to the spoil pile). The others start undug. `burrowSites` ranks sites by the sand still to move (the mean shortfall of the gap below the body height along the tunnel), then by length. A site where the rock foot sits centimetres deep in the sand needs a pit that slumps back in about as fast as one goby can carry it out. In Tee's 48 x 18 x 16 in layout the `BURROW_GOBY` anchor is a natural cave a 10 cm goby already fits (2–3 cm under the rock), so the digging happens at the extra sites.
+- **Excavate** (trip timing unchanged: adults every 0.7–2 h, juveniles every 25–120 s):
+  1. swims to the mouth;
+  2. slides in head first at 0.5 BL/s, only as far as `reach`;
+  3. digs at the face for 2–5 s with the head in the sand (`Organism.inSand`) and the body wriggling;
+  4. takes a mouthful of 0.6 cm³ × (L/10 cm)², backs out at 0.7 BL/s still facing in, turns, swims to the spoil pile about half a body length outside the entrance, and spits (mound plus plume, `Simulation.spitSand`). If interrupted, it drops what it carries.
+- **InBurrow.** By day the head peeks out with the body lying in the tunnel. At night the head is deep and facing in. Both are limited to the dug length; with a short tunnel more of the body stays outside.
+- The rare night patrol, the hover and the flee are unchanged.
+
+### 16.9 Bodies against the sand (`sim/SandContact.kt`)
+
+After every behaviour tick (and in abstract placement), `SandContact.step` lifts any body whose reference point is below `surfaceY + clearance`, where clearance is half the body depth for fish and 0.15 cm for crawlers. It also clears downward velocity and re-anchors the spline head. `Steering.crawl` still re-attaches crawlers to the flat `RockData.sandTopCm` plane, so on sand the clamp lifts them back onto the live surface each tick (the collision layer is the place to make the walk itself read `surfaceY`). `Ctx.safe` lifts a target point that lies inside the live sand to `surfaceY` + 0.2 cm, so no swimmer is sent to a point it cannot reach. Points above the sand are left alone: an earlier floor of `surfaceY` + body clearance also moved cave, cover and station picks, and the dottyback then spent about 40 % of its time visiting the cleaner instead of patrolling (c20). Drifting plankton (`FoodKind.suspended`) is kept over the live sand in the same way, because the flat `clampToWater` floor left copepods 1.6 cm inside the bed where the diamond goby kept going for them. A lawnmower blenny perched low on a rock face lies along the face, because head-up there would hang its body into the sand. A clown coming back to its host with rock in the way goes over the rock (`HoverHost`), not into it. `viaOpenWater` no longer returns the swimmer's own position when the way over is blocked at its height: it tries a higher crossing, a doorway, then a way out of the pocket, and only then holds (a cardinal had held still under a ledge for 90 min on its way to the cleaner). A leopard wrasse picks sleep sand with open water above it and swims over the patch before dropping onto it. A client posing for a cleaner (`PoseForCleaner`) holds the spot where it began to pose and swims back to it if pushed more than 2 cm away. Before, it sought a point just ahead of itself, so separation from the cleaner working along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass. The rest of the body follows: `SandContact` raises spline trail points that lie under the live surface by up to 6 cm/s (`BodySpline.liftTrail`), and while a body is drawn along an override path (den, burrow), its trail is kept on that path. When the override is let go, the body therefore eases out of the shape it was drawn in, not out of the head's track through the sand. A goby leaving its burrow had its middle 1.7 cm under the mound at the mouth. The diamond goby checks a sifting station's rock clearance at the height it hovers over the live sand, not at the flat plane; a station under a rock foot left it 0.3 cm off the rock when it swam off to feed (`AiTest.noRockPenetration`). An engineer goby away from its burrow mouth slides along the bed to it when the way is clear: the open-water swim holds a 20 cm body off the rock it lives against. A swimmer pinched between the sand and a rock overhang is moved aside by the sand, to the nearest spot on the live surface (within about the lift height) with its swim clearance to rock (0.45 L) and off the glass. Before, the steering pushed it out of the rock down onto the flat `sandTopCm` floor and the lift put it straight back each tick: a blue tang was frozen for 95 min in the gap under a ledge at the back glass, out of reach of the cleaners (`RealismAcceptance` c04). A client pushed off its pose spot gives way less to its neighbours (separation 0.25 while it swims back): separation grows as r/d near a cleaner nosing along its flank, which outran the way back. A cleaner shrimp climbing onto a client sets the client's `poseFor` to itself, and `VisitCleaner` keeps the station's client when it hands over to a pose for that cleaner. A stale `poseFor` naming the wrasse that last cleaned it had let the visit release the shrimp's station as the pose began, a clean-visit loop every 1.5 s (`FishGlitchTest`). The tang's patrol leaves a rock pocket through `viaOpenWater`, because a straight seek held it nose to the rock for minutes (`SubmarineTest`). The hawkfish's night landing and rest spots are on `surfaceY` (3.5 to 6 cm), not the flat 3 cm plane that the clamp lifted it off every tick.
+
+Exempt (`SandContact.exempt`): posture 5 (buried nassarius, sleeping leopard wrasse, bobtail squid), `Organism.inSand` (a goby's head in its dig face), and the feather duster (its tube is set in the sand).
+
+Contact moves sand (mass-conserving):
+
+- **Bow wave.** Each 0.25 BL (≥ 0.6 cm) travelled in contact pushes a 0.2 mm layer over the body width (plus what a pressed-in body overlapped) 60 % ahead and 20 % to each side. Nassarius, hermits, the Sally Lightfoot and the brittle star keep their `SandWork` trails instead.
+- **Impression.** After 20 s still in contact, a brittle star leaves one disc impression and a goby three along its body (0.12 cm deep, with a rim).
+
+Wedged between rock and sand (a crevice at the rock foot, a diamond goby dashing into its burrow), the lift stops `ROCK_KEEP` (0.3 cm) short of the rock. The body then shoves the sand out from under itself (bow waves at least one cell wide, so the sand lands outside the cells the head reads). Sand that cannot move (bed at its floor) carries the head up inside that rock margin.
+
+Swap point: when the shared collision layer lands (`BodyCollision.resolveEnv` reading `SandBed.surfaceY` live), `clamp` becomes its sand term and `exempt` its per-cell rule. The displacement half stays.
+
+### 16.10 Sand physics shared by every species, and bodies buried in it
+
+Every species moves sand through the same `SandBed` operations, and all of them conserve mass: `sandVolumeCm3()` (grid + suspended sand grains + mouthfuls carried) changes only when fines drift out as silt.
+
+- **Transfer.** `takeExact`/`depositExact` (spill to wider rings past `MAX_MOUND`), `takeMouthful`/`spit` (§16.8), `bowWave` and `impress` (§16.9), `buryStep`/`emergeFrom` (below). No take goes below a cell's floor.
+- **Angle of repose.** `relax` slumps any step steeper than tan 32° (open sand) or tan 63° (roofed tunnel walls). It works on the *visible* surface, so a buried body's volume holds its cover up.
+- **Flow.** Diffusion grows with pump flow (ripples and pits flatten over hours to days). Roofed cells infill slowly (§16.8).
+- **Suspension.** A puff lifts grains out of the cell (sand where there is sand, silt at the floor). They drift with the local flow and settle back by fall speed. A sand grain that lands or times out goes back into the grid where it is.
+- **Brains.** Anything that rests on, burrows in or sleeps under the sand reads `SandBed.surfaceY`, not the flat `RockData.sandTopCm`: the gobies, nassarius rest and burial, brittle star rest, an overturned snail, the bobtail squid's fallback bed, the leopard wrasse, and food settling (`FoodSystem.groundY`). The renderer's sand mesh is coarser than this grid, so a pit can look slightly shallower than the body in it.
+
+**Bodies in the sand (`SandBed.BuriedBody`).** A body lying in the sand is a slot of cells along its length. `inclusion` holds the body's own volume as height per cell. It lifts `surfaceY` and the rendered surface but is not sand.
+
+- `canBury(head, dir, len, width, thick, cover)`: open sand only (no rock over it, no other body in it), and deep enough along the whole slot for thick + cover above a floor 0.5 cm over the glass. The 3.5 cm front of the bed is too shallow for a 10 cm wrasse (1.6 cm thick + 2.2 cm cover). The back (up to 6 cm) is not.
+- `buryStep(b, digTo, coverTo)`: digging lowers the slot by (thick + cover) × share and throws the sand to a rim: half ahead of the head, a quarter to each side. This makes a depression and a rim. The body volume goes in under the surface as it digs. Covering takes the rim sand back over the body. Exact transfer.
+- `emergeFrom(owner)`: the body volume leaves and the cover over the head end is thrown aside. This leaves a dimple about as deep as the body was thick, with a low rim. `relax` slowly flattens it.
+
+**Leopard wrasse (*Macropharyngodon bipartitus*).** It dives at dusk (light < 0.25, or lights out) at a sleep spot where `canBury` holds; spots on shallow or dug-out sand are skipped. It lies on its side: the slot is as wide as the body is deep (0.36 L), thick 0.45 × that, with cover `max(1, 3 − thick/2)` cm, so the body centre is 3 cm down (research: 2–5 cm).
+
+- **Dive.** Lasts 1.05–3.06 s (SICB P2-191, *H. bivittatus*). Digging runs over the first 85 % and covering from 55 %. Small puffs rise as it wriggles and settle back.
+- **Night.** It is placed at `BuriedBody.bodyY` under the surface it made.
+- **Emergence.** 15–60 min after lights-on it bursts out (`emergeFrom` plus a puff) and rises from that depth.
+
+Abstract mode (no dive) keeps it 3 cm under the live surface. Tests: `SandBurialTest`, `LeopardWrasseTest`.
 
 ## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
 

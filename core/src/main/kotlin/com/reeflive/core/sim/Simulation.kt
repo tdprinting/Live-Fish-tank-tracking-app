@@ -128,11 +128,17 @@ class Simulation(
     val sandPiles = ArrayList<SandPile>()
 
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
-    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed)
+    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed).also { s ->
+        s.attachRock(rock.sdf)
+        // food comes to rest on the live sand surface, not inside it
+        food.groundY = { x, z -> s.surfaceY(x, z) }
+    }
     /** Rock, live sand and glass for the crawlers' surface seat ([CrawlerSeat]). */
     val crawlSurface = CrawlSurface(rock, sand)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
+    /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
+    val sandContact = SandContact(sand, rock.sdf)
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
@@ -142,6 +148,20 @@ class Simulation(
         sand.deposit(at.x, at.z, cm3, 2.0)
         sand.puff(at.x, sand.surfaceY(at.x, at.z) + 0.6, at.z, 6, 4.0)
         val p = sandPiles.firstOrNull { it.pos.distanceTo(at) < 3.0 }
+        if (p != null) p.volume += cm3
+        else {
+            if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
+            sandPiles += SandPile(Vec3(at.x, rock.sandTopCm, at.z), cm3)
+        }
+    }
+
+    /**
+     * A digger spits the mouthful it carries ([SandBed.carriedCm3]) at [at], blowing along ([hx], [hz]): the spoil
+     * mound and its plume go into the sand bed (mass-conserving) and the legacy pile list merges it like [depositSand].
+     */
+    fun spitSand(at: Vec3, cm3: Double, hx: Double = 0.0, hz: Double = 0.0) {
+        sand.spit(at.x, sand.surfaceY(at.x, at.z) + 0.8, at.z, cm3, 1.4, plume = 6, hx = hx, hz = hz)
+        val p = sandPiles.firstOrNull { it.pos.distanceTo(at.withY(rock.sandTopCm)) < 3.0 }
         if (p != null) p.volume += cm3
         else {
             if (sandPiles.size >= 8) sandPiles.minByOrNull { it.volume }?.let { sandPiles.remove(it) }
@@ -425,6 +445,7 @@ class Simulation(
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
         sandWork.step(organisms)
+        sandContact.step(organisms, dt, displace = true)
     }
 
     private fun abstractPlacement(dt: Double) {
@@ -442,6 +463,7 @@ class Simulation(
             o.attached = true
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
         }
+        sandContact.step(organisms, dt, displace = false)
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
@@ -551,9 +573,9 @@ class Simulation(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.ENGINEER_GOBY) {
             val b = agents[o]?.brain as? com.reeflive.core.ai.GobyBrain ?: continue
             if (rng.chance(dtMin / 3.0)) {
-                val pit = b.digPoint
-                sand.dig(pit.x, pit.z, com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3, 1.5)
-                depositSand(b.outside(rng.range(4.0, 9.0)) + Vec3(rng.signed() * 4, 0.0, rng.signed() * 2), com.reeflive.core.ai.GobyBrain.GOBY_MOUTHFUL_CM3)
+                // same draws as before (the sim stream is unchanged): spoil distance and offsets
+                val k = rng.range(4.0, 9.0); val ox = rng.signed() * 4; val oz = rng.signed() * 2
+                b.abstractDig(k, ox, oz)
             }
         }
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
