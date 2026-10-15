@@ -13,6 +13,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,31 +36,19 @@
 
     <div class="chrome" id="chrome">
       <div class="top">
-        <div class="seg glass" role="tablist" aria-label="Mode">
-          <button data-mode="watch" class="on">👀 Watch</button><button data-mode="sandbox">🧪 Sandbox</button>
+        <div class="seg" role="tablist" aria-label="Mode">
+          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button>
         </div>
-        <span class="spacer"></span>
-          <button class="round glass hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
-        <button class="round glass tests" data-tab="params" aria-label="Water tests">📋</button>
-        <div class="row2">
-          <div class="pill glass" id="clock">Day 1 · --:--</div>
-          <button class="pill glass" id="happy" aria-label="Tank happy meter"><span id="happyFace">😊</span> <b id="happyVal">--</b><i class="meter"><i id="happyBar"></i></i></button>
-          <button class="pill glass" id="waterBtn" aria-label="Show water readings">💧 <span id="waterSum">Water</span></button>
-        </div>
-        <div class="strip hidden" id="strip"></div>
+        <button class="status" id="statusBtn" aria-label="How is the tank doing?">
+          <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
+        </button>
       </div>
-
-      <div class="side">
-        <button class="round glass" id="soundBtn" aria-label="Sound">🔇</button>
-        <button class="round glass" id="microBtn" aria-label="Look closer">🔬</button>
-        <button class="round glass" id="cleanBtn" aria-label="Clean glass">🧽</button>
-        <button class="round glass" id="hideBtn" aria-label="Hide buttons">🙈</button>
-      </div>
+      <button class="hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
 
       <div class="sheet glass hidden" id="card"></div>
       <div class="fish glass hidden" id="fish"></div>
       <div class="follow glass hidden" id="follow"></div>
-      <div class="shelfbar glass hidden" id="shelfbar"></div>
+      <div class="shelfbar glass hidden tone-orange" id="shelfbar"></div>
       <nav class="rail glass" id="rail"></nav>
     </div>
     <button class="pill glass showchrome hidden" id="showChrome">👁 Show buttons</button>
