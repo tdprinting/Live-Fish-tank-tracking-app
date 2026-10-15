@@ -26,6 +26,7 @@ const ui = {
   torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
   water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
+  rocks: store.get('reeflive.rocksDynamic', true),
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
@@ -65,9 +66,13 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // a rock settled or toppled after the sand under it was dug out: remember where it lies now
+    onRocks: (state) => { store.set('reeflive.rocks', state); say('Crunch! A rock shifted. The gobies dug out too much sand under it.'); },
     // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
     ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
   }).then(() => {
+    live.restoreRocks(store.get('reeflive.rocks', ''));
+    live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     $('loading').classList.add('done');
@@ -437,7 +442,7 @@ function troubleCard(sb) {
     ${tile('data-preset="HEATER_STUCK"', 'flame', 'Heater stuck on', false, !sb)}${tile('data-pumpfail', 'powerhead', 'Pumps stop tonight', false, !sb)}
     ${tile('data-lights="off"', 'lampOut', 'Lamp goes out', false, !sb)}${tile('data-preset="POWER_OUTAGE"', 'plugOff', 'Power cut', false, !sb)}
     ${tile('data-heatwave', 'heatWave', 'Heat wave', false, !sb)}${tile('data-preset="SALINITY_CRASH"', 'salt', 'Salt crash', false, !sb)}
-    ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}
+    ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}${tile('data-preset="ROCKSLIDE"', 'rocks', 'Rockslide', false, !sb)}
     ${tile('data-preset="MISSED_WATER_CHANGES"', 'calendarX', 'No water changes', false, !sb)}${tile('data-aip="1"', 'pestAnemone', 'Pest anemone', false, !sb)}
     ${tile('data-aip="-1"', 'zap', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', 'sickFish', 'A fish gets sick', false, !sb)}
   </div>`;
@@ -463,6 +468,7 @@ function moreCard(sb) {
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
+      ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>`;
 }
 
@@ -559,6 +565,10 @@ $('card').addEventListener('click', (e) => {
   else if ('microscope' in d) { closeCard(); openMicro(); return; }
   else if ('knock' in d) { act('knock'); cue('CLICK'); }
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }
+  else if ('rocksToggle' in d) {
+    ui.rocks = !ui.rocks; store.set('reeflive.rocksDynamic', ui.rocks); live.setDynamicRocks(ui.rocks);
+    say(ui.rocks ? 'Rocks can shift now. Dig out too much sand and one may topple!' : 'The rocks stay put, however much the gobies dig.');
+  }
   else if ('hermieToggle' in d) { ui.hermie = !ui.hermie; store.set('reeflive.hermie', ui.hermie); $('hermie').classList.toggle('hidden', !ui.hermie); }
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
   else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);

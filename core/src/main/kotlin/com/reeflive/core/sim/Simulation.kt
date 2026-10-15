@@ -24,16 +24,29 @@ import kotlin.math.min
  * Threading: [enqueue] is safe from any thread; everything else runs on the sim thread.
  * [latest] is a volatile snapshot for the renderer/UI.
  */
-class Simulation(
+class Simulation private constructor(
     config: TankConfig,
     val species: SpeciesCatalog,
+    /** This simulation's own copy of the rockscape ([RockData.forSim]): its rocks can move without touching another sim's. */
     val rock: RockData,
-    seed: Long = config.seed,
-    startTimeSec: Double = 12 * 3600.0,
-    initialWater: WaterState = WaterState(volumeL = config.systemLiters),
-    livestock: List<LivestockSeed> = emptyList(),
-    val lights: LightSchedule = LightSchedule(),
+    seed: Long,
+    startTimeSec: Double,
+    initialWater: WaterState,
+    livestock: List<LivestockSeed>,
+    val lights: LightSchedule,
+    @Suppress("UNUSED_PARAMETER") ownRock: Unit,
 ) {
+    constructor(
+        config: TankConfig,
+        species: SpeciesCatalog,
+        rock: RockData,
+        seed: Long = config.seed,
+        startTimeSec: Double = 12 * 3600.0,
+        initialWater: WaterState = WaterState(volumeL = config.systemLiters),
+        livestock: List<LivestockSeed> = emptyList(),
+        lights: LightSchedule = LightSchedule(),
+    ) : this(config, species, rock.forSim(), seed, startTimeSec, initialWater, livestock, lights, Unit)
+
     var config: TankConfig = config; private set
     val rng = Rng(seed)
     var water = WaterSim(config, initialWater); private set
@@ -149,6 +162,168 @@ class Simulation(
     val sandWork = SandWork(sand, rock)
     /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
     val sandContact = SandContact(sand, rock.sdf)
+
+    // ============================================================== dynamic rockscape
+    /** Loose rocks as rigid bodies while [dynamicRocks] is on (null for a scape without separate rocks). */
+    val rockPhysics: RockPhysics? = rock.dynamic?.let { RockPhysics(it, sand, rock.lengthCm, rock.widthCm) }
+    /** Rocks can settle or topple when the sand under them is dug out ([Command.DynamicRocks]); off = no rock physics. */
+    var dynamicRocks = false; private set
+    private var rockPosesCache: FloatArray? = null
+    private var rockPosesAt = -1L
+    private var anchorPiece: Map<String, Int>? = null
+
+    /** Turns the dynamic rockscape on (builds the rock bodies the first time) or off (rocks freeze where they are). */
+    fun setDynamicRocks(on: Boolean) {
+        val rp = rockPhysics ?: return
+        if (on) rp.build()
+        dynamicRocks = on
+    }
+
+    private fun stepRocks(dt: Double) {
+        if (!dynamicRocks) return
+        val rp = rockPhysics ?: return
+        resolveCoralRocks()
+        rp.step(dt)
+        for (s in rp.drainSettled()) onRockSettled(s)
+    }
+
+    private fun onRockSettled(s: RockPhysics.Settle) {
+        if (s.moveCm < 0.3 && s.turnDeg < 1.0) return
+        refreshRockDependents()
+        // the thud: animals nearby startle, and a puff of sand and mulm comes up where it landed
+        val sy = sand.surfaceY(s.x.coerceIn(0.0, rock.lengthCm), s.z.coerceIn(0.0, rock.widthCm))
+        tapGlass(Vec3(s.x, max(sy + 1.0, s.y - s.body.extent * 0.5), s.z))
+        sand.puff(s.x, sy, s.z, (6 + 2 * s.moveCm).toInt().coerceAtMost(40), 4.0 + min(8.0, s.moveCm))
+        emit(SimEvent.RockShifted(s.body.name, s.moveCm, s.turnDeg, simTimeSec))
+    }
+
+    /**
+     * After a rock came to rest: the sand's rock roof (burrows), the anchors on the rock (perches, holes, caves, coral
+     * spots), the corals growing on it and the flow solver's solid cells follow it.
+     */
+    private fun refreshRockDependents() {
+        val f = rock.dynamic ?: return
+        sand.attachRock(rock.sdf)
+        val ap = anchorPiece ?: rock.restAnchors.all.associate { it.name to RockPieceDef.labelOf(rock.pieces, it.pos.x, it.pos.y, it.pos.z, ANCHOR_ON_ROCK_CM) }.also { anchorPiece = it }
+        rock.anchors = AnchorSet(rock.restAnchors.all.map { a ->
+            val p = ap[a.name] ?: -1
+            if (p < 0 || !f.moved[p]) a else {
+                val m = f.xf[p]
+                a.copy(pos = xfPoint(m, a.pos), dir = a.dir?.let { xfDir(m, it) }, normal = a.normal?.let { xfDir(m, it) }, points = a.points?.map { xfPoint(m, it) })
+            }
+        })
+        resolveCoralRocks()
+        for (c in corals) {
+            val p = c.rockPiece
+            if (p < 0 || !f.moved[p]) continue
+            c.pos = xfPoint(f.xf[p], c.restPos); c.normal = xfDir(f.xf[p], c.restNormal); c.patch = null
+        }
+        fluid?.let { fl -> for (k in 0 until fl.nz) for (j in 0 until fl.ny) for (i in 0 until fl.nx) fl.solid[fl.idx(i, j, k)] = rock.sdf.dist(fl.center(i, j, k)) < 0.0 }
+    }
+
+    /** Which rock each new colony grows on (a colony placed after its rock moved is re-expressed in the rock's frame). */
+    private fun resolveCoralRocks() {
+        val f = rock.dynamic ?: return
+        for (c in corals) {
+            if (c.rockPiece != -2) continue
+            var best = -1
+            if (f.active) {
+                var bd = CORAL_ON_ROCK_CM
+                for (p in rock.pieces.indices) if (f.moved[p]) { val d = f.pieceDist(p, c.pos.x, c.pos.y, c.pos.z); if (d < bd) { bd = d; best = p } }
+            }
+            if (best >= 0) {
+                c.rockPiece = best
+                val m = f.xf[best]
+                c.restPos = xfInverse(m, c.pos); c.restNormal = xfDirInverse(m, c.normal)
+            } else {
+                val l = RockPieceDef.labelOf(rock.pieces, c.restPos.x, c.restPos.y, c.restPos.z, CORAL_ON_ROCK_CM)
+                c.rockPiece = if (l >= 0 && !f.moved[l]) l else -1
+            }
+        }
+    }
+
+    /** Moved rocks as text for saving the tank ("" when none moved or the scape has no loose rocks). */
+    fun rockState(): String = rockPhysics?.takeIf { it.built && it.anyMoved }?.encode() ?: ""
+
+    /**
+     * Digs the sand out from under one side of a rock that stands mostly on sand, past its centre of mass, down to the
+     * glass ([Command.UndermineRock]). Returns the rock's name, or null when no rock stands on sand.
+     */
+    fun undermineRock(name: String? = null): String? {
+        val rp = rockPhysics ?: return null
+        rp.build()
+        // the rock leaning least on glass and other rocks goes first: digging under it actually tips it
+        val b = rp.bodies.filter { b -> !b.pinned && !b.awake && (name == null || b.name == name) }
+            .onEach { rp.stable(it) }.filter { it.supSand > it.supGlass + it.supRock }
+            .minByOrNull { (it.supGlass + it.supRock).toDouble() / (it.supSand + it.supGlass + it.supRock) } ?: return null
+        var ang = (simTimeSec * 1.37) % (2 * kotlin.math.PI)
+        var dx = 0.0; var dz = 0.0
+        // try sides until it no longer stands
+        for (attempt in 0 until 4) {
+            dx = kotlin.math.cos(ang); dz = kotlin.math.sin(ang)
+            if (!scourUnder(b, dx, dz)) return null
+            if (!rp.stable(b)) break
+            ang += 0.5 * kotlin.math.PI
+        }
+        val sy = sand.surfaceY(b.pos[0].coerceIn(0.0, rock.lengthCm), b.pos[2].coerceIn(0.0, rock.widthCm))
+        sand.puff(b.pos[0] + dx * b.extent * 0.5, sy, b.pos[2] + dz * b.extent * 0.5, 12, 3.0)
+        return b.name
+    }
+
+    /** Digs the sand under [b]'s footprint on the (dx, dz) side, out to the floor. False when it has no underside. */
+    private fun scourUnder(b: RockBody, dx: Double, dz: Double): Boolean {
+        // the footprint: where the rock's underside meets the sand
+        val r = b.rot
+        var x0 = Double.MAX_VALUE; var x1 = -Double.MAX_VALUE; var z0 = Double.MAX_VALUE; var z1 = -Double.MAX_VALUE
+        for (i in 0 until b.np) {
+            val ny = r[3] * b.nxL[i] + r[4] * b.nyL[i] + r[5] * b.nzL[i]
+            if (ny > -RockPhysics.BOTTOM_NY) continue
+            val x = b.pos[0] + r[0] * b.rx[i] + r[1] * b.ry[i] + r[2] * b.rz[i]
+            val z = b.pos[2] + r[6] * b.rx[i] + r[7] * b.ry[i] + r[8] * b.rz[i]
+            x0 = minOf(x0, x); x1 = maxOf(x1, x); z0 = minOf(z0, z); z1 = maxOf(z1, z)
+        }
+        if (x0 > x1) return false
+        // scour that side out to the floor, a little past the centre of mass so it tips that way
+        var x = maxOf(0.5, x0 - 1.0)
+        while (x <= minOf(rock.lengthCm - 0.5, x1 + 1.0)) {
+            var z = maxOf(0.5, z0 - 1.0)
+            while (z <= minOf(rock.widthCm - 0.5, z1 + 1.0)) {
+                if ((x - b.pos[0]) * dx + (z - b.pos[2]) * dz >= -UNDERMINE_PAST_CM) repeat(4) { sand.dig(x, z, 40.0, 1.2) }
+                z += 1.0
+            }
+            x += 1.0
+        }
+        return true
+    }
+
+    /** A fork of [src] (sandbox, time-lapse): its rocks where they lie and its dynamic / static choice. */
+    fun copyRocksFrom(src: Simulation) {
+        restoreRocks(src.rockState())
+        setDynamicRocks(src.dynamicRocks)
+    }
+
+    /** Puts rocks back where a saved tank had them ([rockState]). */
+    fun restoreRocks(state: String) {
+        val rp = rockPhysics ?: return
+        if (state.isBlank()) return
+        rp.build()
+        resolveCoralRocks()
+        rp.decode(state)
+        refreshRockDependents()
+    }
+
+    private fun rockPoses(): FloatArray? {
+        val rp = rockPhysics ?: return null
+        if (!rp.built || !rp.anyMoved) return null
+        if (rockPosesAt != rp.version || rockPosesCache == null) { rockPosesCache = rp.poseMatrices(); rockPosesAt = rp.version }
+        return rockPosesCache
+    }
+
+    private fun xfPoint(m: DoubleArray, v: Vec3) = Vec3(
+        m[0] * v.x + m[1] * v.y + m[2] * v.z + m[9], m[3] * v.x + m[4] * v.y + m[5] * v.z + m[10], m[6] * v.x + m[7] * v.y + m[8] * v.z + m[11])
+    private fun xfDir(m: DoubleArray, v: Vec3) = Vec3(m[0] * v.x + m[1] * v.y + m[2] * v.z, m[3] * v.x + m[4] * v.y + m[5] * v.z, m[6] * v.x + m[7] * v.y + m[8] * v.z)
+    private fun xfDirInverse(m: DoubleArray, v: Vec3) = Vec3(m[0] * v.x + m[3] * v.y + m[6] * v.z, m[1] * v.x + m[4] * v.y + m[7] * v.z, m[2] * v.x + m[5] * v.y + m[8] * v.z)
+    private fun xfInverse(m: DoubleArray, v: Vec3) = xfDirInverse(m, Vec3(v.x - m[9], v.y - m[10], v.z - m[11]))
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
@@ -322,6 +497,7 @@ class Simulation(
         net.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
         if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
+        stepRocks(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         if (useBehavior && !abstractMode) coralCatch(simDt)
@@ -960,6 +1136,8 @@ class Simulation(
             is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
+            is Command.DynamicRocks -> setDynamicRocks(c.on)
+            is Command.UndermineRock -> undermineRock(c.rock)
             is Command.Finger -> finger(c)
             is Command.WaterPuff -> waterPuff(c)
             is Command.TouchAnimal -> touchAnimal(c.id)
@@ -1453,6 +1631,8 @@ class Simulation(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             bareScape = bareScape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
+            rockPoses = rockPoses(),
+            rockVersion = rockPhysics?.version ?: 0L,
             net = net.pose(),
             netFlush = net.lastFlush,
         ).let { s ->
@@ -1558,6 +1738,11 @@ class Simulation(
         val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
         /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */
         const val FINGER_TIMEOUT_S = 6.0
+        /** An anchor / colony within this of a rock's analytic surface rides with that rock. */
+        const val ANCHOR_ON_ROCK_CM = 4.0
+        const val CORAL_ON_ROCK_CM = 4.0
+        /** [undermineRock] digs this far past the rock's centre of mass (cm), so it no longer stands. */
+        const val UNDERMINE_PAST_CM = 2.5
         /** Longest animal name a [Command.Rename] keeps. */
         const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)

@@ -19,6 +19,8 @@ class DrawPart(
     val kind: MaterialKind,
     /** World-space centre of this part (polyps: mean instance position), for drawing one clump of a coral model. */
     val center: FloatArray = FloatArray(3),
+    /** CPU copy of the geometry (kept by the GLB), for splitting rock-attached parts by rock ([RockPoseDraw]). */
+    val prim: GlbPrimitive? = null,
 ) {
     val part: String get() = node.part
     /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
@@ -184,7 +186,7 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
                 val kind = if (organism) organismKind(node.part) else MaterialKind.forPart(node.part, src.blended)
                 if (kind == MaterialKind.UNLIT_HIDDEN) continue
                 val mat = Material(kind, src, texByImage[src.baseColorImage])
-                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table))
+                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table), prim)
             }
         }
         return GpuModel(p.path, glb, parts, texByImage.values.toList())

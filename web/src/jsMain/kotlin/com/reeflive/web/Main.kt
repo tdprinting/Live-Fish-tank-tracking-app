@@ -235,6 +235,8 @@ object ReefLive {
             while (simAcc >= TICK && steps < 3) {
                 while (scenarioQueue.isNotEmpty() && scenarioQueue[0].first <= s.simTimeSec) s.enqueue(scenarioQueue.removeAt(0).second)
                 s.stepWall(TICK); simAcc -= TICK; steps++
+                // a rock in the tank settled or toppled: the page keeps its new spot for the next visit
+                if (s === reality && s.latest.events.any { it is com.reeflive.core.sim.SimEvent.RockShifted }) emit("onRocks", s.rockState())
             }
             if (steps == 3) simAcc = 0.0
         }
@@ -347,6 +349,15 @@ object ReefLive {
 
     /** 0 pauses. Watch mode runs the real tank at 1x; faster time is a sandbox thing (as on Android). */
     fun setSpeed(speed: Double) { sim?.speed = speed.coerceIn(0.0, 1000.0) }
+
+    /** "Rocks can shift": the dynamic rockscape for the tank and the sandbox (off: rocks never move). */
+    fun setDynamicRocks(on: Boolean) {
+        reality?.enqueue(Command.DynamicRocks(on))
+        if (sim !== reality) sim?.enqueue(Command.DynamicRocks(on))
+    }
+
+    /** Puts the tank's rocks where they lay at the last visit (the text `onRocks` handed the page). */
+    fun restoreRocks(state: String) { reality?.restoreRocks(state) }
     fun follow(id: String?) { renderer?.follow(id) }
     /** Follow camera buttons: [steps] > 0 zooms closer, < 0 further out (eases there, bounces at the limits). */
     fun followZoom(steps: Double) { renderer?.followCam?.zoom(steps.toFloat()) }

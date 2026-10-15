@@ -10,7 +10,7 @@ import org.junit.Test
 class LiveGlueTest {
     @Test fun everyScenarioHasSteps() {
         Scenario.values().forEach { assertTrue(it.name, it.steps().isNotEmpty()) }
-        assertEquals(6, Scenario.values().size)
+        assertEquals(7, Scenario.values().size)
     }
 
     @Test fun heatWaveMapsToHeaterAndRoomTemp() {
