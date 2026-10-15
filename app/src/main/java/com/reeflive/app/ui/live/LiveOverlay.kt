@@ -135,7 +135,7 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
         HudMode.values().forEach { m ->
             val sel = m == mode
             // live theme (UI_STYLE §10.1): the picked side is a candy pill, Sandbox pink to signal "not real"
-            val tone = if (m == HudMode.SANDBOX) Candy.pink else Candy.cyan
+            val tone = when (m) { HudMode.SANDBOX -> Candy.pink; HudMode.MY_TANK -> Candy.green; HudMode.WATCH -> Candy.cyan }
             val reduce = ReefTheme.reduceMotion
             val fg by animateColorAsState(if (sel) s.onCandy else s.label, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
             val bg by animateColorAsState(if (sel) tone else tone.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
@@ -150,12 +150,12 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
                     .clip(ReefShapes.pill)
                     .background(bg)
                     .clickable(interactionSource = interaction, indication = null, role = Role.Tab) { haptics.tick(); onModeChange(m) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 10.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Glyph(
-                    if (m == HudMode.SANDBOX) ReefGlyphs.bucket else ReefGlyphs.eye,
+                    when (m) { HudMode.SANDBOX -> ReefGlyphs.bucket; HudMode.MY_TANK -> ReefGlyphs.fish; HudMode.WATCH -> ReefGlyphs.eye },
                     size = 20.dp, tint = fg, accent = if (sel) Color.White else s.labelDim,
                     modifier = Modifier.graphicsLayer { scaleX = grow; scaleY = grow },
                 )

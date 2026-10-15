@@ -105,6 +105,7 @@ import com.reeflive.app.ui.live.HermieMood
 import com.reeflive.app.ui.live.HermiePill
 import com.reeflive.app.ui.live.HermieState
 import com.reeflive.app.ui.live.HudMode
+import com.reeflive.app.ui.live.MyTankSetupCard
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveCategory
 import com.reeflive.app.ui.live.LiveDialog
@@ -281,7 +282,10 @@ fun LiveTankScreen(
     var touring by rememberSaveable { mutableStateOf(false) }
     var lapseFork by rememberSaveable { mutableStateOf(false) }
     val torch = remember { TorchState() }
-    val sandbox = mode == SimMode.SANDBOX
+    // "sandbox" = every lever works: the pretend tank and My tank (the keeper's own saved tank)
+    val sandbox = mode != SimMode.REALITY
+    val myTank = mode == SimMode.CUSTOM
+    val customInfo by vm.custom.collectAsStateWithLifecycle()
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
     // "Show buttons" pill or Back undo it
@@ -476,7 +480,7 @@ fun LiveTankScreen(
     }
 
     val hudState = HudState(
-        mode = if (sandbox) HudMode.SANDBOX else HudMode.WATCH,
+        mode = when (mode) { SimMode.SANDBOX -> HudMode.SANDBOX; SimMode.CUSTOM -> HudMode.MY_TANK; SimMode.REALITY -> HudMode.WATCH },
         speed = speed,
         simTimeSec = hud.simTimeSec,
         dayPhase = DayPhase.entries.firstOrNull { it.label == hud.dayPhase } ?: DayPhase.DAY,
@@ -569,13 +573,17 @@ fun LiveTankScreen(
             val name = panel.selected?.takeIf { it.id == id }?.name ?: "this animal"
             ask = ConfirmAsk(
                 "Take out $name?",
-                "$name leaves the sandbox. Your real tank is not touched, and Reset tank brings everyone back.",
+                if (myTank) "$name leaves your tank for good." else "$name leaves the sandbox. Your real tank is not touched, and Reset tank brings everyone back.",
                 "Take out",
             ) { tick(); cue(LiveReactions.remove(name)) { vm.removeOrganism(id) } }
         },
         onAdd = { a -> tick(); cue(LiveReactions.addSimple(a.name)) { vm.addOrganism(a.speciesId, a.sizeCm, "New ${a.name}") } },
         onReset = {
-            ask = ConfirmAsk(
+            ask = if (myTank) ConfirmAsk(
+                "Start My tank over?",
+                "Every animal and coral in ${customInfo.name.ifBlank { "My tank" }} goes, and you pick a new empty tank. This cannot be undone.",
+                "Start over",
+            ) { tick(); preset = null; heaterSet = HEATER_DEFAULT_C; heaterWorking = true; vm.startOverCustomTank() } else ConfirmAsk(
                 "Reset the sandbox?",
                 "Everything you changed here goes back to match your real tank: the water, the animals, the equipment and any what-ifs.",
                 "Reset tank",
@@ -613,7 +621,7 @@ fun LiveTankScreen(
         onInfect = { d ->
             ask = ConfirmAsk(
                 "Make a fish sick?",
-                "A random fish in the sandbox catches ${SandboxFriendly.diseaseLabel(d)}. Only the sandbox changes; Reset tank undoes it.",
+                if (myTank) "A random fish in your tank catches ${SandboxFriendly.diseaseLabel(d)}. It is saved like everything else here." else "A random fish in the sandbox catches ${SandboxFriendly.diseaseLabel(d)}. Only the sandbox changes; Reset tank undoes it.",
                 "Make one sick",
             ) { tick(); cue(LiveReactions.infect(d)) { vm.infect(d) } }
         },
@@ -628,20 +636,22 @@ fun LiveTankScreen(
         onHelp = { tick(); open = null; vm.select(null); tipsAsked = true },
     )
     val onModeChange: (HudMode) -> Unit = { m ->
-        val toSandbox = m == HudMode.SANDBOX
+        val target = when (m) { HudMode.SANDBOX -> SimMode.SANDBOX; HudMode.MY_TANK -> SimMode.CUSTOM; HudMode.WATCH -> SimMode.REALITY }
         // tapping the side that is already picked never hides anything: it only brings the menu back out
         railShown = true; chromeHidden = false
-        if (toSandbox != sandbox) {
+        if (target != mode) {
+            val toSandbox = target != SimMode.REALITY
             heaterSet = HEATER_DEFAULT_C; heaterWorking = true
-            preset = null; open = null; tipsAsked = false; lapse = false
+            preset = null; open = null; tipsAsked = false; lapse = false; lapseFork = false
+            vm.select(null); vm.follow(null)
             // a sandbox-only prop in the hand cannot be used in the real tank
             if (carry?.locked(toSandbox) == true) carry = null
-            if (toSandbox) {
-                vm.setMode(SimMode.SANDBOX)
-                if (hermieOn) hermie.say("This is the pretend tank. Try anything, your real tank is safe!", HermieMood.EXCITED)
-            } else {
-                vm.setMode(SimMode.REALITY)
-                if (hermieOn) hermie.say("Back to your real tank. Just watch and feed.", HermieMood.HAPPY)
+            bagCarry = null
+            vm.setMode(target)
+            if (hermieOn) when (target) {
+                SimMode.SANDBOX -> hermie.say("This is the pretend tank. Try anything, your real tank is safe!", HermieMood.EXCITED)
+                SimMode.CUSTOM -> hermie.say("Your very own tank! Everything you do here is saved.", HermieMood.EXCITED)
+                SimMode.REALITY -> hermie.say("Back to your real tank. Just watch and feed.", HermieMood.HAPPY)
             }
         }
     }
@@ -654,6 +664,7 @@ fun LiveTankScreen(
     }
     val tools = LiveTools(
         sandbox = sandbox,
+        myTank = myTank,
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
         onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
@@ -970,6 +981,16 @@ fun LiveTankScreen(
         ) {
             ShowControlsPill(onClick = { tick(); chromeHidden = false })
         }
+        // My tank with nothing set up yet: pick a tank to start (it is saved from then on)
+        if (myTank && customInfo.ready && !customInfo.exists) {
+            Box(Modifier.fillMaxSize().padding(16.dp).statusBarsPadding(), contentAlignment = Alignment.Center) {
+                MyTankSetupCard(onPick = { b ->
+                    tick(); vm.startCustomTank(b)
+                    if (hermieOn) hermie.say("A brand new ${b.label}! Open Add life to bring in your first animals.", HermieMood.EXCITED)
+                    open = LiveCategory.LIFE
+                })
+            }
+        }
         if (lapse && sandbox) {
             TimelapseSheet(
                 state = lapseState, water = hud.water,
@@ -1150,7 +1171,7 @@ private fun HudLayer(
     bottom: Dp,
 ) {
     val reduce = ReefTheme.reduceMotion
-    val sandbox = hudState.mode == HudMode.SANDBOX
+    val sandbox = hudState.mode != HudMode.WATCH
     val padStart by animateDpAsState(start, liveSpec(reduce), label = "hudStart")
     val padBottom by animateDpAsState(bottom, liveSpec(reduce), label = "hudBottom")
     Box(
@@ -1175,7 +1196,7 @@ private fun HudLayer(
                     enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce)),
                     exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + scaleOut(liveSpec(reduce)),
                 ) {
-                    HermiePill(hermie, sandbox, onHermieOff, maxWidth = if (landscape) 220.dp else 260.dp)
+                    HermiePill(hermie, sandbox, onHermieOff, maxWidth = if (landscape) 220.dp else 260.dp, myTank = hudState.mode == HudMode.MY_TANK)
                 }
             }
             if (landscape) {
@@ -1239,7 +1260,8 @@ private fun HudLayer(
         ) {
             val card = st ?: lastCard
             if (card != null) {
-                FishCard(card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) })
+                FishCard(card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) },
+                    onRename = if (hudState.mode == HudMode.MY_TANK) ({ n: String -> vm.rename(card.id, n) }) else null)
             }
         }
         AnimatedVisibility(
@@ -1248,7 +1270,7 @@ private fun HudLayer(
             enter = fadeIn(liveSpec(reduce)) + slideInVertically(liveSpec(reduce)) { it / 3 } + scaleIn(liveSpec(reduce), initialScale = 0.92f),
             exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + slideOutVertically(liveSpec(reduce)) { it / 3 },
         ) {
-            SandboxTipsCard(onDismiss = onDismissTips, sandbox = sandbox)
+            SandboxTipsCard(onDismiss = onDismissTips, sandbox = sandbox, myTank = hudState.mode == HudMode.MY_TANK)
         }
     }
 }

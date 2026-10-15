@@ -89,12 +89,22 @@ class Simulation(
     var forceFullBehavior = false
     /** Disable the behavior layer entirely (health-only long runs). */
     var behaviorEnabled = true
+    /** Started from scratch (core custom/CustomTank): the snapshot asks the renderer to draw no static colonies. */
+    var bareScape = false
 
     private val commands = ConcurrentLinkedQueue<Command>()
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
+
+    /**
+     * A restored tank (core `custom/CustomTank`) keeps its animals' ids: new ids handed out after it ("<species>#n",
+     * frag and bag numbers) must start past the saved ones so a newcomer never takes a saved animal's id.
+     */
+    fun reserveIds(nextOrganism: Int, nextFrag: Int, nextBag: Int) {
+        idCounter = max(idCounter, nextOrganism); fragCounter = max(fragCounter, nextFrag); bags.reserveIds(nextBag)
+    }
     /** Aiptasia controllers (AiptasiaModel). */
     val pests = PestState()
     /** Running disease treatments (W-4). */
@@ -940,6 +950,7 @@ class Simulation(
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
+            is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
             is Command.Finger -> finger(c)
@@ -1427,6 +1438,7 @@ class Simulation(
     fun snapshot(): SimSnapshot =
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
+            bareScape = bareScape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
         ).let { s ->
             if (!bags.any) s
@@ -1531,6 +1543,8 @@ class Simulation(
         val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
         /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */
         const val FINGER_TIMEOUT_S = 6.0
+        /** Longest animal name a [Command.Rename] keeps. */
+        const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */

@@ -266,12 +266,15 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
         val tank = store.model(TANK); val rock = store.model(ROCK); val equipment = store.model(EQUIPMENT); val algae = store.model(ALGAE)
         val details = store.model(DETAILS)
+        // My tank starts bare: none of Tee's static colonies, no algae tufts or glass film until its own algae grow
+        val bare = cur?.bareScape == true
+        val bareAlgae = bare && (cur?.water?.algaeHair ?: 0.0) < BARE_ALGAE_SHOWS
         // opaque: back glass, sand, rock, equipment, static reef details (coralline layer, encrusting, mag cleaner)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = true) }
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
-        details?.let { drawStatic(it, progs, light, opaque = true) }
+        details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
         // corals: soft bodies then polyps
         val corals = coralModels(cur)
@@ -284,10 +287,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
-        algae?.let { drawAlgae(it, progs) }
+        if (!bareAlgae) algae?.let { drawAlgae(it, progs) }
         // blended details (the back-glass algae film) right after the cards, before particles and the water
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
-        details?.let { drawStatic(it, progs, light, opaque = false) }
+        if (!bareAlgae) details?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
         finOrder.clear(); finOrder.addAll(rigs); finOrder.sortWith(farFirst)
         for (r in finOrder) drawOrganism(r, progs, pass = 1)
@@ -440,10 +443,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     // ------------------------------------------------------------------ static scene
 
-    private fun drawStatic(m: GpuModel, progs: Programs, light: LightingState, opaque: Boolean, only: MaterialKind? = null) {
+    private fun drawStatic(m: GpuModel, progs: Programs, light: LightingState, opaque: Boolean, only: MaterialKind? = null, noCoral: Boolean = false) {
         val w = white ?: return
         for (part in m.parts) {
             if (only != null && part.kind != only) continue
+            if (noCoral && part.kind == MaterialKind.SOFT_CORAL) continue
             val transparent = part.kind == MaterialKind.GLASS || part.kind == MaterialKind.WATER || part.material.src.blended
             if (transparent == opaque) continue
             val p = when (part.kind) {
@@ -525,14 +529,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
      * its own target and leaves the scene target / viewport to the normal frame code that follows.
      */
     private fun renderShadowMap(sm: ShadowMap, fu: FrameUniforms, progs: Programs, rigs: Collection<FishRig>, cur: SimSnapshot?) {
-        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0)
+        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0) + (if (cur?.bareScape == true) 500_000L else 0L)
         if (!sm.needsUpdate(signature)) return
         fu.overrideViewProj(sm.matrix)
         // High: rock, equipment and still details live in a cached layer, redrawn only when the scene changes
         if (sm.cachesStatic) {
-            if (sm.staticStale(signature)) { sm.beginStatic(); drawStaticShadowCasters(progs) }
+            if (sm.staticStale(signature)) { sm.beginStatic(); drawStaticShadowCasters(progs, cur?.bareScape == true) }
             sm.begin()
-        } else { sm.begin(); drawStaticShadowCasters(progs) }
+        } else { sm.begin(); drawStaticShadowCasters(progs, cur?.bareScape == true) }
         // the magnet cleaner moves with the finger
         val p = progs.shadow
         p.use()
@@ -579,7 +583,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     /** Shadow casters that never move: rock, equipment (bar the magnet cleaner) and the still reef details. */
-    private fun drawStaticShadowCasters(progs: Programs) {
+    private fun drawStaticShadowCasters(progs: Programs, bare: Boolean) {
         val p = progs.shadow
         p.use()
         for (key in SHADOW_STATIC) {
@@ -592,7 +596,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         val pc = progs.shadowCoral
         pc.use()
-        store.model(DETAILS)?.let { m ->
+        if (!bare) store.model(DETAILS)?.let { m ->
             for (part in m.parts) {
                 if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
                 pc.setMat4("uModel", part.node.world)
@@ -1235,6 +1239,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ALGAE = "models/algae_tufts.glb"
         /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
         const val DETAILS = "models/reef_details.glb"
+        /** Hair-algae cover at which a bare tank ([SimSnapshot.bareScape]) starts showing the tuft cards and film. */
+        const val BARE_ALGAE_SHOWS = 0.12
         /** equipment.glb node of the Flipper magnet scraper (both halves), seated at x 2–8, y 13–33 on the front glass. */
         const val FLIPPER_NODE = "Flipper"
         const val FLIPPER_REST_X = 5f
