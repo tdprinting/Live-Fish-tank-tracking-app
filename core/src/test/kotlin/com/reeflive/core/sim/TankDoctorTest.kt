@@ -81,7 +81,8 @@ class TankDoctorTest {
         val w = WaterSim(TankConfig(), WaterState())
         w.ato = true; w.skimmerEmptyDays = 0.0
         w.emptySkimmerCup()
-        repeat(7 * 1440) { w.step(60.0) }
+        // a bare WaterSim has no fish making DOC: hold the stocked tank's usual 1.5 mg/L (WaterState default)
+        repeat(7 * 24) { w.s.doc = 1.5; repeat(60) { w.step(60.0) } }
         assertTrue("cup after a week ${w.skimmerCup}", w.skimmerCup in 0.35..0.95)
         w.skimmerCup = 1.0
         assertEquals(0.0, w.skimEfficiency, 1e-9)

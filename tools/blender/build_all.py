@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "sdf"))
 
 STEPS = ["selftest", "textures", "fish", "inverts", "rockscape", "sdf", "tank", "corals", "equipment", "details",
-         "supplies", "cards"]
+         "supplies", "care", "cards"]
 
 
 def run(step, args):
@@ -65,6 +65,9 @@ def run(step, args):
     elif step == "supplies":
         import supplies
         supplies.build()
+    elif step == "care":
+        import care_tools
+        care_tools.build()
     elif step == "cards":
         import render_cards
         render_cards.build()
