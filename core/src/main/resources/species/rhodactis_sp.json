@@ -58,6 +58,7 @@
     }
   },
   "model": "models/mushroom_hairy.glb",
+  "variantModels": {"mound": "models/mushroom_hairy_mound.glb"},
   "colors": {
     "primary": "#5FBF4A",
     "secondary": "#2F7A3A",

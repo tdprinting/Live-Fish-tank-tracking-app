@@ -108,7 +108,7 @@ object Stocking {
     /** The anchor a coral species' model sits on, or null (no anchored model in this rockscape). */
     /** Species with a model of their own built around a different anchor than their kind's. */
     private val SPECIES_HOME_ANCHORS: Map<String, List<String>> = mapOf(
-        "rhodactis_sp" to listOf("coral_shroom_hairy"),
+        "rhodactis_sp" to listOf("coral_shroom_hairy", "coral_gsp_lower_right"),
         "sarcophyton_sp" to listOf("coral_toadstool_front"),
         "lobophytum_sp" to listOf("coral_leather_pink_front"),
         "sinularia_sp" to listOf("coral_finger_leather"),

@@ -465,10 +465,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
             when (part.kind) {
                 MaterialKind.ROCK -> {
-                    (if (quality.normalMaps) store.texture(ROCK_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
-                    (store.texture(ROCK_ROUGH_AO) ?: neutralRough)?.bind(2)
-                    p.set1f("uNormalStrength", if (quality.normalMaps && store.texture(ROCK_NORMAL) != null) 1f else 0f)
-                    p.set1f("uDetailScale", 1f)
+                    // relief detail levels are procedural (rock.frag), cavity / ridge / AO ride in COLOR_0
+                    // (tools/blender/rock_surface.py); only the pods and forams on the rock come from the sim
+                    val life = micro.rockLife
+                    p.set4f("uMicro", life[0], life[1], life[2], 0f)
                 }
                 MaterialKind.SAND -> {
                     (if (quality.normalMaps) store.texture(SAND_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
@@ -902,6 +902,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set4fv("uSpine", r.spine, 16)
         p.set4fv("uFrame", r.frames, 16)
         p.set1f("uScale", r.scale)
+        p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
@@ -1281,7 +1282,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
         val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
-            "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
+            "models/kenya.glb", "models/gsp_neon.glb", "models/mushroom_hairy_mound.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",
         )
         const val CAUSTIC = "textures/caustic_512.png"
@@ -1289,10 +1290,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROOM_ENV = "textures/room_env.png"
         const val WATER_N1 = "textures/water_n1.png"
         const val WATER_N2 = "textures/water_n2.png"
-        const val ROCK_NORMAL = "textures/rock_normal.png"
-        const val ROCK_ROUGH_AO = "textures/rock_rough_ao.png"
         const val SAND_NORMAL = "textures/sand_normal.png"
-        val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, ROCK_NORMAL, ROCK_ROUGH_AO, SAND_NORMAL)
+        val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, SAND_NORMAL)
         val IDENTITY = M.identity()
         /** Parts of a coral model within this distance of its home anchor make up one colony (sandbox copies). */
         const val COPY_RADIUS_CM = 25f

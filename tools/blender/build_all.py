@@ -4,7 +4,7 @@
     /tmp/claude-0/bpyenv/bin/python tools/blender/build_all.py --only fish,corals
     /tmp/claude-0/bpyenv/bin/python tools/blender/build_all.py --preview       # + docs/preview renders
 
-Order: fishlib self-test -> textures -> fish -> inverts -> rockscape (+anchors) -> rock SDF -> tank
+Order: fishlib self-test -> textures -> fish -> inverts -> rockscape (+anchors) -> rock SDF (+ rock_surface pass) -> tank
 (needs the SDF for sand mounds) -> corals (need the rock) -> equipment -> details (rock + sand) -> supply shelf -> species cards
 -> validate.
 Prints per-asset triangle counts, fails (exit 1) if any asset is > 15 % over its budget, and prints the
@@ -50,6 +50,9 @@ def run(step, args):
     elif step == "sdf":
         import bake_sdf
         bake_sdf.bake()
+        # smoothed normals + cavity / ridge / AO vertex colours on the rock (needs the SDF just baked)
+        import rock_surface
+        rock_surface.run()
     elif step == "tank":
         import tank
         tank.build()

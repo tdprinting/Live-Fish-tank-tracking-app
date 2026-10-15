@@ -23,17 +23,21 @@ enum class Cue(val minGapMs: Long) {
 
 /** Pure mapping from sim state and events to sounds (kept free of Android so it is unit-tested). */
 object TankSoundMix {
-    /** Night / lights-off floor: ambience never drops below this share of its daytime level. */
-    const val NIGHT_FLOOR = 0.5f
+    /**
+     * Night / lights-off floor: ambience never drops below this share of its daytime level. The pumps run all night
+     * (Tee's night clips sound like the tank by day), so the night mix only eases off a little.
+     */
+    const val NIGHT_FLOOR = 0.85f
     /** Light intensity (0..1.5 in the snapshot) at and above which the ambience is at full daytime level. */
     const val DAY_LIGHT = 0.5f
 
-    // a calm room-tone bed under the cues: the water should be felt more than heard (Tee 2026-10-14: the old mix was
-    // "scratchy, loud and overpowering")
+    // a calm room-tone bed under the cues (Tee 2026-10-14: the old mix was "scratchy, loud and overpowering"), balanced
+    // against Tee's own tank audio (2026-10-15, tools/audio/generate_sounds.py): low water rumble first, the HOB
+    // waterfall's smooth 1-2 kHz "shhh" next, soft 60/120 Hz pump hum, and only rare bubble pops
     private const val FLOW_BASE = 0.20f
-    private const val HUM_BASE = 0.05f
+    private const val HUM_BASE = 0.08f
     private const val HOB_BASE = 0.10f
-    private const val BUBBLES_BASE = 0.16f
+    private const val BUBBLES_BASE = 0.08f
 
     /**
      * Ambience for the current sim state.
