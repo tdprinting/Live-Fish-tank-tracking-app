@@ -89,6 +89,12 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .opt .ico { font-size: 24px; }
 .opt.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.25); }
 .opt.lock { opacity: .45; }
+.fixes { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.fix { display: flex; align-items: center; gap: 10px; border: 1px solid var(--glassBorder); background: var(--glass); border-radius: 14px; padding: 8px 10px; }
+.fix .ico { font-size: 24px; display: flex; }
+.fix .ico .gi { width: 30px; height: 30px; }
+.fix .txt { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.fix.urgent { border-color: #ff5c6c; }
 .opt:active { transform: scale(.96); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
 .pillbtn { border: 1px solid var(--glassBorder); background: var(--glass); border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
@@ -120,8 +126,40 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .rels { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .rel { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--glass); color: var(--mist); }
 .rel.good { color: var(--good); } .rel.danger { color: var(--danger); }
-.follow { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 86px); display: flex; align-items: center; gap: 8px; padding: 8px 10px; max-width: calc(100% - 16px); }
-.fcap { min-width: 0; } .fcap .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+/* follow mode: the menu steps aside; a compact name bar at the bottom, big labelled camera buttons on the right */
+.chrome.following .rail, .chrome.following .side { display: none; }
+.follow { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 12px);
+  width: min(520px, calc(100% - 16px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.follow > * { pointer-events: auto; }
+.fstoprow { display: flex; justify-content: flex-end; pointer-events: none; }
+.fstop { pointer-events: auto; border: 2px solid #1B1340; background: #5FD7FF; color: #1B1340; font-weight: 700; font-size: 15px;
+  min-height: 46px; padding: 8px 18px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 0 #1B1340; }
+.fstop:active { transform: translateY(3px); box-shadow: 0 1px 0 #1B1340; }
+.fnav { display: flex; align-items: center; gap: 6px; padding: 6px; }
+.fbig { flex: none; width: 52px; height: 52px; border-radius: 50%; border: 2px solid #1B1340; background: #5FD7FF; color: #1B1340;
+  font-size: 20px; cursor: pointer; box-shadow: 0 3px 0 #1B1340; }
+.fbig:active { transform: translateY(2px); box-shadow: 0 1px 0 #1B1340; }
+.fcap { flex: 1; min-width: 0; border: 0; background: none; cursor: pointer; text-align: center; padding: 2px 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.fname { display: flex; align-items: baseline; gap: 4px; max-width: 100%; font-size: 17px; }
+.fname strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fline { max-width: 100%; font-size: 13px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcap.open .fline { white-space: normal; }
+.fcam { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 12px; }
+.fcbtn { width: 66px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; }
+.fcbtn b { width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;
+  color: #1B1340; border: 2px solid #1B1340; box-shadow: 0 4px 0 #1B1340; transition: transform .08s; }
+.fcbtn span { font-size: 12px; font-weight: 700; color: #fff; background: rgba(27,19,64,.86); border-radius: 999px; padding: 1px 8px; }
+.fcbtn.closer b { background: #8EE66B; } .fcbtn.further b { background: #FFE14D; } .fcbtn.turn b { background: #FF7AA8; }
+.fcbtn:active b { transform: translateY(3px); box-shadow: 0 1px 0 #1B1340; }
+.fcbtn.pop b { animation: fcpop .3s ease-out; }
+@keyframes fcpop { 40% { transform: scale(1.14); } }
+/* short screens (landscape phones): the camera buttons sit in a row above the name bar, on the right */
+@media (max-height: 520px) {
+  .fcam { top: auto; transform: none; bottom: calc(var(--safe-bottom) + 84px); right: 12px; flex-direction: row; gap: 8px; }
+  .fcbtn b { width: 50px; height: 50px; font-size: 24px; }
+  .fstoprow { justify-content: flex-start; }
+}
 .showchrome { position: absolute; top: calc(var(--safe-top) + 10px); right: 10px; }
 .cleanhint { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 10px); padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 96px); padding: 8px 14px; font-size: 13px; max-width: calc(100% - 32px); }
@@ -194,16 +232,38 @@ body.saver-on .saver { position: fixed; }
 .subbing #chrome, .subbing #showChrome { display: none !important; }
 .subui { position: absolute; inset: 0; pointer-events: none; }
 .subui > * { pointer-events: auto; }
-.subbar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 10px); display: flex; flex-wrap: wrap; justify-content: center;
-  align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; max-width: calc(100% - 16px); }
-.subbar .btn.ghost.on { background: rgba(31,166,201,.45); border-color: var(--lagoonBright); }
-.subjoy { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(var(--safe-bottom) + 20px); width: 132px; height: 132px;
-  border-radius: 50%; touch-action: none; }
-.subjoy .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
-  background: rgba(255,214,64,.85); box-shadow: 0 2px 10px rgba(0,0,0,.35); pointer-events: none; }
-.subud { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-bottom) + 28px); display: flex; flex-direction: column; gap: 14px; }
-.subud .round { width: 58px; height: 58px; font-size: 24px; touch-action: none; }
-.subud .round.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.45); }
+.subtop { position: absolute; top: calc(var(--safe-top) + 10px); left: 10px; right: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; pointer-events: none; }
+.subtop > * { pointer-events: auto; }
+.subinfo { padding: 8px 12px; font-size: 14px; font-weight: 600; border-radius: 999px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subexit { flex: none; border: 2px solid #1B1340; background: #FF7AA8; color: #1B1340; font-weight: 800; font-size: 16px; min-height: 48px;
+  padding: 8px 18px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 0 #1B1340; }
+.subexit:active { transform: translateY(3px); box-shadow: 0 1px 0 #1B1340; }
+.subopts { position: absolute; top: calc(var(--safe-top) + 68px); left: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.subopt { border: 1px solid var(--glassBorder); background: rgba(6,19,39,.62); color: var(--foam); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 38px; }
+.subopt.on { background: rgba(31,166,201,.55); border-color: var(--lagoonBright); }
+.subwatch { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 14px); width: min(420px, calc(100% - 290px));
+  min-width: 230px; padding: 8px; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.swhead { display: flex; align-items: center; gap: 6px; }
+.swhead strong { flex: 1; text-align: center; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swnav { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #1B1340; background: #5FD7FF; color: #1B1340; font-size: 15px; cursor: pointer; flex: none; }
+.swmodes { display: flex; gap: 4px; }
+.subwatch.idle .swmodes, .subwatch.idle .swletgo { display: none; }
+.subwatch.idle #subWatchName { font-weight: 600; font-size: 14px; }
+.swmode { flex: 1; border: 1px solid var(--glassBorder); background: var(--glass); border-radius: 12px; padding: 7px 4px; font-size: 12px; cursor: pointer; color: var(--foam); }
+.swmode.on { background: #8EE66B; color: #1B1340; border-color: #1B1340; font-weight: 700; }
+.swletgo { border: 0; background: none; color: var(--mist); font-size: 13px; cursor: pointer; padding: 4px; text-decoration: underline; }
+.subjoywrap { position: absolute; left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(var(--safe-bottom) + 14px); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.subjoy { position: relative; width: 140px; height: 140px; border-radius: 50%; touch-action: none; border: 2px solid rgba(255,255,255,.3); }
+.subjoy .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%;
+  background: #FFE14D; border: 2px solid #1B1340; box-shadow: 0 3px 0 #1B1340; pointer-events: none; transition: transform .06s; }
+.sublabel { font-size: 12px; font-weight: 700; color: #fff; background: rgba(27,19,64,.86); border-radius: 999px; padding: 1px 10px; }
+.subud { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(var(--safe-bottom) + 14px); display: flex; flex-direction: column; gap: 10px; }
+.subbig { width: 66px; height: 66px; border-radius: 50%; border: 2px solid #1B1340; background: #5FD7FF; color: #1B1340; font-size: 20px; font-weight: 800;
+  cursor: pointer; touch-action: none; box-shadow: 0 4px 0 #1B1340; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.subbig span { font-size: 11px; margin-top: 2px; }
+.subbig.on { transform: translateY(3px); box-shadow: 0 1px 0 #1B1340; background: #8EE66B; }
+/* narrow phones: the watch card rises above the stick and the up / down buttons */
+@media (max-width: 560px) { .subwatch { width: calc(100% - 20px); bottom: calc(var(--safe-bottom) + 190px); } }
 
 /* ---- live screen, "Sea-glass Arcade" (UI_STYLE §10, §10.1; same theme as the Android LiveTheme): the tank fills
    the phone, one slim top row (mode + a status capsule), a dock of candy bubbles at the bottom, and every menu a

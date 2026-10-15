@@ -81,6 +81,8 @@ import kotlinx.coroutines.delay
 enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: String) {
     /** Not a card: swings the camera to the supply shelf ([LiveTools.onSupplies]). */
     SUPPLIES("Supplies", ReefGlyphs.feedTin, "Supply shelf"),
+    /** The tank check: what the tank needs, each fix played in the 3D tank (TankCheckBody). */
+    FIX("Fix tank", ReefGlyphs.waveSparkle, "Fix my tank"),
     LIFE("Add life", ReefGlyphs.fish, "Add life"),
     LIGHT("Tank", ReefGlyphs.sun, "Light, water & gear"),
     TROUBLE("Trouble", ReefGlyphs.whatIf, "Tank trouble"),
@@ -90,8 +92,8 @@ enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: Stri
     ;
 
     companion object {
-        /** Watch mode can watch, use the shelf (feed, clean the glass, test, look) and More: the rest needs the pretend tank. */
-        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.filter { it != VIEW } else listOf(VIEW, SUPPLIES, MORE)
+        /** Watch mode can watch, use the shelf (feed, clean the glass, test, look), fix the tank and More: the rest needs the pretend tank. */
+        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.filter { it != VIEW } else listOf(VIEW, SUPPLIES, FIX, MORE)
     }
 }
 
@@ -138,6 +140,11 @@ class LiveTools(
     /** More → "Thought bubbles": speech bubbles over a few animals saying what they are thinking. */
     val thoughtsOn: Boolean = false,
     val onThoughts: () -> Unit = {},
+    /** Fix tank: what the tank check says the tank needs now, and how many fixes are still playing. */
+    val fixes: List<com.reeflive.core.sim.CareFix> = emptyList(),
+    val fixing: Int = 0,
+    val onFix: (com.reeflive.core.sim.CareFix) -> Unit = {},
+    val onFixAll: () -> Unit = {},
     /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
     val myTank: Boolean = false,
 )
@@ -474,6 +481,7 @@ private fun ColumnScope.CardBody(
     when (c) {
         // never a card: the bubble opens the 3D supply shelf (feed, care and tools live there)
         LiveCategory.SUPPLIES -> Unit
+        LiveCategory.FIX -> TankCheckBody(tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close)
         LiveCategory.LIGHT -> {
             if (tools.readouts.isNotEmpty()) WaterStrip(tools.readouts)
             LiveHelp("Feeding, water changes, doses and cleaning are on the supply shelf.")
@@ -526,6 +534,7 @@ private fun ColumnScope.CardBody(
                 T("Salt crash", ReefGlyphs.dropDown, danger = true) { actions.onPreset(SandboxPreset.SALINITY_CRASH) },
                 T("Copper spill", ReefGlyphs.copperBottle, danger = true) { actions.onPreset(SandboxPreset.COPPER_OVERDOSE) },
                 T("Too much food", ReefGlyphs.crumbs) { actions.onPreset(SandboxPreset.OVERFEEDING) },
+                T("Rockslide", ReefGlyphs.rocks, danger = true) { actions.onPreset(SandboxPreset.ROCKSLIDE) },
                 T("No water changes", ReefGlyphs.calendarX) { actions.onPreset(SandboxPreset.MISSED_WATER_CHANGES) },
                 T("Pest anemone", ReefGlyphs.pestAnemone) { actions.onAddAiptasia() },
                 T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },

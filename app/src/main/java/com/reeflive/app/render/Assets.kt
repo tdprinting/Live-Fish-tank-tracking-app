@@ -19,6 +19,8 @@ class DrawPart(
     val kind: MaterialKind,
     /** World-space centre of this part (polyps: mean instance position), for drawing one clump of a coral model. */
     val center: FloatArray = FloatArray(3),
+    /** CPU copy of the geometry (kept by the GLB), for splitting rock-attached parts by rock ([RockPoseDraw]). */
+    val prim: GlbPrimitive? = null,
 ) {
     val part: String get() = node.part
     /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
@@ -31,6 +33,20 @@ class DrawPart(
     val limbPivots: FloatArray? = node.floats("limbPivots")?.takeIf { it.size >= 40 }
     /** `extras.alphaTest`, parsed once (the draw loop reads it for every part every frame). */
     val alphaTest: Float? = node.float("alphaTest")
+    /**
+     * World-space bounds of this part (min xyz, max xyz; all zero when it has no geometry), for the camera's eye
+     * collision. Instanced polyps hold only their prototype here, so callers skip [MaterialKind.POLYP] parts.
+     */
+    val worldBounds: FloatArray = FloatArray(6).also { b ->
+        b[0] = Float.MAX_VALUE; b[1] = Float.MAX_VALUE; b[2] = Float.MAX_VALUE
+        b[3] = -Float.MAX_VALUE; b[4] = -Float.MAX_VALUE; b[5] = -Float.MAX_VALUE
+        val tmp = FloatArray(3)
+        for (pr in node.primitives) for (cx in 0..1) for (cy in 0..1) for (cz in 0..1) {
+            M.transformPoint(node.world, if (cx == 0) pr.bmin[0] else pr.bmax[0], if (cy == 0) pr.bmin[1] else pr.bmax[1], if (cz == 0) pr.bmin[2] else pr.bmax[2], tmp)
+            for (k in 0 until 3) { b[k] = minOf(b[k], tmp[k]); b[k + 3] = maxOf(b[k + 3], tmp[k]) }
+        }
+        if (b[0] > b[3]) b.fill(0f)
+    }
 }
 
 /** A GLB uploaded to GL. */
@@ -42,6 +58,8 @@ class GpuModel(val path: String, val glb: GlbModel, val parts: List<DrawPart>, p
     /** Root `iridescence` / `roughness` overrides for fish bodies, parsed once. */
     val iridescence: Float = glb.rootFloat("iridescence") ?: 0.1f
     val roughness: Float? = glb.rootFloat("roughness")
+    /** Organism models: the body length (or the anemone's tentacle span) the model was built at, cm. */
+    val lengthCm: Float? = glb.rootFloat("lengthCm")
     /** Organism models in cm (feather duster) are placed rigidly instead of spline-skinned. */
     val rigid: Boolean = glb.rootString("unit")?.startsWith("centimeters") == true
     /** Limb pivots of a limb-rigged crawler (brittle star, Sally Lightfoot; SIMULATION §19), or null. */
@@ -170,7 +188,7 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
                 val kind = if (organism) organismKind(node.part) else MaterialKind.forPart(node.part, src.blended)
                 if (kind == MaterialKind.UNLIT_HIDDEN) continue
                 val mat = Material(kind, src, texByImage[src.baseColorImage])
-                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table))
+                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table), prim)
             }
         }
         return GpuModel(p.path, glb, parts, texByImage.values.toList())

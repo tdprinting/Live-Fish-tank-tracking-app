@@ -5,8 +5,9 @@
 // the room environment (equirect room_env.png) and the fixture glow; premultiplied output (rendered last).
 // Algae on the inner face (research 09 A6): green film haze and diatom dust, densest diatoms, cyano and dinos
 // along the sand line; drawn behind the reflection and only below the water line. On the front pane the film is
-// spatial: uGlassMask (GlassMask, 64 x 32 over the wetted pane, 1 = untouched, 0 = scraped bare) thins every group
-// where the Flipper has been dragged, and the cleared stripes fill in again as the mask regrows.
+// spatial: uGlassMask (GlassMask, 128 x 64 over the wetted pane, 1 = untouched, 0 = scraped bare) thins every group
+// where the Flipper has been dragged and along the trails grazing snails and stars wear into the film (SIMULATION
+// §11.1), and the cleared stripes and trails fill in again as the mask regrows.
 
 in vec3 vWorld;
 in vec3 vNormal;

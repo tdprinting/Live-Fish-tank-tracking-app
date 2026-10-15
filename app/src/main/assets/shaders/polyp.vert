@@ -24,6 +24,13 @@ uniform float uHeight;
 uniform float uPhase;
 uniform float uBodySwayAmp;
 uniform vec4 uWake;
+// anemone mode (uSwayMode 2, the bubble-tip anemone, research 40): x bubble 0..1, y contraction 0..1 (deflated),
+// z feeding curl 0..1, w curl direction (radians about the disc axis, model space)
+uniform vec4 uAnem;
+// fish contact: world point (xyz) and radius (cm, w)
+uniform vec4 uAnemPush;
+// x push strength 0..1, y model scale (world cm per model cm), z/w unused
+uniform vec4 uAnemMisc;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -31,6 +38,8 @@ out vec2 vUv;
 out vec4 vColor;
 out float vVariant;
 out float vOpen;
+out float vTip;
+out float vGlow;
 
 // Rodrigues rotation of v about the unit axis k
 vec3 rotAxis(vec3 v, vec3 k, float a) {
@@ -38,8 +47,93 @@ vec3 rotAxis(vec3 v, vec3 k, float a) {
     return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
 }
 
+// Tentacle radius (fraction of the stringy length) and length factor at hinge h; tools/blender/anemone.py
+// tentacle_profile is the same formula. Stringy: long taper. Bubbled: shorter, a bulb at bp and a narrow tip.
+vec2 anemoneProfile(float h, float bubble, float bp) {
+    float lf = 1.0 - 0.38 * bubble;
+    float rs = 0.085 * (1.0 - 0.5 * h);
+    float bq = (h - bp) / 0.22;
+    float bulb = exp(-bq * bq);
+    float rb = 0.075 * (1.0 - 0.3 * h) + 0.09 * bulb;
+    float nip = smoothstep(bp + 0.14, bp + 0.3, h);
+    rb = mix(rb, 0.05, nip);
+    float r = mix(rs, rb, bubble);
+    float cq = (h - 0.93) / 0.07;
+    if (h > 0.93) r *= sqrt(clamp(1.0 - cq * cq, 0.0, 1.0));
+    return vec2(r, lf);
+}
+
+void anemone(float phase) {
+    float bubble = clamp(uAnem.x, 0.0, 1.0);
+    float ext = 1.0 - clamp(uAnem.y, 0.0, 1.0);
+    float k = mix(0.45, 1.0, ext);
+    vec3 p;
+    vec3 n;
+    float h = aColor.b;
+    vTip = 0.0;
+    if (aColor.g > 0.5) {
+        // oral disc + column: the disc shrinks and the column squats as the animal deflates
+        p = aPos * vec3(k, mix(0.75, 1.0, ext), k);
+        n = normalize(aNormal * vec3(1.0 / k, 1.0, 1.0 / k));
+        vGlow = aColor.r;
+        h = 0.0;
+    } else {
+        float bp = 0.5 + 0.25 * iPhaseVar.y;
+        float rl = length(aPos.xz);
+        vec2 dir = rl > 1e-5 ? aPos.xz / rl : vec2(0.0);
+        vec2 pr = anemoneProfile(h, bubble, bp);
+        vec2 pr2 = anemoneProfile(min(h + 0.02, 1.0), bubble, bp);
+        float len = 0.35 + 0.65 * ext;
+        p = vec3(dir.x * pr.x, h * pr.y, dir.y * pr.x) * len;
+        float drdy = (pr2.x - pr.x) / (0.02 * pr.y);
+        n = rl > 1e-5 ? normalize(vec3(dir.x, -drdy, dir.y)) : vec3(0.0, 1.0, 0.0);
+        // slow writhe about a per-tentacle side axis, larger for long stringy tentacles
+        vec3 side = vec3(cos(phase), 0.0, sin(phase));
+        float wr = h * h * (0.08 + 0.3 * (1.0 - bubble)) * sin(uTime * 0.55 + phase * 3.0);
+        p = rotAxis(p, side, wr);
+        n = rotAxis(n, side, wr);
+        vGlow = 1.0 - smoothstep(0.1, 0.3, h);
+        vTip = bubble * smoothstep(0.84, 0.96, h);
+    }
+    vec3 base = iPosScale.xyz * vec3(k, 1.0, k);
+    vec3 v = qrot(iQuat, p * iPosScale.w);
+    vec3 nn = qrot(iQuat, n);
+    if (aColor.g < 0.5) {
+        // tentacles tip inward as the animal balls up, and the ones on the food's side curl to the mouth
+        vec2 rad = length(iPosScale.xz) > 1e-4 ? normalize(iPosScale.xz) : vec2(1.0, 0.0);
+        vec3 axis = vec3(-rad.y, 0.0, rad.x);
+        float sector = smoothstep(0.2, 0.9, cos(atan(rad.y, rad.x) - uAnem.w));
+        float a = 0.7 * (1.0 - ext) + 1.5 * clamp(uAnem.z, 0.0, 1.0) * sector;
+        v = rotAxis(v, axis, a);
+        nn = rotAxis(nn, axis, a);
+    }
+    vec4 world = uModel * vec4(base + v, 1.0);
+    vec3 wn = normalize(mat3(uModel) * nn);
+    if (aColor.g < 0.5) {
+        float w = h * h * iPosScale.w * uAnemMisc.y;
+        // flow: bulbs are stiffer than stringy tentacles
+        float sw = sin(uTime * 1.3 + phase + dot(world.xz, vec2(0.21, 0.13)));
+        world.xyz += uSwayDir * (uSwayAmp * (1.0 - 0.6 * bubble) * (0.6 + 0.4 * sw)) * w;
+        // a fish pressing in (a nestling clown, a blundering tang) shoves the nearby tentacles aside
+        vec3 d = world.xyz - uAnemPush.xyz;
+        float dl = length(d);
+        float f = uAnemMisc.x * (1.0 - smoothstep(0.0, uAnemPush.w, dl));
+        world.xyz += (dl > 1e-4 ? d / dl : vec3(0.0, 1.0, 0.0)) * (0.6 * f * w);
+    }
+    vWorld = world.xyz;
+    vNormal = wn;
+    vUv = aUv;
+    vColor = aColor;
+    vVariant = iPhaseVar.y;
+    vOpen = ext;
+    gl_Position = uViewProj * world;
+}
+
 void main() {
     float phase = iPhaseVar.x * 6.2831;
+    if (uSwayMode > 1.5) { anemone(phase); return; }
+    vTip = 0.0;
+    vGlow = 1.0;
     float hinge = aColor.b;
     bool longTent = aColor.r > 0.5;
     vec3 p = aPos;

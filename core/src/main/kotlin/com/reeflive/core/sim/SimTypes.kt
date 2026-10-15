@@ -25,11 +25,31 @@ sealed class Command {
     /** The pilot's stick for the sub; it holds until the next one, so hosts send it only when the input changes. */
     data class SteerSubmarine(val controls: SubControls) : Command()
     /**
+     * Watch an animal from the sub ([Submarine.watch]): the autopilot glides over and keeps it company at a polite
+     * distance in [mode]; the stick then moves the sub round the fish. [id] null = back to free steering.
+     */
+    data class SubmarineWatch(val id: String?, val mode: SubWatch = SubWatch.HOVER) : Command()
+    /**
+     * The sub's ‹ › buttons: watch the next ([step] > 0) or previous living fish after the one being watched, in tank
+     * order; with none watched, the fish nearest the sub. Keeps the current mode. Invertebrates and corals are skipped.
+     */
+    data class SubmarineWatchNext(val step: Int = 1) : Command()
+    /**
      * A gentle fingertip tap on the tank at [point] (world cm): the front glass or water, the sand, the rock or a coral
      * ([TankTouch]). Nearby animals react by species and personality, get used to it when nothing follows, and a quick
      * run of taps in one spot becomes a [TapGlass] knock. [strength] 0..1 scales the reach (1 = an ordinary tap).
      */
     data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
+    /**
+     * Dynamic rockscape ([RockPhysics]): rocks can settle or topple when the sand under them is dug out. Off = static
+     * rock (no physics at all). Rocks that already moved stay where they came to rest either way.
+     */
+    data class DynamicRocks(val on: Boolean) : Command()
+    /**
+     * Sandbox "Rockslide": the sand is dug out from under one side of a rock that stands on sand (as a burrowing goby
+     * would, all at once), so with dynamic rocks on it settles or topples. [rock] picks it by name (null: any).
+     */
+    data class UndermineRock(val rock: String? = null) : Command()
     /**
      * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
      * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
@@ -152,8 +172,30 @@ data class LivestockSeed(
     val offset: Vec3? = null,
 )
 
-/** Routine maintenance jobs (research 01 §3.5). */
-enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO }
+/** Routine maintenance jobs (research 01 §3.5, §3.4): EMPTY_SKIMMER tips out the collection cup, TOP_OFF adds RO/DI for what evaporated. */
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO, EMPTY_SKIMMER, TOP_OFF }
+
+/**
+ * Equipment and upkeep at a glance ([WaterSim.careState]): the skimmer cup's fill (0..1), the sock's age, how much
+ * life the carbon has left (1 fresh .. 0 spent), the heater, and how full the tank is against its system volume
+ * (evaporation lowers it until a top-off). The tank check (core care TankDoctor) and the renderer read it.
+ */
+data class CareState(
+    val skimmerOn: Boolean = true,
+    val skimmerCup: Float = 0.3f,
+    val sockOn: Boolean = false,
+    val sockAgeH: Float = 0f,
+    val carbonOn: Boolean = false,
+    val carbonLeft: Float = 0f,
+    val heaterWorking: Boolean = true,
+    val heaterStuck: Boolean = false,
+    val heaterSetC: Float = 25.5f,
+    val waterFull: Float = 1f,
+    val ato: Boolean = false,
+) {
+    /** How dirty the sock looks: clean when new, brown after about three days in. */
+    val sockDirt: Float get() = (sockAgeH / 72f).coerceIn(0f, 1f)
+}
 
 /**
  * Fish diseases (research 01 §4.3). BROOKLYNELLA, URONEMA and FLUKES were added for the treatment model (W-4);
@@ -209,6 +251,11 @@ sealed class SimEvent {
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
+    /**
+     * A loose rock settled or toppled after the sand under it was dug out (dynamic rockscape, [RockPhysics]): [rock] is
+     * its name in the scape (R0…R10, glued rocks joined by '+'), moved [moveCm] and turned [turnDeg].
+     */
+    data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -307,6 +354,8 @@ data class CoralPose(
      */
     val size: Float = 1f,
     val cover: Float = 0f,
+    /** The rock piece the colony grows on ([SimSnapshot.rockPoses] index), −1 none: drawn moved with that rock. */
+    val rockPiece: Int = -1,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }
@@ -378,6 +427,14 @@ data class SimSnapshot(
     /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
     val bags: List<BagPose> = emptyList(),
     val bagHurry: Boolean = false,
+    /** Equipment upkeep (skimmer cup, sock, carbon, heater, water level) for the tank check and the renderer. */
+    val care: CareState = CareState(),
+    /**
+     * Rest → world 4×4 matrix (column-major) per rock piece ([RockData.pieces]) once any rock has moved, else null
+     * (every rock where it was built). Shared between snapshots until a rock moves again ([rockVersion]).
+     */
+    val rockPoses: FloatArray? = null,
+    val rockVersion: Long = 0,
     /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
     val net: NetPose? = null,
     val netFlush: NetFlush? = null,

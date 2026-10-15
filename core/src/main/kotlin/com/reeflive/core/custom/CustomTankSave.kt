@@ -80,6 +80,8 @@ data class SavedAnimal(
     val diseaseStage: Double = 0.0,
     val hlle: Double = 0.0,
     val nutritionGreens: Double = 1.0,
+    /** Species state that is not on [Organism] (an anemone's foot and shape, a clown's anemone acclimation); keys are stable. */
+    val state: Map<String, Double> = emptyMap(),
 )
 
 @Serializable

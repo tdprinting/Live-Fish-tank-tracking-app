@@ -4,6 +4,9 @@ package com.reeflive.web
 
 import com.reeflive.app.audio.TankSoundMix
 import com.reeflive.app.render.BurstKind
+import com.reeflive.app.render.CareAct
+import com.reeflive.app.render.CareJob
+import com.reeflive.app.render.CareShowControl
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.TankBurst
 import com.reeflive.app.render.TankBursts
@@ -19,6 +22,7 @@ import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.waterReadouts
 import com.reeflive.core.live.Scenario
 import com.reeflive.core.sim.BacteriaAction
+import com.reeflive.core.sim.CareFix
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
@@ -37,6 +41,7 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseChange
@@ -65,6 +70,10 @@ object ReefSandbox {
     private var predation = true
     private val extras = HashMap<String, Double>()
     internal val bursts = TankBursts()
+    /** "Fix tank": the 3D upkeep show (render CareScene) and the fixes still queued or playing in it. */
+    internal val care = CareShowControl()
+    private val fixQueued = HashSet<TankDoctor.Kind>()
+    private var fixList: List<CareFix> = emptyList()
 
     // ------------------------------------------------------------------ catalog (static tables for the page)
 
@@ -161,7 +170,7 @@ object ReefSandbox {
             initialWater = water,
             livestock = seeds,
             lights = LightSchedule(real.lights.points),
-        )
+        ).also { it.copyRocksFrom(real) }
     }
 
     private fun now(): Double = js("Date.now()") as Double
@@ -218,7 +227,7 @@ object ReefSandbox {
             "maintain" -> {
                 val t = MaintenanceTask.valueOf(arg ?: return false)
                 send(Command.Maintain(t))
-                burst(when (t) { MaintenanceTask.CHANGE_SOCK -> BurstKind.SUCTION; MaintenanceTask.REPLACE_CARBON -> BurstKind.CLARITY; MaintenanceTask.HARVEST_MACRO -> BurstKind.SPARKLE }, SUMP_SPOT)
+                burst(when (t) { MaintenanceTask.CHANGE_SOCK -> BurstKind.SUCTION; MaintenanceTask.REPLACE_CARBON -> BurstKind.CLARITY; MaintenanceTask.HARVEST_MACRO -> BurstKind.SPARKLE; MaintenanceTask.EMPTY_SKIMMER -> BurstKind.MICROBUBBLES; MaintenanceTask.TOP_OFF -> BurstKind.FRESH }, SUMP_SPOT)
             }
             "acclimate" -> send(Command.SetAcclimation(null))
             "rearrangeRock" -> { send(Command.RearrangeRock); burst(BurstKind.SILT, ROCK_SPOT, amount = 1.5f) }
@@ -292,6 +301,7 @@ object ReefSandbox {
             }
             SandboxPreset.SALINITY_CRASH -> { send(Command.RampParam("sal", 1.012, 30.0, hold = false)); burst(BurstKind.FRESH, DOSE_SPOT) }
             SandboxPreset.COPPER_OVERDOSE -> { send(Command.SetParam("copper", 0.5)); burst(BurstKind.DYE, DOSE_SPOT, floatArrayOf(0.85f, 0.47f, 0.23f)) }
+            SandboxPreset.ROCKSLIDE -> act("scenario", Scenario.ROCKSLIDE.name, 0.0)
         }
     }
 
@@ -369,6 +379,74 @@ object ReefSandbox {
     internal fun scrape(s: GlassStroke) {
         send(Command.ScrapeGlass(GlassPane.FRONT, s.x0.toDouble(), s.y0.toDouble(), s.x1.toDouble(), s.y1.toDouble(),
             GlassStroke.FLIPPER_W.toDouble(), GlassStroke.FLIPPER_H.toDouble()))
+    }
+
+    // ------------------------------------------------------------------ Fix tank (Android LiveTankScreen.playFix)
+
+    /** What the tank check (core TankDoctor) says the tank needs now, minus fixes already playing: JSON for the card. */
+    fun fixes(): String {
+        val s = sim ?: return "null"
+        val snap = s.latest
+        fixList = TankDoctor.diagnose(snap.water, snap.care).filter { it.kind !in fixQueued }
+        return JSON.stringify(obj { o ->
+            o.busy = fixQueued.size
+            o.list = fixList.map { f -> obj { it.kind = f.kind.name; it.title = f.title; it.why = f.why; it.urgent = f.urgent } }.toTypedArray()
+        })
+    }
+
+    /**
+     * Plays fix [index] of the last [fixes] list (-1 = all of them, one after another): the 3D animation, then its
+     * commands when it reaches the water. The page hears "onFixed" (kind) as each lands and "onFixedAll" at the end.
+     */
+    fun fix(index: Int): Boolean {
+        val l = if (index < 0) fixList else listOfNotNull(fixList.getOrNull(index))
+        for (f in l) playFix(f)
+        return l.isNotEmpty()
+    }
+
+    private fun playFix(f: CareFix) {
+        if (!fixQueued.add(f.kind)) return
+        val act = when (f.kind) {
+            TankDoctor.Kind.EMPTY_SKIMMER -> CareAct.EMPTY_CUP
+            TankDoctor.Kind.SWAP_SOCK -> CareAct.SWAP_SOCK
+            TankDoctor.Kind.FRESH_CARBON -> CareAct.SWAP_CARBON
+            TankDoctor.Kind.DOSE_MG, TankDoctor.Kind.DOSE_CA, TankDoctor.Kind.DOSE_ALK -> CareAct.DOSE
+            TankDoctor.Kind.TOP_OFF -> CareAct.TOP_OFF
+            TankDoctor.Kind.WATER_CHANGE, TankDoctor.Kind.RAISE_SALT -> CareAct.WATER_CHANGE
+            TankDoctor.Kind.LOWER_SALT -> CareAct.RO_SWAP
+            TankDoctor.Kind.HEATER, TankDoctor.Kind.PUMPS, TankDoctor.Kind.FEED_CORALS -> CareAct.PAUSE
+        }
+        val tint = when (f.kind) {
+            TankDoctor.Kind.DOSE_ALK -> 0xB08CFF
+            TankDoctor.Kind.DOSE_CA -> 0xE8F2FF
+            TankDoctor.Kind.DOSE_MG -> 0x8FE66B
+            TankDoctor.Kind.RAISE_SALT -> 0xD6F2FF
+            else -> 0xBFE6FF
+        }
+        care.play(CareJob(act, tint, f.amount.toFloat(), onImpact = {
+            careCommands(f.commands)
+            when (f.kind) {
+                TankDoctor.Kind.HEATER -> burst(BurstKind.HEAT, HEATER_SPOT)
+                TankDoctor.Kind.PUMPS -> { burst(BurstKind.PUMP_ON, PUMP_LEFT); burst(BurstKind.PUMP_ON, PUMP_RIGHT) }
+                TankDoctor.Kind.FEED_CORALS -> burst(BurstKind.SPLASH, FEED_SPOT)
+                else -> Unit
+            }
+            live.emit("onFixed", f.kind.name)
+        }, onDone = {
+            fixQueued.remove(f.kind)
+            if (fixQueued.isEmpty()) live.emit("onFixedAll", null)
+        }))
+    }
+
+    /** Upkeep, doses and water changes work in both modes (the owner's own care); gear switches are sandbox-only. */
+    private fun careCommands(cmds: List<Command>) {
+        for (c in cmds) when (c) {
+            is Command.Heater -> if (sandbox) send(c)
+            is Command.Powerheads -> if (sandbox) { send(c); extras["pump_left"] = if (c.on) 1.0 else 0.0; extras["pump_right"] = extras["pump_left"]!! }
+            is Command.SetParam -> if (sandbox) { send(c); if (c.paramId == "skimmer") extras["eq_skimmer"] = c.value }
+            is Command.Maintain -> { send(c); if (sandbox && c.task == MaintenanceTask.CHANGE_SOCK) extras["eq_sock"] = 1.0; if (sandbox && c.task == MaintenanceTask.REPLACE_CARBON) extras["eq_carbon"] = 1.0 }
+            else -> send(c)
+        }
     }
 
     private fun burst(kind: BurstKind, at: FloatArray, tint: FloatArray = WHITE, amount: Float = 1f) =

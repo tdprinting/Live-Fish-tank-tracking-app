@@ -1,0 +1,137 @@
+{
+  "id": "entacmaea_quadricolor",
+  "kind": "INVERT",
+  "common": "Rainbow bubble tip anemone",
+  "scientific": "Entacmaea quadricolor (rainbow morph)",
+  "family": "Actiniidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 20,
+  "growthCmPerYear": 6,
+  "lifespanYears": 50,
+  "depthRatio": 0.5,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 5e-05,
+    "burstBL": 0.0002,
+    "tailHzCruise": 0,
+    "turnRateDeg": 5,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.8,
+    "openWater": 0.0,
+    "coverAffinity": 0.6
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 15,
+  "temperament": {
+    "aggression": 0.4,
+    "boldness": 0.5,
+    "curiosity": 0.0,
+    "skittishness": 0.4
+  },
+  "diet": [
+    "LIGHT",
+    "MYSIS",
+    "KRILL",
+    "PRAWN",
+    "PELLET",
+    "BRINE",
+    "MEATY"
+  ],
+  "feedsPerDay": 0.3,
+  "tolerance": {
+    "temp": {
+      "optLo": 23.5,
+      "optHi": 27.0,
+      "tolLo": 21.0,
+      "tolHi": 28.5,
+      "lethalLo": 17.0,
+      "lethalHi": 31.0
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.026,
+      "tolLo": 1.021,
+      "tolHi": 1.027,
+      "lethalLo": 1.017,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.6,
+      "lethalHi": 8.8
+    },
+    "alk": {
+      "optLo": 7.0,
+      "optHi": 11.0,
+      "tolLo": 6.0,
+      "tolHi": 12.0,
+      "lethalLo": 4.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.08
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.2,
+      "lethalHi": 1.0
+    },
+    "no3": {
+      "optHi": 25.0,
+      "tolHi": 40.0,
+      "lethalHi": 100.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.25,
+      "lethalHi": 0.6
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.6,
+  "starvationDays": 120,
+  "model": "models/bubble_tip_anemone.glb",
+  "colors": {
+    "primary": "#FF7418",
+    "secondary": "#3EE07C",
+    "accent": "#FF4FB8"
+  },
+  "brain": "anemone",
+  "minTankGallons": 30,
+  "coral": {
+    "lightLo": 0.3,
+    "lightHi": 0.85,
+    "flow": "MODERATE",
+    "growth": "Moderate",
+    "aggression": "High",
+    "fluorescence": 0.7
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "copperSensitive": true,
+  "dietSummary": "Mostly fed by the algae in its tissue; catches mysis, krill and pellets with sticky tentacles and passes them to its mouth. A meaty feed once or twice a week helps it grow.",
+  "temperamentSummary": "Walks on its foot until it finds a crevice with good light and flow, then stays. Stings corals and fish it touches, except clownfish that have adopted it.",
+  "careNotes": [
+    "Add to a mature tank (6+ months); keep it away from powerhead intakes.",
+    "Tentacles swell into bubbles or go long and stringy; the cause is not well understood (light and feeding are suspects).",
+    "Deflates now and then to flush waste and reinflates over a few hours; daily deflation or a gaping mouth means trouble.",
+    "Bleaches (turns pale) after several days above about 27-28 C, faster under strong light.",
+    "Can split in two (clones); clones sit together peacefully but sting other anemones.",
+    "Ocellaris clowns are not natural hosts but usually adopt it after days to weeks of testing touches."
+  ]
+}

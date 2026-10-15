@@ -66,13 +66,33 @@ class AnchorSet(anchors: Collection<Anchor>) {
  */
 class RockData(
     val sdf: Sdf,
-    val anchors: AnchorSet,
+    anchors: AnchorSet,
     val lengthCm: Double = TankDims.LENGTH_CM,
     /** Front-to-back depth (z), back glass z = 0. */
     val widthCm: Double = TankDims.DEPTH_CM,
     val sandTopCm: Double = TankDims.SAND_TOP_CM,
     val waterLevelCm: Double = TankDims.WATER_LEVEL_CM,
+    /** The loose rocks the scape is made of (empty: one solid scape that never moves). */
+    val pieces: List<RockPieceDef> = emptyList(),
 ) {
+    /** Anchors as built; [anchors] follows rocks that moved (dynamic rockscape). */
+    val restAnchors: AnchorSet = anchors
+    var anchors: AnchorSet = anchors
+        internal set
+
+    /** The movable field when this copy belongs to one simulation ([forSim]); null for a shared, static scape. */
+    val dynamic: DynamicRockSdf? get() = sdf as? DynamicRockSdf
+
+    /**
+     * A copy for one [Simulation]: the same baked field wrapped so its rocks can move without touching any other
+     * simulation's tank (reality and sandbox share the loaded files). A scape without pieces is returned as is.
+     */
+    fun forSim(): RockData {
+        if (pieces.isEmpty()) return this
+        val base = (sdf as? DynamicRockSdf)?.base ?: sdf
+        return RockData(DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces)
+    }
+
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
         sdf.dist(p), p.y - sandTopCm, waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
@@ -94,7 +114,7 @@ class RockData(
 
         /** Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names. */
         fun fromFiles(sdfBytes: ByteArray, anchorsJson: String): RockData =
-            RockData(SdfGrid.parse(sdfBytes), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()))
+            RockData(SdfGrid.parse(sdfBytes), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
 
         /** The analytic recreation of Tee's rockscape (ASSETS §3.1) with snapped anchors and carved holes. */
         fun defaultTank(): RockData = DefaultScape.build()
@@ -134,6 +154,19 @@ object DefaultScape {
         // R10 (Z8)
         e(82.0, 5.5, 22.0, 7.0, 4.0, 6.0), e(81.5, 9.0, 21.0, 5.0, 2.5, 4.5),
     )
+
+    /**
+     * The loose rocks of the scape (rockscape.py `ROCKS`), as index ranges into [blobs]. R8's second blob is the pink
+     * knob on R9's front, so it rides with R9. [RockPhysics] moves these; the renderer splits the mesh by them.
+     */
+    val pieces: List<RockPieceDef> by lazy {
+        fun p(name: String, vararg i: Int) = RockPieceDef(name, i.map { blobs[it] })
+        listOf(
+            p("R0", 0, 1), p("R2", 2, 3, 4, 5, 6), p("R1", 7, 8, 9, 10, 11), p("R4", 12, 13, 14, 15),
+            p("R3", 16, 17, 18, 19), p("R5", 20, 21, 22, 23, 24), p("R6", 25, 26, 27, 28), p("R9", 29, 30, 34),
+            p("R7", 31, 32), p("R8", 33), p("R10", 35, 36),
+        )
+    }
 
     /** Raw (un-snapped) anchors from ASSETS §3.4 plus Track C additions for the new species. */
     fun anchorsRaw(): AnchorSet {
@@ -209,6 +242,6 @@ object DefaultScape {
             val depth = h.depth ?: 6.0
             carves += Tunnel(listOf(h.pos + dir * 1.5, h.pos - dir * depth), if (h.name == "HOLE_LAWNMOWER") 1.8 else 1.4)
         }
-        return RockData(AnalyticSdf(blobs, carves), set)
+        return RockData(AnalyticSdf(blobs, carves), set, pieces = pieces)
     }
 }
