@@ -60,6 +60,11 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
         /** Share of the dive spent digging the slot; the cover is pulled back over the body from [COVER_FROM] on. */
         @Ev(Evidence.DESIGN_ESTIMATE, "SICB P2-191: plunge, then body waves until covered") const val DIG_SHARE = 0.85
         const val COVER_FROM = 0.55
+        /**
+         * Share of the sand it moves that flies as grains rather than being shoved: sand-diving wrasses fluidise the bed
+         * with body waves and the sand closes over them (SICB P2-191: body waves until covered); the share is not measured.
+         */
+        @Ev(Evidence.DESIGN_ESTIMATE, "SICB P2-191: plunge, body waves, sand closes over") const val AIRBORNE = 0.35
         /** The fish lies on its side in the sand: slot width = body depth, thickness = body width (≈ 0.45 × depth). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val THICK_OF_DEPTH = 0.45
         /** Least cover over the body that hides it (cm). */
@@ -314,8 +319,10 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     val k = (timer / diveS).coerceIn(0.0, 1.0)
                     val body = sand.buriedOf(o.id)
                     if (body != null) {
-                        val moved = sand.buryStep(body, k / DIG_SHARE, (k - COVER_FROM) / (1 - COVER_FROM))
-                        // the grains it kicks loose: a small plume that settles back (fines drift off with the flow)
+                        // the body wave flings the dug sand up and out as grains (to the side the tail sweeps), then
+                        // throws it back over itself; the grains build the rim and the cover where they land
+                        val moved = sand.buryStep(body, k / DIG_SHARE, (k - COVER_FROM) / (1 - COVER_FROM), AIRBORNE, sin(c.t * 30.0))
+                        // the fines it kicks loose: a small haze that settles back or drifts off with the flow
                         if (moved > 0.15 && c.rng.chance(0.5)) sand.puff(body.cx, sand.surfaceY(body.cx, body.cz) + 0.4, body.cz, 2, 3.0, diveDir.x, diveDir.z, finesShare = 0.4)
                     }
                     val g = sand.surfaceY(sleepSpot.x, sleepSpot.z)
@@ -351,7 +358,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                         phase = 3; timer = 0.0
                         emergeFrom = buriedPos()
                         // it bursts out head first: the cover over its head is thrown aside (a dimple with a low rim)
-                        if (sand.buriedOf(o.id) != null) sand.emergeFrom(o.id) else sand.sandEmerge(sleepSpot.x, sleepSpot.z, o.lengthCm)
+                        if (sand.buriedOf(o.id) != null) sand.emergeFrom(o.id, airborne = AIRBORNE) else sand.sandEmerge(sleepSpot.x, sleepSpot.z, o.lengthCm)
                         val g = sand.surfaceY(emergeFrom.x, emergeFrom.z)
                         sand.puff(emergeFrom.x, g + 0.3, emergeFrom.z, 4, 3.0, finesShare = 0.4)
                         o.visible = true

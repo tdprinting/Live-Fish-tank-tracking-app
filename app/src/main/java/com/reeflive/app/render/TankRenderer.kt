@@ -305,7 +305,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
         snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
-        sandClouds?.let { drawCalls += it.draw(progs.particles, cur?.sandClouds, height) }
+        sandClouds?.let {
+            // the scene is drawn between the two newest snapshots: carry the older one's grains along their velocity
+            val prev = interp.previous
+            val ahead = if (prev != null && cur != null) (interp.alpha(now) * (cur.simTimeSec - prev.simTimeSec)).toFloat() else 0f
+            drawCalls += it.draw(progs.particles, prev?.sandClouds ?: cur?.sandClouds, height, ahead)
+        }
         inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
         white?.let { w ->
             if (!subScene.visible) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost sub, see-through

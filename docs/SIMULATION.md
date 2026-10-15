@@ -1127,7 +1127,7 @@ Sources: [research 16, diamond goby](research/16_diamond_goby.md). The sand used
 
 ### 16.1 The grid
 
-`SandBed` is 64 × 24 cells over the 121.9 × 33 cm floor (≈ 1.9 × 1.4 cm). Each cell holds three values:
+`SandBed` is 128 × 48 cells over the 121.9 × 45.7 cm floor (≈ 0.95 cm square; 64 × 24 before §16.11). Each cell holds three values:
 
 - **height**: an offset in cm from the modelled bed. It is clamped to −3 (pit) … +4 (mound) on open sand; under rock it can be dug almost to the glass (§16.8).
 - **freshness**: 0…1. Turned sand is the damp, darker layer from below. It fades with τ = 6 h.
@@ -1317,6 +1317,43 @@ Every species moves sand through the same `SandBed` operations, and all of them 
 - **Emergence.** 15–60 min after lights-on it bursts out (`emergeFrom` plus a puff) and rises from that depth.
 
 Abstract mode (no dive) keeps it 3 cm under the live surface. Tests: `SandBurialTest`, `LeopardWrasseTest`.
+
+### 16.11 Sand as grains: thrown, rolling and pouring (owner request 2026-10-15)
+
+Tee asked for sand that moves as particles: Marina has to really bury herself, and Sandy has to pick sand up, clean it
+and spit it out. The bed stays a heightfield (`surfaceY` is still the collision floor for every other system), but sand
+that moves now travels as grains in between, and slopes fail as it happens.
+
+- **Finer bed.** 128 × 48 cells (≈ 0.95 cm, research sand_bioturbation: "1 cm acceptable"). The renderer splits the sand
+  mesh's top triangles once at load (`Mesh.subdivide`, ≈ 0.75 × 1 cm vertices) so a fish-sized slot or a mouthful's pit
+  shows; the skirt down the glass stays as built.
+- **Grains** (`launchGrains`, the hook for anything that digs or spits). Sand taken off the bed is thrown as pooled
+  particles (≤ 1200 live, recycled after landing their sand) that each carry their share (a clump of at most 0.03 cm³).
+  They ride the jet (τ 0.25 s), sink at their Ferguson–Church settling velocity (§16.3) and join the grid only where
+  they stop, so a rim, a heap or a fish's cover is built by the grains that land on it. Mass-conserving:
+  `sandVolumeCm3` counts grains in flight and sand held in mouths.
+- **Rolling.** A grain landing on a face steeper than 0.85 × repose rolls on: submerged weight down the slope
+  (g (ρs − ρw)/(ρs + ½ρw) ≈ 540 cm/s² for aragonite), Coulomb friction at the dynamic angle (tan 28°, research §3: an
+  avalanche runs until ≤ ~28°) and water drag, until it stops on a gentler slope (≤ 2.5 s).
+- **Slope failure as it happens** (`avalanche`, every step). Tiles of 8 × 8 cells that changed are watched for 1.5 s: any
+  pair steeper than repose (tan 32°, tan 63° under rock) sheds its excess with τ 0.3 s, part of it as rolling grains,
+  so a rim pours back into a slot and a spoil heap slumps while you watch. Same rule as `relax`'s first pass, so a
+  bed left alone ends where it did before. Never below a floor.
+- **Marina** (`buryStep(…, airborne = 0.35, wave)`): 35 % of what she digs flies up and out (70 % to the side her tail
+  sweeps, from the rear two thirds where the body wave is biggest) and 35 % of the cover is thrown back from the rim
+  onto her; the rest is laid as before, then the faces pour. Bursting out throws grains up around the hole. Share is
+  a design estimate; timing stays SICB P2-191 (1.05–3.06 s).
+- **Sandy** (diamond goby): nose down at 35° with the mouth 3.5 mm into the bed; `scoop` takes the mouthful (0.18 cm³,
+  research S1) into `heldCm3`, a pit at the mouth, a few grains spilling from the mouth corners. While it chews, fines
+  seep from both gill slits; then three gill pumps blow the held sand out of both gill openings (back and out), and it
+  pours down beside and behind it. Interrupted, it drops what it holds.
+- **Engineer goby.** A live spit lets 40 % of the load fall as grains onto its spoil heap.
+- **Renderer.** `SandCloudRenderer` draws grains as lit specks in mixed aragonite tones (a clump as three), carried
+  along their velocity from the older snapshot so they fall smoothly at 60 fps; the sim sends a new sand grid every
+  0.1 s while grains fly or a slope pours (`SandBed.busy`), 0.25 s otherwise; `SandFx` uploads it at most every 80 ms.
+- **Cost** (JVM, full stock, 20 Hz): +0.1 ms per tick during a dive, +0.2 ms per tick while Sandy sifts all day.
+
+Tests: `SandGrainTest`.
 
 ## 17. Microfauna in the display tank (`sim/MicroCritters.kt`, `render/MicroCritterVisuals.kt`)
 

@@ -11,6 +11,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+/** static.vert lifts sand vertices above this height (cm) by the sand map; the skirt down the glass sits below it. */
+private const val SAND_LIFT_Y = 0.5f
+
 /** One drawable node of a model: mesh + material + its GLB node. */
 class DrawPart(
     val node: GlbNode,
@@ -170,7 +173,10 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
                 val kind = if (organism) organismKind(node.part) else MaterialKind.forPart(node.part, src.blended)
                 if (kind == MaterialKind.UNLIT_HIDDEN) continue
                 val mat = Material(kind, src, texByImage[src.baseColorImage])
-                parts += DrawPart(node, Mesh.from(prim, inst), mat, kind, partCenter(node, prim, table))
+                // the sand bed is lifted per vertex by the sim's ≈ 1 cm grid (SandFx): give it vertices that fine
+                val mesh = if (kind == MaterialKind.SAND) Mesh.subdivide(prim.vertices, prim.indices) { _, y, _ -> y > SAND_LIFT_Y }.let { (v, i) -> Mesh.create(v, i, inst) }
+                    else Mesh.from(prim, inst)
+                parts += DrawPart(node, mesh, mat, kind, partCenter(node, prim, table))
             }
         }
         return GpuModel(p.path, glb, parts, texByImage.values.toList())
