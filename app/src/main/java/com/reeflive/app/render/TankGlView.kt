@@ -79,6 +79,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         get() = renderer.shelf
         set(v) { renderer.shelf = v }
 
+    /** "Fix my tank" upkeep shows, played one after another by the renderer. */
+    var care: CareShowControl?
+        get() = renderer.care
+        set(v) { renderer.care = v }
+
     val stats: StateFlow<RenderStats> get() = renderer.stats
 
     @SuppressLint("ClickableViewAccessibility")

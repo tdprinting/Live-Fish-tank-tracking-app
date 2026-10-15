@@ -53,6 +53,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
         }
     }
+    /** "Fix my tank" care animations (skimmer cup, sock, doses, water changes); null = only the props at rest. */
+    @Volatile var care: CareShowControl? = null
+    private val careScene = CareScene().also { cs ->
+        cs.onBurst = { b -> particles.burst(b, interp.current) }
+    }
     @Volatile private var requestedQuality = initialQuality
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -230,6 +235,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
         if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
+        careScene.update(dt, care, cur?.care) { r -> main.post(r) }
         val taps = input.drain(camera, width, height)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
@@ -271,6 +277,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         tank?.let { drawStatic(it, progs, light, opaque = true) }
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
+        val careModel = store.model(CareLayout.MODEL)
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true) }
         drawShelf(progs)
         // corals: soft bodies then polyps
@@ -318,6 +326,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         // acclimation bags: see-through plastic over the animals riding in them
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
+        // care props: the clear skimmer cup, the jug and hose, water in the bucket, pour streams
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL); GLES30.glPolygonOffset(-1f, -2f)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GLASS) }

@@ -89,6 +89,11 @@ h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .opt .ico { font-size: 24px; }
 .opt.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.25); }
 .opt.lock { opacity: .45; }
+.fixes { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.fix { display: flex; align-items: center; gap: 10px; border: 1px solid var(--glassBorder); background: var(--glass); border-radius: 14px; padding: 8px 10px; }
+.fix .ico { font-size: 24px; }
+.fix .txt { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.fix.urgent { border-color: #ff5c6c; }
 .opt:active { transform: scale(.96); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
 .pillbtn { border: 1px solid var(--glassBorder); background: var(--glass); border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer; }

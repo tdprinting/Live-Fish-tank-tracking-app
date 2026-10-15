@@ -47,6 +47,8 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'FIX') renderCard(); },
+    onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'FIX') renderCard(); },
   }).then(() => {
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
@@ -195,13 +197,14 @@ function setSpeed(v) {
 const CATS = {
   VIEW: { ico: '👀', label: 'Watch' },
   SUPPLIES: { ico: '🧺', label: 'Supplies' },
+  FIX: { ico: '🩺', label: 'Fix tank' },
   LIFE: { ico: '🐠', label: 'Add life' },
   TANK: { ico: '💡', label: 'Tank' },
   TROUBLE: { ico: '⚡', label: 'Trouble' },
   MORE: { ico: '⋯', label: 'More' },
 };
 function renderRail() {
-  const cats = ui.mode === 'sandbox' ? ['SUPPLIES', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'MORE'];
+  const cats = ui.mode === 'sandbox' ? ['SUPPLIES', 'FIX', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'FIX', 'MORE'];
   $('rail').innerHTML = cats.map((c) => `<button class="tool ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${CATS[c].ico}</span><span>${CATS[c].label}</span></button>`).join('');
 }
 $('rail').addEventListener('click', (e) => {
@@ -229,13 +232,14 @@ function renderCard() {
   let h = '';
   switch (ui.card) {
     case 'VIEW': h = viewCard(); break;
+    case 'FIX': h = fixCard(); break;
     case 'LIFE': h = lifeCard(sb); break;
     case 'TANK': h = tankCard(sb); break;
     case 'TROUBLE': h = troubleCard(sb); break;
     case 'MORE': h = moreCard(sb); break;
   }
   $('card').innerHTML = `<div class="card-head"><strong>${CATS[ui.card].ico} ${CATS[ui.card].label}</strong>
-    <span>${ui.card !== 'VIEW' && ui.card !== 'MORE' ? `<button class="btn small ghost" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
+    <span>${ui.card !== 'VIEW' && ui.card !== 'MORE' && ui.card !== 'FIX' ? `<button class="btn small ghost" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
     <button class="icon-btn" data-close aria-label="Close">✕</button></span></div><div class="card-body">${h}</div>`;
   $('card').classList.remove('hidden');
 }
@@ -256,6 +260,27 @@ function viewCard() {
       ${tile('data-hide', '🎞', 'Cinematic')}${tile('data-saver', '🌙', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
     <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, '🐟', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
 }
+
+// ---- Fix tank: the tank check's list (core TankDoctor); each fix plays in the 3D tank, then goes in
+const FIX_ICON = { EMPTY_SKIMMER: '🫧', SWAP_SOCK: '🧦', FRESH_CARBON: '⚫', WATER_CHANGE: '🪣', TOP_OFF: '💧', LOWER_SALT: '💧', RAISE_SALT: '🧂',
+  DOSE_MG: '🧴', DOSE_CA: '🧴', DOSE_ALK: '🧴', HEATER: '🔥', PUMPS: '🌀', FEED_CORALS: '🍤' };
+function fixCard() {
+  const f = JSON.parse(SB.fixes());
+  if (!f) return '';
+  if (!f.list.length) {
+    return f.busy ? '<p><strong>Fixing...</strong></p><p class="muted">Watch the tank: the fixes are going in one by one.</p>'
+      : '<p><strong>💚 Your tank looks great!</strong></p><p class="muted">The water and the gear are all in good shape. Check again after a few days.</p>';
+  }
+  return `<p class="muted">${f.list.length === 1 ? 'The tank needs one thing.' : `The tank needs ${f.list.length} things. Fix them one by one or all at once.`}</p>
+    ${f.list.length > 1 ? `<div class="options">${tile('data-fixall', '✨', `Fix everything (${f.list.length})`)}</div>` : ''}
+    <div class="fixes">${f.list.map((x, i) => `<div class="fix ${x.urgent ? 'urgent' : ''}"><span class="ico">${FIX_ICON[x.kind] || '🩺'}</span>
+      <span class="txt"><strong>${esc(x.title)}</strong><span class="muted">${esc(x.why)}</span></span>
+      <button class="btn small" data-fix="${i}">Fix</button></div>`).join('')}</div>`;
+}
+const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK: 'Stinky old sock out, fresh one in!', FRESH_CARBON: 'Fresh carbon for sparkly water.',
+  WATER_CHANGE: 'Fresh salt water! The fish love it.', TOP_OFF: 'Topped off with fresh water.', LOWER_SALT: 'A little less salty now.', RAISE_SALT: 'A little saltier now.',
+  DOSE_MG: 'Coral vitamins in! Just the right amount.', DOSE_CA: 'Coral vitamins in! Just the right amount.', DOSE_ALK: 'Coral vitamins in! Just the right amount.',
+  HEATER: 'New heater on. Nice and warm again.', PUMPS: 'Whoosh! The water is moving again.', FEED_CORALS: 'Yum, coral food!' };
 
 // ---- Add life
 function lifeCard(sb) {
@@ -388,6 +413,8 @@ $('card').addEventListener('click', (e) => {
   const d = b.dataset;
   const sbOnly = (fn) => { if (ui.mode !== 'sandbox') { locked(); return; } fn(); };
   if ('close' in d) { closeCard(); return; }
+  if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
+  if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);

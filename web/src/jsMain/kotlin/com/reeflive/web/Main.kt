@@ -149,6 +149,7 @@ object ReefLive {
                 shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
                 r.shelf = shelf
                 r.bursts = ReefSandbox.bursts
+                r.care = ReefSandbox.care
                 renderer = r
                 r.onSurfaceCreated(null, null)
                 resize()

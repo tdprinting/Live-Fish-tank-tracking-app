@@ -58,6 +58,8 @@ fun TankView(
     viewLight: ViewLight = ViewLight.REAL,
     /** The supply shelf beside the tank (Supplies mode), driven through this handle; null = no shelf. */
     shelf: SupplyShelfControl? = null,
+    /** "Fix my tank" upkeep shows (skimmer cup, filter sock, dosing, water change), played through this handle. */
+    care: CareShowControl? = null,
     /** Submarine mode: ride inside the sub instead of chasing it. */
     subFirstPerson: Boolean = false,
 ) {
@@ -68,7 +70,7 @@ fun TankView(
         onPick = onPick, onTapGlass = onTapGlass, onLongPress = onLongPress, onFollowLost = onFollowLost,
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
-        bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson,
+        bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson,
     )
 }
 
@@ -103,6 +105,7 @@ fun TankView(
     bursts: TankBursts? = null,
     viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
+    care: CareShowControl? = null,
     subFirstPerson: Boolean = false,
 ) {
     val pick by rememberUpdatedState(onPick)
@@ -148,6 +151,7 @@ fun TankView(
                         v.bursts = bursts
                         v.viewLight = viewLight
                         v.shelf = shelf
+                        v.care = care
                         view = v
                     }
                 },
@@ -160,6 +164,7 @@ fun TankView(
                     v.bursts = bursts
                     v.viewLight = viewLight
                     v.shelf = shelf
+                    v.care = care
                     v.subFirstPerson = subFirstPerson
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },

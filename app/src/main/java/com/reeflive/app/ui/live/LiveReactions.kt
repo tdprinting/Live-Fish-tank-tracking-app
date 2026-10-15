@@ -382,6 +382,21 @@ object LiveReactions {
                 listOf(Feedback.burst(BurstKind.HAZE, FxSpots.DOSE, carbonDust, 0.4f), Feedback.burst(BurstKind.CLARITY, FxSpots.DOSE)),
             ),
         )
+        MaintenanceTask.EMPTY_SKIMMER -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.skimmer, caption = "Skimmer cup emptied"), "Yuck, skimmer goo! The cup is clean, so the skimmer pulls muck out again.",
+            feedback = Feedback(
+                "Skimmer cup emptied", "A full cup stops skimming: empty and wipe it about once a week",
+                listOf(Feedback.burst(BurstKind.MICROBUBBLES, FxSpots.SUMP)),
+            ),
+        )
+        MaintenanceTask.TOP_OFF -> Reaction(
+            TankFx(FxKind.MAINTAIN, FxSpots.SUMP, glyph = ReefGlyphs.droplet, caption = "Topped off"), "Fresh water in for what evaporated. Only fresh, never salty!",
+            feedback = Feedback(
+                "Topped off with RO water", "Evaporation leaves the salt behind: fresh water puts the salinity back",
+                listOf(Feedback.burst(BurstKind.FRESH, FxSpots.DOSE)),
+                watch = "sal",
+            ),
+        )
         MaintenanceTask.HARVEST_MACRO -> if (now != null && !SupplyPreview.canTrim(now)) {
             Reaction(
                 TankFx(FxKind.SPARKLE, FxSpots.ROCK, glyph = ReefGlyphs.refugium, tint = Color(0xFF8EE66B), caption = "Nothing to trim"),
