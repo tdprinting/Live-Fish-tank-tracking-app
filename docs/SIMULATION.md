@@ -1856,6 +1856,17 @@ AI cost: the probe's 30 sim-minutes take the same wall time as before (~13.5 s);
 
 `LivelierFishTest` checks the clown trips (more at dawn than midday, within the leash) and the tang's height spread.
 
+### 22.3 Part 3: gobies, dottyback, cleaner wrasse
+
+| Species | Measured before | Change |
+|---|---|---|
+| Engineer goby (juvenile) | Hovered by the burrow mouth 80–90 % of the day. | Every 30–70 s a 20–60 s plankton trip 1–2 body lengths up off the burrow and up to 1.5 out, snapping every 2–5 s, nose into the flow; straight back down when alarmed (research 30 §4: juveniles feed on plankton away from the burrow by day; the wild 50 m roam scaled to the tank). |
+| Diamond goby | Sifted 99 % of the day, about 14 mouthfuls a minute. | Half of its sifting bouts end in a 4–15 s rest on the sand, eyes turning, gills slowing (`SandRest`): about 10 mouthfuls a minute, near the measured ~9 counting rests (Myers et al. 2019). |
+| Indigo dottyback | Crevice-to-crevice route only. | Three rounds in ten start with a quick sweep into the open water in front of the cave and back (research 30 §3, hobby observations; DESIGN ESTIMATE). |
+| Cleaner wrasse | Service the same whatever its hunger. | A sated cleaner inspects for up to 20 % less time (Triki et al. 2025: satiated cleaners give poorer service). |
+
+`LivelierFishTest` also checks the diamond goby's mouthful rate and rests and the engineer goby's trips.
+
 ## 23. Fish waste (`sim/WasteSystem.kt`, `render/WasteVisuals.kt`, research 18_fish_waste)
 
 - **Guts.** 17 % of each fish's N output is fecal, not gill ammonia (feed N budget: 13 % in solids vs 62 % dissolved,
