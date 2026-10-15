@@ -283,4 +283,5 @@ enum class SandboxPreset(val label: String, val blurb: String, val focus: Sandbo
     MISSED_WATER_CHANGES("Missed water changes", "About two months of build-up: nutrients up, alk, Ca and Mg down.", SandboxCategory.NUTRIENTS, "Nitrate and Phosphate jumped; algae follows at 1000x."),
     SALINITY_CRASH("Salinity crash", "Top-off floods fresh water: SG falls to 1.012.", SandboxCategory.WATER, "Salinity is in the danger zone; watch the fish cards."),
     COPPER_OVERDOSE("Copper overdose", "Copper reaches 0.5 ppm: lethal to inverts and corals.", SandboxCategory.CHEMISTRY, "Copper is far past the danger line; try 60x."),
+    ROCKSLIDE("Rockslide", "The sand is dug out from under one side of a rock, like a busy goby would.", SandboxCategory.EVENTS, "Watch the rock settle or topple; fish dart away."),
 }

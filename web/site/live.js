@@ -26,6 +26,7 @@ const ui = {
   torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
   water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
+  rocks: store.get('reeflive.rocksDynamic', true),
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
@@ -65,9 +66,13 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // a rock settled or toppled after the sand under it was dug out: remember where it lies now
+    onRocks: (state) => { store.set('reeflive.rocks', state); say('Crunch! A rock shifted. The gobies dug out too much sand under it.'); },
     // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
     ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
   }).then(() => {
+    live.restoreRocks(store.get('reeflive.rocks', ''));
+    live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     $('loading').classList.add('done');
@@ -437,7 +442,7 @@ function troubleCard(sb) {
     ${tile('data-preset="HEATER_STUCK"', 'flame', 'Heater stuck on', false, !sb)}${tile('data-pumpfail', 'powerhead', 'Pumps stop tonight', false, !sb)}
     ${tile('data-lights="off"', 'lampOut', 'Lamp goes out', false, !sb)}${tile('data-preset="POWER_OUTAGE"', 'plugOff', 'Power cut', false, !sb)}
     ${tile('data-heatwave', 'heatWave', 'Heat wave', false, !sb)}${tile('data-preset="SALINITY_CRASH"', 'salt', 'Salt crash', false, !sb)}
-    ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}
+    ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}${tile('data-preset="ROCKSLIDE"', 'rocks', 'Rockslide', false, !sb)}
     ${tile('data-preset="MISSED_WATER_CHANGES"', 'calendarX', 'No water changes', false, !sb)}${tile('data-aip="1"', 'pestAnemone', 'Pest anemone', false, !sb)}
     ${tile('data-aip="-1"', 'zap', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', 'sickFish', 'A fish gets sick', false, !sb)}
   </div>`;
@@ -463,6 +468,7 @@ function moreCard(sb) {
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
+      ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>`;
 }
 
@@ -559,6 +565,10 @@ $('card').addEventListener('click', (e) => {
   else if ('microscope' in d) { closeCard(); openMicro(); return; }
   else if ('knock' in d) { act('knock'); cue('CLICK'); }
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }
+  else if ('rocksToggle' in d) {
+    ui.rocks = !ui.rocks; store.set('reeflive.rocksDynamic', ui.rocks); live.setDynamicRocks(ui.rocks);
+    say(ui.rocks ? 'Rocks can shift now. Dig out too much sand and one may topple!' : 'The rocks stay put, however much the gobies dig.');
+  }
   else if ('hermieToggle' in d) { ui.hermie = !ui.hermie; store.set('reeflive.hermie', ui.hermie); $('hermie').classList.toggle('hidden', !ui.hermie); }
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
   else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);
@@ -598,7 +608,8 @@ function renderFish() {
   // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
   let a = ui.picked && animals.find((x) => x.id === ui.picked);
   if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }
-  $('fish').classList.toggle('hidden', !a || ui.chromeHidden);
+  // while following, the big card stays out of the view unless the name bar was tapped for more
+  $('fish').classList.toggle('hidden', !a || ui.chromeHidden || (!!ui.following && !ui.followInfo));
   if (!a) return;
   if ($('fish').dataset.id === a.id && ui.fishDragging) return;
   $('fish').dataset.id = a.id;
@@ -619,7 +630,7 @@ function renderFish() {
 $('fish').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
-  if ('fclose' in d) { ui.picked = null; renderFish(); }
+  if ('fclose' in d) { ui.picked = null; ui.followInfo = false; renderFish(); renderFollow(); }
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
   else if ('fnet' in d) {
     // the card steps aside so the net can be watched; the goodbye plays once it is out
@@ -644,27 +655,62 @@ $('fish').addEventListener('input', (e) => {
   ui.sizeTimer = setTimeout(() => { SB.act('setSize', ui.picked, Number(e.target.value)); ui.fishDragging = false; }, 200);
 });
 function followFish(id) {
+  const was = ui.following;
   ui.following = id; if (id) ui.picked = id;
+  ui.followInfo = false;
   if (id && ui.card) closeCard();
   live.follow(id);
+  if (id && !was && !ui.tour) say('Drag to look around. Tap another fish to follow it!');
   renderFish(); renderFollow();
 }
+/** Sets innerHTML only when it changed, so a button under the finger is not swapped out mid-tap by the 2 Hz refresh. */
+function setHtml(el, html) { if (el._html !== html) { el._html = html; el.innerHTML = html; } }
 function renderFollow() {
   const i = animals.findIndex((x) => x.id === ui.following);
-  $('follow').classList.toggle('hidden', i < 0 || !!ui.card || ui.shelf || ui.chromeHidden && !ui.tour);
-  if (i < 0) return;
+  const hide = i < 0 || !!ui.card || ui.shelf || ui.chromeHidden && !ui.tour;
+  $('follow').classList.toggle('hidden', hide);
+  $('followCam').classList.toggle('hidden', hide);
+  $('chrome').classList.toggle('following', !hide);
+  if (hide) return;
   const a = animals[i];
-  $('follow').innerHTML = `<button class="icon-btn" data-fprev aria-label="Previous">◀</button>
-    <div class="fcap"><strong>${esc(a.name)}</strong> <span class="muted">${i + 1} / ${animals.length}</span><div class="muted">${esc(a.thinking || a.caption || a.behavior)}</div></div>
-    <button class="icon-btn" data-fnext aria-label="Next">▶</button><button class="btn small ghost" data-fback>Back to tank</button>`;
+  const many = animals.length > 1;
+  const line = a.thinking || a.caption || a.behavior || '';
+  setHtml($('follow'), `<div class="fstoprow"><button class="fstop" data-fback>✕ Stop following</button></div>
+    <div class="fnav glass">${many ? '<button class="fbig" data-fprev aria-label="Previous fish">◀</button>' : ''}
+    <button class="fcap ${ui.followInfo ? 'open' : ''}" data-finfo aria-label="More about ${esc(a.name)}"><span class="fname"><strong>${esc(a.name)}</strong>${many ? `<span class="muted"> ${i + 1}/${animals.length}</span>` : ''}</span><span class="fline">${esc(line)}</span></button>
+    ${many ? '<button class="fbig" data-fnext aria-label="Next fish">▶</button>' : ''}</div>`);
 }
 $('follow').addEventListener('click', (e) => {
   const d = e.target.closest('button')?.dataset;
   if (!d) return;
+  cue('TICK');
   const i = animals.findIndex((x) => x.id === ui.following);
   if ('fback' in d) { ui.tour = false; followFish(null); live.resetCamera(); }
   else if ('fprev' in d) followFish(animals[(i - 1 + animals.length) % animals.length].id);
   else if ('fnext' in d) followFish(animals[(i + 1) % animals.length].id);
+  else if ('finfo' in d) { ui.followInfo = !ui.followInfo; ui.picked = ui.following; renderFish(); renderFollow(); }
+});
+// keyboard while following: Esc stops, + / − zoom, arrows step to the previous / next fish, T turns
+document.addEventListener('keydown', (e) => {
+  if (!ui.following || e.target.closest?.('input, textarea, select')) return;
+  const i = animals.findIndex((x) => x.id === ui.following);
+  if (e.key === 'Escape') { ui.tour = false; followFish(null); live.resetCamera(); }
+  else if (e.key === '+' || e.key === '=') live.followZoom(1);
+  else if (e.key === '-' || e.key === '_') live.followZoom(-1);
+  else if (e.key === 't' || e.key === 'T') live.followOrbit(1);
+  else if (e.key === 'ArrowLeft' && animals.length > 1) followFish(animals[(i - 1 + animals.length) % animals.length].id);
+  else if (e.key === 'ArrowRight' && animals.length > 1) followFish(animals[(i + 1) % animals.length].id);
+  else return;
+  e.preventDefault();
+});
+// the follow camera's buttons: closer / further (eases there; bounces at the limits) and swing round the fish
+$('followCam').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  cue('TICK');
+  b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  if (b.dataset.zoom) live.followZoom(Number(b.dataset.zoom));
+  else if (b.dataset.orbit) live.followOrbit(Number(b.dataset.orbit));
 });
 function nextTour() {
   ui.tourTicks = 0;

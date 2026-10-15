@@ -161,7 +161,7 @@ object ReefSandbox {
             initialWater = water,
             livestock = seeds,
             lights = LightSchedule(real.lights.points),
-        )
+        ).also { it.copyRocksFrom(real) }
     }
 
     private fun now(): Double = js("Date.now()") as Double
@@ -292,6 +292,7 @@ object ReefSandbox {
             }
             SandboxPreset.SALINITY_CRASH -> { send(Command.RampParam("sal", 1.012, 30.0, hold = false)); burst(BurstKind.FRESH, DOSE_SPOT) }
             SandboxPreset.COPPER_OVERDOSE -> { send(Command.SetParam("copper", 0.5)); burst(BurstKind.DYE, DOSE_SPOT, floatArrayOf(0.85f, 0.47f, 0.23f)) }
+            SandboxPreset.ROCKSLIDE -> act("scenario", Scenario.ROCKSLIDE.name, 0.0)
         }
     }
 

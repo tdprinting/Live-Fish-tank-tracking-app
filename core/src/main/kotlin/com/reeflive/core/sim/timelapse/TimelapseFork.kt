@@ -69,6 +69,8 @@ object TimelapseFork {
         dst.copyPestsFrom(src)
         // the sand bed as it is: pits, spoil mounds, mulm and the burrows dug under the rock (SIMULATION §16.8)
         dst.sand.copyFrom(src.sand)
+        // loose rocks where they came to rest (dynamic rockscape)
+        dst.copyRocksFrom(src)
         // ramps and holds (a running hyposalinity or copper course) carry over
         dst.ramps.putAll(src.ramps)
         return dst

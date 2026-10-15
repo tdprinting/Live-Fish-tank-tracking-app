@@ -31,6 +31,16 @@ sealed class Command {
      */
     data class TouchTank(val point: Vec3, val surface: TouchSurface, val strength: Double = 1.0) : Command()
     /**
+     * Dynamic rockscape ([RockPhysics]): rocks can settle or topple when the sand under them is dug out. Off = static
+     * rock (no physics at all). Rocks that already moved stay where they came to rest either way.
+     */
+    data class DynamicRocks(val on: Boolean) : Command()
+    /**
+     * Sandbox "Rockslide": the sand is dug out from under one side of a rock that stands on sand (as a burrowing goby
+     * would, all at once), so with dynamic rocks on it settles or topples. [rock] picks it by name (null: any).
+     */
+    data class UndermineRock(val rock: String? = null) : Command()
+    /**
      * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
      * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
      * it rests; a fast-moving finger makes them hang back. [point] null = the finger lifted.
@@ -209,6 +219,11 @@ sealed class SimEvent {
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
+    /**
+     * A loose rock settled or toppled after the sand under it was dug out (dynamic rockscape, [RockPhysics]): [rock] is
+     * its name in the scape (R0…R10, glued rocks joined by '+'), moved [moveCm] and turned [turnDeg].
+     */
+    data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -307,6 +322,8 @@ data class CoralPose(
      */
     val size: Float = 1f,
     val cover: Float = 0f,
+    /** The rock piece the colony grows on ([SimSnapshot.rockPoses] index), −1 none: drawn moved with that rock. */
+    val rockPiece: Int = -1,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }
@@ -380,6 +397,12 @@ data class SimSnapshot(
     /** Acclimation bags floating in the tank (sandbox Add life) and whether the clock is hurried for them. */
     val bags: List<BagPose> = emptyList(),
     val bagHurry: Boolean = false,
+    /**
+     * Rest → world 4×4 matrix (column-major) per rock piece ([RockData.pieces]) once any rock has moved, else null
+     * (every rock where it was built). Shared between snapshots until a rock moves again ([rockVersion]).
+     */
+    val rockPoses: FloatArray? = null,
+    val rockVersion: Long = 0,
     /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
     val net: NetPose? = null,
     val netFlush: NetFlush? = null,
