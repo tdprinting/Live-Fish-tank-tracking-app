@@ -90,13 +90,22 @@ class BandedClawTest {
         val shrimp = s.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
         val tang = s.organisms.first { it.brainKind == BrainKind.TANG }
         val rig = shrimp.limbRig as ShrimpLimbs
-        var strikes = 0; var was = false
+        var strikes = 0; var was = false; var holding = 0; var onSkin = 0
         s.advance(60.0, behaviorDt = 0.1) {
             tang.pos = shrimp.pos + com.reeflive.core.geom.Vec3(3.0, -2.0, 0.0)
             tang.vel = com.reeflive.core.geom.Vec3(tang.cruiseSpeed * 2, 0.0, 0.0)
             if (rig.striking && !was) strikes++
             was = rig.striking
+            val (fish, at) = rig.held() ?: return@advance
+            holding++
+            // the claw is clamped on the skin: just outside the body, never inside it
+            val mid = fish.pos - fish.heading.normalized() * (0.4 * fish.lengthCm)
+            val dir = (mid - at).normalized()
+            val hit = ShrimpLimbs.onBody(fish, at, dir, 1.0)
+            if (hit != null && hit.distanceTo(at) in 0.01..0.3) onSkin++
         }
         assertTrue("strikes in a minute of crowding: $strikes", strikes in 2..20)
+        assertTrue("held on to the fish ($holding ticks)", holding > 5)
+        assertTrue("claw on the skin $onSkin / $holding", onSkin == holding)
     }
 }
