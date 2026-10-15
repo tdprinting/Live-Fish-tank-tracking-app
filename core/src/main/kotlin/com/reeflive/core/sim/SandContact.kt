@@ -64,11 +64,28 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         return pen
     }
 
+    private var floorClear = 0.0
+    private val floor = com.reeflive.core.geom.BodySpline.Floor { x, z -> sand.surfaceY(x, z) + floorClear }
+
+    /**
+     * The rest of the body on the sand too: trail points under the live surface rise onto it at up to [TRAIL_LIFT_CM_S]
+     * (the head is [clamp]'s). Only for a body within a length of the sand; the override paths (dens, burrows) are drawn
+     * as they are.
+     */
+    private fun liftBody(o: Organism, dt: Double) {
+        if (exempt(o) || !o.alive) return
+        val p = o.pos
+        if (p.y - sand.surfaceY(p.x, p.z) > o.lengthCm) return
+        floorClear = 0.5 * clearance(o)
+        o.spline.liftTrail(floor, TRAIL_LIFT_CM_S * max(dt, 0.05))
+    }
+
     /** Clamp everyone; with [displace] (live behaviour, not abstract placement) the contacts also move sand. */
     fun step(organisms: List<Organism>, dt: Double, displace: Boolean) {
         if (++gc % 400 == 0) { val ids = organisms.mapTo(HashSet()) { it.id }; st.keys.retainAll(ids) }
         for (o in organisms) {
             val pen = clamp(o)
+            liftBody(o, dt)
             if (!displace || !o.alive) continue
             val p = o.pos
             val t = st.getOrPut(o.id) { St(p.x, p.z, 0.0, 0.0, false) }
@@ -129,6 +146,8 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
 
         /** Crawlers' reference point sits on their feet / foot (cm). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val CRAWLER_CLEARANCE = 0.15
+        /** Fastest a trail point under the sand is raised onto it (cm/s; at 20 Hz 0.3 cm a tick, below any body pop). */
+        const val TRAIL_LIFT_CM_S = 6.0
         /** Within this (cm) of the surface the body touches the sand. */
         const val CONTACT_TOL = 0.12
         /** Clearance from rock a lift must not eat into (cm). */

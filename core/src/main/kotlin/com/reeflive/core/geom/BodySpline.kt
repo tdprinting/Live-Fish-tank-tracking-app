@@ -2,6 +2,7 @@ package com.reeflive.core.geom
 
 import kotlin.math.exp
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -89,6 +90,17 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         // trail (20 points cover 1.25 BL) so the relax loop stays O(1) per tick.
         keep = minOf(keep, MAX_TRAIL)
         while (trail.size > keep) trail.removeAt(trail.size - 1)
+        // Fully in an override path, the trail follows the drawn body: the head's own track (into a tunnel, a den, under
+        // a ledge) is not where the body lies, and when the override is let go the body must ease out of the shape it
+        // was drawn in, not out of a track through the sand (a goby leaving its burrow had its middle 1.7 cm under the
+        // sand mound at the mouth, on the line from its dig face to the open water).
+        val ov = override
+        if (ov != null && ov.size > 1 && overrideMix >= 1.0) {
+            val shift = head - ov.first()
+            walk(ov, 1, head, length / (POINTS - 1), scratch, shift)
+            for (i in 1 until POINTS) { if (i - 1 < trail.size) trail[i - 1] = scratch[i] else trail.add(scratch[i]) }
+            while (trail.size > POINTS - 1) trail.removeAt(trail.size - 1)
+        }
     }
 
     /**
@@ -186,7 +198,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     }
 
     /** Stations every [seg] cm along head → [poly][startIdx..], extended straight past its end. */
-    private fun walk(poly: List<Vec3>, startIdx: Int, startHead: Vec3, seg: Double, out: Array<Vec3>) {
+    private fun walk(poly: List<Vec3>, startIdx: Int, startHead: Vec3, seg: Double, out: Array<Vec3>, shift: Vec3? = null) {
         out[0] = startHead
         var prev = startHead
         var j = startIdx
@@ -196,7 +208,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             var cur = prev
             while (true) {
                 if (j >= poly.size) { cur = cur + lastDir * remaining; break }
-                val nxt = poly[j]
+                val nxt = if (shift == null) poly[j] else poly[j] + shift
                 val d = cur.distanceTo(nxt)
                 if (d >= remaining && d > 1e-9) {
                     val dir = (nxt - cur) / d
@@ -211,6 +223,23 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             }
             out[i] = cur
             prev = cur
+        }
+    }
+
+    /** Ground height under (x, z) a trail point must stay above ([liftTrail]). */
+    fun interface Floor { fun y(x: Double, z: Double): Double }
+
+    /**
+     * Raises trail points that lie under [floor] by at most [maxLift] cm each call (a body that turned round over a
+     * mound, or whose track ran down a pit that has since been filled, lies on the sand instead of through it; the limit
+     * keeps a large correction from snapping the body shape in one tick). The head is the caller's to place.
+     */
+    fun liftTrail(floor: Floor, maxLift: Double) {
+        if (rigid) return
+        for (i in trail.indices) {
+            val p = trail[i]
+            val f = floor.y(p.x, p.z)
+            if (p.y < f) trail[i] = p.withY(min(f, p.y + maxLift))
         }
     }
 
