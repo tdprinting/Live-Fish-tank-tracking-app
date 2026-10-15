@@ -88,12 +88,14 @@ void main() {
         float F = fresnelSchlick(cosI, 0.02);
         vec3 R = reflect(I, N);
         vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.4 + ROOM;
+        vec3 glint = vec3(0.0);
         for (int i = 0; i < 2; i++) {
             vec3 L = normalize(uLightPos[i].xyz - vWorld);
-            env += uLightColor[i].rgb * (pow(max(dot(R, L), 0.0), 300.0) * 4.0 + pow(max(dot(R, L), 0.0), 1500.0) * 12.0 * uRipple);
+            glint += uLightColor[i].rgb * (pow(max(dot(R, L), 0.0), 300.0) * 4.0 + pow(max(dot(R, L), 0.0), 1500.0) * 12.0 * uRipple);
         }
-        col = env * F + uFog.rgb * 0.15 + pool * 0.6;
         alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)), 0.0, 1.0);
+        // the fixture glints reach the eye at their Fresnel weight once (straight alpha would scale them by F twice)
+        col = env * F + glint * (F / alpha) + uFog.rgb * 0.15 + pool * 0.6;
     }
     fragColor = vec4(tonemap(col), alpha);
 }

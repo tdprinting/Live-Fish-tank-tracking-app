@@ -81,6 +81,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
     private val micro = MicroCritterVisuals()
+    /** Fish drawn far → near for the blended fin pass (reused every frame, no per-frame list). */
+    private val finOrder = ArrayList<FishRig>()
+    private val farFirst = Comparator<FishRig> { a, b ->
+        val e = camera.eye
+        b.distanceTo(e[0], e[1], e[2]).compareTo(a.distanceTo(e[0], e[1], e[2]))
+    }
     private val lens = LensState()
     private var postFailed = false
     private var placeholder: Mesh? = null
@@ -283,8 +289,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         details?.let { drawStatic(it, progs, light, opaque = false) }
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
-        val sorted = rigs.sortedByDescending { it.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) }
-        for (r in sorted) drawOrganism(r, progs, pass = 1)
+        finOrder.clear(); finOrder.addAll(rigs); finOrder.sortWith(farFirst)
+        for (r in finOrder) drawOrganism(r, progs, pass = 1)
         for (r in micro.visible) drawOrganism(r, progs, pass = 1)
         // transparent: back glass, then water (first when the eye is under the surface, so the underside never
         // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass

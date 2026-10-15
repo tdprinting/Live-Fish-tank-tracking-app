@@ -52,9 +52,9 @@ void main() {
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.03, 1.0, 0.6);
 #ifndef CARD
     // mucus sheen: soft corals and mushrooms read wet in the tank
-    col += wetCoat(Ng, V, vWorld, 0.3, 0.35) * shadowAt(vWorld, N);
+    col += wetCoat(Ng, V, vWorld, 0.3, 0.35) * gShadow;
 #endif
-    float thickness = clamp(vColor.r, 0.0, 1.0);
+    float thickness = clamp(vColor.r, 0.0, 1.0) * gShadow;   // no back-light glow inside a shadow
     for (int i = 0; i < 2; i++) {
         vec3 L;
         vec3 rad = fixtureLight(i, vWorld, L);
