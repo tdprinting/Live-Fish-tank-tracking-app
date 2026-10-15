@@ -158,7 +158,7 @@ class Steering(private val c: Ctx) {
      * follows the head by the same shift.
      */
     private fun limitPushOut(o: Organism, shape0: com.reeflive.core.geom.BodySpline.Pose, h0: Vec3, u0: Vec3, dt: Double, rockOn: Boolean) {
-        if (c.sim.abstractMode) return
+        if (c.sim.abstractMode || !c.sim.bodies.posesLive) return   // (no resolve to ease: advanceAbstract)
         val speed = max(max(o.burstSpeed, o.cruiseSpeed), 1.0)
         val step = (PUSH_SPEED_FACTOR * speed + PUSH_SPEED_CM_S) * dt
         // no part of the body (the head, the tail swung round a corner, a section pushed out of a slot) is moved more than the head may be
