@@ -206,7 +206,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Night (and after a scare): tucked into the burrow under the rock. */
     inner class InBurrow : Behavior("burrow", "In its burrow") {
         override fun score(c: Ctx): Double = when {
-            c.p.night -> 0.85
+            c.p.night -> 0.85 * Feed.nightRestDamp(c, this@DiamondGobyBrain)
             o.waryLevel > 0.3 || o.startle > 0.25 -> 0.7
             else -> 0.1
         }

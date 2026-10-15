@@ -256,7 +256,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx): Double {
             val o = c.o
             return when {
-                c.p.night -> 0.85
+                c.p.night -> 0.85 * Feed.nightRestDamp(c, this@GobyBrain)
                 o.waryLevel > 0.3 || o.startle > 0.2 -> 0.7
                 adult -> 0.75
                 else -> 0.25 + 0.3 * o.skittishness

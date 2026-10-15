@@ -36,6 +36,8 @@ object Perceive {
     const val PLUME_MAX_CM = 90.0
     /** Scent needs a few seconds to leach out of a fresh particle (s) [L]. */
     const val SCENT_LAG_S = 3.0
+    /** Effective light for a fish roused by a night feeding: food seen from below against the moonlit surface [L]. */
+    const val ROUSED_LIGHT = 0.15
     /** Threat radius factor for invertebrates at night (the old 0.6 rule, kept). */
     const val INVERT_NIGHT_THREAT = 0.6
 
@@ -81,11 +83,13 @@ object Perceive {
      * Does [c]'s animal sense food particle [f] through any channel? Ungated species (invertebrates by default)
      * always do, which keeps the old radius search for them.
      */
-    fun sensesFood(c: Ctx, f: FoodParticle): Boolean {
+    fun sensesFood(c: Ctx, f: FoodParticle, roused: Boolean = false): Boolean {
         val s = c.o.species.sensesOrDefault
         if (!s.gated) return true
         val d = c.o.pos.distanceTo(f.pos)
         if (d <= visionRange(c)) return true
+        // a fish roused by a night feeding sees sinking food as silhouettes against the moonlit surface
+        if (roused && d <= s.visionCm * lightFactor(max(c.p.light, ROUSED_LIGHT), s.darkVision)) return true
         if (d <= lateralRange(c.o)) return true
         return s.chem > 0 && scent(c, f, c.o.pos) * s.chem >= SCENT_THRESHOLD
     }
