@@ -94,6 +94,8 @@ object TankTouch {
         if (!o.alive || o.molting) return TouchReaction.NONE
         val k = o.brainKind
         if (k == BrainKind.FEATHER_DUSTER) return if (d < 15.0) TouchReaction.DUCK else TouchReaction.NONE
+        // an anemone has no eyes: only a touch on or right next to it makes it pull in
+        if (k == BrainKind.ANEMONE) return if (d < 0.5 * o.lengthCm + 3.0) TouchReaction.DUCK else TouchReaction.NONE
         return when (surface) {
             TouchSurface.GLASS -> when {
                 // asleep at night: a tap close by only makes a fish shift away; nobody comes to look in the dark
@@ -173,7 +175,7 @@ object TankTouch {
     fun animalReaction(o: Organism): TouchReaction {
         if (!o.alive || o.molting || o.isFish) return TouchReaction.NONE
         return when (o.brainKind) {
-            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
+            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE -> TouchReaction.DUCK
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> TouchReaction.FREEZE
             else -> TouchReaction.TUCK
         }

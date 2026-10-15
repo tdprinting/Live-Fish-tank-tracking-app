@@ -47,6 +47,9 @@ class EyeCollider(maxBoxes: Int = 128, maxCapsules: Int = 256) {
     private val box = FloatArray(maxBoxes * 6)
     private val boxCap = maxBoxes
     var boxCount = 0; private set
+    /** Boxes the subject is inside right now ([passBoxesAround]): a coarse coral / kit box holding it is open water there. */
+    private val boxPass = BooleanArray(maxBoxes)
+    private var anyPass = false
 
     // ---- capsules: a xyz, b xyz, radius; plus an owner tag ----
     private val cap = FloatArray(maxCapsules * 7)
@@ -69,7 +72,26 @@ class EyeCollider(maxBoxes: Int = 128, maxCapsules: Int = 256) {
         sandH = heights; sandNx = nx; sandNz = nz; sandCellX = cellX; sandCellZ = cellZ
     }
 
-    fun clearBoxes() { boxCount = 0 }
+    fun clearBoxes() { boxCount = 0; clearPass() }
+
+    /**
+     * Lets the eye through every box whose clearance shell holds (x, y, z) — the sub (or animal) being watched is there,
+     * so that box is mostly water — until the next call or [clearPass]. Cheap: one pass over the boxes, no allocation.
+     */
+    fun passBoxesAround(x: Float, y: Float, z: Float) {
+        anyPass = false
+        for (i in 0 until boxCount) {
+            val p = boxDist(i, x, y, z) < boxClearance
+            boxPass[i] = p
+            if (p) anyPass = true
+        }
+    }
+
+    fun clearPass() {
+        if (!anyPass) return
+        for (i in 0 until boxCount) boxPass[i] = false
+        anyPass = false
+    }
 
     fun addBox(x0: Float, y0: Float, z0: Float, x1: Float, y1: Float, z1: Float) {
         if (boxCount >= boxCap || x1 < x0 || y1 < y0 || z1 < z0) return
@@ -117,6 +139,7 @@ class EyeCollider(maxBoxes: Int = 128, maxCapsules: Int = 256) {
         for (i in 0 until boxCount) {
             val o = i * 6
             if (box[o] > x1 || box[o + 3] < x0 || box[o + 1] > y1 || box[o + 4] < y0 || box[o + 2] > z1 || box[o + 5] < z0) continue
+            if (anyPass && boxPass[i]) continue
             actBox[actBoxN++] = i
         }
         actCapN = 0

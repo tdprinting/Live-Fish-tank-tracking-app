@@ -176,10 +176,14 @@ object MotionProfiles {
         BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
         // idle foot crawl 1–3 cm/min (~0.05 cm/s); races at ~0.4 cm/s to food or a puff (docs/research/video/SIM_CHANGES.md §2.1) [M][L]
         BrainKind.NASSARIUS to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.4),
-        BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 0.8),
+        // a 2–3 cm reef snail crawls glass at several cm/min (research 17 microfauna morphology, Stomatella 1–3 mm/s is
+        // the fast glider): ~6 cm/min grazing, ~18 cm/min when it hurries (it was 30 cm/min, so its glass trails, §11.1,
+        // ran five times too long)
+        BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.1, walkBurstCmS = 0.3),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
+        BrainKind.ANEMONE to MotionProfile(Gait.SESSILE),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),

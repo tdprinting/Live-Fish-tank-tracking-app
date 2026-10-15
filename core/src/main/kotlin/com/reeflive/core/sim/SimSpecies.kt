@@ -401,6 +401,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
      * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
      */
     BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
+    /** Bubble-tip anemone (*Entacmaea quadricolor*, research 40): walks slowly on its foot, then settles; hosts clowns. */
+    ANEMONE(listOf("entacmaea"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -427,6 +429,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
+            "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
         )
 
         fun byId(id: String): BrainKind? {

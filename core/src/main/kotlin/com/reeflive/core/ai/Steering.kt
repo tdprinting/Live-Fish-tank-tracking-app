@@ -279,7 +279,17 @@ class Steering(private val c: Ctx) {
             val myTail = tailOf(o)
             val myHalf = BodyShapes.of(o.species).maxRadius * L
             for (n in c.p.neighbors(o.pos, L * 2.5 + 6)) {
-                if (n === o || !n.isFish) continue
+                if (n === o) continue
+                if (!n.isFish) {
+                    // a bubble-tip anemone's crown: fish steer around the stinging tentacles (its clowns nestle in)
+                    if (n.brainKind == BrainKind.ANEMONE && o.isFish && n.alive && !c.sim.anemones.welcomes(n, o)) {
+                        val r = 0.5 * n.lengthCm * n.extension.coerceAtLeast(0.45) + 0.5 * L
+                        val d = o.pos - n.pos
+                        val dl = d.length()
+                        if (dl in 1e-6..r) sep += d / (dl * dl) * (r * (1.5 - dl / r))
+                    }
+                    continue
+                }
                 // personal space between the bodies (not the snouts): ~0.3 BL inside a school, little between mates of
                 // a pair (clowns nestle together in the host), 0.6 BL from other fish
                 val k = when {

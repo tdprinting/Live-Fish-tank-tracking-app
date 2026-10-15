@@ -28,7 +28,7 @@ class GlassMaskTest {
         assertEquals(m.at(60.0, midY + 8.0).toDouble(), AlgaeModel.SCRAPE_LEFT, 1e-6)
         assertEquals(1.0, m.at(60.0, midY + 12.0).toDouble(), 1e-9)
         assertEquals(1.0, m.at(60.0, midY - 12.0).toDouble(), 1e-9)
-        // 20 cm of the 53 cm wetted height ≈ 12 of 32 rows, each down by 90 %
+        // 20 cm of the 35 cm wetted height ≈ 36 of 64 rows, each down by 90 %
         val band = 20.0 / (cfg.waterLevelCm - cfg.sandTopCm)
         assertEquals(band * (1 - AlgaeModel.SCRAPE_LEFT), drop, 0.05)
         assertEquals(1 - drop, m.mean, 1e-9)
@@ -130,6 +130,6 @@ class GlassMaskTest {
         assertTrue("film ${sim.water.s.film} vs $film0", sim.water.s.film < film0)
         // the mask row through the middle of the stroke (y 23), wherever the tank's sand and water lines put it
         val row = ((23.0 - sim.rock.sandTopCm) / (sim.rock.waterLevelCm - sim.rock.sandTopCm) * GlassMask.H).toInt()
-        assertTrue(snap.algae.glassMask!![GlassMask.W * row + 32] < 0.5f)
+        assertTrue(snap.algae.glassMask!![GlassMask.W * row + GlassMask.W / 2] < 0.5f)
     }
 }

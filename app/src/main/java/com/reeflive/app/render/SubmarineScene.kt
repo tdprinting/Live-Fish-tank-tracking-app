@@ -1,10 +1,11 @@
 package com.reeflive.app.render
 
-import com.reeflive.core.geom.Sdf
 import com.reeflive.core.sim.SubPose
 import com.reeflive.core.sim.Submarine
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -102,8 +103,11 @@ object SubmarineMesh {
 /**
  * The submarine in the renderer (GL thread): interpolates [SubPose] between snapshots, draws the hull with the generic
  * program (a faint ghost when it is invisible to the fish), spins the propeller, lights the headlamp and beam, and
- * aims the ride camera: chase (behind and above, collision-tested against the rock SDF and kept in the water) or
- * first person from the nose window.
+ * sets up the ride camera's goals for [Camera] (which smooths them and keeps the eye out of everything):
+ * - chase: behind and a little above along a smoothed heading; while watching a fish ([SubPose.watchId]) it looks over
+ *   the sub's shoulder at the fish instead, so the fish and the sub share the frame;
+ * - first person: from inside the nose, looking ahead, or straight at the watched fish.
+ * Allocation-free per frame.
  */
 internal class SubmarineScene {
     private var hull: Mesh? = null
@@ -118,10 +122,28 @@ internal class SubmarineScene {
     private var yaw = 0f; private var pitch = 0f; private var roll = 0f; private var propAngle = 0f
     private var has = false
     var visible = true; private set
+    /** 1 = solid; below 1 the hull fades so it never blocks the view when the camera is pushed up close ([nearFade]). */
+    private var fade = 1f
+    /** Drawn in the opaque pass (seen and not faded); otherwise it is drawn see-through after the particles. */
+    val opaque: Boolean get() = visible && fade >= 0.999f
     var headlight = true; private set
     val active: Boolean get() = has
     val eye = FloatArray(3)
     val aim = FloatArray(3)
+    /** The sub's centre (the chase camera's line of sight starts here) and its smoothed velocity (cm/s). */
+    val anchor = FloatArray(3)
+    val vel = FloatArray(3)
+    /** Half the hull axis (nose minus centre, cm), for the eye's collision capsule. */
+    val halfAxis = FloatArray(3)
+    private val lastPos = FloatArray(3)
+    private var hasLast = false
+    /** Chase heading, smoothed so a quick turn swings the camera round instead of snapping it. */
+    private val chaseYaw = YawSpring(CHASE_YAW_OMEGA)
+    /** Smoothed body centre of the watched fish (no tail-beat wag in the framing). */
+    private val fishS = Spring3(FISH_OMEGA)
+    private var hasFish = false
+    private val fishRaw = FloatArray(3)
+    private val fishOut = FloatArray(3)
 
     fun release() { listOf(hull, windows, prop, lamp, beam).forEach { it?.release() }; hull = null; windows = null; prop = null; lamp = null; beam = null }
 
@@ -132,9 +154,12 @@ internal class SubmarineScene {
         lamp = mk(SubmarineMesh.lamp()); beam = mk(SubmarineMesh.beam())
     }
 
-    /** Interpolated pose for this frame (from the previous and current snapshots); false = no sub. */
-    fun update(prev: SubPose?, cur: SubPose?, alpha: Float, firstPerson: Boolean, sdf: Sdf?): Boolean {
-        if (cur == null) { has = false; return false }
+    /**
+     * Interpolated pose for this frame (from the previous and current snapshots) and the ride camera's goals; [watched]
+     * is the rig of the fish the sub is watching, if any. False = no sub.
+     */
+    fun update(prev: SubPose?, cur: SubPose?, alpha: Float, firstPerson: Boolean, dt: Float, watched: FishRig?): Boolean {
+        if (cur == null) { has = false; hasLast = false; hasFish = false; chaseYaw.reset(); return false }
         val a = if (prev == null) 1f else alpha
         val p = prev ?: cur
         pos[0] = lerp(p.pos.x, cur.pos.x, a); pos[1] = lerp(p.pos.y, cur.pos.y, a); pos[2] = lerp(p.pos.z, cur.pos.z, a)
@@ -142,8 +167,26 @@ internal class SubmarineScene {
         propAngle = lerpAngle(p.prop, cur.prop, a)
         visible = cur.visible; headlight = cur.headlight
         has = true
+        // smoothed velocity of the drawn sub (for the camera's feed-forward)
+        if (hasLast && dt > 1e-4f) {
+            val k = 1f - kotlin.math.exp(-VEL_SMOOTH * dt)
+            for (i in 0 until 3) vel[i] += ((pos[i] - lastPos[i]) / dt - vel[i]) * k
+        } else vel.fill(0f)
+        pos.copyInto(lastPos); hasLast = true
+        anchor[0] = pos[0]; anchor[1] = pos[1]; anchor[2] = pos[2]
         buildModel()
-        aimCamera(firstPerson, sdf)
+        val hl = (Submarine.LENGTH_CM / 2).toFloat() - 1f
+        halfAxis[0] = model[0] * hl; halfAxis[1] = model[1] * hl; halfAxis[2] = model[2] * hl
+        val fish = if (watched != null && cur.watchId != null) watched else null
+        if (fish != null) {
+            val sp = fish.spine
+            var cx = 0f; var cy = 0f; var cz = 0f
+            for (i in 1..9) { cx += sp[i * 4]; cy += sp[i * 4 + 1]; cz += sp[i * 4 + 2] }
+            fishRaw[0] = cx / 9f; fishRaw[1] = cy / 9f; fishRaw[2] = cz / 9f
+            if (!hasFish || dt <= 0f) { fishS.snap(fishRaw); hasFish = true } else fishS.step(fishRaw, dt, fishOut)
+        } else hasFish = false
+        if (chaseYaw.initialized) chaseYaw.step(yaw, dt) else chaseYaw.snap(yaw)
+        aimCamera(firstPerson, fish != null)
         return true
     }
 
@@ -165,29 +208,53 @@ internal class SubmarineScene {
         M.mul(model, spin, propModel)
     }
 
-    private fun aimCamera(firstPerson: Boolean, sdf: Sdf?) {
+    private fun aimCamera(firstPerson: Boolean, watching: Boolean) {
         val fx = model[0]; val fy = model[1]; val fz = model[2]
         if (firstPerson) {
-            val nose = (Submarine.LENGTH_CM / 2).toFloat() + 0.2f
-            eye[0] = pos[0] + fx * nose; eye[1] = pos[1] + 0.2f + fy * nose; eye[2] = pos[2] + fz * nose
-            aim[0] = eye[0] + fx * 20f; aim[1] = eye[1] + fy * 20f; aim[2] = eye[2] + fz * 20f
+            // inside the hull (the hull keeps clear of rock by its radius), looking ahead or at the watched fish
+            eye[0] = pos[0] + fx * FP_NOSE; eye[1] = pos[1] + 0.2f + fy * FP_NOSE; eye[2] = pos[2] + fz * FP_NOSE
+            if (watching) { aim[0] = fishS[0]; aim[1] = fishS[1]; aim[2] = fishS[2] }
+            else { aim[0] = eye[0] + fx * FP_LOOK; aim[1] = eye[1] + fy * FP_LOOK; aim[2] = eye[2] + fz * FP_LOOK }
             return
         }
-        aim[0] = pos[0] + fx * 3f; aim[1] = pos[1] + 0.6f; aim[2] = pos[2] + fz * 3f
-        var ex = pos[0] - cos(yaw) * CHASE_BACK; var ey = pos[1] + CHASE_UP; var ez = pos[2] + sin(yaw) * CHASE_BACK
-        val m = 0.8f
-        ex = ex.coerceIn(m, Camera.TANK[0] - m); ez = ez.coerceIn(m, Camera.TANK[2] - m)
-        ey = ey.coerceIn(Camera.SAND_Y + 2f, Camera.WATER_Y - 0.8f)
-        if (sdf != null) {
-            var dx = ex - pos[0]; var dy = ey - pos[1]; var dz = ez - pos[2]
-            val len = sqrt(dx * dx + dy * dy + dz * dz)
-            if (len > 1e-3f) {
-                dx /= len; dy /= len; dz /= len
-                val t = minOf(Camera.marchClear(sdf, pos[0], pos[1], pos[2], dx, dy, dz, len, 1.0f), len).coerceAtLeast(2.5f)
-                ex = pos[0] + dx * t; ey = pos[1] + dy * t; ez = pos[2] + dz * t
+        if (watching) {
+            // over the sub's shoulder: behind it (away from the fish), off to one side and a little up, so the sub sits
+            // low in a corner and the fish fills the middle; aimed most of the way to the fish
+            var dx = pos[0] - fishS[0]; var dz = pos[2] - fishS[2]
+            val l = sqrt(dx * dx + dz * dz)
+            if (l < 1e-3f) { dx = -cos(chaseYaw.value); dz = sin(chaseYaw.value) } else { dx /= l; dz /= l }
+            eye[0] = pos[0] + dx * WATCH_BACK - dz * WATCH_SIDE; eye[1] = pos[1] + WATCH_UP; eye[2] = pos[2] + dz * WATCH_BACK + dx * WATCH_SIDE
+            aim[0] = pos[0] + (fishS[0] - pos[0]) * WATCH_AIM; aim[1] = pos[1] + (fishS[1] - pos[1]) * WATCH_AIM; aim[2] = pos[2] + (fishS[2] - pos[2]) * WATCH_AIM
+            return
+        }
+        val h = chaseYaw.value
+        aim[0] = pos[0] + cos(h) * 3f; aim[1] = pos[1] + 0.6f; aim[2] = pos[2] - sin(h) * 3f
+        eye[0] = pos[0] - cos(h) * CHASE_BACK; eye[1] = pos[1] + CHASE_UP; eye[2] = pos[2] + sin(h) * CHASE_BACK
+    }
+
+    /**
+     * Fades the hull when the (collided) camera eye ends up close to it, so it never fills the screen, and while it sits
+     * in the line of sight to the watched fish, so it never hides the fish. Eased over [dt] so it never pops.
+     */
+    fun nearFade(camEye: FloatArray, dt: Float) {
+        val dx = camEye[0] - anchor[0]; val dy = camEye[1] - anchor[1]; val dz = camEye[2] - anchor[2]
+        val d = sqrt(dx * dx + dy * dy + dz * dz)
+        var goal = (FADE_MIN + (1f - FADE_MIN) * ((d - FADE_NEAR) / (FADE_FAR - FADE_NEAR))).coerceIn(FADE_MIN, 1f)
+        if (hasFish) {
+            // distance from the sub to the eye → fish sight line (only between them)
+            val sx = fishS[0] - camEye[0]; val sy = fishS[1] - camEye[1]; val sz = fishS[2] - camEye[2]
+            val ss = sx * sx + sy * sy + sz * sz
+            if (ss > 1e-4f) {
+                val t = ((-dx) * sx + (-dy) * sy + (-dz) * sz) / ss
+                if (t > 0f && t < 1f) {
+                    val px = camEye[0] + sx * t - anchor[0]; val py = camEye[1] + sy * t - anchor[1]; val pz = camEye[2] + sz * t - anchor[2]
+                    val off = sqrt(px * px + py * py + pz * pz)
+                    val k = ((off - BLOCK_NEAR) / (BLOCK_FAR - BLOCK_NEAR)).coerceIn(0f, 1f)
+                    goal = min(goal, BLOCK_ALPHA + (1f - BLOCK_ALPHA) * k)
+                }
             }
         }
-        eye[0] = ex; eye[1] = ey; eye[2] = ez
+        fade = if (dt <= 0f) goal else goal + (fade - goal) * exp(-FADE_RATE * dt)
     }
 
     /** Opaque (or ghost) hull, windows, prop and lamp with the generic program. Returns draw calls. */
@@ -197,24 +264,26 @@ internal class SubmarineScene {
         p.use()
         white.bind(0)
         p.set1f("uHasTexture", 0f); p.set1f("uAlphaCutoff", 0f); p.set1f("uLedDies", 0f)
-        val a = if (visible) 1f else GHOST_ALPHA
-        var calls = 0
-        fun part(m: Mesh?, mat: FloatArray, r: Float, g: Float, b: Float, rough: Float, er: Float, eg: Float, eb: Float) {
-            val mesh = m ?: return
-            p.setMat4("uModel", mat)
-            p.set4f("uBaseColor", r, g, b, a)
-            p.set1f("uRoughness", rough)
-            p.set3f("uEmissive", er, eg, eb)
-            mesh.draw(); calls++
-        }
+        val a = min(if (visible) 1f else GHOST_ALPHA, fade)
         // a ghost glows faintly blue so the pilot still sees where it is
         val gl = if (visible) 0f else 0.25f
-        part(hull, model, 1f, 0.78f, 0.1f, 0.35f, 0.06f + gl * 0.3f, 0.04f + gl * 0.6f, gl)
-        part(windows, model, 0.2f, 0.55f, 0.75f, 0.1f, 0.05f, 0.18f + 0.04f * sin(time * 2f), 0.28f)
-        part(prop, propModel, 0.55f, 0.58f, 0.62f, 0.3f, gl * 0.3f, gl * 0.5f, gl)
+        var calls = 0
+        calls += part(p, hull, model, a, 1f, 0.78f, 0.1f, 0.35f, 0.06f + gl * 0.3f, 0.04f + gl * 0.6f, gl)
+        calls += part(p, windows, model, a, 0.2f, 0.55f, 0.75f, 0.1f, 0.05f, 0.18f + 0.04f * sin(time * 2f), 0.28f)
+        calls += part(p, prop, propModel, a, 0.55f, 0.58f, 0.62f, 0.3f, gl * 0.3f, gl * 0.5f, gl)
         val lampOn = if (headlight) 1.6f else 0f
-        part(lamp, model, 0.9f, 0.9f, 0.8f, 0.2f, lampOn, lampOn * 0.95f, lampOn * 0.7f)
+        calls += part(p, lamp, model, a, 0.9f, 0.9f, 0.8f, 0.2f, lampOn, lampOn * 0.95f, lampOn * 0.7f)
         return calls
+    }
+
+    private fun part(p: ShaderProgram, m: Mesh?, mat: FloatArray, a: Float, r: Float, g: Float, b: Float, rough: Float, er: Float, eg: Float, eb: Float): Int {
+        val mesh = m ?: return 0
+        p.setMat4("uModel", mat)
+        p.set4f("uBaseColor", r, g, b, a)
+        p.set1f("uRoughness", rough)
+        p.set3f("uEmissive", er, eg, eb)
+        mesh.draw()
+        return 1
     }
 
     /** The headlight beam, additive, after the opaque scene. Returns draw calls. */
@@ -232,7 +301,7 @@ internal class SubmarineScene {
         return 1
     }
 
-    val triangles: Int get() = listOf(hull, windows, prop, lamp).sumOf { it?.triangles ?: 0 }
+    val triangles: Int get() = (hull?.triangles ?: 0) + (windows?.triangles ?: 0) + (prop?.triangles ?: 0) + (lamp?.triangles ?: 0)
 
     private fun lerp(a: Double, b: Double, t: Float) = (a + (b - a) * t).toFloat()
     private fun lerpAngle(a: Double, b: Double, t: Float): Float {
@@ -245,6 +314,27 @@ internal class SubmarineScene {
     companion object {
         const val CHASE_BACK = 10f
         const val CHASE_UP = 3.2f
+        /** Watching: the eye this far behind the sub (away from the fish) and above it; the aim this share of the way to the fish. */
+        const val WATCH_BACK = 6f
+        const val WATCH_SIDE = 5f
+        const val WATCH_UP = 3.5f
+        const val WATCH_AIM = 0.85f
+        /** Camera-to-sub distances (cm) over which the hull fades out: solid beyond FADE_FAR, faint at FADE_NEAR. */
+        const val FADE_NEAR = 3f
+        const val FADE_FAR = 6.5f
+        const val FADE_MIN = 0.22f
+        /** The hull in the sight line to the watched fish: faded to BLOCK_ALPHA within BLOCK_NEAR cm of it, clear past BLOCK_FAR. */
+        const val BLOCK_NEAR = 1.6f
+        const val BLOCK_FAR = 3.2f
+        const val BLOCK_ALPHA = 0.3f
+        /** How quickly (1/s) the hull eases to its fade. */
+        const val FADE_RATE = 6f
+        /** First person: the eye this far forward of the hull centre (inside its radius), looking this far ahead. */
+        const val FP_NOSE = 0.6f
+        const val FP_LOOK = 10f
+        const val CHASE_YAW_OMEGA = 3.2f
+        const val FISH_OMEGA = 10f
+        const val VEL_SMOOTH = 6f
         const val GHOST_ALPHA = 0.35f
         const val BEAM_ALPHA = 0.07f
     }

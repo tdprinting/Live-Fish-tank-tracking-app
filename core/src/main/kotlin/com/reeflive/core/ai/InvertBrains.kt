@@ -112,7 +112,15 @@ class TailFlip(val b: SpeciesBrain, val nav: ShrimpNav? = null, val home: (Ctx) 
         b.threat?.let { return 0.96 }
         return if (b.startledRecently && b.startleMag > 0.3) 0.9 else 0.0
     }
-    override fun enter(c: Ctx) { from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset() }
+    override fun enter(c: Ctx) {
+        from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset()
+        // a cleaner that flees calls off the cleaning it offered: the client stops posing and the station is free (it was
+        // offered again on every return, so a hawkfish perched by the station posed in a climb-flee loop for minutes)
+        c.p.stations.firstOrNull { it.cleaner === c.o }?.let { st ->
+            st.client?.let { cl -> if (cl.poseFor === c.o) cl.poseUntil = min(cl.poseUntil, c.t) }
+            st.release()
+        }
+    }
     override fun update(c: Ctx, out: SteerIntent) {
         if (elapsed < 0.5) {
             out.fleeFrom = from; out.urgency = 1.0
@@ -234,7 +242,7 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
          * station, so the rule only moves it when the skunk sits practically next door (DESIGN ESTIMATE).
          */
         const val KEEP_APART_CM = 20.0
-        /** Intruder distance that raises the claw display, cm (DESIGN ESTIMATE). */
+        /** Intruder distance that raises the claws-up threat display, cm (DESIGN ESTIMATE; display documented, research 20). */
         const val DISPLAY_CM = 8.0
         /** Cleans per fish visit (SOURCED for its stations, research 12 NTOU thesis: 5.6 %; not a universal constant). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.SOURCED, "12 NTOU thesis") const val CLEAN_PER_VISIT = 0.056
@@ -299,6 +307,12 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 (it.brainKind == BrainKind.BANDED_SHRIMP && it.id != o.mateId || it.brainKind == BrainKind.CLEANER_SHRIMP || (it.isFish && it.vel.length() > 0.5 * it.cruiseSpeed))
         }
         o.clawDisplay += ((if (intruder && !o.molting) 1.0 else 0.0) - o.clawDisplay) * kotlin.math.min(1.0, c.dt * 3)
+        // now and then the claws-up stand-off ends in a grab at the fish (retailer reports, research 20; the
+        // fish is quick enough to get away). Its own random stream: brain rolls stay as they were.
+        if (o.clawDisplay > 0.7) {
+            val fish = c.p.neighbors(o.pos, ShrimpLimbs.STRIKE_CM).firstOrNull { it.isFish && it.alive && it.id != o.id }
+            if (fish != null) (o.limbRig as? ShrimpLimbs)?.considerStrike(o, fish, c.dt)
+        }
     }
 
     override fun abstractPose(c: Ctx, out: SteerIntent) {
@@ -797,22 +811,54 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
         best.also { mouthDir = it }
     }
 
-    inner class Roam : CrawlWander(this, { home }, 40.0, { c -> 0.55 * c.activity }, "Roaming") {
+    /** The disc is in its hide (resting under the rock, or within a few cm of the rest spot). */
+    private fun atHome(c: Ctx) = c.o.posture == 3 || c.o.pos.distanceTo(restSpot(c, false).pos) < 3.0
+
+    /**
+     * Lights on within [DAWN_LEAD_S]: a nocturnal brittle star is back under its rock before the lamp comes on, not
+     * caught in the open by it (research 17 §2.3; field brittle stars are back in their shelters by dawn [M]).
+     */
+    fun dawnSoon(c: Ctx): Boolean =
+        c.p.night && c.sim.lights.intensity(c.t + DAWN_LEAD_S) >= com.reeflive.core.sim.LightSchedule.LIGHTS_ON
+
+    inner class Roam : CrawlWander(this, { home }, 40.0, { c -> if (!c.p.night || dawnSoon(c)) 0.0 else 0.55 * c.activity }, "Roaming") {
         override fun update(c: Ctx, out: SteerIntent) { super.update(c, out); out.armGait = ARMS; arms.snake = 0.15 }
     }
 
     inner class HideUnder : Behavior("hide", "Hiding under rock") {
-        override fun score(c: Ctx) = 0.65 * (1 - c.activity) + 0.1
+        private var bestD = Double.MAX_VALUE
+        private var progressAt = 0.0
+        private var detourUntil = -1.0
+        private var detour = Vec3.ZERO
+        private var detours = 0
+        override fun enter(c: Ctx) { bestD = Double.MAX_VALUE; progressAt = c.t; detourUntil = -1.0 }
+        override fun score(c: Ctx) = if (dawnSoon(c)) 0.8 else 0.65 * (1 - c.activity) + 0.1
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
-            if (c.o.pos.distanceTo(r.pos) > 2.5) {
+            val dHome = c.o.pos.distanceTo(r.pos)
+            if (dHome > 2.5) {
                 out.crawl = true; out.armGait = ARMS; out.target = r.pos; out.speed = c.o.cruiseSpeed * 1.5; out.surfaceOffset = 0.4
                 c.o.extension = 1.0
+                // the surface walk has no path-finding: on a face whose way home runs straight off it (or into it) it
+                // stalls. Then the star works along the face for a while (down toward the sand first, else sideways,
+                // alternating sides) and tries again
+                if (dHome < bestD - 0.5) { bestD = dHome; progressAt = c.t }
+                if (c.t < detourUntil) out.target = c.o.pos + detour * 6.0
+                else if (c.t - progressAt > STALL_S) {
+                    val n = c.rock.envNormal(c.o.pos)
+                    val down = (Vec3.Y * -1.0).rejectFrom(n)
+                    val side = (n cross Vec3.Y).normalized(Vec3.X) * (if (detours % 2 == 0) 1.0 else -1.0)
+                    detour = if (down.length() > 0.5 && detours % 3 == 0) down.normalized() else side
+                    detours++
+                    detourUntil = c.t + DETOUR_S
+                    progressAt = c.t + DETOUR_S; bestD = Double.MAX_VALUE
+                }
                 return
             }
             out.rest(r, 1.0)
-            // disc wedged under the rock, 1–3 arm tips out of the mouth of the hide, sweeping slowly (research 17 §2.3)
-            arms.outArms = tipsOut; arms.outDir = caveMouth(c); arms.snake = 0.25
+            // disc wedged under the rock, 1–3 arm tips out of the mouth of the hide, trawling slowly from side to side
+            // over the substrate for detritus (research 17 §2.3)
+            arms.outArms = tipsOut; arms.outDir = caveMouth(c); arms.snake = 0.25; arms.sweep = 1.0
             c.o.extension = (0.35 + 0.15 * sin(c.t * 0.4 + c.o.appendagePhase)) * LightWithdraw.dayReach(c.p.light)
         }
     }
@@ -851,15 +897,19 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
             arms.feedArm = arm
             arms.feedAt = start
             arms.outDir = start - c.o.pos
+            // in its hide by day only the feeding arm and the usual tips come out; the disc stays under the rock
+            if (atHome(c) && c.activity < 0.5) arms.outArms = tipsOut
             if (elapsed < reachS) {
                 arms.feedLoop = com.reeflive.core.geom.smoothstep(0.4 * reachS, reachS, elapsed)
                 return
             }
             arms.feedLoop = 1.0
-            // held in the loop and passed mouthward along the arm
+            // held in the loop and passed mouthward along the arm: the item rides the drawn arm from the loop near its
+            // tip to the mouth under the disc (tube feet hand it on; Chartok 1983)
             ff.claimedBy = c.o.id; ff.settled = true; ff.vel = Vec3.ZERO
             val prog = ((elapsed - reachS) / carryS).coerceIn(0.0, 1.0)
-            ff.pos = start.lerp(c.o.pos + c.o.up * 0.3, prog)
+            val along = arms.armPoint(c.o, arm, CARRY_FROM * (1 - prog))
+            ff.pos = if (prog < 0.15) start.lerp(along, prog / 0.15) else along
             if (prog >= 1.0) { c.bite(ff); armFeeds++; arm = -1; finished = true }
         }
         override fun exit(c: Ctx) { f?.let { if (!it.eaten && it.claimedBy == c.o.id) it.claimedBy = null }; arm = -1 }
@@ -955,6 +1005,13 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
         const val SCENT_CM_S = 0.5
         /** Chance a survived bite costs an arm tip [L]; up to 47 % of wild O. echinata carry missing or regrowing arms [M]. */
         const val AUTOTOMY_P = 0.5
+        /** Heads home this long (s) before the lights come on: time to row back from the far end of the tank [INFERENCE]. */
+        const val DAWN_LEAD_S = 3600.0
+        /** Homing: no headway for this long (s) is a stall, then a detour along the face for [DETOUR_S]. */
+        const val STALL_S = 6.0
+        const val DETOUR_S = 8.0
+        /** A looped food item starts its ride to the mouth this far out along the arm (s, 0 root .. 1 tip). */
+        const val CARRY_FROM = 0.85
     }
 }
 

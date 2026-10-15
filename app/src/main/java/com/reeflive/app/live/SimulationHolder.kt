@@ -42,7 +42,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -74,8 +76,24 @@ class SimulationHolder(
     private val lights: LightScheduleRepository,
     private val assets: AssetManager?,
     private val clock: Clock = Clock.SYSTEM,
+    /** "Rocks can shift" (Settings): the dynamic rockscape for the tank and its sandbox forks. */
+    private val dynamicRocks: Flow<Boolean> = flowOf(true),
+    /** The tank's rock layout between launches (rocks that settled or toppled stay where they fell). */
+    private val rockStore: RockStore? = null,
     private val customStore: CustomTankStore? = null,
 ) {
+    /** Where the reality tank's moved rocks are kept between launches ([Simulation.rockState]). */
+    interface RockStore {
+        fun load(): String
+        fun save(state: String)
+    }
+
+    /** A small text file (app files dir). */
+    class FileRockStore(private val file: java.io.File) : RockStore {
+        override fun load(): String = runCatching { if (file.isFile) file.readText() else "" }.getOrDefault("")
+        override fun save(state: String) { runCatching { file.writeText(state) } }
+    }
+
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "sim").apply { isDaemon = true } }
     private val scope = CoroutineScope(SupervisorJob() + executor.asCoroutineDispatcher())
 
@@ -137,7 +155,18 @@ class SimulationHolder(
         SimMode.REALITY -> reality
     }
 
+    private var rocksDynamic = true
+    private var savedRocks: String? = null
+
     init {
+        scope.launch {
+            dynamicRocks.collect { on ->
+                rocksDynamic = on
+                reality?.enqueue(Command.DynamicRocks(on))
+                sandbox?.enqueue(Command.DynamicRocks(on))
+                customSim?.enqueue(Command.DynamicRocks(on))
+            }
+        }
         scope.launch {
             combine(measurements.latestValues(), livestock.alive(), lights.active()) { v, a, l -> Triple(v, a, l) }
                 .collect { (v, a, l) -> onInputs(v, a, l) }
@@ -319,6 +348,11 @@ class SimulationHolder(
             lights = Reality.lightsFrom(schedule),
         )
         sim.speed = 1.0
+        // rocks where they came to rest: carried over a rebuild, else as saved at the last launch
+        val prev = reality
+        if (prev != null) sim.restoreRocks(prev.rockState())
+        else sim.restoreRocks(rockStore?.load().orEmpty().also { savedRocks = it })
+        sim.setDynamicRocks(rocksDynamic)
         appliedValues = latestValues
         reality?.let { lastWallMs.remove(it) }
         reality = sim
@@ -407,6 +441,7 @@ class SimulationHolder(
             lights = com.reeflive.core.sim.LightSchedule(real.lights.points),
         )
         sb.speed = _speed.value
+        sb.copyRocksFrom(real)
         lastWallMs[sb] = nowMs()
         return sb
     }
@@ -450,7 +485,14 @@ class SimulationHolder(
 
     private fun publish(sim: Simulation) {
         if (sim === active) _snapshots.value = sim.latest
-        if (sim === reality) publishPeek(sim)
+        if (sim === reality) { publishPeek(sim); saveRocks(sim) }
+    }
+
+    /** A rock in the tank settled or toppled: keep its new spot for the next launch. */
+    private fun saveRocks(sim: Simulation) {
+        if (rockStore == null || sim.latest.events.none { it is com.reeflive.core.sim.SimEvent.RockShifted || it is com.reeflive.core.sim.SimEvent.RockscapeChanged }) return
+        val s = sim.rockState()
+        if (s != savedRocks) { savedRocks = s; rockStore.save(s) }
     }
 
     private fun publishPeek(sim: Simulation) {

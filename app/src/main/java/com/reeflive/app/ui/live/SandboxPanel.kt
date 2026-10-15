@@ -390,7 +390,14 @@ internal fun ParamsContent(state: SandboxPanelState, actions: SandboxActions, ca
                 Text("Feed the fish", style = MaterialTheme.typography.labelLarge, color = ReefTheme.colors.textSecondary)
                 FoodTray(onFeed = actions.onFeed, compact = true)
             }
-            QuickRow("Quick changes", listOf(Quick("Clean the water", ReefGlyphs.waveSparkle) { actions.onWaterChange(0.25) }))
+            QuickRow(
+                "Quick changes",
+                listOf(
+                    Quick("Clean the water", ReefGlyphs.waveSparkle) { actions.onWaterChange(0.25) },
+                    Quick("Siphon the gunk", ReefGlyphs.fishWaste) { actions.onMaintain(MaintenanceTask.SIPHON_SAND) },
+                    Quick("Rinse the filter", ReefGlyphs.sock) { actions.onMaintain(MaintenanceTask.RINSE_FILTER) },
+                ),
+            )
         }
         SandboxCategory.LIGHT_FLOW -> LightsRow(state, actions.onLights)
         else -> Unit
