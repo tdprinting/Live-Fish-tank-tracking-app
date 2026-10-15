@@ -22,10 +22,14 @@
  * ## Imperative API ([TankGlView])
  * - `setSnapshotProvider { SimSnapshot? }`: polled once per frame on the GL thread (must be thread-safe,
  *   e.g. an `AtomicReference.get()`); the renderer interpolates organisms between the last two distinct snapshots.
- * - `follow(id: String?)`: smooth close-up follow camera from the organism's SimSnapshot pose (fly-in, leads the
- *   fish's travel), collision-tested against the rock SDF (`assets/sim/rock_sdf.bin`). Drag swings round the fish,
- *   pinch moves closer; a lens effect (soft background blur, vignette, slight chromatic aberration) fades in on
- *   MEDIUM/HIGH. `null` returns to the orbit camera. If the organism disappears the view calls `onFollowLost`.
+ * - `follow(id: String?)`: smooth close-up follow camera from the organism's SimSnapshot pose (fly-in, tracks a
+ *   smoothed body centre and leads the fish's travel). Drag swings round the fish, pinch moves closer;
+ *   `followCam` ([FollowCamControl]) takes the on-screen Closer / Further / Turn buttons. A lens effect (soft
+ *   background blur, vignette, slight chromatic aberration) fades in on MEDIUM/HIGH. `null` returns to the orbit
+ *   camera. If the organism disappears the view calls `onFollowLost`.
+ * - Eye collision (every camera mode but the shelf and the sub): the eye never enters the rock SDF
+ *   (`assets/sim/rock_sdf.bin`), the sand bed, coral / equipment part boxes or animal bodies; it slides along them
+ *   ([com.reeflive.core.geom.EyeCollider]). The glass is only clamped against, so it can be looked through.
  * - Gestures: drag orbits (fling coasts), two fingers pan / pinch / twist, double tap zooms to the point (or follows
  *   the fish under the finger), double-tap-and-drag zooms with one finger, a tap on a fish picks it, a tap anywhere
  *   else touches the tank there (`onTouchTank`: glass, sand, rock, a coral (the camera also leans in for a closer
@@ -108,6 +112,11 @@ interface TankViewListener {
      * following. The host should route it to its follow state (it comes back through `follow` / `followId`).
      */
     fun onFollowRequest(id: String?) {}
+    /**
+     * Pressed and held right on an animal (not while following, cleaning or in the sub): ride along with it. The
+     * renderer has already drawn a ring around it; the default follows it like a double tap.
+     */
+    fun onHoldAnimal(id: String) = onFollowRequest(id)
     /** Long press on rock or sand (or while following): the first rock / sand / water point under the finger (cm), e.g. to drop food. */
     fun onLongPress(worldPoint: Vec3) {}
     /**

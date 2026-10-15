@@ -8,6 +8,7 @@ import com.reeflive.core.sim.CrabLegs
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.HermitLegs
 import com.reeflive.core.sim.Organism
+import com.reeflive.core.sim.ShrimpLimbs
 import com.reeflive.core.sim.SimEvent
 import kotlin.math.PI
 import kotlin.math.max
@@ -518,8 +519,8 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         const val TAP_MIN_S = 1.0
         const val TAP_MAX_S = 2.0
         /** Side-to-side body sway of the station "dance" while a fish is about, Hz and roll (rad) (Aquarium of the Pacific [M]; numbers DESIGN ESTIMATE). */
-        const val SWAY_HZ = 0.8
-        const val SWAY_ROLL = 0.12
+        const val SWAY_HZ = 0.6
+        const val SWAY_ROLL = 0.06
         /** Swim speed onto a client, cm/s: Lysmata swims up to and onto the fish (DESIGN ESTIMATE). */
         const val MOUNT_CM_S = 8.0
         /** How fast it turns toward the client as it sets off (rad/s). */
@@ -589,12 +590,12 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             station.advertising = client
             groomClock.tick(c, station.client == null && threat == null && c.p.neighbors(station.pos, APPROACH_CM).none { it.isFish && it.alive })
             val rocking = c.t < rockUntil
-            // the signal is the white front legs rocking with the antennae lashing (research 17, Caves 2019), drawn by
-            // the renderer from legRock; the body sways side to side with them, and more slowly whenever a fish is about
-            // (the "rocking dance", Aquarium of the Pacific [M])
+            // the signal is the white front legs rocking with the antennae lashing (research 17/19, Caves 2019), drawn by
+            // the renderer from legRock. The body stays planted: only a slight side-to-side lean while a fish is close
+            // (the "dance", Aquarium of the Pacific [M]); no measured body motion exists, so it is kept small
             out.rollExtra = when {
-                rocking -> 0.08 * sin(2 * PI * ROCK_HZ * c.t)
-                client -> SWAY_ROLL * sin(2 * PI * SWAY_HZ * c.t)
+                rocking -> SWAY_ROLL * 0.5 * sin(2 * PI * ROCK_HZ * c.t)
+                client && c.p.neighbors(station.pos, APPROACH_CM + 5).any { it.isFish && it.alive } -> SWAY_ROLL * sin(2 * PI * SWAY_HZ * c.t)
                 else -> 0.0
             }
             // antennae sweep faster while a client is about (advertising)
@@ -620,7 +621,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) { dur = c.rng.range(8.0, 20.0); tap = c.rng.range(TAP_MIN_S, TAP_MAX_S); antennaTaps++; mounted = false }
         override fun update(c: Ctx, out: SteerIntent) {
             val cl = station.client
-            if (cl == null || !cl.alive) { finished = true; station.release(); return }
+            if (cl == null || !cl.alive) { c.o.ridingOn = null; finished = true; station.release(); return }
             // the client poses for this shrimp: it may still name the wrasse that last cleaned it, and then its
             // VisitCleaner let go of the shrimp's station as it began to pose (a clean-visit loop every 1.5 s)
             cl.poseFor = c.o
@@ -633,7 +634,10 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             val k = ((elapsed - tap) / dur).coerceIn(0.0, 1.0)
-            val onBack = cl.pos + cl.heading * (cl.lengthCm * (0.3 - 0.6 * k)) + cl.up * (cl.lengthCm * cl.species.depthRatio * 0.5 + 0.8 * shrimpStance(c.o))
+            // walks back along the client from behind its eyes toward the tail, standing on the curve of its back
+            val along = 0.15 + 0.4 * k
+            val onBack = cl.pos - cl.heading * (cl.lengthCm * along) +
+                cl.up * (cl.lengthCm * cl.species.depthRatio * 0.5 * ShrimpLimbs.bodyProfile(along) + 0.8 * shrimpStance(c.o))
             val gap = onBack - c.o.pos
             if (!mounted && gap.length() > 0.6) {
                 // swim across head first, legs reaching for the fish
@@ -647,6 +651,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 return
             }
             mounted = true
+            c.o.ridingOn = cl
             out.place(onBack, cl.heading, cl.up, 12.0)
             out.posture = 1
             c.o.mouth = 0.5 + 0.5 * sin(2 * PI * 2 * c.t)
@@ -654,7 +659,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
             if (elapsed > dur + tap) { if (c.p.night) nightCleans++; finishClean(c, cl, isShrimp = true); cl.poseUntil = c.t; station.release(); finished = true }
         }
-        override fun exit(c: Ctx) { nav.reset() }
+        override fun exit(c: Ctx) { nav.reset(); c.o.ridingOn = null }
     }
 }
 

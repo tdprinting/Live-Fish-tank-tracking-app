@@ -212,15 +212,49 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     /** Coral bites so far (C-3; each disturbs the colony briefly). */
     var coralNips = 0
     fun sleepAnchor(c: Ctx): Anchor? = c.rock.anchors["SLEEP_TANG"]
+    /** Overhangs in the rockwork it can tuck under (ai/TangShelter.kt). */
+    val shelters by lazy { TangShelters(c) }
+    /** When and where it was last scared (a hard tap, an attack, a predator in view), for [TangHide]. */
+    var scaredAt = -1e9; private set
+    var scareFrom: Vec3 = Vec3.ZERO; private set
+    /** Its favourite sleeping crevice: the overhang nearest the SLEEP_TANG anchor that fits its body lying on its side. */
+    private var bed: TangShelters.Pose? = null
+    private var bedFor = -1.0
 
     init {
         install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
-            Flee(this, { c, _ -> c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
-            TangSleep(), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
+            Flee(this, { c, from -> shelters.pick(c.o.pos, from, c.o.lengthCm, TangHide.HIDE_ROLL)?.entry ?: c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
+            TangSleep(), TangHide(this), TangRub(this), TangZoom(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
+    }
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        threat?.let { if (it.alive) { scaredAt = c.t; scareFrom = it.pos } }
+    }
+
+    override fun onTap(c: Ctx, at: Vec3, s: Double) {
+        super.onTap(c, at, s)
+        if (s > 0.35) { scaredAt = c.t; scareFrom = at }
+    }
+
+    override fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: Organism?) {
+        super.onAttacked(c, from, mag, by)
+        scaredAt = c.t; scareFrom = from
+    }
+
+    /** The sleeping crevice pose for the tang's current size (refitted if it has grown). */
+    fun bedPose(c: Ctx): TangShelters.Pose? {
+        if (bedFor < 0 || abs(bedFor - c.o.lengthCm) > 0.5) {
+            bedFor = c.o.lengthCm
+            val a = sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)
+            bed = shelters.pick(a, null, c.o.lengthCm, SIDE_REST_ROLL, prefer = a)
+        }
+        return bed
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val a = sleepAnchor(c)
+        if (night) bedPose(c)?.let { return Rest(it.pos, it.heading) }
         return if (night && a != null) Rest(c.safe(a.pos, 0.6 * c.o.collisionLength + 0.5), a.dir ?: Vec3.X * -1.0)
         else Rest(c.safe(Vec3(60.0, c.zoneY(0.6), 24.0)), Vec3.X)
     }
@@ -332,7 +366,32 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
      */
     inner class TangSleep : Sleep(this@TangBrain) {
         private var lyingFor = 0.0
+        private val dock = Dock()
+        private var waking = false
+        /** Once it has started gliding into its crevice it only comes out the way it went in (no swimming through rock). */
+        override val committed: Boolean get() = dock.inside
+        override fun enter(c: Ctx) { dock.reset(); waking = false; lyingFor = 0.0 }
         override fun update(c: Ctx, out: SteerIntent) {
+            val o = c.o
+            val bp = if (c.p.night || dock.inside) bedPose(c) else null
+            if (bp == null) { plainUpdate(c, out); return }
+            // morning, or food in the water it wants: glide back out the way it came, then let the day begin
+            if (waking || !c.p.night || (Feed.rousedBy(c, this@TangBrain) && o.hunger > 0.2)) {
+                waking = true
+                if (dock.leave(c, out, bp)) finished = true
+                return
+            }
+            if (!dock.drive(c, out, bp, o.cruiseSpeed * 0.8, rate = 1.5)) { lyingFor = 0.0; return }
+            // wedged under the overhang lying on its side, back to the rock; the pose was fitted so no part of the
+            // body is in the rock, and it glided in along a path cleared for that pose
+            o.sleeping = true
+            o.desat = max(o.desat, 0.3)
+            lyingFor += c.dt
+            out.place(bp.pos, bp.heading, bp.up, 1.5)
+            out.pectoral = 0.2
+        }
+
+        private fun plainUpdate(c: Ctx, out: SteerIntent) {
             super.update(c, out)
             val o = c.o
             if (!o.sleeping) { lyingFor = 0.0; return }

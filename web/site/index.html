@@ -37,7 +37,7 @@
     <div class="chrome" id="chrome">
       <div class="top">
         <div class="seg" role="tablist" aria-label="Mode">
-          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button>
+          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button><button data-mode="mine" data-ico="fish">My tank</button>
         </div>
         <button class="status" id="statusBtn" aria-label="How is the tank doing?">
           <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
@@ -47,7 +47,12 @@
 
       <div class="sheet glass hidden" id="card"></div>
       <div class="fish glass hidden" id="fish"></div>
-      <div class="follow glass hidden" id="follow"></div>
+      <div class="follow hidden" id="follow"></div>
+      <div class="fcam hidden" id="followCam" aria-label="Camera">
+        <button class="fcbtn closer" data-zoom="1" aria-label="Closer"><b>＋</b><span>Closer</span></button>
+        <button class="fcbtn further" data-zoom="-1" aria-label="Further"><b>－</b><span>Further</span></button>
+        <button class="fcbtn turn" data-orbit="1" aria-label="Turn around the fish"><b>↻</b><span>Turn</span></button>
+      </div>
       <div class="shelfbar glass hidden tone-orange" id="shelfbar"></div>
       <nav class="rail glass" id="rail"></nav>
     </div>
@@ -82,6 +87,13 @@
       <h2 id="newsTitle">What's new</h2>
       <ul id="newsList" class="tips news"></ul>
       <form method="dialog" class="row-gap end"><button class="btn">Cool!</button></form>
+    </dialog>
+
+    <dialog id="mytank" class="glass">
+      <h2>Set up your own tank</h2>
+      <p class="muted">Pick a tank. It starts clean and empty, then add any animals you like from Add life. Everything is saved in this browser: names, personalities, how much they grow.</p>
+      <div id="mytankList" class="builds"></div>
+      <div class="row-gap end"><button class="btn ghost" id="mytankClose">Not now</button></div>
     </dialog>
 
     <dialog id="tips" class="glass">
