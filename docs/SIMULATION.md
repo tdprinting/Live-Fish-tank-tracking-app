@@ -1428,13 +1428,13 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
 - **Core.** `Organism.limbRig` is a `LimbRig.forKind`: `BrittleArms` for `BRITTLE_STAR`, `CrabLegs` for `SALLY_CRAB`, `ShrimpLimbs` for `BANDED_SHRIMP` and `CLEANER_SHRIMP`, and null for every other kind. This is the one channel for limb pose from the sim to the renderer.
   - `Steering.animate` calls `limbRig.step(o, dt, speed)` once per tick.
   - `Steering.crawl` writes the intended travel to `limbRig.travel` and multiplies the crawl velocity by `limbRig.pulse`. The disc moves in pulses; the crab's pulse is a steady 1.
-- **Pose.** `OrganismPose.limbs` holds `LimbRig.count` vec4s: 10 for the crawlers, 1 for the shrimp, empty for other kinds. Component x is a phase in [0, 1) or a slow scalar; y, z and w are plain scalars.
+- **Pose.** `OrganismPose.limbs` holds `LimbRig.count` vec4s: 40 for the brittle star (8 per arm, §19.7), 10 for the Sally Lightfoot, 15 for the hermit, 1 for the shrimp, empty for other kinds. Component x is a phase in [0, 1) or a slow scalar kept inside (0, 1); y, z and w are plain scalars.
   - `motionMode` is 1 for the brittle star and 3 for the crab.
   - Both bodies are now `rigid` splines. The disc never bends or turns with its path.
 - **App.**
   - `FishRig.limbs` interpolates the vec4s (`limbCount` of them). x is interpolated across the 1 → 0 wrap.
   - `DrawPart.limbPivots` / `GpuModel.limbPivots` read the node extras `limbPivots`: 10 × vec4 in glTF model space, xyz = limb root and w = rest length.
-  - `TankRenderer.fishUniforms` uploads every entry to `uLimb[10]` (uLimb[0] is zeroed when the pose has none) and sets `uLimbOn` and `uLimbPivot[10]`. `uLimbOn` is 1 only when the model has pivots and the pose has 10 limbs. Older GLBs fall back to the §15.3 shader paths.
+  - `TankRenderer.fishUniforms` uploads every entry to `uLimb[40]` (uLimb[0] is zeroed when the pose has none) and sets `uLimbOn` and `uLimbPivot[10]`. `uLimbOn` is 1 only when the model has pivots and the pose has at least 10 limbs. Older GLBs fall back to the §15.3 shader paths.
 - **Shader** (`fish.vert`, `uLimbOn`).
   - The body, carapace and eyes are placed rigidly at spine station 0, which is the organism position, with frame 0.
   - Limb vertices (part 3, `COLOR_0.r` = t along the limb, `COLOR_0.b` = limb / 9) go through `starArm` (mode 1) or `crabLimb` (mode 3).
@@ -1449,24 +1449,24 @@ Sources: [research 17, brittle star and Sally Lightfoot](research/17_brittle_sta
   - The two rear arms trail with `HIND_SWEEP` 0.22 rad.
 - **Reverse rowing** (25 %, `REVERSE_SHARE`). The centre arm drags behind and the other four push.
 - **Cycle.**
-  - The cycle runs at `MotionProfile.rowHz` 0.23 Hz × the speed ratio. It idles at 0.06 Hz.
-  - The disc moves for the first `DUTY` 45 % of the cycle and creeps at 20 % in the rest (`pulse`; the mean over a cycle is 1).
+  - Each stance carries the disc `STRIDE_ARM` 0.7 arm lengths (a planted arm sweeping ≈ 45°), so the cycle runs at speed / stride, at least 0.6 × `MotionProfile.rowHz` (0.23 Hz) and at most `MAX_HZ` 0.9 Hz. It idles at 0.06 Hz.
+  - The disc is pulled along only in the power stroke, the first `DUTY` 45 % of the cycle (`pulse`, a half sine with mean 1 over the cycle), and rests while the arms recover.
 - **Turning.**
   - The mode holds for a whole bout.
   - A turn is a new centre arm, chosen only in the static disc phase and only once the travel is more than 0.78 rad off the current arm's sector (`leadSwitches`).
   - `Steering.crawl` parallel-transports the heading over the surface, so the disc never yaws.
-- **Arm shape.** Each arm also carries:
-  - a travelling bend wave from root to tip (`waveAmp`, faster while `snake`);
+- **Grip.** The rowing pair and the rear pair grip in the stance: at touch-down the tip's drawn point on the surface becomes its hold, and every tick a Newton solve on the arm's base swing and curl (finite differences through the same march as the drawing, 6 iterations, limits ±1.8 rad) keeps the drawn tip on it while the disc is pulled past. A hold the arm can no longer reach (out of reach, walled, or more than 2 × `GRIP_TOL` off after a re-solve) is let go (`slips`); a slipped arm lifts its tip until its next stance. In the recovery swing the arm eases from its release shape to its next hold (by `RECOVER_END` 0.92 of the cycle), tip lifted `SWING_LIFT`.
+- **Arm shape.** The base swing and curl (from the grip, else the gait targets) plus:
+  - a travelling bend wave from root to tip (`waveAmp`, faster while `snake`), so arms lie in sideways S-curves;
   - a resting tip curl, alternating in sign;
-  - coiling when drawn in (reach → 0).
-- **Shader (`starArm`).** It integrates the arm's centreline over 8 steps from the per-s direction angles:
-  - yaw = base swing × (1 − 0.55 s) + wave + tip curl + coil;
-  - pitch = lift × s (0.4 + 0.6 s) − sag.
+  - S-folds when drawn in (reach → 0; ± `FOLD_AMP` 1.5 rad, 1.6 folds along the arm), which keep a tucked arm in its own sector instead of looping across its neighbour;
+  - in the day hide, a slow side-to-side trawl of the out tips (`sweep`: ± `SWEEP_AMP` 0.35 rad at `SWEEP_HZ` 0.07 Hz).
 
-  The cross-section rides on the curve's frame. Vertices past the arm's current length collapse onto the stump.
+  shape(s) = yaw × (1 − 0.55 s) + wave × s sin 2π(1.3 s − phase) + curl × 2 smoothstep(0.3, 1, s) + fold × 1.5 sin 2π(1.6 s). The sim then fits this shape to the ground (§19.7).
+- **Shader (`starArm`).** It integrates the sim's 15 step directions and heights into nodes and draws the Catmull-Rom curve through them (end tangents extrapolated), the cross-section riding on the curve's frame. Vertices past the arm's current length collapse onto the stump.
 - **Brain states (`BrittleStarBrain`).**
-  - `HideUnder` by day leaves `outArms` = 1–3 tips (fixed per animal) out toward the cave mouth.
-  - `Roam` at night uses the arm gait.
+  - `HideUnder` by day leaves `outArms` = 1–3 tips (fixed per animal) out toward the cave mouth, trawling slowly. Homing to the hide, a stall (no headway for 6 s: the surface walk has no path-finding and stalls on a face whose way home runs straight off it) sends it along the face for 8 s (down toward the sand first, else sideways, alternating), then it tries again.
+  - `Roam` at night only (never with the lights on) uses the arm gait. An hour before the lights come on (`dawnSoon`, `DAWN_LEAD_S` 3600 s) Roam scores 0 and HideUnder 0.8, so the star is home under its rock before the lamp.
   - `RaceToFood`: the scent arrives after 15 s + distance / 0.5 cm/s. A hidden star first reaches out with its arms for 5–10 s (`armsFirstEmergences`) and then rows out at burst speed.
   - `ArmFeed`: the nearest arm reaches out, loops its tip round the item (`feedLoop` → curl) and carries the item to the mouth at 10 cm per 8–15 s (`armFeeds`).
   - `Retract`: every arm is pulled in at 6/s for 1.2 s, then it runs home at burst speed.
@@ -1516,6 +1516,8 @@ The crawler models stand on their own y = 0 plane, but the sim walks `Organism.p
 
 ### 19.4 Tests
 
+`sim/BrittleMotionTest.kt` (§19.7): the disc moves only in the power strokes (< 3 % of its travel in the recovery) while gripping tips hold (mean < 0.02 cm a tick on sand); over 30 min of night roaming over rock and sand < 2 % of drawn arm points sit more than 0.1 cm inside a surface (deepest < 1.5 cm), < 2 % of lying arm points stand more than 0.6 cm off it, and the disc rests on it; by day the disc stays in its hide without passing into the rock while 1–3 tips trawl; from the small hours it roams, then is home and settled when the lights come on; an arm goes over or round a crab put across it.
+
 `ai/CrawlerTest.kt` has 8 tests:
 - the star hides by day with only a few tips out;
 - it comes out at night;
@@ -1525,6 +1527,17 @@ The crawler models stand on their own y = 0 plane, but the sim walks `Organism.p
 - it retreats fast when disturbed and sheds an arm when bitten;
 - the crab mostly grazes, with alternating claw strokes at 1.5–5 per second, and darts home on a startle and tucks;
 - the crab's legs step in an alternating tetrapod.
+
+### 19.7 Brittle star arm contact (`sim/BrittleArms.kt`, `LimbRig.contact`, 2026-10-15)
+
+The arms are fitted to the rock, sand bed, glass (`CrawlSurface`) and other animals every tick, after the seat update (`Simulation.behaviorTick` / `abstractPlacement` call `limbRig.contact`; dead animals `unseat`).
+
+- **Disc.** The disc is cast down onto the surface along its up and lifted clear of any bump under its underside ring (`discUnderCm`; `discTopClearCm` checks the dome and upper rim). Its up eases toward the sim's at `UP_RATE` 0.8 rad/s instead of following rough rock's normal tick by tick (that swung the whole star and wrenched holding tips off). `Organism.seatOn/seatPos/seatUp` draw it there.
+- **March.** Each arm is marched out from its root in `SAMPLES` 15 steps of 1/15 arm, exactly as the shader draws it. Per step, the surface height under the step's end (probed along the disc's up with `CrawlSurface.heightAt`, then again where the step's run, shortened by that rise, lands) sets the step's height; the arm keeps `CLEAR_CM` 0.08 cm off it. A rise of more than `CLIMB` 1.4 step lengths, a step whose middle cuts into rock (a ridge, a block's corner) or a body too high to climb is a wall: the step bends aside, trying 0.25, 0.5, 0.8, 1.2 rad each way (the side that last worked first; a bend is held while needed and relaxes at 0.6 rad/s, never while gripping). Walled on every side (a crevice, an overhang), the step goes where it is least buried (7 bends × rise, level or sink). Drops over an edge of up to `DROP` 0.98 step lengths are followed, so arms drape over edges. Lifted steps (swing, probing tips) are lowered under a ceiling to keep 0.15 cm clear.
+- **Animals.** Animals lying within reach (sphere of 0.3 × collision length, up to 8) are climbed over like rock where the rise allows, else bent round.
+- **No snaps.** A drawn step turns at most `PSI_STEP` 0.5 rad from one contact to the next (bends are chosen within that), so a wall met all at once is worked round over a few ticks.
+- **Pose layout** (8 vec4 per arm, arm k at `uLimb[8k]`): the x slots carry heights y₁..y₈ as 0.5 + 0.5 y (the renderer lerps x as a phase); the plain slots n = 0.. carry the step directions ψ₁..ψ₁₅ (rad from the rest direction), heights y₉..y₁₅, the arm's length, 0. `limbpose.py` packs and unpacks it (`brittle_pack`).
+- **Cost.** ≈ 2 surface probes per step (more when bending), 5 × 15 steps, plus a 6-iteration grip solve for holding arms: a few thousand SDF samples per tick for the one star; nothing is allocated per tick.
 
 ### 19.5 Shrimp navigation and perches (`ai/ShrimpNav.kt`, 2026-10-14)
 
