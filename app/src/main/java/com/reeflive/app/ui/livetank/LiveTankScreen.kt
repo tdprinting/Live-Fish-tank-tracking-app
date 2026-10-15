@@ -411,6 +411,7 @@ fun LiveTankScreen(
         if (id != null) {
             if (touring) { touring = false; vm.follow(null) }
             chromeHidden = false
+            haptics.tick()       // every touch answers: a tick here, a ring around the animal in the tank (TankRenderer.touchRing)
             vm.select(id)
             vm.touchAnimal(id)   // a snail or crab tapped right on tucks in; a fish only gets picked (TankTouch.animalReaction)
         } else {
@@ -1109,6 +1110,7 @@ private fun TankArea(
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
+        val haptics = rememberHaptics()
         TankView(
             snapshots = vm.snapshots,
             modifier = Modifier.fillMaxSize().skipFxOnTap(fx, onSkip).trackTorch(torch, torchOn),
@@ -1118,7 +1120,8 @@ private fun TankArea(
             onTapGlass = onTapGlass,
             onLongPress = onLongPress,
             onFollowLost = { vm.follow(null) },
-            onFollow = vm::follow,
+            // a follow started by a double tap or a press-and-hold on the animal: a firmer buzz than a tap
+            onFollow = { id -> if (id != null) haptics.confirm(); vm.follow(id) },
             onTouchTank = onTouchTank,
             onFinger = onFinger,
             onFlick = onFlick,
