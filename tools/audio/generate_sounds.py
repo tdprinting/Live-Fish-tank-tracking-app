@@ -5,10 +5,15 @@ Writes app/src/main/res/raw/tank_*.ogg (Vorbis, via ffmpeg's libvorbis) or, when
 same files.
 
 Ambience loops (played with loop = -1 in SoundPool):
-  tank_flow_loop     powerhead wash: soft, dark low-passed noise with slow wavemaker-style surges
-  tank_hum_loop      return pump hum: 100/120 Hz magnet hum with harmonics and a little motor noise
-  tank_hob_loop      surface trickle: quiet rounded water noise and a few soft droplets
-  tank_bubbles_loop  sparse, quiet bubble pops
+  tank_flow_loop     powerhead wash: soft, dark low-passed noise, steady (only a slight swell)
+  tank_hum_loop      pumps and powerheads on 60 Hz mains: 60/120/240 Hz lines over a low motor rumble
+  tank_hob_loop      the HOB waterfall: a smooth, steady 0.5-2.5 kHz splash "shhh" with a rare soft drip
+  tank_bubbles_loop  a rare quiet bubble pop
+
+Matched to Tee's own tank audio (IMG_0106 night feeding clip and kenya_tree_tee.mov; analysis in
+docs/research/video/tee_tank_night_feeding.md "Sound"): a steady bed (50 ms level p10-p90 within ~3 dB), most energy at
+63-500 Hz, a smooth waterfall hump at 1-2.5 kHz (octave bands 2 kHz -20 dB, 4 kHz -27 dB under the total), hum lines at
+60, 120 and 240 Hz, and only ~0.1 drips a second.
 One-shots:
   tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime, tank_glass_scrape
 
@@ -126,8 +131,8 @@ def flow_loop():
     # soft, dark water movement heard through the glass: almost no energy above ~900 Hz (the old 1.5-5 kHz hiss
     # read as a scratchy, loud static on phone and laptop speakers)
     wash = spectral_noise(m, 60, 700, tilt=-1.0)
-    surge = smooth_random(m, 0.25, 0.30)          # slow wavemaker-ish swells
-    ripple = smooth_random(m, 2.0, 0.06)          # gentle turbulence
+    surge = smooth_random(m, 0.25, 0.10)          # slight swells: Tee's tank sounds steady (no wavemaker)
+    ripple = smooth_random(m, 2.0, 0.04)          # gentle turbulence
     x = wash * surge * ripple
     return normalize(make_loop(x, n), 0.5)
 
@@ -137,26 +142,29 @@ def hum_loop():
     m = n + f
     t = t_axis(m)
     x = np.zeros(m)
-    # soft pump rumble: mostly broadband water through the impeller with a faint 120 Hz tone;
-    # the old harmonic stack read as an electrical buzz on phone speakers
-    x += 0.15 * np.sin(2 * np.pi * 120 * t + rng.uniform(0, 2 * np.pi))
-    x += spectral_noise(m, 60, 500, tilt=-1.2)
-    x *= 1 + 0.06 * np.sin(2 * np.pi * 0.5 * t)  # slow beat
+    # pumps on US 60 Hz mains: Tee's clips show steady lines at 60, 120 and 240 Hz (+11-17 dB over the noise around
+    # them), 120 Hz (the magnet's double-mains buzz) strongest, over a low impeller rumble. Each line is a whole number
+    # of cycles in the 4 s loop, so the loop point stays clean
+    for f0, a in ((60, 0.22), (120, 0.30), (180, 0.06), (240, 0.12), (300, 0.05)):
+        x += a * np.sin(2 * np.pi * f0 * t + rng.uniform(0, 2 * np.pi))
+    x += 0.12 * spectral_noise(m, 50, 400, tilt=-1.2)
+    x *= 1 + 0.03 * np.sin(2 * np.pi * 0.5 * t)  # slow beat
     return normalize(make_loop(x, n), 0.45)
 
 
 def hob_loop():
     n, f = loop_len(6.0)
     m = n + f
-    # quiet surface trickle: low, rounded water noise with a few soft droplets (was bright 0.7-6.5 kHz flutter)
-    body = spectral_noise(m, 150, 1100, tilt=-0.9) * smooth_random(m, 1.2, 0.25)
-    x = body
+    # the HOB's waterfall as it sounds in Tee's room: a smooth, steady "shhh" peaking at 1-2.5 kHz with a rounded
+    # low body. Smooth Gaussian noise with almost no flutter: the old flickering grains were what read as scratchy
+    splash = spectral_noise(m, 600, 1900, tilt=-0.3, order=3)
+    body = spectral_noise(m, 120, 900, tilt=-0.6)
+    x = (0.7 * splash + body) * smooth_random(m, 0.6, 0.06)
     drops = np.zeros(m)
-    for _ in range(int(6.0 * 3)):
-        f0 = rng.uniform(600, 1400)
-        d = bubble(rng.uniform(0.03, 0.06), f0, rise=rng.uniform(0.3, 0.7), amp=rng.uniform(0.3, 0.7))
-        add_at(drops, d, int(rng.uniform(0, m - len(d))))
-    x = x + drops * 0.8
+    for _ in range(1):  # ~0.1 drips/s in the clips: one soft drip per 6 s loop
+        d = bubble(rng.uniform(0.04, 0.07), rng.uniform(700, 1200), rise=rng.uniform(0.3, 0.6), amp=0.5)
+        add_at(drops, d, int(rng.uniform(0.5, 5.0) * SR))
+    x = x + drops
     return normalize(make_loop(x, n), 0.45)
 
 
@@ -167,11 +175,11 @@ def bubbles_loop():
     # clusters of a few pops, well apart (the loop is mostly quiet)
     t = 0.3
     while t < 8.0 + XFADE_S - 0.3:
-        for k in range(int(rng.integers(1, 4))):
+        for k in range(int(rng.integers(1, 3))):
             f0 = rng.uniform(450, 1400)
             b = bubble(rng.uniform(0.04, 0.09), f0, rise=rng.uniform(0.4, 1.2), amp=rng.uniform(0.5, 1.0))
             add_at(x, b, int((t + k * rng.uniform(0.05, 0.14)) * SR))
-        t += rng.uniform(0.9, 2.2)
+        t += rng.uniform(2.5, 5.0)  # rare: Tee's clips have ~0.1 pops a second
     x += 0.01 * spectral_noise(m, 300, 3000)  # keep the bed from being digital silence
     return normalize(make_loop(x, n), 0.6)
 
