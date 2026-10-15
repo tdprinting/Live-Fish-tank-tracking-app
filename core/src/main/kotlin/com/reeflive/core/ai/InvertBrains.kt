@@ -1739,7 +1739,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         private val SQUEEZE_R = doubleArrayOf(4.0, 8.0, 12.0)
         /** Carapace fit test: rim radius and height (× length), clearance (cm). */
         const val FIT_RIM = 0.55
-        const val FIT_HEIGHT = 0.15
+        const val FIT_HEIGHT = 0.2
         const val FIT_CLEAR_CM = 0.05
         const val HOME_OUT_MAX_CM = 2.5
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */

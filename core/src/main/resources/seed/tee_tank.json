@@ -18,7 +18,7 @@
     {"speciesId": "lysmata_amboinensis", "nickname": "Skunk", "sizeCm": 5.0},
     {"speciesId": "clibanarius_tricolor", "nickname": "Blue-legs", "sizeCm": 1.5, "quantity": 2},
     {"speciesId": "paguristes_cadenati", "nickname": "Mr. Crabs", "sizeCm": 2.5},
-    {"speciesId": "percnon_gibbesi", "nickname": "Sally", "sizeCm": 4.0},
+    {"speciesId": "percnon_gibbesi", "nickname": "Sally", "sizeCm": 2.5},
     {"speciesId": "ophiocoma_sp", "nickname": "Brittle star", "sizeCm": 15.0, "verified": false, "notes": "Black brittle star; exact Ophiocoma species not confirmed."},
     {"speciesId": "sabellastarte_sp", "nickname": "Feather duster", "sizeCm": 12.0, "verified": false, "notes": "Brown tube worm; assumed Sabellastarte."},
     {"speciesId": "nassarius_sp", "nickname": "Nassarius crew", "sizeCm": 1.5, "quantity": 3},

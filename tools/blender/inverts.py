@@ -1068,269 +1068,198 @@ def build_feather_duster():
 
 
 # ----------------------------------------------------------------------------
-# Sally Lightfoot crab (Percnon gibbesi; research 17 §3, research 27; Tee's photo 2026-10-15): an extremely flat, near
-# round carapace, dark olive-brown and finely speckled, with a thin pale mint-green midline and paired green lines
-# curving back from the front; a toothed front margin between big yellow-green eyes on short stalks; four pairs of
-# long, flattened walking legs: a broad, spotted olive merus with a row of spines on each edge, red-brown joints, a
-# slimmer propodus with a yellow stripe and a bright yellow, hooked dactyl; small equal chelae with pale lilac palms.
-# Unit: carapace width 1.0 (= lengthCm 5), facing +X (it walks sideways along +-Y), feet on z = 0.
+# Sally Lightfoot crab (Percnon gibbesi; research 17 §3, research 27). The model is Tee's own (2026-10-15, a generated
+# one-piece mesh, sources/sally_lightfoot_tee.glb) rigged here: the shortest paths over its surface from each leg and
+# claw tip back to the carapace find the limbs (meshrig.py), which are split off and given the limb rig data; the
+# carapace is flattened to a real Sally's (research 27: about a fifth as deep as it is wide) and the shapeless eye
+# bumps get eyes on stalks.
+# Unit: carapace width 1.0 (= lengthCm), facing +X (it walks sideways along +-Y), feet on z = 0.
 # Limb rig (SIMULATION §19): COLOR_0 R = t along the limb, B = limb / 9 (legs k = 2 pair + (0 left, 1 right), chelae
-# 8 left, 9 right); extras.limbPivots = 10 x vec4 (glTF space): coxa xyz, w = leg length. The leg paths are the ones
-# CrabModel.SALLY (CrawlerSeat.kt) was measured from: change them and re-measure its hip / knee / mid / tip.
+# 8 left, 9 right); extras.limbPivots = 10 x vec4 (glTF space): coxa xyz, w = limb length along its centreline.
+# CrabModel.SALLY (CrawlerSeat.kt) is measured from this model's limbs and carapace: it prints the values to paste.
 # ----------------------------------------------------------------------------
-SALLY_LEG_ANGLES = (62.0, 86.0, 110.0, 134.0)    # leg directions from forward (deg)
-SALLY_LEG_LEN = (0.95, 1.12, 1.12, 0.98)         # carapace widths
-SALLY_BODY_Z = 0.15                              # carapace mid-height
-# segment ends along a walking leg (t): coxa+basis | merus | carpus | propodus | dactyl
-SALLY_JOINTS = (0.1, 0.47, 0.6, 0.85)
+SALLY_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sources", "sally_lightfoot_tee.glb")
+# in the source mesh's frame (Blender axes, front +X): leg and claw tips (x, y), in limb order, and where each claw
+# meets the body (the legs are cut where they leave the carapace outline)
+SALLY_TIPS = ((0.336, 0.388), (0.365, -0.331), (0.242, 0.487), (0.039, -0.477), (-0.279, 0.307), (-0.246, -0.412),
+              (-0.362, 0.117), (-0.354, -0.092), (0.17, 0.06), (0.166, -0.059))
+SALLY_CLAW_BASE = ((0.097, 0.046), (0.097, -0.046))
+SALLY_CENTRE = (-0.008, 0.004)          # carapace centre
+SALLY_SRC_CW = 0.284                    # carapace width
+SALLY_FLAT = 0.55                       # height scale: the source's domed carapace was 0.64 widths deep
+SALLY_EYES = ((0.098, 0.055, 0.176), (0.1, -0.057, 0.174))   # the eye bumps (source frame)
 
 
-def _squircle(phi, n=2.6):
-    return (np.abs(np.cos(phi)) ** n + np.abs(np.sin(phi)) ** n) ** (-1.0 / n)
-
-
-def _sally_outline(phi):
-    """Carapace margin (x, y) at angle phi: a rounded square, the front straightened and notched between the eyes."""
-    r = np.minimum(_squircle(phi), 1.25)
-    x = 0.48 * r * np.cos(phi)
-    y = 0.5 * r * np.sin(phi)
-    x = np.where(x > 0.35, 0.35 + (x - 0.35) * 0.6, x)
-    x = x - 0.025 * np.exp(-(y / 0.07) ** 2) * (x > 0.3)       # the frontal notch
-    return x, y
-
-
-def _sally_leg_radius(t):
-    """Half-width of a walking leg along t: broad merus, pinched joints, slim propodus, tapering hooked dactyl."""
-    j0, j1, j2, j3 = SALLY_JOINTS
-    r = np.interp(t, [0.0, j0, j0 + 0.05, 0.3, j1 - 0.02, j1 + 0.02, j2 - 0.02, j2 + 0.02, j3 - 0.01, j3 + 0.015, 1.0],
-                  [0.042, 0.036, 0.056, 0.06, 0.05, 0.034, 0.036, 0.03, 0.024, 0.02, 0.004])
-    for j in SALLY_JOINTS:               # a little waist at every joint
-        r = r * (1 - 0.18 * np.exp(-((t - j) / 0.012) ** 2))
-    return r
+def _sally_eye_texture():
+    """Eye stalk and eye, u from the stalk's base (0) to the front of the eye (1), v around."""
+    h, w = 32, 128
+    u = np.linspace(0, 1, w)[None, :].repeat(h, 0)
+    v = np.linspace(0, 1, h)[:, None].repeat(w, 1)
+    col = np.zeros((h, w, 3))
+    stalk, cornea, band = np.array(hex2rgb("#6A3020")), np.array(hex2rgb("#2A2014")), np.array(hex2rgb("#8C6A30"))
+    m = S(0.42, 0.5, u)[..., None]
+    col = stalk * (1 - m) + cornea * m
+    b = (S(0.5, 0.56, u) * (1 - S(0.62, 0.7, u)))[..., None]      # a golden band round the cornea's base
+    col = col * (1 - b) + band * b
+    rs = np.random.default_rng(3)
+    sp = (rs.random((h, w)) > 0.93) * (u > 0.66)                  # gold flecks over the dark cornea
+    col = col * (1 - 0.6 * sp[..., None]) + band * 0.6 * sp[..., None]
+    col *= (0.85 + 0.15 * np.sin(v * 2 * np.pi))[..., None]
+    path = os.path.join(C.BUILD, "sally_eye.png")
+    C.write_png(path, np.concatenate([col, np.ones((h, w, 1))], -1))
+    return C.load_image(path, "sally_eye")
 
 
 def build_sally_lightfoot():
+    import meshrig as R
     C.reset_scene()
-    at = Atlas(512, 1024, 4)
-    j0, j1, j2, j3 = SALLY_JOINTS
+    bpy.ops.import_scene.gltf(filepath=SALLY_SRC)
+    src = next(o for o in bpy.data.objects if o.type == 'MESH')
+    me = src.data
+    M = np.array(src.matrix_world)
+    V = np.array([(M @ np.r_[v.co[:], 1.0])[:3] for v in me.vertices])
+    F = np.array([tuple(p.vertices) for p in me.polygons])
+    assert F.shape[1] == 3, "the source mesh is triangles"
+    UV = np.zeros((len(V), 2))
+    for lp in me.loops:
+        UV[lp.vertex_index] = me.uv_layers.active.data[lp.index].uv[:]
+    img = next(i for i in bpy.data.images if "basecolor" in i.name)
+    # ---- limbs ----
+    U, inv = R.weld(V)
+    cx, cy = SALLY_CENTRE
 
-    def leg(cv):
-        # u along the leg (0 coxa .. 1 dactyl tip), v around (0.25 top, 0.75 underside)
-        u, v = cv.u, cv.v
-        top = 0.5 + 0.5 * np.cos((v - 0.25) * 2 * np.pi)                    # 1 on top, 0 underneath
-        cv.vgrad("#3A3420", "#3A3420")
-        n = P.fbm(cv.h, cv.w, 16, 3, 41, aspect=0.25)
-        cv.blend(np.clip(n * 1.6 - 0.4, 0, 1), "#5E5632", 0.8)               # olive mottling
-        rs = np.random.default_rng(5)
-        for _ in range(70):              # dark brown spots on merus and carpus, longer than wide
-            cu, cvv = rs.uniform(j0, j2), rs.uniform(0.0, 1.0)
-            cv.blend(1 - S(0.5, 1.0, np.hypot((u - cu) / 0.014, (v - cvv) / 0.07)), "#1E1A0E", 0.85)
-        speck = P.value_noise(cv.h, cv.w, 160, 60, 9)
-        cv.blend(S(0.84, 0.94, speck) * (u < j2), "#A8A878", 0.4)            # fine pale speckles
-        cv.blend(S(j2 - 0.01, j2 + 0.04, u), "#5E5426")                       # propodus: plainer olive-gold
-        cv.blend(S(j2 + 0.02, j3, u) * S(0.35, 0.75, top), "#D0B030", 0.9)   # its yellow dorsal stripe
-        cv.blend(S(j3 - 0.01, j3 + 0.02, u), "#D8BC30")                       # bright yellow dactyl
-        cv.blend(S(0.94, 0.995, u), "#9A5418", 0.85)                          # amber-brown claw tip
-        for j, w in ((j0, 0.02), (j1, 0.022), (j2, 0.018)):                   # red-brown joints
-            cv.blend(1 - S(w * 0.4, w, np.abs(u - j)), "#64260E", 0.8)
-        cv.blend(1 - S(0.0, j0 * 0.8, u), "#5A2414", 0.6)                     # coxa
-        cv.multiply(0.78 + 0.22 * top)                                        # darker underneath
-    at.paint_strip(0, leg)
+    def inside(P, s=1.0):
+        return ((P[:, 0] - cx) / (0.15 * s)) ** 2 + ((P[:, 1] - cy) / (0.135 * s)) ** 2 < 1
+    lab_u, t_u, lines = R.rig_limbs(U, inv[F], (cx, cy, 0.2), SALLY_TIPS, [None] * 8 + list(SALLY_CLAW_BASE),
+                                    inside, [0.05] * 8 + [0.045] * 2, body=lambda P: inside(P, 1.15))
+    lab, tv = lab_u[inv], t_u[inv]
 
-    def cara(cv):
-        # u 0.25..0.75 holds the top view: px along the body (front = 1), py side to side
-        px = np.clip((cv.u - 0.25) / 0.5, 0, 1)
-        X, Y = (px - 0.5) * 2, (cv.v - 0.5) * 2
-        r = np.hypot(X, Y)
-        cv.vgrad("#3A3018", "#3A3018")
-        cv.blend(np.clip(P.fbm(cv.h, cv.w, 10, 4, 23) * 1.8 - 0.55, 0, 1), "#6A5A2E", 0.85)   # bronze-olive mottling
-        cv.blend(np.clip(P.fbm(cv.h, cv.w, 22, 3, 29) * 2.2 - 1.2, 0, 1), "#1C180C", 0.7)     # dark blotches
-        cv.blend(S(0.84, 0.94, P.value_noise(cv.h, cv.w, 140, 70, 31)), "#A8A878", 0.35)        # fine speckles
-        cv.blend(S(0.82, 1.0, r), "#2A2412", 0.6)                                              # darker rim
+    # ---- to the model frame: carapace width 1, centred, flattened, the lowest point on z = 0 ----
+    sc = 1.0 / SALLY_SRC_CW
 
-        def line(d, w=0.016):
-            return 1 - S(w * 0.5, w, d)
-        green = "#9CD8A8"
-        m = line(np.abs(Y)) * (1 - S(0.78, 0.9, np.abs(X)))                                  # midline
-        # paired lines curving back and out from the front third (the "Y" on Tee's photo)
-        for a, c0 in ((0.45, 0.35), (0.85, 0.05)):
-            yc = a * np.maximum(c0 - X, 0) ** 0.8
-            m = np.maximum(m, line(np.abs(np.abs(Y) - yc), 0.018) * band_(X, -0.55, c0) * (np.abs(Y) > 0.03))
-        # a transverse arc behind the eyes
-        m = np.maximum(m, line(np.abs(X - (0.6 - 0.3 * Y ** 2)), 0.016) * (np.abs(Y) < 0.5))
-        cv.blend(m, green, 0.7)
-        cv.multiply(0.9 + 0.2 * P.value_noise(cv.h, cv.w, 64, 16, 7))
-        # underside (u < 0.25 or > 0.75): plain pale tan
-        cv.blend(np.maximum(1 - S(0.24, 0.25, cv.u), S(0.75, 0.76, cv.u)), "#8C7A58")
+    def tf(P):
+        P = np.atleast_2d(np.asarray(P, float))
+        return np.stack([(P[:, 0] - cx) * sc, (P[:, 1] - cy) * sc, P[:, 2] * sc * SALLY_FLAT], -1)
+    z0 = tf(V)[:, 2].min()
 
-    def band_(x, a, b):
-        return S(a - 0.05, a + 0.05, x) * (1 - S(b - 0.05, b + 0.05, x))
-    at.paint_strip(1, cara)
+    def model(P):
+        Q = tf(P)
+        Q[:, 2] -= z0
+        return Q
+    W = model(V)
+    lines = [model(Cl) for Cl in lines]
 
-    def claw(cv):
-        u = cv.u
-        cv.vgrad("#3E3820", "#544C2A")                               # olive-brown merus / carpus
-        cv.blend(S(0.8, 0.9, P.value_noise(cv.h, cv.w, 80, 30, 13)) * (u < 0.55), "#C8CCA0", 0.6)
-        cv.blend(1 - S(0.01, 0.03, np.abs(u - 0.3)), "#7A2E14", 0.8)  # joint
-        cv.blend(S(0.55, 0.62, u), "#9C94AC")                        # pale lilac palm
-        cv.blend(S(0.62, 0.8, u) * S(0.4, 1.0, cv.v), "#B8B2C8", 0.7)
-        cv.blend(S(0.86, 0.95, u), "#CCC6D6", 0.8)                   # pale fingers
-        cv.blend(S(0.97, 1.0, u), "#5A4A3C", 0.8)                    # dark tips
-    at.paint_strip(2, claw)
-
-    def eye(cv):
-        # u along the stalk (0 base .. 0.5 eye base), the eye from 0.5 (back) to 1 (front pole)
-        u = cv.u
-        cv.vgrad("#4A4424", "#5A5230")
-        cv.blend(S(0.45, 0.55, u), "#B8C838")                        # yellow-green cornea
-        cv.blend(S(0.62, 0.72, u), "#D8D040", 0.8)
-        cv.blend(S(0.86, 0.92, u), "#1A1A10")                        # dark pseudo-pupil at the front
-    at.paint_strip(3, eye)
-    tex = os.path.join(C.BUILD, "sally_lightfoot_atlas.png")
-    at.cv.save(tex)
-    mat = C.material("sally_lightfoot_mat", rough=0.45, image=C.load_image(tex, name="sally_lightfoot"))
-
-    def col(t, k, V):
-        V = np.asarray(V)
-        return np.stack([np.asarray(t, float) * np.ones(len(V)), np.zeros(len(V)), np.full(len(V), k / 9.0),
-                         np.clip(0.5 - V[:, 0], 0, 1)], -1)
-
-    pivots = [0.0] * 40
-    # ---- carapace: flat disc, a low dome on top, flat underneath, a thin rounded rim ----
-    NP = 36
-    phi = np.linspace(0, 2 * np.pi, NP, endpoint=False)
-    ox, oy = _sally_outline(phi)
-    # profile from the top centre round the rim to the bottom centre: (fraction of the outline, height)
-    zc = SALLY_BODY_Z
-    prof = [(0.12, zc + 0.054), (0.3, zc + 0.051), (0.48, zc + 0.045), (0.64, zc + 0.036), (0.78, zc + 0.026),
-            (0.9, zc + 0.016), (0.97, zc + 0.008), (1.0, zc - 0.002), (0.97, zc - 0.014), (0.88, zc - 0.024),
-            (0.6, zc - 0.032), (0.3, zc - 0.035), (0.1, zc - 0.036)]
-    Vb, UVb = [], []
-    x0, y0, x1, y1 = at.rect(1)
-
-    def uv_c(x, y, under):
-        uu = (0.25 + 0.5 * np.clip(x / 0.96 + 0.5, 0, 1)) if not under else 0.12 + 0.1 * np.clip(x / 0.96 + 0.5, 0, 1)
-        return ((x1 - x0) * uu / at.w, 1 - (y0 + np.clip(y + 0.5, 0, 1) * (y1 - y0)) / at.h)
-    for i, (f, z) in enumerate(prof):
-        under = i > 7
-        for k in range(NP):
-            x, y = ox[k] * f, oy[k] * f
-            # the dome rises a little toward the front, where the gastric region is highest
-            zz = z + (0.006 * f * np.cos(phi[k]) if not under else 0.0)
-            Vb.append((x, y, zz))
-            UVb.append(uv_c(x, y, under))
-    Fb = [(i * NP + k, i * NP + (k + 1) % NP, (i + 1) * NP + (k + 1) % NP, (i + 1) * NP + k)
-          for i in range(len(prof) - 1) for k in range(NP)]
-    top_c, bot_c = len(Vb), len(Vb) + 1
-    Vb += [(0.0, 0.0, zc + 0.055), (0.0, 0.0, zc - 0.036)]
-    UVb += [uv_c(0, 0, False), uv_c(0, 0, True)]
-    last = (len(prof) - 1) * NP
-    Fb += [((k + 1) % NP, k, top_c) for k in range(NP)] + [(last + k, last + (k + 1) % NP, bot_c) for k in range(NP)]
-    Vb = np.array(Vb)
-    gb = G.Geo()
-    gb.add(Vb, Fb, np.array(UVb), col(0.0, 0, Vb))
-    # small teeth along the front corners of the margin, and between the eyes
-    for side in (1, -1):
-        for a in (0.42, 0.62, 0.82):
-            px_, py_ = _sally_outline(np.array([side * a]))
-            b = np.array([px_[0], py_[0], zc + 0.004])
-            out = np.array([math.cos(a) * 0.6, side * math.sin(a), 0.0])
-            Vc, Fc = G.cone(b - out * 0.01, b + out * 0.03 + [0.012, 0, 0], 0.012, 3)
-            gb.add(Vc, Fc, [uv_c(b[0], b[1], False)] * len(Vc), col(0.0, 0, Vc))
-        for y in (0.05, 0.13):
-            b = np.array([0.34 + 0.6 * 0.13 - 0.02, side * y, zc + 0.01])
-            Vc, Fc = G.cone(b, b + [0.03, side * 0.004, -0.004], 0.011, 3)
-            gb.add(Vc, Fc, [uv_c(b[0], b[1], False)] * len(Vc), col(0.0, 0, Vc))
+    def colors(Vx, t, k):
+        n = len(Vx)
+        return np.stack([np.clip(np.broadcast_to(t, n), 0, 1), np.zeros(n), np.broadcast_to(np.asarray(k, float) / 9.0, n),
+                         np.clip(0.5 - Vx[:, 0], 0, 1)], -1)
+    mat = C.material("SallyMat", image=img, rough=0.5)
     root = make_root("Root", {})
-    body_o = geo_obj("Body", gb, root, "shell", [mat])
-    # ---- walking legs: flattened, the broad merus spined along both edges ----
-    gl = G.Geo()
-    NS = 22
-    for pair, (adeg, L) in enumerate(zip(SALLY_LEG_ANGLES, SALLY_LEG_LEN)):
-        for side in (1, -1):              # +1 = left (+Y), -1 = right
-            k = 2 * pair + (0 if side > 0 else 1)
-            a = math.radians(adeg)
-            d = np.array([math.cos(a), side * math.sin(a), 0.0])
-            fwd = np.array([-d[1], d[0], 0.0])           # leg's leading (anterior) edge, in the leg plane
-            fwd = fwd if fwd[0] >= 0 else -fwd
-            rr = 0.46 * min(_squircle(math.atan2(side * math.sin(a) / 0.5, math.cos(a) / 0.48)), 1.25)
-            base = d * rr * 0.9 + np.array([0, 0, SALLY_BODY_Z - 0.02])
-            keys = [base, base + d * 0.22 * L + [0, 0, 0.09], base + d * 0.5 * L + [0, 0, 0.16],
-                    base + d * 0.78 * L + [0, 0, 0.07], base + d * 1.0 * L + [0, 0, -base[2] + 0.004]]
-            pts = smooth_path(keys, NS)
-            seg = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
-            tt = seg / seg[-1]
-            # the dactyl hooks down to its tip: pull the last few points under the straight line
-            hook = S(j3, 1.0, tt) * (1 - S(0.97, 1.0, tt))
-            pts = pts - np.outer(hook, [0, 0, 0.012 * L])
-            R = _sally_leg_radius(tt) * (L / 1.05) ** 0.5
-            Vt, Ft, tv, av = G.tube(pts, R, 8, squash=0.36, up=fwd)
-            ts = np.r_[np.repeat(tt, 8), 1.0]
-            gl.add(Vt, Ft, at.uv(0, ts, av), col(ts, k, Vt))
-            # spines: a row along the leading edge of the merus (rising toward the rear legs, research 27), a
-            # shorter row along the trailing edge, and a pair at the far end of the carpus
-            T, N, B = G.frames(pts, fwd)
-            n_lead = (6, 7, 8, 8)[pair]
-            for e, n_sp, ln in ((1.0, n_lead, 0.032), (-1.0, n_lead - 3, 0.022)):
-                for q in np.linspace(j0 + 0.06, j1 - 0.03, n_sp):
-                    i = int(np.searchsorted(tt, q))
-                    edge = N[i] * e
-                    b = pts[i] + edge * R[i] * 0.9
-                    tip = b + (edge * 0.55 + T[i] * 0.75) * ln * L + B[i] * 0.004
-                    Vc, Fc = G.cone(b, tip, 0.007, 3)
-                    gl.add(Vc, Fc, at.uv(0, np.full(len(Vc), tt[i])), col(np.full(len(Vc), tt[i]), k, Vc))
-            for e in (1.0, -1.0):
-                i = int(np.searchsorted(tt, j2 - 0.02))
-                b = pts[i] + N[i] * e * R[i] * 0.8
-                Vc, Fc = G.cone(b, b + (N[i] * e * 0.4 + T[i]) * 0.025 * L, 0.006, 3)
-                gl.add(Vc, Fc, at.uv(0, np.full(len(Vc), tt[i])), col(np.full(len(Vc), tt[i]), k, Vc))
-            pivots[4 * k:4 * k + 4] = gltf_pt(base) + [float(L)]
-    geo_obj("Legs", gl, root, "leg", [mat], extras={"count": 8, "limbPivots": pivots})
-    # ---- chelipeds: small and equal; merus / carpus forward and in, a rounded palm, curved spoon-tipped fingers ----
-    gc = G.Geo()
-    for side, k in ((1, 8), (-1, 9)):
-        b = np.array([0.36, side * 0.17, SALLY_BODY_Z - 0.03])
-        pts = smooth_path([b, b + [0.1, side * 0.1, 0.0], b + [0.2, side * 0.06, -0.03], b + [0.25, side * 0.0, -0.05]], 8)
-        tt = np.linspace(0, 0.55, 8)
-        Vt, Ft, tv, av = G.tube(pts, np.interp(tt, [0, 0.28, 0.32, 0.55], [0.034, 0.03, 0.026, 0.03]), 8,
-                                cap_end=False, up=(0, 0, 1), squash=0.7)
-        gc.add(Vt, Ft, at.uv(2, np.repeat(tt, 8), av), col(np.repeat(tt, 8), k, Vt))
-        for q in (0.12, 0.2):             # a couple of spines on the merus
-            i = int(q / 0.55 * 7)
-            Vc, Fc = G.cone(pts[i] + [0, side * 0.02, 0.01], pts[i] + [0.02, side * 0.04, 0.02], 0.006, 3)
-            gc.add(Vc, Fc, at.uv(2, np.full(len(Vc), 0.2)), col(np.full(len(Vc), q), k, Vc))
-        pc = pts[-1] + np.array([0.03, -side * 0.025, -0.01])
-        Vp, Fp = G.ellipsoid(pc, (0.052, 0.032, 0.03), 10, 6, rot=G.rot_z(-side * 0.5))
-        tp = np.clip(0.6 + 0.25 * ((Vp - pc) @ np.array([math.cos(-side * 0.5), math.sin(-side * 0.5), 0]) / 0.052 + 1) / 2, 0.55, 0.85)
-        gc.add(Vp, Fp, at.uv(2, tp, np.clip((Vp[:, 2] - pc[2]) / 0.06 + 0.5, 0, 1)), col(0.75, k, Vp))
-        for dz, curl in ((0.013, -1.0), (-0.013, 1.0)):    # fixed finger below, dactyl above, closing on each other
-            fb = pc + np.array([0.035, -side * 0.03, dz])
-            ft = fb + np.array([0.045, -side * 0.035, -0.012])
-            mid = (fb + ft) / 2 + np.array([0, 0, -curl * 0.006])
-            fp = smooth_path([fb, mid, ft], 4)
-            Vf, Ff, tf, af = G.tube(fp, np.linspace(0.012, 0.004, 4), 5, up=(0, 0, 1))
-            gc.add(Vf, Ff, at.uv(2, 0.86 + 0.13 * tf, af), col(0.9 + 0.1 * tf, k, Vf))
-        pivots[4 * k:4 * k + 4] = gltf_pt(b) + [0.3]
-    geo_obj("Claws", gc, root, "leg", [mat], extras={"claw": True, "limbPivots": pivots})
-    # ---- eye stalks at the front corners with big yellow-green eyes ----
+    # a triangle belongs to the limb most of its corners are on (any limb corner wins over the body)
+    fl = lab[F]
+    face_k = np.full(len(F), -1)
+    for i, tri in enumerate(fl):
+        ks = tri[tri >= 0]
+        if len(ks):
+            v_, c_ = np.unique(ks, return_counts=True)
+            face_k[i] = v_[np.argmax(c_)]
+
+    def part_obj(name, sel, part, extras=None):
+        Fs = F[sel]
+        used = np.unique(Fs)
+        remap = -np.ones(len(V), int)
+        remap[used] = np.arange(len(used))
+        k = np.repeat(face_k[sel], 3)
+        kv = np.zeros(len(used))
+        kv[remap[Fs.ravel()]] = np.maximum(k, 0)
+        tt = np.where(lab[used] == kv, tv[used], 0.0) if part != "shell" else np.zeros(len(used))
+        Vx = W[used]
+        return C.mesh_object(name, Vx, remap[Fs], uvs=UV[used], cols=colors(Vx, tt, kv), parent=root, part=part,
+                             materials=[mat], extras=extras)
+    pivots = [0.0] * 40
+    lens = []
+    for k, Cl in enumerate(lines):
+        L = float(np.sum(np.linalg.norm(np.diff(Cl, axis=0), axis=1)))
+        lens.append(L)
+        pivots[4 * k:4 * k + 4] = gltf_pt(Cl[0]) + [L]
+    body_o = part_obj("Body", face_k < 0, "shell")
+    part_obj("Legs", (face_k >= 0) & (face_k < 8), "leg", {"count": 8, "limbPivots": pivots})
+    part_obj("Claws", face_k >= 8, "leg", {"claw": True, "limbPivots": pivots})
+
+    # ---- eyes: short stalks rising from the bumps at the front corners, big dark eyes ----
     ge = G.Geo()
-    for side in (1, -1):
-        b = np.array([0.4, side * 0.3, SALLY_BODY_Z + 0.03])
-        tip = b + np.array([0.06, side * 0.03, 0.05])
-        Vt, Ft, tv, av = G.tube([b, (b + tip) / 2, tip], [0.024, 0.022, 0.02], 8, cap_end=False)
-        ge.add(Vt, Ft, at.uv(3, tv * 0.45, av), col(0, 0, Vt))
-        ec = tip + np.array([0.012, side * 0.006, 0.006])
-        Ve, Fe = G.ellipsoid(ec, (0.042, 0.037, 0.04), 10, 6, rot=G.rot_y(math.pi / 2))
-        fwd_e = (Ve - ec) @ np.array([1.0, side * 0.3, 0.15]) / 0.036
-        ge.add(Ve, Fe, at.uv(3, np.clip(0.5 + 0.5 * (fwd_e + 1) / 2, 0.5, 0.99)), col(0, 0, Ve))
-    geo_obj("Eyes", ge, root, "eye", [mat], extras={"pivot": gltf_pt((0.43, 0.0, SALLY_BODY_Z + 0.05))})
-    C.set_extras(root, species="sally_lightfoot", lengthCm=5.0,
+    for e in SALLY_EYES:
+        side = 1.0 if e[1] > 0 else -1.0
+        b = model(e)[0] + np.array([-0.03, -side * 0.01, -0.04])
+        tip = b + np.array([0.05, side * 0.035, 0.07])
+        Vt, Ft, ts, av = G.tube([b, (b + tip) / 2, tip], [0.032, 0.028, 0.026], 8, cap_end=False)
+        ge.add(Vt, Ft, np.stack([ts * 0.45, av], -1), colors(Vt, 0.0, 0))
+        ec = tip + np.array([0.02, side * 0.012, 0.012])
+        Ve, Fe = G.ellipsoid(ec, (0.05, 0.045, 0.048), 12, 8, rot=G.rot_y(math.pi / 2))
+        front = (Ve - ec) @ (np.array([1.0, side * 0.4, 0.2]) / np.linalg.norm([1.0, side * 0.4, 0.2])) / 0.05
+        ge.add(Ve, Fe, np.stack([np.clip(0.5 + 0.25 * (front + 1), 0.5, 0.99), np.full(len(Ve), 0.5)], -1),
+               colors(Ve, 0.0, 0))
+    eye_mat = C.material("SallyEye", image=_sally_eye_texture(), rough=0.18)
+    ex = model(np.array(SALLY_EYES)).mean(0)
+    geo_obj("Eyes", ge, root, "eye", [eye_mat], extras={"pivot": gltf_pt(ex)})
+    C.set_extras(root, species="sally_lightfoot", lengthCm=2.5,
                  unit="carapace width 1.0, crab faces +X and walks sideways (+-Y)",
                  iridescence=0.05, roughness=0.45, gait="sideways", grazes="hair_algae",
                  limbRig="crab_legs", limbPivots=pivots)
+    _print_sally_model(W, lab, tv, lines, lens, face_k, F)
     objs = [o for o in C.all_descendants(root) if o.type == 'MESH']
-    C.recalc_normals(body_o)
-    return finish(root, objs, os.path.join(C.MODELS, "sally_lightfoot.glb"), 5000)
+    return finish(root, objs, os.path.join(C.MODELS, "sally_lightfoot.glb"), 6000)
+
+
+def _print_sally_model(W, lab, tv, lines, lens, face_k, F):
+    """CrabModel.SALLY (glTF space) for CrawlerSeat.kt: coxae, rest foot tips (each dactyl's lowest end), knees (t
+    0.5) and propodi (t 0.75) on the centrelines, leg lengths, the chelae, and the carapace's contact points."""
+    def g(p):
+        return [round(x, 4) for x in gltf_pt(p)]
+
+    def at(Cl, q):
+        s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(Cl, axis=0), axis=1))]
+        return np.array([np.interp(q * s[-1], s, Cl[:, i]) for i in range(3)])
+    hip, tip, knee, mid = [], [], [], []
+    for k in range(8):
+        m = (lab == k) & (tv > 0.93)
+        P = W[m]
+        hip += g(lines[k][0]); tip += g(P[np.argmin(P[:, 2])]); knee += g(at(lines[k], 0.5)); mid += g(at(lines[k], 0.75))
+    cp, ct, cl = [], [], []
+    for k in (8, 9):
+        P = W[lab == k]
+        T = tv[lab == k]
+        cp += g(lines[k][0]); ct += g(P[np.argmax(T)]); cl += g(P[np.argmin(P[:, 2])])
+    # carapace: the underside at eleven points, six round the rim, the top
+    T3 = W[F[face_k < 0]]
+    B = W[np.unique(F[face_k < 0])]
+    hw, hl = (B[:, 1].max() - B[:, 1].min()) / 2, (B[:, 0].max() - B[:, 0].min()) / 2
+    body = []
+
+    def underside(q):
+        # the lowest carapace triangle straight above / below q
+        a, b, c = T3[:, 0, :2], T3[:, 1, :2], T3[:, 2, :2]
+        v0, v1, v2 = b - a, c - a, q - a
+        den = v0[:, 0] * v1[:, 1] - v1[:, 0] * v0[:, 1]
+        den = np.where(np.abs(den) < 1e-12, 1e-12, den)
+        l1 = (v2[:, 0] * v1[:, 1] - v1[:, 0] * v2[:, 1]) / den
+        l2 = (v0[:, 0] * v2[:, 1] - v2[:, 0] * v0[:, 1]) / den
+        hit = (l1 >= 0) & (l2 >= 0) & (l1 + l2 <= 1)
+        z = (1 - l1 - l2) * T3[:, 0, 2] + l1 * T3[:, 1, 2] + l2 * T3[:, 2, 2]
+        return np.array([q[0], q[1], z[hit].min()])
+    for fx, fy in ((-0.85, 0), (-0.6, -0.55), (-0.4, 0.72), (-0.35, 0.3), (-0.22, -0.4), (0, 0), (0.22, 0.4),
+                   (0.4, -0.72), (0.42, 0), (0.6, 0.55), (0.8, 0)):
+        body += g(underside(np.array([fx * hl, fy * hw])))
+    for a in (90, -90, 35, -35, 145, -145):
+        dvec = np.array([math.cos(math.radians(a)), math.sin(math.radians(a))])
+        body += g(B[np.argmax(B[:, :2] @ dvec)])
+    body += g(B[np.argmax(B[:, 2])])
+    under = min(body[1:33:3])
+    print("[sally] CrabModel.SALLY")
+    for name, arr in (("hip", hip), ("tip", tip), ("knee", knee), ("mid", mid), ("legW", [round(x, 3) for x in lens[:8]]),
+                      ("clawPivot", cp), ("clawTip", ct), ("clawLow", cl), ("body", body)):
+        print(f"  {name} = doubleArrayOf({', '.join(str(x) for x in arr)}),")
+    print(f"  underside y {under:.3f} (FLAT_DROP ~ {under - 0.017:.3f}), top {max(body[1::3]):.3f}")
 
 
 INVERT_BUILDERS = {
