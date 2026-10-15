@@ -21,7 +21,7 @@ uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
-// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send one entry, uLimb[0] = (x stride
+// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 13 entries (core ShrimpLimbs), uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
 // limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae, mode 5 hermit crab.
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
@@ -389,14 +389,28 @@ void main() {
         if (cls < 1.5) {
             // walking legs: alternating gait, neighbours and opposite legs half a stride apart; the foot swings
             // forward lifted and pushes back planted. Idle legs shift their footing now and then.
+            // On a surface the sim plants each foot instead (uLimb[1..6] = swing lift, foot offset; uLimb[11].y =
+            // planted): the leg bends from its rest tip onto the foothold and the knee arches as it lifts or folds.
+            float pl = uLimb[11].y;
             float ph = 2.0 * PI * (S.x + 0.5 * mod(pr + (side > 0.0 ? 1.0 : 0.0), 2.0));
-            local.x += h * (0.05 * S.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
-            local.y += h * 0.03 * S.y * max(cos(ph), 0.0);
+            local.x += h * ((1.0 - pl) * 0.05 * S.y * sin(ph) + 0.004 * sin(time * 0.7 + pr * 1.7 + side));
+            local.y += h * (1.0 - pl) * 0.03 * S.y * max(cos(ph), 0.0);
+            if (pr > 1.5) {
+                vec4 W = uLimb[1 + int(pr - 2.0) * 2 + (side > 0.0 ? 1 : 0)];
+                local += W.yzw * h;
+                local.y += sin(PI * h) * (0.125 * W.x + 0.6 * max(W.z, 0.0));   // W.x = lift × 0.4
+            }
         } else if (cls < 2.5) {
             // picking legs (P1-P2): alternate left/right strokes to the mouth while feeding or cleaning; the
             // front pair rocks rapidly back and forth as the skunk cleaner's signal; P1 combs the antenna in grooming
+            // While cleaning or picking at rock the sim drives each claw tip (uLimb[7..10] = grip, tip offset,
+            // uLimb[11].x = weight): out to the skin, a tug, and back to the mouth.
+            float pk = uLimb[11].x;
+            vec4 C = uLimb[7 + int(min(pr, 1.0)) * 2 + (side > 0.0 ? 1 : 0)];
+            local += C.yzw * h;
+            local.y += sin(PI * h) * 0.03 * pk;
             float k = 0.5 + 0.5 * sin(2.0 * PI * 2.2 * time + (side > 0.0 ? 0.0 : PI) + pr * 1.3);
-            float pick = max(uPick, 0.0);
+            float pick = max(uPick, 0.0) * (1.0 - pk);
             local.x -= h * 0.06 * pick * k;
             local.y += h * 0.035 * pick * k;
             local.z -= side * h * 0.03 * pick * k;
@@ -419,6 +433,8 @@ void main() {
             // (advertising, cleaning); lash with the skunk cleaner's leg rock; grooming draws one down to the mouth
             float h2 = h * h;
             float ph = uSwim.w + pr * 2.1 + side * 1.3;
+            // lifted clear of rock just ahead, draped along a client's flank while cleaning (uLimb[11].z left, .w right)
+            local.y += h2 * 0.25 * (side > 0.0 ? uLimb[11].w : uLimb[11].z);
             local.y += h2 * (0.06 * sin(ph - h * 3.0) + 0.1 * S.z * sin(2.0 * PI * 3.0 * time - h * 6.0 + side));
             local.z += h2 * 0.07 * cos(0.7 * ph - h * 2.5);
             float g = S.w * step(0.0, side);
@@ -487,6 +503,12 @@ void main() {
         float ab = max(uw - 0.4, 0.0);
         local.y -= 0.9 * max(bend, 0.0) * ab * ab;
         local.x -= 0.4 * max(bend, 0.0) * ab * ab;
+    }
+    if (mode > 1.5 && mode < 2.5) {
+        // shrimp seated on its legs (core ShrimpLimbs, uLimb[12] = drop, pitch, roll): the body settles onto the
+        // footholds under it
+        vec4 St = uLimb[12];
+        local.y -= St.y + St.z * (local.x + 0.5 - uw + 0.1) + St.w * local.z;
     } else if (mode < 0.5 && abs(bend) > 0.001) {
         float e = uw - 0.35;
         local.z += bend * 0.55 * (e * e - 0.04);
