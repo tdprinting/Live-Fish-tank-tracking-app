@@ -66,3 +66,46 @@ class ShrimpLegsTest {
         assertTrue("feet on the client $onBody / $feet", feet > 0 && onBody > feet * 0.7)
     }
 }
+
+class BandedClawTest {
+    @Test
+    fun bandedShrimpProbesCrevicesWithItsBigClawsAtNight() {
+        val s = TestTank.sim(listOf(TestTank.seed("banded")), seed = 5L, startHour = 23.0)
+        val o = s.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
+        val rig = o.limbRig as ShrimpLimbs
+        var reached = 0; var ticks = 0
+        s.advance(1800.0, behaviorDt = 0.1) {
+            ticks++
+            val r = rig.out
+            val m = maxOf(abs(r[13 * 4 + 2].toDouble()), abs(r[14 * 4 + 2].toDouble()))
+            if (m > 0.2) reached++
+        }
+        // the claws come down from their raised rest into the rock for a good share of the night
+        assertTrue("claw reaches $reached / $ticks", reached > ticks / 20)
+    }
+
+    @Test
+    fun aFishThatKeepsCrowdingTheBandedShrimpSometimesGetsGrabbedAt() {
+        val s = TestTank.sim(listOf(TestTank.seed("banded"), TestTank.seed("tang")), seed = 2L, startHour = 12.0)
+        val shrimp = s.organisms.first { it.brainKind == BrainKind.BANDED_SHRIMP }
+        val tang = s.organisms.first { it.brainKind == BrainKind.TANG }
+        val rig = shrimp.limbRig as ShrimpLimbs
+        var strikes = 0; var was = false; var holding = 0; var onSkin = 0
+        s.advance(60.0, behaviorDt = 0.1) {
+            tang.pos = shrimp.pos + com.reeflive.core.geom.Vec3(3.0, -2.0, 0.0)
+            tang.vel = com.reeflive.core.geom.Vec3(tang.cruiseSpeed * 2, 0.0, 0.0)
+            if (rig.striking && !was) strikes++
+            was = rig.striking
+            val (fish, at) = rig.held() ?: return@advance
+            holding++
+            // the claw is clamped on the skin: just outside the body, never inside it
+            val mid = fish.pos - fish.heading.normalized() * (0.4 * fish.lengthCm)
+            val dir = (mid - at).normalized()
+            val hit = ShrimpLimbs.onBody(fish, at, dir, 1.0)
+            if (hit != null && hit.distanceTo(at) in 0.01..0.3) onSkin++
+        }
+        assertTrue("strikes in a minute of crowding: $strikes", strikes in 2..20)
+        assertTrue("held on to the fish ($holding ticks)", holding > 5)
+        assertTrue("claw on the skin $onSkin / $holding", onSkin == holding)
+    }
+}

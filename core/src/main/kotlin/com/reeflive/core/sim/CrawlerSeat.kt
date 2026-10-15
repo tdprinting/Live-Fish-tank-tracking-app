@@ -519,7 +519,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             out[14 * 4 + 1 + cI] = ease(out[14 * 4 + 1 + cI], min(cm.toFloat(), reach))
         }
         out[14 * 4] = 0f
-        out[14 * 4 + 3] = if (legsOut) 1f else 0f
+        out[HermitLegs.PLANTED_FLAG] = if (legsOut) 1f else 0f
         // antennae, antennules and eyestalks bend away from anything they would reach into
         val front = rig.retract < 0.5
         val wantAnt = if (front) bendNeeded { b -> antennaClear(s, m, rig, b, L) } else 0.0

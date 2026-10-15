@@ -53,6 +53,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
         }
     }
+    /** "Fix my tank" care animations (skimmer cup, sock, doses, water changes); null = only the props at rest. */
+    @Volatile var care: CareShowControl? = null
+    private val careScene = CareScene().also { cs ->
+        cs.onBurst = { b -> particles.burst(b, interp.current) }
+    }
     /** The fish net taking a dead animal out (FishNet); splashes as the hoop goes in and comes out. */
     private val netScene = NetScene().also { ns ->
         ns.onSplash = { kind, x, y, z, r ->
@@ -124,6 +129,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private val stageBinding = LifeStageVisuals.Binding()
     private val particles = ParticleField(initialQuality.particles)
     @Volatile private var sdf: Sdf? = null
+    /** The rock as it is now: the sim's live field once rocks moved or were added (dynamic rockscape), else [sdf]. */
+    private var liveSdf: Sdf? = null
     private var width = 1; private var height = 1
     private val startNs = System.nanoTime()
     private var lastNs = 0L
@@ -234,25 +241,33 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
-        rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L)
+        rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L, cur?.builtRocks)
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input); in Submarine mode the camera rides with the sub
         val fp = subFirstPerson
-        camera.rideOn = subScene.update(interp.previous?.submarine, cur?.submarine, interp.alpha(now), fp, sdf)
-        if (camera.rideOn) { subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim) }
+        liveSdf = cur?.rockSdf ?: sdf
+        val subPose = cur?.submarine
+        val watchedId = subPose?.watchId
+        camera.rideOn = subScene.update(interp.previous?.submarine, subPose, interp.alpha(now), fp, dt, if (watchedId != null) interp.rigs[watchedId] else null)
+        camera.rideFirstPerson = fp
+        if (camera.rideOn) {
+            subScene.eye.copyInto(camera.rideEye); subScene.aim.copyInto(camera.rideAim)
+            subScene.anchor.copyInto(camera.rideAnchor); subScene.vel.copyInto(camera.rideVel)
+        }
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
+        careScene.update(dt, care, cur?.care) { r -> main.post(r) }
         netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
         followCam.drain(camera)
         fillColliders(rigs, cur)
-        camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
+        camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
-        micro.update(cur, sdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
+        micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
             store.model(k.model)?.parts?.sumOf { it.mesh.triangles } ?: 0
         }
 
@@ -287,8 +302,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // opaque: back glass, sand, rock, equipment, static reef details (coralline layer, encrusting, mag cleaner)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = true) }
-        rock?.let { drawStatic(it, progs, light, opaque = true) }
+        rock?.let { drawStatic(it, progs, light, opaque = true); drawBuiltRocks(it, progs) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
+        val careModel = store.model(CareLayout.MODEL)
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
         // corals: soft bodies then polyps
@@ -299,7 +316,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
-        if (subScene.visible) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
+        if (subScene.active) subScene.nearFade(camera.eye, dt)
+        if (subScene.opaque) white?.let { drawCalls += subScene.draw(progs.generic, it, fp, time) }
         if (netScene.visible) white?.let { drawCalls += netScene.drawSolid(progs.generic, it) }
         // alpha-tested/blended fins and algae cards (depth write on, sorted far → near)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
@@ -332,7 +350,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         inkClouds?.let { drawCalls += it.draw(progs.particles, rigs, height) }
         white?.let { w ->
-            if (!subScene.visible) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost sub, see-through
+            if (!subScene.opaque) drawCalls += subScene.draw(progs.generic, w, fp, time)   // the ghost (or faded) sub, see-through
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             drawCalls += subScene.drawBeam(progs.generic, w)
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
@@ -342,6 +360,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         // acclimation bags: see-through plastic over the animals riding in them
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
+        // care props: the clear skimmer cup, the jug and hose, water in the bucket, pour streams
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
         // the fish net's mesh bag, see-through over the body it carries
         if (netScene.visible) drawCalls += netScene.drawMesh(progs.generic)
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting
@@ -385,15 +405,24 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
                 for (i in m.parts.indices) {
                     val part = m.parts[i]
-                    if (part.kind == MaterialKind.POLYP) continue
+                    // polyps and alpha-card foliage (macroalgae blades, grass) are see-through: the eye passes through them
+                    if (part.kind == MaterialKind.POLYP || part.kind == MaterialKind.CARD) continue
                     if (copy && !nearHome(part, pose!!)) continue
                     val b = part.worldBounds
                     if (b[3] - b[0] <= 0f && b[4] - b[1] <= 0f) continue
+                    // one mesh spread over many small colonies (red macro 94 cm, aiptasia 62 cm, the Kenya trees 26 cm)
+                    // has a box that is nearly all open water: only compact bodies block the eye
+                    if (b[3] - b[0] > MAX_EYE_BOX_CM || b[4] - b[1] > MAX_EYE_BOX_CM || b[5] - b[2] > MAX_EYE_BOX_CM) continue
                     c.addBox(b[0] + ox, b[1] + oy, b[2] + oz, b[3] + ox, b[4] + oy, b[5] + oz)
                 }
             }
         }
         c.clearCapsules()
+        // the sub's hull, seen from behind: the chase eye keeps off it (its own line of sight starts inside it)
+        if (subScene.active && !subFirstPerson) {
+            val a = subScene.anchor; val m = subScene.halfAxis
+            c.addCapsule(a[0] - m[0], a[1] - m[1], a[2] - m[2], a[0] + m[0], a[1] + m[1], a[2] + m[2], SUB_HULL_R, Camera.FOLLOW_OWNER)
+        }
         val fid = camera.followId
         for (r in rigs) {
             if (!r.visible) continue
@@ -572,6 +601,27 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
     }
 
+    /** Dry rocks from the aquascape builder: the live-rock material, washed white by how fresh each one is. */
+    private fun drawBuiltRocks(m: GpuModel, progs: Programs) {
+        val list = rockDraw.built ?: return
+        val w = white ?: return
+        val part = m.parts.firstOrNull { it.kind == MaterialKind.ROCK } ?: return
+        val p = progs.rock
+        p.use()
+        part.material.apply(p, w)
+        val life = micro.rockLife
+        for (r in list) {
+            p.setMat4("uModel", rockDraw.pose(r.piece) ?: continue)
+            p.set1f("uDryRock", r.dryness)
+            // pods and forams move onto new rock as it cures
+            val k = 1f - r.dryness
+            p.set4f("uMicro", life[0] * k, life[1] * k, life[2] * k, 0f)
+            val mesh = rockDraw.builtMesh(r)
+            mesh.draw(); drawCalls++; triangles += mesh.triangles
+        }
+        p.set1f("uDryRock", 0f)
+    }
+
     /** [part] split by rock: each group at its rock's pose (−1: the rock still where it was built). */
     private fun drawPieces(p: ShaderProgram, part: DrawPart, pieces: List<Pair<Int, Mesh>>) {
         for ((piece, mesh) in pieces) {
@@ -689,6 +739,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val pieces = if (key in ROCK_ATTACHED) rockDraw.meshes(part) else null
                 if (pieces == null) { part.mesh.draw(); drawCalls++ } else drawPieces(p, part, pieces)
             }
+        }
+        rockDraw.built?.forEach { r ->
+            p.setMat4("uModel", rockDraw.pose(r.piece) ?: return@forEach)
+            rockDraw.builtMesh(r).draw(); drawCalls++
         }
         val pc = progs.shadowCoral
         pc.use()
@@ -1055,7 +1109,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
-        input.instantTaps = camera.shelfOn
+        input.instantTaps = camera.shelfOn || camera.rideOn
         if (c != null) store.model(SupplyShelfLayout.MODEL)
         // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
         val req = c?.takePickRequest()
@@ -1125,6 +1179,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 // double tap: a fish → fly in and follow it; while following → closer / normal framing;
                 // otherwise glide in to the rock / sand / water point under the finger (again to glide back out)
                 val id = Picker.pick(o, dir, rigs, fingerSlack())
+                // riding the sub: a fish is a pick (the host sends the sub to watch it), nothing else zooms
+                if (camera.rideOn) { if (id != null) main.post { l?.onPick(id) }; return }
                 when {
                     id != null && id != camera.followId -> main.post { l?.onFollowRequest(id) }
                     camera.followId != null -> camera.toggleFollowCloseUp()
@@ -1199,7 +1255,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         if (t0 > t1) return null
         fun at(t: Float) = Vec3((o[0] + d[0] * t).toDouble(), (o[1] + d[1] * t).toDouble(), (o[2] + d[2] * t).toDouble())
-        val g = sdf
+        val g = liveSdf ?: sdf
         if (g != null) {
             val tr = t0 + Camera.marchClear(g, o[0] + d[0] * t0, o[1] + d[1] * t0, o[2] + d[2] * t0, d[0], d[1], d[2], t1 - t0, 0f)
             if (tr < t1 - 0.05f) {
@@ -1374,7 +1430,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             t0 = maxOf(t0, a); t1 = minOf(t1, b)
         }
         if (t0 > t1) return null
-        val g = sdf
+        val g = liveSdf ?: sdf
         val hitT = if (g != null) {
             val sx = o[0] + d[0] * t0; val sy = o[1] + d[1] * t0; val sz = o[2] + d[2] * t0
             t0 + Camera.marchClear(g, sx, sy, sz, d[0], d[1], d[2], t1 - t0, 0f)
@@ -1406,11 +1462,16 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     companion object {
+    /** Largest coral part box (cm, any side) the eye treats as solid; bigger ones are spreads of small colonies. */
+    private const val MAX_EYE_BOX_CM = 20f
+
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
         /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
         private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
+        /** The sub's hull as a capsule for the eye (cm). */
+        private const val SUB_HULL_R = 1.1f
         const val ALGAE = "models/algae_tufts.glb"
         /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
         const val DETAILS = "models/reef_details.glb"

@@ -16,7 +16,9 @@ enum class GlassPane { FRONT }
  * W × H texture with u = x / length and v = (y − sand top) / (water level − sand top).
  *
  * A Flipper pass ([scrape]) knocks a swept box of cells down to [AlgaeModel.SCRAPE_LEFT]; the cleared stripe grows
- * back logistically at the glass film's net growth rate ([regrow]), seeded from the film left at the edges.
+ * back logistically at the glass film's net growth rate ([regrow]), seeded from the film left at the edges. Grazing
+ * snails and stars on the pane ([graze], [GlassTrails]) wear narrow trails into it the same way, written quietly and
+ * shown in batches ([publish]) so the snapshot copy is not remade every tick.
  */
 class GlassMask(val lengthCm: Double, val bottomCm: Double, val topCm: Double) {
     val cells = FloatArray(W * H) { 1f }
@@ -26,6 +28,9 @@ class GlassMask(val lengthCm: Double, val bottomCm: Double, val topCm: Double) {
     var mean = 1.0; private set
     private var exported: FloatArray? = null
     private var exportedVersion = -1
+
+    /** Grazed cells not yet published (no [version] bump yet). */
+    private var pending = false
 
     private val heightCm: Double get() = max(topCm - bottomCm, 1.0)
     val isFull: Boolean get() = mean >= 1.0 - 1e-6
@@ -63,7 +68,7 @@ class GlassMask(val lengthCm: Double, val bottomCm: Double, val topCm: Double) {
         if (removed <= 0) return 0.0
         val drop = removed / (W * H)
         mean -= drop
-        version++
+        version++; pending = false
         return drop
     }
 
@@ -89,17 +94,70 @@ class GlassMask(val lengthCm: Double, val bottomCm: Double, val topCm: Double) {
             sum += m
         }
         mean = sum / cells.size
-        version++
+        version++; pending = false
     }
 
     /** Uniform film again (the whole pane wiped, or the cover set from outside). */
     fun fill() {
         if (isFull && cells.all { it == 1f }) return
-        cells.fill(1f); mean = 1.0; version++
+        cells.fill(1f); mean = 1.0; version++; pending = false
+    }
+
+    /**
+     * A grazer's mouth went from (x0, y0) to (x1, y1) (pane cm, as in [at]) clearing a band [widthCm] wide and taking
+     * [take] of the film it passes over. A cell loses film in proportion to how much of it the band covers across the
+     * track (a 1 cm band over a 0.95 cm cell takes nearly all of [take]; over half the cell, about half), and only
+     * cells whose centre projects onto [0, 1) of the segment count, so consecutive segments of one path tile it
+     * without double grazing the joints. Not published until [publish]. Returns the drop of [mean].
+     */
+    fun graze(x0: Double, y0: Double, x1: Double, y1: Double, widthCm: Double, take: Double): Double {
+        val ux = x1 - x0; val uy = y1 - y0
+        val len2 = ux * ux + uy * uy
+        if (len2 < 1e-9 || take <= 0) return 0.0
+        val cw = lengthCm / W; val ch = heightCm / H
+        val len = kotlin.math.sqrt(len2)
+        // cell size across the track (the band's normal is (−uy, ux) / len)
+        val across = (kotlin.math.abs(uy) * cw + kotlin.math.abs(ux) * ch) / len
+        val hw = widthCm / 2
+        val reach = hw + across
+        val i0 = max(0, floor((min(x0, x1) - reach) / cw).toInt()); val i1 = min(W - 1, ceil((max(x0, x1) + reach) / cw).toInt())
+        val j0 = max(0, floor((min(y0, y1) - reach - bottomCm) / ch).toInt()); val j1 = min(H - 1, ceil((max(y0, y1) + reach - bottomCm) / ch).toInt())
+        if (i0 > i1 || j0 > j1) return 0.0
+        val tk = take.coerceIn(0.0, 1.0)
+        var removed = 0.0
+        for (j in j0..j1) {
+            val py = bottomCm + (j + 0.5) * ch - y0
+            for (i in i0..i1) {
+                val px = (i + 0.5) * cw - x0
+                val t = (px * ux + py * uy) / len2
+                if (t < 0 || t >= 1) continue
+                val d = kotlin.math.abs(px * uy - py * ux) / len
+                // overlap of the cell's extent across the track [d − c/2, d + c/2] with the band [−hw, hw]
+                val overlap = min(d + across / 2, hw) - max(d - across / 2, -hw)
+                if (overlap <= 0) continue
+                val k = j * W + i
+                val before = cells[k]
+                val after = (before * (1 - tk * min(1.0, overlap / across))).toFloat()
+                if (after < before) { cells[k] = after; removed += before - after }
+            }
+        }
+        if (removed <= 0) return 0.0
+        val drop = removed / (W * H)
+        mean -= drop
+        pending = true
+        return drop
+    }
+
+    /** Shows the trails grazed since the last call (bumps [version] once). Returns whether anything changed. */
+    fun publish(): Boolean {
+        if (!pending) return false
+        pending = false
+        version++
+        return true
     }
 
     fun copyFrom(o: GlassMask) {
-        o.cells.copyInto(cells); mean = o.mean; version++
+        o.cells.copyInto(cells); mean = o.mean; version++; pending = false
     }
 
     /** An immutable copy for the snapshot (shared until the mask changes), or null while the pane is untouched. */
@@ -110,8 +168,9 @@ class GlassMask(val lengthCm: Double, val bottomCm: Double, val topCm: Double) {
     }
 
     companion object {
-        const val W = 64
-        const val H = 32
+        /** 128 × 64: cells about 0.95 × 0.55 cm on the 122 × 35 cm wetted pane, fine enough for a snail's ~1 cm trail. */
+        const val W = 128
+        const val H = 64
         /** Relative density the regrowth starts from in a bare cell (film left in scratches and spreading from the edges). */
         const val REGROW_SEED = 0.03
 

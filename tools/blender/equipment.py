@@ -3,7 +3,8 @@
 Nodes (direct children of Root, extras.part = "equipment" unless noted):
   PowerheadLeft, PowerheadBack, PowerheadRight  (extras.dir = jet direction, extras.jet = nozzle point)
   Heater, HeaterLED ("light"), IntakeTube, Flipper (inside + outside halves, label texture),
-  FrontMagnet, FrontMagnetBracket, HoseArc, CableLeft, FeedRing, HobFilter, ReturnPipe, ReturnNozzle (extras.outflow), Skimmer,
+  FrontMagnet, FrontMagnetBracket, HoseArc, CableLeft, FeedRing, HobFilter, ReturnPipe, ReturnNozzle (extras.outflow), Skimmer
+  (its collection cup is care_tools.glb, seated at SKIMMER_CUP),
   AtoBox, AtoLED ("light"), Jar, AiPrimeL/R (puck, heat-sink, gooseneck, clamp, power cable, lens plate) and
   AiPrimeL_Lens/AiPrimeR_Lens (part "emitter": 4 x 4 LED dots whose emissive the runtime sets to the light color).
 """
@@ -19,6 +20,10 @@ import tank as T
 from common import bpy
 
 L, H, D = T.TANK
+# Care props (care_tools.py; mirrored in app render/CareScene.kt CareLayout): the skimmer's collection cup base on
+# the skimmer lid, and the filter sock's collar on the HOB filter lid (x, y, z world cm).
+SKIMMER_CUP = (63.0, C.RIM_Y + 10.2, -5.2)
+HOB_SOCK = (108.5, C.RIM_Y + 5.7, -3.7)
 # AI Prime puck centre z (cm from the back glass): a little behind the centre line, arms rising from behind the tank
 LIGHT_Z = 20.0
 
@@ -352,6 +357,9 @@ def build():
         box_add(g, (cx - 3.5, RIM_Y + 5.6, -7.75), (cx + 3.5, RIM_Y + 19.6, -6.25), mat=2)
     for bx in (HX0 + 2.5, HX1 - 2.5):
         bumper(g, bx, RIM_Y - 10.4, 1)
+    # the filter sock's opening in the lid (the sock's white collar, care_tools.glb SockRing, rests on it)
+    V, F, uv = cylinder((HOB_SOCK[0], RIM_Y + 5.6, HOB_SOCK[2]), (HOB_SOCK[0], RIM_Y + 5.7, HOB_SOCK[2]), 2.3, 20)
+    g.add(V, F, uv, mat=1)
     outflow = [RX, round(WY - 0.7, 2), 2.3]
     objs.append(g.obj("HobFilter", root, "equipment", [hob, black, slots]))
 
@@ -385,11 +393,13 @@ def build():
     g.add(V, F, uv, mat=1)                                                     # intake leg into the water
     for bx in (KX + 2, KX + 8):
         bumper(g, bx, RIM_Y - 12.4, 1)
-    for tx in (KX + 3, KX + 7):
-        V, F, uv = cylinder((tx, RIM_Y + 9.6, -6), (tx, RIM_Y + 16.6, -6), 1.6, 12)
-        g.add(V, F, uv, mat=2)
-        V, F, uv = cylinder((tx, RIM_Y + 9.6, -6), (tx, RIM_Y + 11.1, -6), 1.9, 12)
-        g.add(V, F, uv, mat=1)                                                 # tube collars
+    # the collection cup's seat on the lid: a low black collar the clear cup (care_tools.glb Cup, drawn and lifted
+    # off by the renderer's CareScene at SKIMMER_CUP) stands in, and the grey air-line spigot at the back
+    cx, cy, cz = SKIMMER_CUP
+    V, F, uv = cylinder((cx, RIM_Y + 9.6, cz), (cx, cy, cz), 3.75, 24)
+    g.add(V, F, uv, mat=1)
+    V, F, uv = cylinder((KX + 8.6, RIM_Y + 9.6, -8.2), (KX + 8.6, RIM_Y + 12.6, -8.2), 0.6, 10)
+    g.add(V, F, uv, mat=2)
     objs.append(g.obj("Skimmer", root, "equipment", [hob, black, tube_grey]))
 
     # --- AtoBox on the front rim (left) with its red LED

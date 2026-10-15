@@ -153,6 +153,7 @@ object ReefLive {
                 shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
                 r.shelf = shelf
                 r.bursts = ReefSandbox.bursts
+                r.care = ReefSandbox.care
                 renderer = r
                 r.onSurfaceCreated(null, null)
                 resize()
@@ -237,6 +238,7 @@ object ReefLive {
                 s.stepWall(TICK); simAcc -= TICK; steps++
                 // a rock in the tank settled or toppled: the page keeps its new spot for the next visit
                 if (s === reality && s.latest.events.any { it is com.reeflive.core.sim.SimEvent.RockShifted }) emit("onRocks", s.rockState())
+                else if (s === reality && s.latest.events.any { it is com.reeflive.core.sim.SimEvent.RockscapeChanged }) emit("onRockscape", s.rockState())
             }
             if (steps == 3) simAcc = 0.0
         }
@@ -372,6 +374,30 @@ object ReefLive {
     fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }
     fun resetCamera() { renderer?.resetCamera() }
     /** The page's answer to `onTouch(surface)`: touch the tank where that tap landed (ripple or sand puff, Command.TouchTank). */
+    /**
+     * Aquascape builder: the page's answer to `onTouch` while it is open. Drops a dry rock of [shape]
+     * ([com.reeflive.core.sim.DryRockShape] name) turned [turnDeg] where the tap landed, or with [takeOut] takes out
+     * the rock there. On the tank on screen (your tank or the pretend copy).
+     */
+    fun scapeTouch(shape: String, turnDeg: Double, takeOut: Boolean): Boolean {
+        val (p, surface) = pendingTouch ?: return false
+        pendingTouch = null
+        val s = sim ?: return false
+        if (takeOut) s.enqueue(Command.RemoveRock(p))
+        else {
+            val sh = runCatching { com.reeflive.core.sim.DryRockShape.valueOf(shape) }.getOrDefault(com.reeflive.core.sim.DryRockShape.BOULDER)
+            val z = if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.core.sim.TankDims.DEPTH_CM / 2 else p.z
+            s.enqueue(Command.PlaceRock(sh, p.x, z, turnDeg))
+        }
+        return true
+    }
+    /** Aquascape builder: takes out the dry rock added last. */
+    fun scapeUndo() { sim?.enqueue(Command.RemoveRock(null)) }
+    /** Aquascape builder: takes every rock out, to build from scratch. */
+    fun scapeClear() { sim?.enqueue(Command.ClearRocks) }
+    /** The dry rock shapes for the builder bar: [{id, label}]. */
+    fun scapeShapes(): String = JSON.stringify(com.reeflive.core.sim.DryRockShape.entries.map { e -> obj { it.id = e.name; it.label = e.label } }.toTypedArray())
+
     fun touchTank(): Boolean {
         val (p, surface) = pendingTouch ?: return false
         pendingTouch = null
@@ -414,8 +440,20 @@ object ReefLive {
     }
     /** Ride inside the sub (first person) or chase it from behind. */
     fun subView(firstPerson: Boolean) { renderer?.subFirstPerson = firstPerson }
-    /** JSON {curious, wary} while the sub is out, else null: how many animals are reacting to it. */
-    fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
+    /**
+     * Watch an animal from the sub: it glides over and keeps it company at a polite distance. [mode] HOVER, CIRCLE or
+     * ALONGSIDE; [id] null (or "") = back to free steering.
+     */
+    fun subWatch(id: String?, mode: String) {
+        val m = runCatching { com.reeflive.core.sim.SubWatch.valueOf(mode) }.getOrDefault(com.reeflive.core.sim.SubWatch.HOVER)
+        sim?.enqueue(Command.SubmarineWatch(id?.takeIf { it.isNotEmpty() }, m))
+    }
+    /** The sub's ‹ ›: the next / previous fish ([step] ±1), or the nearest when none is watched. */
+    fun subWatchNext(step: Int) { sim?.enqueue(Command.SubmarineWatchNext(step)) }
+    /** JSON {curious, wary, watch, mode} while the sub is out, else null: who reacts to it and whom it is watching. */
+    fun subState(): String = sim?.latest?.submarine?.let {
+        JSON.stringify(obj { o -> o.curious = it.curious; o.wary = it.wary; o.watch = it.watchId; o.mode = it.watchMode.name })
+    } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
         current = v; scaleStep = 0; goodWindows = 0

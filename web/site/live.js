@@ -53,7 +53,7 @@ export function startLive(applyReadings) {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
-    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
+    onPick: (id) => { if (id) buzz(5); if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
     // pressed and held right on an animal: ride along with it
     onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
@@ -66,10 +66,14 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'FIX') renderCard(); },
+    onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'FIX') renderCard(); },
     // a rock settled or toppled after the sand under it was dug out: remember where it lies now
     onRocks: (state) => { store.set('reeflive.rocks', state); say('Crunch! A rock shifted. The gobies dug out too much sand under it.'); },
     // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
     ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
+    // the aquascape builder added or took out a rock: keep the new rockwork
+    onRockscape: (state) => store.set('reeflive.rocks', state),
   }).then(() => {
     live.restoreRocks(store.get('reeflive.rocks', ''));
     live.setDynamicRocks(ui.rocks);
@@ -274,6 +278,7 @@ function setSpeed(v) {
 const CATS = {
   VIEW: { ico: 'eye', label: 'View', tone: 'cyan' },
   SUPPLIES: { ico: 'basket', label: 'Supplies', tone: 'orange' },
+  FIX: { ico: 'waveSparkle', label: 'Fix tank', tone: 'green' },
   LIFE: { ico: 'fish', label: 'Add life', tone: 'pink' },
   TANK: { ico: 'bulb', label: 'Tank', tone: 'yellow' },
   TROUBLE: { ico: 'whatIf', label: 'Trouble', tone: 'purple' },
@@ -281,7 +286,7 @@ const CATS = {
   STATUS: { ico: 'tank', label: 'How is the tank?', tone: 'green' },
 };
 function renderRail() {
-  const cats = editable() ? ['SUPPLIES', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'MORE'];
+  const cats = editable() ? ['SUPPLIES', 'FIX', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'FIX', 'MORE'];
   $('rail').innerHTML = cats.map((c) => `<button class="tool tone-${CATS[c].tone} ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${icon(CATS[c].ico)}</span><span class="lbl">${CATS[c].label}</span></button>`).join('');
 }
 $('rail').addEventListener('click', (e) => {
@@ -319,6 +324,7 @@ function renderCard() {
   let h = '';
   switch (ui.card) {
     case 'VIEW': h = viewCard(); break;
+    case 'FIX': h = fixCard(); break;
     case 'LIFE': h = lifeCard(sb); break;
     case 'TANK': h = tankCard(sb); break;
     case 'TROUBLE': h = troubleCard(sb); break;
@@ -348,6 +354,27 @@ function viewCard() {
       ${tile('data-hide', 'film', 'Cinematic')}${tile('data-saver', 'moon', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
     <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
 }
+
+// ---- Fix tank: the tank check's list (core TankDoctor); each fix plays in the 3D tank, then goes in
+const FIX_ICON = { EMPTY_SKIMMER: 'skimmer', SWAP_SOCK: 'sock', FRESH_CARBON: 'carbon', WATER_CHANGE: 'bucket', TOP_OFF: 'droplet', LOWER_SALT: 'dropMinus', RAISE_SALT: 'dropPlus',
+  DOSE_MG: 'bottle', DOSE_CA: 'bottle', DOSE_ALK: 'bottle', HEATER: 'flame', PUMPS: 'powerhead', FEED_CORALS: 'feedTin' };
+function fixCard() {
+  const f = JSON.parse(SB.fixes());
+  if (!f) return '';
+  if (!f.list.length) {
+    return f.busy ? '<p><strong>Fixing...</strong></p><p class="muted">Watch the tank: the fixes are going in one by one.</p>'
+      : '<p><strong>Your tank looks great!</strong></p><p class="muted">The water and the gear are all in good shape. Check again after a few days.</p>';
+  }
+  return `<p class="muted">${f.list.length === 1 ? 'The tank needs one thing.' : `The tank needs ${f.list.length} things. Fix them one by one or all at once.`}</p>
+    ${f.list.length > 1 ? `<div class="options">${tile('data-fixall', 'waveSparkle', `Fix everything (${f.list.length})`)}</div>` : ''}
+    <div class="fixes">${f.list.map((x, i) => `<div class="fix ${x.urgent ? 'urgent' : ''}"><span class="ico">${icon(FIX_ICON[x.kind] || 'waveSparkle')}</span>
+      <span class="txt"><strong>${esc(x.title)}</strong><span class="muted">${esc(x.why)}</span></span>
+      <button class="pillbtn on" data-fix="${i}">Fix</button></div>`).join('')}</div>`;
+}
+const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK: 'Stinky old sock out, fresh one in!', FRESH_CARBON: 'Fresh carbon for sparkly water.',
+  WATER_CHANGE: 'Fresh salt water! The fish love it.', TOP_OFF: 'Topped off with fresh water.', LOWER_SALT: 'A little less salty now.', RAISE_SALT: 'A little saltier now.',
+  DOSE_MG: 'Coral vitamins in! Just the right amount.', DOSE_CA: 'Coral vitamins in! Just the right amount.', DOSE_ALK: 'Coral vitamins in! Just the right amount.',
+  HEATER: 'New heater on. Nice and warm again.', PUMPS: 'Whoosh! The water is moving again.', FEED_CORALS: 'Yum, coral food!' };
 
 // ---- Add life
 function lifeCard(sb) {
@@ -461,7 +488,7 @@ function moreCard(sb) {
   return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
     <div class="options">${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-microscope', 'microscope', 'Look closer')}
       ${tile('data-clean', 'flipper', 'Clean glass', ui.cleaning)}${tile('data-knock', 'touch', 'Knock')}${tile('data-hide', 'eyeOff', 'Hide buttons')}
-      ${tile('data-camreset', 'eye', 'Reset view')}${sb ? tile('data-reset', 'reset', ui.mode === 'mine' ? 'Start over' : 'Reset tank') : ''}</div>
+      ${tile('data-camreset', 'eye', 'Reset view')}${tile('data-scape', 'rocks', 'Build rockwork')}${sb ? tile('data-reset', 'reset', ui.mode === 'mine' ? 'Start over' : 'Reset tank') : ''}</div>
     <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}</div>
     <h4>Settings</h4><div class="rows">
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
@@ -497,6 +524,8 @@ $('card').addEventListener('click', (e) => {
   const d = b.dataset;
   const sbOnly = (fn) => { if (!editable()) { locked(); return; } fn(); };
   if ('close' in d || b.classList.contains('tests')) { closeCard(); return; }
+  if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
+  if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);
@@ -565,6 +594,7 @@ $('card').addEventListener('click', (e) => {
   else if ('microscope' in d) { closeCard(); openMicro(); return; }
   else if ('knock' in d) { act('knock'); cue('CLICK'); }
   else if ('clean' in d) { closeCard(); setCleaning(!ui.cleaning); return; }
+  else if ('scape' in d) { closeCard(); openScape(); return; }
   else if ('rocksToggle' in d) {
     ui.rocks = !ui.rocks; store.set('reeflive.rocksDynamic', ui.rocks); live.setDynamicRocks(ui.rocks);
     say(ui.rocks ? 'Rocks can shift now. Dig out too much sand and one may topple!' : 'The rocks stay put, however much the gobies dig.');
@@ -843,6 +873,41 @@ function setCleaning(on) {
 }
 $('cleanDone').addEventListener('click', () => setCleaning(false));
 
+// ================================================================ aquascape builder
+// Pick a white dry rock, tap the tank where it goes: it drops in and settles on the sand or rock under it.
+const scape = { on: false, shape: 'BOULDER', turn: 0, takeOut: false };
+function openScape() { scape.on = true; renderScape(); say('Pick a rock, then tap the tank where it should go.'); }
+function renderScape() {
+  let bar = $('scapeBar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'scapeBar'; bar.className = 'scapebar glass'; document.body.appendChild(bar); }
+  bar.classList.toggle('hidden', !scape.on);
+  if (!scape.on) return;
+  const shapes = JSON.parse(live.scapeShapes());
+  const label = shapes.find((s) => s.id === scape.shape)?.label.toLowerCase() || 'rock';
+  bar.innerHTML = `<strong>${scape.takeOut ? 'Tap a rock to take it out' : `Tap the tank to drop a ${label}`}</strong>
+    <span class="sub">New dry rock is white. Over a few months it turns brown, then purple and pink like live rock.</span>
+    <div class="pills">${shapes.map((s) => `<button class="pillbtn ${!scape.takeOut && s.id === scape.shape ? 'on' : ''}" data-shape="${s.id}">${s.label}</button>`).join('')}</div>
+    <div class="pills"><button class="pillbtn" data-turn>Turn ${scape.turn}°</button><button class="pillbtn ${scape.takeOut ? 'on' : ''}" data-takeout>Take out</button>
+    <button class="pillbtn" data-undo>Undo</button><button class="pillbtn" data-empty>Empty tank</button><button class="pillbtn on" data-done>Done</button></div>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#scapeBar button');
+  if (!b) return;
+  const d = b.dataset;
+  if (d.shape) { scape.shape = d.shape; scape.takeOut = false; }
+  else if ('turn' in d) scape.turn = (scape.turn + 45) % 360;
+  else if ('takeout' in d) scape.takeOut = !scape.takeOut;
+  else if ('undo' in d) live.scapeUndo();
+  else if ('empty' in d) { if (confirm('Take out all the rock and build from scratch? Corals on them drop to the sand.')) live.scapeClear(); }
+  else if ('done' in d) scape.on = false;
+  renderScape();
+});
+function scapeTap() {
+  if (!live.scapeTouch(scape.shape, scape.turn, scape.takeOut)) return;
+  knockSound(0.5);
+  try { navigator.vibrate?.(8); } catch { /* not on iOS */ }
+}
+
 // ================================================================ microscope
 const micro = { scene: 'ROCK', zoom: 'X10', bacteria: false, seed: 1, sprites: [] };
 function openMicro() {
@@ -1050,6 +1115,7 @@ function cue(name, gain = 0.8, rate = 1, seconds = 0) {
 // a tap with no fish under it (Android LiveTaps): undo what is open first, else touch the tank there
 let touchSaidAt = 0;
 function touchTank(surface) {
+  if (scape.on) { scapeTap(); return; }
   if (ui.chromeHidden) { setChrome(false); return; }
   if (performance.now() - (ui.cardClosedAt || 0) < 700) return;
   if (ui.picked && !ui.following) { select(null); return; }
@@ -1127,37 +1193,65 @@ function stopThoughts() {
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopThoughts(); else startThoughts(); });
 // ================================================================ submarine (Android SubmarineControls)
-// Be a little submarine: a stick (or W A S D / arrows) steers, the up and down buttons (or Space / E and Shift / Q)
-// dive and climb. The fish see it by species and personality unless it is invisible.
-const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '' };
+// Be a little submarine, built for fish watching: tap a fish and the sub glides over and keeps it company at a polite
+// distance (hover, circle or swim alongside); the stick (or W A S D / arrows) drifts and steers, and while watching it
+// swings round the fish and moves closer or further. Up and down (or Space / E and Shift / Q) dive and climb.
+// The fish see it by species and personality unless it is invisible.
+const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '', watch: null, mode: 'HOVER', sentAt: 0 };
 function setSub(on) {
   sub.on = on;
   if (on) { closeCard(); if (ui.tour) ui.tour = false; ui.following = null; if (ui.cleaning) setCleaning(false); if (ui.shelf) closeShelf(); }
   document.body.classList.toggle('subbing', on);
   $('subui').classList.toggle('hidden', !on);
-  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = '';
+  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = ''; sub.watch = null;
   live.submarine(on, sub.visible, sub.light);
   live.subView(sub.inside);
   if (on) live.steerSub(0, 0, 0, 0);
   moveKnob(0, 0);
   renderSub();
-  toast(on ? 'Dive dive! Steer with the yellow stick (or W A S D). Swim slowly and the curious fish come to look.' : 'The submarine is back in its dock.');
+  toast(on ? 'Dive dive! Tap a fish and the sub swims over to watch it. The yellow stick drifts and steers.' : 'The submarine is back in its dock.');
   if (!on) { renderRail(); renderFollow(); }
 }
+/** Sends the sub to keep [id] company (null = steer freely again). */
+function subWatch(id, mode = sub.mode) {
+  sub.watch = id; sub.mode = mode; sub.sentAt = performance.now();
+  live.subWatch(id ?? '', mode);
+  cue('TICK');
+  const a = id && animals.find((x) => x.id === id);
+  if (a) toast(mode === 'CIRCLE' ? `Circling ${a.name}, slowly.` : mode === 'ALONGSIDE' ? `Swimming along with ${a.name}.` : `Gliding over to ${a.name}. Slow and polite!`);
+  renderSub();
+}
+/** ◀ ▶: the sim picks the next fish (or the nearest one when none is watched); the card follows once it lands. */
+function subStep(d) {
+  live.subWatchNext(d);
+  sub.sentAt = 0;
+  cue('TICK');
+}
 function renderSub() {
-  $('subGhost').classList.toggle('on', !sub.visible);
-  $('subGhost').textContent = sub.visible ? '👻 Invisible' : '👻 Invisible: on';
-  $('subCam').classList.toggle('on', sub.inside);
-  $('subCam').textContent = sub.inside ? '🎥 Outside view' : '🎥 Inside view';
-  $('subLight').classList.toggle('on', sub.light);
-  $('subLight').textContent = sub.light ? '💡 Light on' : '💡 Light off';
+  const opt = (id, on, label) => { $(id).classList.toggle('on', on); $(id).setAttribute('aria-pressed', String(on)); $(id).querySelector('span').textContent = label; };
+  opt('subGhost', !sub.visible, sub.visible ? 'Invisible' : 'Invisible: on');
+  opt('subCam', sub.inside, sub.inside ? 'Inside: on' : 'Inside');
+  opt('subLight', sub.light, sub.light ? 'Light' : 'Light off');
+  const a = sub.watch && animals.find((x) => x.id === sub.watch);
+  // the card always shows: idle it offers ◀ ▶ to pick a fish (or tap one); watching it names the fish and its modes
+  $('subWatch').classList.toggle('idle', !a);
+  $('subWatchName').textContent = a ? `Watching ${a.name}` : 'Tap a fish, or ▶ for the nearest';
+  for (const b of document.querySelectorAll('.swmode')) b.classList.toggle('on', !!a && b.dataset.mode === sub.mode);
+  $('subJoyLabel').textContent = a ? 'Swing round · closer' : 'Drift & steer';
   renderSubInfo();
 }
 function renderSubInfo() {
   let s = null;
   try { s = JSON.parse(live.subState()); } catch { /* not out yet */ }
-  $('subInfo').textContent = !sub.visible ? '👻 The fish cannot see you'
-    : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+  // the sim is the truth (it ends a watch when the fish is gone); give a fresh command a moment to land first
+  if (s && performance.now() - sub.sentAt > 1500 && (s.watch ?? null) !== sub.watch) {
+    sub.watch = s.watch ?? null;
+    if (s.watch) { sub.mode = s.mode; const a = animals.find((x) => x.id === s.watch); if (a) toast(`Gliding over to ${a.name}. Slow and polite!`); }
+    renderSub(); return;
+  }
+  const a = sub.watch && animals.find((x) => x.id === sub.watch);
+  const who = !sub.visible ? '👻 The fish cannot see you' : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+  $('subInfo').textContent = who;
 }
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
 function steerSub() {
@@ -1173,7 +1267,7 @@ function steerSub() {
   sub.sent = msg;
   live.steerSub(thrust, turn, rise, 0);
 }
-function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px, ${y * 40}px)`; }
+function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 42}px, ${y * 42}px)`; }
 (() => {
   const joy = $('subJoy');
   let id = null;
@@ -1201,6 +1295,10 @@ function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px,
   $('subCam').addEventListener('click', () => { sub.inside = !sub.inside; live.subView(sub.inside); renderSub(); });
   $('subLight').addEventListener('click', () => { sub.light = !sub.light; live.submarine(true, sub.visible, sub.light); renderSub(); });
   $('subDone').addEventListener('click', () => setSub(false));
+  $('subLetGo').addEventListener('click', () => { subWatch(null); toast('Free to steer again.'); });
+  $('subPrev').addEventListener('click', () => subStep(-1));
+  $('subNext').addEventListener('click', () => subStep(1));
+  for (const b of document.querySelectorAll('.swmode')) b.addEventListener('click', () => { if (sub.watch) subWatch(sub.watch, b.dataset.mode); });
   const KEYS = ['w', 'a', 's', 'd', 'q', 'e', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
   const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '');
   addEventListener('keydown', (e) => {

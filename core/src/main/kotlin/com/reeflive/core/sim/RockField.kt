@@ -75,11 +75,17 @@ class RockPieceDef(val name: String, val blobs: List<Ellipsoid>) {
  */
 class DynamicRockSdf(
     val base: Sdf,
-    val pieces: List<RockPieceDef>,
+    basePieces: List<RockPieceDef>,
     private val lengthCm: Double = TankDims.LENGTH_CM,
     private val heightCm: Double = TankDims.HEIGHT_CM,
     private val widthCm: Double = TankDims.DEPTH_CM,
 ) : Sdf {
+    private val all = ArrayList(basePieces)
+    /** The rockscape's rocks: those of the tank as built, then any added with the aquascape builder ([addPiece]). */
+    val pieces: List<RockPieceDef> get() = all
+    /** How many of [pieces] were baked into [base]. */
+    val baseCount = basePieces.size
+
     /** True once any piece has moved: [dist] reads the composite grid. */
     var active = false; private set
     var prepared = false; private set
@@ -98,16 +104,18 @@ class DynamicRockSdf(
     /** Piece index of every rock cell (base < 0), −1 elsewhere. */
     lateinit var label: ByteArray; private set
     /** Per piece: the grid box of its cells (i0, j0, k0, i1, j1, k1, inclusive), or null for a piece with no cells. */
-    lateinit var pieceBox: Array<IntArray?>; private set
+    var pieceBox: Array<IntArray?> = emptyArray(); private set
     private var stat: FloatArray? = null
     private var comp: FloatArray? = null
 
-    val moved = BooleanArray(pieces.size)
-    private val pieceGrid = arrayOfNulls<LocalGrid>(pieces.size)
+    var moved = BooleanArray(baseCount); private set
+    /** Taken out of the tank (aquascape builder): no longer part of the field. */
+    var gone = BooleanArray(baseCount); private set
+    private var pieceGrid = arrayOfNulls<LocalGrid>(baseCount)
     /** Rest → world transform per piece: x' = R x + t, R row-major (9) then t (3). */
-    val xf: Array<DoubleArray> = Array(pieces.size) { identityXf() }
+    var xf: Array<DoubleArray> = Array(baseCount) { identityXf() }; private set
     /** World-space grid box each moved piece last covered (cleared when it moves on). */
-    private val lastBox = arrayOfNulls<IntArray>(pieces.size)
+    private var lastBox = arrayOfNulls<IntArray>(baseCount)
     private val dirty = IntArray(6)
     private var anyDirty = false
 
@@ -118,8 +126,12 @@ class DynamicRockSdf(
     /** The rock that never moved (cm); the base field until something moves. */
     fun staticDist(x: Double, y: Double, z: Double): Double = stat?.let { sample(it, x, y, z) } ?: base.dist(Vec3(x, y, z))
 
+    /** Piece [i]'s own grid in its rest frame (moved and added pieces only). */
+    fun localGrid(i: Int): LocalGrid? = pieceGrid[i]
+
     /** Piece [i] on its own at its current transform (cm); only for moved pieces. */
     fun pieceDist(i: Int, x: Double, y: Double, z: Double): Double {
+        if (gone[i]) return 1000.0
         val g = pieceGrid[i] ?: return 1000.0
         val m = xf[i]
         val dx = x - m[9]; val dy = y - m[10]; val dz = z - m[11]
@@ -149,16 +161,17 @@ class DynamicRockSdf(
             val x = ox + i * cell; val y = oy + j * cell; val z = oz + k * cell
             val v = b.dist(Vec3(x, y, z))
             d[a] = v.toFloat()
-            if (v < 0.0) lab[a] = RockPieceDef.labelOf(pieces, x, y, z).toByte()
+            if (v < 0.0) lab[a] = RockPieceDef.labelOf(all.subList(0, baseCount), x, y, z).toByte()
         }
         baseD = d; label = lab
-        pieceBox = Array(pieces.size) { p ->
+        pieceBox = Array(baseCount) { p ->
             var i0 = Int.MAX_VALUE; var j0 = Int.MAX_VALUE; var k0 = Int.MAX_VALUE; var i1 = -1; var j1 = -1; var k1 = -1
             for (k in 0 until nz) for (j in 0 until ny) for (i in 0 until nx) if (lab[idx(i, j, k)].toInt() == p) {
                 i0 = min(i0, i); j0 = min(j0, j); k0 = min(k0, k); i1 = max(i1, i); j1 = max(j1, j); k1 = max(k1, k)
             }
             if (i1 < 0) null else intArrayOf(i0, j0, k0, i1, j1, k1)
         }
+        if (all.size > baseCount) pieceBox = pieceBox.copyOf(all.size)
         prepared = true
     }
 
@@ -193,12 +206,49 @@ class DynamicRockSdf(
         m.copyInto(xf[i])
         changed[i] = true
     }
-    private val changed = BooleanArray(pieces.size)
+    private var changed = BooleanArray(baseCount)
+
+    /**
+     * Adds a rock to the scape (aquascape builder): [def] in its own frame, placed by [setTransform]. Its field is
+     * sampled from the analytic blobs; it counts as moved from the start. Returns its piece index.
+     */
+    fun addPiece(def: RockPieceDef): Int {
+        prepare()
+        if (stat == null) { stat = baseD.copyOf(); comp = baseD.copyOf() }
+        val p = all.size
+        all += def
+        val n = all.size
+        moved = moved.copyOf(n); gone = gone.copyOf(n); changed = changed.copyOf(n)
+        pieceGrid = pieceGrid.copyOf(n); lastBox = lastBox.copyOf(n); pieceBox = pieceBox.copyOf(n)
+        xf = Array(n) { if (it < p) xf[it] else identityXf() }
+        val b = def.box
+        val i0 = floor(b[0] / cell).toInt() - PAD; val j0 = floor(b[1] / cell).toInt() - PAD; val k0 = floor(b[2] / cell).toInt() - PAD
+        val gx = kotlin.math.ceil((b[3] - b[0]) / cell).toInt() + 1 + 2 * PAD
+        val gy = kotlin.math.ceil((b[4] - b[1]) / cell).toInt() + 1 + 2 * PAD
+        val gz = kotlin.math.ceil((b[5] - b[2]) / cell).toInt() + 1 + 2 * PAD
+        val v = FloatArray(gx * gy * gz)
+        for (k in 0 until gz) for (j in 0 until gy) for (i in 0 until gx)
+            v[(k * gy + j) * gx + i] = def.dist((i0 + i) * cell, (j0 + j) * cell, (k0 + k) * cell).toFloat()
+        pieceGrid[p] = LocalGrid(gx, gy, gz, i0 * cell, j0 * cell, k0 * cell, cell, v)
+        moved[p] = true
+        active = true
+        return p
+    }
+
+    /** Takes rock [p] out of the scape (aquascape builder); the field around where it was is re-derived. */
+    fun removePiece(p: Int) {
+        if (gone[p]) return
+        if (!moved[p]) markMoved(intArrayOf(p))
+        gone[p] = true
+        lastBox[p]?.let { addDirty(it) }
+        lastBox[p] = null
+        refresh()
+    }
 
     /** Re-derives the composite over the boxes moved pieces left and entered since the last refresh. */
     fun refresh() {
         if (!active) return
-        for (p in pieces.indices) if (moved[p] && (changed[p] || lastBox[p] == null)) {
+        for (p in pieces.indices) if (moved[p] && !gone[p] && (changed[p] || lastBox[p] == null)) {
             changed[p] = false
             val now = worldBox(p)
             lastBox[p]?.let { addDirty(it) }
@@ -207,7 +257,7 @@ class DynamicRockSdf(
         }
         if (!anyDirty) return
         val st = stat!!; val c = comp!!
-        val boxes = pieces.indices.filter { moved[it] }.map { it to lastBox[it]!! }
+        val boxes = pieces.indices.filter { moved[it] && !gone[it] }.map { it to lastBox[it]!! }
         for (k in dirty[2]..dirty[5]) for (j in dirty[1]..dirty[4]) for (i in dirty[0]..dirty[3]) {
             val a = idx(i, j, k)
             var v = st[a].toDouble()

@@ -182,14 +182,24 @@ class Simulation private constructor(
     }
 
     private fun stepRocks(dt: Double) {
-        if (!dynamicRocks) return
         val rp = rockPhysics ?: return
+        // static scape: only a rock just dropped in with the aquascape builder falls (no support checks)
+        if (!dynamicRocks && !rp.anyAwake) return
         resolveCoralRocks()
-        rp.step(dt)
+        rp.step(dt, checks = dynamicRocks)
         for (s in rp.drainSettled()) onRockSettled(s)
     }
 
     private fun onRockSettled(s: RockPhysics.Settle) {
+        if (s.body.dropping) {
+            // a builder rock landed: the scape changed (save it), it is no rockslide
+            s.body.dropping = false
+            refreshRockDependents()
+            val sy = sand.surfaceY(s.x.coerceIn(0.0, rock.lengthCm), s.z.coerceIn(0.0, rock.widthCm))
+            sand.puff(s.x, sy, s.z, 10, 4.0)
+            emit(SimEvent.RockscapeChanged(s.body.name, true, simTimeSec))
+            return
+        }
         if (s.moveCm < 0.3 && s.turnDeg < 1.0) return
         refreshRockDependents()
         // the thud: animals nearby startle, and a puff of sand and mulm comes up where it landed
@@ -209,7 +219,11 @@ class Simulation private constructor(
         val ap = anchorPiece ?: rock.restAnchors.all.associate { it.name to RockPieceDef.labelOf(rock.pieces, it.pos.x, it.pos.y, it.pos.z, ANCHOR_ON_ROCK_CM) }.also { anchorPiece = it }
         rock.anchors = AnchorSet(rock.restAnchors.all.map { a ->
             val p = ap[a.name] ?: -1
-            if (p < 0 || !f.moved[p]) a else {
+            if (p >= 0 && f.gone[p]) {
+                // its rock was taken out: the spot drops to the sand below
+                val sy = sand.surfaceY(a.pos.x.coerceIn(0.0, rock.lengthCm), a.pos.z.coerceIn(0.0, rock.widthCm))
+                a.copy(pos = Vec3(a.pos.x, sy + 1.0, a.pos.z), points = a.points?.map { Vec3(it.x, sy + 1.0, it.z) })
+            } else if (p < 0 || !f.moved[p]) a else {
                 val m = f.xf[p]
                 a.copy(pos = xfPoint(m, a.pos), dir = a.dir?.let { xfDir(m, it) }, normal = a.normal?.let { xfDir(m, it) }, points = a.points?.map { xfPoint(m, it) })
             }
@@ -217,6 +231,13 @@ class Simulation private constructor(
         resolveCoralRocks()
         for (c in corals) {
             val p = c.rockPiece
+            if (p >= 0 && f.gone[p]) {
+                // its rock was taken out: the colony tumbles onto the sand below
+                val sy = sand.surfaceY(c.pos.x.coerceIn(0.0, rock.lengthCm), c.pos.z.coerceIn(0.0, rock.widthCm))
+                c.pos = Vec3(c.pos.x, sy, c.pos.z); c.normal = Vec3(0.0, 1.0, 0.0)
+                c.restPos = c.pos; c.restNormal = c.normal; c.rockPiece = -1; c.patch = null
+                continue
+            }
             if (p < 0 || !f.moved[p]) continue
             c.pos = xfPoint(f.xf[p], c.restPos); c.normal = xfDir(f.xf[p], c.restNormal); c.patch = null
         }
@@ -296,6 +317,95 @@ class Simulation private constructor(
             x += 1.0
         }
         return true
+    }
+
+    // ============================================================== aquascape builder
+    private var placeSeq = 0
+
+    /**
+     * Drops a white dry rock of [shape] over ([x], [z]) ([Command.PlaceRock]): it starts just above whatever is under its
+     * footprint, falls and settles. Works with the rockscape static too (only the new rock moves). Returns its name.
+     */
+    fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1): String? {
+        val rp = rockPhysics ?: return null
+        rp.build()
+        resolveCoralRocks()
+        val sd = if (seed >= 0) seed else (config.seed.toInt() * 31 + (++placeSeq) * 7477 + (simTimeSec * 13).toInt()) and 0x7fffffff
+        val def = DryRock.def(shape, sd)
+        val yaw = yawDeg * kotlin.math.PI / 180.0
+        val c = kotlin.math.cos(yaw); val sn = kotlin.math.sin(yaw)
+        // footprint after the turn, kept inside the glass
+        val b = def.box
+        var hx = 0.0; var hz = 0.0
+        for (cx in doubleArrayOf(b[0], b[3])) for (cz in doubleArrayOf(b[2], b[5])) {
+            hx = max(hx, kotlin.math.abs(c * cx + sn * cz)); hz = max(hz, kotlin.math.abs(-sn * cx + c * cz))
+        }
+        val px = if (2 * hx + 2 > rock.lengthCm) rock.lengthCm / 2 else x.coerceIn(hx + 1.0, rock.lengthCm - hx - 1.0)
+        val pz = if (2 * hz + 2 > rock.widthCm) rock.widthCm / 2 else z.coerceIn(hz + 1.0, rock.widthCm - hz - 1.0)
+        // the highest sand or rock under the footprint
+        var top = SandBed.GLASS_Y
+        var gx = px - hx
+        while (gx <= px + hx) {
+            var gz = pz - hz
+            while (gz <= pz + hz) {
+                val sx = gx.coerceIn(0.0, rock.lengthCm); val sz = gz.coerceIn(0.0, rock.widthCm)
+                top = max(top, sand.surfaceY(sx, sz))
+                var y = rock.waterLevelCm
+                while (y > top) { if (rock.sdf.dist(Vec3(sx, y, sz)) < 0.0) { top = y; break }; y -= 1.0 }
+                gz += 1.5
+            }
+            gx += 1.5
+        }
+        val height = b[4] - b[1]
+        val bottom = min(top + DROP_GAP_CM, max(top + 0.5, rock.waterLevelCm - height))
+        val body = rp.addRock(shape, sd, px, bottom, pz, yaw, simTimeSec)
+        emit(SimEvent.RockscapeChanged(body.name, true, simTimeSec))
+        return body.name
+    }
+
+    /** Takes out the rock nearest [at], or the dry rock added last ([Command.RemoveRock]). Returns its name. */
+    fun removeRock(at: Vec3? = null): String? {
+        val rp = rockPhysics ?: return null
+        rp.build()
+        val b = if (at == null) rp.added.maxByOrNull { it.bornSec } else rp.bodyNear(at.x, at.y, at.z, REMOVE_NEAR_CM)
+        b ?: return null
+        takeOut(rp, listOf(b))
+        return b.name
+    }
+
+    /** Empties the tank of rock ([Command.ClearRocks]): build a scape from scratch. */
+    fun clearRocks() {
+        val rp = rockPhysics ?: return
+        rp.build()
+        takeOut(rp, rp.bodies.toList())
+    }
+
+    private fun takeOut(rp: RockPhysics, bodies: List<RockBody>) {
+        if (bodies.isEmpty()) return
+        resolveCoralRocks()
+        for (b in bodies) rp.removeBody(b)
+        refreshRockDependents()
+        for (b in bodies) {
+            val sy = sand.surfaceY(b.pos[0].coerceIn(0.0, rock.lengthCm), b.pos[2].coerceIn(0.0, rock.widthCm))
+            sand.puff(b.pos[0], sy, b.pos[2], 8, 4.0)
+            emit(SimEvent.RockscapeChanged(b.name, false, simTimeSec))
+        }
+    }
+
+    private var builtCache: List<BuiltRock>? = null
+    private var builtAt = -1L
+    private var builtDay = -1L
+
+    /** The builder's dry rocks for the snapshot (re-made when a rock changes or once a sim hour as they cure). */
+    private fun builtRocks(): List<BuiltRock>? {
+        val rp = rockPhysics ?: return null
+        if (!rp.built) return null
+        val hour = (simTimeSec / 3600).toLong()
+        if (builtAt == rp.version && builtDay == hour) return builtCache
+        builtAt = rp.version; builtDay = hour
+        val list = rp.added.map { b -> BuiltRock(b.pieces[0], b.shape!!, b.seed, DryRock.dryness((simTimeSec - b.bornSec) / 86400.0).toFloat()) }
+        builtCache = list.ifEmpty { null }
+        return builtCache
     }
 
     /** A fork of [src] (sandbox, time-lapse): its rocks where they lie and its dynamic / static choice. */
@@ -424,12 +534,31 @@ class Simulation private constructor(
     val dayIndex: Int get() = floor(simTimeSec / 86400).toInt()
     val minuteOfDay: Double get() = (simTimeSec / 60) % 1440
 
+    /** Hands the sub's autopilot where the watched animal is; a watched animal that died or left ends the watch. */
+    /** The fish the sub's ‹ › moves to ([Command.SubmarineWatchNext]), or null when there is none. */
+    private fun nextSubFish(step: Int): String? {
+        val fish = organisms.filter { it.alive && it.species.kind == "FISH" }
+        if (fish.isEmpty()) return null
+        val i = fish.indexOfFirst { it.id == submarine.watchId }
+        if (i < 0) return fish.minByOrNull { it.pos.distanceTo(submarine.pos) }?.id
+        val n = fish.size
+        return fish[((i + step) % n + n) % n].id
+    }
+
+    private fun feedSubWatch() {
+        val id = submarine.watchId ?: return
+        if (!submarine.active) return
+        val o = organisms.firstOrNull { it.id == id }
+        if (o == null || !o.alive) submarine.watch(null) else submarine.setTarget(o.pos, o.vel, o.lengthCm)
+    }
+
     // ============================================================== public API
     fun enqueue(cmd: Command) { commands.add(cmd) }
 
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
         drainCommands()
+        feedSubWatch()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
         net.stepWall(this, dtWall)
@@ -453,6 +582,7 @@ class Simulation private constructor(
         while (left > 1e-9) {
             drainCommands()
             val dt = min(behaviorDt, left)
+            feedSubWatch()
             submarine.step(dt, rock, sand)
             bags.stepWall(this, dt)
             net.stepWall(this, dt)
@@ -504,6 +634,8 @@ class Simulation private constructor(
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         if (useBehavior && !abstractMode) coralCatch(simDt)
+        // snails and stars on the front pane wear trails into the glass film (SIMULATION §11.1)
+        if (useBehavior && !abstractMode) glassTrails.step(organisms, water.algae.glassMask, rock.widthCm)
         // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
         nightRolls()
         chemAccum += simDt
@@ -533,6 +665,7 @@ class Simulation private constructor(
         }
     }
     private var coralCatchAcc = 0.0
+    private val glassTrails = GlassTrails()
 
     /** Demersal zooplankton rises from the rock after dark (S:Marnane02 context); pods drift and expire. */
     private fun nightPlankton(dt: Double) {
@@ -1144,6 +1277,9 @@ class Simulation private constructor(
             is Command.TouchTank -> touchTank(c)
             is Command.DynamicRocks -> setDynamicRocks(c.on)
             is Command.UndermineRock -> undermineRock(c.rock)
+            is Command.PlaceRock -> placeRock(c.shape, c.x, c.z, c.yawDeg, c.seed)
+            is Command.RemoveRock -> removeRock(c.at)
+            is Command.ClearRocks -> clearRocks()
             is Command.Finger -> finger(c)
             is Command.WaterPuff -> waterPuff(c)
             is Command.TouchAnimal -> touchAnimal(c.id)
@@ -1153,6 +1289,8 @@ class Simulation private constructor(
                 if (!c.on || !c.visible) subSense.tick(this, 0.0, agentOf)
             }
             is Command.SteerSubmarine -> submarine.controls = c.controls
+            is Command.SubmarineWatch -> if (submarine.active) submarine.watch(c.id, c.mode)
+            is Command.SubmarineWatchNext -> if (submarine.active) nextSubFish(c.step)?.let { submarine.watch(it, submarine.watchMode) }
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
             is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
@@ -1641,6 +1779,8 @@ class Simulation private constructor(
             rockVersion = rockPhysics?.version ?: 0L,
             net = net.pose(),
             netFlush = net.lastFlush,
+            builtRocks = builtRocks(),
+            rockSdf = rock.dynamic?.takeIf { it.active },
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
@@ -1691,6 +1831,7 @@ class Simulation private constructor(
                     cl.inward.x.toFloat(), cl.inward.y.toFloat(), cl.inward.z.toFloat())
             },
             gusts = gustArray(),
+            care = water.careState(),
         )
     }
 
@@ -1747,6 +1888,10 @@ class Simulation private constructor(
         /** An anchor / colony within this of a rock's analytic surface rides with that rock. */
         const val ANCHOR_ON_ROCK_CM = 4.0
         const val CORAL_ON_ROCK_CM = 4.0
+        /** A dry rock from the builder starts this far above what is under it (cm), then falls. */
+        const val DROP_GAP_CM = 1.5
+        /** A tap this close to a rock (cm) takes that rock out. */
+        const val REMOVE_NEAR_CM = 6.0
         /** [undermineRock] digs this far past the rock's centre of mass (cm), so it no longer stands. */
         const val UNDERMINE_PAST_CM = 2.5
         /** Longest animal name a [Command.Rename] keeps. */
