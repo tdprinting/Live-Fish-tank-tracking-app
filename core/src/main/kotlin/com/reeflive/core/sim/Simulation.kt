@@ -143,7 +143,9 @@ class Simulation(
     val sand = SandBed(this.rock.lengthCm, this.rock.widthCm, this.rock.sandTopCm, seed).also { sb ->
         sb.base = this.rock.sandBase
         sb.attachRock(this.rock.sdf)
-        this.rock.floorAt = sb::surfaceY
+        val floor: (Double, Double) -> Double = sb::surfaceY
+        this.rock.floorAt = floor
+        this.rock.setFloorMax(floor, sb::surfaceMax)
         // food comes to rest on the live sand surface, not inside it
         food.groundY = { x, z -> sb.surfaceY(x, z) }
     }

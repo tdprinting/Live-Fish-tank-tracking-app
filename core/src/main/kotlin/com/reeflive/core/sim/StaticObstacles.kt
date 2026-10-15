@@ -261,6 +261,28 @@ class StaticObstacles(private val rock: RockData) {
     }
 
     /**
+     * Whether any obstacle [mask] does not pass (solid or soft) comes near the sphere ([p], [r]): false means [push] of
+     * any sphere inside it finds nothing (it would return null and touch no coral), so a caller may skip those calls.
+     * No side effects.
+     */
+    fun near(p: Vec3, r: Double, mask: Int = 0): Boolean {
+        if (n == 0) return false
+        val x0 = cx(p.x - r); val x1 = cx(p.x + r)
+        val y0 = cy(p.y - r); val y1 = cy(p.y + r)
+        val z0 = cz(p.z - r); val z1 = cz(p.z + r)
+        for (iz in z0..z1) for (iy in y0..y1) for (ix in x0..x1) {
+            val c = ix + nx * (iy + ny * iz)
+            for (s in start[c] until start[c + 1]) {
+                val i = items[s]
+                if (pass[i] and mask != 0) continue
+                val qx = p.x - mx[i]; val qy = p.y - my[i]; val qz = p.z - mz[i]; val qr = br[i] + r
+                if (qx * qx + qy * qy + qz * qz < qr * qr) return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Deepest penetration (cm) of the sphere ([p], [r]) into any obstacle [mask] does not pass, beyond that obstacle's
      * give: > 0 is a violation, ≤ 0 clear (−∞ when nothing is near). [lastOwner] names the deepest one.
      */

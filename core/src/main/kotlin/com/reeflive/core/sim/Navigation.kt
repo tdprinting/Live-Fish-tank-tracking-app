@@ -51,6 +51,17 @@ class Navigation(private val rock: RockData) {
         }
 
         fun idx(ix: Int, iy: Int, iz: Int) = (iz * ny + iy) * nx + ix
+        /** The 26 neighbours of an inner cell as index offsets, and their step lengths ([Field]'s order: z, y, x). */
+        internal val nbrOff = IntArray(26)
+        internal val nbrStep = IntArray(26)
+        init {
+            var n = 0
+            for (dz in -1..1) for (dy in -1..1) for (dx in -1..1) {
+                val m = (if (dx != 0) 1 else 0) + (if (dy != 0) 1 else 0) + (if (dz != 0) 1 else 0)
+                if (m == 0) continue
+                nbrOff[n] = (dz * ny + dy) * nx + dx; nbrStep[n] = Field.STEP[m]; n++
+            }
+        }
         fun cx(x: Double) = floor(x / CELL).toInt().coerceIn(0, nx - 1)
         fun cy(y: Double) = floor(y / CELL).toInt().coerceIn(0, ny - 1)
         fun cz(z: Double) = floor(z / CELL).toInt().coerceIn(0, nz - 1)
@@ -101,6 +112,19 @@ class Navigation(private val rock: RockData) {
                 if (dist[i] != curDist) continue
                 n++
                 val ix = i % g.nx; val iy = (i / g.nx) % g.ny; val iz = i / (g.nx * g.ny)
+                if (ix > 0 && iy > 0 && iz > 0 && ix < g.nx - 1 && iy < g.ny - 1 && iz < g.nz - 1) {
+                    // an inner cell (every passable one: the grid keeps off the glass, sand and surface): no bounds checks,
+                    // the same neighbours in the same order
+                    val off = g.nbrOff; val stp = g.nbrStep; val pass = g.pass; val cost = g.cost
+                    for (q in 0 until 26) {
+                        val j = i + off[q]
+                        if (!pass[j]) continue
+                        val w = stp[q] * cost[j]
+                        val nd = curDist + w
+                        if (nd < dist[j]) { dist[j] = nd; bk[(cur + w) % NB].push(j); pending++ }
+                    }
+                    continue
+                }
                 for (dz in -1..1) for (dy in -1..1) for (dx in -1..1) {
                     val x = ix + dx; val y = iy + dy; val z = iz + dz
                     if (x < 0 || y < 0 || z < 0 || x >= g.nx || y >= g.ny || z >= g.nz) continue
@@ -119,7 +143,7 @@ class Navigation(private val rock: RockData) {
 
         companion object {
             const val UNSET = Int.MAX_VALUE
-            private val STEP = intArrayOf(0, 10, 14, 17)
+            internal val STEP = intArrayOf(0, 10, 14, 17)
             private const val NB = 17 * MAX_COST + 1
         }
     }

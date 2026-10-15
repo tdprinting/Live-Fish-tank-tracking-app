@@ -29,6 +29,51 @@ class HeightField(val lengthCm: Double, val widthCm: Double, val nx: Int, val nz
         k
     }
 
+    /**
+     * The highest cell-centre height [at] blends anywhere in [x0]..[x1] × [z0]..[z1]: nothing it reads there is higher
+     * (but for the rounding of the blend, under 1e-6 cm). NaN where a height is.
+     */
+    fun maxIn(x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val i0 = (x0 / cellX - 0.5).coerceIn(0.0, nx - 1.0001).toInt(); val i1 = (x1 / cellX - 0.5).coerceIn(0.0, nx - 1.0001).toInt() + 1
+        val k0 = (z0 / cellZ - 0.5).coerceIn(0.0, nz - 1.0001).toInt(); val k1 = (z1 / cellZ - 0.5).coerceIn(0.0, nz - 1.0001).toInt() + 1
+        val rho = (max(i1 - i0, k1 - k0) + 1) / 2
+        // one entry of the ±ρ table at the middle node covers every node of the box
+        if (rho <= MAX_REACH) return maxTable(rho)[((k0 + k1) / 2) * nx + (i0 + i1) / 2].toDouble()
+        var m = Double.NEGATIVE_INFINITY
+        for (k in k0..k1) for (i in i0..i1) m = max(m, h[k * nx + i].toDouble())
+        return m
+    }
+
+    /** Per node, the highest height within ±ρ nodes along x and z (ρ = 0 … [MAX_REACH], built on first use; NaN sticks). */
+    private val maxTables = arrayOfNulls<FloatArray>(MAX_REACH + 1)
+
+    private fun maxTable(rho: Int): FloatArray {
+        maxTables[rho]?.let { return it }
+        val t = if (rho == 0) h.copyOf(nx * nz) else {
+            val a = maxTable(rho - 1)
+            fun mx(u: Float, v: Float) = if (u.isNaN() || v.isNaN()) Float.NaN else max(u, v)
+            val b = FloatArray(nx * nz)
+            for (k in 0 until nz) for (i in 0 until nx) {
+                val j = k * nx + i
+                var m = a[j]
+                if (i > 0) m = mx(m, a[j - 1])
+                if (i < nx - 1) m = mx(m, a[j + 1])
+                b[j] = m
+            }
+            val c = FloatArray(nx * nz)
+            for (k in 0 until nz) for (i in 0 until nx) {
+                val j = k * nx + i
+                var m = b[j]
+                if (k > 0) m = mx(m, b[j - nx])
+                if (k < nz - 1) m = mx(m, b[j + nx])
+                c[j] = m
+            }
+            c
+        }
+        maxTables[rho] = t
+        return t
+    }
+
     /** Height (cm) at (x, z), bilinear between cell centres, clamped at the edges. */
     fun at(x: Double, z: Double): Double {
         val fx = (x / cellX - 0.5).coerceIn(0.0, nx - 1.0001)
@@ -43,6 +88,9 @@ class HeightField(val lengthCm: Double, val widthCm: Double, val nx: Int, val nz
     fun max(): Double { var m = Double.NEGATIVE_INFINITY; for (i in 0 until nx * nz) m = max(m, h[i].toDouble()); return m }
 
     companion object {
+        /** Widest reach (nodes either side) of the [maxIn] tables. */
+        const val MAX_REACH = 16
+
         /**
          * Rasterizes triangles ([tris]: 9 floats per triangle, world cm) over the box [0, lengthCm] × [0, widthCm]:
          * every cell takes the highest triangle surface over its centre. Cells no triangle covers take their nearest

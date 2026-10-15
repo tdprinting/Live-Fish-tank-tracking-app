@@ -96,6 +96,23 @@ class RockData(
     /** Height of the sand floor (cm) at (x, z). */
     fun floorY(x: Double, z: Double): Double = floorAt?.invoke(x, z) ?: sandTopCm
 
+    /** Upper bound on [floorY] over a box (x0, z0, x1, z1), for the [floorAt] it was set with ([setFloorMax]). */
+    private var floorMaxAt: ((Double, Double, Double, Double) -> Double)? = null
+    private var floorMaxFor: Any? = null
+
+    /** Sets [floorAt]'s bound: [max] answers for [floorAt] only while [floorAt] is still [of]. */
+    fun setFloorMax(of: (Double, Double) -> Double, max: (Double, Double, Double, Double) -> Double) { floorMaxAt = max; floorMaxFor = of }
+
+    /**
+     * The highest [floorY] reads anywhere in [x0]..[x1] × [z0]..[z1], or more: +∞ when the floor has no bound (a
+     * [floorAt] set without [setFloorMax]).
+     */
+    fun floorMax(x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val f = floorAt ?: return sandTopCm
+        val m = floorMaxAt
+        return if (m != null && f === floorMaxFor) m(x0, z0, x1, z1) else Double.POSITIVE_INFINITY
+    }
+
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
         sdf.dist(p), p.y - floorY(p.x, p.z), waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
