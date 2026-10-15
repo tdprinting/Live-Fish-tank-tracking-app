@@ -283,16 +283,22 @@ class BrittleArms(seed: Long) : LimbRig() {
 }
 
 /**
- * Sally Lightfoot legs and chelae (research 17 §3). Walking legs step in an alternating tetrapod (Barnes 1975,
- * crabs walking sideways): L1 R2 L3 R4 against R1 L2 R3 L4, half a cycle apart, with a small rear-to-front lag on
- * each side. Leading legs (the side it walks toward) pull by flexing in stance, trailing legs push by extending
- * (Clarac & Coulmance 1971). The chelae pick at algae in alternating strokes.
+ * Sally Lightfoot legs and chelae (research 17 §3, research 27). Walking legs step in an alternating tetrapod (Barnes
+ * 1975, crabs walking sideways): L1 R2 L3 R4 against R1 L2 R3 L4, half a cycle apart, each foot touching down a
+ * little after the one behind it (footfalls run back to front, Herreid & Full 1986). Leading legs (the side it walks
+ * toward) pull by flexing in stance, trailing legs push by extending (Clarac & Coulmance 1971). The chelae pick at
+ * algae in alternating strokes.
  *
  * Out, legs k = 0..7 (pair k/2 from the front, even = left, odd = right): (step phase, extension stroke signed
  * (− = leading, pulls), foot lift rad, tuck 0..1 (legs drawn in, body pressed flat)); claws 8 (left), 9 (right):
  * (pick phase, stroke 0..1, reach toward the rock 0..1, 0).
+ *
+ * Seated on a surface ([CrawlerSeat], written after [step] each tick; all zero when not seated), the legs are planted:
+ * 10–17 = leg k's IK (0.3 + 0.5 flex, hip rotation as axis × angle in model space; the swing is the first
+ * [CrawlerSeat.CRAB_SWING] of the step phase, duty factor 0.6), leg k's w = fold of a leg with no clear pose, and
+ * 18 = (0, left / right chela max dip (rad), 1 = legs planted).
  */
-class CrabLegs : LimbRig() {
+class CrabLegs : LimbRig(COUNT) {
     var clock = 0.0; private set
     private var moving = 0.0
     private var side = 1.0
@@ -307,6 +313,10 @@ class CrabLegs : LimbRig() {
     var pickStrokes = 0L; private set
     /** Stride frequency of the last step (Hz). */
     var strideHz = 0.0; private set
+    /** Stepping 0..1 (0 = standing still: every foot planted). */
+    val stepping: Double get() = moving
+    /** Pressed flat 0..1 (eased). */
+    val tuckAmt: Double get() = tuck
 
     // ---- set by the brain each tick ----
     /** Claw picking 0..1 (grazing film / hair algae, scraping a carcass). */
@@ -320,8 +330,10 @@ class CrabLegs : LimbRig() {
         val L = max(o.lengthCm, 1.0)
         val m = smoothstep(0.3, 2.0, speed)
         moving += (m - moving) * min(1.0, dt * 8)
-        // stride frequency from speed: a stride ≈ 0.45 carapace widths, 1.5–7 Hz (crabs speed up mostly by stepping faster)
-        strideHz = (speed / (STRIDE_W * L)).coerceIn(1.5, 7.0)
+        // stride frequency from speed: a stride ≈ 0.45 carapace widths at 1.5–4.5 Hz (crabs speed up mostly by stepping
+        // faster, research 27: walking 1.5–4 Hz); faster than that the strides lengthen instead (Herreid & Full 1986), which
+        // also keeps every step visible in the 20 Hz pose stream (at 7 Hz a swing fell between two snapshots)
+        strideHz = (speed / (STRIDE_W * L)).coerceIn(1.5, MAX_HZ)
         if (moving > 0.02) clock = (clock + strideHz * dt * moving) % 1000.0
         val v = if (travel.lengthSq() > 1e-6) travel else o.vel
         // swap leading / trailing legs only on a clear change of side (a course near the body axis flipped it every tick)
@@ -338,7 +350,8 @@ class CrabLegs : LimbRig() {
             val pair = k / 2
             val isRight = k % 2 == 1
             val group = (pair + (if (isRight) 1 else 0)) % 2
-            val ph = frac(clock + 0.5 * group + METACHRONAL * (3 - pair))
+            // (the rear leg leads in phase: footfalls run back to front along each side)
+            val ph = frac(clock + 0.5 * group + METACHRONAL * pair)
             // −1 = leading (pulls), +1 = trailing (pushes)
             val role = if (isRight) -sideS else sideS
             put(k, ph, role * extAmp, lift, tuck)
@@ -356,11 +369,14 @@ class CrabLegs : LimbRig() {
 
     companion object {
         const val STRIDE_W = 0.45
+        const val MAX_HZ = 4.5
         /** Leg-role swap rate (1/s): a full swap of the leading side takes ~0.4 s. */
         const val SIDE_RATE = 5.0
         const val METACHRONAL = 0.06
         /** Claw picking rate per chela (Hz); the two alternate, so strokes reach the mouth at twice this [L]. */
         const val PICK_HZ = 1.6
+        /** Pose entries: the ten limb entries plus eight planted-leg IK entries and one for the chelae and the planting flag ([CrawlerSeat]). */
+        const val COUNT = 19
     }
 }
 

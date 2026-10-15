@@ -1326,12 +1326,79 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
      * Where it presses in. A cave anchor marks the middle of the cave, open water a crawler cannot reach, so a home
      * more than [HOME_SNAP_CM] off the rock is moved onto the nearest wall.
      */
-    val home: Vec3 = (crevice?.pos ?: Vec3(56.0, 11.8, 7.8)).let { p ->
+    var home: Vec3 = (crevice?.pos ?: Vec3(56.0, 11.8, 7.8)).let { p ->
         if (c.rock.sdf.dist(p) > HOME_SNAP_CM) c.rock.sdf.project(p, 0.5, iterations = 24) else p
+    }
+        private set
+    /** How far [home] has been eased out of a crevice too tight for the carapace (cm). */
+    private var homeOut = 0.0
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        // pressed into a crevice narrower than its carapace the drawn body would sit in the rock (sim/CrawlerSeat.kt):
+        // the spot it wedges into eases out of the crack, along the rock normal, until the whole body fits
+        val st = o.seat ?: return
+        if (o.posture == 4 && st.blend >= 1.0 && st.clearance < -HOME_FIT_TOL_CM && homeOut < HOME_OUT_MAX_CM &&
+            o.pos.distanceTo(home) < 2.0) {
+            val step = min(HOME_OUT_RATE * c.dt, HOME_OUT_MAX_CM - homeOut)
+            home += c.rock.envNormal(home) * step
+            homeOut += step
+        }
+        // out on the rock, a spot where the carapace does not fit (a slot behind the rock, a gap at the glass): it
+        // gives the spot up and moves on rather than stand wedged in it
+        tightT = if (o.posture == 0 && st.blend >= 1.0 && st.clearance < -HOME_FIT_TOL_CM) tightT + c.dt else 0.0
+        if (tightT > TIGHT_S && squeezeTo == null) {
+            // the nearest rock or glass close by with room for the whole carapace
+            var best: Vec3? = null
+            for (r in SQUEEZE_R) {
+                repeat(10) {
+                    c.rockSurfacePoint(o.pos, r, minNormalY = -0.2)?.let { (p, n) ->
+                        if (fits(c, p, n) && (best == null || p.distanceTo(o.pos) < best!!.distanceTo(o.pos))) best = p + n * surfaceOffset(c)
+                    }
+                }
+                if (best != null) break
+            }
+            squeezeTo = best ?: home
+        }
+    }
+    private var tightT = 0.0
+    /** Where it squeezes out to from a slot too narrow for its carapace (see [Squeeze]). */
+    private var squeezeTo: Vec3? = null
+
+    /** Wedged in a slot narrower than its carapace: it sidles out to the nearest spot with room, then carries on. */
+    inner class Squeeze : Behavior("squeeze", "Squeezing out of a gap") {
+        private val router = Router()
+        override fun enter(c: Ctx) { router.reset() }
+        override val committed: Boolean get() = elapsed < 2.0
+        override fun score(c: Ctx) = if (squeezeTo != null) 0.95 else 0.0
+        override fun update(c: Ctx, out: SteerIntent) {
+            val to = squeezeTo ?: run { finished = true; return }
+            if (c.o.pos.distanceTo(to) < 1.5 || elapsed > 12.0) { squeezeTo = null; finished = true; return }
+            scuttle(c, out, router.next(c, to), fast = false)
+            out.allowGlass = true
+        }
+    }
+
+    /**
+     * Room for the carapace standing at surface point [p] (normal [n]): its rim, a body height off the surface, clear of
+     * rock, sand and glass all round (a grazing spot in a slot narrower than the crab would wedge it into the rock).
+     */
+    fun fits(c: Ctx, p: Vec3, n: Vec3): Boolean {
+        val s = c.sim.crawlSurface
+        val t1 = (n cross (if (kotlin.math.abs(n.y) < 0.9) Vec3.Y else Vec3.X)).normalized(Vec3.X)
+        val t2 = n cross t1
+        val r = FIT_RIM * o.lengthCm
+        val h = n * (FIT_HEIGHT * o.lengthCm)
+        if (s.dist(p + h) < FIT_CLEAR_CM) return false
+        for (i in 0 until 6) {
+            val a = i * PI / 3
+            if (s.dist(p + h + (t1 * kotlin.math.cos(a) + t2 * sin(a)) * r) < FIT_CLEAR_CM) return false
+        }
+        return true
     }
 
     init {
-        install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), MoltHide(this) { restSpot(it, false) })
+        install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), Squeeze(), MoltHide(this) { restSpot(it, false) })
     }
 
     /** Legs and chelae (sim/LimbRig.kt): the behaviours say when the claws pick and when it presses flat. */
@@ -1352,16 +1419,46 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     private fun scuttle(c: Ctx, out: SteerIntent, target: Vec3, fast: Boolean) {
         out.crawl = true; out.sideways = true; out.target = target; out.surfaceOffset = surfaceOffset(c); out.arriveRadius = 1.0
         val cycle = (c.t + o.appendagePhase) % 2.0
-        if (fast || cycle < 0.6) { out.speed = c.o.burstSpeed * (if (fast) 1.0 else 0.5); out.urgency = 0.8 }
+        // (unhurried, it slows as it closes in: a sprint at a spot a hand's breadth away overshot it and shuttled to and fro)
+        val walk = min(0.5 * c.o.burstSpeed, max(c.o.cruiseSpeed, SLOW_IN * c.o.pos.distanceTo(target)))
+        if (fast || cycle < 0.6) { out.speed = if (fast) c.o.burstSpeed else walk; out.urgency = 0.8 }
         else { out.speed = 0.0; out.urgency = 0.0 }
     }
 
+    /** Room the carapace needs from rock, sand and glass along a walking route (cm). */
+    private fun routeClear(c: Ctx) = ROUTE_CLEAR * c.L
+
+    /**
+     * Follows a straight scuttle toward a target, and once that stalls (a wall, a slot behind the rock) a walking route
+     * round the obstacle through water with room for the whole carapace.
+     */
+    private inner class Router {
+        var route: List<Vec3> = emptyList(); private set
+        private var bestD = 1e9
+        private var stuckT = 0.0
+        fun reset() { route = emptyList(); bestD = 1e9; stuckT = 0.0 }
+        fun next(c: Ctx, target: Vec3): Vec3 {
+            val d = c.o.pos.distanceTo(target)
+            if (d < bestD - 0.3) { bestD = d; stuckT = 0.0 } else stuckT += c.dt
+            if (stuckT > ROUTE_STALL_S) {
+                val cl = routeClear(c)
+                route = c.rock.surfaceRoute(c.o.pos, target, clear = cl, band = cl + 2.0) ?: emptyList()
+                stuckT = 0.0; bestD = d
+            }
+            while (route.size > 1 && (c.o.pos.distanceTo(route.first()) < 2.5 || c.o.pos.distanceTo(route[1]) < c.o.pos.distanceTo(route.first()))) route = route.drop(1)
+            if (route.size == 1 && c.o.pos.distanceTo(route.first()) < 1.5) route = emptyList()
+            return route.firstOrNull() ?: target
+        }
+    }
+
     inner class HideCrevice : Behavior("hide", "Hiding in a crevice") {
+        private val router = Router()
+        override fun enter(c: Ctx) { router.reset() }
         // after a dash home it stays pressed in for a minute or so before venturing out again
         override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12 + (if (softShell(c)) 0.35 else 0.0) + (if (c.t - lastDartAt < WARY_S) 0.4 else 0.0)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
-            if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, r.pos, fast = false); return }
+            if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, router.next(c, r.pos), fast = false); return }
             out.rest(r, 1.0)
             legs.tucked = true
             // pressed flat in the crevice, now and then picking at the film just inside it
@@ -1386,7 +1483,12 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val night = c.activity > 0.5 && !softShell(c)
             // out at night it sometimes climbs the glass to scrape the film there
             spot = (if (night && c.rng.chance(GLASS_GRAZE_P)) glassSpot(c) else null)
-                ?: c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
+            for (i in 0 until 6) {
+                if (spot != null) break
+                // (only where the carapace fits)
+                spot = c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
+                    ?.takeIf { (p, n) -> fits(c, p, n) }
+            }
             dur = c.rng.range(15.0, 45.0)
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1400,7 +1502,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                 c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
                 c.o.mouth = 1.0
                 // shuffles a step or two sideways along the patch between bites
-                spot = s.copy(first = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2))
+                val shuffle = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2)
+                if (fits(c, shuffle, s.second)) spot = s.copy(first = shuffle)
             }
             legs.pick = 1.0      // quick alternating claw strokes to the mouth
             grazeSeconds += c.dt
@@ -1416,7 +1519,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val back = c.rng.chance(0.7)
             val p = if (back) Vec3((home.x + c.rng.signed() * 20).coerceIn(3.0, r.lengthCm - 3), (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), 0.3)
                 else Vec3(if (home.x > r.lengthCm / 2) r.lengthCm - 0.3 else 0.3, (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), (home.z + c.rng.signed() * 8).coerceIn(2.0, r.widthCm - 2))
-            if (r.sdf.dist(p) > 2.5) return p to (if (back) Vec3.Z else if (p.x > 1) Vec3.X * -1.0 else Vec3.X)
+            val n = if (back) Vec3.Z else if (p.x > 1) Vec3.X * -1.0 else Vec3.X
+            if (r.sdf.dist(p) > 2.5 && fits(c, p, n)) return p to n
         }
         return null
     }
@@ -1470,7 +1574,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             if (stuckT > 0.8) {
                 val next = route.firstOrNull()
                 if (next != null && c.rock.sdf.segmentClear(c.o.pos, next, 0.3)) leap = next
-                else route = c.rock.surfaceRoute(c.o.pos, r.pos, clear = surfaceOffset(c)) ?: emptyList()
+                else route = c.rock.surfaceRoute(c.o.pos, r.pos, clear = routeClear(c), band = routeClear(c) + 2.0)
+                    ?: c.rock.surfaceRoute(c.o.pos, r.pos, clear = surfaceOffset(c)) ?: emptyList()
                 stuckT = 0.0; bestD = d
                 if (leap != null) return update(c, out)
             }
@@ -1556,6 +1661,23 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val HOME_SNAP_CM = 3.0
         /** Share of night grazing bouts spent on the glass film [L]. */
         const val GLASS_GRAZE_P = 0.15
+        /** Crevice fit: body clearance tolerated, how fast and how far the wedge spot eases out (cm/s, cm). */
+        const val HOME_FIT_TOL_CM = 0.03
+        const val HOME_OUT_RATE = 4.0
+        /** Seconds wedged with the body in rock before it leaves a grazing or scavenging spot. */
+        const val TIGHT_S = 0.3
+        /** Walking speed per cm still to go (1/s) when not dashing. */
+        const val SLOW_IN = 2.0
+        /** Walking routes keep this much room (× length) round the body; a straight scuttle stalled this long (s) takes one. */
+        const val ROUTE_CLEAR = 0.3
+        const val ROUTE_STALL_S = 1.5
+        /** Search radii (cm) for a spot with room when squeezing out. */
+        private val SQUEEZE_R = doubleArrayOf(4.0, 8.0, 12.0)
+        /** Carapace fit test: rim radius and height (× length), clearance (cm). */
+        const val FIT_RIM = 0.55
+        const val FIT_HEIGHT = 0.15
+        const val FIT_CLEAR_CM = 0.05
+        const val HOME_OUT_MAX_CM = 2.5
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
         const val MIN_HIDE_S = 8.0
         const val WARY_S = 60.0

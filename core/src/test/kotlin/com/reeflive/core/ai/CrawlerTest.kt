@@ -183,7 +183,7 @@ class CrawlerTest {
         assertTrue("out of the crevice at night (${o.pos.distanceTo(b.home)} cm)", o.pos.distanceTo(b.home) > 4.0)
         ag.brain.onTap(ag.ctx, o.pos + Vec3(1.0, 1.0, 0.0), 0.8)
         var tuck = 0f
-        s.advance(12.0, behaviorDt = 0.05) { tuck = maxOf(tuck, o.toPose().limbs[3]) }
+        s.advance(12.0, behaviorDt = 0.05) { tuck = maxOf(tuck, (o.limbRig as CrabLegs).tuckAmt.toFloat()) }
         assertTrue("darted (${b.darts})", b.darts >= 1)
         assertTrue("back in the crevice (${o.pos.distanceTo(b.home)} cm, ${o.behaviorName})", o.pos.distanceTo(b.home) < 3.0)
         assertTrue("pressed flat, legs drawn in (w $tuck)", tuck > 0.5f)
