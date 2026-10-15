@@ -40,7 +40,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     fun isFemale(c: Ctx): Boolean = c.sim.repro.clownIsFemale(o)
 
     init {
-        install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this), CleanNestSite(this), LayEggs(this), TendEggs(this),
+        install(HoverHost(), Sortie(), NestleHost(), ClownFeed(), GlassCurious(this), CleanNestSite(this), LayEggs(this), TendEggs(this),
             Flee(this, { c, _ -> c.safe(host(c) + Vec3(0.0, 2.0, 0.0), 1.5) }, "Darting into the host"),
             VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this), ExploreAnemone(), FeedAnemone(), DefendHost())
     }
@@ -144,6 +144,77 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
             out.separation = 0.4
         }
     }
+
+    /**
+     * Short trips up off the host to pick zooplankton from the passing water (research 30 §1: wild ocellaris feed on
+     * plankton in the water column just above the host and stay within a few body lengths of it). Most frequent in the
+     * first hours after lights-on, fewest at midday ([diel]). The male tags along a body length behind the female,
+     * a little lower; he goes up on his own less often.
+     */
+    inner class Sortie : Behavior("sortie", "Picking plankton above the host") {
+        private var restUntil = -1.0
+        private var spot = Vec3.ZERO
+        private var nextSpot = 0.0
+        private var nextSnap = 0.0
+        private var until = 0.0
+        private var follow = false
+        private var followAfter = -1.0
+        override fun score(c: Ctx): Double {
+            if (c.p.night || c.o.mouthbrooding) return 0.0
+            if (utility.current === this) return if (finished) 0.0 else 0.8
+            val mate = partner(c)
+            follow = !isFemale(c) && mate != null && c.t > followAfter && c.sim.agentOf(mate)?.brain?.utility?.current?.name == "sortie"
+            if (follow) return 0.75
+            if (restUntil < 0) restUntil = c.t + c.rng.range(0.0, SORTIE_GAP_S)   // fish start out of step
+            return if (c.t < restUntil) 0.0 else 0.75 * c.activity
+        }
+        override fun enter(c: Ctx) {
+            until = c.t + c.rng.range(SORTIE_MIN_S, SORTIE_MAX_S)
+            nextSpot = 0.0; nextSnap = c.t + c.rng.range(1.0, 3.0)
+        }
+        override fun exit(c: Ctx) {
+            val gap = c.rng.range(0.5, 1.5) * SORTIE_GAP_S / diel(c)
+            restUntil = c.t + (if (isFemale(c)) gap else 1.8 * gap)
+            followAfter = c.t + 15.0   // back at the host for a while before tagging along again
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val h = host(c)
+            val L = c.L
+            val mate = partner(c)
+            val top = c.rock.waterLevelCm - 4.0
+            if (c.t > nextSpot) {
+                nextSpot = c.t + c.rng.range(3.0, 6.0)
+                val ang = c.rng.nextDouble() * 2 * PI
+                val r = L * c.rng.range(0.2, 1.0)
+                val base = h.y + (if (flatHost) FLAT_HI else 1.0)
+                spot = c.safe(Vec3(h.x + cos(ang) * r, (base + L * c.rng.range(SORTIE_UP_MIN, SORTIE_UP_MAX)).coerceAtMost(top), h.z + sin(ang) * r * 0.7), 1.2)
+            }
+            var goal = spot
+            if (follow && mate != null) {
+                // a length behind and a little under her, never level with her
+                val back = (c.o.pos - mate.pos).horizontal().normalized(Vec3.X)
+                goal = c.safe(mate.pos + back * L + Vec3(0.0, -0.4 * L, 0.0), 1.2)
+                if (c.sim.agentOf(mate)?.brain?.utility?.current?.name != "sortie") finished = true   // she went home
+            }
+            out.seek(goal, c.o.cruiseSpeed * 0.7, arrive = 0.6 * L)
+            out.hover = true; out.pectoral = 1.0
+            out.waddleAmp = 0.3; out.waddleHz = 1.3
+            val fl = c.sim.flow.velocityFast(c.o.pos).horizontal()
+            if (fl.length() > 1.0 && c.o.pos.distanceTo(goal) < L) out.faceDir = (fl * -1.0).normalized(c.o.heading)
+            if (c.t > nextSnap) {
+                // a snap at a passing particle: mouth open and a quick lunge a few cm toward it
+                nextSnap = c.t + c.rng.range(SNAP_MIN_S, SNAP_MAX_S)
+                c.o.mouth = 1.0
+                c.o.hunger = max(0.0, c.o.hunger - SNAP_YIELD)
+                snaps++
+                spot = c.safe(spot + c.rng.unitVector() * (0.4 * L), 1.2)
+            }
+            if (c.t > until || c.o.pos.distanceTo(h) > SORTIE_LEASH_L * L) finished = true
+        }
+    }
+
+    /** Plankton snaps taken on sorties (counts for tests). */
+    var snaps = 0; private set
 
     /** Night: nestled in the host, female closer to the centre. */
     inner class NestleHost : Behavior("nestle", "Nestled in host") {
@@ -314,6 +385,35 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
         const val FLAT_HI = 4.6
         /** Body-shimmy frequency of a hosting wiggle bout, Hz (DESIGN ESTIMATE from owner video). */
         const val WIGGLE_HZ = 3.0
+        /** Plankton sortie: height over the host's top in body lengths, length and mean gap at the dawn peak, s (DESIGN ESTIMATE
+         *  inside the 1–3 BL host leash of research 30 §1). */
+        const val SORTIE_UP_MIN = 0.8
+        const val SORTIE_UP_MAX = 2.0
+        const val SORTIE_MIN_S = 8.0
+        const val SORTIE_MAX_S = 25.0
+        const val SORTIE_GAP_S = 60.0
+        /** Farthest from the host on a sortie, body lengths. */
+        const val SORTIE_LEASH_L = 2.9
+        /** Seconds between snaps at drifting plankton, and the hunger each one meets (sparse tank plankton). */
+        const val SNAP_MIN_S = 2.0
+        const val SNAP_MAX_S = 5.0
+        const val SNAP_YIELD = 0.002
+
+        /**
+         * Daytime activity of juvenile clowns (research 30 §1, Nguyen 2019 [M]): a peak in the first hours after lights-on,
+         * a dip through midday and a smaller afternoon rise. 1 at the peak; scales how often it leaves the host.
+         */
+        fun diel(c: Ctx): Double {
+            val ph = c.sim.lights.photoperiodHours ?: com.reeflive.core.sim.LightSchedule.DEFAULT_PHOTOPERIOD_H
+            val hour = (c.t / 3600.0) % 24.0
+            val m = ((hour * 60 - com.reeflive.core.sim.LightSchedule.MIDDAY_MIN) / (ph * 60) + 0.5)   // 0 lights-on .. 1 lights-off
+            return when {
+                m < 0.2 -> 1.0
+                m < 0.35 -> 1.0 - 0.55 * (m - 0.2) / 0.15
+                m < 0.7 -> 0.45
+                else -> 0.45 + 0.3 * ((m - 0.7) / 0.3).coerceAtMost(1.0)
+            }
+        }
     }
 
     /** Rise fast to the surface and snatch; female eats first. */
@@ -402,6 +502,11 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         /** Chance a hard startle (tap, attack) makes it play dead (DESIGN ESTIMATE; juveniles far more often). */
         const val PLAY_DEAD_JUVENILE = 0.4
         const val PLAY_DEAD_ADULT = 0.05
+        /** Patrol legs along the rock, cm; chance per leg of turning back early, and of a short look-about hover (DESIGN ESTIMATE). */
+        const val LEG_MIN_CM = 12.0
+        const val LEG_MAX_CM = 30.0
+        const val TURN_BACK = 0.12
+        const val PAUSE_CHANCE = 0.2
     }
 
     /**
@@ -429,27 +534,60 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
-    /** Long sweeps along the front lane, surfing in strong flow. */
+    /**
+     * A loose circuit that skirts the rockwork (research 30 §2: juveniles stay near a refuge and pick plankton in the
+     * flow above the reef, "1–2 m above the bottom" scaled to the tank): along the rock face at one height, over the
+     * top or round the end, and back at another, a body length or two off the rock. Legs vary in height and pace, it
+     * eases to a hover now and then to look about, and sometimes turns back early. (It swept wall to wall at one
+     * speed before: research 30 §2, measured with FishBehaviorProbe.)
+     */
     inner class Patrol : Behavior("patrol", "Patrolling") {
         private var wp = Vec3.ZERO
         private var goRight = true
         private var surfUntil = -1.0
         private var nextSurfCheck = 0.0
+        private var pace = 1.0
+        private var pauseUntil = -1.0
+        private var pauseFace = Vec3.X
+        private var band = 0.6
         override fun score(c: Ctx) = 0.15 + 0.4 * c.activity
-        override fun enter(c: Ctx) { pick(c) }
+        override fun enter(c: Ctx) { goRight = c.rng.chance(0.5); band = c.rng.range(0.35, 0.85); pick(c) }
         private fun pick(c: Ctx) {
             val L = c.L
-            val p = if (L > 15) c.o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)
-            else {
+            val o = c.o
+            if (L > 15) { wp = c.safe(o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)); return }
+            val lo = 12.0; val hi = c.rock.lengthCm - 12.0
+            // at an end, or now and then mid-run, turn back on a new height band
+            if (goRight && o.pos.x > hi - 6 || !goRight && o.pos.x < lo + 6 || c.rng.chance(TURN_BACK)) {
                 goRight = !goRight
-                // right turn over the GSP mound, past the clowns' rock under the shelf (resized layout)
-                Vec3(if (goRight) c.rng.range(96.0, 110.0) else c.rng.range(12.0, 25.0), c.zoneY(c.rng.range(0.35, 0.9)), c.rock.widthCm * c.rng.range(0.5, 0.8))
+                band = (band + c.rng.range(0.2, 0.4) * (if (band > 0.6) -1 else 1)).coerceIn(0.3, 0.9)
             }
-            wp = c.safe(p)
+            val x = (o.pos.x + (if (goRight) 1 else -1) * c.rng.range(LEG_MIN_CM, LEG_MAX_CM)).coerceIn(lo, hi)
+            val y = c.zoneY((band + c.rng.range(-0.08, 0.08)).coerceIn(0.25, 0.92))
+            wp = c.safe(Vec3(x, y, rockFront(c, x, y) + c.rng.range(1.0, 2.0) * L), 1.5)
+            pace = c.rng.range(0.7, 1.3)
+            if (c.rng.chance(PAUSE_CHANCE)) {
+                pauseUntil = c.t + c.rng.range(1.5, 4.0)
+                pauseFace = Vec3.rotateAbout(o.heading.horizontal().normalized(Vec3.X), Vec3.Y, c.rng.signed() * 1.2)
+            }
+        }
+        /** The front face of the rock at (x, y), cm along z, or a mid-tank lane where there is no rock at that height. */
+        private fun rockFront(c: Ctx, x: Double, y: Double): Double {
+            val w = c.rock.widthCm
+            var z = w - 3.0
+            while (z > 3.0) { if (c.rock.sdf.dist(Vec3(x, y, z)) < 0.5) return min(z, w - 6.0); z -= 2.0 }
+            return w * 0.55
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
-            if (o.pos.distanceTo(wp) < 2 * c.L) pick(c)
+            if (c.t < pauseUntil) {
+                // ease to a hover and look about, then swim on
+                out.target = o.pos; out.speed = 0.0
+                out.hover = true; out.pectoral = 1.0
+                out.faceDir = pauseFace
+                return
+            }
+            if (o.pos.distanceTo(wp) < 1.5 * c.L) pick(c)
             if (c.t > nextSurfCheck) {
                 nextSurfCheck = c.t + 2
                 val fl = c.sim.flow.velocityFast(o.pos).length()
@@ -465,7 +603,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             }
             // out of a cave first, over the rock: a straight seek from a hiding pocket at the rock foot held the tang
             // there, nose to the rock, for minutes (it never came back to a loitering sub, SubmarineTest)
-            out.seek(c.viaOpenWater(wp), o.cruiseSpeed * 1.1, arrive = 2 * c.L)
+            out.seek(c.viaOpenWater(wp), o.cruiseSpeed * 1.1 * pace, arrive = c.L)
             out.wander = 0.15
         }
     }
@@ -650,8 +788,12 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         private var bestD = 0.0
         private var progressAt = 0.0
         private var detour: Vec3? = null
+        private var nextLook = 0.0
+        private var lookUntil = -1.0
+        private var lookDir = Vec3.Z
+        private var nextSnap = 0.0
         override fun score(c: Ctx) = 0.45
-        override fun enter(c: Ctx) { bestD = c.o.pos.distanceTo(spot); progressAt = c.t; detour = null }
+        override fun enter(c: Ctx) { bestD = c.o.pos.distanceTo(spot); progressAt = c.t; detour = null; nextSnap = c.t + c.rng.range(DAY_SNAP_MIN_S, DAY_SNAP_MAX_S) }
         override fun update(c: Ctx, out: SteerIntent) {
             if (c.t > next) {
                 next = c.t + c.rng.range(8.0, 20.0)
@@ -678,7 +820,19 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             out.seek(p, c.o.cruiseSpeed * 0.25, arrive = 4.0)
             out.hover = true; out.ampMul = 0.3; out.pectoral = 1.0; out.tailMul = 0.4
             out.maxPitch = HOVER_PITCH
-            out.faceDir = hoverFacing(c, yaw)
+            // small life in the long day rest (research 30 §3): a slow pivot to watch a fish passing close, and now and
+            // then a snap at a drifting particle that comes within reach (it feeds by day only on what reaches it)
+            if (c.t > nextLook) {
+                nextLook = c.t + c.rng.range(4.0, 10.0)
+                val o = c.o
+                val passer = c.p.neighbors(o.pos, LOOK_CM).firstOrNull { it !== o && it.alive && it.isFish && it.vel.length() > 0.5 * it.lengthCm }
+                if (passer != null) { lookUntil = c.t + c.rng.range(1.5, 3.0); lookDir = (passer.pos - o.pos).horizontal().normalized(o.heading) }
+            }
+            out.faceDir = if (c.t < lookUntil) lookDir else hoverFacing(c, yaw)
+            if (c.t > nextSnap) {
+                nextSnap = c.t + c.rng.range(DAY_SNAP_MIN_S, DAY_SNAP_MAX_S)
+                c.o.mouth = 1.0
+            }
             if (c.o.brightExposed) out.ampMul = 0.2
         }
     }
@@ -769,6 +923,10 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         const val HOVER_PITCH = 0.17
         /** Seconds outside its zone without closing on the pocket before the hover takes a detour round the rock. */
         const val STALL_S = 8.0
+        /** Day rest: range at which it turns to watch a passing fish, cm, and seconds between snaps at drifting particles (DESIGN ESTIMATE). */
+        const val LOOK_CM = 18.0
+        const val DAY_SNAP_MIN_S = 20.0
+        const val DAY_SNAP_MAX_S = 60.0
         private val DETOUR_DIRS = listOf(Vec3.Y, Vec3.Z, Vec3(0.0, 0.7, 0.7).normalized(), Vec3.X, Vec3.X * -1.0, Vec3.Z * -1.0)
         const val FORAGE_RADIUS = 40.0
         const val FORAGE_LIGHT = 0.3
@@ -1411,7 +1569,9 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
             val o = c.o
             val pose = perchPose(current)
             val t = threat
-            if (elapsed > 0.8 && o.pos.distanceTo(pose.pos) < 4.0 + 0.5 * o.lengthCm && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
+            // at the perch, or at its approach point (on a rock top that sits a clearance above it: it hovered there unclamped)
+            val there = o.pos.distanceTo(pose.pos) < 4.0 + 0.5 * o.lengthCm || o.pos.distanceTo(hideTarget) < 2.5
+            if (elapsed > 0.8 && there && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
                 out.place(pose.pos, pose.heading, pose.up, 8.0); out.posture = 1; out.pectoral = 1.0
                 out.target = null; out.fleeFrom = null; out.hover = false
             }
