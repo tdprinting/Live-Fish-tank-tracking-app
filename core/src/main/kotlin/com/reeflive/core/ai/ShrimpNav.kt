@@ -89,9 +89,11 @@ fun RockData.bodyHeading(p: Vec3, n: Vec3, len: Double, stand: Double, prefer: V
  * cm of some surface (rock, sand or glass), searched inside the box around both ends grown by [margin] cm. Returns
  * waypoints (the end is [to]) or null when no route exists. For a crawler that must get round a wall rather than over
  * open water (the Sally Lightfoot's dash home). When [to] itself is off every surface the route ends at the nearest
- * reachable cell and then [to]. Bounded to [maxCells] expansions.
+ * reachable cell and then [to]. Bounded to [maxCells] expansions. [fits], when given, must also pass for a cell to be
+ * walked (a wide crawler's whole body has room there).
  */
-fun RockData.surfaceRoute(from: Vec3, to: Vec3, step: Double = 1.5, clear: Double = 0.15, band: Double = 3.0, margin: Double = 12.0, maxCells: Int = 40000): List<Vec3>? {
+fun RockData.surfaceRoute(from: Vec3, to: Vec3, step: Double = 1.5, clear: Double = 0.15, band: Double = 3.0, margin: Double = 12.0, maxCells: Int = 40000,
+                          fits: ((Vec3) -> Boolean)? = null): List<Vec3>? {
     val lo = Vec3(min(from.x, to.x) - margin, min(from.y, to.y) - margin, min(from.z, to.z) - margin)
     val nx = ((abs(from.x - to.x) + 2 * margin) / step).toInt() + 1
     val ny = ((abs(from.y - to.y) + 2 * margin) / step).toInt() + 1
@@ -106,7 +108,7 @@ fun RockData.surfaceRoute(from: Vec3, to: Vec3, step: Double = 1.5, clear: Doubl
         if (walk[id] == 0.toByte()) {
             val p = at(i, j, k)
             val e = envDist(p)
-            walk[id] = if (e in clear..band && inWater(p)) 1 else 2
+            walk[id] = if (e in clear..band && inWater(p) && fits?.invoke(p) != false) 1 else 2
         }
         return walk[id] == 1.toByte()
     }

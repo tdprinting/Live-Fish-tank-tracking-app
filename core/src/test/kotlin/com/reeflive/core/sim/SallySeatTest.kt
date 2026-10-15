@@ -107,10 +107,14 @@ class SallySeatTest {
             st.worst.values.forEach { println("   WORST ${it.second}") }
             println("   counts ${st.counts}")
         }
-        for ((name, st) in runs) {
+        for ((i, r) in runs.withIndex()) {
+            val (name, st) = r
+            val live = i == 0
             assertTrue("$name: crab seated", st.samples > 1000)
             assertTrue("$name: gap under the crab over $GAP_MAX cm on ${st.gapFails} ticks", st.gapFails <= st.samples / 1000)
-            assertTrue("$name: carapace inside the surface on ${st.bodyFails} ticks", st.bodyFails <= st.samples / 1000)
+            // (none at the live 20 Hz tick; at 10x fast-forward its half-second steps can still carry it a tick into a
+            // slot before the seat stops it)
+            assertTrue("$name: carapace inside the surface on ${st.bodyFails} ticks", st.bodyFails <= (if (live) 0L else st.samples / 2000))
             assertEquals("$name: foot tips inside the surface", 0, st.footFails)
             assertEquals("$name: knees inside the surface", 0, st.kneeFails)
             assertTrue("$name: legs mostly find footholds", st.folded < st.samples * 8 / 20)

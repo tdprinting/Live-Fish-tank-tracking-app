@@ -263,8 +263,52 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         }
         // wedged: the seat keeps having to hop (no clean rest carries over from the last tick); the brain walks it off
         wedge = if (hadSeat && hop) wedge + 1.0 else max(0.0, wedge - WEDGE_DECAY)
-        clearance = lowestContact(s, pos, L)
-        val clean = ok(clearance, pos, o.pos, d0, L)
+        if (crab != null) {
+            // the Sally Lightfoot's wide carapace never shows inside the rock: where no seat fits (the sim crawled into
+            // a slot narrower than its body, which its routes avoid and it jumps out of) the drawn body waits at the
+            // last seat that was clear, while that is still within reach of the sim, rather than sink into the rock
+            // (and it leaves that spot by a gliding step, never a hop across: the first clear step toward the new seat,
+            // else it waits on)
+            var m = lowestContact(s, pos, L, BODY_END)
+            val stepMax = SEAT_SPEED * dt + o.pos.distanceTo(oPrev)
+            if (hadSeat && hasClean && m >= -PEN_TOL_CM && pos.distanceTo(pClean) > 2 * stepMax) {
+                val pNew = pos; val uNew = up
+                pos = pClean + (pNew - pClean).clampLength(stepMax)
+                up = Vec3.rotateToward(uClean, uNew, min(SEAT_TURN * dt, SEAT_TURN_TICK), fwd).normalized(uNew)
+                fwd = fwdOn(o.heading, up, fClean, h0); right = fwd cross up
+                m = lowestContact(s, pos, L, BODY_END)
+                if (m < -PEN_TOL_CM && pClean.distanceTo(o.pos) >= CRAB_LAG_MAX * L) {
+                    pos = pNew; up = uNew; fwd = fwdOn(o.heading, up, fClean, h0); right = fwd cross up
+                    m = lowestContact(s, pos, L, BODY_END)
+                }
+            }
+            if (!hadSeat) hasClean = false
+            if (m < -PEN_TOL_CM && (!hasClean || pClean.distanceTo(o.pos) >= CRAB_LAG_MAX * L)) {
+                // no clear seat to wait at (just seated after a leap, set down in a crevice, or left far behind): pushed out along
+                // the surface normal under the deepest point, a few passes, keeping the least sunk
+                var bestP = pos; var bestM = m
+                for (k in 0 until DEPEN_PASSES) {
+                    lowestContact(s, pos, L, BODY_END)
+                    pos += s.normal(lowest) * (DEPEN_CM - m)
+                    m = lowestContact(s, pos, L, BODY_END)
+                    if (m > bestM) { bestM = m; bestP = pos }
+                    if (m >= -PEN_TOL_CM) break
+                }
+                pos = bestP; m = bestM
+            }
+            waiting = false
+            if (m < -PEN_TOL_CM && hadSeat && hasClean && pClean.distanceTo(o.pos) < CRAB_LAG_MAX * L &&
+                lowestContactAt(s, pClean, uClean, fClean, L, BODY_END) >= -PEN_TOL_CM) {
+                // (exactly as it was: turned in place to the sim's heading, the wide disc swung into the rock)
+                pos = pClean; up = uClean; fwd = fClean; right = fwd cross up
+                // and the sim does not walk on into the gap either: its step this tick is taken back, so the slot
+                // is a wall to the crab (its routes stall there and re-plan round it)
+                if (simOffset >= 0.0 && s.dist(oPrev) > 0.0) o.pos = oPrev
+                waiting = true
+            } else if (m >= -PEN_TOL_CM) { pClean = pos; uClean = up; fClean = fwd; hasClean = true }
+        }
+        val clean = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
+        clearance = lowestContact(s, pos, L, BODY_END)
         if (kind == BrainKind.HERMIT && clean && blend >= 1.0 && simOffset >= 0.0) {
             // the sim follows the seat: where the body rests is higher or lower than where the sim walks it by more than a
             // few mm (an overhang or crevice where the single-normal crawl step thrashes): the sim takes the seat's pose
@@ -440,11 +484,32 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     /** Distance of the lowest contact point with the body origin at [p] (the point itself goes to [lowest]). */
-    private fun lowestContact(s: CrawlSurface, p: Vec3, L: Double): Double {
+    /** The Sally Lightfoot's drawn body is waiting at [waitPos], the last seat where it fitted (the sim is in a gap). */
+    var waiting = false; private set
+    val waitPos: Vec3 get() = pClean
+
+    /** Last clear Sally Lightfoot seat (see [update]). */
+    private var pClean = Vec3.ZERO
+    private var uClean = Vec3.Y
+    private var fClean = Vec3.X
+    private var hasClean = false
+
+    /** The crab's carapace and coxae only: its stance contacts stand in for the feet the leg IK places. */
+    private val BODY_END = if (crab != null) CrabModel.STANCE_FROM * 3 else shape.contacts.size
+
+    private fun lowestContactAt(s: CrawlSurface, p: Vec3, u: Vec3, f: Vec3, L: Double, end: Int): Double {
+        val u0 = up; val f0 = fwd; val r0 = right
+        up = u; fwd = f; right = f cross u
+        val m = lowestContact(s, p, L, end)
+        up = u0; fwd = f0; right = r0
+        return m
+    }
+
+    private fun lowestContact(s: CrawlSurface, p: Vec3, L: Double, end: Int = shape.contacts.size): Double {
         val c = shape.contacts
         var minD = Double.MAX_VALUE
         var i = 0
-        while (i < c.size) {
+        while (i < end) {
             val w = p + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
             val d = s.dist(w)
             if (d < minD) { minD = d; lowest = w }
@@ -876,6 +941,11 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val CRAB_HOLD_GAP_CM = 0.5
         /** Largest turn (rad) of the crab's seat taken as a hop in one tick. */
         const val CRAB_HOP_TURN = 0.8
+        /** How far (× length) the sim may get from the last clear Sally Lightfoot seat the drawn body waits at. */
+        const val CRAB_LAG_MAX = 1.6
+        /** Passes, and the margin (cm) left, pushing a sunk Sally Lightfoot seat with no clear one to wait at out of the rock. */
+        const val DEPEN_PASSES = 4
+        const val DEPEN_CM = 0.01
         /** How far (× length) a kept seat may sit from the sim position before a fresh solve replaces it. */
         const val NEAR_MAX = 1.0
         /** Fastest the drawn seat moves (cm/s, on top of the sim's own motion) and turns (rad/s) while it stays clean. */
@@ -1052,12 +1122,12 @@ class CrabModel(
         val SALLY = CrabModel(
             hip = doubleArrayOf(0.2061, 0.13, -0.3877, 0.2061, 0.13, 0.3877, 0.0289, 0.13, -0.4139, 0.0289, 0.13, 0.4139,
                 -0.147, 0.13, -0.4039, -0.147, 0.13, 0.4039, -0.3115, 0.13, -0.3226, -0.3115, 0.13, 0.3226),
-            tip = doubleArrayOf(0.6528, 0.0026, -1.2277, 0.6528, 0.0026, 1.2277, 0.1072, 0.0027, -1.5326, 0.1072, 0.0027, 1.5326,
-                -0.5306, 0.0027, -1.4577, -0.5306, 0.0027, 1.4577, -0.9933, 0.0026, -1.0285, -0.9933, 0.0026, 1.0285),
-            knee = doubleArrayOf(0.4588, 0.2881, -0.829, 0.4588, 0.2881, 0.829, 0.086, 0.2889, -1.0014, 0.086, 0.2889, 1.0014,
-                -0.3338, 0.2889, -0.9638, -0.3338, 0.2889, 0.9638, -0.6632, 0.2883, -0.7097, -0.6632, 0.2883, 0.7097),
-            mid = doubleArrayOf(0.5613, 0.1911, -1.0556, 0.5613, 0.1911, 1.0556, 0.0904, 0.1966, -1.2928, 0.0904, 0.1966, 1.2928,
-                -0.4483, 0.1966, -1.2318, -0.4483, 0.1966, 1.2318, -0.8523, 0.1922, -0.8826, -0.8523, 0.1922, 0.8826),
+            tip = doubleArrayOf(0.6522, 0.0038, -1.2267, 0.6522, 0.0038, 1.2267, 0.1071, 0.0039, -1.5314, 0.1071, 0.0039, 1.5314,
+                -0.5301, 0.0039, -1.4565, -0.5301, 0.0039, 1.4565, -0.9924, 0.0038, -1.0277, -0.9924, 0.0038, 1.0277),
+            knee = doubleArrayOf(0.4454, 0.2868, -0.8374, 0.4454, 0.2868, 0.8374, 0.0704, 0.2877, -1.0036, 0.0704, 0.2877, 1.0036,
+                -0.349, 0.2877, -0.9594, -0.349, 0.2877, 0.9594, -0.6753, 0.287, -0.6995, -0.6753, 0.287, 0.6995),
+            mid = doubleArrayOf(0.5615, 0.19, -1.0561, 0.5615, 0.19, 1.0561, 0.0904, 0.1959, -1.293, 0.0904, 0.1959, 1.293,
+                -0.4484, 0.1959, -1.232, -0.4484, 0.1959, 1.232, -0.8527, 0.1912, -0.883, -0.8527, 0.1912, 0.883),
             legW = doubleArrayOf(0.95, 0.95, 1.12, 1.12, 1.12, 1.12, 0.98, 0.98),
             clawPivot = doubleArrayOf(0.36, 0.12, -0.17, 0.36, 0.12, 0.17),
             clawTip = doubleArrayOf(0.72, 0.06, -0.08, 0.72, 0.06, 0.08),
