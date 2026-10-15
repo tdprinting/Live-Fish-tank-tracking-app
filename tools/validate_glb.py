@@ -47,10 +47,11 @@ BUDGET = {
     "micro_snail": 1400, "micro_flatworm": 200, "micro_tentacle": 800, "micro_caprellid": 2000, "micro_ostracod": 700,
     "micro_foram": 300, "micro_calanoid": 600,
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
-    "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 800,
-    "mushroom_hairy": 1500,
-    # Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md): leathers and the big corallimorph
-    "toadstool_leather": 700, "leather_pink": 500, "finger_leather": 900, "elephant_ear": 800,
+    "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 1100,
+    "mushroom_hairy": 1500, "mushroom_hairy_mound": 3500,
+    # Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md): leathers and the big corallimorph; raised in
+    # the 2026-10-15 coral remake (lobed / ridged leathers, taco-folded ear), paid for by fewer GSP ribbon segments
+    "toadstool_leather": 1000, "leather_pink": 1500, "finger_leather": 1500, "elephant_ear": 1100,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
@@ -75,7 +76,8 @@ BODY_BUDGET = {"engineer_goby": 5600}
 # body COLOR_0.a at its front end: the squid body starts at the arm crown (its arms, part "leg", are the snout)
 SNOUT_A = {"bobtail_squid": 0.3}
 # sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
-SANDBOX_ONLY = {"bobtail_squid"}
+SANDBOX_ONLY = {"bobtail_squid",
+                "gsp_mat"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}
