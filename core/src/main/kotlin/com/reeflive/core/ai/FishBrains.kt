@@ -27,19 +27,22 @@ import kotlin.math.sin
 class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     /** The owner's clowns host the hairy green mushrooms (Rhodactis) on the low rock under the right shelf (HOST_SHROOM). */
     private val hostName = o.hostAnchor ?: "HOST_SHROOM"
-    fun host(c: Ctx): Vec3 = c.rock.anchors.pos(hostName, if (flatHost) Vec3(81.5, 11.5, 21.0) else Vec3(82.0, 16.0, 21.0))
+    /** The bubble-tip anemone this clown has moved into (research 40 §7), or null while it keeps its old host. */
+    fun anemoneHost(): Organism? = c.sim.anemones.hostOf(o)
+    fun host(c: Ctx): Vec3 = anemoneHost()?.pos ?: c.rock.anchors.pos(hostName, if (flatName) Vec3(81.5, 11.5, 21.0) else Vec3(82.0, 16.0, 21.0))
+    private val flatName: Boolean = hostName.uppercase().let { "SHROOM" in it || "MUSHROOM" in it || "RHODACTIS" in it }
     /**
      * A flat host (corallimorph discs on rock) rather than a branching soft coral or an anemone: the pair hugs the
      * discs, belly 1–3 cm over the tentacles (owner observation), instead of weaving up through branches.
      */
-    val flatHost: Boolean = hostName.uppercase().let { "SHROOM" in it || "MUSHROOM" in it || "RHODACTIS" in it }
+    val flatHost: Boolean get() = flatName && anemoneHost() == null
     fun partner(c: Ctx): Organism? = c.sim.organisms.firstOrNull { it !== o && it.alive && it.brainKind == BrainKind.CLOWN }
     fun isFemale(c: Ctx): Boolean = c.sim.repro.clownIsFemale(o)
 
     init {
         install(HoverHost(), NestleHost(), ClownFeed(), GlassCurious(this), CleanNestSite(this), LayEggs(this), TendEggs(this),
             Flee(this, { c, _ -> c.safe(host(c) + Vec3(0.0, 2.0, 0.0), 1.5) }, "Darting into the host"),
-            VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this))
+            VisitCleaner(this, 0.1), SurfaceGasp(this), Flash(this), ExploreAnemone(), FeedAnemone(), DefendHost())
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "host") host(c) else super.anchorPos(c, anchor)
@@ -158,7 +161,11 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
     inner class DefendHost : Behavior("defend", "Defending host") {
         private var intruder: Organism? = null
         private var nipped = false
+        // installed with the anemone behaviours: only an anemone-hosting pair guards its host (research 40 §7.4); with
+        // the mushrooms they never have (owner video), so this stays silent and draws nothing until then
+        override val noisy: Boolean get() = false
         override fun score(c: Ctx): Double {
+            if (anemoneHost() == null) return 0.0
             if (c.o.aggression < 0.2 || c.p.night) return 0.0
             val h = host(c)
             val mate = partner(c)
@@ -186,7 +193,122 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
         }
     }
 
+    /**
+     * Getting to know a new bubble-tip anemone (research 40 §7.2): bouts of approach, a quick touch of the tentacles
+     * and a dart back up, the touches growing longer and turning into bumping and wallowing as it acclimates. How far
+     * along it is lives in AnemoneModel.HostState (time-based, so it also progresses at high speed); this is what it looks like.
+     */
+    inner class ExploreAnemone : Behavior("anemone", "Checking out the anemone") {
+        override val noisy: Boolean get() = false
+        private var nextBout = -1.0
+        private var boutLen = 60.0
+        private var phase = 0
+        private var phaseUntil = 0.0
+        private var dipTo = Vec3.ZERO
+        override val committed: Boolean get() = elapsed < boutLen
+        override val label: String get() {
+            val a = c.sim.anemones.acclimation(o)
+            return when (phase) {
+                2 -> if (a < 0.4) "Stung, darting back from the anemone" else "Popping back out of the anemone"
+                1, 3 -> if (a < 0.4) "Touching the anemone to get used to it" else "Bumping and wiggling into the anemone"
+                else -> "Checking out the anemone"
+            }
+        }
+        override fun score(c: Ctx): Double {
+            c.sim.anemones.candidateOf(o) ?: return 0.0
+            if (c.p.night) return 0.0
+            if (nextBout < 0) nextBout = c.t + c.rng.range(60.0, 600.0)
+            return if (c.t >= nextBout) 0.55 else 0.0
+        }
+        override fun enter(c: Ctx) { boutLen = c.rng.range(40.0, 120.0); phase = 0 }
+        override fun exit(c: Ctx) {
+            val a = c.sim.anemones.acclimation(o)
+            nextBout = c.t + c.rng.range(8.0, 30.0) * 60 * (if (a > 0.7) 0.5 else 1.0)
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val an = c.sim.anemones.candidateOf(o) ?: run { finished = true; return }
+            val disc = an.pos
+            val acc = c.sim.anemones.acclimation(o)
+            val above = c.safe(disc + Vec3(0.0, 0.3 * an.lengthCm + 3.0, 0.0), 1.0)
+            when (phase) {
+                0 -> {
+                    out.seek(c.viaOpenWater(above), c.o.cruiseSpeed, arrive = 1.5)
+                    if (c.o.pos.distanceTo(above) < 2.5) {
+                        phase = 1; phaseUntil = c.t + 3.0
+                        val r = 0.25 * an.lengthCm
+                        dipTo = disc + Vec3(c.rng.signed() * r, 1.0 + 0.1 * an.lengthCm, c.rng.signed() * r * 0.7)
+                    }
+                }
+                1 -> {
+                    out.seek(dipTo, c.o.cruiseSpeed * 0.8, arrive = 0.6, urgency = 0.4)
+                    out.pitchBias = -0.25
+                    if (c.o.pos.distanceTo(dipTo) < 1.5 || c.t > phaseUntil) { phase = 3; phaseUntil = c.t + c.rng.range(0.3, 0.8) + 4.0 * acc }
+                }
+                3 -> {
+                    // the touch: a brief brush at first, longer shimmies into the tentacles as the mucus coat builds
+                    out.seek(dipTo, c.o.cruiseSpeed * 0.3, arrive = 1.0)
+                    out.waddleAmp = 0.4 + 0.5 * acc; out.waddleHz = WIGGLE_HZ
+                    out.rollExtra = 0.2 * acc * sin(2 * PI * WIGGLE_HZ * c.t)
+                    out.hover = true; out.separation = 0.2
+                    if (c.t > phaseUntil) { phase = 2; phaseUntil = c.t + 1.5 }
+                }
+                else -> {
+                    out.seek(above + Vec3(0.0, 3.0, 0.0), c.o.burstSpeed * (if (acc < 0.4) 0.6 else 0.3), arrive = 1.0, urgency = if (acc < 0.4) 0.6 else 0.2)
+                    if (c.t > phaseUntil) phase = 0
+                }
+            }
+            out.separation = min(out.separation, 0.3)
+            if (elapsed > boutLen) finished = true
+        }
+    }
+
+    /**
+     * An anemone-hosting clown carries a piece of food to its anemone now and then (research 40 §7.3: anemonefish give
+     * larger food items to the host; hobby observation): grab it, swim it in, drop it on the tentacles.
+     */
+    inner class FeedAnemone : Behavior("feedanemone", "Carrying food to its anemone") {
+        override val noisy: Boolean get() = false
+        private var target: FoodParticle? = null
+        private var carrying: FoodParticle? = null
+        private var lastFeed = -1
+        private var nextOk = 0.0
+        override val committed: Boolean get() = carrying != null && elapsed < 25
+        override fun score(c: Ctx): Double {
+            anemoneHost() ?: return 0.0
+            if (carrying != null) return 0.7
+            if (c.t < nextOk || c.p.night) return 0.0
+            val f = c.food.nearest(c.o.pos, 30.0) { !it.eaten && it.claimedBy == null && it.feedId != lastFeed && it.kind in CARRY } ?: return 0.0
+            lastFeed = f.feedId
+            // one decision per feeding: about a third of them, once it has had a few bites itself
+            if (c.o.hunger > 0.5 || !c.rng.chance(0.35)) { nextOk = c.t + 20; return 0.0 }
+            target = f
+            return 0.6
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val an = anemoneHost() ?: run { finished = true; return }
+            val held = carrying
+            if (held == null) {
+                val f = target
+                if (f == null || f.eaten || f.claimedBy != null) { finished = true; return }
+                out.seek(f.pos, c.o.burstSpeed * 0.5, arrive = 0.3 * c.L, urgency = 0.5)
+                if (c.o.pos.distanceTo(f.pos) < 0.6 * c.L) { carrying = f; f.claimedBy = c.o.id; c.o.mouth = 1.0 }
+                if (elapsed > 12) finished = true
+                return
+            }
+            if (held.eaten) { carrying = null; finished = true; return }
+            held.pos = c.o.pos + c.o.heading * (0.5 * c.L); held.vel = Vec3.ZERO
+            val drop = c.safe(an.pos + Vec3(0.0, 2.0 + 0.1 * an.lengthCm, 0.0), 1.0)
+            out.seek(c.viaOpenWater(drop), c.o.cruiseSpeed, arrive = 1.0)
+            if (c.o.pos.distanceTo(drop) < 0.6 * c.L + 1.0 || elapsed > 24) {
+                held.claimedBy = null; held.pos = an.pos + Vec3(0.0, 1.5, 0.0)
+                carrying = null; nextOk = c.t + 60; finished = true
+            }
+        }
+        override fun exit(c: Ctx) { carrying?.let { it.claimedBy = null }; carrying = null; target = null }
+    }
+
     companion object {
+        private val CARRY = setOf(FoodKind.MYSIS, FoodKind.KRILL, FoodKind.PRAWN, FoodKind.PELLET)
         /** Flat host: body-centre height above the disc surface, cm (belly 1–3 cm over the disc tops; owner). */
         const val FLAT_LO = 3.6
         const val FLAT_HI = 4.6

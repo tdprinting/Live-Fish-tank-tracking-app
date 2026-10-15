@@ -23,6 +23,8 @@ class ThoughtsTest {
         val sim = TestTank.sim(DefaultStock.all + LivestockSeed("echidna_nebulosa", "Snowflake", 45.0, id = "eel"), seed = seed, startHour = hour)
         sim.species.ensure("euprymna_berryi")
         sim.addFromSeed(LivestockSeed("euprymna_berryi", "Squiddy", 6.0, id = "squid"))
+        sim.species.ensure("entacmaea_quadricolor")
+        sim.addFromSeed(LivestockSeed("entacmaea_quadricolor", "Bubbles", 20.0, id = "bta"))
         sim.species.put(SimSpecies("mystery_fish", kind = "FISH", common = "Mystery fish"))
         sim.species.put(SimSpecies("mystery_critter", kind = "INVERT", common = "Mystery critter"))
         sim.addFromSeed(LivestockSeed("mystery_fish", "Mo", 6.0, id = "gfish"))
