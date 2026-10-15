@@ -77,6 +77,13 @@ enum class BurstKind {
     SURFACE_RIPPLE,
     /** A flick in the water: faint streaks along the puff ([TankBurst.r], g, b carry its direction × speed / 45 cm/s). */
     SWISH,
+    /**
+     * A fingertip landed on an animal (a tap that picks it): a ring of glints around it, square to the view. [TankBurst.r],
+     * g, b carry the view direction (the tap's ray) and [TankBurst.amount] the ring's radius (cm).
+     */
+    TOUCH_RING,
+    /** Pressed and held on an animal to follow it: a brighter double ring that turns as it opens (as [TOUCH_RING]). */
+    FOLLOW_RING,
 }
 
 /** One burst request: what, where (tank cm), an sRGB tint (0..1) and a size factor. */
@@ -286,6 +293,33 @@ class BurstField(seed: Int = 23) {
                 }
                 repeat(n(4)) { add(x + g(1f), y + g(1f), z + g(1f), dx * 0.3f, dy * 0.3f, dz * 0.3f, 1.4f, 0.22f, 0.18f, WHITE, 0.45f, Shape.BUBBLE, BUOY_SLOW or DRAG) }
             }
+            BurstKind.TOUCH_RING, BurstKind.FOLLOW_RING -> {
+                // a basis square to the view: u = dir × up (or × x when looking straight down), v = u × dir
+                var dx = b.r; var dy = b.g; var dz = b.b
+                val dl = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1e-4f); dx /= dl; dy /= dl; dz /= dl
+                var ux = -dz; var uy = 0f; var uz = dx
+                if (ux * ux + uz * uz < 1e-3f) { ux = 0f; uy = dz; uz = -dy }
+                val ul = sqrt(ux * ux + uy * uy + uz * uz); ux /= ul; uy /= ul; uz /= ul
+                val wx = uy * dz - uz * dy; val wy = uz * dx - ux * dz; val wz = ux * dy - uy * dx
+                val rad = b.amount.coerceIn(0.8f, 8f)
+                val follow = b.kind == BurstKind.FOLLOW_RING
+                val c = if (follow) FOLLOW_C else TOUCH_C
+                for (ring in 0 until (if (follow) 2 else 1)) {
+                    val m = if (follow) 22 else 16
+                    val spin = if (follow) (if (ring == 0) 1.6f else -1.6f) else 0f
+                    repeat(m) {
+                        val a = TAU * it / m
+                        val ca = cos(a); val sa = sin(a)
+                        val ox = ux * ca + wx * sa; val oy = uy * ca + wy * sa; val oz = uz * ca + wz * sa
+                        // outward, plus a turn around the animal for the follow ring
+                        val tx = -ux * sa + wx * ca; val ty = -uy * sa + wy * ca; val tz = -uz * sa + wz * ca
+                        val out = rad * (if (follow) 1.1f else 0.9f)
+                        add(x + ox * rad, y + oy * rad, z + oz * rad, ox * out + tx * spin * rad, oy * out + ty * spin * rad, oz * out + tz * spin * rad,
+                            if (follow) 0.8f else 0.55f, if (follow) 0.38f else 0.3f, 0.12f, c, if (follow) 0.95f else 0.75f, Shape.GLOW, DRAG,
+                            delay = ring * 0.12f)
+                    }
+                }
+            }
             BurstKind.NORI_BITS -> repeat(n(3)) {
                 add(x + g(1.5f), y + g(3f), z + g(3f), 1f + g(1f), -0.6f, g(1f), 6f, 0.7f, 0.5f, FoodVisuals.NORI_COLOR, 0.9f, Shape.NORI, FLOW or SINK)
             }
@@ -475,6 +509,9 @@ class BurstField(seed: Int = 23) {
         private fun rgb(r: Int, g: Int, b: Int) = floatArrayOf(lin(r / 255f), lin(g / 255f), lin(b / 255f))
         private val WHITE = rgb(235, 245, 255)
         private val CLEAR = rgb(210, 235, 255)
+        // the live theme's lagoon cyan (a picked animal) and a warmer foam gold (following one)
+        private val TOUCH_C = rgb(140, 235, 255)
+        private val FOLLOW_C = rgb(255, 225, 140)
         private val MUCK = rgb(120, 92, 60)
         private val MUCK_LIGHT = rgb(170, 150, 120)
         private val SILT_C = rgb(196, 182, 150)

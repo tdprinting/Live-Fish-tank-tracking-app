@@ -36,6 +36,12 @@ class LiveTipsTest {
         assertTrue(LiveTips.hermieWatch.any { "Tap the glass and see who comes to look" in it })
     }
 
+    @Test fun holdToFollowIsTaught() {
+        // a press-and-hold right on an animal follows it (TankRenderer LONG_PRESS → onHoldAnimal)
+        assertTrue(LiveTips.watch.any { "Press and hold a fish" in it })
+        assertTrue(LiveTips.hermieWatch.any { "Press and hold a fish" in it })
+    }
+
     @Test fun thoughtBubblesAreTaught() {
         // the fish card's "Thinking…" lines and More → "Thought bubbles" (UI_STYLE §10.9)
         assertTrue(LiveTips.watch.any { "thinking" in it && "Thought bubbles" in it })

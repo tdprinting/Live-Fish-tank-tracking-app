@@ -31,6 +31,16 @@ const ui = {
 let onReadingsNeeded = () => {};
 /** Every lever works: the pretend tank (Sandbox) and My tank (the keeper's own saved tank). */
 const editable = () => ui.mode !== 'watch';
+let statsEl = null;
+function statsBox() {
+  if (!statsEl) {
+    statsEl = document.createElement('pre');
+    statsEl.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top) + 8px);z-index:9999;margin:0;' +
+      'padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ef;font:11px/1.35 ui-monospace,monospace;pointer-events:none';
+    document.body.appendChild(statsEl);
+  }
+  return statsEl;
+}
 
 // ================================================================ start
 let started = false;
@@ -41,8 +51,11 @@ export function startLive(applyReadings) {
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
-    onPick: (id) => { if (id) select(id); else if (!ui.following) select(null); },
+    // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
+    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
+    // pressed and held right on an animal: ride along with it
+    onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
     onFed: () => { cue('PELLET'); say('Yum! Food drops right where you pressed.'); },
     onKnock: () => say('Knock knock! Who comes to look?'),
     onTouch: (surface) => touchTank(surface),
@@ -52,6 +65,8 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
+    ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
   }).then(() => {
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
@@ -115,6 +130,7 @@ const clockText = (sec) => {
 
 // ================================================================ Hermie, toasts
 let hermieTimer = 0, tipIndex = 0;
+function buzz(ms) { try { navigator.vibrate?.(ms); } catch { /* not on iOS */ } }
 function say(text) {
   if (!ui.hermie) { toast(text); return; }
   $('hermieText').textContent = text;
