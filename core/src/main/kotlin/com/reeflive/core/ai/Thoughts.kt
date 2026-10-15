@@ -133,6 +133,7 @@ object Thoughts {
             n == "anemone" && k == BrainKind.CLOWN -> Line(if (label.startsWith("Stung")) "zipping away from the anemone's sting" else "touching the new anemone to get used to it", "get used to the anemone", if (label.startsWith("Stung")) "Ouch, tingly!" else "Hello, new home?", Driver.HOME)
             n == "anemone" && k == BrainKind.ANEMONE -> anemoneLine(label)
             n == "feedanemone" -> Line("bringing a bite of food over to its anemone", "feed the anemone", "A snack for you!", Driver.HOME)
+            n == "sortie" -> Line("swimming up over ${e.host} to snap at plankton", "catch some plankton", "Snap! Got one.", Driver.HUNGER)
             n == "nestle" -> Line("snuggled into ${e.host}", "snuggle into ${e.host}", "Cozy!", Driver.HOME)
             n == "defend" -> Line("defending ${e.host} from ${tgt ?: "an intruder"}", "guard ${e.host}", "Stay away from my home!", Driver.TERRITORY, 3)
             // ---- tang
