@@ -40,6 +40,59 @@ class Mesh private constructor(
         fun from(p: GlbPrimitive, instances: FloatArray? = null): Mesh = create(p.vertices, p.indices, instances)
 
         /**
+         * Splits every triangle whose corners all pass [split] into four at its edge midpoints (shared edges share their
+         * new vertex; position, uv and colour averaged, normal averaged and renormalised). A neighbouring triangle that
+         * is not split but has one of those edges is cut in two at the edge's midpoint, so no crack opens along it.
+         * Load time only: the sand bed's top gets one level so its vertices (≈ 0.75 × 1 cm) resolve the sim's ≈ 1 cm
+         * sand cells (a fish-sized slot, a mouthful's pit), while the skirt down the glass stays as it was.
+         */
+        fun subdivide(vertices: FloatArray, indices: IntArray, split: (x: Float, y: Float, z: Float) -> Boolean = { _, _, _ -> true }): Pair<FloatArray, IntArray> {
+            val st = GlbPrimitive.STRIDE
+            val n0 = vertices.size / st
+            val v = vertices.copyOf((n0 + indices.size) * st)
+            var n = n0
+            val mids = HashMap<Long, Int>(indices.size)
+            fun key(a: Int, b: Int): Long = if (a < b) a.toLong() * n0 + b else b.toLong() * n0 + a
+            fun mid(a: Int, b: Int): Int {
+                val kk = key(a, b)
+                mids[kk]?.let { return it }
+                val o = n * st
+                for (c in 0 until st) v[o + c] = 0.5f * (v[a * st + c] + v[b * st + c])
+                val l = kotlin.math.sqrt(v[o + 3] * v[o + 3] + v[o + 4] * v[o + 4] + v[o + 5] * v[o + 5])
+                if (l > 1e-6f) { v[o + 3] /= l; v[o + 4] /= l; v[o + 5] /= l }
+                mids[kk] = n
+                return n++
+            }
+            fun ok(i: Int) = split(v[i * st], v[i * st + 1], v[i * st + 2])
+            val tris = indices.size / 3
+            val whole = BooleanArray(tris) { t -> ok(indices[t * 3]) && ok(indices[t * 3 + 1]) && ok(indices[t * 3 + 2]) }
+            val out = IntArray(indices.size * 4)
+            var k = 0
+            for (t in 0 until tris) {
+                if (!whole[t]) continue
+                val a = indices[t * 3]; val b = indices[t * 3 + 1]; val c = indices[t * 3 + 2]
+                val ab = mid(a, b); val bc = mid(b, c); val ca = mid(c, a)
+                out[k++] = a; out[k++] = ab; out[k++] = ca
+                out[k++] = ab; out[k++] = b; out[k++] = bc
+                out[k++] = ca; out[k++] = bc; out[k++] = c
+                out[k++] = ab; out[k++] = bc; out[k++] = ca
+            }
+            for (t in 0 until tris) {
+                if (whole[t]) continue
+                val c0 = indices[t * 3]; val c1 = indices[t * 3 + 1]; val c2 = indices[t * 3 + 2]
+                // the first edge that was split next door: fan the triangle from its midpoint (winding kept)
+                val m01 = mids[key(c0, c1)]; val m12 = mids[key(c1, c2)]; val m20 = mids[key(c2, c0)]
+                when {
+                    m01 != null -> { out[k++] = c0; out[k++] = m01; out[k++] = c2; out[k++] = m01; out[k++] = c1; out[k++] = c2 }
+                    m12 != null -> { out[k++] = c1; out[k++] = m12; out[k++] = c0; out[k++] = m12; out[k++] = c2; out[k++] = c0 }
+                    m20 != null -> { out[k++] = c2; out[k++] = m20; out[k++] = c1; out[k++] = m20; out[k++] = c0; out[k++] = c1 }
+                    else -> { out[k++] = c0; out[k++] = c1; out[k++] = c2 }
+                }
+            }
+            return v.copyOf(n * st) to out.copyOf(k)
+        }
+
+        /**
          * [vertices]: STRIDE-12 interleaved floats; [instances]: [INSTANCE_FLOATS] per instance in buffer layout
          * (pos.xyz, scale, quat.xyzw, phase, variant).
          */

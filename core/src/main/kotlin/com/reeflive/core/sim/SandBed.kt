@@ -5,6 +5,7 @@ import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -122,8 +123,27 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     private val pkz = FloatArray(MAX_PARTICLES)
     private val page = FloatArray(MAX_PARTICLES)
     private val pkind = ByteArray(MAX_PARTICLES)
+    /** Sand a grain particle carries (cm³; [GRAIN_CM3] for a cloud grain, more for a thrown clump). Fines carry none. */
+    private val pmass = FloatArray(MAX_PARTICLES)
+    /** 0 = in the water, 1 = rolling down the bed's surface ([stepGrains]). */
+    private val pstate = ByteArray(MAX_PARTICLES)
     var particleCount = 0; private set
     private var stepCount = 0L
+
+    // ---- the live surface: where slopes are failing right now ([avalanche]) ----
+    /** Tiles of [TILE] × [TILE] cells; seconds each stays watched after its last change (0 = quiet). */
+    private val tnx = (nx + TILE - 1) / TILE
+    private val tnz = (nz + TILE - 1) / TILE
+    private val tileLeft = FloatArray(tnx * tnz)
+    private var activeTiles = 0
+    /** Grains that rolled down a failing slope (tests, HUD). */
+    var rolled = 0L; private set
+    /** Sand moved by slope failure as it happens (cm³). */
+    var avalancheCm3 = 0.0; private set
+    /** Sand in fish mouths between a scoop and the expel ([scoop], [expel]); counted in [sandVolumeCm3]. */
+    var heldCm3 = 0.0; private set
+    /** True while grains are flying or rolling or a slope is still failing: the renderer wants the grid more often. */
+    val busy: Boolean get() = grainsLive > 0 || activeTiles > 0
 
     // ============================================================== geometry
     /** Modelled sand surface before any digging (cm): 3.5 at the front glass → 6.0 at the back (tools/blender/rockscape.sand_base). */
@@ -184,6 +204,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             fresh[i] = max(fresh[i], (0.6 + 0.4 * w).toFloat())
         }
         movedCm3 += abs(cm3)
+        wakeAround(x, z, r)
         version++
     }
 
@@ -205,6 +226,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             height[i] = (height[i] + dh.toFloat()).coerceIn(floorH[i], MAX_MOUND)
             if (s2 < 2.5) fresh[i] = max(fresh[i], (freshness * (1 - s2 / 2.5)).toFloat())
         }
+        wakeAround(x, z, 2.5 * width)
         version++
     }
 
@@ -275,7 +297,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val i0 = index(x, z)
         val dShare = (detritus[i0] / 1.5f).coerceIn(0f, 0.6f).toDouble()
         for (k in 0 until n) {
-            val slot = if (particleCount < MAX_PARTICLES) particleCount++ else ((stepCount + k) % MAX_PARTICLES).toInt()
+            val slot = alloc()
             val u = rng.nextDouble()
             var kind = when {
                 u < dShare * 0.6 -> Grain.DETRITUS
@@ -285,33 +307,126 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             }
             // a cell dug to its floor has no sand left to throw: the puff is fines only (sand is never made from nothing)
             if ((kind == Grain.SAND || kind == Grain.FINE) && height[i0] - GRAIN_CM3 / cellArea < floorH[i0]) kind = Grain.SILT
-            px[slot] = (x + rng.signed() * 0.6).toFloat(); py[slot] = (y + rng.nextDouble() * 0.4).toFloat(); pz[slot] = (z + rng.signed() * 0.6).toFloat()
-            pvy[slot] = (upCmS * (0.5 + 0.5 * rng.nextDouble())).toFloat()
-            phx[slot] = (hx + rng.signed() * 0.4 * upCmS).toFloat(); phz[slot] = (hz + rng.signed() * 0.4 * upCmS).toFloat()
-            pfx[slot] = 0f; pfz[slot] = 0f; pkz[slot] = 0f
-            page[slot] = 0f
-            pkind[slot] = kind.ordinal.toByte()
+            val sx = x + rng.signed() * 0.6; val sy = y + rng.nextDouble() * 0.4; val sz = z + rng.signed() * 0.6
+            val vy = upCmS * (0.5 + 0.5 * rng.nextDouble())
+            val vx = hx + rng.signed() * 0.4 * upCmS; val vz = hz + rng.signed() * 0.4 * upCmS
+            put(slot, sx, sy, sz, vx, vy, vz, kind, if (kind == Grain.SAND || kind == Grain.FINE) GRAIN_CM3 else 0.0)
             if (kind == Grain.DETRITUS) detritus[i0] = max(0f, detritus[i0] - DETRITUS_PER_PARTICLE.toFloat())
             else if (kind != Grain.SILT) height[i0] = height[i0] - (GRAIN_CM3 / cellArea).toFloat()
         }
+        wakeCell(i0)
         version++
     }
 
-    // ============================================================== clouds
+    /**
+     * Throws [cm3] of sand that was already taken off the bed (or out of a mouth) into the water as grains from
+     * (x, y, z) at (vx, vy, vz) cm/s, each grain jittered by [spread] × the speed. The grains ride the jet, sink at their
+     * settling velocity, roll down any slope steeper than the angle of repose and join the bed only where they stop: a
+     * spoil heap, a rim or the cover over a buried fish is built by the grains that land on it ([stepClouds]).
+     * Mass-conserving: every grain carries its share (a clump of at most [MAX_CLUMP_CM3]); what the particle budget
+     * cannot carry is laid down under the end of the throw. This is the hook for anything that digs or spits sand.
+     * Returns the number of grains launched.
+     */
+    fun launchGrains(
+        x: Double, y: Double, z: Double, cm3: Double, vx: Double, vy: Double, vz: Double,
+        spread: Double = 0.35, maxGrains: Int = 40, fineShare: Double = 0.2,
+    ): Int {
+        if (cm3 <= 1e-9) return 0
+        val n = min(maxGrains, ceil(cm3 / GRAIN_CM3).toInt()).coerceAtLeast(1)
+        val per = min(cm3 / n, MAX_CLUMP_CM3)
+        val sp = sqrt(vx * vx + vy * vy + vz * vz) * spread
+        val top = (lengthCm - 0.3); val back = (widthCm - 0.3)
+        for (k in 0 until n) {
+            val slot = alloc()
+            val kind = if (rng.nextDouble() < fineShare) Grain.FINE else Grain.SAND
+            put(slot, (x + rng.signed() * 0.2).coerceIn(0.3, top), y + rng.signed() * 0.12, (z + rng.signed() * 0.2).coerceIn(0.3, back),
+                vx + rng.signed() * sp, vy + rng.signed() * sp, vz + rng.signed() * sp, kind, per)
+        }
+        val rest = cm3 - per * n
+        if (rest > 1e-9) depositExact(x + vx * JET_TAU_S, z + vz * JET_TAU_S, rest, 1.0)
+        grainsLaunched += n
+        return n
+    }
+
+    /** Grains thrown by [launchGrains] since the start (tests, HUD). */
+    var grainsLaunched = 0L; private set
+
+    /**
+     * A sifter's scoop: takes up to [cm3] of sand from around its mouth at (x, z) (a pit of radius [r], never below
+     * the floors) into its mouth ([heldCm3]) until it [expel]s it. Returns what it got.
+     */
+    fun scoop(x: Double, z: Double, cm3: Double, r: Double = 0.9): Double {
+        val got = takeExact(x, z, cm3, r)
+        heldCm3 += got
+        movedCm3 += got
+        return got
+    }
+
+    /**
+     * Blows [cm3] of held sand out of a mouth or the gill openings at (x, y, z) along (vx, vy, vz) as grains
+     * ([launchGrains]), with [fines] silt particles in the plume (the fines that make the visible haze).
+     */
+    fun expel(x: Double, y: Double, z: Double, cm3: Double, vx: Double, vy: Double, vz: Double, fines: Int = 0, maxGrains: Int = 30) {
+        val v = min(cm3, heldCm3).coerceAtLeast(0.0)
+        heldCm3 -= v
+        if (heldCm3 < 1e-9) heldCm3 = 0.0
+        launchGrains(x, y, z, v, vx, vy, vz, 0.4, maxGrains, 0.3)
+        for (k in 0 until fines) {
+            val slot = alloc()
+            put(slot, x + rng.signed() * 0.2, y + rng.signed() * 0.1, z + rng.signed() * 0.2,
+                vx * 0.6 + rng.signed() * 1.5, vy * 0.6 + 1.0 + rng.nextDouble() * 2.0, vz * 0.6 + rng.signed() * 1.5, Grain.SILT, 0.0)
+        }
+    }
+
+    /** Fines washing out of a working mouth or gill slit at (x, y, z): [n] silt particles drifting along (vx, vy, vz). */
+    fun seep(x: Double, y: Double, z: Double, n: Int, vx: Double, vy: Double, vz: Double) {
+        for (k in 0 until n) {
+            val slot = alloc()
+            put(slot, x + rng.signed() * 0.15, y, z + rng.signed() * 0.15, vx + rng.signed(), vy + rng.nextDouble(), vz + rng.signed(), Grain.SILT, 0.0)
+        }
+    }
+
+    private fun put(i: Int, x: Double, y: Double, z: Double, vx: Double, vy: Double, vz: Double, kind: Grain, mass: Double) {
+        px[i] = x.toFloat(); py[i] = y.toFloat(); pz[i] = z.toFloat()
+        phx[i] = vx.toFloat(); pvy[i] = vy.toFloat(); phz[i] = vz.toFloat()
+        pfx[i] = 0f; pfz[i] = 0f; pkz[i] = 0f; page[i] = 0f
+        pkind[i] = kind.ordinal.toByte(); pmass[i] = mass.toFloat(); pstate[i] = 0
+    }
+
+    /** A free particle slot; when the pool is full a slot is recycled after its particle settles where it is. */
+    private fun alloc(): Int {
+        if (particleCount < MAX_PARTICLES) return particleCount++
+        val v = ((stepCount * 7 + recycle++) % MAX_PARTICLES).toInt()
+        land(v)
+        return v
+    }
+    private var recycle = 0L
+
+    // ============================================================== clouds and grains
     /**
      * Moves the suspended particles by [dt] sim s. The jet that threw a particle up dies away over [JET_TAU_S]; then it
      * falls at its grain's settling velocity, drifts with the local flow ([flowAt], sampled every 8th step) and is
-     * kicked up and down by turbulence that grows with the flow speed. Particles that reach the bed settle into it;
-     * detritus still up after [MAX_AGE_S] has reached the filter ([resuspendedPending]).
+     * kicked up and down by turbulence that grows with the flow speed. A sand grain that lands on a slope steeper than
+     * the angle of repose rolls down it ([roll]) before it settles; everything else settles into the bed where it lands.
+     * Detritus still up after [MAX_AGE_S] has reached the filter ([resuspendedPending]).
      */
     fun stepClouds(dt: Double, flowAt: ((Double, Double, Double) -> Vec3)?) {
         stepCount++
-        if (particleCount == 0) return
+        if (particleCount == 0) { grainsLive = 0; return }
         var i = 0
+        var grains = 0
+        var landed = false
         val kJet = min(1.0, dt / JET_TAU_S)
         val kDrift = min(1.0, dt / DRIFT_TAU_S)
+        val canRoll = dt <= MAX_ROLL_DT
         while (i < particleCount) {
             val kind = Grain.entries[pkind[i].toInt()]
+            val isGrain = kind == Grain.SAND || kind == Grain.FINE
+            page[i] = (page[i] + dt).toFloat()
+            if (pstate[i].toInt() == ROLLING) {
+                if (canRoll && roll(i, dt)) { grains++; i++; continue }
+                land(i); rolled++; removeAt(i); landed = true; continue
+            }
             val ws = kind.settlingCmS
             if (flowAt != null && (i + stepCount) % 8 == 0L) {
                 val v = flowAt(px[i].toDouble(), py[i].toDouble(), pz[i].toDouble())
@@ -326,28 +441,81 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             px[i] = (px[i] + phx[i] * dt).toFloat().coerceIn(0.3f, (lengthCm - 0.3).toFloat())
             pz[i] = (pz[i] + phz[i] * dt).toFloat().coerceIn(0.3f, (widthCm - 0.3).toFloat())
             py[i] = (py[i] + pvy[i] * dt).toFloat()
-            page[i] = (page[i] + dt).toFloat()
             val ground = surfaceY(px[i].toDouble(), pz[i].toDouble())
-            var remove = false
             if (py[i] <= ground) {
-                val c = index(px[i].toDouble(), pz[i].toDouble())
-                when (kind) {
-                    Grain.DETRITUS -> detritus[c] = min(MAX_DETRITUS, detritus[c] + DETRITUS_PER_PARTICLE.toFloat())
-                    Grain.SILT -> {}
-                    // no upper clamp: a grain always lands (slope failure in [relax] spreads a heap), so sand is conserved
-                    else -> height[c] = height[c] + (GRAIN_CM3 / cellArea).toFloat()
+                if (isGrain && canRoll && slopeAt(px[i].toDouble(), pz[i].toDouble()) > REPOSE_TAN * ROLL_ON_LANDING) {
+                    // it hit a face steeper than repose: it tumbles down it instead of sticking
+                    pstate[i] = ROLLING.toByte(); pkz[i] = 0f
+                    py[i] = (ground + GRAIN_LIFT).toFloat(); pvy[i] = 0f
+                    phx[i] *= 0.4f; phz[i] *= 0.4f
+                    grains++; i++; continue
                 }
-                remove = true
+                land(i); removeAt(i); landed = true; continue
             } else if (page[i] > MAX_AGE_S) {
                 if (kind == Grain.DETRITUS) resuspendedPending += DETRITUS_PER_PARTICLE
                 // sand still up (a strong jet) drops where it is rather than vanishing
-                else if (kind != Grain.SILT) { val c = index(px[i].toDouble(), pz[i].toDouble()); height[c] = height[c] + (GRAIN_CM3 / cellArea).toFloat() }
-                remove = true
+                else land(i)
+                removeAt(i); landed = true; continue
             }
-            if (remove) { removeAt(i); continue }
+            if (isGrain) grains++
             i++
         }
-        version++
+        grainsLive = grains
+        if (landed) version++
+    }
+
+    /** Sand grains in the water or rolling on the bed right now. */
+    var grainsLive = 0; private set
+
+    /**
+     * One step of a grain rolling on the bed: gravity down the slope (submerged weight, [G_SUB]), Coulomb friction
+     * against the motion ([MU_DYN], the angle a moving avalanche comes to rest at) and water drag. False when it
+     * has stopped (slope below repose and slow) or rolled for [MAX_ROLL_S]: then it joins the bed.
+     */
+    private fun roll(i: Int, dt: Double): Boolean {
+        val x = px[i].toDouble(); val z = pz[i].toDouble()
+        val s = slopeAt(x, z)
+        val c = 1.0 / sqrt(1.0 + s * s)
+        var vx = phx[i].toDouble(); var vz = phz[i].toDouble()
+        if (s > 1e-6) { val a = G_SUB * s * c; vx -= gradX / s * a * dt; vz -= gradZ / s * a * dt }
+        var sp = sqrt(vx * vx + vz * vz)
+        if (sp > 1e-9) {
+            val slow = min(sp, MU_DYN * G_SUB * c * dt)
+            val k = (sp - slow) / sp * exp(-dt / ROLL_DRAG_S)
+            vx *= k; vz *= k; sp *= k
+            if (sp > MAX_ROLL_CMS) { vx *= MAX_ROLL_CMS / sp; vz *= MAX_ROLL_CMS / sp; sp = MAX_ROLL_CMS }
+        }
+        pkz[i] = (pkz[i] + dt).toFloat()   // roll timer (no turbulence while on the bed)
+        if ((sp < 0.4 && s < REPOSE_TAN) || pkz[i] > MAX_ROLL_S) return false
+        val nx0 = (x + vx * dt).coerceIn(0.3, lengthCm - 0.3); val nz0 = (z + vz * dt).coerceIn(0.3, widthCm - 0.3)
+        px[i] = nx0.toFloat(); pz[i] = nz0.toFloat()
+        py[i] = (surfaceY(nx0, nz0) + GRAIN_LIFT).toFloat()
+        phx[i] = vx.toFloat(); phz[i] = vz.toFloat(); pvy[i] = 0f
+        return true
+    }
+
+    /** Gradient of the visible surface at (x, z) left in [gradX]/[gradZ]; returns its magnitude (tan of the slope). */
+    private fun slopeAt(x: Double, z: Double): Double {
+        val h = 0.5 * cellX; val hz = 0.5 * cellZ
+        gradX = (surfaceY(x + h, z) - surfaceY(x - h, z)) / (2 * h)
+        gradZ = (surfaceY(x, z + hz) - surfaceY(x, z - hz)) / (2 * hz)
+        return sqrt(gradX * gradX + gradZ * gradZ)
+    }
+    private var gradX = 0.0
+    private var gradZ = 0.0
+
+    /** Particle [i] settles into the bed where it is (sand lifts the cell, detritus loads it, silt is spent). */
+    private fun land(i: Int) {
+        val c = index(px[i].toDouble(), pz[i].toDouble())
+        when (pkind[i].toInt()) {
+            Grain.DETRITUS.ordinal -> detritus[c] = min(MAX_DETRITUS, detritus[c] + DETRITUS_PER_PARTICLE.toFloat())
+            Grain.SILT.ordinal -> {}
+            // no upper clamp: a grain always lands (slope failure in [avalanche] spreads a heap), so sand is conserved
+            else -> {
+                height[c] = height[c] + pmass[i] / cellArea.toFloat()
+                if (pmass[i] > 0f) { fresh[c] = max(fresh[c], 0.7f); wakeCell(c) }
+            }
+        }
     }
 
     private fun removeAt(i: Int) {
@@ -355,12 +523,16 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         if (i != l) {
             px[i] = px[l]; py[i] = py[l]; pz[i] = pz[l]; pvy[i] = pvy[l]; phx[i] = phx[l]; phz[i] = phz[l]
             pfx[i] = pfx[l]; pfz[i] = pfz[l]; pkz[i] = pkz[l]; page[i] = page[l]; pkind[i] = pkind[l]
+            pmass[i] = pmass[l]; pstate[i] = pstate[l]
         }
         particleCount = l
     }
 
     /** Count of suspended particles of [g]. */
     fun suspended(g: Grain? = null): Int { var n = 0; for (i in 0 until particleCount) if (g == null || pkind[i].toInt() == g.ordinal) n++; return n }
+
+    /** Grains rolling down a slope right now. */
+    fun rolling(): Int { var n = 0; for (i in 0 until particleCount) if (pstate[i].toInt() == ROLLING) n++; return n }
 
     /** Highest suspended particle of [g] above the bed (cm), or 0. */
     fun maxHeightAboveBed(g: Grain? = null): Double {
@@ -369,14 +541,116 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return m
     }
 
-    /** Suspended particles for the renderer: x, y, z (cm) and kind + age fraction (`ordinal + min(age/60 s, 0.99)`). */
+    /**
+     * Particles for the renderer, stride [CLOUD_STRIDE]: x, y, z (cm), kind + age fraction (`ordinal + min(age/60 s,
+     * 0.99)`), velocity x, y, z (cm/s, so the renderer can carry a grain between sim ticks) and the sand it carries (cm³).
+     */
     fun cloudArray(): FloatArray {
-        val out = FloatArray(particleCount * 4)
+        if (particleCount == 0) return EMPTY
+        val out = FloatArray(particleCount * CLOUD_STRIDE)
         for (i in 0 until particleCount) {
-            out[i * 4] = px[i]; out[i * 4 + 1] = py[i]; out[i * 4 + 2] = pz[i]
-            out[i * 4 + 3] = pkind[i] + min(page[i] / 60f, 0.99f)
+            val o = i * CLOUD_STRIDE
+            out[o] = px[i]; out[o + 1] = py[i]; out[o + 2] = pz[i]
+            out[o + 3] = pkind[i] + min(page[i] / 60f, 0.99f)
+            out[o + 4] = phx[i]; out[o + 5] = pvy[i]; out[o + 6] = phz[i]
+            out[o + 7] = pmass[i]
         }
         return out
+    }
+
+    /** Runs every sim step: grains and clouds, then the slopes that are failing right now. */
+    fun step(dt: Double, flowAt: ((Double, Double, Double) -> Vec3)?) {
+        stepClouds(dt, flowAt)
+        avalanche(dt)
+    }
+
+    // ============================================================== slope failure as it happens
+    /** Cells (i0..i1, k0..k1) just changed: [avalanche] watches their tiles (and the pairs across the tile edges). */
+    private fun wake(i0: Int, i1: Int, k0: Int, k1: Int) {
+        for (tk in k0 / TILE..k1 / TILE) for (ti in i0 / TILE..i1 / TILE) wakeTile(tk * tnx + ti)
+    }
+    private fun wakeTile(t: Int) {
+        if (tileLeft[t] <= 0f) activeTiles++
+        tileLeft[t] = ACTIVE_HOLD_S.toFloat()
+    }
+    private fun wakeCell(a: Int) { val i = a % nx; val k = a / nx; wake(i, i, k, k) }
+    private fun wakeAround(x: Double, z: Double, r: Double) =
+        wake(((x - r) / cellX).toInt().coerceIn(0, nx - 1), ((x + r) / cellX).toInt().coerceIn(0, nx - 1),
+            ((z - r) / cellZ).toInt().coerceIn(0, nz - 1), ((z + r) / cellZ).toInt().coerceIn(0, nz - 1))
+    private fun tileActive(ti: Int, tk: Int) = ti in 0 until tnx && tk in 0 until tnz && tileLeft[tk * tnx + ti] > 0f
+
+    /**
+     * Slope failure in real time (research sand_bioturbation §3: an avalanche when the slope passes the angle of
+     * repose moves sand downslope until it is back at it): over the tiles that changed, every neighbour pair steeper
+     * than [REPOSE_TAN] (or [CONFINED_REPOSE_TAN] under rock) sheds its excess at the rate of a grain flow
+     * ([AVALANCHE_TAU_S]). Part of what moves goes as grains that roll down the face ([roll]), so a collapsing rim or
+     * a mound being built visibly pours. The same rule as [relax]'s first pass, only as it happens: a bed left alone
+     * ends where it would have anyway. Sand is moved, never made; never below a cell's floor. A tile where nothing
+     * moved for [ACTIVE_HOLD_S] goes quiet; flow across a tile edge wakes the next one.
+     */
+    fun avalanche(dt: Double) {
+        if (activeTiles == 0) return
+        val rate = min(1.0, dt / AVALANCHE_TAU_S).toFloat()
+        val stepX = (REPOSE_TAN * cellX).toFloat(); val stepZ = (REPOSE_TAN * cellZ).toFloat()
+        val confX = (CONFINED_REPOSE_TAN * cellX).toFloat(); val confZ = (CONFINED_REPOSE_TAN * cellZ).toFloat()
+        var movedAll = 0.0
+        rollBudget = MAX_ROLL_SPAWN
+        for (tk in 0 until tnz) for (ti in 0 until tnx) {
+            val t = tk * tnx + ti
+            if (tileLeft[t] <= 0f) continue
+            val x0 = ti * TILE; val x1 = min(nx - 1, x0 + TILE - 1)
+            val z0 = tk * TILE; val z1 = min(nz - 1, z0 + TILE - 1)
+            // pairs across the left/top edges are this tile's; across the right/bottom ones only when that tile is quiet
+            val xe = if (tileActive(ti + 1, tk)) x1 - 1 else min(x1, nx - 2)
+            val ze = if (tileActive(ti, tk + 1)) z1 - 1 else min(z1, nz - 2)
+            var moved = 0.0
+            for (k in z0..z1) for (i in max(0, x0 - 1)..xe) {
+                val a = k * nx + i
+                val m = shed(a, a + 1, if (roofedCell[a] || roofedCell[a + 1]) confX else stepX, rate)
+                if (m > 0) { moved += m; if (i < x0) wakeTile(t - 1) else if (i + 1 > x1) wakeTile(t + 1) }
+            }
+            for (k in max(0, z0 - 1)..ze) for (i in x0..x1) {
+                val a = k * nx + i
+                val m = shed(a, a + nx, if (roofedCell[a] || roofedCell[a + nx]) confZ else stepZ, rate)
+                if (m > 0) { moved += m; if (k < z0) wakeTile(t - tnx) else if (k + 1 > z1) wakeTile(t + tnx) }
+            }
+            if (moved > 1e-6) { movedAll += moved; tileLeft[t] = ACTIVE_HOLD_S.toFloat() }
+            else {
+                tileLeft[t] -= dt.toFloat()
+                if (tileLeft[t] <= 0f) { tileLeft[t] = 0f; activeTiles-- }
+            }
+        }
+        if (movedAll > 1e-6) { avalancheCm3 += movedAll; version++ }
+    }
+    private var rollBudget = 0
+
+    /** Pair (a, b) sheds its excess over [maxStep] at [rate]; returns the volume moved (cm³). */
+    private fun shed(a: Int, b: Int, maxStep: Float, rate: Float): Double {
+        val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
+        val ex = abs(dh) - maxStep
+        if (ex <= 1e-4f) return 0.0
+        val hi = if (dh > 0) a else b; val lo = if (dh > 0) b else a
+        val floor = if (inclusion[hi] > 0f) buryFloor(hi) else floorH[hi]
+        var m = min(ex * 0.5f * rate, max(0f, height[hi] - floor))
+        if (m <= 0f) return 0.0
+        val vol = m * cellArea
+        if (vol >= GRAIN_CM3 && rollBudget > 0 && particleCount < MAX_PARTICLES - 64) {
+            // a share of it tumbles down the face as grains (they land a little below and keep the bed's sand)
+            rollBudget--
+            val g = min(vol * ROLL_SHARE, MAX_CLUMP_CM3)
+            val slot = alloc()
+            val hx = (hi % nx + 0.5) * cellX; val hz = (hi / nx + 0.5) * cellZ
+            val dx = ((lo % nx) - (hi % nx)).toDouble(); val dz = ((lo / nx) - (hi / nx)).toDouble()
+            val x = hx + dx * 0.35 * cellX + rng.signed() * 0.3 * cellX; val z = hz + dz * 0.35 * cellZ + rng.signed() * 0.3 * cellZ
+            put(slot, x, surfaceY(x, z) + GRAIN_LIFT, z, dx * 3.0, 0.0, dz * 3.0, if (rng.chance(0.25)) Grain.FINE else Grain.SAND, g)
+            pstate[slot] = ROLLING.toByte()
+            height[hi] -= (g / cellArea).toFloat()
+            m -= (g / cellArea).toFloat()
+            if (m < 0f) m = 0f
+        }
+        height[hi] -= m; height[lo] += m
+        fresh[lo] = max(fresh[lo], 0.5f)
+        return vol
     }
 
     // ============================================================== slow processes
@@ -394,8 +668,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         repeat(2) {
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
-                if (i + 1 < nx) slump(a, a + 1, if (roofed(a) || roofed(a + 1)) confX else maxStepX)
-                if (k + 1 < nz) slump(a, a + nx, if (roofed(a) || roofed(a + nx)) confZ else maxStepZ)
+                if (i + 1 < nx) slump(a, a + 1, maxStepX, confX)
+                if (k + 1 < nz) slump(a, a + nx, maxStepZ, confZ)
             }
         }
         // 2. smoothing: bioturbation background + flow (diffusion, explicit, unconditionally tiny steps)
@@ -404,7 +678,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val ax = (d / (cellX * cellX)).coerceAtMost(0.2).toFloat(); val az = (d / (cellZ * cellZ)).coerceAtMost(0.2).toFloat()
         if (ax > 1e-7f) {
             // on the visible surface: a buried body's volume holds its cover up instead of sand creeping in under it
-            val h = height.copyOf()
+            val h = relaxScratch
+            height.copyInto(h)
             if (anyInclusion) for (a in h.indices) h[a] += inclusion[a]
             for (k in 0 until nz) for (i in 0 until nx) {
                 val a = k * nx + i
@@ -428,6 +703,15 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         version++
     }
 
+    /** Open-sand pairs slump past [maxStep], pairs under rock only past [confined] (steeper, checked only when needed). */
+    private fun slump(a: Int, b: Int, maxStep: Float, confined: Float) {
+        val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
+        if (abs(dh) <= maxStep) return
+        val lim = if (roofedCell[a] || roofedCell[b]) confined else maxStep
+        if (abs(dh) <= lim) return
+        slump(a, b, lim)
+    }
+
     private fun slump(a: Int, b: Int, maxStep: Float) {
         val dh = height[a] + inclusion[a] - height[b] - inclusion[b]
         if (abs(dh) <= maxStep) return
@@ -438,7 +722,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     /** Back to a smooth, settled bed (reset to Reality). */
     fun reset() {
         height.fill(0f); fresh.fill(0f); detritus.fill(0.25f)
-        particleCount = 0; resuspendedPending = 0.0
+        particleCount = 0; resuspendedPending = 0.0; grainsLive = 0; heldCm3 = 0.0
+        tileLeft.fill(0f); activeTiles = 0
         burrows.clear(); carriedCm3 = 0.0; burrowEpoch++
         inclusion.fill(0f); anyInclusion = false; buried.clear()
         version++
@@ -451,6 +736,11 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      * Filled by [attachRock]; all [OPEN] for a bed without rock.
      */
     val roof = FloatArray(nx * nz) { OPEN }
+    /** [roofed] per cell, and the cell box holding every roofed cell (empty when k1 < k0), both set by [attachRock]. */
+    private val roofedCell = BooleanArray(nx * nz)
+    private var roofI0 = 0; private var roofI1 = -1; private var roofK0 = 0; private var roofK1 = -1
+    /** [relax]'s copy of the visible surface, reused every tick. */
+    private val relaxScratch = FloatArray(nx * nz)
     /** Lowest height offset each cell can be dug to (cm): −[MAX_DEPTH] on open sand, almost to the glass under rock. */
     private val floorH = FloatArray(nx * nz) { -MAX_DEPTH }
     var rockAttached = false; private set
@@ -477,6 +767,13 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             }
             roof[a] = r
             floorH[a] = if (r != OPEN && r != SOLID) min(-MAX_DEPTH, -(base - GLASS_Y - FLOOR_MARGIN).toFloat()) else -MAX_DEPTH
+        }
+        roofI0 = nx; roofI1 = -1; roofK0 = nz; roofK1 = -1
+        for (a in 0 until nx * nz) {
+            roofedCell[a] = roofed(a)
+            if (!roofedCell[a]) continue
+            val i = a % nx; val k = a / nx
+            roofI0 = min(roofI0, i); roofI1 = max(roofI1, i); roofK0 = min(roofK0, k); roofK1 = max(roofK1, k)
         }
         rockAttached = true
         rockSdf = sdf
@@ -577,6 +874,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         if (take <= 1e-9) return 0.0
         height[a] = max(floorH[a], height[a] - (take / cellArea).toFloat())
         fresh[a] = max(fresh[a], 0.95f)
+        wakeCell(a)
         lastDigX = (a % nx + 0.5) * cellX; lastDigZ = (a / nx + 0.5) * cellZ
         carriedCm3 += take
         movedCm3 += take
@@ -592,7 +890,10 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun spit(x: Double, y: Double, z: Double, cm3: Double, r: Double = 1.4, plume: Int = 5, hx: Double = 0.0, hz: Double = 0.0) {
         val v = min(cm3, carriedCm3).coerceAtLeast(0.0)
         carriedCm3 -= v
-        depositExact(x, z, v, r)
+        // a spit from above the bed (a live goby, not the instant dig-out) pours: part of it falls as grains
+        val air = if (plume > 0 && y > surfaceY(x, z) + 0.2) min(v * SPIT_AIRBORNE, MAX_THROW_CM3) else 0.0
+        depositExact(x, z, v - air, r)
+        if (air > 0) launchGrains(x, y, z, air, hx * 0.5, -1.0, hz * 0.5, spread = 0.5, maxGrains = 30, fineShare = 0.25)
         if (plume > 0) puff(x, y, z, plume, 3.5, hx, hz, finesShare = 0.45)
     }
 
@@ -619,7 +920,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             rr *= 1.6; pass++
         }
         if (left > 1e-9) { val i = index(x, z); height[i] += (left / cellArea).toFloat() }
-        if (cm3 > 0) { movedCm3 += cm3; version++ }
+        if (cm3 > 0) { movedCm3 += cm3; wakeAround(x, z, rr); version++ }
     }
 
     /** Takes up to [cm3] from around (x, z) within [r], never below the floors; returns what it took. */
@@ -631,7 +932,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             val t = min(cm3 * w / ws / cellArea, max(0.0, (height[i] - floorH[i]).toDouble()))
             if (t > 0) { height[i] -= t.toFloat(); taken += t * cellArea; fresh[i] = max(fresh[i], (0.4 + 0.4 * w).toFloat()) }
         }
-        if (taken > 0) version++
+        if (taken > 0) { wakeAround(x, z, r); version++ }
         return taken
     }
 
@@ -667,9 +968,9 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun sandVolumeCm3(): Double {
         var s = 0.0
         for (h in height) s += h
-        var g = 0
-        for (i in 0 until particleCount) { val k = pkind[i].toInt(); if (k == Grain.SAND.ordinal || k == Grain.FINE.ordinal) g++ }
-        return s * cellArea + g * GRAIN_CM3 + carriedCm3
+        var g = 0.0
+        for (i in 0 until particleCount) g += pmass[i]
+        return s * cellArea + g + carriedCm3 + heldCm3
     }
 
     /** Burrows dug under the rock, by owner (an engineer goby keeps a few; SIMULATION §16.8). */
@@ -816,8 +1117,9 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      */
     private fun infill(dtMin: Double, flow: Double) {
         val k = (dtMin / INFILL_TAU_MIN * (0.5 + 0.5 * flow)).coerceAtMost(0.2).toFloat()
-        if (k <= 0f) return
-        for (kk in 0 until nz) for (i in 0 until nx) {
+        if (k <= 0f || roofK1 < roofK0) return
+        // only pairs touching a roofed cell move: the box around them, in the same order as a full sweep
+        for (kk in max(0, roofK0 - 1)..roofK1) for (i in max(0, roofI0 - 1)..roofI1) {
             val a = kk * nx + i
             if (i + 1 < nx) evenOut(a, a + 1, k)
             if (kk + 1 < nz) evenOut(a, a + nx, k)
@@ -825,7 +1127,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     }
 
     private fun evenOut(a: Int, b: Int, k: Float) {
-        if (!roofed(a) && !roofed(b)) return
+        if (!roofedCell[a] && !roofedCell[b]) return
         val m = (height[a] - height[b]) * 0.5f * k
         if (m == 0f) return
         // never below a floor
@@ -969,8 +1271,13 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      * [coverTo] (0..1). Digging lowers the slot and throws the sand to the rim (half ahead, a quarter to each side) while
      * the body's own volume goes in under the surface; covering takes it back from the rim onto the body. Exact sand
      * transfer: nothing made or lost. Returns the sand moved this step (cm³), for the plume.
+     *
+     * With [airborne] > 0 that share of what moves flies as grains ([launchGrains]) instead of being laid down: the
+     * body wave flings the dug sand up and out to the side its tail is sweeping ([wave] −1..1 picks the side), and the
+     * cover is thrown back from the rim onto the body, landing where the grains come down (then the faces pour,
+     * [avalanche]). The grains carry the sand, so the bed is still conserved, only a little later.
      */
-    fun buryStep(b: BuriedBody, digTo: Double, coverTo: Double): Double {
+    fun buryStep(b: BuriedBody, digTo: Double, coverTo: Double, airborne: Double = 0.0, wave: Double = 0.0): Double {
         var moved = 0.0
         val dDig = (digTo.coerceIn(0.0, 1.0) - b.dug).coerceAtLeast(0.0)
         if (dDig > 0) {
@@ -985,8 +1292,10 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 inclusion[a] += add; b.added[j] += add
             }
             anyInclusion = true
-            val share = doubleArrayOf(0.5, 0.25, 0.25)
-            for (k in 0 until 3) { depositExact(b.rimX(k), b.rimZ(k), taken * share[k], 1.0); b.rim[k] += taken * share[k] }
+            val thrown = min(taken * airborne.coerceIn(0.0, 1.0), MAX_THROW_CM3)
+            val direct = taken - thrown
+            for (k in 0 until 3) { depositExact(b.rimX(k), b.rimZ(k), direct * RIM_SHARE[k], 1.0); b.rim[k] += direct * RIM_SHARE[k] }
+            if (thrown > 0) flingFromSlot(b, thrown, wave)
             b.dug += dDig
             moved += taken
         }
@@ -1002,19 +1311,56 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 val t = takeExact(b.rimX(k), b.rimZ(k), min(b.rim[k], want * b.rim[k] / rimTotal), 1.0)
                 b.rim[k] -= t; got += t
             }
-            for ((j, a) in b.cells.withIndex()) { height[a] += (got * b.w[j] / wsum / cellArea).toFloat(); fresh[a] = max(fresh[a], 0.8f) }
+            val air = min(got * airborne.coerceIn(0.0, 1.0), MAX_THROW_CM3)
+            val laid = got - air
+            for ((j, a) in b.cells.withIndex()) { height[a] += (laid * b.w[j] / wsum / cellArea).toFloat(); fresh[a] = max(fresh[a], 0.8f) }
+            if (air > 0) throwBackOver(b, air)
             b.covered += dCov
             moved += got
         }
-        if (moved > 0) { movedCm3 += moved; version++ }
+        if (moved > 0) { movedCm3 += moved; wakeAround(b.cx, b.cz, 0.5 * b.lengthCm + 0.5 * b.widthCm + 2.5); version++ }
         return moved
+    }
+
+    /** Dug sand flung up out of the slot by the body wave, mostly to the side the tail sweeps ([buryStep]). */
+    private fun flingFromSlot(b: BuriedBody, cm3: Double, wave: Double) {
+        val side = if (wave >= 0) 1.0 else -1.0
+        val px0 = -b.uz; val pz0 = b.ux          // left of the heading
+        for (pass in 0 until 2) {
+            val sgn = if (pass == 0) side else -side
+            val share = if (pass == 0) 0.7 else 0.3
+            // the wave runs head to tail: the throw comes off the rear two thirds, where the amplitude is
+            val t = (0.35 + 0.6 * rng.nextDouble()) * b.lengthCm
+            val x = b.headX - b.ux * t; val z = b.headZ - b.uz * t
+            val y = surfaceY(x, z) + 0.2
+            val out = 5.0 + 4.0 * rng.nextDouble()
+            launchGrains(x + px0 * sgn * 0.3 * b.widthCm, y, z + pz0 * sgn * 0.3 * b.widthCm, cm3 * share,
+                px0 * sgn * out - b.ux * 1.5, 6.0 + 4.0 * rng.nextDouble(), pz0 * sgn * out - b.uz * 1.5,
+                spread = 0.35, maxGrains = 22, fineShare = 0.25)
+        }
+    }
+
+    /** Cover thrown back from the rim spots over the body ([buryStep]): each spot's share flies toward the midline. */
+    private fun throwBackOver(b: BuriedBody, cm3: Double) {
+        for (k in 0 until 3) {
+            val share = RIM_SHARE[k]
+            val sx = b.rimX(k); val sz = b.rimZ(k)
+            // aim at a point along the body: the head end from the spot ahead, anywhere along it from the sides
+            val t = if (k == 0) 0.25 * b.lengthCm else (0.15 + 0.7 * rng.nextDouble()) * b.lengthCm
+            val tx = b.headX - b.ux * t - sx; val tz = b.headZ - b.uz * t - sz
+            val d = sqrt(tx * tx + tz * tz).coerceAtLeast(1e-6)
+            // a grain carried by a decaying jet travels ≈ v × (jet decay + fall): pick v to land on the body
+            val v = d / (JET_TAU_S + 0.25)
+            launchGrains(sx, surfaceY(sx, sz) + 0.3, sz, cm3 * share, tx / d * v, 4.0 + 2.0 * rng.nextDouble(), tz / d * v,
+                spread = 0.25, maxGrains = 14, fineShare = 0.2)
+        }
     }
 
     /**
      * The body pushes out of the sand: its volume leaves the slot, and the cover over its head end is thrown aside
      * (a dimple with a low rim, [burstShare] of the cover). The dimple then relaxes like any pit. Returns sand moved.
      */
-    fun emergeFrom(owner: String, burstShare: Double = 0.5): Double {
+    fun emergeFrom(owner: String, burstShare: Double = 0.5, airborne: Double = 0.0): Double {
         val b = buried.remove(owner) ?: return 0.0
         for ((j, a) in b.cells.withIndex()) inclusion[a] = max(0f, inclusion[a] - b.added[j])
         anyInclusion = buried.isNotEmpty() && inclusion.any { it > 0f }
@@ -1022,8 +1368,15 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         val r = max(1.0, 0.6 * b.widthCm + 0.5)
         val v = takeExact(b.headX - b.ux * 0.25 * b.lengthCm, b.headZ - b.uz * 0.25 * b.lengthCm, burstShare * b.coverCm * PI * r * r * 0.5, r)
         if (v > 0) {
-            depositExact(b.headX - b.uz * 1.6 * r, b.headZ + b.ux * 1.6 * r, 0.5 * v, r)
-            depositExact(b.headX + b.uz * 1.6 * r, b.headZ - b.ux * 1.6 * r, 0.5 * v, r)
+            // the head bursts up through the cover: a share of it is thrown up and falls back around the hole
+            val air = min(v * airborne.coerceIn(0.0, 1.0), MAX_THROW_CM3)
+            val laid = v - air
+            depositExact(b.headX - b.uz * 1.6 * r, b.headZ + b.ux * 1.6 * r, 0.5 * laid, r)
+            depositExact(b.headX + b.uz * 1.6 * r, b.headZ - b.ux * 1.6 * r, 0.5 * laid, r)
+            if (air > 0) {
+                val hx = b.headX - b.ux * 0.25 * b.lengthCm; val hz = b.headZ - b.uz * 0.25 * b.lengthCm
+                launchGrains(hx, surfaceY(hx, hz) + 0.2, hz, air, b.ux * 2.0, 9.0, b.uz * 2.0, spread = 0.6, maxGrains = 40, fineShare = 0.3)
+            }
         }
         emergences++
         version++
@@ -1050,9 +1403,48 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun meanHeight(): Double { var s = 0.0; for (h in height) s += h; return s / height.size }
 
     companion object {
-        const val NX = 64
-        const val NZ = 24
-        const val MAX_PARTICLES = 160
+        /** ≈ 0.95 cm cells: fine enough for a fish-sized slot, a mouthful's pit and the rim around it. */
+        const val NX = 128
+        const val NZ = 48
+        /** Pooled particles: cloud fines plus thrown and rolling grains (research sand_bioturbation: pool and recycle). */
+        const val MAX_PARTICLES = 1200
+        /** Floats per particle in [cloudArray]. */
+        const val CLOUD_STRIDE = 8
+        private val EMPTY = FloatArray(0)
+        private const val ROLLING = 1
+        /** A rolling grain rides this far over the surface (cm): half a grain. */
+        const val GRAIN_LIFT = 0.03
+        /** Most sand one thrown particle stands for (cm³): a clump about 3 mm across. */
+        const val MAX_CLUMP_CM3 = 0.03
+        /** A grain landing on a face steeper than this share of [REPOSE_TAN] tumbles on (it arrives moving). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val ROLL_ON_LANDING = 0.85
+        /**
+         * Submerged weight of an aragonite grain per unit mass with added mass (cm/s²): g (ρs − ρw) / (ρs + ½ ρw),
+         * ρs 2.93, ρw 1.025 (standard sediment physics).
+         */
+        const val G_SUB = 981.0 * (Settling.ARAGONITE_DENSITY - 1.025) / (Settling.ARAGONITE_DENSITY + 0.5125)
+        /** Moving grains stop at ≈ 28° (tan), a few degrees under the static angle (research sand_bioturbation §3). */
+        @Ev(Evidence.ANALOGY, "sand_bioturbation §3: avalanche until <= ~28 deg") const val MU_DYN = 0.53
+        /** Water drag on a rolling grain (s) and its top speed (cm/s). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val ROLL_DRAG_S = 0.12
+        const val MAX_ROLL_CMS = 12.0
+        /** A grain rolls at most this long (s); steps longer than [MAX_ROLL_DT] (fast-forward) settle grains at once. */
+        const val MAX_ROLL_S = 2.5
+        const val MAX_ROLL_DT = 0.2
+        /** A failing face sheds its excess over ≈ this time (s): grain flows on cm-high faces run at a few cm/s. */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val AVALANCHE_TAU_S = 0.3
+        /** A tile stays watched this long after its last change (s), and its size in cells. */
+        const val ACTIVE_HOLD_S = 1.5
+        const val TILE = 8
+        /** Rolling grains a failing patch may spawn per step, and the share of a pair's flow they carry. */
+        const val MAX_ROLL_SPAWN = 24
+        const val ROLL_SHARE = 0.6
+        /** Most sand one [buryStep] or burst throws as grains (cm³); the rest is laid down directly. */
+        const val MAX_THROW_CM3 = 1.0
+        /** Share of a live spit that falls as visible grains. */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val SPIT_AIRBORNE = 0.4
+        /** Dug sand to the rim spots: ahead, left, right. */
+        private val RIM_SHARE = doubleArrayOf(0.5, 0.25, 0.25)
         const val BASE_FRONT = 3.5
         const val BASE_BACK = 6.0
         const val MAX_DEPTH = 3.0f
