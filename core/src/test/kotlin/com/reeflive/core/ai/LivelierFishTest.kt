@@ -45,4 +45,30 @@ class LivelierFishTest {
         assertTrue("patrol samples ${ys.size}", ys.size > 500)
         assertTrue("patrol height spread ${"%.1f".format(sd)} cm", sd >= 3.0)
     }
+
+    /** Sandy sifts at about the measured rate counting rests (Myers et al. 2019: ~9 mouthfuls a minute) and rests between bouts. */
+    @Test
+    fun diamondGobyMouthfulRate() {
+        val sim = TestTank.sim(DefaultStock.all, seed = 3, startHour = 11.0)
+        val g = sim.organisms.first { it.brainKind == BrainKind.DIAMOND_GOBY }
+        val b = sim.agentOf(g)!!.brain as DiamondGobyBrain
+        sim.advance(300.0, behaviorDt = 0.1)
+        val m0 = b.mouthfuls
+        var rest = 0; var n = 0
+        sim.advance(1800.0, behaviorDt = 0.1) { n++; if (sim.label(BrainKind.DIAMOND_GOBY) == "sandrest") rest++ }
+        val perMin = (b.mouthfuls - m0) / 30.0
+        assertTrue("mouthfuls/min ${"%.1f".format(perMin)}", perMin in 6.0..13.0)
+        assertTrue("rest share ${rest * 100 / n}%", rest > 0.05 * n)
+    }
+
+    /** Ricky Bobby (juvenile engineer goby) swims up off the burrow for plankton trips and comes back. */
+    @Test
+    fun engineerGobyTakesPlanktonTrips() {
+        val sim = TestTank.sim(DefaultStock.all, seed = 3, startHour = 11.0)
+        val g = sim.organisms.first { it.brainKind == BrainKind.ENGINEER_GOBY }
+        val b = sim.agentOf(g)!!.brain as GobyBrain
+        var away = 0; var n = 0
+        sim.advance(1800.0, behaviorDt = 0.1) { n++; if (b.utility.currentLabel == "Picking plankton above its burrow") away++ }
+        assertTrue("on trips ${away * 100 / n}%", away > 0.1 * n && away < 0.7 * n)
+    }
 }

@@ -184,7 +184,11 @@ class Submarine {
             val fx = tPos.x + tVel.x * lead; val fy = tPos.y + tVel.y * lead; val fz = tPos.z + tVel.z * lead
             val a = if (watchMode == SubWatch.ALONGSIDE) tHeading + side * PI / 2 + watchAngle else watchAngle
             val wantSpot = Vec3(fx + cos(a) * watchDist, fy + watchRise, fz + sin(a) * watchDist)
-            val spot = collide(wantSpot, rock, sand)
+            var spot = collide(wantSpot, rock, sand)
+            // squeezed in by the glass or a rock face: pass over the fish rather than slide by its nose
+            val sx = spot.x - fx; val sz = spot.z - fz
+            val short = watchDist * watchDist - sx * sx - sz * sz
+            if (short > 0.0 && spot.y - fy < sqrt(short)) spot = collide(Vec3(spot.x, fy + sqrt(short), spot.z), rock, sand)
             // no room on this side (the fish is by the glass or a rock face): when its far side is open, swing round it to
             // there at the polite distance (never straight across past its nose)
             if (crossLeft <= 0.0 && watchMode != SubWatch.CIRCLE && spot.distanceTo(wantSpot) > BLOCKED_FRACTION * watchDist) {
