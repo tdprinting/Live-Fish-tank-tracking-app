@@ -172,6 +172,11 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.enqueue(Command.SubmarineMode(s.on, s.visible, s.light))
     }
     fun steerSubmarine(c: com.reeflive.core.sim.SubControls) = holder.enqueue(Command.SteerSubmarine(c))
+    /** Watch an animal from the sub (it glides over and keeps it company), or null to steer freely again. */
+    fun watchSubmarine(id: String?, mode: com.reeflive.core.sim.SubWatch = com.reeflive.core.sim.SubWatch.HOVER) =
+        holder.enqueue(Command.SubmarineWatch(id, mode))
+    /** The sub's ‹ ›: watch the next / previous fish, or the nearest one when none is watched. */
+    fun watchSubmarineNext(step: Int) = holder.enqueue(Command.SubmarineWatchNext(step))
     fun shadow(worldPoint: Vec3) = holder.enqueue(Command.Shadow(worldPoint))
     /**
      * A Flipper stroke on the front glass (clean-glass mode). Allowed in Watch too: scraping the glass is what the owner

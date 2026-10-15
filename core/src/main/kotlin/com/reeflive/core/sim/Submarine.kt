@@ -19,6 +19,13 @@ data class SubControls(val thrust: Double = 0.0, val turn: Double = 0.0, val ris
     companion object { val IDLE = SubControls() }
 }
 
+/**
+ * How the sub keeps company with the animal it watches ([Command.SubmarineWatch]):
+ * [HOVER] holds its spot beside the fish and follows it about, [CIRCLE] slowly circles it, [ALONGSIDE] swims at its
+ * side, matching its speed and heading.
+ */
+enum class SubWatch { HOVER, CIRCLE, ALONGSIDE }
+
 /** The sub as the renderer draws it ([SimSnapshot.submarine]); yaw 0 = nose along +X, positive turns toward -Z. */
 data class SubPose(
     val pos: Vec3,
@@ -34,6 +41,9 @@ data class SubPose(
     /** Animals investigating or guarding against it right now, and those keeping clear, frozen or hiding. */
     val curious: Int = 0,
     val wary: Int = 0,
+    /** The animal the sub is watching (autopilot on), or null while the pilot steers freely. */
+    val watchId: String? = null,
+    val watchMode: SubWatch = SubWatch.HOVER,
 )
 
 /**
@@ -41,6 +51,11 @@ data class SubPose(
  * ([Simulation.stepWall]), so it handles the same at any sim speed, and it never passes through anything: the glass and
  * the water surface (analytic box), the sand bed ([SandBed.surfaceY]) and the rock ([RockData.sdf]) all push it back.
  * Fish see it as a moving object ([SubmarineRules], played by `ai.SubmarineReact`) unless [visible] is off.
+ *
+ * Watching ([watch], [Command.SubmarineWatch]): an autopilot glides it over to an animal and keeps it at a polite
+ * distance ([politeDistance]), nose to the fish, closing never faster than [POLITE_CLOSING] (well under a startle,
+ * [SubmarineRules.STARTLE_SPEED]). The stick still works while watching, relative to the fish: sideways swings round
+ * it, forward / back moves closer / further, up / down rises and sinks.
  */
 class Submarine {
     var active = false; private set
@@ -54,6 +69,25 @@ class Submarine {
     private var pitch = 0.0
     private var prop = 0.0
 
+    // ---- watching (autopilot) ----
+    var watchId: String? = null; private set
+    var watchMode = SubWatch.HOVER; private set
+    private var hasTarget = false
+    private var freshTarget = false
+    private var tPos = Vec3.ZERO
+    private var tVel = Vec3.ZERO
+    private var tLen = 6.0
+    private var tAge = 0.0
+    /** The fish's smoothed heading angle in the XZ plane (atan2(z, x)). */
+    private var tHeading = 0.0
+    /** The hover spot round the fish: angle in XZ (atan2(z, x); for ALONGSIDE relative to the fish's side), distance, height. */
+    private var watchAngle = 0.0
+    private var watchDist = 0.0
+    private var watchRise = 0.0
+    private var side = 1.0
+    /** Angle (rad) still to swing round the fish to its open side (the near side was blocked). */
+    private var crossLeft = 0.0
+
     val heading: Vec3 get() = Vec3(cos(yaw), 0.0, -sin(yaw))
     val speed: Double get() = vel.length()
 
@@ -62,6 +96,7 @@ class Submarine {
         if (on == active) return
         active = on
         controls = SubControls.IDLE
+        watchId = null; hasTarget = false
         vel = Vec3.ZERO; yawRate = 0.0; pitch = 0.0
         if (on) { yaw = 0.0; pos = collide(Vec3(SPAWN.x, SPAWN.y, rock.widthCm * 0.5), rock, sand) }
     }
@@ -71,9 +106,43 @@ class Submarine {
         pos = collide(p, rock, sand); vel = Vec3.ZERO; yaw = newYaw
     }
 
+    /**
+     * Starts watching animal [id] in [mode] (null = back to free steering). The same animal in a new mode keeps the
+     * sub where it is and only changes how it keeps company; a new animal glides over to a polite distance.
+     */
+    fun watch(id: String?, mode: SubWatch = SubWatch.HOVER) {
+        if (id == null) { watchId = null; hasTarget = false; return }
+        if (id != watchId) { freshTarget = true; hasTarget = false }
+        else if (mode != watchMode) hasTarget = false
+        watchId = id; watchMode = mode
+    }
+
+    /** The watched animal this wall tick (called by the simulation before [step]). */
+    fun setTarget(p: Vec3, v: Vec3, lengthCm: Double) {
+        tPos = p; tVel = v; tLen = lengthCm; tAge = 0.0
+        val sp = sqrt(v.x * v.x + v.z * v.z)
+        if (!hasTarget) {
+            if (sp > 0.5) tHeading = atan2(v.z, v.x)
+            val dx = pos.x - p.x; val dz = pos.z - p.z
+            val horiz = sqrt(dx * dx + dz * dz)
+            val around = atan2(dz, dx)
+            side = if (wrap(around - tHeading) >= 0) 1.0 else -1.0
+            watchAngle = if (watchMode == SubWatch.ALONGSIDE) 0.0 else around
+            watchDist = if (freshTarget) politeDistance(lengthCm) else horiz.coerceIn(politeDistance(lengthCm), MAX_WATCH_CM)
+            watchRise = if (freshTarget) WATCH_RISE else (pos.y - p.y).coerceIn(-MAX_WATCH_RISE, MAX_WATCH_RISE)
+            freshTarget = false
+            crossLeft = 0.0
+            hasTarget = true
+        } else if (sp > 1.0) {
+            // the fish's heading, smoothed so a quick wiggle does not swing the sub about
+            tHeading = wrap(tHeading + wrap(atan2(v.z, v.x) - tHeading) * HEADING_FOLLOW)
+        }
+    }
+
     /** Advances [dt] wall seconds under [controls] with collision. Sub-stepped so a fast sub never tunnels. */
     fun step(dt: Double, rock: RockData, sand: SandBed?) {
         if (!active || dt <= 0.0) return
+        if (watchId != null && hasTarget) { stepWatch(dt, rock, sand); return }
         val c = controls
         val n = max(1, kotlin.math.ceil(dt / MAX_STEP_S).toInt())
         val h = dt / n
@@ -95,6 +164,69 @@ class Submarine {
             prop = wrap(prop + h * (PROP_IDLE + PROP_RATE * maxOf(abs(c.thrust), abs(c.strafe) * 0.6, abs(c.rise) * 0.4)) * if (c.thrust < 0) -1 else 1)
         }
     }
+
+    /** The autopilot: glide to the hover spot round the watched fish, nose to it, never closing in fast. */
+    private fun stepWatch(dt: Double, rock: RockData, sand: SandBed?) {
+        val c = controls
+        val n = max(1, kotlin.math.ceil(dt / MAX_STEP_S).toInt())
+        val h = dt / n
+        val polite = politeDistance(tLen)
+        repeat(n) {
+            tAge += h
+            // the stick, relative to the fish
+            watchAngle = wrap(watchAngle - c.turn.coerceIn(-1.0, 1.0) * SWING_RATE * h)
+            watchDist = (watchDist - c.thrust.coerceIn(-1.0, 1.0) * WATCH_ZOOM_SPEED * h).coerceIn(polite, MAX_WATCH_CM)
+            watchRise = (watchRise + c.rise.coerceIn(-1.0, 1.0) * RISE_SPEED * h).coerceIn(-MAX_WATCH_RISE, MAX_WATCH_RISE)
+            if (watchMode == SubWatch.CIRCLE) watchAngle = wrap(watchAngle + CIRCLE_RATE * h)
+            if (crossLeft > 0.0) { val d = min(crossLeft, CROSS_RATE * h); watchAngle = wrap(watchAngle + d); crossLeft -= d }
+            // where the fish is now (its last position carried on at its velocity, at most half a second)
+            val lead = min(tAge, 0.5)
+            val fx = tPos.x + tVel.x * lead; val fy = tPos.y + tVel.y * lead; val fz = tPos.z + tVel.z * lead
+            val a = if (watchMode == SubWatch.ALONGSIDE) tHeading + side * PI / 2 + watchAngle else watchAngle
+            val wantSpot = Vec3(fx + cos(a) * watchDist, fy + watchRise, fz + sin(a) * watchDist)
+            val spot = collide(wantSpot, rock, sand)
+            // no room on this side (the fish is by the glass or a rock face): when its far side is open, swing round it to
+            // there at the polite distance (never straight across past its nose)
+            if (crossLeft <= 0.0 && watchMode != SubWatch.CIRCLE && spot.distanceTo(wantSpot) > BLOCKED_FRACTION * watchDist) {
+                val b = a + PI
+                val alt = Vec3(fx + cos(b) * watchDist, fy + watchRise, fz + sin(b) * watchDist)
+                if (collide(alt, rock, sand).distanceTo(alt) < OPEN_FRACTION * watchDist) crossLeft = PI
+            }
+            // follow the fish's own velocity plus a gentle pull to the spot
+            var wx = tVel.x + (spot.x - pos.x) * WATCH_GAIN
+            var wy = tVel.y * 0.5 + (spot.y - pos.y) * WATCH_GAIN
+            var wz = tVel.z + (spot.z - pos.z) * WATCH_GAIN
+            // glide over briskly from far off, then politely: within POLITE_ZONE of its spot never close in on the fish
+            // faster than POLITE_CLOSING (relative to it), so it never sees a looming approach
+            val rx = fx - pos.x; val ry = fy - pos.y; val rz = fz - pos.z
+            val rl = sqrt(rx * rx + ry * ry + rz * rz)
+            if (rl > 1e-3) {
+                val ux = rx / rl; val uy = ry / rl; val uz = rz / rl
+                val far = ((rl - watchDist - POLITE_ZONE) / POLITE_ZONE).coerceIn(0.0, 1.0)
+                val cap = POLITE_CLOSING + (GLIDE_SPEED - POLITE_CLOSING) * far
+                val closing = (wx - tVel.x) * ux + (wy - tVel.y) * uy + (wz - tVel.z) * uz
+                if (closing > cap) { val k = closing - cap; wx -= ux * k; wy -= uy * k; wz -= uz * k }
+            }
+            val wl = sqrt(wx * wx + wy * wy + wz * wz)
+            if (wl > MAX_SPEED) { val k = MAX_SPEED / wl; wx *= k; wy *= k; wz *= k }
+            val kv = 1 - exp(-h / DRAG_TAU_S)
+            vel = Vec3(vel.x + (wx - vel.x) * kv, vel.y + (wy - vel.y) * kv, vel.z + (wz - vel.z) * kv)
+            val next = collide(pos + vel * h, rock, sand)
+            vel = ((next - pos) / h).clampLength(vel.length())
+            pos = next
+            // nose to the fish (alongside: the fish's heading)
+            val want = if (watchMode == SubWatch.ALONGSIDE) -tHeading else atan2(-(fz - pos.z), fx - pos.x)
+            val kTurn = 1 - exp(-h / TURN_TAU_S)
+            yawRate += ((wrap(want - yaw) * WATCH_TURN_GAIN).coerceIn(-TURN_RATE, TURN_RATE) - yawRate) * kTurn
+            yaw = wrap(yaw + yawRate * h)
+            val horiz = sqrt(vel.x * vel.x + vel.z * vel.z)
+            pitch += (atan2(vel.y, max(horiz, 2.0)) * 0.8 - pitch) * (1 - exp(-h / 0.4))
+            prop = wrap(prop + h * (PROP_IDLE + PROP_RATE * min(1.0, vel.length() / MAX_SPEED)))
+        }
+    }
+
+    /** How close the autopilot brings the sub to a fish [lengthCm] long (cm): a few body lengths, never in its face. */
+    fun politeDistance(lengthCm: Double): Double = max(MIN_WATCH_CM, 1.5 * lengthCm + 4.0)
 
     /** The nearest free spot to [p]: inside the glass and under the surface, above the sand, out of the rock. */
     fun collide(p0: Vec3, rock: RockData, sand: SandBed?): Vec3 {
@@ -122,10 +254,10 @@ class Submarine {
             SubReaction.NONE -> Unit
             else -> wary++
         }
-        return SubPose(pos, yaw, pitch, -yawRate * 0.18, prop, speed, visible, headlight, curious, wary)
+        return SubPose(pos, yaw, pitch, -yawRate * 0.18, prop, speed, visible, headlight, curious, wary, watchId, watchMode)
     }
 
-    fun reset() { active = false; visible = true; headlight = true; controls = SubControls.IDLE; vel = Vec3.ZERO; pos = SPAWN; yaw = 0.0 }
+    fun reset() { watchId = null; hasTarget = false; active = false; visible = true; headlight = true; controls = SubControls.IDLE; vel = Vec3.ZERO; pos = SPAWN; yaw = 0.0 }
 
     private fun wrap(a: Double): Double { var r = a % (2 * PI); if (r > PI) r -= 2 * PI; if (r < -PI) r += 2 * PI; return r }
 
@@ -143,6 +275,32 @@ class Submarine {
         const val PROP_RATE = 28.0
         const val MAX_STEP_S = 0.05
         val SPAWN = Vec3(14.0, 30.0, 16.5)
+        /** Watching: closest and furthest hover (cm), how high above the fish it starts and may go (cm). */
+        const val MIN_WATCH_CM = 11.0
+        const val MAX_WATCH_CM = 35.0
+        const val WATCH_RISE = 1.5
+        const val MAX_WATCH_RISE = 14.0
+        /** Fastest the autopilot closes in on the watched fish (cm/s): well under [SubmarineRules.STARTLE_SPEED]. */
+        const val POLITE_CLOSING = 4.0
+        /** Gap (cm) beyond the watching spot over which the glide eases from [GLIDE_SPEED] down to [POLITE_CLOSING]. */
+        const val POLITE_ZONE = 15.0
+        /** A watching spot pushed this far (× the distance) by the glass or rock counts as blocked ... */
+        const val BLOCKED_FRACTION = 0.4
+        /** ... and the far side of the fish is taken instead when its spot is open to within this fraction. */
+        const val OPEN_FRACTION = 0.15
+        /** How fast (rad/s) the sub swings round to the fish's open side. */
+        const val CROSS_RATE = 0.6
+        /** Closing speed (cm/s) of the glide while the fish is still far off (beyond any startle reach). */
+        const val GLIDE_SPEED = 10.0
+        /** Pull to the hover spot (1/s), the stick's swing (rad/s) and closer / further (cm/s) while watching. */
+        const val WATCH_GAIN = 0.9
+        const val SWING_RATE = 0.9
+        const val WATCH_ZOOM_SPEED = 8.0
+        /** Circle mode: a slow lap, about once a minute. */
+        const val CIRCLE_RATE = 0.11
+        const val WATCH_TURN_GAIN = 2.5
+        /** Per wall tick share of the fish's new heading taken (a heading low-pass at 20 Hz). */
+        const val HEADING_FOLLOW = 0.12
     }
 }
 

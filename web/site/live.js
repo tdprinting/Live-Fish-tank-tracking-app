@@ -53,7 +53,7 @@ export function startLive(applyReadings) {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
-    onPick: (id) => { if (id) { buzz(5); select(id); } else if (!ui.following) select(null); },
+    onPick: (id) => { if (id) buzz(5); if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
     // pressed and held right on an animal: ride along with it
     onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
@@ -1127,37 +1127,65 @@ function stopThoughts() {
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopThoughts(); else startThoughts(); });
 // ================================================================ submarine (Android SubmarineControls)
-// Be a little submarine: a stick (or W A S D / arrows) steers, the up and down buttons (or Space / E and Shift / Q)
-// dive and climb. The fish see it by species and personality unless it is invisible.
-const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '' };
+// Be a little submarine, built for fish watching: tap a fish and the sub glides over and keeps it company at a polite
+// distance (hover, circle or swim alongside); the stick (or W A S D / arrows) drifts and steers, and while watching it
+// swings round the fish and moves closer or further. Up and down (or Space / E and Shift / Q) dive and climb.
+// The fish see it by species and personality unless it is invisible.
+const sub = { on: false, visible: true, light: true, inside: false, joy: [0, 0], rise: 0, keys: new Set(), sent: '', watch: null, mode: 'HOVER', sentAt: 0 };
 function setSub(on) {
   sub.on = on;
   if (on) { closeCard(); if (ui.tour) ui.tour = false; ui.following = null; if (ui.cleaning) setCleaning(false); if (ui.shelf) closeShelf(); }
   document.body.classList.toggle('subbing', on);
   $('subui').classList.toggle('hidden', !on);
-  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = '';
+  sub.joy = [0, 0]; sub.rise = 0; sub.keys.clear(); sub.sent = ''; sub.watch = null;
   live.submarine(on, sub.visible, sub.light);
   live.subView(sub.inside);
   if (on) live.steerSub(0, 0, 0, 0);
   moveKnob(0, 0);
   renderSub();
-  toast(on ? 'Dive dive! Steer with the yellow stick (or W A S D). Swim slowly and the curious fish come to look.' : 'The submarine is back in its dock.');
+  toast(on ? 'Dive dive! Tap a fish and the sub swims over to watch it. The yellow stick drifts and steers.' : 'The submarine is back in its dock.');
   if (!on) { renderRail(); renderFollow(); }
 }
+/** Sends the sub to keep [id] company (null = steer freely again). */
+function subWatch(id, mode = sub.mode) {
+  sub.watch = id; sub.mode = mode; sub.sentAt = performance.now();
+  live.subWatch(id ?? '', mode);
+  cue('TICK');
+  const a = id && animals.find((x) => x.id === id);
+  if (a) toast(mode === 'CIRCLE' ? `Circling ${a.name}, slowly.` : mode === 'ALONGSIDE' ? `Swimming along with ${a.name}.` : `Gliding over to ${a.name}. Slow and polite!`);
+  renderSub();
+}
+/** ◀ ▶: the sim picks the next fish (or the nearest one when none is watched); the card follows once it lands. */
+function subStep(d) {
+  live.subWatchNext(d);
+  sub.sentAt = 0;
+  cue('TICK');
+}
 function renderSub() {
-  $('subGhost').classList.toggle('on', !sub.visible);
-  $('subGhost').textContent = sub.visible ? '👻 Invisible' : '👻 Invisible: on';
-  $('subCam').classList.toggle('on', sub.inside);
-  $('subCam').textContent = sub.inside ? '🎥 Outside view' : '🎥 Inside view';
-  $('subLight').classList.toggle('on', sub.light);
-  $('subLight').textContent = sub.light ? '💡 Light on' : '💡 Light off';
+  const opt = (id, on, label) => { $(id).classList.toggle('on', on); $(id).setAttribute('aria-pressed', String(on)); $(id).querySelector('span').textContent = label; };
+  opt('subGhost', !sub.visible, sub.visible ? 'Invisible' : 'Invisible: on');
+  opt('subCam', sub.inside, sub.inside ? 'Inside: on' : 'Inside');
+  opt('subLight', sub.light, sub.light ? 'Light' : 'Light off');
+  const a = sub.watch && animals.find((x) => x.id === sub.watch);
+  // the card always shows: idle it offers ◀ ▶ to pick a fish (or tap one); watching it names the fish and its modes
+  $('subWatch').classList.toggle('idle', !a);
+  $('subWatchName').textContent = a ? `Watching ${a.name}` : 'Tap a fish, or ▶ for the nearest';
+  for (const b of document.querySelectorAll('.swmode')) b.classList.toggle('on', !!a && b.dataset.mode === sub.mode);
+  $('subJoyLabel').textContent = a ? 'Swing round · closer' : 'Drift & steer';
   renderSubInfo();
 }
 function renderSubInfo() {
   let s = null;
   try { s = JSON.parse(live.subState()); } catch { /* not out yet */ }
-  $('subInfo').textContent = !sub.visible ? '👻 The fish cannot see you'
-    : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+  // the sim is the truth (it ends a watch when the fish is gone); give a fresh command a moment to land first
+  if (s && performance.now() - sub.sentAt > 1500 && (s.watch ?? null) !== sub.watch) {
+    sub.watch = s.watch ?? null;
+    if (s.watch) { sub.mode = s.mode; const a = animals.find((x) => x.id === s.watch); if (a) toast(`Gliding over to ${a.name}. Slow and polite!`); }
+    renderSub(); return;
+  }
+  const a = sub.watch && animals.find((x) => x.id === sub.watch);
+  const who = !sub.visible ? '👻 The fish cannot see you' : s ? `👀 ${s.curious} curious · 💨 ${s.wary} shy` : '🟡 Submarine';
+  $('subInfo').textContent = who;
 }
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
 function steerSub() {
@@ -1173,7 +1201,7 @@ function steerSub() {
   sub.sent = msg;
   live.steerSub(thrust, turn, rise, 0);
 }
-function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px, ${y * 40}px)`; }
+function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 42}px, ${y * 42}px)`; }
 (() => {
   const joy = $('subJoy');
   let id = null;
@@ -1201,6 +1229,10 @@ function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 40}px,
   $('subCam').addEventListener('click', () => { sub.inside = !sub.inside; live.subView(sub.inside); renderSub(); });
   $('subLight').addEventListener('click', () => { sub.light = !sub.light; live.submarine(true, sub.visible, sub.light); renderSub(); });
   $('subDone').addEventListener('click', () => setSub(false));
+  $('subLetGo').addEventListener('click', () => { subWatch(null); toast('Free to steer again.'); });
+  $('subPrev').addEventListener('click', () => subStep(-1));
+  $('subNext').addEventListener('click', () => subStep(1));
+  for (const b of document.querySelectorAll('.swmode')) b.addEventListener('click', () => { if (sub.watch) subWatch(sub.watch, b.dataset.mode); });
   const KEYS = ['w', 'a', 's', 'd', 'q', 'e', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
   const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '');
   addEventListener('keydown', (e) => {

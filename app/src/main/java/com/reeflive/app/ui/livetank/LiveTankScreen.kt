@@ -411,7 +411,10 @@ fun LiveTankScreen(
     // a tap on a fish picks it (and brings hidden buttons back so its card can show); a tap anywhere else undoes what
     // is open (LiveTaps), else touches the tank (onTouchTank). It never hides the buttons or drops a followed fish.
     val onPick: (String?) -> Unit = { id ->
-        if (id != null) {
+        if (subUi.on) {
+            // in the sub a tap on a fish sends it over to keep that fish company; empty water does nothing
+            if (id != null) { tick(); vm.watchSubmarine(id, hud.submarine?.watchMode ?: com.reeflive.core.sim.SubWatch.HOVER) }
+        } else if (id != null) {
             if (touring) { touring = false; vm.follow(null) }
             chromeHidden = false
             haptics.tick()       // every touch answers: a tick here, a ring around the animal in the tank (TankRenderer.touchRing)
@@ -944,10 +947,16 @@ fun LiveTankScreen(
         // switching between the real tank and the sandbox copy swaps simulations: launch the sub in the new one too
         LaunchedEffect(sandbox) { if (subUi.on) vm.setSubmarine(subUi) }
         if (subUi.on && !micro) {
+            val watchId = hud.submarine?.watchId
             SubmarineControls(
                 ui = subUi,
                 curious = hud.submarine?.curious,
                 wary = hud.submarine?.wary,
+                watchName = watchId?.let { w -> hud.stats.firstOrNull { it.id == w }?.let { it.nickname.ifBlank { it.common } } },
+                watchMode = hud.submarine?.watchMode ?: com.reeflive.core.sim.SubWatch.HOVER,
+                onWatchMode = { m -> tick(); if (watchId != null) vm.watchSubmarine(watchId, m) },
+                onLetGo = { tick(); vm.watchSubmarine(null) },
+                onNextFish = { d -> tick(); vm.watchSubmarineNext(d) },
                 onSteer = vm::steerSubmarine,
                 onChange = { u ->
                     tick(); vm.setSubmarine(u)

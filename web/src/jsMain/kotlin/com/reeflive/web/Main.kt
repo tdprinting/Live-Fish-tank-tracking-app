@@ -414,8 +414,20 @@ object ReefLive {
     }
     /** Ride inside the sub (first person) or chase it from behind. */
     fun subView(firstPerson: Boolean) { renderer?.subFirstPerson = firstPerson }
-    /** JSON {curious, wary} while the sub is out, else null: how many animals are reacting to it. */
-    fun subState(): String = sim?.latest?.submarine?.let { """{"curious":${it.curious},"wary":${it.wary}}""" } ?: "null"
+    /**
+     * Watch an animal from the sub: it glides over and keeps it company at a polite distance. [mode] HOVER, CIRCLE or
+     * ALONGSIDE; [id] null (or "") = back to free steering.
+     */
+    fun subWatch(id: String?, mode: String) {
+        val m = runCatching { com.reeflive.core.sim.SubWatch.valueOf(mode) }.getOrDefault(com.reeflive.core.sim.SubWatch.HOVER)
+        sim?.enqueue(Command.SubmarineWatch(id?.takeIf { it.isNotEmpty() }, m))
+    }
+    /** The sub's ‹ ›: the next / previous fish ([step] ±1), or the nearest when none is watched. */
+    fun subWatchNext(step: Int) { sim?.enqueue(Command.SubmarineWatchNext(step)) }
+    /** JSON {curious, wary, watch, mode} while the sub is out, else null: who reacts to it and whom it is watching. */
+    fun subState(): String = sim?.latest?.submarine?.let {
+        JSON.stringify(obj { o -> o.curious = it.curious; o.wary = it.wary; o.watch = it.watchId; o.mode = it.watchMode.name })
+    } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
         current = v; scaleStep = 0; goodWindows = 0
