@@ -470,7 +470,7 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         val u = upSm
         val f = o.heading.rejectFrom(u).normalized(fS)
         fS = f; uS = u; rS = f cross u; spanL = L
-        seatDisc(o, s, dt)
+        seatDisc(o, s)
         easing = seated
         if (!seated) for (k in 0 until ARMS) freeArm(k)
         seated = true
@@ -499,17 +499,14 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
     }
 
     /** The disc rests on the surface under it, lifted clear of any bump under its rim. */
-    private fun seatDisc(o: Organism, s: CrawlSurface, dt: Double) {
+    private fun seatDisc(o: Organism, s: CrawlSurface) {
         val u = uS
         val t = s.cast(o.pos, u * -1.0, 3.0)
-        val target = when {
+        base = when {
             t > 0 -> o.pos - u * t
             t == 0.0 -> o.pos
             else -> o.pos - u * 0.4
         }
-        // the disc glides to where the cast puts it, at walking pace: the cast along a turning up can hit a face
-        // 2 cm farther one tick than the last, and the drawn star jumped there
-        base = if (!seated) target else base + (target - base).clampLength(max(BASE_STEP_CM, 2.0 * o.vel.length() * dt))
         var m = discMin(s, false)
         val start = base
         for (i in 0 until SEAT_ITERS) {
@@ -953,8 +950,6 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         /** Tries to lift or push a disc seated partly inside rock, sand or glass clear of it. */
         const val SEAT_ITERS = 6
         const val SEAT_SHIFT_CM = 1.2
-        /** Most the disc's seat moves in a tick beyond twice the walk (cm). */
-        const val BASE_STEP_CM = 0.25
         /** The disc takes the sim's up only when a surface lies this close (cm) under it along that up. */
         const val SEAT_REACH_CM = 1.5
         /** A hanging step's fan ([drape]): bends tried (rad, preferred side positive), rises tried, costs (cm). */

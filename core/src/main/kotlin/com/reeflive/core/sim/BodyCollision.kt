@@ -16,6 +16,12 @@ import kotlin.math.sqrt
 /** Drawn rigid and centred on its spine head (the renderer's limb-rigged crawlers, TankRenderer uLimbOn). */
 internal fun drawnCentred(o: Organism): Boolean = (o.limbRig?.out?.size ?: 0) >= 40
 
+/**
+ * A brittle star seated on its arms ([BrittleArms]): its rig rests the disc on the rock, sand and glass and keeps every
+ * arm out of them, so those are its rig's, as a hermit's are its seat's ([CrawlerSeat]).
+ */
+internal fun armSeated(o: Organism): Boolean = o.seatOn && o.limbRig is BrittleArms
+
 class BodyState {
     val p = Array(N) { Vec3.ZERO }
     val up = Array(N) { Vec3.Y }
@@ -352,7 +358,7 @@ class BodyCollision(private val rock: RockData) {
         val seat = seatOf(o)
         val sim0 = if (seat != null) SimPose(o) else null
         if (seat != null) o.body.seatOff = o.seatPos - o.pos
-        try { return resolveEnv0(o, dt, rockOn, surfaceOn, settle, wedgeFallback && seat == null) } finally {
+        try { return resolveEnv0(o, dt, rockOn, surfaceOn, settle, wedgeFallback && seat == null && !armSeated(o)) } finally {
             val off = o.body.seatOff
             o.body.seatOff = null
             if (seat != null && sim0 != null && off != null) {
@@ -372,7 +378,7 @@ class BodyCollision(private val rock: RockData) {
                 // the seat's own contact points (shell, shield, coxae) are its rock and sand: one still inside after
                 // the seat's solve (sand heaped on it, a squeeze) is pushed out along that surface's normal
                 seat.contactPush(rock, o.lengthCm, SKIN)?.let { carrySeat(o, seat, it, slide = false) }
-            } else if (o.attached && drawnCentred(o)) {
+            } else if (o.attached && drawnCentred(o) && !armSeated(o)) {
                 // a limb-rigged crawler on the rock: its sim position is the point its feet stand round, and stays on the
                 // rock's surface, not in it (the body push and its tip move it as a whole; a crevice can close over it)
                 val dr = rock.sdf.dist(o.pos)
@@ -429,7 +435,7 @@ class BodyCollision(private val rock: RockData) {
         // (a crawler on its seat: the seat's contact solve rests its shell and feet on the rock and sand, CrawlerSeat;
         // the pushes here keep it off the glass, the surface, the equipment and the other animals, and resolveEnv pushes
         // a contact point the seat left inside out along the surface normal)
-        val seatedNow = seatOf(o) != null
+        val seatedNow = seatOf(o) != null || armSeated(o)
         @Suppress("NAME_SHADOWING") val rockOn = rockOn && !(o.isFish && !o.attached && sealedIn(o)) && !seatedNow
         envCalls++
         val mask = StaticObstacles.passMask(o)

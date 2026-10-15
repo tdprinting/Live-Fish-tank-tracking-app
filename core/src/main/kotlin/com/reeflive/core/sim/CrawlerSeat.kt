@@ -290,7 +290,10 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         oHeadPrev = o.heading
 
         val hl = o.limbRig as? HermitLegs
-        if (hermit != null && hl != null) poseHermit(o, hl, hermit, s, L, dt)
+        if (hermit != null && hl != null) {
+            hl.out.copyInto(tickLegs, 0, LEG_POSE0, hl.out.size)
+            poseHermit(o, hl, hermit, s, L, dt)
+        }
 
         o.seatOn = true
         // (unblended: [Organism.toPose] blends the whole body from the sim's spine by [blend])
@@ -329,10 +332,20 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             val rig = o.limbRig as? HermitLegs
             val m = hermit
             // (only when the move put one into the surface: solved twice a tick, the legs' eased pose jumps)
-            if (rig != null && m != null && legsPlanted && (0 until 4).any { legInside(s, m, it, L, rig.out) }) poseHermit(o, rig, m, s, L, 0.0)
+            if (rig != null && m != null && legsPlanted && (0 until 4).any { legInside(s, m, it, L, rig.out) }) {
+                poseHermit(o, rig, m, s, L, 0.0)
+                // (eased from where the tick began, not from the first solve: two eased steps a tick leapt)
+                for (i in LEG_POSE0 until rig.out.size) if (i != HermitLegs.PLANTED_FLAG) {
+                    val t0 = tickLegs[i - LEG_POSE0]
+                    rig.out[i] = rig.out[i].coerceIn(t0 - MAX_STEP, t0 + MAX_STEP)
+                }
+            }
         }
         o.seatPos = pos
     }
+
+    /** The hermit's leg pose entries (from [LEG_POSE0]) as the tick began, before its first solve. */
+    private val tickLegs = FloatArray(HermitLegs.COUNT * 4 - LEG_POSE0)
 
     /** The surface of the last [update] ([carry] checks the legs against it). */
     private var surface: CrawlSurface? = null
@@ -625,7 +638,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             s.dist(posedLeg(m, k, m.mid, k * 3, MID_T, L, out)) < -FOOT_TOL_CM
 
     private fun clearHermit(rig: HermitLegs) {
-        for (i in 40 until rig.out.size) rig.out[i] = 0f
+        // (eased back to rest a step a tick, as every pose entry: the flag below already hands the legs to the gait)
+        for (i in LEG_POSE0 until rig.out.size) rig.out[i] = if (i == HermitLegs.PLANTED_FLAG) 0f else ease(rig.out[i], 0f)
         rig.out[8 * 4 + 2] = 0f; rig.out[9 * 4 + 2] = 0f; rig.out[6 * 4 + 3] = 0f
         antennaBend = 0.0; antennuleBend = 0.0; eyeBend = 0.0
     }
@@ -904,6 +918,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val FEELER_YAW = 0.6
         const val BEND_RELAX = 0.8
         const val MAX_STEP = 0.45f
+        /** First pose entry the seat solves for a hermit (the planted legs, then the chelae and the flag). */
+        private const val LEG_POSE0 = 40
         /** A leg with no clear pose pulls in (and back out) over two ticks. */
         const val TUCK_STEP = 0.5
         private val BENDS = doubleArrayOf(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
