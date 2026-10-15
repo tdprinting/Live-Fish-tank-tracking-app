@@ -55,7 +55,10 @@ import kotlin.math.floor
 @JsExport
 object ReefSandbox {
     private val live get() = ReefLive
+    /** Every lever works: the pretend tank or My tank ([mine]). */
     private var sandbox = false
+    /** My tank (ReefMyTank): the keeper's own saved tank. */
+    private var mine = false
     private var fork: Pair<WaterState, List<LivestockSeed>>? = null
     private var leftRealityAt = 0.0
     private var lightPct = 100.0
@@ -100,34 +103,47 @@ object ReefSandbox {
             t.watchTitle = LiveTips.WATCH_TITLE; t.sandboxTitle = LiveTips.SANDBOX_TITLE; t.hello = LiveTips.HELLO
             t.watch = LiveTips.watch.toTypedArray(); t.sandbox = LiveTips.sandbox.toTypedArray()
             t.hermieWatch = LiveTips.hermieWatch.toTypedArray(); t.hermieSandbox = LiveTips.hermieSandbox.toTypedArray()
+            t.myTankTitle = LiveTips.MY_TANK_TITLE; t.myTank = LiveTips.myTank.toTypedArray(); t.hermieMyTank = LiveTips.hermieMyTank.toTypedArray()
         }
     })
 
     // ------------------------------------------------------------------ mode
 
     fun isSandbox(): Boolean = sandbox
+    fun isMine(): Boolean = mine
 
-    /** "watch" or "sandbox". Leaving Sandbox drops the pretend tank; the real one skips ahead by the time away. */
+    /**
+     * "watch", "sandbox" or "mine". Leaving Sandbox drops the pretend tank; leaving My tank saves it; the real one skips
+     * ahead by the time away.
+     */
     fun setMode(m: String) {
-        val want = m == "sandbox"
-        if (want == sandbox) return
+        val wantMine = m == "mine"
+        val wantSandbox = m == "sandbox"
+        if (wantMine == mine && wantSandbox == (sandbox && !mine)) return
         val real = live.reality ?: return
         lightPct = 100.0; predation = true; extras.clear(); extras.putAll(DEFAULT_EXTRAS)
         live.scenarioQueue.clear()
-        if (want) {
-            leftRealityAt = now()
-            val sb = forkOf(real)
-            sb.speed = 1.0
-            sb.stepWall(0.0)
-            live.sim = sb
-        } else {
-            val away = (now() - leftRealityAt) / 1000.0
-            if (away > 5) real.advanceAbstract(minOf(away, 24 * 3600.0)) else real.stepWall(0.0)
-            real.speed = 1.0
-            live.sim = real
-            fork = null
+        val wasWatch = !sandbox
+        if (mine) ReefMyTank.leave()
+        if (wasWatch) leftRealityAt = now()
+        when {
+            wantSandbox -> {
+                val sb = forkOf(real)
+                sb.speed = 1.0
+                sb.stepWall(0.0)
+                live.sim = sb
+            }
+            wantMine -> { fork = null; mine = true; live.sim = ReefMyTank.enter() }
+            else -> {
+                val away = (now() - leftRealityAt) / 1000.0
+                if (away > 5) real.advanceAbstract(minOf(away, 24 * 3600.0)) else real.stepWall(0.0)
+                real.speed = 1.0
+                live.sim = real
+                fork = null
+            }
         }
-        sandbox = want
+        sandbox = wantSandbox || wantMine
+        mine = wantMine
     }
 
     private fun forkOf(real: Simulation): Simulation {
@@ -376,7 +392,7 @@ object ReefSandbox {
         val snap = s.latest
         val readouts = waterReadouts(snap.water, lightPct, snap.flowStrength.toDouble())
         return JSON.stringify(obj { o ->
-            o.sandbox = sandbox; o.predation = predation; o.speed = s.latest.speed
+            o.sandbox = sandbox; o.mine = mine; o.predation = predation; o.speed = s.latest.speed
             o.values = obj { v ->
                 for (p in SandboxParams.all) {
                     val x = p.valueIn(r)
