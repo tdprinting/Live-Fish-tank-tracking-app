@@ -14,16 +14,22 @@ import kotlin.math.sqrt
 /**
  * One acclimation bag as the renderer and the HUD see it ([SimSnapshot.bags]). ([x], [y], [z]) is the bag's
  * waterline centre (tank cm); the round, water-filled bulb hangs below it (centre `y - 0.7 radius`) and the knotted,
- * air-filled neck rides above. [tiltX] / [tiltZ] lean the bag about those axes (radians) and [yaw] turns it.
+ * air-filled neck rides above. ([tiltX], 0, [tiltZ]) is the bag's lean as a rotation vector (axis × angle, radians;
+ * [BagFrame]) applied after [yaw].
+ *
+ * Releasing ([phase] 2, 3) also shows the bucket, the net and the pour: once [cut] the knot is gone and the bag is
+ * open at the neck; [water] is the bag water left (it all goes into the bucket); [netR] > 0 draws the net (hoop
+ * centre, mouth direction, handle direction, like [NetPose]); [bucketR] > 0 draws the bucket (rim centre, height);
+ * [streamR] > 0 draws the water pouring from the bag mouth to the net.
  */
 data class BagPose(
     val id: Int,
     val x: Float, val y: Float, val z: Float,
     val radius: Float,
     val tiltX: Float, val tiltZ: Float, val yaw: Float,
-    /** 0 falling in, 1 floating, 2 tipping the animals out, 3 lifted out of the water. */
+    /** 0 falling in, 1 floating, 2 being emptied into the net, 3 the net is done and everything is leaving. */
     val phase: Int,
-    /** 0..1: how far it has been lifted out after emptying (the renderer fades it). */
+    /** 0..1: how far it has been lifted away after emptying (the renderer fades it). */
     val lift: Float,
     val speciesId: String,
     val common: String,
@@ -35,26 +41,83 @@ data class BagPose(
     /** Water in the bag and in the tank (°C): the float is what evens them out. */
     val bagTempC: Float,
     val tankTempC: Float,
+    /** Release step ([AcclimationBags.STEP_LIFT] … [AcclimationBags.STEP_NET_OUT]), -1 before it opens. */
+    val step: Int = -1,
+    val cut: Boolean = false,
+    val water: Float = 1f,
+    val netX: Float = 0f, val netY: Float = 0f, val netZ: Float = 0f,
+    val netFx: Float = 0f, val netFy: Float = 1f, val netFz: Float = 0f,
+    val netHx: Float = 0f, val netHy: Float = 1f, val netHz: Float = 0f,
+    val netR: Float = 0f,
+    val bucketX: Float = 0f, val bucketY: Float = 0f, val bucketZ: Float = 0f,
+    val bucketR: Float = 0f, val bucketH: Float = 0f,
+    /** 0..1 fade of the bucket and the net (in at the start of the release, out at the end). */
+    val gearFade: Float = 0f,
+    val streamX0: Float = 0f, val streamY0: Float = 0f, val streamZ0: Float = 0f,
+    val streamX1: Float = 0f, val streamY1: Float = 0f, val streamZ1: Float = 0f,
+    val streamR: Float = 0f,
 )
+
+/**
+ * The bag's rotation, shared by the sim (riders ride in the bag's frame) and the renderer (the bag mesh), so the
+ * animals and the plastic always turn together: rotation vector ([tiltX], 0, [tiltZ]) after a turn of [yaw] about Y
+ * (x' = cos·x + sin·z, z' = −sin·x + cos·z). [out] is row-major: world = out · local.
+ */
+object BagFrame {
+    fun rotation(tiltX: Double, tiltZ: Double, yaw: Double, out: DoubleArray) {
+        val cy = cos(yaw); val sy = sin(yaw)
+        val th = sqrt(tiltX * tiltX + tiltZ * tiltZ)
+        // R = I cosθ + sinθ [k]x + (1 - cosθ) k kᵀ, k = (kx, 0, kz)
+        val kx = if (th > 1e-9) tiltX / th else 1.0; val kz = if (th > 1e-9) tiltZ / th else 0.0
+        val c = cos(th); val s = sin(th); val t = 1 - c
+        val r00 = c + t * kx * kx; val r01 = -s * kz; val r02 = t * kx * kz
+        val r10 = s * kz; val r11 = c; val r12 = -s * kx
+        val r20 = t * kx * kz; val r21 = s * kx; val r22 = c + t * kz * kz
+        // · Ry: columns of Ry are (cy, 0, -sy), (0, 1, 0), (sy, 0, cy)
+        out[0] = r00 * cy - r02 * sy; out[1] = r01; out[2] = r00 * sy + r02 * cy
+        out[3] = r10 * cy - r12 * sy; out[4] = r11; out[5] = r10 * sy + r12 * cy
+        out[6] = r20 * cy - r22 * sy; out[7] = r21; out[8] = r20 * sy + r22 * cy
+    }
+}
 
 /**
  * The bags new livestock arrives in (sandbox "Add life", [Command.FloatBag]). The keeper drops a sealed bag in, it
  * floats for [FLOAT_SEC] sim seconds while the bag water warms or cools to the tank (the standard float acclimation:
- * LiveAquaria and Fenner, *The Conscientious Marine Aquarist*: float 15-30 min to even out the temperature), then it
- * tips over and the animals swim, crawl or sink out into the tank as ordinary livestock.
+ * LiveAquaria and Fenner, *The Conscientious Marine Aquarist*: float 15-30 min to even out the temperature).
  *
- * The bags move on wall time like the toy [Submarine] (the drop, the bobbing and the tip-out look the same at any sim
- * speed); the float timer and the temperature run on sim time, so [hurry] (the fast-forward button) runs the clock
- * at [HURRY_SPEED] until the last bag opens. Nothing passes through a bag: it stays off the glass, the equipment, the
- * rock and the other bags, and swimmers are pushed out of its bulb every behaviour step ([keepClear]).
+ * Then it is emptied the way shops and the guides say to, so no shop water reaches the tank: the bag is lifted out
+ * of the water, cut open below the knot and tipped so it pours into a net held over a bucket. The bag water drains
+ * into the bucket, the animals stay in the net, and the net is lowered into the tank and turned so they swim, crawl
+ * or sink out as ordinary livestock. One bag is emptied at a time.
+ *
+ * The bags move on wall time like the toy [Submarine] (the drop, the bobbing and the release look the same at any
+ * sim speed); the float timer and the temperature run on sim time, so [hurry] (the fast-forward button) runs the
+ * clock at [HURRY_SPEED] until the last bag opens. Nothing passes through a bag or the net: the bag stays off the
+ * glass, the equipment, the rock and the other bags, the net goes in where it clears the rock, residents are pushed
+ * out of both ([keepClear]), and the animals inside are whole bodies kept inside the plastic or the mesh and apart
+ * from each other.
  */
 class AcclimationBags {
-    /** One animal riding in a bag (drawn through the ordinary organism path; it becomes a real organism on release). */
-    private class Rider(val o: Organism, val swimmer: Boolean, val anchor: Vec3, val phase: Double, val loopR: Double) {
-        var released = false
+    /** One animal in a bag or the net (drawn through the ordinary organism path; it becomes a real organism on release). */
+    private class Rider(val o: Organism, val swimmer: Boolean) {
+        val len = o.lengthCm.coerceAtLeast(0.5)
+        val half = 0.5 * len
+        /** Body half-thickness. */
+        val w = 0.12 * len + 0.2
+        /** Body centre and heading in the frame it rides in (the bag's, then the net's), cm. */
+        var lp = Vec3.ZERO
+        var lh = Vec3.X
+        var goal = Vec3.ZERO
+        var goalT = 0.0
+        var stage = IN_BAG
+        var exitAt = 0.0
+        var t = 0.0
+        var from = Vec3.ZERO
+        var to = Vec3.ZERO
+        var fromH = Vec3.X
     }
 
-    /** A crawler that left the bag and is sinking to the rock or sand below. */
+    /** A crawler that left the net and is sinking to the rock or sand below. */
     private class Faller(val o: Organism, val target: Vec3, val bagId: Int) { var v = 0.0 }
 
     private class Bag(
@@ -73,6 +136,8 @@ class AcclimationBags {
         var vx = 0.0; var vz = 0.0
         var phase = DROP
         var floatStartSim = -1.0
+        /** The float is done; it waits its turn to be emptied. */
+        var ready = false
         var t = 0.0
         var openT = 0.0
         var tiltX = 0.0; var tiltZ = 0.0
@@ -81,9 +146,31 @@ class AcclimationBags {
         /** Tip direction (unit, horizontal) chosen when it opens: toward the open middle of the tank. */
         var tipX = 0.0; var tipZ = 1.0
         val riders = ArrayList<Rider>()
-        /** Ids that left this bag: its own animals are not pushed back out of it while it empties. */
+        /** Ids that left this bag: its own animals are not pushed back out of the net while it empties. */
         val releasedIds = HashSet<String>()
         var bagTempC = startTempC
+        val rot = DoubleArray(9)
+
+        // the release: where the bag is lifted from, the net and bucket, the dip spot
+        var step = -1
+        var fromY = 0.0
+        var cut = false
+        var water = 1.0
+        var netR = 0.0
+        var netPos = Vec3.ZERO
+        var netFacing = Vec3.Y
+        var netHandle = Vec3.Y
+        var catchPos = Vec3.ZERO
+        var dipPos = Vec3.ZERO
+        var bucketR = 0.0
+        var bucketH = 0.0
+        var bucketTop = Vec3.ZERO
+        var gearFade = 0.0
+        var streamR = 0.0
+        var stream0 = Vec3.ZERO
+        var stream1 = Vec3.ZERO
+        var released = false
+        val nx = DoubleArray(3); val ny = DoubleArray(3); val nz = DoubleArray(3)
     }
 
     private val bags = ArrayList<Bag>()
@@ -97,11 +184,11 @@ class AcclimationBags {
     var hurry = false
 
     val any: Boolean get() = bags.isNotEmpty() || fallers.isNotEmpty()
-    val floating: Int get() = bags.count { it.phase <= FLOAT }
+    val floating: Int get() = bags.count { it.phase <= FLOAT && !it.ready }
 
     /** Sim speed to run at: [speed], or [HURRY_SPEED] while [hurry] and a bag is still floating. */
     fun effectiveSpeed(speed: Double): Double {
-        if (hurry && bags.none { it.phase <= FLOAT }) hurry = false
+        if (hurry && floating == 0) hurry = false
         return if (hurry) max(speed, HURRY_SPEED) else speed
     }
 
@@ -111,13 +198,13 @@ class AcclimationBags {
     fun unreleased(): List<Organism> {
         if (bags.isEmpty() && fallers.isEmpty()) return emptyList()
         val out = ArrayList<Organism>()
-        for (b in bags) for (rd in b.riders) if (!rd.released) out += rd.o
+        for (b in bags) for (rd in b.riders) if (rd.stage != RELEASED) out += rd.o
         for (f in fallers) out += f.o
         return out
     }
 
     /** Coral bags that have not opened yet: (species id, colonies). */
-    fun unopenedCorals(): List<Pair<String, Int>> = bags.filter { it.coral && it.phase <= FLOAT }.map { it.speciesId to it.count }
+    fun unopenedCorals(): List<Pair<String, Int>> = bags.filter { it.coral && !it.released }.map { it.speciesId to it.count }
 
     /**
      * Drops bags of [count] × [speciesId] in at tank x [x] (front-to-back [z]; null = the middle). Many animals come
@@ -167,33 +254,28 @@ class AcclimationBags {
         for (i in 0 until b.count) {
             val id = "${sp.id}#bag${b.id}_$i"
             val o = Organism(id, sp, cm, "${b.common} #${already + i + 1}", null, sim.rng.fork(id.hashCode().toLong()))
-            val anchor = if (swimmer) {
-                // spread through the bulb on a golden spiral, kept a body half-length off the plastic
-                val room = max(0.3, r - 0.5 * cm - 0.6)
-                val f = (i + 0.5) / b.count
-                val yy = 1 - 2 * f
-                val rr = sqrt(max(0.0, 1 - yy * yy))
-                val a = i * 2.39996
-                Vec3(cos(a) * rr * room * 0.55, -0.7 * r + yy * room * 0.45 - 0.3, sin(a) * rr * room * 0.55)
-            } else {
-                // crawlers rest on the bottom of the bag
-                val a = i * 2.39996
-                val d = if (b.count == 1) 0.0 else r * 0.45 * sqrt((i + 0.5) / b.count)
-                Vec3(cos(a) * d, -1.7 * r + 0.25 + 0.15 * cm, sin(a) * d)
-            }
-            val loop = if (swimmer) max(0.4, min(r * 0.22, r - 0.5 * cm - 0.8 - anchor.length() * 0.2)) else 0.0
-            val rd = Rider(o, swimmer, anchor, sim.rng.nextDouble() * 2 * PI, loop)
-            o.placeAt(Vec3(b.x, b.y, b.z) + anchor, Vec3(cos(rd.phase), 0.0, sin(rd.phase)))
+            val rd = Rider(o, swimmer)
+            // spread through the bulb (swimmers) or over its floor (crawlers); [settle] then fits the whole bodies
+            val a = i * 2.39996
+            val f = (i + 0.5) / b.count
+            val d = if (b.count == 1) 0.0 else r * 0.45 * sqrt(f)
+            rd.lp = if (swimmer) Vec3(cos(a) * d, -BULB_C * r + (0.5 - f) * 0.5 * r, sin(a) * d) else Vec3(cos(a) * d, -1.5 * r, sin(a) * d)
+            rd.lh = Vec3(cos(a + 1.7), 0.0, sin(a + 1.7))
+            rd.goal = rd.lp
             b.riders += rd
         }
+        BagFrame.rotation(b.tiltX, b.tiltZ, b.yaw, b.rot)
+        repeat(6) { settle(b.riders, IN_BAG, bagCentre(b), BAG_IN * r, -BAG_TOP * r) }
+        placeRiders(b, 0.0)
+        for (rd in b.riders) rd.o.spline.reset(rd.o.pos, rd.o.heading)
     }
 
-    /** Opens every floating bag now (tests and "Release now"). */
-    fun openAll() { for (b in bags) if (b.phase <= FLOAT) { b.phase = OPEN; b.openT = 0.0; if (b.floatStartSim < 0) b.floatStartSim = 0.0 } }
+    /** Opens every floating bag now (tests and "Release now"); they are still emptied one at a time. */
+    fun openAll() { for (b in bags) if (b.phase <= FLOAT) { b.ready = true; if (b.floatStartSim < 0) b.floatStartSim = 0.0 } }
 
     // ============================================================== stepping
 
-    /** Wall-time motion: the drop, the bobbing and drifting, the tip-out and lift; opens bags whose float is done. */
+    /** Wall-time motion: the drop, the bobbing and drifting, the release; opens bags whose float is done. */
     fun stepWall(sim: Simulation, dt: Double) {
         if (bags.isEmpty() && fallers.isEmpty()) return
         // substeps keep the bobbing spring stable on long headless steps
@@ -209,6 +291,8 @@ class AcclimationBags {
         val rock = sim.rock
         val tankT = sim.water.s.tempC
         val water = rock.waterLevelCm
+        val busy = bags.any { it.phase >= OPEN }
+        var started = false
         var i = 0
         while (i < bags.size) {
             val b = bags[i]
@@ -230,25 +314,17 @@ class AcclimationBags {
                     drift(b, sim, dt)
                     val el = sim.simTimeSec - b.floatStartSim
                     b.bagTempC = tankT + (b.startTempC - tankT) * exp(-el / TEMP_TAU_SEC)
-                    if (el >= FLOAT_SEC) { b.phase = OPEN; b.openT = 0.0; chooseTip(b, rock) }
+                    if (el >= FLOAT_SEC) b.ready = true
+                    // one bag at a time: the next waits until the last one's net is out
+                    if (b.ready && !busy && !started) { started = true; startRelease(b, sim) }
                 }
-                OPEN -> {
-                    bob(b, sim, dt)
-                    b.openT += dt
-                    val k = smooth(b.openT / TIP_S)
-                    b.tiltX = b.tipZ * TIP_RAD * k
-                    b.tiltZ = -b.tipX * TIP_RAD * k
-                    if (b.openT >= RELEASE_AT_S && b.releasedIds.isEmpty()) release(sim, b)
-                    if (b.openT >= TIP_S + HOLD_S) b.phase = LIFTED
-                }
-                LIFTED -> {
-                    b.openT += dt
-                    b.lift = min(1.0, b.lift + dt / LIFT_S)
-                    b.y += 30.0 * dt
-                    if (b.lift >= 1.0) { bags.removeAt(i); continue }
-                }
+                else -> if (stepRelease(b, sim, dt)) { bags.removeAt(i); continue }
             }
-            if (b.phase <= OPEN) moveRiders(b, dt)
+            if (b.phase <= FLOAT) {
+                BagFrame.rotation(b.tiltX, b.tiltZ, b.yaw, b.rot)
+                swimInBag(b, sim, dt)
+                placeRiders(b, dt)
+            }
             i++
         }
         // a few relaxation passes: a push off one bag or the equipment can land it on another
@@ -296,38 +372,48 @@ class AcclimationBags {
     /** Keeps a bag's bulb inside the glass, off the equipment and the rock (horizontal pushes only: it floats). */
     private fun constrain(b: Bag, rock: RockData) {
         val r = b.radius
+        val p = clearSpot(rock, b.x, b.z, r, rock.waterLevelCm - BULB_PROBES[0] * r, rock.waterLevelCm - BULB_PROBES[1] * r, 0.55 * r)
+        b.x = p.x; b.z = p.z
+    }
+
+    /**
+     * Pushes a column at ([x], [z]) clear of the glass, the equipment and the rock: a ball of radius [r] at height
+     * [y0] and one of radius [r1] at [y1] (horizontal pushes only). Returns the spot (y = 0).
+     */
+    private fun clearSpot(rock: RockData, x0: Double, z0: Double, r: Double, y0: Double, y1: Double, r1: Double): Vec3 {
+        var x = x0; var z = z0
         repeat(3) {
-            b.x = b.x.coerceIn(r + SIDE_KEEP_CM, rock.lengthCm - r - SIDE_KEEP_CM)
-            b.z = b.z.coerceIn(r + BACK_KEEP_CM, rock.widthCm - r - GLASS_KEEP_CM)
+            x = x.coerceIn(r + SIDE_KEEP_CM, rock.lengthCm - r - SIDE_KEEP_CM)
+            z = z.coerceIn(r + BACK_KEEP_CM, rock.widthCm - r - GLASS_KEEP_CM)
             for (k in KEEP_OUT.indices step 3) {
-                val dx = b.x - KEEP_OUT[k]; val dz = b.z - KEEP_OUT[k + 1]
+                val dx = x - KEEP_OUT[k]; val dz = z - KEEP_OUT[k + 1]
                 val need = r + KEEP_OUT[k + 2]
                 val d = sqrt(dx * dx + dz * dz)
                 if (d < need) {
                     val nx = if (d > 1e-6) dx / d else 0.0; val nz = if (d > 1e-6) dz / d else 1.0
-                    b.x = KEEP_OUT[k] + nx * need; b.z = KEEP_OUT[k + 1] + nz * need
+                    x = KEEP_OUT[k] + nx * need; z = KEEP_OUT[k + 1] + nz * need
                 }
             }
-            // the rock: test the bulb and the bottom of the bag
-            for (depth in BULB_PROBES) {
-                val c = Vec3(b.x, rock.waterLevelCm + depth * r, b.z)
-                val probeR = if (depth == BULB_PROBES[0]) r else 0.55 * r
+            for (j in 0..1) {
+                val c = Vec3(x, if (j == 0) y0 else y1, z)
+                val probeR = if (j == 0) r else r1
                 val d = rock.sdf.dist(c)
                 if (d < probeR + 0.4) {
                     val g = rock.sdf.gradient(c)
                     val h = sqrt(g.x * g.x + g.z * g.z)
                     val push = probeR + 0.4 - d
-                    if (h > 1e-4) { b.x += g.x / h * push; b.z += g.z / h * push } else b.z += push
+                    if (h > 1e-4) { x += g.x / h * push; z += g.z / h * push } else z += push
                 }
             }
         }
+        return Vec3(x, 0.0, z)
     }
 
     /** Bags bump apart instead of overlapping. */
     private fun separate(rock: RockData) {
         for (a in 0 until bags.size) for (c in a + 1 until bags.size) {
             val p = bags[a]; val q = bags[c]
-            if (p.phase == LIFTED || q.phase == LIFTED) continue
+            if (p.phase >= OPEN || q.phase >= OPEN) continue
             val dx = q.x - p.x; val dz = q.z - p.z
             val need = p.radius + q.radius + 0.6
             val d = sqrt(dx * dx + dz * dz)
@@ -340,40 +426,328 @@ class AcclimationBags {
         }
     }
 
+    // ============================================================== riders
+
+    private fun bagCentre(b: Bag) = Vec3(0.0, -BULB_C * b.radius, 0.0)
+
+    /** World position of a point in the bag's frame. */
+    private fun bagToWorld(b: Bag, l: Vec3): Vec3 {
+        val m = b.rot
+        return Vec3(
+            b.x + m[0] * l.x + m[1] * l.y + m[2] * l.z,
+            b.y + m[3] * l.x + m[4] * l.y + m[5] * l.z,
+            b.z + m[6] * l.x + m[7] * l.y + m[8] * l.z,
+        )
+    }
+
+    private fun bagDirToWorld(b: Bag, l: Vec3): Vec3 {
+        val m = b.rot
+        return Vec3(m[0] * l.x + m[1] * l.y + m[2] * l.z, m[3] * l.x + m[4] * l.y + m[5] * l.z, m[6] * l.x + m[7] * l.y + m[8] * l.z)
+    }
+
+    /** World down in the bag's frame (the transpose of its rotation). */
+    private fun bagDown(b: Bag): Vec3 { val m = b.rot; return Vec3(-m[3], -m[4], -m[5]) }
+
+    private fun netToWorld(b: Bag, l: Vec3) = Vec3(
+        b.netPos.x + b.nx[0] * l.x + b.ny[0] * l.y + b.nz[0] * l.z,
+        b.netPos.y + b.nx[1] * l.x + b.ny[1] * l.y + b.nz[1] * l.z,
+        b.netPos.z + b.nx[2] * l.x + b.ny[2] * l.y + b.nz[2] * l.z,
+    )
+
+    private fun netDirToWorld(b: Bag, l: Vec3) = Vec3(
+        b.nx[0] * l.x + b.ny[0] * l.y + b.nz[0] * l.z,
+        b.nx[1] * l.x + b.ny[1] * l.y + b.nz[1] * l.z,
+        b.nx[2] * l.x + b.ny[2] * l.y + b.nz[2] * l.z,
+    )
+
+    private fun netDown(b: Bag) = Vec3(-b.nx[1], -b.ny[1], -b.nz[1])
+
+    /** The net's frame from its hoop facing and handle (as NetScene draws it: X = Y × Z, Y = facing, Z = handle side). */
+    private fun netFrame(b: Bag) {
+        val f = b.netFacing
+        val zz = b.netHandle.rejectFrom(f).normalized(if (kotlin.math.abs(f.z) < 0.9) Vec3.Z.rejectFrom(f).normalized() else Vec3.X)
+        val xx = f cross zz
+        b.nx[0] = xx.x; b.nx[1] = xx.y; b.nx[2] = xx.z
+        b.ny[0] = f.x; b.ny[1] = f.y; b.ny[2] = f.z
+        b.nz[0] = zz.x; b.nz[1] = zz.y; b.nz[2] = zz.z
+    }
+
+    /** Swimmers potter about in the bag water; crawlers settle on its floor. Then whole bodies are fitted inside. */
+    private fun swimInBag(b: Bag, sim: Simulation, dt: Double) {
+        if (b.riders.isEmpty() || dt <= 0) return
+        val r = b.radius
+        val c = bagCentre(b)
+        val down = bagDown(b)
+        for (rd in b.riders) {
+            if (rd.stage != IN_BAG) continue
+            if (rd.swimmer) {
+                rd.goalT -= dt
+                val room = max(0.0, BAG_IN * r - rd.half - rd.w - 0.3)
+                if (rd.goalT <= 0 || rd.lp.distanceTo(rd.goal) < 0.4) {
+                    val rng = rd.o.rng
+                    val g = Vec3(rng.signed(), rng.signed() * 0.4, rng.signed()).clampLength(1.0) * room
+                    rd.goal = Vec3(c.x + g.x, min(c.y + g.y, -BAG_TOP * r - rd.w - 0.3), c.z + g.z)
+                    rd.goalT = 3.0 + 3.0 * rng.nextDouble()
+                }
+                val want = (rd.goal - rd.lp).normalized(rd.lh)
+                rd.lh = Vec3.rotateToward(rd.lh, Vec3(want.x, want.y * 0.4, want.z).normalized(rd.lh), 1.4 * dt)
+                val v = min(0.35 * rd.len, 2.5)
+                rd.lp = rd.lp + rd.lh * (v * dt)
+            } else {
+                // a crawler slides to the low side of the bag
+                rd.lp = rd.lp + down * (3.0 * dt)
+                rd.lh = rd.lh.rejectFrom(down).normalized(rd.lh)
+            }
+        }
+        settle(b.riders, IN_BAG, c, BAG_IN * r, if (b.cut) Double.MAX_VALUE else -BAG_TOP * r)
+    }
+
+    /**
+     * Fits every body of [stage] inside a ball ([c], [rad]) under the ceiling [top] (nose, middle and tail each a
+     * ball of the body's half-thickness) and pushes bodies apart, all in the shared local frame.
+     */
+    private fun settle(rs: List<Rider>, stage: Int, c: Vec3, rad: Double, top: Double) {
+        repeat(3) {
+            for (rd in rs) if (rd.stage == stage) contain(rd, c, rad, top)
+            for (i in rs.indices) {
+                val a = rs[i]
+                if (a.stage != stage) continue
+                for (j in i + 1 until rs.size) {
+                    val q = rs[j]
+                    if (q.stage != stage) continue
+                    apart(a, q)
+                }
+            }
+        }
+        for (rd in rs) if (rd.stage == stage) contain(rd, c, rad, top)
+    }
+
+    private fun contain(rd: Rider, c: Vec3, rad: Double, top: Double) {
+        val lim = rad - rd.w
+        // too long to lie straight in this ball: turn the body until it fits (it bends round the side)
+        if (rd.half > lim * 0.98) rd.lh = rd.lh.rejectFrom((rd.lp - c).normalized(Vec3.Y)).normalized(rd.lh)
+        for (pass in 0..1) for (s in -1..1) {
+            val p = rd.lp + rd.lh * (s * rd.half)
+            val d = p - c
+            val len = d.length()
+            if (len > lim && len > 1e-9) rd.lp = rd.lp - d * ((len - lim) / len)
+            val over = rd.lp.y + rd.lh.y * (s * rd.half) + rd.w - top
+            if (over > 0) rd.lp = Vec3(rd.lp.x, rd.lp.y - over, rd.lp.z)
+        }
+    }
+
+    /** Pushes two bodies apart (closest of their nose, middle and tail balls). */
+    private fun apart(a: Rider, q: Rider) {
+        var best = Double.MAX_VALUE
+        var dv = Vec3.ZERO
+        for (s in -1..1) for (u in -1..1) {
+            val pa = a.lp + a.lh * (s * a.half)
+            val pq = q.lp + q.lh * (u * q.half)
+            val d = pq - pa
+            val l2 = d.lengthSq()
+            if (l2 < best) { best = l2; dv = d }
+        }
+        val need = a.w + q.w + 0.15
+        val d = sqrt(best)
+        if (d >= need) return
+        val n = if (d > 1e-6) dv / d else Vec3(1.0, 0.0, 0.0)
+        val push = (need - d) * 0.5
+        a.lp = a.lp - n * push
+        q.lp = q.lp + n * push
+    }
+
+    /** Sets each rider's organism pose from its frame (head forward of the body centre: pos is the head). */
+    private fun placeRiders(b: Bag, dt: Double) {
+        for (rd in b.riders) {
+            val o = rd.o
+            val (c, h) = when (rd.stage) {
+                IN_BAG, SLIDING -> bagToWorld(b, rd.lp) to bagDirToWorld(b, rd.lh)
+                IN_NET -> netToWorld(b, rd.lp) to netDirToWorld(b, rd.lh)
+                FALLING -> rd.lp to rd.lh
+                else -> continue
+            }
+            val hn = h.normalized(o.heading)
+            o.pos = c + hn * rd.half
+            o.heading = hn
+            o.vel = Vec3.ZERO
+            o.spline.reset(o.pos, o.heading)
+            if (rd.swimmer) {
+                o.tailHz = if (rd.stage == IN_BAG) 1.4 else 3.0; o.amp = if (rd.stage == IN_BAG) 0.05 else 0.09
+                o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0
+                o.pecPhase = (o.pecPhase + 1.2 * dt) % 1000.0; o.pecAmp = 0.4; o.pectoral = 1.0
+            }
+        }
+    }
+
+    // ============================================================== the release
+
+    private fun startRelease(b: Bag, sim: Simulation) {
+        val rock = sim.rock
+        b.phase = OPEN; b.openT = 0.0; b.step = STEP_LIFT
+        if (b.floatStartSim < 0) b.floatStartSim = 0.0
+        chooseTip(b, rock)
+        b.fromY = b.y
+        val r = b.radius
+        val n = max(1, b.count)
+        val maxL = b.riders.maxOfOrNull { it.len } ?: 5.0
+        b.netR = ((0.62 * maxL + 1.2) * (1 + 0.2 * (cbrt(n.toDouble()) - 1))).coerceIn(NET_MIN_R, NET_MAX_R)
+        b.bucketR = b.netR + 1.2
+        b.bucketH = FishNet.BAG_DEPTH * b.netR + 2.0
+        // the net sits under the bag mouth when the bag is tipped right over; the bucket under the net, its
+        // bottom clear of the tank water
+        val mouthOut = MOUTH * r * sin(POUR_RAD)
+        val nx = (b.x + b.tipX * mouthOut).coerceIn(b.bucketR, rock.lengthCm - b.bucketR)
+        val nz = (b.z + b.tipZ * mouthOut).coerceIn(b.bucketR, rock.widthCm - b.bucketR)
+        val bottom = rock.waterLevelCm + BUCKET_CLEAR_CM
+        b.bucketTop = Vec3(nx, bottom + b.bucketH, nz)
+        b.catchPos = Vec3(nx, b.bucketTop.y + 0.3, nz)
+        b.netPos = b.catchPos
+        b.netFacing = Vec3.Y
+        b.netHandle = Vec3(-b.tipX * 0.6, 1.0, -b.tipZ * 0.6).normalized()
+        netFrame(b)
+        // where the net goes in: under the water, clear of the rock and the glass
+        val depth = FishNet.BAG_DEPTH * b.netR
+        val hoopY = rock.waterLevelCm - (0.35 * b.netR + 1.0)
+        val spot = clearSpot(rock, nx, nz, b.netR + 0.5, hoopY - 0.35 * b.netR, hoopY - 0.8 * depth, 0.6 * b.netR + 0.5)
+        b.dipPos = Vec3(spot.x, hoopY, spot.z)
+        // the order they slide out of the bag
+        val pourStart = T_CUT + 0.9
+        val gap = min(0.35, (T_POUR - 0.5 - pourStart) / n)
+        for ((k, rd) in b.riders.withIndex()) rd.exitAt = pourStart + k * gap
+    }
+
+    /** Bag height while tipping: the bulb's bottom never comes down into the bucket. */
+    private fun bagY(b: Bag, th: Double): Double = b.bucketTop.y + 0.6 + b.radius * (1 + BULB_C * max(cos(th), 0.0))
+
+    /** One release tick; true when it is finished and the bag can go. */
+    private fun stepRelease(b: Bag, sim: Simulation, dt: Double): Boolean {
+        val rock = sim.rock
+        b.openT += dt
+        val t = b.openT
+        val r = b.radius
+        // the bag: up out of the water, cut, tipped over the net, then away
+        val th = POUR_RAD * smooth((t - T_CUT) / (T_TIP - T_CUT))
+        when {
+            t < T_LIFT -> {
+                b.step = STEP_LIFT
+                b.y = b.fromY + (bagY(b, 0.0) - b.fromY) * smooth(t / T_LIFT)
+                b.tiltX *= (1 - min(1.0, dt * 3)); b.tiltZ *= (1 - min(1.0, dt * 3))
+            }
+            t < T_POUR -> {
+                b.step = if (t < T_CUT) STEP_CUT else STEP_POUR
+                if (t >= T_LIFT + 0.3) b.cut = true
+                b.tiltX = b.tipZ * th; b.tiltZ = -b.tipX * th
+                b.y = bagY(b, th)
+            }
+            else -> {
+                b.step = if (t < T_NET_IN) STEP_NET_IN else if (t < T_NET_TURN) STEP_NET_TURN else STEP_NET_OUT
+                b.lift = min(1.0, (t - T_POUR) / BAG_AWAY_S)
+                b.y += 25.0 * dt * b.lift
+            }
+        }
+        b.gearFade = min(1.0, t / T_LIFT) * (1 - smooth((t - T_NET_TURN) / (T_END - T_NET_TURN)))
+        // the bag water: pours out from when the neck reaches the net until it is empty
+        val pour0 = T_CUT + 0.7
+        b.water = 1 - smooth((t - pour0) / (T_POUR - pour0))
+        BagFrame.rotation(b.tiltX, b.tiltZ, b.yaw, b.rot)
+        val mouth = bagToWorld(b, Vec3(0.0, MOUTH * r, 0.0))
+        b.streamR = if (t > pour0 && b.water > 0.02 && b.lift <= 0.0) 0.07 * r * sqrt(b.water) + 0.15 else 0.0
+        b.stream0 = mouth; b.stream1 = b.catchPos
+
+        // the net: catches, goes down into the tank, turns so they swim out, lifts out
+        when {
+            t < T_POUR -> { b.netPos = b.catchPos; b.netFacing = Vec3.Y }
+            t < T_NET_IN -> {
+                val k = smooth((t - T_POUR) / (T_NET_IN - T_POUR))
+                // up and over, then down: a little arc so it never drags through the bucket rim
+                val p = b.catchPos.lerp(b.dipPos, k)
+                b.netPos = Vec3(p.x, p.y + 4.0 * sin(PI * k) * (1 - k), p.z)
+            }
+            t < T_NET_TURN -> {
+                b.netPos = b.dipPos
+                val k = smooth((t - T_NET_IN) / (T_NET_TURN - T_NET_IN))
+                b.netFacing = Vec3.rotateAbout(Vec3.Y, Vec3(b.tipZ, 0.0, -b.tipX), NET_TURN_RAD * k)
+                if (!b.released && k >= 0.55) release(sim, b)
+            }
+            else -> {
+                if (!b.released) release(sim, b)
+                val k = smooth((t - T_NET_TURN) / (T_END - T_NET_TURN))
+                b.netPos = b.dipPos + Vec3(0.0, k * (b.catchPos.y + 6 - b.dipPos.y), 0.0)
+            }
+        }
+        netFrame(b)
+
+        // the animals: slide out of the mouth, drop into the net, ride it down
+        val netC = Vec3(0.0, -NET_C * b.netR, 0.0)
+        for (rd in b.riders) {
+            if (rd.stage == RELEASED) continue
+            rd.t += dt
+            when (rd.stage) {
+                IN_BAG -> if (t >= rd.exitAt) {
+                    rd.stage = SLIDING; rd.t = 0.0; rd.from = rd.lp; rd.fromH = rd.lh
+                    // nose first along the neck
+                    rd.to = Vec3(0.0, MOUTH * r + rd.half, 0.0)
+                }
+                SLIDING -> {
+                    val k = smooth(rd.t / SLIDE_S)
+                    rd.lp = rd.from.lerp(rd.to, k)
+                    rd.lh = rd.fromH.lerp(Vec3.Y, k).normalized(Vec3.Y)
+                    if (rd.t >= SLIDE_S) {
+                        rd.stage = FALLING; rd.t = 0.0
+                        rd.from = bagToWorld(b, rd.lp); rd.fromH = bagDirToWorld(b, rd.lh)
+                        val k2 = b.riders.indexOf(rd)
+                        val a = k2 * 2.39996
+                        val slot = Vec3(cos(a) * 0.3 * b.netR, -NET_C * b.netR - 0.3 * b.netR, sin(a) * 0.3 * b.netR)
+                        rd.to = netToWorld(b, slot)
+                        rd.lp = rd.from; rd.lh = rd.fromH
+                    }
+                }
+                FALLING -> {
+                    val k = (rd.t / FALL_S).coerceIn(0.0, 1.0)
+                    rd.lp = rd.from.lerp(rd.to, k * k)
+                    rd.lh = rd.fromH.lerp(Vec3(-b.tipX, -0.2, -b.tipZ), k).normalized(rd.fromH)
+                    if (rd.t >= FALL_S) {
+                        rd.stage = IN_NET; rd.t = 0.0
+                        rd.lp = worldToNet(b, rd.to)
+                        rd.lh = worldDirToNet(b, rd.lh).let { Vec3(it.x, 0.0, it.z).normalized(Vec3.X) }
+                    }
+                }
+                IN_NET -> {
+                    // they lie in the bottom of the mesh, sliding to its low side as it turns
+                    rd.lp = rd.lp + netDown(b) * (4.0 * dt)
+                    rd.lh = rd.lh.rejectFrom(netDown(b)).normalized(rd.lh)
+                }
+            }
+        }
+        settle(b.riders, IN_NET, netC, NET_IN * b.netR, -NET_TOP * b.netR)
+        settle(b.riders, SLIDING, bagCentre(b), Double.MAX_VALUE, Double.MAX_VALUE)
+        swimInBag(b, sim, dt)
+        placeRiders(b, dt)
+        // clamp the bodies in the tank water to it once the net is in
+        return t >= T_END && b.riders.none { it.stage != RELEASED }
+    }
+
+    private fun worldToNet(b: Bag, p: Vec3): Vec3 {
+        val d = p - b.netPos
+        return worldDirToNet(b, d)
+    }
+
+    private fun worldDirToNet(b: Bag, d: Vec3) = Vec3(
+        b.nx[0] * d.x + b.nx[1] * d.y + b.nx[2] * d.z,
+        b.ny[0] * d.x + b.ny[1] * d.y + b.ny[2] * d.z,
+        b.nz[0] * d.x + b.nz[1] * d.y + b.nz[2] * d.z,
+    )
+
     private fun chooseTip(b: Bag, rock: RockData) {
-        // tip toward the open middle of the tank, so the animals pour away from the glass
+        // tip toward the open middle of the tank, so the net goes in away from the glass
         val dx = rock.lengthCm / 2 - b.x; val dz = rock.widthCm / 2 - b.z
         val d = sqrt(dx * dx + dz * dz)
         if (d > 1e-3) { b.tipX = dx / d; b.tipZ = dz / d }
     }
 
-    private fun moveRiders(b: Bag, dt: Double) {
-        val base = Vec3(b.x, b.y, b.z)
-        for (rd in b.riders) {
-            if (rd.released) continue
-            val o = rd.o
-            if (rd.swimmer) {
-                // a slow loop in the bag water, nose along the loop
-                val w = 0.5 / max(1.0, rd.loopR)
-                val ph = rd.phase + b.t * w
-                val local = rd.anchor + Vec3(cos(ph) * rd.loopR, 0.25 * sin(2 * ph) * rd.loopR, sin(ph) * rd.loopR)
-                val dir = Vec3(-sin(ph), 0.25 * cos(2 * ph), cos(ph))
-                val p = base + local
-                o.vel = dir * (w * rd.loopR)
-                o.pos = p; o.heading = dir.normalized(o.heading)
-                o.spline.update(p, o.heading, dt, 6.0)
-                o.tailHz = 1.4; o.amp = 0.05
-                o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0
-                o.pecPhase = (o.pecPhase + 1.2 * dt) % 1000.0; o.pecAmp = 0.4; o.pectoral = 1.0
-            } else {
-                o.pos = base + rd.anchor
-                o.spline.reset(o.pos, o.heading)
-            }
-        }
-    }
-
-    /** The bag tips: swimmers become ordinary organisms where they are, crawlers sink to the bottom first. */
+    /** The net is down and turned: swimmers become ordinary organisms where they are, crawlers sink to the bottom. */
     private fun release(sim: Simulation, b: Bag) {
+        b.released = true
         val rock = sim.rock
         if (b.coral) {
             Stocking.addMany(sim, b.speciesId, b.count)
@@ -381,20 +755,24 @@ class AcclimationBags {
             return
         }
         for (rd in b.riders) {
-            rd.released = true
+            if (rd.stage == RELEASED) continue
+            // anyone still on the way out goes with the net
+            rd.stage = RELEASED
             val o = rd.o
             b.releasedIds += o.id
             if (rd.swimmer) {
                 val real = sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, id = o.id))
                 arrive(sim, real, b)
-                real.placeAt(rock.clampToWater(o.pos, 1.0), Vec3(b.tipX, -0.3, b.tipZ).normalized(o.heading))
+                val out = b.netFacing.horizontal().normalized(Vec3(b.tipX, 0.0, b.tipZ))
+                real.placeAt(rock.clampToWater(o.pos, 1.0), (out + Vec3(0.0, -0.2, 0.0)).normalized(o.heading))
             } else if (o.brainKind.isSessile) {
                 arrive(sim, sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, id = o.id)), b)
             } else {
-                // sink straight down from the bag to the rock or sand under it (spread a little as they tumble out)
-                val sx = (o.pos.x + b.tipX * 3 + sim.rng.signed() * 2).coerceIn(4.0, rock.lengthCm - 4)
-                val sz = (o.pos.z + b.tipZ * 3 + sim.rng.signed() * 2).coerceIn(4.0, rock.widthCm - 4)
+                // sink straight down from the net to the rock or sand under it (spread a little as they tumble out)
+                val sx = (o.pos.x + sim.rng.signed() * 1.5).coerceIn(4.0, rock.lengthCm - 4)
+                val sz = (o.pos.z + sim.rng.signed() * 1.5).coerceIn(4.0, rock.widthCm - 4)
                 val land = Stocking.surfaceSpot(rock, sx, sz)?.first ?: Vec3(sx, rock.sandTopCm, sz)
+                o.pos = rock.clampToWater(o.pos, 0.5)
                 fallers += Faller(o, land + Vec3(0.0, 0.3, 0.0), b.id)
             }
         }
@@ -431,33 +809,40 @@ class AcclimationBags {
     }
 
     /**
-     * Pushes swimmers out of every bag's bulb (after the behaviour step): nothing swims through the plastic. A bag's
-     * own animals are exempt while it empties.
+     * Pushes swimmers out of every bag's bulb while it is in the water, and out of a net that is in the tank (after
+     * the behaviour step): nothing swims through the plastic or the mesh. A bag's own animals are exempt from its net.
      */
     fun keepClear(sim: Simulation) {
         if (bags.isEmpty()) return
         val rock = sim.rock
         for (b in bags) {
-            if (b.phase == LIFTED) continue
-            val cy = b.y - 0.7 * b.radius
-            for (o in sim.organisms) {
-                if (!o.alive || o.attached) continue
-                if (b.releasedIds.isNotEmpty() && o.id in b.releasedIds) continue
-                val need = b.radius + 0.3 * o.collisionLength + 0.4
-                val dx = o.pos.x - b.x; val dy = o.pos.y - cy; val dz = o.pos.z - b.z
-                val d2 = dx * dx + dy * dy + dz * dz
-                if (d2 >= need * need) continue
-                val d = sqrt(d2)
-                // out sideways and down (the top of the bulb is at the surface: there is no going over it)
-                var nx = dx; var ny = min(dy, 0.0); var nz = dz
-                var nl = sqrt(nx * nx + ny * ny + nz * nz)
-                if (nl < 1e-6) { nx = 0.0; ny = -1.0; nz = 0.0; nl = 1.0 }
-                nx /= nl; ny /= nl; nz /= nl
-                val p = rock.clampToWater(Vec3(b.x + nx * need, cy + ny * need, b.z + nz * need), 1.0)
-                val vn = o.vel.x * nx + o.vel.y * ny + o.vel.z * nz
-                if (vn < 0) o.vel = Vec3(o.vel.x - vn * nx, o.vel.y - vn * ny, o.vel.z - vn * nz)
-                if (d < need) o.pos = p
+            if (b.phase <= OPEN && b.y - (BULB_C + 1) * b.radius < rock.waterLevelCm) {
+                pushOut(sim, b, Vec3(b.x, b.y - BULB_C * b.radius, b.z), b.radius, downOnly = true)
             }
+            if (b.netR > 0 && b.phase >= OPEN && b.netPos.y - FishNet.BAG_DEPTH * b.netR < rock.waterLevelCm) {
+                pushOut(sim, b, netToWorld(b, Vec3(0.0, -NET_C * b.netR, 0.0)), b.netR, downOnly = false)
+            }
+        }
+    }
+
+    private fun pushOut(sim: Simulation, b: Bag, c: Vec3, rad: Double, downOnly: Boolean) {
+        val rock = sim.rock
+        for (o in sim.organisms) {
+            if (!o.alive || o.attached) continue
+            if (b.releasedIds.isNotEmpty() && o.id in b.releasedIds) continue
+            val need = rad + 0.3 * o.collisionLength + 0.4
+            val dx = o.pos.x - c.x; val dy = o.pos.y - c.y; val dz = o.pos.z - c.z
+            val d2 = dx * dx + dy * dy + dz * dz
+            if (d2 >= need * need) continue
+            // out sideways and down (the top of a bulb is at the surface: there is no going over it)
+            var nx = dx; var ny = if (downOnly) min(dy, 0.0) else dy; var nz = dz
+            var nl = sqrt(nx * nx + ny * ny + nz * nz)
+            if (nl < 1e-6) { nx = 0.0; ny = -1.0; nz = 0.0; nl = 1.0 }
+            nx /= nl; ny /= nl; nz /= nl
+            val p = rock.clampToWater(Vec3(c.x + nx * need, c.y + ny * need, c.z + nz * need), 1.0)
+            val vn = o.vel.x * nx + o.vel.y * ny + o.vel.z * nz
+            if (vn < 0) o.vel = Vec3(o.vel.x - vn * nx, o.vel.y - vn * ny, o.vel.z - vn * nz)
+            o.pos = p
         }
     }
 
@@ -465,27 +850,47 @@ class AcclimationBags {
 
     fun poses(tankTempC: Double, simTimeSec: Double): List<BagPose> = bags.map { b ->
         val el = if (b.floatStartSim < 0) 0.0 else simTimeSec - b.floatStartSim
-        val left = if (b.phase >= OPEN) 0.0 else max(0.0, FLOAT_SEC - el)
+        val left = if (b.ready || b.phase >= OPEN) 0.0 else max(0.0, FLOAT_SEC - el)
+        val phase = when { b.phase < OPEN -> b.phase; b.step >= STEP_NET_OUT -> 3; else -> 2 }
+        val gear = b.phase >= OPEN
         BagPose(
             b.id, b.x.toFloat(), b.y.toFloat(), b.z.toFloat(), b.radius.toFloat(),
-            b.tiltX.toFloat(), b.tiltZ.toFloat(), b.yaw.toFloat(), b.phase, b.lift.toFloat(),
+            b.tiltX.toFloat(), b.tiltZ.toFloat(), b.yaw.toFloat(), phase, b.lift.toFloat(),
             b.speciesId, b.common, b.count, b.coral,
             (left / 60).toFloat(), (1 - left / FLOAT_SEC).toFloat().coerceIn(0f, 1f),
             b.bagTempC.toFloat(), tankTempC.toFloat(),
+            step = if (gear) b.step else -1, cut = b.cut, water = b.water.toFloat(),
+            netX = b.netPos.x.toFloat(), netY = b.netPos.y.toFloat(), netZ = b.netPos.z.toFloat(),
+            netFx = b.netFacing.x.toFloat(), netFy = b.netFacing.y.toFloat(), netFz = b.netFacing.z.toFloat(),
+            netHx = b.netHandle.x.toFloat(), netHy = b.netHandle.y.toFloat(), netHz = b.netHandle.z.toFloat(),
+            netR = if (gear) b.netR.toFloat() else 0f,
+            bucketX = b.bucketTop.x.toFloat(), bucketY = b.bucketTop.y.toFloat(), bucketZ = b.bucketTop.z.toFloat(),
+            bucketR = if (gear) b.bucketR.toFloat() else 0f, bucketH = b.bucketH.toFloat(),
+            gearFade = b.gearFade.toFloat(),
+            streamX0 = b.stream0.x.toFloat(), streamY0 = b.stream0.y.toFloat(), streamZ0 = b.stream0.z.toFloat(),
+            streamX1 = b.stream1.x.toFloat(), streamY1 = b.stream1.y.toFloat(), streamZ1 = b.stream1.z.toFloat(),
+            streamR = b.streamR.toFloat(),
         )
     }
 
-    /** The animals still in a bag or sinking out of it, as ordinary poses marked [OrganismPose.bagged]. */
+    /** The animals still in a bag, the net or sinking out of it, as ordinary poses marked [OrganismPose.bagged]. */
     fun riderPoses(): List<OrganismPose> {
         if (bags.isEmpty() && fallers.isEmpty()) return emptyList()
         val out = ArrayList<OrganismPose>()
-        for (b in bags) for (rd in b.riders) if (!rd.released) out += rd.o.toPose().copy(bagged = true)
+        for (b in bags) for (rd in b.riders) if (rd.stage != RELEASED) out += rd.o.toPose().copy(bagged = true)
         for (f in fallers) out += f.o.toPose().copy(bagged = true)
         return out
     }
 
     companion object {
-        const val DROP = 0; const val FLOAT = 1; const val OPEN = 2; const val LIFTED = 3
+        const val DROP = 0; const val FLOAT = 1; const val OPEN = 2
+
+        /** Release steps ([BagPose.step]). */
+        const val STEP_LIFT = 0; const val STEP_CUT = 1; const val STEP_POUR = 2
+        const val STEP_NET_IN = 3; const val STEP_NET_TURN = 4; const val STEP_NET_OUT = 5
+
+        private const val IN_BAG = 0; private const val SLIDING = 1; private const val FALLING = 2
+        private const val IN_NET = 3; private const val RELEASED = 4
 
         /** Float time before the bag opens (30 sim minutes). */
         const val FLOAT_SEC = 1800.0
@@ -509,11 +914,6 @@ class AcclimationBags {
         private const val BOB_C = 4.5
         private const val DRIFT_FLOW = 0.12
         private const val MAX_DRIFT_CM_S = 2.5
-        private const val TIP_S = 1.2
-        private const val TIP_RAD = 1.15
-        private const val RELEASE_AT_S = 0.6
-        private const val HOLD_S = 0.8
-        private const val LIFT_S = 1.0
         private const val SINK_CM_S = 9.0
         private const val SIDE_KEEP_CM = 1.0
         private const val GLASS_KEEP_CM = 0.8
@@ -521,6 +921,35 @@ class AcclimationBags {
         private const val BACK_KEEP_CM = 5.5
         /** Waterline-relative depths (× radius) probed against the rock: bulb centre, then the bottom. */
         private val BULB_PROBES = doubleArrayOf(-0.7, -1.25)
+
+        /** The bag's inside (× radius, its own frame): the water ball's centre depth and radius, the water top. */
+        const val BULB_C = 0.72
+        const val BAG_IN = 0.94
+        const val BAG_TOP = 0.08
+        /** The cut neck (× radius above the waterline centre), and how far over it is tipped to pour. */
+        const val MOUTH = 0.6
+        const val POUR_RAD = 2.1
+        /** The net's mesh bag as a ball (× hoop radius): centre depth, radius, and the top they stay under. */
+        const val NET_C = 0.35
+        const val NET_IN = 0.88
+        const val NET_TOP = 0.05
+        const val NET_MIN_R = 4.0
+        const val NET_MAX_R = 10.0
+        private const val NET_TURN_RAD = 1.3
+        /** The bucket's bottom above the tank water: the bag water never touches the tank. */
+        const val BUCKET_CLEAR_CM = 1.2
+
+        /** Release timeline (wall s from the start): lift out, cut, tip, pour, net in, turn, out. */
+        const val T_LIFT = 1.4
+        const val T_CUT = 2.0
+        const val T_TIP = 3.4
+        const val T_POUR = 4.8
+        const val T_NET_IN = 6.2
+        const val T_NET_TURN = 7.0
+        const val T_END = 8.0
+        private const val BAG_AWAY_S = 0.8
+        private const val SLIDE_S = 0.3
+        private const val FALL_S = 0.35
 
         /**
          * Equipment a floating bulb could reach, as (x, z, radius) cylinders (tank cm, from tools/blender/equipment.py):
@@ -537,11 +966,10 @@ class AcclimationBags {
             30.0, 13.0, 1.5,
         )
 
-        /** Bulb radius (cm) for [n] animals of [cm] each: the body has to fit, and more animals need more water. */
+        /** Bulb radius (cm) for [n] animals of [cm] each: the whole body has to fit, and more animals need more water. */
         fun bagRadius(cm: Double, n: Int): Double =
-            ((max(0.62 * cm, 3.0) * (1 + 0.25 * (cbrt(n.toDouble()) - 1))) + 1.5).coerceIn(4.5, 12.0)
+            ((max(0.66 * cm + 0.6, 3.0) * (1 + 0.25 * (cbrt(n.toDouble()) - 1))) + 1.0).coerceIn(4.5, 14.0)
 
         private fun smooth(t: Double): Double { val x = t.coerceIn(0.0, 1.0); return x * x * (3 - 2 * x) }
     }
 }
-
