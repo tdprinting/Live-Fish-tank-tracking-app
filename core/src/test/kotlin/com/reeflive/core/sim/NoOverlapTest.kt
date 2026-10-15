@@ -17,8 +17,10 @@ import kotlin.math.sin
  * 1. **Body vs body**: no two bodies overlap ([BodyCollision.pairPenetration]) by more than [TOL].
  * 2. **Environment**: no point of any station's section (12 around each ellipse, at every station and halfway between
  *    stations) is inside the rock SDF, under the sand surface or through the glass by more than [TOL].
- * 3. **Static obstacles**: no such point is inside a [StaticObstacles] solid (corals, decor, equipment, feather
- *    duster) by more than [TOL] beyond the obstacle's give, under the animal's [StaticObstacles.passMask].
+ * 3. **Static obstacles**: no such point is inside a [StaticObstacles] solid (hard decor, equipment, the feather
+ *    duster) by more than [TOL] beyond the obstacle's give, under the animal's [StaticObstacles.passMask]. Coral is
+ *    soft (Tee): bodies push through it and it bends, so a body in a colony is a contact
+ *    ([StaticObstacles.contacts], counted and reported), never clipping.
  *
  * Failure lists the worst offenders by species for each check (samples over tolerance, worst depth, an example).
  *
@@ -29,13 +31,8 @@ import kotlin.math.sin
  *   strike reaching its prey (open mouth on its focus).
  * - Whole bodies: the explicit states [BodyCollision.exempt] lets into the geometry (in a hole, den or burrow, posture 3;
  *   buried in the sand, posture 5; a scripted den / hole path; the sessile feather duster; hidden animals) and dead ones.
- * - Obstacles: the pass rules documented on [StaticObstacles] (clowns in the hairy mushroom host; small crawlers and the
- *   shrimp in the Kenya, the macro and the duster crown).
- *
- * Pending work in the collision thread (claude/collision), so this test may fail until it lands:
- * - check 3 fails until `BodyCollision.resolveEnv` pushes stations out of [StaticObstacles] (`push`), which nothing
- *   calls yet: today every animal swims through corals and equipment;
- * - checks 1 and 2 measure that thread's resolver (wedge holds, sealed-hollow escapes, pair passes) as it stands.
+ * - Obstacles: every coral colony (soft, see above); the pass rules documented on [StaticObstacles] (small crawlers
+ *   and the shrimp in the duster crown).
  *
  * Hours per run: system property `reeflive.noOverlapHours` or env `REEFLIVE_NO_OVERLAP_HOURS` (default 2; four runs, two
  * by day and two by night).
@@ -74,6 +71,8 @@ class NoOverlapTest {
         val pairs = Check("body vs body")
         val env = Check("rock / sand / glass")
         val obs = Check("static obstacles")
+        // body stations in a coral colony (soft: reported for the coral motion, not clipping)
+        var coralContacts = 0L
         for ((seed, hour) in RUNS) {
             val sim = teeSim(seed, hour)
             val dt = 0.05
@@ -82,6 +81,7 @@ class NoOverlapTest {
                 sim.advance(dt, dt)
                 if (k % EVERY != 0) continue
                 val t = sim.simTimeSec
+                coralContacts += sim.obstacles.contacts.size
                 val live = sim.organisms.filter { it.alive && !sim.bodies.exempt(it) }
                 for (o in live) sampleBody(sim, o, env, obs, seed, t)
                 for (i in live.indices) for (j in i + 1 until live.size) {
@@ -95,7 +95,7 @@ class NoOverlapTest {
             }
         }
         val report = "NoOverlapTest: ${"%.1f".format(hours)} h x ${RUNS.size} runs (seeds/hours $RUNS), tolerance $TOL cm\n  " +
-            listOf(pairs, env, obs).joinToString("\n  ") { it.report() }
+            listOf(pairs, env, obs).joinToString("\n  ") { it.report() } + "\n  coral contacts (soft, not counted): $coralContacts"
         println(report)
         assertTrue(report, !pairs.failed && !env.failed && !obs.failed)
     }

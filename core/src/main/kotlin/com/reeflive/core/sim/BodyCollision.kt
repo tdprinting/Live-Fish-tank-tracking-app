@@ -196,7 +196,7 @@ class BodyCollision(private val rock: RockData) {
     fun exempt(o: Organism): Boolean =
         o.brainKind.isSessile || o.posture == 3 || o.posture == 5 || o.spline.override != null || !o.visible || o.body.emerging > 0
 
-    /** Corals, decor and equipment as solids (set by the Simulation; null = none). */
+    /** Decor and equipment as solids, coral as soft contacts (set by the Simulation; null = none). */
     var obstacles: StaticObstacles? = null
     /** Station pushes off the static obstacles (tests). */
     var obstaclePushes = 0L; private set
@@ -317,7 +317,8 @@ class BodyCollision(private val rock: RockData) {
                 rockGap.fill(dc)
                 // broad phase: a body whose bounding sphere is clear of the rock, the sand, the glass and the surface
                 // (most swimmers in open water, most of the time) needs no station checks
-                if (dc > SKIN && clearOfBounds(body, surfaceOn) && obstacles?.push(body.centre, body.radius + SKIN, mask) == null) { clear = true; broad = true; break }
+                // (a body in a coral colony goes on to the station checks: they report where it touches the coral)
+                if (dc > SKIN && clearOfBounds(body, surfaceOn) && obstacles.let { ob -> ob == null || ob.push(body.centre, body.radius + SKIN, mask) == null && !ob.softTouched }) { clear = true; broad = true; break }
             }
             var any = false
             var best = 0.0
@@ -385,10 +386,11 @@ class BodyCollision(private val rock: RockData) {
                         }
                     }
                 }
-                // corals, decor and equipment ([StaticObstacles]): the section's bounding sphere is pushed off their capsules
+                // decor and equipment ([StaticObstacles]): the section's bounding sphere is pushed off their capsules; coral
+                // is soft (the body passes, the colony bends): the station is reported in its contacts
                 obstacles?.let { ob ->
                     val cc = q + body.up[i] * body.ctr[i]
-                    ob.push(cc, max(body.a[i], body.b[i]) + SKIN, mask)?.let { v -> q += v; obstaclePushes++ }
+                    ob.push(cc, max(body.a[i], body.b[i]) + SKIN, mask, o.id)?.let { v -> q += v; obstaclePushes++ }
                 }
                 // the sand is a height field, not a distance field: a steep mound beside the station can reach the body
                 // even when the sand under the centre is far below, so the lowest point of the section is checked too
@@ -777,7 +779,7 @@ class BodyCollision(private val rock: RockData) {
     /** Bodies the last pair pass pushed (still overlapping when the passes ran out). */
     private val overlapping = HashSet<Organism>()
 
-    /** Bodies the environment pushed back against their pair push this tick (against the rock, a coral): they yield no more. */
+    /** Bodies the environment pushed back against their pair push this tick (against the rock, the equipment): they yield no more. */
     private val pinned = HashSet<Organism>()
 
     private fun pairPass(animals: List<Organism>, stations: List<com.reeflive.core.ai.CleaningStation>, dt: Double, holdAttached: Boolean): Boolean {
@@ -824,7 +826,7 @@ class BodyCollision(private val rock: RockData) {
             o.pos = o.spline.headPos
             seatOf(o)?.let { carrySeat(o, it, o.pos - p0) }
             resolveEnv(o, dt)
-            // the environment took back most of the push (the body is against the rock or a coral on that side): from
+            // the environment took back most of the push (the body is against the rock or the equipment on that side): from
             // now on the other body of the pair moves instead, or the two would trade the same overlap pass after pass
             // (measured at the body's middle against the mean push: a push on the tail barely moves the head)
             var wx = 0.0; var wy = 0.0; var wz = 0.0

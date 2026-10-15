@@ -8,7 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The coral, decor and equipment obstacles ([StaticObstacles]): data, push semantics, pass rules and rebuilds. */
+/** The coral, decor and equipment obstacles ([StaticObstacles]): data, push semantics, soft coral, contacts and rebuilds. */
 class StaticObstaclesTest {
     private fun sim(stock: List<LivestockSeed> = DefaultStock.all) =
         Simulation(TankConfig(seed = 5), TestTank.catalog, TestTank.rock.forSimulation(), 5, 11 * 3600.0, WaterState(), stock)
@@ -19,10 +19,16 @@ class StaticObstaclesTest {
         (0 until o.size).filter { o.ownerOf(it).contains(owner) }.map { o.capsule(it) }
 
     @Test
-    fun everyColonyDecorAndEquipmentIsSolid() {
+    fun everyColonyDecorAndEquipmentIsModelled() {
         val s = sim()
         val o = ready(s)
         for (c in s.corals) assertTrue("no obstacle for ${c.id}", capsulesOf(o, "coral ${c.id} ").isNotEmpty())
+        // coral is soft, the equipment, hard decor and the duster are not
+        for (i in 0 until o.size) {
+            val name = o.ownerOf(i)
+            val coral = name.startsWith("coral ") || name.startsWith("reef_details MushroomsRed")
+            assertEquals(name, coral, o.isSoft(i))
+        }
         for (part in listOf("equipment Heater", "equipment IntakeTube", "equipment PowerheadRight", "reef_details MushroomsRed", "duster duster tube", "duster duster crown"))
             assertTrue("no obstacle for $part", capsulesOf(o, part).isNotEmpty())
         // nothing outside the water box
@@ -58,22 +64,55 @@ class StaticObstaclesTest {
     }
 
     @Test
-    fun clownsPassTheirHostShrimpPassTheKenyaTangsPassNothing() {
+    fun coralIsSoftForEveryoneTheEquipmentStaysSolid() {
         val s = sim()
         val o = ready(s)
         fun org(id: String) = s.organisms.first { it.id == id }
         val clown = org("clown_f"); val shrimp = org("skunk"); val tang = org("tang")
-        assertEquals(StaticObstacles.PASS_HOST, StaticObstacles.passMask(clown))
+        assertEquals(0, StaticObstacles.passMask(clown))
         assertEquals(StaticObstacles.PASS_SMALL, StaticObstacles.passMask(shrimp))
         assertEquals(0, StaticObstacles.passMask(tang))
-        val host = capsulesOf(o, "(mushroom_hairy)").maxByOrNull { it[6] }!!
-        val hp = Vec3(host[0], host[1], host[2])
-        assertTrue(o.depth(hp, 0.5, StaticObstacles.passMask(tang)) > 0)
-        assertTrue(o.depth(hp, 0.5, StaticObstacles.passMask(clown)) <= 0)
-        val kenya = capsulesOf(o, "(kenya)").maxByOrNull { it[6] }!!
-        val kp = Vec3(kenya[0], kenya[1], kenya[2])
-        assertTrue(o.depth(kp, 0.5, StaticObstacles.passMask(clown)) > 0)   // ISSUES #3: clowns stay out of the Kenya
-        assertTrue(o.depth(kp, 0.5, StaticObstacles.passMask(shrimp)) <= 0)
+        // the clowns' host and the Kenya: no push and no depth for anyone (the colony bends)
+        for (owner in listOf("(mushroom_hairy)", "(kenya)")) {
+            val c = capsulesOf(o, owner).maxByOrNull { it[6] }!!
+            val p = Vec3(c[0], c[1], c[2])
+            for (who in listOf(clown, shrimp, tang)) {
+                assertTrue("$owner pushes ${who.id}", o.push(p, 0.5, StaticObstacles.passMask(who)) == null && o.softTouched)
+                assertTrue("$owner solid to ${who.id}", o.depth(p, 0.5, StaticObstacles.passMask(who)) <= 0)
+            }
+        }
+        // the heater stays solid for the clown too
+        val h = capsulesOf(o, "equipment Heater").maxByOrNull { it[6] }!!
+        val hp = Vec3(h[0], h[1], h[2])
+        assertTrue(o.depth(hp, 0.5, StaticObstacles.passMask(clown)) > 0)
+        assertNotNull(o.push(hp, 0.5, StaticObstacles.passMask(clown)))
+    }
+
+    @Test
+    fun coralContactsAreListedPerAnimalAndColonyAndClearedEachTick() {
+        val s = sim()
+        val o = ready(s)
+        val k = capsulesOf(o, "(kenya)").maxByOrNull { it[6] }!!
+        val kp = Vec3(k[0], k[1], k[2])
+        val kenyaId = o.ownerOf((0 until o.size).first { o.ownerOf(it).contains("(kenya)") }).removePrefix("coral ").substringBefore(" (")
+        assertNull(o.push(kp, 0.5, 0, "tang"))
+        o.push(kp + Vec3(0.1, 0.0, 0.0), 0.5, 0, "tang")   // the same animal and colony again: one entry, the deeper one
+        o.push(kp, 0.5, 0, "clown_f")
+        assertEquals(2, o.contacts.size)
+        val c = o.contacts.first { it.organismId == "tang" }
+        assertEquals(kenyaId, c.coralId)
+        assertTrue("depth ${c.depthCm}", c.depthCm >= k[6] + 0.5 - 1e-6)
+        assertTrue("point on the colony's surface", c.point.distanceTo(kp) <= k[6] + 1e-6)
+        // the next tick starts empty, and the entries are reused (no allocation per tick)
+        val first = o.contacts[0]
+        o.sync(s)
+        assertEquals(0, o.contacts.size)
+        o.push(kp, 0.5, 0, "tang")
+        assertTrue(first === o.contacts[0])
+        // in the running sim: a swimmer's stations in a colony are reported, and nothing is pushed off coral
+        var seen = 0
+        repeat(2400) { s.advance(0.05, 0.05); seen += s.obstacles.contacts.size }
+        println("StaticObstacles: $seen coral contacts in 2 min")
     }
 
     @Test

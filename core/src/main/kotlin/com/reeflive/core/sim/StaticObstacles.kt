@@ -8,8 +8,10 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * The solid things in the water that are not rock, sand or glass: the coral colonies, the decor and the equipment
- * (owner rule, tee-clips ISSUES #3 / #7: no body passes through anything). Each is a set of capsules (a sphere is a
+ * The things in the water that are not rock, sand or glass: the coral colonies, the decor and the equipment.
+ * Equipment and hard decor are solid (owner rule, tee-clips ISSUES #3 / #7: no body passes through them). Coral is
+ * soft (Tee): every animal pushes through a colony and the colony bends; nothing is pushed off it. Each body station
+ * inside a colony is reported in [contacts] instead, for the coral motion to bend its polyps and branches. Each is a set of capsules (a sphere is a
  * capsule with equal ends) fitted offline to the model the renderer draws ([StaticObstacleData], baked by
  * `tools/sdf/bake_obstacles.py` from the GLBs, which are in world cm), plus the feather duster built from its organism.
  *
@@ -17,20 +19,15 @@ import kotlin.math.sqrt
  * touches and allocates nothing unless it finds a contact. Kotlin/JS-safe (no java.*).
  *
  * ## Rules per obstacle
- * Each capsule has a `give` (cm a body may press into it: the soft fringe of a flexible colony bends) and a pass mask
- * (the animals the colony lets through; see [passMask]):
+ * Each solid capsule has a `give` (cm a body may press into it) and a pass mask (the animals it lets through; see
+ * [passMask]):
  *
  * | Obstacle | give | passes | why |
  * |---|---|---|---|
- * | Kenya tree (`kenya`, the branching "sea fan" of ISSUES #3) | 0.4 | [PASS_SMALL] | branches sway and part; shrimp and snails sit among them; clowns do not (that is the clip in #3) |
- * | red macroalgae (`macro_red`) | 0.6 | [PASS_SMALL] | bushy and flexible; small crawlers live inside it |
+ * | every coral colony (Kenya, macro, mushrooms incl. the clowns' hairy mushroom host and decor `MushroomsRed`, leathers, GSP, clove, zoa, organ pipe) | – | everyone (soft) | swimmers push through coral and the coral bends ([contacts]) |
  * | feather duster crown (organism) | 1.0 | [PASS_SMALL] | a fan of radioles that snaps shut on contact; scaled by the crown's extension and regrowth |
  * | feather duster tube (organism) | 0 | none | parchment tube, firm |
- * | hairy mushroom (`mushroom_hairy`, the clowns' host) | 0.3 | [PASS_HOST] | clowns nestle into their host's disc tentacles (that is hosting); everyone else is pushed off |
- * | mushrooms, elephant ear (`mushroom`, `elephant_ear`, decor `MushroomsRed`) | 0.3 / 0.3 / 0.2 | none | fleshy discs on rock or sand |
- * | leathers, GSP mats, clove stolons (`toadstool_leather`, `leather_pink`, `finger_leather`, `gsp_*`, `clove`) | 0.2 | none | firm tissue; their polyps (not modelled here) retract on contact |
- * | zoa rubble (`zoa`) | 0.1 | none | rock rubble under the polyps |
- * | organ pipe (`organ_pipe`) | 0 | none | calcite skeleton |
+ * | hard decor (`reef_details` except the mushrooms) | 0 | none | hard |
  * | equipment in the water (heater, HOB intake tube, powerheads, HOB / skimmer lips, magnet cleaners, feed ring, hose, cable) | 0 | none | hard |
  *
  * Polyps (Kenya tufts, GSP, zoa, clove, leather polyps) are not obstacles: they are drawn over the body mesh and
@@ -57,6 +54,8 @@ class StaticObstacles(private val rock: RockData) {
     private var mx = DoubleArray(0); private var my = DoubleArray(0); private var mz = DoubleArray(0); private var br = DoubleArray(0)
     private var owner = IntArray(0)
     private val ownerNames = ArrayList<String>()
+    /** Coral id of each owner (null: solid equipment, decor or a duster): a capsule whose owner has one is soft. */
+    private val ownerCoral = ArrayList<String?>()
     /** Capsule range [first, end) of each duster crown and its organism (rescaled by [sync]). */
     private val crownFirst = ArrayList<Int>()
     private val crownEnd = ArrayList<Int>()
@@ -74,6 +73,26 @@ class StaticObstacles(private val rock: RockData) {
     private var seenDusters = arrayOfNulls<Organism>(0)
     private var dirty = true
 
+    // ---- coral contacts this tick (pooled: filled by [push], cleared by [sync]) ----
+    private val pool = ArrayList<CoralContact>()
+    private var nContacts = 0
+
+    /**
+     * Every body station inside a coral colony this behaviour tick: one entry per animal and colony (the deepest
+     * station), filled by the body collision's per-station queries and cleared at the start of the next tick by
+     * [sync]. The list and its entries are reused from tick to tick: read them within the tick, copy what is kept.
+     */
+    val contacts: List<CoralContact> = object : AbstractList<CoralContact>() {
+        override val size: Int get() = nContacts
+        override fun get(index: Int): CoralContact {
+            if (index < 0 || index >= nContacts) throw IndexOutOfBoundsException("$index of $nContacts")
+            return pool[index]
+        }
+    }
+
+    /** The last [push] overlapped a soft (coral) capsule. */
+    var softTouched = false; private set
+
     /** Owner label of the capsule the last [depth] / [push] found deepest (tests, logs), or null. */
     var lastOwner: String? = null; private set
     /** Capsules in the grid now. */
@@ -89,6 +108,7 @@ class StaticObstacles(private val rock: RockData) {
      * duster crowns (extension × regrowth). Cheap when nothing changed: an identity pass over the colonies and dusters.
      */
     fun sync(sim: Simulation) {
+        nContacts = 0
         val corals = sim.corals
         val orgs = sim.organisms
         var changed = dirty || corals.size != seenCorals.size
@@ -123,13 +143,13 @@ class StaticObstacles(private val rock: RockData) {
             val name = if (copy) anchored ?: models.first() else anchored ?: models.firstOrNull { it !in used } ?: continue
             val m = DATA[name] ?: continue
             if (!copy && !used.add(name)) continue
-            val rule = RULES[name] ?: Rule(0.2, 0)
-            val owner = b.owner("coral ${c.id} ($name)")
+            val rule = RULES[name] ?: Rule(0.0, 0)
+            val owner = b.owner("coral ${c.id} ($name)", c.id)
             val home = c.pos - c.offset
             for (node in m.nodes) {
                 // a copy carries only the nodes near its home anchor (TankRenderer.nearHome, COPY_RADIUS_CM)
                 if (copy && node.centre.distanceTo(home) > COPY_RADIUS_CM) continue
-                val r = NODE_RULES["$name/${node.name}"] ?: rule
+                val r = rule
                 for (k in 0 until node.caps.size / 7) {
                     val q = k * 7
                     val o = c.offset
@@ -141,8 +161,9 @@ class StaticObstacles(private val rock: RockData) {
         for (name in FIXED) {
             val m = DATA[name] ?: continue
             for (node in m.nodes) {
-                val r = NODE_RULES["$name/${node.name}"] ?: RULES[name] ?: Rule(0.0, 0)
-                val owner = b.owner("$name ${node.name}")
+                val r = RULES[name] ?: Rule(0.0, 0)
+                // (the decor's mushroom corals are coral too: soft)
+                val owner = b.owner("$name ${node.name}", if ("$name/${node.name}" in DECOR_CORAL) "$name/${node.name}" else null)
                 for (k in 0 until node.caps.size / 7) {
                     val q = k * 7
                     b.add(node.caps[q], node.caps[q + 1], node.caps[q + 2], node.caps[q + 3], node.caps[q + 4], node.caps[q + 5], node.caps[q + 6], r.give, r.pass, owner)
@@ -179,10 +200,14 @@ class StaticObstacles(private val rock: RockData) {
      * that serves both. Returns null when the sphere is clear (the common case: no allocation). The vector points out
      * along each capsule's surface normal at the contact; a centre exactly on a capsule axis is pushed straight up.
      *
-     * Call: `obstacles.push(p: Vec3, r: Double, mask: Int = 0): Vec3?`, e.g. per body station from
-     * `BodyCollision.resolveEnv` with the station's section centre and bounding radius and `obstacles.passMask(o)`.
+     * Coral is soft: it never pushes. A sphere inside a colony sets [softTouched], and with [who] (the animal's id)
+     * is reported in [contacts].
+     *
+     * Call: `obstacles.push(p: Vec3, r: Double, mask: Int = 0, who: String? = null): Vec3?`, e.g. per body station
+     * from `BodyCollision.resolveEnv` with the station's section centre and bounding radius and `obstacles.passMask(o)`.
      */
-    fun push(p: Vec3, r: Double, mask: Int = 0): Vec3? {
+    fun push(p: Vec3, r: Double, mask: Int = 0, who: String? = null): Vec3? {
+        softTouched = false
         if (n == 0) return null
         var hiX = 0.0; var hiY = 0.0; var hiZ = 0.0; var loX = 0.0; var loY = 0.0; var loZ = 0.0
         var any = false
@@ -205,6 +230,20 @@ class StaticObstacles(private val rock: RockData) {
                 t = t.coerceIn(0.0, 1.0)
                 val ex = p.x - (ax[i] + dx * t); val ey = p.y - (ay[i] + dy * t); val ez = p.z - (az[i] + dz * t)
                 val d2 = ex * ex + ey * ey + ez * ez
+                val coral = ownerCoral[owner[i]]
+                if (coral != null) {
+                    val reachC = r + rad[i]
+                    if (d2 < reachC * reachC) {
+                        softTouched = true
+                        if (who != null) {
+                            val d = sqrt(d2)
+                            // the point on the colony's surface toward the body, and how deep the sphere is past it
+                            val k = if (d > 1e-9) rad[i] / d else 0.0
+                            note(who, coral, Vec3(ax[i] + dx * t + ex * k, ay[i] + dy * t + ey * k + (if (d > 1e-9) 0.0 else rad[i]), az[i] + dz * t + ez * k), reachC - d)
+                        }
+                    }
+                    continue
+                }
                 val reach = r + rad[i] - give[i]
                 if (reach <= 0 || d2 >= reach * reach) continue
                 val d = sqrt(d2)
@@ -236,7 +275,7 @@ class StaticObstacles(private val rock: RockData) {
             val c = ix + nx * (iy + ny * iz)
             for (s in start[c] until start[c + 1]) {
                 val i = items[s]
-                if (pass[i] and mask != 0) continue
+                if (pass[i] and mask != 0 || ownerCoral[owner[i]] != null) continue
                 val qx = p.x - mx[i]; val qy = p.y - my[i]; val qz = p.z - mz[i]; val qr = br[i] + r
                 if (worst > -1.0 && qx * qx + qy * qy + qz * qz >= qr * qr) continue
                 val dx = bx[i] - ax[i]; val dy = by[i] - ay[i]; val dz = bz[i] - az[i]
@@ -250,6 +289,23 @@ class StaticObstacles(private val rock: RockData) {
         }
         return worst
     }
+
+    /** Records (or deepens) the contact of animal [who] with colony [coral] this tick. */
+    private fun note(who: String, coral: String, point: Vec3, depth: Double) {
+        for (k in 0 until nContacts) {
+            val c = pool[k]
+            if (c.organismId == who && c.coralId == coral) {
+                if (depth > c.depthCm) { c.point = point; c.depthCm = depth }
+                return
+            }
+        }
+        if (nContacts == pool.size) pool += CoralContact()
+        val c = pool[nContacts++]
+        c.organismId = who; c.coralId = coral; c.point = point; c.depthCm = depth
+    }
+
+    /** Whether capsule [i] is coral (soft: passed by everyone, reported in [contacts]). */
+    fun isSoft(i: Int): Boolean = ownerCoral[owner[i]] != null
 
     /** Capsule [i] as (ax, ay, az, bx, by, bz, radius, give) and its pass mask and owner (tests, debug overlays). */
     fun capsule(i: Int): DoubleArray = doubleArrayOf(ax[i], ay[i], az[i], bx[i], by[i], bz[i], rad[i], give[i])
@@ -267,9 +323,9 @@ class StaticObstacles(private val rock: RockData) {
         private var arrs = Array(8) { DoubleArray(cap) }
         var p = IntArray(cap)
         var w = IntArray(cap)
-        init { ownerNames.clear() }
+        init { ownerNames.clear(); ownerCoral.clear() }
 
-        fun owner(label: String): Int { ownerNames += label; return ownerNames.size - 1 }
+        fun owner(label: String, coral: String? = null): Int { ownerNames += label; ownerCoral += coral; return ownerNames.size - 1 }
 
         fun add(x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double, r: Double, g: Double, mask: Int, who: Int) {
             if (count == cap) {
@@ -318,9 +374,7 @@ class StaticObstacles(private val rock: RockData) {
         const val CELL = 4.0
         /** TankRenderer.COPY_RADIUS_CM: a sandbox copy keeps the model's nodes this close to its home anchor. */
         const val COPY_RADIUS_CM = 25.0
-        /** Clownfish pass their host (the hairy mushroom): nestling into it is hosting. */
-        const val PASS_HOST = 1
-        /** Small crawlers and the cleaner / banded shrimp pass the flexible colonies (Kenya, macro, duster crown). */
+        /** Small crawlers and the cleaner / banded shrimp pass the feather duster's crown. */
         const val PASS_SMALL = 2
         /** Bodies shorter than this (cm) count as small ([PASS_SMALL]): snails, hermits, asterina, juveniles. */
         const val SMALL_CM = 3.0
@@ -328,29 +382,17 @@ class StaticObstacles(private val rock: RockData) {
         /** The pass mask of [o]: which obstacle rules let it through (0 = everything is solid to it). */
         fun passMask(o: Organism): Int {
             var m = 0
-            if (o.brainKind == BrainKind.CLOWN) m = m or PASS_HOST
             if (o.brainKind == BrainKind.CLEANER_SHRIMP || o.brainKind == BrainKind.BANDED_SHRIMP || o.lengthCm < SMALL_CM) m = m or PASS_SMALL
             return m
         }
 
+        // (coral capsules are soft whatever their rule: these only describe the solid equipment and decor)
         private val RULES: Map<String, Rule> = mapOf(
-            "kenya" to Rule(0.4, PASS_SMALL),
-            "macro_red" to Rule(0.6, PASS_SMALL),
-            "mushroom_hairy" to Rule(0.3, PASS_HOST),
-            "mushroom" to Rule(0.3, 0),
-            "elephant_ear" to Rule(0.3, 0),
-            "toadstool_leather" to Rule(0.2, 0),
-            "leather_pink" to Rule(0.2, 0),
-            "finger_leather" to Rule(0.2, 0),
-            "gsp_mat" to Rule(0.2, 0),
-            "gsp_neon" to Rule(0.2, 0),
-            "clove" to Rule(0.2, 0),
-            "zoa" to Rule(0.1, 0),
-            "organ_pipe" to Rule(0.0, 0),
             "equipment" to Rule(0.0, 0),
             "reef_details" to Rule(0.0, 0),
         )
-        private val NODE_RULES: Map<String, Rule> = mapOf("reef_details/MushroomsRed" to Rule(0.2, 0))
+        /** Decor nodes that are coral (soft). */
+        private val DECOR_CORAL = setOf("reef_details/MushroomsRed")
         private val FIXED = listOf("reef_details", "equipment")
         private val MODELS_BY_KIND: Map<CoralKind, List<String>> = mapOf(
             CoralKind.KENYA to listOf("kenya"), CoralKind.GSP to listOf("gsp_mat", "gsp_neon"), CoralKind.ZOA to listOf("zoa"),
@@ -382,4 +424,16 @@ class StaticObstacles(private val rock: RockData) {
             return out
         }
     }
+}
+
+/**
+ * A body station of an animal inside a coral colony this tick ([StaticObstacles.contacts]): the animal, the colony
+ * ([Coral.id]; `reef_details/MushroomsRed` for the decor's mushrooms), the point on the colony's surface nearest the
+ * body (world cm) and how deep the station's bounding sphere is past it (cm). Pooled: reused every tick.
+ */
+class CoralContact internal constructor() {
+    var organismId: String = ""; internal set
+    var coralId: String = ""; internal set
+    var point: Vec3 = Vec3.ZERO; internal set
+    var depthCm: Double = 0.0; internal set
 }
