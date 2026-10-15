@@ -115,6 +115,9 @@ class Camera {
     // ---- supply shelf (SupplyShelf.kt): a second framing beside the tank, blended over the tank view ----
     /** True while the camera looks at (or travels to) the supply shelf; drags then look along the shelf rows. */
     var shelfOn = false; private set
+    /** Looking at the nursery tank beside the display (core NurseryTank); any drag, pinch or reset glides back. */
+    var nurseryOn = false; private set
+    private var nurseryMix = 0f
     /**
      * Submarine mode ([SubmarineScene]): while on, the eye and aim ease to [rideEye] / [rideAim] (set every frame) in
      * place of the orbit or follow camera; turning it off glides back to the default tank view.
@@ -165,6 +168,7 @@ class Camera {
 
     /** Animated return to the default view; stops any follow. */
     fun reset() {
+        nurseryOn = false
         if (followId != null) releaseFollow()
         glide()
         target[0] = DEFAULT_TARGET[0]; target[1] = DEFAULT_TARGET[1]; target[2] = DEFAULT_TARGET[2]
@@ -209,6 +213,28 @@ class Camera {
     /** Shelf viewing distance (cm from the front of the boards): close in, further out on tall narrow screens. */
     val shelfDistance: Float
         get() = max(SHELF_DISTANCE, SHELF_MIN_WIDTH / (2f * kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat()) * max(aspect, 0.1f)))
+
+    /**
+     * Blends the nursery framing (in front of the nursery tank, a little above) over [eye] / [aim] on the shelf's
+     * travel arc. True while the eye is mostly there (the display's glass clamp must not pull it back).
+     */
+    private fun blendNursery(dt: Float): Boolean {
+        val goal = if (nurseryOn) 1f else 0f
+        if (nurseryMix != goal) {
+            val d = dt / SHELF_TRAVEL_S
+            nurseryMix = if (goal > nurseryMix) kotlin.math.min(goal, nurseryMix + d) else max(goal, nurseryMix - d)
+        }
+        if (nurseryMix <= 0f) return false
+        val c = com.reeflive.core.sim.NurseryTank.CENTER
+        val dist = 62f
+        val e = smooth01(nurseryMix)
+        val ex = c.x.toFloat() + 6f; val ey = c.y.toFloat() + 9f; val ez = com.reeflive.core.sim.NurseryTank.Z1.toFloat() + dist
+        val ax = c.x.toFloat(); val ay = c.y.toFloat() - 1f; val az = c.z.toFloat()
+        eye[0] += (ex - eye[0]) * e; eye[1] += (ey - eye[1]) * e; eye[2] += (ez - eye[2]) * e
+        aim[0] += (ax - aim[0]) * e; aim[1] += (ay - aim[1]) * e; aim[2] += (az - aim[2]) * e
+        eye[1] += sin(PI.toFloat() * e) * SHELF_ARC_UP
+        return nurseryMix > 0.5f
+    }
 
     /** Advances the shelf travel and look springs, then blends the shelf framing over [eye] / [aim]. */
     private fun blendShelf(dt: Float) {
@@ -342,9 +368,16 @@ class Camera {
         if (fZoomS.omega != OMEGA_TOUCH) fZoomS.omega = OMEGA_TOUCH
     }
 
+    /** Glides to the nursery tank ([on]) or back to the tank view; stops any follow. */
+    fun lookAtNursery(on: Boolean) {
+        if (on && followId != null) releaseFollow()
+        nurseryOn = on
+    }
+
     /** One-finger drag in pixels. In follow mode it swings the camera around the fish. */
     fun orbit(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
         if (shelfOn) { shelfDrag(dxPx, dyPx, viewHeightPx); return }
+        if (nurseryOn) { nurseryOn = false; return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         if (rideOn) {
             rideYaw -= dxPx * k
@@ -381,6 +414,7 @@ class Camera {
     /** Pinch: factor > 1 zooms in (about the view centre). */
     fun zoom(factor: Float) {
         if (factor <= 0f || shelfOn) return
+        if (nurseryOn) { nurseryOn = false; return }
         if (touching) zoomPending += -ln(factor)
         if (followId != null) { touchFeel(); followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE) }
         else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE) }
@@ -477,6 +511,7 @@ class Camera {
             initialized = true
         }
         blendShelf(step)
+        val inNursery = blendNursery(step)
         // Clearances from the near plane this framing will get, so the near plane can never cut into anything solid.
         val pre = eyeAimDistance()
         val corner = EyeCollider.nearCornerDistance(nearFor(pre), fovY, aspect)
@@ -492,7 +527,10 @@ class Camera {
             colliders.boxClearance = max(BOX_CLEARANCE, corner + 0.6f)
             colliders.bodyClearance = max(BODY_CLEARANCE, corner + 0.4f)
         }
-        if (shelfMix > 0f) {
+        if (inNursery) {
+            // the nursery tank sits outside the display: no display collision
+            ballOn = false
+        } else if (shelfMix > 0f) {
             // the shelf beside the tank: only the old rock / glass clamp
             clampEye(eye, sdf)
             ballOn = false
