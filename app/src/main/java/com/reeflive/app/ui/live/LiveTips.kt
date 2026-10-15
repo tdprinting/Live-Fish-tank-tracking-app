@@ -13,7 +13,7 @@ object LiveTips {
 
     /** One line per tip, in the order the card shows them (the card pairs each with a glyph). */
     val watch = listOf(
-        "Tap a fish to meet it. Tap Follow on its card to swim along with it.",
+        "Tap a fish to meet it. Press and hold a fish (or tap Follow on its card) to swim along with it.",
         "A fish's card says what it is thinking. Thought bubbles in More shows it in the tank.",
         "Tap the glass and see who comes to look. Tap the sand or a rock too.",
         "Hold a finger on the glass, then slide it: fish follow. Flick it to make a splash of current.",
@@ -44,6 +44,7 @@ object LiveTips {
     /** Hermie's tips, one per tap on him. */
     val hermieWatch = listOf(
         "Tap a fish to meet it!",
+        "Press and hold a fish to ride along with it!",
         "Tap the glass and see who comes to look!",
         "Hold a finger on the glass and slide it. Fish follow!",
         "Tap the top of the water. Hungry fish come up!",
