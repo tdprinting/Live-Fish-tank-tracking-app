@@ -201,7 +201,9 @@ class BodyCollisionTest {
         cost(true); cost(false)
         val on = cost(true); val off = cost(false)
         println("BodyCollisionTest: sim tick %.0f µs with bodies, %.0f µs without (collision %.0f µs per tick)".format(on, off, on - off))
+        println("BodyCollisionTest: $armCheck")
         assertTrue("body into geometry by %.3f cm: $worstEnvWho".format(worstEnv), worstEnv <= tol)
+        armCheck.failure()?.let { throw AssertionError(it) }
         assertTrue("bodies overlap by %.3f cm: $worstPairWho".format(worstPair), worstPair <= tol)
     }
 
@@ -210,6 +212,9 @@ class BodyCollisionTest {
      * stations and midpoints) tested directly against the rock SDF, the sand height, the glass and the surface.
      */
     private var lastTerm = ""
+
+    /** The brittle star's arms, by BrittleMotionTest's arm criterion ([BrittleArmCheck]). */
+    private val armCheck = BrittleArmCheck()
 
     private fun ringPenetration(sim: Simulation, o: Organism): Double {
         val b = o.body
@@ -230,7 +235,7 @@ class BodyCollisionTest {
                 val s = i / 10.0
                 if (s > arms.armLen[k]) break
                 val d = sim.crawlSurface.dist(arms.armPoint(o, k, s)) - 0.0105 * 0.62 * (1 - 0.82 * Math.pow(s, 1.25)) * o.lengthCm
-                if (-d > worst) { worst = -d; lastTerm = "brittle arm $k s=$s" }
+                armCheck.add(-d) { "arm $k s=$s at ${arms.armPoint(o, k, s)} t=${sim.simTimeSec}" }
             }
         }
         val onRig = seat != null || arms != null

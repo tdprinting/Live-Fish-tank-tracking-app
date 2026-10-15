@@ -44,6 +44,9 @@ import kotlin.math.sin
  * by day and two by night).
  */
 class NoOverlapTest {
+    /** The brittle star's arms, by BrittleMotionTest's arm criterion ([BrittleArmCheck]). */
+    private val armCheck = BrittleArmCheck()
+
     private val tankGlb: File? = listOf("../app/src/main/assets/models/tank.glb", "app/src/main/assets/models/tank.glb").map(::File).firstOrNull { it.isFile }
 
     private fun teeSim(seed: Long, hour: Double): Simulation {
@@ -101,9 +104,10 @@ class NoOverlapTest {
             }
         }
         val report = "NoOverlapTest: ${"%.1f".format(hours)} h x ${RUNS.size} runs (seeds/hours $RUNS), tolerance $TOL cm\n  " +
-            listOf(pairs, env, obs).joinToString("\n  ") { it.report() } + "\n  coral contacts (soft, not counted): $coralContacts"
+            listOf(pairs, env, obs).joinToString("\n  ") { it.report() } + "\n  coral contacts (soft, not counted): $coralContacts" +
+            "\n  $armCheck" + (armCheck.failure()?.let { "\n  $it" } ?: "")
         println(report)
-        assertTrue(report, !pairs.failed && !env.failed && !obs.failed)
+        assertTrue(report, !pairs.failed && !env.failed && !obs.failed && armCheck.failure() == null)
     }
 
     /** Every section point of [o]'s body against the rock, sand and glass ([env]) and the static obstacles ([obs]). */
@@ -153,7 +157,7 @@ class NoOverlapTest {
                 val s = i / 10.0
                 if (s > arms.armLen[k]) break
                 val d = sim.crawlSurface.dist(arms.armPoint(o, k, s)) - 0.0105 * 0.62 * (1 - 0.82 * Math.pow(s, 1.25)) * o.lengthCm
-                if (-d > worstEnv) { worstEnv = -d; envWhere = "brittle arm $k s=$s" }
+                armCheck.add(-d) { "arm $k s=$s at ${arms.armPoint(o, k, s)} t=${sim.simTimeSec}" }
             }
         }
         val who = "${o.id} '${o.behaviorName}' posture ${o.posture}"
