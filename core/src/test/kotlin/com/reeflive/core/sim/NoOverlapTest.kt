@@ -114,6 +114,9 @@ class NoOverlapTest {
         val mask = StaticObstacles.passMask(o)
         val seat = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
         val intake = o.brainKind == BrainKind.DIAMOND_GOBY && o.mouth >= 0.9
+        // a brittle star on its arms: its rig rests the disc and the arms on the rock, sand and glass, measured below
+        val arms = (o.limbRig as? BrittleArms)?.takeIf { o.seatOn }
+        val onRig = seat != null || arms != null
         var worstEnv = Double.NEGATIVE_INFINITY; var envWhere = ""
         var worstObs = Double.NEGATIVE_INFINITY; var obsWhere = ""
         for (i in 0 until BodyState.N) for (half in 0..1) {
@@ -130,7 +133,7 @@ class NoOverlapTest {
                 // k = RIM: the section centre (a body wholly inside a thin obstacle has no rim point in it)
                 val q = if (k == RIM) p + up * c else p + up * (c + a * cos(k * 2 * Math.PI / RIM)) + side * (w * sin(k * 2 * Math.PI / RIM))
                 // (a seated crawler's rock, sand and glass are its seat's, measured on its contact points below)
-                val terms = if (seat != null) doubleArrayOf(-1.0, -1.0, -1.0, -1.0)
+                val terms = if (onRig) doubleArrayOf(-1.0, -1.0, -1.0, -1.0)
                     else doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm))
                 // (a sand sifter's snout in the bed while it takes a mouthful, up to [MOUTH_INTAKE_CM]: see the class doc)
                 if (i == 0 && half == 0 && intake) { terms[0] -= MOUTH_INTAKE_CM; terms[1] -= MOUTH_INTAKE_CM }
@@ -142,6 +145,16 @@ class NoOverlapTest {
         if (seat != null) {
             val d = seat.contactDepth(sim.crawlSurface, o.lengthCm)
             if (d > worstEnv) { worstEnv = d; envWhere = "seat contact" }
+        }
+        if (arms != null) {
+            // the disc's underside and each arm, as BrittleMotionTest measures them
+            if (-arms.discUnderCm > worstEnv) { worstEnv = -arms.discUnderCm; envWhere = "brittle disc" }
+            for (k in 0 until BrittleArms.ARMS) for (i in 1..10) {
+                val s = i / 10.0
+                if (s > arms.armLen[k]) break
+                val d = sim.crawlSurface.dist(arms.armPoint(o, k, s)) - 0.0105 * 0.62 * (1 - 0.82 * Math.pow(s, 1.25)) * o.lengthCm
+                if (-d > worstEnv) { worstEnv = -d; envWhere = "brittle arm $k s=$s" }
+            }
         }
         val who = "${o.id} '${o.behaviorName}' posture ${o.posture}"
         env.note(o.species.id, worstEnv) { "$who, $envWhere at ${fmt(o.pos)} seed $seed t=${"%.1f".format(t)}" }

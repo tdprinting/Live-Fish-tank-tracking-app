@@ -14,6 +14,9 @@ import kotlin.math.sqrt
  * (SIMULATION §4.3, [BodyShape]) placed on the bent spine with the body's up and side axes. Rebuilt by [refresh].
  */
 /** Drawn rigid and centred on its spine head (the renderer's limb-rigged crawlers, TankRenderer uLimbOn). */
+/** A limb-rigged crawler's body that its sim position's projection onto the rock put this deep (cm) is resolved again. */
+internal const val REPROJECT_CM = 0.05
+
 internal fun drawnCentred(o: Organism): Boolean = (o.limbRig?.out?.size ?: 0) >= 40
 
 /**
@@ -404,7 +407,11 @@ class BodyCollision(private val rock: RockData) {
                 // nor under the sand (sand that settled over it, a placement onto an old height), where a rock roof
                 // leaves the room to stand on it
                 val fy = rock.floorY(o.pos.x, o.pos.z)
-                if (o.pos.y < fy && rock.sdf.dist(o.pos.withY(fy)) > 0.0) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
+                var moved = dr < 0.0
+                if (o.pos.y < fy && rock.sdf.dist(o.pos.withY(fy)) > 0.0) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0); moved = true }
+                // the body moved with that projection: out of the rock and sand again where it put a section back in
+                // (the projection is of the point the feet stand round; the body round it may lie along a curved face)
+                if (moved && rimDepth(o, rockOn, surfaceOn) > REPROJECT_CM) resolveEnv0(o, dt, rockOn, surfaceOn, settle, false)
             }
         }
     }
