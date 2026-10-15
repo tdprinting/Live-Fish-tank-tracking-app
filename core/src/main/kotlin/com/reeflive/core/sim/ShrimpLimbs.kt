@@ -20,7 +20,12 @@ import kotlin.math.sqrt
  *    the skin or rock, pluck, and carry the morsel back to the mouth, left and right alternating;
  *  - 11: (picking weight, planted weight, left antenna lift, right antenna lift): the antennae lift away from rock ahead and
  *    drape down over a client while cleaning;
- *  - 12: (0, drop, pitch, roll), the body seated on its legs (model units; y −= drop + pitch·(x − [SEAT_X]) + roll·z).
+ *  - 12: (0, drop, pitch, roll), the body seated on its legs (model units; y −= drop + pitch·(x − [SEAT_X]) + roll·z);
+ *  - 13, 14: the banded shrimp's big chelipeds, left and right: (0, model-space claw-tip offset xyz). While it
+ *    forages they take turns reaching into the rock (into the most sheltered nook the claw can reach: a crevice),
+ *    working there and drawing back to hand the morsel to the small chelae; at a fish that keeps pushing in it
+ *    sometimes strikes: one claw shoots out to the fish's flank, clamps onto its skin and holds on (riding the fish's
+ *    frame as it twists) until the fish tears free or the shrimp lets go, then draws back (research 20).
  *
  * The brains call nothing here: [step] runs from Steering with the stride clock, [plant] from the Simulation after
  * steering with the surface (and [Organism.ridingOn], the fish being cleaned).
@@ -47,6 +52,19 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
     private var seatR = 0.0
     private var antL = 0.0
     private var antR = 0.0
+
+    private val clawPhase = doubleArrayOf(0.0, 0.5)
+    private val clawSpot = arrayOfNulls<Vec3>(2)
+    private var probing = 0.0
+    private var strikeT = -1.0
+    private var strikeSide = 0
+    private var strikeFish: Organism? = null
+    /** Where the claw holds the fish, in the fish's own frame (along heading, up, side; cm from its head). */
+    private var latch: Vec3? = null
+    private var holdFor = 0.0
+    private var releaseAt = -1.0
+    private var releaseFrom: Vec3? = null
+    private var strikeReady = 0.0
 
     override fun step(o: Organism, dt: Double, speed: Double) {
         val k = min(1.0, dt * EASE_RATE)
@@ -86,7 +104,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
             val base = (i / 2) * 3
             if (legs[base + 1] > 0.0) { put(1 + i, 0.0, 0.0, 0.0, 0.0); continue }   // no such leg (banded pair 2)
             val side = if (i % 2 == 1) 1.0 else -1.0
-            val rest = world(o, f, up, rt, legs[base], legs[base + 1], legs[base + 2] * side)
+            val rest = world(o, f, up, rt, legs[base], legs[base + 1], legs[base + 2] * -side)
             val home = if (!grounded) null else if (rider != null) grip(rider, rest, up, L)
                 else surf.dist(rest).let { d -> if (d > REACH_BL * L) null else project(surf, rest - surf.normal(rest) * d) }
             if (home == null) {
@@ -122,7 +140,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
                 }
             }
             // a foot never reaches further from its hip than the leg is long
-            val hip = world(o, f, up, rt, legs[base] + HIP_DX, HIP_Y, HIP_Z * side)
+            val hip = world(o, f, up, rt, legs[base] + HIP_DX, HIP_Y, HIP_Z * -side)
             val reach = foot - hip
             val maxLen = LEG_BL * L
             if (reach.length() > maxLen) foot = hip + reach * (maxLen / reach.length())
@@ -141,7 +159,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
             val p = j / 2
             val side = if (j % 2 == 1) 1.0 else -1.0
             val base = p * 3
-            val restTip = world(o, f, up, rt, picks[base], picks[base + 1], picks[base + 2] * side)
+            val restTip = world(o, f, up, rt, picks[base], picks[base + 1], picks[base + 2] * -side)
             val prev = pickPhase[j]
             pickPhase[j] = frac(prev + dt * hz * (if (p == 0) 1.0 else 0.85))
             if (pickPhase[j] < prev || pickSpot[j] == null) {
@@ -182,6 +200,135 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
         val ae = min(1.0, dt * 5.0)
         antL += (tl.coerceAtMost(1.0) - antL) * ae; antR += (tr.coerceAtMost(1.0) - antR) * ae
         put(11, min(picking, 0.99), planted, antL, antR)
+
+        if (o.brainKind == BrainKind.BANDED_SHRIMP) chelipeds(o, surf, f, up, rt, L, dt, ease)
+    }
+
+    /** True while a cheliped strike is under way (tests, brains). */
+    val striking: Boolean get() = strikeT >= 0
+
+    /** The fish the striking claw is clamped onto, and where (world), else null (tests). */
+    internal fun held(): Pair<Organism, Vec3>? {
+        val fish = strikeFish ?: return null
+        val lt = latch ?: return null
+        if (releaseAt >= 0) return null
+        val (h, u, sd) = fishFrame(fish)
+        return fish to (fish.pos + h * lt.x + u * lt.y + sd * lt.z)
+    }
+
+    /**
+     * Asks for a strike at [target] (the brain calls this while its claws are up at a fish close by). Most calls do
+     * nothing: a strike comes about once every [STRIKE_MEAN_S] of such a stand-off, never twice within 3 s.
+     */
+    fun considerStrike(o: Organism, target: Organism, dt: Double) {
+        if (strikeT >= 0 || strikeReady > 0) return
+        if (target.pos.distanceTo(o.pos) > STRIKE_CM) return
+        if (rand() < dt / STRIKE_MEAN_S) {
+            strikeT = 0.0; strikeFish = target; latch = null; releaseAt = -1.0; releaseFrom = null
+            holdFor = HOLD_MIN_S + (HOLD_MAX_S - HOLD_MIN_S) * rand()
+            strikeSide = if ((target.pos - o.pos) dot (o.heading cross o.up) > 0) 1 else 0
+        }
+    }
+
+    /** The point on [fish]'s skin facing the claw at [from] (a ray at the middle of its body), or null. */
+    private fun skinFacing(fish: Organism, from: Vec3, reach: Double): Vec3? {
+        val mid = fish.pos - fish.heading.normalized() * (0.4 * fish.lengthCm)
+        val dir = (mid - from).normalized(fish.up)
+        val hit = onBody(fish, from, dir, reach) ?: return null
+        return hit - dir * GRIP_GAP_CM   // the fingers close on the skin, not inside it
+    }
+
+    private fun fishFrame(fish: Organism): Triple<Vec3, Vec3, Vec3> {
+        val h = fish.heading.normalized()
+        val u = fish.up.rejectFrom(h).normalized(Vec3.Y)
+        return Triple(h, u, h cross u)
+    }
+
+    /**
+     * The striking claw's tip this tick (world), or null when the strike is over. Reach out to the skin facing the
+     * claw (0.18 s); if it gets there, clamp on and hold in the fish's own frame for [holdFor] s, letting go early
+     * when the fish pulls out of reach; then draw back to rest (0.35 s). A strike that cannot reach the skin is a
+     * snap at the water and comes straight back.
+     */
+    private fun strikeTip(rest: Vec3, L: Double, dt: Double): Vec3? {
+        strikeT += dt
+        val fish = strikeFish?.takeIf { it.alive }
+        val reach = STRIKE_BL * L
+        val lt = latch
+        if (releaseAt < 0) {
+            if (fish != null && lt != null) {
+                val (h, u, sd) = fishFrame(fish)
+                val held = fish.pos + h * lt.x + u * lt.y + sd * lt.z
+                if (held.distanceTo(rest) > reach * 1.1 || strikeT > STRIKE_REACH_S + holdFor) { releaseAt = strikeT; releaseFrom = held }
+                else return held
+            } else if (fish != null && strikeT < STRIKE_REACH_S) {
+                val target = skinFacing(fish, rest, reach) ?: (fish.pos - rest).clampLength(reach * 0.8).plus(rest)
+                val q = strikeT / STRIKE_REACH_S
+                return rest.lerp(target, q * q)
+            } else {
+                // arrived: clamp on if the skin is within reach, else it was a snap at the water
+                val at = fish?.let { skinFacing(it, rest, reach) }
+                if (fish != null && at != null) {
+                    val (h, u, sd) = fishFrame(fish)
+                    val d = at - fish.pos
+                    latch = Vec3(d dot h, d dot u, d dot sd)
+                    return at
+                }
+                releaseAt = strikeT
+                releaseFrom = fish?.let { (it.pos - rest).clampLength(reach * 0.8) + rest } ?: rest
+            }
+        }
+        val q = (strikeT - releaseAt) / RELEASE_S
+        if (q >= 1.0) return null
+        val from = releaseFrom ?: rest
+        return from.lerp(rest, q * q * (3 - 2 * q))
+    }
+
+    private fun chelipeds(o: Organism, surf: CrawlSurface, f: Vec3, up: Vec3, rt: Vec3, L: Double, dt: Double, ease: Double) {
+        val want = if (o.attached && o.alive && o.mouth > 0.25 && o.clawDisplay < 0.3) 1.0 else 0.0
+        probing += (want - probing) * min(1.0, dt * 3.0)
+        strikeReady = max(0.0, strikeReady - dt)
+        for (s in 0 until 2) {
+            val side = if (s == 1) 1.0 else -1.0
+            val rest = world(o, f, up, rt, CLAW_X, CLAW_Y + 0.07 * signal, (CLAW_Z - 0.12 * signal) * -side)
+            // a strike: out to the fish's skin, clamp on and hold, then back
+            if (strikeT >= 0 && s == strikeSide) {
+                val tip = strikeTip(rest, L, dt)
+                if (tip == null) {
+                    strikeT = -1.0; strikeFish = null; latch = null; strikeReady = 3.0
+                    putOffset(13 + s, 0.0, Vec3.ZERO, f, up, rt, L, 0.8, 1.0)
+                } else putOffset(13 + s, 0.0, tip - rest, f, up, rt, L, 0.8, 1.0)
+                continue
+            }
+            val prev = clawPhase[s]
+            clawPhase[s] = frac(prev + dt * CLAW_HZ)
+            if (clawPhase[s] < prev || clawSpot[s] == null) clawSpot[s] = crevice(surf, rest, f, up, rt, L)
+            val spot = clawSpot[s] ?: (rest + f * (0.1 * L) - up * (0.35 * L))
+            val hand = world(o, f, up, rt, HAND_X, HAND_Y, HAND_Z * -side)
+            // 0..0.35 reach in, 0.35..0.6 work the crevice, 0.6..0.9 draw back to the small chelae, then hold
+            val ph = clawPhase[s]
+            val tip = when {
+                ph < 0.35 -> { val q = ph / 0.35; hand.lerp(spot, q * q * (3 - 2 * q)) }
+                ph < 0.6 -> spot + f * (0.015 * L * sin(2 * PI * 3 * (ph - 0.35) / 0.25)) - up * (0.01 * L)
+                ph < 0.9 -> { val q = (ph - 0.6) / 0.3; spot.lerp(hand, q * q * (3 - 2 * q)) }
+                else -> hand
+            }
+            putOffset(13 + s, 0.0, tip - rest, f, up, rt, L, 0.8, probing)
+        }
+    }
+
+    /** The most sheltered rock point the claw can reach from [from]: a few rays ahead and down, scored by cover. */
+    private fun crevice(surf: CrawlSurface, from: Vec3, f: Vec3, up: Vec3, rt: Vec3, L: Double): Vec3? {
+        var best: Vec3? = null; var score = -1.0
+        for (k in 0 until 5) {
+            val dir = (f * (0.4 + 0.6 * rand()) - up * (0.5 + 0.7 * rand()) + rt * (rand() - 0.5)).normalized(-up)
+            val t = surf.cast(from, dir, CLAW_REACH_BL * L)
+            if (t <= 0) continue
+            val p = from + dir * t
+            val c = surf.rock.sdf.cover(p + surf.normal(p) * 0.5)
+            if (c > score) { score = c; best = p }
+        }
+        return best
     }
 
     /** One more step onto the surface: the first projection lands off it where the rock curves. */
@@ -232,7 +379,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
                 val base = (i / 2) * 3
                 if (legs[base + 1] > 0.0) continue
                 val side = if (i % 2 == 1) 1.0 else -1.0
-                val x = legs[base] - SEAT_X; val z = legs[base + 2] * side
+                val x = legs[base] - SEAT_X; val z = legs[base + 2] * -side
                 // astride a client the legs wrap round its flanks: seat on its back under the midline
                 val g = gap(surf, rider, rawWorld(o, f, up, rt, legs[base], legs[base + 1], if (rider != null) 0.0 else z), up, L) ?: continue
                 if (g > SEAT_MAX + 0.1 || g < -0.1) continue
@@ -279,7 +426,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
 
     companion object {
         const val EASE_RATE = 8.0
-        const val ENTRIES = 13
+        const val ENTRIES = 15
         /** Body lengths a planted foot may fall behind its rest place before the leg steps (design estimate). */
         const val STEP_BL = 0.07
         /** Swing duration; with a duty factor near 0.5 at a slow walk (research 19, shore crab analogue). */
@@ -312,6 +459,20 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
         /** Rest tips of the picking pairs P1, P2 (left side). */
         private val SKUNK_PICKS = doubleArrayOf(0.3785, -0.1656, -0.1303, 0.3351, -0.1655, -0.1303)
         private val BANDED_PICKS = doubleArrayOf(0.4102, -0.1715, -0.135, 0.3652, -0.1715, -0.135)
+        /** Banded cheliped (P3) rest tip, left (held raised and forward, shrimp.glb), and the hand-off point. */
+        const val CLAW_X = 0.7062; const val CLAW_Y = 0.3677; const val CLAW_Z = -0.4062
+        const val HAND_X = 0.5; const val HAND_Y = -0.02; const val HAND_Z = -0.12
+        /** Crevice strokes per second per claw (DESIGN ESTIMATE, research 20) and how far a claw reaches (body lengths). */
+        const val CLAW_HZ = 0.45
+        const val CLAW_REACH_BL = 0.9
+        /** Strike: fish within [STRIKE_CM], about once per [STRIKE_MEAN_S] of claws-up stand-off (DESIGN ESTIMATE). */
+        const val STRIKE_CM = 6.0
+        const val STRIKE_MEAN_S = 6.0
+        const val STRIKE_BL = 0.6
+        /** Strike timing: reach, hold on the fish (DESIGN ESTIMATE), let go; and how far off the skin the tip sits. */
+        const val STRIKE_REACH_S = 0.18; const val HOLD_MIN_S = 0.6; const val HOLD_MAX_S = 1.5; const val RELEASE_S = 0.35
+        const val GRIP_GAP_CM = 0.08
+
 
         /**
          * The fish [c]'s body depth profile, 0..1 of its greatest half-depth at [xn] of its length from the snout:

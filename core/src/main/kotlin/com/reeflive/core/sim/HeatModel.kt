@@ -73,6 +73,10 @@ object HeatModel {
     // shrimp (no acclimation reserve, short LOE), with a sand refuge.
     val CEPHALOPOD = Profile("bobtail squid (est.)", 33.5, 28.5, 20.0, 1.2, 0.5, 10.0, acclimates = false, pLethargic = 0.5, pLoe = 0.9)
 
+    // Bubble-tip anemone (est., research 40 §8.1): wild stock bleaches at 27 °C over days and dies near 29 °C sustained
+    // (Hill & Scott 2012); the slow bleaching is AnemoneModel's, this is only the acute heat response, like the tube worm.
+    val ANEMONE = Profile("bubble tip anemone (est.)", 35.0, 30.0, 120.0, 1.0, 0.0, 15.0)
+
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> SHRIMP
@@ -92,6 +96,7 @@ object HeatModel {
         BrainKind.EEL -> MORAY
         BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
+        BrainKind.ANEMONE -> ANEMONE
     }
 
     fun isSnail(kind: BrainKind) = kind == BrainKind.ASTREA || kind == BrainKind.NASSARIUS

@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,9 @@ import com.reeflive.app.render.BurstKind
 import com.reeflive.app.render.TankBurst
 import com.reeflive.app.render.TankBursts
 import com.reeflive.app.render.SupplyShelfControl
+import com.reeflive.app.render.CareAct
+import com.reeflive.app.render.CareJob
+import com.reeflive.app.render.CareShowControl
 import com.reeflive.app.render.TankProjection
 import com.reeflive.app.render.ViewLight
 import com.reeflive.app.render.TankView
@@ -162,6 +166,8 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.CoralKind
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
+import com.reeflive.core.sim.CareFix
+import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.SupplyPreview
@@ -345,6 +351,9 @@ fun LiveTankScreen(
     // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
     var heaterSet by rememberSaveable { mutableDoubleStateOf(HEATER_DEFAULT_C) }
     var heaterWorking by rememberSaveable { mutableStateOf(true) }
+    // Fix tank: the 3D upkeep show and the fixes still queued or playing in it
+    val careShow = remember { CareShowControl() }
+    val fixQueued = remember { mutableStateListOf<TankDoctor.Kind>() }
     var dial by remember { mutableStateOf<TankGauge?>(null) }
     val reduceMotion = ReefTheme.reduceMotion
     SideEffect {
@@ -411,7 +420,10 @@ fun LiveTankScreen(
     // a tap on a fish picks it (and brings hidden buttons back so its card can show); a tap anywhere else undoes what
     // is open (LiveTaps), else touches the tank (onTouchTank). It never hides the buttons or drops a followed fish.
     val onPick: (String?) -> Unit = { id ->
-        if (id != null) {
+        if (subUi.on) {
+            // in the sub a tap on a fish sends it over to keep that fish company; empty water does nothing
+            if (id != null) { tick(); vm.watchSubmarine(id, hud.submarine?.watchMode ?: com.reeflive.core.sim.SubWatch.HOVER) }
+        } else if (id != null) {
             if (touring) { touring = false; vm.follow(null) }
             chromeHidden = false
             haptics.tick()       // every touch answers: a tick here, a ring around the animal in the tank (TankRenderer.touchRing)
@@ -641,6 +653,44 @@ fun LiveTankScreen(
         onMicro = { a -> tick(); cue(LiveReactions.micro(a)) { vm.micro(a) } },
         onHelp = { tick(); open = null; vm.select(null); tipsAsked = true },
     )
+    // Fix tank: each fix plays in the 3D tank (render CareScene: the cup comes off and is emptied, the sock is swapped,
+    // the bottle pours) and its commands go in when the animation reaches the water; heater, pumps and coral food
+    // use their usual pictures. Queued kinds drop off the list so a fix is never sent twice.
+    fun playFix(f: CareFix) {
+        if (f.kind in fixQueued) return
+        fixQueued += f.kind
+        val act = when (f.kind) {
+            TankDoctor.Kind.EMPTY_SKIMMER -> CareAct.EMPTY_CUP
+            TankDoctor.Kind.SWAP_SOCK -> CareAct.SWAP_SOCK
+            TankDoctor.Kind.FRESH_CARBON -> CareAct.SWAP_CARBON
+            TankDoctor.Kind.DOSE_MG, TankDoctor.Kind.DOSE_CA, TankDoctor.Kind.DOSE_ALK -> CareAct.DOSE
+            TankDoctor.Kind.TOP_OFF -> CareAct.TOP_OFF
+            TankDoctor.Kind.WATER_CHANGE, TankDoctor.Kind.RAISE_SALT -> CareAct.WATER_CHANGE
+            TankDoctor.Kind.LOWER_SALT -> CareAct.RO_SWAP
+            TankDoctor.Kind.HEATER, TankDoctor.Kind.PUMPS, TankDoctor.Kind.FEED_CORALS -> CareAct.PAUSE
+        }
+        val tint = when (f.kind) {
+            TankDoctor.Kind.DOSE_ALK -> 0xB08CFF
+            TankDoctor.Kind.DOSE_CA -> 0xE8F2FF
+            TankDoctor.Kind.DOSE_MG -> 0x8FE66B
+            TankDoctor.Kind.RAISE_SALT -> 0xD6F2FF
+            else -> 0xBFE6FF
+        }
+        val impact: () -> Unit = when (f.kind) {
+            TankDoctor.Kind.HEATER -> ({ heaterWorking = true; heaterSet = TankDoctor.HEATER_C; cue(LiveReactions.heater(true)) { vm.care(f.commands) } })
+            TankDoctor.Kind.PUMPS -> ({ cue(LiveReactions.pump("pump_left", true)) { vm.care(f.commands) } })
+            TankDoctor.Kind.FEED_CORALS -> ({ cue(LiveReactions.feed(FoodKind.CORAL_FOOD)) { vm.care(f.commands) } })
+            else -> ({ vm.care(f.commands); if (hermieOn) hermie.say(fixDoneLine(f.kind), HermieMood.HAPPY) })
+        }
+        if (act != CareAct.PAUSE) banner.show(Feedback(f.title, f.why), Candy.green)
+        careShow.play(CareJob(act, tint, f.amount.toFloat(), onImpact = impact, onDone = {
+            fixQueued -= f.kind
+            if (fixQueued.isEmpty()) {
+                banner.show(Feedback("All fixed!", "The tank check is happy. Check again in a few days."), Candy.green)
+                if (hermieOn) hermie.say("All done! The tank is happy again.", HermieMood.EXCITED)
+            }
+        }))
+    }
     val onModeChange: (HudMode) -> Unit = { m ->
         val target = when (m) { HudMode.SANDBOX -> SimMode.SANDBOX; HudMode.MY_TANK -> SimMode.CUSTOM; HudMode.WATCH -> SimMode.REALITY }
         // tapping the side that is already picked never hides anything: it only brings the menu back out
@@ -739,6 +789,14 @@ fun LiveTankScreen(
         // Watch card "Feed": the food lives on the supply shelf now, so it opens the shelf (same as the Supplies bubble)
         onOpenFeed = { openShelf() },
         onSupplies = { openShelf() },
+        fixes = if (open == LiveCategory.FIX) TankDoctor.diagnose(hud.water, hud.care).filter { it.kind !in fixQueued } else emptyList(),
+        fixing = fixQueued.size,
+        onFix = { f -> tick(); playFix(f) },
+        onFixAll = {
+            tick()
+            if (hermieOn) hermie.say("Let's fix it all up! Watch the tank.", HermieMood.EXCITED)
+            TankDoctor.diagnose(hud.water, hud.care).filter { it.kind !in fixQueued }.forEach(::playFix)
+        },
         onHeatWave = {
             tick()
             SandboxParams.byId("temp")?.let { def ->
@@ -870,6 +928,7 @@ fun LiveTankScreen(
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
             bottomPad = BottomBarClearance,
             shelf = shelf,
+            care = careShow,
             onTouchTank = onTouchTank,
             onFinger = onFinger,
             onFlick = onFlick,
@@ -944,10 +1003,16 @@ fun LiveTankScreen(
         // switching between the real tank and the sandbox copy swaps simulations: launch the sub in the new one too
         LaunchedEffect(sandbox) { if (subUi.on) vm.setSubmarine(subUi) }
         if (subUi.on && !micro) {
+            val watchId = hud.submarine?.watchId
             SubmarineControls(
                 ui = subUi,
                 curious = hud.submarine?.curious,
                 wary = hud.submarine?.wary,
+                watchName = watchId?.let { w -> hud.stats.firstOrNull { it.id == w }?.let { it.nickname.ifBlank { it.common } } },
+                watchMode = hud.submarine?.watchMode ?: com.reeflive.core.sim.SubWatch.HOVER,
+                onWatchMode = { m -> tick(); if (watchId != null) vm.watchSubmarine(watchId, m) },
+                onLetGo = { tick(); vm.watchSubmarine(null) },
+                onNextFish = { d -> tick(); vm.watchSubmarineNext(d) },
                 onSteer = vm::steerSubmarine,
                 onChange = { u ->
                     tick(); vm.setSubmarine(u)
@@ -1055,6 +1120,19 @@ private fun bannerTone(r: Reaction): Color = when (r.fx.kind) {
 private const val TOUR_STOP_MS = 12_000L
 /** The sim's default heater set point (WaterState.heaterSetC default). */
 private const val HEATER_DEFAULT_C = 25.5
+
+/** Hermie's line as each fix lands. */
+private fun fixDoneLine(k: TankDoctor.Kind): String = when (k) {
+    TankDoctor.Kind.EMPTY_SKIMMER -> "Eww, skimmer goo! Cup's clean now."
+    TankDoctor.Kind.SWAP_SOCK -> "Stinky old sock out, fresh one in!"
+    TankDoctor.Kind.FRESH_CARBON -> "Fresh carbon for sparkly water."
+    TankDoctor.Kind.WATER_CHANGE -> "Fresh salt water! The fish love it."
+    TankDoctor.Kind.TOP_OFF -> "Topped off with fresh water."
+    TankDoctor.Kind.LOWER_SALT -> "A little less salty now."
+    TankDoctor.Kind.RAISE_SALT -> "A little saltier now."
+    TankDoctor.Kind.DOSE_MG, TankDoctor.Kind.DOSE_CA, TankDoctor.Kind.DOSE_ALK -> "Coral vitamins in! Just the right amount."
+    else -> "Fixed!"
+}
 /** Supplies: how long a picked prop's label shows before the camera glides back, and the glide (Camera.SHELF_TRAVEL_S). */
 private const val SHELF_LABEL_MS = 700L
 private const val SHELF_LABEL_REDUCED_MS = 300L
@@ -1109,6 +1187,7 @@ private fun TankArea(
     onSkip: () -> Unit,
     bottomPad: Dp,
     shelf: SupplyShelfControl,
+    care: CareShowControl,
     onTouchTank: (Vec3, TouchSurface) -> Unit,
     onFinger: (Vec3?, Float, TouchSurface) -> Unit,
     onFlick: (Vec3, Vec3) -> Unit,
@@ -1138,6 +1217,7 @@ private fun TankArea(
             bursts = bursts,
             viewLight = viewLight,
             shelf = shelf,
+            care = care,
             subFirstPerson = sub.on && sub.inside,
             followCam = followCam,
         )
