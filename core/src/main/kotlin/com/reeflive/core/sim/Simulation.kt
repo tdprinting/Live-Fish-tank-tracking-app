@@ -164,6 +164,8 @@ class Simulation private constructor(
     val sandWork = SandWork(sand, rock)
     /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
     val sandContact = SandContact(sand, rock.sdf)
+    /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
+    val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
 
     // ============================================================== dynamic rockscape
     /** Loose rocks as rigid bodies while [dynamicRocks] is on (null for a scape without separate rocks). */
@@ -439,6 +441,7 @@ class Simulation private constructor(
     private val sandFlowAt: (Double, Double, Double) -> Vec3 = { x, y, z -> flow.velocityFast(Vec3(x, y, z)) }
     private var lastSandGridAt = -1e9
     private var sandGridCache: SandGridSnapshot? = null
+    private var sandRelaxPendingMin = 0.0
 
     /** A goby drops a mouthful of sand at [at]; nearby piles merge (max 8 piles). The sand bed gets the mound and a puff. */
     fun depositSand(at: Vec3, cm3: Double) {
@@ -628,10 +631,11 @@ class Simulation private constructor(
         bags.keepClear(this)
         net.keepClear(this)
         if (useBehavior && !abstractMode) nightPlankton(simDt)
-        if (sand.particleCount > 0) sand.stepClouds(min(simDt, 2.0), sandFlowAt)
+        sand.step(min(simDt, 2.0), sandFlowAt)
         stepRocks(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
+        waste.step(simDt, simTimeSec, water.s.tempC, organisms, water, useBehavior && !abstractMode, fluid?.hobOn ?: true)
         if (useBehavior && !abstractMode) coralCatch(simDt)
         // snails and stars on the front pane wear trails into the glass film (SIMULATION §11.1)
         if (useBehavior && !abstractMode) glassTrails.step(organisms, water.algae.glassMask, rock.widthCm)
@@ -821,6 +825,9 @@ class Simulation private constructor(
         var bio = 0.0
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
+        var fecalBio = 0.0
+        for (o in organisms) if (o.alive && o.isFish && !o.sleeping) fecalBio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC)
+        w.fecalBioIndex = fecalBio
         repro.step(CHEM_DT)
         SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(CHEM_DT / 60.0)
@@ -835,6 +842,7 @@ class Simulation private constructor(
         microDrivers()
         w.bacteria.bioturbation = sandStirrers()
         w.step(CHEM_DT)
+        waste.collect(organisms, w)
         applyRamps()
         cycle?.update(w.s, simTimeSec)
         // health
@@ -1198,7 +1206,9 @@ class Simulation private constructor(
      * settling from the column, and fines that stayed suspended reaching the filter sock or skimmer.
      */
     private fun sandTick(dtMin: Double) {
-        sand.relax(dtMin, flowStrength, water.s.detritus)
+        // the bed's slow upkeep runs in batches: disturbed sand already pours in real time (SandBed.step)
+        sandRelaxPendingMin += dtMin
+        if (sandRelaxPendingMin >= SAND_RELAX_EVERY_MIN) { sand.relax(sandRelaxPendingMin, flowStrength, water.s.detritus); sandRelaxPendingMin = 0.0 }
         val up = sand.resuspendedPending
         if (up > 0) {
             water.captureResuspended((up * RESUSPEND_CAPTURE_PER_LOAD).coerceAtMost(RESUSPEND_CAPTURE_MAX_PER_MIN * dtMin))
@@ -1238,7 +1248,10 @@ class Simulation private constructor(
             }
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
-            is Command.Maintain -> water.maintain(c.task)
+            is Command.Maintain -> {
+                water.maintain(c.task)
+                if (c.task == MaintenanceTask.SIPHON_SAND) { waste.siphon(); sand.siphon(WaterSim.SIPHON_SHARE) }
+            }
             is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
             is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
             is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
@@ -1816,11 +1829,12 @@ class Simulation private constructor(
             },
             noriRemaining = food.nori?.remaining?.toFloat() ?: 0f,
             sandGrid = run {
-                if (simTimeSec - lastSandGridAt > 0.25 * max(speed, 1.0) || sandGridCache == null) { lastSandGridAt = simTimeSec; sandGridCache = sand.gridSnapshot() }
+                if (simTimeSec - lastSandGridAt > (if (sand.busy) SAND_GRID_BUSY_S else 0.25) * max(speed, 1.0) || sandGridCache == null) { lastSandGridAt = simTimeSec; sandGridCache = sand.gridSnapshot() }
                 sandGridCache
             },
             sandClouds = sand.cloudArray(),
             foodMeta = food.exportMeta(simTimeSec),
+            waste = waste.export(simTimeSec),
             pumps = pumpArray(),
             nori = food.nori?.let { n ->
                 val cl = n.cloth
@@ -1900,6 +1914,10 @@ class Simulation private constructor(
         const val ABSTRACT_SPEED = 240.0
         /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
         const val MAX_BEHAVIOR_DT = 0.5
+        /** Sand grid refresh for the renderer while grains fly or slopes pour (s); 0.25 s when the bed is still. */
+        const val SAND_GRID_BUSY_S = 0.1
+        /** Sim minutes between the sand bed's slow upkeep passes (smoothing, freshness, detritus): a full-grid sweep. */
+        const val SAND_RELAX_EVERY_MIN = 3.0
         /** Nitrogen as a fraction of fish wet mass (~18 % protein × 16 % N ≈ 2-3 %). */
         const val CARCASS_N_FRACTION = 0.025
         /** Hours before a carcass starts leaching (autolysis), and the leach rate of what N is left (est.). */

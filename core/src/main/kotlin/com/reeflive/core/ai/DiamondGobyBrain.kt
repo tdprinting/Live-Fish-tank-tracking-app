@@ -28,8 +28,17 @@ import kotlin.math.sin
  */
 class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
-        /** Sand per mouthful for a ~12 cm fish (cm³). */
-        @Ev(Evidence.DESIGN_ESTIMATE, "16 diamond goby: mouthful size not measured") const val MOUTHFUL_CM3 = 0.35
+        /** Sand per mouthful (cm³): V. puellaris ≈ 0.18 cm³ at ≈ 9 mouthfuls a minute (Palaios 34(3), sand_bioturbation S1). */
+        @Ev(Evidence.SOURCED, "sand_bioturbation S1: ~0.18 cm3 per mouthful") const val MOUTHFUL_CM3 = 0.18
+        /** Nose-down pitch of the scoop (rise over run) and how deep the mouth bites into the bed (cm). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val SCOOP_PITCH = 0.7
+        const val MOUTH_IN_CM = 0.35
+        /** Gill openings behind the snout (share of body length) and the gill pumps that blow a mouthful out. */
+        @Ev(Evidence.DESIGN_ESTIMATE, "fish_diamond_goby: sand pouring out of the gills") const val GILL_AT_BL = 0.23
+        const val EXPEL_PULSES = 3
+        private val SIGNS = doubleArrayOf(1.0, -1.0)
+        /** Share of a mouthful that trickles from the corners of the mouth as it lifts out of the bed. */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val SPILL_SHARE = 0.06
         /** Gap kept between the fish and the rock face while it sifts at the rock foot (cm, render clearance). */
         const val ROCK_GAP_CM = 0.3
         /** Scoop (head down in the sand) and sift (chewing, gill flare) durations (s). */
@@ -236,6 +245,10 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         private var left = 0
         private var chew = 2.0
         private var fwd = Vec3.X
+        /** Sand in its mouth (cm³) between the scoop and the last gill pump. */
+        private var held = 0.0
+        private var pulses = 0
+        private var nextSeep = 0.0
         override val committed: Boolean get() = phase in 1..3
         override val label: String get() = when (phase) { 0 -> "Moving to a new patch of sand"; 1 -> "Taking a mouthful of sand"; 2 -> "Sifting sand through its gills"; else -> "Blowing sand out of its gills" }
         override fun score(c: Ctx): Double {
@@ -243,7 +256,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             return (0.55 + 0.3 * o.hunger) * max(c.activity, 0.3)
         }
         override fun enter(c: Ctx) {
-            phase = 0; timer = 0.0
+            phase = 0; timer = 0.0; held = 0.0; pulses = 0
             station = pickStation(c, if (station == Vec3.ZERO) burrow else station)
             left = MOUTHFULS_MIN + c.rng.nextInt(MOUTHFULS_MAX - MOUTHFULS_MIN + 1)
             fwd = horizontalHeading(station - o.pos, o.heading)
@@ -257,37 +270,56 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                     glide(c, out, s)
                     if (d < 2.0 || timer > 25) { phase = 1; timer = 0.0; fwd = horizontalHeading(o.heading, fwd) }
                 }
-                1 -> { // nose into the sand
-                    val head = Vec3(s.x, sand.surfaceY(s.x, s.z) + 0.3, s.z)
-                    out.place(offRock(head), Vec3(fwd.x, -0.6, fwd.z).normalized(fwd), Vec3.Y, 5.0)
+                1 -> { // nose into the sand: the mouth bites in at the station, the tail up
+                    val bed = sand.surfaceY(s.x, s.z)
+                    val d = Vec3(fwd.x, -SCOOP_PITCH, fwd.z).normalized(fwd)
+                    val mouthAt = Vec3(s.x, bed - MOUTH_IN_CM, s.z)
+                    out.place(offRock(mouthAt - d * (0.5 * o.lengthCm)), d, Vec3.Y, 5.0)
+                    o.inSand = true
                     o.mouth = 1.0
                     if (timer >= SCOOP_S) {
-                        sand.dig(s.x, s.z, MOUTHFUL_CM3, 1.0)
+                        // the mouthful comes out of the bed (a pit at the mouth) and is held while it sifts
+                        held = sand.scoop(s.x, s.z, MOUTHFUL_CM3, 0.9)
                         sand.sift(s.x, s.z, 1.2, 0.5)
+                        // a few grains trickle from the corners of the mouth as it lifts out
+                        val spill = held * SPILL_SHARE
+                        sand.expel(s.x, bed + 0.2, s.z, spill, fwd.x * 0.5, 1.5, fwd.z * 0.5, fines = 2, maxGrains = 6)
+                        held -= spill
                         mouthfuls++
-                        phase = 2; timer = 0.0; chew = c.rng.range(SIFT_MIN_S, SIFT_MAX_S)
+                        o.inSand = false
+                        phase = 2; timer = 0.0; chew = c.rng.range(SIFT_MIN_S, SIFT_MAX_S); nextSeep = 0.2
                     }
                 }
-                2 -> { // hover and sift: cheeks working, gills flared, drifting forward
+                2 -> { // hover and sift: cheeks working, gills flared, drifting forward; fines wash out of the gills
                     val p = s + fwd * (timer * 0.6)
                     out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
                     o.mouth = 0.3 + 0.2 * sin(c.t * 9.0)
                     o.gill = 0.8 + 0.2 * sin(c.t * 7.0)
                     o.gillRate = 2.5
-                    if (timer >= chew) { phase = 3; timer = 0.0 }
+                    if (timer >= nextSeep) {
+                        nextSeep += 0.3
+                        for (sg in SIGNS) { val g = gill(sg); val l = side(sg); sand.seep(g.x, g.y, g.z, 1, -fwd.x * 1.5 + l.x * 1.2, 0.3, -fwd.z * 1.5 + l.z * 1.2) }
+                    }
+                    if (timer >= chew) { phase = 3; timer = 0.0; pulses = 0 }
                 }
-                else -> { // expel from the gill openings
+                else -> { // blow it out of the gill openings in a few pumps: the grains pour down beside and behind it
                     val p = s + fwd * (chew * 0.6)
                     out.place(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z)), fwd, Vec3.Y, 3.0)
-                    o.gill = 1.0
-                    if (timer >= 0.15 && timer - c.dt < 0.15) {
-                        val g = o.pos - o.heading * (0.22 * o.lengthCm)
-                        val bed = sand.surfaceY(g.x, g.z)
-                        sand.puff(g.x, max(bed + 0.5, g.y - 0.3), g.z, 8, 5.0, -fwd.x * 1.5, -fwd.z * 1.5, finesShare = 0.5)
-                        sand.deposit(g.x, g.z, MOUTHFUL_CM3 - 8 * SandBed.GRAIN_CM3, 1.8)
-                        eatMouthful(c)
-                        dustCorals(c, g)
-                        puffs++
+                    o.gill = if (pulses < EXPEL_PULSES) 1.0 else 0.6
+                    if (pulses < EXPEL_PULSES && timer >= 0.1 + 0.14 * pulses) {
+                        pulses++
+                        val part = if (pulses == EXPEL_PULSES) held else held / (EXPEL_PULSES - pulses + 1)
+                        for (sg in SIGNS) {
+                            val g = gill(sg); val l = side(sg)
+                            sand.expel(g.x, g.y, g.z, 0.5 * part, l.x * 3.5 - fwd.x * 5.0, -0.5, l.z * 3.5 - fwd.z * 5.0, fines = 2, maxGrains = 16)
+                        }
+                        held -= part
+                        if (pulses == 1) {
+                            val g = o.pos + o.heading * (0.27 * o.lengthCm)
+                            eatMouthful(c)
+                            dustCorals(c, g)
+                            puffs++
+                        }
                     }
                     if (timer >= 0.5) {
                         o.gillRate = 1.0
@@ -310,7 +342,20 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
             }
         }
-        override fun exit(c: Ctx) { c.o.gillRate = 1.0 }
+
+        /** Unit vector to the fish's [sign] side (horizontal). */
+        private fun side(sign: Double): Vec3 = (fwd cross Vec3.Y).normalized(Vec3.Z) * sign
+
+        /** The gill opening on the [sign] side: [GILL_AT_BL] behind the snout, at the flank. */
+        private fun gill(sign: Double): Vec3 =
+            o.pos + o.heading * ((0.5 - GILL_AT_BL) * o.lengthCm) + side(sign) * (0.3 * o.species.depthRatio * o.lengthCm)
+
+        override fun exit(c: Ctx) {
+            c.o.gillRate = 1.0
+            c.o.inSand = false
+            // interrupted with a mouthful: it lets the sand go where it is
+            if (held > 0) { sand.expel(o.pos.x, o.pos.y, o.pos.z, held, 0.0, -1.0, 0.0, fines = 1, maxGrains = 10); held = 0.0 }
+        }
     }
 
     /** Burrow upkeep: duck in under the rock, come out with a mouthful and spit it a few cm away (a pit and a mound). */

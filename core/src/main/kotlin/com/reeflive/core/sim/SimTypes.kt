@@ -181,8 +181,9 @@ data class LivestockSeed(
     val offset: Vec3? = null,
 )
 
-/** Routine maintenance jobs (research 01 §3.5, §3.4): EMPTY_SKIMMER tips out the collection cup, TOP_OFF adds RO/DI for what evaporated. */
-enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO, EMPTY_SKIMMER, TOP_OFF }
+/** Routine maintenance jobs (research 01 §3.5, §3.4): EMPTY_SKIMMER tips out the collection cup, TOP_OFF adds RO/DI for what evaporated,
+ * RINSE_FILTER rinses the HOB floss, SIPHON_SAND gravel-vacs fish waste and mulm (research 18_fish_waste). */
+enum class MaintenanceTask { CHANGE_SOCK, REPLACE_CARBON, HARVEST_MACRO, EMPTY_SKIMMER, TOP_OFF, RINSE_FILTER, SIPHON_SAND }
 
 /**
  * Equipment and upkeep at a glance ([WaterSim.careState]): the skimmer cup's fill (0..1), the sock's age, how much
@@ -426,6 +427,8 @@ data class SimSnapshot(
      * settled (1/0) and a stable 0..1 seed. Renderer only (thawing cubes, fluttering flakes, spreading plankton haze).
      */
     val foodMeta: FloatArray = FloatArray(0),
+    /** Fish feces pellets, [WasteSystem.STRIDE] floats each: x, y, z, length (cm), tint, settled (0 / 1 + breakdown), seed, tumble. */
+    val waste: FloatArray = FloatArray(0),
     /**
      * Water movers for the renderer, [PUMP_STRIDE] floats each: nozzle x, y, z (cm), unit jet axis x, y, z, the jet's
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
