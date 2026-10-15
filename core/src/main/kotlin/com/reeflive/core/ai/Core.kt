@@ -119,9 +119,11 @@ class Perception(val sim: Simulation) {
     /** Activity curve (SIMULATION §4.4). */
     fun activity(o: Organism): Double {
         val day = smoothstep(0.05, 0.3, light)
-        return when (o.species.activity.uppercase()) {
-            "NOCTURNAL" -> 1 - day * 0.85
-            "CREPUSCULAR" -> {
+        // (compared ignoring case in place: an uppercase() copy per call was a string per animal per tick)
+        val a = o.species.activity
+        return when {
+            a.equals("NOCTURNAL", ignoreCase = true) -> 1 - day * 0.85
+            a.equals("CREPUSCULAR", ignoreCase = true) -> {
                 val dim = if (light in 0.03..0.35) 1.0 else 0.0
                 if (dim > 0) 1.0 else if (night) 0.7 else 0.5
             }

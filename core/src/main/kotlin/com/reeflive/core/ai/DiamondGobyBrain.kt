@@ -28,6 +28,11 @@ import kotlin.math.sin
  */
 class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
+        /** waryLevel above which it ducks into the burrow by day, and above which it stops sifting. */
+        const val WARY_HIDE = 0.3
+        const val WARY_SIFT = 0.4
+        /** Hysteresis band on both thresholds (see band()). */
+        const val WARY_BAND = 0.05
         /** Sand per mouthful (cm³): V. puellaris ≈ 0.18 cm³ at ≈ 9 mouthfuls a minute (Palaios 34(3), sand_bioturbation S1). */
         @Ev(Evidence.SOURCED, "sand_bioturbation S1: ~0.18 cm3 per mouthful") const val MOUTHFUL_CM3 = 0.18
         /** Nose-down pitch of the scoop (rise over run) and how deep the mouth bites into the bed (cm). */
@@ -41,6 +46,10 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         @Ev(Evidence.DESIGN_ESTIMATE) const val SPILL_SHARE = 0.06
         /** Gap kept between the fish and the rock face while it sifts at the rock foot (cm, render clearance). */
         const val ROCK_GAP_CM = 0.3
+        /** A scoop whose body pose has to be pushed this far (cm) off the rock is not taken there... */
+        const val SCOOP_ROCK_CM = 1.0
+        /** ...and after this many such stations in a row the sifting bout ends. */
+        const val SCOOP_MOVES = 3
         /** Scoop (head down in the sand) and sift (chewing, gill flare) durations (s). */
         const val SCOOP_S = 0.6
         @Ev(Evidence.DESIGN_ESTIMATE) const val SIFT_MIN_S = 1.5
@@ -216,12 +225,20 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     // ================================================================ behaviours
+    /**
+     * Hysteresis on the wary thresholds: -[WARY_BAND] for the behaviour in hand, +[WARY_BAND] for the others. InBurrow
+     * takes over above WARY_HIDE + 0.05 and lets go only below WARY_HIDE - 0.05; Sift, once going, keeps on up to
+     * WARY_SIFT + 0.05 and starts again only below WARY_SIFT - 0.05. A waryLevel hovering at a threshold
+     * no longer flips burrow / sift every few ticks (FishGlitch BEHAVIOUR_THRASH).
+     */
+    private fun band(b: Behavior): Double = if (utility.current === b) -WARY_BAND else WARY_BAND
+
 
     /** Night (and after a scare): tucked into the burrow under the rock. */
     inner class InBurrow : Behavior("burrow", "In its burrow") {
         override fun score(c: Ctx): Double = when {
             c.p.night -> 0.85 * Feed.nightRestDamp(c, this@DiamondGobyBrain)
-            o.waryLevel > 0.3 || o.startle > 0.25 -> 0.7
+            o.waryLevel > WARY_HIDE + band(this) || o.startle > 0.25 -> 0.7
             else -> 0.1
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -257,11 +274,15 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         override val committed: Boolean get() = phase in 1..3
         override val label: String get() = when (phase) { 0 -> "Moving to a new patch of sand"; 1 -> "Taking a mouthful of sand"; 2 -> "Sifting sand through its gills"; else -> "Blowing sand out of its gills" }
         override fun score(c: Ctx): Double {
-            if (c.p.night || o.waryLevel > 0.4) return 0.0
+            if (c.p.night || o.waryLevel > WARY_SIFT - band(this)) return 0.0
             return (0.55 + 0.3 * o.hunger) * max(c.activity, 0.3)
         }
+        /** Stations given up in a row because a scoop there would put the body in the rock. */
+        private var moves = 0
+        /** Head pose for a scoop at [s] pitched along [d]: the mouth in the bed, half a body length back up the pitch. */
+        private fun scoopPose(s: Vec3, d: Vec3): Vec3 = Vec3(s.x, sand.surfaceY(s.x, s.z) - MOUTH_IN_CM, s.z) - d * (0.5 * o.lengthCm)
         override fun enter(c: Ctx) {
-            phase = 0; timer = 0.0; held = 0.0; pulses = 0
+            phase = 0; timer = 0.0; held = 0.0; pulses = 0; moves = 0
             station = pickStation(c, if (station == Vec3.ZERO) burrow else station)
             left = MOUTHFULS_MIN + c.rng.nextInt(MOUTHFULS_MAX - MOUTHFULS_MIN + 1)
             fwd = horizontalHeading(station - o.pos, o.heading)
@@ -273,13 +294,24 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                 0 -> { // glide low over the sand to the station
                     val d = o.pos.distanceTo(s)
                     glide(c, out, s)
-                    if (d < 2.0 || timer > 25) { phase = 1; timer = 0.0; fwd = horizontalHeading(o.heading, fwd) }
+                    if (d < 2.0 || timer > 25) {
+                        val f = horizontalHeading(o.heading, fwd)
+                        val at = scoopPose(s, Vec3(f.x, -SCOOP_PITCH, f.z).normalized(f))
+                        // not got there (the straight glide is blocked by rock between): scooping at a station 9 cm
+                        // away put its head through the rock foot in one tick, the body folding in after it. Nor where
+                        // the body would lie in the rock (a station by a rock foot, or the burrow-mouth fallback). It
+                        // looks for open sand from where it is instead (a few tries, then the bout ends)
+                        if (d >= 2.0 || offRock(at).distanceTo(at) > SCOOP_ROCK_CM) {
+                            if (++moves >= SCOOP_MOVES) { finished = true; return }
+                            station = pickStation(c, o.pos); timer = 0.0
+                        } else { phase = 1; timer = 0.0; fwd = f }
+                    }
                 }
                 1 -> { // nose into the sand: the mouth bites in at the station, the tail up
                     val bed = sand.surfaceY(s.x, s.z)
                     val d = Vec3(fwd.x, -SCOOP_PITCH, fwd.z).normalized(fwd)
                     val mouthAt = Vec3(s.x, bed - MOUTH_IN_CM, s.z)
-                    out.place(offRock(mouthAt - d * (0.5 * o.lengthCm)), d, Vec3.Y, 5.0)
+                    out.place(offRock(scoopPose(s, d)), d, Vec3.Y, 5.0)
                     o.inSand = true
                     o.mouth = 1.0
                     if (timer >= SCOOP_S) {
@@ -330,8 +362,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                         o.gillRate = 1.0
                         left--
                         val next = Vec3(p.x + fwd.x * 2.0, hoverY(p.x + fwd.x * 2.0, p.z + fwd.z * 2.0), p.z + fwd.z * 2.0)
-                        // the shuffle would run it into the rock foot: this station is done
-                        if (c.rock.sdf.dist(next) < 1.5) left = 0
+                        // the shuffle would run it into the rock foot, or it is not where it sifts (held off by the rock
+                        // between): this station is done
+                        if (c.rock.sdf.dist(next) < 1.5 || o.pos.distanceTo(offRock(Vec3(p.x, hoverY(p.x, p.z), p.z))) > 2.0) left = 0
                         if (left > 0) {
                             // shuffle on a little and take the next mouthful
                             station = Vec3(p.x + fwd.x * c.rng.range(0.5, 2.0), 0.0, p.z + fwd.z * c.rng.range(0.5, 2.0)).let { q ->
@@ -339,6 +372,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                                 Vec3(x, hoverY(x, z), z)
                             }
                             phase = 1; timer = 0.0
+                            // (nor where the scoop would put the body in the rock, as at a station: see phase 0)
+                            val at = scoopPose(station, Vec3(fwd.x, -SCOOP_PITCH, fwd.z).normalized(fwd))
+                            if (offRock(at).distanceTo(at) > SCOOP_ROCK_CM) { stations++; finished = true }
                         } else {
                             stations++
                             // between sifting bouts it often settles on the sand for a while (research 30 §5: ~9 mouthfuls

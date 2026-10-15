@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.ai.CardinalBrain
 import com.reeflive.core.ai.CleanerShrimpBrain
+import com.reeflive.core.ai.DottybackBrain
 import com.reeflive.core.ai.GobyBrain
 import com.reeflive.core.ai.HawkBrain
 import com.reeflive.core.ai.PairBouts
@@ -259,12 +260,14 @@ class RealismAcceptanceTest {
     fun c07_dottybackNewcomerAttack() {
         val sim = tank(stockWithout("cardinal"), hour = 10.0)
         val dotty = sim.org(BrainKind.DOTTYBACK)
-        val cave = sim.brainOf(dotty).anchorPos(sim.agentOf(dotty)!!.ctx, "cave")!!
+        val db = sim.brainOf(dotty) as DottybackBrain
+        val cave = db.anchorPos(sim.agentOf(dotty)!!.ctx, "cave")!!
         sim.enqueue(Command.AddOrganism("sphaeramia_nematoptera", 6.0, "Newbie"))
         sim.advance(0.1)
         val card = sim.org(BrainKind.CARDINAL)
         val cb = sim.brainOf(card) as CardinalBrain
-        cb.setPocket(sim.rock.clampToWater(cave + Vec3(-14.0, 6.0, 12.0), 3.0))
+        // the newcomer settles in open water 10 cm out in front of the cave mouth (along the cave's axis), the dottyback's doorstep
+        cb.setPocket(sim.rock.clampToWater(db.home?.along(-10.0) ?: (cave + Vec3(-14.0, 6.0, 12.0)), 3.0))
         val hour1 = chases(sim.run(3600.0)).count { it.actorId == dotty.id && it.targetId == card.id }
         assertTrue("dottyback chases of the newcomer in hour 1: $hour1", hour1 >= 3)
         assertTrue("week-1 hover radius ${card.hoverRadius}", card.hoverRadius <= 10.0)

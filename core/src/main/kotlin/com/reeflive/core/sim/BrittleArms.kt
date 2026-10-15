@@ -314,7 +314,8 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
                 yaw[k] += (ty - yaw[k]) * min(1.0, dt * 8)
                 curl[k] += (tcu - curl[k]) * min(1.0, dt * 2.5)
             }
-            pitch[k] += (tp - pitch[k]) * k0
+            // (a tip set down for a hold comes down onto the ground at once, so the hold is taken where it lands)
+            pitch[k] += (tp - pitch[k]) * (if (want && !grip[k]) min(1.0, dt * PLANT_RATE) else k0)
             reach[k] += (tr2 - reach[k]) * kr
             waveAmp[k] += (tw - waveAmp[k]) * k0
             // travelling bend wave from root to tip; faster while snaking
@@ -479,14 +480,17 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         for (k in 0 until ARMS) {
             val b = k * SAMPLES
             psiS.copyInto(psiPrev, b, b, b + SAMPLES)
-            holdGrip(k, L)
+            holdGrip(k, L, s)
             march(k, s, L, dt)
-            if (grip[k] && offHold(k) > GRIP_TOL * L) {
+            if (grip[k] && offHold(k) > RESOLVE_TOL * L) {
                 // the lie of the ground bent the holding arm off its hold: solve again with those bends, else let go
-                holdGrip(k, L)
+                holdGrip(k, L, s)
                 if (grip[k]) march(k, s, L, 0.0)
                 if (grip[k] && offHold(k) > 2 * GRIP_TOL * L) { grip[k] = false; slips++; slipped[k] = true }
             }
+            // (the hold is kept in the disc's plane and the tip set on the ground along the disc's up: where the ground
+            // under it will not give the tip back its hold, or the tilting disc carries it off along a face, it lets go)
+            if (grip[k] && tipContact(k).distanceTo(anchor[k]) > 1.5 * GRIP_TOL * L) { grip[k] = false; slips++; slipped[k] = true }
             emit(k)
         }
     }
@@ -511,19 +515,23 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         val start = base
         for (i in 0 until SEAT_ITERS) {
             if (m >= -0.005) break
-            // lifted along its up or pushed out along the surface normal at its deepest point, whichever leaves it
-            // clearer (lifting along the up alone walked a disc set against a wall or under a ledge through the sand);
-            // never moved to where it is buried deeper, nor far from where the sim has the animal
+            // lifted along its up, pushed out along the surface normal at its deepest point, or both at once (in a
+            // crease between two faces, each alone pushes the rim into the other), whichever leaves it clearest
+            // (lifting along the up alone walked a disc set against a wall or under a ledge through the sand); never
+            // moved to where it is buried deeper, nor far from where the sim has the animal
             val b0 = base
-            val n = s.normal(discDeep)
-            base = b0 + u * (-m + 0.01)
-            val mu = discMin(s, false)
-            base = b0 + n * (-m + 0.01)
-            val mn = discMin(s, false)
-            val best = max(mu, mn)
-            if (best <= m) { base = b0; break }
-            if (mu > mn) base = b0 + u * (-m + 0.01)
-            if (base.distanceTo(start) > SEAT_SHIFT_CM) { base = b0; break }
+            val deep0 = discDeep
+            val n = s.normal(deep0)
+            var best = m; var bestB = b0; var bestDeep = deep0
+            for (k in 0 until 3) {
+                val dir = when (k) { 0 -> u; 1 -> n; else -> (u + n).normalized(u) }
+                base = b0 + dir * (-m + 0.01)
+                if (base.distanceTo(start) > SEAT_SHIFT_CM) continue
+                val mk = discMin(s, false)
+                if (mk > best) { best = mk; bestB = base; bestDeep = discDeep }
+            }
+            base = bestB; discDeep = bestDeep
+            if (best <= m) break
             m = best
         }
         discUnderCm = discMin(s, false)
@@ -564,13 +572,16 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
     }
 
     /** Stance grip: the tip holds where it touched down and the arm bends about it while the disc is pulled past. */
-    private fun holdGrip(k: Int, L: Double) {
+    private fun holdGrip(k: Int, L: Double, s: CrawlSurface) {
         if (!gripWant[k]) { grip[k] = false; return }
         // an arm bent against a wall or with nowhere to lie cannot take a hold there
         if (!grip[k] && (blockedNow[k] > 0 || bentNow[k] > 0)) return
         if (!grip[k]) {
-            // touch-down: the hold is where the tip is now, on the surface
-            anchor[k] = tipContact(k)
+            // touch-down: the hold is where the tip is now, once it is down on the surface (the swing's lift eases
+            // out over the first ticks of the stance; a hold taken in the air sank onto the ground under the tip)
+            val t = tipContact(k)
+            if (s.dist(t) > CLEAR_CM + TOUCH_CM) return
+            anchor[k] = t
             ikYaw[k] = yaw[k]; ikCurl[k] = curl[k]
             grip[k] = true; grips++
         }
@@ -938,6 +949,12 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         /** Clearance (cm) of a lying arm's support from the surface; a step whose middle sinks deeper than [MID_TOL_CM]
          *  into it (a ridge or a block's corner cut across) is a wall. */
         const val CLEAR_CM = 0.08
+        /** A tip takes its hold once it is within this (cm) of lying on the surface (its [CLEAR_CM] hair). */
+        const val TOUCH_CM = 0.04
+        /** Rate (1/s) at which a tip comes down for its hold. */
+        const val PLANT_RATE = 16.0
+        /** A holding tip the march bent farther than this (× body length) off its hold is solved for again. */
+        const val RESOLVE_TOL = 0.3 * GRIP_TOL
         /** Fastest tilt (rad/s) of the seated disc toward the rock under it. */
         const val UP_RATE = 0.8
         /** Largest turn (rad) of a drawn step from one contact to the next. */

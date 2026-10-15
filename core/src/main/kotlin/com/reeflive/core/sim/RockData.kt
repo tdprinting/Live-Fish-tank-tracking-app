@@ -62,7 +62,9 @@ class AnchorSet(anchors: Collection<Anchor>) {
 }
 
 /**
- * Rock SDF + anchors + the analytic tank box (sand plane and glass are not in the SDF).
+ * Rock SDF + anchors + the modelled holes and caves + the analytic tank box (sand plane and glass are not in the SDF).
+ * [holes] are the real openings in the rock (ASSETS §3.6): the only places an animal's body may go inside the rock
+ * surface, and only into one that fits it (SIMULATION §24).
  */
 class RockData(
     val sdf: Sdf,
@@ -74,10 +76,15 @@ class RockData(
     val waterLevelCm: Double = TankDims.WATER_LEVEL_CM,
     /** The loose rocks the scape is made of (empty: one solid scape that never moves). */
     val pieces: List<RockPieceDef> = emptyList(),
+    holes: HoleSet = HoleSet(HoleSet.fromAnchors(anchors)),
 ) {
     /** Anchors as built; [anchors] follows rocks that moved (dynamic rockscape). */
     val restAnchors: AnchorSet = anchors
     var anchors: AnchorSet = anchors
+        internal set
+    /** Holes as built; [holes] follows rocks that moved, like [anchors]. */
+    val restHoles: HoleSet = holes
+    var holes: HoleSet = holes
         internal set
 
     /** The movable field when this copy belongs to one simulation ([forSim]); null for a shared, static scape. */
@@ -90,7 +97,7 @@ class RockData(
     fun forSim(): RockData {
         if (pieces.isEmpty()) return this
         val base = (sdf as? DynamicRockSdf)?.base ?: sdf
-        return RockData(DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces)
+        return RockData(DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces, restHoles)
     }
 
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
@@ -110,11 +117,18 @@ class RockData(
     companion object {
         /** Analytic stand-in for an arbitrary set of spheres (tests). */
         fun ofSpheres(spheres: List<Pair<Vec3, Double>>, anchors: AnchorSet = DefaultScape.anchorsRaw()): RockData =
-            RockData(AnalyticSdf(spheres.map { (c, r) -> Ellipsoid(c, Vec3(r, r, r)) }), anchors)
+            RockData(AnalyticSdf(spheres.map { (c, r) -> Ellipsoid(c, Vec3(r, r, r)) }), anchors, holes = HoleSet.EMPTY)
 
-        /** Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names. */
-        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String): RockData =
-            RockData(SdfGrid.parse(sdfBytes), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
+        /**
+         * Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names. The
+         * holes come from the anchors file's `"holes"` array (rockscape.py measures them on the built mesh); an older
+         * file without one falls back to its HOLE anchors.
+         */
+        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String): RockData {
+            val own = AnchorSet.parse(anchorsJson)
+            val holes = HoleSet.parse(anchorsJson).ifEmpty { HoleSet.fromAnchors(own) }
+            return RockData(SdfGrid.parse(sdfBytes), own.withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces, holes = HoleSet(holes))
+        }
 
         /** The analytic recreation of Tee's rockscape (ASSETS §3.1) with snapped anchors and carved holes. */
         fun defaultTank(): RockData = DefaultScape.build()
@@ -182,7 +196,7 @@ object DefaultScape {
             a("den_path", "PATH", 62.0, 3.8, 32.5, pts = listOf(v(62.0, 3.8, 32.5), v(66.0, 4.5, 26.0), v(71.0, 5.2, 19.5), v(74.5, 5.8, 14.0))),
             a("CAVE_SMALL", "CAVE", 56.0, 11.8, 7.8),
             a("CAVE_BIG", "CAVE", 36.0, 10.4, 7.8),
-            a("HOLE_BLENNY", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 6.0),
+            a("HOLE_BLENNY", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), radius = 1.4, depth = 6.0),
             a("PERCH_1", "PERCH", 7.2, 24.9, 24.7, normal = v(0.3, 0.92, 0.24)),
             a("PERCH_2", "PERCH", 43.1, 20.2, 28.7, normal = v(-0.47, 0.83, -0.3)),
             a("PERCH_3", "PERCH", 103.8, 28.9, 6.8, normal = v(-0.34, 0.91, -0.24)),
@@ -209,7 +223,7 @@ object DefaultScape {
             a("coral_aiptasia_kenya_base", "CORAL", 63.9, 16.5, 21.4, normal = v(0.22, 0.8, -0.56)),
             // ---- Track C additions (new livestock, 04_more_species); Track B: please add to anchors.json ----
             a("coral_organpipe_kenya_base", "CORAL", 71.8, 15.5, 25.2, normal = v(-0.08, 0.84, 0.53)),
-            a("HOLE_LAWNMOWER", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), depth = 7.0),
+            a("HOLE_LAWNMOWER", "HOLE", 10.0, 13.0, 32.3, dir = v(0.1, 0.1, 0.99), radius = 1.8, depth = 7.0),
             a("STATION_SHRIMP", "STATION", 106.0, 28.0, 16.0, normal = v(0.28, 0.35, 0.9)),
             a("DUSTER_TUBE", "TUBE", 86.0, 7.0, 27.3, normal = v(0.0, 1.0, 0.0)),
             a("BRITTLE_HOME", "CAVE", 36.0, 5.5, 10.4),
@@ -240,7 +254,7 @@ object DefaultScape {
         for (h in set.ofType("HOLE")) {
             val dir = (h.dir ?: Vec3.Z).normalized()
             val depth = h.depth ?: 6.0
-            carves += Tunnel(listOf(h.pos + dir * 1.5, h.pos - dir * depth), if (h.name == "HOLE_LAWNMOWER") 1.8 else 1.4)
+            carves += Tunnel(listOf(h.pos + dir * 1.5, h.pos - dir * depth), h.radius ?: 1.4)
         }
         return RockData(AnalyticSdf(blobs, carves), set, pieces = pieces)
     }

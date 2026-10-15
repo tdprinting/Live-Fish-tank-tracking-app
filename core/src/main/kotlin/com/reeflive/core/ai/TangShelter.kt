@@ -154,7 +154,15 @@ class TangShelters(private val c: Ctx) {
      * that fit its body. Tries the [tries] best-scoring candidates.
      */
     fun pick(from: Vec3, threat: Vec3?, L: Double, roll: Double, prefer: Vec3? = null, tries: Int = 8): Pose? {
-        val ranked = spots.sortedByDescending { s ->
+        // never a refuge right by what scared it (a crevice under the clowns' corner, fleeing the clowns): it would be
+        // displayed at again as soon as it got there and stay scared for the rest of the hide), nor on a territorial
+        // neighbour's doorstep (the clowns' host, the dottyback's cave): hidden there it was displayed at and chased
+        // again and again, its fear never eased and it never came out (TangHideTest, SIMULATION §24)
+        val doors = residentDoors()
+        val away = spots.filter { s ->
+            (threat == null || s.pos.distanceTo(threat) >= THREAT_CLEAR_CM) && doors.none { s.pos.distanceTo(it) < THREAT_CLEAR_CM }
+        }.ifEmpty { spots }
+        val ranked = away.sortedByDescending { s ->
             var v = s.cover - 0.012 * s.pos.distanceTo(from)
             if (threat != null) v += 0.01 * min(40.0, s.pos.distanceTo(threat))
             if (prefer != null) v -= 0.02 * s.pos.distanceTo(prefer)
@@ -162,6 +170,17 @@ class TangShelters(private val c: Ctx) {
         }
         for (s in ranked.take(tries)) fit(s.pos, L, roll, roof = true)?.let { return it }
         return null
+    }
+
+    /** The homes territorial neighbours defend: each clown's host, each dottyback's cave. */
+    private fun residentDoors(): List<Vec3> = c.sim.organisms.mapNotNull { o ->
+        if (!o.alive || o === c.o) return@mapNotNull null
+        val a = c.sim.agentOf(o) ?: return@mapNotNull null
+        when (val br = a.brain) {
+            is ClownBrain -> br.host(a.ctx)
+            is DottybackBrain -> br.shelterSpot(a.ctx)
+            else -> null
+        }
     }
 
     companion object {
@@ -173,6 +192,8 @@ class TangShelters(private val c: Ctx) {
         const val ROOF_CM = 14.0
         const val MIN_COVER = 0.5
         const val SPREAD_CM = 6.0
+        /** A shelter this close (cm) to the scare it flees, or to a territorial neighbour's home, is passed over while there is another. */
+        const val THREAT_CLEAR_CM = 15.0
         const val ENTRY_MAX_CM = 24.0
         private val TURNS = doubleArrayOf(0.0, 0.35, -0.35, 0.7, -0.7)
     }

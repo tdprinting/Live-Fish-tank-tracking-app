@@ -446,8 +446,9 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
     private fun finish(c: Ctx) { active = null; finished = true; c.o.dorsalRaise = 0.0 }
 
     override fun exit(c: Ctx) {
-        // a chase cut short by a higher-priority behaviour still happened: settle its outcome (and event)
-        active?.let { a -> if (phase == 1 && a.target.alive) { phase = 2; outcome(c, a.row, a.target) } }
+        // a chase cut short by a higher-priority behaviour still happened: settle its outcome (and event). That covers
+        // phase 2 too: the chase ended on the tick before the preemption and its outcome was due on the next update
+        active?.let { a -> if ((phase == 1 || phase == 2) && a.target.alive) { phase = 2; outcome(c, a.row, a.target) } }
         active = null; c.o.dorsalRaise = 0.0
     }
 
@@ -514,8 +515,12 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
     }
     /** A perched (benthic) client poses where it sits instead of lifting off the rock. */
     private var perch: Rest? = null
+    /** Where a free-swimming client took up its pose: it holds that spot while the cleaner works round it. */
     private var hold: Vec3? = null
-    override fun enter(c: Ctx) { perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null; hold = null }
+    override fun enter(c: Ctx) {
+        perch = if (c.o.attached) Rest(c.o.pos, c.o.heading, c.o.up, posture = c.o.posture) else null
+        hold = c.o.pos
+    }
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
         val w = o.poseFor ?: run { finished = true; return }
@@ -539,7 +544,7 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
         // along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass at 6-9 cm/s)
         val h = hold ?: o.pos.also { hold = it }
         val pushed = o.pos.distanceTo(h) > 2.0
-        out.seek(if (pushed) h else o.pos + o.heading * 0.2, o.cruiseSpeed * (if (pushed) 0.5 else 0.1), arrive = 2.0)
+        out.seek(h, o.cruiseSpeed * 0.5, arrive = 2.0)
         // pushed off its spot, it gives way less: separation grows as r/d near the cleaner nosing along its flank, which
         // outran the way back and herded a posing engineer goby 30 cm along the front glass at 4-5 cm/s
         if (pushed) out.separation = 0.25

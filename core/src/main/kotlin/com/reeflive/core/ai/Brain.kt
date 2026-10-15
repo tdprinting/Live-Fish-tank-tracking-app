@@ -24,6 +24,10 @@ data class Rest(val pos: Vec3, val heading: Vec3, val up: Vec3? = null, val post
  * Base for every species brain (SIMULATION §4.5). Holds perception-derived state shared by its
  * behaviors (startle, threat, food alert) and the hooks the Simulation calls (food, tap, shadow).
  */
+/** Points kept of a fish's recent track, and their spacing (cm), for [SpeciesBrain.retrace]. */
+private const val CRUMBS = 16
+private const val CRUMB_CM = 2.0
+
 abstract class SpeciesBrain(val c: Ctx) {
     val o: Organism get() = c.o
     lateinit var utility: UtilityBrain
@@ -100,6 +104,24 @@ abstract class SpeciesBrain(val c: Ctx) {
     /** After steering has moved the body this tick (a brain's last word on where it is). */
     open fun postSteer(c: Ctx) {}
 
+    /** The fish's recent track, a point every [CRUMB_CM] it moved, oldest overwritten (see [preTick], [retrace]). */
+    private val crumbs = arrayOfNulls<Vec3>(CRUMBS)
+    private var crumbAt = 0
+
+    /**
+     * Back the way it came: the oldest point of its recent track it can still reach in a straight line, walking back
+     * from the newest (so it follows the bends of the way in); null if none is more than 2 cm away.
+     */
+    fun retrace(c: Ctx): Vec3? {
+        var best: Vec3? = null
+        for (k in 1..CRUMBS) {
+            val p = crumbs[(crumbAt - k + CRUMBS) % CRUMBS] ?: break
+            if (!c.rock.sdf.segmentClear(o.pos, p, 0.25)) break
+            best = p
+        }
+        return best?.takeIf { it.distanceTo(o.pos) > 2.0 }
+    }
+
     open fun preTick(c: Ctx) {
         val dt = c.dt
         o.sleeping = false
@@ -109,6 +131,11 @@ abstract class SpeciesBrain(val c: Ctx) {
         if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
+        // the way it came (a crumb every 2 cm it moves): [Ctx.viaOpenWater] backs out of a crawl space along it
+        if (o.isFish && !o.attached) {
+            val last = crumbs[(crumbAt + CRUMBS - 1) % CRUMBS]
+            if (last == null || last.distanceSqTo(o.pos) >= CRUMB_CM * CRUMB_CM) { crumbs[crumbAt] = o.pos; crumbAt = (crumbAt + 1) % CRUMBS }
+        }
         threatCheck -= dt
         perceiveIn -= dt
         if (perceiveIn <= 0) { Social.perceive(c, Social.PERCEIVE_INTERVAL - perceiveIn); perceiveIn = Social.PERCEIVE_INTERVAL * (0.8 + 0.4 * c.rng.nextDouble()) }
@@ -174,6 +201,13 @@ abstract class SpeciesBrain(val c: Ctx) {
 
     /** A blenny's head-further-out pose at its hole for a peek at a tap ([TouchReact] PEEK); null = no hole. */
     open fun peekRest(c: Ctx): Rest? = null
+
+    /**
+     * The animal's own shelter, just outside its door (a goby's burrow mouth, a blenny's claimed hole, the dottyback's
+     * cave), or null when it has none. [KeepClear] retreats here instead of to the nearest rock cover, so a home-bound
+     * fish that fears a neighbour stays at home rather than drifting off across the rock.
+     */
+    open fun shelterSpot(c: Ctx): Vec3? = null
 
     open fun onShadow(c: Ctx, at: Vec3) {
         shadowAt = c.t
@@ -346,6 +380,10 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
         if (!sdf.segmentClear(above, goal, 0.5)) continue
         if (sdf.segmentClear(o.pos, above, 0.5)) return above
         val up = safe(Vec3(o.pos.x, above.y, o.pos.z))
+        // wedged in a crawl space tighter than the steering lets a swimmer be (under a rock foot against the back glass,
+        // where a fleeing tang stayed 3.5 h trying to climb into the roof): back out the way it came in
+        if (sdf.dist(o.pos) < WEDGED_L * o.collisionLength && !sdf.segmentClear(o.pos, up, 0.5))
+            sim.agentOf(o)?.brain?.retrace(this)?.let { return it }
         if (sdf.segmentClear(up, above, 0.5) && (held == null || sdf.segmentClear(o.pos, up, 0.5))) return up
         // the climb alone leaves the swimmer pinned under a ridge: slide across at its own height first, along either axis
         for (mid in listOf(Vec3(above.x, up.y, o.pos.z), Vec3(o.pos.x, up.y, above.z))) {
@@ -385,11 +423,17 @@ fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
     return goal
 }
 
+/** Closer to rock than this many body lengths a swimmer is wedged (Steering's hard rock resolve keeps 0.45 L). */
+private const val WEDGED_L = 0.45
+
 private val DOORWAYS = listOf(Vec3(0.0, 0.0, -1.0), Vec3(0.0, 0.0, 1.0), Vec3(-1.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0),
     Vec3(0.0, 0.7, -0.7), Vec3(0.0, 0.7, 0.7), Vec3(-0.7, 0.7, 0.0), Vec3(0.7, 0.7, 0.0))
 
-/** A point on the rock surface near [center] with its outward normal; null if none found. */
-fun Ctx.rockSurfacePoint(center: Vec3, radius: Double, minNormalY: Double = -0.2, tries: Int = 12): Pair<Vec3, Vec3>? {
+/**
+ * A point on the rock surface near [center] with its outward normal; null if none found. [underRock] also takes the
+ * underside of a rock over the sand (a brittle star's roof; a shelled crawler there is pinned between roof and floor).
+ */
+fun Ctx.rockSurfacePoint(center: Vec3, radius: Double, minNormalY: Double = -0.2, tries: Int = 12, underRock: Boolean = false): Pair<Vec3, Vec3>? {
     for (i in 0 until tries) {
         val p = center + rng.unitVector() * (radius * rng.nextDouble())
         if (rock.sdf.dist(p) > 12) continue
@@ -398,8 +442,11 @@ fun Ctx.rockSurfacePoint(center: Vec3, radius: Double, minNormalY: Double = -0.2
         val n = rock.sdf.gradient(q)
         if (n.y < minNormalY) continue
         if (!rock.inWater(q, 1.5)) continue
-        // open water in front of the spot (not the inside of a narrow hole or crevice)
-        if (rock.sdf.dist(q + n * 3.0) < 2.4 || rock.sdf.dist(q + n * 1.0) < 0.8) continue
+        // open water in front of the spot (not the inside of a narrow hole or crevice, nor a roof over the sand: the rock
+        // SDF reads the sand as open, and a hermit sent to the roof of a dug goby burrow thrashed between roof and floor)
+        val front = q + n * 3.0
+        if (rock.sdf.dist(front) < 2.4 || rock.sdf.dist(q + n * 1.0) < 0.8) continue
+        if (!underRock && front.y < sim.sand.surfaceY(front.x, front.z) + 1.0) continue
         return q to n
     }
     return null

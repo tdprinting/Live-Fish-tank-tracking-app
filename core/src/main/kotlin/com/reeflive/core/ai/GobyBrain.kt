@@ -188,6 +188,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         ?: (Vec3(anchorMouth.x, max(anchorMouth.y, sand.surfaceY(anchorMouth.x, anchorMouth.z) + 1.0), anchorMouth.z) + outDir * k)
     fun inside(k: Double) = mouth + inDir * k
 
+    /** Its burrow mouth, where it keeps clear of a feared fish, ready to duck in (not off up the rock). */
+    override fun shelterSpot(c: Ctx): Vec3 = outside(1.5)
+
     /**
      * Body trailing back from the head when there is no dug burrow (the rock den path): down the tunnel when it faces
      * out, out through the mouth when it faces in (so a head-first goby does not fold back on itself at the mouth).

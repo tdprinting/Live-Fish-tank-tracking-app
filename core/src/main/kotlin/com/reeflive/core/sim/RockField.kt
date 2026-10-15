@@ -118,9 +118,12 @@ class DynamicRockSdf(
     private var lastBox = arrayOfNulls<IntArray>(baseCount)
     private val dirty = IntArray(6)
     private var anyDirty = false
+    /** Bumped each time the field changes (a [refresh] that re-derived cells); caches over the field key on it. */
+    var revision = 0; private set
 
     override fun dist(p: Vec3): Double = if (!active) base.dist(p) else sample(comp!!, p.x, p.y, p.z)
-    fun distXyz(x: Double, y: Double, z: Double): Double = if (!active) base.dist(Vec3(x, y, z)) else sample(comp!!, x, y, z)
+    override fun distAt(x: Double, y: Double, z: Double): Double = if (!active) base.distAt(x, y, z) else sample(comp!!, x, y, z)
+    fun distXyz(x: Double, y: Double, z: Double): Double = distAt(x, y, z)
     override fun cover(p: Vec3): Double = base.cover(p)
 
     /** The rock that never moved (cm); the base field until something moves. */
@@ -268,6 +271,7 @@ class DynamicRockSdf(
             c[a] = v.toFloat()
         }
         anyDirty = false
+        revision++
     }
 
     /** The cells piece [p] covers at its current transform (its grid's corners, padded), clamped to the grid. */
