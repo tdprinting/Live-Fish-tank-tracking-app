@@ -426,6 +426,15 @@ object ReefLive {
         return JSON.stringify(o)
     }
 
+    /**
+     * The last body the fish net took out (core FishNet), for the page's toilet goodbye (flush.js): key (new per
+     * body), name, fish or not, and the cartoon colours; "null" before the first.
+     */
+    fun netFlush(): String {
+        val f = sim?.latest?.netFlush ?: return "null"
+        return JSON.stringify(obj { it.key = "${f.seq}:${f.id}"; it.name = f.name; it.isFish = f.isFish; it.body = f.body; it.accent = f.accent })
+    }
+
     /** HUD state: clock, light phase, water and the organisms (id, name, species, health). */
     fun state(): String {
         val s = sim ?: return "null"

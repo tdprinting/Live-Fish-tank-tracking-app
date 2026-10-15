@@ -52,6 +52,8 @@ class Organism(
     var deadSince: Double? = null
     /** g of TAN-equivalent this carcass has leached into the water so far (bounded by its N content; see Simulation.corpses). */
     var carcassTanReleasedG = 0.0
+    /** The body is in the keeper's net ([FishNet]): the net moves it, not the sinking / floating carcass physics. */
+    var netted = false
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()
@@ -152,6 +154,8 @@ class Organism(
     var vel = Vec3.ZERO
     var heading = Vec3.X
     var up = Vec3.Y
+    /** The fish a cleaner shrimp is standing on while it cleans it (its legs grip the body, core ShrimpLimbs). */
+    var ridingOn: Organism? = null
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
     /**
      * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the

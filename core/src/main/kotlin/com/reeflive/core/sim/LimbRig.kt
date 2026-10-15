@@ -485,27 +485,3 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
     }
 }
 
-/**
- * Banded coral shrimp and skunk cleaner shrimp limbs (research 17 shrimp motion detail). The shrimp models carry a
- * limb class per vertex (ASSETS §2.8 limb rig) and `fish.vert` (motion mode 2) animates each class procedurally, so
- * the sim only sends one entry of whole-animal signals:
- *
- * limb 0 = (stride phase (cycles, from `Organism.walkPhase`, set by Steering.crawl), stepping 0..1 (`walkAmt`),
- * signal 0..1 = max(skunk front-leg rock `legRock`, banded claw display `clawDisplay`), antenna grooming `groom`).
- */
-class ShrimpLimbs : LimbRig(1) {
-    /** The brains switch the signals on and off in one tick; the legs and antennae ease in and out (~0.25 s). */
-    private var signal = 0.0
-    private var groom = 0.0
-
-    override fun step(o: Organism, dt: Double, speed: Double) {
-        val k = min(1.0, dt * EASE_RATE)
-        signal += (max(o.legRock, o.clawDisplay) - signal) * k
-        groom += (o.groom - groom) * k
-        put(0, frac(o.walkPhase), o.walkAmt, signal, groom)
-    }
-
-    companion object {
-        const val EASE_RATE = 8.0
-    }
-}

@@ -10,9 +10,14 @@ import android.util.Log
  * names in [SAMPLER_UNITS] are assigned fixed texture units.
  */
 class ShaderProgram private constructor(val id: Int, val name: String) {
-    private val locations = HashMap<String, Int>()
-    /** Last scalar/vector value sent per uniform: uniform state lives in the program, so an unchanged value is skipped. */
-    private val last = HashMap<String, FloatArray>()
+    /** Per uniform: its location and the last scalar/vector value sent (uniform state lives in the program, so an
+     *  unchanged value is skipped). One map, so each set costs a single lookup (string hashing is not cached in JS). */
+    private class Slot(val name: String, val loc: Int) { val v = FloatArray(4); var valid = false; var next: Slot? = null }
+    private val slots = HashMap<String, Slot>()
+    // Draws set the same uniforms in the same order every frame, so each lookup first tries the slot that followed
+    // the previous one last time (compared by reference: uniform names are literals); the hash map
+    // (String.hashCode is uncached on JS) is only the fallback, which relinks the sequence.
+    private var prev: Slot? = null
 
     fun use() {
         if (Gl.currentProgram == id) return
@@ -20,24 +25,39 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
         Gl.currentProgram = id
     }
 
-    fun loc(uniform: String): Int = locations.getOrPut(uniform) { GLES30.glGetUniformLocation(id, uniform).also { Gl.check("glGetUniformLocation") } }
-
-    /** True when [u] already holds (x, y, z, w); otherwise records them for next time. */
-    private fun same(u: String, x: Float, y: Float, z: Float, w: Float): Boolean {
-        val v = last[u]
-        if (v != null && v[0] == x && v[1] == y && v[2] == z && v[3] == w) return true
-        if (v == null) last[u] = floatArrayOf(x, y, z, w) else { v[0] = x; v[1] = y; v[2] = z; v[3] = w }
-        return false
+    private fun slot(u: String): Slot {
+        val p = prev
+        val c = p?.next
+        if (c != null && c.name === u) { prev = c; return c }
+        val s = slots.getOrPut(u) { Slot(u, GLES30.glGetUniformLocation(id, u).also { Gl.check("glGetUniformLocation") }) }
+        p?.next = s
+        prev = s
+        return s
     }
 
-    fun set1f(u: String, v: Float) { val l = loc(u); if (l >= 0 && !same(u, v, 0f, 0f, 0f)) { GLES30.glUniform1f(l, v); Gl.check("glUniform1f", u) } }
-    fun set1i(u: String, v: Int) { val l = loc(u); if (l >= 0 && !same(u, v.toFloat(), 0f, 0f, 0f)) { GLES30.glUniform1i(l, v); Gl.check("glUniform1i", u) } }
-    fun set2f(u: String, x: Float, y: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, 0f, 0f)) { GLES30.glUniform2f(l, x, y); Gl.check("glUniform2f", u) } }
-    fun set3f(u: String, x: Float, y: Float, z: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, z, 0f)) { GLES30.glUniform3f(l, x, y, z); Gl.check("glUniform3f", u) } }
-    fun set4f(u: String, x: Float, y: Float, z: Float, w: Float) { val l = loc(u); if (l >= 0 && !same(u, x, y, z, w)) { GLES30.glUniform4f(l, x, y, z, w); Gl.check("glUniform4f", u) } }
-    fun set3fv(u: String, v: FloatArray) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniform3fv(l, 1, v, 0); Gl.check("glUniform3fv", u) } }
-    fun set4fv(u: String, v: FloatArray, count: Int = v.size / 4) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniform4fv(l, count, v, 0); Gl.check("glUniform4fv", u) } }
-    fun setMat4(u: String, m: FloatArray) { val l = loc(u); if (l >= 0) { last.remove(u); GLES30.glUniformMatrix4fv(l, 1, false, m, 0); Gl.check("glUniformMatrix4fv", u) } }
+    fun loc(uniform: String): Int = slot(uniform).loc
+
+    /** The uniform's slot when it exists and does not already hold (x, y, z, w) (which are then recorded), else null. */
+    private fun changed(u: String, x: Float, y: Float, z: Float, w: Float): Slot? {
+        val s = slot(u)
+        if (s.loc < 0) return null
+        val v = s.v
+        if (s.valid && v[0] == x && v[1] == y && v[2] == z && v[3] == w) return null
+        v[0] = x; v[1] = y; v[2] = z; v[3] = w; s.valid = true
+        return s
+    }
+
+    /** The slot for an array/matrix upload (never deduplicated; forgets the cached scalar value), or null. */
+    private fun raw(u: String): Slot? { val s = slot(u); if (s.loc < 0) return null; s.valid = false; return s }
+
+    fun set1f(u: String, v: Float) { val s = changed(u, v, 0f, 0f, 0f) ?: return; GLES30.glUniform1f(s.loc, v); Gl.check("glUniform1f", u) }
+    fun set1i(u: String, v: Int) { val s = changed(u, v.toFloat(), 0f, 0f, 0f) ?: return; GLES30.glUniform1i(s.loc, v); Gl.check("glUniform1i", u) }
+    fun set2f(u: String, x: Float, y: Float) { val s = changed(u, x, y, 0f, 0f) ?: return; GLES30.glUniform2f(s.loc, x, y); Gl.check("glUniform2f", u) }
+    fun set3f(u: String, x: Float, y: Float, z: Float) { val s = changed(u, x, y, z, 0f) ?: return; GLES30.glUniform3f(s.loc, x, y, z); Gl.check("glUniform3f", u) }
+    fun set4f(u: String, x: Float, y: Float, z: Float, w: Float) { val s = changed(u, x, y, z, w) ?: return; GLES30.glUniform4f(s.loc, x, y, z, w); Gl.check("glUniform4f", u) }
+    fun set3fv(u: String, v: FloatArray) { val s = raw(u) ?: return; GLES30.glUniform3fv(s.loc, 1, v, 0); Gl.check("glUniform3fv", u) }
+    fun set4fv(u: String, v: FloatArray, count: Int = v.size / 4) { val s = raw(u) ?: return; GLES30.glUniform4fv(s.loc, count, v, 0); Gl.check("glUniform4fv", u) }
+    fun setMat4(u: String, m: FloatArray) { val s = raw(u) ?: return; GLES30.glUniformMatrix4fv(s.loc, 1, false, m, 0); Gl.check("glUniformMatrix4fv", u) }
 
     fun release() {
         if (Gl.currentProgram == id) Gl.currentProgram = 0

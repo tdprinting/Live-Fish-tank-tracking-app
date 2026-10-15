@@ -154,6 +154,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun puff(point: Vec3, velocity: Vec3) = holder.enqueue(Command.WaterPuff(point, velocity))
     /** A tap right on an animal: snails and crabs tuck in, shrimp freeze, a hermit ducks into its shell. */
     fun touchAnimal(id: String) = holder.enqueue(Command.TouchAnimal(id))
+    /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
+    fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
+
+    /** The last net goodbye already shown (so a body flushed before this screen opened never replays). */
+    private var flushSeen: com.reeflive.core.sim.NetFlush? = holder.snapshots.value.netFlush
+    /** [f] if it is a goodbye not shown yet (marking it shown), else null. */
+    fun takeFlush(f: com.reeflive.core.sim.NetFlush?): com.reeflive.core.sim.NetFlush? =
+        if (f != null && f != flushSeen) { flushSeen = f; f } else null
 
     private val _submarine = MutableStateFlow(com.reeflive.app.ui.live.SubUi())
     /** Submarine mode (SubmarineControls): the toy sub is out, seen by the fish, ridden from inside, lamp on. */
