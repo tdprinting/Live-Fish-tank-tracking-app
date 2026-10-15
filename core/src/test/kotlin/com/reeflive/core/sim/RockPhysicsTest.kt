@@ -43,7 +43,8 @@ class RockPhysicsTest {
         println("[rock] topple run ${(System.nanoTime() - t0) / 1e6} ms; R3 now ${r3.pos.toList()} wakes=${r3.wakes} awake=${r3.awake}")
         assertTrue("R3 moved", r3.moved)
         val dx = r3.pos[0] - before[0]; val dy = r3.pos[1] - before[1]
-        assertTrue("it went down and toward the dug side (dx=$dx dy=$dy)", dy < -0.5 && dx < 0.0)
+        // (where it comes to rest depends on the pit rim at the sand grid's ~1 cm resolution: about half a centimetre down)
+        assertTrue("it went down and toward the dug side (dx=$dx dy=$dy)", dy < -0.4 && dx < -1.0)
         assertFalse("it came to rest", r3.awake)
         assertTrue("its neighbours stayed put", rp.bodies.filter { it !== r3 }.none { it.moved })
         val ev = s.latest.events.filterIsInstance<SimEvent.RockShifted>()
