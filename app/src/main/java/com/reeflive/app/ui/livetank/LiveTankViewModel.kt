@@ -25,6 +25,8 @@ import com.reeflive.core.sim.OrganismStats
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.TouchSurface
+import com.reeflive.core.sim.DryRockShape
+import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseSpec
@@ -248,6 +250,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         if (_selectedOrganismId.value == id) select(null)
     }
     fun runScenario(s: Scenario) = sandbox { holder.runScenario(s) }
+
+    // aquascape builder: on the tank on screen (your tank or the pretend copy); the rock layout is saved with the tank
+    /** Drops a dry rock over [at]; a tap that only met the glass drops it halfway back. */
+    fun placeRock(shape: DryRockShape, at: Vec3, surface: TouchSurface, turnDeg: Double) =
+        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) TankDims.DEPTH_CM / 2 else at.z, turnDeg))
+    /** Takes out the rock nearest [at] (null: the dry rock added last). */
+    fun removeRock(at: Vec3?) = holder.enqueue(Command.RemoveRock(at))
+    fun clearRocks() = holder.enqueue(Command.ClearRocks)
 
     // pests, treatments, maintenance (sandbox only)
     fun addAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.AddAiptasia(count)) }

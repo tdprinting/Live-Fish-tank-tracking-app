@@ -163,6 +163,7 @@ class SimulationHolder(
                 rocksDynamic = on
                 reality?.enqueue(Command.DynamicRocks(on))
                 sandbox?.enqueue(Command.DynamicRocks(on))
+                customSim?.enqueue(Command.DynamicRocks(on))
             }
         }
         scope.launch {
@@ -481,7 +482,7 @@ class SimulationHolder(
 
     /** A rock in the tank settled or toppled: keep its new spot for the next launch. */
     private fun saveRocks(sim: Simulation) {
-        if (rockStore == null || sim.latest.events.none { it is com.reeflive.core.sim.SimEvent.RockShifted }) return
+        if (rockStore == null || sim.latest.events.none { it is com.reeflive.core.sim.SimEvent.RockShifted || it is com.reeflive.core.sim.SimEvent.RockscapeChanged }) return
         val s = sim.rockState()
         if (s != savedRocks) { savedRocks = s; rockStore.save(s) }
     }

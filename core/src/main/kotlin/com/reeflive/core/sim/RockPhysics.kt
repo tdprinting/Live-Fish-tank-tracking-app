@@ -31,12 +31,17 @@ class RockPhysics(
 ) {
     val bodies = ArrayList<RockBody>()
     /** Body index of each piece, −1 for a piece without cells. */
-    val bodyOf = IntArray(field.pieces.size) { -1 }
+    var bodyOf = IntArray(field.pieces.size) { -1 }; private set
     var built = false; private set
     /** Bumps whenever a rock pose changes (renderer refresh, snapshot cache). */
     var version = 0L; private set
     val anyAwake: Boolean get() = bodies.any { it.awake }
-    val anyMoved: Boolean get() = bodies.any { it.moved }
+    val anyMoved: Boolean get() = bodies.any { it.moved } || this.field.gone.any { it }
+    /** Rocks added with the aquascape builder, oldest first. */
+    val added: List<RockBody> get() = bodies.filter { it.shape != null }
+    private var addedCount = 0
+    /** Something was taken out from under the rocks: check every rock's footing at the next step. */
+    private var recheck = false
 
     /** Rocks that came to rest since the last [drainSettled] (the sim refreshes sand, anchors and corals and reports). */
     private val settled = ArrayList<Settle>()
@@ -75,6 +80,7 @@ class RockPhysics(
     }
 
     private fun indexBodies() {
+        if (bodyOf.size != field.pieces.size) bodyOf = IntArray(field.pieces.size)
         bodyOf.fill(-1)
         bodies.forEachIndexed { i, b -> b.index = i; for (p in b.pieces) bodyOf[p] = i }
     }
@@ -93,17 +99,37 @@ class RockPhysics(
         val inSet = BooleanArray(f.pieces.size).also { s -> pieces.forEach { s[it] = true } }
         val box = IntArray(6) { if (it < 3) Int.MAX_VALUE else -1 }
         for (p in pieces) { val bx = f.pieceBox[p]!!; for (c in 0 until 3) { box[c] = min(box[c], bx[c]); box[c + 3] = max(box[c + 3], bx[c + 3]) } }
-        fun member(i: Int, j: Int, k: Int): Boolean {
-            if (i < 0 || j < 0 || k < 0 || i >= f.nx || j >= f.ny || k >= f.nz) return false
-            val l = f.label[f.idx(i, j, k)].toInt()
-            return l >= 0 && inSet[l]
-        }
-        val cv = f.cell * f.cell * f.cell
+        fun label(i: Int, j: Int, k: Int): Int =
+            if (i < 0 || j < 0 || k < 0 || i >= f.nx || j >= f.ny || k >= f.nz) -1 else f.label[f.idx(i, j, k)].toInt()
+        val b = RockBody(pieces, pieces.joinToString("+") { f.pieces[it].name })
+        fill(b, box, f.cell, f::cx, f::cy, f::cz, { i, j, k -> val l = label(i, j, k); l >= 0 && inSet[l] }, { i, j, k -> val l = label(i, j, k); if (l >= 0 && !inSet[l]) l else -1 })
+        return b
+    }
+
+    /** A body for rock [p] added with the aquascape builder, from its own grid (rest frame = the rock's own frame). */
+    private fun makeAddedBody(p: Int): RockBody {
+        val g = field.localGrid(p)!!
+        val b = RockBody(intArrayOf(p), field.pieces[p].name)
+        fun inside(i: Int, j: Int, k: Int) = i in 0 until g.nx && j in 0 until g.ny && k in 0 until g.nz && g.d[(k * g.ny + j) * g.nx + i] < 0f
+        fill(b, intArrayOf(0, 0, 0, g.nx - 1, g.ny - 1, g.nz - 1), g.cell, { g.ox + it * g.cell }, { g.oy + it * g.cell }, { g.oz + it * g.cell },
+            ::inside, { _, _, _ -> -1 })
+        return b
+    }
+
+    /**
+     * Mass, centre, inertia and surface probes of [b] from the cells over [box] (inclusive grid indices) for which
+     * [member] holds; [touch] names the other piece a cell next to the body belongs to (−1 for none).
+     */
+    private fun fill(
+        b: RockBody, box: IntArray, cell: Double, cx: (Int) -> Double, cy: (Int) -> Double, cz: (Int) -> Double,
+        member: (Int, Int, Int) -> Boolean, touch: (Int, Int, Int) -> Int,
+    ) {
+        val cv = cell * cell * cell
         var n = 0; var sx = 0.0; var sy = 0.0; var sz = 0.0
         for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) if (member(i, j, k)) {
-            n++; sx += f.cx(i); sy += f.cy(j); sz += f.cz(k)
+            n++; sx += cx(i); sy += cy(j); sz += cz(k)
         }
-        val b = RockBody(pieces, pieces.joinToString("+") { f.pieces[it].name })
+        n = max(n, 1)
         b.volume = n * cv
         b.mass = RHO_ROCK * b.volume
         // added mass of the displaced water (half a sphere's worth) for the translational inertia
@@ -112,34 +138,31 @@ class RockPhysics(
         b.pos[0] = b.comRest[0]; b.pos[1] = b.comRest[1]; b.pos[2] = b.comRest[2]
         val ib = DoubleArray(9)
         val mc = RHO_ROCK * cv
-        val own = mc * f.cell * f.cell / 6.0
+        val own = mc * cell * cell / 6.0
         val px = ArrayList<Double>(); val py = ArrayList<Double>(); val pz = ArrayList<Double>()
         val qx = ArrayList<Double>(); val qy = ArrayList<Double>(); val qz = ArrayList<Double>()
         val rp = ArrayList<Int>()
         for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) {
             if (!member(i, j, k)) continue
-            val rx = f.cx(i) - b.comRest[0]; val ry = f.cy(j) - b.comRest[1]; val rz = f.cz(k) - b.comRest[2]
+            val rx = cx(i) - b.comRest[0]; val ry = cy(j) - b.comRest[1]; val rz = cz(k) - b.comRest[2]
             ib[0] += mc * (ry * ry + rz * rz) + own; ib[4] += mc * (rx * rx + rz * rz) + own; ib[8] += mc * (rx * rx + ry * ry) + own
             ib[1] -= mc * rx * ry; ib[2] -= mc * rx * rz; ib[5] -= mc * ry * rz
             // boundary: any of the 26 neighbours outside the body; the outward normal points at the empty side
             var ex = 0.0; var ey = 0.0; var ez = 0.0; var face = false
-            var touch = -1
+            var tch = -1
             for (dk in -1..1) for (dj in -1..1) for (di in -1..1) {
                 if (di == 0 && dj == 0 && dk == 0) continue
                 if (member(i + di, j + dj, k + dk)) continue
                 val w = 1.0 / sqrt((di * di + dj * dj + dk * dk).toDouble())
                 ex += di * w; ey += dj * w; ez += dk * w
                 if (abs(di) + abs(dj) + abs(dk) == 1) face = true
-                val ii = i + di; val jj = j + dj; val kk = k + dk
-                if (ii in 0 until f.nx && jj in 0 until f.ny && kk in 0 until f.nz) {
-                    val l = f.label[f.idx(ii, jj, kk)].toInt()
-                    if (l >= 0 && !inSet[l]) touch = l
-                }
+                val t = touch(i + di, j + dj, k + dk)
+                if (t >= 0) tch = t
             }
             if (!face) continue
             val el = sqrt(ex * ex + ey * ey + ez * ez)
             if (el < 1e-9) continue
-            px += rx; py += ry; pz += rz; qx += ex / el; qy += ey / el; qz += ez / el; rp += touch
+            px += rx; py += ry; pz += rz; qx += ex / el; qy += ey / el; qz += ez / el; rp += tch
         }
         ib[3] = ib[1]; ib[6] = ib[2]; ib[7] = ib[5]
         b.inertia = ib
@@ -153,7 +176,6 @@ class RockPhysics(
         b.nxL = DoubleArray(b.np) { qx[keep[it]] }; b.nyL = DoubleArray(b.np) { qy[keep[it]] }; b.nzL = DoubleArray(b.np) { qz[keep[it]] }
         b.restPiece = IntArray(b.np) { rp[keep[it]] }
         b.extent = sqrt(b.rx.indices.maxOfOrNull { b.rx[it] * b.rx[it] + b.ry[it] * b.ry[it] + b.rz[it] * b.rz[it] } ?: 1.0)
-        return b
     }
 
     private fun stride(ids: List<Int>, max: Int): List<Int> {
@@ -207,13 +229,14 @@ class RockPhysics(
      * Advances the rocks by [dt] sim seconds. Asleep and unchanged: one counter add. Returns true when a pose changed
      * (the caller refreshes the snapshot's rock poses).
      */
-    fun step(dt: Double): Boolean {
+    fun step(dt: Double, checks: Boolean = true): Boolean {
         if (!built) return false
         checkAcc += dt
         val awake = anyAwake
-        if (checkAcc >= (if (awake) CHECK_AWAKE_S else CHECK_S)) {
+        if (checks && (recheck || checkAcc >= (if (awake) CHECK_AWAKE_S else CHECK_S))) {
             checkAcc = 0.0
-            if (awake || sand.version != lastSandVersion) {
+            if (awake || recheck || sand.version != lastSandVersion) {
+                recheck = false
                 lastSandVersion = sand.version
                 for (b in bodies) if (!b.awake && !b.pinned && b.cooldown <= 0.0 && !stable(b)) wake(b)
             }
@@ -240,6 +263,59 @@ class RockPhysics(
         b.awake = true; b.sleepT = 0.0; b.awakeT = 0.0
         b.pos.copyInto(b.wakePos); b.q.copyInto(b.wakeQ)
         b.wakes++
+    }
+
+    // ============================================================== aquascape builder
+    /**
+     * Puts a dry rock of [shape] into the tank with its lowest point at ([x], [bottomY], [z]), turned [yawRad] about
+     * the vertical; it falls from there and settles on whatever is under it. [bornSec] is the sim time it went in (its
+     * cure clock). Returns its body.
+     */
+    fun addRock(shape: DryRockShape, seed: Int, x: Double, bottomY: Double, z: Double, yawRad: Double, bornSec: Double, name: String? = null): RockBody {
+        build()
+        val nm = name ?: "D${++addedCount}"
+        if (name != null) name.removePrefix("D").toIntOrNull()?.let { addedCount = max(addedCount, it) }
+        val p = field.addPiece(DryRock.def(shape, seed, nm))
+        val b = makeAddedBody(p)
+        b.shape = shape; b.seed = seed; b.bornSec = bornSec; b.dropping = true
+        b.q[0] = 0.0; b.q[1] = kotlin.math.sin(yawRad / 2); b.q[2] = 0.0; b.q[3] = kotlin.math.cos(yawRad / 2)
+        Quat4.toMat(b.q, b.rot)
+        val r = b.rot
+        b.pos[0] = x + r[0] * b.comRest[0] + r[1] * b.comRest[1] + r[2] * b.comRest[2]
+        b.pos[1] = bottomY + r[3] * b.comRest[0] + r[4] * b.comRest[1] + r[5] * b.comRest[2]
+        b.pos[2] = z + r[6] * b.comRest[0] + r[7] * b.comRest[1] + r[8] * b.comRest[2]
+        b.moved = true
+        bodies += b
+        indexBodies()
+        publish(b)
+        b.awake = true; b.sleepT = 0.0; b.awakeT = 0.0
+        b.pos.copyInto(b.wakePos); b.q.copyInto(b.wakeQ)
+        field.refresh()
+        version++
+        return b
+    }
+
+    /** Takes [b] out of the tank (aquascape builder); whatever rested on it gets its footing checked. */
+    fun removeBody(b: RockBody) {
+        build()
+        for (p in b.pieces) field.removePiece(p)
+        bodies.remove(b)
+        indexBodies()
+        recheck = true
+        for (o in bodies) o.cooldown = 0.0
+        version++
+    }
+
+    /** The body whose rock is nearest (x, y, z), within [maxCm]; null when none is that close. */
+    fun bodyNear(x: Double, y: Double, z: Double, maxCm: Double): RockBody? {
+        build()
+        var best: RockBody? = null
+        var bd = maxCm
+        for (b in bodies) for (p in b.pieces) {
+            val d = if (field.moved[p]) field.pieceDist(p, x, y, z) else field.pieces[p].dist(x, y, z)
+            if (d < bd) { bd = d; best = b }
+        }
+        return best
     }
 
     fun drainSettled(): List<Settle> = if (settled.isEmpty()) emptyList() else settled.toList().also { settled.clear() }
@@ -424,6 +500,8 @@ class RockPhysics(
         for (p in field.pieces.indices) {
             val m = field.xf[p]
             val o = p * 16
+            // a rock taken out collapses to a point (nothing drawn)
+            if (field.gone[p]) { out[o + 15] = 1f; continue }
             out[o] = m[0].toFloat(); out[o + 1] = m[3].toFloat(); out[o + 2] = m[6].toFloat()
             out[o + 4] = m[1].toFloat(); out[o + 5] = m[4].toFloat(); out[o + 6] = m[7].toFloat()
             out[o + 8] = m[2].toFloat(); out[o + 9] = m[5].toFloat(); out[o + 10] = m[8].toFloat()
@@ -432,23 +510,51 @@ class RockPhysics(
         return out
     }
 
-    /** Moved rocks as text (piece name: quaternion xyzw, then body centre xyz), for saving the tank between launches. */
-    fun encode(): String = bodies.filter { it.moved }.joinToString(";") { b ->
-        field.pieces[b.pieces[0]].name + ":" + (b.q.toList() + b.pos.toList()).joinToString(",") { ((it * 1e4).toLong() / 1e4).toString() }
+    /**
+     * The rockscape's changes as text, for saving the tank between launches: a moved rock as `name:qx,qy,qz,qw,x,y,z`
+     * (quaternion, body centre), an added dry rock as `+name/SHAPE/seed/bornSec:` and its pose, a rock taken out as
+     * `-name`.
+     */
+    fun encode(): String {
+        fun pose(b: RockBody) = (b.q.toList() + b.pos.toList()).joinToString(",") { ((it * 1e4).toLong() / 1e4).toString() }
+        val out = ArrayList<String>()
+        for (p in 0 until field.baseCount) if (field.gone[p]) out += "-" + field.pieces[p].name
+        for (b in bodies) {
+            if (!b.moved) continue
+            val sh = b.shape
+            out += if (sh == null) field.pieces[b.pieces[0]].name + ":" + pose(b)
+            else "+" + field.pieces[b.pieces[0]].name + "/" + sh.name + "/" + b.seed + "/" + b.bornSec.toLong() + ":" + pose(b)
+        }
+        return out.joinToString(";")
     }
 
-    /** Restores [encode]d poses (the bodies must be [build]t). Unknown names are skipped. */
+    /** Restores an [encode]d rockscape (the bodies must be [build]t). Unknown names and shapes are skipped. */
     fun decode(s: String) {
         if (s.isBlank()) return
         for (part in s.split(';')) {
-            val name = part.substringBefore(':')
+            if (part.startsWith("-")) {
+                val p = field.pieces.indexOfFirst { it.name == part.substring(1) }.takeIf { it in 0 until field.baseCount } ?: continue
+                val bi = bodyOf.getOrElse(p) { -1 }
+                if (bi >= 0) removeBody(bodies[bi]) else field.removePiece(p)
+                continue
+            }
             val v = part.substringAfter(':').split(',').mapNotNull { it.toDoubleOrNull() }
             if (v.size != 7) continue
-            val p = field.pieces.indexOfFirst { it.name == name }.takeIf { it >= 0 } ?: continue
-            val bi = bodyOf[p].takeIf { it >= 0 } ?: continue
-            val b = bodies[bi]
-            if (b.pieces[0] != p) continue
-            if (!b.moved) { field.markMoved(b.pieces); b.moved = true }
+            val b: RockBody
+            if (part.startsWith("+")) {
+                val h = part.substring(1).substringBefore(':').split('/')
+                if (h.size != 4) continue
+                val shape = DryRockShape.entries.firstOrNull { it.name == h[1] } ?: continue
+                b = addRock(shape, h[2].toIntOrNull() ?: 0, 0.0, 0.0, 0.0, 0.0, h[3].toDoubleOrNull() ?: 0.0, h[0])
+                b.awake = false; b.dropping = false
+            } else {
+                val name = part.substringBefore(':')
+                val p = field.pieces.indexOfFirst { it.name == name }.takeIf { it >= 0 } ?: continue
+                val bi = bodyOf[p].takeIf { it >= 0 } ?: continue
+                b = bodies[bi]
+                if (b.pieces[0] != p) continue
+                if (!b.moved) { field.markMoved(b.pieces); b.moved = true }
+            }
             for (k in 0 until 4) b.q[k] = v[k]
             Quat4.normalize(b.q)
             Quat4.toMat(b.q, b.rot)
@@ -514,6 +620,12 @@ class RockBody(val pieces: IntArray, val name: String) {
     var rx = DoubleArray(0); var ry = DoubleArray(0); var rz = DoubleArray(0)
     var nxL = DoubleArray(0); var nyL = DoubleArray(0); var nzL = DoubleArray(0)
     var restPiece = IntArray(0)
+    /** Dry rock added with the aquascape builder: its shape and seed, and the sim time it went in (null shape = part of the tank as built). */
+    var shape: DryRockShape? = null
+    var seed = 0
+    var bornSec = 0.0
+    /** Just dropped in by the builder and still falling (its landing is not a rockslide). */
+    var dropping = false
     // state
     val pos = DoubleArray(3)
     val q = doubleArrayOf(0.0, 0.0, 0.0, 1.0)

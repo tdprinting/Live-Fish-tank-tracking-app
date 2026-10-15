@@ -42,6 +42,8 @@ data class CustomTankSave(
     /** Animals of species this version cannot load, carried through untouched. */
     val dormant: List<SavedAnimal> = emptyList(),
     val dormantCorals: List<SavedCoral> = emptyList(),
+    /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
+    val rocks: String = "",
 )
 
 @Serializable

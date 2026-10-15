@@ -41,6 +41,15 @@ sealed class Command {
      */
     data class UndermineRock(val rock: String? = null) : Command()
     /**
+     * Aquascape builder: drops a white dry rock of [shape] over (x, z), turned [yawDeg] about the vertical; it falls and
+     * settles on what is under it. [seed] varies the rock (−1: a new one each time).
+     */
+    data class PlaceRock(val shape: DryRockShape, val x: Double, val z: Double, val yawDeg: Double = 0.0, val seed: Int = -1) : Command()
+    /** Aquascape builder: takes out the rock nearest [at] (null: the dry rock added last). */
+    data class RemoveRock(val at: com.reeflive.core.geom.Vec3? = null) : Command()
+    /** Aquascape builder: empties the tank of rock, to build a scape from scratch. */
+    data object ClearRocks : Command()
+    /**
      * A finger held on the glass (or the water surface) after a long press, at [point] (world cm), moving at [speedCmS]
      * along the pane ([TankTouch] finger rules): food-conditioned bold fish come and follow it, nipping at the glass when
      * it rests; a fast-moving finger makes them hang back. [point] null = the finger lifted.
@@ -224,6 +233,8 @@ sealed class SimEvent {
      * its name in the scape (R0…R10, glued rocks joined by '+'), moved [moveCm] and turned [turnDeg].
      */
     data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
+    /** The aquascape builder added ([added]) or took out a rock (save the tank's rock layout). */
+    data class RockscapeChanged(val rock: String, val added: Boolean, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -404,6 +415,10 @@ data class SimSnapshot(
     /** The fish net while it fetches a dead animal ([FishNet]), and the last body it took out (for the goodbye). */
     val net: NetPose? = null,
     val netFlush: NetFlush? = null,
+    /** Dry rocks added with the aquascape builder (drawn from their shape at [rockPoses]), or null for none. */
+    val builtRocks: List<BuiltRock>? = null,
+    /** The live rock field once rocks have moved or been added / taken out (taps and the camera hit rocks where they are now). */
+    val rockSdf: com.reeflive.core.geom.Sdf? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

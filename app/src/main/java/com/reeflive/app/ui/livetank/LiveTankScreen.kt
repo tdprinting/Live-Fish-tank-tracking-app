@@ -161,6 +161,9 @@ import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.CoralKind
 import com.reeflive.core.sim.DoseCheck
+import com.reeflive.core.sim.DryRockShape
+import com.reeflive.app.ui.live.AquascapeBar
+import com.reeflive.app.ui.live.ScapeTool
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
@@ -316,6 +319,12 @@ fun LiveTankScreen(
     BackHandler(enabled = micro) { micro = false }
     // clean-glass mode (both modes): drag the Flipper over the front glass; Back or "Done" leaves it
     var cleaning by rememberSaveable { mutableStateOf(false) }
+    // aquascape builder (Tools → Build rockwork): taps on the tank drop or take out rocks
+    var scaping by rememberSaveable { mutableStateOf(false) }
+    var scapeShape by rememberSaveable { mutableStateOf(DryRockShape.BOULDER) }
+    var scapeTool by rememberSaveable { mutableStateOf(ScapeTool.DROP) }
+    var scapeTurn by rememberSaveable { mutableStateOf(0) }
+    BackHandler(enabled = scaping) { scaping = false }
     BackHandler(enabled = cleaning) { cleaning = false }
     // Submarine mode (SubmarineControls): a toy sub the fish react to; Back docks it
     val subUi by vm.submarine.collectAsStateWithLifecycle()
@@ -425,7 +434,11 @@ fun LiveTankScreen(
     // the glass (a puff on the sand), and the animals nearby answer it in the sim (Command.TouchTank)
     val onTouchTank: (Vec3, TouchSurface) -> Unit = { p, surface ->
         val tap = waterTap()
-        if (tap == WaterTap.TOUCH) {
+        if (scaping) {
+            haptics.tick()
+            if (scapeTool == ScapeTool.TAKE_OUT) vm.removeRock(p)
+            else { vm.placeRock(scapeShape, p, surface, scapeTurn.toDouble()); audio.knock(0.5f) }
+        } else if (tap == WaterTap.TOUCH) {
             vm.touchTank(p, surface)
             val glass = surface == TouchSurface.GLASS
             audio.knock(if (glass) 1f else 0.7f)
@@ -674,6 +687,7 @@ fun LiveTankScreen(
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
         onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
+        onAquascape = { tick(); open = null; vm.select(null); vm.follow(null); cleaning = false; scaping = true },
         onHide = { tick(); chromeHidden = true },
         onScreensaver = { tick(); context.startActivity(Intent(context, ScreensaverActivity::class.java)) },
         onHelp = {
@@ -855,7 +869,7 @@ fun LiveTankScreen(
         val besideBar = landscape && maxWidth >= BottomBarMaxWidth + (s.railWidth + 32.dp) * 2
         val menuBottom = if (besideBar) navInset + 8.dp else NavClearance + navInset
         val following = followId != null && stats != null && !cleaning
-        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && bagCarry == null && !subUi.on
+        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && bagCarry == null && !subUi.on && !scaping
         // what the HUD keeps clear of: the rail on the left (landscape) or the dock above the bar (portrait)
         val hudStart = if (landscape && menuUp) s.railWidth + 4.dp else 0.dp
         val hudBottom = when {
@@ -874,6 +888,19 @@ fun LiveTankScreen(
             onFinger = onFinger,
             onFlick = onFlick,
             followCam = followCam,
+        )
+        if (scaping) AquascapeBar(
+            shape = scapeShape, tool = scapeTool, turnDeg = scapeTurn,
+            onShape = { tick(); scapeShape = it },
+            onTool = { tick(); scapeTool = it },
+            onTurn = { tick(); scapeTurn = (scapeTurn + 45) % 360 },
+            onUndo = { tick(); vm.removeRock(null) },
+            onEmpty = { tick(); vm.clearRocks() },
+            onDone = { tick(); scaping = false },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 12.dp, end = 12.dp, bottom = navInset + 12.dp)
+                .widthIn(max = 560.dp),
         )
         // speech bubbles over a few animals: same bounds as the tank view, draws only, touches go through
         if (thoughtsOn && !micro && !supplies && carry == null && bagCarry == null && !cleaning && !subUi.on) {

@@ -114,6 +114,8 @@ class LiveTools(
     val readouts: List<WaterReadout>,
     /** Things that make a fish ill ask first; the menu only reports the pick. */
     val onHeatWave: () -> Unit = {},
+    /** Tools → Build rockwork: opens the aquascape builder (white dry rock). */
+    val onAquascape: () -> Unit = {},
     // ---- time slider (both modes) and the Watch card
     val speed: Double = 1.0,
     val simTimeSec: Double = 0.0,
@@ -574,6 +576,7 @@ private fun ColumnScope.CardBody(
                 T("Look closer", ReefGlyphs.microscope) { tools.onMicroscope() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
                 T("Knock glass", ReefGlyphs.touch) { tools.onTapGlass() },
+                T("Build rockwork", ReefGlyphs.rocks, sub = "Add white dry rock") { tools.onAquascape() },
                 T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
