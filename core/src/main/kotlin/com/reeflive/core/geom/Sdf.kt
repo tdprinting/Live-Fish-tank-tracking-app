@@ -168,6 +168,14 @@ class SdfGrid(
     private val d: FloatArray, private val coverBytes: ByteArray?,
 ) : CachedCoverSdf() {
 
+    /** A copy with the bake's sign errors and face seams mended (see [parse]). */
+    fun repaired(): SdfGrid {
+        val r = d.copyOf()
+        repairFaces(nx, ny, nz, cell.toFloat(), r)
+        repairSigns(nx, ny, nz, cell.toFloat(), r)
+        return SdfGrid(nx, ny, nz, origin, cell, r, coverBytes)
+    }
+
     private fun at(ix: Int, iy: Int, iz: Int): Float {
         val x = ix.coerceIn(0, nx - 1); val y = iy.coerceIn(0, ny - 1); val z = iz.coerceIn(0, nz - 1)
         return d[(z * ny + y) * nx + x]
@@ -334,7 +342,11 @@ class SdfGrid(
         /** Widest reach (cells either side) of the [slopeIn] tables. */
         const val SLOPE_REACH = 3
 
-        fun parse(bytes: ByteArray): SdfGrid {
+        /**
+         * Reads an RSDF file. [repair] mends the bake's sign errors and face seams ([repairFaces], [repairSigns]): the
+         * solid bodies need it (they were pushed out of rock that is not there); off, the field is the file as baked.
+         */
+        fun parse(bytes: ByteArray, repair: Boolean = false): SdfGrid {
             val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             val magic = String(bytes, 0, 4, Charsets.US_ASCII)
             require(magic == "RSDF") { "Not an RSDF file (magic=$magic)" }
@@ -346,9 +358,7 @@ class SdfGrid(
             require(n > 0 && bytes.size >= 32 + n * 2) { "RSDF truncated" }
             val d = FloatArray(n) { Half.toFloat(b.short) }
             val cover = if (b.remaining() >= n) ByteArray(n).also { b.get(it) } else null
-            repairFaces(nx, ny, nz, cell.toFloat(), d)
-            repairSigns(nx, ny, nz, cell.toFloat(), d)
-            return SdfGrid(nx, ny, nz, origin, cell, d, cover)
+            return SdfGrid(nx, ny, nz, origin, cell, d, cover).let { if (repair) it.repaired() else it }
         }
 
         /**

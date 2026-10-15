@@ -347,6 +347,9 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     /** The hermit's leg pose entries (from [LEG_POSE0]) as the tick began, before its first solve. */
     private val tickLegs = FloatArray(HermitLegs.COUNT * 4 - LEG_POSE0)
 
+    /** Whether the bodies are solid (Simulation.solidBodies); off, the seat is as before them. Set by the Simulation. */
+    var solid = false
+
     /** The surface of the last [update] ([carry] checks the legs against it). */
     private var surface: CrawlSurface? = null
 
@@ -639,7 +642,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
 
     private fun clearHermit(rig: HermitLegs) {
         // (eased back to rest a step a tick, as every pose entry: the flag below already hands the legs to the gait)
-        for (i in LEG_POSE0 until rig.out.size) rig.out[i] = if (i == HermitLegs.PLANTED_FLAG) 0f else ease(rig.out[i], 0f)
+        for (i in LEG_POSE0 until rig.out.size) rig.out[i] = if (i == HermitLegs.PLANTED_FLAG || !solid) 0f else ease(rig.out[i], 0f)
         rig.out[8 * 4 + 2] = 0f; rig.out[9 * 4 + 2] = 0f; rig.out[6 * 4 + 3] = 0f
         antennaBend = 0.0; antennuleBend = 0.0; eyeBend = 0.0
     }

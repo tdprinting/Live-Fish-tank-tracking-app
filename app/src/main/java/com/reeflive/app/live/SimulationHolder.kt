@@ -330,7 +330,7 @@ class SimulationHolder(
         if (rock == null) {
             rock = runCatching {
                 val am = assets ?: error("no assets")
-                RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() })
+                RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() }, repairBake = true)
             }.getOrElse { RockData.defaultTank() }.also { r ->
                 // the animals stand on the sand that is drawn: tank.glb's sand mesh (slope, mounds at the rock feet, lanes,
                 // spoil fan, rubble), rasterized once; the sim's dynamic sand bed adds its digging on top like static.vert

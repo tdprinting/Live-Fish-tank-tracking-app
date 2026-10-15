@@ -94,7 +94,7 @@ class RockData(
     fun forSim(): RockData {
         val base = (sdf as? DynamicRockSdf)?.base ?: sdf
         val field = if (pieces.isEmpty()) base else DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm)
-        return RockData(field, restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces).also { it.sandBase = sandBase }
+        return RockData(field, restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces).also { it.sandBase = sandBase; it.liveFloor = liveFloor }
     }
 
     /**
@@ -115,6 +115,15 @@ class RockData(
     /** Height of the sand floor (cm) at (x, z). */
     fun floorY(x: Double, z: Double): Double = floorAt?.invoke(x, z) ?: sandTopCm
 
+    /**
+     * Whether the water's floor ([envDist], [inWater], [clampToWater]) is the live sand ([floorY]) rather than the flat
+     * [sandTopCm]: on with the solid bodies (Simulation.solidBodies), off as before.
+     */
+    @Volatile var liveFloor = false
+
+    /** The floor of the water at (x, z): [floorY] with [liveFloor], else the flat [sandTopCm]. */
+    fun waterFloor(x: Double, z: Double): Double = if (liveFloor) floorY(x, z) else sandTopCm
+
     /** Upper bound on [floorY] over a box (x0, z0, x1, z1), for the [floorAt] it was set with ([setFloorMax]). */
     private var floorMaxAt: ((Double, Double, Double, Double) -> Double)? = null
     private var floorMaxFor: Any? = null
@@ -134,16 +143,16 @@ class RockData(
 
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
-        sdf.dist(p), p.y - floorY(p.x, p.z), waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
+        sdf.dist(p), p.y - waterFloor(p.x, p.z), waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
     )
 
     fun inWater(p: Vec3, margin: Double = 0.0) =
-        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (floorY(p.x, p.z) + margin)..(waterLevelCm - margin)
+        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (waterFloor(p.x, p.z) + margin)..(waterLevelCm - margin)
 
     fun clampToWater(p: Vec3, margin: Double): Vec3 {
         val x = p.x.coerceIn(margin, lengthCm - margin)
         val z = p.z.coerceIn(margin, widthCm - margin)
-        val lo = floorY(x, z) + margin
+        val lo = waterFloor(x, z) + margin
         return Vec3(x, p.y.coerceIn(min(lo, waterLevelCm - margin), waterLevelCm - margin), z)
     }
 
@@ -152,9 +161,12 @@ class RockData(
         fun ofSpheres(spheres: List<Pair<Vec3, Double>>, anchors: AnchorSet = DefaultScape.anchorsRaw()): RockData =
             RockData(AnalyticSdf(spheres.map { (c, r) -> Ellipsoid(c, Vec3(r, r, r)) }), anchors)
 
-        /** Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names. */
-        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String): RockData =
-            RockData(SdfGrid.parse(sdfBytes), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
+        /**
+         * Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names.
+         * [repairBake]: the field with the bake's errors mended ([SdfGrid.parse]), for the solid bodies.
+         */
+        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String, repairBake: Boolean = false): RockData =
+            RockData(SdfGrid.parse(sdfBytes, repairBake), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
 
         /** The analytic recreation of Tee's rockscape (ASSETS §3.1) with snapped anchors and carved holes. */
         fun defaultTank(): RockData = DefaultScape.build()

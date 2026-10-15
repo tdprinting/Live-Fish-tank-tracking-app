@@ -23,6 +23,20 @@ object TestTank {
         if (System.getProperty("reeflive.analyticRock") == "true") RockData.defaultTank() else bakedRock ?: RockData.defaultTank()
     }
 
+    /** [bakedRock] with the bake's errors mended, as the app and the web load it for the solid bodies. */
+    val solidRock: RockData by lazy {
+        if (System.getProperty("reeflive.analyticRock") == "true") RockData.defaultTank()
+        else assetDir()?.let { d -> RockData.fromFiles(File(d, "rock_sdf.bin").readBytes(), File(d, "anchors.json").readText(), repairBake = true) }
+            ?: RockData.defaultTank()
+    }
+
+    /** [sim] on [solidRock] with the solid bodies on ([Simulation.solidBodies]). */
+    fun solidSim(
+        livestock: List<LivestockSeed>,
+        seed: Long = 1L,
+        startHour: Double = 12.0,
+    ) = Simulation(TankConfig(seed = seed), catalog, solidRock, seed, startHour * 3600, WaterState(), livestock).also { it.solidBodies = true }
+
     fun sim(
         livestock: List<LivestockSeed>,
         seed: Long = 1L,

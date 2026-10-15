@@ -112,6 +112,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Hover height of the head over the sand at (x, z). */
     /** Belly height over the sand at a head position (x, z): the highest bed under the body (the mounds it dumps), not just under the head. */
     private fun hoverY(x: Double, z: Double): Double {
+        if (!c.sim.bodies.enabled) return sand.surfaceY(x, z) + 0.5 * o.species.depthRatio * o.lengthCm + 0.2   // (as before the solid bodies)
         val h = horizontalHeading(o.heading, Vec3.X)
         var g = sand.surfaceY(x, z)
         for (k in 1..4) { val f = o.lengthCm * k / 4.0; g = max(g, sand.surfaceY(x - h.x * f, z - h.z * f)) }
@@ -121,6 +122,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Sifting at the rock foot and lying in the burrow under it, the fish is kept a few mm off the rock face (the burrow is in the sand). */
     /** [p] (the head, facing [fwd]) moved so the whole body, tail included, stays inside the glass. */
     private fun inGlass(p: Vec3, fwd: Vec3): Vec3 {
+        if (!c.sim.bodies.enabled) return p
         val m = 0.6
         val tail = p - fwd * o.lengthCm
         fun shift(h: Double, t: Double, hi: Double) = max(m - min(h, t), 0.0) - max(max(h, t) - (hi - m), 0.0)
@@ -239,10 +241,11 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun enter(c: Ctx) { inside = false }
         override fun update(c: Ctx, out: SteerIntent) {
             val night = c.p.night
-            if (!inside && o.pos.distanceTo(mouth(0.5)) > 3) {
+            val solid = c.sim.bodies.enabled
+            if ((if (solid) !inside else o.posture != 3) && o.pos.distanceTo(mouth(0.5)) > 3) {
                 glide(c, out, mouth(0.5), 1.2)
                 // nosing into the mouth under the rock: in the burrow (an allowed contact, as in [DigBurrow])
-                if (o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
+                if (solid && o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
                 return
             }
             inside = true
@@ -250,7 +253,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             // eased in a step at a time, each step kept off the rock (the burrow is in the sand under it: the straight
             // ease from the mouth cut the corner of the rock lip with the head)
             val to = offRock(burrow + inDir * (if (night) 1.5 else 0.2))
-            out.place(offRock(o.pos.lerp(to, 1 - kotlin.math.exp(-3.0 * c.dt))), inDir, Vec3.Y, 1e3)
+            if (solid) out.place(offRock(o.pos.lerp(to, 1 - kotlin.math.exp(-3.0 * c.dt))), inDir, Vec3.Y, 1e3)
+            else out.place(to, inDir, Vec3.Y, 3.0)
             out.posture = 3
             o.visible = !night
             o.sleeping = night
@@ -432,7 +436,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             // at the burrow mouth (under the rock, in its own pit) it is working the burrow: an allowed contact
             // (and on the way out, up to 1.5 L, while any of the body is still in the sand or rock round the mouth)
             val db = o.pos.distanceTo(burrow)
-            if (db < 0.8 * o.lengthCm || db < 1.5 * o.lengthCm && o.posture == 3 && c.sim.bodies.sectionDepth(o) > 0.0) out.posture = 3
+            if (c.sim.bodies.enabled) if (db < 0.8 * o.lengthCm || db < 1.5 * o.lengthCm && o.posture == 3 && c.sim.bodies.sectionDepth(o) > 0.0) out.posture = 3
         }
     }
 

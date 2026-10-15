@@ -128,9 +128,9 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             } else {
                 if (rock.sdf.dist(p) < 0.3) {
                     p = rock.sdf.project(p, 0.3); f.settled = true; f.vel = Vec3.ZERO
-                } else if (p.y <= rock.floorY(p.x, p.z) + 0.35) {
-                    // settles on the sand that is there (the drawn bed plus the animals' digging), not inside it
-                    p = p.withY(rock.floorY(p.x, p.z) + 0.3); f.settled = true; f.vel = Vec3.ZERO
+                } else {
+                    val ground = groundY?.let { g -> kotlin.math.max(rock.sandTopCm, g(p.x, p.z)) } ?: rock.sandTopCm
+                    if (p.y <= ground + 0.35) { p = p.withY(ground + 0.3); f.settled = true; f.vel = Vec3.ZERO }
                 }
             }
             f.pos = p

@@ -141,7 +141,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     init {
         Thread({
-            sdf = runCatching { SdfGrid.parse(assets.open("sim/rock_sdf.bin").use { it.readBytes() }) }
+            sdf = runCatching { SdfGrid.parse(assets.open("sim/rock_sdf.bin").use { it.readBytes() }, repair = true) }
                 .onFailure { Log.w(Gl.TAG, "rock SDF unavailable; follow camera without collision", it) }.getOrNull()
         }, "reef-sdf").start()
     }

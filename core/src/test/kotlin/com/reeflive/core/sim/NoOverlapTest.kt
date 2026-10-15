@@ -47,7 +47,7 @@ class NoOverlapTest {
     private val tankGlb: File? = listOf("../app/src/main/assets/models/tank.glb", "app/src/main/assets/models/tank.glb").map(::File).firstOrNull { it.isFile }
 
     private fun teeSim(seed: Long, hour: Double): Simulation {
-        val rock = TestTank.rock.forSimulation().also { r -> tankGlb?.let { r.sandBase = HeightField.fromGlb(it.readBytes(), r.lengthCm, r.widthCm) } }
+        val rock = TestTank.solidRock.forSimulation().also { r -> tankGlb?.let { r.sandBase = HeightField.fromGlb(it.readBytes(), r.lengthCm, r.widthCm) } }
         return Simulation(TankConfig(seed = seed), TestTank.catalog, rock, seed, hour * 3600, WaterState(), DefaultStock.all).also { it.solidBodies = true }
     }
 

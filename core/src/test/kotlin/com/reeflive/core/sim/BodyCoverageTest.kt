@@ -28,7 +28,7 @@ class BodyCoverageTest {
             val catalog = SpeciesCatalog.fromClasspath(listOf(id), prefix)
             val sp = catalog.all().firstOrNull() ?: continue
             if (sp.isCoral) continue
-            val sim = Simulation(TankConfig(seed = 3), catalog, TestTank.rock, 3, 12 * 3600.0, WaterState(), listOf(LivestockSeed(id, "x", id = "x"))).also { it.solidBodies = true }
+            val sim = Simulation(TankConfig(seed = 3), catalog, TestTank.solidRock, 3, 12 * 3600.0, WaterState(), listOf(LivestockSeed(id, "x", id = "x"))).also { it.solidBodies = true }
             val o = sim.organisms.firstOrNull { it.id == "x" } ?: sim.organisms.firstOrNull()
             if (o == null) { problems += "$id: nothing spawned"; continue }
             animals++

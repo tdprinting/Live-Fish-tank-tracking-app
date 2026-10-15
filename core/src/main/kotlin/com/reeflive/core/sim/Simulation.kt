@@ -195,7 +195,7 @@ class Simulation private constructor(
      */
     var solidBodies: Boolean
         get() = bodies.enabled
-        set(v) { bodies.enabled = v }
+        set(v) { bodies.enabled = v; rock.liveFloor = v }
 
     /** Turns the dynamic rockscape on (builds the rock bodies the first time) or off (rocks freeze where they are). */
     fun setDynamicRocks(on: Boolean) {
@@ -632,7 +632,7 @@ class Simulation private constructor(
         }
         behaviorEnabled = prev
         // the poses the host draws next are resolved again (the steps above ran without the body collision)
-        if (!bodies.posesLive) settleBodies(MAX_BEHAVIOR_DT)
+        if (!bodies.posesLive && bodies.enabled) settleBodies(MAX_BEHAVIOR_DT)
         latest = snapshot()
     }
 
@@ -669,7 +669,7 @@ class Simulation private constructor(
         // ABSTRACT_SPEED the parked poses are drawn too, and one step per wall tick costs no more than 1x), not on the
         // headless 60 s steps of advanceAbstract (catch-up, the timelapse, health runs), whose poses nobody sees
         val live = useBehavior
-        if (live && !bodies.posesLive) settleBodies(dtB)
+        if (live && !bodies.posesLive && bodies.enabled) settleBodies(dtB)
         bodies.posesLive = live
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
@@ -694,7 +694,7 @@ class Simulation private constructor(
         sand.takeRaised()?.let { if (useBehavior) bodies.afterSandRaised(organisms, it, dtB) }
         // every body matches its animal (pose, growth) at the end of the step, so a later read of o.body (a brain's next
         // tick, a test, the pair hash) never sees a stale one and the run does not depend on who looked at it
-        for (o in organisms) o.body.refresh(o)
+        if (bodies.enabled) for (o in organisms) o.body.refresh(o)
         tickCount++
     }
 
@@ -804,12 +804,12 @@ class Simulation private constructor(
     }
 
     private fun behaviorTick(dt: Double) {
-        obstacles.sync(this)
+        if (bodies.enabled) obstacles.sync(this)
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
         if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
-        nav.step()
+        if (bodies.enabled) nav.step()
         for (o in organisms.toList()) {
             if (o !in organisms) continue   // eaten during this tick
             val a = agents[o] ?: continue
@@ -824,6 +824,7 @@ class Simulation private constructor(
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.let { st ->
                 val p0 = o.pos; val u0 = o.up
+                st.solid = bodies.enabled
                 st.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
                 // the seat moved the animal onto where its shell rests, and it is drawn there: that pose goes through
                 // the body collision too
@@ -854,6 +855,7 @@ class Simulation private constructor(
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.let { st ->
                 val p0 = o.pos; val u0 = o.up
+                st.solid = bodies.enabled
                 st.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
                 if (o.pos != p0 || o.up != u0 || o.seatOn) bodies.resolveEnv(o, dt)
             }
@@ -866,7 +868,7 @@ class Simulation private constructor(
 
     private fun deadPhysics(o: Organism, dt: Double) {
         val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
-        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.floorY(o.pos.x, o.pos.z) + 0.6
+        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.waterFloor(o.pos.x, o.pos.z) + 0.6
         val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
         val vy = if (buoyant) 1.2 else -2.0
         var p = o.pos + (f + Vec3(0.0, vy, 0.0)) * dt

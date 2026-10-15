@@ -20,7 +20,7 @@ class BodyCollisionTest {
     private val tankGlb: File? = listOf("../app/src/main/assets/models/tank.glb", "app/src/main/assets/models/tank.glb").map(::File).firstOrNull { it.isFile }
 
     /** Tee's tank as the app builds it: the baked rock plus the drawn sand mesh as the sand base. */
-    private fun teeRock(): RockData = TestTank.rock.forSimulation().also { r ->
+    private fun teeRock(): RockData = TestTank.solidRock.forSimulation().also { r ->
         tankGlb?.let { r.sandBase = HeightField.fromGlb(it.readBytes(), r.lengthCm, r.widthCm) }
     }
 
@@ -220,6 +220,20 @@ class BodyCollisionTest {
         // sections are a coarse envelope of the mesh, legs included), as NoOverlapTest and HermitSeatTest measure it
         val seat = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
         if (seat != null) { worst = max(worst, seat.contactDepth(sim.crawlSurface, o.lengthCm)); lastTerm = "seat contact" }
+        // a brittle star on its arms: its rig rests the disc and the arms on the rock, sand and glass (the body's
+        // sections are its coarse envelope), so those are measured at the disc's underside and along each arm, as
+        // BrittleMotionTest does
+        val arms = (o.limbRig as? BrittleArms)?.takeIf { o.seatOn }
+        if (arms != null) {
+            if (-arms.discUnderCm > worst) { worst = -arms.discUnderCm; lastTerm = "brittle disc" }
+            for (k in 0 until BrittleArms.ARMS) for (i in 1..10) {
+                val s = i / 10.0
+                if (s > arms.armLen[k]) break
+                val d = sim.crawlSurface.dist(arms.armPoint(o, k, s)) - 0.0105 * 0.62 * (1 - 0.82 * Math.pow(s, 1.25)) * o.lengthCm
+                if (-d > worst) { worst = -d; lastTerm = "brittle arm $k s=$s" }
+            }
+        }
+        val onRig = seat != null || arms != null
         for (i in 0 until BodyState.N) for (half in 0..1) {
             if (half == 1 && i == BodyState.N - 1) continue
             val j = if (half == 1) i + 1 else i
@@ -232,7 +246,7 @@ class BodyCollisionTest {
             for (k in 0 until 12) {
                 val th = k * Math.PI / 6
                 val q = p + up * (c + a * cos(th)) + side * (w * sin(th))
-                val terms = if (seat != null) doubleArrayOf(-1.0, -1.0, -1.0, -1.0, q.y - r.waterLevelCm)
+                val terms = if (onRig) doubleArrayOf(-1.0, -1.0, -1.0, -1.0, q.y - r.waterLevelCm)
                     else doubleArrayOf(-r.sdf.dist(q), r.floorY(q.x, q.z) - q.y, max(-q.x, q.x - r.lengthCm), max(-q.z, q.z - r.widthCm), q.y - r.waterLevelCm)
                 for (m in terms.indices) if (terms[m] > worst) { worst = terms[m]; lastTerm = "${TERMS[m]} station $i${if (half == 1) "+" else ""} at $q" }
             }

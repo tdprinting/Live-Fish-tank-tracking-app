@@ -105,7 +105,7 @@ object ReefLive {
                 status("Building the reef…")
                 val species = SpeciesCatalog.fromClasspath(speciesIds).also { this@ReefLive.species = it }
                 val rock = runCatching {
-                    RockData.fromFiles(kotlin.Resources.get("assets/sim/rock_sdf.bin")!!, kotlin.Resources.get("assets/sim/anchors.json")!!.decodeToString())
+                    RockData.fromFiles(kotlin.Resources.get("assets/sim/rock_sdf.bin")!!, kotlin.Resources.get("assets/sim/anchors.json")!!.decodeToString(), repairBake = true)
                 }.getOrElse { RockData.defaultTank() }.also { this@ReefLive.rock = it }
                 val now = js("new Date()")
                 val secOfDay = (now.getHours() as Int) * 3600.0 + (now.getMinutes() as Int) * 60.0 + (now.getSeconds() as Int)

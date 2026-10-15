@@ -67,7 +67,7 @@ class Steering(private val c: Ctx) {
         val startHeading = o.heading; val startUp = o.up
         o.posture = intent.posture
         // sealed in a hollow of the rock (placed there, see OpenWater): swim out through it rather than stay forever
-        if (!intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o, c.t)) intent.ignoreRock = true
+        if (solid && !intent.ignoreRock && o.isFish && intent.posture !in 3..5 && c.sim.bodies.sealedIn(o, c.t)) intent.ignoreRock = true
         // a walker / glider given an empty intent (a behaviour that just finished) stays on its surface
         // instead of dropping into the swim integrator for a tick
         if (!intent.kinematic && !intent.crawl && intent.target == null && intent.fleeFrom == null && intent.wander == 0.0 &&
@@ -112,7 +112,7 @@ class Steering(private val c: Ctx) {
                 // stepping eases in and out so a stop-go pause plants the feet. Counted after the projection, so a
                 // step that was undone takes no stride.
                 // (along the surface only: the press into it is no travel)
-                val walkSpeed = o.vel.rejectFrom(envNormal(o.pos)).length()
+                val walkSpeed = if (solid) o.vel.rejectFrom(envNormal(o.pos)).length() else o.vel.length()
                 o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
                 o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)
             }
@@ -130,7 +130,7 @@ class Steering(private val c: Ctx) {
         // a free swimmer's body is never pitched past its limit nor rolled past 40°, whatever the avoidance or a wedge's
         // restored pose did to it: it slides along a surface level instead (tee-clips #4, #8: a clown near-vertical, a
         // wrasse pitched up, a fish standing on its nose on the rock)
-        if (o.isFish && !intent.kinematic && !intent.crawl && intent.posture == 0 && intent.splineOverride == null) {
+        if (solid && o.isFish && !intent.kinematic && !intent.crawl && intent.posture == 0 && intent.splineOverride == null) {
             val pm = intent.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
             if (abs(o.heading.y) > pm + 0.02) o.heading = clampPitch(o.heading, pm)
             val level = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
@@ -145,7 +145,7 @@ class Steering(private val c: Ctx) {
         animate(o, intent, dt, sp)
         // the whole body, not just the snout, stays out of the rock, sand, glass and surface (SIMULATION §4.3)
         val settle = o.isFish && (intent.kinematic || sp < 0.4 * max(o.cruiseSpeed, 0.5))
-        val shape0 = if (o.isFish && !intent.crawl) o.spline.pose() else null
+        val shape0 = if (solid && o.isFish && !intent.crawl) o.spline.pose() else null
         c.sim.bodies.resolveEnv(o, dt, rockOn = !intent.ignoreRock, settle = settle)
         if (shape0 != null) limitPushOut(o, shape0, startHeading, startUp, dt, !intent.ignoreRock)
     }
@@ -230,7 +230,7 @@ class Steering(private val c: Ctx) {
         // the snout's stand-off from the rock (0.45 collision length), relaxed on the final approach to a target that
         // sits on the rock (food lying on it, a graze patch): the mouth reaches it, the body collision keeps the body out
         var snoutClear = 0.45 * Lc
-        it.target?.let { t ->
+        if (solid) it.target?.let { t ->
             if (t.distanceTo(o.pos) < 1.5 * L + 4.0) snoutClear = min(snoutClear, max(SNOUT_MIN_CLEAR, rock.sdf.dist(t) - 0.3))
         }
         // a goal behind rock is reached round it: head for the next point of the route in view. A route threads gaps
@@ -276,8 +276,8 @@ class Steering(private val c: Ctx) {
         }
         if (it.separation > 0) {
             var sep = Vec3.ZERO
-            val myTail = tailOf(o)
-            val myHalf = BodyShapes.of(o.species).maxRadius * L
+            val myTail = if (solid) tailOf(o) else o.pos
+            val myHalf = if (solid) BodyShapes.of(o.species).maxRadius * L else 0.0
             for (n in c.p.neighbors(o.pos, L * 2.5 + 6)) {
                 if (n === o) continue
                 if (!n.isFish) {
@@ -288,6 +288,16 @@ class Steering(private val c: Ctx) {
                         val dl = d.length()
                         if (dl in 1e-6..r) sep += d / (dl * dl) * (r * (1.5 - dl / r))
                     }
+                    continue
+                }
+                if (!solid) {
+                    // (as before the solid bodies: snout to snout)
+                    val r = 1.2 * (L + n.lengthCm) / 2
+                    val d = o.pos - n.pos
+                    val dl = d.length()
+                    // full strength (r/dl) well inside, eased to zero across the edge (0.9 r → 1.1 r): the hard cut-off
+                    // flicked two neighbours apart and back every tick as one crossed it
+                    if (dl in 1e-6..(1 + SEP_EDGE) * r) sep += d / (dl * dl) * (r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r)))
                     continue
                 }
                 // personal space between the bodies (not the snouts): ~0.3 BL inside a school, little between mates of
@@ -331,13 +341,13 @@ class Steering(private val c: Ctx) {
             // (on a route the body fits along, the push off the rock is the snout's own stand-off: the wider margin
             // held a juvenile engineer goby for good where its route rounds a rock edge, the pull of the next waypoint
             // and the push off the edge cancelling exactly)
-            val clearance = if (onRoute) snoutClear + ROUTE_ROCK_MARGIN else min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
+            val clearance = if (!solid) 0.6 * Lc + 1.0 else if (onRoute) snoutClear + ROUTE_ROCK_MARGIN else min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
             val d = rock.sdf.dist(look)
             if (d < clearance) a += rock.sdf.gradient(look) * ((clearance - d) * 40)
-            if (!onRoute) a += feelers(o, it)
+            if (solid && !onRoute) a += feelers(o, it)
         }
         if (!it.allowGlass) a += glassAvoid(o.pos, 0.5 * Lc.coerceAtMost(8.0) + 1)
-        a += floorAvoid(o, it)
+        if (solid) a += floorAvoid(o, it)
         a = a.clampLength(maxAccel * 2)
         val steer = (desired - o.vel) * 3.0
         a += steer.clampLength(max(0.0, maxAccel * 2 - a.length()))
@@ -436,7 +446,7 @@ class Steering(private val c: Ctx) {
         val gm = if (it.allowGlass) 0.6 else (0.25 * L).coerceIn(0.6, 4.0)
         val px = p.x.coerceIn(gm, rock.lengthCm - gm); val pz = p.z.coerceIn(gm, rock.widthCm - gm)
         // the snout stays just off the sand; the belly and fins are the body collision's (they rest on the sand there)
-        p = Vec3(px, p.y.coerceIn(rock.floorY(px, pz) + SNOUT_FLOOR_CLEAR, rock.waterLevelCm - 0.6), pz)
+        p = Vec3(px, p.y.coerceIn(snoutFloor(px, pz, L), rock.waterLevelCm - 0.6), pz)
         // (the hold band and the wedge clearance shrink with the snout's stand-off: food on the rock, a route gap)
         val holdD = min(HOLD_BAND * Lc, snoutClear * (HOLD_BAND / 0.45))
         val wedgeD = min(WEDGE_CLEAR * Lc, holdD)
@@ -448,7 +458,7 @@ class Steering(private val c: Ctx) {
             val n = rock.sdf.gradient(o.pos).normalized(Vec3.Y)
             val tan = desired - n * min(0.0, desired dot n)
             var q = o.pos + tan.clampLength(0.5 * cruise) * dt
-            q = Vec3(q.x.coerceIn(gm, rock.lengthCm - gm), q.y, q.z.coerceIn(gm, rock.widthCm - gm)).let { w -> w.withY(w.y.coerceIn(rock.floorY(w.x, w.z) + SNOUT_FLOOR_CLEAR, rock.waterLevelCm - 0.6)) }
+            q = Vec3(q.x.coerceIn(gm, rock.lengthCm - gm), q.y, q.z.coerceIn(gm, rock.widthCm - gm)).let { w -> w.withY(w.y.coerceIn(snoutFloor(w.x, w.z, L), rock.waterLevelCm - 0.6)) }
             if (q.distanceTo(o.pos) > 1e-4 && ((q - o.pos) dot desired) > 0 && rock.sdf.dist(q) >= wedgeD) { v = (q - o.pos) / max(dt, 1e-6); p = q }
             else { p = o.pos; v = Vec3.ZERO }
         }
@@ -479,7 +489,7 @@ class Steering(private val c: Ctx) {
         fun push(dist: Double, dir: Vec3) { if (dist < margin) a += dir * ((margin - dist) * 30) }
         push(p.x, Vec3.X); push(r.lengthCm - p.x, Vec3.X * -1.0)
         push(p.z, Vec3.Z); push(r.widthCm - p.z, Vec3.Z * -1.0)
-        push(p.y - r.floorY(p.x, p.z), Vec3.Y); push(r.waterLevelCm - 1 - p.y, Vec3.Y * -1.0)
+        push(p.y - r.waterFloor(p.x, p.z), Vec3.Y); push(r.waterLevelCm - 1 - p.y, Vec3.Y * -1.0)
         return a
     }
 
@@ -506,6 +516,16 @@ class Steering(private val c: Ctx) {
         }
         return a
     }
+
+    /** Whether the bodies are solid ([com.reeflive.core.sim.BodyCollision.enabled]): off, the steering is as before them. */
+    private val solid: Boolean get() = c.sim.bodies.enabled
+
+    /**
+     * Lowest the snout swims at (x, z): just off the live sand with solid bodies (the belly and fins are the body
+     * collision's), else the flat sand plane plus a margin for the body.
+     */
+    private fun snoutFloor(x: Double, z: Double, L: Double): Double =
+        if (solid) c.rock.floorY(x, z) + SNOUT_FLOOR_CLEAR else c.rock.sandTopCm + max(0.6, 0.2 * L.coerceAtMost(8.0))
 
     /** Tail end of [o]'s collision body (its last refresh), or a straight body behind the head before the first. */
     private fun tailOf(o: Organism): Vec3 = if (o.body.radius > 0) o.body.p[com.reeflive.core.sim.BodyState.N - 1] else o.pos - o.heading * o.lengthCm
@@ -668,7 +688,7 @@ class Steering(private val c: Ctx) {
             val maxC = max(1.5 * v.length(), REATTACH_CM_S) * dt
             p -= envNormal(p) * (d - it.surfaceOffset).coerceAtMost(maxC)
         }
-        p = r.clampToWater(p, 0.2).let { q -> val fy = r.floorY(q.x, q.z); if (q.y < fy + it.surfaceOffset) q.withY(fy + it.surfaceOffset) else q }
+        p = r.clampToWater(p, 0.2).let { q -> val fy = r.waterFloor(q.x, q.z); if (q.y < fy + it.surfaceOffset) q.withY(fy + it.surfaceOffset) else q }
         // pressed against a wall it cannot climb, the re-attach throws a walker back past where it stood: it stays put
         // instead of shuttling to and fro between the wall and the floor every tick
         if (forwardWalker && d <= it.surfaceOffset + 3 && dir.lengthSq() > 1e-9 && ((p - o.pos) dot dir) < 0) p = o.pos
