@@ -285,7 +285,8 @@ class BodyCollision(private val rock: RockData) {
                 // old height): it is what the walk and the brain read
                 val fy = rock.floorY(o.pos.x, o.pos.z)
                 if (o.pos.y < fy) { o.pos = o.pos.withY(fy); o.spline.update(o.pos, o.heading, 0.0, 0.0) }
-                carrySeat(o, seat, sim0.pos + off + d - o.seatPos)
+                // (what is left is equipment, decor and the water surface: it may climb onto them, so no slide)
+                carrySeat(o, seat, sim0.pos + off + d - o.seatPos, slide = false)
                 // the seat's own contact points (shell, shield, coxae) are its rock and sand: one still inside after
                 // the seat's solve (sand heaped on it, a squeeze) is pushed out along that surface's normal
                 seat.contactPush(rock, o.lengthCm, SKIN)?.let { carrySeat(o, seat, it, slide = false) }
@@ -304,8 +305,8 @@ class BodyCollision(private val rock: RockData) {
      * seat's own contact solve settles the rest next tick, so the drawn body glides rather than hops.
      */
     /**
-     * Moves a seated crawler's drawn body by [d] (at most [SEAT_CARRY_CM]). A shove ([slide]: another animal, the glass,
-     * equipment) slides it along the surface it holds on to, not off it: the seat's contact solve owns the normal.
+     * Moves a seated crawler's drawn body by [d] (at most [SEAT_CARRY_CM]). A shove off another animal ([slide]) slides
+     * it along the surface it holds on to, not off it (the seat's contact solve owns the normal), and sets it back down.
      */
     private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3, slide: Boolean = true) {
         val m = if (slide) d - seat.up * (d dot seat.up) else d
@@ -469,14 +470,17 @@ class BodyCollision(private val rock: RockData) {
                     }
                     if (deficit > -SKIN * 0.5) { q += Vec3.Y * (deficit + SKIN); noteContact(o, n, i, rigid, body) }
                 }
-                if (q.x < bound) contact(Vec3.X, q.x)
-                if (rock.lengthCm - q.x < bound) contact(Vec3(-1.0, 0.0, 0.0), rock.lengthCm - q.x)
-                if (q.z < bound) contact(Vec3.Z, q.z)
-                if (rock.widthCm - q.z < bound) contact(Vec3(0.0, 0.0, -1.0), rock.widthCm - q.z)
+                // (a seated crawler's glass is its seat's, as its rock and sand are)
+                if (!seatedNow) {
+                    if (q.x < bound) contact(Vec3.X, q.x)
+                    if (rock.lengthCm - q.x < bound) contact(Vec3(-1.0, 0.0, 0.0), rock.lengthCm - q.x)
+                    if (q.z < bound) contact(Vec3.Z, q.z)
+                    if (rock.widthCm - q.z < bound) contact(Vec3(0.0, 0.0, -1.0), rock.widthCm - q.z)
+                }
                 if (surfaceOn && rock.waterLevelCm - q.y < bound) contact(Vec3(0.0, -1.0, 0.0), rock.waterLevelCm - q.y)
                 // the halfway section to the next station against the glass and the surface (a body crossing a pane
                 // corner-on reaches it between two stations)
-                if (i < BodyState.N - 1) {
+                if (i < BodyState.N - 1 && !seatedNow) {
                     val j = i + 1
                     val hp = (p0 + body.p[j]) * 0.5 + (q - p0)
                     if (hp.x < boundH || rock.lengthCm - hp.x < boundH || hp.z < boundH || rock.widthCm - hp.z < boundH || surfaceOn && rock.waterLevelCm - hp.y < boundH) {

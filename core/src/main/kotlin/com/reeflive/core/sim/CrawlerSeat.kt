@@ -294,7 +294,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             // step, the bends do not relax)
             val rig = o.limbRig as? HermitLegs
             val m = hermit
-            if (rig != null && m != null && legsPlanted) poseHermit(o, rig, m, s, L, 0.0)
+            // (only when the move put one into the surface: solved twice a tick, the legs' eased pose jumps)
+            if (rig != null && m != null && legsPlanted && (0 until 4).any { legInside(s, m, it, L, rig.out) }) poseHermit(o, rig, m, s, L, 0.0)
         }
         o.seatPos = pos
     }
