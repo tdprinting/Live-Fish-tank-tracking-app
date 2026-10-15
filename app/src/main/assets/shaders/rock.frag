@@ -1,9 +1,9 @@
 #version 300 es
 #include "common.glsl"
 #include "lighting.glsl"
-// Rock and sand PBR-lite (ARCHITECTURE §8.4 item 1): Lambert + GGX, normal map via a derivative
-// cotangent frame (the GLBs carry no tangents), caustics, hair-algae bloom, Beer-Lambert + fog.
-// SAND: tiled detail normal and the front-glass green film (COLOR_0.r).
+// Rock and sand PBR-lite (ARCHITECTURE §8.4 item 1): Lambert + GGX, caustics, hair-algae bloom, Beer-Lambert + fog.
+// SAND: tiled detail normal map via a derivative cotangent frame (the GLBs carry no tangents) and the front-glass
+// green film (COLOR_0.r). ROCK: distance-based detail levels of procedural relief, plus the small life on it.
 // Algae cover (research 09 A6) from the Frame UBO as patchy world-space noise masks: sand gets diatom dust,
 // red cyano mats and khaki dino strands; rock tops hair turf, cyano and dinos; shaded rock coralline crust.
 
@@ -14,12 +14,19 @@ in vec4 vColor;
 
 uniform sampler2D uAlbedo;
 uniform sampler2D uNormalMap;
-uniform sampler2D uRoughAo;
 uniform vec4 uBaseColor;
 uniform float uHasTexture;
 uniform float uRoughness;
 uniform float uNormalStrength; // 0 disables the normal map (Low quality)
 uniform float uDetailScale;    // normal-map uv multiplier
+// Microfauna on the rock (MicrofaunaState.visible, animals in view per cm² of rock): x harpacticoid copepods,
+// y ostracods, z forams (Homotrema); w unused. Zero turns them off.
+uniform vec4 uMicro;
+#ifndef SAND
+// object-space position (static.vert, ROCK): the rock detail is pinned to the rock, so it rides along if a rock moves
+in vec3 vObj;
+uniform mat4 uModel;
+#endif
 #ifdef SAND
 // Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus, a dug cavity under rock.
 uniform sampler2D uSandMap;
@@ -41,13 +48,120 @@ vec3 perturb(vec3 N, vec3 p, vec2 uv, vec3 tn) {
     return normalize(tbn * tn);
 }
 
-// Mean curvature sign of the smooth vertex normal across the pixel quad (1/cm; > 0 convex ridge, < 0 cavity).
-float curvature(vec3 n, vec3 p) {
-    vec3 sx = dFdx(p), sy = dFdy(p);
-    return dot(dFdx(n), sx) / max(dot(sx, sx), 1e-6) + dot(dFdy(n), sy) / max(dot(sy, sy), 1e-6);
+vec3 hash33(vec3 p) { return vec3(hash13(p), hash13(p + 19.19), hash13(p + 47.31)); }
+
+// Value noise (common.glsl vnoise lattice) with its analytic gradient: xyz = d/dp, for relief normals without
+// screen-space derivatives (no 2x2 blockiness up close, no shimmer far away).
+vec4 vnoiseD(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    vec3 du = 6.0 * f * (1.0 - f);
+    float a = hash13(i), b = hash13(i + vec3(1.0, 0.0, 0.0)), c = hash13(i + vec3(0.0, 1.0, 0.0));
+    float d = hash13(i + vec3(1.0, 1.0, 0.0)), e = hash13(i + vec3(0.0, 0.0, 1.0)), g = hash13(i + vec3(1.0, 0.0, 1.0));
+    float h = hash13(i + vec3(0.0, 1.0, 1.0)), k = hash13(i + vec3(1.0, 1.0, 1.0));
+    float k1 = b - a, k2 = c - a, k3 = e - a, k4 = a - b - c + d, k5 = a - c - e + h, k6 = a - b - e + g;
+    float k7 = -a + b + c - d + e - g - h + k;
+    float v = a + k1 * u.x + k2 * u.y + k3 * u.z + k4 * u.x * u.y + k5 * u.y * u.z + k6 * u.z * u.x + k7 * u.x * u.y * u.z;
+    vec3 gr = du * vec3(k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z,
+                        k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x,
+                        k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y);
+    return vec4(v, gr);
 }
 
-vec3 hash33(vec3 p) { return vec3(hash13(p), hash13(p + 19.19), hash13(p + 47.31)); }
+// Limestone voids: the rock is cut through a field of spherical holes (one maybe in each unit cell, jittered, 2x2x2
+// search), so where the surface slices a void it shows a round pit whose size depends on how deep the cut goes, as on
+// real live rock. Returns the pit depth profile (0 rim .. 1 centre, a hemisphere) and its gradient (per unit of p).
+vec4 voids(vec3 p, float density) {
+    vec3 b = floor(p - 0.5);
+    vec4 best = vec4(0.0);
+    for (int z = 0; z < 2; z++)
+    for (int y = 0; y < 2; y++)
+    for (int x = 0; x < 2; x++) {
+        vec3 c = b + vec3(float(x), float(y), float(z));
+        float h = hash13(c + 0.37);
+        if (h >= density) continue;
+        vec3 j = fract((h / max(density, 1e-3)) * vec3(97.13, 41.71, 13.37) + hash13(c + 5.1));
+        vec3 dv = p - (c + 0.2 + 0.6 * j);
+        float r = 0.28 + 0.22 * fract(h * 531.7);
+        float q = dot(dv, dv) / (r * r);
+        if (q < 1.0) {
+            float dep = sqrt(1.0 - q);
+            // d(dep)/dp = -dv / (r² dep); capped at the rim so the wall stays steep but finite
+            if (dep > best.x) best = vec4(dep, -dv / (r * r * max(dep, 0.2)));
+        }
+    }
+    return best;
+}
+
+// Detail level weight of a relief octave with `freq` cycles per cm at `fp` (length(fwidth), about two pixel widths):
+// 1 while a period spans 8+ pixels, 0 below ~3 (it would only alias).
+float lodW(float freq, float fp) { return 1.0 - smoothstep(0.15, 0.33, fp * freq); }   // fp ~ 2 pixel widths
+
+const vec3 FORAM_RED = vec3(0.52, 0.04, 0.07);      // Homotrema rubrum test
+const vec3 POD_AMBER = vec3(0.62, 0.42, 0.18);      // harpacticoid: translucent tan-amber, darker gut
+const vec3 POD_GUT = vec3(0.16, 0.09, 0.05);
+const vec3 OSTRACOD = vec3(0.30, 0.27, 0.17);       // ostracod: olive-beige bean-shaped shell
+
+// Small life on the rock, only where it resolves (research 10 / 17): sessile red forams (Homotrema rubrum, 2-8 mm
+// red domes, in shaded crevices and under ledges) and crawling pods (harpacticoid copepods ~0.8 mm that dart then
+// pause; ostracods ~0.8 mm that glide). Densities come from the sim (uMicro, per cm² of rock in view). Each lives in
+// its own lattice cell and stays inside it, so nothing is cut at a cell edge; shapes are drawn in the surface plane.
+void rockLife(vec3 p, float fp, float sky, vec3 N, inout vec3 albedo, inout float rough) {
+    float wf = 1.0 - smoothstep(0.03, 0.08, fp);
+    if (wf > 0.0 && uMicro.z > 0.0) {
+        const float FC = 1.2;
+        vec3 cc = floor(p / FC);
+        vec3 hh = hash33(cc + 71.0);
+        // cryptic: prefers crevices and undersides
+        float pref = mix(0.25, 1.0, 1.0 - sky) * mix(1.0, 0.35, smoothstep(0.2, 0.8, N.y));
+        if (hh.x < min(uMicro.z * FC * FC * 1.5, 0.6) * pref) {
+            vec3 c = (cc + 0.3 + 0.4 * hash33(cc + 5.0)) * FC;
+            vec3 dv = p - c;
+            vec3 dt = dv - N * dot(dv, N);
+            float r = 0.1 + 0.22 * hh.y;
+            // knobby outline (short branches round the dome)
+            vec3 ax = normalize(cross(N, vec3(0.31, 0.57, 0.76)));
+            float ang = atan(dot(dt, cross(N, ax)), dot(dt, ax));
+            float rr = r * (0.9 + 0.1 * sin(ang * (3.0 + floor(hh.z * 3.0)) + hh.z * 6.0));
+            float m = clamp((rr - length(dt)) / max(fp, 1e-4) + 0.5, 0.0, 1.0) * step(abs(dot(dv, N)), FC * 0.5) * wf;
+            float dome = sqrt(max(1.0 - dot(dt, dt) / (rr * rr), 0.0));
+            albedo = mix(albedo, FORAM_RED * (0.75 + 0.5 * hh.z) * (0.7 + 0.3 * dome), m);
+            rough = mix(rough, 0.6, m);
+        }
+    }
+    float wp = 1.0 - smoothstep(0.012, 0.03, fp);
+    float pods = uMicro.x + uMicro.y;
+    if (wp > 0.0 && pods > 0.0) {
+        const float PC = 0.6;
+        vec3 cc = floor(p / PC);
+        vec3 hh = hash33(cc + 13.0);
+        if (hh.x < min(pods * PC * PC * 1.5, 0.85)) {
+            bool ostra = hh.z < uMicro.y / pods;
+            float t = uTime * (ostra ? 0.3 : 0.8) + hh.y * 17.0;
+            float seg = floor(t);
+            // harpacticoids: a quick dart, then a pause; ostracods: a steady glide
+            float k = ostra ? fract(t) : smoothstep(0.0, 0.15, fract(t));
+            vec3 a = cc + 0.2 + 0.6 * hash33(cc + seg * 1.7);
+            vec3 b = cc + 0.2 + 0.6 * hash33(cc + (seg + 1.0) * 1.7);
+            vec3 dv = p - mix(a, b, k) * PC;
+            vec3 dt = dv - N * dot(dv, N);
+            vec3 dir = b - a;
+            vec3 ax = dir - N * dot(dir, N);
+            ax *= inversesqrt(max(dot(ax, ax), 1e-8));
+            float along = dot(dt, ax);
+            float across = length(dt - ax * along);
+            float hl = ostra ? 0.04 : 0.045;   // half length (cm): ~0.8-0.9 mm animals
+            float hw = ostra ? 0.028 : 0.018;
+            float e = length(vec2(along / hl, across / hw));
+            float m = clamp((1.0 - e) * hw / max(fp, 1e-4) + 0.5, 0.0, 1.0) * step(abs(dot(dv, N)), PC * 0.5) * wp;
+            vec3 body = ostra ? OSTRACOD : mix(POD_AMBER, POD_GUT, (1.0 - smoothstep(0.0, 0.45, across / hw)) * 0.6 * step(-0.6, along / hl));
+            albedo *= 1.0 - 0.35 * wp * (1.0 - smoothstep(1.0, 1.8, e)) * (1.0 - m);   // contact shade round the body
+            albedo = mix(albedo, body, m);
+            rough = mix(rough, ostra ? 0.3 : 0.45, m);
+        }
+    }
+}
 
 const vec3 ROCK_BLEACH = vec3(0.50, 0.42, 0.28);   // sun-bleached cream-tan skeleton
 const vec3 ROCK_GREY = vec3(0.24, 0.21, 0.16);     // older grey limestone
@@ -60,7 +174,7 @@ const vec3 ALG_DIATOM = vec3(0.26, 0.13, 0.03);    // tan / golden brown
 const vec3 ALG_CYANO = vec3(0.16, 0.012, 0.016);   // burgundy red slime
 const vec3 ALG_DINO = vec3(0.24, 0.16, 0.06);      // khaki brown snot
 const vec3 ALG_BUBBLE = vec3(0.02, 0.07, 0.03);    // glossy dark green
-const vec3 ALG_CORAL_PINK = vec3(0.45, 0.10, 0.32);
+const vec3 ALG_CORAL_PINK = vec3(0.52, 0.11, 0.19);   // pink-red, as on Tee's rock
 const vec3 ALG_CORAL_PURPLE = vec3(0.20, 0.05, 0.27);
 
 // Mats shared by sand and rock: cyano (slimy red, O2 bubbles by day) then dinos (stringy, lift at night).
@@ -207,37 +321,94 @@ void main() {
         slimeMats(vWorld, n1, uAlgaeSand.y, uAlgaeSand.z, albedo, rough);
     }
 #else
-    vec2 ra = texture(uRoughAo, vUv).rg;
-    rough = mix(uRoughness, ra.r, 0.7);
-    ao = mix(1.0, ra.g, 0.85);
+    // Rock detail levels: the mesh normals are smoothed over ~2 cm (tools/blender/rock_surface.py), and the relief
+    // comes back here as procedural octaves with analytic gradients. Each octave fades out once its period spans fewer
+    // than ~4 pixels (lodW), so a close camera sees pores, vugs and grit while a far one pays for two octaves only.
+    // COLOR_0 (rock_surface.py): r cavity, g ridge, b open sky (SDF ambient occlusion), a broad blotch noise.
+    float fp = length(fwidth(vWorld));   // cm per pixel (about two pixel widths)
+    float fpL = uQuality >= 0.5 ? fp : 100.0;   // Low quality: lumps only
+    float cavity = vColor.r, ridge = vColor.g, sky = vColor.b;
+    rough = uRoughness;
+    ao = (0.3 + 0.7 * sky) * (1.0 - 0.35 * cavity);
+    vec3 op = vObj;            // detail coordinates: object space
+    mat3 toW = mat3(uModel);   // rigid (no scale): object -> world for gradients and normals
+    vec3 No = N * toW;         // world normal in object space (transpose of a rotation)
+    vec3 relief = vec3(0.0);   // gradient of the relief height in object space (cm / cm)
+    float pores = 0.0, grit = 0.5, lost = 0.0;
+    // lumps (2 cm period): always on, and its value doubles as the mid-scale tone noise
+    vec4 n0 = vnoiseD(op * 0.5 + vec3(1.7, 9.2, 4.4));
+    relief += n0.yzw * (0.5 * 0.45);
+    float mid = n0.x;
+    float big = vColor.a;   // fbm3(vWorld * 0.05 + (3.1, 7.7, 1.3)), baked per vertex
+    {
+        // big holes (~1-2 cm across, sparse): what gives live rock its texture from across the room
+        vec4 v0 = voids(op * 0.45 + vec3(2.0, 17.0, 9.0), 0.34 + (big - 0.5) * 0.4);
+        pores = v0.x;
+        relief -= v0.yzw * (0.45 * 0.8);
+        // pores (~7 mm): rounded pits, denser in some blotches than others
+        float w1 = lodW(1.4, fpL);
+        lost += 1.0 - w1;
+        if (w1 > 0.0) {
+            vec4 v1 = voids(op * 1.4 + vec3(11.0, 5.0, 2.0), 0.3 + (big - 0.5) * 0.6);
+            pores = max(pores, v1.x * (0.6 + 0.4 * cavity) * w1);
+            relief -= v1.yzw * (1.4 * 0.22 * w1);
+        }
+        // vugs and boring holes (~3 mm)
+        float w2 = lodW(3.6, fpL);
+        lost += 1.0 - w2;
+        if (w2 > 0.0) {
+            vec4 v2 = voids(op * 3.6 + vec3(4.0, 13.0, 8.0), 0.35);
+            pores = max(pores, v2.x * 0.8 * w2);
+            relief -= v2.yzw * (3.6 * 0.08 * w2);
+        }
+        // grit (~1 mm) and micro grain (~0.4 mm): close-ups only
+        float w3 = lodW(9.0, fpL);
+        lost += 1.0 - w3;
+        if (w3 > 0.0) {
+            vec4 n3 = vnoiseD(op * 9.0 + vec3(7.0, 2.0, 19.0));
+            relief += n3.yzw * (9.0 * 0.03 * w3);
+            grit = mix(0.5, n3.x, w3);
+            float w4 = lodW(23.0, fpL);
+            if (w4 > 0.0) {
+                vec4 n4 = vnoiseD(op * 23.0 + vec3(3.0, 29.0, 5.0));
+                relief += n4.yzw * (23.0 * 0.009 * w4);
+                grit = mix(grit, 0.5 * (grit + n4.x), w4);
+            }
+        }
+    }
+    // tilt the smooth normal by the relief slope (tangential part only)
+    relief = toW * relief;
+    N = normalize(N - (relief - N * dot(relief, N)));
+    // detail the far view can no longer resolve turns into a slightly rougher, flatter-toned surface
+    rough = mix(rough, min(rough + 0.12, 1.0), lost / 3.0);
     {
         // Live-rock character, independent of the algae covers below: broad bleached / grey limestone blotches,
-        // porous pits (dark, bumped), cavity AO and bright worn ridges from the vertex-normal curvature, a faint
-        // coralline baseline (real live rock always carries some) and a soft wet sheen.
-        float big = fbm3(vWorld * 0.05 + vec3(3.1, 7.7, 1.3));
-        float mid = vnoise(vWorld * 0.33 + vec3(1.7, 9.2, 4.4));
+        // porous pits, cavity AO and bright worn ridges, a faint coralline baseline (real live rock always carries
+        // some) and a soft wet sheen.
         float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
         float bl = smoothstep(0.5, 0.68, big + (mid - 0.5) * 0.25);
         float gr = smoothstep(0.46, 0.32, big);
         albedo = mix(albedo, ROCK_BLEACH * (0.6 + 3.0 * lum), bl * 0.5 + 0.28);
         albedo = mix(albedo, ROCK_GREY * (0.6 + 3.0 * lum), gr * 0.15);
         // thin olive film of turf / diatoms that live rock always carries, heavier on lit, up-facing crusts
-        float film = smoothstep(0.35, 0.75, mid) * mix(0.25, 0.55, smoothstep(0.0, 0.8, N.y));
-        albedo = mix(albedo, ROCK_FILM * (0.7 + 2.0 * lum), film * 0.22);
-        float cv = clamp(curvature(normalize(vNormal), vWorld) * 2.5, -1.0, 1.0);
-        float cavity = max(-cv, 0.0);
-        float ridge = max(cv, 0.0);
-        float pitN = vnoise(vWorld * 0.85 + vec3(11.0, 5.0, 2.0));
-        float pt = 0.6 + (big - 0.5) * 0.5; // denser pitting in some blotches than others
-        float pits = smoothstep(pt, pt + 0.18, pitN) * (0.6 + 0.4 * cavity);
-        if (uQuality >= 1.5) pits = max(pits, smoothstep(0.7, 0.86, vnoise(vWorld * 2.1 + vec3(4.0, 13.0, 8.0))) * 0.7);
-        bumpHt = -pits * 0.35;
-        albedo *= 1.0 - 0.55 * pits;
-        albedo = mix(albedo, ROCK_BLEACH * 1.1, ridge * 0.18 * (1.0 - pits));
-        ao *= (1.0 - 0.5 * cavity) * (1.0 - 0.35 * pits);
-        float cb = smoothstep(0.6, 0.72, fbm3(vWorld * 0.11 + vec3(19.0, 3.0, 7.0))) * (1.0 - 0.6 * smoothstep(0.1, 0.7, N.y));
-        albedo = mix(albedo, mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, mid) * 0.75, cb * 0.45 * (1.0 - pits));
-        rough = mix(rough, 0.42, 0.45 * smoothstep(0.45, 0.8, mid) * (1.0 - pits));
+        float film = smoothstep(0.3, 0.7, mid) * mix(0.3, 0.65, smoothstep(0.0, 0.8, N.y));
+        albedo = mix(albedo, ROCK_FILM * (0.7 + 2.0 * lum), film * 0.34);
+        // the baked albedo's coralline zones were mauve / purple; Tee's rock carries pink-red coralline: pull the blue
+        // out of purple tones
+        float purple = clamp((albedo.b - albedo.g) * 6.0, 0.0, 1.0) * clamp((albedo.r - albedo.g) * 6.0, 0.0, 1.0);
+        albedo.b = mix(albedo.b, albedo.g * 1.15, purple * 0.7);
+        // pores too small to resolve keep their average darkening, so the far tone matches the close one
+        albedo *= (1.0 - 0.5 * pores * pores) * (1.0 - 0.07 * lost / 3.0) * (0.8 + 0.4 * grit) * (0.8 + 0.4 * mid) * (1.0 - 0.25 * cavity);
+        albedo = mix(albedo, ROCK_BLEACH * 1.1, ridge * 0.2 * (1.0 - pores));
+        ao *= 1.0 - 0.6 * pores * pores;   // deep pore bottoms see little of the water above
+        // coralline crust in lit-but-shaded spots, with pale growth margins and its own fine bumps up close
+        float cbn = vnoise(op * 0.13 + vec3(19.0, 3.0, 7.0));
+        float cb = smoothstep(0.76, 0.86, cbn) * (1.0 - 0.6 * smoothstep(0.1, 0.7, N.y)) * smoothstep(0.15, 0.5, sky);
+        float margin = cb * (1.0 - smoothstep(0.25, 0.8, cb));
+        // mostly pink-red, as on Tee's rock; purple only in a few deep-shade patches
+        albedo = mix(albedo, mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, smoothstep(0.6, 0.9, mid) * (1.0 - sky)) * (0.65 + 0.35 * grit), cb * 0.3 * (1.0 - pores));
+        albedo = mix(albedo, vec3(0.62, 0.52, 0.58), margin * 0.3);
+        rough = mix(rough, 0.42, 0.45 * smoothstep(0.45, 0.8, mid) * (1.0 - pores));
     }
     float hair = tex.a; // baked hair-algae mask in the albedo alpha
     float top = smoothstep(0.1, 0.7, N.y);
@@ -245,7 +416,7 @@ void main() {
     float hairC = max(uAlgaeTop.x, uAlgaeBloom) * top;
     float coralC = uAlgaeShade.x * mix(1.0, 0.25, top);
     if (hairC + coralC + cv.y + cv.z + cv.w > 0.001) {
-        vec3 rp = vWorld * 0.09;
+        vec3 rp = op * 0.09;
         float n1 = fbm3(rp);
         float n2 = fbm3(rp * 1.9 + vec3(5.0, 23.0, 11.0));
         // coralline: pink/purple matte crust with pale growth margins
@@ -259,19 +430,21 @@ void main() {
         float ht = algaePatch(n1 + (hair - 0.5) * 0.12, hairC) * algaeDensity(hairC) * (0.6 + 0.4 * hair);
         albedo = mix(albedo, ALG_HAIR, clamp(ht + hairC * 0.25 * hair, 0.0, 1.0));
         // bubble algae: a glossy dark-green tint in small clustered spots (no geometry)
-        float bb = algaePatch(0.5 + (vnoise(vWorld * 0.6) - 0.5) * 0.63, cv.w) * algaeDensity(cv.w);
+        float bb = algaePatch(0.5 + (vnoise(op * 0.6) - 0.5) * 0.63, cv.w) * algaeDensity(cv.w);
         albedo = mix(albedo, ALG_BUBBLE, bb);
         rough = mix(rough, 0.15, bb);
-        slimeMats(vWorld, n1, cv.y, cv.z, albedo, rough);
+        slimeMats(op, n1, cv.y, cv.z, albedo, rough);
     }
+    // the animals and forams on top of whatever covers the rock
+    if (uQuality >= 0.5) rockLife(op, fp, sky, No, albedo, rough);
 #endif
+#ifdef SAND
     if (uNormalStrength > 0.0) {
         vec3 tn = texture(uNormalMap, uv0 * uDetailScale).xyz * 2.0 - 1.0;
         tn.xy *= uNormalStrength;
         N = perturb(N, vWorld, uv0 * uDetailScale, normalize(tn));
     }
     if (uQuality >= 0.5) N = bumpH(N, vWorld, bumpHt); // uniform branch: derivatives stay defined
-#ifdef SAND
     // the cross-section against the glass is lit by light scattered through the bed and the pane: wrap it
     vec3 col = shadeLit(albedo, N, V, vWorld, rough, ao, 0.04, wall * 0.7, 1.0);
     if (glint > 0.0) {

@@ -90,6 +90,9 @@ class AcclimationBags {
     private val fallers = ArrayList<Faller>()
     private var nextId = 1
 
+    /** New bags (and their riders' ids) start at [next] or later ([Simulation.reserveIds]). */
+    fun reserveIds(next: Int) { nextId = max(nextId, next) }
+
     /** The fast-forward button: the sim clock runs at least [HURRY_SPEED] while any bag floats. */
     var hurry = false
 
@@ -103,6 +106,18 @@ class AcclimationBags {
     }
 
     fun clear() { bags.clear(); fallers.clear(); hurry = false }
+
+    /** Animals still in a bag or sinking out of one: not tank organisms yet, but a saved tank must keep them. */
+    fun unreleased(): List<Organism> {
+        if (bags.isEmpty() && fallers.isEmpty()) return emptyList()
+        val out = ArrayList<Organism>()
+        for (b in bags) for (rd in b.riders) if (!rd.released) out += rd.o
+        for (f in fallers) out += f.o
+        return out
+    }
+
+    /** Coral bags that have not opened yet: (species id, colonies). */
+    fun unopenedCorals(): List<Pair<String, Int>> = bags.filter { it.coral && it.phase <= FLOAT }.map { it.speciesId to it.count }
 
     /**
      * Drops bags of [count] × [speciesId] in at tank x [x] (front-to-back [z]; null = the middle). Many animals come

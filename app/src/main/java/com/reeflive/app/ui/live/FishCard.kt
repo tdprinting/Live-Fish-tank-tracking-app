@@ -24,6 +24,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.reeflive.app.ui.components.ButtonKind
 import com.reeflive.app.ui.components.GlassIconButton
 import com.reeflive.app.ui.components.ReefButton
+import com.reeflive.app.ui.components.ReefTextField
 import com.reeflive.app.ui.components.StatusPill
 import com.reeflive.app.ui.theme.GlassCard
 import com.reeflive.app.ui.theme.ReefLiveTheme
@@ -52,9 +56,13 @@ fun FishCard(
     onFollow: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** My tank: the keeper can name the animal (saved with it). Null hides the button. */
+    onRename: ((String) -> Unit)? = null,
 ) {
     val c = ReefTheme.colors
     val s = LiveTheme.style
+    var naming by remember(state.id) { mutableStateOf(false) }
+    var draft by remember(state.id) { mutableStateOf(state.name) }
     LivePanel(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -100,6 +108,17 @@ fun FishCard(
             "Follow", if (state.alive) onFollow else null, Modifier.fillMaxWidth(), tone = Candy.cyan, selected = state.alive,
             leading = { Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, tint = s.onCandy) },
         )
+        if (onRename != null && state.alive) {
+            Spacer(Modifier.height(8.dp))
+            if (naming) {
+                val done = { if (draft.isNotBlank()) onRename(draft.trim()); naming = false }
+                ReefTextField(draft, { draft = it.take(24) }, Modifier.fillMaxWidth(), label = "Name", placeholder = state.speciesName, onIme = done)
+                Spacer(Modifier.height(8.dp))
+                LivePill("Save name", done, Modifier.fillMaxWidth(), tone = Candy.green)
+            } else {
+                LivePill("Give it a name", { draft = state.name; naming = true }, Modifier.fillMaxWidth(), tone = Candy.green, selected = false)
+            }
+        }
     }
 }
 

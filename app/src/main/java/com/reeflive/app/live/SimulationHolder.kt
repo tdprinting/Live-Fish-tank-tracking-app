@@ -2,9 +2,15 @@ package com.reeflive.app.live
 
 import android.content.res.AssetManager
 import com.reeflive.app.data.repo.Clock
+import com.reeflive.app.data.repo.CustomTankStore
 import com.reeflive.app.data.repo.LightScheduleRepository
 import com.reeflive.app.data.repo.LivestockRepository
 import com.reeflive.app.data.repo.MeasurementRepository
+import com.reeflive.core.custom.CustomTank
+import com.reeflive.core.custom.CustomTankCodec
+import com.reeflive.core.custom.CustomTankSave
+import com.reeflive.core.custom.TankBuild
+import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.RealityInit
@@ -42,7 +48,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.Executors
 
-enum class SimMode { REALITY, SANDBOX }
+enum class SimMode { REALITY, SANDBOX, CUSTOM }
+
+/** "My tank" as the screen sees it: whether one is set up yet, its name and build. */
+data class CustomTankInfo(val ready: Boolean, val exists: Boolean, val name: String = "", val build: TankBuild = TankBuilds.DEFAULT)
 
 /**
  * Owns the [Simulation] on a dedicated "sim" thread (ARCHITECTURE §9) and glues it to the app data.
@@ -50,6 +59,9 @@ enum class SimMode { REALITY, SANDBOX }
  * - REALITY: initialised from the latest logged values, alive livestock and the active light schedule; runs 1x;
  *   a newly logged measurement is applied as a `SetParam` as soon as the repository flow emits (well under 2 s).
  * - SANDBOX: a forked copy of reality's current state with a speed multiplier; [resetSandbox] restores the fork.
+ * - CUSTOM ("My tank"): the keeper's own tank, started empty from a [TankBuild] and saved to [customStore]
+ *   (core CustomTank) every [CustomTank.AUTOSAVE_MS] on screen, when it leaves the screen and when the mode
+ *   changes. Reopening skips it forward by the time away (1x, capped at 24 h, as reality).
  * - [onForeground]/[onBackground]: the loop only runs while the Live tab is RESUMED. Returning fast-forwards the
  *   reality sim by the elapsed wall time, capped at 24 h of sim ([FastForward]).
  *
@@ -61,6 +73,7 @@ class SimulationHolder(
     private val lights: LightScheduleRepository,
     private val assets: AssetManager?,
     private val clock: Clock = Clock.SYSTEM,
+    private val customStore: CustomTankStore? = null,
 ) {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "sim").apply { isDaemon = true } }
     private val scope = CoroutineScope(SupervisorJob() + executor.asCoroutineDispatcher())
@@ -86,6 +99,10 @@ class SimulationHolder(
     private val timelapseScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var timelapseCancel: CancelToken? = null
 
+    private val _custom = MutableStateFlow(CustomTankInfo(ready = false, exists = false))
+    /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
+    val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -95,6 +112,10 @@ class SimulationHolder(
     private var reality: Simulation? = null
     private var sandbox: Simulation? = null
     private var fork: Fork? = null
+    private var customSim: Simulation? = null
+    private var customBase: CustomTankSave? = null
+    private var customLoaded = false
+    private var lastCustomSaveMs = 0L
     private var lastWallMs = HashMap<Simulation, Long>()
     private val scenarios = ScenarioQueue()
     private var tickJob: Job? = null
@@ -109,7 +130,11 @@ class SimulationHolder(
 
     private class Fork(val water: WaterState, val seeds: List<LivestockSeed>)
 
-    private val active: Simulation? get() = if (_mode.value == SimMode.SANDBOX) sandbox ?: reality else reality
+    private val active: Simulation? get() = when (_mode.value) {
+        SimMode.SANDBOX -> sandbox ?: reality
+        SimMode.CUSTOM -> customSim
+        SimMode.REALITY -> reality
+    }
 
     init {
         scope.launch {
@@ -126,7 +151,37 @@ class SimulationHolder(
     fun setSpeed(speed: Double) {
         val s = speed.coerceIn(1.0, 1000.0)
         _speed.value = s
-        scope.launch { sandbox?.speed = s }
+        scope.launch { sandbox?.speed = s; if (_mode.value == SimMode.CUSTOM) customSim?.speed = s }
+    }
+
+    /** Sets up a new, empty "My tank" in [build] (replacing none: call [startOverCustomTank] first) and shows it. */
+    fun startCustomTank(build: TankBuild, name: String = "My tank") {
+        scope.launch {
+            ensureAssets()
+            val now = nowMs()
+            val seed = now xor 0x5EEDL
+            val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
+            sim.speed = 1.0
+            customSim?.let { lastWallMs.remove(it) }
+            customSim = sim
+            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed)
+            customLoaded = true
+            lastWallMs[sim] = now
+            saveCustom()
+            _custom.value = CustomTankInfo(ready = true, exists = true, name = name, build = build)
+            if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
+        }
+    }
+
+    /** Deletes "My tank" (the screen asks first); the build picker shows again. */
+    fun startOverCustomTank() {
+        scope.launch {
+            customSim?.let { lastWallMs.remove(it) }
+            customSim = null; customBase = null; customLoaded = true
+            customStore?.clear()
+            _custom.value = CustomTankInfo(ready = true, exists = false)
+            if (_mode.value == SimMode.CUSTOM) _snapshots.value = SimSnapshot.EMPTY
+        }
     }
 
     /** Restores the sandbox to the state it was forked from. */
@@ -197,6 +252,7 @@ class SimulationHolder(
     fun onBackground() {
         scope.launch {
             foreground = false
+            saveCustom()
             tickJob?.cancel(); tickJob = null
             _running.value = false
         }
@@ -222,7 +278,9 @@ class SimulationHolder(
 
     private fun ensureAssets() {
         if (species == null) {
-            species = SpeciesCatalog.fromClasspath(alive.map { it.speciesId }.plus(com.reeflive.core.sim.DefaultStock.all.map { it.speciesId }).distinct())
+            // every Add life species too: My tank takes any of them
+            val stock = com.reeflive.core.sim.Stocking.CATALOG.map { it.speciesId }
+            species = SpeciesCatalog.fromClasspath(alive.map { it.speciesId }.plus(com.reeflive.core.sim.DefaultStock.all.map { it.speciesId }).plus(stock).distinct())
         } else {
             val ids = alive.map { it.speciesId }.filterNot { species!!.has(it) }.distinct()
             if (ids.isNotEmpty()) SpeciesCatalog.fromClasspath(ids).all().forEach { species!!.put(it) }
@@ -264,8 +322,18 @@ class SimulationHolder(
     }
 
     private fun switchMode(m: SimMode) {
-        if (_mode.value == m && (m == SimMode.REALITY || sandbox != null)) return
+        if (_mode.value == m && (m != SimMode.SANDBOX || sandbox != null)) return
         val real = reality
+        // My tank keeps its own speed; the other two start at real time
+        if (_mode.value == SimMode.CUSTOM) { saveCustom(); _speed.value = 1.0 }
+        if (m == SimMode.CUSTOM) {
+            leaveSandbox()
+            loadCustom()
+            _mode.value = m
+            val sim = customSim
+            if (sim != null) { _speed.value = sim.speed; catchUp(sim) } else _snapshots.value = SimSnapshot.EMPTY
+            return
+        }
         if (m == SimMode.SANDBOX) {
             if (real == null) { _mode.value = m; return }
             val sb = forkSandbox(real)
@@ -274,10 +342,44 @@ class SimulationHolder(
             publish(sb)
         } else {
             _mode.value = m
-            sandbox?.let { lastWallMs.remove(it) }
-            sandbox = null; fork = null; scenarios.clear()
+            leaveSandbox()
+            _speed.value = 1.0
             real?.let { catchUp(it); publish(it) }
         }
+    }
+
+    private fun leaveSandbox() {
+        sandbox?.let { lastWallMs.remove(it) }
+        sandbox = null; fork = null; scenarios.clear()
+    }
+
+    /** Reads "My tank" once (on first use); a damaged file falls back to the previous save. */
+    private fun loadCustom() {
+        if (customLoaded) return
+        customLoaded = true
+        ensureAssets()
+        val store = customStore
+        val save = store?.read()?.let { CustomTankCodec.decode(it) } ?: store?.readBackup()?.let { CustomTankCodec.decode(it) }
+        if (save == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
+        val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull()
+        if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
+        customSim = sim
+        customBase = CustomTank.baseAfterRestore(save, species!!)
+        // the time away, at 1x: the tank lived on while the app was closed
+        sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0)
+        sim.stepWall(0.0)
+        lastWallMs[sim] = nowMs()
+        _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
+    }
+
+    private fun saveCustom() {
+        val sim = customSim ?: return
+        val base = customBase ?: return
+        val now = nowMs()
+        val save = CustomTank.capture(sim, base, now)
+        customBase = save
+        lastCustomSaveMs = now
+        customStore?.write(CustomTankCodec.encode(save))
     }
 
     private fun forkSandbox(real: Simulation): Simulation {
@@ -301,7 +403,7 @@ class SimulationHolder(
         return sb
     }
 
-    /** Skip [sim] forward by the wall time since it last ran (reality only; capped at 24 h of sim). */
+    /** Skip [sim] forward by the wall time since it last ran (reality and My tank; capped at 24 h of sim). */
     private fun catchUp(sim: Simulation) {
         val now = nowMs()
         val last = lastWallMs[sim] ?: now
@@ -314,7 +416,8 @@ class SimulationHolder(
 
     private fun startLoop() {
         if (tickJob != null) return
-        active?.let { if (it === reality) catchUp(it) }
+        active?.let { if (it === reality || it === customSim) catchUp(it) }
+        if (_mode.value == SimMode.CUSTOM && !customLoaded) { loadCustom(); customSim?.let { catchUp(it) } }
         active?.let { publish(it) }
         _running.value = true
         tickJob = scope.launch {
@@ -329,6 +432,7 @@ class SimulationHolder(
                     sim.stepWall(dt)
                     lastWallMs[sim] = nowMs()
                     publish(sim)
+                    if (sim === customSim && nowMs() - lastCustomSaveMs >= CustomTank.AUTOSAVE_MS) saveCustom()
                 }
                 val spent = (System.nanoTime() - t0) / 1_000_000
                 delay((TICK_MS - spent).coerceAtLeast(1))

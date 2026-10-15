@@ -127,6 +127,7 @@ fun StockGallery(
     onAdd: (StockCard, Int, StockSize) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
+    myTank: Boolean = false,
 ) {
     val c = ReefTheme.colors
     val haptics = rememberHaptics()
@@ -177,11 +178,12 @@ fun StockGallery(
                     color = if (stock.animalsFull || stock.coralsFull) c.cautionText else c.textSecondary,
                 )
             }
-            ReefButton("Reset tank", onReset, kind = ButtonKind.OUTLINED, icon = Icons.Rounded.RestartAlt)
+            // My tank's reset is "start over" and lives in More only, away from the add buttons
+            if (!myTank) ReefButton("Reset tank", onReset, kind = ButtonKind.OUTLINED, icon = Icons.Rounded.RestartAlt)
         }
         Text(
             "Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and let it float until " +
-                "they are ready to swim out. Only this sandbox changes.",
+                "they are ready to swim out. " + if (myTank) "They stay in your tank, saved, as they grow." else "Only this sandbox changes.",
             style = MaterialTheme.typography.bodySmall, color = c.textSecondary,
         )
         SegmentedPills(

@@ -9,6 +9,7 @@ package com.reeflive.app.ui.live
 object LiveTips {
     const val WATCH_TITLE = "Welcome to your live tank!"
     const val SANDBOX_TITLE = "This is your pretend tank!"
+    const val MY_TANK_TITLE = "This is your very own tank!"
 
     /** One line per tip, in the order the card shows them (the card pairs each with a glyph). */
     val watch = listOf(
@@ -29,6 +30,15 @@ object LiveTips {
         "Each card has a More button with the grown-up sliders.",
         "Made a mess? More has a big Reset tank button.",
         "Tap Watch at the top to go back to your real tank.",
+    )
+
+    /** My tank: the keeper's own tank, started empty and saved on this device. */
+    val myTank = listOf(
+        "Add life brings in any fish, shrimp, crab or coral you like. Drag the bag onto the water.",
+        "Everything here is saved: names, personalities and how much each animal grows.",
+        "Tap an animal, then Give it a name.",
+        "Time keeps going while the app is closed, so check in and feed them.",
+        "More has Start over if you want a different tank.",
     )
 
     /** Hermie's tips, one per tap on him. */
@@ -55,6 +65,16 @@ object LiveTips {
         "Tap the tank while something animates to skip it.",
         "Thought bubbles in More show what the fish plan to do.",
         "Made a mess? More has a big Reset button.",
+        "Tap Watch at the top to see your real tank again.",
+    )
+
+    val hermieMyTank = listOf(
+        "This is your own tank. Everything here is saved!",
+        "Add life brings in new friends in a bag.",
+        "Tap an animal to give it a name.",
+        "Feed them every day so they grow big!",
+        "Watch the water. Clean water means happy fish.",
+        "Thought bubbles in More show what they are thinking.",
         "Tap Watch at the top to see your real tank again.",
     )
 
