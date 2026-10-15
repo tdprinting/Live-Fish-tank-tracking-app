@@ -68,6 +68,7 @@ import com.reeflive.app.appGraph
 import com.reeflive.app.audio.TankAudio
 import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
+import com.reeflive.app.render.FollowCamControl
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.BurstKind
@@ -241,6 +242,8 @@ fun LiveTankScreen(
     val projection = remember { TankProjection() }
     // in-tank 3D feedback (dye plumes, bubbles, pump jets) and the banner naming what is happening
     val bursts = remember { TankBursts() }
+    // the follow camera's on-screen buttons (zoom, swing round): FollowOverlay presses, the renderer drains
+    val followCam = remember { FollowCamControl() }
     val banner = remember { ActionBannerState() }
     val hermie = remember { HermieState() }
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
@@ -926,6 +929,7 @@ fun LiveTankScreen(
             onTouchTank = onTouchTank,
             onFinger = onFinger,
             onFlick = onFlick,
+            followCam = followCam,
         )
         // speech bubbles over a few animals: same bounds as the tank view, draws only, touches go through
         if (thoughtsOn && !micro && !supplies && carry == null && bagCarry == null && !cleaning && !subUi.on) {
@@ -973,6 +977,7 @@ fun LiveTankScreen(
                 vm.select(null)
                 echo(LiveReactions.netOut(st.nickname.ifBlank { st.common }))
             },
+            followCam = followCam,
         )
         AnimatedVisibility(
             visible = menuUp,
@@ -1177,6 +1182,7 @@ private fun TankArea(
     onTouchTank: (Vec3, TouchSurface) -> Unit,
     onFinger: (Vec3?, Float, TouchSurface) -> Unit,
     onFlick: (Vec3, Vec3) -> Unit,
+    followCam: FollowCamControl,
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
@@ -1204,6 +1210,7 @@ private fun TankArea(
             shelf = shelf,
             care = care,
             subFirstPerson = sub.on && sub.inside,
+            followCam = followCam,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
@@ -1262,6 +1269,7 @@ private fun HudLayer(
     start: Dp,
     bottom: Dp,
     onNetOut: (OrganismStats) -> Unit,
+    followCam: FollowCamControl,
 ) {
     val reduce = ReefTheme.reduceMotion
     val sandbox = hudState.mode != HudMode.WATCH
@@ -1328,7 +1336,11 @@ private fun HudLayer(
             val ids = vm.hud.value.stats.filter { it.alive }.map { it.id }
             val i = ids.indexOf(st.id).coerceAtLeast(0)
             fun step(d: Int) { if (ids.isNotEmpty()) vm.follow(ids[(i + d + ids.size) % ids.size]) }
-            FollowOverlay(st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) })
+            FollowOverlay(
+                st.toFollowState(i, ids.size), { step(-1) }, { step(1) }, { vm.follow(null) },
+                onZoom = { steps -> followCam.zoom(steps) },
+                onOrbit = { dir -> followCam.orbit(dir * FollowCamControl.ORBIT_STEP) },
+            )
         }
         val bottomCard = Modifier
             .align(if (landscape) Alignment.BottomEnd else Alignment.BottomCenter)

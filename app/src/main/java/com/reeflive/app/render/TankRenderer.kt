@@ -149,6 +149,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun setQuality(q: RenderQuality) { requestedQuality = q }
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
+    /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
+    @Volatile var followCam: FollowCamControl = FollowCamControl()
 
     /** Clean-glass mode on/off (any thread): drags slide the Flipper; the camera squares up to the front glass. */
     fun setCleaning(on: Boolean) {
@@ -163,6 +165,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         // A new context: every GL object from a previous one is gone.
         store.onContextLost(quality)
+        rockDraw.onContextLost()
         Texture.resetCaps()
         Gl.currentProgram = 0
         initGl()
@@ -211,6 +214,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
         store.release()
         store.onContextLost(quality)
+        rockDraw.onContextLost()
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -235,6 +239,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
+        rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L)
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input); in Submarine mode the camera rides with the sub
@@ -245,6 +250,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         careScene.update(dt, care, cur?.care) { r -> main.post(r) }
         netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
+        followCam.drain(camera)
+        fillColliders(rigs, cur)
         camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
@@ -351,6 +358,63 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (usePost) drawCalls += post!!.end(lens.amount, lens.focus, quality.lensBlurPasses)
         publishStats(now, rigs.size, light)
     }
+
+    // ------------------------------------------------------------------ camera collision
+
+    private var collidersCorals: List<Pair<GpuModel, CoralPose?>>? = null
+    private var collidersEquipment: GpuModel? = null
+
+    /**
+     * Fills the camera's [Camera.colliders] for this frame: the sand grid (by reference), coral and equipment part boxes
+     * (rebuilt only when the coral list or the loaded equipment changes) and three capsules per visible animal. No
+     * allocation beyond the collection iterators.
+     */
+    private fun fillColliders(rigs: Collection<FishRig>, cur: SimSnapshot?) {
+        val c = camera.colliders
+        val g = cur?.sandGrid
+        if (g != null) c.setSandGrid(g.height, g.nx, g.nz, g.cellXCm, g.cellZCm) else c.setSandGrid(null, 0, 0, 1f, 1f)
+        val corals = coralModels(cur)
+        val equipment = store.model(EQUIPMENT)
+        if (corals !== collidersCorals || equipment !== collidersEquipment) {
+            collidersCorals = corals; collidersEquipment = equipment
+            c.clearBoxes()
+            if (equipment != null) for (i in equipment.parts.indices) {
+                val part = equipment.parts[i]
+                if (part.node.hidden || !blocksEye(part.node.name)) continue
+                val b = part.worldBounds
+                c.addBox(b[0], b[1], b[2], b[3], b[4], b[5])
+            }
+            for (k in corals.indices) {
+                val (m, pose) = corals[k]
+                val copy = pose != null && pose.isCopy
+                val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
+                for (i in m.parts.indices) {
+                    val part = m.parts[i]
+                    if (part.kind == MaterialKind.POLYP) continue
+                    if (copy && !nearHome(part, pose!!)) continue
+                    val b = part.worldBounds
+                    if (b[3] - b[0] <= 0f && b[4] - b[1] <= 0f) continue
+                    c.addBox(b[0] + ox, b[1] + oy, b[2] + oz, b[3] + ox, b[4] + oy, b[5] + oz)
+                }
+            }
+        }
+        c.clearCapsules()
+        val fid = camera.followId
+        for (r in rigs) {
+            if (!r.visible) continue
+            val rad = maxOf(r.scale * Picker.RADIUS_FRACTION, 0.3f)
+            val owner = if (r.id == fid) Camera.FOLLOW_OWNER else 0
+            val s = r.spine
+            for (k in 0 until 3) {
+                val a = EYE_SEGMENTS[k] * 4; val b = EYE_SEGMENTS[k + 1] * 4
+                c.addCapsule(s[a], s[a + 1], s[a + 2], s[b], s[b + 1], s[b + 2], rad, owner)
+            }
+        }
+    }
+
+    /** Equipment the eye stays out of: not the long cable and hose (their boxes are mostly open water) or the Flipper on the glass. */
+    private fun blocksEye(name: String): Boolean =
+        !name.startsWith("Cable") && !name.startsWith("Hose") && !name.startsWith("Flipper")
 
     // ------------------------------------------------------------------ follow lens
 
@@ -480,6 +544,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else -> progs.generic
             }
             p.use()
+            // a loose rock that moved (dynamic rockscape) draws at its own pose, with what grows on it
+            val pieces = if (part.node.name != FLIPPER_NODE && m.path in ROCK_ATTACHED) rockDraw.meshes(part) else null
             p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
             part.material.apply(p, w)
             p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
@@ -506,10 +572,21 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 }
                 else -> Unit
             }
-            part.mesh.draw()
-            drawCalls++; triangles += part.mesh.triangles
+            if (pieces == null) { part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles }
+            else drawPieces(p, part, pieces)
         }
     }
+
+    /** [part] split by rock: each group at its rock's pose (−1: the rock still where it was built). */
+    private fun drawPieces(p: ShaderProgram, part: DrawPart, pieces: List<Pair<Int, Mesh>>) {
+        for ((piece, mesh) in pieces) {
+            p.setMat4("uModel", if (piece >= 0) rockDraw.apply(piece, part.node.world, rockModel) else part.node.world)
+            mesh.draw(); drawCalls++; triangles += mesh.triangles
+        }
+    }
+    private val rockDraw = RockPoseDraw()
+    private val rockModel = FloatArray(16)
+    private val rockCoral = FloatArray(16)
 
     private fun drawAlgae(m: GpuModel, progs: Programs) {
         val w = white ?: return
@@ -521,7 +598,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             // full extension: the shader scales every vertex toward the model's base by uExtension, and this model
             // spans the whole tank (0.3 pulled tufts up to ~15 cm off the rock)
             coralUniforms(p, m, null, 1f)
-            part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
+            val pieces = rockDraw.meshes(part)
+            if (pieces == null) { part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles } else drawPieces(p, part, pieces)
         }
     }
 
@@ -550,7 +628,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
      * its own target and leaves the scene target / viewport to the normal frame code that follows.
      */
     private fun renderShadowMap(sm: ShadowMap, fu: FrameUniforms, progs: Programs, rigs: Collection<FishRig>, cur: SimSnapshot?) {
-        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0) + (if (cur?.bareScape == true) 500_000L else 0L)
+        // a rock that moved (dynamic rockscape) re-renders the cached static layer
+        val signature = store.loadedCount.toLong() * 1_000_003L + (cur?.corals?.size ?: 0) + (if (cur?.bareScape == true) 500_000L else 0L) + (cur?.rockVersion ?: 0L) * 7_919L
         if (!sm.needsUpdate(signature)) return
         fu.overrideViewProj(sm.matrix)
         // High: rock, equipment and still details live in a cached layer, redrawn only when the scene changes
@@ -574,7 +653,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             for (part in m.parts) {
                 if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
                 if (c != null && copy && !nearHome(part, c)) continue
-                pc.setMat4("uModel", if (copy) M.mul(coralShift, part.node.world, coralModel) else part.node.world)
+                pc.setMat4("uModel", onRock(c, if (copy) M.mul(coralShift, part.node.world, coralModel) else part.node.world))
                 coralUniforms(pc, m, c)
                 part.mesh.draw(); drawCalls++
             }
@@ -612,7 +691,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             for (part in m.parts) {
                 if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part) || part.node.name == FLIPPER_NODE) continue
                 p.setMat4("uModel", part.node.world)
-                part.mesh.draw(); drawCalls++
+                val pieces = if (key in ROCK_ATTACHED) rockDraw.meshes(part) else null
+                if (pieces == null) { part.mesh.draw(); drawCalls++ } else drawPieces(p, part, pieces)
             }
         }
         val pc = progs.shadowCoral
@@ -622,7 +702,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
                 pc.setMat4("uModel", part.node.world)
                 staticCoralUniforms(pc, part)
-                part.mesh.draw(); drawCalls++
+                val pieces = rockDraw.meshes(part)
+                if (pieces == null) { part.mesh.draw(); drawCalls++ } else drawPieces(pc, part, pieces)
             }
         }
     }
@@ -689,6 +770,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     private val flowScratch = FloatArray(3)
+    private val baseScratch = FloatArray(3)
+
+    /** [m] carried by the pose of the rock [c] grows on, when that rock has moved (dynamic rockscape). */
+    private fun onRock(c: CoralPose?, m: FloatArray): FloatArray =
+        if (c == null || !rockDraw.isMoved(c.rockPiece)) m else rockDraw.apply(c.rockPiece, m, rockCoral)
     private val gustScratch = FloatArray(3)
 
     private fun coralUniforms(p: ShaderProgram, m: GpuModel, c: CoralPose?, defaultExtension: Float = 1f) {
@@ -699,8 +785,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val height = (b[4] - b[1]).coerceAtLeast(1f)
         val ox = c?.offsetX ?: 0f; val oy = c?.offsetY ?: 0f; val oz = c?.offsetZ ?: 0f
         // a copy grows from its own spot (the moved home anchor), not from the centre of the whole model
-        if (c != null && c.isCopy) p.set3f("uBase", c.homeX + ox, c.homeY + oy, c.homeZ + oz)
-        else p.set3f("uBase", (b[0] + b[3]) * 0.5f, b[1], (b[2] + b[5]) * 0.5f)
+        val base = baseScratch
+        if (c != null && c.isCopy) { base[0] = c.homeX + ox; base[1] = c.homeY + oy; base[2] = c.homeZ + oz }
+        else { base[0] = (b[0] + b[3]) * 0.5f; base[1] = b[1]; base[2] = (b[2] + b[5]) * 0.5f }
+        // a colony on a rock that moved sways about where its base is now
+        c?.let { rockDraw.matrix(it.rockPiece) }?.let { M.transformPoint(it, base[0], base[1], base[2], base) }
+        p.set3f("uBase", base[0], base[1], base[2])
         p.set1f("uHeight", height)
         p.set1f("uExtension", c?.extension ?: defaultExtension)
         p.set1f("uPhase", c?.swayPhase ?: 0f)
@@ -781,11 +871,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else -> progs.softCoral
             }
             p.use()
-            p.setMat4("uModel", when {
+            p.setMat4("uModel", onRock(c, when {
                 !copy -> if (isPolyp) IDENTITY else part.node.world
                 isPolyp -> coralShift
                 else -> M.mul(coralShift, part.node.world, coralModel)
-            })
+            }))
             part.material.apply(p, w, alphaTestOverride = part.alphaTest ?: if (part.material.src.blended) 0.3f else null)
             CORAL_TINT[part.material.src.name]?.let { t ->
                 val bc = part.material.src.baseColor
@@ -1285,6 +1375,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
+        /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
+        private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
         const val ALGAE = "models/algae_tufts.glb"
         /** Static reef and glass details (ASSETS.md §4.1): coralline layer, encrusting colony, mushrooms, glass film. */
         const val DETAILS = "models/reef_details.glb"
@@ -1303,6 +1395,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
         const val GLASS_MASK_H = com.reeflive.core.sim.GlassMask.H
         val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE, DETAILS)
+        /** Models that sit on the rock and follow a loose rock that moved (dynamic rockscape). */
+        val ROCK_ATTACHED = setOf(ROCK, DETAILS, ALGAE, "models/rockscape_lod1.glb")
         /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
         val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
