@@ -172,6 +172,9 @@ class Navigation(private val rock: RockData) {
             // the body is in a slot the grid does not count passable (the resolve lets it squeeze where the 1 cm grid
             // cannot): back out to the nearest cell of the route network it can see, then on from there
             if (!f.done) return null
+            // in open water the body fits (its own cell passable) and still cut off from the goal: no way round is known
+            // at this size (a goal in a pocket the body cannot enter): no route, the steering heads straight for it
+            if (g.pass[g.cellOf(from)]) { unreachable = true; return null }
             val out = nearestReached(g, f, from, EXIT_SNAP)?.let { g.centre(it) }?.takeIf { rock.sdf.segmentClear(from, it, 0.3) }
             if (out == null) unreachable = true
             return out
@@ -278,9 +281,7 @@ class Navigation(private val rock: RockData) {
         const val DESCENT = 24
         const val LINE_STEP = 0.5
         const val END_SKIP = 1.0
-        private val GRIDS = object : LinkedHashMap<OpenWater, Grid>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<OpenWater, Grid>?) = size > 16
-        }
+        private val GRIDS = LruCache<OpenWater, Grid>(16)
 
     }
 }

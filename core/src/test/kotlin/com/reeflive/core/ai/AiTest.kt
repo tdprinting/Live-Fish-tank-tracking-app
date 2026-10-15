@@ -158,8 +158,9 @@ class AiTest {
             sim.advanceAbstract(2400.0)
             for (o in sim.organisms) {
                 assertTrue("${o.nickname} NaN", o.pos.isFinite() && o.heading.isFinite() && o.up.isFinite())
-                // a fish buried in the sand (posture 5: the leopard wrasse at night) is under the bed on purpose
-                val buried = o.posture == 5 && o.pos.y < sim.rock.floorY(o.pos.x, o.pos.z) && o.pos.y > sim.rock.sandTopCm - 3.0
+                // a fish buried in the sand (posture 5: the leopard wrasse at night) or down its burrow (posture 3: the
+                // diamond goby's burrow is dug in the sand under the rock) is under the bed on purpose
+                val buried = (o.posture == 5 || o.posture == 3) && o.pos.y < sim.rock.floorY(o.pos.x, o.pos.z) && o.pos.y > sim.rock.sandTopCm - 3.0
                 assertTrue("${o.nickname} outside ${o.pos}", buried || sim.rock.inWater(o.pos, -0.5))
             }
         }

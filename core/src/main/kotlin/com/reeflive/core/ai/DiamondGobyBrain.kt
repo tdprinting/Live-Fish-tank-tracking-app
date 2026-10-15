@@ -223,16 +223,23 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             o.waryLevel > 0.3 || o.startle > 0.25 -> 0.7
             else -> 0.1
         }
+        /** In at the mouth (the glide nosing into it is posture 3 too, but still gliding there). */
+        private var inside = false
+        override fun enter(c: Ctx) { inside = false }
         override fun update(c: Ctx, out: SteerIntent) {
             val night = c.p.night
-            if (o.posture != 3 && o.pos.distanceTo(mouth(0.5)) > 3) {
+            if (!inside && o.pos.distanceTo(mouth(0.5)) > 3) {
                 glide(c, out, mouth(0.5), 1.2)
                 // nosing into the mouth under the rock: in the burrow (an allowed contact, as in [DigBurrow])
                 if (o.pos.distanceTo(burrow) < 0.8 * o.lengthCm) out.posture = 3
                 return
             }
+            inside = true
             // head just inside the mouth by day, deeper at night (the pair shares the burrow)
-            out.place(offRock(burrow + inDir * (if (night) 1.5 else 0.2)), inDir, Vec3.Y, 3.0)
+            // eased in a step at a time, each step kept off the rock (the burrow is in the sand under it: the straight
+            // ease from the mouth cut the corner of the rock lip with the head)
+            val to = offRock(burrow + inDir * (if (night) 1.5 else 0.2))
+            out.place(offRock(o.pos.lerp(to, 1 - kotlin.math.exp(-3.0 * c.dt))), inDir, Vec3.Y, 1e3)
             out.posture = 3
             o.visible = !night
             o.sleeping = night

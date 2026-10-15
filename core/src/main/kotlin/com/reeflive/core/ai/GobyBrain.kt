@@ -5,6 +5,7 @@ import com.reeflive.core.sim.Anchor
 import com.reeflive.core.sim.Organism
 import kotlin.math.PI
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 /**
@@ -26,6 +27,10 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         const val SPIT_HZ = 6.0
         /** Seconds the body eases out of the burrow pose before the dig pose (its own spline override) is taken. */
         const val OVERRIDE_SETTLE_S = 0.8
+        /** Within this many body lengths of the mouth a digging trip glides in (posture 3) instead of swimming. */
+        const val MOUTH_GLIDE_L = 0.8
+        /** The gliding head's stand-off from the rock round the mouth (cm). */
+        const val MOUTH_ROCK_GAP_CM = 0.3
     }
     val burrow: Anchor? = c.rock.anchors["BURROW_GOBY"] ?: c.rock.anchors["CAVE_EEL"]
     val mouth: Vec3 = burrow?.pos ?: Vec3(62.0, 3.8, 32.5)
@@ -61,7 +66,10 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     fun rollNight(c: Ctx) {
         if (c.p.lightsOffAt <= lastNightRoll) return
         lastNightRoll = c.p.lightsOffAt
-        patrolTonight = adult && c.rng.chance(ADULT_NIGHT_PATROL_P)
+        // drawn from the night and the fish, not the behaviour stream: whether it patrols tonight does not hang on how
+        // many random draws its day happened to take
+        val night = kotlin.math.floor(c.p.lightsOffAt / 86400.0).toLong()
+        patrolTonight = adult && com.reeflive.core.geom.Rng(c.o.id.hashCode().toLong() * 0x9E3779B97F4A7C15uL.toLong() + night).chance(ADULT_NIGHT_PATROL_P)
     }
 
     /** Where the excavated sand comes from: the dig zone at the burrow mouth (a pit in the sand bed, SIMULATION §16). */
@@ -69,6 +77,21 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
 
     fun outside(k: Double) = Vec3(mouth.x, max(mouth.y, c.rock.floorY(mouth.x, mouth.z) + 1.0), mouth.z) + outDir * k
     fun inside(k: Double) = mouth + inDir * k
+
+    /**
+     * Nosing in at the mouth: glided along to [to] at cruise speed, the head kept off the rock, the body let in round
+     * the mouth (posture 3). The mouth sits in a pocket of the rock the whole swimming body does not fit (the route
+     * network ends short of it): a swimmer seeking it bounced about a body length off.
+     */
+    private fun glideIn(c: Ctx, out: SteerIntent, to: Vec3, posture: Int = 3) {
+        val o = c.o
+        val v = to - o.pos
+        val dir = v.normalized(o.heading)
+        var n = o.pos + dir * min(v.length(), o.cruiseSpeed * c.dt)
+        if (c.rock.sdf.dist(n) < MOUTH_ROCK_GAP_CM) n = c.rock.sdf.project(n, MOUTH_ROCK_GAP_CM)
+        out.place(n, Vec3(dir.x, 0.4 * dir.y, dir.z).normalized(o.heading), Vec3.Y, 1e3)
+        out.posture = posture
+    }
 
     /**
      * Body trailing back from the head: down the tunnel when it faces out of the burrow, out through the mouth when it
@@ -106,7 +129,8 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             val o = c.o
             val night = c.p.night
             if (o.posture != 3 && o.pos.distanceTo(outside(0.0)) > 4) {
-                out.seek(outside(1.0), o.cruiseSpeed, arrive = 2.0, urgency = 0.5)
+                if (o.pos.distanceTo(mouth) < MOUTH_GLIDE_L * o.lengthCm) glideIn(c, out, outside(1.0))
+                else out.seek(outside(1.0), o.cruiseSpeed, arrive = 2.0, urgency = 0.5)
                 return
             }
             val head = if (night) inside(4.0) else outside(0.6 + 0.4 * sin(c.t * 0.3))
@@ -167,9 +191,9 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
             timer += c.dt
             when (phase) {
                 0 -> { // into the mouth
-                    out.seek(outside(0.5), o.cruiseSpeed, arrive = 1.0)
-                    // nosing into the mouth: the body follows the tunnel, it does not clip the rock lip
-                    if (o.pos.distanceTo(mouth) < 0.8 * o.lengthCm) out.posture = 3
+                    val dm = o.pos.distanceTo(mouth)
+                    if (dm < MOUTH_GLIDE_L * o.lengthCm) glideIn(c, out, outside(0.5))
+                    else out.seek(outside(0.5), o.cruiseSpeed, arrive = 1.0)
                     // (not before the body has eased out of the burrow pose it was in: the dig pose replaces that
                     // override outright, and taking it the next tick swung the tail 14 cm in one frame)
                     if (o.pos.distanceTo(outside(0.5)) < 2.0 && timer > OVERRIDE_SETTLE_S) { phase = 1; timer = 0.0 }
@@ -186,11 +210,10 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 2 -> { // carry the mouthful out: cheeks full, head a little down, short wriggling swim
                     o.mouth = 0.45
-                    out.seek(dump, o.cruiseSpeed * 0.8, arrive = 1.0, urgency = 0.4)
-                    // the tail is still in the tunnel until the body is out of the mouth (in the burrow, posture 3): within
-                    // 0.8 L, and up to 1.5 L while any of the body is still in the sand or rock round the mouth
-                    val dm = o.pos.distanceTo(mouth)
-                    if (dm < 0.8 * o.lengthCm || dm < 1.5 * o.lengthCm && o.posture == 3 && c.sim.bodies.sectionDepth(o) > 0.0) out.posture = 3
+                    // out along the tunnel and clear of the mouth's pocket first (glided, as on the way in, but out of the
+                    // burrow: its tail, still in the tunnel, is let in only until the body is out), then the short swim
+                    if (o.pos.distanceTo(mouth) < MOUTH_GLIDE_L * o.lengthCm) glideIn(c, out, outside(MOUTH_GLIDE_L * o.lengthCm + 1.0), posture = 0)
+                    else out.seek(dump, o.cruiseSpeed * 0.8, arrive = 1.0, urgency = 0.4)
                     out.ampMul = 1.3
                     out.pitchBias = -0.15
                     if (o.pos.distanceTo(dump) < 2.0 || timer > 10) { phase = 3; timer = 0.0 }

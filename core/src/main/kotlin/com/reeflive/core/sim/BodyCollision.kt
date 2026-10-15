@@ -22,6 +22,11 @@ class BodyState {
     val ctr = DoubleArray(N)
     val a = DoubleArray(N)
     val b = DoubleArray(N)
+    /**
+     * A crawler on its seat ([CrawlerSeat]) is drawn where the seat rests it, not at the sim position: its body is that
+     * drawn body. While a resolve moves the animal, the seat is carried along at this offset from the sim position.
+     */
+    internal var seatOff: Vec3? = null
     /** Heading and up of the spline's remembered clear pose ([BodySpline.saveSafe]). */
     var safeHeading = Vec3.X
     var safeUp = Vec3.Y
@@ -91,21 +96,25 @@ class BodyState {
         val s = shape!!
         val st = s.stations(N)
         val L = o.lengthCm
-        val rigid = o.spline.rigid && o.spline.override == null
+        val seat = seatOf(o)
+        val rigid = seat != null || o.spline.rigid && o.spline.override == null
         if (!rigid) o.spline.samplePoints(spine)
-        val h = o.heading.normalized(Vec3.X)
+        // (seated: straight back from the seat point along the seat's forward, its up the seat's, as Organism.toPose draws it)
+        val base = if (seat != null) seatOff?.let { o.pos + it } ?: o.seatPos else o.pos
+        val h = if (seat != null) seat.fwd else o.heading.normalized(Vec3.X)
+        val upRef = if (seat != null) o.seatUp else o.up
         // the renderer's lateral swim wave and C-start bend (fish.vert) widen the swept body; the shrimp tail-flip curls the tail down
         val amp = min(o.amp, MAX_WAVE_AMP)
         val mode = o.toPoseMotionMode()
         for (i in 0 until N) {
             val uu = s.uMin + (s.uMax - s.uMin) * i / (N - 1)
             u[i] = uu
-            p[i] = if (rigid) o.pos - h * (uu * L) else spineAt(uu)
+            p[i] = if (rigid) base - h * (uu * L) else spineAt(uu)
         }
         var cx = 0.0; var cy = 0.0; var cz = 0.0
         for (i in 0 until N) {
             val t = if (rigid) h else (if (i == 0) p[0] - p[1] else if (i == N - 1) p[N - 2] - p[N - 1] else p[i - 1] - p[i + 1]).normalized(h)
-            val upv = o.up.rejectFrom(t).normalized(Vec3.Y.rejectFrom(t).normalized(Vec3.Z))
+            val upv = upRef.rejectFrom(t).normalized(Vec3.Y.rejectFrom(t).normalized(Vec3.Z))
             up[i] = upv
             side[i] = (t cross upv).normalized(Vec3.Z)
             val uu = u[i].coerceIn(0.0, 1.0)
@@ -137,6 +146,9 @@ class BodyState {
     }
 }
 
+/** The seat [o] is drawn on (fully blended in), or null: then its body is the sim's own. */
+internal fun seatOf(o: Organism): CrawlerSeat? = o.seat?.takeIf { o.seatOn && it.blend >= 1.0 }
+
 /** The renderer's motion mode for this animal (OrganismPose.motionMode): 0 fish, 1 brittle star, 2 shrimp, 3 crab. */
 internal fun Organism.toPoseMotionMode(): Int = when (motion.gait) {
     Gait.ARM_ROW -> 1
@@ -166,6 +178,8 @@ class BodyCollision(private val rock: RockData) {
     private fun grad(p: Vec3): Vec3 = grid?.gradientFast(p) ?: rock.sdf.gradient(p)
     private val hash = SpatialHash<Organism>(15.0) { it.body.centre }
     private val pairDelta = LinkedHashMap<Organism, Array<Vec3>>()
+    /** Summed falloff weight of the pushes on each spline station ([pairDelta]): overlapping segment pairs share one push. */
+    private val pairWeight = HashMap<Organism, DoubleArray>()
     private val order = HashMap<Organism, Int>()
 
     // ---- counters (tests / profiling) ----
@@ -243,6 +257,18 @@ class BodyCollision(private val rock: RockData) {
      */
     fun resolveEnv(o: Organism, dt: Double, rockOn: Boolean = true, surfaceOn: Boolean = true, settle: Boolean = false, wedgeFallback: Boolean = true): Double {
         if (!enabled) return 0.0
+        // a seated crawler's body is its drawn one: the seat moves with every push on the animal
+        val seat = seatOf(o)
+        if (seat != null) o.body.seatOff = o.seatPos - o.pos
+        try { return resolveEnv0(o, dt, rockOn, surfaceOn, settle, wedgeFallback) } finally {
+            o.body.seatOff?.let { off -> o.body.seatOff = null; seat?.let { carrySeat(o, it, o.pos + off - o.seatPos) } }
+        }
+    }
+
+    /** Moves the seat [o] is drawn on by [d] along with the animal. */
+    private fun carrySeat(o: Organism, seat: CrawlerSeat, d: Vec3) { if (d.lengthSq() > 1e-18) seat.carry(o, d) }
+
+    private fun resolveEnv0(o: Organism, dt: Double, rockOn: Boolean, surfaceOn: Boolean, settle: Boolean, wedgeFallback: Boolean): Double {
         // coming out of a burrow, a hole or the sand (posture 3 / 5 just left): the body is still partly in it, and
         // stays let in (inside the glass) until it is out, for at most [EMERGE_TICKS] resolves
         val bs = o.body
@@ -270,7 +296,9 @@ class BodyCollision(private val rock: RockData) {
         var lastPush = 0.0
         var bellyN = Vec3.ZERO
         var bellyCount = 0
-        val rigid = o.spline.rigid
+        // (a seated crawler is moved as a whole: the seat keeps its shape on the surface)
+        val seated = seatOf(o) != null
+        val rigid = o.spline.rigid || seated
         // how far each station was from the rock on the first pass, and how far the body has moved since: a station
         // that started farther from the rock than the body has moved cannot have reached it (distance is 1-Lipschitz)
         var moved = 0.0
@@ -437,9 +465,12 @@ class BodyCollision(private val rock: RockData) {
             val translate = Vec3(hiX + loX, hiY + loY, hiZ + loZ)
             // a rigid body (a shell, a carapace) on curved rock also tips: the small rotation that best serves the
             // station pushes (shape matching about the body centre), then the translation
-            if (rigid && o.spline.override == null) tip(o, body)
+            if (rigid && !seated && o.spline.override == null) tip(o, body)
             applyDeltas(o, body, if (rigid || iter >= BEND_ITERATIONS) null else deltas, translate)
         }
+        // still pushing (the planar contacts over-push at a convex edge, and two faces can trade the body back and forth)
+        // but every rim point is clear: the pose fits
+        if (!clear && wedgeFallback && lastPush > WEDGE_LIMIT && rimDepth(o, rockOn, surfaceOn) <= 0.0) clear = true
         lastClear = clear || lastPush <= WEDGE_LIMIT
         o.body.clearPose = clear
         o.body.clearBroad = broad
@@ -449,7 +480,11 @@ class BodyCollision(private val rock: RockData) {
             if (wedgeFallback) o.body.held = 0   // (not the re-settle of a held pose: that is still the same hold)
         } else if (wedgeFallback && lastPush > WEDGE_LIMIT) {
             // held this long, the behaviour keeps pressing into the same wedge: find clear water instead of freezing
-            if (o.body.held >= HOLD_MAX && unstick(o, rockOn, surfaceOn)) { o.body.held = 0; return worst }
+            if (o.body.held >= HOLD_MAX) {
+                if (unstick(o, rockOn, surfaceOn)) { o.body.held = 0; return worst }
+                // nothing clear near the pose it was pressed into: back out (or hop) from the pose it last fitted in
+                if (restoreHeld(o, count = false) && unstick(o, rockOn, surfaceOn)) { o.body.held = 0; return worst }
+            }
             if (restoreHeld(o)) {
                 // a wedge the pushes cannot clear (a crevice narrower than the body, rock against sand): the body stays
                 // where it last fitted instead of passing into the geometry. The swim wave and bend have moved on since
@@ -601,8 +636,29 @@ class BodyCollision(private val rock: RockData) {
         body.refresh(o)
         val axis = IntArray(3) { it * (BodyState.N - 1) / 2 }.map { i -> body.p[i] + body.up[i] * body.ctr[i] }
         val axis0 = axis.map { if (rockOn) rock.sdf.dist(it) else 0.0 }
+        val start = o.spline.pose()
+        val h0 = o.heading
         for (k in 1..UNSTICK_STEPS) {
             val dist = min(L * 0.15, 0.75) * k
+            // backing out along its own spine first, the way it came in: the body only passes where it already was
+            // (and where the tail carries on straight behind it), so a fish nosed into a slot it cannot turn in backs out
+            if (o.spline.override == null) {
+                if (moved != Vec3.ZERO) { o.spline.setPose(start); moved = Vec3.ZERO }
+                o.spline.backUp(dist)
+                // (the heading turns toward the stretch of spine the head backed onto, within a tick's turn: a trail
+                // crumpled by grazing or hovering points anywhere there)
+                o.pos = o.spline.headPos; o.heading = Vec3.rotateToward(h0, o.spline.headingDir, BACKUP_TURN_RAD)
+                body.refresh(o)
+                val tail = body.p[BodyState.N - 1] + body.up[BodyState.N - 1] * body.ctr[BodyState.N - 1]
+                val ok = !rockOn || !crossesWall(axis.subList(2, 3), axis0.subList(2, 3), tail - axis[2])
+                val rd = if (ok) rimDepth(o, rockOn, surfaceOn) else 1.0
+                if (rd < 0.0) {
+                    o.vel = Vec3.ZERO
+                    o.body.clearPose = true
+                    return true
+                }
+                o.spline.setPose(start); o.pos = o.spline.headPos; o.heading = h0
+            }
             for (d in dirs) {
                 val t = d * dist
                 if (rockOn && crossesWall(axis, axis0, t)) continue
@@ -618,9 +674,8 @@ class BodyCollision(private val rock: RockData) {
             }
         }
         // nowhere clear nearby: stay where the pushes left the body
-        for (j in 0 until BodySpline.POINTS) deltas[j] = moved * -1.0
-        o.spline.displace(deltas)
-        o.pos = o.spline.headPos
+        o.spline.setPose(start)
+        o.pos = o.spline.headPos; o.heading = h0
         return false
     }
 
@@ -738,6 +793,7 @@ class BodyCollision(private val rock: RockData) {
         var maxR = 0.0
         for (o in live) maxR = max(maxR, o.body.radius)
         pairDelta.clear()
+        pairWeight.clear()
         order.clear()
         for ((k, o) in live.withIndex()) order[o] = k
         val near = ArrayList<Organism>()
@@ -756,11 +812,17 @@ class BodyCollision(private val rock: RockData) {
         if (pairDelta.isEmpty()) return false
         overlapping.clear()
         for ((o, d) in pairDelta) {
+            // every segment pair that overlaps pushes the same stations: their mean, not their sum, takes the overlap
+            // out (a sum pushes a body lying alongside another many times too far, and it springs back next tick)
+            val w = pairWeight[o]
+            if (w != null) for (q in d.indices) if (w[q] > 1.0) d[q] = d[q] / w[q]
             overlapping += o
             pairPushes++
             val before = o.body.centre
+            val p0 = o.pos
             o.spline.displace(d)
             o.pos = o.spline.headPos
+            seatOf(o)?.let { carrySeat(o, it, o.pos - p0) }
             resolveEnv(o, dt)
             // the environment took back most of the push (the body is against the rock or a coral on that side): from
             // now on the other body of the pair moves instead, or the two would trade the same overlap pass after pass
@@ -824,12 +886,13 @@ class BodyCollision(private val rock: RockData) {
 
     private fun addDelta(o: Organism, body: BodyState, i0: Int, i1: Int, t: Double, d: Vec3) {
         val arr = pairDelta.getOrPut(o) { Array(BodySpline.POINTS) { Vec3.ZERO } }
-        if (o.spline.rigid) { for (k in arr.indices) arr[k] = arr[k] + d; return }
+        val wt = pairWeight.getOrPut(o) { DoubleArray(BodySpline.POINTS) }
+        if (o.spline.rigid || seatOf(o) != null) { for (k in arr.indices) { arr[k] = arr[k] + d; wt[k] += 1.0 }; return }
         // body station → spline station (u = i/15), spread over a few stations so the push bends the spine smoothly
         val f = ((body.u[i0] + (body.u[i1] - body.u[i0]) * t) * (BodySpline.POINTS - 1)).coerceIn(0.0, BodySpline.POINTS - 1.0)
         for (q in 0 until BodySpline.POINTS) {
             val fall = (1 - abs(q - f) / 3.0).coerceAtLeast(0.0)
-            if (fall > 0) arr[q] = arr[q] + d * fall
+            if (fall > 0) { arr[q] = arr[q] + d * fall; wt[q] += fall }
         }
     }
 
@@ -918,6 +981,8 @@ class BodyCollision(private val rock: RockData) {
         const val BROAD_FLOOR_MARGIN = 1.5
         /** How fast a resting fish's body settles onto the slope under its belly (1/s). */
         const val SETTLE_RATE = 4.0
+        /** Largest heading change of a back-out along the spine ([unstick]), rad. */
+        const val BACKUP_TURN_RAD = 0.3
         /** Steepest slope (sin of pitch) a resting fish's body follows. */
         const val SETTLE_MAX_PITCH = 0.57
 

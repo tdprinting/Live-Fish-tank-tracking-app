@@ -261,6 +261,15 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         o.seatUp = up
     }
 
+    /**
+     * Carries the seated body [d] along with the animal (the body collision pushed it: off another animal, out of a
+     * rock edge the contact solve does not see); the next update warm-starts from there.
+     */
+    internal fun carry(o: Organism, d: Vec3) {
+        pos += d; oPrev += d
+        o.seatPos = pos
+    }
+
     /** Body forward on [up]: the sim heading in that plane, or the last forward when the heading is nearly along up. */
     private fun fwdOn(h: Vec3, up: Vec3, prev: Vec3, h0: Vec3): Vec3 {
         val r = h.rejectFrom(up)

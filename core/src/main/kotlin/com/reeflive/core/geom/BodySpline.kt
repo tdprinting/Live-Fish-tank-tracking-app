@@ -118,6 +118,41 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
 
     /** Current head position (the snout; the organism's `pos`). */
     val headPos: Vec3 get() = head
+    /** Current heading (unit). */
+    val headingDir: Vec3 get() = heading
+
+    /** A copy of the pose (head, heading, trail), for a trial move that may be taken back with [setPose]. */
+    class Pose internal constructor(internal val head: Vec3, internal val heading: Vec3, internal val trail: List<Vec3>)
+    fun pose(): Pose = Pose(head, heading, ArrayList(trail))
+    fun setPose(p: Pose) { head = p.head; heading = p.heading; trail.clear(); trail.addAll(p.trail) }
+
+    /**
+     * Slides the body [d] cm back along its own spine, the way it came in (a fish backing out of a slot it cannot turn
+     * in): the head moves onto the trail and the tail carries on straight past its end. A rigid body backs straight
+     * along its heading; an [override] path (den, hole) is left alone.
+     */
+    fun backUp(d: Double) {
+        if (override != null) return
+        if (rigid || trail.isEmpty()) { head -= heading * d; return }
+        var cur = head
+        var prevPt = head
+        var rem = d
+        var j = 0
+        while (j < trail.size) {
+            prevPt = cur
+            val dd = cur.distanceTo(trail[j])
+            if (dd >= rem && dd > 1e-12) { cur = cur + (trail[j] - cur) * (rem / dd); rem = 0.0; break }
+            rem -= dd; cur = trail[j]; j++
+        }
+        val tailDir = if (trail.size >= 2) (trail[trail.size - 1] - trail[trail.size - 2]).normalized(heading * -1.0) else heading * -1.0
+        if (rem > 0) cur = cur + tailDir * rem
+        // the new heading: along the stretch of spine the head now sits on
+        heading = if (j < trail.size) (prevPt - trail[j]).let { if (it.lengthSq() > 1e-12) it.normalized(heading) else heading } else tailDir * -1.0
+        val rest = if (j < trail.size) ArrayList(trail.subList(j, trail.size)) else ArrayList()
+        head = cur
+        trail.clear(); trail.addAll(rest)
+        respace(if (trail.isEmpty()) length / 16 else head.distanceTo(trail[0]))
+    }
 
     /**
      * Displaces the body (collision response, SIMULATION §4.3): [deltas] holds one displacement per spine station
@@ -174,7 +209,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         }
     }
 
-    /** Spine points only (no frames), head→tail, bend-limited like [sample]. */
+    /** Spine points only (no frames), head→tail, the same as [sample]. */
     fun samplePoints(pos: Array<Vec3>) = points(pos)
 
     /**
@@ -199,7 +234,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         val mix = if (ov == null || ov.isEmpty()) 0.0 else overrideMix
         if (mix < 1.0) {
             if (rigid) for (i in 0 until POINTS) pos[i] = head - heading * (seg * i)
-            else { walk(trail, 0, head, seg, pos); limitBend(pos) }
+            else walk(trail, 0, head, seg, pos)
         }
         if (mix > 0.0) {
             // the path starts at the head: shift it so its first point coincides with the current head
@@ -208,42 +243,6 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             val dst = if (mix >= 1.0) pos else scratch
             walk(shifted, 1, head, seg, dst)
             if (mix < 1.0) for (i in 0 until POINTS) pos[i] = pos[i].lerp(scratch[i], mix)
-        }
-    }
-
-    /**
-     * Caps the bend between neighbouring stations at [MAX_BEND_PER_SEGMENT] and the head-to-tail total at
-     * [MAX_BEND_TOTAL], keeping the head and every segment length (the renderer's FishRig.limitBend applies the same
-     * limits to the interpolated spine; doing it here makes the simulated body the drawn body).
-     */
-    private val bendOld = Array(POINTS) { Vec3.ZERO }
-
-    private fun limitBend(pos: Array<Vec3>) {
-        // directions and segment lengths come from the original stations (as in FishRig.limitBend), positions are rebuilt
-        for (i in 0 until POINTS) bendOld[i] = pos[i]
-        val old = bendOld
-        var pd = old[1] - old[0]
-        val pl = pd.length()
-        if (pl < 1e-9) return
-        pd = pd / pl
-        var budget = MAX_BEND_TOTAL
-        for (i in 1 until POINTS - 1) {
-            var d = old[i + 1] - old[i]
-            val len = d.length()
-            if (len < 1e-9) { pos[i + 1] = pos[i]; continue }
-            d = d / len
-            val c = (pd dot d).coerceIn(-1.0, 1.0)
-            val ang = kotlin.math.acos(c)
-            val allowed = kotlin.math.min(MAX_BEND_PER_SEGMENT, kotlin.math.max(budget, 0.0))
-            if (ang > allowed + 1e-4) {
-                var q = d - pd * c
-                if (q.length() < 1e-6) q = Vec3(-pd.z, 0.0, pd.x).let { if (it.length() < 1e-6) Vec3(0.0, -pd.z, pd.y) else it }
-                q = q.normalized(Vec3.Y)
-                d = pd * kotlin.math.cos(allowed) + q * kotlin.math.sin(allowed)
-                budget -= allowed
-            } else budget -= ang
-            pos[i + 1] = pos[i] + d * len
-            pd = d
         }
     }
 
@@ -284,8 +283,9 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         const val MAX_TRAIL = 48
         /**
          * Largest turn between neighbouring spine stations (rad per BL/15): at 0.42 rad the bend radius stays ≥ 0.16 BL,
-         * wider than a fish's half-thickness plus a folded pectoral, so the body cannot pass through itself. Single source
-         * for the renderer (FishRig) and the sim's collision body.
+         * wider than a fish's half-thickness plus a folded pectoral, so the body cannot pass through itself. Used by the
+         * renderer (FishRig.limitBend). The sim's collision body follows the trail unlimited: clamping a folded trail
+         * there has no continuous answer, and the body flicked between folds from tick to tick (FishGlitchTest).
          */
         const val MAX_BEND_PER_SEGMENT = 0.42
         /** Total head-to-tail bend (rad); a C-start or a U-shaped den path still fits, a spiral does not. */

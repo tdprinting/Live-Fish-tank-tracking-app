@@ -518,6 +518,8 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         const val SWAY_ROLL = 0.12
         /** Swim speed onto a client, cm/s: Lysmata swims up to and onto the fish (DESIGN ESTIMATE). */
         const val MOUNT_CM_S = 8.0
+        /** How fast it turns toward the client as it sets off (rad/s). */
+        const val MOUNT_TURN_RAD_S = 1.5
     }
 
     /** Leg-rock probability: predators 0.51, others 0.12 in full light (S:Caves19), up to ×1.6 in the dark. */
@@ -629,7 +631,10 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (!mounted && gap.length() > 0.6) {
                 // swim across head first, legs reaching for the fish
                 val step = gap.clampLength(MOUNT_CM_S * c.dt)
-                out.place(c.o.pos + step, gap.normalized(c.o.heading), Vec3.Y.lerp(cl.up, 0.5).normalized(Vec3.Y), 40.0)
+                // turning off the perch at a walking pace: the rigid body swung round in a tick or two hit the rock it
+                // stands on with its tail, and the push out of it threw the head on faster than it swims
+                val face = Vec3.rotateToward(c.o.heading, gap.normalized(c.o.heading), MOUNT_TURN_RAD_S * c.dt)
+                out.place(c.o.pos + step, face, Vec3.Y.lerp(cl.up, 0.5).normalized(Vec3.Y), 40.0)
                 cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
                 c.o.appendagePhase += c.dt * 6
                 return
@@ -1364,10 +1369,18 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
     inner class HideCrevice : Behavior("hide", "Hiding in a crevice") {
         // after a dash home it stays pressed in for a minute or so before venturing out again
         override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12 + (if (softShell(c)) 0.35 else 0.0) + (if (c.t - lastDartAt < WARY_S) 0.4 else 0.0)
+        /** Where it is pressed in: the crevice spot, or as far in as its body went (the collision holds it there). */
+        private var seat: Vec3? = null
+        override fun enter(c: Ctx) { seat = null }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
-            if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, r.pos, fast = false); return }
-            out.rest(r, 1.0)
+            val d = c.o.pos.distanceTo(r.pos)
+            val s0 = seat
+            // (once in, a body held at the crevice mouth stays pressed there rather than scuttling off and back in)
+            if (if (s0 == null) d > 2.0 else d > 2.0 + 0.6 * c.L) { seat = null; scuttle(c, out, r.pos, fast = false); return }
+            val s = if (s0 == null || c.o.pos.distanceTo(s0) > 0.3) c.o.pos.takeIf { s0 != null } ?: r.pos else s0
+            seat = s
+            out.rest(r.copy(pos = s), 1.0)
             legs.tucked = true
             // pressed flat in the crevice, now and then picking at the film just inside it
             if (sin(c.t * 0.21 + c.o.appendagePhase) > 0.6) legs.pick = 0.4

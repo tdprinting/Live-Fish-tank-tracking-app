@@ -91,9 +91,7 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
         /** Key of a grid: the rock field, the tank box, the drawn sand (by content) and the clearance. */
         private data class Key(val sdf: Sdf, val l: Double, val w: Double, val water: Double, val sandTop: Double, val sand: Long?, val clear: Double)
         /** The grids of the last few rocks (a test suite builds many simulations; a resized tank never reuses the old box). */
-        private val cache = object : LinkedHashMap<Key, OpenWater>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, OpenWater>?) = size > 16
-        }
+        private val cache = LruCache<Key, OpenWater>(16)
 
         /**
          * Shared by every simulation on the same rock and drawn sand. The floor is the modelled sand ([modelFloor]),
@@ -105,5 +103,17 @@ class OpenWater(rock: RockData, private val clear: Double = CLEAR) {
         /** The drawn sand surface without digging ([SandBed.modelY]): tank.glb's sand, else the bed's front-to-back slope. */
         fun modelFloor(rock: RockData, x: Double, z: Double): Double =
             rock.sandBase?.at(x, z) ?: (SandBed.BASE_FRONT + (SandBed.BASE_BACK - SandBed.BASE_FRONT) * ((rock.widthCm - z) / rock.widthCm).coerceIn(0.0, 1.0))
+    }
+}
+
+/** A small least-recently-used map (platform-neutral: the core also compiles to JS, which has no access-ordered map). */
+internal class LruCache<K, V : Any>(private val max: Int) {
+    private val map = LinkedHashMap<K, V>()
+    fun getOrPut(key: K, make: () -> V): V {
+        map.remove(key)?.let { map[key] = it; return it }
+        val v = make()
+        map[key] = v
+        if (map.size > max) map.remove(map.keys.first())
+        return v
     }
 }

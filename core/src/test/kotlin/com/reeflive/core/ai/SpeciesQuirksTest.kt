@@ -34,7 +34,9 @@ class SpeciesQuirksTest {
         s.advance(15 * 60.0, behaviorDt = 0.1) { if (hawk.behaviorName == "Resting on the sand") resting++ }
         assertTrue("settled: ${hb.sandRest.settles}, resting ticks $resting", hb.sandRest.settles >= 1 && resting > 0)
         assertEquals("Resting on the sand", hawk.behaviorName)
-        assertTrue("on the sand: y ${hawk.pos.y} sand ${s.rock.sandTopCm}", hawk.pos.y - s.rock.sandTopCm < 2.5)
+        // (the sand's own surface: the bed is deeper than the tank's nominal sand top in places)
+        val sandY = s.rock.floorY(hawk.pos.x, hawk.pos.z)
+        assertTrue("on the sand: y ${hawk.pos.y} sand $sandY", hawk.pos.y - sandY < 2.5)
         val gap = s.rock.sdf.dist(hawk.pos)
         assertTrue("within 10 cm of the rock base: $gap", gap <= SandRest.ROCK_GAP_CM + 1.0)
         val pitchDeg = Math.toDegrees(asin(hawk.heading.y))
@@ -43,7 +45,7 @@ class SpeciesQuirksTest {
         val spot = hb.sandRest.spotOrNull()!!
         s.advanceAbstract(12 * 3600.0)
         s.advance(20 * 60.0, behaviorDt = 0.1)
-        assertTrue("up off the sand by day: ${hawk.behaviorName} y ${hawk.pos.y}", hawk.pos.y - s.rock.sandTopCm > 3.0)
+        assertTrue("up off the sand by day: ${hawk.behaviorName} y ${hawk.pos.y}", hawk.pos.y - s.rock.floorY(hawk.pos.x, hawk.pos.z) > 3.0)
         assertEquals(spot, hb.sandRest.spotOrNull())
     }
 

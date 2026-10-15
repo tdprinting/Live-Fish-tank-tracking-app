@@ -231,12 +231,20 @@ class Steering(private val c: Ctx) {
                 val space = k * min(L, n.lengthCm)
                 val r = myHalf + BodyShapes.of(n.species).maxRadius * n.lengthCm + space
                 val nTail = tailOf(n)
-                val (s0, t0) = com.reeflive.core.sim.BodyCollision.closestParams(o.pos, myTail, n.pos, nTail)
-                val d = (o.pos + (myTail - o.pos) * s0) - (n.pos + (nTail - n.pos) * t0)
-                val dl = d.length()
-                // full strength (r/dl) well inside, eased to zero across the edge (0.9 r → 1.1 r): the hard cut-off
-                // flicked two neighbours apart and back every tick as one crossed it
-                if (dl in 1e-6..(1 + SEP_EDGE) * r) sep += d / (dl * dl) * (r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r)))
+                val ax = nTail - n.pos
+                val al = ax.lengthSq()
+                // measured from the snout, the middle and the tail of this body to the nearest point of the other's
+                // axis (the nearest points of two near-parallel axes jump end to end as they slide past each other, and
+                // swung a pair nestled side by side in the host back and forth)
+                for (f in SEP_SAMPLES) {
+                    val q = o.pos + (myTail - o.pos) * f
+                    val t = if (al < 1e-9) 0.0 else (((q - n.pos) dot ax) / al).coerceIn(0.0, 1.0)
+                    val d = q - (n.pos + ax * t)
+                    val dl = d.length()
+                    // full strength (r/dl) well inside, eased to zero across the edge (0.9 r → 1.1 r): the hard cut-off
+                    // flicked two neighbours apart and back every tick as one crossed it
+                    if (dl in 1e-6..(1 + SEP_EDGE) * r) sep += d / (dl * dl) * (r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r)) / SEP_SAMPLES.size)
+                }
             }
             desired += sep * (cruise * 0.6 * it.separation)
         }
@@ -251,7 +259,10 @@ class Steering(private val c: Ctx) {
         var a = Vec3.ZERO
         if (!it.ignoreRock) {
             val look = o.pos + o.vel * 0.4
-            val clearance = min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
+            // (on a route the body fits along, the push off the rock is the snout's own stand-off: the wider margin
+            // held a juvenile engineer goby for good where its route rounds a rock edge, the pull of the next waypoint
+            // and the push off the edge cancelling exactly)
+            val clearance = if (onRoute) snoutClear + ROUTE_ROCK_MARGIN else min(0.6 * Lc + 1.0, snoutClear * (0.6 / 0.45) + 1.0)
             val d = rock.sdf.dist(look)
             if (d < clearance) a += rock.sdf.gradient(look) * ((clearance - d) * 40)
             if (!onRoute) a += feelers(o, it)
@@ -757,6 +768,8 @@ class Steering(private val c: Ctx) {
         /** cos of the largest roll a free swimmer ends a tick with (40°). */
         const val MAX_ROLL_COS = 0.766
         const val NAV_SNOUT_CLEAR = 0.5
+        /** On a route, how far past the snout's stand-off the look-ahead starts pushing off the rock (cm). */
+        const val ROUTE_ROCK_MARGIN = 0.3
         const val NAV_RETARGET_CM = 1.5
         const val SNOUT_FLOOR_CLEAR = 0.4
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
@@ -764,6 +777,8 @@ class Steering(private val c: Ctx) {
         const val C_STAGE2 = 0.12
         /** Half-width (fraction of the personal space) of the band across its edge where separation eases out. */
         const val SEP_EDGE = 0.1
+        /** Points along the body (0 = snout, 1 = tail) the separation is measured from. */
+        private val SEP_SAMPLES = doubleArrayOf(0.0, 0.5, 1.0)
         /** Rock clearance (× collision length) inside which a swimmer holds position rather than step closer. */
         const val HOLD_BAND = 0.34
         /** Closest (× collision length) a swimmer wedged between rock and glass may slide along the rock. */
