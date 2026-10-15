@@ -70,7 +70,9 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         }
         // Relax toward the straight line behind the heading.
         if (relaxRate > 0) {
-            val k = 1 - exp(-relaxRate * dt)
+            // capped per tick: at the 0.5 s fast-forward tick a body that had just stopped out of a curve straightened
+            // 86 % in one step (a visible body pop); at the live 20 Hz tick this changes nothing
+            val k = 1 - exp(-min(relaxRate * dt, MAX_RELAX_STEP))
             var s = head.distanceTo(trail[0])
             var prev = trail[0]
             for (i in trail.indices) {
@@ -251,5 +253,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         const val MAX_TRAIL = 48
         /** Rate (1/s) at which the body eases into or out of an [override] path. */
         const val OVERRIDE_BLEND_RATE = 6.0
+        /** Largest relax exponent one tick may apply (k ≤ 1 − e^−0.5 ≈ 0.39). */
+        const val MAX_RELAX_STEP = 0.5
     }
 }

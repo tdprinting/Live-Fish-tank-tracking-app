@@ -224,7 +224,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
         if (moving > 0.02) clock = (clock + strideHz * dt * moving) % 1000.0
         // withdraw fast (≈ 0.15 s), re-emerge slowly (≈ 3 s)
         val want = (1.0 - o.extension).coerceIn(0.0, 1.0)
-        retract += (want - retract) * min(1.0, dt * (if (want > retract) 12.0 else 0.35))
+        // the snap in is spread over at least 3 live ticks (≤ 4/s): in one tick the legs went from out to fully in
+        retract += ((want - retract) * min(1.0, dt * (if (want > retract) 12.0 else 0.35))).coerceAtMost(WITHDRAW_MAX_PER_S * dt)
         val r = retract
         val rFront = smoothstep(0.45, 1.0, r)     // eyes and antennae: first out
         val rClaw = smoothstep(0.2, 0.8, r)
@@ -265,6 +266,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
     companion object {
         /** Stride length as a fraction of shell length (INFERENCE from small decapod walking, docs/research). */
         const val STRIDE_L = 0.3
+        /** Fastest withdrawal into the shell, retract units per second (fully in within ~0.15–0.25 s). */
+        const val WITHDRAW_MAX_PER_S = 4.0
         const val METACHRONAL = 0.08
         /** Shell roll per stride at full walking (rad, ≈ 6°). */
         const val ROLL = 0.1
@@ -274,6 +277,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
         const val BOB_MAX_HZ = 1.5
         /** Pose entries: the ten limb entries plus four for the planted legs and one for the chelae and the planting flag ([CrawlerSeat]). */
         const val COUNT = 15
+        /** Index in the pose of the legs-planted flag (0 or 1, set by [CrawlerSeat]). */
+        const val PLANTED_FLAG = 14 * 4 + 3
     }
 }
 
