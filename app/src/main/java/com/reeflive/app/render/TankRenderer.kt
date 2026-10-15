@@ -1250,7 +1250,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
         val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
-            "models/kenya.glb", "models/gsp_neon.glb", "models/gsp_mat.glb", "models/zoa.glb", "models/clove.glb",
+            "models/kenya.glb", "models/gsp_neon.glb", "models/mushroom_hairy_mound.glb", "models/zoa.glb", "models/clove.glb",
             "models/mushroom.glb", "models/macro_red.glb", "models/organ_pipe.glb",
         )
         const val CAUSTIC = "textures/caustic_512.png"

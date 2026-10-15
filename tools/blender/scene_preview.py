@@ -45,9 +45,9 @@ INVERT_POSES = [
     ("astrea", 3.0, (12, 20, D_ - 0.7), 0), ("feather_duster", 1.0, (86, 5.3, 27.3), 0),
     ("sally_lightfoot", 5.0, (100.5, 27.5, 12.5), 250),
 ]
-CORALS = ("kenya", "gsp_neon", "gsp_mat", "zoa", "clove", "mushroom", "mushroom_hairy", "macro_red", "organ_pipe",
+CORALS = ("kenya", "gsp_neon", "mushroom_hairy_mound", "zoa", "clove", "mushroom", "mushroom_hairy", "macro_red", "organ_pipe",
           "algae_tufts", "aiptasia", "reef_details")
-POLYP_FILES = ("gsp_neon", "gsp_mat", "zoa", "clove", "kenya", "organ_pipe", "mushroom_hairy")
+POLYP_FILES = ("gsp_neon", "mushroom_hairy_mound", "zoa", "clove", "kenya", "organ_pipe", "mushroom_hairy")
 
 
 def place(objs, scale, pos, yaw_deg, pitch_deg=0.0):
