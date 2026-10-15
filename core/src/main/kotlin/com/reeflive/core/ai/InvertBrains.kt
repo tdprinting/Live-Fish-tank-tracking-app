@@ -100,7 +100,15 @@ class TailFlip(val b: SpeciesBrain, val nav: ShrimpNav? = null, val home: (Ctx) 
         b.threat?.let { return 0.96 }
         return if (b.startledRecently && b.startleMag > 0.3) 0.9 else 0.0
     }
-    override fun enter(c: Ctx) { from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset() }
+    override fun enter(c: Ctx) {
+        from = b.threat?.pos ?: b.startleFrom; b.startleAt = -1e9; nav?.reset()
+        // a cleaner that flees calls off the cleaning it offered: the client stops posing and the station is free (it was
+        // offered again on every return, so a hawkfish perched by the station posed in a climb-flee loop for minutes)
+        c.p.stations.firstOrNull { it.cleaner === c.o }?.let { st ->
+            st.client?.let { cl -> if (cl.poseFor === c.o) cl.poseUntil = min(cl.poseUntil, c.t) }
+            st.release()
+        }
+    }
     override fun update(c: Ctx, out: SteerIntent) {
         if (elapsed < 0.5) {
             out.fleeFrom = from; out.urgency = 1.0

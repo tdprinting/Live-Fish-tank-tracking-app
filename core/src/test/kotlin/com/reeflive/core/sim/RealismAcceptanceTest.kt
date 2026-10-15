@@ -352,7 +352,10 @@ class RealismAcceptanceTest {
     }
 
     // ------------------------------------------------------------------ c11
-    /** 06 §5.6 #11: hawk perched ≥ 75 % of daylight; 5–20 hops/h; never strikes a fish ≥ 0.5 its length; ≤ 1 charge/h at the wrasse. */
+    /**
+     * 06 §5.6 #11: hawk perched ≥ 75 % of daylight; never strikes a fish ≥ 0.5 its length; ≤ 1 charge/h at the wrasse.
+     * Perch changes 25–80/h: research 30 §3 (Coker 2017, congener *P. forsteri*: 46–55/h) replaced the unsourced 5–20/h.
+     */
     @Test
     fun c11_hawkfishEconomy() {
         val sim = tank(hour = 10.5)
@@ -367,7 +370,7 @@ class RealismAcceptanceTest {
             if (hb.current !== last) { hops++; last = hb.current }
         }
         assertTrue("perched ${perched.toDouble() / n}", perched >= 0.75 * n)
-        assertTrue("hops ${hops / hours}/h", hops / hours in 5.0..20.0)
+        assertTrue("hops ${hops / hours}/h", hops / hours in 25.0..80.0)
         for (f in sim.organisms.filter { it.isFish && it !== hawk && it.lengthCm >= 0.5 * hawk.lengthCm })
             assertEquals("hawk prey weight for ${f.nickname}", 0.0, Predation.preyWeight(hawk, f, false), 0.0)
         val wrasse = sim.org(BrainKind.WRASSE)
@@ -740,12 +743,14 @@ class RealismAcceptanceTest {
     fun c26_lowPhBoldness() {
         val sim = tank(hour = 12.0)
         val card = sim.org(BrainKind.CARDINAL)
-        sim.advance(1.0)
+        // the pH effect alone: a chance chase in the measuring second (the hawkfish hopping at it) makes it timid for 10 min
+        val calm = { card.timidUntil = -1e9 }
+        sim.advance(1.0) { calm() }
         val r0 = card.hoverRadius
         val sk0 = StressModel.skittishMult(card)
         sim.enqueue(Command.RampParam("ph", 7.6, 0.0, hold = true))
         sim.advanceAbstract(14 * 86400.0)
-        sim.advance(1.0)
+        sim.advance(1.0) { calm() }
         assertTrue("hover radius $r0 → ${card.hoverRadius}", card.hoverRadius >= 1.3 * r0)
         assertTrue("startle per tap $sk0 → ${StressModel.skittishMult(card)}", StressModel.skittishMult(card) <= 0.7 * sk0)
     }

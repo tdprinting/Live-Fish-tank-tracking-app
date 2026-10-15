@@ -98,6 +98,9 @@ Research snapshot: 2026-10-13. Companion to the [master livestock research](15_m
 | lithopoma_tectum | `ai/InvertBrains.kt:AstreaBrain.Flipped` chance | 0.3 per hour on sand | DESIGN-ESTIMATE | none | falls from glass per hour |
 | lithopoma_tectum | `ai/InvertBrains.kt:AstreaBrain.Flipped` duration | 2 to 6 h upside down | DESIGN-ESTIMATE | none (11 §6: no unconditional death timer after inversion) | righting time when a snail is found inverted |
 | lithopoma_tectum | `ai/InvertBrains.kt:GlassGraze` wait | 60 to 240 s | DESIGN-ESTIMATE | none (shared with `asterina_sp`) | glass grazing bout length |
+| lithopoma_tectum | `sim/GlassTrails.kt:SNAIL` | swath 0.35 × shell length, one pass takes 60 % of the film | DESIGN-ESTIMATE | Steneck & Watling 1982 (functional groups: rhipidoglossan radulae sweep film, cannot excavate) | trail width on a filmed pane and how many passes clear it |
+| lithopoma_tectum | `sim/MotionProfile.kt` ASTREA walk | 0.1 cm/s (6 cm/min), 0.3 cm/s hurrying | ANALOGY | 17 microfauna morphology (reef snails cross glass at several cm/min) | time a snail over a measured stretch of glass |
+| asterina_sp | `sim/GlassTrails.kt:STAR` | swath 0.5 × star, one pass takes 40 % | DESIGN-ESTIMATE | none (stomach eversion over film) | faint star trails on a filmed pane |
 | lithopoma_tectum | grazing performance among snails (no code constant) | species differ in grazing, survival and growth | ANALOGY | [PMC6023205 (2018)](https://pmc.ncbi.nlm.nih.gov/articles/PMC6023205/) (other aquarium snails) | compare grazing tracks with another snail, if present |
 | asterina_sp | `ai/InvertBrains.kt:GlassGraze` wait (shared) | 60 to 240 s | DESIGN-ESTIMATE | none | glass grazing bout length |
 | asterina_sp | `ai/InvertBrains.kt:AsterinaBrain` scavenge radius | 6 cm | DESIGN-ESTIMATE | none | contact with food within the radius |

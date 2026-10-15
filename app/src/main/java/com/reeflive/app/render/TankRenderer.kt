@@ -129,6 +129,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private val stageBinding = LifeStageVisuals.Binding()
     private val particles = ParticleField(initialQuality.particles)
     @Volatile private var sdf: Sdf? = null
+    /** The rock as it is now: the sim's live field once rocks moved or were added (dynamic rockscape), else [sdf]. */
+    private var liveSdf: Sdf? = null
     private var width = 1; private var height = 1
     private val startNs = System.nanoTime()
     private var lastNs = 0L
@@ -239,11 +241,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
-        rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L)
+        rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L, cur?.builtRocks)
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
         // 2. camera (+ input); in Submarine mode the camera rides with the sub
         val fp = subFirstPerson
+        liveSdf = cur?.rockSdf ?: sdf
         val subPose = cur?.submarine
         val watchedId = subPose?.watchId
         camera.rideOn = subScene.update(interp.previous?.submarine, subPose, interp.alpha(now), fp, dt, if (watchedId != null) interp.rigs[watchedId] else null)
@@ -258,13 +261,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val taps = input.drain(camera, width, height)
         followCam.drain(camera)
         fillColliders(rigs, cur)
-        camera.update(dt, width, height, sdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
+        camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
-        micro.update(cur, sdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
+        micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
             store.model(k.model)?.parts?.sumOf { it.mesh.triangles } ?: 0
         }
 
@@ -299,7 +302,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // opaque: back glass, sand, rock, equipment, static reef details (coralline layer, encrusting, mag cleaner)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = true) }
-        rock?.let { drawStatic(it, progs, light, opaque = true) }
+        rock?.let { drawStatic(it, progs, light, opaque = true); drawBuiltRocks(it, progs) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
         val careModel = store.model(CareLayout.MODEL)
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
@@ -593,6 +596,27 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
     }
 
+    /** Dry rocks from the aquascape builder: the live-rock material, washed white by how fresh each one is. */
+    private fun drawBuiltRocks(m: GpuModel, progs: Programs) {
+        val list = rockDraw.built ?: return
+        val w = white ?: return
+        val part = m.parts.firstOrNull { it.kind == MaterialKind.ROCK } ?: return
+        val p = progs.rock
+        p.use()
+        part.material.apply(p, w)
+        val life = micro.rockLife
+        for (r in list) {
+            p.setMat4("uModel", rockDraw.pose(r.piece) ?: continue)
+            p.set1f("uDryRock", r.dryness)
+            // pods and forams move onto new rock as it cures
+            val k = 1f - r.dryness
+            p.set4f("uMicro", life[0] * k, life[1] * k, life[2] * k, 0f)
+            val mesh = rockDraw.builtMesh(r)
+            mesh.draw(); drawCalls++; triangles += mesh.triangles
+        }
+        p.set1f("uDryRock", 0f)
+    }
+
     /** [part] split by rock: each group at its rock's pose (−1: the rock still where it was built). */
     private fun drawPieces(p: ShaderProgram, part: DrawPart, pieces: List<Pair<Int, Mesh>>) {
         for ((piece, mesh) in pieces) {
@@ -710,6 +734,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 val pieces = if (key in ROCK_ATTACHED) rockDraw.meshes(part) else null
                 if (pieces == null) { part.mesh.draw(); drawCalls++ } else drawPieces(p, part, pieces)
             }
+        }
+        rockDraw.built?.forEach { r ->
+            p.setMat4("uModel", rockDraw.pose(r.piece) ?: return@forEach)
+            rockDraw.builtMesh(r).draw(); drawCalls++
         }
         val pc = progs.shadowCoral
         pc.use()
@@ -1222,7 +1250,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         if (t0 > t1) return null
         fun at(t: Float) = Vec3((o[0] + d[0] * t).toDouble(), (o[1] + d[1] * t).toDouble(), (o[2] + d[2] * t).toDouble())
-        val g = sdf
+        val g = liveSdf ?: sdf
         if (g != null) {
             val tr = t0 + Camera.marchClear(g, o[0] + d[0] * t0, o[1] + d[1] * t0, o[2] + d[2] * t0, d[0], d[1], d[2], t1 - t0, 0f)
             if (tr < t1 - 0.05f) {
@@ -1397,7 +1425,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             t0 = maxOf(t0, a); t1 = minOf(t1, b)
         }
         if (t0 > t1) return null
-        val g = sdf
+        val g = liveSdf ?: sdf
         val hitT = if (g != null) {
             val sx = o[0] + d[0] * t0; val sy = o[1] + d[1] * t0; val sz = o[2] + d[2] * t0
             t0 + Camera.marchClear(g, sx, sy, sz, d[0], d[1], d[2], t1 - t0, 0f)

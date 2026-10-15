@@ -1,5 +1,6 @@
 package com.reeflive.app.render
 
+import com.reeflive.core.sim.BuiltRock
 import com.reeflive.core.sim.DefaultScape
 import com.reeflive.core.sim.RockPieceDef
 
@@ -24,8 +25,13 @@ class RockPoseDraw(private val pieces: List<RockPieceDef> = DefaultScape.pieces)
     private val labels = HashMap<DrawPart, ByteArray>()
     private val splits = HashMap<DrawPart, Split>()
 
+    /** Dry rocks added with the aquascape builder (drawn at [pose] with [builtMesh]), or null. */
+    var built: List<BuiltRock>? = null; private set
+    private val builtMeshes = HashMap<Long, Mesh>()
+
     /** Takes this frame's poses (cheap unless they changed). */
-    fun update(rockPoses: FloatArray?, rockVersion: Long) {
+    fun update(rockPoses: FloatArray?, rockVersion: Long, builtRocks: List<BuiltRock>? = null) {
+        built = builtRocks
         if (rockPoses === poses && rockVersion == version) return
         poses = rockPoses; version = rockVersion
         var m = 0L
@@ -54,6 +60,20 @@ class RockPoseDraw(private val pieces: List<RockPieceDef> = DefaultScape.pieces)
         if (!isMoved(piece)) return null
         System.arraycopy(p, piece * 16, mat, 0, 16)
         return mat
+    }
+
+    /** Rock [piece]'s rest → world matrix whether or not it moved (builder rocks), or null without poses. */
+    fun pose(piece: Int): FloatArray? {
+        val p = poses ?: return null
+        if ((piece + 1) * 16 > p.size) return null
+        System.arraycopy(p, piece * 16, mat, 0, 16)
+        return mat
+    }
+
+    /** The mesh of a builder rock (made once per shape and seed). */
+    fun builtMesh(r: BuiltRock): Mesh = builtMeshes.getOrPut(r.shape.ordinal.toLong() shl 32 or (r.seed.toLong() and 0xffffffffL)) {
+        val d = DryRockMesh.build(r.shape, r.seed)
+        Mesh.create(d.vertices, d.indices)
     }
 
     /**
@@ -106,7 +126,7 @@ class RockPoseDraw(private val pieces: List<RockPieceDef> = DefaultScape.pieces)
     }
 
     /** GL context lost: the split meshes died with it (parts are rebuilt on reload). */
-    fun onContextLost() { labels.clear(); splits.clear() }
+    fun onContextLost() { labels.clear(); splits.clear(); builtMeshes.clear() }
 
     companion object {
         /** A vertex farther than this from every rock (glass decals, equipment) stays put. */

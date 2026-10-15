@@ -197,7 +197,8 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
             if (s == 0) tl = lift else tr = lift
         }
         // a probe point already inside rock would ask for more than a full lift: cap it, and ease gently
-        val ae = min(1.0, dt * 5.0)
+        // (at most 0.6 of the way per tick: on a long fast-forward tick, letting go of a client snapped them -0.6 → 1)
+        val ae = min(0.6, dt * 5.0)
         antL += (tl.coerceAtMost(1.0) - antL) * ae; antR += (tr.coerceAtMost(1.0) - antR) * ae
         put(11, min(picking, 0.99), planted, antL, antR)
 

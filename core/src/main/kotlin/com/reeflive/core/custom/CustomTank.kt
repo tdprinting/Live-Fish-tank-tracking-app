@@ -38,6 +38,8 @@ object CustomTank {
 
     private fun applyBuild(sim: Simulation, build: TankBuild) {
         sim.bareScape = true
+        // the keeper's own tank has a living rockscape: rocks settle when dug under, and it can be rebuilt
+        sim.setDynamicRocks(true)
         sim.water.skimmer = build.skimmer
         sim.water.filterSock = build.filterSock
         sim.water.refugium = build.refugium
@@ -70,6 +72,7 @@ object CustomTank {
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
             animals = animals,
             corals = corals,
+            rocks = sim.rockState(),
             nextIds = SavedIds(
                 organism = maxOf(base.nextIds.organism, nextNumber(animals.map { it.id } + corals.map { it.id }, "#")),
                 frag = base.nextIds.frag,
@@ -136,6 +139,7 @@ object CustomTank {
         }
         val sim = Simulation(build.config(save.seed), species, rock, save.seed, save.simTimeSec, water, seeds)
         applyBuild(sim, build)
+        sim.restoreRocks(save.rocks)
         // loose colonies (dropped branches, frags) sit where they were
         for (c in anchored) if (c.anchor.isBlank() && c.x != 0.0) {
             sim.corals += Coral(c.id, species[c.speciesId], c.nickname, "", Vec3(c.x, c.y, c.z), Vec3(c.nx, c.ny, c.nz), 0.0)
