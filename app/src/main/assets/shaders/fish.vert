@@ -27,7 +27,7 @@ uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x bod
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
-uniform vec4 uLimb[40];    // per-limb pose (layout per animal: core BrittleArms (40) / CrabLegs (10) / ShrimpLimbs (15) / HermitLegs (15))
+uniform vec4 uLimb[40];    // per-limb pose (layout per animal: core BrittleArms (40) / CrabLegs (19) / ShrimpLimbs (15) / HermitLegs (15))
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
@@ -146,12 +146,32 @@ void starArm(int k, inout vec3 local, inout vec3 n) {
 // Poses one Sally Lightfoot limb vertex about its pivot. Legs (k 0..7; uLimb = phase, signed extension stroke, foot
 // lift, tuck): swing in the first half of the step cycle (foot lifted), stance in the second (foot planted while the
 // leg flexes or extends along its length); tuck draws the legs in and down. Chelae (8, 9; uLimb = pick phase,
-// stroke, reach): dip to the rock and come back to the mouth, alternating.
+// stroke, reach): dip to the rock and come back to the mouth, alternating. Seated on a surface (core CrawlerSeat,
+// uLimb[18].w = 1) the legs are planted instead: uLimb[10 + k] rotates the rest leg about its coxa onto the foothold
+// (axis x angle), shortens it by the flex and raises the knee, A.w folds a leg that has nowhere clear to stand, and
+// uLimb[18].y / .z cap the left / right chela's dip at the surface.
 void crabLimb(int k, inout vec3 local, inout vec3 n) {
     vec4 P = uLimbPivot[k];
     vec4 A = uLimb[k];
     vec3 off = local - P.xyz;
-    if (k < 8) {
+    bool planted = uLimb[18].w > 0.5;
+    if (k < 8 && planted) {
+        vec4 IK = uLimb[10 + k];
+        float ang = length(IK.yzw);
+        if (ang > 1e-5) {
+            vec3 ax = IK.yzw / ang;
+            off = rotAxis(off, ax, ang);
+            n = rotAxis(n, ax, ang);
+        }
+        float t = clamp(aColor.r, 0.0, 1.0);
+        float flex = (IK.x - 0.3) / 0.5;
+        off *= 1.0 - flex * t;
+        float r = 1.0 - flex;
+        off.y += 0.35 * sqrt(max(1.0 - r * r, 0.0)) * P.w * sin(PI * t);
+        // no clear foothold: folded against the carapace rim
+        off *= 1.0 - 0.6 * A.w * t;
+        off.y += 0.1 * A.w * t * P.w;
+    } else if (k < 8) {
         vec3 d = normalize(vec3(P.x, 0.0, P.z) + vec3(0.0001, 0.0, 0.0));
         float ph = A.x;
         float swing = 1.0 - step(0.5, ph);
@@ -173,6 +193,7 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
     } else {
         float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the rock
         float down = A.y * 0.5 * w + 0.15 * (A.z - 0.5);
+        if (planted) down = min(down, k == 8 ? uLimb[18].y : uLimb[18].z);
         off.x += 0.12 * (A.z - 0.5) - 0.07 * A.y * (1.0 - w);
         off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
         n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);

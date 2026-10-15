@@ -55,7 +55,7 @@ object Stocking {
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
         StockEntry("paguristes_cadenati", StockGroup.INVERTS, "Scarlet hermit crab", 3.0),
-        StockEntry("percnon_gibbesi", StockGroup.INVERTS, "Sally Lightfoot crab", 5.0),
+        StockEntry("percnon_gibbesi", StockGroup.INVERTS, "Sally Lightfoot crab", 3.0),
         StockEntry("ophiocoma_sp", StockGroup.INVERTS, "Black brittle star", 20.0),
         StockEntry("sabellastarte_sp", StockGroup.INVERTS, "Brown feather duster", 15.0),
         StockEntry("nassarius_sp", StockGroup.INVERTS, "Nassarius snail", 1.5),

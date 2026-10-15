@@ -29,8 +29,8 @@ class FishRig(val id: String) {
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
      * uLimb: per-limb pose from the core LimbRig (SIMULATION §19), up to 40 × vec4 (the brittle star: 8 per arm; the
-     * hermit: 10 + 5 surface-contact entries); [limbCount] entries are valid, 0 = none. The Sally Lightfoot sends 10
-     * (posed about model pivots), the shrimp one (stride, stepping, signal, grooming).
+     * hermit: 10 + 5 surface-contact entries; the Sally Lightfoot: 10 + 9 planted-leg entries); [limbCount] entries are
+     * valid, 0 = none. The shrimp sends one (stride, stepping, signal, grooming).
      */
     val limbs = FloatArray(160)
     var limbCount = 0

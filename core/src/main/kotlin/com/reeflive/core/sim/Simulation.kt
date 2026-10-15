@@ -772,12 +772,18 @@ class Simulation private constructor(
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             o.attached = a.intent.kinematic || a.intent.crawl
+        }
+        sandWork.step(organisms)
+        sandContact.step(organisms, dt, displace = true)
+        // the drawn bodies are seated on the sand as this tick left it (a goby's spoil landing on a resting hermit or
+        // crab after its seat was solved buried the shell for a tick)
+        for (o in organisms) {
+            if (!o.alive) continue
+            val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
-        sandWork.step(organisms)
-        sandContact.step(organisms, dt, displace = true)
     }
 
     private fun abstractPlacement(dt: Double) {
