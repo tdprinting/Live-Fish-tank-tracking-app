@@ -1710,6 +1710,7 @@ class Simulation private constructor(
                     cl.inward.x.toFloat(), cl.inward.y.toFloat(), cl.inward.z.toFloat())
             },
             gusts = gustArray(),
+            care = water.careState(),
         )
     }
 

@@ -53,6 +53,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
         }
     }
+    /** "Fix my tank" care animations (skimmer cup, sock, doses, water changes); null = only the props at rest. */
+    @Volatile var care: CareShowControl? = null
+    private val careScene = CareScene().also { cs ->
+        cs.onBurst = { b -> particles.burst(b, interp.current) }
+    }
     /** The fish net taking a dead animal out (FishNet); splashes as the hoop goes in and comes out. */
     private val netScene = NetScene().also { ns ->
         ns.onSplash = { kind, x, y, z, r ->
@@ -248,6 +253,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             subScene.anchor.copyInto(camera.rideAnchor); subScene.vel.copyInto(camera.rideVel)
         }
         bagScene.update(interp.previous?.bags, cur?.bags, interp.alpha(now))
+        careScene.update(dt, care, cur?.care) { r -> main.post(r) }
         netScene.update(interp.previous?.net, cur?.net, interp.alpha(now))
         val taps = input.drain(camera, width, height)
         followCam.drain(camera)
@@ -295,6 +301,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         tank?.let { drawStatic(it, progs, light, opaque = true) }
         rock?.let { drawStatic(it, progs, light, opaque = true) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
+        val careModel = store.model(CareLayout.MODEL)
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
         // corals: soft bodies then polyps
@@ -344,6 +352,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         // acclimation bags: see-through plastic over the animals riding in them
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
+        // care props: the clear skimmer cup, the jug and hose, water in the bucket, pour streams
+        if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
         // the fish net's mesh bag, see-through over the body it carries
         if (netScene.visible) drawCalls += netScene.drawMesh(progs.generic)
         // glass planes coincide with the sand skirts and rock edges: pull them a hair toward the eye to stop z-fighting

@@ -271,9 +271,29 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         val row = when (task) {
             MaintenanceTask.CHANGE_SOCK -> "eq_sock"
             MaintenanceTask.REPLACE_CARBON -> "eq_carbon"
-            MaintenanceTask.HARVEST_MACRO -> null
+            MaintenanceTask.HARVEST_MACRO, MaintenanceTask.EMPTY_SKIMMER, MaintenanceTask.TOP_OFF -> null
         }
         if (row != null) _extras.value = _extras.value + (row to 1.0)
+    }
+
+    /**
+     * Sends one "Fix my tank" step (core TankDoctor). Upkeep, doses and water changes work in both modes like the
+     * shelf's care props; switching gear back on (heater, pumps, skimmer) is a sandbox change, so Watch skips it.
+     */
+    fun care(commands: List<Command>) {
+        val sandboxOn = mode.value == SimMode.SANDBOX
+        for (c in commands) when (c) {
+            is Command.Maintain -> maintain(c.task)
+            is Command.Heater, is Command.Powerheads, is Command.SetParam -> if (sandboxOn) {
+                holder.enqueue(c)
+                when (c) {
+                    is Command.Powerheads -> _extras.value = _extras.value + PUMP_IDS.keys.associateWith { if (c.on) 1.0 else 0.0 }
+                    is Command.SetParam -> if (c.paramId == "skimmer") _extras.value = _extras.value + ("eq_skimmer" to c.value)
+                    else -> Unit
+                }
+            }
+            else -> holder.enqueue(c)
+        }
     }
     fun addSpareShells(count: Int = 1) = sandbox { holder.enqueue(Command.AddSpareShells(count)) }
     /** Pod / phyto doses and pest treatments from the microscope (research 10). */
