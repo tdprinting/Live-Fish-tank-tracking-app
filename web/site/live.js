@@ -212,7 +212,7 @@ function showTips() {
 }
 
 // ================================================================ mode
-document.querySelectorAll('[data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
+document.querySelectorAll('.seg [data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
 function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
@@ -223,7 +223,7 @@ function setMode(m) {
   if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
   else { ui.speed = 1; live.setSpeed(1); }
   live.shelfLocked(editable() ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
-  document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+  document.querySelectorAll('.seg [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
   if (m === 'mine') {
     const info = JSON.parse(MY.info());
