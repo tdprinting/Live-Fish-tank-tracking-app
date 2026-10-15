@@ -25,7 +25,7 @@ class BodyCollisionTest {
     }
 
     private fun teeSim(seed: Long, hour: Double) =
-        Simulation(TankConfig(seed = seed), TestTank.catalog, teeRock(), seed, hour * 3600, WaterState(), DefaultStock.all)
+        Simulation(TankConfig(seed = seed), TestTank.catalog, teeRock(), seed, hour * 3600, WaterState(), DefaultStock.all).also { it.solidBodies = true }
 
     @Test
     fun heightFieldRasterizesASlope() {

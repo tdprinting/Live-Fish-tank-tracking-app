@@ -189,6 +189,14 @@ class Simulation private constructor(
     private var rockPosesAt = -1L
     private var anchorPiece: Map<String, Int>? = null
 
+    /**
+     * Solid bodies ([BodyCollision], [Command.SolidBodies]): animals do not pass into the rock, sand, glass, decor or
+     * each other. Off (the default) they pass through as before; the app turns it on.
+     */
+    var solidBodies: Boolean
+        get() = bodies.enabled
+        set(v) { bodies.enabled = v }
+
     /** Turns the dynamic rockscape on (builds the rock bodies the first time) or off (rocks freeze where they are). */
     fun setDynamicRocks(on: Boolean) {
         val rp = rockPhysics ?: return
@@ -423,10 +431,11 @@ class Simulation private constructor(
         return builtCache
     }
 
-    /** A fork of [src] (sandbox, time-lapse): its rocks where they lie and its dynamic / static choice. */
+    /** A fork of [src] (sandbox, time-lapse): its rocks where they lie, its dynamic / static choice and its solid bodies. */
     fun copyRocksFrom(src: Simulation) {
         restoreRocks(src.rockState())
         setDynamicRocks(src.dynamicRocks)
+        solidBodies = src.solidBodies
     }
 
     /** Puts rocks back where a saved tank had them ([rockState]). */
@@ -1345,6 +1354,7 @@ class Simulation private constructor(
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
             is Command.DynamicRocks -> setDynamicRocks(c.on)
+            is Command.SolidBodies -> solidBodies = c.on
             is Command.UndermineRock -> undermineRock(c.rock)
             is Command.PlaceRock -> placeRock(c.shape, c.x, c.z, c.yawDeg, c.seed)
             is Command.RemoveRock -> removeRock(c.at)

@@ -62,6 +62,7 @@ class AppGraph(val app: Application) {
         SimulationHolder(
             measurements, livestock, lights, assets = app.assets, clock = clock,
             dynamicRocks = settings.settings.map { it.dynamicRocks }.distinctUntilChanged(),
+            solidBodies = settings.settings.map { it.solidBodies }.distinctUntilChanged(),
             rockStore = SimulationHolder.FileRockStore(java.io.File(app.filesDir, "rocks.txt")),
             customStore = com.reeflive.app.data.repo.CustomTankStore(java.io.File(app.filesDir, com.reeflive.app.data.repo.CustomTankStore.FILE_NAME)),
         )

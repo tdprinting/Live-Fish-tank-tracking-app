@@ -78,6 +78,8 @@ class SimulationHolder(
     private val clock: Clock = Clock.SYSTEM,
     /** "Rocks can shift" (Settings): the dynamic rockscape for the tank and its sandbox forks. */
     private val dynamicRocks: Flow<Boolean> = flowOf(true),
+    /** "Solid bodies" (Settings): the body collision for the tank, its sandbox forks and a custom tank. */
+    private val solidBodies: Flow<Boolean> = flowOf(true),
     /** The tank's rock layout between launches (rocks that settled or toppled stay where they fell). */
     private val rockStore: RockStore? = null,
     private val customStore: CustomTankStore? = null,
@@ -156,6 +158,7 @@ class SimulationHolder(
     }
 
     private var rocksDynamic = true
+    private var bodiesSolid = true
     private var savedRocks: String? = null
 
     init {
@@ -165,6 +168,14 @@ class SimulationHolder(
                 reality?.enqueue(Command.DynamicRocks(on))
                 sandbox?.enqueue(Command.DynamicRocks(on))
                 customSim?.enqueue(Command.DynamicRocks(on))
+            }
+        }
+        scope.launch {
+            solidBodies.collect { on ->
+                bodiesSolid = on
+                reality?.enqueue(Command.SolidBodies(on))
+                sandbox?.enqueue(Command.SolidBodies(on))
+                customSim?.enqueue(Command.SolidBodies(on))
             }
         }
         scope.launch {
@@ -193,6 +204,7 @@ class SimulationHolder(
             val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
             sim.speed = 1.0
             customSim?.let { lastWallMs.remove(it) }
+            sim.solidBodies = bodiesSolid
             customSim = sim
             customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed)
             customLoaded = true
@@ -353,6 +365,7 @@ class SimulationHolder(
         if (prev != null) sim.restoreRocks(prev.rockState())
         else sim.restoreRocks(rockStore?.load().orEmpty().also { savedRocks = it })
         sim.setDynamicRocks(rocksDynamic)
+        sim.solidBodies = bodiesSolid
         appliedValues = latestValues
         reality?.let { lastWallMs.remove(it) }
         reality = sim
@@ -405,6 +418,7 @@ class SimulationHolder(
         if (save == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull()
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
+        sim.solidBodies = bodiesSolid
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
         // the time away, at 1x: the tank lived on while the app was closed

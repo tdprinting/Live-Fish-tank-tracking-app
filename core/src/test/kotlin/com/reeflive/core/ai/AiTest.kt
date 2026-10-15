@@ -37,13 +37,7 @@ class AiTest {
         assertTrue("clowns near host ${"%.3f".format(frac)}", frac >= 0.95)
     }
 
-    /**
-     * SIMULATION §8.7: every tick no snout is in the rock: swimmers sdf > −2 mm (the body collision's tolerance: a
-     * body squeezed through a route gap may graze the rock by a skin's width), attached animals sdf ≥ −1 mm (the
-     * baked grid's interpolation under a crawler's sole). The 0.3 L stand-off this test used to ask of swimmers is
-     * gone: the whole body now collides (BodyCollisionTest checks every body surface), so a fish may put its mouth to
-     * food lying on the rock or to a client resting against it.
-     */
+    /** SIMULATION §8.7: every tick, swimmers keep sdf > 0.3 L (collision length); attached animals sdf ≥ 0. */
     @Test
     fun noRockPenetration() {
         for ((seed, hour) in listOf(1L to 9.5, 2L to 12.0, 3L to 21.0)) {
@@ -58,7 +52,7 @@ class AiTest {
                 for (o in sim.organisms) {
                     if (!o.alive) continue
                     val d = sim.rock.sdf.dist(o.pos)
-                    val ok = if (o.attached) d >= -0.1 else d > -BodyCollisionTol
+                    val ok = if (o.attached) d >= -0.05 else d > 0.3 * o.collisionLength
                     if (!ok) { fails++; if (worst.isEmpty()) worst = "${o.nickname} ${o.behaviorName} sdf=${"%.2f".format(d)} at ${o.pos} attached=${o.attached} tick=$ticks" }
                 }
             }
@@ -159,15 +153,10 @@ class AiTest {
             for (o in sim.organisms) {
                 assertTrue("${o.nickname} NaN", o.pos.isFinite() && o.heading.isFinite() && o.up.isFinite())
                 // a body buried in the sand (posture 5) lies under the live surface (SandBed.surfaceY, 3.5-6 cm), which
-                // can be below the old flat sand plane: it only has to stay above the glass (SIMULATION §16.10); a goby
-                // down its burrow (posture 3, or in its dug tunnel) is under the bed on purpose
-                val burrowed = (o.posture == 3 || o.inSand) && o.pos.y < sim.rock.floorY(o.pos.x, o.pos.z) && o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y
-                val inside = if (o.posture == 5) o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y && sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.floorY(o.pos.x, o.pos.z))), -0.5)
-                    // (anything else on or over the live sand: the bed is below the old flat sand plane at the front,
-                    // where the leopard wrasse rests before it digs in)
-                    else burrowed || o.pos.y > sim.rock.floorY(o.pos.x, o.pos.z) - 0.5 &&
-                        sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.sandTopCm)), -0.5)
-                assertTrue("${o.nickname} outside ${o.pos} (posture ${o.posture}, inSand ${o.inSand}, sand %.2f, sdf %.2f)".format(sim.rock.floorY(o.pos.x, o.pos.z), sim.rock.sdf.dist(o.pos)), inside)
+                // can be below the old flat sand plane: it only has to stay above the glass (SIMULATION §16.10)
+                val inside = if (o.posture == 5) o.pos.y > com.reeflive.core.sim.SandBed.GLASS_Y && sim.rock.inWater(o.pos.withY(maxOf(o.pos.y, sim.rock.sandTopCm)), -0.5)
+                    else sim.rock.inWater(o.pos, -0.5)
+                assertTrue("${o.nickname} outside ${o.pos}", inside)
             }
         }
         val pose = sim.snapshot().organisms.first()
@@ -261,6 +250,3 @@ class AiTest {
         assertTrue("starving crab tried for 8 nights-hours; grabs ${grabs.size} attempts ${hours}", grabs.size <= 1)
     }
 }
-
-/** The 2 mm the body collision is held to (BodyCollisionTest). */
-private const val BodyCollisionTol = 0.2

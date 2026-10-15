@@ -89,7 +89,7 @@ class HermitSeatTest {
     }
 
     private fun run(seed: Long, hour: Double, hours: Double, dt: Double): Stats {
-        val sim = TestTank.sim(DefaultStock.all, seed = seed, startHour = hour)
+        val sim = TestTank.sim(DefaultStock.all, seed = seed, startHour = hour).also { it.solidBodies = true }
         val st = Stats()
         var left = hours * 3600
         while (left > 1e-6) {
@@ -123,7 +123,7 @@ class HermitSeatTest {
 
     @Test
     fun aHermitSettlesOntoItsSurfaceAndThePoseCarriesTheSeat() {
-        val sim = TestTank.sim(listOf(TestTank.seed("hermit1")), seed = 3L, startHour = 23.0)
+        val sim = TestTank.sim(listOf(TestTank.seed("hermit1")), seed = 3L, startHour = 23.0).also { it.solidBodies = true }
         val o = sim.organisms.first { it.brainKind == BrainKind.HERMIT }
         sim.advance(120.0, behaviorDt = 0.05)
         val seat = o.seat!!

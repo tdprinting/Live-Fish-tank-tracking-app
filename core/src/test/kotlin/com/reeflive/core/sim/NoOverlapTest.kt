@@ -48,7 +48,7 @@ class NoOverlapTest {
 
     private fun teeSim(seed: Long, hour: Double): Simulation {
         val rock = TestTank.rock.forSimulation().also { r -> tankGlb?.let { r.sandBase = HeightField.fromGlb(it.readBytes(), r.lengthCm, r.widthCm) } }
-        return Simulation(TankConfig(seed = seed), TestTank.catalog, rock, seed, hour * 3600, WaterState(), DefaultStock.all)
+        return Simulation(TankConfig(seed = seed), TestTank.catalog, rock, seed, hour * 3600, WaterState(), DefaultStock.all).also { it.solidBodies = true }
     }
 
     /** Violations of one check for one species: samples over [TOL], the worst depth (cm) and where it happened. */

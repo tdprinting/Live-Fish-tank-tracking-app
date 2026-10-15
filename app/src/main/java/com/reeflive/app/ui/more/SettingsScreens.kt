@@ -151,6 +151,7 @@ data class SettingsActions(
     val onLiveQuality: (LiveQuality) -> Unit = {},
     val onTankSounds: (Boolean) -> Unit = {},
     val onDynamicRocks: (Boolean) -> Unit = {},
+    val onSolidBodies: (Boolean) -> Unit = {},
     val onTankVolume: (Float) -> Unit = {},
     val onNotifications: (Boolean) -> Unit = {},
     val onReminderTime: () -> Unit = {},
@@ -208,6 +209,7 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
                 SwitchRow("Tank sounds", "Water flow, pumps, feeding and alerts", s.tankSounds, actions.onTankSounds)
                 if (s.tankSounds) VolumeRow(s.tankVolume, actions.onTankVolume)
                 SwitchRow("Rocks can shift", "A rock can settle or topple when the gobies dig out too much sand under it. Off keeps the rockscape fixed", s.dynamicRocks, actions.onDynamicRocks)
+                SwitchRow("Solid bodies", "Fish and invertebrates never pass into rock, sand, glass or each other. Off lets them overlap as before", s.solidBodies, actions.onSolidBodies)
             }
             SectionHeader("Tank & parameters")
             LinkRow("Targets & parameters", "Ranges, favorites, hide/show", actions.onTargets)
@@ -259,6 +261,7 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
             onTankSounds = { go { g.settings.setTankSounds(it) } },
             onDynamicRocks = { go { g.settings.setDynamicRocks(it) } },
+            onSolidBodies = { go { g.settings.setSolidBodies(it) } },
             onTankVolume = { go { g.settings.setTankVolume(it) } },
             onNotifications = { on ->
                 go { g.settings.setNotifications(on) }

@@ -115,6 +115,8 @@ object ReefLive {
                     initialWater = WaterState(volumeL = config.systemLiters), livestock = DefaultStock.all,
                 )
                 s.speed = 1.0
+                // solid bodies: no animal passes into the rock, sand, glass or another (sandbox forks copy it)
+                s.solidBodies = true
                 s.stepWall(0.0)
                 sim = s; reality = s
 

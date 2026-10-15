@@ -11,7 +11,7 @@ import org.junit.Test
 /** The coral, decor and equipment obstacles ([StaticObstacles]): data, push semantics, soft coral, contacts and rebuilds. */
 class StaticObstaclesTest {
     private fun sim(stock: List<LivestockSeed> = DefaultStock.all) =
-        Simulation(TankConfig(seed = 5), TestTank.catalog, TestTank.rock.forSimulation(), 5, 11 * 3600.0, WaterState(), stock)
+        Simulation(TankConfig(seed = 5), TestTank.catalog, TestTank.rock.forSimulation(), 5, 11 * 3600.0, WaterState(), stock).also { it.solidBodies = true }
 
     private fun ready(s: Simulation): StaticObstacles = s.obstacles.also { it.sync(s) }
 

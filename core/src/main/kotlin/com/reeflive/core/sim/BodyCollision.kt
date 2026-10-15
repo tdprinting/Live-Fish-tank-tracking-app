@@ -275,8 +275,11 @@ class BodyCollision(private val rock: RockData) {
     private val order = HashMap<Organism, Int>()
 
     // ---- counters (tests / profiling) ----
-    /** Off only for cost measurements (the bodies then pass through everything as before). */
-    var enabled = true
+    /**
+     * Solid bodies on ([Simulation.solidBodies], the app's "Solid bodies" setting). Off by default in core: the bodies
+     * then pass through everything as before the collision, and the sand lifts them ([SandContact.pushOut]).
+     */
+    var enabled = false
     /**
      * Whether the sim is stepping drawn poses (set by [Simulation] every step). Off on the headless steps of
      * [Simulation.advanceAbstract] (catch-up after the app reopens, the timelapse, long health runs: 60 s steps with the

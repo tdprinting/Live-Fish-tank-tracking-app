@@ -32,6 +32,7 @@ object TimelapseFork {
             lights = lights,
         )
         dst.predationEnabled = src.predationEnabled
+        dst.solidBodies = src.solidBodies
         dst.bareScape = src.bareScape
         dst.crabLiveFishScenario = src.crabLiveFishScenario
         dst.unsourcedPredation = src.unsourcedPredation
