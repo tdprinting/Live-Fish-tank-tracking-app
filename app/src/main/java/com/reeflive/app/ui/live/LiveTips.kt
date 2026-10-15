@@ -9,10 +9,11 @@ package com.reeflive.app.ui.live
 object LiveTips {
     const val WATCH_TITLE = "Welcome to your live tank!"
     const val SANDBOX_TITLE = "This is your pretend tank!"
+    const val MY_TANK_TITLE = "This is your very own tank!"
 
     /** One line per tip, in the order the card shows them (the card pairs each with a glyph). */
     val watch = listOf(
-        "Tap a fish to meet it. Tap Follow on its card to swim along with it.",
+        "Tap a fish to meet it. Press and hold a fish (or tap Follow on its card) to swim along with it.",
         "A fish's card says what it is thinking. Thought bubbles in More shows it in the tank.",
         "Tap the glass and see who comes to look. Tap the sand or a rock too.",
         "Hold a finger on the glass, then slide it: fish follow. Flick it to make a splash of current.",
@@ -31,9 +32,19 @@ object LiveTips {
         "Tap Watch at the top to go back to your real tank.",
     )
 
+    /** My tank: the keeper's own tank, started empty and saved on this device. */
+    val myTank = listOf(
+        "Add life brings in any fish, shrimp, crab or coral you like. Drag the bag onto the water.",
+        "Everything here is saved: names, personalities and how much each animal grows.",
+        "Tap an animal, then Give it a name.",
+        "Time keeps going while the app is closed, so check in and feed them.",
+        "More has Start over if you want a different tank.",
+    )
+
     /** Hermie's tips, one per tap on him. */
     val hermieWatch = listOf(
         "Tap a fish to meet it!",
+        "Press and hold a fish to ride along with it!",
         "Tap the glass and see who comes to look!",
         "Hold a finger on the glass and slide it. Fish follow!",
         "Tap the top of the water. Hungry fish come up!",
@@ -55,6 +66,16 @@ object LiveTips {
         "Tap the tank while something animates to skip it.",
         "Thought bubbles in More show what the fish plan to do.",
         "Made a mess? More has a big Reset button.",
+        "Tap Watch at the top to see your real tank again.",
+    )
+
+    val hermieMyTank = listOf(
+        "This is your own tank. Everything here is saved!",
+        "Add life brings in new friends in a bag.",
+        "Tap an animal to give it a name.",
+        "Feed them every day so they grow big!",
+        "Watch the water. Clean water means happy fish.",
+        "Thought bubbles in More show what they are thinking.",
         "Tap Watch at the top to see your real tank again.",
     )
 

@@ -21,6 +21,8 @@ import kotlin.math.sqrt
  */
 class Steering(private val c: Ctx) {
     private var wanderDir: Vec3 = Vec3.X
+    /** Kinematic placement's up before [SteerIntent.rollExtra] (the roll is an offset from it, not added every tick). */
+    private var kinBaseUp: Vec3? = null
     /** Low-passed course the swimming head turns toward (null until the first swim step). */
     private var wantSmooth: Vec3? = null
     /** Low-passed wander course of a crawler. */
@@ -66,6 +68,7 @@ class Steering(private val c: Ctx) {
             intent.surfaceOffset = max(intent.surfaceOffset, c.rock.envDist(o.pos).coerceAtMost(1.5))
         }
         updateCStart(o, intent, dt)
+        if (!intent.kinematic) kinBaseUp = null
         when {
             intent.kinematic -> kinematic(o, intent, dt)
             intent.crawl -> {
@@ -384,10 +387,14 @@ class Steering(private val c: Ctx) {
         o.pos = np
         it.kinHeading?.let { h -> o.heading = Vec3.rotateToward(o.heading, h.normalized(o.heading), Math.toRadians(240.0) * dt) }
         val upT = it.kinUp ?: it.upOverride ?: Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
-        val upL = o.up.lerp(upT.rejectFrom(o.heading).normalized(upT), k.coerceAtLeast(0.1)).normalized(Vec3.Y)
+        // the roll (a sway, a lean) is drawn about the placement's own up: applied to o.up itself it compounded every
+        // tick, and a resting cleaner shrimp swaying 0.12 rad turned its body ~85°/s against the up-rate cap
+        val base0 = (kinBaseUp ?: o.up).normalized(Vec3.Y)
+        val upL = base0.lerp(upT.rejectFrom(o.heading).normalized(upT), k.coerceAtLeast(0.1)).normalized(Vec3.Y)
         // capped like a crawler's: at a long tick the lerp alone flipped a cleaner onto its back in one step
-        o.up = Vec3.rotateToward(o.up.normalized(Vec3.Y), upL, CRAWL_UP_RATE * dt, o.heading)
-        if (it.rollExtra != 0.0) o.up = Vec3.rotateAbout(o.up, o.heading, it.rollExtra)
+        val base = Vec3.rotateToward(base0, upL, CRAWL_UP_RATE * dt, o.heading)
+        kinBaseUp = base
+        o.up = if (it.rollExtra != 0.0) Vec3.rotateAbout(base, o.heading, it.rollExtra) else base
     }
 
     // ---------------------------------------------------------------- surface crawling
@@ -481,8 +488,8 @@ class Steering(private val c: Ctx) {
         o.vel = (p - o.pos) / max(dt, 1e-6)
         o.pos = p
         // the body's up eases onto a new surface (over an edge, into a corner) instead of snapping to it each tick
-        val nTarget = envNormal(p)
-        val nn = Vec3.rotateToward(o.up.normalized(Vec3.Y), nTarget, CRAWL_UP_RATE * dt, o.heading)
+        val nTarget = if (mp.footprintBL > 0) footprintNormal(p, o, mp.footprintBL * o.lengthCm) else envNormal(p)
+        val nn = Vec3.rotateToward(o.up.normalized(Vec3.Y), nTarget, (if (mp.bodyUpRate > 0) mp.bodyUpRate else CRAWL_UP_RATE) * dt, o.heading)
         // the body turns to the smoothed course (a crab's side to it), never to the raw per-tick one
         val travel = if (it.armGait == 0 && v.lengthSq() > 1e-9 || forwardWalker && dir.lengthSq() > 1e-9) (crawlDirS ?: dir.normalized(o.heading)) * dir.length() else v
         var hd = if (travel.lengthSq() > 1e-6) travel.rejectFrom(nn).normalized(o.heading) else (it.faceDir ?: o.heading).rejectFrom(nn).normalized(o.heading)
@@ -501,6 +508,24 @@ class Steering(private val c: Ctx) {
             o.heading = h.rejectFrom(nn).normalized(hd)
         } else o.heading = Vec3.rotateToward(o.heading, hd, Math.toRadians(o.species.locomotion.turnRateDeg.coerceAtLeast(20.0)) * dt)
         o.up = (it.upOverride?.let { u -> Vec3.rotateToward(o.up.normalized(Vec3.Y), u.normalized(Vec3.Y), CRAWL_UP_RATE * dt, o.heading) } ?: nn).normalized(Vec3.Y)
+    }
+
+    /**
+     * Surface normal averaged under a walker's footprint: the local normal at [p] and at four points [span] cm fore and
+     * aft and [span]/2 to either side, each first stepped onto the surface (MotionProfile.footprintBL). Over a sharp
+     * corner the samples disagree and the mean leans the body part way, as legs straddling the edge would.
+     */
+    private fun footprintNormal(p: Vec3, o: Organism, span: Double): Vec3 {
+        val n0 = envNormal(p)
+        val f = o.heading.rejectFrom(n0).normalized(n0.cross(Vec3.Z).normalized(Vec3.X))
+        val l = n0 cross f
+        var sum = n0 * 2.0
+        for (k in 0 until 4) {
+            val off = when (k) { 0 -> f * span; 1 -> f * -span; 2 -> l * (0.5 * span); else -> l * (-0.5 * span) }
+            val q = p + off
+            sum += envNormal(q - envNormal(q) * c.rock.envDist(q).coerceIn(-span, span))
+        }
+        return sum.normalized(n0)
     }
 
     // ---------------------------------------------------------------- escape C-start

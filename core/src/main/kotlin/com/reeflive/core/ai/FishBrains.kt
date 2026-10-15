@@ -144,7 +144,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Night: nestled in the host, female closer to the centre. */
     inner class NestleHost : Behavior("nestle", "Nestled in host") {
-        override fun score(c: Ctx) = 0.8 * (1 - c.activity)
+        override fun score(c: Ctx) = 0.8 * (1 - c.activity) * Feed.nightRestDamp(c, this@ClownBrain)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
             val drift = if (flatHost) 0.5 else 0.8
@@ -961,7 +961,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Night: motionless in a mucus cocoon in the small cave. */
     inner class Cocoon : Behavior("cocoon", "Sleeping in cocoon") {
-        override fun score(c: Ctx) = 0.85 * (1 - c.activity)
+        override fun score(c: Ctx) = 0.85 * (1 - c.activity) * Feed.nightRestDamp(c, this@WrasseBrain)
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, true)
             // the cave-mouth steering keeps the fish 4.5-7 cm off the spot, so settle from within 8 cm

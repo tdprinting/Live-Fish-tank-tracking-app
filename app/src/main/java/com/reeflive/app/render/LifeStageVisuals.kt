@@ -59,10 +59,14 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
 
     private val specs = HashMap<String, LifeStageSpec?>()
 
-    private fun spec(speciesId: String): LifeStageSpec? = specs.getOrPut(speciesId) {
-        val text = runCatching { loader?.getResourceAsStream("species/$speciesId.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
-        val sp = text?.let { runCatching { SimSpecies.parse(it) }.getOrNull() } ?: return@getOrPut null
-        if (!sp.kind.equals("FISH", true)) null else LifeStageSpec.of(sp)
+    // (getOrPut would re-read and re-parse the species JSON on every call for the null entries: inverts, every frame)
+    private fun spec(speciesId: String): LifeStageSpec? {
+        if (specs.containsKey(speciesId)) return specs[speciesId]
+        val text = runCatching { loader?.getResourceAsStream("species/${ModelRegistry.SHEET_ALIASES[speciesId] ?: speciesId}.json")?.bufferedReader()?.use { it.readText() } }.getOrNull()
+        val sp = text?.let { runCatching { SimSpecies.parse(it) }.getOrNull() }
+        val r = if (sp == null || !sp.kind.equals("FISH", true)) null else LifeStageSpec.of(sp)
+        specs[speciesId] = r
+        return r
     }
 
     /** Every stage texture of [modelPath], for preloading. */

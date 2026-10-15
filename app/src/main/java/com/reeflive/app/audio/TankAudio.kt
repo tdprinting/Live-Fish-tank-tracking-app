@@ -128,6 +128,19 @@ class TankAudio(context: Context) {
         if (active()) play(Cue.PELLET, rate = 0.5f + Random.nextFloat() * 0.08f, gain = 0.9f * strength.coerceIn(0f, 1f))
     }
 
+    /** The net goodbye: the body plops into the toilet bowl. */
+    fun plop() {
+        if (active()) play(Cue.FEED, rate = 0.75f, gain = 1f)
+    }
+
+    /** The net goodbye: the toilet flushes (the bubbles bed, pitched down, for a short gurgle). */
+    fun flush() {
+        if (!active() || bubblesId !in loaded) return
+        val v = (volume * 0.9f).coerceIn(0f, 1f)
+        val stream = pool.play(bubblesId, v, v, 2, 0, 0.7f)
+        if (stream != 0) main.postDelayed({ if (!released) pool.stop(stream) }, FLUSH_MS)
+    }
+
     /** Clean-glass mode: the Flipper slid [cm] over the glass. A soft felt-on-glass swish, rate-limited. */
     fun scrape(cm: Float) {
         if (!active() || scrapeId !in loaded) return
@@ -203,6 +216,7 @@ class TankAudio(context: Context) {
     }
 
     private companion object {
+        private const val FLUSH_MS = 1700L
         const val MAX_STREAMS = 10
         const val GLIDE = 0.15f
         const val MIN_LEVEL = 0.003f

@@ -40,6 +40,8 @@ import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.pointerevents.PointerEvent
 import kotlin.js.Promise
 import kotlin.math.min
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Browser host for the shared simulation (:core) and 3D renderer (app/.../render), both compiled from the same
@@ -129,6 +131,8 @@ object ReefLive {
                     // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
                     override fun onPick(id: String?) { if (id != null) sim?.enqueue(Command.TouchAnimal(id)); emit("onPick", id) }
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
+                    // pressed and held on an animal: follow it (the page buzzes and says who)
+                    override fun onHoldAnimal(id: String) { r.follow(id); emit("onFollow", id); emit("onHold", id) }
                     override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
@@ -154,6 +158,7 @@ object ReefLive {
                 r.onSurfaceCreated(null, null)
                 resize()
                 touch = TouchController(Context(AssetManager(files)), View(), r.input)
+                resize()   // TouchController sets its own finger size from the slop; the page's px are device px
                 attachPointers(cnv)
                 window.addEventListener("resize", { resize() })
                 running = true
@@ -215,6 +220,8 @@ object ReefLive {
         val h = (c.clientHeight * dpr).toInt().coerceAtLeast(1)
         if (c.width != w || c.height != h) { c.width = w; c.height = h }
         renderer?.onSurfaceChanged(null, w, h)
+        // a fingertip's radius for forgiving picks: ~22 CSS px (the Android 24 dp, a bit under half a 48 px target)
+        renderer?.input?.fingerPx = (22.0 * dpr).toFloat()
     }
 
     private fun frame(t: Double) {
@@ -222,6 +229,7 @@ object ReefLive {
         val dt = if (lastFrame < 0) 0.0 else ((t - lastFrame) / 1000.0).coerceIn(0.0, 0.25)
         lastFrame = t
         val s = sim
+        val t0 = if (statsOn) now() else 0.0
         if (s != null) {
             simAcc += dt
             var steps = 0
@@ -231,12 +239,32 @@ object ReefLive {
             }
             if (steps == 3) simAcc = 0.0
         }
+        val t1 = if (statsOn) now() else 0.0
         adapt(dt)
         val c = canvas
         if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
         director?.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
+        if (statsOn) stats(dt, t1 - t0, now() - t1)
         window.requestAnimationFrame(::frame)
+    }
+
+    // ------------------------------------------------------------------ stats overlay (?stats in the page URL)
+    private val statsOn by lazy { listener?.onStats != null }
+    private fun now(): Double = js("performance.now()") as Double
+    private var stFrames = 0; private var stTime = 0.0; private var stSim = 0.0; private var stDraw = 0.0; private var stWorst = 0.0
+
+    /** Once a second: frame rate, worst frame, and the CPU ms per frame spent in the sim and in issuing draws. Frame
+     *  time well above sim + draw means the GPU (pixels / shaders) is the limit. */
+    private fun stats(dt: Double, simMs: Double, drawMs: Double) {
+        stFrames++; stTime += dt; stSim += simMs; stDraw += drawMs; stWorst = max(stWorst, dt)
+        if (stTime < 1.0) return
+        val c = canvas
+        fun f(v: Double) = ((v * 10).roundToInt() / 10.0).toString()
+        emit("onStats", "${(stFrames / stTime).roundToInt()} fps · worst ${(stWorst * 1000).roundToInt()} ms\n" +
+            "sim ${f(stSim / stFrames)} ms · draw ${f(stDraw / stFrames)} ms\n" +
+            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}")
+        stFrames = 0; stTime = 0.0; stSim = 0.0; stDraw = 0.0; stWorst = 0.0
     }
 
     /** Pause rendering and the sim while the page is hidden; on return the sim skips ahead like the Android app. */
@@ -425,6 +453,15 @@ object ReefLive {
             }
         }.toTypedArray()
         return JSON.stringify(o)
+    }
+
+    /**
+     * The last body the fish net took out (core FishNet), for the page's toilet goodbye (flush.js): key (new per
+     * body), name, fish or not, and the cartoon colours; "null" before the first.
+     */
+    fun netFlush(): String {
+        val f = sim?.latest?.netFlush ?: return "null"
+        return JSON.stringify(obj { it.key = "${f.seq}:${f.id}"; it.name = f.name; it.isFish = f.isFish; it.body = f.body; it.accent = f.accent })
     }
 
     /** HUD state: clock, light phase, water and the organisms (id, name, species, health). */

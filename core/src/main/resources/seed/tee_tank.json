@@ -26,7 +26,7 @@
     {"speciesId": "asterina_sp", "nickname": "Asterinas", "sizeCm": 1.0, "quantity": 3, "notes": "Hitchhikers; population grows by splitting."},
     {"speciesId": "capnella_sp", "nickname": "Kenya tree", "placement": "kenya_main"},
     {"speciesId": "briareum_sp", "nickname": "Neon GSP", "variant": "neon", "placement": "gsp_upper_left"},
-    {"speciesId": "briareum_sp", "nickname": "GSP mat", "placement": "gsp_lower_right"},
+    {"speciesId": "rhodactis_sp", "nickname": "Hairy shroom mound", "placement": "gsp_lower_right", "notes": "Night video 2026-10-15: the lime mound at the lower right is green hairy mushrooms with purple centres (was listed as a GSP mat); the lawnmower blenny naps on it."},
     {"speciesId": "zoanthus_sp", "nickname": "Zoas", "placement": "zoa_front_center"},
     {"speciesId": "clavularia_sp", "nickname": "Cloves", "placement": "clove_kenya_base"},
     {"speciesId": "discosoma_sp", "nickname": "Green shroom", "placement": "shroom_front_left"},

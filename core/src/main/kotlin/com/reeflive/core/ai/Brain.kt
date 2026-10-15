@@ -410,9 +410,9 @@ fun Ctx.standoff(a: Anchor, d: Double): Vec3 = a.pos + (a.normal ?: Vec3.Y).norm
 fun Ctx.isPrepared(f: FoodParticle) = !f.kind.suspended
 
 /** Nearest diet-matching food this animal accepts within [radius], optionally with a line-of-sight check. */
-fun Ctx.findFood(radius: Double, los: Boolean = true, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
+fun Ctx.findFood(radius: Double, los: Boolean = true, roused: Boolean = false, extra: (FoodParticle) -> Boolean = { true }): FoodParticle? {
     val f = food.nearest(o.pos, radius) { f ->
-        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f)
+        o.species.dietMatch(f.kind) > 0 && (o.acceptsPrepared || f.kind.suspended) && extra(f) && Perceive.sensesFood(this, f, roused)
     } ?: return null
     if (los && !rock.sdf.segmentClear(o.pos, f.pos, 0.2)) {
         // try the second nearest without LOS cost explosion: accept if near

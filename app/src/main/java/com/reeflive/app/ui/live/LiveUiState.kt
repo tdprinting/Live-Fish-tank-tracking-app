@@ -8,7 +8,8 @@ import com.reeflive.core.status.Status
 import java.util.Locale
 
 /** Watch = read-only live view of the real tank; Sandbox = what-if controls. */
-enum class HudMode(val label: String) { WATCH("Watch"), SANDBOX("Sandbox") }
+/** The three tanks: yours as logged, the pretend copy, and "My tank" (built from scratch and saved). */
+enum class HudMode(val label: String) { WATCH("Watch"), SANDBOX("Sandbox"), MY_TANK("My tank") }
 
 enum class DayPhase(val label: String) { NIGHT("Night"), DAWN("Dawn"), DAY("Day"), DUSK("Dusk") }
 

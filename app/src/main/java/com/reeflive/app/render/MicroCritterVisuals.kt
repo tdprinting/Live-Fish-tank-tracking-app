@@ -3,6 +3,8 @@ package com.reeflive.app.render
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.sim.CritterField
 import com.reeflive.core.sim.CritterKind
+import com.reeflive.core.sim.MicroGroup
+import com.reeflive.core.sim.MicroScene
 import com.reeflive.core.sim.SimSnapshot
 
 /**
@@ -22,8 +24,20 @@ class MicroCritterVisuals {
     /** Rigs to draw this frame (already culled and budgeted). */
     val visible: List<FishRig> get() = drawn
 
+    /**
+     * Animals too small for a model, drawn by rock.frag where the rock is close enough to resolve them (uMicro): x
+     * harpacticoid copepods, y ostracods, z forams, per cm² of rock in view (MicrofaunaState.visible). Zero on Low.
+     */
+    val rockLife = FloatArray(3)
+
     fun update(s: SimSnapshot?, sdf: Sdf?, dt: Float, camera: Camera, quality: RenderQuality, triBudget: Int, tris: (CritterKind) -> Int) {
         drawn.clear()
+        if (s == null || quality == RenderQuality.LOW) { rockLife.fill(0f) } else {
+            val m = s.microfauna
+            rockLife[0] = m.visible(MicroGroup.HARPACTICOID, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
+            rockLife[1] = m.visible(MicroGroup.OSTRACOD, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
+            rockLife[2] = m.visible(MicroGroup.FORAM, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
+        }
         if (s == null || sdf == null || quality == RenderQuality.LOW) return
         val f = field ?: CritterField(sdf).also { field = it }
         if (fishHeads.size != s.organisms.size * 3) fishHeads = FloatArray(s.organisms.size * 3)
@@ -49,7 +63,10 @@ class MicroCritterVisuals {
         var spent = 0
         for (r in order) {
             val d = r.distanceTo(ex, ey, ez).coerceAtLeast(1f)
-            if (r.scale / d < MIN_ANGULAR_SIZE) continue
+            val ang = r.scale / d
+            if (ang < MIN_ANGULAR_SIZE) continue
+            // fade into the water as it shrinks toward a speck instead of popping out at the cutoff
+            r.fade = 1f - ((ang - MIN_ANGULAR_SIZE) / (FADE_ANGULAR_SIZE - MIN_ANGULAR_SIZE)).coerceIn(0f, 1f)
             val k = CritterKind.of(r.speciesId) ?: continue
             val t = tris(k)
             if (spent + t > triBudget) break
@@ -63,6 +80,10 @@ class MicroCritterVisuals {
     companion object {
         /** Body length / distance below which a critter is a sub-pixel speck at phone resolution (~3 px at 60° FOV). */
         const val MIN_ANGULAR_SIZE = 0.0035f
+        /** Angular size above which a critter shows at full contrast (fully faded at [MIN_ANGULAR_SIZE]). */
+        const val FADE_ANGULAR_SIZE = 0.009f
+        /** Cap on the per-cm² rock densities handed to the shader (one animal per lattice cell is its own limit). */
+        const val MAX_ROCK_DENSITY = 8f
         const val MICRO_TRIS_HIGH = 12000
         const val MICRO_TRIS_MEDIUM = 2000
     }
