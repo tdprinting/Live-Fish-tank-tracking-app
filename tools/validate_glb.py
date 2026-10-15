@@ -46,6 +46,9 @@ BUDGET = {
     "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,
     "micro_snail": 1400, "micro_flatworm": 200, "micro_tentacle": 800, "micro_caprellid": 2000, "micro_ostracod": 700,
     "micro_foram": 300, "micro_calanoid": 600,
+    # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
+    "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
+    "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,
     "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 1100,
     "mushroom_hairy": 1500, "mushroom_hairy_mound": 3500,
@@ -378,6 +381,8 @@ def estimates(report):
                 continue
             if name.startswith("micro_"):
                 continue  # covered by the MICRO_TRIS_* draw budget below
+            if name.startswith("brood_"):
+                continue  # only after a spawn; pooled and capped per quality (core BroodField)
             if name in OFF_VIEW:
                 continue  # drawn only while the camera looks away from the tank
             use = name

@@ -60,6 +60,8 @@ fun TankView(
     shelf: SupplyShelfControl? = null,
     /** Submarine mode: ride inside the sub instead of chasing it. */
     subFirstPerson: Boolean = false,
+    /** Bumped for each "Look at the nursery" press: the camera glides to the nursery tank. */
+    nurseryRequest: Int = 0,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -69,6 +71,7 @@ fun TankView(
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, subFirstPerson = subFirstPerson,
+        nurseryRequest = nurseryRequest,
     )
 }
 
@@ -104,6 +107,7 @@ fun TankView(
     viewLight: ViewLight = ViewLight.REAL,
     shelf: SupplyShelfControl? = null,
     subFirstPerson: Boolean = false,
+    nurseryRequest: Int = 0,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -161,6 +165,7 @@ fun TankView(
                     v.viewLight = viewLight
                     v.shelf = shelf
                     v.subFirstPerson = subFirstPerson
+                    v.nurseryRequest = nurseryRequest
                 },
                 onRelease = { v -> v.onPause(); if (view === v) view = null },
             )

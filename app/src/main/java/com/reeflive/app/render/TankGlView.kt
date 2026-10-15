@@ -43,6 +43,10 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
 
     fun setQuality(q: RenderQuality) = renderer.setQuality(q)
     fun resetCamera() = renderer.resetCamera()
+    fun lookAtNursery(on: Boolean) = renderer.lookAtNursery(on)
+    /** Bumped by the UI for each "Look at the nursery" press (0 = none yet). */
+    var nurseryRequest = 0
+        set(v) { if (v != field) { field = v; if (v > 0) lookAtNursery(true) } }
 
     /** Clean-glass mode: drags slide the Flipper over the front glass (strokes go to [TankViewListener.onScrape]). */
     fun setCleaning(on: Boolean) = renderer.setCleaning(on)

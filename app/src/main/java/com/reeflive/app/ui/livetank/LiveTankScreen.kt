@@ -1109,6 +1109,7 @@ private fun TankArea(
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
+        val nurseryView by vm.nurseryView.collectAsStateWithLifecycle()
         TankView(
             snapshots = vm.snapshots,
             modifier = Modifier.fillMaxSize().skipFxOnTap(fx, onSkip).trackTorch(torch, torchOn),
@@ -1130,6 +1131,7 @@ private fun TankArea(
             viewLight = viewLight,
             shelf = shelf,
             subFirstPerson = sub.on && sub.inside,
+            nurseryRequest = nurseryView,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
@@ -1279,10 +1281,18 @@ private fun HudLayer(
         ) {
             val card = st ?: lastCard
             if (card != null) {
+                val hudSnap by vm.hud.collectAsStateWithLifecycle()
+                val family = hudSnap.brood.panel?.takeIf { it.shows(card.speciesId) }?.let { p ->
+                    p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.SANDBOX })
+                }
                 FishCard(
                     card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) },
                     onRename = if (hudState.mode == HudMode.MY_TANK) ({ n: String -> vm.rename(card.id, n) }) else null,
                     onNetOut = { onNetOut(card) },
+                    family = family,
+                    onFamily = { id ->
+                        if (id == com.reeflive.core.sim.Brood.VIEW_NURSERY) { vm.select(null); vm.viewNursery() } else vm.breed(id)
+                    },
                 )
             }
         }

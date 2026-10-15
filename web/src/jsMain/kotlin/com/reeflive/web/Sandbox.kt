@@ -189,6 +189,12 @@ object ReefSandbox {
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
             "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
+            // clownfish breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
+            "breed" -> {
+                val a = arg ?: return false
+                if (a == "SPAWN_NOW" && !sandbox) return false
+                send(Command.Breed(a)); return true
+            }
         }
         if (!sandbox) return false
         when (name) {
@@ -429,6 +435,15 @@ object ReefSandbox {
             it.thinking = held.now; it.thinkNext = held.next; it.feeling = held.feeling; it.moodWord = st.thought.mood
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
+            // the parents' "Family" panel (core Brood): eggs, larvae, the nursery and its buttons
+            it.family = sim?.latest?.brood?.panel?.takeIf { p -> p.shows(st.speciesId) }?.let { p ->
+                obj { f ->
+                    f.title = p.title; f.lines = p.lines.toTypedArray()
+                    f.actions = p.actions.filter { a -> !a.sandboxOnly || sandbox }.map { a ->
+                        obj { o -> o.id = a.id; o.label = a.label; o.enabled = a.enabled; o.note = a.note }
+                    }.toTypedArray()
+                }
+            }
             it.relations = c.relationships.take(6).map { r ->
                 obj { o -> o.name = r.otherName; o.species = r.otherSpecies; o.label = r.labelOverride ?: r.kind.label; o.affinity = r.affinity; o.note = r.note }
             }.toTypedArray()

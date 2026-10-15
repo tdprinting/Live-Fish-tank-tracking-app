@@ -157,6 +157,13 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
     fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
 
+    /** A breeding / nursery button on a clown's card (core Brood.Act name). */
+    fun breed(act: String) = holder.enqueue(Command.Breed(act))
+    private val _nurseryView = kotlinx.coroutines.flow.MutableStateFlow(0)
+    /** Bumped for each "Look at the nursery" press (TankView glides the camera there). */
+    val nurseryView: StateFlow<Int> = _nurseryView
+    fun viewNursery() { _nurseryView.value++ }
+
     /** The last net goodbye already shown (so a body flushed before this screen opened never replays). */
     private var flushSeen: com.reeflive.core.sim.NetFlush? = holder.snapshots.value.netFlush
     /** [f] if it is a goodbye not shown yet (marking it shown), else null. */

@@ -44,6 +44,8 @@ class Simulation(
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
     val repro = Reproduction(this)
+    /** Larvae, the nursery tank and fry (research 28), stepped right after [repro]. */
+    val brood = Brood(this)
     /** Hermit shells, asterina-vs-organ-pipe and feather-duster crown cycle (research 04). */
     val invertEcology = InvertEcology(this)
     private val agents = HashMap<Organism, Agent>()
@@ -509,6 +511,7 @@ class Simulation(
         for (o in organisms) if (o.alive) bio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC) * (if (o.sleeping) 0.7 else 1.0)
         w.bioMassIndex = bio
         repro.step(CHEM_DT)
+        brood.step(CHEM_DT)
         SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(CHEM_DT / 60.0)
         w.lightIntensity = light
@@ -954,6 +957,7 @@ class Simulation(
                 // new arrivals enter at the surface like a release from the acclimation cup
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
+            is Command.Breed -> Brood.Act.entries.firstOrNull { it.name == c.act }?.let { brood.act(it) }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
             is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
@@ -1361,7 +1365,7 @@ class Simulation(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
-        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); touchMemory.clear()
+        organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); brood.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
         submarine.reset(); subSense.clear(); bags.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
@@ -1453,6 +1457,7 @@ class Simulation(
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
             net = net.pose(),
             netFlush = net.lastFlush,
+            brood = brood.view,
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))

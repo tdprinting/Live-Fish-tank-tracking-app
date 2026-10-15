@@ -351,6 +351,8 @@ object ReefLive {
     fun shelfPick(id: String) { shelf.pick(id) }
     fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }
     fun resetCamera() { renderer?.resetCamera() }
+    /** Glide to the nursery tank beside the display (clownfish babies) or back. */
+    fun nursery(on: Boolean) { renderer?.lookAtNursery(on) }
     /** The page's answer to `onTouch(surface)`: touch the tank where that tap landed (ripple or sand puff, Command.TouchTank). */
     fun touchTank(): Boolean {
         val (p, surface) = pendingTouch ?: return false
