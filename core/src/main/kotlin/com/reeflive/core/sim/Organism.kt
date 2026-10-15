@@ -154,6 +154,8 @@ class Organism(
     var vel = Vec3.ZERO
     var heading = Vec3.X
     var up = Vec3.Y
+    /** The fish a cleaner shrimp is standing on while it cleans it (its legs grip the body, core ShrimpLimbs). */
+    var ridingOn: Organism? = null
     var attached = false          // kinematically placed by the behavior (perch, hole, den, tube…)
     /**
      * The body is legitimately in the sand this tick (a goby's head in its dig face, a wrasse wriggling under): the
