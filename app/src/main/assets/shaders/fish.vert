@@ -21,13 +21,13 @@ uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
-// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 13 entries (core ShrimpLimbs), uLimb[0] = (x stride
+// Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 15 entries (core ShrimpLimbs), uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
 // limb path below. Crawlers (uLimbOn): mode 1 brittle star arms, mode 3 Sally Lightfoot legs + chelae, mode 5 hermit crab.
 // The disc / carapace is placed rigidly at the organism (spine station 0); each limb vertex (part 3, COLOR_0.r = t
 // along the limb, COLOR_0.b = limb index / 9) is posed about its pivot from the sim's per-limb data.
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
-uniform vec4 uLimb[15];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs / HermitLegs; only the hermit sends 15)
+uniform vec4 uLimb[15];    // per-limb pose (layout per animal: core BrittleArms / CrabLegs / ShrimpLimbs / HermitLegs; the hermit and the shrimp send 15)
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
@@ -423,6 +423,8 @@ void main() {
             local.x += h * 0.012 * S.y * sin(2.0 * PI * S.x + pr * PI);
         } else if (cls < 3.5) {
             // banded cheliped: held raised; it swings up and out toward an intruder (display), draws in to feed
+            // The sim drives each claw tip while it probes crevices or strikes (uLimb[13] left, [14] right).
+            local += uLimb[side > 0.0 ? 14 : 13].yzw * h;
             float dsp = S.z;
             local.z += side * h * 0.12 * dsp;
             local.y += h * (0.07 * dsp + 0.008 * sin(time * 0.9 + side));
