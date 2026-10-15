@@ -172,6 +172,24 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      */
     fun surfaceY(x: Double, z: Double): Double = modelY(x, z) + heightAt(x, z) + inclusionAt(x, z)
 
+    /**
+     * An upper bound on [surfaceY] over [x0]..[x1] × [z0]..[z1] (the body collision's exact skips): the most of each
+     * blended grid's heights there, plus a margin for the rounding of the blends.
+     */
+    fun surfaceMax(x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val m = base?.maxIn(x0, z0, x1, z1) ?: max(baseY(z0), baseY(z1))
+        return m + gridMax(height, x0, z0, x1, z1) + (if (anyInclusion) gridMax(inclusion, x0, z0, x1, z1) else 0.0) + 1e-5
+    }
+
+    /** The most of the cell values [heightAt] / [inclusionAt] blend in the box (NaN where one is). */
+    private fun gridMax(g: FloatArray, x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val i0 = (x0 / cellX - 0.5).coerceIn(0.0, nx - 1.001).toInt(); val i1 = (x1 / cellX - 0.5).coerceIn(0.0, nx - 1.001).toInt() + 1
+        val k0 = (z0 / cellZ - 0.5).coerceIn(0.0, nz - 1.001).toInt(); val k1 = (z1 / cellZ - 0.5).coerceIn(0.0, nz - 1.001).toInt() + 1
+        var m = Double.NEGATIVE_INFINITY
+        for (k in k0..k1) for (i in i0..i1) m = max(m, g[k * nx + i].toDouble())
+        return m
+    }
+
     fun freshAt(x: Double, z: Double): Double = fresh[index(x, z)].toDouble()
     fun detritusAt(x: Double, z: Double): Double = detritus[index(x, z)].toDouble()
     fun cellHeight(x: Double, z: Double): Double = height[index(x, z)].toDouble()
