@@ -1771,3 +1771,26 @@ What remains sits mostly in the collision code:
 - A grazing snail circles where it cannot reach its target.
 - 0–4 `TELEPORT` hops of 4–10 cm per run come from two sources. One is a crawler wedged in a crevice for 2 s that takes the projection out. The other is the swim hard resolve pushing a clown or blenny out of rock.
 - The clowns wiggle in the host.
+
+## 22. Livelier fish (research 30, `ai/PerchSites.kt`, `FishBehaviorProbe`)
+
+Sources: [clown, tang, cardinal](research/30_fish_ai_clown_tang_cardinal.md), [wrasses and hawkfish](research/30_fish_ai_wrasses_hawkfish.md),
+[blennies, gobies, dottyback](research/30_fish_ai_blennies_gobies_dottyback.md). `FishBehaviorProbe` (run with
+`REEFLIVE_PROBE=1`, writes `core/build/fish_probe.txt`) measures every fish over 30 min of day and 15 min of night:
+speed in BL/s, share of time still, stop-go bouts per minute, turning, depth, distance to rock, ground covered and
+the behaviour time budget. `FishTraceDump` (`REEFLIVE_TRACE=<dir>`) writes paths for the top-down previews.
+
+### 22.1 Part 1: rock perchers
+
+| Species | Measured before | Change |
+|---|---|---|
+| Falco hawkfish | Never changed perch in 30 min (32 cm² covered): the numbered `PERCH_n` aliases sit on the same spots as the named perches, so "nearest other perch" was itself. | `PerchSites` keeps the named perches without aliases and adds rock tops found once by a top-down trace (up to 22, ≥ 9 cm apart, ≥ 10 cm under the water line). The next perch is a weighted draw: hops near 22 cm, recent perches, occupied perches, the clowns' host and cleaning stations avoided, food and passing fish attract. Dwell is 15 s + an exponential tail (mean ~70 s), from *P. forsteri* (Coker et al. 2017: 7.6–9.1 perch changes per 10 min) [ANALOGY]. It glances at moving fish and food in quick head turns, pivots on its perch every 12–40 s, and turns to face the next perch and crouches before it hops. A perch it cannot reach within 8 s is remembered as unreachable for 15 min and it lands on the nearest other perch instead. `c11` now expects 25–80 changes/h. |
+| Lawnmower blenny | One rasp every second for its whole day (60/min). | Bite bouts of 2–5 rasps at ~0.65 s, then a 4–12 s look-round with the head up and the eyes swivelling, ~20 bites/min while grazing (field: 3,427 bites/day, Townsend & Tibbetts 2004) [SOURCED rate]. Food per rasp is scaled up to match. A fifth of its moves cross its 28 cm range. |
+| Tailspot blenny | Head-out in its hole 95 % of the day. | Hole score 0.45 → 0.38 and perching beside the hole 0.35 → 0.42 (15–60 s, 4–12 cm out, rested 10–40 s between), with head turns and bobs: about two thirds in the hole. It rests level along the rock face, facing away from the hole. |
+| Leopard wrasse | Hung in one place picking every 3–6 s; every mild clown charge buried it for 5–20 min. | Forages along a path: 1–3 pecks per spot, then glides 5–12 cm on (turning back toward home past its range), now and then pausing to look round, avoiding clowns and fish that chased it. Only a chase of magnitude ≥ 0.5 buries it, for a time scaled by the magnitude. |
+| All fish (`KeepClear`) | The tang spent a third of its day hovering, staring at the female clown that once chased it. | A 3–8 s bout to cover, then 10–30 s off unless the feared fish closes in. |
+| Skunk cleaner shrimp | A hawkfish perched by the station posed in a climb → tail-flip → climb loop. | Fleeing releases the client; a fish is offered a cleaning at most once per 5 min. |
+| Body spline | The 10× speed tick (0.5 s) popped the body when a fish turned hard. | Trail relax capped at 0.5 per step (`BodySpline.MAX_RELAX_STEP`). |
+| Hermit crab legs | A startled hermit pulled its legs fully in within one tick. | Withdrawal capped at 4 retract units/s (`HermitLegs.WITHDRAW_MAX_PER_S`), fully in within ~0.25 s. |
+
+AI cost: the probe's 30 sim-minutes take the same wall time as before (~13.5 s); the perch trace runs once at start-up.

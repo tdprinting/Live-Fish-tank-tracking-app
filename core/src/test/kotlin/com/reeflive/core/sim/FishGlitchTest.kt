@@ -144,7 +144,9 @@ class FishGlitchTest {
                     if (tr.yawFlips.size >= 6) hit(tr, Cause.OSCILLATION, t, "${tr.yawFlips.size} reversals ≥8°/3 s")
                     if (abs(pose.bend - tr.bend) > 1.0f + poseJump) hit(tr, Cause.POSE_JUMP, t, "bend %.2f→%.2f".format(tr.bend, pose.bend))
                     tr.limbs?.let { pl ->
-                        if (pl.size == pose.limbs.size) for (i in pl.indices) if (i % 4 != 0 && abs(pl[i] - pose.limbs[i]) > poseJump) {
+                        // a hermit's legs-planted entry is an on/off flag for the renderer, not a pose that moves
+                        val flag = if (tr.o.brainKind == BrainKind.HERMIT) HermitLegs.PLANTED_FLAG else -1
+                        if (pl.size == pose.limbs.size) for (i in pl.indices) if (i % 4 != 0 && i != flag && abs(pl[i] - pose.limbs[i]) > poseJump) {
                             hit(tr, Cause.POSE_JUMP, t, "limb[$i] %.2f→%.2f".format(pl[i], pose.limbs[i])); break
                         }
                     }
