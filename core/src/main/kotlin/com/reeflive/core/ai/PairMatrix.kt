@@ -538,7 +538,11 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
         // it holds the spot where it began to pose (seeking just ahead of itself, the separation from the cleaner working
         // along its body pushed it off: a posing engineer goby was herded 25 cm along the front glass at 6-9 cm/s)
         val h = hold ?: o.pos.also { hold = it }
-        out.seek(if (o.pos.distanceTo(h) > 2.0) h else o.pos + o.heading * 0.2, o.cruiseSpeed * (if (o.pos.distanceTo(h) > 2.0) 0.5 else 0.1), arrive = 2.0)
+        val pushed = o.pos.distanceTo(h) > 2.0
+        out.seek(if (pushed) h else o.pos + o.heading * 0.2, o.cruiseSpeed * (if (pushed) 0.5 else 0.1), arrive = 2.0)
+        // pushed off its spot, it gives way less: separation grows as r/d near the cleaner nosing along its flank, which
+        // outran the way back and herded a posing engineer goby 30 cm along the front glass at 4-5 cm/s
+        if (pushed) out.separation = 0.25
         o.mouth = 0.7
         o.finClamp = 0.0
         o.gill = max(o.gill, 0.9)

@@ -21,7 +21,7 @@ uniform float uRoughness;
 uniform float uNormalStrength; // 0 disables the normal map (Low quality)
 uniform float uDetailScale;    // normal-map uv multiplier
 #ifdef SAND
-// Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus.
+// Dynamic sand bed (SIMULATION §16, SandFx): r height offset (cm), g freshness, b detritus, a dug cavity under rock.
 uniform sampler2D uSandMap;
 uniform float uSandOn;
 uniform vec2 uSandExtent;
@@ -192,6 +192,8 @@ void main() {
         // mulm collects as a brown film; sifted patches come up clean and bright
         albedo = mix(albedo, vec3(0.16, 0.11, 0.06), smoothstep(0.35, 1.5, sm.b) * 0.45);
         albedo *= mix(1.06, 1.0, smoothstep(0.0, 0.2, sm.b));
+        // a, dug cavity under rock (SandBed.cavity): the burrow floor sits in the rock's shadow, darkest deep in
+        albedo *= 1.0 - 0.55 * clamp(sm.a, 0.0, 1.0);
     }
     if (dot(uAlgaeSand, vec4(1.0)) > 0.001) {
         vec3 sp = vWorld * 0.07;

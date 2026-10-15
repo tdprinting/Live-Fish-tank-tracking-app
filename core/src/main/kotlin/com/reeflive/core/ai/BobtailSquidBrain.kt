@@ -107,7 +107,7 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
             val s = -0.08 * d + r.sdf.cover(p + Vec3.Y * 2.0) + hs.sumOf { min(it.distanceTo(p), 40.0) * 0.02 } + 0.3 * c.rng.nextDouble()
             if (s > bs) { bs = s; best = p }
         }
-        return best ?: Vec3(r.lengthCm * 0.3, r.sandTopCm, r.widthCm * 0.6)
+        return best ?: Vec3(r.lengthCm * 0.3, sand.surfaceY(r.lengthCm * 0.3, r.widthCm * 0.6), r.widthCm * 0.6)
     }
 
     private fun buriedPos(): Vec3 = Vec3(bed.x, sand.surfaceY(bed.x, bed.z) - BURY_DEPTH * bodyHalfDepth() * 2 + bodyHalfDepth(), bed.z)

@@ -411,7 +411,12 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         if (c.t - o.lastCleanedAt < 2) { st.release(); finished = true }
         if (elapsed > 90) { if (st.client === o) st.release(); finished = true }
     }
-    override fun exit(c: Ctx) { station?.let { if (it.client === c.o) it.release() } }
+    override fun exit(c: Ctx) {
+        // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station
+        // there stopped the shrimp's clean at its antenna tap, the pose lapsed, the fish came back to visit, and the two
+        // looped every 1.5 s (a dottyback at the skunk shrimp for minutes)
+        station?.let { if (it.client === c.o && !(c.o.poseFor === it.cleaner && c.o.poseUntil > c.t)) it.release() }
+    }
 }
 
 /** Curious approach to a glass tap (clowns, tang, wrasse): hover at 4 cm for 5–15 s. */
