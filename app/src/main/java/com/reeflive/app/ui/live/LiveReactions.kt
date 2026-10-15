@@ -275,6 +275,10 @@ object LiveReactions {
         SandboxPreset.COPPER_OVERDOSE -> Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = copper, caption = "Copper overdose"), "Too much copper. Shrimp and corals hate it!", HermieMood.WORRIED).let {
             Reaction(it.fx, it.say, it.mood, it.feedback.withWatch("copper").withEffect("Copper floods in: deadly for shrimp and corals"))
         }
+        SandboxPreset.ROCKSLIDE -> Reaction(
+            TankFx(FxKind.ALERT, FxSpots.SAND, glyph = ReefGlyphs.rocks, tint = Color(0xFFB8A58A), caption = "Rockslide"), "Uh oh, the sand under a rock is gone. Watch it shift!", HermieMood.SURPRISED,
+            Feedback("Rockslide", "The sand under one side of a rock is dug out: it settles or topples", listOf(Feedback.burst(BurstKind.SILT, FxSpots.SAND, amount = 2f)), durationMs = 2600),
+        )
     }
 
     fun heatWave() = Reaction(TankFx(FxKind.THERMO_UP, FxSpots.THERMO, caption = "Heat wave"), "A heat wave! Warm water holds less air.", HermieMood.WORRIED).let {

@@ -284,6 +284,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
             // the top-off floods fresh water in over ~30 min, then the sim takes over again
             SandboxPreset.SALINITY_CRASH -> holder.enqueue(Command.RampParam("sal", 1.012, 30.0, hold = false))
             SandboxPreset.COPPER_OVERDOSE -> setParam("copper", 0.5)
+            SandboxPreset.ROCKSLIDE -> runScenario(Scenario.ROCKSLIDE)
         }
     }
 
