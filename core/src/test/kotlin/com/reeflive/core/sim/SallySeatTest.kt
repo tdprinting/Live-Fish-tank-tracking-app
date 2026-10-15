@@ -173,8 +173,10 @@ class SallySeatTest {
         assertTrue("stance feet re-placed ${seat.replants} times", seat.replants < touchdowns / 10)
         assertTrue("it steps", touchdowns > 30)
         // leading legs (its right: the odd legs) pull by flexing, trailing legs (even) push by extending
-        for (k in 1 until 8 step 2) assertTrue("leading leg $k flexes in stance", flexGrow[k] > 3 * flexShrink[k])
-        // (the rear pair points mostly backward, so a sideways stroke changes its reach least)
+        // (the rear pair points almost straight back, so a sideways stroke hardly changes its reach: the rear leading
+        // leg only must not push)
+        for (k in 1 until 6 step 2) assertTrue("leading leg $k flexes in stance", flexGrow[k] > 3 * flexShrink[k])
+        assertTrue("rear leading leg does not extend", flexShrink[7] <= flexGrow[7])
         assertTrue("trailing legs extend in stance", (0 until 8 step 2).sumOf { flexShrink[it] } > 2 * (0 until 8 step 2).sumOf { flexGrow[it] })
         val pose = o.toPose()
         assertEquals(CrabLegs.COUNT * 4, pose.limbs.size)

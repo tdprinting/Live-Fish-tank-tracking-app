@@ -1087,6 +1087,7 @@ SALLY_CLAW_BASE = ((0.097, 0.046), (0.097, -0.046))
 SALLY_CENTRE = (-0.008, 0.004)          # carapace centre
 SALLY_SRC_CW = 0.284                    # carapace width
 SALLY_FLAT = 0.55                       # height scale: the source's domed carapace was 0.64 widths deep
+SALLY_ARCH = 0.12                      # knee rise over the leg length (see the walking legs below)
 SALLY_EYES = ((0.098, 0.055, 0.176), (0.1, -0.057, 0.174))   # the eye bumps (source frame)
 
 
@@ -1148,6 +1149,15 @@ def build_sally_lightfoot():
         return Q
     W = model(V)
     lines = [model(Cl) for Cl in lines]
+    # the source's walking legs lie almost flat out from the body; a real Sally carries the merus-carpus joint well
+    # up (research 27), which also keeps the knees clear of the rock as the feet plant on uneven ground
+    for k in range(8):
+        Cl = lines[k]
+        L = float(np.sum(np.linalg.norm(np.diff(Cl, axis=0), axis=1)))
+        m = lab == k
+        W[m, 2] += SALLY_ARCH * L * np.sin(np.pi * tv[m]) ** 0.8
+        tc = np.linspace(0.0, 1.0, len(Cl))
+        Cl[:, 2] += SALLY_ARCH * L * np.sin(np.pi * tc) ** 0.8
 
     def colors(Vx, t, k):
         n = len(Vx)

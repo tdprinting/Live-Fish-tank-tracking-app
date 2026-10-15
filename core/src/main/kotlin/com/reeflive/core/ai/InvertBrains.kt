@@ -1436,6 +1436,24 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         return true
     }
 
+    /**
+     * Room for the legs at surface point [p] (normal [n]): most of a ring a leg's reach out, a knee height off the
+     * surface plane, is open water (in a pocket of rock its long legs would find no clear sweep and fold up).
+     */
+    fun legRoom(c: Ctx, p: Vec3, n: Vec3): Boolean {
+        val s = c.sim.crawlSurface
+        val t1 = (n cross (if (kotlin.math.abs(n.y) < 0.9) Vec3.Y else Vec3.X)).normalized(Vec3.X)
+        val t2 = n cross t1
+        val r = LEG_ROOM_R * o.lengthCm
+        val h = n * (LEG_ROOM_H * o.lengthCm)
+        var open = 0
+        for (i in 0 until 8) {
+            val a = i * PI / 4
+            if (s.dist(p + h + (t1 * kotlin.math.cos(a) + t2 * sin(a)) * r) > 0.0) open++
+        }
+        return open >= LEG_ROOM_OPEN
+    }
+
     init {
         install(HideCrevice(), Graze(), CrabScavenge(), CarcassPick(), Dart(), NightGrab(), Squeeze(), MoltHide(this) { restSpot(it, false) })
     }
@@ -1541,11 +1559,11 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val night = c.activity > 0.5 && !softShell(c)
             // out at night it sometimes climbs the glass to scrape the film there
             spot = (if (night && c.rng.chance(GLASS_GRAZE_P)) glassSpot(c) else null)
-            for (i in 0 until 6) {
+            for (i in 0 until 10) {
                 if (spot != null) break
-                // (only where the carapace fits)
+                // (only where the carapace fits and the legs have rock to spread over, not a pocket they fold up in)
                 spot = c.rockSurfacePoint(if (night) c.o.pos + Vec3(c.rng.signed() * 15, 0.0, c.rng.signed() * 6) else home, if (night) 25.0 else 10.0, minNormalY = 0.0)
-                    ?.takeIf { (p, n) -> fits(c, p, n) }
+                    ?.takeIf { (p, n) -> fits(c, p, n) && legRoom(c, p, n) }
             }
             dur = c.rng.range(15.0, 45.0)
         }
@@ -1561,7 +1579,7 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                 c.o.mouth = 1.0
                 // shuffles a step or two sideways along the patch between bites
                 val shuffle = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2)
-                if (fits(c, shuffle, s.second)) spot = s.copy(first = shuffle)
+                if (fits(c, shuffle, s.second) && legRoom(c, shuffle, s.second)) spot = s.copy(first = shuffle)
             }
             legs.pick = 1.0      // quick alternating claw strokes to the mouth
             grazeSeconds += c.dt
@@ -1578,7 +1596,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val p = if (back) Vec3((home.x + c.rng.signed() * 20).coerceIn(3.0, r.lengthCm - 3), (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), 0.3)
                 else Vec3(if (home.x > r.lengthCm / 2) r.lengthCm - 0.3 else 0.3, (home.y + c.rng.signed() * 10).coerceIn(r.sandTopCm + 3, r.waterLevelCm - 5), (home.z + c.rng.signed() * 8).coerceIn(2.0, r.widthCm - 2))
             val n = if (back) Vec3.Z else if (p.x > 1) Vec3.X * -1.0 else Vec3.X
-            if (r.sdf.dist(p) > 2.5 && fits(c, p, n)) return p to n
+            // (clear of the rock by more than its legs reach, or the legs reach the rock and pull it into the corner)
+            if (r.sdf.dist(p) > max(2.5, GLASS_ROCK_L * o.lengthCm) && fits(c, p, n) && legRoom(c, p, n)) return p to n
         }
         return null
     }
@@ -1740,6 +1759,12 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         /** Carapace fit test: rim radius and height (× length), clearance (cm). */
         const val FIT_RIM = 0.55
         const val FIT_HEIGHT = 0.2
+        /** [legRoom]: ring radius and height (carapace widths) and how many of its 8 points must be open water. */
+        const val LEG_ROOM_R = 1.1
+        const val LEG_ROOM_H = 0.25
+        const val LEG_ROOM_OPEN = 6
+        /** A glass grazing spot stands this far (carapace widths) from the rock: past the legs' reach. */
+        const val GLASS_ROCK_L = 1.9
         const val FIT_CLEAR_CM = 0.05
         const val HOME_OUT_MAX_CM = 2.5
         /** Seconds pressed into the crevice after a dash, then extra wary for [WARY_S] [L]. */
