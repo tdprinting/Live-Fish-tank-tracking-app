@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>ReefLive</title>
+<meta name="description" content="Track your reef tank and watch a live simulation of it.">
+<meta name="theme-color" content="#061327">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ReefLive">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <button class="back" data-tab="live" aria-label="Back to the tank">‹ Tank</button>
+  <div class="brand"><span class="dot"></span>ReefLive</div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="live" role="tab">Live tank</button>
+    <button class="tab" data-tab="params" role="tab">Parameters</button>
+  </nav>
+</header>
+
+<main>
+  <section id="live" class="view active">
+    <canvas id="tank" aria-label="Live 3D view of the reef tank"></canvas>
+    <div id="torch" class="torch hidden"></div>
+    <div id="loading" class="loading"><div class="spinner"></div><p id="loadText">Loading the tank…</p></div>
+
+    <div class="chrome" id="chrome">
+      <div class="top">
+        <div class="seg" role="tablist" aria-label="Mode">
+          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button><button data-mode="mine" data-ico="fish">My tank</button>
+        </div>
+        <button class="status" id="statusBtn" aria-label="How is the tank doing?">
+          <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
+        </button>
+      </div>
+      <button class="hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
+
+      <div class="sheet glass hidden" id="card"></div>
+      <div class="fish glass hidden" id="fish"></div>
+      <div class="follow hidden" id="follow"></div>
+      <div class="fcam hidden" id="followCam" aria-label="Camera">
+        <button class="fcbtn closer" data-zoom="1" aria-label="Closer"><b>＋</b><span>Closer</span></button>
+        <button class="fcbtn further" data-zoom="-1" aria-label="Further"><b>－</b><span>Further</span></button>
+        <button class="fcbtn turn" data-orbit="1" aria-label="Turn around the fish"><b>↻</b><span>Turn</span></button>
+      </div>
+      <div class="shelfbar glass hidden tone-orange" id="shelfbar"></div>
+      <nav class="rail glass" id="rail"></nav>
+    </div>
+    <button class="pill glass showchrome hidden" id="showChrome">👁 Show buttons</button>
+    <div class="saver hidden" id="saver" aria-label="Screensaver: tap to exit"><div class="saver-black" id="saverBlack"></div><div class="saver-caption" id="saverCaption"></div><div class="saver-hint" id="saverHint">Tap to exit</div></div>
+    <div class="cleanhint glass hidden" id="cleanHint">Drag the Flipper across the glass <button class="btn small" id="cleanDone">Done</button></div>
+    <div class="subui hidden" id="subui">
+      <div class="subtop">
+        <div class="subinfo glass" id="subInfo">🟡 Tap a fish to watch it</div>
+        <button class="subexit" id="subDone">✕ Leave sub</button>
+      </div>
+      <div class="subopts">
+        <button class="subopt" id="subGhost" aria-pressed="false">👻 <span>Invisible</span></button>
+        <button class="subopt" id="subCam" aria-pressed="false">🎥 <span>Inside</span></button>
+        <button class="subopt" id="subLight" aria-pressed="true">💡 <span>Light</span></button>
+      </div>
+      <div class="subwatch glass idle" id="subWatch">
+        <div class="swhead"><button class="swnav" id="subPrev" aria-label="Previous fish">◀</button><strong id="subWatchName"></strong><button class="swnav" id="subNext" aria-label="Next fish">▶</button></div>
+        <div class="swmodes">
+          <button class="swmode" data-mode="HOVER">🫧 Hover</button><button class="swmode" data-mode="CIRCLE">🔄 Circle</button><button class="swmode" data-mode="ALONGSIDE">🐟 Swim along</button>
+        </div>
+        <button class="swletgo" id="subLetGo">Let go</button>
+      </div>
+      <div class="subjoywrap"><div class="subjoy glass" id="subJoy" aria-label="Steer the submarine"><div class="knob" id="subKnob"></div></div><span class="sublabel" id="subJoyLabel">Drift &amp; steer</span></div>
+      <div class="subud"><button class="subbig" id="subUp" aria-label="Go up">▲<span>Up</span></button><button class="subbig" id="subDown" aria-label="Go down">▼<span>Down</span></button></div>
+    </div>
+    <div class="toast glass hidden" id="toast"></div>
+
+    <div class="overlay hidden" id="micro">
+      <div class="ov-head"><strong>🔬 Look closer</strong><button class="btn small ghost" id="microClose">Back to tank</button></div>
+      <div class="pills" id="microScenes"></div>
+      <div class="pills" id="microZooms"></div>
+      <canvas id="microCanvas"></canvas>
+      <div class="micro-info" id="microInfo"></div>
+    </div>
+
+    <div class="overlay hidden" id="lapse">
+      <div class="ov-head"><strong>⏱ Time-lapse</strong><button class="btn small ghost" id="lapseClose">Close</button></div>
+      <div id="lapseBody"></div>
+    </div>
+
+    <dialog id="news" class="glass">
+      <h2 id="newsTitle">What's new</h2>
+      <ul id="newsList" class="tips news"></ul>
+      <form method="dialog" class="row-gap end"><button class="btn">Cool!</button></form>
+    </dialog>
+
+    <dialog id="mytank" class="glass">
+      <h2>Set up your own tank</h2>
+      <p class="muted">Pick a tank. It starts clean and empty, then add any animals you like from Add life. Everything is saved in this browser: names, personalities, how much they grow.</p>
+      <div id="mytankList" class="builds"></div>
+      <div class="row-gap end"><button class="btn ghost" id="mytankClose">Not now</button></div>
+    </dialog>
+
+    <dialog id="tips" class="glass">
+      <h2 id="tipsTitle"></h2>
+      <ol id="tipsList" class="tips"></ol>
+      <form method="dialog" class="row-gap end"><button class="btn">Got it</button></form>
+    </dialog>
+  </section>
+
+  <section id="params" class="view">
+    <div class="wrap">
+      <div class="row-between">
+        <h1>Water parameters</h1>
+        <button class="btn" id="logBtn">＋ Log a test</button>
+      </div>
+      <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
+      <div id="paramGrid" class="grid"></div>
+      <h2>History</h2>
+      <div id="history" class="history"></div>
+      <div class="row-gap">
+        <button class="btn ghost" id="exportBtn">Export backup</button>
+        <label class="btn ghost">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="logDialog" class="glass">
+  <form method="dialog" id="logForm">
+    <h2>Log a test</h2>
+    <label class="field">When<input type="datetime-local" id="logWhen" required></label>
+    <div id="logFields" class="fields"></div>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save" id="logSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="install" class="install glass hidden">
+  <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>
+  <button class="icon-btn" id="installClose" aria-label="Dismiss">✕</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

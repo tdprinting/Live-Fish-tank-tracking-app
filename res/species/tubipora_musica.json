@@ -1,0 +1,100 @@
+{
+  "id": "tubipora_musica",
+  "kind": "CORAL",
+  "common": "Organ pipe coral",
+  "scientific": "Tubipora musica",
+  "family": "Tubiporidae",
+  "maxLengthCm": 30,
+  "typicalAdultCm": 15,
+  "growthCmPerYear": 2,
+  "lifespanYears": 30,
+  "tolerance": {
+    "temp": {
+      "optLo": 25,
+      "optHi": 28,
+      "tolLo": 24,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.02,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 8.0,
+      "tolHi": 8.4,
+      "lethalLo": 7.9,
+      "lethalHi": 8.8
+    },
+    "alk": {
+      "optLo": 7.0,
+      "optHi": 11.0,
+      "tolLo": 6.0,
+      "tolHi": 12.0,
+      "lethalLo": 4.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.08
+    },
+    "no3": {
+      "optHi": 25.0,
+      "tolHi": 50.0,
+      "lethalHi": 100.0
+    },
+    "po4": {
+      "optHi": 0.15,
+      "tolHi": 0.25,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/organ_pipe.glb",
+  "colors": {
+    "primary": "#9A2A2A",
+    "secondary": "#B8C97A",
+    "accent": "#E8E0C8"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.5,
+    "lightHi": 0.9,
+    "flow": "MODERATE",
+    "growth": "Slow",
+    "aggression": "None",
+    "fluorescence": 0.2
+  },
+  "hardiness": 0.55,
+  "careLevel": "Moderate",
+  "reefSafe": "Yes",
+  "dietSummary": "Photosynthetic; baby brine and rotifers help.",
+  "temperamentSummary": "Red calcite tubes topped with feathery 8-tentacle polyps.",
+  "careNotes": [
+    "Needs bright light and moderate flow that does not batter it.",
+    "Previously logged as aiptasia at the Kenya base."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT"
+  ],
+  "feedsPerDay": 0,
+  "starvationDays": 9999
+}
