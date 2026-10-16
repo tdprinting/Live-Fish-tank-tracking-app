@@ -37,6 +37,10 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
         @Ev(Evidence.DESIGN_ESTIMATE, "cephalopod_squid §5 burial sequence") const val BURY_S = 8.0
         /** Eyes stay above the sand: depth of the mantle centre below the surface as a fraction of the body depth. */
         const val BURY_DEPTH = 0.32
+        /** Sand over the mantle once buried (cm): a thin layer, the eyes stay out. */
+        const val COVER_CM = 0.4
+        /** Steepest it pitches its body while swimming (sin of the angle): it swims level on its fins. */
+        const val MAX_PITCH = 0.35
         /** Strike reach (BL, mantle tip to tentacle club) and the stalk distance it closes to before striking. */
         @Ev(Evidence.ANALOGY, "cephalopod_squid §5 Hanlon 1997 paralarval attack 12 BL/s; adult reach est.") const val STRIKE_BL = 0.9
         /** Hunger relief of one pod-sized catch (minutes of hunger rise) at pod index 1 (design estimate). */
@@ -59,8 +63,10 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     val rig: SquidRig = o.limbRig as? SquidRig ?: SquidRig()
-    /** Where it buries by day: open sand near cover, away from the hawkfish perches. */
+    /** Where it buries by day: open sand near cover, away from the hawkfish perches, deep enough to dig into. */
     var bed: Vec3; private set
+    /** The way it lies in its bed (unit, along x): its trench runs back from the head that way. */
+    private var bedDir = Vec3.X
     var buried = false; private set
     /** 0..1 light-organ symbiont population (vented at lights-on, regrows through the day). */
     var symbionts = 1.0; private set
@@ -103,14 +109,87 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
             val z = c.rng.range(5.0, r.widthCm - 3.0)
             val p = Vec3(x, sand.surfaceY(x, z), z)
             val d = r.sdf.dist(p + Vec3.Y * 1.5)
-            if (d < 3.0) continue
+            if (d < 3.0 || !fitsAt(x, z, 1.0) && !fitsAt(x, z, -1.0)) continue
             val s = -0.08 * d + r.sdf.cover(p + Vec3.Y * 2.0) + hs.sumOf { min(it.distanceTo(p), 40.0) * 0.02 } + 0.3 * c.rng.nextDouble()
             if (s > bs) { bs = s; best = p }
         }
         return best ?: Vec3(r.lengthCm * 0.3, sand.surfaceY(r.lengthCm * 0.3, r.widthCm * 0.6), r.widthCm * 0.6)
     }
 
-    private fun buriedPos(): Vec3 = Vec3(bed.x, sand.surfaceY(bed.x, bed.z) - BURY_DEPTH * bodyHalfDepth() * 2 + bodyHalfDepth(), bed.z)
+    /** The trench it digs: the mantle and head, a body depth wide, the body less a little, under a thin cover. */
+    private val slotLen: Double get() = 0.8 * o.lengthCm
+    private val slotW: Double get() = o.species.depthRatio * o.lengthCm
+    private val slotThick: Double get() = 0.8 * slotW
+    private fun slotHead(x: Double, z: Double, ux: Double) = Vec3(x + ux * 0.5 * slotLen, 0.0, z)
+    private fun fitsAt(x: Double, z: Double, ux: Double): Boolean {
+        val h = slotHead(x, z, ux)
+        return sand.canBury(h.x, h.z, ux, 0.0, slotLen, slotW, slotThick, COVER_CM)
+    }
+
+    /**
+     * Buried: the head at the front of its trench with the eyes at the sand line, the mantle under the cover. Without
+     * a trench (abstract mode, or the sand was too shallow) BURY_DEPTH of the body sits below the live surface.
+     */
+    private fun buriedPos(): Vec3 {
+        sand.buriedOf(o.id)?.let { return Vec3(it.headX, it.bodyY + 0.35 * it.thickCm, it.headZ) }
+        return Vec3(bed.x, sand.surfaceY(bed.x, bed.z) - BURY_DEPTH * bodyHalfDepth() * 2 + bodyHalfDepth(), bed.z)
+    }
+
+    /** Starts the trench at the bed (null when the sand there is too shallow now). */
+    private fun startTrench(): com.reeflive.core.sim.SandBed.BuriedBody? {
+        sand.buriedOf(o.id)?.let { return it }
+        val ux = if (fitsAt(bed.x, bed.z, bedDir.x)) bedDir.x else -bedDir.x
+        bedDir = Vec3(ux, 0.0, 0.0)
+        val h = slotHead(bed.x, bed.z, ux)
+        return sand.startBurial(o.id, h.x, h.z, ux, 0.0, slotLen, slotW, slotThick, COVER_CM)
+    }
+
+    /**
+     * One step of the trench: dug to [digTo], covered to [coverTo] ([SandBed.buryStep]). The funnel blows the sand out
+     * to the sides, not ahead of the eyes, so what landed in front is moved to the side rims (the cover comes back
+     * from there).
+     */
+    private fun dig(b: com.reeflive.core.sim.SandBed.BuriedBody, digTo: Double, coverTo: Double) {
+        sand.buryStep(b, digTo, coverTo)
+        if (b.rim[0] <= 1e-6) return
+        val t = sand.takeExact(b.rimX(0), b.rimZ(0), b.rim[0], 1.0)
+        b.rim[0] -= t
+        for (k in 1..2) { sand.depositExact(b.rimX(k), b.rimZ(k), 0.5 * t, 1.0); b.rim[k] += 0.5 * t }
+    }
+
+    /** Lowest the head may go so no part of the body is in the sand (the body trails straight back from the head). */
+    private fun clearY(p: Vec3, h: Vec3): Double {
+        val back = h.horizontal().normalized(Vec3.X)
+        var y = -1e9
+        for (k in 0..4) {
+            val s = k / 4.0 * o.lengthCm
+            val q = p - back * s
+            // the body may tilt: whatever the tail drops below the head adds to the clearance
+            y = max(y, sand.surfaceY(q.x, q.z) + bodyHalfDepth() + 0.3 + max(0.0, h.y) * s)
+        }
+        return y
+    }
+
+    /**
+     * After steering: out of the sand, nothing goes into it. Squid swim level (Hanlon 1997), so the pitch is held
+     * shallow, and the head is lifted until the whole body clears the live sand surface.
+     */
+    override fun postSteer(c: Ctx) {
+        if (buried || o.posture == 5 || !o.alive) return
+        var h = o.heading
+        if (kotlin.math.abs(h.y) > MAX_PITCH) {
+            val flat = h.horizontal().normalized(Vec3.X)
+            h = Vec3(flat.x, if (h.y > 0) MAX_PITCH else -MAX_PITCH, flat.z).normalized(flat)
+        }
+        val floor = clearY(o.pos, h)
+        if (o.pos.y >= floor && h === o.heading) return
+        o.heading = h
+        if (o.pos.y < floor) {
+            o.pos = Vec3(o.pos.x, min(floor, c.rock.waterLevelCm - 1.0), o.pos.z)
+            if (o.vel.y < 0) o.vel = Vec3(o.vel.x, 0.0, o.vel.z)
+        }
+        o.spline.reset(o.pos, o.heading)
+    }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
         if (night) Rest(c.safe(Vec3(bed.x, c.zoneY(0.2), bed.z)), o.heading.horizontal().normalized(Vec3.X))
@@ -215,8 +294,9 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
             // a scare far from the bed: bury where it is if there is open sand
             if (!buried && o.pos.horizontal().distanceTo(bed.horizontal()) > 30) {
                 val here = Vec3(o.pos.x, sand.surfaceY(o.pos.x, o.pos.z), o.pos.z)
-                if (c.rock.sdf.dist(here + Vec3.Y * 1.5) > 3.0) bed = here
+                if (c.rock.sdf.dist(here + Vec3.Y * 1.5) > 3.0 && (fitsAt(here.x, here.z, 1.0) || fitsAt(here.x, here.z, -1.0))) bed = here
             }
+            bedDir = Vec3(if (o.heading.x >= 0) 1.0 else -1.0, 0.0, 0.0)
         }
         override fun update(c: Ctx, out: SteerIntent) {
             timer += c.dt
@@ -226,14 +306,20 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
                     out.seek(c.viaOpenWater(top), o.cruiseSpeed * 1.2, arrive = 2.0, urgency = 0.4)
                     out.hover = true
                     rig.armSpreadTarget = 0.2
-                    if (o.pos.distanceTo(top) < 2.5 || timer > 40) { phase = 1; timer = 0.0; nextPuff = 0.0 }
+                    if (o.pos.distanceTo(top) < 2.5 || timer > 40) {
+                        if (startTrench() == null) { bed = findBed(c); timer = 0.0; return }
+                        phase = 1; timer = 0.0; nextPuff = 0.0
+                    }
                 }
                 1 -> {
-                    // settle into the hollow blown by the funnel; arms sweep sand onto the back
+                    // the funnel blows a trench (the sand thrown to the rim), it settles in as it deepens, then the
+                    // arms sweep the sand back over the mantle: the body goes into a hole it made, never through sand
                     val k = smoothstep(0.0, BURY_S, timer)
-                    val p = top.lerp(buriedPos(), k)
-                    out.place(p, o.heading.horizontal().normalized(Vec3.X), Vec3.Y, 4.0)
-                    out.posture = if (k > 0.5) 5 else 0
+                    val body = sand.buriedOf(o.id)
+                    if (body != null) dig(body, min(1.0, timer / (0.6 * BURY_S)), (timer / BURY_S - 0.6) / 0.4)
+                    val p = top.lerp(buriedPos(), smoothstep(0.0, 0.6 * BURY_S, timer))
+                    out.place(p, bedDir, Vec3.Y, 4.0)
+                    out.posture = 5
                     rig.armSpreadTarget = 0.8
                     rig.armRaiseTarget = 0.6 * sin(timer * 4.0).coerceAtLeast(0.0)
                     rig.jet = 0.15
@@ -243,14 +329,14 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
                         sand.sift(bed.x, bed.z, 1.5, 0.2)
                     }
                     if (timer >= BURY_S) {
+                        sand.buriedOf(o.id)?.let { dig(it, 1.0, 1.0) }
                         phase = 2; buried = true; burials++
-                        // the hollow: a shallow pit under it, the sand thrown on its back and around the rim
-                        sand.dig(bed.x, bed.z, 0.8, 1.6)
-                        sand.deposit(bed.x, bed.z, 0.8, 3.0)
                     }
                 }
                 else -> {
-                    out.place(buriedPos(), o.heading.horizontal().normalized(Vec3.X), Vec3.Y, 3.0)
+                    // already buried when it arrived (placed by day): its trench is made at once
+                    if (sand.buriedOf(o.id) == null) startTrench()?.let { dig(it, 1.0, 1.0) }
+                    out.place(buriedPos(), bedDir, Vec3.Y, 3.0)
                     out.posture = 5
                     o.sleeping = c.activity < 0.5
                     rig.armSpreadTarget = 0.1
@@ -259,8 +345,9 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
             }
         }
         override fun exit(c: Ctx) {
-            if (buried) {
-                // emerging: a little puff of sand, shaken off
+            if (sand.buriedOf(o.id) != null) {
+                // emerging: it pushes up out of its trench, throwing the cover aside, and shakes off a puff of sand
+                sand.emergeFrom(o.id, burstShare = 1.0)
                 sand.puff(bed.x, sand.surfaceY(bed.x, bed.z) + 0.5, bed.z, 6, 4.0, finesShare = 0.5)
             }
             buried = false
@@ -386,7 +473,8 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 else -> {
                     // handling: arms wrapped round the prey, tentacles drawn back; drifts down a little
-                    out.place(o.pos + Vec3.Y * (-0.3 * c.dt), o.heading, null, 2.0)
+                    val down = o.pos + Vec3.Y * (-0.3 * c.dt)
+                    out.place(down.withY(max(down.y, clearY(down, o.heading))), o.heading, null, 2.0)
                     rig.armSpreadTarget = 0.0
                     rig.darkTarget = if (caught) 0.55 else 0.3
                     if (timer > handleS) finish(c, if (caught) c.rng.range(60.0, 180.0) else c.rng.range(5.0, 15.0))
