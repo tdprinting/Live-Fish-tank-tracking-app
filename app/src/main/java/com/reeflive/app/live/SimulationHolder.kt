@@ -6,6 +6,7 @@ import com.reeflive.app.data.repo.CustomTankStore
 import com.reeflive.app.data.repo.LightScheduleRepository
 import com.reeflive.app.data.repo.LivestockRepository
 import com.reeflive.app.data.repo.MeasurementRepository
+import com.reeflive.core.geom.HeightField
 import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
@@ -77,6 +78,8 @@ class SimulationHolder(
     private val clock: Clock = Clock.SYSTEM,
     /** "Rocks can shift" (Settings): the dynamic rockscape for the tank and its sandbox forks. */
     private val dynamicRocks: Flow<Boolean> = flowOf(true),
+    /** "Solid bodies" (Settings): the body collision for the tank, its sandbox forks and a custom tank. */
+    private val solidBodies: Flow<Boolean> = flowOf(true),
     /** The tank's rock layout between launches (rocks that settled or toppled stay where they fell). */
     private val rockStore: RockStore? = null,
     private val customStore: CustomTankStore? = null,
@@ -155,6 +158,7 @@ class SimulationHolder(
     }
 
     private var rocksDynamic = true
+    private var bodiesSolid = true
     private var savedRocks: String? = null
 
     init {
@@ -164,6 +168,14 @@ class SimulationHolder(
                 reality?.enqueue(Command.DynamicRocks(on))
                 sandbox?.enqueue(Command.DynamicRocks(on))
                 customSim?.enqueue(Command.DynamicRocks(on))
+            }
+        }
+        scope.launch {
+            solidBodies.collect { on ->
+                bodiesSolid = on
+                reality?.enqueue(Command.SolidBodies(on))
+                sandbox?.enqueue(Command.SolidBodies(on))
+                customSim?.enqueue(Command.SolidBodies(on))
             }
         }
         scope.launch {
@@ -192,6 +204,7 @@ class SimulationHolder(
             val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
             sim.speed = 1.0
             customSim?.let { lastWallMs.remove(it) }
+            sim.solidBodies = bodiesSolid
             customSim = sim
             customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed)
             customLoaded = true
@@ -317,8 +330,15 @@ class SimulationHolder(
         if (rock == null) {
             rock = runCatching {
                 val am = assets ?: error("no assets")
-                RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() })
-            }.getOrElse { RockData.defaultTank() }
+                RockData.fromFiles(am.open("sim/rock_sdf.bin").use { it.readBytes() }, am.open("sim/anchors.json").bufferedReader().use { it.readText() }, repairBake = true)
+            }.getOrElse { RockData.defaultTank() }.also { r ->
+                // the animals stand on the sand that is drawn: tank.glb's sand mesh (slope, mounds at the rock feet, lanes,
+                // spoil fan, rubble), rasterized once; the sim's dynamic sand bed adds its digging on top like static.vert
+                r.sandBase = runCatching {
+                    val am = assets ?: error("no assets")
+                    HeightField.fromGlb(am.open("models/tank.glb").use { it.readBytes() }, r.lengthCm, r.widthCm)
+                }.getOrNull()
+            }
         }
     }
 
@@ -345,6 +365,7 @@ class SimulationHolder(
         if (prev != null) sim.restoreRocks(prev.rockState())
         else sim.restoreRocks(rockStore?.load().orEmpty().also { savedRocks = it })
         sim.setDynamicRocks(rocksDynamic)
+        sim.solidBodies = bodiesSolid
         appliedValues = latestValues
         reality?.let { lastWallMs.remove(it) }
         reality = sim
@@ -397,6 +418,7 @@ class SimulationHolder(
         if (save == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull()
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
+        sim.solidBodies = bodiesSolid
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
         // the time away, at 1x: the tank lived on while the app was closed

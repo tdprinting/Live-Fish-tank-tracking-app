@@ -168,6 +168,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double, simOffset: Double = -1.0) {
+        surface = s
         val L = max(o.lengthCm, 0.3)
         val d0 = s.dist(o.pos)
         // (the Sally Lightfoot stands on long legs: its body may be over a dip, its feet on the rims round it)
@@ -361,7 +362,10 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         oHeadPrev = o.heading
 
         val hl = o.limbRig as? HermitLegs
-        if (hermit != null && hl != null) poseHermit(o, hl, hermit, s, L, dt)
+        if (hermit != null && hl != null) {
+            hl.out.copyInto(tickLegs, 0, LEG_POSE0, hl.out.size)
+            poseHermit(o, hl, hermit, s, L, dt)
+        }
         if (crab != null && cl != null) poseCrab(o, cl, crab, s, L)
 
         o.seatOn = true
@@ -369,6 +373,58 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         o.seatPos = pos
         o.seatUp = up
     }
+
+    /**
+     * Moves the seated body [d] (the body collision pushed it: off another animal, out of a rock edge the contact
+     * solve does not see); the sim position stays, and the next update warm-starts from there.
+     */
+    internal fun carry(o: Organism, d: Vec3, settle: ((Vec3) -> Boolean)? = ANY) {
+        pos += d
+        val s = surface
+        val L = max(o.lengthCm, 0.3)
+        // shoves add up over a tick's passes: the drawn body stays within reach of the animal the sim walks
+        val off = pos - o.pos
+        val reach = max(CARRY_REACH_L * L, 1.0)
+        if (off.length() > reach) pos = o.pos + off.normalized(up) * reach
+        if (s != null) {
+            // still resting on the surface after a shove along it (round a curve, across a lip): back down onto it
+            // (toward the surface nearest the lowest contact, which on a ceiling or in a crevice is not along up)
+            // ([settle] null: not after a shove off another animal, it may climb onto it; [settle] refuses a settled
+            // position that would put the body into what pushed it, equipment it climbed)
+            val g = if (settle != null) lowestContact(s, pos, L) else 0.0
+            if (settle != null && g > CARRY_SETTLE_CM) {
+                val w = lowest; val e = 0.05
+                val n = Vec3(s.dist(w + Vec3(e, 0.0, 0.0)) - s.dist(w - Vec3(e, 0.0, 0.0)),
+                    s.dist(w + Vec3(0.0, e, 0.0)) - s.dist(w - Vec3(0.0, e, 0.0)),
+                    s.dist(w + Vec3(0.0, 0.0, e)) - s.dist(w - Vec3(0.0, 0.0, e))).normalized(up)
+                val to = pos - n * (g - FOOT_TOL_CM)
+                if (settle(to)) pos = to
+            }
+            // the planted feet stay where they stand: the legs are solved again from the moved body (dt 0: no gait
+            // step, the bends do not relax)
+            val rig = o.limbRig as? HermitLegs
+            val m = hermit
+            // (only when the move put one into the surface: solved twice a tick, the legs' eased pose jumps)
+            if (rig != null && m != null && legsPlanted && (0 until 4).any { legInside(s, m, it, L, rig.out) }) {
+                poseHermit(o, rig, m, s, L, 0.0)
+                // (eased from where the tick began, not from the first solve: two eased steps a tick leapt)
+                for (i in LEG_POSE0 until rig.out.size) if (i != HermitLegs.PLANTED_FLAG) {
+                    val t0 = tickLegs[i - LEG_POSE0]
+                    rig.out[i] = rig.out[i].coerceIn(t0 - MAX_STEP, t0 + MAX_STEP)
+                }
+            }
+        }
+        o.seatPos = pos
+    }
+
+    /** The hermit's leg pose entries (from [LEG_POSE0]) as the tick began, before its first solve. */
+    private val tickLegs = FloatArray(HermitLegs.COUNT * 4 - LEG_POSE0)
+
+    /** Whether the bodies are solid (Simulation.solidBodies); off, the seat is as before them. Set by the Simulation. */
+    var solid = false
+
+    /** The surface of the last [update] ([carry] checks the legs against it). */
+    private var surface: CrawlSurface? = null
 
     /** Body forward on [up]: the sim heading in that plane, or the last forward when the heading is nearly along up. */
     private fun fwdOn(h: Vec3, up: Vec3, prev: Vec3, h0: Vec3): Vec3 {
@@ -515,6 +571,51 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         return null
     }
 
+    /**
+     * How deep the seated body's contact points (shell, shield, hips, claw pivots) are in the rock and sand now (cm,
+     * ≤ 0 = clear): the seated body's own no-clipping measure (the no-overlap checks, HermitSeatTest).
+     */
+    fun contactDepth(s: CrawlSurface, L: Double): Double = -lowestContact(s, pos, L)
+
+    /**
+     * The move that takes the deepest of the contact points out of [rock] (its distance field or the sand) by [skin],
+     * along that surface's normal; null when every point is clear.
+     */
+    fun contactPush(rock: RockData, L: Double, skin: Double): Vec3? {
+        val c = shape.contacts
+        var worst = skin; var at: Vec3? = null; var sand = false
+        var i = 0
+        while (i < c.size) {
+            val w = pos + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
+            val dr = -rock.sdf.dist(w); val ds = rock.floorY(w.x, w.z) - w.y
+            if (dr > worst) { worst = dr; at = w; sand = false }
+            if (ds > worst) { worst = ds; at = w; sand = true }
+            i += 3
+        }
+        val w = at ?: return null
+        if (sand) return Vec3.Y * (worst + skin)
+        val e = 0.05
+        val n = Vec3(
+            rock.sdf.dist(w + Vec3(e, 0.0, 0.0)) - rock.sdf.dist(w - Vec3(e, 0.0, 0.0)),
+            rock.sdf.dist(w + Vec3(0.0, e, 0.0)) - rock.sdf.dist(w - Vec3(0.0, e, 0.0)),
+            rock.sdf.dist(w + Vec3(0.0, 0.0, e)) - rock.sdf.dist(w - Vec3(0.0, 0.0, e)),
+        ).normalized(up)
+        return n * (worst + skin)
+    }
+
+    /** [contactDepth] against [rock]'s distance field and floor (the body collision's view of the rock and sand). */
+    fun contactDepth(rock: RockData, L: Double): Double {
+        val c = shape.contacts
+        var worst = Double.NEGATIVE_INFINITY
+        var i = 0
+        while (i < c.size) {
+            val w = pos + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
+            worst = max(worst, max(-rock.sdf.dist(w), rock.floorY(w.x, w.z) - w.y))
+            i += 3
+        }
+        return worst
+    }
+
     /** Distance of the lowest contact point with the body origin at [p] (the point itself goes to [lowest]). */
     /** The Sally Lightfoot's drawn body is waiting at [waitPos], the last seat where it fitted (the sim is in a gap). */
     var waiting = false; private set
@@ -650,7 +751,26 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
 
     /** Foothold of leg [k] at stance progress [e] (+1 = touch-down, −1 = lift-off). */
     private fun footFor(s: CrawlSurface, m: LegModel, k: Int, e: Double, L: Double): Vec3 =
-        if (m is CrabModel) crabFoothold(s, m, k, e, L) else foothold(s, m, k, stroke[k] * e, L)
+        if (m is CrabModel) crabFoothold(s, m, k, e, L) else hermitFoothold(s, m, k, stroke[k] * e, L)
+
+    /**
+     * [foothold] of a hermit's leg. With solid bodies a foot whose rest tip has no ground within the cast (the shell
+     * on a ledge or a rock crest, the surface falling away under the leg) does not hang in the water: it reaches
+     * for the nearest surface within the hip's reach, as the Sally Lightfoot's does ([crabFoothold]). Off, as before.
+     */
+    private fun hermitFoothold(s: CrawlSurface, m: LegModel, k: Int, yaw: Double, L: Double): Vec3 {
+        val f = foothold(s, m, k, yaw, L)
+        if (!solid || onSurface(s, f, L)) return f
+        val w = footPoint(m, k, yaw, L)
+        val hip = world(m.hip[k * 3], m.hip[k * 3 + 1], m.hip[k * 3 + 2], L)
+        for (r in CRAB_REACH_TRY) {
+            val q = if (r >= 1.0) w else hip + (w - hip) * r
+            val p = project(s, q, L)
+            if (onSurface(s, p, L) && reachable(m, k, p, L)) return p
+            if (r < 1.0) { val c = castFoot(s, q, L); if (onSurface(s, c, L) && reachable(m, k, c, L)) return c }
+        }
+        return f
+    }
 
     // ------------------------------------------------------------------ Sally Lightfoot
 
@@ -740,7 +860,9 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             s.dist(posedLeg(m, k, m.mid, k * 3, MID_T, L, out)) < -FOOT_TOL_CM
 
     private fun clearLegs(rig: LimbRig) {
-        for (i in 40 until rig.out.size) rig.out[i] = 0f
+        // (a hermit's legs eased back to rest a step a tick, as every pose entry: the flag below already hands the legs to the gait)
+        for (i in LEG_POSE0 until rig.out.size)
+            rig.out[i] = if (rig !is HermitLegs || i == HermitLegs.PLANTED_FLAG || !solid) 0f else ease(rig.out[i], 0f)
         if (rig !is HermitLegs) return
         rig.out[8 * 4 + 2] = 0f; rig.out[9 * 4 + 2] = 0f; rig.out[6 * 4 + 3] = 0f
         antennaBend = 0.0; antennuleBend = 0.0; eyeBend = 0.0
@@ -772,14 +894,18 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
      * Foothold for leg [k] at stroke angle [yaw] (the shader's fore-aft swing about the hip): the rest tip, swung,
      * cast down onto the surface from above; inside a wall it is projected out instead; over an edge it hangs.
      */
-    private fun foothold(s: CrawlSurface, m: LegModel, k: Int, yaw: Double, L: Double): Vec3 {
+    private fun foothold(s: CrawlSurface, m: LegModel, k: Int, yaw: Double, L: Double): Vec3 =
+        castFoot(s, footPoint(m, k, yaw, L), L)
+
+    /** Leg [k]'s rest tip swung [yaw] about its hip, in world space (before it is cast onto the surface). */
+    private fun footPoint(m: LegModel, k: Int, yaw: Double, L: Double): Vec3 {
         val sg = if (m.hip[k * 3 + 2] >= 0) 1.0 else -1.0
         val ang = yaw * sg
         val hx = m.hip[k * 3]; val hz = m.hip[k * 3 + 2]
         val vx = m.tip[k * 3] - hx; val vz = m.tip[k * 3 + 2] - hz
         val c = kotlin.math.cos(ang); val sn = sin(ang)
         // rotation about +Y: x' = x c + z s, z' = −x s + z c
-        return castFoot(s, world(hx + vx * c + vz * sn, m.tip[k * 3 + 1], hz - vx * sn + vz * c, L), L)
+        return world(hx + vx * c + vz * sn, m.tip[k * 3 + 1], hz - vx * sn + vz * c, L)
     }
 
     /** A foothold over model point [w]: cast down onto the surface from above; inside a wall it is projected out; over an edge it hangs. */
@@ -1003,6 +1129,12 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val REST_CM = 0.02
         const val PEN_TOL_CM = 0.005
         const val FOOT_TOL_CM = 0.03
+        /** A carried body whose lowest contact is further than this off the surface is set back down onto it (cm). */
+        const val CARRY_SETTLE_CM = 0.1
+        /** [carry]'s settle accepted wherever it lands. */
+        val ANY: (Vec3) -> Boolean = { true }
+        /** Farthest a carried body may sit from the sim position (body lengths). */
+        const val CARRY_REACH_L = 0.6
         /** Foot tip radius (model units): the dactyl tips sit this far off the ground in the model. */
         const val FOOT_R = 0.004
         /** Stance / swing split of the step cycle (`fish.vert`: swing for the first 40 %). */
@@ -1049,6 +1181,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         const val FEELER_YAW = 0.6
         const val BEND_RELAX = 0.8
         const val MAX_STEP = 0.45f
+        /** First pose entry the seat solves for a hermit (the planted legs, then the chelae and the flag). */
+        private const val LEG_POSE0 = 40
         /** A leg with no clear pose pulls in (and back out) over two ticks. */
         const val TUCK_STEP = 0.5
         private val BENDS = doubleArrayOf(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)

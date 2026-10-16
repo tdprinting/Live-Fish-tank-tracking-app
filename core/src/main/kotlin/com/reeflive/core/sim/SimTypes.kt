@@ -45,6 +45,8 @@ sealed class Command {
      * rock (no physics at all). Rocks that already moved stay where they came to rest either way.
      */
     data class DynamicRocks(val on: Boolean) : Command()
+    /** Solid bodies ([BodyCollision]): no animal passes into rock, sand, glass, decor or another animal. Off = as before. */
+    data class SolidBodies(val on: Boolean) : Command()
     /**
      * Sandbox "Rockslide": the sand is dug out from under one side of a rock that stands on sand (as a burrowing goby
      * would, all at once), so with dynamic rocks on it settles or topples. [rock] picks it by name (null: any).

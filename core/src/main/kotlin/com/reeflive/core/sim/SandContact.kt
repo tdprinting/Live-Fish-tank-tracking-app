@@ -23,6 +23,13 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
     /** Ticks on which a body was lifted out of the sand (tests, tuning). */
     var lifts = 0L; private set
 
+    /**
+     * Whether [step] lifts bodies out of the sand itself. Off while the body collision runs (Simulation): then
+     * `BodyCollision.resolveEnv` is the one push-out path (its sand term reads [SandBed.surfaceY] through
+     * `RockData.floorY`) and this only moves the sand the bodies touch.
+     */
+    var pushOut = true
+
     /** Lifts [o] onto the live sand surface (clearance [clearance]); returns how deep (cm) it was in. */
     fun clamp(o: Organism): Double {
         if (exempt(o)) return 0.0
@@ -81,6 +88,10 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         return pen
     }
 
+    /** How deep (cm) [o]'s reference point is under its resting height on the sand, without moving it. */
+    private fun depth(o: Organism): Double =
+        if (exempt(o)) 0.0 else max(0.0, sand.surfaceY(o.pos.x, o.pos.z) + clearance(o) - o.pos.y)
+
     /** Nearest point within about [pen] of [p], resting on the sand, with [keep] cm to rock and off the glass; null if none. */
     private fun pinchExit(o: Organism, p: com.reeflive.core.geom.Vec3, pen: Double, keep: Double, sdf: com.reeflive.core.geom.Sdf): com.reeflive.core.geom.Vec3? {
         val m = (0.25 * o.lengthCm).coerceIn(0.6, 4.0)
@@ -122,8 +133,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
     fun step(organisms: List<Organism>, dt: Double, displace: Boolean) {
         if (++gc % 400 == 0) { val ids = organisms.mapTo(HashSet()) { it.id }; st.keys.retainAll(ids) }
         for (o in organisms) {
-            val pen = clamp(o)
-            liftBody(o, dt)
+            val pen = if (pushOut) clamp(o).also { liftBody(o, dt) } else depth(o)
             if (!displace || !o.alive) continue
             val p = o.pos
             val t = st.getOrPut(o.id) { St(p.x, p.z, 0.0, 0.0, false) }

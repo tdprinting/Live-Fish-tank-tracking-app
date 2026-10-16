@@ -56,7 +56,20 @@ fun sandSpot(c: Ctx, xr: ClosedFloatingPointRange<Double>, zr: ClosedFloatingPoi
     return p
 }
 
-fun surfaceOffset(c: Ctx) = 0.5 * c.o.species.depthRatio * c.L + 0.2
+/**
+ * Height of the crawling animal's spine point above the surface it walks on: the model's sole (legs, foot) sits on
+ * the surface ([BodyShapes]: 0 for snails, hermits, stars and the crab, whose models stand on their spine point; the
+ * shrimp stand on their legs about a quarter body length below it), plus a hair of clearance.
+ */
+fun surfaceOffset(c: Ctx) =
+    // a hermit is drawn on its seat (CrawlerSeat), not at its sim position: the sim walks half its depth off the surface,
+    // where the single-normal crawl step does not flip it between the faces of a crevice
+    // (without the solid bodies every crawler walks half its depth off the surface, as before them)
+    if (!c.sim.bodies.enabled || c.o.brainKind == com.reeflive.core.sim.BrainKind.HERMIT) 0.5 * c.o.species.depthRatio * c.L + 0.2
+    else com.reeflive.core.sim.BodyShapes.of(c.o.species).sole * c.L + CRAWL_SKIN_CM
+
+/** Gap between a crawler's sole and the surface (cm). */
+const val CRAWL_SKIN_CM = 0.08
 
 /** Wander along surfaces around a centre. */
 open class CrawlWander(val b: SpeciesBrain, val centre: (Ctx) -> Vec3, val radius: Double, val weight: (Ctx) -> Double, label: String = "Wandering") : Behavior("crawl", label) {
@@ -525,6 +538,8 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         const val SWAY_ROLL = 0.06
         /** Swim speed onto a client, cm/s: Lysmata swims up to and onto the fish (DESIGN ESTIMATE). */
         const val MOUNT_CM_S = 8.0
+        /** How fast it turns toward the client as it sets off (rad/s). */
+        const val MOUNT_TURN_RAD_S = 1.5
     }
 
     /** Leg-rock probability: predators 0.51, others 0.12 in full light (S:Caves19), up to ×1.6 in the dark. */
@@ -642,7 +657,10 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (!mounted && gap.length() > 0.6) {
                 // swim across head first, legs reaching for the fish
                 val step = gap.clampLength(MOUNT_CM_S * c.dt)
-                out.place(c.o.pos + step, gap.normalized(c.o.heading), Vec3.Y.lerp(cl.up, 0.5).normalized(Vec3.Y), 40.0)
+                // turning off the perch at a walking pace: the rigid body swung round in a tick or two hit the rock it
+                // stands on with its tail, and the push out of it threw the head on faster than it swims
+                val face = if (c.sim.bodies.enabled) Vec3.rotateToward(c.o.heading, gap.normalized(c.o.heading), MOUNT_TURN_RAD_S * c.dt) else gap.normalized(c.o.heading)
+                out.place(c.o.pos + step, face, Vec3.Y.lerp(cl.up, 0.5).normalized(Vec3.Y), 40.0)
                 cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
                 c.o.appendagePhase += c.dt * 6
                 return
@@ -778,7 +796,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     /** The disc keeps whatever heading it has (a brittle star has no front to turn). */
     private fun flatHeading() = o.heading.horizontal().normalized(Vec3.X)
 
-    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.sim.sand.surfaceY(home.x, home.z) + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
+    override fun restSpot(c: Ctx, night: Boolean) = Rest(Vec3(home.x, c.rock.floorY(home.x, home.z) + 0.4, home.z), flatHeading(), Vec3.Y, posture = 3)
 
     /** The open side of the hide (most clearance, a little toward the front glass), where the day arm tips poke out. */
     fun caveMouth(c: Ctx): Vec3 = mouthDir ?: run {
@@ -1120,7 +1138,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val p = if (buryAt == Vec3.ZERO) o.homePos else buryAt
-        return Rest(Vec3(p.x, c.sim.sand.surfaceY(p.x, p.z) + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
+        return Rest(Vec3(p.x, c.rock.floorY(p.x, p.z) + 0.1, p.z), Vec3.X, Vec3.Y, posture = 5)
     }
 
     override fun initialPlace(c: Ctx) {
@@ -1154,7 +1172,7 @@ class NassariusBrain(c: Ctx) : SpeciesBrain(c) {
                 val tilt = Math.toRadians(SIPHON_TILT_DEG)
                 val head = h * kotlin.math.cos(tilt) + Vec3.Y * kotlin.math.sin(tilt)
                 val up = h * -kotlin.math.sin(tilt) + Vec3.Y * kotlin.math.cos(tilt)
-                out.rest(Rest(r.pos.withY(c.sim.sand.surfaceY(r.pos.x, r.pos.z) - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
+                out.rest(Rest(r.pos.withY(c.rock.floorY(r.pos.x, r.pos.z) - BURY_FRAC * c.o.lengthCm), head, up, posture = 5), 1.0)
             }
             c.o.extension = 0.6 + 0.2 * sin(c.t * 0.5 + c.o.appendagePhase)   // siphon
         }
@@ -1586,13 +1604,22 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
 
     inner class HideCrevice : Behavior("hide", "Hiding in a crevice") {
         private val router = Router()
-        override fun enter(c: Ctx) { router.reset() }
         // after a dash home it stays pressed in for a minute or so before venturing out again
         override fun score(c: Ctx) = 0.7 * (1 - c.activity) + 0.12 + (if (softShell(c)) 0.35 else 0.0) + (if (c.t - lastDartAt < WARY_S) 0.4 else 0.0)
+        /** Where it is pressed in: the crevice spot, or as far in as its body went (the collision holds it there). */
+        private var seat: Vec3? = null
+        override fun enter(c: Ctx) { router.reset(); seat = null }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = restSpot(c, false)
-            if (c.o.pos.distanceTo(r.pos) > 2.0) { scuttle(c, out, router.next(c, r.pos), fast = false); return }
-            out.rest(r, 1.0)
+            val d = c.o.pos.distanceTo(r.pos)
+            val s0 = if (c.sim.bodies.enabled) seat else null
+            // (once in, a body held at the crevice mouth stays pressed there rather than scuttling off and back in)
+            if (if (s0 == null) d > 2.0 else d > 2.0 + 0.6 * c.L) { seat = null; scuttle(c, out, router.next(c, r.pos), fast = false); return }
+            if (!c.sim.bodies.enabled) { out.rest(r, 1.0); seat = null } else {
+            val s = if (s0 == null || c.o.pos.distanceTo(s0) > 0.3) c.o.pos.takeIf { s0 != null } ?: r.pos else s0
+            seat = s
+            out.rest(r.copy(pos = s), 1.0)
+            }
             legs.tucked = true
             // pressed flat in the crevice, now and then picking at the film just inside it
             if (sin(c.t * 0.21 + c.o.appendagePhase) > 0.6) legs.pick = 0.4
@@ -1602,8 +1629,12 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
 
     inner class Graze : Behavior("graze", "Grazing hair algae") {
         private var spot: Pair<Vec3, Vec3>? = null
+        private var atPatch = false
         private var next = 0.0
         private var dur = 30.0
+        /** Closest it got to the patch on the way, and when (an approach that stopped closing in grazes where it is). */
+        private var bestD = Double.MAX_VALUE
+        private var bestAt = 0.0
         override fun score(c: Ctx): Double {
             val w = c.sim.water.s
             // hair algae and the film on rock and glass (research 17 §3.3: scrapes biofilm, tears off algae)
@@ -1623,19 +1654,33 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
                     ?.takeIf { (p, n) -> fits(c, p, n) && legRoom(c, p, n) }
             }
             dur = c.rng.range(15.0, 45.0)
+            atPatch = false
+            bestD = Double.MAX_VALUE; bestAt = c.t
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val s = spot ?: run { finished = true; return }
             if (elapsed > dur + 40) { finished = true; return }   // unreachable spot
-            if (c.o.pos.distanceTo(s.first) > 1.5) { scuttle(c, out, s.first, fast = false); return }
+            // (once at the patch, a body the rock holds a little off the spot grazes on rather than scuttling back and forth)
+            val d = c.o.pos.distanceTo(s.first)
+            val solid = c.sim.bodies.enabled
+            if (!solid && d > 1.5) { scuttle(c, out, s.first, fast = false); return }
+            if (if (atPatch) d > 1.5 + 0.5 * c.L else d > 1.5) {
+                // (held off a step it shuffled to: it grazes on from here instead of re-approaching)
+                if (d < bestD - 0.5) { bestD = d; bestAt = c.t }
+                // (and an approach that stopped closing in, e.g. on the glass under a patch on the rock in front of it,
+                // grazes the film where it stands instead of circling under the patch until it gives up)
+                if (atPatch || c.t - bestAt > APPROACH_STALL_S) { spot = s.copy(first = c.o.pos) } else { scuttle(c, out, s.first, fast = false); return }
+            }
+            atPatch = true
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c); out.allowGlass = true
             if (c.t > next) {
                 next = c.t + 2
                 c.o.hunger = max(0.0, c.o.hunger - 0.004)
                 c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
                 c.o.mouth = 1.0
-                // shuffles a step or two sideways along the patch between bites
-                val shuffle = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2)
+                // shuffles a step or two sideways along the patch between bites, from where it stands when solid (stepping
+                // from the old target walked the spot off the rock's curve until the rock held it off and it re-approached)
+                val shuffle = (if (solid) c.o.pos else s.first) + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2)
                 if (fits(c, shuffle, s.second) && legRoom(c, shuffle, s.second)) spot = s.copy(first = shuffle)
             }
             legs.pick = 1.0      // quick alternating claw strokes to the mouth
@@ -1739,9 +1784,12 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             val b = body ?: run { finished = true; return }
             if (b.alive || b !in c.sim.organisms) { finished = true; return }
             c.o.focusId = b.id
-            // the claws reach about a third of a body length: arrival is judged along the surface, so a carcass bobbing
-            // a few cm above the rock it walks on is picked at from beneath it
-            if (c.o.pos.distanceTo(b.pos) > max(2.0, 0.35 * c.o.lengthCm)) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
+            // the claws reach about a third of a body length, to the remains' whole body (a carcass lies on its side,
+            // the body off the sand), and arrival is judged along the surface (a carcass bobbing above the rock is
+            // picked at from beneath it)
+            val claw = max(2.0, 0.35 * c.o.lengthCm)
+            val reach = if (!c.sim.bodies.enabled) Double.MAX_VALUE else (0 until com.reeflive.core.sim.BodyState.N).minOf { b.body.p[it].distanceTo(c.o.pos) }
+            if (reach > claw && c.o.pos.distanceTo(b.pos) > claw) { scuttle(c, out, b.pos, fast = false); if (elapsed > 40) finished = true; return }
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c)
             c.o.appendagePhase += c.dt * 6
             legs.pick = 1.0
@@ -1794,6 +1842,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
         const val HOME_SNAP_CM = 3.0
         /** Share of night grazing bouts spent on the glass film [L]. */
         const val GLASS_GRAZE_P = 0.15
+        /** Seconds an approach to a grazing patch may go without closing in by 0.5 cm before it grazes where it is. */
+        const val APPROACH_STALL_S = 4.0
         /** Crevice fit: body clearance tolerated, how fast and how far the wedge spot eases out (cm/s, cm). */
         const val HOME_FIT_TOL_CM = 0.03
         const val HOME_OUT_RATE = 4.0

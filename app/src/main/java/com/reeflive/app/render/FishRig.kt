@@ -1,5 +1,6 @@
 package com.reeflive.app.render
 
+import com.reeflive.core.geom.BodySpline
 import com.reeflive.core.sim.CritterPose
 import com.reeflive.core.sim.OrganismPose
 import com.reeflive.core.sim.SimSnapshot
@@ -166,9 +167,9 @@ class FishRig(val id: String) {
          * The body trail can fold into a hairpin on a sharp turn; at 0.42 rad the bend radius stays ≥ 0.16 BL,
          * wider than a fish's half-thickness plus a folded pectoral, so the body cannot pass through itself.
          */
-        const val MAX_BEND_PER_SEGMENT = 0.42f
+        val MAX_BEND_PER_SEGMENT = BodySpline.MAX_BEND_PER_SEGMENT.toFloat()
         /** Total head-to-tail bend (rad); a C-start or a U-shaped den path still fits, a spiral does not. */
-        const val MAX_BEND_TOTAL = 3.1416f
+        val MAX_BEND_TOTAL = BodySpline.MAX_BEND_TOTAL.toFloat()
 
         /**
          * Caps the bend of a stride-4 [spine] (16 stations, head first) in place: walking head → tail, each segment

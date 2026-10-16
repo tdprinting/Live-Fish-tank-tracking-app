@@ -52,8 +52,8 @@ class Simulation private constructor(
     var water = WaterSim(config, initialWater); private set
     val organisms = ArrayList<Organism>()
     val corals = ArrayList<Coral>()
-    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
-    val food = FoodSystem(rock, flow, rng.fork(7))
+    val flow = FlowField(config.powerheads, this.rock.sdf, config.lengthCm, config.waterLevelCm)
+    val food = FoodSystem(this.rock, flow, rng.fork(7))
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
     val repro = Reproduction(this)
@@ -155,16 +155,29 @@ class Simulation private constructor(
     val sandPiles = ArrayList<SandPile>()
 
     /** Dynamic sand bed: height, freshly turned sand, detritus and suspended clouds (SIMULATION §16). */
-    val sand = SandBed(rock.lengthCm, rock.widthCm, rock.sandTopCm, seed).also { s ->
-        s.attachRock(rock.sdf)
+    val sand = SandBed(this.rock.lengthCm, this.rock.widthCm, this.rock.sandTopCm, seed).also { sb ->
+        sb.base = this.rock.sandBase
+        sb.attachRock(this.rock.sdf)
+        val floor: (Double, Double) -> Double = sb::surfaceY
+        this.rock.floorAt = floor
+        this.rock.setFloorMax(floor, sb::surfaceMax)
         // food comes to rest on the live sand surface, not inside it
-        food.groundY = { x, z -> s.surfaceY(x, z) }
+        food.groundY = { x, z -> sb.surfaceY(x, z) }
     }
+    /** Path-finding round the rock for bodies that cannot pass through it (SIMULATION §4.3). */
+    val nav = Navigation(this.rock)
+    /** Corals, decor and equipment as solid capsules for the body collision ([StaticObstacles]); synced each behaviour tick. */
+    val obstacles = StaticObstacles(this.rock)
+    /** Body-vs-geometry and body-vs-body collision (SIMULATION §4.3); the static obstacles push its stations too. */
+    val bodies = BodyCollision(this.rock).also { it.obstacles = obstacles }
     /** Rock, live sand and glass for the crawlers' surface seat ([CrawlerSeat]). */
-    val crawlSurface = CrawlSurface(rock, sand)
+    val crawlSurface = CrawlSurface(this.rock, sand)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
-    /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
+    /**
+     * Bodies push the sand they touch aside (SIMULATION §16.9). The body collision keeps them out of it ([bodies]);
+     * with the collision off this lifts them out instead ([SandContact.pushOut]).
+     */
     val sandContact = SandContact(sand, rock.sdf)
     /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
     val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
@@ -177,6 +190,14 @@ class Simulation private constructor(
     private var rockPosesCache: FloatArray? = null
     private var rockPosesAt = -1L
     private var anchorPiece: Map<String, Int>? = null
+
+    /**
+     * Solid bodies ([BodyCollision], [Command.SolidBodies]): animals do not pass into the rock, sand, glass, decor or
+     * each other. Off (the default) they pass through as before; the app turns it on.
+     */
+    var solidBodies: Boolean
+        get() = bodies.enabled
+        set(v) { bodies.enabled = v; rock.liveFloor = v }
 
     /** Turns the dynamic rockscape on (builds the rock bodies the first time) or off (rocks freeze where they are). */
     fun setDynamicRocks(on: Boolean) {
@@ -412,10 +433,11 @@ class Simulation private constructor(
         return builtCache
     }
 
-    /** A fork of [src] (sandbox, time-lapse): its rocks where they lie and its dynamic / static choice. */
+    /** A fork of [src] (sandbox, time-lapse): its rocks where they lie, its dynamic / static choice and its solid bodies. */
     fun copyRocksFrom(src: Simulation) {
         restoreRocks(src.rockState())
         setDynamicRocks(src.dynamicRocks)
+        solidBodies = src.solidBodies
     }
 
     /** Puts rocks back where a saved tank had them ([rockState]). */
@@ -479,13 +501,13 @@ class Simulation private constructor(
 
     // ---- water physics (SIMULATION §9.7): optional Navier–Stokes flow + surface waves ----
     var fluid: com.reeflive.core.geom.FluidSim? = null; private set
-    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm)
+    val surface = com.reeflive.core.geom.WaterSurface(this.rock.lengthCm, this.rock.widthCm)
     private var fluidAcc = 0.0
     private var lastFlowGridAt = -1e9
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
     /** Parameter id the fluid's dose tracer currently represents. */
     var doseTracerParam: String? = null; private set
-    val heaterPos = Vec3(rock.lengthCm - 2.4, (rock.sandTopCm + rock.waterLevelCm) / 2, 2.5)   // equipment.glb Heater, back-right corner
+    val heaterPos = Vec3(this.rock.lengthCm - 2.4, (this.rock.sandTopCm + this.rock.waterLevelCm) / 2, 2.5)   // equipment.glb Heater, back-right corner
 
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
@@ -611,7 +633,23 @@ class Simulation private constructor(
             left -= dt
         }
         behaviorEnabled = prev
+        // the poses the host draws next are resolved again (the steps above ran without the body collision)
+        if (!bodies.posesLive && bodies.enabled) settleBodies(MAX_BEHAVIOR_DT)
         latest = snapshot()
+    }
+
+    /**
+     * Back to drawn poses after steps without the body collision ([BodyCollision.posesLive] off): the clear poses saved
+     * before them are stale (a wedge hold would snap an animal back to where it was hours ago), so they are dropped, and
+     * every live body is resolved once, so the first drawn pose is clear and saved as the new clear pose.
+     */
+    private fun settleBodies(dt: Double) {
+        bodies.posesLive = true
+        for (o in organisms) {
+            o.spline.dropSafe()
+            if (o.alive) bodies.resolveEnv(o, dt, rockOn = !o.body.escaping, wedgeFallback = false)
+        }
+        bodies.resolvePairs(organisms, perception.stations, dt)
     }
 
     fun drainEvents(): List<SimEvent> = synchronized(pendingEvents) { pendingEvents.toList().also { pendingEvents.clear() } }
@@ -629,6 +667,12 @@ class Simulation private constructor(
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
+        // the body collision runs on every step whose poses are drawn: all of stepWall (1x up to 1000x; above
+        // ABSTRACT_SPEED the parked poses are drawn too, and one step per wall tick costs no more than 1x), not on the
+        // headless 60 s steps of advanceAbstract (catch-up, the timelapse, health runs), whose poses nobody sees
+        val live = useBehavior
+        if (live && !bodies.posesLive && bodies.enabled) settleBodies(dtB)
+        bodies.posesLive = live
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
         net.keepClear(this)
@@ -648,6 +692,11 @@ class Simulation private constructor(
             chemAccum -= CHEM_DT
             chemTick()
         }
+        // the sand rose this step after bodies were resolved against it (a mouthful, a settling cloud): out of it again
+        sand.takeRaised()?.let { if (useBehavior) bodies.afterSandRaised(organisms, it, dtB) }
+        // every body matches its animal (pose, growth) at the end of the step, so a later read of o.body (a brain's next
+        // tick, a test, the pair hash) never sees a stale one and the run does not depend on who looked at it
+        if (bodies.enabled) for (o in organisms) o.body.refresh(o)
         tickCount++
     }
 
@@ -757,10 +806,12 @@ class Simulation private constructor(
     }
 
     private fun behaviorTick(dt: Double) {
+        if (bodies.enabled) obstacles.sync(this)
         perception.rebuild()
         if (abstractMode) { abstractPlacement(dt); return }
         if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
+        if (bodies.enabled) nav.step()
         for (o in organisms.toList()) {
             if (o !in organisms) continue   // eaten during this tick
             val a = agents[o] ?: continue
@@ -775,6 +826,7 @@ class Simulation private constructor(
             o.attached = a.intent.kinematic || a.intent.crawl
         }
         sandWork.step(organisms)
+        sandContact.pushOut = !bodies.enabled || !bodies.posesLive
         sandContact.step(organisms, dt, displace = true)
         // the drawn bodies are seated on the sand as this tick left it (a goby's spoil landing on a resting hermit or
         // crab after its seat was solved buried the shell for a tick)
@@ -782,9 +834,18 @@ class Simulation private constructor(
             if (!o.alive) continue
             val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
-            o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.seat?.let { st ->
+                val p0 = o.pos; val u0 = o.up
+                st.solid = bodies.enabled
+                st.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+                // the seat moved the animal onto where its shell rests, and it is drawn there: that pose goes through
+                // the body collision too
+                if (o.pos != p0 || o.up != u0 || o.seatOn) bodies.resolveEnv(o, dt)
+            }
             o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
+        // bodies apart: animal against animal, then each moved body out of the rock and sand again
+        bodies.resolvePairs(organisms, perception.stations, dt)
     }
 
     private fun abstractPlacement(dt: Double) {
@@ -801,15 +862,22 @@ class Simulation private constructor(
             a.steering.apply(a.intent)
             o.attached = true
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
-            o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+            o.seat?.let { st ->
+                val p0 = o.pos; val u0 = o.up
+                st.solid = bodies.enabled
+                st.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
+                if (o.pos != p0 || o.up != u0 || o.seatOn) bodies.resolveEnv(o, dt)
+            }
             o.limbRig?.contact(o, crawlSurface, organisms, dt)
         }
+        bodies.resolvePairs(organisms, perception.stations, dt)
+        sandContact.pushOut = !bodies.enabled || !bodies.posesLive
         sandContact.step(organisms, dt, displace = false)
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
         val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
-        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.sandTopCm + 0.6
+        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.waterFloor(o.pos.x, o.pos.z) + 0.6
         val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
         val vy = if (buoyant) 1.2 else -2.0
         var p = o.pos + (f + Vec3(0.0, vy, 0.0)) * dt
@@ -821,6 +889,8 @@ class Simulation private constructor(
         o.vel = Vec3.ZERO; o.amp = 0.0; o.tailHz = 0.0
         o.spline.override = null
         o.spline.update(o.pos, o.heading, dt, 2.0)
+        // a carcass rests on the sand or the rock, never in it (a floating one breaks the surface)
+        bodies.resolveEnv(o, dt, surfaceOn = !buoyant)
     }
 
     // ============================================================== chemistry / health tick
@@ -1297,6 +1367,7 @@ class Simulation private constructor(
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)
             is Command.DynamicRocks -> setDynamicRocks(c.on)
+            is Command.SolidBodies -> solidBodies = c.on
             is Command.UndermineRock -> undermineRock(c.rock)
             is Command.PlaceRock -> placeRock(c.shape, c.x, c.z, c.yawDeg, c.seed)
             is Command.RemoveRock -> removeRock(c.at)

@@ -171,7 +171,11 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
     fun rollNight(c: Ctx) {
         if (c.p.lightsOffAt <= lastNightRoll) return
         lastNightRoll = c.p.lightsOffAt
-        patrolTonight = adult && c.rng.chance(ADULT_NIGHT_PATROL_P)
+        // drawn from the night and the fish, not the behaviour stream: whether it patrols tonight does not hang on how
+        // many random draws its day happened to take
+        // (with the solid bodies only: as before them it is the behaviour stream's draw)
+        val night = kotlin.math.floor(c.p.lightsOffAt / 86400.0).toLong()
+        patrolTonight = adult && (if (c.sim.bodies.enabled) com.reeflive.core.geom.Rng(c.o.id.hashCode().toLong() * 0x9E3779B97F4A7C15uL.toLong() + night).chance(ADULT_NIGHT_PATROL_P) else c.rng.chance(ADULT_NIGHT_PATROL_P))
     }
 
     /**

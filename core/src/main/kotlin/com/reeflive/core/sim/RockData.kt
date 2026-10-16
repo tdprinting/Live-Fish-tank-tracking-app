@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.geom.AnalyticSdf
 import com.reeflive.core.geom.Ellipsoid
+import com.reeflive.core.geom.HeightField
 import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.SdfGrid
 import com.reeflive.core.geom.Tunnel
@@ -13,6 +14,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.min
 
 /** Named point of interest in the rockscape (ASSETS §3.4 anchors.json). */
 data class Anchor(
@@ -85,36 +87,86 @@ class RockData(
 
     /**
      * A copy for one [Simulation]: the same baked field wrapped so its rocks can move without touching any other
-     * simulation's tank (reality and sandbox share the loaded files). A scape without pieces is returned as is.
+     * simulation's tank (reality and sandbox share the loaded files), the same modelled sand ([sandBase]) and its own
+     * [floorAt] (each Simulation stands its animals on its own sand bed; a fork must not read its parent's sand).
+     * Keep in step with the constructor.
      */
     fun forSim(): RockData {
-        if (pieces.isEmpty()) return this
         val base = (sdf as? DynamicRockSdf)?.base ?: sdf
-        return RockData(DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces)
+        val field = if (pieces.isEmpty()) base else DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm)
+        return RockData(field, restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces).also { it.sandBase = sandBase; it.liveFloor = liveFloor }
+    }
+
+    /**
+     * The drawn sand surface without the animals' digging (tank.glb's sand mesh, rasterized by the app; see
+     * [HeightField.fromGlb]). Null = the sand bed's linear slope. The Simulation hands it to its [SandBed].
+     */
+    var sandBase: HeightField? = null
+
+    /**
+     * Sand surface height at (x, z) the animals stand on: set by the Simulation to its dynamic sand bed
+     * ([SandBed.surfaceY]); null = the flat [sandTopCm] (tests, tools).
+     */
+    @Volatile var floorAt: ((Double, Double) -> Double)? = null
+
+    /** Same as [forSim] (tests and tools that build their own [Simulation] rock). */
+    fun forSimulation(): RockData = forSim()
+
+    /** Height of the sand floor (cm) at (x, z). */
+    fun floorY(x: Double, z: Double): Double = floorAt?.invoke(x, z) ?: sandTopCm
+
+    /**
+     * Whether the water's floor ([envDist], [inWater], [clampToWater]) is the live sand ([floorY]) rather than the flat
+     * [sandTopCm]: on with the solid bodies (Simulation.solidBodies), off as before.
+     */
+    @Volatile var liveFloor = false
+
+    /** The floor of the water at (x, z): [floorY] with [liveFloor], else the flat [sandTopCm]. */
+    fun waterFloor(x: Double, z: Double): Double = if (liveFloor) floorY(x, z) else sandTopCm
+
+    /** Upper bound on [floorY] over a box (x0, z0, x1, z1), for the [floorAt] it was set with ([setFloorMax]). */
+    private var floorMaxAt: ((Double, Double, Double, Double) -> Double)? = null
+    private var floorMaxFor: Any? = null
+
+    /** Sets [floorAt]'s bound: [max] answers for [floorAt] only while [floorAt] is still [of]. */
+    fun setFloorMax(of: (Double, Double) -> Double, max: (Double, Double, Double, Double) -> Double) { floorMaxAt = max; floorMaxFor = of }
+
+    /**
+     * The highest [floorY] reads anywhere in [x0]..[x1] × [z0]..[z1], or more: +∞ when the floor has no bound (a
+     * [floorAt] set without [setFloorMax]).
+     */
+    fun floorMax(x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val f = floorAt ?: return sandTopCm
+        val m = floorMaxAt
+        return if (m != null && f === floorMaxFor) m(x0, z0, x1, z1) else Double.POSITIVE_INFINITY
     }
 
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(
-        sdf.dist(p), p.y - sandTopCm, waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
+        sdf.dist(p), p.y - waterFloor(p.x, p.z), waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
     )
 
     fun inWater(p: Vec3, margin: Double = 0.0) =
-        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (sandTopCm + margin)..(waterLevelCm - margin)
+        p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (waterFloor(p.x, p.z) + margin)..(waterLevelCm - margin)
 
-    fun clampToWater(p: Vec3, margin: Double): Vec3 = Vec3(
-        p.x.coerceIn(margin, lengthCm - margin),
-        p.y.coerceIn(sandTopCm + margin, waterLevelCm - margin),
-        p.z.coerceIn(margin, widthCm - margin),
-    )
+    fun clampToWater(p: Vec3, margin: Double): Vec3 {
+        val x = p.x.coerceIn(margin, lengthCm - margin)
+        val z = p.z.coerceIn(margin, widthCm - margin)
+        val lo = waterFloor(x, z) + margin
+        return Vec3(x, p.y.coerceIn(min(lo, waterLevelCm - margin), waterLevelCm - margin), z)
+    }
 
     companion object {
         /** Analytic stand-in for an arbitrary set of spheres (tests). */
         fun ofSpheres(spheres: List<Pair<Vec3, Double>>, anchors: AnchorSet = DefaultScape.anchorsRaw()): RockData =
             RockData(AnalyticSdf(spheres.map { (c, r) -> Ellipsoid(c, Vec3(r, r, r)) }), anchors)
 
-        /** Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names. */
-        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String): RockData =
-            RockData(SdfGrid.parse(sdfBytes), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
+        /**
+         * Track B's baked files (`assets/sim/rock_sdf.bin`, `anchors.json`), with default anchors for missing names.
+         * [repairBake]: the field with the bake's errors mended ([SdfGrid.parse]), for the solid bodies.
+         */
+        fun fromFiles(sdfBytes: ByteArray, anchorsJson: String, repairBake: Boolean = false): RockData =
+            RockData(SdfGrid.parse(sdfBytes, repairBake), AnchorSet.parse(anchorsJson).withDefaults(DefaultScape.anchorsRaw()), pieces = DefaultScape.pieces)
 
         /** The analytic recreation of Tee's rockscape (ASSETS §3.1) with snapped anchors and carved holes. */
         fun defaultTank(): RockData = DefaultScape.build()

@@ -969,7 +969,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val dancing = c.t < danceUntil
             val bob = if (dancing) DANCE_BOB_CM * sin(2 * PI * DANCE_HZ * c.t) else 0.0
-            out.seek(stationPos + Vec3(sin(c.t * 0.5) * 1.5, sin(c.t * 0.31) + bob, 0.0), c.o.cruiseSpeed * (if (dancing) 0.9 else 0.5), arrive = if (dancing) 0.8 else 2.0)
+            // back to the station over the rock, not into it: a body that cannot pass through rock needs a way round
+            val spot = stationPos + Vec3(sin(c.t * 0.5) * 1.5, sin(c.t * 0.31) + bob, 0.0)
+            out.seek(if (c.sim.bodies.enabled && c.o.pos.distanceTo(stationPos) > 8) c.viaOpenWater(spot) else spot, c.o.cruiseSpeed * (if (dancing) 0.9 else 0.5), arrive = if (dancing) 0.8 else 2.0)
             out.hover = true; out.faceDir = Vec3.Z
             val near = c.p.neighbors(stationPos, 35.0).filter { it.isFish && it !== c.o && it.alive && it.brainKind != BrainKind.EEL }
             val newcomer = near.firstOrNull { it.pos.distanceTo(stationPos) < GREET_CM && it !== greeted }
@@ -1080,16 +1082,22 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             when (phase) {
                 // approach to 1 BL at 1.8 BL/s
                 0 -> {
-                    val goal = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    val raw = c.safe(cl.pos - toC * (0.6 * c.L + 0.5 * cl.lengthCm))
+                    // a client in a crevice the wrasse's body does not fit is worked from the nearest water it reaches
+                    val goal = if (c.sim.bodies.enabled) c.sim.nav.approach(c.sim.bodies.levelOf(o), raw) ?: raw else raw
                     out.seek(c.viaOpenWater(goal), 1.8 * c.L, arrive = 1.0, urgency = 0.4)
                     // a client wedged in a crevice is worked from the mouth: arriving at the (rock-clamped) approach point counts
-                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0)) {
+                    // (the wrasse's body does not fit into the crevice: held at its mouth a little farther out counts too)
+                    if (o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 1.5 || (phaseT > 2.0 && o.pos.distanceTo(goal) < 2.0 && (!c.sim.bodies.enabled || o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 8.0)) ||
+                        c.sim.bodies.enabled && ((phaseT > 3.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 5.0 && o.vel.length() < 0.3 * o.cruiseSpeed) ||
+                        (phaseT > 8.0 && o.pos.distanceTo(cl.pos) < c.L + 0.5 * cl.lengthCm + 6.0))) {
                         phase = if (wantsTactile(cl, c)) 1 else 2
                         if (phase == 1) encounters.advertised++
                         phaseT = 0.0
                     }
                     // no path-finding: a client it cannot reach (rock in the way) is left alone for a while
-                    if (phaseT > APPROACH_GIVE_UP_S) { encounters.failedApproaches++; unreachableUntil[cl.id] = c.t + UNREACHABLE_S; done(c, cl, false) }
+                    // ...and one with no way round the rock to it at all is given up at once
+                    if (phaseT > APPROACH_GIVE_UP_S || (phaseT > 1.0 && o.noRouteSince >= 0 && c.t - o.noRouteSince > 1.0)) { encounters.failedApproaches++; unreachableUntil[cl.id] = c.t + UNREACHABLE_S; done(c, cl, false) }
                 }
                 // tactile dance: pitch ±20° at 2 Hz within 15 cm, stroking with the pelvic fins
                 1 -> {
@@ -1477,6 +1485,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                 // moray strike: a fast lunge (≈ 1 m/s), resolved the moment the jaws reach the prey
                 out.seek(p.pos, STRIKE_SPEED, arrive = 0.2, urgency = 1.0)
                 o.mouth = 1.0
+                if (c.sim.bodies.enabled) o.focusId = p.id   // the jaws may reach the prey's body (BodyCollision.touchAllowed)
                 val hit = d < 2.0 + 0.5 * p.lengthCm
                 if (hit || c.t - strikeAt > 0.4) {
                     // the kill roll is unsourced (realism_gaps X7): only behind the evidence gate; otherwise an attack
@@ -1487,6 +1496,7 @@ class EelBrain(c: Ctx) : SpeciesBrain(c) {
                         p.startle = max(p.startle, 0.4)
                     }
                     strikeAt = -1.0
+                    if (c.sim.bodies.enabled && o.focusId == p.id) o.focusId = null
                     cooldown = c.t + 15
                     finished = true
                 }

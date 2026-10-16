@@ -336,6 +336,9 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
  * view, crosses, then drops to it.
  */
 fun Ctx.viaOpenWater(goal: Vec3): Vec3 {
+    // with bodies that do not pass through rock the steering finds the way round ([com.reeflive.core.sim.Navigation]):
+    // the climb-over below is the fallback while no route is known
+    if (sim.bodies.enabled && sim.nav.route(sim.bodies.levelOf(o), o.pos, goal) != null) return goal
     val sdf = rock.sdf
     if (sdf.segmentClear(o.pos, goal, 0.5)) return goal
     // a crossing that would only hold the swimmer where it is (already at that height, the way over blocked)

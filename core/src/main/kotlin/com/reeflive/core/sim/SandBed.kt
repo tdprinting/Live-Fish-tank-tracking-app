@@ -97,6 +97,21 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     val detritus = FloatArray(nx * nz) { 0.25f }
     /** Bumped on every change; the snapshot copies the grid only when it moved on. */
     var version = 0L; private set
+
+    // where the bed rose since the last [takeRaised] (x0, z0, x1, z1; empty when x0 > x1): a body resolved against the
+    // old surface earlier in the step may now be under the new one
+    private var rx0 = Double.POSITIVE_INFINITY; private var rz0 = Double.POSITIVE_INFINITY
+    private var rx1 = Double.NEGATIVE_INFINITY; private var rz1 = Double.NEGATIVE_INFINITY
+    private fun raised(x0: Double, z0: Double, x1: Double, z1: Double) {
+        rx0 = min(rx0, x0); rz0 = min(rz0, z0); rx1 = max(rx1, x1); rz1 = max(rz1, z1)
+    }
+    private fun raisedAround(x: Double, z: Double, r: Double) = raised(x - r - cellX, z - r - cellZ, x + r + cellX, z + r + cellZ)
+
+    /** The rectangle (x0, z0, x1, z1) where the sand rose since the last call, or null; clears it. */
+    fun takeRaised(): DoubleArray? {
+        if (rx0 > rx1) return null
+        return doubleArrayOf(rx0, rz0, rx1, rz1).also { rx0 = Double.POSITIVE_INFINITY; rz0 = Double.POSITIVE_INFINITY; rx1 = Double.NEGATIVE_INFINITY; rz1 = Double.NEGATIVE_INFINITY }
+    }
     private val rng = Rng(seed xor 0x5A4DL)
 
     // ---- counters (tests, HUD; no SimEvents) ----
@@ -164,8 +179,37 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz
     }
 
-    /** Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it (and any body buried in it). */
-    fun surfaceY(x: Double, z: Double): Double = baseY(z) + heightAt(x, z) + inclusionAt(x, z)
+    /**
+     * The modelled (undisturbed) sand surface: the drawn sand mesh rasterized ([com.reeflive.core.sim.RockData.sandBase],
+     * set by the app from tank.glb) when there is one, else the linear front-to-back slope [baseY].
+     */
+    var base: com.reeflive.core.geom.HeightField? = null
+
+    fun modelY(x: Double, z: Double): Double = base?.at(x, z) ?: baseY(z)
+
+    /**
+     * Visible sand surface (cm) at (x, z): the modelled bed plus what the animals did to it and any body buried in it
+     * (static.vert lifts the mesh the same way).
+     */
+    fun surfaceY(x: Double, z: Double): Double = modelY(x, z) + heightAt(x, z) + inclusionAt(x, z)
+
+    /**
+     * An upper bound on [surfaceY] over [x0]..[x1] × [z0]..[z1] (the body collision's exact skips): the most of each
+     * blended grid's heights there, plus a margin for the rounding of the blends.
+     */
+    fun surfaceMax(x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val m = base?.maxIn(x0, z0, x1, z1) ?: max(baseY(z0), baseY(z1))
+        return m + gridMax(height, x0, z0, x1, z1) + (if (anyInclusion) gridMax(inclusion, x0, z0, x1, z1) else 0.0) + 1e-5
+    }
+
+    /** The most of the cell values [heightAt] / [inclusionAt] blend in the box (NaN where one is). */
+    private fun gridMax(g: FloatArray, x0: Double, z0: Double, x1: Double, z1: Double): Double {
+        val i0 = (x0 / cellX - 0.5).coerceIn(0.0, nx - 1.001).toInt(); val i1 = (x1 / cellX - 0.5).coerceIn(0.0, nx - 1.001).toInt() + 1
+        val k0 = (z0 / cellZ - 0.5).coerceIn(0.0, nz - 1.001).toInt(); val k1 = (z1 / cellZ - 0.5).coerceIn(0.0, nz - 1.001).toInt() + 1
+        var m = Double.NEGATIVE_INFINITY
+        for (k in k0..k1) for (i in i0..i1) m = max(m, g[k * nx + i].toDouble())
+        return m
+    }
 
     fun freshAt(x: Double, z: Double): Double = fresh[index(x, z)].toDouble()
     fun detritusAt(x: Double, z: Double): Double = detritus[index(x, z)].toDouble()
@@ -204,6 +248,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             fresh[i] = max(fresh[i], (0.6 + 0.4 * w).toFloat())
         }
         movedCm3 += abs(cm3)
+        if (cm3 > 0) raisedAround(x, z, r)
         wakeAround(x, z, r)
         version++
     }
@@ -226,6 +271,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             height[i] = (height[i] + dh.toFloat()).coerceIn(floorH[i], MAX_MOUND)
             if (s2 < 2.5) fresh[i] = max(fresh[i], (freshness * (1 - s2 / 2.5)).toFloat())
         }
+        raisedAround(x, z, 2.5 * width)
         wakeAround(x, z, 2.5 * width)
         version++
     }
@@ -528,7 +574,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             // no upper clamp: a grain always lands (slope failure in [avalanche] spreads a heap), so sand is conserved
             else -> {
                 height[c] = height[c] + pmass[i] / cellArea.toFloat()
-                if (pmass[i] > 0f) { fresh[c] = max(fresh[c], 0.7f); wakeCell(c) }
+                if (pmass[i] > 0f) { fresh[c] = max(fresh[c], 0.7f); wakeCell(c); raisedAround(px[i].toDouble(), pz[i].toDouble(), 0.0) }
             }
         }
     }
@@ -629,7 +675,11 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 val m = shed(a, a + nx, if (roofedCell[a] || roofedCell[a + nx]) confZ else stepZ, rate)
                 if (m > 0) { moved += m; if (k < z0) wakeTile(t - tnx) else if (k + 1 > z1) wakeTile(t + tnx) }
             }
-            if (moved > 1e-6) { movedAll += moved; tileLeft[t] = ACTIVE_HOLD_S.toFloat() }
+            if (moved > 1e-6) {
+                movedAll += moved; tileLeft[t] = ACTIVE_HOLD_S.toFloat()
+                // the low side of a shed pair rose, one cell past the tile at most
+                raised((x0 - 1) * cellX, (z0 - 1) * cellZ, (x1 + 2) * cellX, (z1 + 2) * cellZ)
+            }
             else {
                 tileLeft[t] -= dt.toFloat()
                 if (tileLeft[t] <= 0f) { tileLeft[t] = 0f; activeTiles-- }
@@ -715,6 +765,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             if (fresh[a] < 0.002f) fresh[a] = 0f
             detritus[a] += (target - detritus[a]) * kd
         }
+        raised(0.0, 0.0, lengthCm, widthCm)   // slumps and smoothing raise the low cells anywhere
         version++
     }
 
@@ -935,7 +986,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             rr *= 1.6; pass++
         }
         if (left > 1e-9) { val i = index(x, z); height[i] += (left / cellArea).toFloat() }
-        if (cm3 > 0) { movedCm3 += cm3; wakeAround(x, z, rr); version++ }
+        if (cm3 > 0) { movedCm3 += cm3; wakeAround(x, z, rr); raisedAround(x, z, rr); version++ }
     }
 
     /** Takes up to [cm3] from around (x, z) within [r], never below the floors; returns what it took. */
@@ -1333,7 +1384,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             b.covered += dCov
             moved += got
         }
-        if (moved > 0) { movedCm3 += moved; wakeAround(b.cx, b.cz, 0.5 * b.lengthCm + 0.5 * b.widthCm + 2.5); version++ }
+        if (moved > 0) { movedCm3 += moved; wakeAround(b.cx, b.cz, 0.5 * b.lengthCm + 0.5 * b.widthCm + 2.5); raisedAround(b.cx, b.cz, 0.5 * b.lengthCm + 0.5 * b.widthCm + 2.5); version++ }
         return moved
     }
 
@@ -1551,7 +1602,7 @@ class SandWork(private val sand: SandBed, private val rock: RockData) {
             val t = tracks.getOrPut(o.id) { Track(p.x, p.z, o.posture, 0.0, 0) }
             val dx = p.x - t.x; val dz = p.z - t.z
             val moved = sqrt(dx * dx + dz * dz)
-            val onSand = p.y < sand.surfaceY(p.x, p.z) + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
+            val onSand = p.y < rock.floorY(p.x, p.z) + 2.0 + 0.5 * o.species.depthRatio * o.lengthCm && rock.sdf.dist(p) > 0.6
             if (moved > 6.0) { t.x = p.x; t.z = p.z; t.acc = 0.0; t.posture = o.posture; continue }   // placed, not walked
             if (kind == BrainKind.NASSARIUS && onSand && (t.posture == 5) != (o.posture == 5)) {
                 // burying or emerging: a small crater, the spoil around it and a little puff
