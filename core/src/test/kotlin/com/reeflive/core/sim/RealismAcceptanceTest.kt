@@ -593,17 +593,20 @@ class RealismAcceptanceTest {
     /** 06 §5.6 #20: RearrangeRock → bouts in the next 6 h ≥ 2× the pre-command rate, ≤ 1.2× by 72 h. */
     @Test
     fun c20_rockRearrangement() {
+        // (four tanks: two-hour chase counts of ~25-30 swing by ±5 per tank, too much for the 20 % margin over two)
         var pre = 0.0; var post = 0.0; var late = 0.0
-        for (seed in 1L..2L) {
+        val seeds = 1L..4L
+        val n = (seeds.last - seeds.first + 1).toDouble()
+        for (seed in seeds) {
             val sim = tank(seed = seed, hour = 10.0)
-            pre += chases(sim.run(2 * 3600.0)).size / 2.0
+            pre += chases(sim.run(2 * 3600.0)).size / n
             sim.enqueue(Command.RearrangeRock)
             // read the reset from the run's own events: the 200-entry eventLog has rolled over by the end of a busy 2 h
             val ev = sim.run(2 * 3600.0)
-            post += chases(ev).size / 2.0
+            post += chases(ev).size / n
             assertTrue("territory reset event", ev.any { it is SimEvent.TerritoryReset })
             sim.advanceAbstract(68 * 3600.0)
-            late += chases(sim.run(2 * 3600.0)).size / 2.0
+            late += chases(sim.run(2 * 3600.0)).size / n
         }
         assertTrue("pre $pre post $post", post >= 2 * pre)
         assertTrue("pre $pre after 72 h $late", late <= 1.2 * pre)

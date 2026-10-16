@@ -186,6 +186,7 @@ object Thoughts {
             n == "retreat" -> Line("hiding inside its shell${e.because()}", "pop back out of its shell", "Nobody home!", Driver.FEAR, 2)
             // ---- brittle star
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
+            n == "squeeze" -> Line("squeezing out of a gap too tight for its shell", "squeeze out of the gap", "Too tight in here!", Driver.HOME, 2)
             n == "hide" -> Line("hiding under a rock with just its arms peeking out", "hide under the rock", "Shh, hiding.", Driver.HOME, 0)
             n == "armfeed" -> Line("passing food to its mouth with an arm", "pass food to its mouth", "Yum, arm delivery!", Driver.HUNGER, 2)
             n == "retract" -> Line("pulling its arms in and creeping away${e.because()}", "pull its arms in", "Eek!", Driver.FEAR, 3)

@@ -28,8 +28,8 @@ dependencies {
 
 tasks.test {
     testLogging { events("passed", "skipped", "failed") }
-    // the long sim runs are independent: spread them over the CI runner's cores (one JVM per fork)
-    maxParallelForks = (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
+    // the long whole-tank runs are independent: one JVM per core (CI's single fork sat at ~48 of its 60 minutes)
+    maxParallelForks = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
     maxHeapSize = "1g"
 }
 

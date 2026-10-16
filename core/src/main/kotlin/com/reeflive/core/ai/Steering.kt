@@ -130,7 +130,8 @@ class Steering(private val c: Ctx) {
         // a free swimmer's body is never pitched past its limit nor rolled past 40°, whatever the avoidance or a wedge's
         // restored pose did to it: it slides along a surface level instead (tee-clips #4, #8: a clown near-vertical, a
         // wrasse pitched up, a fish standing on its nose on the rock)
-        if (solid && o.isFish && !intent.kinematic && !intent.crawl && intent.posture == 0 && intent.splineOverride == null) {
+        val freeSwimmer = solid && o.isFish && !intent.kinematic && !intent.crawl && intent.posture == 0 && intent.splineOverride == null
+        if (freeSwimmer) {
             val pm = intent.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
             if (abs(o.heading.y) > pm + 0.02) o.heading = clampPitch(o.heading, pm)
             val level = Vec3.Y.rejectFrom(o.heading).normalized(Vec3.Y)
@@ -148,6 +149,12 @@ class Steering(private val c: Ctx) {
         val shape0 = if (solid && o.isFish && !intent.crawl) o.spline.pose() else null
         c.sim.bodies.resolveEnv(o, dt, rockOn = !intent.ignoreRock, settle = settle)
         if (shape0 != null) limitPushOut(o, shape0, startHeading, startUp, dt, !intent.ignoreRock)
+        // (the push-out easing above turns the heading from where it was drawn last tick, which on the tick a fish is
+        // released from a steep placed pose (a perch, a duck behind rock) put it back past the limit it was just clamped to)
+        if (freeSwimmer && shape0 != null) {
+            val pm = intent.maxPitch ?: if (o.brainKind == BrainKind.EEL) 0.87 else 0.57
+            if (abs(o.heading.y) > pm + 0.02) o.heading = clampPitch(o.heading, pm)
+        }
     }
 
     /**
