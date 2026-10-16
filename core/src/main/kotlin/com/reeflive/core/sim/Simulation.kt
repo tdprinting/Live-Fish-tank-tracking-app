@@ -162,12 +162,18 @@ class Simulation private constructor(
     }
     /** Rock, live sand and glass for the crawlers' surface seat ([CrawlerSeat]). */
     val crawlSurface = CrawlSurface(rock, sand)
+    /** The same with the rock's pores smoothed shut, for the limb rigs' arms and legs ([CrawlSurface.rockDist]). */
+    val limbSurface = CrawlSurface(rock, sand, smoothPores = true)
     /** Nassarius trails, hermit and crab scratching, brittle-star furrows (observed after each behaviour tick). */
     val sandWork = SandWork(sand, rock)
     /** Bodies rest on the live sand and push it aside instead of passing through it (SIMULATION §16.9). */
     val sandContact = SandContact(sand, rock.sdf)
     /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
     val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
+    /** Single-occupant holes and who holds them (sim/RockHoles.kt): no two animals share a blenny hole or a small cave. */
+    val holeClaims = HoleClaims { it in organisms }
+    /** Keeps bodies out of solid rock except in holes that fit them (SIMULATION §4.11). */
+    val rockGuard = RockGuard(rock, { x, z -> sand.surfaceY(x, z) }, holeClaims)
 
     // ============================================================== dynamic rockscape
     /** Loose rocks as rigid bodies while [dynamicRocks] is on (null for a scape without separate rocks). */
@@ -177,6 +183,7 @@ class Simulation private constructor(
     private var rockPosesCache: FloatArray? = null
     private var rockPosesAt = -1L
     private var anchorPiece: Map<String, Int>? = null
+    private var holePiece: Map<String, Int>? = null
 
     /** Turns the dynamic rockscape on (builds the rock bodies the first time) or off (rocks freeze where they are). */
     fun setDynamicRocks(on: Boolean) {
@@ -230,6 +237,22 @@ class Simulation private constructor(
             } else if (p < 0 || !f.moved[p]) a else {
                 val m = f.xf[p]
                 a.copy(pos = xfPoint(m, a.pos), dir = a.dir?.let { xfDir(m, it) }, normal = a.normal?.let { xfDir(m, it) }, points = a.points?.map { xfPoint(m, it) })
+            }
+        })
+        // the holes and caves ride with their rock too (the brains look their homes up by name, RockHoles.kt)
+        val hp = holePiece ?: rock.restHoles.all.associate { h ->
+            // a burrow is dug in the sand: it stays where it is (the sand keeps its own roof, SandBed.attachRock)
+            if (h.kind == HoleKind.BURROW) return@associate h.name to -1
+            val q = h.along(min(h.depth, HOLE_LABEL_IN_CM))
+            h.name to RockPieceDef.labelOf(rock.pieces, q.x, q.y, q.z, ANCHOR_ON_ROCK_CM)
+        }.also { holePiece = it }
+        rock.holes = HoleSet(rock.restHoles.all.mapNotNull { h ->
+            val p = hp[h.name] ?: -1
+            // its rock was taken out: the hole is gone with it (its dweller shelters on the rock face instead)
+            if (p >= 0 && f.gone[p]) null
+            else if (p < 0 || !f.moved[p]) h else {
+                val m = f.xf[p]
+                h.copy(mouth = xfPoint(m, h.mouth), axis = xfDir(m, h.axis), path = h.path.map { xfPoint(m, it) }, up = xfDir(m, h.up))
             }
         })
         resolveCoralRocks()
@@ -782,8 +805,11 @@ class Simulation private constructor(
             if (!o.alive) continue
             val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            sandContact.preClamp(o)
+            rockGuard.apply(o)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
-            o.limbRig?.contact(o, crawlSurface, organisms, dt)
+            o.limbRig?.contact(o, limbSurface, organisms, dt)
+            if (o.seat != null) rockGuard.keepClaims(o)
         }
     }
 
@@ -801,8 +827,11 @@ class Simulation private constructor(
             a.steering.apply(a.intent)
             o.attached = true
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            sandContact.preClamp(o)
+            rockGuard.apply(o)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
-            o.limbRig?.contact(o, crawlSurface, organisms, dt)
+            o.limbRig?.contact(o, limbSurface, organisms, dt)
+            if (o.seat != null) rockGuard.keepClaims(o)
         }
         sandContact.step(organisms, dt, displace = false)
     }
@@ -1910,6 +1939,8 @@ class Simulation private constructor(
         const val FINGER_TIMEOUT_S = 6.0
         /** An anchor / colony within this of a rock's analytic surface rides with that rock. */
         const val ANCHOR_ON_ROCK_CM = 4.0
+        /** A hole belongs to the rock nearest this far in from its mouth (cm). */
+        const val HOLE_LABEL_IN_CM = 1.0
         const val CORAL_ON_ROCK_CM = 4.0
         /** A dry rock from the builder starts this far above what is under it (cm), then falls. */
         const val DROP_GAP_CM = 1.5

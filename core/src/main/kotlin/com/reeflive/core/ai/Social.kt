@@ -189,7 +189,8 @@ object Social {
 
 /**
  * Keep clear of the individual this animal currently fears (after being chased, or a much larger
- * aggressive fish). Moves to the far side of nearby cover; intensity follows the remembered fear.
+ * aggressive fish). A fish with a home shelter ([SpeciesBrain.shelterSpot]) goes home unless the feared fish is at its
+ * door; everyone else moves to the far side of nearby cover. Intensity follows the remembered fear.
  */
 class KeepClear(val b: SpeciesBrain) : Behavior("keepclear", "Keeping clear") {
     private var spot: Vec3? = null
@@ -209,7 +210,8 @@ class KeepClear(val b: SpeciesBrain) : Behavior("keepclear", "Keeping clear") {
     override fun update(c: Ctx, out: SteerIntent) {
         val w = c.o.wary ?: run { finished = true; return }
         c.o.focusId = w.id
-        if (spot == null) spot = c.coverPoint(w.pos, 25.0)
+        // its own shelter when that is away from the feared fish (a burrow mouth, its cave), else cover on the far side
+        if (spot == null) spot = b.shelterSpot(c)?.takeIf { it.distanceTo(w.pos) > SHELTER_THREAT_CM } ?: c.coverPoint(w.pos, 25.0)
         val s = spot!!
         out.seek(s, c.o.cruiseSpeed * 1.1, arrive = 3.0, urgency = 0.5)
         if (c.o.pos.distanceTo(s) < 4.0) {
@@ -217,5 +219,10 @@ class KeepClear(val b: SpeciesBrain) : Behavior("keepclear", "Keeping clear") {
             out.faceDir = (w.pos - c.o.pos).normalized(Vec3.X)   // keeps an eye on it
         }
         if (elapsed > bout || c.o.pos.distanceTo(w.pos) > 3 * c.L + 20) finished = true
+    }
+
+    companion object {
+        /** A shelter with the feared fish this close to its door (cm) is not a refuge: take other cover. */
+        const val SHELTER_THREAT_CM = 6.0
     }
 }

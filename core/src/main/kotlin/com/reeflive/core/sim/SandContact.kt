@@ -16,7 +16,7 @@ import kotlin.math.sqrt
  * becomes its sand term and [exempt] its per-cell exemption; the displacement half stays here. Uses no random numbers.
  */
 class SandContact(private val sand: SandBed, private val rock: com.reeflive.core.geom.Sdf? = null) {
-    private class St(var x: Double, var z: Double, var acc: Double, var rest: Double, var impressed: Boolean)
+    private class St(var x: Double, var z: Double, var acc: Double, var rest: Double, var impressed: Boolean, var pre: Double = 0.0)
     private val st = HashMap<String, St>()
     private var gc = 0
 
@@ -102,8 +102,26 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         return null
     }
 
+    /**
+     * [clamp] ahead of the rock guard (Simulation): the guard then lays the body where it will lie on the live sand, not
+     * at the flat sand plane the crawl step puts it on (the lift came after the guard, and a rigid brittle star lifted
+     * 1.5 cm onto the live sand at a rock foot had its body in the rock). [step] keeps the depth for its bow wave.
+     */
+    fun preClamp(o: Organism) {
+        val pen = clamp(o)
+        if (pen > 0.0) st.getOrPut(o.id) { St(o.pos.x, o.pos.z, 0.0, 0.0, false) }.pre = pen
+    }
+
     private var floorClear = 0.0
-    private val floor = com.reeflive.core.geom.BodySpline.Floor { x, z -> sand.surfaceY(x, z) + floorClear }
+    private val floor = object : com.reeflive.core.geom.BodySpline.Floor {
+        override fun y(x: Double, z: Double) = sand.surfaceY(x, z) + floorClear
+        // over a buried rock foot the point stays in the sand (the rock guard counts it as lying in the sand): lifted
+        // after the guard it came up inside the rock (a grazing lawnmower's tail 1 cm into the foot of the rock)
+        override fun canLift(p: com.reeflive.core.geom.Vec3, to: Double): Boolean {
+            val sdf = rock ?: return true
+            return sdf.dist(p.withY(to)) >= ROCK_KEEP
+        }
+    }
 
     /**
      * The rest of the body on the sand too: trail points under the live surface rise onto it at up to [TRAIL_LIFT_CM_S]
@@ -122,7 +140,10 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
     fun step(organisms: List<Organism>, dt: Double, displace: Boolean) {
         if (++gc % 400 == 0) { val ids = organisms.mapTo(HashSet()) { it.id }; st.keys.retainAll(ids) }
         for (o in organisms) {
-            val pen = clamp(o)
+            val early = st[o.id]
+            val pre = early?.pre ?: 0.0
+            if (early != null) early.pre = 0.0
+            val pen = max(clamp(o), pre)
             liftBody(o, dt)
             if (!displace || !o.alive) continue
             val p = o.pos

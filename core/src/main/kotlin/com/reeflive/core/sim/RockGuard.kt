@@ -1,0 +1,241 @@
+package com.reeflive.core.sim
+
+import com.reeflive.core.geom.BodySpline
+import com.reeflive.core.geom.Vec3
+
+/**
+ * Hole-aware rock guard (SIMULATION §24), run after Steering every tick: no part of a body (head or any of the
+ * [BodySpline.POINTS] spine stations) stays inside solid rock unless it lies in a modelled hole or cave that fits the
+ * animal ([HoleSet.inFittingHole]); the rock feet buried under the sand count as sand. A head inside a single-occupant
+ * hole held by another animal ([HoleClaims]) is put back out past the mouth. A head found inside rock is moved back onto the surface; a body whose trail cuts
+ * through rock (a tail swung round a corner, a straight rigid body on a concave face) is re-laid from the head with
+ * the same segment lengths, each station stepping round the rock (never jumping), and the trail takes that shape.
+ *
+ * Deliberately small and self-contained: it is a backstop for behaviours (which aim for real holes or the rock face
+ * themselves), and the body-collision layer (sim/BodyCollision.kt, resolveEnv) can replace it wholesale.
+ */
+class RockGuard(
+    private val rock: RockData,
+    private val sandY: (Double, Double) -> Double = { _, _ -> rock.sandTopCm },
+    private val claims: HoleClaims? = null,
+) {
+    /** Single-occupant holes, for the claim check (with a reach radius for a quick reject); redone when rocks move. */
+    private var ownFor: HoleSet? = null
+    private var ownHoles: List<RockHole> = emptyList()
+    private var ownReach = DoubleArray(0)
+
+    /** Heads moved back out of a hole another animal holds (diagnostics, tests). */
+    var claimFixes = 0L; private set
+    private val pos = Array(BodySpline.POINTS) { Vec3.ZERO }
+    private val cand = Array(7) { Vec3.ZERO }
+
+    /** Heads moved out of rock / bodies re-laid since the start (diagnostics, tests). */
+    var headFixes = 0L; private set
+    var bodyFixes = 0L; private set
+
+    private fun blocked(p: Vec3, br: Double): Boolean = mayBeRock(p) && blocked(rock, p, br, TOL, sandY)
+
+    // Cells of the rock SDF grid where the field can read deeper than −TOL anywhere (some corner does: the field is
+    // trilinear over a cell, so a cell whose eight corners all read −TOL or more reads −TOL or more throughout). Most
+    // spine stations of most animals are in cells that cannot, and skip the field lookup (SIMULATION §24). Rebuilt when
+    // a moved rock has settled ([DynamicRockSdf.revision] unchanged for [MASK_SETTLE] checks); off until then.
+    private val grid = ((rock.sdf as? DynamicRockSdf)?.base ?: rock.sdf) as? com.reeflive.core.geom.SdfGrid
+    private var mask: BooleanArray? = null
+    private var maskRev = -1
+    private var seenRev = -1
+    private var settle = 0
+
+    private fun mayBeRock(p: Vec3): Boolean {
+        val g = grid ?: return true
+        val rev = (rock.sdf as? DynamicRockSdf)?.revision ?: 0
+        if (rev != maskRev) {
+            if (rev != seenRev) { seenRev = rev; settle = 0 }
+            if (++settle < MASK_SETTLE && maskRev >= 0) return true
+            buildMask(g); maskRev = rev
+        }
+        val fx = (p.x - g.origin.x) / g.cell; val fy = (p.y - g.origin.y) / g.cell; val fz = (p.z - g.origin.z) / g.cell
+        if (fx < 0.0 || fy < 0.0 || fz < 0.0 || fx >= g.nx - 1.0 || fy >= g.ny - 1.0 || fz >= g.nz - 1.0) return true
+        return mask!![(fz.toInt() * (g.ny - 1) + fy.toInt()) * (g.nx - 1) + fx.toInt()]
+    }
+
+    private fun buildMask(g: com.reeflive.core.geom.SdfGrid) {
+        val sdf = rock.sdf
+        val nx = g.nx; val ny = g.ny; val nz = g.nz
+        val node = FloatArray(nx * ny * nz)
+        for (k in 0 until nz) for (j in 0 until ny) for (i in 0 until nx)
+            node[(k * ny + j) * nx + i] = sdf.distAt(g.origin.x + i * g.cell, g.origin.y + j * g.cell, g.origin.z + k * g.cell).toFloat()
+        val m = mask ?: BooleanArray((nx - 1) * (ny - 1) * (nz - 1)).also { mask = it }
+        for (k in 0 until nz - 1) for (j in 0 until ny - 1) for (i in 0 until nx - 1) {
+            var lo = Float.MAX_VALUE
+            for (c in 0 until 8) lo = minOf(lo, node[((k + (c shr 2)) * ny + j + ((c shr 1) and 1)) * nx + i + (c and 1)])
+            m[(k * (ny - 1) + j) * (nx - 1) + i] = lo < -TOL
+        }
+    }
+
+    /**
+     * One animal per hole: a head inside a hole another animal holds goes back out past the mouth. Run by [apply], and
+     * again after a crawler's seat has placed it (the seat's height write-back could set a hermit walking the lip of a
+     * crevice back inside it).
+     */
+    fun keepClaims(o: Organism) {
+        if (claims == null || !o.alive) return
+        if (ownFor !== rock.holes) {
+            ownHoles = rock.holes.all.filter { it.singleOccupant }
+            ownReach = DoubleArray(ownHoles.size) { ownHoles[it].depth + ownHoles[it].radius + 1.0 }
+            ownFor = rock.holes
+        }
+        for (i in ownHoles.indices) {
+            val h = ownHoles[i]
+            if (o.pos.distanceTo(h.mouth) > ownReach[i] || !h.holds(o.pos)) continue
+            val holder = claims.holder(h) ?: continue
+            if (holder === o) continue
+            o.pos = o.pos + h.axis * (-((o.pos - h.mouth) dot h.axis) + CLAIM_OUT_CM)
+            claimFixes++
+        }
+    }
+
+    fun apply(o: Organism) {
+        if (!o.alive) return
+        val sdf = rock.sdf
+        val br = RockHole.bodyRadius(o)
+        keepClaims(o)
+        // every station lies within a body length of the spline's head: a head that far from the rock (most fish,
+        // most of the time) has nothing to check (the full check ran for every animal every tick: SIMULATION §24)
+        if (sdf.dist(o.pos) > o.spline.length + o.pos.distanceTo(o.spline.headPos) + FAR_SLACK_CM) {
+            if (o.spline.override == null && o.spline.holding) o.spline.releaseCorrection()
+            return
+        }
+        if (blocked(o.pos, br)) {
+            // out onto the rock face, never down into the sand bed
+            val q = sdf.project(o.pos, MARGIN, iterations = 16)
+            o.pos = q.withY(maxOf(q.y, minOf(o.pos.y, sandY(q.x, q.z) + MARGIN)))
+            headFixes++
+        }
+        if (o.spline.override == null && o.spline.holding) {
+            // a correction is held for as long as the plain straight body would still cut the rock: a rigid body keeps
+            // showing it at full weight, a trail stops relaxing back toward the straight line. Letting it ease or relax
+            // back into the rock and re-laying it from there flailed the body every few ticks (FishGlitch BODY_POP)
+            val seg = o.spline.length / (BodySpline.POINTS - 1)
+            var rawBad = false
+            for (i in 0 until BodySpline.POINTS) if (blocked(o.pos - o.heading * (seg * i), br)) { rawBad = true; break }
+            if (!rawBad) o.spline.releaseCorrection() else if (o.spline.rigid) o.spline.holdCorrection()
+        }
+        o.spline.sampleStations(pos)
+        var bad = false
+        for (i in 0 until BodySpline.POINTS) if (blocked(pos[i], br)) { bad = true; break }
+        if (!bad) return
+        bodyFixes++
+        val seg = o.spline.length / (BodySpline.POINTS - 1)
+        val out = ArrayList<Vec3>(BodySpline.POINTS)
+        var prev = if (blocked(pos[0], br)) sdf.project(pos[0], MARGIN, iterations = 16) else pos[0]
+        out.add(prev)
+        var back = (pos[1] - pos[0]).normalized(o.heading * -1.0)
+        for (i in 1 until BodySpline.POINTS) {
+            // the next station one segment on from the last, never jumping: toward where the trail had it, else straight
+            // on, else slid along the rock face, else straight away from the rock
+            val n = sdf.gradient(prev).normalized(Vec3.Y)
+            val q = pos[i]
+            val towardQ = (q - prev).normalized(back)
+            // first choice: toward the trail point pushed just out of the rock, the least change of shape (a trail the
+            // relax has eased a little into the rock comes back out where it was, instead of folding to another side)
+            val qOut = if (blocked(q, br)) sdf.project(q, MARGIN, iterations = 8) else q
+            cand[0] = (qOut - prev).normalized(towardQ); cand[1] = towardQ; cand[2] = back
+            cand[3] = back.rejectFrom(n).normalized(n); cand[4] = towardQ.rejectFrom(n).normalized(n)
+            cand[5] = (back + n).normalized(n); cand[6] = n
+            var best: Vec3? = null
+            var bestD = -1e9
+            var ok = false
+            // ... and if one segment along that still ends in the rock, that end pushed out too (and back to one segment)
+            val c0 = prev + cand[0] * seg
+            if (clear(c0, br)) { best = c0; ok = true } else {
+                val c1 = prev + (sdf.project(c0, MARGIN, iterations = 8) - prev).normalized(cand[0]) * seg
+                if (clear(c1, br)) { best = c1; ok = true }
+            }
+            if (!ok) for (d in cand) {
+                val c = prev + d * seg
+                if (clear(c, br)) { best = c; ok = true; break }
+                val dc = sdf.dist(c)
+                if (dc > bestD) { bestD = dc; best = c }
+            }
+            if (!ok) {
+                // a pocket or a thin spur where the gradient misleads: the open axis direction closest to straight on
+                val dirs = AXES.sortedByDescending { it dot back }
+                val c = dirs.map { prev + it * seg }.firstOrNull { !blocked(it, br) && sdf.dist(it) >= MARGIN * 0.5 }
+                    ?: dirs.map { prev + it * seg }.firstOrNull { !blocked(it, br) }
+                    // boxed in (a long rigid body in a crack): fold the rest of the body back along itself
+                    ?: out.getOrNull(out.size - 2)
+                if (c != null) best = c
+            }
+            val c = best!!
+            back = (c - prev).normalized(back)
+            out.add(c)
+            prev = c
+        }
+        finish(o, out, br)
+    }
+
+    private fun finish(o: Organism, out: List<Vec3>, br: Double) {
+        // a re-lay that leaves the body no further out of the rock than the shape shown (a long rigid body boxed in
+        // against the rock) keeps the shown shape: re-laying it from its own last re-lay every tick flailed it
+        if (o.spline.override != null && penetration(out, br) >= penetration(pos, br) - 1e-6) return
+        // a free-swimming trail is corrected in place (no pop when it clears the rock); a behaviour's own polyline
+        // (hole, den) and a rigid body are shown through the override
+        if (o.spline.override == null && !o.spline.rigid) o.spline.adopt(out) else o.spline.correct(out)
+    }
+
+    /**
+     * A spot a corrected station may take: out of the rock with a little clearance, in the sand (over a buried rock foot,
+     * as [blocked] counts it: re-laying a body that lies in the sand round the buried rock popped it), or in a hole that
+     * fits the body.
+     */
+    private fun clear(c: Vec3, br: Double): Boolean =
+        !blocked(c, br) && (rock.sdf.dist(c) >= MARGIN * 0.5 || c.y < sandY(c.x, c.z) + SAND_SKIN || rock.holes.inFittingHole(c, br))
+
+    /** How far the stations of [p] reach into rock beyond the tolerance, summed (cm). */
+    private fun penetration(p: List<Vec3>, br: Double): Double {
+        var s = 0.0
+        for (q in p) if (blocked(q, br)) s += -rock.sdf.dist(q) - TOL
+        return s
+    }
+
+    private fun penetration(p: Array<Vec3>, br: Double): Double {
+        var s = 0.0
+        for (q in p) if (blocked(q, br)) s += -rock.sdf.dist(q) - TOL
+        return s
+    }
+
+    companion object {
+        /** Penetration tolerated before the guard acts (cm; the baked SDF is a 1 cm grid). */
+        const val TOL = 0.1
+        /** Clearance a corrected station is given (cm). */
+        const val MARGIN = 0.12
+        /** Guard checks with an unchanged rock field before the may-be-rock mask is rebuilt after a rock moved. */
+        const val MASK_SETTLE = 2000
+        /** Margin (cm) over a body length beyond which the rock cannot reach any station (the baked field's slack). */
+        const val FAR_SLACK_CM = 1.0
+        /** How far past the mouth a head is put back out of a hole another animal holds (cm). */
+        const val CLAIM_OUT_CM = 0.3
+        private val AXES = listOf(Vec3.X, Vec3.X * -1.0, Vec3.Y, Vec3.Y * -1.0, Vec3.Z, Vec3.Z * -1.0,
+            Vec3(1.0, 1.0, 0.0).normalized(), Vec3(-1.0, 1.0, 0.0).normalized(), Vec3(0.0, 1.0, 1.0).normalized(), Vec3(0.0, 1.0, -1.0).normalized())
+        /**
+         * How far inside the baked rock surface a point in a fitting hole may read (cm): the 1 cm SDF grid reads a
+         * 1–2 cm hole as shallow rock, but deeper than this the descriptor's round volume has missed the real walls.
+         */
+        const val HOLE_SLACK = 1.0
+        /** Height above the sand surface still counted as lying on the sand (cm). */
+        const val SAND_SKIN = 0.6
+
+        /** Inside rock, and not in the open volume of a hole that fits a body of half-thickness [br]. */
+        fun blocked(rock: RockData, p: Vec3, br: Double, tol: Double = TOL, sandY: (Double, Double) -> Double = { _, _ -> rock.sandTopCm }): Boolean {
+            // the rock feet run on under the sand: a body on or in the sand there is in sand, not in rock. Lying on the
+            // sand (the skin over it) counts only where the rock is shallow: a tail skimming the sand through a rock foot
+            // the sand is banked against was a body 2.6 cm inside the rock (Stripes at the goby spoil, t=34035 seed 1)
+            val d = rock.sdf.dist(p)
+            if (d >= -tol) return false
+            val sy = sandY(p.x, p.z)
+            if (p.y < sy) return false
+            if (p.y < sy + SAND_SKIN && d >= -HOLE_SLACK) return false
+            return d < -tol && (d < -HOLE_SLACK || !rock.holes.inFittingHole(p, br))
+        }
+    }
+}

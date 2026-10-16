@@ -65,6 +65,52 @@ class RockPhysicsTest {
         assertTrue(s.rock.sdf.dist(com.reeflive.core.geom.Vec3(r3.pos[0], r3.pos[1], r3.pos[2])) < 0.0)
     }
 
+    /** The holes and caves in a rock that toppled go with it (the hole dwellers look them up by name); the others stay. */
+    @Test
+    fun holesRideWithTheirRock() {
+        val s = sim()
+        val r3 = s.rockPhysics!!.bodies.first { it.name == "R3" }
+        val before = r3.pos.copyOf()
+        undermineR3(s)
+        s.advance(25.0, 0.05)
+        assertTrue("R3 moved", r3.moved)
+        val shift = com.reeflive.core.geom.Vec3(r3.pos[0] - before[0], r3.pos[1] - before[1], r3.pos[2] - before[2]).length()
+        val rest = s.rock.restHoles.all.associateBy { it.name }
+        val fresh = sim(dynamic = false)
+        val moved = s.rock.holes.all.filter { it.mouth.distanceTo(rest.getValue(it.name).mouth) > 0.01 }
+        println("[rock] R3 shifted ${"%.1f".format(shift)} cm; holes that went with it: ${moved.map { it.name }}")
+        assertTrue("R3's holes went with it", moved.isNotEmpty())
+        for (h in moved) {
+            val r = rest.getValue(h.name)
+            assertEquals("${h.name} keeps its size", r.radius, h.radius, 1e-9)
+            assertEquals("${h.name} keeps its length", r.path.zipWithNext { a, b -> a.distanceTo(b) }.sum(),
+                h.path.zipWithNext { a, b -> a.distanceTo(b) }.sum(), 1e-6)
+            // the mouth sits where it sat on the rock (the moved rock's field is resampled at 1 cm)
+            val now = s.rock.sdf.dist(h.mouth); val was = fresh.rock.sdf.dist(r.mouth)
+            assertTrue("${h.name} mouth still on the rock (rock distance $was -> $now)", kotlin.math.abs(now - was) < 1.0)
+            assertTrue("${h.name} moved no farther than the rock could carry it", h.mouth.distanceTo(r.mouth) < shift + 30.0)
+        }
+        val r3Def = s.rock.pieces.indexOfFirst { it.name == "R3" }
+        for (h in s.rock.holes.all) if (h !in moved) {
+            val q = h.along(minOf(h.depth, 1.0))
+            assertTrue("${h.name} is not on R3 but moved", RockPieceDef.labelOf(s.rock.pieces, q.x, q.y, q.z, 4.0) != r3Def || h.kind == HoleKind.BURROW)
+        }
+        assertTrue("the brains' lookup follows", s.rock.holes.live(rest.getValue(moved[0].name)) === moved[0])
+    }
+
+    /** Taking the rocks out takes their holes with them; the hole dwellers then shelter on what rock is left. */
+    @Test
+    fun holesGoWithTheirRock() {
+        val s = TestTank.sim(DefaultStock.all, seed = 3L)
+        s.setDynamicRocks(true)
+        assertTrue(s.rock.holes.all.any { it.kind != HoleKind.BURROW })
+        s.clearRocks()
+        assertTrue("no rock, no holes: ${s.rock.holes.all.map { it.name }}", s.rock.holes.all.all { it.kind == HoleKind.BURROW })
+        s.advance(60.0, 0.05)
+        val mower = s.organisms.first { it.brainKind == BrainKind.LAWNMOWER_BLENNY }
+        assertNull("the lawnmower's hole went with its rock", (s.agentOf(mower)!!.brain as com.reeflive.core.ai.LawnmowerBlennyBrain).hole)
+    }
+
     @Test
     fun staticRockscapeNeverMoves() {
         val s = sim(dynamic = false)

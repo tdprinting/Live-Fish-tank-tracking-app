@@ -2,6 +2,7 @@ package com.reeflive.core.geom
 
 import kotlin.math.exp
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -46,6 +47,61 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         lastOverride = override
     }
 
+    /**
+     * Show a corrected head→tail polyline (the sim's rock guard) at once, for a rigid body or one already on an
+     * [override] path: the polyline was taken from the shape currently shown, so it does not pop, and easing it in
+     * would leave the uncorrected shape (in the rock) mostly showing. It eases back out once [override] is cleared.
+     */
+    fun correct(poly: List<Vec3>) {
+        if (!rigid && overrideMix < 1.0 && poly.size >= 2) {
+            // part way through easing into a path (a goby sliding into its burrow): the corrected shape becomes the
+            // trail and the ease starts again from it. Shown at full weight, the path the behaviour sets again next
+            // tick replaced it at once (the rest of the ease and the correction in one 7 cm pop)
+            adopt(poly)
+            overrideMix = 0.0
+            return
+        }
+        override = poly
+        lastOverride = poly
+        overrideMix = 1.0
+        held = true
+    }
+
+    /** A [correct]ion or [adopt]ed trail the rock guard is holding (see [holdCorrection], [update]). */
+    private var held = false
+    /** Whether a correction is being held (with none, [holdCorrection] and [releaseCorrection] change nothing). */
+    val holding: Boolean get() = held
+
+    /**
+     * Keep the last [correct]ed polyline on at full weight while the rock guard still needs it (the plain rigid body
+     * would cut the rock), instead of letting it ease out and correcting it afresh every few ticks. False when no
+     * correction is being held; [releaseCorrection] lets it ease out.
+     */
+    fun holdCorrection(): Boolean {
+        if (!held || !rigid) return false
+        override = lastOverride ?: run { held = false; return false }
+        overrideMix = 1.0
+        return true
+    }
+
+    fun releaseCorrection() {
+        // a trail let go after a hold relaxes back over a few updates, not in one long fast-forward step
+        if (held && !rigid) relaxEase = RELAX_EASE_UPDATES
+        held = false
+    }
+
+    /** Updates left in which the trail's relax is capped at [RELAX_EASE_STEP] (after a hold is let go). */
+    private var relaxEase = 0
+
+    /** Replace the trail with a corrected head→tail polyline (the sim's rock guard), so it carries on from there. */
+    fun adopt(poly: List<Vec3>) {
+        if (rigid || poly.size < 2) return
+        held = true
+        head = poly[0]
+        trail.clear()
+        for (i in 1 until poly.size) trail.add(poly[i])
+    }
+
     fun update(headPos: Vec3, headingDir: Vec3, dt: Double, relaxRate: Double) {
         if (!(headPos.x.isFinite() && headPos.y.isFinite() && headPos.z.isFinite())) return
         head = headPos
@@ -53,7 +109,8 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         // ease the body into and out of an override path instead of switching shape in one tick
         override?.let { if (it.isNotEmpty()) lastOverride = it }
         val target = if (override != null) 1.0 else 0.0
-        overrideMix += (target - overrideMix) * (1 - exp(-OVERRIDE_BLEND_RATE * dt.coerceAtLeast(0.0)))
+        // (at most MAX_BLEND_STEP per update: a long fast-forward tick would otherwise swap the shape in one step)
+        overrideMix += ((target - overrideMix) * (1 - exp(-OVERRIDE_BLEND_RATE * dt.coerceAtLeast(0.0)))).coerceIn(-MAX_BLEND_STEP, MAX_BLEND_STEP)
         if (kotlin.math.abs(target - overrideMix) < 1e-3) overrideMix = target
         if (overrideMix == 0.0) lastOverride = null
         if (rigid) return
@@ -68,13 +125,26 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             trail.add(0, trail[0] + dir * step)
             d -= step
         }
-        // Relax toward the straight line behind the heading.
-        if (relaxRate > 0) {
+        // Relax toward the straight line behind the heading (not while the rock guard holds an adopted shape: the
+        // straight line would put the body back into the rock)
+        if (relaxRate > 0 && !held) {
             // capped per tick: at the 0.5 s fast-forward tick a body that had just stopped out of a curve straightened
             // 86 % in one step (a visible body pop); at the live 20 Hz tick this changes nothing
-            val k = 1 - exp(-min(relaxRate * dt, MAX_RELAX_STEP))
+            var k = 1 - exp(-min(relaxRate * dt, MAX_RELAX_STEP))
+            if (relaxEase > 0) { relaxEase--; k = minOf(k, RELAX_EASE_STEP) }
+            // and capped in distance: a fish that pivoted on the spot (a grazing blenny turning about at the rock)
+            // has its tail a body length off the straight line, and a fifth of that in one tick popped the tail 5 cm
+            var far = 0.0
             var s = head.distanceTo(trail[0])
             var prev = trail[0]
+            for (i in trail.indices) {
+                if (i > 0) { s += trail[i].distanceTo(prev); prev = trail[i] }
+                if (s > length) break
+                far = max(far, (head - heading * s).distanceTo(trail[i]))
+            }
+            if (far * k > MAX_RELAX_BL * length) k = MAX_RELAX_BL * length / far
+            s = head.distanceTo(trail[0])
+            prev = trail[0]
             for (i in trail.indices) {
                 if (i > 0) { s += trail[i].distanceTo(prev); prev = trail[i] }
                 val ideal = head - heading * s
@@ -120,6 +190,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             frames[i] = Quat.fromForwardUp(fwd, up)
         }
     }
+
+    /** The head the stations start from (the last [update]'s). */
+    val headPos: Vec3 get() = head
+
+    /** [sample]'s spine points only, without the frames (the rock guard's per-tick check). */
+    fun sampleStations(pos: Array<Vec3>) = samplePositions(pos)
 
     /**
      * [sample] straight into pose arrays: spine xyz into [sp] (POINTS × 3) and frame quaternions xyzw into [fr]
@@ -229,7 +305,11 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     }
 
     /** Ground height under (x, z) a trail point must stay above ([liftTrail]). */
-    fun interface Floor { fun y(x: Double, z: Double): Double }
+    fun interface Floor {
+        fun y(x: Double, z: Double): Double
+        /** Whether trail point [p] may be raised to [to] (false: it stays where it is, e.g. under it is a buried rock foot). */
+        fun canLift(p: Vec3, to: Double): Boolean = true
+    }
 
     /**
      * Raises trail points that lie under [floor] by at most [maxLift] cm each call (a body that turned round over a
@@ -241,7 +321,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         for (i in trail.indices) {
             val p = trail[i]
             val f = floor.y(p.x, p.z)
-            if (p.y < f) trail[i] = p.withY(min(f, p.y + maxLift))
+            if (p.y < f && floor.canLift(p, f)) trail[i] = p.withY(min(f, p.y + maxLift))
         }
     }
 
@@ -255,5 +335,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         const val OVERRIDE_BLEND_RATE = 6.0
         /** Largest relax exponent one tick may apply (k ≤ 1 − e^−0.5 ≈ 0.39). */
         const val MAX_RELAX_STEP = 0.5
+        /** Largest change of the override blend in one update (the live 20 Hz tick moves it at most 0.26). */
+        const val MAX_BLEND_STEP = 0.35
+        /** Farthest a trail point moves in one relax update, as a fraction of the body length. */
+        const val MAX_RELAX_BL = 0.15
+        /** After a held trail is let go, its relax is capped at this fraction per update for that many updates. */
+        const val RELAX_EASE_STEP = 0.25
+        const val RELAX_EASE_UPDATES = 6
     }
 }

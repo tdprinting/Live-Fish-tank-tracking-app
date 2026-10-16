@@ -3,6 +3,8 @@ package com.reeflive.core.ai
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.smoothstep
 import com.reeflive.core.sim.Anchor
+import com.reeflive.core.sim.HoleKind
+import com.reeflive.core.sim.RockHole
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
@@ -1550,6 +1552,10 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         /** Preferred hop length, cm (most perch changes are short; DESIGN ESTIMATE scaled to the tank), and the longest. */
         const val HOP_PREF_CM = 22.0
         const val HOP_MAX_CM = 70.0
+        /** A duck no closer to its approach point for this long (s) clamps onto the perch from where it is ... */
+        const val DUCK_STALL_S = 2.0
+        /** ... when the perch is this near (cm) with open water between. */
+        const val DUCK_REACH_CM = 15.0
         const val UNREACHABLE_S = 900.0
         /** Perched head-up angle, rad (~15°; research video fish_falco_hawkfish [S1][M]). */
         const val PERCH_HEAD_UP = 0.26
@@ -1568,13 +1574,24 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
      * the threat, then it clamps onto the rock there instead of hovering in cover like a mid-water fish.
      */
     inner class DuckToPerch : Flee(this@HawkBrain, { c, from -> escapePerch(c, from) }, "Ducking behind rock") {
+        private var bestD = Double.MAX_VALUE
+        private var progressAt = 0.0
+        override fun enter(c: Ctx) { super.enter(c); bestD = Double.MAX_VALUE; progressAt = c.t }
         override fun update(c: Ctx, out: SteerIntent) {
             super.update(c, out)
             val o = c.o
             val pose = perchPose(current)
             val t = threat
+            // as close to the approach point as the water lets it: an approach point over a perch just under the surface
+            // (PERCH_SHELF) is clamped up to where the steering keeps a swimmer off the surface, and it hung a few cm
+            // short of it, unclamped, for the whole duck (MotionTest hawkfishNeverCruises). Stalled with open water to
+            // the perch, it clamps on from there
+            val dh = o.pos.distanceTo(hideTarget)
+            if (dh < bestD - 0.5) { bestD = dh; progressAt = c.t }
+            val stalled = c.t - progressAt > DUCK_STALL_S && o.pos.distanceTo(pose.pos) < DUCK_REACH_CM &&
+                c.rock.sdf.segmentClear(o.pos, pose.pos, 0.5)
             // at the perch, or at its approach point (on a rock top that sits a clearance above it: it hovered there unclamped)
-            val there = o.pos.distanceTo(pose.pos) < 4.0 + 0.5 * o.lengthCm || o.pos.distanceTo(hideTarget) < 2.5
+            val there = o.pos.distanceTo(pose.pos) < 4.0 + 0.5 * o.lengthCm || dh < 2.5 || stalled
             if (elapsed > 0.8 && there && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
                 out.place(pose.pos, pose.heading, pose.up, 8.0); out.posture = 1; out.pectoral = 1.0
                 out.target = null; out.fleeFrom = null; out.hover = false
@@ -1796,40 +1813,114 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
 }
 
 // =====================================================================================
-// Hole dwellers: shared hole placement
+// Hole dwellers: shared hole placement (SIMULATION §24)
 // =====================================================================================
-/** Kinematic in-hole pose: head [headOut] cm outside the mouth along the hole axis, body along the tunnel. */
-fun holeRest(c: Ctx, hole: Anchor?, fallback: Vec3, headOut: Double): Rest {
-    val pos = hole?.pos ?: fallback
-    val dir = (hole?.dir ?: Vec3.Z).normalized(Vec3.Z)
-    var head = pos + dir * headOut
-    // a hole whose tunnel the baked rock doesn't carve fully: slide the head out until it is in water
-    var k = 0
-    while (c.rock.sdf.dist(head) < 0.05 && k++ < 40) head += dir * 0.1
-    val depth = hole?.depth ?: 6.0
-    return Rest(head, dir, Vec3.Y.rejectFrom(dir).normalized(Vec3.Y), posture = 3, spline = listOf(head, pos, pos - dir * depth, pos - dir * (depth + c.L)))
+/**
+ * How far in from the mouth the head sits for a [headOut] cm head-out pose (negative = inside). A hole shorter than
+ * the body keeps the head further out, so the tail never reaches past the end of the hole into rock.
+ */
+fun holeHeadDepth(hole: RockHole, bodyLength: Double, headOut: Double): Double =
+    min(-headOut, hole.depth - bodyLength - 0.2).coerceAtLeast(-bodyLength)
+
+/**
+ * Kinematic in-hole pose (posture 3): head [headOut] cm out of the mouth along the hole's axis (negative = inside),
+ * facing out, the body lying back along the hole with the tail deepest (blennies back in tail first and perch with
+ * only the head out; docs/research/video/fish_tailspot_blenny.md).
+ */
+fun holeRest(c: Ctx, hole: RockHole, headOut: Double): Rest {
+    val d = holeHeadDepth(hole, c.L, headOut)
+    val up = Vec3.Y.rejectFrom(hole.axis).normalized(hole.up)
+    return Rest(hole.along(d), hole.axis, up, posture = 3, spline = hole.polyline(d, d + c.L))
 }
 
 /** How far a blenny's head comes out of its hole to watch a tap on the glass (cm; its day pose is 1–1.6). */
 const val PEEK_HEAD_OUT_CM = 2.2
 
-/** Go to the hole mouth (swim), then slide in (kinematic). [headOut] < 0 = fully inside. */
-open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3, label: String, val scoreFn: (Ctx) -> Double, val headOutFn: (Ctx) -> Double) : Behavior("hole_$holeName", label) {
-    private var inside = false
+/** Where a hole-dweller with no fitting hole shelters: pressed against the rock face near [near], facing out. */
+fun rockShelterRest(c: Ctx, near: Vec3): Rest {
+    val p0 = c.rock.sdf.project(near, 0.0)
+    val n = c.rock.sdf.gradient(p0)
+    val h = Vec3.Y.rejectFrom(n).let { if (it.length() < 0.2) Vec3.X.rejectFrom(n) else it }.normalized(Vec3.X)
+    return Rest(p0 + n * (0.5 * c.o.species.depthRatio * c.L + 0.3), h, n, posture = 1)
+}
+
+/**
+ * Go home to a real hole the way a blenny does: swim to a point a body length out in front of the mouth, turn to face
+ * out, back in tail first along the hole, then sit with the head out ([headOutFn] > 0) or fully in (< 0). [hole] must
+ * fit the fish (RockHole.fits); with none it shelters against the rock face at [shelter] instead of entering rock.
+ */
+open class InHole(val b: SpeciesBrain, var hole: RockHole?, var shelter: Vec3, label: String, val scoreFn: (Ctx) -> Double, val headOutFn: (Ctx) -> Double) : Behavior("hole", label) {
+    /** 0 swim to the stand point, 1 turn to face out, 2 back in tail first, 3 in the hole. */
+    var phase = 0; private set
+    /** The phase now, for tests and captions (same as [phase]). */
+    val phaseNow: Int get() = phase
+    private var phaseAt = 0.0
+    private var dHead = 0.0
+    /** Completed tail-first entries (tests, captions). */
+    var backIns = 0; private set
+    private var shelterRest: Rest? = null
+
+    override val label: String get() = if (phase == 2) "Backing into its hole" else super.label
     override fun score(c: Ctx) = scoreFn(c)
-    override fun enter(c: Ctx) { inside = c.o.posture == 3 }
+    override fun enter(c: Ctx) {
+        val h = c.rock.holes.live(hole)
+        phase = if (h != null && c.o.posture == 3 && h.contains(c.o.pos, 0.8)) 3 else 0
+        phaseAt = c.t
+    }
+    override fun exit(c: Ctx) {
+        // the body lay along the hole: start the swim-out trail there instead of the stale pre-hole trail
+        if (phase >= 2) c.o.spline.reset(c.o.pos, c.o.heading)
+        phase = 0
+    }
     override fun update(c: Ctx, out: SteerIntent) {
-        val hole = c.rock.anchors[holeName]
-        val r = holeRest(c, hole, fallback, headOutFn(c))
-        val mouth = c.safe((hole?.pos ?: fallback) + r.heading * (c.clearance + 1.0), c.clearance * 0.8)
-        if (!inside) {
-            out.seek(mouth, c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
-            if (c.o.pos.distanceTo(mouth) < 2.0) inside = true
+        // its own hole only: one another animal holds is never entered (it shelters on the rock face until its brain
+        // finds a free one); claiming here also re-takes its hole after a reload
+        val h = c.rock.holes.live(hole)?.takeIf { c.sim.holeClaims.claim(it, c.o) }
+        if (h == null) {
+            val r = shelterRest ?: rockShelterRest(c, shelter).also { shelterRest = it }
+            if (c.o.pos.distanceTo(r.pos) > 2.0 && c.o.posture != 1) out.seek(c.viaOpenWater(c.safe(r.pos + r.up!! * c.clearance)), c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
+            else out.rest(r, 4.0)
+            c.o.sleeping = c.p.night
             return
         }
-        out.rest(r, 5.0)
-        c.o.sleeping = c.p.night
-        c.o.eyeYaw = 0.35 * sin(2 * PI * 0.5 * c.t + c.o.appendagePhase)
+        val L = c.L
+        val startD = -(L + 0.8)   // head here = tail tip just outside the mouth
+        val stand = h.along(startD)
+        // moved off its line (pushed, placed, startled away): go round again, tail first
+        if (phase >= 2 && c.o.pos.distanceTo(h.along(if (phase == 2) dHead else holeHeadDepth(h, L, headOutFn(c)))) > 3.0 + 0.3 * L) {
+            phase = 0; phaseAt = c.t
+        }
+        when (phase) {
+            0 -> {
+                out.seek(c.viaOpenWater(stand), c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
+                if (c.o.pos.distanceTo(stand) < max(1.5, 0.2 * L) || c.t - phaseAt > 20) { phase = 1; phaseAt = c.t }
+            }
+            1 -> {
+                // U-turn on the spot to face out of the hole
+                // (it only starts backing once it faces out: a slow turn is pushed harder, then the approach restarts)
+                out.place(stand, h.axis, null, if (c.t - phaseAt > 2.5) 20.0 else 6.0)
+                out.pectoral = 1.0
+                if ((c.o.heading dot h.axis) > 0.94) { phase = 2; phaseAt = c.t; dHead = startD }
+                else if (c.t - phaseAt > 6.0) { phase = 0; phaseAt = c.t }
+            }
+            2 -> {
+                val target = holeHeadDepth(h, L, headOutFn(c))
+                // reversing on the pectorals with a tail wriggle, about a body length a second (faster when scared)
+                val rate = if (b.startledRecently || b.threat != null) 1.6 else 0.8
+                dHead = min(target, dHead + rate * L * c.dt)
+                val up = Vec3.Y.rejectFrom(h.axis).normalized(h.up)
+                out.place(h.along(dHead), h.axis, up, 30.0)
+                out.posture = if (dHead + L > 0.3) 3 else 0
+                out.splineOverride = h.polyline(dHead, dHead + L)
+                out.ampMul = 1.4; out.tailMul = 1.3; out.pectoral = 1.0
+                if (dHead >= target - 0.05) { phase = 3; backIns++ }
+            }
+            else -> {
+                out.rest(holeRest(c, h, headOutFn(c)), 5.0)
+                c.o.sleeping = c.p.night
+                c.o.eyeYaw = 0.35 * sin(2 * PI * 0.5 * c.t + c.o.appendagePhase)
+            }
+        }
     }
 }
 
@@ -1837,26 +1928,38 @@ open class InHole(val b: SpeciesBrain, var holeName: String, var fallback: Vec3,
 // Lawnmower blenny (Salarias fasciatus): perch, hop, constant grazing, territorial to blennies
 // =====================================================================================
 class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
-    val hole: Anchor? = c.rock.anchors["HOLE_LAWNMOWER"] ?: c.rock.anchors["HOLE_BLENNY"]
-    val territory: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
+    /** Its home: a modelled hole that fits its body (ASSETS §3.6, HOLE_LAWNMOWER), or null (then it shelters on the rock face). */
+    private val hole0: RockHole? = c.rock.holes.claimHome(o, setOf(HoleKind.HOLE, HoleKind.CAVE),
+        (c.rock.anchors["HOLE_LAWNMOWER"] ?: c.rock.anchors["HOLE_BLENNY"])?.pos, c.sim.holeClaims)
+    /** Where its hole is now (it rides with its rock when the rocks shift, sim/RockPhysics.kt). */
+    val hole: RockHole? get() = c.rock.holes.live(hole0)
+    private val faceShelter: Vec3 by lazy { c.rock.sdf.project(c.rock.anchors.pos("GRAZE_2", Vec3(30.0, 40.0, 14.0)), 0.5) }
+    /** Territory centre: the hole mouth, else a rock face on the left stack (never inside rock). */
+    val territory: Vec3 get() = hole?.mouth ?: faceShelter
 
     init {
         install(RockGraze(),
-            TailFirstHole(this, hole?.name ?: "HOLE_LAWNMOWER", territory, "Resting in its hole", { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) }, { c -> if (c.p.night) -0.5 else 1.0 }),
+            InHole(this, hole, territory, "Resting in its hole",
+                { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) + (if (c.t - startleAt < 12) 0.35 else 0.0) },
+                { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe((hole?.pos ?: territory) + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
+            Flee(this, { c, _ -> c.safe(hole?.along(-(c.clearance + 1.0)) ?: territory) }, "Darting home"), SurfaceGasp(this),
             // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
             NibbleNori(this, 0.75, quiet = true))
     }
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
 
-    /** A tap on the glass: head and shoulders out of the hole to look (research 04 §1C "watches from rock"). */
-    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, territory, PEEK_HEAD_OUT_CM)
+    override fun shelterSpot(c: Ctx): Vec3? = hole?.let { c.safe(it.along(-(c.clearance + 1.0))) }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest =
-        if (night) holeRest(c, hole, territory, -0.5)
-        else c.rockSurfacePoint(territory, 10.0)?.let { (p, n) -> perchOn(p, n) } ?: holeRest(c, hole, territory, 1.0)
+    /** A tap on the glass: head and shoulders out of the hole to look (research 04 §1C "watches from rock"). */
+    override fun peekRest(c: Ctx): Rest? = hole?.let { holeRest(c, it, PEEK_HEAD_OUT_CM) }
+
+    override fun restSpot(c: Ctx, night: Boolean): Rest {
+        val h = hole
+        return if (night) (if (h != null) holeRest(c, h, -0.5) else rockShelterRest(c, territory))
+        else c.rockSurfacePoint(territory, 10.0)?.let { (p, n) -> perchOn(p, n) } ?: (if (h != null) holeRest(c, h, 1.0) else rockShelterRest(c, territory))
+    }
 
     /** Rasps taken (one per second of grazing). */
     var rasps = 0; private set
@@ -1865,6 +1968,8 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         /** Hop speed (research video fish_lawnmower_blenny: "3 BL/s per hop" [L]), longest single hop, propped head-up angle (rad). */
         const val HOP_BL_S = 3.0
         const val HOP_MAX_BL = 3.0
+        /** Points along a hop arc checked for rock before it takes off ([RockGraze.hopClear]). */
+        const val HOP_PROBES = 10
         const val HEAD_UP = 0.26
         /**
          * Grazing comes in bite bouts with look-round pauses between them: 3,427 bites a day in the field, ~5 a minute
@@ -1942,13 +2047,27 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             hopT = -1.0
             biteLeft = 0
         }
+        /** The hop arc from here to [p] (as [update] flies it) stays out of the rock. */
+        private fun hopClear(c: Ctx, p: Rest): Boolean {
+            val from = c.o.pos
+            val d = from.distanceTo(p.pos)
+            val up = (c.o.up + p.up!!).normalized(Vec3.Y)
+            for (k in 1 until HOP_PROBES) {
+                val u = k.toDouble() / HOP_PROBES
+                if (c.rock.sdf.dist(from.lerp(p.pos, u) + up * (4 * (0.3 * d + 1.0) * u * (1 - u))) < 0.0) return false
+            }
+            return true
+        }
+
         override fun update(c: Ctx, out: SteerIntent) {
             val p = perch ?: run { pick(c); out.crawl = true; return }
             when (state) {
                 1 -> {
                     val o = c.o
-                    if (hopT < 0 && o.pos.distanceTo(p.pos) > HOP_MAX_BL * o.lengthCm) {
-                        // too far for one hop (back from feeding): skip along the rock on its pectorals
+                    if (hopT < 0 && (o.pos.distanceTo(p.pos) > HOP_MAX_BL * o.lengthCm || !hopClear(c, p))) {
+                        // too far for one hop (back from feeding), or a hop that would pass through the rock (round a
+                        // spur or a ridge: the arc pressed onto the face, the body cut through behind it): skip along
+                        // the rock on its pectorals
                         out.crawl = true
                         out.surfaceOffset = 0.5 * o.species.depthRatio * o.lengthCm + 0.3
                         out.seek(p.pos, o.burstSpeed * 0.4, arrive = 1.5, urgency = 0.5)
@@ -2038,12 +2157,20 @@ class BlennyRival(val b: SpeciesBrain, val radius: Double, val centre: Vec3) : B
 // Tailspot blenny (Ecsenius stigmatura): peeks from its hole, darts up for plankton
 // =====================================================================================
 class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
-    // the rebuilt rockscape names the tailspot's own hole HOLE_TAILSPOT; HOLE_BLENNY is the lawnmower's
-    var hole: Anchor? = c.rock.anchors["HOLE_TAILSPOT"] ?: c.rock.anchors["HOLE_BLENNY"]; private set
-    val holePos: Vec3 get() = hole?.pos ?: Vec3(10.0, 13.0, 32.3)
+    /** Its home: a modelled hole that fits its body, its own (HOLE_TAILSPOT) first (ASSETS §3.6); null = rock-face shelter. */
+    private var hole0: RockHole? = c.rock.holes.claimHome(o, setOf(HoleKind.HOLE),
+        (c.rock.anchors["HOLE_TAILSPOT"] ?: c.rock.anchors["HOLE_BLENNY_2"])?.pos, c.sim.holeClaims)
+    /** Where its hole is now (it rides with its rock when the rocks shift, sim/RockPhysics.kt). */
+    var hole: RockHole?
+        get() = c.rock.holes.live(hole0)
+        private set(v) { hole0 = v }
+    private val shelterAt: Vec3 = c.rock.sdf.project(c.rock.anchors.pos("HOLE_TAILSPOT", Vec3(10.0, 13.0, 32.3)), 0.5)
+    val holePos: Vec3 get() = hole?.mouth ?: shelterAt
+    /** Outward direction at the home (the hole's axis, else the rock face's normal). */
+    private val holeOut: Vec3 get() = hole?.axis ?: c.rock.sdf.gradient(shelterAt)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
-    private val inHole = TailFirstHole(this, hole?.name ?: "HOLE_TAILSPOT", holePos, "Peeking from its hole",
+    val inHole = InHole(this, hole, holePos, "Peeking from its hole",
         // by day it spends about half its time head-out in the hole and the rest perched round it or darting out
         // (research 30: Ecsenius perch on rock by their holes; DESIGN ESTIMATE share); it was in the hole 95 % of the day
         { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else 0.38) + (if (c.o.health < 0.5) 0.3 else 0.0) },
@@ -2054,24 +2181,26 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         install(
             inHole,
             PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(), GlassCurious(this),
-            Flee(this, { c, _ -> c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
+            Flee(this, { c, _ -> c.safe(holePos + holeOut * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
     }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = holeRest(c, hole, holePos, if (night) -0.5 else 1.5)
+    override fun restSpot(c: Ctx, night: Boolean): Rest = hole?.let { holeRest(c, it, if (night) -0.5 else 1.5) } ?: rockShelterRest(c, shelterAt)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole") holePos else super.anchorPos(c, anchor)
 
+    override fun shelterSpot(c: Ctx): Vec3? = if (hole != null) c.safe(holePos + holeOut * (c.clearance + 1.0)) else null
+
     /** A tap on the glass: further out of its hole to look (research 04 §2C "peeks from rock"). */
-    override fun peekRest(c: Ctx): Rest = holeRest(c, hole, holePos, PEEK_HEAD_OUT_CM)
+    override fun peekRest(c: Ctx): Rest? = hole?.let { holeRest(c, it, PEEK_HEAD_OUT_CM) }
 
     override fun initialPlace(c: Ctx) {
         super.initialPlace(c)
-        o.posture = 3
+        if (hole != null) o.posture = 3
     }
 
     override fun preTick(c: Ctx) {
         super.preTick(c)
-        if (c.t >= nextHoleCheck) { nextHoleCheck = c.t + 300; reconsiderHole(c) }
+        if (c.t >= nextHoleCheck) { nextHoleCheck = c.t + 300; findSpareHole(c); reconsiderHole(c) }
     }
 
     /**
@@ -2086,15 +2215,30 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         val harassed = (r?.harassedBy ?: 0.0) > 0.2 || (r?.fear ?: 0.0) > 0.3
         val settled = c.t - o.arrivalTime > 3 * 86400
         if (!harassed && !settled) return
-        // only holes carved deep enough to take the blenny (water along the tunnel), so it never sits inside rock
-        fun open(a: com.reeflive.core.sim.Anchor): Boolean {
-            val d = (a.dir ?: Vec3.Z).normalized(Vec3.Z)
-            return (1..4).all { k -> c.rock.sdf.dist(a.pos - d * (k * (a.depth ?: 6.0) / 4)) > 0.0 }
-        }
-        val best = c.rock.anchors.ofType("HOLE").filter { it.pos.distanceTo(lh) >= MOVE_AWAY_CM && open(it) }.maxByOrNull { it.pos.distanceTo(lh) } ?: return
-        hole = best
-        inHole.holeName = best.name; inHole.fallback = best.pos
-        o.homePos = best.pos
+        // only real holes that fit the blenny's body (measured on the built rock), so it never sits inside rock
+        val claims = c.sim.holeClaims
+        val best = c.rock.holes.all.filter { it.kind == HoleKind.HOLE && it.fits(o) && it.mouth.distanceTo(lh) >= MOVE_AWAY_CM && claims.usableBy(it, o) }
+            .maxByOrNull { it.mouth.distanceTo(lh) } ?: return
+        if (best === hole) return
+        moveTo(c, best)
+    }
+
+    /** Move house: claim [h] first, then let the old hole go (it is never shared, not even for a tick). */
+    private fun moveTo(c: Ctx, h: RockHole) {
+        if (!c.sim.holeClaims.claim(h, o)) return
+        hole?.let { c.sim.holeClaims.release(it, o) }
+        hole = h
+        inHole.hole = h; inHole.shelter = h.mouth
+        o.homePos = h.mouth
+    }
+
+    /**
+     * A blenny without a hole (every fitting one held when it arrived) keeps looking: it takes the first spare hole that
+     * fits. A held hole is contested only through the blenny war (pair row lmb_tailspot), whose loser moves out.
+     */
+    private fun findSpareHole(c: Ctx) {
+        if (hole != null) return
+        c.rock.holes.homeFor(o, setOf(HoleKind.HOLE), shelterAt, claims = c.sim.holeClaims)?.let { moveTo(c, it) }
     }
 
     /** Short excursions from the hole and how many ended back at it (research 10 §7: inspect → excursion → return). */
@@ -2130,7 +2274,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             return 0.55
         }
         override fun enter(c: Ctx) {
-            val sites = (c.rock.anchors.ofType("HOLE") + c.rock.anchors.ofType("GRAZE")).map { it.pos }.filter { it.distanceTo(holePos) > 15 }
+            val sites = (c.rock.holes.fitting(RockHole.bodyRadius(c.o), setOf(HoleKind.HOLE)).map { it.mouth } +
+                c.rock.anchors.ofType("GRAZE").map { it.pos }).filter { it.distanceTo(holePos) > 15 }
             if (sites.isEmpty()) { finished = true; return }
             site = sites[c.rng.nextInt(sites.size)]
             val sp = c.rockSurfacePoint(site, 6.0)
@@ -2167,7 +2312,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             back = false
             excursions++
             next = c.t + c.rng.range(30.0, 90.0)
-            target = f?.pos ?: c.safe(holePos + (hole?.dir ?: Vec3.Z) * 6.0 + Vec3(c.rng.signed() * 5, c.rng.range(10.0, 20.0), 0.0))
+            target = f?.pos ?: c.safe(holePos + holeOut * 6.0 + Vec3(c.rng.signed() * 5, c.rng.range(10.0, 20.0), 0.0))
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
@@ -2182,7 +2327,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 if (elapsed > 4) back = true
             } else {
                 // swim back to the hole mouth; the InHole behaviour then slides it in head-out
-                val mouth = c.safe(holePos + (hole?.dir ?: Vec3.Z) * (c.clearance + 1.0), c.clearance * 0.8)
+                val mouth = c.safe(holePos + holeOut * (c.clearance + 1.0), c.clearance * 0.8)
                 out.seek(mouth, o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
                 if (o.pos.distanceTo(mouth) < 2.5) { returns++; finished = true }
                 else if (elapsed > 12) finished = true
@@ -2243,19 +2388,42 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 // Indigo dottyback (Pseudochromis): secretive cave darter, territorial
 // =====================================================================================
 class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
-    val cave: Vec3 = c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(106.0, 7.5, 13.0)))
-    val caveSafe: Vec3 = c.safe(cave + Vec3(0.0, 0.0, 3.0))
+    /** Its cave: the modelled CAVE_DOTTYBACK when it fits the body (ASSETS §3.6); null = it shelters on the rock face. */
+    private val home0: RockHole? = c.rock.holes.claimHome(o, setOf(HoleKind.CAVE), c.rock.anchors["CAVE_DOTTYBACK"]?.pos, c.sim.holeClaims)
+        ?.takeIf { it.depth < 20.0 }
+    /** Where its cave is now (it rides with its rock when the rocks shift, sim/RockPhysics.kt). */
+    val home: RockHole? get() = c.rock.holes.live(home0)
+    private val caveFace: Vec3 by lazy { c.rock.sdf.project(c.rock.anchors.pos("CAVE_DOTTYBACK", c.rock.anchors.pos("CAVE_BIG", Vec3(106.0, 7.5, 13.0))), 0.0) }
+    val cave: Vec3 get() = home?.mouth ?: caveFace
+    private var safeFor: com.reeflive.core.sim.HoleSet? = null
+    private var safeAt = Vec3.ZERO
+    /** Just outside the mouth (where it pauses and where a fright sends it before it backs in); redone if its rock moved. */
+    val caveSafe: Vec3 get() {
+        if (safeFor !== c.rock.holes) {
+            val cv = cave
+            safeAt = c.safe(home?.along(-3.0) ?: (cv + c.rock.sdf.gradient(cv) * 3.0)); safeFor = c.rock.holes
+        }
+        return safeAt
+    }
 
     init {
         // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
         install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
-            Sleep(this, "Resting in its cave"), VisitCleaner(this), SurfaceGasp(this), Flash(this))
+            // night, sickness or stress: in its cave, head just inside the mouth (was a Sleep hover outside it)
+            InHole(this, home, cave, "Resting in its cave", { c ->
+                val o = c.o
+                val sick = if (o.health < 0.6 || o.disease != null && o.diseaseStage > 0.3) 1.0 else 0.0
+                (0.7 * (1 - c.activity) + 0.25 * o.stress + 0.3 * sick).coerceAtMost(0.9)
+            }, { c -> if (c.p.night) -0.6 else 0.4 }),
+            VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = Rest(caveSafe, Vec3.Z)
+    override fun restSpot(c: Ctx, night: Boolean): Rest = home?.let { holeRest(c, it, if (night) -0.6 else 0.4) } ?: Rest(caveSafe, Vec3.Z)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "cave") cave else super.anchorPos(c, anchor)
+
+    override fun shelterSpot(c: Ctx): Vec3? = if (home != null) caveSafe else null
 
     inner class DottyFeed : Feed(this@DottybackBrain, 50.0) {
         override fun bonus(c: Ctx, f: FoodParticle) = 0.1

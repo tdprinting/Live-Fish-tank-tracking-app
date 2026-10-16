@@ -99,19 +99,84 @@ CARVES = [
     ((56, 14.4, 9.1), (9, 9.2, 11.7)), ((62, 15.7, 5.2), (5, 7.9, 6.5)),                                 # central arch
     ((86, 13.0, 8.0), (5, 9.0, 10.4)), ((86, 9.1, 13.0), (4, 4.0, 7.8)),                                 # right recess
     ((101.5, 22.0, 7.0), (1.2, 3.3, 9.1)),                                                               # slit R9 / R6
-    ((106, 7.5, 13.5), (3.8, 3.2, 4.5)), ((106, 7.0, 9.5), (2.8, 2.5, 3.0)),                             # dottyback cave (R9 foot)
+    ((106, 7.5, 13.5), (3.8, 3.2, 4.5)), ((106, 7.0, 9.5), (2.8, 2.5, 3.0)),                             # R9 foot chamber (OVERHANG_SHRIMP_R roof)
 ]
 # tunnels / holes: chains of negative balls (centre, radius)
 TUNNELS = {
     "goby_burrow": [((62, 3.8, 32.5), 3.5), ((64, 4.2, 29.2), 3.5), ((66, 4.5, 26.0), 3.5), ((68.5, 4.8, 22.8), 3.5),
                     ((71, 5.2, 19.5), 3.5), ((73, 5.5, 16.2), 3.3), ((74.5, 5.8, 14.0), 3.0)],  # dead end inside R5
-    # lawnmower blenny's hole in the front face of the R2 left pillar, ~59 cm from the tailspot's
-    "blenny_hole": [((10 - 0.1 * k, 13 - 0.1 * k, 32.8 - 1.0 * k), 1.3) for k in (0, 1.5, 3, 4.5, 6)],
-    # tailspot hole in the front of the R4 shelf's right end above the central arch: >= 50 cm from the lawnmower's
-    # hole, ~28 cm from the clowns' host (outside their 22 cm defence radius), ~50 cm from the dottyback cave
-    "blenny_hole_2": [((62.5, 29.5 - 0.05 * k, 13.3 - 1.0 * k), 1.5) for k in (-3, -2, -1, 0, 1.5, 3, 4.5, 6)],
+    # the blenny holes are modelled holes now (HOLES below: HOLE_LAWNMOWER, HOLE_TAILSPOT), cut with a boolean
 }
 DEN_PATH = [[62, 3.8, 32.5], [66, 4.5, 26], [71, 5.2, 19.5], [74.5, 5.8, 14]]  # a dead-end burrow ~22 cm long
+
+# ----------------------------------------------------------------------------
+# Modelled holes and caves (docs/ASSETS.md §3.6). Unlike CARVES/TUNNELS (negative metaballs, softened and partly
+# refilled by the displacement), these are cut out of the *displaced* high mesh with a boolean (Manifold solver), so
+# each one truly exists in the mesh and in the baked rock SDF. Sized for the animals that use them (species sheet
+# length x depthRatio = body depth; a hole fits when its radius >= half the body depth + 0.1 cm):
+#   lawnmower blenny 10 cm x 0.18 -> 1.8 cm deep body -> hole r 1.25 (2.5 cm across), 11.7 cm deep (> 1 BL)
+#   tailspot blenny 5.5 cm x 0.18 -> 1.0 cm -> hole r 1.0 (2 cm across), 7.5 cm deep (1.4 BL)
+# (cut a little wider than the snug fit so the 1 cm baked SDF grid still reads the tunnel as water all the way in)
+#   indigo dottyback 6 cm x 0.32 -> 1.9 cm -> cave r 1.8 (3.6 cm across), 8 cm deep
+# Real blenny holes are vacated worm / bivalve borings about one body-depth wide and at least a body length deep
+# (Wilson, Fisher & Pratchett 2013, Mar Biol: hole diameter and depth both rise with blenny length); the fish backs
+# in tail first and perches with only the head out (docs/research/video/fish_tailspot_blenny.md).
+# Mouth/end points were picked on the rock with >= 0.6 cm of rock round each tunnel (the build re-checks the walls).
+# kind: HOLE (round, one fish), CAVE (round, larger), CREVICE / LEDGE / OVERHANG (flat slots: radius = half the
+# narrow opening along `up`, width = half the wide opening).
+# ----------------------------------------------------------------------------
+HOLES = [
+    # the lawnmower's hole in the front face of the R2 left pillar (where the old blenny_hole tunnel was)
+    dict(name="HOLE_LAWNMOWER", kind="HOLE", mouth=(10.0, 13.0, 32.8), end=(9.3, 12.3, 21.1), radius=1.25,
+         species="salarias_fasciatus"),
+    # the tailspot's home in the front of the R4 shelf's right end, climbing up into it: 54 cm from the lawnmower's
+    # hole, 28 cm from the clowns' host (outside their 22 cm defence radius), 42 cm from the dottyback's cave
+    dict(name="HOLE_TAILSPOT", kind="HOLE", mouth=(58.29, 26.08, 12.9), end=(56.27, 32.09, 8.88), radius=1.0,
+         species="ecsenius_stigmatura"),
+    # spare blenny-size holes (prospecting, the blenny-war move, small-fish shelter)
+    dict(name="HOLE_SPARE_R9", kind="HOLE", mouth=(110.77, 20.86, 6.56), end=(103.99, 17.81, 5.52), radius=1.0,
+         species="ecsenius_stigmatura"),
+    dict(name="HOLE_SPARE_R1", kind="HOLE", mouth=(16.4, 25.14, 14.16), end=(22.38, 25.15, 9.63), radius=1.0),
+    # the dottyback's cave low in the right rock under the shelf, facing the open front: within its 25 cm standoff
+    # reach of the clowns' host (17 cm) but out of reach of the engineer goby's burrow (40 cm) and the tailspot's hole
+    # (42 cm); a cave right above the burrow (or beside the tailspot's hole) kept those small fish under its
+    # territorial chases all day (06 dotty_small row)
+    dict(name="CAVE_DOTTYBACK", kind="CAVE", mouth=(97.16, 9.29, 14.65), end=(95.31, 11.17, 7.1), radius=1.5,
+         species="pseudochromis_indigo"),
+]
+# flat shelters cut the same way: the brittle star's crevice in the left wall of CAVE_BIG (BRITTLE_HIDE is the
+# cavern's sand floor, 11 cm off), the diamond goby's ledge at the R2 pillar foot (its burrow goes on into the sand
+# under it) and the two shrimp overhangs (a roof pocket cut up into the underside of a ledge, where the banded shrimp
+# hangs upside down)
+SLOTS = [
+    dict(name="CREVICE_BRITTLE", kind="CREVICE", mouth=(24.95, 5.47, 13.44), end=(19.73, 5.47, 12.48), radius=1.05,
+         width=2.6, up=(0, 1, 0), species="ophiocoma_erinaceus"),
+    dict(name="LEDGE_GOBY", kind="LEDGE", mouth=(15.91, 6.26, 24.74), end=(9.55, 6.26, 26.49), radius=1.4, width=2.6,
+         up=(0, 1, 0), species="valenciennea_puellaris"),
+    # the left pocket under the SHRIMP_LEDGE_L overhang by the wrasse station, the right one in the roof of the
+    # chamber at the R9 foot (off the clowns' host halo)
+    dict(name="OVERHANG_SHRIMP_L", kind="OVERHANG", mouth=(40.0, 25.3, 17.0), end=(40.0, 26.0, 12.5), radius=1.2,
+         width=3.5, up=(0, 1, 0), species="stenopus_hispidus,lysmata_amboinensis"),
+    dict(name="OVERHANG_SHRIMP_R", kind="OVERHANG", mouth=(105.0, 9.4, 10.6), end=(105.0, 10.0, 6.1), radius=1.2,
+         width=3.5, up=(0, 1, 0), species="stenopus_hispidus,lysmata_amboinensis"),
+]
+# open caverns already carved by CARVES / TUNNELS: exported as descriptors only (no extra cut)
+CAVERNS = [
+    dict(name="CAVE_BIG", kind="CAVE", mouth=(36, 10.4, 22), end=(36, 10.4, 3), up=(0, 1, 0)),
+    dict(name="CAVE_SHELF", kind="CAVE", mouth=(56, 11.8, 22), end=(56, 11.8, 3), up=(0, 1, 0)),
+    dict(name="BURROW_GOBY", kind="BURROW", path=DEN_PATH, species="pholidichthys_leucotaenia"),
+    # the R9 / R6 slit
+    dict(name="CREVICE_SALLY", kind="CREVICE", mouth=(101, 22, 15), end=(101, 22, 4), up=(1, 0, 0), width=4.0,
+         species="percnon_gibbesi"),
+]
+# porosity pass: procedural through-holes and blind pockets (seeded), plus undercuts at the rock feet
+POROSITY = dict(through=26, pockets=70, undercuts=10, seed=77)
+# rocks the porosity pass leaves whole: R3 is the pillar the rock-physics topple test undermines (core RockPhysicsTest),
+# so it keeps the volume, mass and footprint it was tuned with
+SOLID_ROCKS = ("R3",)
+SOLID_PITS = (40, 560)  # pits (big, small) a SOLID_ROCKS rock keeps: the budget before the porosity pass
+SOLID_PAD_CM = 2.5  # beyond the metaball radii: covers the displacement (lumps, knobs, strata) and the pore's own rim
+CARVED = dict(through=[], pockets=[], under=[])  # filled by build_high (carve_holes)
 
 # ----------------------------------------------------------------------------
 # anchors (spec §4). snap: "surface" = nearest rock point within 2.5 cm (+ normal); "top" = first rock hit straight
@@ -125,9 +190,8 @@ ANCHORS = [
     ("SAND_GOBY_DIG", "SAND_ZONE", (60, 4, 37), dict(radius=6, species="engineer_goby"), "sand"),
     ("CAVE_BIG", "CAVE", (36, 10.4, 7.8), {}, None),
     ("CAVE_SHELF", "CAVE", (56, 11.8, 7.8), {}, None),
-    ("CAVE_DOTTYBACK", "CAVE", (106, 7.5, 13.0), dict(species="dottyback"), None),
-    ("HOLE_BLENNY", "HOLE", (10, 13, 32.3), dict(dir=[0.1, 0.1, 0.99], depth=6, radius=1.3, species="lawnmower_blenny"), None),
-    ("HOLE_BLENNY_2", "HOLE", (62.5, 29.5, 13.3), dict(dir=[0, 0.05, 1], depth=6, radius=1.2, species="tailspot_blenny"), None),
+    # HOLE_LAWNMOWER, HOLE_TAILSPOT, HOLE_SPARE_*, CAVE_DOTTYBACK, LEDGE_GOBY and the shrimp ledges come
+    # from the modelled holes (HOLES / SLOTS, hole_anchors) measured on the final mesh
     # the clowns' hairy-mushroom carpet: top of the R10 rock under the shelf (corals.mushroom_hairy is built here)
     ("HOST_SHROOM", "HOST", (81.5, 13.6, 21), dict(normal=[0, 1, 0.3], radius=6, species="clown_orange,clown_darwin"),
      "surface"),
@@ -190,8 +254,8 @@ ANCHORS = [
 ]
 # compatibility names for the simulation track (anchors written before the spec v2 layout)
 ALIASES = [("CAVE_EEL", "BURROW_GOBY", None), ("HOST_KENYA", "HOST_ARCH_CLOWNS", None),
-           ("CAVE_SMALL", "CAVE_SHELF", None), ("HOLE_LAWNMOWER", "HOLE_BLENNY", None),
-           ("HOLE_TAILSPOT", "HOLE_BLENNY_2", None), ("PERCH_1", "PERCH_R2_CROWN", None),
+           ("CAVE_SMALL", "CAVE_SHELF", None), ("HOLE_BLENNY", "HOLE_LAWNMOWER", None),
+           ("HOLE_BLENNY_2", "HOLE_TAILSPOT", None), ("PERCH_1", "PERCH_R2_CROWN", None),
            ("PERCH_2", "PERCH_R3_TOP", None), ("PERCH_3", "PERCH_R9", None), ("PERCH_4", "PERCH_R5_LIP", None),
            ("PERCH_5", "PERCH_SHELF", None), ("SHRIMP_LEDGE", "SHRIMP_LEDGE_L", None),
            ("STATION_SHRIMP", "STATION_SKUNK", None),
@@ -290,6 +354,26 @@ def clip_below(obj, y_world=0.4):
     obj.data.update()
 
 
+def lift_solid_feet(obj, lift=0.1):
+    """Raise the flat cut under each SOLID_ROCKS rock [lift] cm off y 1.5. The rock SDF samples cell centres at
+    y 0.5, 1.5, ..., so a foot cut exactly at 1.5 leaves a layer of cells at distance ~0 whose sign is noise; which of
+    them read as rock decides how R3 sits and whether it topples when undermined (core RockPhysicsTest). Lifted, that
+    layer is clearly outside."""
+    V = C.get_verts(obj)
+    hit = np.zeros(len(V), bool)
+    for name in SOLID_ROCKS:
+        for c, rad, neg in ROCKS[name][1]:
+            if neg:
+                continue
+            dx = (V[:, 0] - c[0]) / (rad[0] + SOLID_PAD_CM)
+            dz = (-V[:, 1] - c[2]) / (rad[2] + SOLID_PAD_CM)
+            hit |= (dx * dx + dz * dz < 1.0) & (V[:, 2] < 1.5 + 1e-3)
+    V[hit, 2] = 1.5 + lift
+    obj.data.vertices.foreach_set("co", V.ravel())
+    obj.data.update()
+    print(f"[rock] lifted {int(hit.sum())} foot vertices of {', '.join(SOLID_ROCKS)} to y {1.5 + lift:.2f}")
+
+
 def voxel_remesh(obj, size):
     md = obj.modifiers.new("remesh", 'REMESH')
     md.mode = 'VOXEL'
@@ -339,9 +423,10 @@ def displace(obj, seed=5):
     obj.data.update()
 
 
-def pits(obj, count=560, big=40, seed=9):
+def pits(obj, count=820, big=70, seed=9):
     """Pores: spherical dents pushed in along -normal (the boolean-hole look without booleans).
-    `count` small pores r 0.35-1.1 cm (the sponge-like holes all over live rock) + `big` holes r 1.4-2.3 cm."""
+    `count` small pores r 0.35-1.1 cm (the sponge-like holes all over live rock) + `big` holes r 1.4-2.3 cm.
+    None is centred within 1.5 cm of a modelled hole (the dents would pinch its mouth and walls), nor beyond the old budget on a SOLID_ROCKS rock."""
     Vb = C.get_verts(obj)
     Nb = vertex_normals(obj)
     pw = np.stack([Vb[:, 0], Vb[:, 2], -Vb[:, 1]], -1)
@@ -349,6 +434,12 @@ def pits(obj, count=560, big=40, seed=9):
     rs = np.random.default_rng(seed)
     w = 0.3 + np.clip(nw[:, 1], 0, 1) + np.clip(nw[:, 2], 0, 1) * 0.8
     w *= pw[:, 1] > 6.0
+    for h in hole_specs():
+        a, b = np.array(h["mouth"], float), np.array(h["end"], float)
+        ab = b - a
+        t = np.clip(((pw - a) @ ab) / (ab @ ab), 0, 1)
+        dd = np.linalg.norm(pw - (a + t[:, None] * ab), axis=1)
+        w *= dd > h["radius"] + h.get("width", 0.0) + 1.5
     w = w / w.sum()
     idx = rs.choice(len(Vb), count + big, p=w)
     from mathutils.kdtree import KDTree
@@ -363,11 +454,417 @@ def pits(obj, count=560, big=40, seed=9):
         else:
             r = rs.uniform(0.35, 1.1)
             depth = r * rs.uniform(0.9, 1.6)
+        # a SOLID_ROCKS rock keeps only the pits of the old 40 big + 560 small budget (its tuned mass); every pore is
+        # drawn above all the same, so skipping one leaves the others as they were
+        if (SOLID_PITS[0] <= k < big or k >= big + SOLID_PITS[1]) and _in_solid(pw[i], 0.0):
+            continue
         for (co, j, dist) in kd.find_range(Vb[i], r):
             prof = math.sqrt(max(r * r - dist * dist, 0)) / r
             Vb[j] = Vb[j] - Nb[i] * depth * prof
     obj.data.vertices.foreach_set("co", Vb.ravel())
     obj.data.update()
+
+
+# ----------------------------------------------------------------------------
+# modelled holes: cutters, site checks, descriptors (ASSETS §3.6)
+# ----------------------------------------------------------------------------
+def _unit(v):
+    v = np.asarray(v, float)
+    return v / (np.linalg.norm(v) + 1e-12)
+
+
+def _frame(axis, up_hint=(0, 1, 0)):
+    """axis, up (narrow direction, orthogonal to axis), side."""
+    a = _unit(axis)
+    u = np.asarray(up_hint, float)
+    u = u - a * (u @ a)
+    if np.linalg.norm(u) < 1e-3:
+        u = np.array([1.0, 0.0, 0.0]) - a * a[0]
+    u = _unit(u)
+    return a, u, np.cross(a, u)
+
+
+def _seg_dist(p, a, b):
+    p, a, b = (np.asarray(x, float) for x in (p, a, b))
+    ab = b - a
+    t = np.clip(((p - a) @ ab) / (ab @ ab + 1e-12), 0, 1)
+    return float(np.linalg.norm(p - (a + ab * t)))
+
+
+class RockQuery:
+    """Signed distance (world cm, positive in water) to a closed mesh object: BVH nearest + face-normal sign."""
+
+    def __init__(self, obj):
+        from mathutils.bvhtree import BVHTree
+        mw = obj.matrix_world
+        verts = [mw @ v.co for v in obj.data.vertices]
+        self.bvh = BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in obj.data.polygons])
+
+    def sd(self, p):
+        pb = w2b(tuple(float(x) for x in p))
+        loc, nrm, idx, d = self.bvh.find_nearest(pb)
+        if loc is None:
+            return 60.0
+        s = (pb[0] - loc[0]) * nrm[0] + (pb[1] - loc[1]) * nrm[1] + (pb[2] - loc[2]) * nrm[2]
+        return -d if s < 0 else d
+
+    def ray(self, p, d, dist):
+        from mathutils import Vector
+        loc, nrm, idx, t = self.bvh.ray_cast(Vector(w2b(tuple(float(x) for x in p))), Vector(w2b(tuple(_unit(d)))), dist)
+        return None if loc is None else t
+
+
+def tube_cutter(a, b, ra, rs=None, up=(0, 1, 0), seed=0, wobble=0.06, segs=16, step=0.45, cap=None):
+    """Closed tube a -> b with domed ends; elliptic section (ra along `up`, rs across). World verts + faces."""
+    rs = rs or ra
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    ax, u, s = _frame(b - a, up)
+    L = float(np.linalg.norm(b - a))
+    rng = np.random.default_rng(seed)
+    ph = rng.uniform(0, 2 * math.pi, 3)
+    rc = cap if cap is not None else min(ra, rs)
+    nc = 4
+    rings = [(-rc * math.cos(k / nc * math.pi / 2), math.sin(k / nc * math.pi / 2)) for k in range(1, nc + 1)]
+    n = max(1, int(math.ceil(L / step)))
+    rings += [(L * j / n, 1.0) for j in range(1, n)]
+    rings += [(L + rc * math.cos(k / nc * math.pi / 2), math.sin(k / nc * math.pi / 2)) for k in range(nc, 0, -1)]
+    V = [a - ax * rc]
+    for t, sc in rings:
+        c = a + ax * t
+        for i in range(segs):
+            phi = 2 * math.pi * i / segs
+            w = 1 + wobble * (0.6 * math.sin(2 * phi + ph[0] + 0.7 * t) + 0.4 * math.sin(3 * phi + ph[1] - 0.4 * t))
+            V.append(c + (u * (ra * math.cos(phi)) + s * (rs * math.sin(phi))) * (sc * w))
+    V.append(b + ax * rc)
+    F = []
+    nr = len(rings)
+    for i in range(segs):
+        F.append((0, 1 + (i + 1) % segs, 1 + i))
+    for r in range(nr - 1):
+        o0, o1 = 1 + r * segs, 1 + (r + 1) * segs
+        for i in range(segs):
+            j = (i + 1) % segs
+            F.append((o0 + i, o0 + j, o1 + j, o1 + i))
+    last = len(V) - 1
+    o = 1 + (nr - 1) * segs
+    for i in range(segs):
+        F.append((o + i, o + (i + 1) % segs, last))
+    return V, F
+
+
+def ellipsoid_cutter(center, radii, axis, up=(0, 1, 0), segs=16, rings=10):
+    """Closed ellipsoid: radii = (along axis, along up, across)."""
+    ax, u, s = _frame(axis, up)
+    c = np.asarray(center, float)
+    V = [c - u * radii[1]]
+    for k in range(1, rings):
+        th = math.pi * k / rings
+        for i in range(segs):
+            phi = 2 * math.pi * i / segs
+            d = ax * (radii[0] * math.sin(th) * math.cos(phi)) + s * (radii[2] * math.sin(th) * math.sin(phi)) \
+                - u * (radii[1] * math.cos(th))
+            V.append(c + d)
+    V.append(c + u * radii[1])
+    F = [(0, 1 + (i + 1) % segs, 1 + i) for i in range(segs)]
+    for r in range(rings - 2):
+        o0, o1 = 1 + r * segs, 1 + (r + 1) * segs
+        F += [(o0 + i, o0 + (i + 1) % segs, o1 + (i + 1) % segs, o1 + i) for i in range(segs)]
+    o = 1 + (rings - 2) * segs
+    F += [(o + i, o + (i + 1) % segs, len(V) - 1) for i in range(segs)]
+    return V, F
+
+
+def _cutter_object(name, V, F, coll):
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([w2b(tuple(v)) for v in V], [], F)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    coll.objects.link(o)
+    return o
+
+
+def hole_specs():
+    return HOLES + SLOTS
+
+
+def avoid_points():
+    """Places the porosity pass keeps clear of: coral / host footprints and perches (cm, radius)."""
+    pts = [(np.array(p, float), 6.0) for n, t, p, e, s in ANCHORS if t in ("CORAL", "HOST")]
+    pts += [(np.array(p, float), 3.0) for n, t, p, e, s in ANCHORS if t in ("PERCH", "LEDGE")]
+    # corals placed by corals.NEW_ANCHORS and the clowns' hairy mushroom carpet (core RockData HOST_SHROOM)
+    pts += [(np.array(p, float), 6.0) for p in ((52.0, 8.6, 27.1), (46.6, 8.2, 27.6), (78.3, 42.8, 9.3), (37.0, 48.3, 18.0))]
+    pts.append((np.array((82.3, 20.3, 15.2)), 9.0))
+    return pts
+
+
+def _in_solid(p, pad):
+    for name in SOLID_ROCKS:
+        for c, rad, neg in ROCKS[name][1]:
+            if neg:
+                continue
+            q = (np.asarray(p, float) - np.array(c, float)) / (np.array(rad, float) + SOLID_PAD_CM + pad)
+            if q @ q < 1.0:
+                return True
+    return False
+
+
+def _blocked(p, pad, avoid):
+    for c, r in avoid:
+        if np.linalg.norm(p - c) < r + pad:
+            return True
+    for h in hole_specs():
+        if _seg_dist(p, h["mouth"], h["end"]) < h["radius"] + max(h.get("width", 0), 0) * 0.5 + 2.5 + pad:
+            return True
+    for a, b in zip(DEN_PATH[:-1], DEN_PATH[1:]):
+        if _seg_dist(p, a, b) < 3.5 + 2.5 + pad:
+            return True
+    return False
+
+
+def porosity_cutters(obj, q, seed):
+    """Seeded through-holes (r 0.8-2.0 through 2.5-12 cm of rock), blind pockets and undercuts at the rock feet.
+
+    Each candidate draws from its own generator (keyed by the seed and the candidate's index / vertex), and each
+    returned cutter carries that key as its own seed, so moving a modelled hole or an anchor only changes the pores
+    near it: a rejected candidate no longer shifts every later draw and cutter shape (one shared stream did, and
+    re-rolled the whole rock on any edit).
+    """
+    V = C.get_verts(obj)
+    N = vertex_normals(obj)
+    pw = np.stack([V[:, 0], V[:, 2], -V[:, 1]], -1)
+    nw = np.stack([N[:, 0], N[:, 2], -N[:, 1]], -1)
+    rs = np.random.default_rng(seed)
+    avoid = avoid_points()
+    # rock-snapped corals sit on the surface nearest their literal point: keep clear of that spot as well
+    extra = []
+    for c, r in avoid:
+        if r >= 6.0 and abs(q.sd(c)) < 8.0:
+            loc, nrm, idx, dd = q.bvh.find_nearest(w2b(tuple(c)))
+            if loc is not None:
+                extra.append((np.array(C.b2w(loc)), r))
+    avoid = avoid + extra
+    w = (0.4 + np.clip(nw[:, 2], 0, 1) + 0.5 * np.clip(nw[:, 1], 0, 1)) * (pw[:, 1] > 7.5) * (pw[:, 1] < 54.0) * (pw[:, 2] > 3.0)
+    idx = rs.choice(len(pw), 6000, p=w / w.sum())  # the candidate list depends on the uncut mesh only
+    through, pockets, under, taken = [], [], [], []
+
+    def free(p, r):
+        return all(np.linalg.norm(p - c) > r + rc + 1.2 for c, rc in taken)
+
+    for j, i in enumerate(idx):
+        p, n = pw[i], _unit(nw[i])
+        if len(through) >= POROSITY["through"] and len(pockets) >= POROSITY["pockets"]:
+            break
+        rs = np.random.default_rng([seed, 1, j])
+        key = 10000 + j
+        if len(through) < POROSITY["through"] and rs.uniform() < 0.5:
+            r = rs.uniform(0.8, 2.0)
+            if _blocked(p, r, avoid) or not free(p, r) or q.sd(p + n * (r + 1.0)) < r:
+                continue
+            d = _unit(-n + rs.normal(size=3) * 0.35)
+            t, ex = 0.6, None
+            while t < 12.5:
+                if q.sd(p + d * t) > 0.3 and t > 2.5:
+                    ex = t
+                    break
+                t += 0.4
+            if ex is None or q.sd(p + d * (ex + r + 1.0)) < r * 0.8:
+                continue
+            e = p + d * ex
+            if min(p[1], e[1]) - r < 4.0:  # keep clear of the y 1.5 cut / sand (the cap must stay one closed shell)
+                continue
+            if _blocked(e, r, avoid) or any(_blocked(p + d * k, r, avoid) for k in np.linspace(0, ex, 6)):
+                continue
+            through.append((p - d * 1.0, e + d * 1.0, r, key))
+            taken.append((p, r))
+            taken.append((e, r))
+        elif len(pockets) < POROSITY["pockets"]:
+            r = rs.uniform(0.6, 1.7)
+            dep = rs.uniform(1.4, 3.2) * r
+            if _blocked(p, r, avoid) or not free(p, r):
+                continue
+            d = _unit(-n + rs.normal(size=3) * 0.25)
+            if (p + d * dep)[1] - r < 4.0:
+                continue
+            if any(q.sd(p + d * k) > -0.2 for k in np.linspace(0.8, dep + r, 5)):
+                continue
+            pockets.append((p + n * r, p + d * dep, r, key))
+            taken.append((p, r))
+    # undercuts: flat scoops at the rock feet just above the sand (shelter for the crawlers and the gobies)
+    feet = np.where((pw[:, 1] > 7.0) & (pw[:, 1] < 10.5) & (np.abs(nw[:, 1]) < 0.45) & (pw[:, 2] > 8.0))[0]
+    for i in np.random.default_rng([seed, 2]).permutation(feet):
+        if len(under) >= POROSITY["undercuts"]:
+            break
+        rs = np.random.default_rng([seed, 3, int(i)])
+        p, n = pw[i], _unit(nw[i] * np.array([1, 0, 1]))
+        if _blocked(p, 3.0, avoid) or not free(p, 3.0) or q.sd(p - n * 4.0) > -1.0:
+            continue
+        rad = (rs.uniform(2.2, 3.2), rs.uniform(1.0, 1.5), rs.uniform(3.0, 4.5))
+        under.append((p - n * 0.8 + np.array([0, 0.4, 0]), rad, n))
+        taken.append((p, 3.0))
+    return through, pockets, under
+
+
+def carve_holes(obj):
+    """Cut the modelled holes, slots and the porosity pass out of the displaced high mesh (one Manifold boolean)."""
+    t0 = time.time()
+    q = RockQuery(obj)
+    report = []
+    def wall(a, b, ra):
+        ax = _unit(a - b)
+        # from 2r + 0.5 in: nearer the mouth the outer face is within r by definition (the mouth flares there)
+        return min(-q.sd(a - ax * t) - ra for t in np.linspace(max(1.5, 2 * ra + 0.5), np.linalg.norm(a - b), 9))
+
+    for k, h in enumerate(hole_specs()):
+        a, b = np.array(h["mouth"], float), np.array(h["end"], float)
+        ra = h["radius"]
+        if h["kind"] == "OVERHANG":  # a roof pocket opens into the space under the ledge by design
+            continue
+        # rock left round the tunnel beyond its mouth; the sites were picked on the previous bake, so nudge the
+        # mouth / end (<= 2.5 cm, then <= 5 cm) on this mesh until the wall is >= 0.6 cm (seeded, deterministic)
+        best, bw = (a, b), wall(a, b, ra)
+        rng = np.random.default_rng(100 + k)
+        tries = 0
+        while bw < 0.6 and tries < 1200:
+            tries += 1
+            wide = 1.0 if tries < 400 else 2.0  # a wider look (<= 5 cm) when the close nudges are not enough
+            a2 = a + np.clip(rng.normal(size=3) * wide, -2.5 * wide, 2.5 * wide)
+            b2 = b + np.clip(rng.normal(size=3) * 1.3 * wide, -2.5 * wide, 2.5 * wide)
+            ax2 = _unit(a2 - b2)
+            if abs(np.linalg.norm(a2 - b2) / np.linalg.norm(a - b) - 1) > 0.2 or ax2 @ _unit(a - b) < 0.8:
+                continue
+            if q.sd(a2 + ax2 * 2.0) < min(ra, 1.2) or q.sd(a2 - ax2 * 1.0) > 0.5:
+                continue
+            w = wall(a2, b2, ra) - 0.05 * np.linalg.norm(a2 - a)
+            if w > bw:
+                best, bw = (a2, b2), w
+        h["mouth"], h["end"] = tuple(np.round(best[0], 2)), tuple(np.round(best[1], 2))
+        report.append((h["name"], round(float(bw), 2), list(h["mouth"]), list(h["end"])))
+        if bw < 0.4:
+            print(f"[rock] WARNING hole {h['name']}: wall only {bw:.2f} cm")
+    through, pockets, under = porosity_cutters(obj, q, POROSITY["seed"])
+    # a SOLID_ROCKS rock is left whole. The pores are dropped after they are chosen (not refused while choosing), so
+    # every other pore keeps its place, shape and THROUGH_<n> name (a dropped through-hole leaves a None in its slot)
+    through = [None if any(_in_solid(np.asarray(e, float), r) for e in (a, b)) or
+               any(_in_solid(np.asarray(a, float) + (np.asarray(b, float) - np.asarray(a, float)) * f, r) for f in (0.25, 0.5, 0.75))
+               else (a, b, r, key) for a, b, r, key in through]
+    pockets = [pk for pk in pockets if not (_in_solid(np.asarray(pk[0], float), pk[2]) or _in_solid(np.asarray(pk[1], float), pk[2]))]
+    under = [u for u in under if not _in_solid(np.asarray(u[0], float), max(u[1]))]
+    coll = bpy.data.collections.new("HoleCutters")
+    bpy.context.scene.collection.children.link(coll)
+    k = 0
+    for h in hole_specs():
+        a, b = np.array(h["mouth"], float), np.array(h["end"], float)
+        ax = _unit(a - b)
+        ra = h["radius"]
+        V, F = tube_cutter(a + ax * 1.5, b, ra, h.get("width", ra), h.get("up", (0, 1, 0)), seed=k, wobble=0.05,
+                           cap=min(ra, h.get("width", ra)))
+        _cutter_object(h["name"], V, F, coll)
+        k += 1
+    # each pore's cutter is seeded by its own candidate key (not its running index), so one pore more or fewer does
+    # not reshape all the others
+    for a, b, r, key in filter(None, through):
+        V, F = tube_cutter(a, b, r, r * np.random.default_rng(key).uniform(0.8, 1.15), seed=key, wobble=0.14, segs=14)
+        _cutter_object(f"thru{key}", V, F, coll)
+    for a, b, r, key in pockets:
+        V, F = tube_cutter(a, b, r, r * np.random.default_rng(key).uniform(0.75, 1.2), seed=key, wobble=0.15, segs=12)
+        _cutter_object(f"pock{key}", V, F, coll)
+    for c, rad, n in under:
+        V, F = ellipsoid_cutter(c, rad, -n)
+        _cutter_object(f"under{k}", V, F, coll)
+        k += 1
+    md = obj.modifiers.new("holes", 'BOOLEAN')
+    md.operation = 'DIFFERENCE'
+    md.operand_type = 'COLLECTION'
+    md.collection = coll
+    md.solver = 'MANIFOLD'
+    C.apply_modifiers(obj)
+    for o in list(coll.objects):
+        bpy.data.objects.remove(o)
+    bpy.data.collections.remove(coll)
+    print(f"[rock] carved {len(hole_specs())} modelled holes, {sum(t is not None for t in through)} through-holes, {len(pockets)} pockets, "
+          f"{len(under)} undercuts in {time.time() - t0:.1f}s; hole walls (cm): {report}")
+    return dict(through=through, pockets=pockets, under=under)
+
+
+def describe_holes(low, carved):
+    """Hole/cave descriptors measured on the final LOD0 mesh: mouth, outward axis, radius (clear half-opening along
+    the tunnel, so the sim's fit test is honest), width, depth, path, species."""
+    q = RockQuery(low)
+    out = []
+
+    def rnd(v, k=2):
+        return [round(float(x), k) for x in v]
+
+    def one(h, kind, path, up, width=None, species=""):
+        path = [np.array(p, float) for p in path]
+        ax = _unit(path[0] - path[1])
+        a, u, s = _frame(ax, up)
+        # mouth: walk out from the end until the rock ring round the axis opens (5 of 8 probes in water)
+        r0 = max(0.6, q.sd(path[0] - ax * 1.0))
+        mouth = path[0]
+        for t in np.arange(-1.0, 6.0, 0.25):
+            m = path[0] + ax * t
+            ring = sum(q.sd(m + (u * math.cos(f) + s * math.sin(f)) * (r0 + 0.6)) > 0 for f in np.linspace(0, 2 * math.pi, 8, endpoint=False))
+            if ring >= 5:
+                mouth = path[0] + ax * (t - 0.25)
+                break
+        pts = [mouth] + path[1:]
+        # walk in along the path: the open tunnel ends where the clearance drops below half its usual size (the far
+        # dome, or a den path that runs on into rock); radius = the narrowest clearance before that end region
+        samp, arc = [], []
+        acc = 0.0
+        for p0, p1 in zip(pts[:-1], pts[1:]):
+            seg = float(np.linalg.norm(p1 - p0))
+            for t in np.arange(0.0, seg, 0.4):
+                samp.append(p0 + (p1 - p0) * (t / seg))
+                arc.append(acc + t)
+            acc += seg
+        samp.append(pts[-1])
+        arc.append(acc)
+        sds = [q.sd(p) for p in samp]
+        ref = float(np.median(sds[2:6])) if len(sds) > 6 else max(sds)
+        cut = len(samp)
+        for i in range(3, len(samp)):
+            if sds[i] < (0.3 if kind == "BURROW" else max(0.3, 0.5 * ref)):
+                cut = i
+                break
+        depth = float(arc[cut - 1])
+        inner = [sds[i] for i in range(1, cut) if arc[i] <= depth - 0.8 * ref] or sds[1:cut]
+        radius = min(inner)
+        endp = samp[cut - 1]
+        pts = [p for p, a in zip(pts, [0.0] + list(np.cumsum([np.linalg.norm(b - a) for a, b in zip(pts[:-1], pts[1:])])))
+               if a < depth - 0.01] + [endp]
+        d = {"name": h, "kind": kind, "mouth": rnd(mouth), "axis": rnd(ax, 3), "up": rnd(u, 3),
+             "radius": round(float(max(radius, 0.0)) - 0.02, 2), "depth": round(depth, 2), "path": [rnd(p) for p in pts]}
+        if width is not None:
+            mid = mouth - ax * min(depth * 0.5, 3.0)
+            hits = [q.ray(mid, s, 12.0), q.ray(mid, -s, 12.0)]
+            d["width"] = round(float(min(x if x is not None else 12.0 for x in hits)), 2)
+        if species:
+            d["species"] = species
+        return d
+
+    for h in hole_specs():
+        out.append(one(h["name"], h["kind"], [h["mouth"], h["end"]], h.get("up", (0, 1, 0)),
+                       h.get("width") if h["kind"] in ("CREVICE", "LEDGE", "OVERHANG", "CAVE") else None, h.get("species", "")))
+    for h in CAVERNS:
+        path = h.get("path") or [h["mouth"], h["end"]]
+        out.append(one(h["name"], h["kind"], path, h.get("up", (0, 1, 0)), h.get("width", 0.0) if h["kind"] != "BURROW" else None,
+                       h.get("species", "")))
+    for k, th in enumerate(carved["through"]):
+        if th is None:  # dropped off a SOLID_ROCKS rock (carve_holes)
+            continue
+        a, b, r, _key = th
+        if r >= 0.8:
+            d = one(f"THROUGH_{k + 1}", "THROUGH", [a, b], (0, 1, 0))
+            if d["radius"] >= 0.6 and d["depth"] >= 3.0:
+                out.append(d)
+    return out
 
 
 def build_high(resolution=0.6, voxel=0.5):
@@ -390,6 +887,11 @@ def build_high(resolution=0.6, voxel=0.5):
     Vb[far, 1] = -(ZH + 0.3 * np.tanh((zf[far] - ZH) / 0.3))
     o.data.vertices.foreach_set("co", Vb.ravel())
     o.data.update()
+    global CARVED
+    CARVED = carve_holes(o)
+    # the boolean leaves self-touching n-gons where cuts meet thin walls (they triangulate into 4-face edges): a 0.4 cm
+    # voxel remesh re-closes the shell cleanly and keeps every hole (the narrowest, r 0.85, spans four voxels)
+    voxel_remesh(o, 0.4)
     pits(o)
     # pits move neighbours along -n of the pit centre: undersides can push vertices up, so re-cap at WATER_Y + 1
     Vb = C.get_verts(o)
@@ -398,6 +900,7 @@ def build_high(resolution=0.6, voxel=0.5):
     o.data.vertices.foreach_set("co", Vb.ravel())
     o.data.update()
     clip_below(o, 1.5)  # rock feet sink 1.5+ cm into the sand (sand 3.5-6 cm); nothing below y 1.5
+    lift_solid_feet(o)
     print(f"[rock] high: {len(o.data.polygons)} faces in {time.time() - t:.1f}s")
     return o
 
@@ -697,7 +1200,42 @@ def dilate(img, valid, iters=6):
 
 
 # ----------------------------------------------------------------------------
-def snap_anchors(low):
+def hole_anchors(low, holes):
+    """Anchors for the homes cut as modelled holes (pos = measured mouth, dir = outward axis)."""
+    q = RockQuery(low)
+    by = {h["name"]: h for h in holes}
+    out = []
+
+    def base(h, typ, **kw):
+        a = {"name": h["name"], "type": typ, "pos": h["mouth"], "dir": h["axis"], "radius": h["radius"], "depth": h["depth"]}
+        if h.get("species"):
+            a["species"] = h["species"]
+        a.update(kw)
+        return a
+
+    for h in holes:
+        if h["kind"] == "HOLE":
+            out.append(base(h, "HOLE"))
+    if "CAVE_DOTTYBACK" in by:
+        out.append(base(by["CAVE_DOTTYBACK"], "CAVE"))
+    if "LEDGE_GOBY" in by:
+        out.append(base(by["LEDGE_GOBY"], "BURROW"))
+    # the shrimp hang from the roof of each overhang pocket: straight up from its middle, normal pointing down
+    for side, nm in (("L", "OVERHANG_SHRIMP_L"), ("R", "OVERHANG_SHRIMP_R")):
+        if nm not in by:
+            continue
+        h = by[nm]
+        mid = np.array(h["mouth"]) - np.array(h["axis"]) * min(1.5, h["depth"] * 0.4)
+        up = q.ray(mid, (0, 1, 0), 6.0) or h["radius"]
+        roof = mid + np.array([0, up, 0])
+        g = np.array([q.sd(roof + e * 0.3) - q.sd(roof - e * 0.3) for e in np.eye(3)])
+        nrm = _unit(g) if np.linalg.norm(g) > 1e-6 else np.array([0, -1.0, 0])
+        out.append({"name": f"SHRIMP_LEDGE_{side}", "type": "LEDGE", "pos": [round(float(x), 2) for x in roof],
+                    "normal": [round(float(x), 3) for x in nrm], "hole": nm})
+    return out
+
+
+def snap_anchors(low, holes=None):
     from mathutils.bvhtree import BVHTree
     dg = bpy.context.evaluated_depsgraph_get()
     bvh = BVHTree.FromObject(low, dg)
@@ -720,6 +1258,16 @@ def snap_anchors(low):
                 report.append((name, "top"))
         if snap == "surface":
             loc, nrm, idx, dist = bvh.find_nearest(w2b(pos))
+            hint = extra.get("normal")
+            if loc is not None and hint is not None and typ == "CORAL" and np.dot(C.b2w(nrm), hint) / np.linalg.norm(hint) < -0.3:
+                # the nearest face turned away from the coral's side (a carved hole or pocket came close): take the face
+                # seen from the hinted side instead, so the coral stays on top of the rock
+                from mathutils import Vector
+                hn = np.array(hint, float) / np.linalg.norm(hint)
+                o = np.array(pos, float) + hn * 10.0
+                hit, hn2, hidx, hd = bvh.ray_cast(Vector(w2b(o)), Vector(w2b(-hn)), 20.0)
+                if hit is not None and np.linalg.norm(np.array(C.b2w(hit)) - np.array(pos, float)) < 8.0:
+                    loc, nrm, dist = hit, hn2, float(np.linalg.norm(np.array(C.b2w(hit)) - np.array(pos, float)))
             if loc is not None and dist > 2.5:
                 print(f"[rock] WARNING anchor {name} is {dist:.1f} cm from rock")
             if loc is not None:
@@ -735,6 +1283,14 @@ def snap_anchors(low):
             a[k] = v
         out.append(a)
     out.insert(4, {"name": "den_path", "type": "PATH", "points": DEN_PATH})
+    if holes:
+        by = {a["name"]: a for a in out}
+        for a in hole_anchors(low, holes):
+            if a["name"] in by:
+                by[a["name"]].clear()
+                by[a["name"]].update(a)
+            else:
+                out.append(a)
     # aliases used by the simulation track (core DefaultScape) so it never falls back to its analytic defaults
     by = {a["name"]: a for a in out}
     for alias, src, typ in ALIASES:
@@ -747,11 +1303,14 @@ def snap_anchors(low):
     return out, report
 
 
-def write_anchors(anchors):
+def write_anchors(anchors, holes=()):
+    """anchors.json: {"anchors": [...], "holes": [...]} (holes: ASSETS §3.6 descriptors, read by core RockData)."""
     path = os.path.join(C.SIM, "anchors.json")
     with open(path, "w") as f:
         f.write('{"anchors": [\n')
         f.write(",\n".join("  " + json.dumps(a) for a in anchors))
+        f.write("\n],\n\"holes\": [\n")
+        f.write(",\n".join("  " + json.dumps(h) for h in holes))
         f.write("\n]}\n")
     return path
 
@@ -806,8 +1365,12 @@ def build(bake=True, albedo_size=2048, verbose=True):
         t_ = sum(len(p.vertices) - 2 for p in o.data.polygons)
         yv = C.get_verts(o)[:, 2]
         print(f"[rock] lod{lod}: tris {t_}, non-manifold edges {TK.non_manifold(o)}, y range {yv.min():.2f}..{yv.max():.2f}")
-    anchors, rep = snap_anchors(low)
-    write_anchors(anchors)
+    holes = describe_holes(low, CARVED)
+    for h in holes:
+        print(f"[rock] hole {h['name']:<18} {h['kind']:<8} mouth {h['mouth']} r {h['radius']:.2f} depth {h['depth']:.1f}"
+              + (f" width {h['width']:.1f}" if 'width' in h else ""))
+    anchors, rep = snap_anchors(low, holes)
+    write_anchors(anchors, holes)
     if verbose:
         print("[rock] anchor snap distances (cm):", rep)
     # both files carry a single node named "Rock" (the runtime swaps files, not nodes)

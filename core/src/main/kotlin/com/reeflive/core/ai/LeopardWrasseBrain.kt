@@ -32,6 +32,8 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** No closer to its picking stand by 1 cm in this long: it cannot get there, pick another site (design estimate, as Feed). */
         const val STUCK_S = 8.0
+        /** A rock spot whose stand has to move further than this (cm) to be in open water has no room in front. */
+        const val STAND_SLIP_CM = 1.5
         /**
          * Seconds between pecks in a bout at one spot, and pecks per spot. It works a surface in short bouts and glides on
          * to the next spot a few cm along, "moving methodically across sand and rock" (research 30 §2, hobby accounts);
@@ -465,8 +467,13 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
                 }
                 val sp = c.rockSurfacePoint(centre, 7.0) ?: continue
                 if (attempt < 3 && unwelcome(c, sp.first)) continue
+                // room to hang in front of it: a face a few cm off the glass (the back of a rock against the back pane)
+                // puts the stand past the glass, and the fish sat still for minutes trying to reach one after another
+                val want = sp.first + sp.second * (0.35 * o.lengthCm + 1.0)
+                val st = c.safe(want, 0.6 * o.collisionLength)
+                if (st.distanceTo(want) > STAND_SLIP_CM) continue
                 spot = sp.first; normal = sp.second
-                stand = c.safe(spot + normal * (0.35 * o.lengthCm + 1.0), 0.6 * o.collisionLength)
+                stand = st
                 return
             }
             val sp = c.rockSurfacePoint(forageCentre + c.rng.unitVector() * (RANGE_CM * 0.5 * c.rng.nextDouble()), 14.0) ?: c.rockSurfacePoint(o.pos, 20.0)

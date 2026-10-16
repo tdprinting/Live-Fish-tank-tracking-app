@@ -15,9 +15,39 @@ import kotlin.math.sqrt
  * sand the renderer draws, sloping from 3.5 cm at the front glass to 6 cm at the back, not the flat
  * [RockData.sandTopCm] plane) and the four glass panes. Signed distance in cm, positive in the water.
  */
-class CrawlSurface(val rock: RockData, val sand: SandBed?) {
+class CrawlSurface(val rock: RockData, val sand: SandBed?, val smoothPores: Boolean = false) {
+    // The pore-smoothed field cached at the nodes of a lattice at half the SDF's cell, aligned with it (see [rockDist]).
+    // Filled node by node on first use, in 8³-node blocks allocated as the limbs first reach them; a moved rock
+    // ([DynamicRockSdf.revision]) clears it block by block.
+    private val dyn = rock.sdf as? DynamicRockSdf
+    private val grid = (dyn?.base ?: rock.sdf) as? com.reeflive.core.geom.SdfGrid
+    private val nh = if (grid != null && smoothPores) 2 else 0
+    private val lh = if (grid != null) grid.cell / 2 else 1.0
+    private val lox = grid?.origin?.x ?: 0.0
+    private val loy = grid?.origin?.y ?: 0.0
+    private val loz = grid?.origin?.z ?: 0.0
+    private val lnx = if (nh > 0) 2 * (grid!!.nx - 1) + 1 else 0
+    private val lny = if (nh > 0) 2 * (grid!!.ny - 1) + 1 else 0
+    private val lnz = if (nh > 0) 2 * (grid!!.nz - 1) + 1 else 0
+    private val bnx = (lnx + 7) shr 3
+    private val bny = (lny + 7) shr 3
+    private val bnz = (lnz + 7) shr 3
+    private val blocks = arrayOfNulls<FloatArray>(bnx * bny * bnz)
+    private val blockRev = IntArray(bnx * bny * bnz)
+
+    private fun node(i: Int, j: Int, k: Int, rev: Int): Double {
+        val b = ((k shr 3) * bny + (j shr 3)) * bnx + (i shr 3)
+        var arr = blocks[b]
+        if (arr == null) { arr = FloatArray(512) { Float.NaN }; blocks[b] = arr; blockRev[b] = rev }
+        else if (blockRev[b] != rev) { arr.fill(Float.NaN); blockRev[b] = rev }
+        val a = ((k and 7) * 8 + (j and 7)) * 8 + (i and 7)
+        var v = arr[a]
+        if (v.isNaN()) { v = smoothed(lox + i * lh, loy + j * lh, loz + k * lh).toFloat(); arr[a] = v }
+        return v.toDouble()
+    }
+
     fun dist(p: Vec3): Double {
-        var d = rock.sdf.dist(p)
+        var d = rockDist(p.x, p.y, p.z)
         val sy = sand?.surfaceY(p.x.coerceIn(0.0, rock.lengthCm), p.z.coerceIn(0.0, rock.widthCm)) ?: rock.sandTopCm
         val s = p.y - sy
         if (s < d) d = s
@@ -26,6 +56,48 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?) {
         if (p.z < d) d = p.z
         if (rock.widthCm - p.z < d) d = rock.widthCm - p.z
         return d
+    }
+
+    /**
+     * The rock SDF; with [smoothPores] (the limb rigs' surface: brittle star arms, crab legs), the rock as a tip feels
+     * it, its pores smoothed shut (SIMULATION §24). Live rock is pitted with pores a tip would drop into and skid out
+     * of; within [PORE_CM] of the rock the field is the lesser of the raw distance and its mean over six samples
+     * [PORE_CM] away (a low-pass that is exact on a flat or evenly curved face, keeps convex edges, and fills a dent
+     * narrower than about [PORE_CM]), blended back to the raw field by 1.5 × [PORE_CM]. Never more than the raw
+     * distance, so an arm clear of this surface is clear of the rock. The seats keep the raw field: a hermit's sim
+     * position follows its seat, and its room checks and the rock guard read the raw rock.
+     */
+    fun rockDist(x: Double, y: Double, z: Double): Double {
+        if (!smoothPores) return rock.sdf.distAt(x, y, z)
+        if (nh == 0) return smoothed(x, y, z)
+        // the lattice nodes' smoothed values, trilinearly interpolated. The raw field is trilinear over the SDF's cells,
+        // so over the half cells it is reproduced exactly where no node is smoothed, and stays an upper bound where
+        // some are (each node's value is at most the raw one there)
+        val fx = (x - lox) / lh; val fy = (y - loy) / lh; val fz = (z - loz) / lh
+        if (fx < 0.0 || fy < 0.0 || fz < 0.0 || fx > lnx - 1.0 || fy > lny - 1.0 || fz > lnz - 1.0) return smoothed(x, y, z)
+        val i0 = min(fx.toInt(), lnx - 2); val j0 = min(fy.toInt(), lny - 2); val k0 = min(fz.toInt(), lnz - 2)
+        val tx = fx - i0; val ty = fy - j0; val tz = fz - k0
+        val rev = dyn?.revision ?: 0
+        val c00 = node(i0, j0, k0, rev).let { it + (node(i0 + 1, j0, k0, rev) - it) * tx }
+        val c10 = node(i0, j0 + 1, k0, rev).let { it + (node(i0 + 1, j0 + 1, k0, rev) - it) * tx }
+        val c01 = node(i0, j0, k0 + 1, rev).let { it + (node(i0 + 1, j0, k0 + 1, rev) - it) * tx }
+        val c11 = node(i0, j0 + 1, k0 + 1, rev).let { it + (node(i0 + 1, j0 + 1, k0 + 1, rev) - it) * tx }
+        val c0 = c00 + (c10 - c00) * ty
+        val c1 = c01 + (c11 - c01) * ty
+        return c0 + (c1 - c0) * tz
+    }
+
+    /** The pore-smoothed field at one point (see [rockDist]). */
+    private fun smoothed(x: Double, y: Double, z: Double): Double {
+        val sdf = rock.sdf
+        val d = sdf.distAt(x, y, z)
+        val a = kotlin.math.abs(d)
+        if (a >= PORE_BAND_CM) return d
+        val r = PORE_CM
+        val m = (sdf.distAt(x + r, y, z) + sdf.distAt(x - r, y, z) + sdf.distAt(x, y + r, z) +
+            sdf.distAt(x, y - r, z) + sdf.distAt(x, y, z + r) + sdf.distAt(x, y, z - r)) / 6.0
+        if (m >= d) return d
+        return if (a <= r) m else m + (d - m) * ((a - r) / (PORE_BAND_CM - r))
     }
 
     /** Outward surface normal at [p] (central differences, [h] cm). */
@@ -84,6 +156,9 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?) {
     companion object {
         const val HIT_CM = 0.01
         const val CLIMB_STEP_CM = 0.04
+        /** Pores narrower than about this (cm) are smoothed out of the crawl surface ([rockDist]). */
+        const val PORE_CM = 0.6
+        const val PORE_BAND_CM = 1.5 * PORE_CM
     }
 }
 
@@ -119,6 +194,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     private var oPrev = Vec3.ZERO
     private var wedge = 0.0
     private var oHeadPrev = Vec3.X
+    /** The seat owns the hermit's sim height (see [update]): set by a write-back, cleared when the seat is not clean. */
+    private var ownsHeight = false
     /** The seat has had to hop several ticks running (see [update]); the hermit brain walks off and clears it. */
     val wedged: Boolean get() = wedge >= WEDGE_TICKS
     fun clearWedge() { wedge = 0.0 }
@@ -288,7 +365,13 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
                             Vec3.angle(up, uPrev) > 2 * turnMax) { pos = pS; up = uS; fwd = fS; right = fwd cross up } else pos = pL }
                     else if (!(ok(lowestContact(s, pL, L), pL, o.pos, d0, L) && pL.distanceTo(pPrev) <= 2 * stepMax &&
                             Vec3.angle(up, uPrev) <= 2 * turnMax && Vec3.angle(fwd, fPrev) <= 2 * turnMax + Vec3.angle(oHeadPrev, o.heading))) {
-                        pos = pNew; up = uNew; fwd = fNew; right = fwd cross up; hop = true
+                        // a step that only grazes (a shell edge a couple of mm into the rock or glass, or a little
+                        // clear of it, as it turns through a concave corner from an overhang onto the glass) is drawn
+                        // for that tick: the body carries on toward the new seat over a few ticks instead of hopping
+                        // there (FishGlitch BODY_POP). Anything deeper still hops
+                        val mS = lowestContact(s, pS, L)
+                        if (mS >= -GLIDE_CLIP_CM && mS <= GLIDE_GAP_CM && near(pS, o.pos, up, d0, L)) pos = pS
+                        else { pos = pNew; up = uNew; fwd = fNew; right = fwd cross up; hop = true }
                     } else pos = pL
                 }
             }
@@ -341,6 +424,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         }
         val clean = ok(lowestContact(s, pos, L), pos, o.pos, d0, L)
         clearance = lowestContact(s, pos, L, BODY_END)
+        if (kind != BrainKind.HERMIT || !clean || blend < 1.0 || simOffset < 0.0) ownsHeight = false
         if (kind == BrainKind.HERMIT && clean && blend >= 1.0 && simOffset >= 0.0) {
             // the sim follows the seat: where the body rests is higher or lower than where the sim walks it by more than a
             // few mm (an overhang or crevice where the single-normal crawl step thrashes): the sim takes the seat's pose
@@ -351,10 +435,16 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             // back, so it never reached its pick spot)
             val dh = (pos + up * simOffset - o.pos) dot up
             val simSeat = o.pos + up * dh
-            if (kotlin.math.abs(dh) > WRITE_BACK_CM && s.dist(simSeat) >= 0.5 * simOffset) {
+            // Once it has written back, the seat stays the one height authority while it is clean: it writes every
+            // tick, not only past [WRITE_BACK_CM]. The crawl step re-attaches by the single-point distance along one
+            // normal, which in a crevice sits lower than a body resting there; under the threshold it walked the sim
+            // back down, the seat wrote it up again, and the two traded the height and the up every tick or few (a
+            // hermit picking in a crevice: FishGlitch OSCILLATION)
+            if ((ownsHeight || kotlin.math.abs(dh) > WRITE_BACK_CM) && s.dist(simSeat) >= 0.5 * simOffset) {
+                ownsHeight = true
                 o.pos = simSeat
                 o.up = Vec3.rotateToward(o.up, up, min(WRITE_BACK_TURN * dt, SEAT_TURN_TICK), o.heading).normalized(up)
-            }
+            } else ownsHeight = false
         }
         upS = up
         oPrev = o.pos
@@ -1002,6 +1092,9 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         /** Rest clearance of the lowest contact point and the penetration the solve tolerates before pushing (cm). */
         const val REST_CM = 0.02
         const val PEN_TOL_CM = 0.005
+        /** A gliding seat step (see [update]) may graze this deep into rock or glass, or float this far clear (cm). */
+        const val GLIDE_CLIP_CM = 0.08
+        const val GLIDE_GAP_CM = 0.25
         const val FOOT_TOL_CM = 0.03
         /** Foot tip radius (model units): the dactyl tips sit this far off the ground in the model. */
         const val FOOT_R = 0.004

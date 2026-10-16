@@ -149,6 +149,33 @@ class SandRest(val hawk: HawkBrain) : Behavior("sandrest", "Resting on the sand"
         fun restHeading(c: Ctx, s: Vec3): Vec3 = horizontalHeading(c.rock.sdf.gradient(s), Vec3.Z)
 
         /**
+         * The resting body lies clear of the rock at [p]. It faces away from the rock ([restHeading]), so its body points
+         * back toward it, and the head's 2.5 cm gap alone let a 6.5 cm body lie in a rock foot. Each station along the
+         * body (head-up at [PITCH], yawed up to [BODY_YAW] either way for a bent trail and the head turns) is taken at
+         * no lower than the live sand plus [SandContact] clearance (the sand holds the tail up there) and must keep
+         * [BODY_CLEAR_CM] plus the body's half-width from the rock.
+         */
+        fun bodyClear(c: Ctx, o: Organism, p: Vec3): Boolean {
+            val h0 = restHeading(c, p)
+            val keep = BODY_CLEAR_CM + 0.35 * o.species.depthRatio * o.lengthCm
+            val lie = com.reeflive.core.sim.SandContact.clearance(o) * 0.5
+            for (yaw in doubleArrayOf(0.0, BODY_YAW, -BODY_YAW, 0.5 * BODY_YAW, -0.5 * BODY_YAW)) {
+                val h = Vec3.rotateAbout(h0, Vec3.Y, yaw)
+                val back = (h * cos(PITCH) + Vec3.Y * sin(PITCH)) * -1.0
+                for (i in 1..6) {
+                    var q = p + back * (i / 6.0 * o.lengthCm)
+                    val floor = c.sim.sand.surfaceY(q.x, q.z) + lie
+                    if (q.y < floor) q = q.withY(floor)
+                    if (c.rock.sdf.dist(q) < keep) return false
+                }
+            }
+            return true
+        }
+        /** Yaw either way the resting body is checked over (rad, ~20 deg), and the rock clearance it keeps (cm). */
+        const val BODY_YAW = 0.35
+        const val BODY_CLEAR_CM = 0.3
+
+        /**
          * A night spot: open sand 2.5–[ROCK_GAP_CM] cm from the rock, with open water above, nearest the hawk's lowest
          * perch. Remembered across nights (PlaceKind.NIGHT). Deterministic search (no rng).
          */
@@ -168,6 +195,7 @@ class SandRest(val hawk: HawkBrain) : Behavior("sandrest", "Resting on the sand"
                 val gap = c.rock.sdf.dist(p)
                 if (gap < 2.5 || gap > ROCK_GAP_CM) continue
                 if (c.rock.sdf.dist(p + Vec3.Y * 4.0) < 2.0) continue
+                if (!bodyClear(c, o, p)) continue
                 val score = p.distanceTo(base) + 0.5 * gap
                 if (score < bs) { bs = score; best = p }
             }

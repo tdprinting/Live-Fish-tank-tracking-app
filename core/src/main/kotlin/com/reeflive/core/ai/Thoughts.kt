@@ -114,7 +114,7 @@ object Thoughts {
             n == "cleansite" -> Line("cleaning a rock by ${e.host} to lay eggs on", "get a nest spot ready", "Making it spotless!", Driver.FAMILY, 3)
             n == "layeggs" -> Line("laying eggs by ${e.host}", "lay some eggs", "Eggs!", Driver.FAMILY, 3)
             n == "tendeggs" -> Line("fanning the eggs to keep them fresh", "look after the eggs", "Guarding my eggs!", Driver.FAMILY, 3)
-            n.startsWith("hole_") -> holeLine(e, label)
+            n == "hole" || n.startsWith("hole_") -> holeLine(e, label)
             // ---- common behaviours, with the species' own wording where it has one
             n == "flee" -> fleeLine(e, label)
             n == "sleep" -> sleepLine(e, label)
@@ -184,6 +184,7 @@ object Thoughts {
             n == "pick" && k == BrainKind.LEOPARD_WRASSE -> Line(if (label.contains("sand")) "picking tiny critters off the sand" else "picking tiny pods off the coral", "pick pods off the coral", "Pod snack!", Driver.HUNGER)
             n == "pick" -> Line("picking bits of food off the rock", "pick at the rock", "Pick pick.", Driver.HUNGER)
             n == "retreat" -> Line("hiding inside its shell${e.because()}", "pop back out of its shell", "Nobody home!", Driver.FEAR, 2)
+            n == "backout" -> Line("backing out of a gap too tight for its shell", "back out of the tight spot", "Too squeezy!", Driver.ROUTINE)
             // ---- brittle star
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
             n == "squeeze" -> Line("squeezing out of a gap too tight for its shell", "squeeze out of the gap", "Too tight in here!", Driver.HOME, 2)
@@ -256,7 +257,10 @@ object Thoughts {
     }
 
     private fun holeLine(e: Env, label: String): Line = when {
+        label.contains("cave") -> if (e.night) Line("sleeping in its cave", "rest in its cave", "Zzz…", Driver.REST, 0)
+            else Line("tucked into its cave with its head at the door", "rest in its cave", "My cave.", Driver.HOME, 0)
         e.night -> Line("sleeping in its hole", "rest in its hole", "Zzz…", Driver.REST, 0)
+        label.startsWith("Backing") -> Line("backing into its hole tail first", "settle into its hole", "Reverse in…", Driver.HOME, 1)
         e.brain.threat != null || e.sim.simTimeSec - e.brain.startleAt < 20 ->
             Line("backing into its hole${e.because()}", "pop back out of its hole", "Eek! Hide!", Driver.FEAR, 3)
         label.startsWith("Peeking") -> Line("peeking out of its hole", "peek out of its hole", "Peekaboo!", Driver.CURIOSITY)
