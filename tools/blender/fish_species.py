@@ -936,6 +936,8 @@ SPECIES = {
         pectoral=dict(u=0.24, length=0.15, width=0.1, zf=-0.15, shape="round"),
         pelvic=dict(u=0.25, length=0.1),
         eye=dict(u=0.075, zf=0.42, r=0.034, iris="#C8D0D8", ring="#E87A2A", outer="#5AA8EC", ring_w=0.14),
+        # wide oblique mouth whose corner reaches back under the front of the eye; opens ~35° to take sand (research 16)
+        mouth=dict(u=0.075, seam=-0.22, gape_deg=35),
         paint=paint_diamond_goby, fins=fins_diamond_goby, irid=0.3, rough=0.32, length_cm=12.0,
     ),
     "leopard_wrasse": dict(
@@ -976,7 +978,16 @@ def build_geometry(sid):
                                         back_pinch=sp.get("back_pinch", 0.25),
                                         gill=sp.get("gill", (0.215, 0.36, 0.06, 0.24)),
                                         head_flatten=sp.get("head_flatten"))
-    COL = np.stack([np.zeros(len(V)), G, np.zeros(len(V)), -np.ones(len(V))], -1)
+    jaw_extras = {}
+    if "mouth" in sp:  # an opening mouth: split lips, a lower jaw on a hinge and a dark mouth lining (fish.vert uJaw)
+        mo = sp["mouth"]
+        V, F, UV, G, JAW, INS, hinge = FL.add_mouth(V, F, UV, G, prof, sp["ring"], mouth_u=mo["u"], seam_s=mo["seam"])
+        COL = np.stack([INS, G, JAW, -np.ones(len(V))], -1)
+        # hinge (model x, y) and the widest gape (rad) for the shader
+        jaw_extras["jaw"] = (lambda h=hinge, a=mo["gape_deg"]: [fb.gltf_point(h)[0], fb.gltf_point(h)[1],
+                                                                round(math.radians(a), 4), 1.0])
+    else:
+        COL = np.stack([np.zeros(len(V)), G, np.zeros(len(V)), -np.ones(len(V))], -1)
     if sid == "tang":  # caudal spine: small yellow wedge each side at u 0.92
         V, F, UV, COL = list(V), list(F), list(UV), list(COL)
         for side in (1, -1):
@@ -1010,7 +1021,7 @@ def build_geometry(sid):
                 COL += [(0, 0, 0, -1)] * 5
                 F += [(b, b + 1, b + 2, b + 3), (b + 3, b + 2, b + 4)]
         V, UV, COL = np.array(V), np.array(UV), np.array(COL)
-    fb.add("Body", V, F, UV, COL, "body", "body")
+    fb.add("Body", V, F, UV, COL, "body", "body", extras=jaw_extras)
 
     fins = []
     for key, kind in (("dorsal", "dorsal"), ("dorsal2", "dorsal2"), ("anal", "anal")):

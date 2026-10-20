@@ -34,6 +34,11 @@ class DrawPart(
     val identityWorld: Boolean = M.isIdentity(node.world)
     /** Limb pivots for the crawler limb rig (`extras.limbPivots`: 10 × vec4, model space xyz + rest length), or null. */
     val limbPivots: FloatArray? = node.floats("limbPivots")?.takeIf { it.size >= 40 }
+    /**
+     * Fish jaw (`extras.jaw`: hinge x, y in model space, widest gape in rad, 1), parsed once; all zero for a model
+     * without one (fish.vert uJaw).
+     */
+    val jaw: FloatArray = node.floats("jaw")?.takeIf { it.size >= 4 }?.copyOf(4) ?: FloatArray(4)
     /** `extras.alphaTest`, parsed once (the draw loop reads it for every part every frame). */
     val alphaTest: Float? = node.float("alphaTest")
     /**

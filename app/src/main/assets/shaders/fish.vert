@@ -16,7 +16,8 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
-uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
+uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
+uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
@@ -32,10 +33,6 @@ uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length 
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
-// Jaw: hinge behind the snout (u) and the height of the lips' seam (model units; the fish heads in tools/blender/fish_species.py
-// put the mouth a little below the axis).
-const float JAW_U = 0.08;
-const float MOUTH_Y = -0.01;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -397,17 +394,16 @@ void main() {
         local.yz *= 1.0 - 0.25 * uShape.x;
         float flare = 0.03 * uFin.z * aColor.g * (0.5 + 0.5 * sin(time * uFin.w * 2.0 * PI));
         local.z += sign(local.z) * flare;
-        // jaw gape (fish only; uPick = the sim's mouth, 0 shut .. 1 wide): the lower jaw swings down about a hinge
-        // JAW_U behind the snout and the upper jaw lifts a little, so a goby's bite into the sand or a fish taking food
-        // shows; the lips' seam shades dark as it opens (vColor.g, read by fish.frag)
-        float gape = mode < 0.5 ? clamp(uPick, 0.0, 1.0) : 0.0;
-        if (gape > 0.001 && u < JAW_U) {
-            float lever = JAW_U - u;
-            float lowerJaw = 1.0 - smoothstep(-0.004, 0.004, local.y - MOUTH_Y);
-            float seam = 1.0 - smoothstep(0.0, 0.03, abs(local.y - MOUTH_Y));
-            local.y -= gape * lever * mix(-0.2, 0.65, lowerJaw);
-            local.x -= gape * lever * 0.35 * seam;
-            mouthDark = gape * smoothstep(JAW_U, 0.0, u) * seam;
+        // opening jaw (models built with a mouth, uJaw.w = 1; uPick = the sim's mouth, 0 shut .. 1 wide): the lower jaw
+        // (COLOR_0.b = 1) turns down about the hinge under the eye, the mouth lining's inner folds (0.5) half as far, and
+        // the lining (COLOR_0.r) shades dark (vColor.g, read by fish.frag)
+        if (uJaw.w > 0.5 && mode < 0.5) {
+            float a = -clamp(uPick, 0.0, 1.0) * uJaw.z * aColor.b;
+            vec2 r = aPos.xy - uJaw.xy;
+            float c = cos(a), sn = sin(a);
+            local.xy += vec2(c * r.x - sn * r.y, sn * r.x + c * r.y) - r;
+            n.xy = vec2(c * n.x - sn * n.y, sn * n.x + c * n.y);
+            mouthDark = aColor.r;
         }
     } else if (part < 1.5) {
         // fins: clamp folds toward the body (hinge-weighted, up to ~60 deg) and flutter
