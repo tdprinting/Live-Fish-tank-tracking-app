@@ -15,6 +15,7 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
+uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
@@ -398,7 +399,7 @@ void main() {
         local.x -= clampA * 0.06;
         local.y *= 1.0 - 0.45 * clampA * step(abs(local.z), abs(local.y));
         local.z *= 1.0 - 0.45 * clampA * step(abs(local.y), abs(local.z));
-        float flutter = 0.02 * sin(time * 12.0 + u * 6.0) * hinge * (1.0 - 0.7 * uFin.y);
+        float flutter = 0.006 * sin(time * 9.0 + u * 6.0) * hinge * (1.0 - 0.7 * uFin.y);
         if (uShape.w > 0.5 && uShape.w < 1.5) {
             // pectorals: fan open and row
             float spread = mix(0.25, 1.0, uFin.x);
@@ -532,18 +533,18 @@ void main() {
         n = normalize(vec3(n.x, n.y / k.x, n.z / k.y));
     }
 
-    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (0.1 + 0.9 u^2). The amplitude is
+    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (h + (1 - h) u^k), h and k per body type (uEnv). The amplitude is
     // capped and faded while the body is strongly curved (head vs tail heading) so the wave cannot fold the tail
     // back into the body on a tight turn.
     vec3 fwdHead = qrot(uFrame[0], vec3(1.0, 0.0, 0.0));
     vec3 fwdTail = qrot(uFrame[15], vec3(1.0, 0.0, 0.0));
     float bendFade = mix(0.35, 1.0, smoothstep(-0.2, 0.85, dot(fwdHead, fwdTail)));
     float amp = min(uSwim.y, MAX_WAVE_AMP) * bendFade;
-    float A = amp * (0.1 + 0.9 * uw * uw);
+    float A = amp * (uEnv.y + (1.0 - uEnv.y) * pow(uw, uEnv.x));
     float arg = 2.0 * PI * (uw * uSwim.z - uSwim.x);
     local.z += A * sin(arg);
     // slope dz/du tilts the normal (cheap analytic correction instead of a finite difference)
-    float dzdu = amp * (1.8 * uw) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
+    float dzdu = amp * (1.0 - uEnv.y) * uEnv.x * pow(uw, uEnv.x - 1.0) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
     // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
     // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
     float bend = uMotion.z;

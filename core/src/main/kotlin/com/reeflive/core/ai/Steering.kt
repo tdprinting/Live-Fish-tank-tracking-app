@@ -629,8 +629,13 @@ class Steering(private val c: Ctx) {
             if (Symptomatic.lethargic(o)) { amp *= 0.6; pecAmp *= 0.6 }
             if (o.health < 0.3) { amp *= 0.5; pecAmp *= 0.5 }
             caudalShare = st.caudalShare
-            o.tailHz = tailHz
-            o.amp = amp * (1 - 0.3 * o.finClamp)
+            // muscle and body inertia: the beat amplitude and rate ease toward the target (a fish does not snap from
+            // hovering to a full beat between two ticks, which read as a rubbery wobble); a C-start is not eased
+            val ampTarget = amp * (1 - 0.3 * o.finClamp)
+            if (cStartT >= 0) { o.amp = ampTarget; o.tailHz = tailHz } else {
+                o.amp += (ampTarget - o.amp) * min(1.0, dt * (if (ampTarget > o.amp) 8.0 else 5.0))
+                o.tailHz += (tailHz - o.tailHz) * min(1.0, dt * 6.0)
+            }
             o.pecAmp = pecAmp * (1 - 0.6 * o.finClamp)
             o.pecPhase = (o.pecPhase + pecHz * dt) % 1000.0
             o.pectoral = it.pectoral ?: when {

@@ -1092,6 +1092,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uScale", r.scale)
         p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
+        p.set2f("uEnv", r.envExp, r.envHead)
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
