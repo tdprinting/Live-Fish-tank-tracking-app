@@ -378,7 +378,7 @@ object ReefLive {
     fun followZoom(steps: Double) { renderer?.followCam?.zoom(steps.toFloat()) }
     /** Follow camera buttons: swing round the fish, [dir] +1 / −1 one 45° step. */
     fun followOrbit(dir: Double) { renderer?.followCam?.orbit(dir.toFloat() * com.reeflive.app.render.FollowCamControl.ORBIT_STEP) }
-    /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON. */
+    /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON, BLUE. */
     fun setViewLight(name: String) { renderer?.viewLight = runCatching { com.reeflive.app.render.ViewLight.valueOf(name) }.getOrDefault(com.reeflive.app.render.ViewLight.REAL) }
     /** The 3D supply shelf beside the tank: the camera swings over to it; tapping a prop calls `onShelfPick(id)`. */
     fun shelfOpen(on: Boolean) { shelf.setOpen(on, false) }

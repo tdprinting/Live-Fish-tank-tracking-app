@@ -249,6 +249,7 @@ class Brood(private val sim: Simulation) {
         o.placeAt(Vec3(8.0 + rng.range(0.0, 6.0), sim.rock.waterLevelCm - 4, sim.rock.widthCm * 0.7), Vec3(1.0, 0.0, rng.signed() * 0.3))
         c.count -= 1.0
         if (c.count < 0.5) cohorts.remove(c)
+        sim.careLog.babiesReleased++
         sim.emit(SimEvent.BabyReleased(o.id, sim.simTimeSec))
     }
 

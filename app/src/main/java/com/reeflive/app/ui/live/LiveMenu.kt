@@ -604,4 +604,5 @@ private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
     ViewLight.DUSK -> ReefGlyphs.sun
     ViewLight.NIGHT -> ReefGlyphs.moon
     ViewLight.MOON -> ReefGlyphs.moon
+    ViewLight.BLUE -> ReefGlyphs.uvLamp
 }
