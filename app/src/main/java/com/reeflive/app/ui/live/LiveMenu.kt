@@ -152,6 +152,10 @@ class LiveTools(
     /** My tank's growing speed (slow biology only; animals still move at real speed). */
     val lifePace: com.reeflive.core.sim.LifePace = com.reeflive.core.sim.LifePace.DEFAULT,
     val onLifePace: (com.reeflive.core.sim.LifePace) -> Unit = {},
+    /** My tank's fish stores (docs/ECONOMY.md §5): Add life shows their storefronts instead of the free gallery. */
+    val stores: List<com.reeflive.app.live.StoreFrontUi> = emptyList(),
+    val onStore: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
+    val onStoreShut: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
 )
 
 /**
@@ -515,7 +519,16 @@ private fun ColumnScope.CardBody(
                 T("Germ zapper", ReefGlyphs.uvLamp, on = isOn("eq_uv"), closes = false) { flip("eq_uv") },
             ))
         }
-        LiveCategory.LIFE -> {
+        LiveCategory.LIFE -> if (tools.myTank) {
+            // My tank buys its animals at the fish stores; the free gallery stays in the sandbox
+            StoreStreet(tools.stores, { close(); tools.onStore(it) }, tools.onStoreShut)
+            LiveSectionTitle("Tiny life & helpers")
+            Tiles(tone, close, listOf(
+                T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
+                T("Phyto", ReefGlyphs.seaweed) { actions.onMicro(MicroAction.DOSE_PHYTO) },
+                T("Spare shells", ReefGlyphs.shell) { actions.onAddSpareShells() },
+            ))
+        } else {
             StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset, myTank = tools.myTank)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(

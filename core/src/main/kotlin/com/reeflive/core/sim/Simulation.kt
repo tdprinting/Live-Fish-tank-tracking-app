@@ -946,7 +946,7 @@ class Simulation private constructor(
             if (o.alive) growth(o, lifeMin)
         }
         coralGrowth(lifeMin)
-        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, lifeMin)
+        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON, lifeMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
@@ -1343,7 +1343,12 @@ class Simulation private constructor(
                 water.maintain(c.task)
                 if (c.task == MaintenanceTask.SIPHON_SAND) { waste.siphon(); sand.siphon(WaterSim.SIPHON_SHARE) }
             }
-            is Command.AddAiptasia -> AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
+            is Command.AddAiptasia -> {
+                val near = c.nearCoralId?.let { id -> corals.firstOrNull { it.id == id } }
+                if (near != null) repeat(c.count.coerceIn(0, 3)) { AiptasiaModel.hitchhike(this, near.pos) }
+                else AiptasiaModel.seed(this, c.count.coerceIn(0, AiptasiaModel.CAP))
+            }
+            is Command.TreatAiptasia -> AiptasiaModel.treat(this, c.treatment, c.polypId)
             is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
             is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
             is Command.StopTreatment -> treatments.active[c.kind]?.let { endTreatment(it) }
@@ -1935,6 +1940,8 @@ class Simulation private constructor(
             foodMeta = food.exportMeta(simTimeSec),
             waste = waste.export(simTimeSec),
             pumps = pumpArray(),
+            berghia = pests.berghia.toFloat(),
+            berghiaPrey = if (pests.berghia > 0) pests.berghiaPrey else null,
             nori = food.nori?.let { n ->
                 val cl = n.cloth
                 NoriPose(cl.cols, cl.rows, cl.exportNodes(), cl.exportCells(), n.pos.x.toFloat(), n.pos.y.toFloat(), n.pos.z.toFloat(),

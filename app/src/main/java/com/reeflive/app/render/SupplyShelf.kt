@@ -43,7 +43,7 @@ object SupplyShelfLayout {
     const val SLOT_X0 = 136.4f
     const val SLOT_X1 = 233.6f
     /** Props per row (feed, care, tools), in the order of the script's lists and of SupplyItem. */
-    val ROW_COUNT = intArrayOf(13, 10, 5)
+    val ROW_COUNT = intArrayOf(13, 10, 8)
     /** Node of the lit "Supplies" sign on the crest (drawn brighter than the rest). */
     const val SIGN_NODE = "ShelfSign"
 

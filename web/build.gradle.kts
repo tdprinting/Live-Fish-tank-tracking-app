@@ -142,6 +142,12 @@ tasks.register<Sync>("site") {
         rename("species_(.*)", "$1")
         into("species")
     }
+    // the fish stores' storefront pictures (tools/blender/stores.py), for My tank's store screens
+    from(rootProject.layout.projectDirectory.dir("app/src/main/res/drawable-nodpi")) {
+        include("store_*.webp")
+        rename("store_(.*)", "$1")
+        into("stores")
+    }
     from(rootProject.layout.projectDirectory.dir("app/src/main/res/raw")) { into("sounds") }
     from(soundsM4a) { into("sounds") }
 }
