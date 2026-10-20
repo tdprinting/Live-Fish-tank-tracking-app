@@ -207,7 +207,7 @@ def build_scene(samples, w, h, view):
                 instance_polyps(objs)
             if f == "equipment":
                 for o in objs:
-                    if o.type == 'MESH' and o.name.startswith(("HoseArc", "FeedRing", "Jar")):
+                    if o.type == 'MESH' and o.name.startswith(("HoseArc", "Jar")):
                         o.visible_shadow = False
     for sid, L, pos, yaw, pitch in FISH_POSES:
         p = os.path.join(M, sid + ".glb")
