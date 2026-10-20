@@ -64,6 +64,9 @@ class Material(val kind: MaterialKind, val src: GlbMaterial, val albedo: Texture
     /** Parsed once: [apply] runs for every part every frame. */
     val alphaCutoff: Float = if (src.alphaMode == "MASK") src.alphaCutoff
         else (src.extras["alphaTest"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
+    /** The GLB's emissive, or for coral tissue modelled without one its [Fluorescence] (the coral shaders scale it by blue light). */
+    private val emissive: FloatArray = if (src.emissive.any { it > 0f } || (kind != MaterialKind.POLYP && kind != MaterialKind.SOFT_CORAL)) src.emissive
+        else Fluorescence.of(src.name) ?: src.emissive
 
     /** Binds texture unit 0 and the per-material uniforms. [white] is the 1×1 default. */
     fun apply(p: ShaderProgram, white: Texture, alphaTestOverride: Float? = null) {
@@ -72,7 +75,7 @@ class Material(val kind: MaterialKind, val src: GlbMaterial, val albedo: Texture
         p.set4f("uBaseColor", c[0], c[1], c[2], c.getOrElse(3) { 1f })
         p.set1f("uHasTexture", if (albedo != null) 1f else 0f)
         p.set1f("uRoughness", src.roughness)
-        p.set3f("uEmissive", src.emissive[0], src.emissive[1], src.emissive[2])
+        p.set3f("uEmissive", emissive[0], emissive[1], emissive[2])
         p.set1f("uAlphaCutoff", alphaTestOverride ?: alphaCutoff)
     }
 }
