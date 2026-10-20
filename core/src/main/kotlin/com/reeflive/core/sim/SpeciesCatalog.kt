@@ -137,6 +137,14 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.ANEMONE -> base.copy(kind = "INVERT", common = "Bubble tip anemone", maxLengthCm = 40.0, typicalAdultCm = 20.0, depthRatio = 0.5, massCoeff = 0.02,
                     locomotion = Locomotion("CRAWLING", 0.00005, 0.0002, 0.0, 5.0), diet = listOf("LIGHT", "MYSIS", "KRILL", "PRAWN", "PELLET"), feedsPerDay = 0.3,
                     hardiness = 0.6, starvationDays = 120.0, homeRadiusCm = 15.0, model = "models/bubble_tip_anemone.glb")
+                BrainKind.GRAMMA -> base.copy(common = "Royal gramma", maxLengthCm = 8.0, typicalAdultCm = 6.5, depthRatio = 0.3, massCoeff = 0.016,
+                    lifespanYears = 6.0, locomotion = Locomotion("LABRIFORM", 0.7, 6.0, 2.5, 320.0, 0.9, 0.035, 0.09), zone = Zone(0.1, 0.6, 0.15, 0.85),
+                    temperament = Temperament(0.35, 0.45, 0.45, 0.6), diet = listOf("MYSIS", "BRINE", "CYCLOPS", "PODS", "ZOOPLANKTON", "FLAKE", "PELLET"),
+                    hardiness = 0.75, homeRadiusCm = 20.0, iridescence = 0.2, model = "models/royal_gramma.glb")
+                BrainKind.WATCHMAN_GOBY -> base.copy(common = "Yellow watchman goby", maxLengthCm = 10.0, typicalAdultCm = 7.5, depthRatio = 0.2, massCoeff = 0.012,
+                    locomotion = Locomotion("LABRIFORM", 0.6, 6.0, 2.2, 260.0, 0.9, 0.04, 0.1), zone = Zone(0.0, 0.15, 0.1, 0.8),
+                    temperament = Temperament(0.3, 0.45, 0.5, 0.7), diet = listOf("MYSIS", "BRINE", "PODS", "PELLET", "FLAKE", "MEATY"),
+                    hardiness = 0.85, starvationDays = 24.0, homeRadiusCm = 15.0, iridescence = 0.15, model = "models/watchman_goby.glb")
                 BrainKind.GENERIC_FISH -> base
                 BrainKind.GENERIC_INVERT -> base.copy(kind = "INVERT", locomotion = Locomotion("CRAWLING", 0.05, 0.2))
             }

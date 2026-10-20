@@ -143,6 +143,16 @@ object Thoughts {
             n == "tanghide" -> Line("tucked under the rock until it feels safe again", "hide under the rock", "Nobody can see me here.", Driver.FEAR, 2)
             n == "tangrub" -> Line("rubbing its side along the rock, just for fun", "give the rock a rub", "Wheee, scratchy!", Driver.CURIOSITY, 2)
             n == "tangzoom" -> Line("racing across the tank as fast as it can", "race across the tank", "Zoom zoom!", Driver.CURIOSITY, 2)
+            // ---- royal gramma and watchman goby (research 50)
+            n == "gramhover" -> Line(if (e.o.up.y < -0.3) "hanging upside down under its ledge (grammas do that!)" else "hanging belly-to-the-rock by its cave",
+                "hang by its cave", if (e.o.up.y < -0.3) "The world looks better this way." else "My cave, my rules.", Driver.HOME)
+            n == "gape" -> Line("opening its mouth wide at ${tgt ?: "an intruder"} to scare it off", "guard its cave", "Back off, this is my cave!", Driver.TERRITORY, 3)
+            n == "nest" -> Line("carrying bits of algae into its cave to build a nest", "build a nest", "Making it cozy for the eggs!", Driver.FAMILY, 3)
+            n == "lookout" -> Line("propped up at its burrow, keeping watch", "keep watch at its burrow", "I'll keep an eye out.", Driver.HOME)
+            n == "dive" -> Line("flicking its tail and diving into its burrow${e.because()}", "pop back out of its burrow", "Danger! Everyone in!", Driver.FEAR, 3)
+            n == "spit" -> Line("spitting a mouthful of sand out of its burrow", "tidy its burrow", "Ptooey!", Driver.HOME, 2)
+            n == "hovercover" && k == BrainKind.CARDINAL && e.o.mouthbrooding ->
+                Line("carrying its eggs in its mouth (dads do that!)", "keep the eggs safe in its mouth", "Mmmf. Can't talk, eggs.", Driver.FAMILY, 3)
             // ---- cardinal
             n == "hovercover" -> Line("hovering in its favourite shady spot", "hover in the shade", "Nice and shady.", Driver.HOME)
             n == "dusk" -> Line("out hunting tiny critters in the dark", "hunt for tiny critters tonight", "Night snacks!", Driver.HUNGER, 2)
@@ -488,7 +498,7 @@ object Thoughts {
     fun kindWord(o: Organism): String = when (o.brainKind) {
         BrainKind.CLOWN -> "clownfish"
         BrainKind.TANG -> "tang"
-        BrainKind.CARDINAL -> "cardinalfish"
+        BrainKind.CARDINAL -> if (o.species.id.startsWith("pterapogon")) "Banggai cardinal" else "cardinalfish"
         BrainKind.WRASSE -> "cleaner wrasse"
         BrainKind.EEL -> "moray eel"
         BrainKind.ENGINEER_GOBY -> "engineer goby"
@@ -509,6 +519,8 @@ object Thoughts {
         BrainKind.LEOPARD_WRASSE -> "leopard wrasse"
         BrainKind.BOBTAIL_SQUID -> "bobtail squid"
         BrainKind.ANEMONE -> "bubble tip anemone"
+        BrainKind.GRAMMA -> "royal gramma"
+        BrainKind.WATCHMAN_GOBY -> "watchman goby"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
     }
@@ -573,7 +585,7 @@ object Thoughts {
 
     private val PARTS = listOf("gills", "fins", "sides", "mouth")
     /** Behaviours an empty-tummy fish idles in: the "is hungry and watching for food" sentence replaces them. */
-    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station")
+    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "gramhover", "lookout")
     private val RESTING = setOf("sleep", "cocoon", "burrow", "sand", "bury", "nestle", "hovercover", "hide", "buried")
     /** Never offered as the next plan: reactions, not plans. */
     private val NO_NEXT = setOf("touch", "unwell", "heat", "flee", "tailflip", "retract", "dart", "jet", "snap", "molt", "gasp", "abandoned", "flipped", "yield")

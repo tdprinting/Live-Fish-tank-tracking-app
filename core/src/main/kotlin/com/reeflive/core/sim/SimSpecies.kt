@@ -403,6 +403,10 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
     /** Bubble-tip anemone (*Entacmaea quadricolor*, research 40): walks slowly on its foot, then settles; hosts clowns. */
     ANEMONE(listOf("entacmaea"), false),
+    /** Basslets (royal gramma, *Gramma loreto*, research 50 §1): holds a cave, hangs belly-to-rock (upside down under ledges). */
+    GRAMMA(listOf("gramma"), true),
+    /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
+    WATCHMAN_GOBY(listOf("cryptocentrus", "amblyeleotris", "stonogobiops"), true),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -430,6 +434,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
+            "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
+            "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
         )
 
         fun byId(id: String): BrainKind? {

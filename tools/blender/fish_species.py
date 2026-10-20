@@ -777,6 +777,141 @@ def fins_leopard_wrasse(cv):
     FL.paint_fin_slot(cv, 5, base="#C89A70", alpha=0.5, rays=5, ray_color="#8A6040")
 
 # ----------------------------------------------------------------------------
+def paint_royal_gramma(cv, fl):
+    """Royal gramma, Gramma loreto (research 50 §1): the front half of the fish electric magenta-violet, the rear half
+    golden yellow, meeting in a short dappled zone a little behind mid-body (further forward on the belly); a thin
+    black line runs from the snout through the eye and a little past it; a faint yellow wash under the eye."""
+    u, v = cv.u, cv.v
+    edge = 0.5 - 0.06 * (1 - v)                            # the colour boundary leans forward toward the belly
+    cv.vgrad("#B03AC8", "#8A1EB0", 0.0, 1.0)               # violet, deeper along the back
+    cv.blend(1 - S(0.0, 0.3, v), "#C860D8", 0.35)          # paler lilac throat
+    mix = S(edge - 0.06, edge + 0.06, u)
+    yc = P.Canvas(cv.w, cv.h)
+    yc.vgrad("#F4C21C", "#F0A80E", 0.0, 1.0)
+    # dapple: violet scale centres reach a little into the yellow and yellow ones into the violet
+    n = P.value_noise(cv.h, cv.w, 70, 30, 501)
+    m = np.clip(mix + (n - 0.5) * 0.5 * (1 - np.abs(2 * mix - 1)), 0, 1)
+    cv.rgb = cv.rgb * (1 - m[..., None]) + yc.rgb * m[..., None]
+    mucus(cv, 0.035, 502)
+    scales_overlay(cv, 10, 0.06)
+    # snout-eye line: a thin black stroke from the upper lip through the eye to just past it, rising a little
+    cv.blend(fl.stroke([(0.0, 0.5), (0.05, 0.6), (0.1, 0.68), (0.16, 0.72)], [0.003, 0.004, 0.004, 0.0015], soft=0.002),
+             "#140818", 0.95)
+    cv.blend(fl.stroke([(0.04, 0.52), (0.14, 0.58)], [0.004, 0.002], soft=0.004), "#E8C850", 0.35)
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.52, color="#40104A", op=0.6)
+
+
+def fins_royal_gramma(cv):
+    # dorsal XII,19-20: violet in front, yellow behind (like the body), the black spot at the front between spines 1-5
+    def dorsal_fn(T, Sx, rgb, a):
+        y = S(0.38, 0.5, T)
+        rgb = rgb * (1 - y[..., None]) + hex2rgb("#F2B418") * y[..., None]
+        spot = np.exp(-(((T - 0.12) / 0.07) ** 2 + ((Sx - 0.45) / 0.35) ** 2))
+        m = np.clip(spot * 1.6, 0, 1)
+        return rgb * (1 - m[..., None]) + hex2rgb("#08040A") * m[..., None], np.maximum(a, 0.95 * m)
+    FL.paint_fin_slot(cv, 0, base="#9A2AC0", alpha=0.85, rays=31, ray_color="#6A1890", spine_count=12, spots=dorsal_fn,
+                      margin="#D070E8", margin_w=0.05)
+    # anal III,10: violet, a little paler toward the rim
+    FL.paint_fin_slot(cv, 2, base="#9A2AC0", alpha=0.8, rays=13, ray_color="#6A1890", spine_count=3, margin="#C860E0",
+                      margin_w=0.08)
+    FL.paint_fin_slot(cv, 3, base="#F4BC1A", alpha=0.85, rays=17, ray_color="#C88A10", margin="#F8D860", margin_w=0.04)
+    FL.paint_fin_slot(cv, 4, base="#E8C0F0", alpha=0.3, rays=16, ray_color="#B080C0")
+    # long violet pelvics (the male's reach the anal fin)
+    FL.paint_fin_slot(cv, 5, base="#A030C8", alpha=0.9, rays=5, ray_color="#701C98", margin="#D890F0", margin_w=0.1)
+
+
+def paint_banggai(cv, fl):
+    """Banggai cardinalfish, Pterapogon kauderni (research 50 §2): silvery body with a pewter cast, three bold black
+    bars (through the eye, from the first dorsal to the pelvic base, from the second dorsal to the anal fin), the rear
+    body and peduncle sprinkled with white pearl spots, a faint dark wash between the bars."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#E8ECEE", "#A8B0B4", 0.0, 1.0)               # silver, pewter on the back
+    cv.blend(P.value_noise(cv.h, cv.w, 50, 24, 511) * 0.5, "#D0D6DA", 0.4)
+    cv.blend(S(0.25, 0.75, u) * S(0.35, 1.0, v), "#9AA0A6", 0.25)
+    mucus(cv, 0.03, 512)
+    scales_overlay(cv, 13, 0.07)
+
+    def bar(c0, c1, lean, soft=0.006, vlo=0.0):
+        b0 = c0 + lean * (1 - v)
+        b1 = c1 + lean * (1 - v)
+        return S(b0 - soft, b0 + soft, u) * (1 - S(b1 - soft, b1 + soft, u)) * S(vlo, vlo + 0.05, v)
+    cv.blend(bar(0.1, 0.17, -0.02), "#0C0C0E")           # the eye bar, nape to throat
+    cv.blend(bar(0.3, 0.38, 0.05), "#0C0C0E")            # first dorsal to the pelvics
+    cv.blend(bar(0.56, 0.65, 0.04, vlo=0.04), "#0E0E10")  # second dorsal to the anal fin
+    cv.blend(S(0.95, 1.0, u) * (S(0.8, 0.95, v) + (1 - S(0.05, 0.2, v))), "#1A1A1C", 0.5)  # dark edges at the tail base
+    rs = np.random.default_rng(513)
+    m, _ = fl.spots(rs, 46, 0.006, 0.011, 0.025, (0.66, 0.99, 0.08, 0.94))
+    m2, _ = fl.spots(rs, 10, 0.005, 0.008, 0.025, (0.4, 0.55, 0.08, 0.5))
+    cv.blend(np.maximum(m, m2), "#FAFAF6")
+    dark_mouth(cv, fl, u1=0.03, v0=0.48, v1=0.56, color="#202024", op=0.6)
+
+
+def fins_banggai(cv):
+    pearls = lambda n, rows: (lambda T, Sx, rgb, a: _pearl_spots(T, Sx, rgb, a, n, rows))  # noqa: E731
+    # tall black first dorsal VIII
+    FL.paint_fin_slot(cv, 0, base="#101012", alpha=0.95, rays=8, ray_color="#000000", spine_count=8, incise=0.12)
+    # second dorsal I,14 and anal II,13: long front rays, black leading half with white pearls, clear rear
+    def black_lead(T, Sx, rgb):
+        m = (1 - S(0.25, 0.45, T))[..., None]
+        return rgb * (1 - m) + hex2rgb("#141416") * m
+    FL.paint_fin_slot(cv, 1, base="#C8CCD0", alpha=0.6, rays=15, ray_color="#6A6E72", base_fn=black_lead, spots=pearls(9, 4))
+    FL.paint_fin_slot(cv, 2, base="#C8CCD0", alpha=0.6, rays=14, ray_color="#6A6E72", base_fn=black_lead, spots=pearls(9, 4))
+
+    def lobes(T, Sx, rgb, a):  # caudal: black leading margins on both lobes, clear between
+        m = 1 - S(0.06, 0.16, np.minimum(T, 1 - T))
+        return rgb * (1 - m[..., None]) + hex2rgb("#101012") * m[..., None], np.maximum(a, 0.9 * m)
+    FL.paint_fin_slot(cv, 3, base="#C0C4C8", alpha=0.45, rays=17, ray_color="#707478", spots=lobes)
+    FL.paint_fin_slot(cv, 4, base="#E0E4E8", alpha=0.25, rays=14, ray_color="#A0A4A8")
+    # long black pelvics with white pearls
+    FL.paint_fin_slot(cv, 5, base="#121214", alpha=0.95, rays=6, ray_color="#000000", spots=pearls(5, 4))
+
+
+def _pearl_spots(T, Sx, rgb, a, n, rows):
+    ph = np.abs(((T * n + 0.5 * np.floor(Sx * rows)) % 1.0) - 0.5)
+    rw = np.abs(((Sx * rows) % 1.0) - 0.5)
+    m = (1 - S(0.12, 0.22, np.sqrt(ph ** 2 + rw ** 2))) * (Sx > 0.12) * (Sx < 0.92)
+    return rgb * (1 - m[..., None]) + hex2rgb("#F8F8F4") * m[..., None], np.maximum(a, 0.95 * m)
+
+
+def paint_watchman(cv, fl):
+    """Yellow watchman goby, Cryptocentrus cinctus (research 50 §3), yellow morph: lemon yellow all over, deeper on
+    the back, with four or five faint darker saddles; small pale-blue spots edged darker on the head, cheeks and
+    front of the body; a pale throat."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F8E890", "#EEC81C", 0.0, 0.9)
+    cv.blend(S(0.8, 1.0, v), "#D8A814", 0.4)
+    for c in (0.3, 0.45, 0.6, 0.75, 0.9):                  # faint saddles
+        cv.blend(np.exp(-((u - c) / 0.035) ** 2) * S(0.35, 0.95, v), "#C89A18", 0.3)
+    cv.blend(1 - S(0.05, 0.3, v), "#F8F0C8", 0.5)
+    mucus(cv, 0.035, 521)
+    scales_overlay(cv, 8, 0.04)
+    rs = np.random.default_rng(522)
+    ring, _ = fl.spots(rs, 34, 0.0055, 0.0085, 0.016, (0.02, 0.32, 0.3, 0.95),
+                       weight_fn=lambda uu, vv: 1.0 - 0.6 * S(0.18, 0.32, uu))
+    core, _ = fl.spots(np.random.default_rng(522), 34, 0.0038, 0.006, 0.016, (0.02, 0.32, 0.3, 0.95),
+                       weight_fn=lambda uu, vv: 1.0 - 0.6 * S(0.18, 0.32, uu))
+    cv.blend(ring, "#3A6A8A", 0.7)
+    cv.blend(core, "#8CD0F4", 0.95)
+    dark_mouth(cv, fl, u1=0.04, v0=0.42, v1=0.5, color="#8A6010", op=0.6)
+
+
+def fins_watchman(cv):
+    def blue_spots(T, Sx, rgb, a, n=7, rows=3):
+        ph = np.abs(((T * n) % 1.0) - 0.5)
+        rw = np.abs(((Sx * rows + 0.4) % 1.0) - 0.5)
+        m = (1 - S(0.13, 0.26, ph)) * (1 - S(0.12, 0.26, rw)) * (Sx < 0.88)
+        return rgb * (1 - m[..., None]) + hex2rgb("#7CC4F0") * m[..., None], np.maximum(a, 0.9 * m)
+    FL.paint_fin_slot(cv, 0, base="#F2D040", alpha=0.75, rays=6, ray_color="#C8A020", spine_count=6,
+                      spots=lambda T, Sx, rgb, a: blue_spots(T, Sx, rgb, a, 5, 3), margin="#8CC8F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 1, base="#F2D040", alpha=0.75, rays=11, ray_color="#C8A020",
+                      spots=lambda T, Sx, rgb, a: blue_spots(T, Sx, rgb, a, 9, 3), margin="#8CC8F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 2, base="#F0C830", alpha=0.75, rays=10, ray_color="#C8A020", margin="#5AA0E0", margin_w=0.12)
+    FL.paint_fin_slot(cv, 3, base="#F0CC30", alpha=0.8, rays=17, ray_color="#C8A020",
+                      spots=lambda T, Sx, rgb, a: blue_spots(T, Sx, rgb, a, 8, 4))
+    FL.paint_fin_slot(cv, 4, base="#F6E080", alpha=0.45, rays=18, ray_color="#D8B840")
+    FL.paint_fin_slot(cv, 5, base="#F6E8A0", alpha=0.6, rays=5, ray_color="#D8B840")
+
+
 SPECIES = {
     "clown_orange": dict(
         # A. ocellaris: oval, depth ~0.44 SL at the spiny dorsal, caudal peduncle ~0.19 SL deep
@@ -957,6 +1092,63 @@ SPECIES = {
         eye=dict(u=0.085, zf=0.3, r=0.04, iris="#D07A30", ring="#3A3A18", outer="#A8B040", ring_w=0.16, pupil=0.4),
         paint=paint_leopard_wrasse, fins=fins_leopard_wrasse, irid=0.25, rough=0.33, length_cm=8.5,
     ),
+    "royal_gramma": dict(
+        # Gramma loreto (research 50 §1): small, moderately elongate, compressed basslet, depth ~0.3 SL [L], rounded head
+        # with a large eye and an oblique terminal mouth; one long dorsal XII,19-20 that rises toward the back, anal
+        # III,10, slightly concave caudal (fishprofiles: "Concave"); long pelvics reaching the anal fin in males
+        profile=[(0, 0.05, 0.035, -0.01), (0.04, 0.15, 0.08, -0.005), (0.12, 0.25, 0.11, 0.0), (0.26, 0.3, 0.12, 0.0),
+                 (0.42, 0.3, 0.115, 0.0), (0.6, 0.26, 0.1, 0.0), (0.76, 0.19, 0.075, 0.0), (0.9, 0.14, 0.05, 0.0),
+                 (1.0, 0.13, 0.035, 0.0)],
+        body_tris=3200, ring=28, p_exp=0.82, belly_bias=0.06,
+        dorsal=dict(u0=0.22, u1=0.86, h=[(0.22, 0.02), (0.25, 0.07), (0.42, 0.075), (0.62, 0.1), (0.78, 0.13),
+                                         (0.84, 0.1), (0.86, 0.02)], rake=26, n=31),
+        anal=dict(u0=0.56, u1=0.86, h=[(0.56, 0.02), (0.6, 0.08), (0.76, 0.12), (0.84, 0.09), (0.86, 0.02)], rake=30, n=13),
+        caudal=dict(length=0.24, span=0.3, shape="forked"),
+        pectoral=dict(u=0.27, length=0.16, width=0.09, zf=-0.05, shape="round"),
+        pelvic=dict(u=0.28, length=0.3, base=0.06),
+        eye=dict(u=0.1, zf=0.3, r=0.055, iris="#E8C050", ring="#2A1030", outer="#9A3AB0", ring_w=0.12, pupil=0.45),
+        paint=paint_royal_gramma, fins=fins_royal_gramma, irid=0.2, rough=0.32, length_cm=6.5,
+    ),
+    "banggai": dict(
+        # Pterapogon kauderni (research 50 §2): deep, compressed apogonid, depth ~0.5 SL [L, like the pajama cardinal],
+        # big head and eye, tall tasseled first dorsal VIII, second dorsal I,14 and anal II,13 with the front rays long
+        # and streaming, deeply forked caudal with long pointed lobes, long pelvics
+        profile=[(0, 0.06, 0.03, 0.0), (0.04, 0.14, 0.06, -0.005), (0.1, 0.24, 0.09, -0.01), (0.18, 0.34, 0.11, -0.015),
+                 (0.3, 0.46, 0.13, -0.01), (0.42, 0.52, 0.14, 0.0), (0.54, 0.48, 0.13, 0.0), (0.66, 0.36, 0.11, 0.0),
+                 (0.78, 0.23, 0.085, 0.0), (0.88, 0.16, 0.06, 0.0), (1.0, 0.15, 0.038, 0.0)],
+        body_tris=3400, ring=32, p_exp=0.7, belly_bias=0.05, gill=(0.31, 0.4, 0.06, 0.26),
+        dorsal=dict(u0=0.33, u1=0.47, h=[(0.33, 0.1), (0.35, 0.42), (0.38, 0.4), (0.42, 0.24), (0.47, 0.03)],
+                    rake=32, n=8),
+        dorsal2=dict(u0=0.54, u1=0.74, h=[(0.54, 0.08), (0.555, 0.62), (0.58, 0.46), (0.63, 0.28), (0.69, 0.16),
+                                          (0.74, 0.03)], rake=58, n=15),
+        anal=dict(u0=0.56, u1=0.76, h=[(0.56, 0.07), (0.575, 0.55), (0.6, 0.4), (0.66, 0.22), (0.76, 0.03)],
+                  rake=52, n=14),
+        caudal=dict(length=0.33, span=0.5, shape="forked"),
+        pectoral=dict(u=0.33, length=0.17, width=0.08, zf=-0.05, shape="pointed"),
+        pelvic=dict(u=0.34, length=0.36, base=0.09),
+        eye=dict(u=0.14, zf=0.3, r=0.075, iris="#E8D070", ring="#101010", outer="#B0A060", pupil=0.45, ring_w=0.12),
+        paint=paint_banggai, fins=fins_banggai, irid=0.3, rough=0.3, length_cm=6.5,
+    ),
+    "watchman_goby": dict(
+        # Cryptocentrus cinctus (research 50 §3): torpedo-shaped shrimp goby, depth ~0.2 L [L], a big blunt head with
+        # high bulging eyes and a large downturned mouth reaching back under the eye, two dorsals (VI + I,10), anal
+        # I,9, rounded tail, fused cup-shaped pelvics
+        profile=[(0, 0.06, 0.06, -0.02), (0.04, 0.15, 0.12, -0.01), (0.1, 0.2, 0.15, 0.0), (0.2, 0.21, 0.145, 0.0),
+                 (0.36, 0.2, 0.13, 0.0), (0.54, 0.175, 0.105, 0.0), (0.72, 0.14, 0.08, 0.0), (0.86, 0.105, 0.055, 0.0),
+                 (1.0, 0.085, 0.035, 0.0)],
+        body_tris=3200, ring=28, p_exp=0.95, belly_bias=0.1,
+        dorsal=dict(u0=0.27, u1=0.42, h=[(0.27, 0.03), (0.29, 0.16), (0.31, 0.2), (0.35, 0.14), (0.42, 0.02)],
+                    rake=26, n=6),
+        dorsal2=dict(u0=0.46, u1=0.84, h=[(0.46, 0.03), (0.49, 0.11), (0.72, 0.12), (0.82, 0.1), (0.84, 0.02)],
+                     rake=24, n=11),
+        anal=dict(u0=0.52, u1=0.84, h=[(0.52, 0.03), (0.55, 0.09), (0.78, 0.09), (0.84, 0.02)], rake=26, n=10),
+        caudal=dict(length=0.24, span=0.2, shape="rounded"),
+        pectoral=dict(u=0.25, length=0.17, width=0.11, zf=-0.15, shape="round"),
+        pelvic=dict(u=0.24, length=0.12),
+        eye=dict(u=0.08, zf=0.48, r=0.04, iris="#E8D060", ring="#2A2A30", outer="#5A90C8", ring_w=0.14),
+        mouth=dict(u=0.085, seam=-0.25, gape_deg=30),
+        paint=paint_watchman, fins=fins_watchman, irid=0.15, rough=0.32, length_cm=8.0,
+    ),
 }
 SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin,
                                fins=lambda cv: fins_clown(cv, darwin=True),
@@ -964,7 +1156,8 @@ SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin
                                         ring_w=0.07, pupil=0.4))
 
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
-            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse"]
+            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse",
+            "royal_gramma", "banggai", "watchman_goby"]
 
 
 # ----------------------------------------------------------------------------

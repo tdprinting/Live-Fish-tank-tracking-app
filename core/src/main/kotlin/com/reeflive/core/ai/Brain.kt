@@ -292,6 +292,8 @@ object Predation {
                 BrainKind.CLEANER_SHRIMP -> 8.0
                 BrainKind.HERMIT -> 5.0
                 BrainKind.CARDINAL -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
+                // research 50: a small gramma or watchman out of its cave or burrow fits the hawk's mouth
+                BrainKind.GRAMMA, BrainKind.WATCHMAN_GOBY -> if (me.posture != 3 && L < 0.6 * pred.lengthCm) 1.5 * L else 0.0
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
                 // research cephalopod_squid: a bobtail squid out of the sand is the size of the hawk's usual prey
                 BrainKind.BOBTAIL_SQUID -> if (me.posture == 5) 0.0 else 2.5 * L
@@ -326,6 +328,7 @@ object Predation {
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0
                 BrainKind.HERMIT -> 0.4
                 BrainKind.CARDINAL -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
+                BrainKind.GRAMMA, BrainKind.WATCHMAN_GOBY -> if (prey.posture == 3 || !prey.visible || prey.lengthCm > 0.5 * pred.lengthCm) 0.0 else 0.3
                 BrainKind.BRITTLE_STAR -> 0.1
                 // research cephalopod_squid: an exposed bobtail squid is soft prey for a hawkfish (buried in the sand it is not found)
                 BrainKind.BOBTAIL_SQUID -> if (prey.posture == 5 || prey.lengthCm > 1.2 * pred.lengthCm) 0.0 else 0.5
@@ -362,6 +365,27 @@ fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
         if (rock.sdf.dist(up) >= min(clear, rock.sdf.dist(q))) q = up
     }
     return q
+}
+
+/** [p] moved in from the glass to at least [m] cm, if the move keeps it as clear of rock. */
+fun Ctx.offGlass(p: Vec3, m: Double): Vec3 {
+    val q = Vec3(p.x.coerceIn(m, rock.lengthCm - m), p.y, p.z.coerceIn(m, rock.widthCm - m))
+    return if (q == p || rock.sdf.dist(q) >= min(clearance, rock.sdf.dist(p))) q else p
+}
+
+/**
+ * A hover point [p] (the head) for a fish held facing [face]: shifted along the floor so the tail, a body length
+ * behind, stays inside the glass too (c.safe only keeps the head off it). Kept as is if the shift would meet rock.
+ */
+fun Ctx.tailInside(p: Vec3, face: Vec3): Vec3 {
+    val m = 0.5
+    val tx = p.x - face.x * L
+    val tz = p.z - face.z * L
+    val dx = if (tx < m) m - tx else if (tx > rock.lengthCm - m) rock.lengthCm - m - tx else 0.0
+    val dz = if (tz < m) m - tz else if (tz > rock.widthCm - m) rock.widthCm - m - tz else 0.0
+    if (dx == 0.0 && dz == 0.0) return p
+    val q = Vec3(p.x + dx, p.y, p.z + dz)
+    return if (rock.sdf.dist(q) >= min(clearance, rock.sdf.dist(p))) q else p
 }
 
 /**

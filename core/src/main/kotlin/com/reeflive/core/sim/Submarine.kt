@@ -348,7 +348,7 @@ object SubmarineRules {
 
     private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
-    private val BURROWERS = setOf(BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE)
+    private val BURROWERS = setOf(BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.WATCHMAN_GOBY)
     /** Animals with nothing to show (snails, stars) or no escape to play. */
     private val INDIFFERENT = setOf(BrainKind.ASTREA, BrainKind.ASTERINA, BrainKind.BRITTLE_STAR, BrainKind.GENERIC_INVERT)
 
@@ -394,6 +394,12 @@ object SubmarineRules {
                 else -> SubReaction.NONE
             }
             BrainKind.CARDINAL -> if (d < SHY_CM) SubReaction.AVOID else SubReaction.NONE
+            // research 50: the gramma gapes at it from its cave mouth, then ducks in if it keeps coming
+            BrainKind.GRAMMA -> when {
+                d < 10.0 -> SubReaction.HIDE
+                d < SEE_CM * 0.6 -> SubReaction.POSTURE
+                else -> SubReaction.NONE
+            }
             in BURROWERS -> when {
                 d < 8.0 -> SubReaction.HIDE
                 d < SHY_CM + 4 -> SubReaction.AVOID

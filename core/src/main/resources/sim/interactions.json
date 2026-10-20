@@ -89,6 +89,21 @@
       "habituation": 0.0, "newcomerMult": 1.0, "evidence": "04 §13B, S:Kadota11 (strike rate per hour when visible; kill p per strike)" },
     { "id": "tang_flare", "actor": "TANG", "targets": ["DOTTYBACK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY"], "type": "defensive", "anchor": "body", "triggerRadius": 0.0, "triggerBL": 1.0,
       "pEvent": 0.8, "maxRatePerH": 0, "floorRatePerH": 0, "bout": "SPINE_FLARE", "chaseLen": 0, "chaseSpeedBL": 0, "stressToTarget": 0.0,
-      "habituation": 0.0, "newcomerMult": 1.0, "evidence": "S:ADW-tang (reaction when a bout targets the tang)" }
+      "habituation": 0.0, "newcomerMult": 1.0, "evidence": "S:ADW-tang (reaction when a bout targets the tang)" },
+    { "id": "gramma_gramma", "actor": "GRAMMA", "targets": ["GRAMMA"], "type": "aggression", "anchor": "cave", "triggerRadius": 20,
+      "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 5, "bout": "LATERAL_DISPLAY_CHASE_NIP", "chaseLen": 25, "chaseSpeedBL": 6, "stressToTarget": 0.06,
+      "habituation": 0.2, "newcomerMult": 2.5, "evidence": "50 §1 facts 18-21: very protective of its cave; a mated pair (mateId) is left alone; rates I" },
+    { "id": "gramma_dotty", "actor": "GRAMMA", "targets": ["DOTTYBACK"], "type": "aggression", "anchor": "cave", "triggerRadius": 18,
+      "pEvent": 0.5, "maxRatePerH": 6, "floorRatePerH": 2, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 15, "chaseSpeedBL": 6, "stressToTarget": 0.04,
+      "habituation": 0.5, "newcomerMult": 2.0, "evidence": "50 §1 facts 21-22: gramma holds its cave against a dottyback at first (Reef Central anecdotes); rates I" },
+    { "id": "dotty_gramma", "actor": "DOTTYBACK", "targets": ["GRAMMA"], "type": "aggression", "anchor": "cave", "triggerRadius": 30,
+      "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE_NIP", "chaseLen": 35, "chaseSpeedBL": 6, "stressToTarget": 0.07,
+      "habituation": 0.5, "newcomerMult": 3.0, "evidence": "50 §1 facts 21-23: dottybacks and basslets want the same caves; the settled dottyback wins; rates I" },
+    { "id": "watchman_watchman", "actor": "WATCHMAN_GOBY", "targets": ["WATCHMAN_GOBY", "DIAMOND_GOBY"], "type": "aggression", "anchor": "burrow", "triggerRadius": 15,
+      "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 4, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 15, "chaseSpeedBL": 5, "stressToTarget": 0.05,
+      "habituation": 0.3, "newcomerMult": 2.0, "evidence": "50 §3 facts 88, 107: aggressive to its own kind and other shrimp gobies at the burrow; a mated pair is left alone; rates I" },
+    { "id": "banggai_males", "actor": "BANGGAI_M", "targets": ["BANGGAI_M"], "type": "aggression", "anchor": "body", "triggerRadius": 12,
+      "pEvent": 0.4, "maxRatePerH": 6, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 12, "chaseSpeedBL": 4, "stressToTarget": 0.04,
+      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "50 §2: males squabble in aquaria, keep a pair (hobby consensus); rates I" }
   ]
 }

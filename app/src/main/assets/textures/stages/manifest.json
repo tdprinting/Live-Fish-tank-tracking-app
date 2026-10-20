@@ -95,6 +95,27 @@
         "juvenile": "textures/stages/leopard_wrasse_juvenile.png",
         "male": "textures/stages/leopard_wrasse_male.png"
       }
+    },
+    "models/royal_gramma.glb": {
+      "species": "gramma_loreto",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/royal_gramma_juvenile.png"
+      }
+    },
+    "models/banggai.glb": {
+      "species": "pterapogon_kauderni",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/banggai_juvenile.png"
+      }
+    },
+    "models/watchman_goby.glb": {
+      "species": "cryptocentrus_cinctus",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/watchman_goby_juvenile.png"
+      }
     }
   },
   "pending": {}

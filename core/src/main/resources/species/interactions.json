@@ -799,5 +799,101 @@
   "b": "macropharyngodon_bipartitus",
   "risk": "M",
   "note": "Protogynous: two males fight; one per tank in most aquaria"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "gramma_loreto",
+  "risk": "H",
+  "note": "Two males fight over caves; a male-female pair is fine in a bigger tank"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "pseudochromis_indigo",
+  "risk": "H",
+  "note": "Dottybacks and grammas want the same caves; the dottyback usually wins"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "The hawkfish may eye a small gramma; an adult is mostly safe"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Different zones; no conflict"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Visits the cleaner"
+ },
+ {
+  "a": "gramma_loreto",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Peaceful together"
+ },
+ {
+  "a": "pterapogon_kauderni",
+  "b": "pterapogon_kauderni",
+  "risk": "M",
+  "note": "Males squabble; keep one pair"
+ },
+ {
+  "a": "pterapogon_kauderni",
+  "b": "sphaeramia_nematoptera",
+  "risk": "L",
+  "note": "Two calm cardinals; they hover apart"
+ },
+ {
+  "a": "pterapogon_kauderni",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "Hawkfish eat baby Banggais and may chase small adults"
+ },
+ {
+  "a": "pterapogon_kauderni",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "Dottyback chases cardinals that come near its cave"
+ },
+ {
+  "a": "pterapogon_kauderni",
+  "b": "entacmaea_quadricolor",
+  "risk": "L",
+  "note": "Young Banggais hide among anemone tentacles"
+ },
+ {
+  "a": "cryptocentrus_cinctus",
+  "b": "cryptocentrus_cinctus",
+  "risk": "H",
+  "note": "Fight unless a mated pair"
+ },
+ {
+  "a": "cryptocentrus_cinctus",
+  "b": "valenciennea_puellaris",
+  "risk": "M",
+  "note": "Both want burrows under the rock; the watchman chases the diamond goby off"
+ },
+ {
+  "a": "cryptocentrus_cinctus",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "L",
+  "note": "The engineer goby digs elsewhere; usually fine"
+ },
+ {
+  "a": "cryptocentrus_cinctus",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "The hawkfish may snap at a small watchman out on the sand"
+ },
+ {
+  "a": "cryptocentrus_cinctus",
+  "b": "pseudochromis_indigo",
+  "risk": "L",
+  "note": "Different homes; little conflict"
  }
 ]

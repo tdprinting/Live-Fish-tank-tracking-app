@@ -1,0 +1,146 @@
+{
+  "kind": "FISH",
+  "id": "gramma_loreto",
+  "common": "Royal gramma",
+  "scientific": "Gramma loreto",
+  "family": "Grammatidae",
+  "maxLengthCm": 8.0,
+  "typicalAdultCm": 6.5,
+  "growthCmPerYear": 2.5,
+  "lifespanYears": 6,
+  "depthRatio": 0.3,
+  "massCoeff": 0.016,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.7,
+    "burstBL": 6,
+    "tailHzCruise": 2.5,
+    "turnRateDeg": 320,
+    "waveLen": 0.9,
+    "ampCruise": 0.035,
+    "ampBurst": 0.09
+  },
+  "zone": {
+    "yMin": 0.1,
+    "yMax": 0.6,
+    "openWater": 0.15,
+    "coverAffinity": 0.85
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 110,
+    "darkVision": 0.12,
+    "lateralBL": 1.5,
+    "chem": 0.5
+  },
+  "territorialRadius": 15,
+  "homeRadiusCm": 20,
+  "temperament": {
+    "aggression": 0.35,
+    "boldness": 0.45,
+    "curiosity": 0.45,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "CYCLOPS",
+    "PODS",
+    "ZOOPLANKTON",
+    "FLAKE",
+    "PELLET"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.25,
+    "VELVET": 0.35,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.75,
+  "starvationDays": 21,
+  "size": {
+    "lod0Tris": 3200
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 3.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 4.5
+  },
+  "model": "models/royal_gramma.glb",
+  "colors": {
+    "primary": "#9A2AC0",
+    "secondary": "#F2B418",
+    "accent": "#140818"
+  },
+  "iridescence": 0.2,
+  "brain": "gramma",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Zooplankton picker: mysis, brine, copepods and small pellets caught near its cave.",
+  "temperamentSummary": "Peaceful to other fish, guards its cave; hangs belly-to-rock, even upside down under ledges.",
+  "careNotes": [
+    "Needs a cave or overhang of its own.",
+    "Keep one, or a male and female in a bigger tank: two males fight.",
+    "Clashes with dottybacks, which want the same caves.",
+    "Can jump: a lid helps."
+  ]
+}

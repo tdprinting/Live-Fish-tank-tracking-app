@@ -239,15 +239,24 @@ class Reproduction(private val sim: Simulation) {
 
     // ============================================================== cardinal mouthbrooding (B-2)
 
-    private var cardReadiness = 0.0
-    private var cardCooldownUntil = 0.0
-    private var brooder: Organism? = null
-    private var broodEndAt = 0.0
-    /** Broods released at hatching / lost (male stressed or died). Larvae drift off; there is no rearing. */
+    /**
+     * One breeding line per cardinal species: the pajama and the Banggai share a brain but never a brood (research 50
+     * §2). Pajama larvae drift off at hatching; a Banggai male broods for about a month and spits out finished young.
+     */
+    private class CardinalLine {
+        var readiness = 0.0
+        var cooldownUntil = 0.0
+        var brooder: Organism? = null
+        var broodEndAt = 0.0
+    }
+    private val cardLines = LinkedHashMap<String, CardinalLine>()
+
+    /** Broods released at hatching / lost (male stressed or died), over all cardinal species. */
     var hatchedBroods = 0; private set
     var lostBroods = 0; private set
-
-    private fun cardinals() = sim.organisms.filter { it.alive && it.brainKind == BrainKind.CARDINAL }
+    /** Banggai young spat out into the tank, and those the tank had no room for (they "went to the store"). */
+    var banggaiYoungReleased = 0; private set
+    var banggaiYoungRehomed = 0; private set
 
     /** Sex from the sheet role, else the larger of a pair is the male (males have the bigger mouth, research 02 §3C). */
     private fun resolveCardinalSex(cl: List<Organism>) {
@@ -256,30 +265,70 @@ class Reproduction(private val sim: Simulation) {
         for (o in cl) if (o.sexFemale == null) o.sexFemale = if (o.role != null) o.role.equals("FEMALE", true) else o !== big
     }
 
+    private fun isBanggai(id: String) = id.startsWith("pterapogon")
+
     private fun cardinalBreeding(now: Double, dt: Double) {
-        val cl = cardinals()
+        var bySpecies: HashMap<String, ArrayList<Organism>>? = null
+        for (o in sim.organisms) {
+            if (!o.alive || o.brainKind != BrainKind.CARDINAL) continue
+            val m = bySpecies ?: HashMap<String, ArrayList<Organism>>().also { bySpecies = it }
+            m.getOrPut(o.species.id) { ArrayList() } += o
+        }
+        for ((sp, line) in cardLines) if (bySpecies?.containsKey(sp) != true) breedLine(sp, line, emptyList(), now, dt)
+        bySpecies?.forEach { (sp, cl) -> breedLine(sp, cardLines.getOrPut(sp) { CardinalLine() }, cl, now, dt) }
+    }
+
+    private fun breedLine(sp: String, line: CardinalLine, cl: List<Organism>, now: Double, dt: Double) {
         resolveCardinalSex(cl)
-        val b = brooder
+        val banggai = isBanggai(sp)
+        val b = line.brooder
         if (b != null) {
-            if (!b.alive || b !in sim.organisms) { b.mouthbrooding = false; brooder = null; lostBroods++; return }
+            if (!b.alive || b !in sim.organisms) { b.mouthbrooding = false; line.brooder = null; lostBroods++; return }
             b.hunger = minOf(b.hunger, BROOD_MAX_HUNGER)       // he does not eat while brooding
             if (b.stress > BROOD_ABANDON_STRESS) {              // a stressed male swallows the eggs
-                b.mouthbrooding = false; brooder = null; lostBroods++; cardCooldownUntil = now + 5 * 86400.0
-            } else if (now >= broodEndAt && sim.perception.night) {
-                b.mouthbrooding = false; brooder = null; hatchedBroods++
-                cardCooldownUntil = now + rng.range(CARD_COOLDOWN_DAYS_MIN, CARD_COOLDOWN_DAYS_MAX) * 86400.0
+                b.mouthbrooding = false; line.brooder = null; lostBroods++; line.cooldownUntil = now + 5 * 86400.0
+            } else if (now >= line.broodEndAt && sim.perception.night) {
+                b.mouthbrooding = false; line.brooder = null; hatchedBroods++
+                if (banggai) releaseBanggaiYoung(b)
+                line.cooldownUntil = now + rng.range(CARD_COOLDOWN_DAYS_MIN, CARD_COOLDOWN_DAYS_MAX) * 86400.0
             }
             return
         }
         val f = cl.filter { it.sexFemale == true }.maxByOrNull { it.lengthCm }
         val m = cl.filter { it.sexFemale == false }.maxByOrNull { it.lengthCm }
-        if (f == null || m == null) { cardReadiness = maxOf(0.0, cardReadiness - dt / 86400.0); return }
+        if (f == null || m == null) { line.readiness = maxOf(0.0, line.readiness - dt / 86400.0); return }
         val ok = fit(f, CARDINAL_MATURE_CM, now) && fit(m, CARDINAL_MATURE_CM, now) && inRange(sim.water.s)
-        cardReadiness = (cardReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
-        if (cardReadiness >= 1.0 && now >= cardCooldownUntil && sim.perception.night) {
-            m.mouthbrooding = true; brooder = m; cardReadiness = 0.0
-            broodEndAt = now + rng.range(BROOD_DAYS_MIN, BROOD_DAYS_MAX) * 86400.0
+        line.readiness = (line.readiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
+        if (line.readiness >= 1.0 && now >= line.cooldownUntil && sim.perception.night) {
+            m.mouthbrooding = true; line.brooder = m; line.readiness = 0.0
+            line.broodEndAt = now + (if (banggai) rng.range(BANGGAI_BROOD_DAYS_MIN, BANGGAI_BROOD_DAYS_MAX) else rng.range(BROOD_DAYS_MIN, BROOD_DAYS_MAX)) * 86400.0
         }
+    }
+
+    /**
+     * The Banggai's direct development (research 50 §2, facts 62-65): after about a month in the father's mouth the young
+     * come out as finished little fish, about 8 mm long, with no drifting larval stage. They are let into the tank as
+     * animals of their own, where they keep to cover (an anemone if there is one) and the hawkfish may eat them; a tank
+     * at its cardinal limit sends the rest to the fish store.
+     */
+    private fun releaseBanggaiYoung(father: Organism) {
+        val brood = rng.range(BANGGAI_YOUNG_MIN.toDouble(), BANGGAI_YOUNG_MAX + 1.0).toInt()
+        val room = (BANGGAI_DISPLAY_CAP - sim.organisms.count { it.alive && it.brainKind == BrainKind.CARDINAL && isBanggai(it.species.id) })
+            .coerceAtLeast(0)
+        val n = minOf(brood, room, BANGGAI_YOUNG_SHOWN)
+        val base = father.nickname.ifBlank { "Banggai" }
+        var first: String? = null
+        for (k in 0 until n) {
+            val o = sim.addFromSeed(LivestockSeed(father.species.id, "$base's baby ${banggaiYoungReleased + 1}", BANGGAI_YOUNG_CM, ageYears = 30.0 / 365.0))
+            o.arrivalTime = sim.simTimeSec; o.clock = sim.simTimeSec
+            o.hunger = 0.3
+            val p = father.pos + com.reeflive.core.geom.Vec3(rng.signed() * 2.0, rng.signed() * 1.0, rng.signed() * 2.0)
+            o.placeAt(sim.rock.clampToWater(p, 1.0), father.heading)
+            if (first == null) first = o.id
+            banggaiYoungReleased++
+        }
+        banggaiYoungRehomed += brood - n
+        first?.let { sim.emit(SimEvent.BabyReleased(it, sim.simTimeSec)) }
     }
 
     companion object {
@@ -287,6 +336,16 @@ class Reproduction(private val sim: Simulation) {
         const val CARDINAL_MATURE_CM = 5.0
         const val BROOD_DAYS_MIN = 6.0
         const val BROOD_DAYS_MAX = 8.0
+        /** Banggai: the male broods up to 30 days (Wikipedia; 20-30 days, research 50 §2 facts 62-63). */
+        const val BANGGAI_BROOD_DAYS_MIN = 20.0
+        const val BANGGAI_BROOD_DAYS_MAX = 30.0
+        /** Young per brood (10-40 in hobby reports [L]), released at ~8 mm SL (FishBase via search, fact 65). */
+        const val BANGGAI_YOUNG_MIN = 10
+        const val BANGGAI_YOUNG_MAX = 30
+        const val BANGGAI_YOUNG_CM = 0.8
+        /** At most this many young become animals per brood, and this many Banggais in the tank (CPU and the tank's room). */
+        const val BANGGAI_YOUNG_SHOWN = 6
+        const val BANGGAI_DISPLAY_CAP = 12
         const val BROOD_MAX_HUNGER = 0.6
         const val BROOD_ABANDON_STRESS = 0.8
         const val CLOWN = "CLOWN"

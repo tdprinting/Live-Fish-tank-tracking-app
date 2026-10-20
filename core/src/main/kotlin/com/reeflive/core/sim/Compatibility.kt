@@ -70,6 +70,25 @@ object Compatibility {
                     "Leopard wrasses change sex: keep one, or one male with females in a large tank. Two males fight.")
             }
         }
+        // research 50 (popular fish pack, batch 1)
+        if (kind == BrainKind.GRAMMA) {
+            if (others.any { it == BrainKind.DOTTYBACK }) out += CompatibilityWarning("gramma_dottyback", CompatibilityWarning.Severity.WARN,
+                "Royal grammas and dottybacks want the same caves. Expect chasing; the dottyback usually wins.")
+            if (others.any { it == BrainKind.GRAMMA }) out += CompatibilityWarning("gramma_pair", CompatibilityWarning.Severity.INFO,
+                "Two royal grammas fight unless they are a male and a female, and each needs a cave.")
+        }
+        if (kind == BrainKind.WATCHMAN_GOBY) {
+            out += CompatibilityWarning("watchman_sand", CompatibilityWarning.Severity.INFO,
+                "Needs open sand at the foot of a rock to dig its burrow. A pistol shrimp makes it a perfect pair.")
+            if (others.any { it == BrainKind.WATCHMAN_GOBY || it == BrainKind.DIAMOND_GOBY }) out += CompatibilityWarning("watchman_gobies", CompatibilityWarning.Severity.WARN,
+                "Watchman gobies chase other sand gobies away from their burrow unless they are a mated pair.")
+        }
+        if (speciesId.startsWith("pterapogon")) {
+            out += CompatibilityWarning("banggai_care", CompatibilityWarning.Severity.INFO,
+                "Buy captive-bred Banggais: wild ones are endangered. Keep one pair; extra males get chased.")
+            if (others.any { it == BrainKind.HAWK }) out += CompatibilityWarning("banggai_hawk", CompatibilityWarning.Severity.INFO,
+                "The hawkfish will eat Banggai babies when they are released.")
+        }
         if (kind == BrainKind.ANEMONE) {
             // research 40: wanders until settled, stings what it touches, pumps are a hazard; clowns may move in
             out += CompatibilityWarning("anemone_wanders", CompatibilityWarning.Severity.INFO,

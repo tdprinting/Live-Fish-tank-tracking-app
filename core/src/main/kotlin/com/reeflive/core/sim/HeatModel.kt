@@ -85,10 +85,10 @@ object HeatModel {
         BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
         BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
-        BrainKind.DOTTYBACK -> DOTTYBACK
+        BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
-        BrainKind.DIAMOND_GOBY -> SAND_GOBY
+        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
