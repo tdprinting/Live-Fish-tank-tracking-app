@@ -59,6 +59,10 @@ void main() {
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     albedo = mix(albedo, vec3(lum), clamp(uDesat, 0.0, 1.0));
+#ifndef FIN
+    // inside of an open mouth (fish.vert jaw gape writes the seam's weight to vColor.g)
+    if (uPart < 0.5) albedo *= 1.0 - 0.8 * clamp(vColor.g, 0.0, 1.0);
+#endif
     if (uPart > 1.5 && uPart < 2.5) albedo = mix(albedo, vec3(0.62, 0.64, 0.66), uEyeCloud * 0.85);
 
     // Squid skin: procedural chromatophores over the texture that expand (dark) and retract (pale) within a fraction

@@ -32,6 +32,10 @@ uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length 
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
+// Jaw: hinge behind the snout (u) and the height of the lips' seam (model units; the fish heads in tools/blender/fish_species.py
+// put the mouth a little below the axis).
+const float JAW_U = 0.08;
+const float MOUTH_Y = -0.01;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -340,7 +344,7 @@ void main() {
         vWorld = w.xyz;
         vNormal = normalize(mat3(uModel) * n);
         vUv = aUv;
-        vColor = aColor;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
         gl_Position = uViewProj * w;
         return;
     }
@@ -364,12 +368,13 @@ void main() {
         vWorld = wl;
         vNormal = normalize(qrot(uFrame[0], n));
         vUv = aUv;
-        vColor = aColor;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
         gl_Position = uViewProj * vec4(wl, 1.0);
         return;
     }
 
     float u = aColor.a;
+    float mouthDark = 0.0;
     if (mode > 0.5 && mode < 1.5 && part > 2.5) {
         // Brittle star arm rowing (Astley 2012): the arm pointing forward (+X) leads and barely moves; the arm pairs
         // either side make mirrored power strokes in the disc plane, the trailing pair drags. Rotate about the disc.
@@ -392,6 +397,18 @@ void main() {
         local.yz *= 1.0 - 0.25 * uShape.x;
         float flare = 0.03 * uFin.z * aColor.g * (0.5 + 0.5 * sin(time * uFin.w * 2.0 * PI));
         local.z += sign(local.z) * flare;
+        // jaw gape (fish only; uPick = the sim's mouth, 0 shut .. 1 wide): the lower jaw swings down about a hinge
+        // JAW_U behind the snout and the upper jaw lifts a little, so a goby's bite into the sand or a fish taking food
+        // shows; the lips' seam shades dark as it opens (vColor.g, read by fish.frag)
+        float gape = mode < 0.5 ? clamp(uPick, 0.0, 1.0) : 0.0;
+        if (gape > 0.001 && u < JAW_U) {
+            float lever = JAW_U - u;
+            float lowerJaw = 1.0 - smoothstep(-0.004, 0.004, local.y - MOUTH_Y);
+            float seam = 1.0 - smoothstep(0.0, 0.03, abs(local.y - MOUTH_Y));
+            local.y -= gape * lever * mix(-0.2, 0.65, lowerJaw);
+            local.x -= gape * lever * 0.35 * seam;
+            mouthDark = gape * smoothstep(JAW_U, 0.0, u) * seam;
+        }
     } else if (part < 1.5) {
         // fins: clamp folds toward the body (hinge-weighted, up to ~60 deg) and flutter
         float clampA = uFin.y * hinge;
@@ -573,5 +590,6 @@ void main() {
     vNormal = normalize(qrot(q, n));
     vUv = aUv;
     vColor = aColor;
+    vColor.g = mouthDark;
     gl_Position = uViewProj * vec4(world, 1.0);
 }

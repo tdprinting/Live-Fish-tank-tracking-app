@@ -24,6 +24,24 @@ Research update: 2026-10-13. These notes support SIMULATION §16. The diamond go
 
 None of these is measured. The behaviour layer checks them only as patterns, through `SandBedTest`.
 
+**Observed (2026-10-20 update).** Aquarium trials on *V. sexguttata* and *V. strigata* found the sorting is done inside the
+head: a specialised epibranchial lobe, the pharyngeal jaws and dense papillose taste buds in the oropharyngeal cavity
+separate small prey from the heavier sand grains, and the prey is selected by size, shape and density. [Univ. Copenhagen
+news](https://www1.bio.ku.dk/english/news/news/what-is-going-on-in-the-coral-food-web/). In the best-studied sediment
+sifters (geophagine cichlids) one feeding event has three parts: a stereotyped strike into the substrate, a variable
+rhythmic winnowing stage with rapid reversals of water flow inside the mouth, and a stereotyped ejection of the cleaned
+sediment through the gill openings. [Weller et al. 2017, *Satanoperca daemon*](https://hiweller.rbind.io/publication/weller-dirt-sifting-2017/).
+No high-speed kinematics are published for *Valenciennea*; the sim borrows the cichlid phase structure.
+
+**How the sim draws one mouthful** (`DiamondGobyBrain.Sift`, design estimates):
+- strike 0.35 s: a 1.2 cm lunge forward and down to ~35° nose-down, mouth wide open, the snout 3.5 mm into the bed;
+- bite 0.25 s: the mouth closes on the sand;
+- lift 0.45 s and winnow 1.5–3.5 s: head slightly nose-up just over the sand, mouth almost shut with a small 2.5 Hz jaw
+  pump, gill covers working, fines seeping from both gill slits;
+- eject: three gill pumps 0.16 s apart pour the sand out of both gill openings, then a 1–2 cm shuffle to the next bite.
+The body is drawn as one smooth curve from the head (the skull at the head's pitch, the tail easing back to nearly
+level, never in the sand), and the head only moves forward or up and down.
+
 ## 3. Burrows and pairs
 
 **Observed.** Wild fish live in monogamous pairs in a shallow burrow they dig under rubble or a rock. FishBase gives a depth range of 2–84 m. [FishBase](https://www.fishbase.se/summary/7246); [Fishes of Australia](https://fishesofaustralia.net.au/Home/species/177).
