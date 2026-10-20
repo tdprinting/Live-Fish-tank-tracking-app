@@ -5,6 +5,7 @@ import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.TankDoctor
 import kotlinx.serialization.Serializable
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -32,6 +33,11 @@ data class SavedEconomy(
     val lastFullDay: String = "",
     val lastWaterChangeDay: String = "",
     val goals: List<String> = emptyList(),
+    /** What was bought at each store on [boughtDay], as "store/species" → count (sold out when it reaches the stock). */
+    val boughtDay: String = "",
+    val bought: Map<String, Int> = emptyMap(),
+    /** Day Shelly's last gave the free starter snails to an empty, broke tank. */
+    val giftDay: String = "",
     /** Newest first, at most [Economy.LEDGER_MAX]: the "where did my money go" list. */
     val ledger: List<LedgerEntry> = emptyList(),
 )
@@ -199,6 +205,47 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         state = state.copy(coins = state.coins - amount, ledger = ledger(today, label, -amount))
         return true
     }
+
+    /** How many of [speciesId] [store] has left today. */
+    fun left(store: FishStore, item: StockItem, today: String): Int {
+        val b = if (state.boughtDay == today) state.bought["${store.id}/${item.listing.speciesId}"] ?: 0 else 0
+        return max(0, item.count - b)
+    }
+
+    /** Whether [store] is open to this keeper and [l] can be bought at this level (the lock on the card). */
+    fun canSee(store: FishStore): Boolean = level >= store.level
+    fun unlocked(l: Listing): Boolean = level >= l.level
+
+    /**
+     * Buys one [speciesId] at [store] today at the shelf price. On [BuyResult.OK] the money is gone and the caller
+     * brings the animal in (the shop bag, as Add life does).
+     */
+    fun buy(store: FishStore, speciesId: String, today: String): BuyResult {
+        if (!canSee(store)) return BuyResult.STORE_LOCKED
+        val item = Stores.stock(store, today).firstOrNull { it.listing.speciesId == speciesId } ?: return BuyResult.NOT_IN_STOCK
+        if (!unlocked(item.listing)) return BuyResult.LEVEL_LOCKED
+        if (left(store, item, today) <= 0) return BuyResult.SOLD_OUT
+        if (item.price > state.coins) return BuyResult.TOO_POOR
+        val key = "${store.id}/$speciesId"
+        val bought = if (state.boughtDay == today) state.bought else emptyMap()
+        spend(item.price, "${store.label}: ${speciesLabel(speciesId)}", today)
+        state = state.copy(boughtDay = today, bought = bought + (key to (bought[key] ?: 0) + 1))
+        return BuyResult.OK
+    }
+
+    /**
+     * Never stuck: a tank with no animals and not enough money for the cheapest one gets two free snails from
+     * Shelly's, once a day. Returns true when the caller should bring them in.
+     */
+    fun starterGift(sim: Simulation, today: String): Boolean {
+        if (state.giftDay == today || sim.organisms.any { it.alive }) return false
+        val cheapest = PriceBook.all.filter { unlocked(it) }.minOfOrNull { it.price } ?: return false
+        if (state.coins >= cheapest) return false
+        state = state.copy(giftDay = today, ledger = ledger(today, "Gift from Shelly's: 2 snails", 0))
+        return true
+    }
+
+    private fun speciesLabel(id: String) = com.reeflive.core.sim.Stocking.entry(id)?.common ?: id
 
     /** Money from a sale: sand dollars but no star points (so trading cannot farm levels). */
     fun sold(amount: Int, label: String, today: String) {
