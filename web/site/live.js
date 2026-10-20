@@ -6,6 +6,7 @@ import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
+import { initStores, streetHtml } from './stores.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -52,11 +53,13 @@ export function startLive(applyReadings) {
   started = true;
   // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
   window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
+  // the fish stores: walking a store's display tanks replaces the tank in the 3D view until you leave (stores.js)
+  window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
-    onPick: (id) => { if (id) buzz(5); if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
+    onPick: (id) => { if (id) buzz(5); if (window.reefstores?.active()) { window.reefstores.pick(id); return; } if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
     onFollow: (id) => { ui.following = id; if (id) ui.picked = id; renderFish(); renderFollow(); },
     // pressed and held right on an animal: ride along with it
     onHold: (id) => { buzz(18); const a = animals.find((x) => x.id === id); say(a ? `Riding along with ${a.name}! Back to tank to stop.` : 'Riding along!'); },
@@ -222,6 +225,7 @@ document.querySelectorAll('.seg [data-mode]').forEach((b) => { b.insertAdjacentH
 function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
+  if (window.reefstores?.active()) window.reefstores.leave(true);
   ui.mode = m;
   SB.setMode(m);
   ui.picked = null; ui.following = null; live.follow(null); renderFish();
@@ -386,6 +390,13 @@ const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK
 
 // ---- Add life
 function lifeCard(sb) {
+  // My tank buys its animals at the fish stores (docs/ECONOMY.md §5); the free gallery stays in the Sandbox
+  if (ui.mode === 'mine') {
+    return `${streetHtml()}
+    <h4>Helpers</h4><div class="options">
+      ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
+      ${tile('data-shells', 'shell', 'Spare shells', false, !sb)}</div>`;
+  }
   const groups = [['FISH', 'fish', 'Fish'], ['INVERTS', 'shrimp', 'Inverts'], ['CORALS', 'branch', 'Corals']];
   const list = C.stock.filter((s) => s.group === ui.addGroup);
   let h = `<div class="pills">${groups.map(([g, i, n]) => `<button class="pillbtn ${ui.addGroup === g ? 'on' : ''}" data-group="${g}">${icon(i)} ${n}</button>`).join('')}</div>
@@ -544,6 +555,7 @@ $('card').addEventListener('click', (e) => {
   else if ('sub' in d) { setSub(!sub.on); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
+  else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
   else if (d.count) ui.addCount = Number(d.count);
   else if (d.size) ui.addSize = d.size;
