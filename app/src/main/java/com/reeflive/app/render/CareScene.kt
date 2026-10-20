@@ -68,6 +68,10 @@ enum class CareAct(val seconds: Float, val impact: Float) {
     RO_SWAP(9.6f, 8.0f),
     /** No props (heater, pumps, food: the screen draws its own picture); keeps the queue's rhythm. */
     PAUSE(1.8f, 0.25f),
+    /** A syringe of aiptasia killer (Aiptasia-X, Joe's Juice, kalk paste) to a polyp's mouth ([CareJob.at]) and a squeeze. */
+    INJECT(5.2f, 3.1f),
+    /** An aiptasia laser held off a polyp, a second of beam. */
+    LASER(4.6f, 2.5f),
 }
 
 /**
@@ -78,6 +82,8 @@ class CareJob(
     val act: CareAct,
     val tint: Int = 0xFFFFFF,
     val amount: Float = 0.25f,
+    /** [CareAct.INJECT] / [CareAct.LASER]: the polyp's foot x, y, z and rock normal x, y, z (world cm). */
+    val at: FloatArray? = null,
     val onImpact: () -> Unit = {},
     val onDone: () -> Unit = {},
 )
@@ -112,6 +118,9 @@ internal class CareScene {
     }
 
     private var job: CareJob? = null
+    /** The aiptasia tools ([CareAct.INJECT], [CareAct.LASER]), drawn from their own model by [drawPest]. */
+    private val pest = PestScene()
+    private val mouthPt = FloatArray(3)
     private var t = 0f
     private var impacted = false
     private var bound: GpuModel? = null
@@ -154,6 +163,7 @@ internal class CareScene {
             }
         }
         n = 0
+        pest.clear()
         val c = care ?: REST
         val act = job?.act
         if (act != CareAct.EMPTY_CUP) restCup(c.skimmerCup)
@@ -185,6 +195,8 @@ internal class CareScene {
             CareAct.WATER_CHANGE -> waterChange(j.amount, j.tint)
             CareAct.RO_SWAP -> roSwap(j.amount)
             CareAct.PAUSE -> Unit
+            CareAct.INJECT -> pest.inject(j, t)
+            CareAct.LASER -> pest.laser(j, t)
         }
     }
 
@@ -348,6 +360,18 @@ internal class CareScene {
             CareAct.SWAP_SOCK -> if (at(6.8f)) emit(TankBurst(BurstKind.SUCTION, 108f, 30f, 6f, amount = 0.8f))
             CareAct.SWAP_CARBON -> if (at(6.8f)) emit(TankBurst(BurstKind.CLARITY, 100f, 30f, 10f, amount = 0.8f))
             CareAct.EMPTY_CUP -> if (at(7.4f)) emit(TankBurst(BurstKind.MICROBUBBLES, 73f, CareLayout.WATER_Y - 1f, 3f, amount = 0.8f))
+            CareAct.INJECT -> {
+                pest.mouth(j, mouthPt)
+                // the tool breaks the surface, then the dose puffs out over the polyp's mouth
+                if (at(0.9f)) emit(TankBurst(BurstKind.SPLASH, mouthPt[0], CareLayout.WATER_Y - 0.4f, mouthPt[2], amount = 0.3f))
+                if (at(3.0f)) emit(TankBurst(BurstKind.ZAP, mouthPt[0], mouthPt[1], mouthPt[2], cr(j.tint), cg(j.tint), cb(j.tint), 0.6f))
+            }
+            CareAct.LASER -> {
+                pest.mouth(j, mouthPt)
+                if (at(0.8f)) emit(TankBurst(BurstKind.SPLASH, mouthPt[0], CareLayout.WATER_Y - 0.4f, mouthPt[2], amount = 0.3f))
+                if (at(2.4f) || at(2.9f)) emit(TankBurst(BurstKind.SPARKLE, mouthPt[0], mouthPt[1], mouthPt[2], 0.6f, 1f, 0.55f, 0.5f))
+                if (at(3.0f)) emit(TankBurst(BurstKind.BUBBLES, mouthPt[0], mouthPt[1], mouthPt[2], amount = 0.25f))
+            }
             else -> Unit
         }
     }
@@ -448,6 +472,9 @@ internal class CareScene {
     }
 
     // ------------------------------------------------------------------ draw
+
+    /** The aiptasia tools posed this frame, from models/pest_tools.glb ([PestScene.MODEL]). */
+    fun drawPest(model: GpuModel, p: ShaderProgram, white: Texture, blended: Boolean): Int = pest.draw(model, p, white, blended)
 
     private fun bind(model: GpuModel) {
         if (bound === model) return

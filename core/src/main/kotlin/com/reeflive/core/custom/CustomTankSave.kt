@@ -51,6 +51,8 @@ data class CustomTankSave(
      * from before tanks were drawn to size: a tank of another size then gets its rocks fitted afresh on opening.
      */
     val scapeFit: List<Double>? = null,
+    /** Pest controllers living in the rock (PestState.save: "berghia" population, "peppermint" count). */
+    val pests: Map<String, Double> = emptyMap(),
     /** Sand dollars, stars, today's care list and goals (docs/ECONOMY.md; added after v1 as a defaulted field). */
     val economy: com.reeflive.core.custom.economy.SavedEconomy = com.reeflive.core.custom.economy.SavedEconomy(),
 )

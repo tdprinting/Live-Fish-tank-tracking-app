@@ -79,6 +79,7 @@ object CustomTank {
             brood = sim.brood.save(),
             rocks = sim.rockState(),
             scapeFit = listOf(shift.x, shift.y, shift.z),
+            pests = sim.pests.save(),
             nextIds = SavedIds(
                 organism = maxOf(base.nextIds.organism, nextNumber(animals.map { it.id } + corals.map { it.id }, "#")),
                 frag = base.nextIds.frag,
@@ -184,6 +185,7 @@ object CustomTank {
             if (n.isFinite() && n >= 0) w.micro.setTotal(g, n)
         }
         sim.brood.load(save.brood)
+        sim.pests.restore(save.pests)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
         sim.reserveIds(save.nextIds.organism, save.nextIds.frag, save.nextIds.bag)
         return sim
