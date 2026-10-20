@@ -68,15 +68,23 @@ class Coral(
     /** Present when the tank was loaded (its neighbours' pressure then is its acclimated baseline). */
     var established = false
     var baseline: Pair<Double, Double>? = null
+    /** GSP: recent touches that close the polyps around them ([GspPolyps.poke]), [GspPolyps.STRIDE] values each. */
+    val pokes = DoubleArray(GspPolyps.MAX_POKES * GspPolyps.STRIDE)
+    /** When this colony went into the tank (sim s; NaN until its first step), for [GspPolyps.settleFactor]. */
+    var placedAtSec = Double.NaN
     /** Last time a disturbance fragmented this aiptasia polyp (AiptasiaModel). */
     var lastFragAt = -1e9
 
-    fun toPose() = CoralPose(
+    fun toPose(simTimeSec: Double = 0.0) = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
         species.id, anchor, flowSpeed.toFloat(), tissue.toFloat(), skeleton.toFloat(),
         offsetX = offset.x.toFloat(), offsetY = offset.y.toFloat(), offsetZ = offset.z.toFloat(),
         homeX = (restPos.x - offset.x).toFloat(), homeY = (restPos.y - offset.y).toFloat(), homeZ = (restPos.z - offset.z).toFloat(),
         size = size.toFloat(), cover = cover.toFloat(), rockPiece = rockPiece.coerceAtLeast(-1),
+        restX = restPos.x.toFloat(), restY = restPos.y.toFloat(), restZ = restPos.z.toFloat(),
+        restNx = restNormal.x.toFloat(), restNy = restNormal.y.toFloat(), restNz = restNormal.z.toFloat(),
+        matRadius = if (kind == CoralKind.GSP) GspPolyps.matRadius(this).toFloat() else 0f,
+        pokes = GspPolyps.pokesFor(this, simTimeSec),
     )
 }
 
@@ -204,6 +212,8 @@ object CoralSim {
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
         var target = lightOpen(c.kind, minutesSinceOn, minutesUntilOff, c.species.id) * (1 - 0.8 * c.stress) * flowExt
         target *= (1 - c.disturb).coerceIn(0.0, 1.0) * (1 - c.overgrown)
+        // a newly placed GSP keeps its polyps mostly in for its first hours
+        target *= GspPolyps.settleFactor(c, simTimeSec)
         // leathers close up for a few days every few weeks while they shed a waxy film
         if (shedding(c, simTimeSec, flowStrength)) target *= SHED_EXTENSION
         // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis

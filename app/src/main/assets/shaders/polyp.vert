@@ -31,6 +31,14 @@ uniform vec4 uAnem;
 uniform vec4 uAnemPush;
 // x push strength 0..1, y model scale (world cm per model cm), z/w unused
 uniform vec4 uAnemMisc;
+// green star polyps on a mat built from the rock (GspMatDraw): the mat's reach along the rock (cm; 0 = a GLB colony).
+// Each instance then packs its own distance along the rock into iPhaseVar.y (floor(y) / 16 cm, variant = fract(y)).
+uniform float uMatRadius;
+// touches closing the polyps around them (core GspPolyps): xyz in the rock's frame, w seconds since the first touch;
+// uPokeT x seconds since the last touch, y strength
+uniform vec4 uPokes[8];
+uniform vec4 uPokeT[8];
+uniform float uPokeCount;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -134,6 +142,26 @@ void main() {
     if (uSwayMode > 1.5) { anemone(phase); return; }
     vTip = 0.0;
     vGlow = 1.0;
+    float variant = fract(iPhaseVar.y);
+    float sc = iPosScale.w;
+    float ext = uExtension;
+    if (uMatRadius > 0.0) {
+        // bare stolon at the margin, young polyps sprouting behind it, the older ones inside a little longer
+        float e = gspEdge(iPosScale.xyz, uMatRadius) - floor(iPhaseVar.y) / 16.0;
+        sc *= smoothstep(0.5, 2.5, e) * (0.8 + 0.2 * smoothstep(2.5, 8.0, e));
+        // GspPolyps.closure: a ring spreading 3 cm/s from each touch to 3.5 cm, shut 4 s after the last touch,
+        // reopening over 40 s
+        float closed = 0.0;
+        for (int i = 0; i < 8; i++) {
+            if (float(i) >= uPokeCount) break;
+            float st = uPokeT[i].y;
+            float ring = min(0.8 + 3.0 * uPokes[i].w, 3.5 * (0.5 + 0.5 * st));
+            float d = distance(iPosScale.xyz, uPokes[i].xyz);
+            float c = st * (1.0 - smoothstep(ring - 0.8, ring, d)) * (1.0 - smoothstep(4.0, 44.0, uPokeT[i].x));
+            closed = max(closed, c);
+        }
+        ext *= 1.0 - clamp(closed, 0.0, 1.0);
+    }
     float hinge = aColor.b;
     bool longTent = aColor.r > 0.5;
     vec3 p = aPos;
@@ -142,7 +170,7 @@ void main() {
     float swayW = hinge;
     if (longTent) {
         // long tentacles stay out: only a small breathing pulse on top of the colony extension
-        open = clamp(uExtension * (0.88 + 0.12 * sin(uTime * 0.3 + phase)), 0.0, 1.0);
+        open = clamp(ext * (0.88 + 0.12 * sin(uTime * 0.3 + phase)), 0.0, 1.0);
         // writhe: each strand bends slowly about its own side axis, most at the tip
         float rl = length(p.xz);
         if (rl > 1e-4) {
@@ -159,7 +187,7 @@ void main() {
         // a long strand bends in the flow like a beam: tips swing ~2.5x a short polyp's
         swayW = 2.5 * hinge * hinge;
     } else {
-        open = clamp(uExtension * (0.6 + 0.4 * sin(uTime * 0.3 + phase)), 0.0, 1.0);
+        open = clamp(ext * (0.6 + 0.4 * sin(uTime * 0.3 + phase)), 0.0, 1.0);
         // close: fold the tentacles in toward the axis and down, and twist about the axis
         float fold = (1.0 - open) * hinge;
         p.xz *= 1.0 - 0.75 * fold;
@@ -170,7 +198,7 @@ void main() {
         n.xz = vec2(c * n.x - s * n.z, s * n.x + c * n.z);
     }
 
-    vec3 w = iPosScale.xyz + qrot(iQuat, p * iPosScale.w);
+    vec3 w = iPosScale.xyz + qrot(iQuat, p * sc);
     if (uSwayMode > 0.5) {
         // ride the branch: the body's extension shrink and tree sway at the instance base (uModel is a pure
         // translation for coral GLBs, so a world-space offset can be added before it), then a quick fringe flutter
@@ -182,14 +210,14 @@ void main() {
     } else {
         // sway with the flow (coherent phase across a mat)
         float sw = sin(uTime * 1.6 + phase + dot(iPosScale.xz, vec2(0.15, 0.1)));
-        w += uSwayDir * sw * uSwayAmp * swayW * iPosScale.w;
+        w += uSwayDir * sw * uSwayAmp * swayW * sc;
     }
     vec4 world = uModel * vec4(w, 1.0);
     vWorld = world.xyz;
     vNormal = normalize(mat3(uModel) * qrot(iQuat, n));
     vUv = aUv;
     vColor = aColor;
-    vVariant = iPhaseVar.y;
+    vVariant = variant;
     vOpen = open;
     gl_Position = uViewProj * world;
 }
