@@ -122,6 +122,7 @@ import com.reeflive.app.ui.live.MoneyChip
 import com.reeflive.app.ui.live.StoreOverlay
 import com.reeflive.app.ui.live.RewardFxLayer
 import com.reeflive.app.ui.live.RewardFxState
+import com.reeflive.app.ui.live.WelcomeBackCard
 import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveCategory
@@ -1277,6 +1278,9 @@ fun LiveTankScreen(
             }
         }
         if (myTank) RewardFxLayer(rewardFx)
+        // My tank lived on while the keeper was away: the days race by, then what happened
+        val awayUi by vm.away.collectAsStateWithLifecycle()
+        awayUi?.let { a -> if (myTank) WelcomeBackCard(a, onCare = { tick(); vm.dismissAway(); careOpen = true }, onDismiss = { vm.dismissAway() }) }
         // the net lifted a body out: the toilet goodbye (once per body)
         LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }
         flushing?.let { f ->

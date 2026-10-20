@@ -63,6 +63,8 @@ class Simulation private constructor(
     val invertEcology = InvertEcology(this)
     /** Bubble-tip anemones and the clowns adopting them (research 40). */
     val anemones = AnemoneModel(this)
+    /** My tank's away grace (custom AwayCatchUp): hunger and slowly worsening water cannot kill while it is on. */
+    var healthGrace = false
     /** What the keeper did (feedings, chores) for My tank's daily care list ([CareLog]). */
     val careLog = CareLog()
     private val agents = HashMap<Organism, Agent>()
@@ -924,7 +926,7 @@ class Simulation private constructor(
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
                 organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
             val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess,
-                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure)
+                infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure, healthGrace)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
             if (o.alive) growth(o, dtMin)

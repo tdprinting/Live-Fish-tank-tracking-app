@@ -242,6 +242,9 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
     fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
+    /** "While you were away" in My tank: the catch-up's progress, then what happened. */
+    val away: StateFlow<com.reeflive.app.live.AwayUi?> = holder.awayState
+    fun dismissAway() = holder.dismissAway()
     /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
     fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
 

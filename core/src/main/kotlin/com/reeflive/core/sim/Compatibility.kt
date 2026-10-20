@@ -31,7 +31,7 @@ object Compatibility {
         if (isBlenny(kind) && others.any { isBlenny(it) } && (volumeL <= 0 || volumeL < BLENNY_FREE_VOLUME_L)) {
             out += CompatibilityWarning(
                 "blenny_cap", CompatibilityWarning.Severity.WARN,
-                "Blennies are territorial toward each other (lawnmower, tailspot and bicolor fight). Only one per tank under about 400 L; the newcomer will be chronically stressed.",
+                "Blennies are territorial toward each other (lawnmower, tailspot, bicolor and midas fight). Only one per tank under about 400 L; the newcomer will be chronically stressed.",
             )
         }
         if (kind == BrainKind.DOTTYBACK && others.any { it == BrainKind.DOTTYBACK }) {

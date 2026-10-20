@@ -113,8 +113,6 @@ function tick() {
   P = JSON.parse(SB.panel());
   if (!P) return;
   animals = JSON.parse(SB.animals());
-  const news = SB.coralNews();
-  if (news) toast(news);
   const s = JSON.parse(live.state());
   ui.clockAt = s;
   if (s) $('clock').textContent = `${PHASE_ICON[s.phase] ?? ''} ${hhmm(s.time)}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;

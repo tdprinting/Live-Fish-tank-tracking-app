@@ -573,9 +573,6 @@ object ReefSandbox {
         JSON.stringify(obj { it.title = f.kind.title; it.text = f.text })
     }
 
-    /** Coral news from My tank's catch-up (bleached, died, budded while away), once; "" when none. */
-    fun coralNews(): String = ReefMyTank.coralNews.also { ReefMyTank.coralNews = "" }
-
     /**
      * Tank Health's corals (core CoralHealth / CoralCare): {words, price, corals: [{name, health, pale, need}]}, where
      * [words] is what the care button would give now ("" = nothing needed) and [need] a colony's main trouble.
