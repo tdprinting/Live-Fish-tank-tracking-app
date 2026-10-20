@@ -179,6 +179,7 @@ bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of ca
 | Hairy green mushroom | coral | 2 | 35 |
 | Firefish goby | fish | 2 | 40 |
 | Bicolor blenny | fish | 2 | 65 |
+| Arrow crab | invert | 3 | 18 |
 | Tailspot blenny | fish | 3 | 30 |
 | Engineer goby | fish | 3 | 30 |
 | Diamond goby | fish | 3 | 35 |
@@ -199,7 +200,7 @@ bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of ca
 | Hummingbird bobtail squid | invert | 7 | 80 |
 | Purple tang | fish | 7 | 250 |
 
-Asterina stars are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later
+Asterina stars and bristleworms are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later
 gets a price from its size and care level (`PriceBook` default) until it is listed here.
 
 Which store sells what:
@@ -325,5 +326,8 @@ worst re-roll one day's list, never pay twice for a task.
 ## 13. Later ideas (not in the first version)
 
 * Buying equipment (a bigger skimmer, a refugium, a better light) and tank upgrades with sand dollars.
+* Pest control and supplies as store products (prices from the pest thread's research): Berghia nudibranchs, pack of
+  5, 65 (level 2); Aiptasia-X 25, Joe's Juice 10, kalkwasser paste 5 (level 1); an aiptasia laser 150 (level 4); a
+  mesh lid about 40 at Big Blue (firefish and fairy wrasses jump).
 * A store "order" quest: "Big Blue wants 3 zoa frags by Friday" for a big payout.
 * Seasonal store events (a holiday sale, a rare fish week).

@@ -119,6 +119,7 @@ import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.MyTankSetupCard
 import com.reeflive.app.ui.live.CareCard
 import com.reeflive.app.ui.live.MoneyChip
+import com.reeflive.app.ui.live.StoreOverlay
 import com.reeflive.app.ui.live.RewardFxLayer
 import com.reeflive.app.ui.live.RewardFxState
 import com.reeflive.core.custom.economy.EconomyView
@@ -314,6 +315,9 @@ fun LiveTankScreen(
     // My tank's sand dollars (docs/ECONOMY.md): the chip in the HUD opens the Care card; Tank Health counts as testing
     val economy by vm.economy.collectAsStateWithLifecycle()
     var careOpen by rememberSaveable { mutableStateOf(false) }
+    // walking a fish store's display tanks (docs/ECONOMY.md §5): the 3D view shows the store's tank meanwhile
+    val visit by vm.visit.collectAsStateWithLifecycle()
+    var storePick by remember { mutableStateOf<String?>(null) }
     val rewardFx = remember { RewardFxState() }
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
@@ -372,6 +376,7 @@ fun LiveTankScreen(
     BackHandler(enabled = supplies) { supplies = false }
     BackHandler(enabled = carry != null) { carry = null; supplies = true }
     BackHandler(enabled = bagCarry != null) { bagCarry = null; open = LiveCategory.LIFE }
+    BackHandler(enabled = visit != null) { storePick = null; vm.leaveStore() }
     // in-tank gauges (§10.7): the heater's set point and state are tracked here (the snapshot has no heater read-out)
     var heaterSet by rememberSaveable { mutableDoubleStateOf(HEATER_DEFAULT_C) }
     var heaterWorking by rememberSaveable { mutableStateOf(true) }
@@ -450,7 +455,11 @@ fun LiveTankScreen(
     // a tap on a fish picks it (and brings hidden buttons back so its card can show); a tap anywhere else undoes what
     // is open (LiveTaps), else touches the tank (onTouchTank). It never hides the buttons or drops a followed fish.
     val onPick: (String?) -> Unit = { id ->
-        if (subUi.on) {
+        val v = visit
+        if (v != null) {
+            // in a store a tap on an animal opens its card
+            if (id != null) { haptics.tick(); v.speciesOf[id]?.let { storePick = it } }
+        } else if (subUi.on) {
             // in the sub a tap on a fish sends it over to keep that fish company; empty water does nothing
             if (id != null) { tick(); vm.watchSubmarine(id, hud.submarine?.watchMode ?: com.reeflive.core.sim.SubWatch.HOVER) }
         } else if (id != null) {
@@ -755,6 +764,13 @@ fun LiveTankScreen(
     val tools = LiveTools(
         sandbox = sandbox,
         myTank = myTank,
+        stores = com.reeflive.core.custom.economy.FishStore.entries.map { com.reeflive.app.live.StoreFrontUi(it, (economy?.level ?: 1) >= it.level) },
+        onStore = { f ->
+            tick(); storePick = null
+            vm.enterStore(f)
+            if (hermieOn) hermie.say(f.greeting, HermieMood.HAPPY)
+        },
+        onStoreShut = { f -> tick(); if (hermieOn) hermie.say("Do your care jobs to level up and ${f.label} opens!", HermieMood.SURPRISED) },
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
         onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
@@ -980,7 +996,7 @@ fun LiveTankScreen(
         val besideBar = landscape && maxWidth >= BottomBarMaxWidth + (s.railWidth + 32.dp) * 2
         val menuBottom = if (besideBar) navInset + 8.dp else NavClearance + navInset
         val following = followId != null && stats != null && !cleaning
-        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && bagCarry == null && !subUi.on && !scaping
+        val menuUp = !chromeHidden && !micro && !cleaning && !following && !supplies && carry == null && bagCarry == null && !subUi.on && !scaping && visit == null
         // what the HUD keeps clear of: the rail on the left (landscape) or the dock above the bar (portrait)
         val hudStart = if (landscape && menuUp) s.railWidth + 4.dp else 0.dp
         val hudBottom = when {
@@ -1176,6 +1192,28 @@ fun LiveTankScreen(
         LaunchedEffect(open) { if (open == LiveCategory.FIX) vm.testedWater() }
         val eco = economy
         if (careOpen && myTank && eco != null) CareCard(eco, onCollect = { tick(); vm.collectHappyBonus() }, onDismiss = { careOpen = false })
+        visit?.let { v ->
+            if (myTank) StoreOverlay(
+                v, storePick,
+                onTank = { i -> tick(); storePick = null; vm.showStoreTank(i) },
+                onLeave = { tick(); storePick = null; vm.leaveStore(); if (hermieOn) hermie.say("Back home. Come again soon!", HermieMood.HAPPY) },
+                onCheckout = { bag, done -> vm.checkout(bag) { r -> scope.launch { done(r) } } },
+                say = { if (hermieOn) hermie.say(it, HermieMood.SURPRISED) },
+                tick = { tick() },
+                topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
+                bottomInset = navInset,
+            )
+        }
+        // a checkout went through: the chip counts down and Hermie says where the bags are
+        LaunchedEffect(Unit) {
+            vm.paid.collect { (total, n) ->
+                storePick = null
+                if (hermieOn) hermie.say(
+                    "Paid $total! ${if (n == 1) "Your new animal is" else "Your $n new animals are"} floating in bags at the top of the tank.",
+                    HermieMood.EXCITED,
+                )
+            }
+        }
         if (myTank) RewardFxLayer(rewardFx)
         // the net lifted a body out: the toilet goodbye (once per body)
         LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }

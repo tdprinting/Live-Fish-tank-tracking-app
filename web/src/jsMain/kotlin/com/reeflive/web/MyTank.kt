@@ -11,7 +11,6 @@ import com.reeflive.core.custom.economy.DisplayTank
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.StoreVisit
-import com.reeflive.core.custom.economy.Stores
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
@@ -167,18 +166,15 @@ object ReefMyTank {
         val store = visiting ?: return "null"
         val e = economy ?: return "null"
         val day = today()
-        val wanted = Stores.wanted(store, day).toSet()
         return JSON.stringify(obj { o ->
             o.store = store.id; o.label = store.label; o.greeting = store.greeting; o.coins = e.state.coins; o.at = tankAt
             o.tanks = tanks.map { t ->
                 obj { tk ->
                     tk.title = t.title; tk.animals = t.animals
-                    tk.items = t.items.map { i ->
+                    tk.items = StoreVisit.cards(e, store, t, mine, day).map { c ->
                         obj {
-                            it.id = i.listing.speciesId; it.name = com.reeflive.core.sim.Stocking.entry(i.listing.speciesId)?.common ?: i.listing.speciesId
-                            it.group = i.listing.group.name; it.price = i.price; it.count = i.count; it.left = e.left(store, i, day)
-                            it.deal = i.deal; it.wanted = i.listing.speciesId in wanted; it.level = i.listing.level
-                            it.locked = !e.unlocked(i.listing); it.warning = Stores.warning(mine, i.listing.speciesId)
+                            it.id = c.speciesId; it.name = c.name; it.group = c.group.name; it.price = c.price; it.left = c.left
+                            it.deal = c.deal; it.wanted = c.wanted; it.level = c.level; it.locked = c.locked; it.warning = c.warning
                         }
                     }.toTypedArray()
                 }

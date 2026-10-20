@@ -82,9 +82,11 @@ class StoresTest {
     @Test fun aDisplayTankSwimsWithTheShelf() {
         val tank = StoreVisit.tanks(FishStore.SHELLYS, day).first { it.title == "Starter fish" }
         val sim = StoreVisit.build(tank, com.reeflive.core.sim.SpeciesCatalog(), com.reeflive.core.sim.TestTank.rock, 3L)
-        repeat(20) { sim.stepWall(0.05) }
+        // the animals are in as soon as it is built (the host maps taps to cards right away)
         val ids = sim.organisms.filter { it.alive }.map { it.species.id }
         for (it in tank.items) assertEquals(it.listing.speciesId, StoreVisit.shown(it), ids.count { id -> id == it.listing.speciesId })
         assertTrue(sim.organisms.all { o -> StoreVisit.itemFor(tank, o.species.id) != null })
+        repeat(20) { sim.stepWall(0.05) }
+        assertEquals(ids.size, sim.organisms.count { it.alive })
     }
 }

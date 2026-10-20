@@ -208,6 +208,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val gains: kotlinx.coroutines.flow.SharedFlow<com.reeflive.core.custom.economy.Gain> = holder.gains
     fun testedWater() { if (mode.value == SimMode.CUSTOM) holder.testedWater() }
     fun collectHappyBonus() = holder.collectHappyBonus()
+    // fish stores (docs/ECONOMY.md §5)
+    val visit: StateFlow<com.reeflive.app.live.StoreVisitUi?> = holder.visitState
+    val paid: kotlinx.coroutines.flow.SharedFlow<Pair<Int, Int>> = holder.paid
+    fun storeFronts(): List<com.reeflive.app.live.StoreFrontUi> = holder.storeFronts()
+    fun enterStore(store: com.reeflive.core.custom.economy.FishStore) = holder.enterStore(store)
+    fun showStoreTank(i: Int) = holder.showStoreTank(i)
+    fun leaveStore() = holder.leaveStore()
+    fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
     /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
     fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
 

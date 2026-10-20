@@ -17,6 +17,22 @@ data class DisplayTank(val title: String, val items: List<StockItem>) {
     val animals: Int get() = items.sumOf { StoreVisit.shown(it) }
 }
 
+/** One animal's card in a store, as the keeper sees it today. */
+data class ShelfCard(
+    val speciesId: String,
+    val name: String,
+    val group: StockGroup,
+    val price: Int,
+    /** Left on the shelf today (after what this keeper already bought). */
+    val left: Int,
+    val deal: Boolean,
+    val wanted: Boolean,
+    val level: Int,
+    val locked: Boolean,
+    /** One line when it fits the keeper's tank badly ([Stores.warning]); the store still sells it. */
+    val warning: String?,
+)
+
 /** What happened at the counter: the result and the species bought, one entry per animal. */
 data class Checkout(val result: BuyResult, val bought: List<String>, val total: Int)
 
@@ -85,6 +101,18 @@ object StoreVisit {
         for (it in tank.items) sim.enqueue(Command.AddMany(it.listing.speciesId, shown(it), size = StockSize.JUVENILE))
         sim.stepWall(0.0)
         return sim
+    }
+
+    /** The cards of [tank] for this keeper ([mine] is their tank, for the warnings). */
+    fun cards(e: Economy, store: FishStore, tank: DisplayTank, mine: Simulation, day: String): List<ShelfCard> {
+        val wanted = Stores.wanted(store, day).toSet()
+        return tank.items.map { i ->
+            val id = i.listing.speciesId
+            ShelfCard(
+                id, Stocking.entry(id)?.common ?: id, i.listing.group, i.price, e.left(store, i, day), i.deal, id in wanted,
+                i.listing.level, !e.unlocked(i.listing), Stores.warning(mine, id),
+            )
+        }
     }
 
     /** The card for an animal tapped in a display tank ([speciesId] of the organism or coral). */
