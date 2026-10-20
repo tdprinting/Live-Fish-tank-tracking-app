@@ -45,20 +45,6 @@ float ggxSpec(vec3 N, vec3 V, vec3 L, float rough) {
 
 float fresnelSchlick(float cosT, float f0) { return f0 + (1.0 - f0) * pow(1.0 - clamp(cosT, 0.0, 1.0), 5.0); }
 
-// Animated caustics: two scrolling samples of the shared tile, refracted by the live surface slope,
-// projected from above (normal.y) and scaled by light intensity and the water column.
-float causticAt(vec3 p, vec3 n) {
-    if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return 0.0;
-    float depth = max(uWaterLevel - p.y, 0.0);
-    vec2 refr = surfaceSlope(p.xz) * depth * 0.6;
-    vec2 uv = (p.xz + refr) * uCausticScale;
-    float t = uTime;
-    float a = texture(uCaustic, uv + t * vec2(0.013, 0.008)).r;
-    float b = texture(uCaustic, uv * 1.7 - t * vec2(0.010, -0.014)).r;
-    float c = pow(a * b, 1.1) * 4.0;
-    return c * max(n.y, 0.0) * lightIntensity() * exp(-0.012 * depth);
-}
-
 // Hue of the live fixture light, normalised so its brightest channel is 1 (follows the AI Prime schedule).
 vec3 lightTint() {
     vec3 s = uLightColor[0].rgb + uLightColor[1].rgb;
@@ -67,11 +53,11 @@ vec3 lightTint() {
 
 // Stronger caustics, tinted by the live light: two scrolling samples of the shared tile refracted by the surface
 // slope. High quality splits the second sample per channel (dispersion: thin colour fringes on the bright lines).
-// Faces that look sideways still catch a little of the pattern.
-vec3 causticColor(vec3 p, vec3 n) {
+// Faces that look sideways still catch a little of the pattern. [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
+vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
     float depth = max(uWaterLevel - p.y, 0.0);
-    vec2 refr = surfaceSlope(p.xz) * depth * 0.6;
+    vec2 refr = slope * depth * 0.6;
     // walls see the pattern projected down their face: shift by height along the normal so it varies (stretched)
     // vertically instead of smearing into stripes
     vec2 uv = (p.xz + refr + n.xz * (p.y * 0.55)) * uCausticScale;
@@ -151,9 +137,9 @@ float shadowAt(vec3 p, vec3 n) {
 
 // Slow light flicker of the direct beam as the rippled surface focuses and spreads it (a heavily blurred, scrolling
 // read of the caustic tile, ~1 around its mean). Medium and High.
-float surfaceFlicker(vec3 p) {
+float surfaceFlicker(vec3 p, vec2 slope) {
     if (uQuality < 0.5 || p.y > uWaterLevel) return 1.0;
-    vec2 uv = (p.xz + surfaceSlope(p.xz) * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
+    vec2 uv = (p.xz + slope * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
     float f = texture(uCaustic, uv + uTime * vec2(0.017, -0.012), 3.5).r;
     return 0.82 + 0.18 * clamp(f * 28.0, 0.0, 2.2);
 }
@@ -199,8 +185,10 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
         float spec = ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), f0) * max(ndl, 0.0);
         direct += rad * (albedo * diff + vec3(spec * specScale));
     }
-    direct *= surfaceFlicker(p);
-    direct += albedo * causticColor(p, N) * uCausticStrength;
+    // the surface heightfield's slope (4 taps) is read once for both the flicker and the caustics
+    vec2 slope = p.y > uWaterLevel || (uQuality < 0.5 && uCausticStrength <= 0.0) ? vec2(0.0) : surfaceSlope(p.xz);
+    direct *= surfaceFlicker(p, slope);
+    direct += albedo * causticColor(p, N, slope) * uCausticStrength;
 #ifndef NO_CONTACT_SHADOW
     if (uCasterCount > 0.5) direct *= contactShadow(p);
 #endif
@@ -221,14 +209,19 @@ vec3 applyWater(vec3 col, vec3 p) {
 // Filmic curve (Hejl-style x/(x+0.155)*1.019); it already includes the display gamma, so no extra pow.
 // Shared grade, so every shader lands in one look: partial white balance toward the fixture colour (the eye / a
 // camera adapts to the AI Prime mix, so cream rock reads cream under a blue-heavy daylight, while dusk keeps more blue
-// and moonlight stays blue), then a gentle S-curve and a touch of saturation.
+// and moonlight stays blue), then a gentle S-curve and a touch of saturation. Actinic-only light (blue fraction near 1,
+// the Blue light look and blue-only ramps) is barely balanced: the real tank reads deep blue under it, with the
+// fluorescent corals glowing out of it, and more saturated.
 vec3 tonemap(vec3 x) {
     x = max(x, vec3(0.0));
-    vec3 adapt = mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()));
+    float actinic = (1.0 - uNight) * smoothstep(0.86, 0.98, uBlueFraction);
+    float wb = 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()) * (1.0 - 0.8 * actinic);
+    vec3 adapt = mix(vec3(1.0), lightTint(), wb);
     x /= max(adapt, vec3(0.2));
     vec3 c = x / (x + 0.155) * 1.019;
     c = clamp(c, 0.0, 1.0);
     c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    return clamp(mix(vec3(l), c, 1.06), 0.0, 1.0);
+    // actinic: the camera / eye sees royal blue as a deep, saturated indigo (Tee's video), not a pale sky blue
+    return clamp(mix(vec3(l), c, 1.06 + 0.5 * actinic), 0.0, 1.0);
 }

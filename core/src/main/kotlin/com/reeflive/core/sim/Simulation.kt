@@ -63,6 +63,8 @@ class Simulation private constructor(
     val invertEcology = InvertEcology(this)
     /** Bubble-tip anemones and the clowns adopting them (research 40). */
     val anemones = AnemoneModel(this)
+    /** What the keeper did (feedings, chores) for My tank's daily care list ([CareLog]). */
+    val careLog = CareLog()
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -1320,6 +1322,7 @@ class Simulation private constructor(
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
             is Command.Maintain -> {
+                careLog.maintained[c.task.ordinal]++
                 water.maintain(c.task)
                 if (c.task == MaintenanceTask.SIPHON_SAND) { waste.siphon(); sand.siphon(WaterSim.SIPHON_SHARE) }
             }
@@ -1340,8 +1343,8 @@ class Simulation private constructor(
                 } else pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
-            is Command.Feed -> { feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
-            is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
+            is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
+            is Command.WaterChange -> { if (c.fraction >= CareLog.MIN_CHANGE) careLog.waterChanges++; water.waterChange(c.fraction, c.mix) }
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
@@ -1386,7 +1389,7 @@ class Simulation private constructor(
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm, c.size)
-            is Command.ScrapeGlass -> scrapeGlass(c)
+            is Command.ScrapeGlass -> { careLog.scrapes++; scrapeGlass(c) }
             is Command.Micro -> water.micro.apply(c.action, c.amount, water.s)
             is Command.Bacteria -> water.bacteria.apply(c.action, c.amount, water)
         }
