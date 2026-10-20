@@ -6,6 +6,7 @@ import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
 import com.reeflive.core.custom.TankBuilds
+import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Simulation
@@ -28,6 +29,8 @@ object ReefMyTank {
     private var loaded = false
     /** Wall ms when the tank last stopped running (left the mode or the page was hidden). */
     private var pausedAt = -1.0
+    /** Sand dollars, the care list and goals (docs/ECONOMY.md); kept across "Start over" like the Android app. */
+    private var economy: Economy? = null
 
     private fun now(): Double = js("Date.now()") as Double
     private fun read(key: String): String? = runCatching { localStorage.getItem(key) }.getOrNull()?.takeIf { it.isNotBlank() }
@@ -63,7 +66,9 @@ object ReefMyTank {
         s.speed = 1.0
         s.stepWall(0.0)
         sim = s
-        base = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed)
+        val eco = economy ?: Economy()
+        economy = eco
+        base = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed, economy = eco.state)
         loaded = true
         save()
         if (ReefSandbox.isMine()) ReefLive.sim = s
@@ -81,11 +86,44 @@ object ReefMyTank {
     /** Names an animal; it is kept in the next save. */
     fun rename(id: String, name: String) { sim?.enqueue(Command.Rename(id, name)) }
 
+    /** Today as the economy counts days: the keeper's local calendar day. */
+    private fun today(): String = js("(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})()") as String
+
+    /**
+     * Ticks off the chores done since the last call and returns the Care card's data (the page calls it about once a
+     * second in My tank): `{coins, level, levelStars, levelNeed, tasks:[{id,label,hint,pay,done}], allDoneBonus,
+     * allDonePaid, streak, multiplier, happyBonus, happyPaid, attention, goals:[{id,label,reward,done}],
+     * gains:[{amount,label,levelUp,opens}]}`, or "null" with no tank.
+     */
+    fun economy(): String {
+        val s = sim ?: return "null"
+        val e = economy ?: return "null"
+        e.update(s, today())
+        val v = e.view(s)
+        val gains = e.takeGains()
+        return JSON.stringify(obj { o ->
+            o.coins = v.coins; o.level = v.level; o.levelStars = v.levelStars; o.levelNeed = v.levelNeed
+            o.tasks = v.tasks.map { t -> obj { it.id = t.task.id; it.label = t.task.label; it.hint = t.task.hint; it.pay = t.pay; it.done = t.done } }.toTypedArray()
+            o.allDoneBonus = v.allDoneBonus; o.allDonePaid = v.allDonePaid; o.streak = v.streak; o.multiplier = v.multiplier
+            o.happyBonus = v.happyBonus; o.happyPaid = v.happyPaid; o.attention = v.attention
+            o.goals = v.goals.map { g -> obj { it.id = g.goal.id; it.label = g.goal.label; it.reward = g.goal.reward; it.done = g.done } }.toTypedArray()
+            o.gains = gains.map { g ->
+                obj { it.amount = g.amount; it.label = g.label; it.levelUp = g.levelUp; it.opens = com.reeflive.core.custom.economy.Levels.opens(g.levelUp) }
+            }.toTypedArray()
+        })
+    }
+
+    /** The keeper opened Tank Health (the water test): today's "Test the water" chore. */
+    fun testedWater() { if (sim != null) economy?.testedWater(today()) }
+
+    /** Collects today's happy tank bonus; returns what it paid. */
+    fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
+
     /** Writes the tank to this browser's storage (the page calls it every 30 s and when it is hidden). */
     fun save() {
         val s = sim ?: return
         val b = base ?: return
-        val next = CustomTank.capture(s, b, now().toLong())
+        val next = CustomTank.capture(s, economy?.let { b.copy(economy = it.state) } ?: b, now().toLong())
         base = next
         val text = CustomTankCodec.encode(next)
         read(KEY)?.let { write(BACKUP, it) }
@@ -125,6 +163,7 @@ object ReefMyTank {
         val s = runCatching { CustomTank.restore(save, species, rock) }.getOrNull() ?: return
         sim = s
         base = CustomTank.baseAfterRestore(save, species)
+        economy = Economy(save.economy)
         // closed since the last save: skip ahead by the time away
         pausedAt = save.savedAtMs.toDouble()
         s.stepWall(0.0)
