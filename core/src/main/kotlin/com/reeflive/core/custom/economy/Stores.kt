@@ -22,11 +22,11 @@ object PriceBook {
         l("nassarius_sp", 1, 4), l("lithopoma_tectum", 1, 3), l("clibanarius_tricolor", 1, 3), l("paguristes_cadenati", 1, 8),
         l("amphiprion_ocellaris", 1, 25), l("sphaeramia_nematoptera", 1, 20), l("salarias_fasciatus", 1, 25),
         l("capnella_sp", 1, 15), l("discosoma_sp", 1, 15), l("briareum_sp", 1, 20), l("clavularia_sp", 1, 20),
-        l("lysmata_amboinensis", 2, 30), l("stenopus_hispidus", 2, 25), l("percnon_gibbesi", 2, 20), l("ophiocoma_sp", 2, 20),
+        l("ecsenius_bicolor", 2, 30), l("lysmata_amboinensis", 2, 30), l("stenopus_hispidus", 2, 25), l("percnon_gibbesi", 2, 20), l("ophiocoma_sp", 2, 20),
         l("sabellastarte_sp", 2, 20), l("zoanthus_sp", 2, 25), l("rhodactis_sp", 2, 35), l("sinularia_sp", 2, 30),
         l("ecsenius_stigmatura", 3, 35), l("valenciennea_puellaris", 3, 35), l("pholidichthys_leucotaenia", 3, 30),
         l("labroides_dimidiatus", 3, 30), l("sarcophyton_sp", 3, 45), l("lobophytum_sp", 3, 40),
-        l("cirrhitichthys_falco", 4, 45), l("pseudochromis_indigo", 4, 50), l("entacmaea_quadricolor", 4, 70),
+        l("cirrhitichthys_falco", 4, 45), l("ecsenius_midas", 4, 55), l("pseudochromis_indigo", 4, 50), l("entacmaea_quadricolor", 4, 70),
         l("amplexidiscus_fenestrafer", 4, 55), l("tubipora_musica", 5, 60), l("paracanthurus_hepatus", 5, 80),
         l("macropharyngodon_bipartitus", 6, 70), l("euprymna_berryi", 7, 150),
     )

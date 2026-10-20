@@ -136,6 +136,7 @@ Base prices are close to US store prices in 2026. "Level" is when it can be boug
 | Green mushroom | coral | 1 | 15 |
 | Green star polyps | coral | 1 | 20 |
 | Clove polyps | coral | 1 | 20 |
+| Bicolor blenny | fish | 2 | 30 |
 | Skunk cleaner shrimp | invert | 2 | 30 |
 | Coral banded shrimp | invert | 2 | 25 |
 | Sally Lightfoot crab | invert | 2 | 20 |
@@ -151,6 +152,7 @@ Base prices are close to US store prices in 2026. "Level" is when it can be boug
 | Toadstool leather | coral | 3 | 45 |
 | Pink lobed leather | coral | 3 | 40 |
 | Falco hawkfish | fish | 4 | 45 |
+| Midas blenny | fish | 4 | 55 |
 | Indigo dottyback | fish | 4 | 50 |
 | Rainbow bubble tip anemone | invert | 4 | 70 |
 | Elephant ear mushroom | coral | 4 | 55 |
