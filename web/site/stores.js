@@ -7,7 +7,7 @@ const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
 const pic = (it) => `<img class="sp" src="species/${it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
 
 let my, say, cue, onLeave;
-let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false;
+let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
 
 /** The street for My tank's "Add life" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
@@ -35,7 +35,7 @@ function enter(id) {
   let d = null;
   try { d = JSON.parse(my.visit(id)); } catch { d = null; }
   if (!d) { say?.('That store is not open for you yet. Do your care jobs to level up!'); return; }
-  data = d; at = 0; picked = null; bag = []; counterOpen = false;
+  data = d; at = 0; picked = null; bag = []; counterOpen = false; sellOpen = false;
   document.body.classList.add('instore');
   ui.classList.remove('hidden');
   cue?.('TICK');
@@ -148,6 +148,7 @@ function render() {
     <div class="sthead glass">
       <button class="door" data-sleave aria-label="Leave the store">🚪</button>
       <div class="stname"><b>${esc(data.label)}</b><small>${esc(t.title)} · ${t.animals} animals</small></div>
+      <button class="pill sellbtn" data-ssell>Sell</button>
     </div>
     <div class="sttabs">${data.tanks.map((x, i) => `<button class="pillbtn ${i === at ? 'on' : ''}" data-stank="${i}">${esc(x.title)}</button>`).join('')}</div>
     ${data.tanks.length > 1 ? `<button class="starrow l" data-sgo="-1" aria-label="Previous tank">◀</button><button class="starrow r" data-sgo="1" aria-label="Next tank">▶</button>` : ''}
@@ -158,7 +159,8 @@ function render() {
       <span class="pr">${it.locked ? `🔒 Lv ${it.level}` : `${SAND_DOLLAR}${it.price}`}</span>
       ${inBag(it.id) ? `<i class="inbag">${inBag(it.id)}</i>` : ''}</button>`).join('')}</div>
     <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter ${bag.length ? '' : 'disabled'}>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
-    ${counterOpen ? counter(coins, sum) : ''}`;
+    ${counterOpen ? counter(coins, sum) : ''}
+    ${sellOpen ? sellSheet() : ''}`;
 }
 
 function card(p, coins) {
@@ -194,11 +196,37 @@ function counter(coins, sum) {
   </div></div>`;
 }
 
+/** The Sell sheet (docs/ECONOMY.md §6): the store's offer for each of your animals, wanted ones first. */
+function sellSheet() {
+  let list = [];
+  try { list = JSON.parse(my.offers()); } catch { list = []; }
+  const rows = list.map((o) => {
+    const why = o.tooSmallCm ? `Too little: grows to ${o.tooSmallCm.toFixed(1)} cm (now ${o.cm.toFixed(1)})` : o.amount ? '' : 'This store does not buy these';
+    return `<div class="crow">${pic({ id: o.speciesId, group: o.group })}<span class="nm">${esc(o.name)}${o.wanted ? ' <i class="rib want">Wanted</i>' : ''}${why ? `<br><small class="muted">${why}</small>` : ''}</span>
+      ${o.amount ? `<button class="pill collect" data-ssellid="${o.id}" data-spet="${o.pet ? esc(o.name) : ''}">${SAND_DOLLAR}${o.amount}</button>` : ''}</div>`;
+  }).join('');
+  return `<div class="caremodal" data-ssellbg><div class="carecard glass counter">
+    <h3>Sell to ${esc(data.label)}</h3>
+    <p class="muted">Grown-up, healthy animals are worth more. Wanted ones pay extra today.</p>
+    ${rows || '<p class="muted">Nothing in your tank to sell yet.</p>'}
+    <div class="carefoot"><button class="pill" data-ssellclose>Done</button></div></div></div>`;
+}
+
+function sell(id, pet) {
+  if (pet && !confirm(`Say goodbye to ${pet}?`)) return;
+  const paid = my.sell(id);
+  if (paid > 0) { cue?.('TICK'); say?.(`Sold for ${paid} sand dollars! The store will take good care of it.`); refresh(); }
+  render();
+}
+
 function onClick(e) {
-  const b = e.target.closest('[data-sleave],[data-stank],[data-sgo],[data-spick],[data-sadd],[data-sremove],[data-sclose],[data-scounter],[data-scounterclose],[data-spay],[data-scounterbg]');
+  const b = e.target.closest('[data-ssell],[data-ssellid],[data-ssellclose],[data-ssellbg],[data-sleave],[data-stank],[data-sgo],[data-spick],[data-sadd],[data-sremove],[data-sclose],[data-scounter],[data-scounterclose],[data-spay],[data-scounterbg]');
   if (!b) return;
   const d = b.dataset;
-  if ('sleave' in d) leave();
+  if (d.ssellid) sell(d.ssellid, d.spet);
+  else if ('ssell' in d) { sellOpen = true; cue?.('TICK'); render(); }
+  else if ('ssellclose' in d || ('ssellbg' in d && e.target === b)) { sellOpen = false; render(); }
+  else if ('sleave' in d) leave();
   else if (d.stank != null) go(Number(d.stank));
   else if (d.sgo) go(at + Number(d.sgo));
   else if (d.spick) { picked = picked === d.spick ? null : d.spick; cue?.('TICK'); render(); }

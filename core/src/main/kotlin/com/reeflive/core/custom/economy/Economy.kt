@@ -73,7 +73,8 @@ enum class Goal(val id: String, val label: String, val reward: Int) {
     BABY_FISH("baby_fish", "Raise baby fish in the nursery", 150),
     FISH_30_DAYS("fish_30_days", "Keep a fish for 30 days", 100),
     STREAK_7("streak_7", "Finish the list 7 days in a row", 100),
-    LEVEL_5("level_5", "Reach level 5", 100);
+    LEVEL_5("level_5", "Reach level 5", 100),
+    FIRST_SALE("first_sale", "Sell something to a fish store", 25);
 
     companion object {
         fun byId(id: String): Goal? = entries.firstOrNull { it.id == id }
@@ -272,6 +273,17 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         if (amount <= 0) return
         state = state.copy(coins = state.coins + amount, ledger = ledger(today, label, amount))
         gains += Gain(amount, label)
+    }
+
+    /**
+     * Sells [offer] to [store] (docs/ECONOMY.md §6): the money arrives (no star points) and the caller takes the
+     * animal out (Command.RemoveOrganism / RemoveCoral). False when the store does not take it.
+     */
+    fun sell(store: FishStore, offer: SellOffer, today: String): Boolean {
+        if (!canSee(store) || offer.amount <= 0) return false
+        sold(offer.amount, "Sold ${offer.name} to ${store.label}", today)
+        goal(Goal.FIRST_SALE)
+        return true
     }
 
     fun view(sim: Simulation): EconomyView {
