@@ -497,6 +497,8 @@ object Thoughts {
         BrainKind.PEEKER_BLENNY -> "blenny"
         BrainKind.DOTTYBACK -> "dottyback"
         BrainKind.BANDED_SHRIMP -> "banded shrimp"
+        BrainKind.PEPPERMINT_SHRIMP -> "peppermint shrimp"
+        BrainKind.FILE_CLAM -> "flame scallop"
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"

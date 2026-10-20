@@ -53,6 +53,8 @@ object Stocking {
         StockEntry("macropharyngodon_bipartitus", StockGroup.FISH, "Blue star leopard wrasse", 10.0),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
+        // research 42: hides by day, eats aiptasia at night
+        StockEntry("lysmata_boggessi", StockGroup.INVERTS, "Peppermint shrimp", 4.0),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
         StockEntry("paguristes_cadenati", StockGroup.INVERTS, "Scarlet hermit crab", 3.0),
         StockEntry("percnon_gibbesi", StockGroup.INVERTS, "Sally Lightfoot crab", 3.0),
@@ -65,6 +67,8 @@ object Stocking {
         StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
         // research 40: walks until it finds a crevice, stings corals in reach, splits, and clowns may move in
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
+        // research 42: a file clam for a crevice; starves without daily phytoplankton
+        StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),

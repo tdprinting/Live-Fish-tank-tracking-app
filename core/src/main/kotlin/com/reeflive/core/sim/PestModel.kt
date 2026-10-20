@@ -29,6 +29,8 @@ class PestState {
  */
 object AiptasiaModel {
     const val SPECIES_ID = "aiptasia_sp"
+    /** The peppermint shrimp the keeper adds against aiptasia (research 42). */
+    const val PEPPERMINT_ID = "lysmata_boggessi"
     const val CAP = 60
     /** Lacerates per mature polyp per day at full food (est.; literature on A. pallida culture ~ weekly when fed). */
     const val BUD_PER_DAY = 1.0 / 14
@@ -43,9 +45,13 @@ object AiptasiaModel {
 
     fun polyps(sim: Simulation) = sim.corals.filter { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
 
-    /** Peppermint shrimp present: added controllers plus any Lysmata boggessi / wurdemanni in the tank. */
+    /**
+     * Peppermint shrimp eating by the numbers: controllers from an older save ([PestState.peppermint]) plus, while the
+     * behaviour layer is off (fast time, away catch-up), the live peppermints, which otherwise hunt polyp by polyp
+     * themselves ([com.reeflive.core.ai.PeppermintShrimpBrain]).
+     */
     fun peppermintCount(sim: Simulation): Int = sim.pests.peppermint +
-        sim.organisms.count { it.alive && (it.species.id.contains("boggessi") || it.species.id.contains("wurdemanni")) }
+        (if (sim.behaviorEnabled && !sim.abstractMode) 0 else sim.organisms.count { it.alive && !it.molting && it.brainKind == BrainKind.PEPPERMINT_SHRIMP })
 
     fun step(sim: Simulation, dtMin: Double) {
         val days = dtMin / 1440
@@ -94,7 +100,7 @@ object AiptasiaModel {
         }
         if (st.berghia > 0) {
             val n = polyps(sim).size
-            val predators = sim.organisms.any { it.alive && (it.brainKind == BrainKind.CLEANER_SHRIMP || it.brainKind == BrainKind.BANDED_SHRIMP || it.brainKind == BrainKind.WRASSE) } || pep > 0
+            val predators = sim.organisms.any { it.alive && (it.brainKind.isShrimp || it.brainKind == BrainKind.WRASSE) } || pep > 0
             val badWater = sim.water.s.copper > 0.01 || sim.water.s.nh3Free > 0.02
             var rate = 0.0
             if (n > 0) rate += BERGHIA_BREED_PER_DAY * (1 - st.berghia / (2.0 * n + 2)).coerceAtLeast(-1.0) else rate -= BERGHIA_STARVE_PER_DAY

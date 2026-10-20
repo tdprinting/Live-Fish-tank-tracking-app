@@ -80,6 +80,8 @@ data class SimSpecies(
         food == FoodKind.PRAWN && brainKind == BrainKind.NASSARIUS -> 1.5
         food == FoodKind.MYSIS && brainKind == BrainKind.CLEANER_SHRIMP -> 1.3
         food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
+        // the flame scallop lives on phytoplankton (research 42 §2.4)
+        food == FoodKind.PLANKTON && brainKind == BrainKind.FILE_CLAM -> 1.5
         // hawkfish are krill specialists in the shops' experience; grazers prefer a wafer to a pellet (design estimates)
         food == FoodKind.KRILL && brainKind == BrainKind.HAWK -> 1.3
         food == FoodKind.ALGAE_WAFER && (brainKind == BrainKind.TANG || brainKind == BrainKind.LAWNMOWER_BLENNY || brainKind == BrainKind.ASTREA) -> 1.2
@@ -403,12 +405,24 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
     /** Bubble-tip anemone (*Entacmaea quadricolor*, research 40): walks slowly on its foot, then settles; hosts clowns. */
     ANEMONE(listOf("entacmaea"), false),
+    /**
+     * Peppermint shrimp (*Lysmata boggessi* / *L. wurdemanni*, research 42): small, shy, nocturnal Lysmata that hide in
+     * the rock by day and hunt aiptasia at night. The genus resolves to [CLEANER_SHRIMP], so the sheets name this brain.
+     */
+    PEPPERMINT_SHRIMP(emptyList(), false),
+    /**
+     * File clams, sold as "flame scallops" (*Ctenoides scaber*, research 42): wedged in a crevice with the red mantle and
+     * sticky tentacles out, filter feeding; swims off by clapping its valves when bothered.
+     */
+    FILE_CLAM(listOf("ctenoides", "lima", "limaria"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
     /** Organisms that never swim freely (Steering uses surface-constrained or no movement). */
     val isBenthic: Boolean get() = !isFish
     val isSessile: Boolean get() = this == FEATHER_DUSTER
+    /** The three shrimp: stance, limbs, molting and most shrimp rules are shared. */
+    val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP
 
     companion object {
         fun resolve(s: SimSpecies): BrainKind {
@@ -420,6 +434,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
         }
 
         /** Track A sheet `brain` strings that differ from the enum names; unknown strings fall back to genus/kind. */
+        private val PEPPERMINT_IDS = listOf("lysmata_boggessi", "lysmata_wurdemanni", "lysmata_rathbunae", "lysmata_ankeri")
+
         private val ALIASES = mapOf(
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
@@ -430,9 +446,13 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
+            "peppermint_shrimp" to PEPPERMINT_SHRIMP, "peppermint" to PEPPERMINT_SHRIMP,
+            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM,
         )
 
         fun byId(id: String): BrainKind? {
+            // the peppermint Lysmata share the cleaner's genus: tell them apart by species (research 42)
+            if (PEPPERMINT_IDS.any { id.lowercase().startsWith(it) }) return PEPPERMINT_SHRIMP
             val genus = id.lowercase().substringBefore('_').substringBefore('-')
             return entries.firstOrNull { k -> k.genera.any { genus == it || genus.startsWith(it) } }
         }
