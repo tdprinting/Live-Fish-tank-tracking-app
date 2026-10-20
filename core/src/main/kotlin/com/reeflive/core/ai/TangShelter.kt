@@ -1,5 +1,6 @@
 package com.reeflive.core.ai
 
+import com.reeflive.core.geom.Sdf
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.smoothstep
 import kotlin.math.abs
@@ -23,7 +24,26 @@ class TangShelters(private val c: Ctx) {
     /** A shelter: a point under rock and how enclosed it is (0..1). */
     data class Spot(val pos: Vec3, val cover: Double)
 
-    val spots: List<Spot> by lazy { scan() }
+    /**
+     * The shelters of the rockwork as it stands. My tank's rocks shift when dug under and can be rebuilt, so the scan is
+     * redone once the rocks have moved and come to rest again (at most every [RESCAN_S]); [generation] counts rescans.
+     */
+    val spots: List<Spot> get() {
+        val rp = c.sim.rockPhysics
+        val v = rp?.version ?: 0L
+        val cur = scanned
+        if (cur == null || v != scannedVersion && !rp!!.anyAwake && c.t - scannedAt >= RESCAN_S) {
+            scannedVersion = v; scannedAt = c.t
+            if (cur != null) generation++
+            return scan().also { scanned = it }
+        }
+        return cur
+    }
+    private var scanned: List<Spot>? = null
+    private var scannedVersion = Long.MIN_VALUE
+    private var scannedAt = -1e9
+    /** Bumped each time the rocks moved and the shelters were found again (the bed is refitted then). */
+    var generation = 0; private set
 
     private fun scan(): List<Spot> {
         val rock = c.rock
@@ -57,6 +77,23 @@ class TangShelters(private val c: Ctx) {
         val kept = ArrayList<Spot>()
         for (s in out) if (kept.none { it.pos.distanceTo(s.pos) < SPREAD_CM }) kept += s
         return kept
+    }
+
+    /** How far above the body centre (cm) the rock may be and still be a roof over its back: half a body length above the dorsal tip. */
+    fun roofMax(L: Double) = min(ROOF_CM, (HALF_DEPTH + ROOF_ABOVE) * L)
+
+    /**
+     * How tucked in a fish posed at [p] is (0 out in the open .. 1 walled in): the share of short rays from its flanks,
+     * back, nose and tail that meet rock within a body length, plus a roof close over its back. A spot that merely
+     * lies in a rock's shadow scores low; a crevice or the hollow under a ledge scores high.
+     */
+    fun snug(p: Vec3, L: Double): Double {
+        val sdf = c.rock.sdf
+        var hits = 0
+        for (d in Sdf.COVER_DIRS) if (d.y > -0.5 && sdf.raycast(p, d, SNUG_REACH * L) != null) hits++
+        val roofAt = sdf.raycast(p, Vec3.Y, ROOF_CM)
+        val roofScore = if (roofAt == null) 0.0 else 1.0 - smoothstep(HALF_DEPTH * L, roofMax(L) + 0.5 * L, roofAt)
+        return 0.7 * hits / UPPER_DIRS + 0.3 * roofScore
     }
 
     /** Body sample points (nose, tail, fin tips, flanks) of a tang of length [L] posed at [p] facing [h] with [up]. */
@@ -99,7 +136,7 @@ class TangShelters(private val c: Ctx) {
             val hi = HALF_DEPTH * L + 2.5
             while (d <= hi) {
                 val p = surf + n * d
-                if ((!roof || sdf.raycast(p, Vec3.Y, ROOF_CM) != null) && clear(p, h, up, L)) {
+                if ((!roof || sdf.raycast(p, Vec3.Y, roofMax(L)) != null) && clear(p, h, up, L)) {
                     entryFrom(p, n, h, up, L)?.let { return Pose(p, h, up, n, it) }
                 }
                 d += 0.25
@@ -153,7 +190,7 @@ class TangShelters(private val c: Ctx) {
      * The best shelter for a tang at [from] fleeing [threat] (or none): enclosed spots near it, away from the threat,
      * that fit its body. Tries the [tries] best-scoring candidates.
      */
-    fun pick(from: Vec3, threat: Vec3?, L: Double, roll: Double, prefer: Vec3? = null, tries: Int = 8): Pose? {
+    fun pick(from: Vec3, threat: Vec3?, L: Double, roll: Double, prefer: Vec3? = null, tries: Int = 8, snuggest: Boolean = false, avoid: List<Vec3> = emptyList()): Pose? {
         // never a refuge right by what scared it (a crevice under the clowns' corner, fleeing the clowns): it would be
         // displayed at again as soon as it got there and stay scared for the rest of the hide), nor on a territorial
         // neighbour's doorstep (the clowns' host, the dottyback's cave): hidden there it was displayed at and chased
@@ -161,15 +198,25 @@ class TangShelters(private val c: Ctx) {
         val doors = residentDoors()
         val away = spots.filter { s ->
             (threat == null || s.pos.distanceTo(threat) >= THREAT_CLEAR_CM) && doors.none { s.pos.distanceTo(it) < THREAT_CLEAR_CM }
-        }.ifEmpty { spots }
+        }.ifEmpty { spots }.filter { s -> avoid.none { s.pos.distanceTo(it) < SPREAD_CM } }
         val ranked = away.sortedByDescending { s ->
             var v = s.cover - 0.012 * s.pos.distanceTo(from)
             if (threat != null) v += 0.01 * min(40.0, s.pos.distanceTo(threat))
             if (prefer != null) v -= 0.02 * s.pos.distanceTo(prefer)
             v
         }
-        for (s in ranked.take(tries)) fit(s.pos, L, roll, roof = true)?.let { return it }
-        return null
+        if (!snuggest) {
+            for (s in ranked.take(tries)) fit(s.pos, L, roll, roof = true)?.let { return it }
+            return null
+        }
+        // a bed: of the best-placed fits, the one most walled in (it sleeps wedged in, not just in a rock's shadow)
+        var best: Pose? = null; var bestV = -1.0
+        for (s in ranked.take(tries)) {
+            val q = fit(s.pos, L, roll, roof = true) ?: continue
+            val v = snug(q.pos, L) - 0.004 * q.pos.distanceTo(prefer ?: from)
+            if (v > bestV) { bestV = v; best = q }
+        }
+        return best
     }
 
     /** The homes territorial neighbours defend: each clown's host, each dottyback's cave. */
@@ -195,6 +242,13 @@ class TangShelters(private val c: Ctx) {
         /** A shelter this close (cm) to the scare it flees, or to a territorial neighbour's home, is passed over while there is another. */
         const val THREAT_CLEAR_CM = 15.0
         const val ENTRY_MAX_CM = 24.0
+        /** Roof over the back: at most this many body lengths above the dorsal tip [L]. */
+        const val ROOF_ABOVE = 0.5
+        /** Reach of the snugness rays, body lengths, and how many of [Sdf.COVER_DIRS] are not steeply down. */
+        const val SNUG_REACH = 1.0
+        val UPPER_DIRS = Sdf.COVER_DIRS.count { it.y > -0.5 }.toDouble()
+        /** Shortest gap (s) between shelter rescans after the rocks moved. */
+        const val RESCAN_S = 30.0
         private val TURNS = doubleArrayOf(0.0, 0.35, -0.35, 0.7, -0.7)
     }
 }
