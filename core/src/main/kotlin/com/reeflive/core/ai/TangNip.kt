@@ -49,7 +49,9 @@ class NipCorals(val b: TangBrain) : Behavior("nipcoral", "Nipping at the coral")
             nextBite = c.t + c.rng.range(1.5, 3.5)
             bitesLeft--
             c.o.mouth = 1.0
-            k.disturb = maxOf(k.disturb, DISTURB)
+            // a GSP mat closes around the bitten polyps; other colonies flinch as a whole
+            if (k.kind == CoralKind.GSP) com.reeflive.core.sim.GspPolyps.poke(k, k.pos, c.sim.simTimeSec, 1.0, 4.0)
+            else k.disturb = maxOf(k.disturb, DISTURB)
             b.coralNips++
         }
     }

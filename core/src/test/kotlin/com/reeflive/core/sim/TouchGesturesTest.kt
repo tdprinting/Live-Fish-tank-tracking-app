@@ -152,7 +152,7 @@ class TouchGesturesTest {
         val during = s.flow.velocity(from + Vec3(3.0, 0.0, 0.0), s.simTimeSec)
         assertTrue("the puff adds a current along the flick: $before → $during", (during - before).x > 8.0)
         assertTrue("it reaches the snapshot for the renderer", s.latest.gusts.size == FlowGust.STRIDE)
-        assertTrue("polyps in its path pull in a little: ${gsp.disturb}", gsp.disturb > 0.1)
+        assertTrue("GSP polyps in its path pull in", GspPolyps.pokesFor(gsp, s.simTimeSec) != null)
         s.advance(FlowGust.LIFE_S + 0.5)
         assertTrue("and it is gone a few seconds later", s.flow.gusts.isEmpty() && s.latest.gusts.isEmpty())
         // a puff straight at the shy cardinal makes it flinch away

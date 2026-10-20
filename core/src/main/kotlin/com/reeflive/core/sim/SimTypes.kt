@@ -379,6 +379,20 @@ data class CoralPose(
     val cover: Float = 0f,
     /** The rock piece the colony grows on ([SimSnapshot.rockPoses] index), −1 none: drawn moved with that rock. */
     val rockPiece: Int = -1,
+    /** Where the colony was placed, in the frame of the rock it grows on (that rock as built), and its surface normal. */
+    val restX: Float = 0f,
+    val restY: Float = 0f,
+    val restZ: Float = 0f,
+    val restNx: Float = 0f,
+    val restNy: Float = 1f,
+    val restNz: Float = 0f,
+    /** Encrusting mat (GSP): how far the mat reaches along the rock from [restX]/[restY]/[restZ], cm; 0 for other kinds. */
+    val matRadius: Float = 0f,
+    /**
+     * GSP touches closing the polyps around them ([GspPolyps]): per touch dx, dy, dz from the colony's current
+     * position (world axes), first and last touch (sim s), strength; null when none.
+     */
+    val pokes: FloatArray? = null,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }

@@ -39,6 +39,8 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val softCoral = p("softcoral", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1"))
     val card = p("card", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1", "CARD" to "1"))
     val polyp = p("polyp", "polyp.vert", "polyp.frag")
+    /** Green star polyp stolon mat on a copy of the rock's triangles (GspMatDraw). */
+    val gspMat = p("gsp_mat", "static.vert", "gsp_mat.frag", mapOf("GSPMAT" to "1"))
     val fish = p("fish", "fish.vert", "fish.frag")
     val fin = p("fin", "fish.vert", "fish.frag", mapOf("FIN" to "1"))
     val glass = p("glass", "static.vert", "glass.frag")
@@ -51,7 +53,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
     val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, shelf, softCoral, card, polyp, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
+    fun all() = listOf(rock, sand, generic, shelf, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 
