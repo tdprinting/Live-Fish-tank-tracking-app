@@ -5,8 +5,12 @@ import com.reeflive.core.geom.Vec3
 /** Sandbox / UI commands (SIMULATION §1.3). Applied at the start of the next behavior tick. */
 sealed class Command {
     data class SetParam(val paramId: String, val value: Double) : Command()
-    /** Drop [grams] of [kind] at [at] (world cm) or the feeding ring; [FoodKind.typicalDoseGrams] is one tap of the button. */
-    data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null) : Command()
+    /**
+     * Drop [grams] of [kind] at [at] (world cm) or the feeding ring; [FoodKind.typicalDoseGrams] is one tap of the button.
+     * With [target], [at] is what the keeper aimed at (a fish, a coral, a spot on the rock or sand) and the food goes in
+     * the way a keeper target-feeds it there ([Simulation.targetRelease]).
+     */
+    data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null, val target: Boolean = false) : Command()
     data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX) : Command()
     data class Dose(val paramId: String, val delta: Double) : Command()
     data class Lights(val on: Boolean?, val overrideIntensity: Double? = null) : Command()

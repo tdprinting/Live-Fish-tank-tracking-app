@@ -121,14 +121,14 @@ class FoodVisuals {
                 angle = atan2(hj(k + 1, seed, 1) - hj(k, seed, 1), hj(k + 1, seed, 0) - hj(k, seed, 0))
                 param = 0f
             }
-            FoodKind.PLANKTON, FoodKind.CORAL_FOOD -> { alpha = 0.55f; ox = sin(time * 2f + ph * 9f) * 0.05f }
+            FoodKind.PLANKTON, FoodKind.CORAL_FOOD -> { alpha = 0.7f; ox = sin(time * 2f + ph * 9f) * 0.05f }
             FoodKind.ALGAE_WAFER -> {
                 param = if (settled) 0.38f else 0.25f + 0.75f * abs(sin(age * 1.6f + ph))
                 if (!settled) angle = ph + age * 0.5f
             }
             FoodKind.NORI -> Unit
         }
-        sink.put(x + ox, y + oy, z + oz, look.size, c[0], c[1], c[2], alpha, look.shape, seed, angle, param)
+        sink.put(x + ox, y + oy, z + oz, look.drawn, c[0], c[1], c[2], alpha, look.shape, seed, angle, param)
     }
 
     /** Thawing cubes (frozen foods), phyto / powder haze, and the nori sheet with its torn flecks. */
@@ -210,7 +210,23 @@ class FoodVisuals {
         /** Wet nori: very dark, slightly translucent green (#24401C linear-ish). */
         val NORI_COLOR = floatArrayOf(0.035f, 0.11f, 0.025f)
 
-        class Look(val shape: Float, val size: Float, val color: FloatArray)
+        class Look(val shape: Float, val size: Float, val color: FloatArray) {
+            /**
+             * Sprite size actually drawn (cm): a quarter bigger than life, and never under [MIN_DRAWN_CM], so even a
+             * 1 mm pellet or a copepod reads as a speck you can follow to the fish that eats it (Tee: "make the food
+             * bigger or easier to see"). The sim's particle sizes and positions are unchanged.
+             */
+            val drawn: Float = max(size * 1.25f, MIN_DRAWN_CM)
+        }
+
+        /** Smallest drawn food sprite (cm). */
+        const val MIN_DRAWN_CM = 0.45f
+
+        /**
+         * Smallest food point on screen (px) for a view [viewportH] px tall: about 0.4 % of the view height, so food
+         * stays a visible speck from across the tank on a 3x phone screen as well as on a small one.
+         */
+        fun minPx(viewportH: Int): Float = max(4f, viewportH / 260f)
 
         private fun lin(hex: Int): FloatArray = floatArrayOf(
             ((hex shr 16 and 0xFF) / 255f).pow(2.2f), ((hex shr 8 and 0xFF) / 255f).pow(2.2f), ((hex and 0xFF) / 255f).pow(2.2f),
