@@ -11,6 +11,8 @@ sealed class Command {
      * the way a keeper target-feeds it there ([Simulation.targetRelease]).
      */
     data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null, val target: Boolean = false) : Command()
+    /** Tank Health "Feed the hungry ones": each hungry animal gets its favourite food dropped above it ([HungryFeed]). */
+    data object FeedHungry : Command()
     data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX) : Command()
     data class Dose(val paramId: String, val delta: Double) : Command()
     /** Tank Health's "Care for corals and inverts": doses and feeds what [CoralCare.plan] lists for the tank now. */
