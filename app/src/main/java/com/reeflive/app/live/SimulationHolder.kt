@@ -11,6 +11,9 @@ import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
 import com.reeflive.core.custom.TankBuild
 import com.reeflive.core.custom.TankBuilds
+import com.reeflive.core.custom.economy.Economy
+import com.reeflive.core.custom.economy.EconomyView
+import com.reeflive.core.custom.economy.Gain
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.RealityInit
@@ -38,7 +41,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -121,6 +127,13 @@ class SimulationHolder(
     /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
     val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
 
+    private val _economy = MutableStateFlow<EconomyView?>(null)
+    /** My tank's sand dollars, care list and goals (docs/ECONOMY.md); null while there is no My tank. */
+    val economy: StateFlow<EconomyView?> = _economy.asStateFlow()
+    private val _gains = MutableSharedFlow<Gain>(extraBufferCapacity = 16)
+    /** Money that just came in (the coin cheer). */
+    val gains: SharedFlow<Gain> = _gains.asSharedFlow()
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -134,6 +147,9 @@ class SimulationHolder(
     private var customBase: CustomTankSave? = null
     private var customLoaded = false
     private var lastCustomSaveMs = 0L
+    /** My tank's economy; kept across "Start over" so the keeper's money and level stay theirs. */
+    private var economyLive: Economy? = null
+    private var lastEconomyMs = 0L
     private var lastWallMs = HashMap<Simulation, Long>()
     private val scenarios = ScenarioQueue()
     private var tickJob: Job? = null
@@ -193,13 +209,26 @@ class SimulationHolder(
             sim.speed = 1.0
             customSim?.let { lastWallMs.remove(it) }
             customSim = sim
-            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed)
+            val eco = economyLive ?: Economy()
+            economyLive = eco
+            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state)
             customLoaded = true
             lastWallMs[sim] = now
             saveCustom()
             _custom.value = CustomTankInfo(ready = true, exists = true, name = name, build = build)
+            updateEconomy(sim, force = true)
             if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
         }
+    }
+
+    /** The keeper opened the water test (Tank Health or the shelf kit): today's "Test the water" chore. */
+    fun testedWater() {
+        scope.launch { val sim = customSim ?: return@launch; economyLive?.testedWater(today()); updateEconomy(sim, force = true) }
+    }
+
+    /** Collects today's happy tank bonus. */
+    fun collectHappyBonus() {
+        scope.launch { val sim = customSim ?: return@launch; economyLive?.collectHappy(sim, today()); updateEconomy(sim, force = true) }
     }
 
     /** Deletes "My tank" (the screen asks first); the build picker shows again. */
@@ -208,6 +237,7 @@ class SimulationHolder(
             customSim?.let { lastWallMs.remove(it) }
             customSim = null; customBase = null; customLoaded = true
             customStore?.clear()
+            _economy.value = null
             _custom.value = CustomTankInfo(ready = true, exists = false)
             if (_mode.value == SimMode.CUSTOM) _snapshots.value = SimSnapshot.EMPTY
         }
@@ -399,18 +429,35 @@ class SimulationHolder(
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
+        economyLive = Economy(save.economy)
         // the time away, at 1x: the tank lived on while the app was closed
         sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0)
         sim.stepWall(0.0)
         lastWallMs[sim] = nowMs()
         _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
+        updateEconomy(sim, force = true)
+    }
+
+    /** Today as the economy counts days: the keeper's local calendar day. */
+    private fun today(): String = Instant.ofEpochMilli(nowMs()).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+
+    /** Ticks off chores done since the last look (about once a second) and publishes the money; sim thread. */
+    private fun updateEconomy(sim: Simulation, force: Boolean = false) {
+        val eco = economyLive ?: return
+        val now = nowMs()
+        if (!force && now - lastEconomyMs < ECONOMY_MS) return
+        lastEconomyMs = now
+        val changed = eco.update(sim, today())
+        for (g in eco.takeGains()) _gains.tryEmit(g)
+        if (changed || force || _economy.value == null) _economy.value = eco.view(sim)
+        else _economy.value?.let { v -> Economy.happyBonus(sim).let { h -> if (h != v.happyBonus) _economy.value = v.copy(happyBonus = h) } }
     }
 
     private fun saveCustom() {
         val sim = customSim ?: return
         val base = customBase ?: return
         val now = nowMs()
-        val save = CustomTank.capture(sim, base, now)
+        val save = CustomTank.capture(sim, economyLive?.let { base.copy(economy = it.state) } ?: base, now)
         customBase = save
         lastCustomSaveMs = now
         customStore?.write(CustomTankCodec.encode(save))
@@ -467,7 +514,10 @@ class SimulationHolder(
                     sim.stepWall(dt)
                     lastWallMs[sim] = nowMs()
                     publish(sim)
-                    if (sim === customSim && nowMs() - lastCustomSaveMs >= CustomTank.AUTOSAVE_MS) saveCustom()
+                    if (sim === customSim) {
+                        updateEconomy(sim)
+                        if (nowMs() - lastCustomSaveMs >= CustomTank.AUTOSAVE_MS) saveCustom()
+                    }
                 }
                 val spent = (System.nanoTime() - t0) / 1_000_000
                 delay((TICK_MS - spent).coerceAtLeast(1))
@@ -496,5 +546,7 @@ class SimulationHolder(
 
     companion object {
         const val TICK_MS = 50L   // 20 Hz (SIMULATION §1.2)
+        /** How often My tank's chores are checked off (wall ms). */
+        const val ECONOMY_MS = 1000L
     }
 }

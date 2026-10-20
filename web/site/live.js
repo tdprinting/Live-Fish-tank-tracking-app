@@ -5,6 +5,7 @@ import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
+import { initCare } from './care.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -49,6 +50,8 @@ export function startLive(applyReadings) {
   onReadingsNeeded = applyReadings;
   if (started) return;
   started = true;
+  // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
+  initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -320,6 +323,8 @@ const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
 function renderCard() {
   if (!ui.card) return;
+  // opening the tank check is testing the water (My tank's daily job)
+  if (ui.card === 'FIX' || ui.card === 'HEALTH') MY.testedWater();
   const sb = editable();
   let h = '';
   switch (ui.card) {

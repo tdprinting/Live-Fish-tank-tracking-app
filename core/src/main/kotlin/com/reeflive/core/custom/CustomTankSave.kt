@@ -46,6 +46,8 @@ data class CustomTankSave(
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
     /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
     val rocks: String = "",
+    /** Sand dollars, stars, today's care list and goals (docs/ECONOMY.md; added after v1 as a defaulted field). */
+    val economy: com.reeflive.core.custom.economy.SavedEconomy = com.reeflive.core.custom.economy.SavedEconomy(),
 )
 
 @Serializable
