@@ -151,6 +151,7 @@ data class SettingsActions(
     val onLiveQuality: (LiveQuality) -> Unit = {},
     val onTankSounds: (Boolean) -> Unit = {},
     val onDynamicRocks: (Boolean) -> Unit = {},
+    val onTankAlerts: (Boolean) -> Unit = {},
     val onTankVolume: (Float) -> Unit = {},
     val onNotifications: (Boolean) -> Unit = {},
     val onReminderTime: () -> Unit = {},
@@ -189,6 +190,7 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
             }
             Group("Alerts & reminders") {
                 SwitchRow("Notifications", "Danger alerts, task reminders and stale tests", s.notifications, actions.onNotifications)
+                SwitchRow("My tank alerts", "A nudge when your fish are hungry or your tank needs a job. A few a day, never at night", s.tankAlerts && s.notifications, actions.onTankAlerts)
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Daily check", style = MaterialTheme.typography.bodyLarge, color = c.text)
@@ -259,6 +261,10 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
             onTankSounds = { go { g.settings.setTankSounds(it) } },
             onDynamicRocks = { go { g.settings.setDynamicRocks(it) } },
+            onTankAlerts = { on ->
+                go { g.settings.setTankAlerts(on); if (on) g.settings.setNotifications(true) }
+                if (on && !permission && Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            },
             onTankVolume = { go { g.settings.setTankVolume(it) } },
             onNotifications = { on ->
                 go { g.settings.setNotifications(on) }

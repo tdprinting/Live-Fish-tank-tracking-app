@@ -5,7 +5,7 @@ const CODE = `reeflive-code-${BUILD}`;
 const DATA = `reeflive-data-${BUILD}`;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'flush.js', 'care.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
+  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'flush.js', 'care.js', 'notify.js', 'push-config.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
   self.skipWaiting();
 });
 
@@ -38,3 +38,14 @@ async function networkFirst(req) {
     return (await caches.match(req)) || (await caches.match('./'));
   }
 }
+
+// Tank alerts (web/site/notify.js, push-server/): the sender pushes {title, body, tag}; tapping opens the app.
+self.addEventListener('push', (e) => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch { /* plain text */ }
+  e.waitUntil(self.registration.showNotification(m.title || 'Your tank needs you', { body: m.body || '', tag: m.tag || 'tank', icon: 'icons/icon-192.png' }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => (cs.length ? cs[0].focus() : self.clients.openWindow('./'))));
+});

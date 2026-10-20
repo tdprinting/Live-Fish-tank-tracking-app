@@ -113,6 +113,18 @@ object ReefMyTank {
         })
     }
 
+    /**
+     * When the tank will next need the keeper if the page stays closed, as `[{atMs, tag, title, body}]` for the push
+     * sender (core CareAlerts); [utcOffsetMin] is the phone's local offset. "[]" with no tank.
+     */
+    fun alertPlan(utcOffsetMin: Int): String {
+        val s = sim ?: return "[]"
+        val e = economy
+        val left = e?.view(s)?.tasks?.count { !it.done } ?: 0
+        val plan = com.reeflive.core.custom.CareAlerts.plan(s, now().toLong(), utcOffsetMin, e != null, left)
+        return JSON.stringify(plan.map { a -> obj { it.atMs = a.atMs.toDouble(); it.tag = a.tag; it.title = a.title; it.body = a.body } }.toTypedArray())
+    }
+
     /** The keeper opened Tank Health (the water test): today's "Test the water" chore. */
     fun testedWater() { if (sim != null) economy?.testedWater(today()) }
 

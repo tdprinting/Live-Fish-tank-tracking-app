@@ -6,6 +6,7 @@ import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
+import { alertsOn, alertsBlocker, enableAlerts, disableAlerts, scheduleAlerts, cancelAlerts } from './notify.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -265,8 +266,10 @@ $('mytankList').addEventListener('click', (e) => {
 $('mytankClose').addEventListener('click', () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(MY.info()).exists) setMode('watch'); });
 // saved every 30 s while on screen, and whenever the page goes away
 setInterval(() => { if (ui.mode === 'mine') MY.save(); }, 30000);
-document.addEventListener('visibilitychange', () => { if (document.hidden) MY.hidden(); else MY.visible(); });
-window.addEventListener('pagehide', () => MY.hidden());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { MY.hidden(); if (ui.mode === 'mine') scheduleAlerts(MY); } else { MY.visible(); cancelAlerts(); }
+});
+window.addEventListener('pagehide', () => { MY.hidden(); if (ui.mode === 'mine') scheduleAlerts(MY); });
 
 /** Watch mode runs the real tank at 1x; faster time plays on a pretend copy, like the Android app. */
 function setSpeed(v) {
@@ -504,6 +507,7 @@ function moreCard(sb) {
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
+      ${row('data-alerts-toggle', 'sparkle', 'Tank alerts', alertsOn())}<p class="muted">A nudge when your fish are hungry or your tank needs a job. Only a few a day, never at night.</p>
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>`;
 }
 
@@ -608,6 +612,10 @@ $('card').addEventListener('click', (e) => {
     say(ui.rocks ? 'Rocks can shift now. Dig out too much sand and one may topple!' : 'The rocks stay put, however much the gobies dig.');
   }
   else if ('hermieToggle' in d) { ui.hermie = !ui.hermie; store.set('reeflive.hermie', ui.hermie); $('hermie').classList.toggle('hidden', !ui.hermie); }
+  else if ('alertsToggle' in d) {
+    if (alertsOn()) disableAlerts().then(renderCard);
+    else { const why = alertsBlocker(); if (why) say(why); else enableAlerts().then((m) => { say(m || 'Alerts on! I will tap you when the tank needs you.'); renderCard(); }); }
+  }
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
   else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);
   else if ('camreset' in d) { ui.following = null; ui.tour = false; live.follow(null); live.resetCamera(); }
