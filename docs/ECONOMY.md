@@ -273,29 +273,31 @@ lit, readable as tiny thumbnails:
 
 ## 9. While you are away
 
-The tank keeps living when the app is closed, like a real one: fish grow, eat what is in the tank, get hungry, make
-waste; algae grows; nitrate climbs. Today the catch-up on reopening stops at 24 hours; it becomes the whole time away
-(fast to compute: the long part runs in coarse steps with the animals' behaviour switched off, as the catch-up does now).
+The tank keeps living when the app is closed, like a real one: fish grow, get hungry, make waste; algae grows;
+nitrate climbs. Today the catch-up on reopening stops at 24 hours and an automatic feeder (Tee's real feeding times)
+quietly feeds My tank, so nothing ever goes hungry. Both change:
 
-To keep it fair for a kid:
-
-* **Hunger is gradual.** Fish get hungry over about a day, then lose condition slowly. A healthy fish survives about
-  **3 days** with no food (longer for big fish, which in real life go a week or more), snails and corals much longer.
-  Hermits, snails and the clean-up crew eat algae and leftovers, so they get by.
+* **No hidden feeder in My tank.** The keeper feeds (it is a daily job). A store "auto feeder" can come later.
+* **The whole time away counts,** up to 30 days. A long catch-up runs as a short "while you were away" fast-forward
+  on the welcome-back card (a day counter racing up, the tank dimming through the nights), a few seconds at most, in
+  coarse steps with the animals' behaviour switched off, as the catch-up does now.
+* **Hunger is research-paced.** Fish get hungry within a day, then lose condition at their species' starvation rate
+  (`starvationDays` in the species sheets: most reef fish 3-6 weeks to death without food, small fast ones sooner).
+  Hungry fish get stressed and their immunity drops, so a week without food often brings disease first. Grazers,
+  snails, hermits and filter feeders get by on algae, film and detritus.
 * **The water and the gear keep going too.** Nitrate and phosphate climb, water evaporates and salinity rises, the
   skimmer cup fills and overflows back in, the filter sock clogs and rots what it caught, carbon runs out, algae
   spreads. All of this is already in the chemistry; the long catch-up just lets it run. Bad water stresses animals,
   makes them sick and can kill them, the same as hunger.
 * **Grace period.** For the first **2 days** away nobody can die from hunger or slowly worsening water alone (a
-  sudden disaster, like a heater stuck on, is still dangerous, as in real life). After that a starving animal can
-  get sick and, if it stays hungry for days more, die. Animals that were already sick or stressed are at more risk.
+  sudden disaster, like a heater stuck on, is still dangerous, as in real life).
 * **Welcome back.** On reopening after more than a few hours, a card says what happened while you were gone, in plain
-  words: "You were away 3 days. Nemo and Marlin are very hungry! The skimmer cup overflowed and the filter sock is clogged. Nitrate went up to 25. Algae grew on the glass."
-  with one big **Take care of it** button that opens the Care card (feed, clean). Deaths are listed gently, with what
-  caused them (hunger, bad water, sickness), and the net takes them out.
+  words: "You were away 3 days. Nemo and Marlin are very hungry! The skimmer cup overflowed and the filter sock is
+  clogged. Nitrate went up to 25. Algae grew on the glass." with one big **Take care of it** button that opens the
+  Care card (feed, clean). Deaths are listed gently, with what caused them (hunger, bad water, sickness), and the net
+  takes them out.
 * **No spiral.** Being away costs nothing but the daily pay you missed, the streak, and animals that were neglected
   too long. If the tank ends up empty, Shelly's free starter (section 2) gets you going again.
-* **Vacation mode (later idea):** an automatic feeder you can buy at the store keeps fish fed while you are away.
 
 ## 10. Saving
 
