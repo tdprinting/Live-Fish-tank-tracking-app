@@ -28,12 +28,14 @@ void main() {
     vec3 n1 = texture(uWaterN1, uv + uTime * vec2(1.5, 0.8) / 20.0).xyz * 2.0 - 1.0;
     vec3 n2 = texture(uWaterN2, uv * 1.3 + uTime * vec2(-1.0, 1.2) / 20.0).xyz * 2.0 - 1.0;
     vec2 slope = surfaceSlope(vWorld.xz);
-    // ripple layer: three travelling wavelets (cm, s) from the return pump's chop, scaled by uRipple (quality)
+    // ripple layer: four travelling wavelets (cm, s) from the return pump and powerheads' chop, scaled by uRipple
+    // (quality). Tee's tank video (2026-10-20) shows a busy, choppy surface, so the short fast one matters.
     vec2 q = vWorld.xz;
     float tr = uTime;
-    vec2 rip = vec2(0.8, 0.6) * cos(dot(q, vec2(0.8, 0.6)) * 0.9 + tr * 2.1) * 0.05
-             + vec2(-0.5, 0.86) * cos(dot(q, vec2(-0.5, 0.86)) * 1.45 + tr * 2.7) * 0.035
-             + vec2(0.97, -0.26) * cos(dot(q, vec2(0.97, -0.26)) * 2.3 + tr * 3.4) * 0.02;
+    vec2 rip = vec2(0.8, 0.6) * cos(dot(q, vec2(0.8, 0.6)) * 0.9 + tr * 2.1) * 0.06
+             + vec2(-0.5, 0.86) * cos(dot(q, vec2(-0.5, 0.86)) * 1.45 + tr * 2.7) * 0.045
+             + vec2(0.97, -0.26) * cos(dot(q, vec2(0.97, -0.26)) * 2.3 + tr * 3.4) * 0.03
+             + vec2(0.31, 0.95) * cos(dot(q, vec2(0.31, 0.95)) * 3.7 + tr * 4.9) * 0.02;
     rip *= uRipple * (0.6 + 0.4 * uFlowStrength);
     vec3 N = normalize(vec3((n1.x + n2.x) * 0.12 - slope.x + rip.x, 1.0, (n1.y + n2.y) * 0.12 - slope.y + rip.y));
 
@@ -59,9 +61,13 @@ void main() {
         // reflected underwater scene approximation: lit water colour + the fixtures' reflected glow
         vec3 refl = uFog.rgb * 1.6 + (uLightColor[0].rgb + uLightColor[1].rgb) * 0.04;
         refl += uAmbientB.rgb * 0.5;
-        // the mirror shimmers: bright caustic-like bands drift over the underside of the surface
-        float sh = texture(uCaustic, vWorld.xz * 0.03 + rip * 0.4 + uTime * vec2(0.02, 0.013)).r;
-        refl *= 0.75 + 0.7 * sh * sh;
+        // the mirror shimmers like the real tank seen through the front glass: a crinkled net of bright ripple
+        // facets catching the lamps, two chop-warped reads of the caustic tile drifting against each other
+        vec2 cuv = vWorld.xz * 0.045 + N.xz * 0.5;
+        float ca = texture(uCaustic, cuv + uTime * vec2(0.035, 0.021)).r;
+        float cb = texture(uCaustic, cuv * 1.7 - N.xz * 0.3 - uTime * vec2(0.026, -0.031)).r;
+        float crinkle = smoothstep(0.03, 0.4, ca + cb);
+        refl = refl * (0.7 + 0.5 * crinkle) + lightTint() * lightIntensity() * crinkle * crinkle * 0.5 * uRipple;
         if (dot(T, T) < 1e-4) {
             col = refl; // total internal reflection
         } else {
@@ -79,6 +85,7 @@ void main() {
             float cosT = sqrt(max(1.0 - ETA_WATER * ETA_WATER * (1.0 - cosI * cosI), 0.0));
             F = mix(F, 1.0, smoothstep(0.15, 0.0, cosT));
             col = mix(trans, refl, F);
+            col += lightTint() * lightIntensity() * crinkle * crinkle * 0.12 * uRipple; // the window ripples too
         }
         col += pool;
         col = applyWater(col, vWorld);
@@ -88,14 +95,26 @@ void main() {
         float F = fresnelSchlick(cosI, 0.02);
         vec3 R = reflect(I, N);
         vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.4 + ROOM;
+        // glitter (the real tank from above): the chop tilts countless tiny facets to the lamps, so short white
+        // streaks flicker all over the lit surface, stretched along the current. Two warped reads of the caustic
+        // tile, kept only where both lines cross a threshold, under a broad lobe toward each fixture. The steep facets
+        // that make them reflect far more than the flat-surface Fresnel, so they add on top of it.
+        vec2 gq = vWorld.xz + N.xz * 8.0;
+        float g1 = texture(uCaustic, gq * vec2(0.035, 0.11) + uTime * vec2(0.06, -0.035)).r;
+        float g2 = texture(uCaustic, gq * vec2(0.05, 0.08) - uTime * vec2(0.041, 0.067)).r;
+        float glitter = smoothstep(0.06, 0.3, g1) * smoothstep(0.02, 0.12, g2) * uRipple;
         vec3 glint = vec3(0.0);
+        vec3 sparkle = vec3(0.0);
         for (int i = 0; i < 2; i++) {
             vec3 L = normalize(uLightPos[i].xyz - vWorld);
-            glint += uLightColor[i].rgb * (pow(max(dot(R, L), 0.0), 300.0) * 4.0 + pow(max(dot(R, L), 0.0), 1500.0) * 12.0 * uRipple);
+            float rl = max(dot(R, L), 0.0);
+            glint += uLightColor[i].rgb * (pow(rl, 300.0) * 4.0 + pow(rl, 1500.0) * 12.0 * uRipple);
+            sparkle += uLightColor[i].rgb * (0.25 + rl * rl) * glitter;
         }
-        alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)), 0.0, 1.0);
+        float sp = min(dot(sparkle, vec3(0.3)), 0.6);
+        alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)) + sp, 0.0, 1.0);
         // the fixture glints reach the eye at their Fresnel weight once (straight alpha would scale them by F twice)
-        col = env * F + glint * (F / alpha) + uFog.rgb * 0.15 + pool * 0.6;
+        col = env * F + glint * (F / alpha) + uFog.rgb * 0.15 + pool * 0.6 + sparkle * (1.5 / alpha);
     }
     fragColor = vec4(tonemap(col), alpha);
 }
