@@ -106,64 +106,98 @@ a little every day so it pays to shop around.
 | **Big Blue Aquatics** | level 4 | almost everything, deep stock | 110 % | 60 % fish and inverts, 50 % corals | the big store with a wall of tanks |
 | **Deep Reef Imports** | level 6 | rare animals (3-4 a day) | 125 % | 75 % for animals in great shape | a fancy import shop; pays the most |
 
-* **Stock:** each store has a short list for the day (Shelly's 6 items, Frag Shack 6 corals, Big Blue 12, Deep Reef
-  3-4), with a few of each. It restocks at midnight. The list is drawn from the store's catalogue with a seed of
+* **Stock:** each store has a short list for the day (Shelly's 9 items, Frag Shack 9 corals, Big Blue 14, Deep Reef
+  5), with a few of each. It restocks at midnight. The list is drawn from the store's catalogue with a seed of
   (store, date), so it is the same on every visit that day.
 * **Deal of the day:** one item per store is 30 % off.
 * **Wanted today:** each store asks for one or two species and pays **+50 %** for them that day ("Wanted: bubble tip
   anemones!"). This is what makes selling fun: grow something, then find the store that wants it.
-* **Buying:** tap an animal, tap **Buy**. The money drops, and the animal arrives in its shop bag exactly as Add life
-  works today (float, acclimate, release). Nothing else changes about how animals enter the tank.
+* **Buying:** see "Visiting a store" below: walk the store's display tanks, pick animals into a shop bag, check out.
+  The bagged animals come home and float in exactly as Add life does today (float, acclimate, release).
 * **Locked animals:** every species is visible in the store so kids know what to save up for. Locked cards are
   dimmed with a lock and one short reason: "Level 4" or "Need 35" (with a progress bar to the price).
 * **Warnings, not blocks:** if an animal is a bad fit (a tang in a 20 gallon, a hawkfish with shrimp), the Buy button
   says why in one line and asks "Buy anyway?". Kids learn real stocking rules without hard walls.
 
+### Visiting a store
+
+A store is a place you walk around, not a list. Inside, the big 3D view **becomes the store's display tanks**: real
+little tanks with the day's stock swimming in them, several of each species, run by the same sim as your tank (fish
+school, shrimp clean, corals sway). Each store is split into sections, each section is one or more tanks:
+
+| Store | Sections (one display tank each) |
+|---|---|
+| Shelly's | Starter fish · Clean-up crew · Easy corals |
+| Frag Shack | Soft corals · Mushrooms & polyps · Leathers & rare frags |
+| Big Blue | Community fish · Bigger fish · Shrimp & crabs · Corals |
+| Deep Reef | The showpiece tank (its rarest animal alone) · Rare fish · Rare inverts & corals |
+
+* **Browse:** swipe left/right (or tap the arrows) to walk from tank to tank; tabs on top name the sections
+  ("Fish", "Clean-up crew", "Corals"). A tank's sign says its name and how many animals are in it.
+* **Pick:** tap an animal in the tank (the camera swims up to it, like the close-up follow cam) or its card in the strip
+  below. The card shows the picture, name, price, size, "Easy / Medium / Expert", how many are left, ribbons (Deal,
+  Wanted), and one warning line when it fits your tank badly. **Add to bag** drops it in the bag; tap again for one more.
+  Locked animals still swim in the tank, so kids see what they are saving for; their card says "Level 4" or "Need 35".
+* **The shop bag** (bottom right) shows how many animals and the total, and turns red when the total is more than
+  you have.
+* **Check out:** the counter screen lists the bag, the total, and your sand dollars before and after. **Pay** sends the
+  coins flying out of the money chip into the till (the reward animation run backwards), then you are back home with
+  the bags floating at the top of your tank. Not enough money: the Pay button says "Need 20 more" and points at the
+  Care card.
+* **Leave without buying** is always one tap (the door icon); the bag empties back onto the shelves.
+* Performance: only one display tank runs at a time (your own tank pauses while you shop, then catches up as if you
+  were away for those minutes), and display tanks are small (a 40 gallon breeder with a few rocks).
+
 ### Prices and unlock levels
 
-Base prices are close to US store prices in 2026. "Level" is when it can be bought at all.
+Base prices follow 2025-26 US store prices (LiveAquaria and local-store listings, one sand dollar a dollar): cheap
+schooling fish and clean-up crew cost a few dollars to ~15, most fish and frags 25-65, tangs, the leopard wrasse and the
+bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of care earns roughly 60-150.
 
 | Species | Group | Level | Price |
 |---|---|---|---|
-| Nassarius snail | invert | 1 | 4 |
-| Astrea snail | invert | 1 | 3 |
-| Blue-leg hermit crab | invert | 1 | 3 |
-| Scarlet hermit crab | invert | 1 | 8 |
-| Ocellaris clownfish | fish | 1 | 25 |
-| Pajama cardinalfish | fish | 1 | 20 |
-| Lawnmower blenny | fish | 1 | 25 |
-| Blue-green chromis (each; schools of 5+ are calm) | fish | 1 | 12 |
-| Peppermint shrimp | invert | 1 | 15 |
-| Kenya tree coral | coral | 1 | 15 |
-| Green mushroom | coral | 1 | 15 |
+| Nassarius snail | invert | 1 | 3 |
+| Astrea snail | invert | 1 | 4 |
+| Blue-leg hermit crab | invert | 1 | 5 |
+| Peppermint shrimp | invert | 1 | 13 |
+| Blue-green chromis | fish | 1 | 15 |
+| Scarlet hermit crab | invert | 1 | 15 |
 | Green star polyps | coral | 1 | 20 |
-| Clove polyps | coral | 1 | 20 |
-| Bicolor blenny | fish | 2 | 30 |
-| Firefish goby | fish | 2 | 30 |
-| Skunk cleaner shrimp | invert | 2 | 30 |
-| Coral banded shrimp | invert | 2 | 25 |
-| Sally Lightfoot crab | invert | 2 | 20 |
-| Black brittle star | invert | 2 | 20 |
-| Brown feather duster | invert | 2 | 20 |
+| Kenya tree coral | coral | 1 | 25 |
+| Ocellaris clownfish | fish | 1 | 30 |
+| Pajama cardinalfish | fish | 1 | 30 |
+| Lawnmower blenny | fish | 1 | 30 |
+| Green mushroom | coral | 1 | 30 |
+| Clove polyps | coral | 1 | 35 |
+| Sally Lightfoot crab | invert | 2 | 15 |
+| Black brittle star | invert | 2 | 25 |
 | Zoanthids | coral | 2 | 25 |
+| Finger leather | coral | 2 | 25 |
+| Brown feather duster | invert | 2 | 30 |
+| Coral banded shrimp | invert | 2 | 30 |
+| Skunk cleaner shrimp | invert | 2 | 35 |
 | Hairy green mushroom | coral | 2 | 35 |
-| Finger leather | coral | 2 | 30 |
-| Tailspot blenny | fish | 3 | 35 |
-| Diamond goby | fish | 3 | 35 |
+| Firefish goby | fish | 2 | 40 |
+| Bicolor blenny | fish | 2 | 65 |
+| Tailspot blenny | fish | 3 | 30 |
 | Engineer goby | fish | 3 | 30 |
-| Bluestreak cleaner wrasse | fish | 3 | 30 |
-| Toadstool leather | coral | 3 | 45 |
-| Pink lobed leather | coral | 3 | 40 |
-| Falco hawkfish | fish | 4 | 45 |
-| Midas blenny | fish | 4 | 55 |
+| Diamond goby | fish | 3 | 35 |
+| Pink lobed leather | coral | 3 | 35 |
+| Bluestreak cleaner wrasse | fish | 3 | 40 |
+| Toadstool leather | coral | 3 | 70 |
+| Falco hawkfish | fish | 4 | 40 |
 | Indigo dottyback | fish | 4 | 50 |
-| Rainbow bubble tip anemone | invert | 4 | 70 |
-| Elephant ear mushroom | coral | 4 | 55 |
-| Organ pipe coral | coral | 5 | 60 |
-| Flame scallop (warning: needs phytoplankton every day) | invert | 5 | 35 |
-| Blue tang | fish | 5 | 80 |
-| Blue star leopard wrasse | fish | 6 | 70 |
-| Hummingbird bobtail squid | invert | 7 | 150 |
+| Red fairy wrasse, female (the male: level 5, 80) | fish | 4 | 50 |
+| Elephant ear mushroom | coral | 4 | 50 |
+| Midas blenny | fish | 4 | 65 |
+| Rainbow bubble tip anemone | invert | 4 | 150 |
+| Flame scallop (warning: needs phytoplankton daily) | invert | 5 | 20 |
+| Organ pipe coral | coral | 5 | 40 |
+| Yellow tang | fish | 5 | 130 |
+| Blue tang | fish | 5 | 150 |
+| Blue star leopard wrasse | fish | 6 | 150 |
+| Hummingbird bobtail squid | invert | 7 | 80 |
+| Purple tang | fish | 7 | 250 |
 
 Asterina stars are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later
 gets a price from its size and care level (`PriceBook` default) until it is listed here.
@@ -212,9 +246,9 @@ Kept as simple as the rest of the kid-friendly UI: big pictures, one number, one
    flames, the happy tank Collect button, the level bar, and Goals below.
 3. **Stores** (replaces "Add life" in My tank): a street of four storefront pictures
    rendered from the Blender models. Locked stores are dark with "Opens at level 4".
-4. **Inside a store:** the storefront picture on top with the store's name and a one-line greeting, then two tabs:
-   * **Buy:** a grid of animal cards (picture, name, price, a "Deal" or "Wanted" ribbon, locks).
-   * **Sell:** your animals with the store's offer for each; the wanted ones float to the top.
+4. **Inside a store:** the storefront's greeting, then the display tanks in the 3D view (see "Visiting a store"):
+   section tabs on top, the animal strip and the shop bag below, the door to leave. A **Sell** button on the counter
+   lists your animals with the store's offer for each; the wanted ones float to the top.
 5. **Rewards feel like a game:** every payment sends sand dollars bubbling up out of the tank, wobbling along a curve
    into the money chip, which gulps and counts up while a big "+15" floats away. A finished job's tick pops. A level-up
    dims the water, rushes bubbles and a little school of fish past, and pops a big glowing star with what just opened.

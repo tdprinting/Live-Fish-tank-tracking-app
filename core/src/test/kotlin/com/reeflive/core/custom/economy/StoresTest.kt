@@ -46,4 +46,45 @@ class StoresTest {
         assertEquals(BuyResult.TOO_POOR, poor.buy(FishStore.SHELLYS, "amphiprion_ocellaris", day))
         assertEquals(0, e.state.stars)
     }
+
+    @Test fun displayTanksHoldTheWholeShelfInSections() {
+        for (s in FishStore.entries) {
+            val tanks = StoreVisit.tanks(s, day)
+            assertEquals(Stores.stock(s, day).toSet(), tanks.flatMap { it.items }.toSet())
+            assertEquals(tanks.sumOf { it.items.size }, tanks.flatMap { it.items }.size)
+            assertTrue(tanks.all { it.items.isNotEmpty() && it.animals in 1..60 })
+        }
+        assertEquals("The showpiece", StoreVisit.tanks(FishStore.DEEP_REEF, day).first().title)
+    }
+
+    @Test fun checkoutPaysForTheWholeBagOrNothing() {
+        val e = Economy(SavedEconomy(coins = 1000))
+        val shelf = Stores.stock(FishStore.SHELLYS, day)
+        val two = shelf.take(2).map { it.listing.speciesId }
+        val total = shelf.take(2).sumOf { it.price }
+        val c = e.checkout(FishStore.SHELLYS, two, day)
+        assertEquals(BuyResult.OK, c.result)
+        assertEquals(1000 - total, e.state.coins)
+        val poor = Economy(SavedEconomy(coins = total - 1))
+        assertEquals(BuyResult.TOO_POOR, poor.checkout(FishStore.SHELLYS, two, day).result)
+        assertEquals(total - 1, poor.state.coins)
+        // more than the shelf holds: nothing is bought
+        val tooMany = List(shelf[0].count + 1) { shelf[0].listing.speciesId }
+        assertEquals(BuyResult.SOLD_OUT, Economy(SavedEconomy(coins = 5000)).checkout(FishStore.SHELLYS, tooMany, day).result)
+    }
+
+    @Test fun cheapFishCostLessThanTangs() {
+        val p = { id: String -> PriceBook.listing(id)!!.price }
+        assertTrue(p("chromis_viridis") * 5 < p("paracanthurus_hepatus"))
+        assertTrue(p("amphiprion_ocellaris") < p("zebrasoma_flavescens") && p("zebrasoma_flavescens") < p("zebrasoma_xanthurum"))
+    }
+
+    @Test fun aDisplayTankSwimsWithTheShelf() {
+        val tank = StoreVisit.tanks(FishStore.SHELLYS, day).first { it.title == "Starter fish" }
+        val sim = StoreVisit.build(tank, com.reeflive.core.sim.SpeciesCatalog(), com.reeflive.core.sim.TestTank.rock, 3L)
+        repeat(20) { sim.stepWall(0.05) }
+        val ids = sim.organisms.filter { it.alive }.map { it.species.id }
+        for (it in tank.items) assertEquals(it.listing.speciesId, StoreVisit.shown(it), ids.count { id -> id == it.listing.speciesId })
+        assertTrue(sim.organisms.all { o -> StoreVisit.itemFor(tank, o.species.id) != null })
+    }
 }

@@ -217,6 +217,26 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     fun unlocked(l: Listing): Boolean = level >= l.level
 
     /**
+     * The counter (ECONOMY §5 "Visiting a store"): pays for the whole shop bag at once, or nothing when any of it
+     * cannot be bought (then [Checkout.result] says why). [bag] has one species id per animal.
+     */
+    fun checkout(store: FishStore, bag: List<String>, today: String): Checkout {
+        if (bag.isEmpty()) return Checkout(BuyResult.OK, emptyList(), 0)
+        if (!canSee(store)) return Checkout(BuyResult.STORE_LOCKED, emptyList(), 0)
+        val shelf = Stores.stock(store, today).associateBy { it.listing.speciesId }
+        var total = 0
+        for ((id, n) in bag.groupingBy { it }.eachCount()) {
+            val item = shelf[id] ?: return Checkout(BuyResult.NOT_IN_STOCK, emptyList(), 0)
+            if (!unlocked(item.listing)) return Checkout(BuyResult.LEVEL_LOCKED, emptyList(), 0)
+            if (left(store, item, today) < n) return Checkout(BuyResult.SOLD_OUT, emptyList(), 0)
+            total += item.price * n
+        }
+        if (total > state.coins) return Checkout(BuyResult.TOO_POOR, emptyList(), total)
+        for (id in bag) buy(store, id, today)
+        return Checkout(BuyResult.OK, bag, total)
+    }
+
+    /**
      * Buys one [speciesId] at [store] today at the shelf price. On [BuyResult.OK] the money is gone and the caller
      * brings the animal in (the shop bag, as Add life does).
      */

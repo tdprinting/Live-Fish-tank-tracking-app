@@ -12,23 +12,25 @@ import kotlin.math.roundToInt
 data class Listing(val speciesId: String, val group: StockGroup, val level: Int, val price: Int)
 
 /**
- * Prices and unlock levels, close to 2026 US store prices (one sand dollar a dollar). A species added to the sim
+ * Prices and unlock levels, close to 2025-26 US store prices (one sand dollar a dollar). A species added to the sim
  * later and not listed here gets [fallback] from its gallery group and size until it is.
  */
 object PriceBook {
     private fun l(id: String, level: Int, price: Int) = Listing(id, Stocking.entry(id)?.group ?: StockGroup.FISH, level, price)
 
     val LISTINGS: List<Listing> = listOf(
-        l("nassarius_sp", 1, 4), l("lysmata_boggessi", 1, 15), l("lithopoma_tectum", 1, 3), l("clibanarius_tricolor", 1, 3), l("paguristes_cadenati", 1, 8),
-        l("chromis_viridis", 1, 12), l("amphiprion_ocellaris", 1, 25), l("sphaeramia_nematoptera", 1, 20), l("salarias_fasciatus", 1, 25),
-        l("capnella_sp", 1, 15), l("discosoma_sp", 1, 15), l("briareum_sp", 1, 20), l("clavularia_sp", 1, 20),
-        l("ecsenius_bicolor", 2, 30), l("nemateleotris_magnifica", 2, 30), l("lysmata_amboinensis", 2, 30), l("stenopus_hispidus", 2, 25), l("percnon_gibbesi", 2, 20), l("ophiocoma_sp", 2, 20),
-        l("sabellastarte_sp", 2, 20), l("zoanthus_sp", 2, 25), l("rhodactis_sp", 2, 35), l("sinularia_sp", 2, 30),
-        l("ecsenius_stigmatura", 3, 35), l("valenciennea_puellaris", 3, 35), l("pholidichthys_leucotaenia", 3, 30),
-        l("labroides_dimidiatus", 3, 30), l("sarcophyton_sp", 3, 45), l("lobophytum_sp", 3, 40),
-        l("cirrhitichthys_falco", 4, 45), l("ecsenius_midas", 4, 55), l("pseudochromis_indigo", 4, 50), l("entacmaea_quadricolor", 4, 70),
-        l("amplexidiscus_fenestrafer", 4, 55), l("tubipora_musica", 5, 60), l("ctenoides_scaber", 5, 35), l("paracanthurus_hepatus", 5, 80),
-        l("macropharyngodon_bipartitus", 6, 70), l("euprymna_berryi", 7, 150),
+        // fish, inverts, corals: 2025-26 US prices (LiveAquaria and store listings; captive bred where sold that way)
+        l("chromis_viridis", 1, 15), l("amphiprion_ocellaris", 1, 30), l("sphaeramia_nematoptera", 1, 30), l("salarias_fasciatus", 1, 30),
+        l("nemateleotris_magnifica", 2, 40), l("ecsenius_bicolor", 2, 65), l("ecsenius_stigmatura", 3, 30), l("valenciennea_puellaris", 3, 35),
+        l("pholidichthys_leucotaenia", 3, 30), l("labroides_dimidiatus", 3, 40), l("cirrhitichthys_falco", 4, 40), l("pseudochromis_indigo", 4, 50),
+        l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis", 4, 50), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),
+        l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250), l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
+        l("clibanarius_tricolor", 1, 5), l("lysmata_boggessi", 1, 13), l("paguristes_cadenati", 1, 15), l("percnon_gibbesi", 2, 15),
+        l("ophiocoma_sp", 2, 25), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),
+        l("entacmaea_quadricolor", 4, 150), l("ctenoides_scaber", 5, 20), l("euprymna_berryi", 7, 80), l("briareum_sp", 1, 20),
+        l("capnella_sp", 1, 25), l("discosoma_sp", 1, 30), l("clavularia_sp", 1, 35), l("zoanthus_sp", 2, 25),
+        l("sinularia_sp", 2, 25), l("rhodactis_sp", 2, 35), l("lobophytum_sp", 3, 35), l("sarcophyton_sp", 3, 70),
+        l("amplexidiscus_fenestrafer", 4, 50), l("tubipora_musica", 5, 40),
     )
     private val byId = LISTINGS.associateBy { it.speciesId }
 
@@ -61,10 +63,10 @@ enum class FishStore(
     /** Items on the shelf each day. */
     val stockSize: Int,
 ) {
-    SHELLYS("shellys", "Shelly's Pet Shop", "Hi there! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 6),
-    FRAG_SHACK("frag_shack", "Frag Shack", "Corals, corals, corals! Fresh frags under the blue lights.", 2, 0.85, 0.0, 0.0, 0.65, 6),
-    BIG_BLUE("big_blue", "Big Blue Aquatics", "Welcome to the wall of tanks! We have a bit of everything.", 4, 1.1, 0.6, 0.6, 0.5, 12),
-    DEEP_REEF("deep_reef", "Deep Reef Imports", "Only the rarest, healthiest animals. Have a look.", 6, 1.25, 0.75, 0.75, 0.75, 4);
+    SHELLYS("shellys", "Shelly's Pet Shop", "Hi there! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 9),
+    FRAG_SHACK("frag_shack", "Frag Shack", "Corals, corals, corals! Fresh frags under the blue lights.", 2, 0.85, 0.0, 0.0, 0.65, 9),
+    BIG_BLUE("big_blue", "Big Blue Aquatics", "Welcome to the wall of tanks! We have a bit of everything.", 4, 1.1, 0.6, 0.6, 0.5, 14),
+    DEEP_REEF("deep_reef", "Deep Reef Imports", "Only the rarest, healthiest animals. Have a look.", 6, 1.25, 0.75, 0.75, 0.75, 5);
 
     fun carries(l: Listing): Boolean = when (this) {
         SHELLYS -> l.level <= 3 && (l.group != StockGroup.CORALS || l.level <= 1)
