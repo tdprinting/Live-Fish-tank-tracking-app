@@ -388,7 +388,7 @@ object SubmarineRules {
             }
             BrainKind.HAWK -> if (d < SEE_CM) SubReaction.POSTURE else SubReaction.NONE
             BrainKind.EEL -> if (d < 12.0) SubReaction.POSTURE else SubReaction.NONE
-            BrainKind.TANG, BrainKind.WRASSE -> when {
+            BrainKind.TANG, BrainKind.WRASSE, BrainKind.CHROMIS -> when {
                 interest(o) >= 0.35 -> if (d < SEE_CM) SubReaction.INVESTIGATE else SubReaction.NONE
                 d < SHY_CM -> SubReaction.AVOID
                 else -> SubReaction.NONE
@@ -400,6 +400,12 @@ object SubmarineRules {
                 else -> SubReaction.NONE
             }
             in BLENNIES -> if (d < 9.0) SubReaction.HIDE else SubReaction.NONE
+            // research 41: the firefish dives into its hole at anything big coming close
+            BrainKind.FIREFISH -> when {
+                d < 12.0 -> SubReaction.HIDE
+                d < SHY_CM + 4 -> SubReaction.AVOID
+                else -> SubReaction.NONE
+            }
             in CRUSTACEANS -> when {
                 d < 5.0 -> SubReaction.HIDE
                 d < 13.0 -> SubReaction.FREEZE

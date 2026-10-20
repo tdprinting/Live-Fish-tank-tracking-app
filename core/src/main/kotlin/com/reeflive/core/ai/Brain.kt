@@ -84,7 +84,7 @@ abstract class SpeciesBrain(val c: Ctx) {
                     (r.actor == o.brainKind.name || o.brainKind == BrainKind.CLOWN && r.actor.startsWith("CLOWN_"))
             }
             if (pairRows.isNotEmpty()) add(PairBouts(this@SpeciesBrain, pairRows))
-            else if (o.isFish && o.brainKind != BrainKind.ENGINEER_GOBY && o.brainKind != BrainKind.CARDINAL) add(Rivalry(this@SpeciesBrain))
+            else if (o.isFish && o.brainKind != BrainKind.ENGINEER_GOBY && o.brainKind != BrainKind.CARDINAL && o.brainKind != BrainKind.CHROMIS) add(Rivalry(this@SpeciesBrain))
             if (o.brainKind == BrainKind.CLOWN) add(Yield(this@SpeciesBrain))
             if (o.isFish) add(PoseForCleaner(this@SpeciesBrain))
             if (o.isFish) add(KeepClear(this@SpeciesBrain))
@@ -150,6 +150,27 @@ abstract class SpeciesBrain(val c: Ctx) {
             o.startle = max(o.startle, 0.05)
         }
         mind.tick(c)
+        if (o.species.jumpRisk > 0.0) jumpCheck(c)
+    }
+
+    private var jumpSeenAt = -1e9
+    private var jumpThreat: Organism? = null
+
+    /**
+     * Jumpers (research 41 §1.8, [com.reeflive.core.sim.JumpModel]): each fresh startle, and each predator that newly
+     * comes at it, may send the fish up and out of the water instead of to cover. Runs before the brain's own escape
+     * consumes the startle (Flee resets [startleAt] on entry).
+     */
+    private fun jumpCheck(c: Ctx) {
+        val t0 = threat
+        val home = shelterSpot(c)?.distanceTo(o.pos) ?: Double.POSITIVE_INFINITY
+        if (startleAt > jumpSeenAt) {
+            jumpSeenAt = startleAt
+            com.reeflive.core.sim.JumpModel.maybeLeap(c, startleMag, startleFrom, home)
+        } else if (t0 != null && t0 !== jumpThreat) {
+            com.reeflive.core.sim.JumpModel.maybeLeap(c, 0.5, t0.pos, home)
+        }
+        jumpThreat = t0
     }
 
     abstract fun restSpot(c: Ctx, night: Boolean): Rest
@@ -295,6 +316,9 @@ object Predation {
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
                 // research cephalopod_squid: a bobtail squid out of the sand is the size of the hawk's usual prey
                 BrainKind.BOBTAIL_SQUID -> if (me.posture == 5) 0.0 else 2.5 * L
+                // research 41 §1.9, §2.9: hawkfish snap at small hoverers; a firefish in its hole is out of reach
+                BrainKind.FIREFISH -> if (me.posture == 3 || !me.visible) 0.0 else if (L < 1.1 * pred.lengthCm) 2.0 * L else 0.0
+                BrainKind.CHROMIS -> if (L < 0.6 * pred.lengthCm) 1.5 * L else 0.0
                 else -> 0.0
             }
             else -> 0.0
@@ -329,6 +353,9 @@ object Predation {
                 BrainKind.BRITTLE_STAR -> 0.1
                 // research cephalopod_squid: an exposed bobtail squid is soft prey for a hawkfish (buried in the sand it is not found)
                 BrainKind.BOBTAIL_SQUID -> if (prey.posture == 5 || prey.lengthCm > 1.2 * pred.lengthCm) 0.0 else 0.5
+                // a slender firefish or a small chromis fits a hawkfish's mouth only while much shorter than it (research 41)
+                BrainKind.FIREFISH -> if (prey.posture == 3 || !prey.visible || prey.lengthCm > 0.6 * pred.lengthCm) 0.0 else 0.3
+                BrainKind.CHROMIS -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
                 else -> 0.0
             }
             else -> 0.0

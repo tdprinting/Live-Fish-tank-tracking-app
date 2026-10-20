@@ -29,6 +29,8 @@ CARDS = {
     "pseudochromis_indigo": "dottyback",
     "valenciennea_puellaris": "diamond_goby",
     "macropharyngodon_bipartitus": "leopard_wrasse",
+    "nemateleotris_magnifica": "firefish",
+    "chromis_viridis": "chromis",
     "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",

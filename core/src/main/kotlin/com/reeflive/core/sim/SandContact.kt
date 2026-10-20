@@ -140,6 +140,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
     fun step(organisms: List<Organism>, dt: Double, displace: Boolean) {
         if (++gc % 400 == 0) { val ids = organisms.mapTo(HashSet()) { it.id }; st.keys.retainAll(ids) }
         for (o in organisms) {
+            if (o.leap != null) continue   // in the air or out on the floor (JumpModel)
             val early = st[o.id]
             val pre = early?.pre ?: 0.0
             if (early != null) early.pre = 0.0

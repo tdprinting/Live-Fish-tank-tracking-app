@@ -47,6 +47,11 @@ data class SimSpecies(
     val lifeStages: LifeStageSpec? = null,
     /** Sensing channels (Senses.kt, SIMULATION §21.1); null = defaults by brain and activity. */
     val senses: SensesSpec? = null,
+    /**
+     * How prone the species is to leap out of the water when badly startled, 0 (never) .. 1 (firefish), read by
+     * [JumpModel] for every fish (research 41 §1.8: an open-top tank loses firefish to the floor).
+     */
+    val jumpRisk: Double = 0.0,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
@@ -401,6 +406,10 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
      * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
      */
     BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
+    /** Firefish dartfish (*Nemateleotris*, research 41): hovers over its bolt hole picking plankton, dives in head first. */
+    FIREFISH(listOf("nemateleotris"), true),
+    /** Chromis damselfish (blue-green chromis, *Chromis viridis*, research 41): mid-water shoal with a pecking order. */
+    CHROMIS(listOf("chromis"), true),
     /** Bubble-tip anemone (*Entacmaea quadricolor*, research 40): walks slowly on its foot, then settles; hosts clowns. */
     ANEMONE(listOf("entacmaea"), false),
     GENERIC_FISH(emptyList(), true),
@@ -430,6 +439,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
+            "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
         )
 
         fun byId(id: String): BrainKind? {

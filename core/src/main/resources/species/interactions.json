@@ -799,5 +799,123 @@
   "b": "macropharyngodon_bipartitus",
   "risk": "M",
   "note": "Protogynous: two males fight; one per tank in most aquaria"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "nemateleotris_magnifica",
+  "risk": "H",
+  "note": "Two firefish fight over holes unless they are a mated pair"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "pseudochromis_indigo",
+  "risk": "H",
+  "note": "Dottybacks chase firefish away from their holes; often the reason one jumps",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "A hawkfish may chase or snap at a small firefish",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "salarias_fasciatus",
+  "risk": "L",
+  "note": "May squabble over a hole; usually keep apart"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "ecsenius_stigmatura",
+  "risk": "L",
+  "note": "May squabble over a hole; usually keep apart"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Clowns chase it off near their host"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "A busy tang can spook it into its hole"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "sphaeramia_nematoptera",
+  "risk": "N",
+  "note": "Peaceful tankmates"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse cleans the firefish"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "stenopus_hispidus",
+  "risk": "L",
+  "note": "A big banded shrimp may grab a sleeping firefish"
+ },
+ {
+  "a": "nemateleotris_magnifica",
+  "b": "chromis_viridis",
+  "risk": "L",
+  "note": "Different zones: chromis up high, firefish by its hole"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "chromis_viridis",
+  "risk": "M",
+  "note": "Groups of 3-4 bicker until one is left; keep one or 6 or more"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "cirrhitichthys_falco",
+  "risk": "M",
+  "note": "A hawkfish may catch a small chromis",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "The dottyback may chase chromis near its cave",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Clowns chase it off near their host"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Share the open water peacefully"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "sphaeramia_nematoptera",
+  "risk": "N",
+  "note": "Peaceful tankmates"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "labroides_dimidiatus",
+  "risk": "L",
+  "note": "Wrasse cleans the chromis"
+ },
+ {
+  "a": "chromis_viridis",
+  "b": "pholidichthys_leucotaenia",
+  "risk": "N",
+  "note": "No conflict"
  }
 ]

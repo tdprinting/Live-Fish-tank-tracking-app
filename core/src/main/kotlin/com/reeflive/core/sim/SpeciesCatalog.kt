@@ -129,6 +129,14 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("LABRIFORM", 0.8, 5.0, 3.0, 260.0, 0.85, 0.03, 0.08), zone = Zone(0.05, 0.55, 0.3, 0.7),
                     temperament = Temperament(0.05, 0.35, 0.5, 0.7), diet = listOf("PODS", "MYSIS", "FLAKE", "PELLET"), feedsPerDay = 3.0,
                     hardiness = 0.4, starvationDays = 18.0, homeRadiusCm = 40.0, iridescence = 0.25, model = "models/leopard_wrasse.glb")
+                BrainKind.FIREFISH -> base.copy(common = "Firefish goby", maxLengthCm = 9.0, typicalAdultCm = 7.0, depthRatio = 0.17, massCoeff = 0.008,
+                    lifespanYears = 3.0, locomotion = Locomotion("LABRIFORM", 0.5, 9.0, 2.5, 320.0, 0.9, 0.03, 0.1), zone = Zone(0.05, 0.45, 0.3, 0.85),
+                    temperament = Temperament(0.2, 0.3, 0.45, 0.85), diet = listOf("MYSIS", "BRINE", "CYCLOPS", "PODS", "ZOOPLANKTON", "FLAKE"), feedsPerDay = 3.0,
+                    hardiness = 0.65, starvationDays = 18.0, homeRadiusCm = 15.0, iridescence = 0.15, jumpRisk = 0.9, model = "models/firefish.glb")
+                BrainKind.CHROMIS -> base.copy(common = "Blue-green chromis", maxLengthCm = 10.0, typicalAdultCm = 7.5, depthRatio = 0.46, massCoeff = 0.022,
+                    lifespanYears = 10.0, locomotion = Locomotion("LABRIFORM", 1.4, 8.0, 3.5, 300.0, 0.9, 0.035, 0.09), zone = Zone(0.4, 0.85, 0.85, 0.35),
+                    schooling = true, temperament = Temperament(0.25, 0.55, 0.6, 0.5), diet = listOf("FLAKE", "MYSIS", "BRINE", "CYCLOPS", "PELLET", "PODS", "ZOOPLANKTON"),
+                    feedsPerDay = 3.0, hardiness = 0.6, starvationDays = 16.0, homeRadiusCm = 35.0, iridescence = 0.6, jumpRisk = 0.15, model = "models/chromis.glb")
                 BrainKind.BOBTAIL_SQUID -> base.copy(kind = "INVERT", common = "Hummingbird bobtail squid", family = "Sepiolidae", maxLengthCm = 9.0, typicalAdultCm = 6.0,
                     lifespanYears = 0.5, depthRatio = 0.45, massCoeff = 0.09, activity = "NOCTURNAL",
                     locomotion = Locomotion("FIN_JET", 0.6, 8.0, 1.5, 300.0, 1.0, 0.0, 0.0), zone = Zone(0.0, 0.6, 0.6, 0.5),

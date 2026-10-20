@@ -4,6 +4,7 @@ import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.Mood
 import com.reeflive.core.sim.SimEvent
+import com.reeflive.core.sim.Jump
 import com.reeflive.core.sim.SimSnapshot
 
 /** Pure glue between app data (repositories) and the simulation (ARCHITECTURE §5.2 / §9, PLAN C3). */
@@ -134,6 +135,11 @@ data class LivePeek(
             is SimEvent.Eaten -> "${e.preyId} was eaten by ${e.predatorId}"
             is SimEvent.Fed -> "Fed ${e.grams} g"
             is SimEvent.NearMiss -> "${e.preyId} had a close call with ${e.predatorId}"
+            is SimEvent.Jumped -> when (e.what) {
+                Jump.OUT -> "${e.id} jumped out of the open top!"
+                Jump.HIT_LID -> "${e.id} jumped and bounced off the lid"
+                Jump.LEAPT -> null
+            }
             else -> null   // Cleaned, Chase, Pose, Jolt, TerritoryReset, Quiver, LegRock: too frequent for the peek
         }
 

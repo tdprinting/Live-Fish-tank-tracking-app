@@ -63,7 +63,7 @@ object TankTouch {
     private val POLYPS = setOf(CoralKind.GSP, CoralKind.ZOA, CoralKind.CLOVE)
     private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.HERMIT)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
-    private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK)
+    private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.CHROMIS)
     private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE)
 
     /** Polyp corals retract to touch; the other kinds (leathers, mushrooms, macro) do not visibly react to a tap. */
@@ -105,6 +105,8 @@ object TankTouch {
                 shy(o, night) -> if (d < FEEL_CM) TouchReaction.AVOID else TouchReaction.NONE
                 k in CRUSTACEANS -> if (d < FEEL_CM) still(k) else TouchReaction.NONE
                 k == BrainKind.BOBTAIL_SQUID -> if (d < FEEL_CM) TouchReaction.DUCK else TouchReaction.NONE
+                // research 41: a firefish dives into its hole at a knock close by
+                k == BrainKind.FIREFISH -> if (d < FEEL_CM) TouchReaction.DUCK else TouchReaction.NONE
                 else -> TouchReaction.NONE
             }
             TouchSurface.SAND -> when {
@@ -125,7 +127,7 @@ object TankTouch {
             }
             TouchSurface.ROCK, TouchSurface.CORAL -> when {
                 d >= ROCK_CM -> TouchReaction.NONE
-                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
+                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH -> TouchReaction.DUCK
                 o.isFish && shy(o, night) -> TouchReaction.AVOID
                 else -> TouchReaction.NONE
             }

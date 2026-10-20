@@ -790,19 +790,23 @@ class Simulation private constructor(
             a.ctx.p = perception
             a.ctx.dt = dt
             if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
+            // a leap at the surface flies the body; the brain waits until it is back in the water (JumpModel)
+            if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
             a.intent.reset()
             a.brain.preTick(a.ctx)
+            if (o.leap != null) continue
             a.brain.utility.tick(a.ctx, a.intent)
             a.steering.apply(a.intent)
             a.brain.postSteer(a.ctx)
             o.attached = a.intent.kinematic || a.intent.crawl
         }
+        takeOutJumpers()
         sandWork.step(organisms)
         sandContact.step(organisms, dt, displace = true)
         // the drawn bodies are seated on the sand as this tick left it (a goby's spoil landing on a resting hermit or
         // crab after its seat was solved buried the shell for a tick)
         for (o in organisms) {
-            if (!o.alive) continue
+            if (!o.alive || o.leap != null) continue
             val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             sandContact.preClamp(o)
@@ -819,6 +823,7 @@ class Simulation private constructor(
             val a = agents[o] ?: continue
             a.ctx.p = perception; a.ctx.dt = dt
             if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
+            if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
             a.intent.reset()
             // research 08: a fish lethargic or on its side from heat lies on the bottom, not at its rest spot
             if (!com.reeflive.core.ai.HeatResponse.abstractPose(a.ctx, a.intent)) a.brain.abstractPose(a.ctx, a.intent)
@@ -833,6 +838,7 @@ class Simulation private constructor(
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
         }
+        takeOutJumpers()
         sandContact.step(organisms, dt, displace = false)
     }
 
@@ -898,6 +904,7 @@ class Simulation private constructor(
                 BrainKind.LAWNMOWER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.PEEKER_BLENNY || it.brainKind == BrainKind.LAWNMOWER_BLENNY) }
                 BrainKind.PEEKER_BLENNY -> organisms.any { it !== o && it.alive && (it.brainKind == BrainKind.LAWNMOWER_BLENNY || it.brainKind == BrainKind.PEEKER_BLENNY) }
                 BrainKind.DOTTYBACK, BrainKind.TANG, BrainKind.EEL -> organisms.any { it !== o && it.alive && it.brainKind == o.brainKind }
+                BrainKind.CHROMIS -> chromisUnderdog(o)
                 else -> false
             }
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
@@ -1425,6 +1432,7 @@ class Simulation private constructor(
         "crab_predation" -> if (crabLiveFishScenario) 1.0 else 0.0
         "asterina_coral" -> if (asterinaCorallivoryScenario) 1.0 else 0.0
         "unsourced_predation" -> if (unsourcedPredation) 1.0 else 0.0
+        "lid" -> if (water.lid) 1.0 else 0.0
         else -> water.s.get(id)
     }
 
@@ -1784,6 +1792,37 @@ class Simulation private constructor(
         return o
     }
 
+    /** Fish that leapt over the rim this tick ([JumpModel]); taken out after the loop that flew them. */
+    private val leftTank = ArrayList<Organism>()
+
+    private fun jumpedOut(o: Organism) { leftTank += o }
+
+    /** A fish that jumped out landed on the floor: it is gone from the tank (no carcass in the water). */
+    private fun takeOutJumpers() {
+        if (leftTank.isEmpty()) return
+        for (o in leftTank) {
+            o.leap = null
+            HealthModel.kill(o, JUMPED_OUT, simTimeSec, pendingEventsSink)
+            removeOrganism(o)
+        }
+        leftTank.clear()
+        flushEvents()
+    }
+
+    /**
+     * The bottom fish of a small chromis group (2–5) that its mates have been chasing (research 41 §2.5): the steady
+     * pecking wears it down. In a group of 6 or more the chases spread out and nobody is singled out.
+     */
+    private fun chromisUnderdog(o: Organism): Boolean {
+        var n = 1
+        for (m in organisms) {
+            if (m === o || !m.alive || m.brainKind != BrainKind.CHROMIS) continue
+            n++
+            if (com.reeflive.core.ai.Interactions.dominates(o, m)) return false
+        }
+        return n in 2..5 && o.relations.values.any { it.harassedBy > 0.2 }
+    }
+
     fun removeOrganism(o: Organism) {
         organisms.remove(o)
         agents.remove(o)
@@ -1944,6 +1983,8 @@ class Simulation private constructor(
     }
 
     companion object {
+        /** Death cause of a fish that leapt over the rim of the open top ([JumpModel]). */
+        const val JUMPED_OUT = "jumped out of the tank"
         /** How far above the aimed spot a target-fed food is let go (cm): close enough to land on it, clear of the rock. */
         const val TARGET_LIFT_CM = 2.5
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */

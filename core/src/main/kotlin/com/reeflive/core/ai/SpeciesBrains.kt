@@ -28,6 +28,8 @@ object SpeciesBrains {
             BrainKind.DIAMOND_GOBY -> DiamondGobyBrain(c)
             BrainKind.LEOPARD_WRASSE -> LeopardWrasseBrain(c)
             BrainKind.BOBTAIL_SQUID -> BobtailSquidBrain(c)
+            BrainKind.FIREFISH -> FirefishBrain(c)
+            BrainKind.CHROMIS -> ChromisBrain(c)
             BrainKind.ANEMONE -> AnemoneBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)

@@ -61,7 +61,7 @@ object CustomTank {
             "heater_set_c" to w.heaterSetC, "heater_working" to b(w.heaterWorking), "flow_strength" to w.flowStrength,
             "flow_on" to b(w.s.flowOn), "skimmer" to b(w.skimmer), "filter_sock" to b(w.filterSock), "carbon" to b(w.carbon),
             "uv" to b(w.uv), "refugium" to b(w.refugium), "ato" to b(w.ato), "gfo" to b(w.s.gfoActive),
-            "predation" to b(sim.predationEnabled),
+            "predation" to b(sim.predationEnabled), "lid" to b(w.lid),
         )
         return base.copy(
             savedAtMs = nowMs,
@@ -167,6 +167,7 @@ object CustomTank {
         eq["ato"]?.let { w.ato = it > 0.5 }
         eq["gfo"]?.let { w.s.gfoActive = it > 0.5 }
         eq["predation"]?.let { sim.predationEnabled = it > 0.5 }
+        eq["lid"]?.let { w.lid = it > 0.5 }
         for ((name, n) in save.micro) {
             val g = MicroGroup.entries.firstOrNull { it.name == name } ?: continue
             if (n.isFinite() && n >= 0) w.micro.setTotal(g, n)

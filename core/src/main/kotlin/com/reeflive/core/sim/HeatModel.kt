@@ -82,13 +82,15 @@ object HeatModel {
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> SHRIMP
         BrainKind.ASTREA -> TURBO_SNAIL
         BrainKind.TANG -> TANG
-        BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
+        // chromis are damselfish like the clown (Pomacentridae; est.)
+        BrainKind.CLOWN, BrainKind.CHROMIS, BrainKind.GENERIC_FISH -> CLOWN
         BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
-        BrainKind.DIAMOND_GOBY -> SAND_GOBY
+        // the firefish is a dartfish, a goby relative (est.)
+        BrainKind.DIAMOND_GOBY, BrainKind.FIREFISH -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
@@ -105,7 +107,7 @@ object HeatModel {
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */
     fun hidesLow(kind: BrainKind) = kind == BrainKind.LAWNMOWER_BLENNY || kind == BrainKind.PEEKER_BLENNY || kind == BrainKind.ENGINEER_GOBY ||
-        kind == BrainKind.DIAMOND_GOBY
+        kind == BrainKind.DIAMOND_GOBY || kind == BrainKind.FIREFISH
 
     // ---------------------------------------------------------------- constants (08 §6, §7)
     const val D_AGITATED = 0.05

@@ -121,6 +121,11 @@ object Thoughts {
             n == "feed" -> feedLine(e, label)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
             n == "graze" -> Line("grazing algae off the rock", "graze some algae", "Munch munch algae.", Driver.HUNGER)
+            n == "firehover" -> Line("hovering over its hole, flicking its dorsal fin", "hover over its hole", "Flick flick.", Driver.HOME)
+            n == "hole" && k == BrainKind.FIREFISH && label.startsWith("Darting") ->
+                Line("darting head first into its hole${e.because()}", "pop back out of its hole", "Zoom, hide!", Driver.FEAR, 3)
+            n == "shoal" -> Line("schooling with the other chromis", "swim with the school", "Stick together!", Driver.FAMILY)
+            n == "peck" -> Line("chasing ${tgt ?: "a lower-ranked chromis"} to show who's boss", "boss the school around", "I'm in charge here.", Driver.TERRITORY, 3)
             n == "hover" && k == BrainKind.BOBTAIL_SQUID -> Line("hovering on its little fins, looking for a snack", "hover over the sand", "Anything tasty?", Driver.HUNGER, 2)
             n == "hover" && k == BrainKind.LEOPARD_WRASSE -> Line("hovering among the corals", "hover in the coral", "Nice and cozy.", Driver.ROUTINE)
             n == "hover" -> Line("hanging out near its favourite spot", "hang out near home", "Home sweet home.", Driver.HOME)
@@ -508,6 +513,8 @@ object Thoughts {
         BrainKind.DIAMOND_GOBY -> "diamond goby"
         BrainKind.LEOPARD_WRASSE -> "leopard wrasse"
         BrainKind.BOBTAIL_SQUID -> "bobtail squid"
+        BrainKind.FIREFISH -> "firefish"
+        BrainKind.CHROMIS -> "chromis"
         BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
@@ -573,7 +580,7 @@ object Thoughts {
 
     private val PARTS = listOf("gills", "fins", "sides", "mouth")
     /** Behaviours an empty-tummy fish idles in: the "is hungry and watching for food" sentence replaces them. */
-    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station")
+    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal")
     private val RESTING = setOf("sleep", "cocoon", "burrow", "sand", "bury", "nestle", "hovercover", "hide", "buried")
     /** Never offered as the next plan: reactions, not plans. */
     private val NO_NEXT = setOf("touch", "unwell", "heat", "flee", "tailflip", "retract", "dart", "jet", "snap", "molt", "gasp", "abandoned", "flipped", "yield")

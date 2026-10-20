@@ -51,6 +51,9 @@ object Stocking {
         // research 16: sand sifter (in the owner's tank since 2026-10)
         StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),
         StockEntry("macropharyngodon_bipartitus", StockGroup.FISH, "Blue star leopard wrasse", 10.0),
+        // research 41: firefish (needs a lid) and a blue-green chromis shoal
+        StockEntry("nemateleotris_magnifica", StockGroup.FISH, "Firefish goby", 7.0),
+        StockEntry("chromis_viridis", StockGroup.FISH, "Blue-green chromis", 7.5),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
