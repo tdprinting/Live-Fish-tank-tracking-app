@@ -101,9 +101,11 @@ class AcclimationBags {
     /** One animal in a bag or the net (drawn through the ordinary organism path; it becomes a real organism on release). */
     private class Rider(val o: Organism, val swimmer: Boolean) {
         val len = o.lengthCm.coerceAtLeast(0.5)
-        val half = 0.5 * len
-        /** Body half-thickness. */
-        val w = 0.12 * len + 0.2
+        /** A brittle star is a flat disc with arms all round: a ball of its arm span, not a line. */
+        val star = o.limbRig is BrittleArms
+        val half = if (star) 0.0 else 0.5 * len
+        /** Body half-thickness: the deeper of the width and the depth (tangs are tall), plus the fins. */
+        val w = if (star) 0.5 * len + 0.3 else max(0.12, 0.5 * o.species.depthRatio) * len + 0.25
         /** Body centre and heading in the frame it rides in (the bag's, then the net's), cm. */
         var lp = Vec3.ZERO
         var lh = Vec3.X
@@ -571,6 +573,11 @@ class AcclimationBags {
             o.heading = hn
             o.vel = Vec3.ZERO
             o.spline.reset(o.pos, o.heading)
+            if (rd.star) {
+                // lies flat on the low side of the bag; falling out of the net, the arms trail
+                o.up = Vec3.Y
+                (o.limbRig as BrittleArms).carried(dt, if (rd.stage == FALLING) 1.0 else 0.0)
+            }
             if (rd.swimmer) {
                 o.tailHz = if (rd.stage == IN_BAG) 1.4 else 3.0; o.amp = if (rd.stage == IN_BAG) 0.05 else 0.09
                 o.swimPhase = (o.swimPhase + o.tailHz * dt) % 1000.0
@@ -804,6 +811,8 @@ class AcclimationBags {
             }
             o.pos = o.pos + to * (step / d)
             o.spline.reset(o.pos, o.heading)
+            o.up = Vec3.Y
+            (o.limbRig as? BrittleArms)?.carried(dt, 1.0)
             i++
         }
     }

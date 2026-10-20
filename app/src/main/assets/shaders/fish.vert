@@ -16,7 +16,8 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
-uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1
+uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
+uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
@@ -340,7 +341,7 @@ void main() {
         vWorld = w.xyz;
         vNormal = normalize(mat3(uModel) * n);
         vUv = aUv;
-        vColor = aColor;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
         gl_Position = uViewProj * w;
         return;
     }
@@ -364,12 +365,13 @@ void main() {
         vWorld = wl;
         vNormal = normalize(qrot(uFrame[0], n));
         vUv = aUv;
-        vColor = aColor;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
         gl_Position = uViewProj * vec4(wl, 1.0);
         return;
     }
 
     float u = aColor.a;
+    float mouthDark = 0.0;
     if (mode > 0.5 && mode < 1.5 && part > 2.5) {
         // Brittle star arm rowing (Astley 2012): the arm pointing forward (+X) leads and barely moves; the arm pairs
         // either side make mirrored power strokes in the disc plane, the trailing pair drags. Rotate about the disc.
@@ -392,6 +394,17 @@ void main() {
         local.yz *= 1.0 - 0.25 * uShape.x;
         float flare = 0.03 * uFin.z * aColor.g * (0.5 + 0.5 * sin(time * uFin.w * 2.0 * PI));
         local.z += sign(local.z) * flare;
+        // opening jaw (models built with a mouth, uJaw.w = 1; uPick = the sim's mouth, 0 shut .. 1 wide): the lower jaw
+        // (COLOR_0.b = 1) turns down about the hinge under the eye, the mouth lining's inner folds (0.5) half as far, and
+        // the lining (COLOR_0.r) shades dark (vColor.g, read by fish.frag)
+        if (uJaw.w > 0.5 && mode < 0.5) {
+            float a = -clamp(uPick, 0.0, 1.0) * uJaw.z * aColor.b;
+            vec2 r = aPos.xy - uJaw.xy;
+            float c = cos(a), sn = sin(a);
+            local.xy += vec2(c * r.x - sn * r.y, sn * r.x + c * r.y) - r;
+            n.xy = vec2(c * n.x - sn * n.y, sn * n.x + c * n.y);
+            mouthDark = aColor.r;
+        }
     } else if (part < 1.5) {
         // fins: clamp folds toward the body (hinge-weighted, up to ~60 deg) and flutter
         float clampA = uFin.y * hinge;
@@ -573,5 +586,6 @@ void main() {
     vNormal = normalize(qrot(q, n));
     vUv = aUv;
     vColor = aColor;
+    vColor.g = mouthDark;
     gl_Position = uViewProj * vec4(world, 1.0);
 }

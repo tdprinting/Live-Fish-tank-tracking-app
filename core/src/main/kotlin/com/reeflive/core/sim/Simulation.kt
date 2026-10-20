@@ -1233,6 +1233,17 @@ class Simulation private constructor(
         water.algae.wipeGlass()   // the glass gets wiped on water-change day (research 09 A2: GSA wiped every 3-7 d)
     }
 
+    /**
+     * Where food aimed at [aim] goes in: floating foods (flake, floating pellets) land on the surface right above it;
+     * everything else is let go a little above it, the way a keeper target-feeds with a turkey baster or feeding tube,
+     * so it drifts and sinks onto the fish, coral or spot that was picked. Nori still goes on its clip.
+     */
+    fun targetRelease(kind: FoodKind, aim: Vec3): Vec3 {
+        val p = rock.clampToWater(aim, 1.0)
+        return if (kind.floats) p.withY(rock.waterLevelCm - 0.3)
+        else p.withY((p.y + TARGET_LIFT_CM).coerceAtMost(rock.waterLevelCm - 2.5))
+    }
+
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
@@ -1307,7 +1318,7 @@ class Simulation private constructor(
                 PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
-            is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at ?: feedPoint(null)); touchMemory.fed() }
+            is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
             is Command.WaterChange -> { if (c.fraction >= CareLog.MIN_CHANGE) careLog.waterChanges++; water.waterChange(c.fraction, c.mix) }
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
@@ -1936,6 +1947,8 @@ class Simulation private constructor(
     }
 
     companion object {
+        /** How far above the aimed spot a target-fed food is let go (cm): close enough to land on it, clear of the rock. */
+        const val TARGET_LIFT_CM = 2.5
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
         val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
         /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */

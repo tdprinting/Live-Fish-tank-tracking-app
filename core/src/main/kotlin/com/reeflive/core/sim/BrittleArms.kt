@@ -381,6 +381,26 @@ class BrittleArms(seed: Long) : LimbRig(COUNT) {
         }
     }
 
+    /**
+     * Arms for a star riding in a bag or net, where no brain steps it and there is no ground to fit to: the arms lie
+     * flat in the disc plane, tips slightly up, with a slow wave and a gentle sweep; [drag] 0..1 (falling through the
+     * water) lifts and trails them. Without this the unposed arms were drawn hanging straight down.
+     */
+    fun carried(dt: Double, drag: Double) {
+        val k0 = min(1.0, dt * 3)
+        sweepPhase = (sweepPhase + dt * SWEEP_HZ * 2) % 1000.0
+        for (k in 0 until ARMS) {
+            val alt = if (k % 2 == 0) 1.0 else -1.0
+            yaw[k] += (0.18 * sin(2 * PI * sweepPhase + 1.9 * k) - yaw[k]) * k0
+            curl[k] += (alt * (0.25 + 0.6 * drag) - curl[k]) * k0
+            pitch[k] += ((0.08 + 0.5 * drag) - pitch[k]) * k0
+            reach[k] += (1.0 - reach[k]) * k0
+            waveAmp[k] += ((0.12 + 0.2 * drag) - waveAmp[k]) * k0
+            wavePhase[k] = (wavePhase[k] + dt * (0.25 + 0.03 * k)) % 1000.0
+            freeArm(k); emit(k)
+        }
+    }
+
     /** Writes arm [k]'s drawn steps to [out] (layout in the class doc). */
     private fun emit(k: Int) {
         val o = k * 32

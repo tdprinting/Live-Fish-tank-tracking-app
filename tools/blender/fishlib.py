@@ -143,6 +143,94 @@ def build_body(prof, tris, ring=32, p_exp=0.85, belly_bias=0.12, back_pinch=0.25
     return V, F, np.array(UV), HH, UU, G
 
 
+def add_mouth(V, F, UV, G, prof, ring, mouth_u=0.075, seam_s=-0.22, inset=0.4):
+    """Cut an opening mouth into a build_body loft (spec frame). The snout rings in front of the jaw hinge
+    (u < mouth_u) are split along the lips' seam (ring height seam_s, -1 belly .. +1 back, a little below the axis)
+    into an upper jaw and a lower jaw that share no vertex there, and the gap between them is lined with a mouth
+    pocket: on each side a strip from the upper lip in to an inner fold (inset x the half width) and back out to the
+    lower lip, and between the two folds the floor of the mouth, all meeting at the jaw corners on the hinge ring.
+    Closed, the lips coincide and the pocket lies flat inside the head; opened (fish.vert, uJaw: the lower jaw
+    turns down about the hinge), the pocket shows as the inside of the mouth.
+
+    Returns V, F, UV, G plus per-vertex `jaw` (1 = moves with the lower jaw, 0.5 = the inner folds, 0 = fixed),
+    `inside` (1 = mouth lining, shaded dark) and the hinge point (spec frame)."""
+    V = [tuple(v) for v in np.asarray(V, float)]
+    UV = [tuple(t) for t in np.asarray(UV, float)]
+    G = list(np.asarray(G, float))
+    n_ring = (len(V) - 2) // ring
+    snout, tail = n_ring * ring, n_ring * ring + 1
+    us = [V[a * ring][0] for a in range(n_ring)]
+    m = sum(1 for u in us if u < mouth_u)          # mouth stations 0..m-1; station m carries the jaw corners
+    assert 1 <= m < n_ring - 1, f"mouth_u {mouth_u} leaves {m} mouth stations"
+    theta = 2 * np.pi * np.arange(ring) / ring
+    s = np.sin(theta - np.pi / 2)
+    # the two ring vertices nearest the seam height on the +y (k < ring/2) and -y flanks
+    kR = int(np.argmin(np.where(np.arange(ring) < ring // 2, np.abs(s - seam_s), 9)))
+    kL = int(np.argmin(np.where(np.arange(ring) >= ring // 2, np.abs(s - seam_s), 9)))
+    lower_k = set(range(kL, ring)) | set(range(0, kR + 1))   # ring vertices of the lower jaw (seam included)
+
+    def strip_lower(kk):  # the quad strip between ring kk and kk + 1 lies under the seam
+        return kk >= kL or kk < kR
+
+    jaw = [0.0] * len(V)
+    inside = [0.0] * len(V)
+
+    def add(v, uv, g=0.0, j=0.0, ins=0.0):
+        V.append(tuple(v)); UV.append(tuple(uv)); G.append(g); jaw.append(j); inside.append(ins)
+        return len(V) - 1
+
+    # lips: the seam vertices of the mouth stations get a lower-lip twin; the snout tip a lower twin at seam height
+    zt = prof.Zc(0.0) + prof.H(0.0) * seam_s
+    V[snout] = (V[snout][0], 0.0, zt)
+    tipL = add(V[snout], UV[snout], j=1.0)
+    twin = {}
+    for a in range(m):
+        for k in (kR, kL):
+            i = a * ring + k
+            twin[i] = add(V[i], UV[i], G[i], 1.0)
+        for k in lower_k - {kR, kL}:
+            jaw[a * ring + k] = 1.0
+    F2 = []
+    for f in F:
+        f = list(f)
+        if snout in f:
+            # snout fan (n, kk + 1, kk)
+            kk = f[2] % ring
+            if strip_lower(kk):
+                f = [tipL if i == snout else twin.get(i, i) for i in f]
+        elif tail not in f and len(f) == 4:
+            a, kk = f[0] // ring, f[0] % ring
+            if a < m and strip_lower(kk):
+                f = [twin.get(i, i) for i in f]
+        F2.append(tuple(f))
+
+    # mouth lining: per side, upper lip -> inner fold -> lower lip, from the tip back to the jaw corner (own vertices,
+    # so the lining does not bend the skin's normals); then the floor between the two folds
+    corner = {k: m * ring + k for k in (kR, kL)}
+    folds = {}
+    for k in (kR, kL):
+        up_c, fo_c, lo_c = [], [], []
+        pts = [V[snout]] + [V[a * ring + k] for a in range(m)]
+        for t, p in enumerate(pts):
+            uvp = UV[snout] if t == 0 else UV[(t - 1) * ring + k]
+            up_c.append(add(p, uvp, ins=1.0))
+            fo_c.append(add((p[0] + 0.01, p[1] * inset, p[2]), uvp, j=0.5, ins=1.0))
+            lo_c.append(add(p, uvp, j=1.0, ins=1.0))
+        cv = add(V[corner[k]], UV[corner[k]], ins=1.0)
+        for t in range(len(pts) - 1):
+            F2.append((up_c[t], up_c[t + 1], fo_c[t + 1], fo_c[t]))
+            F2.append((fo_c[t], fo_c[t + 1], lo_c[t + 1], lo_c[t]))
+        F2.append((up_c[-1], cv, fo_c[-1]))
+        F2.append((fo_c[-1], cv, lo_c[-1]))
+        folds[k] = (fo_c, cv)
+    (fr, cr), (fl, cl) = folds[kR], folds[kL]
+    for t in range(len(fr) - 1):
+        F2.append((fr[t], fl[t], fl[t + 1], fr[t + 1]))
+    F2.append((fr[-1], fl[-1], cl, cr))
+    hinge = (us[m], 0.0, prof.Zc(us[m]) + prof.H(us[m]) * seam_s)
+    return (np.array(V), F2, np.array(UV), np.array(G), np.array(jaw), np.array(inside), hinge)
+
+
 # ----------------------------------------------------------------------------
 # Fins
 # ----------------------------------------------------------------------------

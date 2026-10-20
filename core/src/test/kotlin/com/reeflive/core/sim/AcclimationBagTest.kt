@@ -160,6 +160,27 @@ class AcclimationBagTest {
         }
     }
 
+    @Test fun baggedBrittleStarLiesFlatWithItsWholeSpanInsideTheBag() {
+        val s = sim()
+        s.enqueue(Command.FloatBag("ophiocoma_erinaceus", 2, x = 60.0))
+        repeat(20 * 5) { s.stepWall(0.05) }
+        val snap = s.snapshot()
+        val b = snap.bags.single()
+        val stars = snap.organisms.filter { it.bagged }
+        assertEquals(2, stars.size)
+        for (p in stars) {
+            // no arm hangs down: every step height (the x slots) is at or above the disc plane (0.5)
+            for (k in 0 until BrittleArms.ARMS) for (j in 0 until 8) {
+                val h = p.limbs[k * 32 + 4 * j]
+                assertTrue("arm $k step $j hangs ($h)", h >= 0.5f - 1e-4f)
+            }
+            val h = p.headPos()
+            val l = local(b, h.x.toFloat(), h.y.toFloat(), h.z.toFloat())
+            val out = l.distanceTo(Vec3(0.0, -AcclimationBags.BULB_C * b.radius, 0.0)) - 0.97 * b.radius
+            assertTrue("star centre outside the bag ($out)", out < 0.0)
+        }
+    }
+
     @Test fun bagWaterNeverReachesTheTank() {
         val s = sim()
         s.enqueue(Command.FloatBag("amphiprion_ocellaris", 2, x = 60.0))
