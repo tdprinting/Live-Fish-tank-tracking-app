@@ -26,6 +26,9 @@ class TangSpawn(val b: TangBrain) : Behavior("tangspawn", "Courting") {
 
     override fun score(c: Ctx): Double = if (phase() != Reproduction.TangPhase.IDLE && inPair(c)) 0.95 else 0.0
 
+    // 0 or urgent only, so no whim noise (and no extra draws on the shared rng)
+    override val noisy: Boolean get() = false
+
     override val committed: Boolean get() = phase() == Reproduction.TangPhase.RUSH
 
     override fun enter(c: Ctx) {
