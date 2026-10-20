@@ -59,7 +59,8 @@ class StoresTest {
 
     @Test fun checkoutPaysForTheWholeBagOrNothing() {
         val e = Economy(SavedEconomy(coins = 1000))
-        val shelf = Stores.stock(FishStore.SHELLYS, day)
+        // two things a level-1 keeper may buy (the shelf's order shifts as species are added to the catalogue)
+        val shelf = Stores.stock(FishStore.SHELLYS, day).filter { it.listing.level <= 1 }
         val two = shelf.take(2).map { it.listing.speciesId }
         val total = shelf.take(2).sumOf { it.price }
         val c = e.checkout(FishStore.SHELLYS, two, day)
