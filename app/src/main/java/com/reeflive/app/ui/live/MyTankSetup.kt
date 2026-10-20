@@ -78,21 +78,21 @@ private fun TankSketch(b: TankBuild, modifier: Modifier = Modifier) {
         val l = sh.lengthCm.toFloat() * k; val h = sh.heightCm.toFloat() * k; val d = sh.depthCm.toFloat() * k * slant
         val w = sh.waterLevelCm.toFloat() * k; val sand = 4.5f * k
         val x0 = (size.width - l - d) / 2f; val y0 = size.height - 8f * k - 1f
-        fun poly(vararg p: Offset) = Path().apply { moveTo(p[0].x, p[0].y); for (i in 1 until p.size) lineTo(p[i].x, p[i].y); close() }
+        fun poly(p: List<Offset>) = Path().apply { moveTo(p[0].x, p[0].y); for (i in 1 until p.size) lineTo(p[i].x, p[i].y); close() }
         drawRoundRect(Color(0xFF6B4A2E), Offset(x0 - 2f, y0 + 1f), Size(l + d + 4f, 7f * k), androidx.compose.ui.geometry.CornerRadius(2f))
         val wy = y0 - w
-        drawPath(poly(Offset(x0 + d, wy - d), Offset(x0 + l + d, wy - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0), Offset(x0, y0), Offset(x0, wy)), Color(0x592A8FC4))
-        drawPath(poly(Offset(x0, y0 - sand), Offset(x0 + l, y0 - sand), Offset(x0 + l + d, y0 - sand - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0), Offset(x0, y0)), Color(0xFFE8DCC0))
-        drawPath(poly(Offset(x0, wy), Offset(x0 + l, wy), Offset(x0 + l + d, wy - d), Offset(x0 + d, wy - d)), Color(0x737FD0FF))
+        drawPath(poly(listOf(Offset(x0 + d, wy - d), Offset(x0 + l + d, wy - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0), Offset(x0, y0), Offset(x0, wy))), Color(0x592A8FC4))
+        drawPath(poly(listOf(Offset(x0, y0 - sand), Offset(x0 + l, y0 - sand), Offset(x0 + l + d, y0 - sand - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0), Offset(x0, y0))), Color(0xFFE8DCC0))
+        drawPath(poly(listOf(Offset(x0, wy), Offset(x0 + l, wy), Offset(x0 + l + d, wy - d), Offset(x0 + d, wy - d))), Color(0x737FD0FF))
         val top = y0 - h
         val glass = Color(0xE6BFE8FF)
         val thin = Stroke(width = 1.2f)
         drawRect(glass, Offset(x0, top), Size(l, h), style = thin)
-        drawPath(poly(Offset(x0 + l, top), Offset(x0 + l + d, top - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0)), glass, style = thin)
-        drawPath(poly(Offset(x0, top), Offset(x0 + d, top - d), Offset(x0 + l + d, top - d), Offset(x0 + l, top)), glass, style = thin)
+        drawPath(poly(listOf(Offset(x0 + l, top), Offset(x0 + l + d, top - d), Offset(x0 + l + d, y0 - d), Offset(x0 + l, y0))), glass, style = thin)
+        drawPath(poly(listOf(Offset(x0, top), Offset(x0 + d, top - d), Offset(x0 + l + d, top - d), Offset(x0 + l, top))), glass, style = thin)
         if (!b.rimless) {
             val rim = Stroke(width = 2.6f)
-            drawPath(poly(Offset(x0, top), Offset(x0 + l, top), Offset(x0 + l + d, top - d), Offset(x0 + d, top - d)), Color(0xFF111111), style = rim)
+            drawPath(poly(listOf(Offset(x0, top), Offset(x0 + l, top), Offset(x0 + l + d, top - d), Offset(x0 + d, top - d))), Color(0xFF111111), style = rim)
             drawLine(Color(0xFF111111), Offset(x0, y0), Offset(x0 + l, y0), strokeWidth = 2.6f)
         }
     }
