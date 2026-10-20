@@ -47,6 +47,8 @@ data class SimSpecies(
     val lifeStages: LifeStageSpec? = null,
     /** Sensing channels (Senses.kt, SIMULATION §21.1); null = defaults by brain and activity. */
     val senses: SensesSpec? = null,
+    /** Corals: the light, flow, ground and sting reach the sheet's `coral` block gives ([CoralSpots] scores spots by them). */
+    val coral: CoralNeeds? = null,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */

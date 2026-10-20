@@ -77,6 +77,9 @@ class Coral(
     /** Aiptasia being killed by a keeper's treatment ([AiptasiaModel.treat]): which one, and sim seconds until gone. */
     var treatment: AiptasiaTreatment? = null
     var treatLeftSec = 0.0
+    /** Light here relative to mid-water ([CoralSpots.lightAt]; My tank) and the rock revision it was worked out at. */
+    var lightHere = Double.NaN
+    var lightAtRev = -1L
 
     fun toPose(simTimeSec: Double = 0.0) = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),

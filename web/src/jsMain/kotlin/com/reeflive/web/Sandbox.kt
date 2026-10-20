@@ -277,6 +277,8 @@ object ReefSandbox {
                 send(Command.FloatBag(parts[0], num.toInt().coerceAtLeast(1), x, size = size))
             }
             "hurryBags" -> send(Command.HurryBags(num > 0))
+            // My tank: the coral out of its bag goes on offered spot [num] (−1: the best one)
+            "placeCoral" -> send(Command.PlaceCoral(num.toInt()))
             "addSized" -> {
                 // arg = "speciesId:SIZE", num = count
                 val (id, size) = (arg ?: return false).split(":").let { it[0] to StockSize.valueOf(it.getOrElse(1) { "JUVENILE" }) }

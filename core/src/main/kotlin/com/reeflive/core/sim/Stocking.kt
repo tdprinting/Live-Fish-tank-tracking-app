@@ -166,16 +166,23 @@ object Stocking {
         val room = MAX_CORALS - sim.corals.size
         val want = min(count.coerceIn(0, MAX_CORALS_PER_ADD), max(0, room))
         if (want == 0) return 0
+        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
+        for ((p, _) in spots) placeCoral(sim, sp, p)
+        return spots.size
+    }
+
+    /**
+     * One colony of [sp] at [p] on the rock or sand: its species' model moved there from the anchor it was built
+     * around (the keeper's pick, [CoralPicks], or a free spot from [coralSpots]). Returns its id.
+     */
+    fun placeCoral(sim: Simulation, sp: SimSpecies, p: Vec3): String {
         val home = homeAnchor(sim.rock, sp)
         val homePos = home?.pos ?: NO_ANCHOR
-        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
         val already = sim.corals.count { it.species.id == sp.id }
-        spots.forEachIndexed { i, (p, _) ->
-            sim.addFromSeed(
-                LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", 0.0, placement = home?.name, offset = p - homePos),
-            )
-        }
-        return spots.size
+        sim.addFromSeed(
+            LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, 0)}", 0.0, placement = home?.name, offset = p - homePos),
+        )
+        return sim.corals.last().id
     }
 
     /**

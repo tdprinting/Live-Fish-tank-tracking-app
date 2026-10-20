@@ -42,6 +42,8 @@ data class CustomTankSave(
     /** Animals of species this version cannot load, carried through untouched. */
     val dormant: List<SavedAnimal> = emptyList(),
     val dormantCorals: List<SavedCoral> = emptyList(),
+    /** Coral species ids out of their bag and waiting for the keeper to pick a spot, in order (added after v1, defaulted). */
+    val toPlace: List<String> = emptyList(),
     /** Eggs on the rock and the nursery tank's larvae / fry (added after v1 as a defaulted field: no migration needed). */
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
     /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */

@@ -276,6 +276,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun floatBag(speciesId: String, count: Int, size: StockSize, x: Float) = sandbox { holder.enqueue(Command.FloatBag(speciesId, count, x.toDouble(), size = size)) }
     /** Fast-forwards the clock while bags float ([on]), or back to the chosen speed. */
     fun hurryBags(on: Boolean) = sandbox { holder.enqueue(Command.HurryBags(on)) }
+    /** Puts the coral waiting for a spot (My tank) on offered spot [spot] (−1: the best one). */
+    fun placeCoral(spot: Int) = sandbox { holder.enqueue(Command.PlaceCoral(spot)) }
     fun removeOrganism(id: String) = sandbox {
         holder.enqueue(Command.RemoveOrganism(id))
         if (_selectedOrganismId.value == id) select(null)

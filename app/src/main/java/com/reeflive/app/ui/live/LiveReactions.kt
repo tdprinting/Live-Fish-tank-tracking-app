@@ -487,6 +487,13 @@ object LiveReactions {
         if (on) HermieMood.EXCITED else HermieMood.HAPPY,
     )
 
+    /** A new coral was put on the spot the keeper picked (CoralPickLayer). */
+    fun coralPlaced(name: String) = Reaction(
+        TankFx(FxKind.HEARTS, FxSpots.CENTRE, caption = "$name placed"),
+        "Nice spot! Your $name will grow right there.",
+        HermieMood.EXCITED,
+    )
+
     fun addSimple(name: String) = Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, caption = name), "Welcome, $name!", HermieMood.EXCITED)
 
     fun speed(x: Double) = Reaction(

@@ -933,7 +933,9 @@ class Simulation private constructor(
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
             val tissueBefore = c.tissue
-            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength, w.bacteria.coralPathogenStress)
+            // My tank: each colony sees the light where it sits (deeper and under ledges is dimmer; CoralSpots)
+            val here = if (bareScape) localLight(c) else 1.0
+            CoralSim.step(c, w.s, light * w.clarity * here, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength, w.bacteria.coralPathogenStress)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % (2 * Math.PI)
@@ -1380,6 +1382,7 @@ class Simulation private constructor(
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
             is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
+            is Command.PlaceCoral -> coralPicks.place(this, c.spot)
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1584,6 +1587,16 @@ class Simulation private constructor(
     val submarine = Submarine()
     /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
     val bags = AcclimationBags()
+    /** Corals out of their bag waiting for the keeper to pick a spot (My tank, [Command.PlaceCoral]). */
+    val coralPicks = CoralPicks()
+    /** [CoralSpots.lightAt] for [c], cached until it or the rockwork moves. */
+    private fun localLight(c: Coral): Double {
+        val rev = rockRevision()
+        if (c.lightHere.isNaN() || c.lightAtRev != rev) { c.lightHere = CoralSpots.lightAt(rock, c.pos, c.normal); c.lightAtRev = rev }
+        return c.lightHere
+    }
+    /** Changes whenever rocks move, are added or taken out (spot suggestions are recomputed then). */
+    fun rockRevision(): Long = rockPhysics?.version ?: 0L
     /** The fish net that takes dead animals out ([Command.NetOut]). */
     val net = FishNet()
     val subSense = com.reeflive.core.ai.SubmarineSense()
@@ -1779,7 +1792,7 @@ class Simulation private constructor(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); brood.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear(); bags.clear(); net.clear()
+        submarine.reset(); subSense.clear(); bags.clear(); coralPicks.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1874,6 +1887,7 @@ class Simulation private constructor(
             brood = brood.view,
             builtRocks = builtRocks(),
             rockSdf = rock.dynamic?.takeIf { it.active },
+            coralPick = coralPicks.pose(this),
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))

@@ -152,6 +152,7 @@ import com.reeflive.app.ui.live.SupplyCarryLayer
 import com.reeflive.app.ui.live.BagCarry
 import com.reeflive.app.ui.live.BagCarryLayer
 import com.reeflive.app.ui.live.BagTimerLayer
+import com.reeflive.app.ui.live.CoralPickLayer
 import com.reeflive.app.ui.live.SupplyItem
 import com.reeflive.app.ui.live.SupplyShelfOverlay
 import com.reeflive.app.ui.live.SubmarineControls
@@ -370,6 +371,8 @@ fun LiveTankScreen(
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
     // the shop bag in hand after an animal is picked in Add life (dragged onto the tank to float)
     var bagCarry by remember { mutableStateOf<BagCarry?>(null) }
+    /** The keeper tapped "Later" on the coral spot picker (a pill brings it back). */
+    var coralPickHidden by remember { mutableStateOf(false) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
     // "Tap a supply, then drag it to the tank" until the first supply lands in the tank (remembered in settings)
@@ -1177,6 +1180,16 @@ fun LiveTankScreen(
             BagTimerLayer(
                 vm.snapshots, projection, hud.bags, hud.bagHurry,
                 onHurry = { on -> tick(); vm.hurryBags(on); echo(LiveReactions.hurryBags(on)) },
+                bottomClearance = hudBottom,
+            )
+        }
+        // a coral out of its bag waits for the keeper to pick one of its glowing spots (My tank)
+        val coralPick = hud.coralPick
+        if (myTank && coralPick != null && bagCarry == null && !micro && !supplies && !subUi.on) {
+            CoralPickLayer(
+                coralPick, projection, coralPickHidden,
+                onPlace = { spot -> tick(); vm.placeCoral(spot); coralPickHidden = false; echo(LiveReactions.coralPlaced(coralPick.name)) },
+                onHide = { coralPickHidden = it },
                 bottomClearance = hudBottom,
             )
         }

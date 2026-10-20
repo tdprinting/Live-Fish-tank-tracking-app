@@ -3,6 +3,7 @@
 // ReefLive drives the 3D view, ReefSandbox is the Android view model's actions and readings.
 import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
+import { initCorals } from './corals.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
@@ -89,6 +90,7 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
+    initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine' });
     $('loading').classList.add('done');
     applyReadings();
     renderAll();
