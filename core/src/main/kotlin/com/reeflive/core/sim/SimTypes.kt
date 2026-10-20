@@ -410,6 +410,8 @@ data class SimSnapshot(
     val flowStrength: Float = 1f,
     /** A tank started from scratch (My tank, [Simulation.bareScape]): the renderer leaves out the owner's static colonies. */
     val bareScape: Boolean = false,
+    /** The tank's box and look ([Simulation.shape]): the renderer draws the glass, equipment and camera to it. */
+    val shape: TankShape = TankShape.STOCK,
     /** Water-surface heightfield (cm, sx × sz, x fastest) and its dims (SIMULATION §9.7). */
     val surfaceHeights: FloatArray = FloatArray(0),
     val surfaceDims: IntArray = IntArray(2),

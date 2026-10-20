@@ -69,9 +69,9 @@ import com.reeflive.core.sim.TankDims
  */
 
 /** Tank interior on the front glass (cm): the drop zone. */
-private const val GLASS_Z = TankDims.DEPTH_F + 0.8f
-private const val TANK_L = TankDims.LENGTH_F
-private const val TANK_TOP = TankDims.HEIGHT_F
+private val GLASS_Z: Float get() = com.reeflive.app.render.Camera.TANK[2] + 0.8f
+private val TANK_L: Float get() = com.reeflive.app.render.Camera.TANK[0]
+private val TANK_TOP: Float get() = com.reeflive.app.render.Camera.TANK[1]
 
 /**
  * Solves which front-glass point (tank cm x, y on z = [z]) is under view pixel ([sx], [sy]) with a few Newton steps
@@ -169,7 +169,7 @@ fun SupplyCarryLayer(
                 frame
                 val path = Path()
                 var ok = true
-                val pts = arrayOf(0f to TankDims.SAND_TOP_F, TANK_L to TankDims.SAND_TOP_F, TANK_L to TankDims.WATER_LEVEL_F, 0f to TankDims.WATER_LEVEL_F)
+                val pts = arrayOf(0f to TankDims.SAND_TOP_F, TANK_L to TankDims.SAND_TOP_F, TANK_L to com.reeflive.app.render.Camera.WATER_Y, 0f to com.reeflive.app.render.Camera.WATER_Y)
                 pts.forEachIndexed { i, (x, y) ->
                     if (!projection.project(x, y, GLASS_Z, corner)) ok = false
                     if (i == 0) path.moveTo(corner[0], corner[1]) else path.lineTo(corner[0], corner[1])
@@ -188,7 +188,7 @@ fun SupplyCarryLayer(
                         val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
                         layout(c.maxWidth, c.maxHeight) {
                             frame
-                            if (projection.project(TANK_L / 2, TankDims.WATER_LEVEL_F, GLASS_Z, corner)) {
+                            if (projection.project(TANK_L / 2, com.reeflive.app.render.Camera.WATER_Y, GLASS_Z, corner)) {
                                 val x = (corner[0] - p.width / 2f).roundToInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
                                 val y = (corner[1] + 8.dp.toPx()).roundToInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
                                 p.place(x, y)

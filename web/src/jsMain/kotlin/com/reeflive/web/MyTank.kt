@@ -46,9 +46,12 @@ object ReefMyTank {
         })
     }
 
-    /** The tanks to pick from: `[{id, label, blurb, gallons, size}]`. */
+    /** The tanks to pick from: `[{id, label, blurb, gallons, size, l, h, d (cm), rimless, filter}]` (the picker draws each to scale). */
     fun builds(): String = JSON.stringify(TankBuilds.all.map { b ->
-        obj { it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel }
+        obj {
+            it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel
+            it.l = b.shape.lengthCm; it.h = b.shape.heightCm; it.d = b.shape.depthCm; it.rimless = b.rimless; it.filter = b.filter.name
+        }
     }.toTypedArray())
 
     /** Sets up a new, empty tank in build [buildId] and shows it when the page is in My tank. */

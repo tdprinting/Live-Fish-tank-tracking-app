@@ -33,10 +33,21 @@ object CareLayout {
     val DOSE = floatArrayOf(89f, 47.5f, 9f)
     /** RO/DI jug base while it pours: back-left, tipped toward the viewer. */
     val JUG = floatArrayOf(14f, 47f, 6f)
-    const val WATER_Y = Camera.WATER_Y
+    val WATER_Y: Float get() = Camera.WATER_Y
     const val CUP_H = 8f
     const val BOTTLE_H = 15.4f
     const val JUG_H = 24f
+
+    private val spots by lazy { listOf(CUP, SOCK, CARBON, BUCKET, HOSE_ANCHOR, VAC, DOSE, JUG) }
+    private val stock by lazy { spots.map { it.copyOf() } }
+
+    /** Moves every prop spot with the glass, rim or equipment it works at for the tank on screen (core TankShape). */
+    fun fitTo(s: com.reeflive.core.sim.TankShape) {
+        for (i in spots.indices) {
+            val a = spots[i]; val o = stock[i]
+            a[0] = s.mapX(o[0].toDouble()).toFloat(); a[1] = s.mapY(o[1].toDouble()).toFloat(); a[2] = s.mapZ(o[2].toDouble()).toFloat()
+        }
+    }
 }
 
 /** One care animation. [seconds] long; the sim command goes out at [impact] (the moment the stuff reaches the tank). */

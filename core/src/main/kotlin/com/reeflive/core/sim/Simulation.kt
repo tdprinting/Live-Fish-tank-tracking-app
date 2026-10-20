@@ -48,11 +48,16 @@ class Simulation private constructor(
     ) : this(config, species, rock.forSim(), seed, startTimeSec, initialWater, livestock, lights, Unit)
 
     var config: TankConfig = config; private set
+    /**
+     * The tank's box and look (My tank builds set theirs, [CustomTank]): the renderer sizes the glass, equipment and
+     * camera to it, and equipment-side spots built for Tee's tank (jets, the HOB, feeding) are placed by it.
+     */
+    var shape: TankShape = TankShape(config.lengthCm, config.heightCm, config.widthCm)
     val rng = Rng(seed)
     var water = WaterSim(config, initialWater); private set
     val organisms = ArrayList<Organism>()
     val corals = ArrayList<Coral>()
-    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
+    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm, tankDepth = config.widthCm)
     val food = FoodSystem(rock, flow, rng.fork(7))
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
@@ -232,9 +237,12 @@ class Simulation private constructor(
             val p = ap[a.name] ?: -1
             if (p >= 0 && f.gone[p]) {
                 // its rock was taken out: the spot drops to the sand below
-                val sy = sand.surfaceY(a.pos.x.coerceIn(0.0, rock.lengthCm), a.pos.z.coerceIn(0.0, rock.widthCm))
-                a.copy(pos = Vec3(a.pos.x, sy + 1.0, a.pos.z), points = a.points?.map { Vec3(it.x, sy + 1.0, it.z) })
-            } else if (p < 0 || !f.moved[p]) a else {
+                val at = fitFree(a.pos)
+                val sy = sand.surfaceY(at.x, at.z)
+                a.copy(pos = Vec3(at.x, sy + 1.0, at.z), points = a.points?.map { val q = fitFree(it); Vec3(q.x, sy + 1.0, q.z) })
+            } else if (p < 0) {
+                if (fitted) a.copy(pos = fitFree(a.pos), points = a.points?.map { fitFree(it) }) else a
+            } else if (!f.moved[p]) a else {
                 val m = f.xf[p]
                 a.copy(pos = xfPoint(m, a.pos), dir = a.dir?.let { xfDir(m, it) }, normal = a.normal?.let { xfDir(m, it) }, points = a.points?.map { xfPoint(m, it) })
             }
@@ -250,7 +258,8 @@ class Simulation private constructor(
             val p = hp[h.name] ?: -1
             // its rock was taken out: the hole is gone with it (its dweller shelters on the rock face instead)
             if (p >= 0 && f.gone[p]) null
-            else if (p < 0 || !f.moved[p]) h else {
+            else if (p < 0) { if (fitted) h.copy(mouth = fitFree(h.mouth), path = h.path.map { fitFree(it) }) else h }
+            else if (!f.moved[p]) h else {
                 val m = f.xf[p]
                 h.copy(mouth = xfPoint(m, h.mouth), axis = xfDir(m, h.axis), path = h.path.map { xfPoint(m, it) }, up = xfDir(m, h.up))
             }
@@ -269,6 +278,52 @@ class Simulation private constructor(
             c.pos = xfPoint(f.xf[p], c.restPos); c.normal = xfDir(f.xf[p], c.restNormal); c.patch = null
         }
         fluid?.let { fl -> for (k in 0 until fl.nz) for (j in 0 until fl.ny) for (i in 0 until fl.nx) fl.solid[fl.idx(i, j, k)] = rock.sdf.dist(fl.center(i, j, k)) < 0.0 }
+    }
+
+    /**
+     * How far the stock rocks were moved to fit a tank of another size ([fitStockScape]); spots that sit on no rock
+     * (sand-level caves, burrows) move with them.
+     */
+    var scapeShift: Vec3 = Vec3.ZERO; private set
+    private val fitted: Boolean get() = scapeShift != Vec3.ZERO || !shape.isStock
+
+    /**
+     * A spot on no rock, in this tank: equipment-side spots (at the water line or a glass of Tee's tank: the HOB
+     * outflow, the nori clip, feeding spots) follow the glass they were at ([TankShape.map]); the others move with
+     * the rocks ([scapeShift]). Kept inside the water.
+     */
+    private fun fitFree(p: Vec3): Vec3 {
+        if (!fitted) return p
+        val edge = p.y > TankDims.WATER_LEVEL_CM - 6 || p.x < TankShape.EDGE_CM || p.x > TankDims.LENGTH_CM - TankShape.EDGE_CM ||
+            p.z < TankShape.EDGE_CM || p.z > TankDims.DEPTH_CM - TankShape.EDGE_CM
+        val q = if (edge) shape.map(p) else p + scapeShift
+        return Vec3(q.x.coerceIn(1.0, rock.lengthCm - 1.0), q.y.coerceIn(0.5, rock.waterLevelCm), q.z.coerceIn(1.0, rock.widthCm - 1.0))
+    }
+
+    /**
+     * Fits Tee's rockscape into this tank when it is another size (a My tank build): of the rocks that fit, the run
+     * with the most rock stays, centred along the glass; the rest are taken out (RockPhysics.fitInto). [savedShift]
+     * (a reopened tank whose rocks were already fitted and saved) only restores where the free spots went.
+     */
+    fun fitStockScape(savedShift: Vec3? = null) {
+        val rp = rockPhysics ?: return
+        if (savedShift != null) { scapeShift = savedShift; refreshRockDependents(); return }
+        if (shape.isStock) return
+        rp.build()
+        val dx = rp.fitInto(rock.lengthCm, rock.widthCm) ?: 0.0
+        scapeShift = Vec3(dx, 0.0, 0.0)
+        refreshRockDependents()
+    }
+
+    /**
+     * Adds saved animals and colonies after the rockwork is in place (a reopened My tank), so each starts at its spot
+     * on the rock as it is now.
+     */
+    fun addRestored(livestock: List<LivestockSeed>) {
+        livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
+        perception.rebuild()
+        latest = snapshot()
     }
 
     /** Which rock each new colony grows on (a colony placed after its rock moved is re-expressed in the rock's frame). */
@@ -502,7 +557,7 @@ class Simulation private constructor(
 
     // ---- water physics (SIMULATION §9.7): optional Navier–Stokes flow + surface waves ----
     var fluid: com.reeflive.core.geom.FluidSim? = null; private set
-    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm)
+    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm).also { w -> w.hobPos = w.hobPos?.let { shape.map(it).withY(rock.waterLevelCm) } }
     private var fluidAcc = 0.0
     private var lastFlowGridAt = -1e9
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
@@ -513,6 +568,7 @@ class Simulation private constructor(
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
         val f = com.reeflive.core.geom.FluidSim(rock.lengthCm, rock.widthCm, rock.sandTopCm, rock.waterLevelCm, quality,
+            pumps = com.reeflive.core.geom.Pump.defaults().map { it.copy(pos = shape.map(it.pos), intake = it.intake?.let { i -> shape.map(i) }) },
             solidAt = { p -> rock.sdf.dist(p) < 0.0 })
         f.strength = water.flowStrength; f.powerheadsOn = water.s.flowOn
         repeat(200) { f.step(0.1, water.heaterOutputW, heaterPos) }
@@ -1234,7 +1290,7 @@ class Simulation private constructor(
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
-        null -> rock.anchors.pos("HAND_FEED", HAND_FEED).withY(rock.waterLevelCm - 0.3)
+        null -> rock.anchors.pos("HAND_FEED", shape.map(HAND_FEED)).withY(rock.waterLevelCm - 0.3)
         "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(62.0, 3.8, 32.5)) + Vec3(-2.0, 7.0, 5.0)
         "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3)) + Vec3(2.0, 12.0, 1.0)
         else -> rock.anchors.pos(anchor, Vec3(41.0, rock.waterLevelCm - 6, 26.0))
@@ -1824,6 +1880,7 @@ class Simulation private constructor(
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             bareScape = bareScape,
+            shape = shape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
             rockPoses = rockPoses(),
             rockVersion = rockPhysics?.version ?: 0L,

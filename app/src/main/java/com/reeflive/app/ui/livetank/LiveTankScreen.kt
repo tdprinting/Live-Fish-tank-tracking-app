@@ -195,7 +195,7 @@ private val NavClearance = 88.dp
 private val GaugeTopClearance = 112.dp
 
 /** Point on the front glass, centre, for the "Tap glass" action (tank cm: [TankDims], 122 × 40.6 × 45.7). */
-private val FrontGlassCentre = Vec3(TankDims.LENGTH_CM / 2, 20.0, TankDims.DEPTH_CM)
+private val FrontGlassCentre: Vec3 get() = Vec3(com.reeflive.app.render.Camera.TANK[0].toDouble() / 2, 20.0, com.reeflive.app.render.Camera.TANK[2].toDouble())
 
 private fun summarize(stats: List<OrganismStats>): FishSummary {
     val alive = stats.filter { it.alive }
@@ -884,7 +884,7 @@ fun LiveTankScreen(
                 cue(LiveReactions.feed(k, FxPoint(fx, SURFACE_Y, FEED_Z))) { vm.feed(k, k.typicalDoseGrams, Vec3(fx.toDouble(), SURFACE_Y.toDouble(), FEED_Z.toDouble())) }
             }
             item == SupplyItem.KNOCKER -> {
-                val p = Vec3(gx.coerceIn(1f, TankDims.LENGTH_F - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, TankDims.WATER_LEVEL_F).toDouble(), FrontGlassCentre.z)
+                val p = Vec3(gx.coerceIn(1f, com.reeflive.app.render.Camera.TANK[0] - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, com.reeflive.app.render.Camera.WATER_Y).toDouble(), FrontGlassCentre.z)
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
@@ -1165,7 +1165,7 @@ private const val SHELF_LABEL_MS = 700L
 private const val SHELF_LABEL_REDUCED_MS = 300L
 private const val SHELF_TRAVEL_MS = 1000L
 /** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
-private const val SURFACE_Y = TankDims.WATER_LEVEL_F - 0.4f
+private val SURFACE_Y: Float get() = com.reeflive.app.render.Camera.WATER_Y - 0.4f
 private const val FEED_Z = 23.4f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */

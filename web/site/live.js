@@ -238,10 +238,33 @@ function setMode(m) {
 }
 
 // ================================================================ My tank: pick a tank, saved in this browser
+/**
+ * A little drawing of a tank build, every build at the same scale so the sizes compare at a glance: the glass box in
+ * a three-quarter view, water, sand, the black rim (none on a rimless tank) and the stand.
+ */
+function tankSketch(b) {
+  const k = 0.72, sk = 0.42;                      // px per cm; how much of the depth shows on the slant
+  const L = b.l * k, H = b.h * k, D = b.d * k * sk, W = (b.h - 2.5) * k, S = 4.5 * k;
+  const vw = 121.9 * k + 61 * k * sk + 4, vh = 61 * k + 61 * k * sk + 12;
+  const x0 = 2 + (vw - 4 - L - D) / 2, y0 = vh - 9;  // front-bottom-left corner, above the stand
+  const p = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const top = y0 - H, wy = y0 - W;
+  const rim = b.rimless ? '' : `<path d="M${x0} ${top}h${L}l${D} ${-D}h${-L}z" fill="none" stroke="#111" stroke-width="2.2"/>
+    <path d="M${x0} ${y0}h${L}" stroke="#111" stroke-width="2.2"/>`;
+  return `<svg class="tank-sketch" viewBox="0 0 ${vw.toFixed(0)} ${vh.toFixed(0)}" aria-hidden="true">
+    <rect x="${x0 - 2}" y="${y0 + 1}" width="${L + D + 4}" height="7" rx="1.5" fill="#6b4a2e"/>
+    <polygon points="${p([[x0 + D, wy - D], [x0 + L + D, wy - D], [x0 + L + D, y0 - D], [x0 + L, y0], [x0, y0], [x0, wy]])}" fill="#2a8fc4" opacity=".35"/>
+    <polygon points="${p([[x0, y0 - S], [x0 + L, y0 - S], [x0 + L + D, y0 - S - D], [x0 + L + D, y0 - D], [x0 + L, y0], [x0, y0]])}" fill="#e8dcc0"/>
+    <polygon points="${p([[x0, wy], [x0 + L, wy], [x0 + L + D, wy - D], [x0 + D, wy - D]])}" fill="#7fd0ff" opacity=".45"/>
+    <path d="M${x0} ${top}h${L}v${H}h${-L}z M${x0 + L} ${top}l${D} ${-D}v${H}l${-D} ${D} M${x0} ${top}l${D} ${-D}h${L}" fill="none" stroke="#bfe8ff" stroke-width="1" opacity=".9"/>
+    ${rim}
+  </svg>`;
+}
+
 function showMyTankSetup() {
   const builds = JSON.parse(MY.builds());
-  $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}"><strong>${icon('tank')} ${esc(b.label)}</strong>
-    <small>${b.gallons} gal · ${esc(b.size)}</small><span>${esc(b.blurb)}</span></button>`).join('');
+  $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}">${tankSketch(b)}<strong>${icon('tank')} ${esc(b.label)}</strong>
+    <small>${b.gallons} gal · ${esc(b.size)}${b.rimless ? ' · rimless' : ''}</small><span>${esc(b.blurb)}</span></button>`).join('');
   const d = $('mytank');
   if (!d.open) d.showModal();
 }

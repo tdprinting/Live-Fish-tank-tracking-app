@@ -46,6 +46,11 @@ data class CustomTankSave(
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
     /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
     val rocks: String = "",
+    /**
+     * How far Tee's rocks were moved to fit this tank's glass (x, y, z cm; Simulation.scapeShift). Missing in saves
+     * from before tanks were drawn to size: a tank of another size then gets its rocks fitted afresh on opening.
+     */
+    val scapeFit: List<Double>? = null,
 )
 
 @Serializable

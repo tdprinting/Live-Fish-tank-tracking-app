@@ -1377,7 +1377,7 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
 
     init { install(GlassGraze(this), Flipped()) }
 
-    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(60.0, 0.55 * c.rock.waterLevelCm, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
+    override fun restSpot(c: Ctx, night: Boolean): Rest = if (o.homePos == Vec3.ZERO) Rest(Vec3(c.rock.lengthCm / 2, 0.55 * c.rock.waterLevelCm, c.rock.widthCm - surfaceOffset(c)), Vec3.Y, Vec3(0.0, 0.0, -1.0))
         else Rest(o.homePos, o.heading, o.up)
 
     override fun initialPlace(c: Ctx) {

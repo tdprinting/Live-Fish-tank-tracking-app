@@ -143,9 +143,9 @@ fun BagCarryLayer(
                 frame
                 val path = Path()
                 var ok = true
-                val pts = arrayOf(0f to TankDims.WATER_LEVEL_F - 12f, TankDims.LENGTH_F to TankDims.WATER_LEVEL_F - 12f, TankDims.LENGTH_F to TankDims.WATER_LEVEL_F + 2f, 0f to TankDims.WATER_LEVEL_F + 2f)
+                val pts = arrayOf(0f to com.reeflive.app.render.Camera.WATER_Y - 12f, com.reeflive.app.render.Camera.TANK[0] to com.reeflive.app.render.Camera.WATER_Y - 12f, com.reeflive.app.render.Camera.TANK[0] to com.reeflive.app.render.Camera.WATER_Y + 2f, 0f to com.reeflive.app.render.Camera.WATER_Y + 2f)
                 pts.forEachIndexed { i, (x, y) ->
-                    if (!projection.project(x, y, TankDims.DEPTH_F + 0.8f, corner)) ok = false
+                    if (!projection.project(x, y, com.reeflive.app.render.Camera.TANK[2] + 0.8f, corner)) ok = false
                     if (i == 0) path.moveTo(corner[0], corner[1]) else path.lineTo(corner[0], corner[1])
                 }
                 path.close()
