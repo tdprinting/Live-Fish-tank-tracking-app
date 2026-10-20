@@ -759,6 +759,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
                     pf.set1f("uPart", code)
                     pf.set4f("uShape", r.thin, code, r.eyeYaw, part.finKind)
+                    pf.set4f("uJaw", part.jaw[0], part.jaw[1], part.jaw[2], part.jaw[3])
                     pf.set3fv("uEyePivot", part.eyePivot)
                     part.mesh.draw(); drawCalls++
                 }
@@ -1034,6 +1035,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
+            p.set4f("uJaw", part.jaw[0], part.jaw[1], part.jaw[2], part.jaw[3])
             p.set3fv("uEyePivot", part.eyePivot)
             part.material.apply(p, w)
             bindStage(p, w, when { isFin -> sb.fin; part.part == "body" -> sb.body; else -> null })
@@ -1066,6 +1068,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         fishUniforms(p, r, rigid = false)
         p.set1f("uPart", 0f)
         p.set4f("uShape", r.thin, 0f, 0f, 0f)
+        p.set4f("uJaw", 0f, 0f, 0f, 0f)
         p.set3f("uEyePivot", 0.4f, 0.05f, 0f)
         white?.bind(0)
         val c = Placeholder.colorFor(r.speciesId)
