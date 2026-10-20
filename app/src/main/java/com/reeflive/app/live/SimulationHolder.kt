@@ -11,6 +11,14 @@ import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
 import com.reeflive.core.custom.TankBuild
 import com.reeflive.core.custom.TankBuilds
+import com.reeflive.core.custom.economy.BuyResult
+import com.reeflive.core.custom.economy.DisplayTank
+import com.reeflive.core.custom.economy.Economy
+import com.reeflive.core.custom.economy.FishStore
+import com.reeflive.core.custom.economy.ShelfCard
+import com.reeflive.core.custom.economy.StoreVisit
+import com.reeflive.core.custom.economy.EconomyView
+import com.reeflive.core.custom.economy.Gain
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.live.LivePeek
 import com.reeflive.core.live.RealityInit
@@ -25,6 +33,7 @@ import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
+import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.TankConfig
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.CancelToken
@@ -38,7 +47,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +63,21 @@ import java.time.ZoneId
 import java.util.concurrent.Executors
 
 enum class SimMode { REALITY, SANDBOX, CUSTOM }
+
+/**
+ * A walk around a fish store (docs/ECONOMY.md §5): its display tanks (the 3D view shows [at]), each with its cards, the
+ * keeper's sand dollars, and which species each animal in the shown tank is (for taps in the tank).
+ */
+data class StoreVisitUi(
+    val store: FishStore,
+    val tanks: List<Pair<DisplayTank, List<ShelfCard>>>,
+    val at: Int,
+    val coins: Int,
+    val speciesOf: Map<String, String>,
+)
+
+/** The street of stores for the Add life card: each store and whether it is open to this keeper. */
+data class StoreFrontUi(val store: FishStore, val open: Boolean)
 
 /** "My tank" as the screen sees it: whether one is set up yet, its name and build. */
 data class CustomTankInfo(val ready: Boolean, val exists: Boolean, val name: String = "", val build: TankBuild = TankBuilds.DEFAULT)
@@ -121,6 +148,21 @@ class SimulationHolder(
     /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
     val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
 
+    private val _economy = MutableStateFlow<EconomyView?>(null)
+    /** My tank's sand dollars, care list and goals (docs/ECONOMY.md); null while there is no My tank. */
+    val economy: StateFlow<EconomyView?> = _economy.asStateFlow()
+    private val _gains = MutableSharedFlow<Gain>(extraBufferCapacity = 16)
+    /** Money that just came in (the coin cheer). */
+    val gains: SharedFlow<Gain> = _gains.asSharedFlow()
+
+    private val _visit = MutableStateFlow<StoreVisitUi?>(null)
+    /** The store being visited, or null at home. */
+    val visitState: StateFlow<StoreVisitUi?> = _visit.asStateFlow()
+
+    private val _paid = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 4)
+    /** A checkout went through: (sand dollars paid, animals bought); the screen plays the pay animation. */
+    val paid: SharedFlow<Pair<Int, Int>> = _paid.asSharedFlow()
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -134,6 +176,13 @@ class SimulationHolder(
     private var customBase: CustomTankSave? = null
     private var customLoaded = false
     private var lastCustomSaveMs = 0L
+    /** My tank's economy; kept across "Start over" so the keeper's money and level stay theirs. */
+    private var economyLive: Economy? = null
+    private var lastEconomyMs = 0L
+    /** The display tank on screen while visiting a store (My tank waits meanwhile, then catches up). */
+    private var display: Simulation? = null
+    private var visiting: FishStore? = null
+    private var visitTanks: List<DisplayTank> = emptyList()
     private var lastWallMs = HashMap<Simulation, Long>()
     private val scenarios = ScenarioQueue()
     private var tickJob: Job? = null
@@ -150,7 +199,7 @@ class SimulationHolder(
 
     private val active: Simulation? get() = when (_mode.value) {
         SimMode.SANDBOX -> sandbox ?: reality
-        SimMode.CUSTOM -> customSim
+        SimMode.CUSTOM -> display ?: customSim
         SimMode.REALITY -> reality
     }
 
@@ -193,21 +242,116 @@ class SimulationHolder(
             sim.speed = 1.0
             customSim?.let { lastWallMs.remove(it) }
             customSim = sim
-            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed)
+            val eco = economyLive ?: Economy()
+            economyLive = eco
+            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state)
             customLoaded = true
             lastWallMs[sim] = now
             saveCustom()
             _custom.value = CustomTankInfo(ready = true, exists = true, name = name, build = build)
+            updateEconomy(sim, force = true)
             if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
         }
+    }
+
+    /** The four storefronts and which are open to this keeper (the Add life card in My tank). */
+    fun storeFronts(): List<StoreFrontUi> = economyLive.let { e -> FishStore.entries.map { StoreFrontUi(it, e != null && e.canSee(it)) } }
+
+    /** Walks into [store]: the 3D view shows its first display tank; My tank waits and catches up on the way out. */
+    fun enterStore(store: FishStore) {
+        scope.launch {
+            val e = economyLive ?: return@launch
+            if (customSim == null || !e.canSee(store) || _mode.value != SimMode.CUSTOM) return@launch
+            if (visiting == null) saveCustom()
+            visiting = store
+            visitTanks = StoreVisit.tanks(store, today())
+            display = null
+            showTankNow(0)
+        }
+    }
+
+    /** Shows display tank [i] (one runs at a time). */
+    fun showStoreTank(i: Int) { scope.launch { showTankNow(i) } }
+
+    private fun showTankNow(i: Int) {
+        val n = visitTanks.size
+        if (n == 0 || visiting == null) return
+        val k = ((i % n) + n) % n
+        ensureAssets()
+        val t = visitTanks[k]
+        val d = StoreVisit.build(t, species!!, rock!!, (today().hashCode() * 31L + k))
+        display?.let { lastWallMs.remove(it) }
+        display = d
+        lastWallMs[d] = nowMs()
+        publishVisit(k)
+        publish(d)
+    }
+
+    private fun publishVisit(at: Int = _visit.value?.at ?: 0) {
+        val store = visiting ?: run { _visit.value = null; return }
+        val e = economyLive ?: return
+        val mine = customSim ?: return
+        val day = today()
+        val d = display
+        val speciesOf = d?.organisms?.associate { it.id to it.species.id }.orEmpty()
+        _visit.value = StoreVisitUi(store, visitTanks.map { it to StoreVisit.cards(e, store, it, mine, day) }, at, e.state.coins, speciesOf)
+    }
+
+    /** Walks out (the bag goes back on the shelves); My tank catches up on the minutes spent shopping. */
+    fun leaveStore() { scope.launch { leaveStoreNow() } }
+
+    private fun leaveStoreNow() {
+        if (visiting == null) return
+        display?.let { lastWallMs.remove(it) }
+        display = null; visiting = null; visitTanks = emptyList()
+        _visit.value = null
+        customSim?.let { catchUp(it) }
+    }
+
+    /**
+     * Pays for the shop bag ([bag]: one species id per animal). On success the keeper is home and the bags float at
+     * the top of My tank; [onResult] gets the result on the sim thread.
+     */
+    fun checkout(bag: List<String>, onResult: (BuyResult) -> Unit = {}) {
+        scope.launch {
+            val store = visiting ?: return@launch
+            val e = economyLive ?: return@launch
+            val c = e.checkout(store, bag, today())
+            if (c.result != BuyResult.OK) { publishVisit(); onResult(c.result); return@launch }
+            leaveStoreNow()
+            val mine = customSim
+            if (mine != null) {
+                val groups = bag.groupingBy { it }.eachCount().entries.toList()
+                groups.forEachIndexed { k, (id, n) ->
+                    // the bags in a row along the front glass, as if carried home and set down one by one
+                    mine.enqueue(Command.FloatBag(id, n, 20.0 + (k + 0.5) * 80.0 / groups.size, size = StockSize.JUVENILE))
+                }
+                updateEconomy(mine, force = true)
+            }
+            saveCustom()
+            _paid.tryEmit(c.total to bag.size)
+            onResult(BuyResult.OK)
+        }
+    }
+
+    /** The keeper opened the water test (Tank Health or the shelf kit): today's "Test the water" chore. */
+    fun testedWater() {
+        scope.launch { val sim = customSim ?: return@launch; economyLive?.testedWater(today()); updateEconomy(sim, force = true) }
+    }
+
+    /** Collects today's happy tank bonus. */
+    fun collectHappyBonus() {
+        scope.launch { val sim = customSim ?: return@launch; economyLive?.collectHappy(sim, today()); updateEconomy(sim, force = true) }
     }
 
     /** Deletes "My tank" (the screen asks first); the build picker shows again. */
     fun startOverCustomTank() {
         scope.launch {
+            leaveStoreNow()
             customSim?.let { lastWallMs.remove(it) }
             customSim = null; customBase = null; customLoaded = true
             customStore?.clear()
+            _economy.value = null
             _custom.value = CustomTankInfo(ready = true, exists = false)
             if (_mode.value == SimMode.CUSTOM) _snapshots.value = SimSnapshot.EMPTY
         }
@@ -359,7 +503,7 @@ class SimulationHolder(
         if (_mode.value == m && (m != SimMode.SANDBOX || sandbox != null)) return
         val real = reality
         // My tank keeps its own speed; the other two start at real time
-        if (_mode.value == SimMode.CUSTOM) { saveCustom(); _speed.value = 1.0 }
+        if (_mode.value == SimMode.CUSTOM) { leaveStoreNow(); saveCustom(); _speed.value = 1.0 }
         if (m == SimMode.CUSTOM) {
             leaveSandbox()
             loadCustom()
@@ -399,18 +543,35 @@ class SimulationHolder(
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
+        economyLive = Economy(save.economy)
         // the time away, at 1x: the tank lived on while the app was closed
         sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0)
         sim.stepWall(0.0)
         lastWallMs[sim] = nowMs()
         _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
+        updateEconomy(sim, force = true)
+    }
+
+    /** Today as the economy counts days: the keeper's local calendar day. */
+    private fun today(): String = Instant.ofEpochMilli(nowMs()).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+
+    /** Ticks off chores done since the last look (about once a second) and publishes the money; sim thread. */
+    private fun updateEconomy(sim: Simulation, force: Boolean = false) {
+        val eco = economyLive ?: return
+        val now = nowMs()
+        if (!force && now - lastEconomyMs < ECONOMY_MS) return
+        lastEconomyMs = now
+        val changed = eco.update(sim, today())
+        for (g in eco.takeGains()) _gains.tryEmit(g)
+        if (changed || force || _economy.value == null) _economy.value = eco.view(sim)
+        else _economy.value?.let { v -> Economy.happyBonus(sim).let { h -> if (h != v.happyBonus) _economy.value = v.copy(happyBonus = h) } }
     }
 
     private fun saveCustom() {
         val sim = customSim ?: return
         val base = customBase ?: return
         val now = nowMs()
-        val save = CustomTank.capture(sim, base, now)
+        val save = CustomTank.capture(sim, economyLive?.let { base.copy(economy = it.state) } ?: base, now)
         customBase = save
         lastCustomSaveMs = now
         customStore?.write(CustomTankCodec.encode(save))
@@ -467,7 +628,10 @@ class SimulationHolder(
                     sim.stepWall(dt)
                     lastWallMs[sim] = nowMs()
                     publish(sim)
-                    if (sim === customSim && nowMs() - lastCustomSaveMs >= CustomTank.AUTOSAVE_MS) saveCustom()
+                    if (sim === customSim) {
+                        updateEconomy(sim)
+                        if (nowMs() - lastCustomSaveMs >= CustomTank.AUTOSAVE_MS) saveCustom()
+                    }
                 }
                 val spent = (System.nanoTime() - t0) / 1_000_000
                 delay((TICK_MS - spent).coerceAtLeast(1))
@@ -496,5 +660,7 @@ class SimulationHolder(
 
     companion object {
         const val TICK_MS = 50L   // 20 Hz (SIMULATION §1.2)
+        /** How often My tank's chores are checked off (wall ms). */
+        const val ECONOMY_MS = 1000L
     }
 }

@@ -8,6 +8,28 @@ import kotlin.math.min
 /** Aiptasia predators the keeper can add (research 03 D, 01 §4.4). */
 enum class PestController { PEPPERMINT_SHRIMP, BERGHIA }
 
+/**
+ * What the keeper kills an aiptasia with (docs/research/aiptasia_control.md). [openKill] / [closedKill]: chance the
+ * dose kills a polyp that is open / pulled into its hole (a closed polyp takes in little of it); [fragment]: chance the
+ * dying polyp leaves a pedal lacerate behind; [dieSec]: sim seconds from the dose until it is gone; [whiten]: how pale
+ * it goes while it dies (Aiptasia-X and the calcium hydroxide pastes coat it white; the laser just shrivels it).
+ * A miss still makes the polyp snap shut and sulk in its hole for a while.
+ */
+enum class AiptasiaTreatment(
+    val label: String, val openKill: Double, val closedKill: Double, val fragment: Double, val dieSec: Double, val whiten: Double,
+) {
+    /** Red Sea Aiptasia-X: injected at the oral disc, "dies within minutes" encapsulated in globules (retailer, §2). */
+    AIPTASIA_X("Aiptasia-X", 0.92, 0.45, 0.1, 300.0, 0.85),
+    /** Blue Life Joe's Juice: fed over the mouth; behaves like a calcium hydroxide slurry (§3). */
+    JOES_JUICE("Joe's Juice", 0.85, 0.4, 0.15, 900.0, 0.9),
+    /** Home-made kalkwasser paste in a blunt syringe, into the mouth, left about an hour (§4); base hits spread them. */
+    KALK_PASTE("Kalk paste", 0.8, 0.3, 0.2, 1800.0, 1.0),
+    /** Aiptasia laser: closes in seconds, often needs another pass, tissue left can regrow (§5). */
+    LASER("Laser", 0.75, 0.6, 0.08, 20.0, 0.25),
+    /** Scraping it off the rock: the classic way to make ten out of one (§1, "when scraped or disturbed"). */
+    SCRAPE("Scrape", 0.9, 0.9, 0.5, 30.0, 0.0),
+}
+
 /** Controller populations living in the tank but not simulated as animals (they hide in the rock). */
 class PestState {
     /** Peppermint shrimp added with [Command.AddPestControl] (any Lysmata boggessi/wurdemanni organism counts too). */
@@ -16,8 +38,23 @@ class PestState {
     var berghia = 0.0
     var peppermintAcc = 0.0
     var berghiaAcc = 0.0
+    /** The polyp the Berghia are working on now (they graze one down before moving to the next). */
+    var berghiaPrey: String? = null
 
-    fun copyFrom(o: PestState) { peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; berghiaAcc = o.berghiaAcc }
+    fun copyFrom(o: PestState) {
+        peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; berghiaAcc = o.berghiaAcc; berghiaPrey = o.berghiaPrey
+    }
+
+    /** For My tank saves (CustomTankSave.pests). */
+    fun save(): Map<String, Double> = buildMap {
+        if (peppermint > 0) put("peppermint", peppermint.toDouble())
+        if (berghia > 0) put("berghia", berghia)
+    }
+
+    fun restore(m: Map<String, Double>) {
+        peppermint = (m["peppermint"] ?: 0.0).toInt().coerceAtLeast(0)
+        berghia = (m["berghia"] ?: 0.0).coerceAtLeast(0.0)
+    }
 }
 
 /**
@@ -40,6 +77,11 @@ object AiptasiaModel {
     const val BERGHIA_BREED_PER_DAY = 0.04
     const val BERGHIA_STARVE_PER_DAY = 1.0 / 7
     const val BERGHIA_PREDATION_PER_DAY = 0.05
+    const val NIGHT_FEED = 1.7
+    const val DAY_FEED = 0.45
+    /** Chance a store frag or piece of live rock carries an aiptasia (est.; dry rock carries none). */
+    const val HITCHHIKE_FRAG = 0.06
+    const val HITCHHIKE_LIVE_ROCK = 0.25
 
     fun polyps(sim: Simulation) = sim.corals.filter { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
 
@@ -47,8 +89,9 @@ object AiptasiaModel {
     fun peppermintCount(sim: Simulation): Int = sim.pests.peppermint +
         sim.organisms.count { it.alive && (it.species.id.contains("boggessi") || it.species.id.contains("wurdemanni")) }
 
-    fun step(sim: Simulation, dtMin: Double) {
+    fun step(sim: Simulation, dtMin: Double, night: Boolean = false) {
         val days = dtMin / 1440
+        dying(sim, dtMin * 60)
         val rng = sim.growthRng
         val w = sim.water.s
         val all = polyps(sim)
@@ -60,19 +103,19 @@ object AiptasiaModel {
             p.size = min(1.0, p.size + 0.05 * vig * days)
             // pedal laceration
             if (p.size >= MATURE && rng.chance(BUD_PER_DAY * vig * days)) lacerate(sim, p)?.let { born += it }
-            // disturbed (shadow, fish contact, tap): fragments now and then
-            if (p.disturb > 0.5 && sim.simTimeSec - p.lastFragAt > 3600) {
+            // disturbed (shadow, fish contact, tap): fragments now and then (not one already dying or being grazed down)
+            if (p.disturb > 0.5 && p.treatment == null && p.id != sim.pests.berghiaPrey && sim.simTimeSec - p.lastFragAt > 3600) {
                 p.lastFragAt = sim.simTimeSec
                 if (rng.chance(0.3)) lacerate(sim, p)?.let { born += it }
             }
         }
         add(sim, born)
-        controllers(sim, days)
+        controllers(sim, days, night)
         // dead polyps disappear
         sim.corals.removeAll { it.kind == CoralKind.AIPTASIA && it.tissue <= 0.01 }
     }
 
-    private fun controllers(sim: Simulation, days: Double) {
+    private fun controllers(sim: Simulation, days: Double, night: Boolean) {
         val st = sim.pests
         val rng = sim.growthRng
         val pep = peppermintCount(sim)
@@ -102,17 +145,118 @@ object AiptasiaModel {
             if (badWater) rate -= 0.2
             st.berghia = max(0.0, st.berghia * (1 + rate * days))
             if (st.berghia < 0.3) st.berghia = 0.0
-            st.berghiaAcc += st.berghia * BERGHIA_PER_DAY * days
-            while (st.berghiaAcc >= 1) {
-                st.berghiaAcc -= 1
-                val live = polyps(sim)
-                if (live.isEmpty()) { st.berghiaAcc = 0.0; break }
-                kill(live[rng.nextInt(live.size)])
+            // they graze mostly after lights-out and hide in the rock by day (supplier care notes; est. weights that
+            // average about 1 over a 10 h night); one polyp at a time, a small one goes faster
+            val w = if (night) NIGHT_FEED else DAY_FEED
+            var eat = st.berghia * BERGHIA_PER_DAY * days * w
+            while (eat > 1e-9) {
+                val prey = prey(sim) ?: break
+                val need = prey.tissue * max(0.3, prey.size)
+                prey.disturb = max(prey.disturb, 0.6)   // a polyp being eaten stays pulled in
+                if (eat >= need) { eat -= need; kill(prey) } else { prey.tissue -= eat / max(0.3, prey.size); eat = 0.0 }
             }
+        } else st.berghiaPrey = null
+    }
+
+    /** The Berghia's current polyp, or the next one: the nearest to the last (they crawl on), else any. */
+    private fun prey(sim: Simulation): Coral? {
+        val st = sim.pests
+        val live = polyps(sim)
+        if (live.isEmpty()) { st.berghiaPrey = null; return null }
+        live.firstOrNull { it.id == st.berghiaPrey && it.treatment == null }?.let { return it }
+        val from = sim.corals.firstOrNull { it.id == st.berghiaPrey }?.pos
+        val pick = live.filter { it.treatment == null }.ifEmpty { live }.let { l ->
+            if (from != null) l.minByOrNull { it.pos.distanceSqTo(from) }!! else l[sim.growthRng.nextInt(l.size)]
         }
+        st.berghiaPrey = pick.id
+        return pick
     }
 
     private fun kill(p: Coral) { p.tissue = 0.0 }
+
+    /** Treated polyps shrink away over their treatment's [AiptasiaTreatment.dieSec]. */
+    private fun dying(sim: Simulation, dtSec: Double) {
+        for (p in sim.corals) {
+            val t = p.treatment ?: continue
+            if (p.kind != CoralKind.AIPTASIA) continue
+            p.disturb = 1.0
+            p.bleach = max(p.bleach, t.whiten * (1 - p.treatLeftSec / t.dieSec).coerceIn(0.0, 1.0))
+            p.treatLeftSec -= dtSec
+            p.tissue = if (p.treatLeftSec <= 0) 0.0 else min(p.tissue, (p.treatLeftSec / t.dieSec).coerceIn(0.05, 1.0))
+        }
+    }
+
+    /**
+     * Nearest live polyp to [pos] within [radiusCm] no bigger than [maxSize] (shrimp and other predators; the
+     * peppermint shrimp thread's brain), or null. Polyps already dying from a treatment are skipped.
+     */
+    fun preyNear(sim: Simulation, pos: Vec3, radiusCm: Double, maxSize: Double = 1.0): Coral? {
+        var best: Coral? = null
+        var bd = radiusCm * radiusCm
+        for (c in sim.corals) {
+            if (c.kind != CoralKind.AIPTASIA || c.tissue <= 0.01 || c.size > maxSize || c.treatment != null) continue
+            val d = c.pos.distanceSqTo(pos)
+            if (d < bd) { bd = d; best = c }
+        }
+        return best
+    }
+
+    /** A predator's bite: takes [amount] of the polyp's tissue (scaled by its size) and makes it pull in. True when gone. */
+    fun bite(sim: Simulation, polyp: Coral, amount: Double): Boolean {
+        polyp.disturb = max(polyp.disturb, 0.8)
+        polyp.tissue -= amount / max(0.3, polyp.size)
+        if (polyp.tissue > 0.01) return false
+        kill(polyp)
+        return true
+    }
+
+    /** What a treatment did, for the screen to say (also emitted as [SimEvent.AiptasiaTreated]). */
+    enum class TreatResult { KILLED, HID, NONE }
+
+    /**
+     * The keeper doses polyp [id] (null: the biggest untreated one) with [t]. An open polyp usually dies over
+     * [AiptasiaTreatment.dieSec]; one pulled into its hole (night, just touched) mostly escapes and stays shut a while.
+     * A dying polyp may leave a lacerate.
+     */
+    fun treat(sim: Simulation, t: AiptasiaTreatment, id: String? = null): TreatResult {
+        val live = polyps(sim).filter { it.treatment == null }
+        val p = (if (id != null) live.firstOrNull { it.id == id } else null) ?: live.maxByOrNull { it.size } ?: return TreatResult.NONE
+        val rng = sim.growthRng
+        val open = p.extension > 0.45
+        val result = if (rng.chance(if (open) t.openKill else t.closedKill)) {
+            p.treatment = t; p.treatLeftSec = t.dieSec
+            if (rng.chance(t.fragment)) lacerate(sim, p)?.let { add(sim, listOf(it)) }
+            TreatResult.KILLED
+        } else {
+            // it snapped shut in time: pulled into the rock, it sulks for an hour (the laser still singes it)
+            p.disturb = 1.0
+            p.lastFragAt = sim.simTimeSec
+            if (t == AiptasiaTreatment.LASER) p.size = max(0.2, p.size * 0.6)
+            TreatResult.HID
+        }
+        sim.emit(SimEvent.AiptasiaTreated(p.id, t, result == TreatResult.KILLED, sim.simTimeSec))
+        return result
+    }
+
+    /**
+     * A hitchhiker: one small aiptasia on the rock within a few cm of [near] (a store frag's spot, a new live rock).
+     * Returns it, or null when there is no rock there.
+     */
+    fun hitchhike(sim: Simulation, near: Vec3): Coral? {
+        if (polyps(sim).size >= CAP) return null
+        val rng = sim.growthRng
+        val rock = sim.rock
+        repeat(8) {
+            val q = rock.sdf.project(near + Vec3(rng.signed(), rng.signed() * 0.5, rng.signed()) * 4.0, 0.2)
+            if (!rock.inWater(q, 0.5) || q.y < rock.sandTopCm + 0.5 || kotlin.math.abs(rock.sdf.dist(q) - 0.2) > 0.5) return@repeat
+            val c = Coral("aiptasia#${sim.nextFragId()}", sim.species[SPECIES_ID], "Aiptasia", "", q, rock.sdf.gradient(q), rng.nextDouble() * 6.28)
+            c.size = 0.3
+            sim.corals += c
+            sim.emit(SimEvent.CoralSpawned("", c.id, sim.simTimeSec))
+            return c
+        }
+        return null
+    }
 
     /** A pedal lacerate: a small new polyp 1-4 cm from [p] on the rock (nothing on sand). */
     fun lacerate(sim: Simulation, p: Coral): Coral? {
