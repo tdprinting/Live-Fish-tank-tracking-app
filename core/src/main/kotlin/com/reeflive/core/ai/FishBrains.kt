@@ -468,13 +468,35 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** The sleeping crevice pose for the tang's current size (refitted if it has grown). */
     fun bedPose(c: Ctx): TangShelters.Pose? {
-        if (bedFor < 0 || abs(bedFor - c.o.lengthCm) > 0.5) {
-            bedFor = c.o.lengthCm
+        // spots is read first: it rescans the rockwork if the rocks have moved, which bumps the generation
+        shelters.spots
+        val gen = shelters.generation
+        // in it or gliding in or out: keep the pose it is on (a refit mid-glide would steer it through rock) unless
+        // the rocks moved and it no longer fits there or has no roof over it any more (its rock was taken out)
+        val cur = bed
+        if (bedLocked && cur != null && (gen == bedGen || bedStillGood(c, cur))) { bedGen = gen; return cur }
+        if (bedFor < 0 || abs(bedFor - c.o.lengthCm) > 0.5 || gen != bedGen) {
+            bedFor = c.o.lengthCm; bedGen = gen
             val a = sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)
-            bed = shelters.pick(a, null, c.o.lengthCm, SIDE_REST_ROLL, prefer = a)
+            // the most walled-in crevice of the overhangs near its usual corner (P. hepatus wedges itself into a
+            // crevice or under a ledge to sleep [S3][M]; a spot that is only in a rock's shadow will not do)
+            bed = shelters.pick(a, null, c.o.lengthCm, SIDE_REST_ROLL, prefer = a, tries = BED_TRIES, snuggest = true, avoid = badBeds)
         }
         return bed
     }
+
+    private fun bedStillGood(c: Ctx, p: TangShelters.Pose) =
+        shelters.clear(p.pos, p.heading, p.up, c.o.lengthCm) && c.rock.sdf.raycast(p.pos, Vec3.Y, shelters.roofMax(c.o.lengthCm)) != null
+
+    /** A bed it could not get into (the way in was blocked): passed over when the bed is chosen again. */
+    fun bedBlocked(c: Ctx) {
+        bed?.let { badBeds += it.pos; if (badBeds.size > 4) badBeds.removeAt(0) }
+        bedFor = -1.0
+    }
+    private val badBeds = ArrayList<Vec3>()
+    /** Set by [TangSleep] while it is inside the crevice's doorway. */
+    private var bedLocked = false
+    private var bedGen = -1
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val a = sleepAnchor(c)
@@ -498,6 +520,9 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         const val SNAP_YIELD = 0.002
         /** Night side-rest roll, rad (~70°; observed 30–90°, research video fish_blue_tang [S3][M]). */
         const val SIDE_REST_ROLL = 1.22
+        /** Crevices weighed when choosing a bed, and seconds it tries to get into one before picking another (DESIGN ESTIMATE). */
+        const val BED_TRIES = 14
+        const val BED_GIVE_UP_S = 120.0
         /** Play-dead roll, rad (~85°, "rolled 90 deg onto side", [S1][M]) and passive sink rate, cm/s (DESIGN ESTIMATE). */
         const val PLAY_DEAD_ROLL = 1.48
         const val PLAY_DEAD_SINK = 1.5
@@ -632,10 +657,16 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         private var waking = false
         /** Once it has started gliding into its crevice it only comes out the way it went in (no swimming through rock). */
         override val committed: Boolean get() = dock.inside
-        override fun enter(c: Ctx) { dock.reset(); waking = false; lyingFor = 0.0 }
+        private var triedAt = 0.0
+        private var lastBed: TangShelters.Pose? = null
+        override fun enter(c: Ctx) { dock.reset(); waking = false; lyingFor = 0.0; triedAt = 0.0; lastBed = null }
+        override fun exit(c: Ctx) { bedLocked = false }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
+            bedLocked = dock.inside
             val bp = if (c.p.night || dock.inside) bedPose(c) else null
+            // the rockwork changed under it and it has a new bed: swim there from where it is
+            if (bp !== lastBed) { if (lastBed != null && bp != null) dock.reset(); lastBed = bp }
             if (bp == null) { plainUpdate(c, out); return }
             // morning, or food in the water it wants: glide back out the way it came, then let the day begin
             if (waking || !c.p.night || (Feed.rousedBy(c, this@TangBrain) && o.hunger > 0.2)) {
@@ -643,7 +674,12 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
                 if (dock.leave(c, out, bp)) finished = true
                 return
             }
-            if (!dock.drive(c, out, bp, o.cruiseSpeed * 0.8, rate = 1.5)) { lyingFor = 0.0; return }
+            if (!dock.drive(c, out, bp, o.cruiseSpeed * 0.8, rate = 1.5)) {
+                lyingFor = 0.0
+                // something is in the way (a rock moved, a coral grew, another fish sits there): another crevice
+                if (!dock.inside && elapsed - triedAt > BED_GIVE_UP_S) { bedBlocked(c); dock.reset(); triedAt = elapsed }
+                return
+            }
             // wedged under the overhang lying on its side, back to the rock; the pose was fitted so no part of the
             // body is in the rock, and it glided in along a path cleared for that pose
             o.sleeping = true

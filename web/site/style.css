@@ -417,3 +417,105 @@ dialog h2 { font-family: var(--display); font-size: 22px; margin-top: 0; }
 .rlbl .gi { width: 24px; height: 24px; color: #fff; --gacc: #FFE14D; }
 .opt.on { background: radial-gradient(110% 70% at 30% 10%, rgba(255,255,255,.7), transparent 55%), var(--tone, #F2F6FF); border-color: var(--navy); }
 .seg .gi { width: 18px; height: 18px; vertical-align: -0.25em; margin-right: 2px; --gacc: #FF7A59; }
+
+/* My tank's sand dollars (care.js; Android CareCard.kt) */
+.money { display: inline-flex; align-items: center; gap: 5px; border: 2.5px solid var(--navy); border-radius: 999px;
+  background: #FFE14D; color: var(--navy); padding: 4px 11px 4px 5px; font: 700 15px/1 var(--display); cursor: pointer; position: relative;
+  box-shadow: 0 3px 0 var(--navy); font-variant-numeric: tabular-nums; }
+.money .sanddollar { width: 24px; height: 24px; }
+.money .lv { font-size: 13px; opacity: .85; }
+.money .ping { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #FF5C6C; border: 2px solid var(--navy); }
+.caremodal { position: fixed; inset: 0; z-index: 90; background: rgba(3,9,18,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.carecard { width: min(440px, 100%); max-height: calc(100% - 32px); overflow-y: auto; padding: 18px; background: var(--panel); border: 2.5px solid var(--navy); }
+.carecard h3 { margin: 0; font: 600 19px/1.2 var(--display); }
+.carecard h4 { margin: 14px 0 6px; font: 600 15px/1.2 var(--display); }
+.carecard p { margin: 6px 0; }
+.carehead { display: flex; gap: 10px; align-items: center; }
+.carehead .sanddollar { width: 42px; height: 42px; flex: none; }
+.carecard .lvl { font: 600 13px/1.3 var(--display); }
+.lvbar { height: 12px; border-radius: 999px; background: rgba(27,19,64,.55); border: 2px solid var(--navy); overflow: hidden; }
+.lvbar i { display: block; height: 100%; background: #FFE14D; }
+.job, .goal { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.07); margin: 6px 0; }
+.job.done { background: rgba(142,230,107,.22); }
+.job .tick { width: 22px; font-size: 18px; text-align: center; }
+.job.done .tick { color: #8EE66B; }
+.job .what, .goal .what { flex: 1; display: flex; flex-direction: column; }
+.job small { color: var(--labelDim); }
+.job .pay, .goal .pay { color: #FFE14D; font-weight: 700; }
+.goal { background: none; padding: 3px 4px; margin: 2px 0; }
+.goal.done { color: var(--labelDim); }
+.goal.done .pay { color: var(--labelDim); }
+.carecard .streak { color: #FFB13D; }
+.happyrow { display: flex; align-items: center; gap: 10px; }
+.happyrow p { flex: 1; }
+.carecard .pill { border: 2.5px solid var(--navy); background: var(--pillFill); color: var(--navy); font-weight: 700; padding: 8px 16px; }
+.carecard .pill.collect { background: #8EE66B; }
+.carefoot { display: flex; justify-content: flex-end; margin-top: 10px; }
+/* money cheers (care.js; Android RewardFx.kt) */
+.money.gulp { animation: gulp .55s cubic-bezier(.3,1.6,.5,1); }
+@keyframes gulp { 0% { transform: scale(1,1); } 30% { transform: scale(1.22,.82); } 60% { transform: scale(.94,1.06); } 100% { transform: scale(1,1); } }
+.money.gulp .sanddollar { animation: spinin .55s ease-out; }
+@keyframes spinin { from { transform: rotate(-60deg); } to { transform: rotate(0); } }
+.fxcoin { position: fixed; left: 0; top: 0; z-index: 95; width: 26px; height: 26px; pointer-events: none; border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.18), 0 0 0 5.5px rgba(255,255,255,.45), inset -3px -3px 6px rgba(255,255,255,.15); }
+.fxcoin svg { width: 100%; height: 100%; display: block; }
+.fxplus { position: fixed; z-index: 95; pointer-events: none; font: 800 34px/1 var(--display); color: #FFE14D;
+  text-shadow: 2px 2px 0 #1B1340, -2px 2px 0 #1B1340, 2px -2px 0 #1B1340, -2px -2px 0 #1B1340, 0 4px 0 #1B1340; }
+.job.done .tick { animation: tickpop .5s cubic-bezier(.3,1.8,.5,1); }
+@keyframes tickpop { 0% { transform: scale(.3); } 60% { transform: scale(1.5); } 100% { transform: scale(1); } }
+.levelup { position: fixed; inset: 0; z-index: 100; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: radial-gradient(circle at 50% 45%, rgba(14,59,90,.85), rgba(3,9,18,.94) 70%); animation: lvin .3s ease-out; }
+.levelup.out { animation: lvout .35s ease-in forwards; }
+@keyframes lvin { from { opacity: 0; } } @keyframes lvout { to { opacity: 0; transform: scale(1.06); } }
+.levelup .rays { position: absolute; left: 50%; top: 24px; width: 420px; height: 420px; margin: -145px 0 0 -210px; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255,225,77,.16) 0 6deg, transparent 6deg 30deg); border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%); mask: radial-gradient(circle, #000 20%, transparent 70%); animation: rays 8s linear infinite; }
+@keyframes rays { to { transform: rotate(360deg); } }
+.levelup .lb { position: absolute; bottom: -30px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(255,255,255,.18);
+  animation: rise linear infinite; }
+@keyframes rise { from { transform: translateY(0); } 50% { transform: translate(12px,-55vh); } to { transform: translateY(-115vh); } }
+.levelup .lf { position: absolute; left: -60px; width: 44px; height: 26px; animation: swim 2.6s ease-in-out infinite; }
+@keyframes swim { 0% { transform: translateX(0) translateY(0); } 50% { transform: translateX(55vw) translateY(-10px); } 100% { transform: translateX(110vw) translateY(0); } }
+.lvbox { position: relative; text-align: center; padding: 24px; animation: pop .7s cubic-bezier(.3,1.7,.5,1); }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } }
+.lstar { width: 130px; height: 130px; filter: drop-shadow(0 0 24px rgba(255,225,77,.6)); animation: wiggle 1.6s ease-in-out infinite; }
+@keyframes wiggle { 0%,100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.06); } }
+.lvtitle { font: 800 44px/1.1 var(--display); color: #F2F6FF; text-shadow: 2px 2px 0 #1B1340, -2px 2px 0 #1B1340, 2px -2px 0 #1B1340, -2px -2px 0 #1B1340, 0 5px 0 #1B1340; }
+.lvopens { font: 700 20px/1.3 var(--display); color: #FFE14D; margin-top: 6px; }
+.lvtap { font-size: 14px; color: rgba(242,246,255,.7); margin-top: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .levelup .rays, .levelup .lb, .levelup .lf, .lstar, .lvbox, .money.gulp, .money.gulp .sanddollar, .job.done .tick { animation: none !important; }
+  .levelup .lb, .levelup .lf { display: none; }
+}
+/* touch controls: food in hand waiting for a tap, and the gear's pop-out menu (Android TankSpotPopup) */
+.aimbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); width: min(520px, calc(100% - 24px));
+  padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-size: 15px; z-index: 30; }
+.aimbar .ico { width: 44px; height: 44px; flex: none; }
+.aimbar .ico img { width: 100%; height: 100%; object-fit: contain; animation: aimbob 1s ease-in-out infinite alternate; }
+.aimbar strong { flex: 1; }
+@keyframes aimbob { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
+.spotpop { position: fixed; inset: 0; pointer-events: none; z-index: 35; }
+.spotpop .ring { position: fixed; left: var(--x); top: var(--y); width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  border: 3px solid #5FD7FF; background: rgba(95,215,255,.25); }
+.spotpop .card { position: fixed; pointer-events: auto; max-width: min(320px, calc(100vw - 16px)); padding: 12px; color: #fff;
+  background: var(--panel); border: 3px solid var(--navy); border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.4); transform-origin: 50% 100%; }
+.spotpop.below .card { transform-origin: 50% 0; }
+.spotpop .card.warn { border-color: #FFB13D; }
+.spotpop .card.warn p:first-of-type { color: #FFB13D; }
+.spotpop.pop .card { animation: spotpop .35s cubic-bezier(.34,1.56,.64,1); }
+.spotpop.pop .ring { animation: spotring .35s ease-out; }
+@keyframes spotpop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes spotring { from { transform: scale(.2); } to { transform: scale(1); } }
+.spotpop .head { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.spotpop .head strong { flex: 1; }
+.spotpop .head .ico { width: 30px; height: 30px; }
+.spotpop .x { width: 32px; height: 32px; border-radius: 50%; color: #fff; opacity: .8; }
+.spotpop .x svg { width: 20px; height: 20px; }
+.spotpop p { margin: 6px 0 8px; font-size: 13px; opacity: .9; }
+.spotpop .opts { display: flex; gap: 8px; }
+.spotpop .opts button { width: 84px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; color: #fff; font-size: 13px; font-weight: 600; border-radius: 16px; }
+.spotpop .opts button .ico { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: rgba(142,230,107,.22); border: 2.5px solid var(--navy); }
+.spotpop .opts button.urgent .ico { background: rgba(255,92,108,.35); }
+.spotpop .opts button .ico svg { width: 30px; height: 30px; }
+.spotpop .opts button:active .ico { transform: scale(.94); }
+@media (prefers-reduced-motion: reduce) { .spotpop.pop .card, .spotpop.pop .ring, .aimbar .ico img { animation: none; } }

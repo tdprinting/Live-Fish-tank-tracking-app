@@ -5,6 +5,7 @@ import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
+import { initCare } from './care.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -49,6 +50,8 @@ export function startLive(applyReadings) {
   onReadingsNeeded = applyReadings;
   if (started) return;
   started = true;
+  // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
+  window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -66,6 +69,9 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
+    onAim: (h) => aimFed(h),
+    onSpot: (t) => openSpot(t),
     onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'FIX') renderCard(); },
     onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'FIX') renderCard(); },
     // a rock settled or toppled after the sand under it was dug out: remember where it lies now
@@ -343,6 +349,8 @@ const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
 function renderCard() {
   if (!ui.card) return;
+  // opening the tank check is testing the water (My tank's daily job)
+  if (ui.card === 'FIX' || ui.card === 'HEALTH') MY.testedWater();
   const sb = editable();
   let h = '';
   switch (ui.card) {
@@ -369,7 +377,7 @@ function timeSlider(stops) {
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
 function viewCard() {
-  const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight']];
+  const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
   return `${timeSlider(STOPS)}
     <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
@@ -849,10 +857,9 @@ function useSupply(id) {
   if (s.sandbox && !editable()) { locked(); return; }
   if (s.food) {
     const f = C.foods.find((x) => x.id === s.food);
-    SB.act('feed', s.food, 0);
-    cue(['PELLET', 'FLOATING_PELLET', 'ALGAE_WAFER'].includes(s.food) ? 'PELLET' : 'FEED');
-    say(`${f.label}! ${f.blurb}`);
-    setTimeout(closeShelf, 700);
+    // nori goes on its clip; every other food waits in the hand until the tank is tapped where it should go
+    if (s.food === 'NORI') { SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
+    setTimeout(() => { closeShelf(); startAim(s.food); }, 500);
     return;
   }
   s.run();
@@ -927,6 +934,7 @@ function renderScape() {
   let bar = $('scapeBar');
   if (!bar) { bar = document.createElement('div'); bar.id = 'scapeBar'; bar.className = 'scapebar glass'; document.body.appendChild(bar); }
   bar.classList.toggle('hidden', !scape.on);
+  live.gearTaps(!scape.on);
   if (!scape.on) return;
   const shapes = JSON.parse(live.scapeShapes());
   const label = shapes.find((s) => s.id === scape.shape)?.label.toLowerCase() || 'rock';
@@ -1365,3 +1373,78 @@ function renderAll() {
   live.shelfLocked(SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
   renderRail();
 }
+
+// ================================================================ touch controls (Android LiveTankScreen onAim / onSpot)
+// Food picked on the shelf stays "in hand" until the tank is tapped: it goes in right at that fish, coral or spot.
+const aimUi = { food: null };
+function startAim(food) {
+  aimUi.food = food;
+  live.aimArm(true);
+  const f = C.foods.find((x) => x.id === food);
+  let bar = $('aimBar');
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'aimBar'; bar.className = 'aimbar glass';
+    bar.addEventListener('click', (e) => { if (e.target.closest('[data-aimcancel]')) stopAim(); });
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span class="ico">${icon(`food:${food}`)}</span><strong>Tap a fish, coral or spot to drop the ${esc(f.label.toLowerCase())} there</strong>
+    <button class="pillbtn" data-aimcancel>Cancel</button>`;
+  bar.classList.remove('hidden');
+}
+function stopAim() {
+  aimUi.food = null;
+  live.aimArm(false);
+  $('aimBar')?.classList.add('hidden');
+}
+function aimFed(h) {
+  const food = aimUi.food;
+  if (!food) return;
+  stopAim();
+  SB.feedAt(food, h.x, h.y, h.z);
+  const f = C.foods.find((x) => x.id === food);
+  cue(['PELLET', 'FLOATING_PELLET', 'ALGAE_WAFER'].includes(food) ? 'PELLET' : 'FEED');
+  const who = h.id ? animals.find((a) => a.id === h.id)?.name : null;
+  say(who ? `${f.label} for ${who}! ${f.blurb}` : `${f.label}! ${f.blurb}`);
+}
+
+// A tap on a piece of gear (skimmer, filter, heater, pumps, lamps, top-off) pops out its own little menu right there.
+const spotUi = { spot: null };
+function openSpot(t) {
+  const m = JSON.parse(SB.spotMenu(t.spot));
+  if (!m) return;
+  spotUi.spot = t.spot;
+  buzz(5);
+  if (ui.card) closeCard();
+  let el = $('spotPop');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'spotPop'; el.className = 'spotpop';
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if ('close' in b.dataset) { closeSpot(); return; }
+      const label = b.dataset.label;
+      if (SB.spotAct(spotUi.spot, b.dataset.opt)) { cue('TICK'); say(`${label}: on it!`); setTimeout(tick, 150); }
+      closeSpot();
+    });
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="ring"></div><div class="card ${m.warn ? 'warn' : ''}">
+    <div class="head"><span class="ico">${icon(m.glyph)}</span><strong>${esc(m.title)}</strong><button class="x" data-close aria-label="Close">${icon('close')}</button></div>
+    <p>${esc(m.status)}</p>
+    ${m.options.length ? `<div class="opts">${m.options.map((o) => `<button class="${o.urgent ? 'urgent' : ''}" data-opt="${o.id}" data-label="${esc(o.label)}"><span class="ico">${icon(o.glyph)}</span>${esc(o.label)}</button>`).join('')}</div>`
+      : '<p class="muted">Switch to My tank to change the gear.</p>'}</div>`;
+  const r = $('tank').getBoundingClientRect();
+  const x = r.left + t.x, y = r.top + t.y;
+  el.style.setProperty('--x', `${x}px`); el.style.setProperty('--y', `${y}px`);
+  el.classList.remove('hidden', 'below', 'pop');
+  const card = el.querySelector('.card');
+  const w = card.offsetWidth, hgt = card.offsetHeight;
+  const below = y - 30 - hgt < 8;
+  el.classList.toggle('below', below);
+  card.style.left = `${Math.min(Math.max(8, x - w / 2), innerWidth - w - 8)}px`;
+  card.style.top = `${below ? y + 30 : y - 30 - hgt}px`;
+  void el.offsetWidth;   // restart the pop animation
+  el.classList.add('pop');
+}
+function closeSpot() { spotUi.spot = null; $('spotPop')?.classList.add('hidden'); }
+$('tank').addEventListener('pointerdown', () => { if (spotUi.spot) closeSpot(); });

@@ -54,6 +54,24 @@ class LightingStateTest {
         assertTrue(actinic.keyColor[2] > actinic.keyColor[0])
     }
 
+    @Test fun blueLightLookIsActinicAndLit() {
+        // the Blue light look: blue share ~1 (the grade keeps it blue, corals fluoresce), bright enough to not be night,
+        // and its key light is blue; Day stays below the grade's actinic threshold (0.86) so daylight is still balanced
+        val s = LightingState.from(ViewLight.BLUE.channels!!)
+        assertTrue(s.blueFraction > 0.99f)
+        assertFalse(s.night)
+        assertTrue(s.intensity in 0.4f..0.7f)
+        assertTrue(s.keyColor[2] > 2f * s.keyColor[1] && s.keyColor[1] > s.keyColor[0])
+        assertTrue(LightingState.from(ViewLight.DAY.channels!!).blueFraction < 0.86f)
+    }
+
+    @Test fun fluorescenceOnlyForCoralTissueWithoutOwnGlow() {
+        assertNotNull(Fluorescence.of("zoa_polyp_orange"))
+        assertNotNull(Fluorescence.of("clove_polyp"))
+        assertNull(Fluorescence.of("gsp_mat_polyp")) // GSP's glow is in its GLB
+        assertNull(Fluorescence.of("rock"))
+    }
+
     @Test fun nightUsesMoonOnly() {
         val s = LightingState.from(floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0.3f))
         assertTrue(s.night)

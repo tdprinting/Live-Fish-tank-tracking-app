@@ -140,7 +140,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun setQuality(q: LiveQuality) { _quality.value = q }
 
     // ---- actions allowed in both modes ----
-    fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null) = holder.enqueue(Command.Feed(kind, grams, at))
+    /** Feeds [kind] at [at] (or the usual hand-feed spot); [target] = [at] is the spot the player tapped (Command.Feed.target). */
+    fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
     fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
@@ -202,6 +203,11 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val custom: StateFlow<com.reeflive.app.live.CustomTankInfo> = holder.custom
     fun startCustomTank(build: com.reeflive.core.custom.TankBuild) = holder.startCustomTank(build)
     fun startOverCustomTank() = holder.startOverCustomTank()
+    /** My tank's sand dollars, care list and goals (docs/ECONOMY.md), and money as it comes in. */
+    val economy: StateFlow<com.reeflive.core.custom.economy.EconomyView?> = holder.economy
+    val gains: kotlinx.coroutines.flow.SharedFlow<com.reeflive.core.custom.economy.Gain> = holder.gains
+    fun testedWater() { if (mode.value == SimMode.CUSTOM) holder.testedWater() }
+    fun collectHappyBonus() = holder.collectHappyBonus()
     /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
     fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
 
@@ -298,7 +304,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
      * shelf's care props; switching gear back on (heater, pumps, skimmer) is a sandbox change, so Watch skips it.
      */
     fun care(commands: List<Command>) {
-        val sandboxOn = mode.value == SimMode.SANDBOX
+        // My tank is editable like the sandbox (the same gate as [sandbox])
+        val sandboxOn = mode.value != SimMode.REALITY
         for (c in commands) when (c) {
             is Command.Maintain -> maintain(c.task)
             is Command.Heater, is Command.Powerheads, is Command.SetParam -> if (sandboxOn) {

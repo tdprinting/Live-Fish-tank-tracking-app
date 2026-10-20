@@ -73,7 +73,9 @@ class TangHideTest {
         val tang = sim.tang(); val b = sim.brain()
         val bed = b.bedPose(sim.agentOf(tang)!!.ctx)
         assertNotNull(bed); bed!!
-        assertNotNull("roof over the bed", sim.rock.sdf.raycast(bed.pos, Vec3.Y, 25.0))
+        assertNotNull("roof over the bed", sim.rock.sdf.raycast(bed.pos, Vec3.Y, b.shelters.roofMax(tang.lengthCm)))
+        // wedged in, walled round by rock: not just lying in a rock's shadow (Tee 2026-10-20)
+        assertTrue("snug ${b.shelters.snug(bed.pos, tang.lengthCm)}", b.shelters.snug(bed.pos, tang.lengthCm) >= 0.6)
         var minDepth = 9.0
         sim.advance(600.0, behaviorDt = 0.1) { minDepth = minOf(minDepth, sim.bodyDepth(tang)) }
         var there = 0; var n = 0
@@ -133,5 +135,30 @@ class TangHideTest {
         assertTrue("zooms $zooms", zooms >= 2)
         assertTrue("top speed ${"%.2f".format(top)} of burst", top > 0.6)
         assertTrue("crossed ${"%.0f".format(span)} cm", span > 40)
+    }
+
+    /** My tank: the rockwork changes (a rock taken out over its bed), and Dori finds a new crevice to sleep in. */
+    @Test
+    fun itFindsANewCreviceWhenTheRockworkChanges() {
+        val cat = com.reeflive.core.sim.SpeciesCatalog.fromClasspath(listOf("paracanthurus_hepatus"))
+        val sim = com.reeflive.core.custom.CustomTank.fresh(com.reeflive.core.custom.TankBuilds.DEFAULT, cat, TestTank.rock, 21.0 * 3600, seed = 2L)
+        sim.enqueue(Command.AddOrganism("paracanthurus_hepatus", 8.0, "Dori"))
+        sim.stepWall(0.05)
+        val tang = sim.tang(); val b = sim.brain(); val ctx = sim.agentOf(tang)!!.ctx
+        val first = b.bedPose(ctx)!!
+        sim.advance(30.0, behaviorDt = 0.1)
+        sim.enqueue(Command.RemoveRock(first.pos))
+        sim.advance(120.0, behaviorDt = 0.1)
+        val bed = b.bedPose(ctx)
+        assertTrue("rescanned", b.shelters.generation >= 1)
+        assertNotNull(bed); bed!!
+        assertTrue("bed clear of the new rockwork", b.shelters.clear(bed.pos, bed.heading, bed.up, tang.lengthCm, 0.0))
+        assertNotNull("roof over the new bed", sim.rock.sdf.raycast(bed.pos, Vec3.Y, b.shelters.roofMax(tang.lengthCm)))
+        var minDepth = 9.0; var there = 0; var n = 0
+        sim.advance(900.0, behaviorDt = 0.1) { minDepth = minOf(minDepth, sim.bodyDepth(tang)) }
+        val now = b.bedPose(ctx)!!
+        sim.advance(120.0, behaviorDt = 0.1) { n++; if (tang.sleeping && tang.pos.distanceTo(now.pos) < 1.5) there++ }
+        assertTrue("asleep in its crevice $there of $n", there >= 0.8 * n)
+        assertTrue("clipped ${"%.2f".format(minDepth)}", minDepth > -0.1)
     }
 }

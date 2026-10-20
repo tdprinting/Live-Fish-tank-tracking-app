@@ -6,7 +6,10 @@ import com.reeflive.core.sim.AnemoneRig
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.Organism
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -31,9 +34,8 @@ class AnemoneBrain(c: Ctx) : SpeciesBrain(c) {
     private var curl = 0.0
     private var curlAngle = 0.0
     private var nextScan = 0.0
-    private var pushPos = Vec3.ZERO
-    private var pushR = 0.0
-    private var push = 0.0
+    /** Up to two fish pressing into the crown (a clown pair nestles together); the tentacles bend away from each. */
+    private val contacts = arrayOf(Contact(), Contact())
     private var placedAt = Vec3.ZERO
     private val lastSting = HashMap<String, Double>()
     /** Fish stung so far (tests, HUD). */
@@ -146,9 +148,54 @@ class AnemoneBrain(c: Ctx) : SpeciesBrain(c) {
             scan(c, disc, up)
         }
         feed(c, disc, up)
-        push *= exp(-dt / 0.8)
         curl += ((if (held != null) 1.0 else 0.0) - curl) * min(1.0, dt / 6.0)
-        (o.limbRig as? AnemoneRig)?.set(s.bubble, contract, curl, curlAngle, pushPos, pushR, push, s.bleach, up)
+        val rig = o.limbRig as? AnemoneRig
+        rig?.set(s.bubble, contract, curl, curlAngle, s.bleach, up)
+        for (i in contacts.indices) {
+            val k = contacts[i]
+            k.step(dt)
+            rig?.contact(i, k.pos, k.radius, k.strength, k.drift)
+        }
+    }
+
+    /**
+     * A fish touching the tentacles, smoothed every tick so the crown moves like soft tissue: the contact point follows
+     * the fish closely (the tentacles touching it move with it), its drift (the water it drags) lags a little, and the
+     * strength is an underdamped spring, so the tentacles part quickly when a fish pushes in and swing back with a small
+     * overshoot when it leaves. (Tentacle mechanics are unmeasured; research 40 §7.3. DESIGN ESTIMATE.)
+     */
+    private class Contact {
+        var fish: Organism? = null
+        var pos = Vec3.ZERO
+        var drift = Vec3.ZERO
+        var radius = 3.0
+        var strength = 0.0
+        private var rate = 0.0
+
+        fun attach(n: Organism) {
+            // a free (relaxed) slot jumps to the newcomer; one still bent around a fish slides over to it
+            if (fish == null && abs(strength) < 0.15) { pos = n.pos; drift = n.vel }
+            fish = n
+        }
+
+        fun step(dt: Double) {
+            val f = fish?.takeIf { it.alive }
+            if (f == null) fish = null
+            val target = if (f != null) 1.0 else 0.0
+            if (f != null) {
+                pos += (f.pos - pos) * min(1.0, dt / 0.12)
+                drift += (f.vel - drift) * min(1.0, dt / 0.4)
+                radius += (0.6 * f.lengthCm + 2.0 - radius) * min(1.0, dt / 0.3)
+            } else drift *= exp(-dt / 0.6)
+            if (dt > 0.5) { strength = target; rate = 0.0; return }   // fast-forward: no visible spring
+            // semi-implicit spring, ~0.9 Hz, damping ratio 0.45 (substeps keep it stable at any tick length)
+            val n = ceil(dt / 0.02).toInt().coerceAtLeast(1)
+            val h = dt / n
+            repeat(n) {
+                rate += (SPRING_W * SPRING_W * (target - strength) - 2 * SPRING_ZETA * SPRING_W * rate) * h
+                strength += rate * h
+            }
+        }
     }
 
     /** Fish in the crown: hosting clowns nestle (the tentacles part around them); anything else gets stung. */
@@ -156,6 +203,8 @@ class AnemoneBrain(c: Ctx) : SpeciesBrain(c) {
         val r = model.crownRadius(o, contract)
         var best: Organism? = null
         var bd = Double.MAX_VALUE
+        var second: Organism? = null
+        var sd = Double.MAX_VALUE
         for (n in c.p.neighbors(disc, r + 8)) {
             if (n === o || !n.alive || !n.isFish) continue
             val rel = n.pos - disc
@@ -164,10 +213,16 @@ class AnemoneBrain(c: Ctx) : SpeciesBrain(c) {
             val side = (rel - up * h).length()
             if (side > r + 0.3 * n.lengthCm) continue
             val d = rel.length()
-            if (d < bd) { bd = d; best = n }
+            if (d < bd) { second = best; sd = bd; bd = d; best = n } else if (d < sd) { sd = d; second = n }
             if (!model.welcomes(o, n) && contract < 0.85) sting(c, n, disc)
         }
-        best?.let { n -> pushPos = n.pos; pushR = 0.6 * n.lengthCm + 2.0; push = 1.0 }
+        // keep each fish on the slot it already has (no jumping between them); a fish that left frees its slot
+        for (k in contacts) if (k.fish != null && k.fish !== best && k.fish !== second) k.fish = null
+        for (n in arrayOf(best, second)) {
+            if (n == null || contacts.any { it.fish === n }) continue
+            val free = contacts.filter { it.fish == null }.minByOrNull { abs(it.strength) } ?: continue
+            free.attach(n)
+        }
     }
 
     private fun sting(c: Ctx, n: Organism, disc: Vec3) {
@@ -214,6 +269,9 @@ class AnemoneBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     companion object {
+        private const val SPRING_W = 2 * PI * 0.9
+        private const val SPRING_ZETA = 0.45
+
         /** Angle of [d] about the disc axis [up] in the renderer's model frame ([AnemoneRig.basis]). */
         fun sideAngle(d: Vec3, up: Vec3): Double {
             val (x, z) = AnemoneRig.basis(up)

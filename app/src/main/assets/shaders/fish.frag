@@ -59,6 +59,10 @@ void main() {
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     albedo = mix(albedo, vec3(lum), clamp(uDesat, 0.0, 1.0));
+#ifndef FIN
+    // the mouth lining (fish.vert writes it to vColor.g for a model with a jaw): dark flesh, seen in shadow
+    if (uPart < 0.5) albedo = mix(albedo, vec3(0.09, 0.035, 0.04), 0.9 * clamp(vColor.g, 0.0, 1.0));
+#endif
     if (uPart > 1.5 && uPart < 2.5) albedo = mix(albedo, vec3(0.62, 0.64, 0.66), uEyeCloud * 0.85);
 
     // Squid skin: procedural chromatophores over the texture that expand (dark) and retract (pale) within a fraction
@@ -135,6 +139,8 @@ void main() {
     // the rim is brightest on the top edge (light from the fixtures above) and picks up the water colour below
     float top = clamp(Ng.y * 0.5 + 0.5, 0.0, 1.0);
     col += rim * (0.40 * lightSum * (0.6 + 0.8 * top) + 0.30 * albedo * lightIntensity() + uFog.rgb * 0.6 * (1.0 - top));
+    // inside the open mouth is in its own shadow: no sheen or rim from the lights
+    col *= 1.0 - 0.8 * clamp(vColor.g, 0.0, 1.0);
     alpha = 1.0;
     // counter-illumination: a faint blue-green glow from the ventral light organ, strongest seen from below
     col += vec3(0.35, 0.62, 0.95) * sqGlow * 0.06 * (0.3 + 0.7 * smoothstep(0.0, -0.7, N.y));

@@ -45,6 +45,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var viewLight: ViewLight = ViewLight.REAL
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
+    /** Tap-to-place: while armed the next tap aims (food goes in where the finger lands) instead of picking. */
+    @Volatile var aim: TankAimControl? = null
+    /** The tappable gear's boxes (SpotBoxes), built once the equipment model is in. */
+    private var spotBoxes: List<Pair<com.reeflive.core.sim.TankSpot, FloatArray>>? = null
     private val shelfScene = SupplyShelfScene()
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
@@ -184,6 +188,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // A new context: every GL object from a previous one is gone.
         store.onContextLost(quality)
         rockDraw.onContextLost()
+        gspMats.onContextLost()
         Texture.resetCaps()
         Gl.currentProgram = 0
         initGl()
@@ -216,6 +221,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private fun releaseGl() {
         programs?.release(); programs = null
+        gspMats.release()
         frame?.release(); frame = null
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
@@ -235,6 +241,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         store.release()
         store.onContextLost(quality)
         rockDraw.onContextLost()
+        gspMats.onContextLost()
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -283,6 +290,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
+        aim?.take()?.let { aimFrom(it[0], it[1], rigs) }
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
@@ -428,6 +436,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             for (k in corals.indices) {
                 val (m, pose) = corals[k]
+                // GSP grows as a thin skin on the rock (GspMatDraw): nothing for the eye to bump into
+                if (gspMats.isGsp(m)) continue
                 val copy = pose != null && pose.isCopy
                 val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
                 for (i in m.parts.indices) {
@@ -680,6 +690,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private val fit = TankFit()
     /** The tank on screen is smaller than Tee's: its rocks were fitted (every one moved or taken out). */
     private val scapeTrimmed: Boolean get() = Camera.shape.lengthCm < TankDims.LENGTH_CM - 0.1 || Camera.shape.depthCm < TankDims.DEPTH_CM - 0.1
+    /** Green star polyp mats built on the drawn rock (GspMatDraw). */
+    private val gspMats = GspMatDraw()
+
+    /**
+     * True when [c] is a green star polyp colony drawn as a mat on its rock ([gspMats]) instead of its GLB.
+     */
+    private fun gspOnRock(m: GpuModel, c: CoralPose?): Boolean {
+        if (c == null || !gspMats.isGsp(m)) return false
+        val rock = store.model(ROCK)?.parts?.firstOrNull { it.kind == MaterialKind.ROCK }
+        return gspMats.ready(c, m, rock, sdf, rockDraw, quality.polypDensity)
+    }
     private val rockModel = FloatArray(16)
     private val rockCoral = FloatArray(16)
 
@@ -745,6 +766,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val pc = progs.shadowCoral
         pc.use()
         for ((m, c) in coralModels(cur)) {
+            // a GSP mat drawn on the rock is a skin on it: no dome of its own to cast a shadow
+            if (gspOnRock(m, c)) continue
             val copy = c != null && c.isCopy
             if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
             for (part in m.parts) {
@@ -769,6 +792,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     val code = when (part.part) { "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
                     pf.set1f("uPart", code)
                     pf.set4f("uShape", r.thin, code, r.eyeYaw, part.finKind)
+                    pf.set4f("uJaw", part.jaw[0], part.jaw[1], part.jaw[2], part.jaw[3])
                     pf.set3fv("uEyePivot", part.eyePivot)
                     part.mesh.draw(); drawCalls++
                 }
@@ -877,8 +901,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 out += copy to c
                 continue
             }
-            val m = anchored ?: candidates.firstOrNull { it.path !in used } ?: continue
-            if (used.add(m.path)) out += m to c
+            // GSP grows on the rock from its own placement (GspMatDraw): every colony can share the one GLB polyp
+            val gsp = c.matRadius > 0f
+            val m = anchored ?: candidates.firstOrNull { it.path !in used } ?: (if (gsp) candidates.firstOrNull() else null) ?: continue
+            if (used.add(m.path) || gsp) out += m to c
         }
         return out
     }
@@ -983,6 +1009,22 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private fun drawCoral(m: GpuModel, c: CoralPose?, progs: Programs, s: SimSnapshot?, polyps: Boolean) {
         val w = white ?: return
+        if (c != null && gspOnRock(m, c)) {
+            if (!polyps) {
+                val t = gspMats.drawMat(progs.gspMat, c, rockDraw)
+                if (t > 0) { drawCalls++; triangles += t }
+                return
+            }
+            val part = m.parts.firstOrNull { it.kind == MaterialKind.POLYP } ?: return
+            val p = progs.polyp
+            p.use()
+            part.material.apply(p, w, alphaTestOverride = part.alphaTest ?: if (part.material.src.blended) 0.3f else null)
+            coralUniforms(p, m, c)
+            p.set1f("uSwayAmp", 0.25f * (c.flow / 12f).coerceIn(0.2f, 1.5f))
+            val t = gspMats.drawPolyps(p, c, rockDraw, s?.simTimeSec ?: 0.0)
+            if (t > 0) { drawCalls++; triangles += t }
+            return
+        }
         val copy = c != null && c.isCopy
         if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
         for (part in m.parts) {
@@ -1067,6 +1109,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             val partCode = when (part.part) { "fin" -> 1f; "eye" -> 2f; "leg", "antenna" -> 3f; else -> 0f }
             p.set1f("uPart", partCode)
             p.set4f("uShape", r.thin, partCode, r.eyeYaw, part.finKind)
+            p.set4f("uJaw", part.jaw[0], part.jaw[1], part.jaw[2], part.jaw[3])
             p.set3fv("uEyePivot", part.eyePivot)
             part.material.apply(p, w)
             bindStage(p, w, when { isFin -> sb.fin; part.part == "body" -> sb.body; else -> null })
@@ -1099,6 +1142,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         fishUniforms(p, r, rigid = false)
         p.set1f("uPart", 0f)
         p.set4f("uShape", r.thin, 0f, 0f, 0f)
+        p.set4f("uJaw", 0f, 0f, 0f, 0f)
         p.set3f("uEyePivot", 0.4f, 0.05f, 0f)
         white?.bind(0)
         val c = Placeholder.colorFor(r.speciesId)
@@ -1112,7 +1156,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /**
      * Bubble-tip anemone uniforms from its [com.reeflive.core.sim.AnemoneRig] pose (r.limbs): model frame from the disc axis
      * (same basis as AnemoneRig.basis), scaled from the model's built span to the animal's, plus bubble / contraction /
-     * feeding curl, the fish pushing into it and bleaching.
+     * feeding curl, the (up to two) fish pushing into it and bleaching.
      */
     private fun anemoneUniforms(p: ShaderProgram, r: FishRig, m: GpuModel) {
         val l = r.limbs
@@ -1136,7 +1180,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uExtension", 1f - l[1])
         p.set4f("uAnem", l[0], l[1], l[2], l[3])
         p.set4f("uAnemPush", l[5], l[6], l[7], l[9])
-        p.set4f("uAnemMisc", l[4], k, 0f, 0f)
+        p.set4f("uAnemPushB", l[17], l[18], l[19], l[21])
+        p.set4f("uAnemDrift", l[25], l[26], l[27], 0f)
+        p.set4f("uAnemDriftB", l[29], l[30], l[31], 0f)
+        p.set4f("uAnemMisc", l[10], k, l[11], 0f)
         val flow = interp.current?.flowStrength ?: 1f
         p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.12f * flow.coerceIn(0f, 2f))
         p.set1f("uBleach", l[8]); p.set1f("uBrown", 0f)
@@ -1153,6 +1200,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uScale", r.scale)
         p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
+        p.set2f("uEnv", r.envExp, r.envHead)
         p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
@@ -1184,7 +1232,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
-        input.instantTaps = camera.shelfOn || camera.rideOn
+        input.instantTaps = camera.shelfOn || camera.rideOn || aim?.armed == true
         if (c != null) store.model(SupplyShelfLayout.MODEL)
         // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
         val req = c?.takePickRequest()
@@ -1230,6 +1278,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.ray(t.x, t.y, width, height, dir)
         val o = camera.eye.copyOf()
         val l = listener
+        // tap-to-place: an armed aim takes the single tap (food from the shelf drops in where the finger lands)
+        if (t.kind == CameraInput.TapKind.PICK && aim?.armed == true) { aimFrom(t.x, t.y, rigs); return }
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
                 // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
@@ -1243,6 +1293,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else if (id == null && following == null && !cleaning && !camera.rideOn) {
                     // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
                     // (not in clean-glass mode, where the finger is on the Flipper)
+                    // a piece of gear (skimmer, filter, heater, pumps, lamps, top-off) in front of any rock: its pop-out menu
+                    val spot = if (aim?.gearTaps != false) spotAt(o, dir) else null
+                    if (spot != null) { val x = t.x; val y = t.y; main.post { l?.onSpot(spot, x, y) }; return }
                     val hit = touchHit(o, dir)
                     // a coral: lean in for a closer look as its polyps pull in
                     if (hit != null && hit.second == TouchSurface.CORAL) camera.peekAt(hit.first.x.toFloat(), hit.first.y.toFloat(), hit.first.z.toFloat())
@@ -1288,6 +1341,50 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onLongPress(p) }
             }
         }
+    }
+
+    /**
+     * The gear under the ray, when the ray reaches it before any rock or sand (the glass and the water's top are see
+     * through): equipment.glb's tappable nodes ([SpotBoxes]). Null when the model is not in yet or nothing is hit.
+     */
+    private fun spotAt(o: FloatArray, d: FloatArray): com.reeflive.core.sim.TankSpot? {
+        val boxes = spotBoxes ?: store.model(EQUIPMENT)?.let { SpotBoxes.build(it) }?.also { spotBoxes = it } ?: return null
+        val (spot, t) = SpotBoxes.hit(boxes, o, d) ?: return null
+        val solid = surfacePoint(o, d)
+        if (solid != null) {
+            val dx = solid.x.toFloat() - o[0]; val dy = solid.y.toFloat() - o[1]; val dz = solid.z.toFloat() - o[2]
+            if (t > kotlin.math.sqrt(dx * dx + dy * dy + dz * dz) + 0.5f) return null
+        }
+        return spot
+    }
+
+    /**
+     * An aimed tap at view pixel ([x], [y]) ([TankAimControl]): an animal under the finger (its head), else the first
+     * rock / coral / sand point along the ray, else the open water half way along it. Reported on the main thread.
+     */
+    private fun aimFrom(x: Float, y: Float, rigs: Collection<FishRig>) {
+        val c = aim ?: return
+        val dir = FloatArray(3)
+        camera.ray(x, y, width, height, dir)
+        val o = camera.eye.copyOf()
+        val id = Picker.pick(o, dir, rigs, fingerSlack())
+        val hit = if (id != null) {
+            val r = rigs.firstOrNull { it.id == id } ?: return
+            touchRing(id, dir, rigs)
+            AimHit(Vec3(r.spine[0].toDouble(), r.spine[1].toDouble(), r.spine[2].toDouble()), TouchSurface.GLASS, id)
+        } else {
+            val h = touchHit(o, dir) ?: return
+            val p = when (h.second) {
+                // the ray crossed open water: half way between where it entered and the far side
+                TouchSurface.GLASS -> surfacePoint(o, dir)?.let { far -> Vec3((h.first.x + far.x) / 2, (h.first.y + far.y) / 2, (h.first.z + far.z) / 2) } ?: h.first
+                // from above, aim at whatever lies under the surface there
+                TouchSurface.SURFACE -> surfacePoint(o, dir) ?: h.first
+                else -> h.first
+            }
+            AimHit(p, h.second, null)
+        }
+        val cb = c.onAim ?: return
+        main.post { cb(hit) }
     }
 
     /** [Picker.fingerSlack] for this view: how far beside an animal a fingertip may land and still pick it. */

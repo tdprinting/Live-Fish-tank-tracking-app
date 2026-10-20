@@ -105,6 +105,16 @@ float algaePatch(float n, float cover) {
 }
 
 // Opacity inside a patch: thin film at low cover, dense mat at bloom levels.
+// Green star polyp mat margin (GspMatDraw, gsp_mat.frag, polyp.vert): the mat reaches [r] cm along the rock, with a
+// lobed edge and thin stolon runners reaching ahead of it ([op] = position in the rock's own frame).
+float gspEdge(vec3 op, float r) {
+    float lobes = (vnoise(op * 0.21) - 0.5) * 4.0;              // value noise sits near 0.5: about -1..1
+    // runners: the 0.5 level lines of a finer noise (2-3 mm wide), only where a broad mask lets one grow
+    float line = 1.0 - smoothstep(0.03, 0.09, abs(vnoise(op * 0.6 + vec3(7.0, 3.0, 1.0)) - 0.5));
+    float run = line * smoothstep(0.52, 0.62, vnoise(op * 0.13 + vec3(2.0, 9.0, 4.0)));
+    return r + min(r * 0.15, 1.4) * lobes + min(r * 0.35, 2.4) * run;
+}
+
 float algaeDensity(float cover) { return mix(0.45, 0.92, smoothstep(0.0, 0.5, cover)); }
 
 // Length of the segment a->b that lies inside the water volume (box 0..tank, below the surface).

@@ -68,6 +68,8 @@ class Simulation private constructor(
     val invertEcology = InvertEcology(this)
     /** Bubble-tip anemones and the clowns adopting them (research 40). */
     val anemones = AnemoneModel(this)
+    /** What the keeper did (feedings, chores) for My tank's daily care list ([CareLog]). */
+    val careLog = CareLog()
     private val agents = HashMap<Organism, Agent>()
 
     var simTimeSec: Double = startTimeSec; private set
@@ -718,6 +720,7 @@ class Simulation private constructor(
         if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
         waste.step(simDt, simTimeSec, water.s.tempC, organisms, water, useBehavior && !abstractMode, fluid?.hobOn ?: true)
         if (useBehavior && !abstractMode) coralCatch(simDt)
+        if (useBehavior && !abstractMode) gspContacts(simDt)
         // snails and stars on the front pane wear trails into the glass film (SIMULATION §11.1)
         if (useBehavior && !abstractMode) glassTrails.step(organisms, water.algae.glassMask, rock.widthCm)
         // checked every step (not on the 60 s chemistry tick) so the 02:00 roll lands at 02:00
@@ -728,6 +731,22 @@ class Simulation private constructor(
             chemTick()
         }
         tickCount++
+    }
+
+    private var gspContactAcc = 0.0
+
+    /** Share of a GSP colony a touch next to it closes (the whole of a small frag, little of a big mat). */
+    private fun gspShare(k: Coral): Double {
+        val r = GspPolyps.matRadius(k)
+        return (GspPolyps.WAVE_MAX_CM * GspPolyps.WAVE_MAX_CM / max(r * r, GspPolyps.WAVE_MAX_CM * GspPolyps.WAVE_MAX_CM)).coerceIn(0.2, 1.0)
+    }
+
+    /** Walkers and resting animals on a GSP mat close the polyps under them ([GspPolyps.contacts]). */
+    private fun gspContacts(dt: Double) {
+        gspContactAcc += dt
+        if (gspContactAcc < GspPolyps.CONTACT_DT) return
+        gspContactAcc = 0.0
+        if (corals.any { it.kind == CoralKind.GSP }) GspPolyps.contacts(organisms, corals, rock, simTimeSec)
     }
 
     /**
@@ -1287,6 +1306,17 @@ class Simulation private constructor(
         water.algae.wipeGlass()   // the glass gets wiped on water-change day (research 09 A2: GSA wiped every 3-7 d)
     }
 
+    /**
+     * Where food aimed at [aim] goes in: floating foods (flake, floating pellets) land on the surface right above it;
+     * everything else is let go a little above it, the way a keeper target-feeds with a turkey baster or feeding tube,
+     * so it drifts and sinks onto the fish, coral or spot that was picked. Nori still goes on its clip.
+     */
+    fun targetRelease(kind: FoodKind, aim: Vec3): Vec3 {
+        val p = rock.clampToWater(aim, 1.0)
+        return if (kind.floats) p.withY(rock.waterLevelCm - 0.3)
+        else p.withY((p.y + TARGET_LIFT_CM).coerceAtMost(rock.waterLevelCm - 2.5))
+    }
+
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
@@ -1344,6 +1374,7 @@ class Simulation private constructor(
             is Command.Photoperiod -> lights.photoperiodHours = c.hours.coerceIn(4.0, 16.0)
             is Command.AddSpareShells -> invertEcology.addSpareShells(c.count, c.sizeCm)
             is Command.Maintain -> {
+                careLog.maintained[c.task.ordinal]++
                 water.maintain(c.task)
                 if (c.task == MaintenanceTask.SIPHON_SAND) { waste.siphon(); sand.siphon(WaterSim.SIPHON_SHARE) }
             }
@@ -1360,8 +1391,8 @@ class Simulation private constructor(
                 PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
-            is Command.Feed -> { feed(c.kind, c.grams, c.at ?: feedPoint(null)); touchMemory.fed() }
-            is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
+            is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
+            is Command.WaterChange -> { if (c.fraction >= CareLog.MIN_CHANGE) careLog.waterChanges++; water.waterChange(c.fraction, c.mix) }
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
@@ -1406,7 +1437,7 @@ class Simulation private constructor(
             is Command.SetPredation -> predationEnabled = c.enabled
             is Command.Shadow -> shadow(c.worldPoint)
             is Command.AddMany -> Stocking.addMany(this, c.speciesId, c.count, c.sizeCm, c.size)
-            is Command.ScrapeGlass -> scrapeGlass(c)
+            is Command.ScrapeGlass -> { careLog.scrapes++; scrapeGlass(c) }
             is Command.Micro -> water.micro.apply(c.action, c.amount, water.s)
             is Command.Bacteria -> water.bacteria.apply(c.action, c.amount, water)
         }
@@ -1632,8 +1663,12 @@ class Simulation private constructor(
         var retracted = 0
         if (surface == TouchSurface.ROCK || surface == TouchSurface.CORAL) for (k in corals) {
             val d = k.pos.distanceTo(p)
+            // a GSP mat closes around the touch, not as a whole (GspPolyps)
+            if (k.kind == CoralKind.GSP) { if (GspPolyps.poke(k, p, simTimeSec, 1.0, 3.0)) { retracted++; continue } }
             if (d >= TankTouch.CORAL_CM || !TankTouch.retracts(k.kind)) continue
-            k.disturb = max(k.disturb, if (d < TankTouch.ON_CORAL_CM) TankTouch.CORAL_DISTURB_HIT else TankTouch.CORAL_DISTURB)
+            val hit = if (d < TankTouch.ON_CORAL_CM) TankTouch.CORAL_DISTURB_HIT else TankTouch.CORAL_DISTURB
+            // a tap on nearby rock shakes a mat's closest polyps; how much of the colony that is depends on its size
+            k.disturb = max(k.disturb, if (k.kind == CoralKind.GSP) hit * gspShare(k) else hit)
             retracted++
         }
         val out = LinkedHashMap<String, TouchReaction>()
@@ -1735,10 +1770,8 @@ class Simulation private constructor(
         val dir = c.velocity / sp
         val travel = sp.coerceAtMost(com.reeflive.core.geom.FlowGust.MAX_SPEED) * com.reeflive.core.geom.FlowGust.TAU_S
         val end = c.point + dir * travel
-        fun distToPath(q: Vec3): Double {
-            val k = ((q - c.point) dot dir).coerceIn(0.0, travel)
-            return q.distanceTo(c.point + dir * k)
-        }
+        fun pathPoint(q: Vec3): Vec3 = c.point + dir * ((q - c.point) dot dir).coerceIn(0.0, travel)
+        fun distToPath(q: Vec3): Double = q.distanceTo(pathPoint(q))
         // sand under the puff's path lifts (a little cloud, pushed along)
         for (k in 0..3) {
             val q = c.point.lerp(end, k / 3.0)
@@ -1748,7 +1781,11 @@ class Simulation private constructor(
         for (k in corals) {
             if (!TankTouch.retracts(k.kind)) continue
             val d = distToPath(k.pos)
-            if (d < TankTouch.PUFF_CM) k.disturb = max(k.disturb, TankTouch.PUFF_DISTURB * (1 - d / TankTouch.PUFF_CM))
+            if (d >= TankTouch.PUFF_CM) continue
+            val f = TankTouch.PUFF_DISTURB * (1 - d / TankTouch.PUFF_CM)
+            // a puff closes the stretch of a GSP mat it washes over
+            if (k.kind == CoralKind.GSP) { GspPolyps.poke(k, pathPoint(k.pos), simTimeSec, f / TankTouch.PUFF_DISTURB, TankTouch.PUFF_CM); continue }
+            k.disturb = max(k.disturb, f)
         }
         val night = perception.night
         for (o in organisms) {
@@ -1902,7 +1939,7 @@ class Simulation private constructor(
             lights = FloatArray(LightSchedule.CHANNELS) { lightCh[it].toFloat() },
             water = water.s.copy(),
             organisms = organisms.map { it.toPose() },
-            corals = corals.map { it.toPose() },
+            corals = corals.map { it.toPose(simTimeSec) },
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
             algae = water.algae.snapshot(),
@@ -1990,6 +2027,8 @@ class Simulation private constructor(
     }
 
     companion object {
+        /** How far above the aimed spot a target-fed food is let go (cm): close enough to land on it, clear of the rock. */
+        const val TARGET_LIFT_CM = 2.5
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
         val HAND_FEED = Vec3(74.0, TankDims.WATER_LEVEL_CM - 1.0, 4.5)
         /** A finger with no news for this long (sim s at 1×) counts as lifted (a lost touch-up). */

@@ -236,7 +236,7 @@ class ParticleRenderer {
             f.ambientRange to (1.5f to 4f),
             f.bubbleRange to (2f to 8f),
             f.fxRange to (2f to 40f),
-            f.foodRange to (2f to 32f),
+            f.foodRange to (FoodVisuals.minPx(viewportH) to 48f),
             f.wasteRange to (1.5f to 28f),
         )) {
             if (range.second == 0) continue

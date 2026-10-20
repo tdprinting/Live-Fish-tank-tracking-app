@@ -247,12 +247,17 @@ class AnemoneModel(private val sim: Simulation) {
         if (!s.settled && s.target != null) c = max(c, 0.25)
         c = max(c, 0.35 * s.bleach)
         s.contractTarget = c
-        // bubbles: bright, settled, fed and calm animals bubble; hungry ones stretch out stringy sweepers (research 40 §1.3:
-        // the cause is not settled, so this is a soft mix of the suspected drivers)
+        // bubbles (research 40 §1.3): the bulb is linked to hosted anemonefish and is often lost in aquaria (Fautin 2007 via
+        // SeaLifeBase); hobby reports add bright light, feeding and stable, settled conditions, and hungry animals stretch
+        // out stringy sweepers. The cause is not settled, so this is a soft mix of those drivers, sharpened so a happy hosted
+        // anemone reads as clearly bubbled and an unhosted, dim or stressed one as clearly stringy (few animals sit halfway).
         val calm = 1 - smoothstep(0.2, 0.7, o.stress)
-        var b = s.bubbliness * (0.2 + 0.8 * s.lightScore) * calm * (0.75 + 0.25 * s.fed) * (if (s.settled) 1.0 else 0.75)
+        val hosted = hosts.values.any { it.hostId == o.id }
+        var b = s.bubbliness * (0.35 + 0.65 * s.lightScore) * calm * (0.8 + 0.2 * s.fed) * (if (s.settled) 1.0 else 0.75) *
+            (if (hosted) 1.0 else UNHOSTED_BUBBLE)
         if (o.hunger > 0.6) b *= 0.6
         b *= 1 - 0.6 * s.bleach
+        b = smoothstep(BUBBLE_EDGE.start, BUBBLE_EDGE.endInclusive, b)
         s.bubble += (b.coerceIn(0.0, 1.0) - s.bubble) * min(1.0, dtMin / (BUBBLE_TAU_H * 60))
     }
 
@@ -325,6 +330,7 @@ class AnemoneModel(private val sim: Simulation) {
         cs.foot = p; cs.normal = nrm; cs.settled = true; cs.lineage = s.lineage
         cs.bubbliness = s.bubbliness; cs.dayLight = s.dayLight; cs.bubble = s.bubble * 0.5; cs.healing = 1.0
         s.healing = 1.0; s.splits++; s.bubble *= 0.5
+        sim.careLog.anemoneSplits++
         // the parent moves half a disc the other way
         surfaceUnder(s.foot - side * (0.45 * half)).let { (q, qn) -> s.foot = q; s.normal = qn }
         child.placeAt(discCenter(child, cs), o.heading)
@@ -469,6 +475,10 @@ class AnemoneModel(private val sim: Simulation) {
         val POST_MEAL_H = 0.5..4.0
         const val WASTE_G_PER_CM = 0.002
         const val BUBBLE_TAU_H = 6.0
+        /** Bubble drive without a hosted clown (DESIGN ESTIMATE: bulbs are linked to fish but not absent without them). */
+        const val UNHOSTED_BUBBLE = 0.55
+        /** Bubble drive mapped to tentacle shape: below the range stringy, above it fully bubbled (DESIGN ESTIMATE). */
+        val BUBBLE_EDGE = 0.25..0.55
         /** Bleaching: sustained heat above this (27 °C for 6 d bleached wild animals, Hill & Scott 2012; captive stock runs warmer). */
         @Ev(Evidence.ANALOGY, "40 §8.1 Hill & Scott 2012") const val BLEACH_C = 27.5
         const val RECOVER_DAYS = 45.0

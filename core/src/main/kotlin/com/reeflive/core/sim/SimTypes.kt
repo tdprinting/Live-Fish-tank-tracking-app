@@ -5,8 +5,12 @@ import com.reeflive.core.geom.Vec3
 /** Sandbox / UI commands (SIMULATION §1.3). Applied at the start of the next behavior tick. */
 sealed class Command {
     data class SetParam(val paramId: String, val value: Double) : Command()
-    /** Drop [grams] of [kind] at [at] (world cm) or the feeding ring; [FoodKind.typicalDoseGrams] is one tap of the button. */
-    data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null) : Command()
+    /**
+     * Drop [grams] of [kind] at [at] (world cm) or the feeding ring; [FoodKind.typicalDoseGrams] is one tap of the button.
+     * With [target], [at] is what the keeper aimed at (a fish, a coral, a spot on the rock or sand) and the food goes in
+     * the way a keeper target-feeds it there ([Simulation.targetRelease]).
+     */
+    data class Feed(val kind: FoodKind, val grams: Double, val at: Vec3? = null, val target: Boolean = false) : Command()
     data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX) : Command()
     data class Dose(val paramId: String, val delta: Double) : Command()
     data class Lights(val on: Boolean?, val overrideIntensity: Double? = null) : Command()
@@ -375,6 +379,20 @@ data class CoralPose(
     val cover: Float = 0f,
     /** The rock piece the colony grows on ([SimSnapshot.rockPoses] index), −1 none: drawn moved with that rock. */
     val rockPiece: Int = -1,
+    /** Where the colony was placed, in the frame of the rock it grows on (that rock as built), and its surface normal. */
+    val restX: Float = 0f,
+    val restY: Float = 0f,
+    val restZ: Float = 0f,
+    val restNx: Float = 0f,
+    val restNy: Float = 1f,
+    val restNz: Float = 0f,
+    /** Encrusting mat (GSP): how far the mat reaches along the rock from [restX]/[restY]/[restZ], cm; 0 for other kinds. */
+    val matRadius: Float = 0f,
+    /**
+     * GSP touches closing the polyps around them ([GspPolyps]): per touch dx, dy, dz from the colony's current
+     * position (world axes), first and last touch (sim s), strength; null when none.
+     */
+    val pokes: FloatArray? = null,
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }

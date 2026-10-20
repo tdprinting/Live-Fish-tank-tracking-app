@@ -59,6 +59,8 @@ object ReefLive {
     internal var rock: RockData? = null
     internal var renderer: TankRenderer? = null
     internal val shelf = SupplyShelfControl()
+    /** Tap-to-place food and gear taps (render TankAimControl). */
+    private val aim = com.reeflive.app.render.TankAimControl()
     private var touch: TouchController? = null
     private var canvas: HTMLCanvasElement? = null
     private var listener: dynamic = null
@@ -151,7 +153,15 @@ object ReefLive {
                     override fun onFlick(worldPoint: Vec3, velocity: Vec3) { sim?.enqueue(Command.WaterPuff(worldPoint, velocity)); emit("onFlick", null) }
                     override fun onScrape(stroke: GlassStroke) { ReefSandbox.scrape(stroke); emit("onScrape", stroke.lengthCm) }
                     override fun onFlipperTap() { emit("onFlipperTap", null) }
+                    // a tap on a piece of gear: the page pops out its menu (ReefSandbox.spotMenu) where the finger landed
+                    override fun onSpot(spot: com.reeflive.core.sim.TankSpot, x: Float, y: Float) {
+                        val c = canvas ?: return
+                        val k = c.getBoundingClientRect().width / c.width
+                        emit("onSpot", obj { it.spot = spot.name; it.x = x * k; it.y = y * k })
+                    }
                 }
+                aim.onAim = { h -> emit("onAim", obj { it.x = h.point.x; it.y = h.point.y; it.z = h.point.z; it.surface = h.surface.name; it.id = h.animalId }) }
+                r.aim = aim
                 shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
                 r.shelf = shelf
                 r.bursts = ReefSandbox.bursts
@@ -368,10 +378,14 @@ object ReefLive {
     fun followZoom(steps: Double) { renderer?.followCam?.zoom(steps.toFloat()) }
     /** Follow camera buttons: swing round the fish, [dir] +1 / −1 one 45° step. */
     fun followOrbit(dir: Double) { renderer?.followCam?.orbit(dir.toFloat() * com.reeflive.app.render.FollowCamControl.ORBIT_STEP) }
-    /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON. */
+    /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON, BLUE. */
     fun setViewLight(name: String) { renderer?.viewLight = runCatching { com.reeflive.app.render.ViewLight.valueOf(name) }.getOrDefault(com.reeflive.app.render.ViewLight.REAL) }
     /** The 3D supply shelf beside the tank: the camera swings over to it; tapping a prop calls `onShelfPick(id)`. */
     fun shelfOpen(on: Boolean) { shelf.setOpen(on, false) }
+    /** Tap-to-place: while on, the next tap on the tank reports `onAim` ({x, y, z, surface, id}) instead of picking. */
+    fun aimArm(on: Boolean) { aim.armed = on }
+    /** Gear taps (`onSpot`) on or off (off while building with rock). */
+    fun gearTaps(on: Boolean) { aim.gearTaps = on }
     fun shelfRow(row: Int) { shelf.focusRow(row) }
     fun shelfPick(id: String) { shelf.pick(id) }
     fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }

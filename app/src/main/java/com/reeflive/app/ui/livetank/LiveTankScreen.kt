@@ -75,6 +75,12 @@ import com.reeflive.app.render.BurstKind
 import com.reeflive.app.render.TankBurst
 import com.reeflive.app.render.TankBursts
 import com.reeflive.app.render.SupplyShelfControl
+import com.reeflive.app.render.AimHit
+import com.reeflive.app.render.TankAimControl
+import com.reeflive.app.ui.live.SpotTap
+import com.reeflive.app.ui.live.TankSpotPopup
+import com.reeflive.core.sim.TankSpot
+import com.reeflive.core.sim.TankSpots
 import com.reeflive.app.render.CareAct
 import com.reeflive.app.render.CareJob
 import com.reeflive.app.render.CareShowControl
@@ -111,6 +117,11 @@ import com.reeflive.app.ui.live.HermiePill
 import com.reeflive.app.ui.live.HermieState
 import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.MyTankSetupCard
+import com.reeflive.app.ui.live.CareCard
+import com.reeflive.app.ui.live.MoneyChip
+import com.reeflive.app.ui.live.RewardFxLayer
+import com.reeflive.app.ui.live.RewardFxState
+import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveCategory
 import com.reeflive.app.ui.live.LiveDialog
@@ -300,6 +311,10 @@ fun LiveTankScreen(
     val sandbox = mode != SimMode.REALITY
     val myTank = mode == SimMode.CUSTOM
     val customInfo by vm.custom.collectAsStateWithLifecycle()
+    // My tank's sand dollars (docs/ECONOMY.md): the chip in the HUD opens the Care card; Tank Health counts as testing
+    val economy by vm.economy.collectAsStateWithLifecycle()
+    var careOpen by rememberSaveable { mutableStateOf(false) }
+    val rewardFx = remember { RewardFxState() }
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
     // "Show buttons" pill or Back undo it
@@ -362,6 +377,12 @@ fun LiveTankScreen(
     var heaterWorking by rememberSaveable { mutableStateOf(true) }
     // Fix tank: the 3D upkeep show and the fixes still queued or playing in it
     val careShow = remember { CareShowControl() }
+    // touch controls: a tap on a piece of gear pops out its menu right there (core TankSpots); food carried from the
+    // shelf goes in exactly where it is let go or tapped (TankAimControl finds the fish, coral, rock or sand there)
+    val aim = remember { TankAimControl() }
+    var spotTap by remember { mutableStateOf<SpotTap?>(null) }
+    var spotSerial by remember { mutableIntStateOf(0) }
+    var aimFood by remember { mutableStateOf<FoodKind?>(null) }
     val fixQueued = remember { mutableStateListOf<TankDoctor.Kind>() }
     var dial by remember { mutableStateOf<TankGauge?>(null) }
     val reduceMotion = ReefTheme.reduceMotion
@@ -851,6 +872,7 @@ fun LiveTankScreen(
                     // a fresh test each pick: the kit's own rounding and read error, not the sim's exact numbers
                     kitReadouts = testKitReadouts(hud.water, kotlin.random.Random(pickSerial * 7919L + hud.simTimeSec.toLong()))
                     testKit = true
+                    vm.testedWater()
                     if (hermieOn) hermie.say(LiveReactions.testKit(kitReadouts), HermieMood.HAPPY)
                 }
                 else -> pickJob[0] = scope.launch {
@@ -870,7 +892,7 @@ fun LiveTankScreen(
         onDispose { shelf.onPick = null }
     }
     // the carried prop let go over the tank: food drops in there, the knocker knocks there, the rest do their thing
-    val onCarryDrop: (SupplyItem, Float, Float) -> Unit = { item, gx, gy ->
+    val onCarryDrop: (SupplyItem, Float, Float, Float, Float) -> Unit = { item, gx, gy, sx, sy ->
         carry = null
         if (!supplyHintDone) {
             supplyHintDone = true
@@ -878,17 +900,48 @@ fun LiveTankScreen(
         }
         val k = item.food
         when {
-            k != null && k != FoodKind.NORI -> {
-                val fx = gx.coerceIn(4f, 118f)
-                tick()
-                cue(LiveReactions.feed(k, FxPoint(fx, SURFACE_Y, FEED_Z))) { vm.feed(k, k.typicalDoseGrams, Vec3(fx.toDouble(), SURFACE_Y.toDouble(), FEED_Z.toDouble())) }
-            }
+            // food goes in right where it was let go: the renderer finds the fish, coral, rock or sand there (onAim)
+            k != null && k != FoodKind.NORI -> { tick(); aimFood = k; aim.aimAt(sx, sy) }
             item == SupplyItem.KNOCKER -> {
                 val p = Vec3(gx.coerceIn(1f, com.reeflive.app.render.Camera.TANK[0] - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, com.reeflive.app.render.Camera.WATER_Y).toDouble(), FrontGlassCentre.z)
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
             else -> item.use(actions, tools)
+        }
+    }
+    val onAim: (AimHit) -> Unit = { h ->
+        val k = aimFood
+        if (k != null) {
+            aimFood = null
+            val p = h.point
+            cue(LiveReactions.feed(k, FxPoint(p.x.toFloat(), if (k.floats) SURFACE_Y else p.y.toFloat(), p.z.toFloat()))) {
+                vm.feed(k, k.typicalDoseGrams, p, target = true)
+            }
+        }
+    }
+    val latestAim by rememberUpdatedState(onAim)
+    DisposableEffect(aim) {
+        aim.onAim = { h -> latestAim(h) }
+        onDispose { aim.onAim = null }
+    }
+    // a tapped piece of gear: its pop-out menu (TankSpotPopup) replaces whatever card was open
+    val onSpot: (TankSpot, Float, Float) -> Unit = { spot, x, y ->
+        haptics.tick()
+        spotSerial++
+        spotTap = SpotTap(spot, Offset(x, y), spotSerial)
+        open = null
+        vm.select(null)
+    }
+    val onSpotOption: (com.reeflive.core.sim.SpotOption) -> Unit = { o ->
+        tick()
+        spotTap = null
+        val f = o.fix
+        if (f != null) playFix(f)
+        else {
+            o.commands.filterIsInstance<com.reeflive.core.sim.Command.Heater>().firstOrNull()?.setC?.let { heaterSet = it }
+            vm.care(o.commands)
+            banner.show(Feedback(o.label, "Done!"), Candy.green)
         }
     }
     val onCarryBack: (SupplyItem) -> Unit = { carry = null; tick(); supplies = true }
@@ -936,18 +989,28 @@ fun LiveTankScreen(
             else -> BottomBarClearance
         }
         TankArea(
-            vm, fx, projection, bursts, viewLight, torch, torchOn, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning) toggleCleaning() }, onPick, onTankTap, onLongPress, micro,
+            vm, fx, projection, bursts, viewLight, torch, torchOn, if (supplies) null else followId, quality, cleaning, onScrape, { if (!cleaning) toggleCleaning() },
+            { id -> spotTap = null; onPick(id) }, onTankTap, onLongPress, micro,
             onCloseMicro = { micro = false },
             onMicroAction = if (sandbox) actions.onMicro else null,
             onSkip = { skippedAt[0] = SystemClock.uptimeMillis() },
             bottomPad = BottomBarClearance,
             shelf = shelf,
             care = careShow,
-            onTouchTank = onTouchTank,
+            onTouchTank = { p, surface -> spotTap = null; onTouchTank(p, surface) },
             onFinger = onFinger,
             onFlick = onFlick,
             followCam = followCam,
+            onSpot = onSpot,
+            aim = aim,
         )
+        // gear taps mean "rock goes here" while building and nothing from inside the sub
+        SideEffect { aim.gearTaps = !scaping && !subUi.on }
+        val spotShown = spotTap
+        if (spotShown != null && !micro && !supplies && carry == null && bagCarry == null && !cleaning && !subUi.on && !scaping) {
+            val menu = TankSpots.menu(spotShown.spot, hud.water, hud.care, hud.lightIntensity.toDouble() > 0.05, sandbox)
+            TankSpotPopup(spotShown, menu, onOption = onSpotOption, onClose = { tick(); spotTap = null })
+        }
         if (scaping) AquascapeBar(
             shape = scapeShape, tool = scapeTool, turnDeg = scapeTurn,
             onShape = { tick(); scapeShape = it },
@@ -1008,6 +1071,9 @@ fun LiveTankScreen(
                 echo(LiveReactions.netOut(st.nickname.ifBlank { st.common }))
             },
             followCam = followCam,
+            economy = if (myTank) economy else null,
+            onMoney = { tick(); careOpen = true },
+            rewardFx = rewardFx,
         )
         AnimatedVisibility(
             visible = menuUp,
@@ -1098,6 +1164,19 @@ fun LiveTankScreen(
                 })
             }
         }
+        // My tank: money coming in is cheered by Hermie; the Tank Health card is the water test
+        LaunchedEffect(Unit) {
+            vm.gains.collect { g ->
+                rewardFx.cheer(g)
+                if (!hermieOn) return@collect
+                if (g.levelUp > 0) hermie.say("Level ${g.levelUp}! ${com.reeflive.core.custom.economy.Levels.opens(g.levelUp)}".trim(), HermieMood.EXCITED)
+                else hermie.say("+${g.amount} sand dollars: ${g.label}", HermieMood.HAPPY)
+            }
+        }
+        LaunchedEffect(open) { if (open == LiveCategory.FIX) vm.testedWater() }
+        val eco = economy
+        if (careOpen && myTank && eco != null) CareCard(eco, onCollect = { tick(); vm.collectHappyBonus() }, onDismiss = { careOpen = false })
+        if (myTank) RewardFxLayer(rewardFx)
         // the net lifted a body out: the toilet goodbye (once per body)
         LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }
         flushing?.let { f ->
@@ -1219,6 +1298,8 @@ private fun TankArea(
     onFinger: (Vec3?, Float, TouchSurface) -> Unit,
     onFlick: (Vec3, Vec3) -> Unit,
     followCam: FollowCamControl,
+    onSpot: (TankSpot, Float, Float) -> Unit,
+    aim: TankAimControl,
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
@@ -1249,6 +1330,8 @@ private fun TankArea(
             subFirstPerson = sub.on && sub.inside,
             nurseryRequest = nurseryView,
             followCam = followCam,
+            onSpot = onSpot,
+            aim = aim,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
@@ -1308,6 +1391,9 @@ private fun HudLayer(
     bottom: Dp,
     onNetOut: (OrganismStats) -> Unit,
     followCam: FollowCamControl,
+    economy: EconomyView? = null,
+    onMoney: () -> Unit = {},
+    rewardFx: RewardFxState? = null,
 ) {
     val reduce = ReefTheme.reduceMotion
     val sandbox = hudState.mode != HudMode.WATCH
@@ -1326,6 +1412,7 @@ private fun HudLayer(
         ) {
             // the meter starts folded to its face (tap shows "Tank happy N %") and Hermie takes the rest of the row
             val pills: @Composable RowScope.() -> Unit = {
+                if (economy != null && rewardFx != null) MoneyChip(economy, onMoney, rewardFx)
                 AnimatedVisibility(meterOn, enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + scaleOut(liveSpec(reduce))) {
                     HappyMeterPill(happy, onMeterOff, startFolded = true)
                 }
