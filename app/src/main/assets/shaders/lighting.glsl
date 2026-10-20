@@ -209,14 +209,19 @@ vec3 applyWater(vec3 col, vec3 p) {
 // Filmic curve (Hejl-style x/(x+0.155)*1.019); it already includes the display gamma, so no extra pow.
 // Shared grade, so every shader lands in one look: partial white balance toward the fixture colour (the eye / a
 // camera adapts to the AI Prime mix, so cream rock reads cream under a blue-heavy daylight, while dusk keeps more blue
-// and moonlight stays blue), then a gentle S-curve and a touch of saturation.
+// and moonlight stays blue), then a gentle S-curve and a touch of saturation. Actinic-only light (blue fraction near 1,
+// the Blue light look and blue-only ramps) is barely balanced: the real tank reads deep blue under it, with the
+// fluorescent corals glowing out of it, and more saturated.
 vec3 tonemap(vec3 x) {
     x = max(x, vec3(0.0));
-    vec3 adapt = mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()));
+    float actinic = (1.0 - uNight) * smoothstep(0.86, 0.98, uBlueFraction);
+    float wb = 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()) * (1.0 - 0.8 * actinic);
+    vec3 adapt = mix(vec3(1.0), lightTint(), wb);
     x /= max(adapt, vec3(0.2));
     vec3 c = x / (x + 0.155) * 1.019;
     c = clamp(c, 0.0, 1.0);
     c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    return clamp(mix(vec3(l), c, 1.06), 0.0, 1.0);
+    // actinic: the camera / eye sees royal blue as a deep, saturated indigo (Tee's video), not a pale sky blue
+    return clamp(mix(vec3(l), c, 1.06 + 0.5 * actinic), 0.0, 1.0);
 }
