@@ -13,6 +13,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
+/** Row kinds finer than a BrainKind ([PairMatrix.subKind]). */
+private val SUB_KINDS = setOf("ZEBRASOMA", "XANTHURUM", "FAIRY_WRASSE_M")
+
 /** One row of `sim/interactions.json` (research 06 §5.3). See the file's `doc` field for units. */
 @Serializable
 data class PairRow(
@@ -51,6 +54,10 @@ data class PairRow(
     val killDusk: Double = 0.0,
     val evidence: String = "",
 ) {
+    /** The actor / a target is a [PairMatrix.subKind] (resolved once, so plain rows keep the cheap kind compare). */
+    @kotlinx.serialization.Transient val subActor: Boolean = actor in SUB_KINDS
+    @kotlinx.serialization.Transient val subTargets: Boolean = targets.any { it in SUB_KINDS }
+
     val displayOnly: Boolean get() = type == "standoff" || type == "ignore" || chaseLen <= 0.0 || bout == "MUTUAL_DISPLAY" || bout == "ORIENT_HOP"
 }
 
@@ -85,7 +92,7 @@ object PairMatrix {
     fun actorMatches(r: PairRow, o: Organism, sim: Simulation): Boolean = when (r.actor) {
         "CLOWN_F" -> o.brainKind == BrainKind.CLOWN && ClownQueue.isDominant(o, sim)
         "CLOWN_M" -> o.brainKind == BrainKind.CLOWN && !ClownQueue.isDominant(o, sim)
-        else -> subKind(r.actor, o) ?: (o.brainKind.name == r.actor)
+        else -> if (r.subActor) subKind(r.actor, o) == true else o.brainKind.name == r.actor
     }
 
     /**
@@ -102,7 +109,7 @@ object PairMatrix {
     /** A brain gets the bout rows its kind (or one of its [subKind]s) can act in; the sub-kind rows are checked again each scan. */
     fun mayAct(r: PairRow, o: Organism): Boolean =
         r.actor == o.brainKind.name || o.brainKind == BrainKind.CLOWN && r.actor.startsWith("CLOWN_") ||
-            r.actor == "FAIRY_WRASSE_M" && o.brainKind == BrainKind.FAIRY_WRASSE || subKind(r.actor, o) == true
+            r.actor == "FAIRY_WRASSE_M" && o.brainKind == BrainKind.FAIRY_WRASSE || r.subActor && subKind(r.actor, o) == true
 
     const val XANTHURUM_ID = "zebrasoma_xanthurum"
 
@@ -116,7 +123,7 @@ object PairMatrix {
                 // the cleaner is "never chased sustainedly because of the cleaning role" (06 §3.1, S:Cheney08);
                 // rows that do target it name it (dottyback, other wrasse)
                 "ANY_FISH" -> t.isFish && t.brainKind != BrainKind.WRASSE
-                else -> subKind(k, t) ?: (t.brainKind.name == k)
+                else -> if (r.subTargets) subKind(k, t) ?: (t.brainKind.name == k) else t.brainKind.name == k
             }
         }
         if (!kindOk) return false
