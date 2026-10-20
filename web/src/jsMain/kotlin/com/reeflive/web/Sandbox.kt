@@ -226,10 +226,10 @@ object ReefSandbox {
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
             "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
-            // clownfish breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
+            // clownfish and blue tang breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
             "breed" -> {
                 val a = arg ?: return false
-                if (a == "SPAWN_NOW" && !sandbox) return false
+                if (a.startsWith("SPAWN_NOW") && !sandbox) return false
                 send(Command.Breed(a)); return true
             }
         }
@@ -600,7 +600,7 @@ object ReefSandbox {
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
             // the parents' "Family" panel (core Brood): eggs, larvae, the nursery and its buttons
-            it.family = sim?.latest?.brood?.panel?.takeIf { p -> p.shows(st.speciesId) }?.let { p ->
+            it.family = sim?.latest?.brood?.panelFor(st.speciesId)?.let { p ->
                 obj { f ->
                     f.title = p.title; f.lines = p.lines.toTypedArray()
                     f.actions = p.actions.filter { a -> !a.sandboxOnly || sandbox }.map { a ->

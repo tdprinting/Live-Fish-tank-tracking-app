@@ -1363,7 +1363,12 @@ class Simulation private constructor(
                 // new arrivals enter at the surface like a release from the acclimation cup
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
-            is Command.Breed -> Brood.Act.entries.firstOrNull { it.name == c.act }?.let { brood.act(it) }
+            is Command.Breed -> {
+                // "ACT" for the clowns, "ACT:<spec key>" for the other breeding species (Brood.id)
+                val name = c.act.substringBefore(':')
+                val spec = BroodSpecs.byKey(c.act.substringAfter(':', BroodSpecs.CLOWN.key)) ?: BroodSpecs.CLOWN
+                Brood.Act.entries.firstOrNull { it.name == name }?.let { brood.act(it, spec) }
+            }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
             is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)

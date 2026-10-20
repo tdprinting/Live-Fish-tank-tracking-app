@@ -1584,7 +1584,7 @@ private fun HudLayer(
             val card = st ?: lastCard
             if (card != null) {
                 val hudSnap by vm.hud.collectAsStateWithLifecycle()
-                val family = hudSnap.brood.panel?.takeIf { it.shows(card.speciesId) }?.let { p ->
+                val family = hudSnap.brood.panelFor(card.speciesId)?.let { p ->
                     p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.MY_TANK })
                 }
                 FishCard(

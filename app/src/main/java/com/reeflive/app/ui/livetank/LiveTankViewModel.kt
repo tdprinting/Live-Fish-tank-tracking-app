@@ -178,7 +178,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
     fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
 
-    /** A breeding / nursery button on a clown's card (core Brood.Act name). */
+    /** A breeding / nursery button on a clown's or blue tang's card (core Brood.Act name, ":tang" for tangs). */
     fun breed(act: String) = holder.enqueue(Command.Breed(act))
     private val _nurseryView = kotlinx.coroutines.flow.MutableStateFlow(0)
     /** Bumped for each "Look at the nursery" press (TankView glides the camera there). */
