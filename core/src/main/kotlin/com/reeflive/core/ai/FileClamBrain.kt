@@ -129,8 +129,12 @@ class FileClamBrain(c: Ctx) : SpeciesBrain(c) {
             val axis = h.axis.normalized(Vec3.Z)
             val inset = min(0.45 * L, max(0.0, h.depth - 0.5 * L)).coerceAtLeast(0.15 * L)
             val p = h.along(inset)
-            val up = if (h.kind.slot) h.up.rejectFrom(axis).normalized(Vec3.Y) else upFor(axis, Vec3.Y)
-            Rest(p, axis, up, posture = 3)
+            val up0 = if (h.kind.slot) h.up.rejectFrom(axis).normalized(Vec3.Y) else upFor(axis, Vec3.Y)
+            // lie on the hole's floor with the lower valve against the rock (a wide cave would otherwise leave it hanging)
+            val thick = 0.5 * o.species.depthRatio * L
+            val floor = c.rock.sdf.project(p - up0 * max(0.0, h.radius - thick), 0.0)
+            val n = c.rock.sdf.gradient(floor).normalized(up0)
+            Rest(floor + n * (thick + 0.2), axis.rejectFrom(n).normalized(axis), n, posture = 3)
         } else {
             hole = null
             val centre = from ?: Vec3(c.rock.lengthCm * 0.5, c.rock.sandTopCm + 10, c.rock.widthCm * 0.5)

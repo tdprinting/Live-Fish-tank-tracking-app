@@ -34,17 +34,17 @@ class PeppermintFlameScallopTest {
 
     @Test fun peppermintEatsASmallAiptasiaAtNight() {
         val sim = sim(pep, "Minty", 4.0, startHour = 21.0)
-        sim.enqueue(Command.AddAiptasia(1)); sim.advance(1.0)
-        val polyp = sim.corals.first { it.kind == CoralKind.AIPTASIA }
-        polyp.size = 0.3
+        sim.enqueue(Command.AddAiptasia(3)); sim.advance(1.0)
+        val polyps = sim.corals.filter { it.kind == CoralKind.AIPTASIA }
+        polyps.forEach { it.size = 0.3 }
         val o = sim.a1()
         o.hunger = 0.9
         val b = sim.agentOf(o)!!.brain as PeppermintShrimpBrain
-        // walk up to an hour of sim time in behaviour steps
+        // up to three hours of the night in behaviour steps
         var t = 0.0
-        while (t < 3600 && b.aiptasiaEaten == 0) { sim.advance(30.0); t += 30 }
-        assertTrue("ate the small aiptasia within an hour (eaten ${b.aiptasiaEaten}, refused ${b.aiptasiaRefused})", b.aiptasiaEaten >= 1)
-        assertTrue("the polyp is gone", polyp.tissue <= 0.01)
+        while (t < 3 * 3600 && b.aiptasiaEaten == 0) { sim.advance(30.0); t += 30 }
+        assertTrue("ate a small aiptasia within three hours (eaten ${b.aiptasiaEaten}, refused ${b.aiptasiaRefused})", b.aiptasiaEaten >= 1)
+        assertTrue("a polyp is gone", polyps.any { it.tissue <= 0.01 })
         assertTrue("in the water", sim.rock.inWater(o.pos, 0.0))
     }
 

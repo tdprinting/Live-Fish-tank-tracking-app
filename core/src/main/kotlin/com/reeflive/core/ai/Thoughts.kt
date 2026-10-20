@@ -186,6 +186,15 @@ object Thoughts {
             n == "retreat" -> Line("hiding inside its shell${e.because()}", "pop back out of its shell", "Nobody home!", Driver.FEAR, 2)
             n == "backout" -> Line("backing out of a gap too tight for its shell", "back out of the tight spot", "Too squeezy!", Driver.ROUTINE)
             // ---- brittle star
+            // ---- peppermint shrimp and flame scallop (research 42)
+            n == "hide" && k == BrainKind.PEPPERMINT_SHRIMP -> Line(when {
+                label.startsWith("Grooming") -> "cleaning its antennae in its hiding spot"
+                label.contains("back") -> "heading back to its hiding spot in the rock"
+                else -> "hiding in a dark gap in the rock until night"
+            }, "come out after dark", "Too bright out there.", Driver.HOME, 0)
+            n == "aiptasia" -> Line(if (label.startsWith("Eating")) "picking apart a pest aiptasia anemone" else "sneaking up on a pest aiptasia anemone",
+                "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
+            n == "clam" -> clamLine(label)
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
             n == "squeeze" -> Line("squeezing out of a gap too tight for its shell", "squeeze out of the gap", "Too tight in here!", Driver.HOME, 2)
             n == "hide" -> Line("hiding under a rock with just its arms peeking out", "hide under the rock", "Shh, hiding.", Driver.HOME, 0)
@@ -327,6 +336,17 @@ object Thoughts {
             else -> "scavenging for leftovers"
         }
         return Line(now, "look for leftovers", if (food != null) "Yum, $food!" else "Leftovers?", Driver.HUNGER, if (food != null) 3 else 1)
+    }
+
+    private fun clamLine(label: String): Line = when {
+        label.startsWith("Swimming") -> Line("clapping its shell to swim away", "find a quieter crevice", "Clap clap clap!", Driver.FEAR, 3)
+        label.startsWith("Looking") -> Line("drifting down to look for a new crevice", "find a new crevice", "Somewhere darker…", Driver.HOME, 2)
+        label.startsWith("Resting") -> Line("resting where it landed", "creep into a crevice", "Phew.", Driver.HOME)
+        label.startsWith("Snapped") -> Line("snapped its shell shut", "open up again", "Eek!", Driver.FEAR, 2)
+        label.startsWith("Flushing") -> Line("clapping its shell to flush out its gills", "keep filtering", "Ahem!", Driver.ROUTINE)
+        label.startsWith("Starving") -> Line("filtering hard, but there is too little phytoplankton to eat", "eat phytoplankton (dose some!)", "So hungry…", Driver.HUNGER, 3)
+        label.startsWith("Hungry") -> Line("filtering the water for phytoplankton", "eat more phytoplankton", "More phyto, please.", Driver.HUNGER, 2)
+        else -> Line("wedged in its crevice, waving its red tentacles and filtering the water", "keep filtering", "Mmm, plankton.", Driver.HUNGER)
     }
 
     private fun crawlLine(e: Env, label: String): Line = when (label) {

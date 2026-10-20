@@ -1333,9 +1333,11 @@ class Simulation private constructor(
                     emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
                 }
             is Command.AddPestControl -> when (c.controller) {
-                // real peppermint shrimp now (research 42): they arrive in a bag like any other animal and hunt the polyps themselves
-                PestController.PEPPERMINT_SHRIMP -> if (c.count > 0) bags.float(this, AiptasiaModel.PEPPERMINT_ID, c.count, StockSize.ADULT, 0.0, rock.lengthCm * 0.5, null)
-                    else pests.peppermint = max(0, pests.peppermint + c.count)
+                // real peppermint shrimp now (research 42): they go straight onto the rock and hunt the polyps themselves
+                PestController.PEPPERMINT_SHRIMP -> if (c.count > 0) {
+                    species.ensure(AiptasiaModel.PEPPERMINT_ID)
+                    repeat(c.count) { addFromSeed(LivestockSeed(AiptasiaModel.PEPPERMINT_ID, "Peppermint", 0.0)) }
+                } else pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
             is Command.Feed -> { feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }

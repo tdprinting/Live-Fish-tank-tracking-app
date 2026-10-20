@@ -15,9 +15,13 @@ class PestState {
     /** Berghia nudibranch population (fractional: they breed and starve gradually). */
     var berghia = 0.0
     var peppermintAcc = 0.0
+    /** Established polyps owed to the peppermints (fractional, so the rare kill comes at its expected rate). */
+    var peppermintLargeAcc = 0.0
     var berghiaAcc = 0.0
 
-    fun copyFrom(o: PestState) { peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; berghiaAcc = o.berghiaAcc }
+    fun copyFrom(o: PestState) {
+        peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; peppermintLargeAcc = o.peppermintLargeAcc; berghiaAcc = o.berghiaAcc
+    }
 }
 
 /**
@@ -35,9 +39,9 @@ object AiptasiaModel {
     /** Lacerates per mature polyp per day at full food (est.; literature on A. pallida culture ~ weekly when fed). */
     const val BUD_PER_DAY = 1.0 / 14
     const val MATURE = 0.6
-    /** Polyps eaten per controller per day (est.). */
+    /** Polyps eaten per controller per day (est.; research 42 §1.5: established polyps are mostly ignored, even by a hungry shrimp). */
     const val PEPPERMINT_SMALL_PER_DAY = 0.5
-    const val PEPPERMINT_LARGE_PER_DAY = 0.08
+    const val PEPPERMINT_LARGE_PER_DAY = 0.04
     const val BERGHIA_PER_DAY = 0.4
     const val BERGHIA_BREED_PER_DAY = 0.04
     const val BERGHIA_STARVE_PER_DAY = 1.0 / 7
@@ -88,13 +92,14 @@ object AiptasiaModel {
                 st.peppermintAcc -= 1
                 val live = polyps(sim)
                 if (live.isEmpty()) { st.peppermintAcc = 0.0; break }
-                // a shrimp-day finds a small polyp at 0.5/day, an established one only at 0.08/day
+                // a shrimp-day finds a small polyp at 0.5/day, an established one only at 0.04/day
                 val small = live.filter { it.size < MATURE }
                 val pSmall = PEPPERMINT_SMALL_PER_DAY * min(1.0, small.size / 3.0)
                 val pLarge = PEPPERMINT_LARGE_PER_DAY
                 when {
                     small.isNotEmpty() && rng.chance(pSmall) -> kill(small[rng.nextInt(small.size)])
-                    rng.chance(pLarge) -> kill(live[rng.nextInt(live.size)])
+                    // an established one now and then, at its expected rate (a dice roll here ran in streaks)
+                    else -> { st.peppermintLargeAcc += pLarge; if (st.peppermintLargeAcc >= 1) { st.peppermintLargeAcc -= 1; kill(live[rng.nextInt(live.size)]) } }
                 }
             }
         }

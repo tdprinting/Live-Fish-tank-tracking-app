@@ -194,7 +194,8 @@ class PeppermintShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
         override fun score(c: Ctx): Double {
             if (c.o.molting || c.t - c.o.lastMoltAt < 6 * 3600) return 0.0
-            if (nextHuntAt < 0) nextHuntAt = c.t + 86400.0 / rate(c) * (0.2 + 0.6 * c.rng.nextDouble())
+            // a newcomer goes looking within its first night out; after that the gap between kills follows hunger
+            if (nextHuntAt < 0) nextHuntAt = c.t + 1800.0 * c.rng.nextDouble()
             if (c.t < nextHuntAt || forayDrive(c) < 0.5 && c.o.hunger < 0.7) return 0.0
             // nothing to hunt: look again in half an hour rather than every tick
             if (target?.let { it.tissue > 0.01 } != true) target = choose(c) ?: run { nextHuntAt = c.t + 1800.0; return 0.0 }
