@@ -13,6 +13,8 @@ import com.reeflive.core.custom.TankBuild
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.BuyResult
 import com.reeflive.core.custom.economy.DisplayTank
+import com.reeflive.core.custom.AwayCatchUp
+import com.reeflive.core.custom.AwaySummary
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.ShelfCard
@@ -80,6 +82,9 @@ data class StoreVisitUi(
 data class StoreFrontUi(val store: FishStore, val open: Boolean)
 
 /** "My tank" as the screen sees it: whether one is set up yet, its name and build. */
+/** The welcome-back card: how far the catch-up is ([daysDone] of [days]) and, once done, what happened. */
+data class AwayUi(val progress: Double, val daysDone: Double, val days: Double, val summary: AwaySummary?)
+
 data class CustomTankInfo(val ready: Boolean, val exists: Boolean, val name: String = "", val build: TankBuild = TankBuilds.DEFAULT)
 
 /**
@@ -163,6 +168,10 @@ class SimulationHolder(
     /** A checkout went through: (sand dollars paid, animals bought); the screen plays the pay animation. */
     val paid: SharedFlow<Pair<Int, Int>> = _paid.asSharedFlow()
 
+    private val _away = MutableStateFlow<AwayUi?>(null)
+    /** My tank's "while you were away" catch-up and its summary (docs/ECONOMY.md §9); null when nothing to show. */
+    val awayState: StateFlow<AwayUi?> = _away.asStateFlow()
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -178,6 +187,8 @@ class SimulationHolder(
     private var lastCustomSaveMs = 0L
     /** My tank's economy; kept across "Start over" so the keeper's money and level stay theirs. */
     private var economyLive: Economy? = null
+    /** A long time-away catch-up in progress ([beginAway]). */
+    private var away: AwayCatchUp? = null
     private var lastEconomyMs = 0L
     /** The display tank on screen while visiting a store (My tank waits meanwhile, then catches up). */
     private var display: Simulation? = null
@@ -261,7 +272,7 @@ class SimulationHolder(
     fun enterStore(store: FishStore) {
         scope.launch {
             val e = economyLive ?: return@launch
-            if (customSim == null || !e.canSee(store) || _mode.value != SimMode.CUSTOM) return@launch
+            if (customSim == null || away != null || !e.canSee(store) || _mode.value != SimMode.CUSTOM) return@launch
             if (visiting == null) saveCustom()
             visiting = store
             visitTanks = StoreVisit.tanks(store, today())
@@ -352,6 +363,7 @@ class SimulationHolder(
             customSim = null; customBase = null; customLoaded = true
             customStore?.clear()
             _economy.value = null
+            away = null; _away.value = null
             _custom.value = CustomTankInfo(ready = true, exists = false)
             if (_mode.value == SimMode.CUSTOM) _snapshots.value = SimSnapshot.EMPTY
         }
@@ -544,13 +556,44 @@ class SimulationHolder(
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
         economyLive = Economy(save.economy)
-        // the time away, at 1x: the tank lived on while the app was closed
-        sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0)
+        // the time away, at 1x: the tank lived on while the app was closed (all of it, up to 30 days)
+        beginAway(sim, (nowMs() - save.savedAtMs).coerceAtLeast(0L) / 1000.0)
         sim.stepWall(0.0)
         lastWallMs[sim] = nowMs()
         _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
         updateEconomy(sim, force = true)
     }
+
+    /**
+     * My tank lived on while the keeper was away: a short gap runs at once; a long one runs a chunk per tick
+     * ([stepAway]) while the welcome-back card shows the days racing by, then says what happened.
+     */
+    private fun beginAway(sim: Simulation, seconds: Double) {
+        if (seconds < FastForward.MIN_SIM_SEC) return
+        val run = AwayCatchUp(sim, seconds)
+        if (seconds < AwayCatchUp.REPORT_SEC) { run.runAll(); return }
+        away = run
+        _away.value = AwayUi(run.progress, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, null)
+    }
+
+    /** One chunk of a long away catch-up; true while it is still running (the tick loop skips the normal step). */
+    private fun stepAway(sim: Simulation): Boolean {
+        val run = away ?: return false
+        run.step()
+        if (run.finished) {
+            away = null
+            val s = run.summary()
+            _away.value = if (s.worthShowing) AwayUi(1.0, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, s) else null
+            lastWallMs[sim] = nowMs()
+            return false
+        }
+        _away.value = AwayUi(run.progress, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, null)
+        publish(sim)
+        return true
+    }
+
+    /** The welcome-back card was closed. */
+    fun dismissAway() { _away.value = _away.value?.takeIf { it.summary == null } }
 
     /** Today as the economy counts days: the keeper's local calendar day. */
     private fun today(): String = Instant.ofEpochMilli(nowMs()).atZone(ZoneId.systemDefault()).toLocalDate().toString()
@@ -604,6 +647,7 @@ class SimulationHolder(
         val now = nowMs()
         val last = lastWallMs[sim] ?: now
         lastWallMs[sim] = now
+        if (sim === customSim) { beginAway(sim, (now - last).coerceAtLeast(0L) / 1000.0); publish(sim); return }
         val secs = FastForward.simSeconds(now - last, speed = 1.0)
         if (secs >= FastForward.MIN_SIM_SEC) sim.advanceAbstract(secs)
         else sim.stepWall(0.0)
@@ -623,7 +667,9 @@ class SimulationHolder(
                 val t0 = System.nanoTime()
                 val dt = ((t0 - last) / 1e9).coerceIn(0.0, 0.1)
                 last = t0
-                if (sim != null) {
+                if (sim != null && sim === customSim && stepAway(sim)) {
+                    // catching up on the time away: the card shows the days going by
+                } else if (sim != null) {
                     scenarios.due(sim.simTimeSec).forEach { sim.enqueue(it) }
                     sim.stepWall(dt)
                     lastWallMs[sim] = nowMs()
