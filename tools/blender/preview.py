@@ -19,7 +19,7 @@ from common import bpy  # noqa: E402
 FISH_SHEET = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "hawkfish", "lawnmower_blenny",
               "tailspot_blenny", "dottyback", "engineer_goby", "diamond_goby", "leopard_wrasse"]
 INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "sally_lightfoot", "brittle_star", "feather_duster",
-                "nassarius", "astrea", "asterina"]
+                "nassarius", "astrea", "asterina", "trochus", "fighting_conch", "tuxedo_urchin"]
 
 
 def setup_cycles(w, h, samples=48):

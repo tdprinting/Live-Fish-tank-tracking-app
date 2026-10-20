@@ -241,7 +241,7 @@ def build_trochus():
                  roughness=0.4, motionMode=8, depthRatio=round(depth, 3), aperture=aperture,
                  note="retracted parts gather at extras.aperture (model space) and the shell stays")
     print(f"[trochus] depthRatio {depth:.3f}, aperture {aperture}")
-    return finish(root, objs, os.path.join(C.MODELS, "trochus.glb"), 2400)
+    return finish(root, objs, os.path.join(C.MODELS, "trochus.glb"), 2800)
 
 
 # ----------------------------------------------------------------------------
@@ -363,7 +363,7 @@ def build_conch():
         t = i / (nl - 1)
         x = -0.22 + 0.6 * t
         notch = math.exp(-((x - 0.3) / 0.03) ** 2)
-        width = (0.11 * math.sin(math.pi * min(1.0, t * 1.1)) ** 0.8 + 0.015) * (1 - 0.7 * notch)
+        width = (0.15 * math.sin(math.pi * min(1.0, t * 1.1)) ** 0.8 + 0.015) * (1 - 0.7 * notch)
         rr = prof(x) * 0.95
         for j in range(nw):
             u = j / (nw - 1)
@@ -464,7 +464,7 @@ def build_conch():
                  roughness=0.35, motionMode=8, depthRatio=round(depth, 3), aperture=aperture, operculumTip=oper_tip,
                  note="leap: the shell vaults over extras.operculumTip (fish.vert snailPose)")
     print(f"[conch] depthRatio {depth:.3f}, aperture {aperture}, operculum tip {oper_tip}")
-    return finish(root, objs, os.path.join(C.MODELS, "fighting_conch.glb"), 3600)
+    return finish(root, objs, os.path.join(C.MODELS, "fighting_conch.glb"), 3800)
 
 
 # ----------------------------------------------------------------------------
@@ -653,10 +653,16 @@ def build_urchin():
                  roughness=0.55, motionMode=9, depthRatio=round(depth, 3), testCentre=centre,
                  debris=URCHIN_DEBRIS, note="hidden debris pieces collapse to extras.testCentre (glTF space)")
     print(f"[urchin] depthRatio {depth:.3f}, test centre {centre}")
-    return finish(root, objs, os.path.join(C.MODELS, "tuxedo_urchin.glb"), 4200)
+    return finish(root, objs, os.path.join(C.MODELS, "tuxedo_urchin.glb"), 5000)
 
 
 BUILDERS = {"trochus": build_trochus, "conch": build_conch, "urchin": build_urchin}
+
+
+def build_all():
+    for fn in BUILDERS.values():
+        fn()
+
 
 if __name__ == "__main__":
     want = [a for a in sys.argv[1:] if a in BUILDERS] or list(BUILDERS)

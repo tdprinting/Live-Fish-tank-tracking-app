@@ -33,6 +33,17 @@ class CleanupCrewTest {
         assertTrue(BrainKind.TROCHUS.isSnail && BrainKind.CONCH.isSnail && !BrainKind.URCHIN.isSnail)
     }
 
+    @Test fun storesSellThemAtTheirPrices() {
+        val p = com.reeflive.core.custom.economy.PriceBook
+        assertEquals(8, p.listing(trochus)!!.price)
+        assertEquals(18, p.listing(conch)!!.price)
+        assertEquals(30, p.listing(urchin)!!.price)
+        val sim = sim(trochus, 3.0)
+        sim.species.ensure(conch)
+        sim.water.bacteria.sandDepthCm = 1.0
+        assertTrue(com.reeflive.core.custom.economy.Stores.warning(sim, conch)!!.contains("sand"))
+    }
+
     @Test fun trochusGrazesTheGlassAndRightsItself() {
         val sim = sim(trochus, 3.0)
         sim.advance(30.0)

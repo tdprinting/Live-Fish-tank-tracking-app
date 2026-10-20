@@ -40,6 +40,9 @@ CARDS = {
     "nassarius_sp": "nassarius",
     "lithopoma_tectum": "astrea",
     "asterina_sp": "asterina",
+    "tectus_fenestratus": "trochus",
+    "strombus_alatus": "fighting_conch",
+    "mespilia_globulus": "tuxedo_urchin",
     "capnella_sp": "kenya",
     "briareum_sp": "gsp_mat",
     "clavularia_sp": "clove",
@@ -51,7 +54,7 @@ CARDS = {
 }
 TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
 HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "shrimp", "skunk_shrimp", "gsp_mat",
-        "organ_pipe", "clove"}
+        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
 
 
 def render_card(species, glb, size=512, samples=32):
