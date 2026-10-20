@@ -44,6 +44,8 @@ data class AppSettings(
     val watchHintSeen: Boolean = false,
     /** Dynamic rockscape: rocks can settle or topple when fish dig out the sand under them (off: rocks never move). */
     val dynamicRocks: Boolean = true,
+    /** My tank nudges (hungry fish, full skimmer cup, care jobs) while the app is closed. */
+    val tankAlerts: Boolean = true,
 ) {
     /** Preferred display unit for a parameter whose base unit is [base]. */
     fun displayUnitFor(paramId: String, base: ParamUnit): ParamUnit = when (paramId) {
@@ -80,6 +82,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val supplyHintSeen = booleanPreferencesKey("supplyHintSeen")
         val watchHintSeen = booleanPreferencesKey("watchHintSeen")
         val dynamicRocks = booleanPreferencesKey("dynamicRocks")
+        val tankAlerts = booleanPreferencesKey("tankAlerts")
     }
 
     private fun unit(name: String?, default: ParamUnit) = ParamUnit.entries.firstOrNull { it.name == name } ?: default
@@ -107,6 +110,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             supplyHintSeen = p[K.supplyHintSeen] ?: false,
             watchHintSeen = p[K.watchHintSeen] ?: false,
             dynamicRocks = p[K.dynamicRocks] ?: true,
+            tankAlerts = p[K.tankAlerts] ?: true,
         )
     }
 
@@ -147,6 +151,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setNotifications(v: Boolean) = store.edit { it[K.notifications] = v }
     suspend fun setTankSounds(v: Boolean) = store.edit { it[K.tankSounds] = v }
     suspend fun setDynamicRocks(v: Boolean) = store.edit { it[K.dynamicRocks] = v }
+    suspend fun setTankAlerts(v: Boolean) = store.edit { it[K.tankAlerts] = v }
     suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
     suspend fun setSandboxHintSeen(v: Boolean) = store.edit { it[K.sandboxHintSeen] = v }
     suspend fun setSupplyHintSeen(v: Boolean) = store.edit { it[K.supplyHintSeen] = v }

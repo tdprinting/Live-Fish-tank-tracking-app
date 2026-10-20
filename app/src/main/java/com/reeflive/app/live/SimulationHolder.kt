@@ -107,7 +107,15 @@ class SimulationHolder(
     /** The tank's rock layout between launches (rocks that settled or toppled stay where they fell). */
     private val rockStore: RockStore? = null,
     private val customStore: CustomTankStore? = null,
+    /** Gets the My tank care plan when the app goes to the background and a cancel when it is back (CareAlerts). */
+    private val careAlerts: CareAlertSink? = null,
 ) {
+    /** Where My tank's "needs you" notifications go (the app schedules them; nothing here knows how). */
+    interface CareAlertSink {
+        fun schedule(plan: List<com.reeflive.core.custom.PlannedAlert>)
+        fun cancel()
+    }
+
     /** Where the reality tank's moved rocks are kept between launches ([Simulation.rockState]). */
     interface RockStore {
         fun load(): String
@@ -417,6 +425,7 @@ class SimulationHolder(
     fun onForeground() {
         scope.launch {
             foreground = true
+            careAlerts?.cancel()
             startLoop()
         }
     }
@@ -426,6 +435,7 @@ class SimulationHolder(
         scope.launch {
             foreground = false
             saveCustom()
+            planCareAlerts()
             tickJob?.cancel(); tickJob = null
             _running.value = false
         }
@@ -565,6 +575,16 @@ class SimulationHolder(
         for (g in eco.takeGains()) _gains.tryEmit(g)
         if (changed || force || _economy.value == null) _economy.value = eco.view(sim)
         else _economy.value?.let { v -> Economy.happyBonus(sim).let { h -> if (h != v.happyBonus) _economy.value = v.copy(happyBonus = h) } }
+    }
+
+    /** The app is leaving the screen: tell the sink when My tank will next need the keeper. */
+    private fun planCareAlerts() {
+        val sink = careAlerts ?: return
+        val sim = customSim ?: return sink.cancel()
+        val now = nowMs()
+        val left = economyLive?.view(sim)?.tasks?.count { !it.done } ?: 0
+        val offsetMin = java.util.TimeZone.getDefault().getOffset(now) / 60_000
+        sink.schedule(com.reeflive.core.custom.CareAlerts.plan(sim, now, offsetMin, economyLive != null, left))
     }
 
     private fun saveCustom() {
