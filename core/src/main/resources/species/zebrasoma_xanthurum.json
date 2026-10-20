@@ -148,5 +148,6 @@
     "One of the most aggressive tangs: add it last, and never with another purple or yellow tang in a small tank.",
     "Wild-caught from the Red Sea, so it is rarer and costs much more than a yellow tang.",
     "Tough once settled; still keep it in pristine water and feed greens daily."
-  ]
+  ],
+  "jumpRisk": 0.1
 }

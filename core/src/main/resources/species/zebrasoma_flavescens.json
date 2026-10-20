@@ -148,5 +148,6 @@
     "Fights other Zebrasoma tangs (yellow, purple, sailfin). Keep one, or add several at once in a very large tank.",
     "Most yellow tangs sold now are captive-bred in Hawaii; they are hardier and already eat nori.",
     "The white scalpel on each side of the tail is sharp: net it carefully."
-  ]
+  ],
+  "jumpRisk": 0.1
 }
