@@ -1,0 +1,212 @@
+// My tank's fish stores (docs/ECONOMY.md §5; Android StoreScreens.kt): the street of storefronts, then walking the
+// store's display tanks in the 3D view, picking animals into the shop bag and paying at the counter.
+import { SAND_DOLLAR } from './care.js';
+
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
+const pic = (it) => `<img class="sp" src="species/${it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
+
+let my, say, cue, onLeave;
+let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false;
+
+/** The street for My tank's "Add life" card: one storefront per store, locked ones dark with their level. */
+export function streetHtml() {
+  let s = null;
+  try { s = JSON.parse(my.stores()); } catch { s = null; }
+  if (!s) return '';
+  return `<p class="muted">Visit a fish store to buy new animals with your sand dollars.</p><div class="street">${s.stores.map((f) =>
+    `<button class="front ${f.open ? '' : 'shut'}" data-store="${f.id}" ${f.open ? '' : 'aria-disabled="true"'}>
+      <img src="stores/${f.id}.webp" alt="">
+      <b>${esc(f.label)}</b>${f.open ? '' : `<span class="opens">🔒 Opens at level ${f.level}</span>`}</button>`).join('')}</div>`;
+}
+
+export function initStores(opts) {
+  ({ my, say, cue } = opts);
+  onLeave = opts.onLeave || (() => {});
+  ui = document.createElement('div');
+  ui.id = 'storeUi';
+  ui.className = 'hidden';
+  (document.getElementById('live') || document.body).appendChild(ui);
+  ui.addEventListener('click', onClick);
+  return { enter, active: () => data != null, pick, leave };
+}
+
+function enter(id) {
+  let d = null;
+  try { d = JSON.parse(my.visit(id)); } catch { d = null; }
+  if (!d) { say?.('That store is not open for you yet. Do your care jobs to level up!'); return; }
+  data = d; at = 0; picked = null; bag = []; counterOpen = false;
+  document.body.classList.add('instore');
+  ui.classList.remove('hidden');
+  cue?.('TICK');
+  say?.(d.greeting);
+  render();
+}
+
+function leave(quiet) {
+  if (!data) return;
+  my.leaveStore();
+  data = null; bag = []; picked = null; counterOpen = false;
+  document.body.classList.remove('instore');
+  ui.classList.add('hidden');
+  ui.innerHTML = '';
+  if (!quiet) say?.('Back home. Come again soon!');
+  onLeave();
+}
+
+function refresh() { try { const d = JSON.parse(my.visitItems()); if (d) data = d; } catch { /* keep */ } }
+
+function go(i) {
+  if (!data) return;
+  const n = data.tanks.length;
+  at = (i + n) % n;
+  picked = null;
+  my.showTank(at);
+  cue?.('TICK');
+  render();
+}
+
+/** An animal tapped in the display tank: its card. */
+function pick(id) {
+  if (!data || !id) return;
+  const sp = my.displaySpecies(id);
+  if (sp) { picked = sp; render(); }
+}
+
+const tank = () => data.tanks[at];
+const item = (id) => data.tanks.flatMap((t) => t.items).find((x) => x.id === id);
+const inBag = (id) => bag.filter((x) => x === id).length;
+const total = () => bag.reduce((s, id) => s + (item(id)?.price || 0), 0);
+
+function add(id) {
+  const it = item(id);
+  if (!it || it.locked) return;
+  if (inBag(id) >= it.left) { say?.(`That is all the ${it.name} they have today.`); return; }
+  bag.push(id);
+  cue?.('TICK');
+  const b = ui.querySelector('.bagbtn');
+  b?.classList.remove('plop'); void b?.offsetWidth; b?.classList.add('plop');
+  render();
+}
+
+function remove(id) { const k = bag.lastIndexOf(id); if (k >= 0) bag.splice(k, 1); render(); }
+
+function pay() {
+  let r = null;
+  try { r = JSON.parse(my.checkout(JSON.stringify(bag))); } catch { r = null; }
+  if (!r) return;
+  if (r.result !== 'OK') {
+    const why = { TOO_POOR: 'Not enough sand dollars yet.', SOLD_OUT: 'Someone bought the last one!', LEVEL_LOCKED: 'That one needs a higher level.' };
+    say?.(why[r.result] || 'The till got stuck. Try again.');
+    refresh(); render();
+    return;
+  }
+  const n = bag.length;
+  payFx(r.total);
+  data = null; bag = []; counterOpen = false;
+  document.body.classList.remove('instore');
+  ui.classList.add('hidden'); ui.innerHTML = '';
+  cue?.('FEED');
+  say?.(`Paid ${r.total}! ${n === 1 ? 'Your new animal is' : `Your ${n} new animals are`} floating in bags at the top of the tank. They come out when the water in the bag is warm.`);
+  onLeave();
+}
+
+/** The reward burst run backwards: sand dollars hop out of the money chip into the till. */
+function payFx(amount) {
+  const chip = document.querySelector('.money');
+  if (!chip || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = chip.getBoundingClientRect();
+  const sx = r.left + 16, sy = r.top + r.height / 2, tx = innerWidth / 2, ty = innerHeight * 0.55;
+  const coins = Math.min(10, 3 + Math.round(amount / 25));
+  for (let i = 0; i < coins; i++) {
+    const c = document.createElement('div');
+    c.className = 'fxcoin';
+    c.innerHTML = SAND_DOLLAR;
+    document.body.appendChild(c);
+    const mx = (sx + tx) / 2 + (Math.random() - 0.5) * 160, my2 = Math.min(sy, ty) - 60 - Math.random() * 60;
+    const frames = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+      const x = (1 - t) ** 2 * sx + 2 * (1 - t) * t * mx + t * t * tx, y = (1 - t) ** 2 * sy + 2 * (1 - t) * t * my2 + t * t * ty;
+      return { transform: `translate(${x - 13}px, ${y - 13}px) scale(${1 - 0.4 * t}) rotate(${t * 300}deg)`, opacity: t > 0.85 ? 0 : 1 };
+    });
+    c.animate(frames, { duration: 700, delay: i * 60, easing: 'ease-in', fill: 'forwards' }).onfinish = () => c.remove();
+  }
+  const m = document.createElement('div');
+  m.className = 'fxplus minus';
+  m.textContent = `−${amount}`;
+  m.style.left = `${sx}px`; m.style.top = `${sy + 20}px`;
+  document.body.appendChild(m);
+  m.animate([{ transform: 'translate(-50%,0)', opacity: 1 }, { transform: 'translate(-50%,40px)', opacity: 0 }], { duration: 1100, easing: 'ease-out' }).onfinish = () => m.remove();
+}
+
+function render() {
+  if (!data) return;
+  const t = tank();
+  const coins = data.coins;
+  const sum = total();
+  const p = picked && item(picked);
+  ui.innerHTML = `
+    <div class="sthead glass">
+      <button class="door" data-sleave aria-label="Leave the store">🚪</button>
+      <div class="stname"><b>${esc(data.label)}</b><small>${esc(t.title)} · ${t.animals} animals</small></div>
+    </div>
+    <div class="sttabs">${data.tanks.map((x, i) => `<button class="pillbtn ${i === at ? 'on' : ''}" data-stank="${i}">${esc(x.title)}</button>`).join('')}</div>
+    ${data.tanks.length > 1 ? `<button class="starrow l" data-sgo="-1" aria-label="Previous tank">◀</button><button class="starrow r" data-sgo="1" aria-label="Next tank">▶</button>` : ''}
+    ${p ? card(p, coins) : ''}
+    <div class="ststrip">${t.items.map((it) => `<button class="stitem ${it.locked ? 'locked' : ''} ${picked === it.id ? 'on' : ''}" data-spick="${it.id}">
+      ${it.deal ? '<i class="rib deal">Deal</i>' : it.wanted ? '<i class="rib want">Wanted</i>' : ''}
+      ${pic(it)}<span class="nm">${esc(it.name)}</span>
+      <span class="pr">${it.locked ? `🔒 Lv ${it.level}` : `${SAND_DOLLAR}${it.price}`}</span>
+      ${inBag(it.id) ? `<i class="inbag">${inBag(it.id)}</i>` : ''}</button>`).join('')}</div>
+    <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter ${bag.length ? '' : 'disabled'}>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
+    ${counterOpen ? counter(coins, sum) : ''}`;
+}
+
+function card(p, coins) {
+  const n = inBag(p.id);
+  const can = !p.locked && n < p.left;
+  const need = p.price - coins;
+  return `<div class="stcard glass">
+    <button class="x" data-sclose aria-label="Close">✕</button>
+    <div class="row">${pic(p)}<div><h3>${esc(p.name)}</h3>
+      <p class="price">${SAND_DOLLAR}<b>${p.price}</b>${p.deal ? ' <i class="rib deal">30% off today</i>' : ''}</p>
+      <p class="muted">${p.left} in the shop today${n ? ` · ${n} in your bag` : ''}</p></div></div>
+    ${p.locked ? `<p class="lockline">🔒 Unlocks at level ${p.level}. Keep doing your care jobs!</p>` : need > 0 ? `<p class="muted">You need ${need} more sand dollars.</p>` : ''}
+    ${p.warning ? `<p class="warnline">⚠️ ${esc(p.warning)}</p>` : ''}
+    <div class="row-gap">${n ? `<button class="pill" data-sremove="${p.id}">− One less</button>` : ''}
+      <button class="pill collect" data-sadd="${p.id}" ${can ? '' : 'disabled'}>${p.locked ? 'Locked' : p.left <= 0 ? 'Sold out' : n >= p.left ? 'All in your bag' : 'Add to bag'}</button></div>
+  </div>`;
+}
+
+function counter(coins, sum) {
+  const rows = [...new Set(bag)].map((id) => {
+    const it = item(id), n = inBag(id);
+    return `<div class="crow">${pic(it)}<span class="nm">${esc(it.name)}</span>
+      <button class="pm" data-sremove="${id}">−</button><b>${n}</b><button class="pm" data-sadd="${id}">+</button>
+      <span class="pr">${SAND_DOLLAR}${it.price * n}</span></div>`;
+  }).join('');
+  const short = sum - coins;
+  return `<div class="caremodal" data-scounterbg><div class="carecard glass counter">
+    <h3>The counter</h3>${rows || '<p class="muted">Your bag is empty.</p>'}
+    <div class="ctotal"><span>Total</span><b>${SAND_DOLLAR}${sum}</b></div>
+    <p class="muted">You have ${coins}. After paying: <b>${Math.max(0, coins - sum)}</b></p>
+    <div class="carefoot" style="gap:10px"><button class="pill" data-scounterclose>Keep shopping</button>
+      <button class="pill collect" data-spay ${short > 0 || !bag.length ? 'disabled' : ''}>${short > 0 ? `Need ${short} more` : `Pay ${sum}`}</button></div>
+  </div></div>`;
+}
+
+function onClick(e) {
+  const b = e.target.closest('[data-sleave],[data-stank],[data-sgo],[data-spick],[data-sadd],[data-sremove],[data-sclose],[data-scounter],[data-scounterclose],[data-spay],[data-scounterbg]');
+  if (!b) return;
+  const d = b.dataset;
+  if ('sleave' in d) leave();
+  else if (d.stank != null) go(Number(d.stank));
+  else if (d.sgo) go(at + Number(d.sgo));
+  else if (d.spick) { picked = picked === d.spick ? null : d.spick; cue?.('TICK'); render(); }
+  else if (d.sadd) add(d.sadd);
+  else if (d.sremove) remove(d.sremove);
+  else if ('sclose' in d) { picked = null; render(); }
+  else if ('scounter' in d) { counterOpen = true; cue?.('TICK'); render(); }
+  else if ('scounterclose' in d) { counterOpen = false; render(); }
+  else if ('spay' in d) pay();
+  else if ('scounterbg' in d && e.target === b) { counterOpen = false; render(); }
+}
