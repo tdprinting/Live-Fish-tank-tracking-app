@@ -133,6 +133,7 @@ Base prices are close to US store prices in 2026. "Level" is when it can be boug
 | Pajama cardinalfish | fish | 1 | 20 |
 | Lawnmower blenny | fish | 1 | 25 |
 | Blue-green chromis (each; schools of 5+ are calm) | fish | 1 | 12 |
+| Peppermint shrimp | invert | 1 | 15 |
 | Kenya tree coral | coral | 1 | 15 |
 | Green mushroom | coral | 1 | 15 |
 | Green star polyps | coral | 1 | 20 |
@@ -159,6 +160,7 @@ Base prices are close to US store prices in 2026. "Level" is when it can be boug
 | Rainbow bubble tip anemone | invert | 4 | 70 |
 | Elephant ear mushroom | coral | 4 | 55 |
 | Organ pipe coral | coral | 5 | 60 |
+| Flame scallop (warning: needs phytoplankton every day) | invert | 5 | 35 |
 | Blue tang | fish | 5 | 80 |
 | Blue star leopard wrasse | fish | 6 | 70 |
 | Hummingbird bobtail squid | invert | 7 | 150 |

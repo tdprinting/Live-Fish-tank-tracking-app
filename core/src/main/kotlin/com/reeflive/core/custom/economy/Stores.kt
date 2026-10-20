@@ -19,7 +19,7 @@ object PriceBook {
     private fun l(id: String, level: Int, price: Int) = Listing(id, Stocking.entry(id)?.group ?: StockGroup.FISH, level, price)
 
     val LISTINGS: List<Listing> = listOf(
-        l("nassarius_sp", 1, 4), l("lithopoma_tectum", 1, 3), l("clibanarius_tricolor", 1, 3), l("paguristes_cadenati", 1, 8),
+        l("nassarius_sp", 1, 4), l("lysmata_boggessi", 1, 15), l("lithopoma_tectum", 1, 3), l("clibanarius_tricolor", 1, 3), l("paguristes_cadenati", 1, 8),
         l("chromis_viridis", 1, 12), l("amphiprion_ocellaris", 1, 25), l("sphaeramia_nematoptera", 1, 20), l("salarias_fasciatus", 1, 25),
         l("capnella_sp", 1, 15), l("discosoma_sp", 1, 15), l("briareum_sp", 1, 20), l("clavularia_sp", 1, 20),
         l("ecsenius_bicolor", 2, 30), l("nemateleotris_magnifica", 2, 30), l("lysmata_amboinensis", 2, 30), l("stenopus_hispidus", 2, 25), l("percnon_gibbesi", 2, 20), l("ophiocoma_sp", 2, 20),
@@ -27,7 +27,7 @@ object PriceBook {
         l("ecsenius_stigmatura", 3, 35), l("valenciennea_puellaris", 3, 35), l("pholidichthys_leucotaenia", 3, 30),
         l("labroides_dimidiatus", 3, 30), l("sarcophyton_sp", 3, 45), l("lobophytum_sp", 3, 40),
         l("cirrhitichthys_falco", 4, 45), l("ecsenius_midas", 4, 55), l("pseudochromis_indigo", 4, 50), l("entacmaea_quadricolor", 4, 70),
-        l("amplexidiscus_fenestrafer", 4, 55), l("tubipora_musica", 5, 60), l("paracanthurus_hepatus", 5, 80),
+        l("amplexidiscus_fenestrafer", 4, 55), l("tubipora_musica", 5, 60), l("ctenoides_scaber", 5, 35), l("paracanthurus_hepatus", 5, 80),
         l("macropharyngodon_bipartitus", 6, 70), l("euprymna_berryi", 7, 150),
     )
     private val byId = LISTINGS.associateBy { it.speciesId }
@@ -139,6 +139,7 @@ object Stores {
         val shrimp = alive.any { it.species.id == "lysmata_amboinensis" || it.species.id == "stenopus_hispidus" }
         if (speciesId == "cirrhitichthys_falco" && shrimp) return "Hawkfish sometimes eat small shrimp."
         if (speciesId in setOf("lysmata_amboinensis", "stenopus_hispidus") && alive.any { it.species.id == "cirrhitichthys_falco" }) return "Your hawkfish might eat a small shrimp."
+        if (speciesId == "ctenoides_scaber") return "Hard to keep: needs phytoplankton every day."
         if (speciesId == "pseudochromis_indigo" && alive.any { it.species.id == speciesId }) return "Two dottybacks will fight. One is best."
         if (speciesId == "stenopus_hispidus" && alive.any { it.species.id == speciesId }) return "Two coral banded shrimp fight unless they are a pair."
         if (speciesId == "amphiprion_ocellaris" && alive.count { it.species.id == speciesId } >= 2) return "Clownfish live in pairs. A third one gets picked on."
