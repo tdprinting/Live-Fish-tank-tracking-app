@@ -1186,6 +1186,8 @@ fun LiveTankScreen(
         // a coral out of its bag waits for the keeper to pick one of its glowing spots (My tank)
         val coralPick = hud.coralPick
         if (myTank && coralPick != null && bagCarry == null && !micro && !supplies && !subUi.on) {
+            // a new coral to place: close any open menu so the spots and their badges are in view
+            LaunchedEffect(coralPick.waiting) { if (!coralPickHidden) open = null }
             CoralPickLayer(
                 coralPick, projection, coralPickHidden,
                 onPlace = { spot -> tick(); vm.placeCoral(spot); coralPickHidden = false; echo(LiveReactions.coralPlaced(coralPick.name)) },

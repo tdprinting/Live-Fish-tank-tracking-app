@@ -167,7 +167,7 @@ object CoralSpots {
             val room = if (c.nearest == Double.MAX_VALUE) 1.0 else smoothstep(0.0, 15.0, c.nearest)
             val s = (0.45 * lightFit + 0.35 * flowFit + 0.2 * room) * (1 - 0.8 * c.harm)
             val stars = when { s >= 0.78 -> 3; s >= 0.55 -> 2; else -> 1 }
-            val crowded = others.isNotEmpty() && c.nearest < 25.0
+            val crowded = c.stinger < 25.0
             CoralSpot(c.p, c.n, s, stars, reason(light, rank, c.onSand, c.harm, crowded), light, c.flow, c.onSand)
         }.sortedByDescending { it.score }
         val out = ArrayList<CoralSpot>()
@@ -187,7 +187,8 @@ object CoralSpots {
     }
 
     private class Neighbor(val pos: Vec3, val extent: Double, val reach: Double, val same: Boolean)
-    private class Candidate(val p: Vec3, val n: Vec3, val onSand: Boolean, val lightFactor: Double, val flow: Double, val harm: Double, val nearest: Double)
+    /** [nearest]: gap to the nearest colony; [stinger]: to the nearest one that could sting it or that it could sting. */
+    private class Candidate(val p: Vec3, val n: Vec3, val onSand: Boolean, val lightFactor: Double, val flow: Double, val harm: Double, val nearest: Double, val stinger: Double)
 
     /** A spot under (x, z) a new colony can sit on, with its light, water speed and sting danger; null when it cannot. */
     private fun candidate(
@@ -204,6 +205,7 @@ object CoralSpots {
         // not on top of another colony, and the danger from anything that stings within reach (both ways)
         var harm = 0.0
         var nearest = Double.MAX_VALUE
+        var stinger = Double.MAX_VALUE
         for (o in others) {
             val d = o.pos.distanceTo(p)
             if (d < spacing) return null
@@ -211,11 +213,11 @@ object CoralSpots {
             if (gap < 0.5) return null
             nearest = min(nearest, gap)
             val reach = max(o.reach, if (o.same) 0.0 else myReach)
-            if (reach > 0) harm = max(harm, 1 - (gap / reach).coerceIn(0.0, 1.0))
+            if (reach > 0) { harm = max(harm, 1 - (gap / reach).coerceIn(0.0, 1.0)); stinger = min(stinger, gap) }
         }
         // the water the polyps sit in, a few cm off the rock (right at the surface the rock's own shelter hides it)
         val flow = sim.flow.velocityFast(p + Vec3.Y * POLYP_CM).length()
-        return Candidate(p, n, onSand, lightAt(rock, p, n), flow, harm, nearest)
+        return Candidate(p, n, onSand, lightAt(rock, p, n), flow, harm, nearest, stinger)
     }
 
     /** Height of the colony's polyps above its base where its water speed is read, cm. */

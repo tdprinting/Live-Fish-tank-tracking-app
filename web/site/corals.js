@@ -3,9 +3,10 @@
 // gets a numbered badge with stars and the reason ("Bright light, gentle flow"). Tap a badge to put it there, "Pick for
 // me" for the best spot, or "Later" (a pill brings the spots back). Self-contained: its own DOM and CSS.
 
-let live = null, SB = null, say = () => {}, cue = () => {}, isMine = () => false;
+let live = null, SB = null, say = () => {}, cue = () => {}, isMine = () => false, onShow = () => {};
 let root, panel, title, hint, laterPill;
 let hidden = false;
+let lastWaiting = 0;  // a new coral to place closes any open card (onShow)
 const badges = new Map(); // rank -> element
 
 const CSS = `
@@ -25,10 +26,11 @@ const CSS = `
 #coralPanel .row { display: flex; gap: 8px; }
 `;
 
-/** Wires the module to the page: [opts] = { live, SB, say, cue, isMine }. */
+/** Wires the module to the page: [opts] = { live, SB, say, cue, isMine, onShow }. */
 export function initCorals(opts) {
   ({ live, SB, say, cue } = opts);
   isMine = opts.isMine || (() => true);
+  onShow = opts.onShow || (() => {});
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   const host = document.getElementById('live');
   root = document.createElement('div'); root.id = 'coralLayer'; host.appendChild(root);
@@ -78,7 +80,9 @@ export function tickCorals() {
   }
   for (const [rank, el] of badges) if (!seen.has(rank)) { el.remove(); badges.delete(rank); }
   panel.classList.toggle('hidden', p == null);
-  if (!p) { hidden = false; return; }
+  if (!p) { hidden = false; lastWaiting = 0; return; }
+  if (p.waiting > lastWaiting && !hidden) onShow();
+  lastWaiting = p.waiting;
   const more = p.waiting > 1 ? ` (${p.waiting} to place)` : '';
   for (const el of panel.querySelectorAll('.glass, .row')) el.classList.toggle('hidden', hidden);
   laterPill.classList.toggle('hidden', !hidden);

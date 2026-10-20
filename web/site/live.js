@@ -90,7 +90,7 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
-    initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine' });
+    initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
     renderAll();
