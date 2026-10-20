@@ -334,6 +334,9 @@ def caudal_fin(prof, ub, length, span, shape="rounded", n=21, ns=6, slot=None):
     elif shape == "lunate":
         ext = 0.42 + 0.58 * at ** 1.8
         zt = np.sign(t) * at ** 0.9 * span / 2
+    elif shape == "lyre":  # midas blenny: lunate with the outer rays drawn out into long lobes
+        ext = 0.5 + 0.6 * at ** 2.2
+        zt = np.sign(t) * at ** 0.85 * span / 2
     elif shape == "lanceolate":  # pointed (dottybacks): middle rays longest, a short filament at the tip
         ext = 0.66 + 0.34 * np.clip(1 - at, 0, 1) ** 1.3
         zt = t * span / 2 * (1 - 0.15 * at)

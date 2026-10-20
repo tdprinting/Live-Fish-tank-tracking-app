@@ -181,6 +181,48 @@ class AcclimationBagTest {
         }
     }
 
+    /** The cut bag's outline (BagMesh.plasticCut, × radius): radius at height y. */
+    private val cutProfile = floatArrayOf(
+        0.02f, -1.7f, 0.5f, -1.62f, 0.82f, -1.42f, 0.97f, -1.1f, 1.0f, -0.72f, 0.97f, -0.38f,
+        0.88f, -0.05f, 0.72f, 0.28f, 0.56f, 0.52f, 0.52f, 0.6f,
+    )
+
+    private fun cutRadius(y: Double): Double {
+        for (i in 0 until cutProfile.size / 2 - 1) {
+            val y0 = cutProfile[i * 2 + 1]; val y1 = cutProfile[i * 2 + 3]
+            if (y in y0..y1) { val k = (y - y0) / (y1 - y0); return cutProfile[i * 2] + k * (cutProfile[i * 2 + 2] - cutProfile[i * 2]) }
+        }
+        return 0.0
+    }
+
+    @Test fun animalsLeaveTheCutBagThroughItsNeckNotItsShoulder() {
+        for ((sp, n) in listOf("amphiprion_ocellaris" to 6, "paracanthurus_hepatus" to 1, "ophiocoma_erinaceus" to 3)) {
+            val s = sim()
+            s.enqueue(Command.FloatBag(sp, n, x = 60.0))
+            repeat(20 * 2) { s.stepWall(0.05) }
+            s.enqueue(Command.HurryBags(false, openNow = true))
+            // a body point that was inside the plastic last frame must not be outside it now unless it left by the mouth
+            val inside = HashMap<String, Boolean>()
+            repeat(20 * 8) {
+                s.stepWall(0.05)
+                val snap = s.snapshot()
+                val b = snap.bags.firstOrNull() ?: return@repeat
+                if (b.phase != 2 || !b.cut || b.step > AcclimationBags.STEP_POUR) return@repeat
+                val r = b.radius.toDouble()
+                for (p in snap.organisms.filter { it.bagged }) for ((i, q) in spine(p).withIndex()) {
+                    val l = local(b, q.x.toFloat(), q.y.toFloat(), q.z.toFloat())
+                    val y = l.y / r
+                    val radial = kotlin.math.sqrt(l.x * l.x + l.z * l.z) / r
+                    val now = y < 0.6 && radial < cutRadius(y)
+                    val key = "${p.id}/$i"
+                    val was = inside[key]
+                    if (was == true && !now) assertTrue("$sp ${p.id} point $i went through the plastic at y=${"%.2f".format(y)} radial=${"%.2f".format(radial)} (wall ${"%.2f".format(cutRadius(y))})", y >= 0.5 || radial - cutRadius(y) < 0.03)
+                    inside[key] = now
+                }
+            }
+        }
+    }
+
     @Test fun bagWaterNeverReachesTheTank() {
         val s = sim()
         s.enqueue(Command.FloatBag("amphiprion_ocellaris", 2, x = 60.0))

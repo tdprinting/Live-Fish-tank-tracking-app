@@ -33,8 +33,41 @@ export function initCare({ my, isMine, say, cue, host }) {
   let shown = null;          // the number on the chip, counting up to view.coins
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // ---- "While you were away" (docs/ECONOMY.md §9; Android WelcomeBack.kt): the days race by, then what happened
+  const away = document.createElement('div');
+  away.className = 'caremodal hidden';
+  away.id = 'awayModal';
+  document.body.appendChild(away);
+  let awayLoop = false;
+  function awayFrame() {
+    let a = null;
+    try { a = JSON.parse(my.away()); } catch { a = null; }
+    if (!a || !isMine()) { away.classList.add('hidden'); awayLoop = false; return; }
+    away.classList.remove('hidden');
+    const f = a.daysDone - Math.floor(a.daysDone), day = f < 0.5, k = day ? f / 0.5 : (f - 0.5) / 0.5;
+    const arc = `<div class="dayarc ${day ? 'day' : 'night'}"><i class="orb" style="left:${(10 + 80 * k).toFixed(1)}%;bottom:${(18 + Math.sin(k * Math.PI) * 55).toFixed(1)}%"></i><b class="sea"></b></div>`;
+    if (a.running) {
+      away.innerHTML = `<div class="carecard glass">${arc}<h3>While you were away…</h3>
+        <p class="lvl" style="color:#FFE14D">Day ${Math.floor(a.daysDone) + 1} of ${Math.max(1, Math.ceil(a.days))}</p>
+        <div class="lvbar"><i style="width:${Math.max(3, a.progress * 100).toFixed(1)}%;background:#5FD7FF"></i></div>
+        <p class="muted">Your tank kept living: fish got hungry, water changed, algae grew.</p></div>`;
+      requestAnimationFrame(awayFrame);
+      return;
+    }
+    awayLoop = false;
+    away.innerHTML = `<div class="carecard glass">${arc}<h3>${esc(a.headline)}</h3>
+      ${a.lines.map((l) => `<p>• ${esc(l)}</p>`).join('')}
+      ${a.deaths.length ? `<h4>Goodbye</h4>${a.deaths.map((d) => `<p class="muted">${esc(d.name)} (${esc(d.cause)})</p>`).join('')}<p class="muted">The net will take them out. Feeding every day and the Care card jobs keep everyone healthy.</p>` : ''}
+      <div class="carefoot" style="gap:10px"><button class="pill" id="awayLater">Later</button>${a.lines.length || a.deaths.length ? '<button class="pill collect" id="awayCare">Take care of it</button>' : ''}</div></div>`;
+    away.querySelector('#awayLater').addEventListener('click', () => { cue?.('TICK'); my.dismissAway(); away.classList.add('hidden'); });
+    away.querySelector('#awayCare')?.addEventListener('click', () => {
+      cue?.('TICK'); my.dismissAway(); away.classList.add('hidden'); open = true; render(); modal.classList.remove('hidden');
+    });
+  }
+
   function poll() {
     if (!isMine()) { chip.classList.add('hidden'); if (open) close(); return; }
+    if (!awayLoop && away.classList.contains('hidden') && my.away() !== 'null') { awayLoop = true; requestAnimationFrame(awayFrame); }
     let v = null;
     try { v = JSON.parse(my.economy()); } catch { v = null; }
     if (!v) { chip.classList.add('hidden'); return; }

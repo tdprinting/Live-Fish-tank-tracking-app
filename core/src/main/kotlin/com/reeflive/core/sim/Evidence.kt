@@ -107,6 +107,12 @@ object EvidenceLedger {
         EvidenceEntry("valenciennea_puellaris", "sand on low corals", "puff within 7 cm, coral < 8 cm over the sand", S, "16 §2 aquariadise, aquariumsource (direction); distances D"),
         EvidenceEntry("valenciennea_puellaris", "DiamondGobyBrain.SIFT_YIELD_MIN", "0.3 min per mouthful at prey index 1", D, "16 §4", "condition over 3 weeks on a young vs mature bed"),
         // ------------------------------------------------------------ leopard wrasse (research video fish_leopard_wrasse)
+        EvidenceEntry("ecsenius_bicolor", "solitary in old tubes / holes; grazes algae round it", "EcseniusStyle.BICOLOR", S, "50 §1c FishBase, Aquarium Source"),
+        EvidenceEntry("ecsenius_bicolor", "in-hole share, dart rate, graze weight", "0.35 / 3-7 min / 0.9", D, "50 §4a", "share of daylight at the hole"),
+        EvidenceEntry("ecsenius_bicolor", "bicolor_rival pEvent 0.6", "chases blennies its size or smaller", D, "50 §1c; scaled from S:Townsend04", "chases per intrusion"),
+        EvidenceEntry("ecsenius_midas", "feeds on zooplankton 2-3 m above the benthos; schools with anthias", "MidwaterForage", S, "50 §2c FishBase"),
+        EvidenceEntry("ecsenius_midas", "in-hole share 0.2, station 15-35 cm up, range 50 cm", "EcseniusStyle.MIDAS", D, "50 §4b", "share of daylight in open water"),
+        EvidenceEntry("ecsenius_midas", "sinks 0.5 cm/s between beats (no swim bladder)", "MotionProfiles.bySpecies", D, "50 §2c; combtooth blennies lack a swim bladder"),
         EvidenceEntry("macropharyngodon_bipartitus", "sleeps buried in sand; dives when scared", "behaviour", S, "fish_leopard_wrasse S1 Seatizens, S2 fishprofiles, S4 Fenner TFH"),
         EvidenceEntry("macropharyngodon_bipartitus", "dive kinematics", "head-first, 1.05-3.06 s", A, "fish_leopard_wrasse S6 Halichoeres bivittatus (SICB P2-191)"),
         EvidenceEntry("macropharyngodon_bipartitus", "LeopardWrasseBrain.EMERGE_LAG", "15-60 min after lights-on", D, "fish_leopard_wrasse S7 (H. trimaculatus, direction only)", "minutes from lights-on to the wrasse showing"),

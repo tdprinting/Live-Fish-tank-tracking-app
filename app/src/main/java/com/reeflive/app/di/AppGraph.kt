@@ -26,6 +26,9 @@ import com.reeflive.app.live.SimulationHolder
 import com.reeflive.app.notif.Notifier
 import com.reeflive.app.update.UpdateManager
 import com.reeflive.app.work.AlertEvaluator
+import com.reeflive.app.work.CareAlertScheduler
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.reeflive.app.work.ReminderScheduler
 import com.reeflive.core.species.SpeciesDb
 import kotlinx.coroutines.CoroutineScope
@@ -58,12 +61,23 @@ class AppGraph(val app: Application) {
     val journal: JournalRepository by lazy { JournalRepository(db, db.journalDao(), events) }
     val lights: LightScheduleRepository by lazy { LightScheduleRepository(db.lightDao(), events) }
 
+    private val careAlertSink = object : SimulationHolder.CareAlertSink {
+        override fun schedule(plan: List<com.reeflive.core.custom.PlannedAlert>) {
+            appScope.launch {
+                val s = settings.settings.first()
+                if (s.notifications && s.tankAlerts) CareAlertScheduler.schedule(app, plan, clock.now()) else CareAlertScheduler.cancel(app)
+            }
+        }
+        override fun cancel() = CareAlertScheduler.cancel(app)
+    }
+
     val simulationHolder: SimulationHolder by lazy {
         SimulationHolder(
             measurements, livestock, lights, assets = app.assets, clock = clock,
             dynamicRocks = settings.settings.map { it.dynamicRocks }.distinctUntilChanged(),
             rockStore = SimulationHolder.FileRockStore(java.io.File(app.filesDir, "rocks.txt")),
             customStore = com.reeflive.app.data.repo.CustomTankStore(java.io.File(app.filesDir, com.reeflive.app.data.repo.CustomTankStore.FILE_NAME)),
+            careAlerts = careAlertSink,
         )
     }
 
