@@ -66,6 +66,10 @@ fun TankView(
     nurseryRequest: Int = 0,
     /** The follow camera's on-screen buttons (zoom, swing round); null = gestures only. */
     followCam: FollowCamControl? = null,
+    /** A tap on a piece of gear: pop out its menu at that view pixel ([TankViewListener.onSpot]); null = [onPick] (null). */
+    onSpot: ((com.reeflive.core.sim.TankSpot, Float, Float) -> Unit)? = null,
+    /** Tap-to-place: while armed, the next tap aims instead of picking ([TankAimControl]). */
+    aim: TankAimControl? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -75,7 +79,7 @@ fun TankView(
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson, followCam = followCam,
-        nurseryRequest = nurseryRequest,
+        nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim,
     )
 }
 
@@ -114,6 +118,8 @@ fun TankView(
     subFirstPerson: Boolean = false,
     nurseryRequest: Int = 0,
     followCam: FollowCamControl? = null,
+    onSpot: ((com.reeflive.core.sim.TankSpot, Float, Float) -> Unit)? = null,
+    aim: TankAimControl? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
     val followReq by rememberUpdatedState(onFollow)
@@ -121,6 +127,7 @@ fun TankView(
     val flipperTap by rememberUpdatedState(onFlipperTap)
     val glass by rememberUpdatedState(onTapGlass)
     val touch by rememberUpdatedState(onTouchTank)
+    val spotTap by rememberUpdatedState(onSpot)
     val finger by rememberUpdatedState(onFinger)
     val flick by rememberUpdatedState(onFlick)
     val press by rememberUpdatedState(onLongPress)
@@ -140,6 +147,10 @@ fun TankView(
             override fun onFollowLost(id: String) = lost(id)
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
             override fun onFlipperTap() = flipperTap()
+            override fun onSpot(spot: com.reeflive.core.sim.TankSpot, x: Float, y: Float) {
+                val f = spotTap
+                if (f != null) f(spot, x, y) else pick(null)
+            }
             override fun onFollowRequest(id: String?) = followReq(id)
         }
     }
@@ -159,6 +170,7 @@ fun TankView(
                         v.viewLight = viewLight
                         v.shelf = shelf
                         v.care = care
+                        v.aim = aim
                         if (followCam != null) v.followCam = followCam
                         view = v
                     }
@@ -173,6 +185,7 @@ fun TankView(
                     v.viewLight = viewLight
                     v.shelf = shelf
                     v.care = care
+                    v.aim = aim
                     v.subFirstPerson = subFirstPerson
                     v.nurseryRequest = nurseryRequest
                     if (followCam != null) v.followCam = followCam

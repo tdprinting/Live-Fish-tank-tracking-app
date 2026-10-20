@@ -93,6 +93,11 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
         get() = renderer.care
         set(v) { renderer.care = v }
 
+    /** Tap-to-place handle (food from the shelf goes in where the player taps). */
+    var aim: TankAimControl?
+        get() = renderer.aim
+        set(v) { renderer.aim = v }
+
     val stats: StateFlow<RenderStats> get() = renderer.stats
 
     @SuppressLint("ClickableViewAccessibility")

@@ -136,6 +136,12 @@ interface TankViewListener {
     fun onScrape(stroke: GlassStroke) {}
     /** Single tap on the Flipper scraper resting on the glass: the host enters clean-glass mode so a drag can start cleaning. */
     fun onFlipperTap() {}
+    /**
+     * Single tap on a piece of gear (the skimmer and its cup, the filter, heater, powerheads, lamps, top-off): the host
+     * pops out that gear's menu (core TankSpots.menu) at view pixel ([x], [y]), where the finger landed. The default
+     * treats it as a tap on empty water.
+     */
+    fun onSpot(spot: com.reeflive.core.sim.TankSpot, x: Float, y: Float) { onPick(null) }
 }
 
 /**

@@ -63,7 +63,8 @@ import com.reeflive.core.sim.TankDims
 /*
  * Carrying a supply from the shelf into the tank (UI_STYLE §10.6): after a prop is picked the camera glides back to
  * the tank and the prop floats in the player's hand at the bottom of the screen. Drag it over the tank (the front glass
- * glows) and let go, or just tap the tank, to use it there: food drops in at that spot, the knocker knocks there, the
+ * glows) and let go, or just tap the tank, to use it there: food goes in right at the fish, coral, rock or sand under
+ * that spot (a tap uses the very point tapped; a drag the point under the carried prop), the knocker knocks there, the
  * rest do their usual thing. The prop's name rides under it and over the glass. Letting go off the tank keeps it in the
  * hand (a near miss should not throw it away); "Back to shelf" returns it to the shelf and "Cancel" just drops the idea.
  */
@@ -107,14 +108,14 @@ fun insideTank(x: Float, y: Float): Boolean = x in 0f..TANK_L && y in 0f..TANK_T
 
 /**
  * The carried prop and its drop gesture, over the whole screen (lay it out at the GL view's bounds). [onDrop] gets the
- * front-glass point (tank cm) the prop was let go over; [onPutBack] takes it back to the shelf; [onCancel] puts it away
- * and stays at the tank.
+ * front-glass point (tank cm) the prop was let go over and that view pixel (sx, sy: to aim into the tank there);
+ * [onPutBack] takes it back to the shelf; [onCancel] puts it away and stays at the tank.
  */
 @Composable
 fun SupplyCarryLayer(
     item: SupplyItem,
     projection: TankProjection,
-    onDrop: (SupplyItem, x: Float, y: Float) -> Unit,
+    onDrop: (SupplyItem, x: Float, y: Float, sx: Float, sy: Float) -> Unit,
     onPutBack: (SupplyItem) -> Unit,
     onCancel: () -> Unit,
     bottomClearance: Dp,
@@ -124,6 +125,8 @@ fun SupplyCarryLayer(
     val density = LocalDensity.current
     val drop by rememberUpdatedState(onDrop)
     val lift = with(density) { 56.dp.toPx() }
+    // a finger that moved less than this is a tap: the food goes in right under it, not under the lifted prop
+    val tapSlop = with(density) { 14.dp.toPx() }
     var finger by remember(item) { mutableStateOf<Offset?>(null) }
     var over by remember(item) { mutableStateOf(false) }
     var missed by remember(item) { mutableStateOf(false) }
@@ -147,20 +150,23 @@ fun SupplyCarryLayer(
                         finger = down.position
                         missed = false
                         var pos = down.position
+                        var moved = 0f
                         while (true) {
                             val ev = awaitPointerEvent()
                             val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                             if (ch.positionChange() != Offset.Zero) ch.consume()
                             pos = ch.position
+                            moved = maxOf(moved, (pos - down.position).getDistance())
                             finger = pos
                             over = glassPointAt(projection, pos.x, pos.y - lift, glass) && insideTank(glass[0], glass[1])
                             if (!ch.pressed) break
                         }
                         finger = null
-                        val hit = glassPointAt(projection, pos.x, pos.y - lift, glass) && insideTank(glass[0], glass[1])
+                        val sy = if (moved < tapSlop) pos.y else pos.y - lift
+                        val hit = glassPointAt(projection, pos.x, sy, glass) && insideTank(glass[0], glass[1])
                         over = false
                         missed = !hit
-                        if (hit) drop(item, glass[0], glass[1])
+                        if (hit) drop(item, glass[0], glass[1], pos.x, sy)
                     }
                 },
         ) {
@@ -232,7 +238,7 @@ fun SupplyCarryLayer(
                 LiveHelp(
                     when {
                         missed -> "Missed the tank! Let go over the glowing glass, or put it back."
-                        item.food != null -> "Drag the ${item.label.lowercase()} over the tank and let go to feed there."
+                        item.food != null -> "Tap a fish, coral or spot in the tank to feed right there."
                         else -> "Drag the ${item.label.lowercase()} over the tank and let go to use it."
                     },
                 )

@@ -43,6 +43,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var viewLight: ViewLight = ViewLight.REAL
     /** The supply shelf beside the tank (Supplies mode, [SupplyShelfControl]); null = no shelf. */
     @Volatile var shelf: SupplyShelfControl? = null
+    /** Tap-to-place: while armed the next tap aims (food goes in where the finger lands) instead of picking. */
+    @Volatile var aim: TankAimControl? = null
+    /** The tappable gear's boxes (SpotBoxes), built once the equipment model is in. */
+    private var spotBoxes: List<Pair<com.reeflive.core.sim.TankSpot, FloatArray>>? = null
     private val shelfScene = SupplyShelfScene()
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
@@ -279,6 +283,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         projection?.publish(camera.viewProj, camera.proj, width, height)
         for (t in taps) handleTap(t, rigs)
+        aim?.take()?.let { aimFrom(it[0], it[1], rigs) }
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
@@ -1146,7 +1151,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
-        input.instantTaps = camera.shelfOn || camera.rideOn
+        input.instantTaps = camera.shelfOn || camera.rideOn || aim?.armed == true
         if (c != null) store.model(SupplyShelfLayout.MODEL)
         // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
         val req = c?.takePickRequest()
@@ -1192,6 +1197,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.ray(t.x, t.y, width, height, dir)
         val o = camera.eye.copyOf()
         val l = listener
+        // tap-to-place: an armed aim takes the single tap (food from the shelf drops in where the finger lands)
+        if (t.kind == CameraInput.TapKind.PICK && aim?.armed == true) { aimFrom(t.x, t.y, rigs); return }
         when (t.kind) {
             CameraInput.TapKind.PICK -> {
                 // the Flipper rests on the glass: tapping it hands the finger over to clean-glass mode
@@ -1205,6 +1212,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else if (id == null && following == null && !cleaning && !camera.rideOn) {
                     // no animal under the finger: a fingertip on the tank (glass, sand or rock) where it landed
                     // (not in clean-glass mode, where the finger is on the Flipper)
+                    // a piece of gear (skimmer, filter, heater, pumps, lamps, top-off) in front of any rock: its pop-out menu
+                    val spot = if (aim?.gearTaps != false) spotAt(o, dir) else null
+                    if (spot != null) { val x = t.x; val y = t.y; main.post { l?.onSpot(spot, x, y) }; return }
                     val hit = touchHit(o, dir)
                     // a coral: lean in for a closer look as its polyps pull in
                     if (hit != null && hit.second == TouchSurface.CORAL) camera.peekAt(hit.first.x.toFloat(), hit.first.y.toFloat(), hit.first.z.toFloat())
@@ -1250,6 +1260,50 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 main.post { l?.onLongPress(p) }
             }
         }
+    }
+
+    /**
+     * The gear under the ray, when the ray reaches it before any rock or sand (the glass and the water's top are see
+     * through): equipment.glb's tappable nodes ([SpotBoxes]). Null when the model is not in yet or nothing is hit.
+     */
+    private fun spotAt(o: FloatArray, d: FloatArray): com.reeflive.core.sim.TankSpot? {
+        val boxes = spotBoxes ?: store.model(EQUIPMENT)?.let { SpotBoxes.build(it) }?.also { spotBoxes = it } ?: return null
+        val (spot, t) = SpotBoxes.hit(boxes, o, d) ?: return null
+        val solid = surfacePoint(o, d)
+        if (solid != null) {
+            val dx = solid.x.toFloat() - o[0]; val dy = solid.y.toFloat() - o[1]; val dz = solid.z.toFloat() - o[2]
+            if (t > kotlin.math.sqrt(dx * dx + dy * dy + dz * dz) + 0.5f) return null
+        }
+        return spot
+    }
+
+    /**
+     * An aimed tap at view pixel ([x], [y]) ([TankAimControl]): an animal under the finger (its head), else the first
+     * rock / coral / sand point along the ray, else the open water half way along it. Reported on the main thread.
+     */
+    private fun aimFrom(x: Float, y: Float, rigs: Collection<FishRig>) {
+        val c = aim ?: return
+        val dir = FloatArray(3)
+        camera.ray(x, y, width, height, dir)
+        val o = camera.eye.copyOf()
+        val id = Picker.pick(o, dir, rigs, fingerSlack())
+        val hit = if (id != null) {
+            val r = rigs.firstOrNull { it.id == id } ?: return
+            touchRing(id, dir, rigs)
+            AimHit(Vec3(r.spine[0].toDouble(), r.spine[1].toDouble(), r.spine[2].toDouble()), TouchSurface.GLASS, id)
+        } else {
+            val h = touchHit(o, dir) ?: return
+            val p = when (h.second) {
+                // the ray crossed open water: half way between where it entered and the far side
+                TouchSurface.GLASS -> surfacePoint(o, dir)?.let { far -> Vec3((h.first.x + far.x) / 2, (h.first.y + far.y) / 2, (h.first.z + far.z) / 2) } ?: h.first
+                // from above, aim at whatever lies under the surface there
+                TouchSurface.SURFACE -> surfacePoint(o, dir) ?: h.first
+                else -> h.first
+            }
+            AimHit(p, h.second, null)
+        }
+        val cb = c.onAim ?: return
+        main.post { cb(hit) }
     }
 
     /** [Picker.fingerSlack] for this view: how far beside an animal a fingertip may land and still pick it. */

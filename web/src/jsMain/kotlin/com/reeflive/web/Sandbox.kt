@@ -41,7 +41,10 @@ import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Stocking
+import com.reeflive.core.sim.SpotMenu
 import com.reeflive.core.sim.TankDoctor
+import com.reeflive.core.sim.TankSpot
+import com.reeflive.core.sim.TankSpots
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseChange
@@ -442,6 +445,46 @@ object ReefSandbox {
             fixQueued.remove(f.kind)
             if (fixQueued.isEmpty()) live.emit("onFixedAll", null)
         }))
+    }
+
+    // ------------------------------------------------------------------ touch controls (Android LiveTankScreen onSpot / onAim)
+
+    /**
+     * Food from the shelf aimed at a tapped spot (world cm, the renderer's `onAim`): it goes in right there, floating
+     * food on the surface above it, the rest let go just above it (core Simulation.targetRelease).
+     */
+    fun feedAt(kind: String, x: Double, y: Double, z: Double): Boolean {
+        val s = sim ?: return false
+        val k = runCatching { FoodKind.valueOf(kind) }.getOrDefault(FoodKind.FLAKE)
+        val aim = com.reeflive.core.geom.Vec3(x, y, z)
+        send(Command.Feed(k, k.typicalDoseGrams, aim, target = true))
+        val p = s.targetRelease(k, aim)
+        burst(if (k == FoodKind.ALGAE_WAFER || k == FoodKind.PRAWN || k == FoodKind.KRILL) BurstKind.PLOP else BurstKind.SPLASH, floatArrayOf(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))
+        return true
+    }
+
+    private fun spotOf(name: String): TankSpot? = runCatching { TankSpot.valueOf(name) }.getOrNull()
+
+    private fun spotMenuOf(spot: TankSpot): SpotMenu? {
+        val snap = sim?.latest ?: return null
+        return TankSpots.menu(spot, snap.water, snap.care, snap.lightIntensity > 0.05f, sandbox)
+    }
+
+    /** A tapped piece of gear's pop-out menu (core TankSpots) as JSON: title, status, warn, glyph, options [{id, label, glyph, urgent}]. */
+    fun spotMenu(spot: String): String {
+        val m = spotOf(spot)?.let { spotMenuOf(it) } ?: return "null"
+        return JSON.stringify(obj { o ->
+            o.spot = m.spot.name; o.title = m.title; o.status = m.status; o.warn = m.warn; o.glyph = m.spot.glyph
+            o.options = m.options.map { x -> obj { it.id = x.id; it.label = x.label; it.glyph = x.glyph; it.urgent = x.urgent } }.toTypedArray()
+        })
+    }
+
+    /** Runs option [id] of [spot]'s menu: a fix plays in the 3D tank like Fix tank's; a switch goes straight in. */
+    fun spotAct(spot: String, id: String): Boolean {
+        val o = spotOf(spot)?.let { spotMenuOf(it) }?.options?.firstOrNull { it.id == id } ?: return false
+        val f = o.fix
+        if (f != null) playFix(f) else careCommands(o.commands)
+        return true
     }
 
     /** Upkeep, doses and water changes work in both modes (the owner's own care); gear switches are sandbox-only. */
