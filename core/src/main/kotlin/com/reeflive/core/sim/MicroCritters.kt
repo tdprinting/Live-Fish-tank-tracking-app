@@ -46,7 +46,12 @@ enum class CritterKind(
     /** Homotrema rubrum: sessile red dots on shaded rock undersides (research 17 §14.2). */
     FORAM(MicroGroup.FORAM, "micro_foram", 0.2, 0.5, 10, 0.0, 0.0, MicroScene.ROCK),
     /** One terebellid feeding tentacle; [TENTACLES_PER_WORM] of them per buried worm, laid over the sand. */
-    TENTACLE(MicroGroup.SPAGHETTI_WORM, "micro_tentacle", 4.0, 10.0, 3, 0.12, 0.004, MicroScene.SAND);
+    TENTACLE(MicroGroup.SPAGHETTI_WORM, "micro_tentacle", 4.0, 10.0, 3, 0.12, 0.004, MicroScene.SAND),
+    /**
+     * Berghia nudibranch (aiptasia_control.md §6): not microfauna, driven by the pest population instead
+     * ([BerghiaField]); [CritterField] never spawns it. Glide speed has no data: ~1.2 mm/s like other small aeolids (est.).
+     */
+    BERGHIA(MicroGroup.FLATWORM, "berghia", 1.4, 2.2, 8, 0.12, 0.02, MicroScene.ROCK);
 
     val model: String get() = "models/$speciesId.glb"
 
@@ -130,6 +135,7 @@ class CritterField(
         }
         val h = dt.coerceIn(0.0, 0.1)
         for (k in CritterKind.entries) {
+            if (k == CritterKind.BERGHIA) continue
             target[k.ordinal] = if (simWorms && k == CritterKind.BRISTLEWORM) 0 else wanted(k, state, qualityScale)
             spawnCooldown[k.ordinal] -= h
             var n = critters.count { it.kind == k && it.state != RETREAT && it.state != GONE }
@@ -177,6 +183,7 @@ class CritterField(
             CritterKind.ISOPOD -> 30.0; CritterKind.COPEPOD -> 500.0; CritterKind.SNAIL -> 40.0
             CritterKind.FLATWORM -> 20.0; CritterKind.TENTACLE -> 1.0
             CritterKind.PLANKTON -> 2000.0; CritterKind.CAPRELLID -> 15.0; CritterKind.OSTRACOD -> 300.0; CritterKind.FORAM -> 40.0
+            CritterKind.BERGHIA -> return 0
         }
         return floor(cap * e / (e + half) + 0.35).toInt()   // about two-thirds of an animal before one shows
     }

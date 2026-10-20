@@ -21,7 +21,9 @@ import com.reeflive.app.ui.live.ThoughtHold
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.waterReadouts
 import com.reeflive.core.live.Scenario
+import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.BacteriaAction
+import com.reeflive.core.sim.CoralKind
 import com.reeflive.core.sim.CareFix
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Disease
@@ -181,6 +183,25 @@ object ReefSandbox {
     // ------------------------------------------------------------------ actions
 
     private val sim: Simulation? get() = live.sim
+
+    /**
+     * A pest product from the shelf (render CareScene INJECT / LASER): the tool goes to the biggest whole aiptasia
+     * and doses it when it reaches it; once the tool is out the page hears "onPestTreated" (1 it took, 0 it hid,
+     * -1 nothing to treat).
+     */
+    private fun treatAiptasia(t: AiptasiaTreatment): Boolean {
+        val s = sim ?: return false
+        val target = s.latest.corals.filter { CoralKind.resolve(it.speciesId) == CoralKind.AIPTASIA && it.tissue > 0.5f }.maxByOrNull { it.size }
+        if (target == null) { live.emit("onPestTreated", -1); return true }
+        val act = if (t == AiptasiaTreatment.LASER) CareAct.LASER else CareAct.INJECT
+        val tint = when (t) { AiptasiaTreatment.KALK_PASTE -> 0xF4F4EE; AiptasiaTreatment.JOES_JUICE -> 0xE8F0FF; else -> 0xF2EEE2 }
+        val at = floatArrayOf(target.restX, target.restY, target.restZ, target.restNx, target.restNy, target.restNz)
+        care.play(CareJob(act, tint, at = at, onImpact = { send(Command.TreatAiptasia(t, target.id)) }, onDone = {
+            val c = sim?.corals?.firstOrNull { it.id == target.id }
+            live.emit("onPestTreated", if (c == null || c.treatment != null) 1 else 0)
+        }))
+        return true
+    }
     private fun send(c: Command) { sim?.enqueue(c) }
 
     /**
@@ -265,7 +286,11 @@ object ReefSandbox {
             "remove" -> send(Command.RemoveOrganism(arg ?: return false))
             "setSize" -> send(Command.SetSize(arg ?: return false, num))
             "aiptasia" -> if (num >= 0) send(Command.AddAiptasia(1)) else { send(Command.RemoveAiptasia(1)); burst(BurstKind.ZAP, ROCK_SPOT) }
-            "pestControl" -> { send(Command.AddPestControl(PestController.valueOf(arg ?: return false))); burst(BurstKind.BUBBLES, RELEASE_SPOT) }
+            "pestControl" -> {
+                val c = PestController.valueOf(arg ?: return false)
+                send(Command.AddPestControl(c, if (c == PestController.BERGHIA) 3 else 1)); burst(BurstKind.BUBBLES, RELEASE_SPOT)
+            }
+            "treatAiptasia" -> return treatAiptasia(AiptasiaTreatment.valueOf(arg ?: "AIPTASIA_X"))
             "spareShells" -> { send(Command.AddSpareShells(1)); burst(BurstKind.SHELLS, RELEASE_SPOT) }
             "treatment" -> {
                 val k = TreatmentKind.valueOf(arg ?: return false)

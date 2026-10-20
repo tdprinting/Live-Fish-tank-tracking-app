@@ -1,6 +1,8 @@
 package com.reeflive.app.render
 
 import com.reeflive.core.geom.Sdf
+import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.BerghiaField
 import com.reeflive.core.sim.CritterField
 import com.reeflive.core.sim.CritterKind
 import com.reeflive.core.sim.MicroGroup
@@ -16,6 +18,7 @@ import com.reeflive.core.sim.SimSnapshot
  */
 class MicroCritterVisuals {
     private var field: CritterField? = null
+    private var berghia: BerghiaField? = null
     private val rigs = HashMap<String, FishRig>()
     private val drawn = ArrayList<FishRig>()
     private val order = ArrayList<FishRig>()
@@ -63,6 +66,22 @@ class MicroCritterVisuals {
             r.setCritter(p)
             order += r
         }
+        // the Berghia nudibranchs the keeper added crawl to the aiptasia the sim says they are eating
+        if (s.berghia > 0f || berghia != null) {
+            val bf = berghia ?: BerghiaField(sdf).also { berghia = it }
+            var prey: Vec3? = null; var preyN: Vec3? = null
+            val pid = s.berghiaPrey
+            if (pid != null) for (c in s.corals) if (c.id == pid) {
+                prey = Vec3(c.restX.toDouble(), c.restY.toDouble(), c.restZ.toDouble())
+                preyN = Vec3(c.restNx.toDouble(), c.restNy.toDouble(), c.restNz.toDouble())
+                break
+            }
+            for (p in bf.update(s.berghia, prey, preyN, s.dayPhase == "Night", (dt * speed).toDouble())) {
+                val r = rigs.getOrPut(p.id) { FishRig(p.id) }
+                r.setCritter(p)
+                order += r
+            }
+        }
         rigs.values.removeAll { !it.touched }
         val ex = camera.eye[0]; val ey = camera.eye[1]; val ez = camera.eye[2]
         order.sortBy { it.distanceTo(ex, ey, ez) }
@@ -81,7 +100,7 @@ class MicroCritterVisuals {
         }
     }
 
-    fun release() { field = null; rigs.clear(); drawn.clear(); order.clear() }
+    fun release() { field = null; berghia = null; rigs.clear(); drawn.clear(); order.clear() }
 
     companion object {
         /** Body length / distance below which a critter is a sub-pixel speck at phone resolution (~3 px at 60° FOV). */

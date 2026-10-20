@@ -46,8 +46,23 @@ object Hitchhikers {
         }
     }
 
+    /**
+     * Aiptasia (glass anemone, sim/PestModel.kt): a small polyp on a frag's plug or a live rock, never in a fish bag or
+     * on dry rock (aiptasia thread: 6 % per frag, 25 % per live rock, est.). One that came in with no spot named lands
+     * on the rock at mid height.
+     */
+    val AIPTASIA = HitchhikerKind(
+        "aiptasia", "An aiptasia anemone",
+        perDay = 0.0,
+        perSource = doubleArrayOf(0.06, 0.25, 0.0, 0.0),
+    ) { sim, near ->
+        val at = near ?: Vec3(sim.rock.lengthCm * (0.2 + 0.6 * sim.hitchRng.nextDouble()), (sim.rock.sandTopCm + sim.rock.waterLevelCm) / 2,
+            sim.rock.widthCm * 0.4)
+        AiptasiaModel.hitchhike(sim, at) != null
+    }
+
     /** Every kind that can arrive on its own; another pest adds its row here. */
-    val kinds: MutableList<HitchhikerKind> = mutableListOf(BRISTLEWORM)
+    val kinds: MutableList<HitchhikerKind> = mutableListOf(BRISTLEWORM, AIPTASIA)
 
     /** At this many worms the population is established and newcomers no longer count as an arrival. */
     const val ESTABLISHED_WORMS = 20.0
