@@ -1118,7 +1118,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /**
      * Bubble-tip anemone uniforms from its [com.reeflive.core.sim.AnemoneRig] pose (r.limbs): model frame from the disc axis
      * (same basis as AnemoneRig.basis), scaled from the model's built span to the animal's, plus bubble / contraction /
-     * feeding curl, the fish pushing into it and bleaching.
+     * feeding curl, the (up to two) fish pushing into it and bleaching.
      */
     private fun anemoneUniforms(p: ShaderProgram, r: FishRig, m: GpuModel) {
         val l = r.limbs
@@ -1142,7 +1142,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uExtension", 1f - l[1])
         p.set4f("uAnem", l[0], l[1], l[2], l[3])
         p.set4f("uAnemPush", l[5], l[6], l[7], l[9])
-        p.set4f("uAnemMisc", l[4], k, 0f, 0f)
+        p.set4f("uAnemPushB", l[17], l[18], l[19], l[21])
+        p.set4f("uAnemDrift", l[25], l[26], l[27], 0f)
+        p.set4f("uAnemDriftB", l[29], l[30], l[31], 0f)
+        p.set4f("uAnemMisc", l[10], k, l[11], 0f)
         val flow = interp.current?.flowStrength ?: 1f
         p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.12f * flow.coerceIn(0f, 2f))
         p.set1f("uBleach", l[8]); p.set1f("uBrown", 0f)

@@ -12,6 +12,7 @@ in float vVariant;
 in float vOpen;
 in float vTip;
 in float vGlow;
+in float vRing;
 
 uniform sampler2D uAlbedo;
 uniform vec4 uBaseColor;
@@ -32,6 +33,7 @@ void main() {
     albedo *= 0.85 + 0.3 * vVariant;
     // bubble-tip anemone: magenta tips on swollen bulbs (Tee's photos 2026-10-15)
     albedo = mix(albedo, vec3(0.95, 0.12, 0.5), vTip * 0.85);
+    albedo = mix(albedo, vec3(0.86, 0.84, 0.78), vRing * 0.65);
     albedo = mix(albedo, vec3(0.89), clamp(uBleach, 0.0, 1.0));
     albedo = mix(albedo, vec3(0.195, 0.102, 0.042), clamp(uBrown, 0.0, 1.0) * 0.4);
     vec3 N = normalize(vNormal);
