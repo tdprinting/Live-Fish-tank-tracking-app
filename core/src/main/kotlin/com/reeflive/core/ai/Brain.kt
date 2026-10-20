@@ -317,7 +317,7 @@ object Predation {
             }
             BrainKind.SALLY_CRAB -> when {
                 pred.lengthCm < SallyCrabBrain.GRAB_MIN_CM -> 0.0
-                prey.brainKind == BrainKind.ASTREA || prey.brainKind == BrainKind.NASSARIUS -> 0.6
+                prey.brainKind == BrainKind.ASTREA || prey.brainKind == BrainKind.NASSARIUS || prey.brainKind == BrainKind.TROCHUS -> 0.6
                 prey.isFish && prey.sleeping && prey.lengthCm < 0.8 * pred.lengthCm -> 0.4
                 else -> 0.0
             }

@@ -80,7 +80,8 @@ object HeatModel {
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> SHRIMP
-        BrainKind.ASTREA -> TURBO_SNAIL
+        BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
+        BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG
         BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
         BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
@@ -94,12 +95,12 @@ object HeatModel {
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
         BrainKind.EEL -> MORAY
-        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.GENERIC_INVERT -> ECHINODERM
+        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
     }
 
-    fun isSnail(kind: BrainKind) = kind == BrainKind.ASTREA || kind == BrainKind.NASSARIUS
+    fun isSnail(kind: BrainKind) = kind.isSnail
     fun isShrimp(kind: BrainKind) = kind == BrainKind.CLEANER_SHRIMP || kind == BrainKind.BANDED_SHRIMP
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB

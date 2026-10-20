@@ -744,7 +744,7 @@ class Simulation private constructor(
                 // the crab is an opportunist: only a hungry one tries (vendor statement, 07 gap 5)
                 if (a.brainKind == BrainKind.SALLY_CRAB && a.hunger < 0.5) continue
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
-                val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
+                val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" && it != "TROCHUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
                 // the crab's snail rolls have no source (realism_gaps X7): behind the evidence gate
                 if (a.brainKind == BrainKind.SALLY_CRAB && !crabOnFish && !unsourcedPredation) continue
@@ -1042,10 +1042,10 @@ class Simulation private constructor(
         for (o in organisms) {
             if (!o.alive || !o.species.grazer) continue
             val diurnal = !o.species.activity.equals("NOCTURNAL", true)
-            if (diurnal && !day && o.brainKind != BrainKind.ASTREA) continue
+            if (diurnal && !day && o.brainKind != BrainKind.ASTREA && o.brainKind != BrainKind.TROCHUS && o.brainKind != BrainKind.URCHIN) continue
             if (o.brainKind == BrainKind.SALLY_CRAB && day) continue   // wedged in its crevice by day
             val film = when (o.brainKind) {
-                BrainKind.ASTREA, BrainKind.ASTERINA, BrainKind.HERMIT -> 0.7
+                BrainKind.ASTREA, BrainKind.TROCHUS, BrainKind.URCHIN, BrainKind.CONCH, BrainKind.ASTERINA, BrainKind.HERMIT -> 0.7
                 BrainKind.SALLY_CRAB -> 0.5
                 BrainKind.LAWNMOWER_BLENNY -> 0.4
                 else -> 0.15
@@ -1075,7 +1075,7 @@ class Simulation private constructor(
     /** Hair-algae units removed per minute of continuous grazing (tuned for a healthy-tank equilibrium hair ≈ 0.03–0.05). */
     fun grazeRemovalPerMin(o: Organism): Double = when (o.brainKind) {
         BrainKind.TANG -> 2e-6; BrainKind.LAWNMOWER_BLENNY -> 3e-6; BrainKind.PEEKER_BLENNY -> 0.5e-6
-        BrainKind.ASTREA -> 1e-6; BrainKind.HERMIT -> 0.5e-6; BrainKind.SALLY_CRAB -> 1.2e-6; BrainKind.ASTERINA -> 0.2e-6
+        BrainKind.ASTREA, BrainKind.TROCHUS -> 1e-6; BrainKind.URCHIN -> 0.8e-6; BrainKind.CONCH -> 0.2e-6; BrainKind.HERMIT -> 0.5e-6; BrainKind.SALLY_CRAB -> 1.2e-6; BrainKind.ASTERINA -> 0.2e-6
         else -> 0.5e-6
     } * (o.lengthCm / o.species.typicalAdultCm.coerceAtLeast(0.5)).coerceIn(0.3, 2.0)
 
@@ -1148,8 +1148,7 @@ class Simulation private constructor(
         if (rock <= 0.3) return
         for (o in organisms.toList()) {
             if (!o.alive) continue
-            if (o.brainKind != BrainKind.ASTREA && o.brainKind != BrainKind.HERMIT && o.brainKind != BrainKind.NASSARIUS &&
-                GrazerType.of(o) != GrazerType.TROCHUS) continue
+            if (!o.brainKind.isSnail && o.brainKind != BrainKind.HERMIT && GrazerType.of(o) != GrazerType.TROCHUS) continue
             if (rng.chance(0.02 * dtMin / 1440.0)) HealthModel.kill(o, "dinoflagellate toxin", simTimeSec, pendingEventsSink)
         }
     }

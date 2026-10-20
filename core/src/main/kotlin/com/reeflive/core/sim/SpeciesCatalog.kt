@@ -118,6 +118,15 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.ASTREA -> base.copy(kind = "INVERT", common = "Astrea snail", maxLengthCm = 4.0, depthRatio = 0.7, massCoeff = 0.15,
                     locomotion = Locomotion("CRAWLING", 0.02, 0.05, 0.0, 30.0), diet = listOf("ALGAE"), grazer = true, feedsPerDay = 4.0,
                     hardiness = 0.8, starvationDays = 21.0, homeRadiusCm = 60.0, model = "models/astrea.glb")
+                BrainKind.TROCHUS -> base.copy(kind = "INVERT", common = "Trochus snail", maxLengthCm = 5.0, typicalAdultCm = 3.0, depthRatio = 1.05, massCoeff = 0.05,
+                    locomotion = Locomotion("CRAWLING", 0.04, 0.12, 0.0, 60.0), diet = listOf("ALGAE", "DIATOMS"), grazer = true, feedsPerDay = 6.0,
+                    hardiness = 0.8, starvationDays = 21.0, homeRadiusCm = 60.0, model = "models/trochus.glb")
+                BrainKind.CONCH -> base.copy(kind = "INVERT", common = "Fighting conch", maxLengthCm = 11.0, typicalAdultCm = 7.0, depthRatio = 0.6, massCoeff = 0.08,
+                    activity = "NOCTURNAL", locomotion = Locomotion("CRAWLING", 0.07, 1.1, 0.0, 45.0), diet = listOf("ALGAE", "DIATOMS", "DETRITUS", "NORI", "PELLET"),
+                    grazer = true, feedsPerDay = 3.0, hardiness = 0.8, starvationDays = 21.0, homeRadiusCm = 40.0, model = "models/fighting_conch.glb")
+                BrainKind.URCHIN -> base.copy(kind = "INVERT", common = "Tuxedo urchin", maxLengthCm = 8.0, typicalAdultCm = 5.0, depthRatio = 0.75, massCoeff = 0.12,
+                    activity = "NOCTURNAL", locomotion = Locomotion("CRAWLING", 0.01, 0.025, 0.0, 30.0), diet = listOf("ALGAE", "DIATOMS", "NORI"),
+                    grazer = true, feedsPerDay = 4.0, hardiness = 0.6, starvationDays = 30.0, homeRadiusCm = 60.0, model = "models/tuxedo_urchin.glb")
                 BrainKind.ASTERINA -> base.copy(kind = "INVERT", common = "Asterina starfish", maxLengthCm = 1.5, depthRatio = 0.2, massCoeff = 0.02, activity = "NOCTURNAL",
                     locomotion = Locomotion("CRAWLING", 0.04, 0.08, 0.0, 30.0), diet = listOf("ALGAE", "DETRITUS"), grazer = true, feedsPerDay = 2.0,
                     hardiness = 0.95, homeRadiusCm = 60.0, model = "models/asterina.glb")

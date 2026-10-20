@@ -128,6 +128,14 @@ object Thoughts {
             n == "scavenge" -> scavengeLine(e, label)
             n == "crawl" -> crawlLine(e, label)
             n == "glassgraze" -> Line("cleaning algae off the glass", "clean some glass", "Scrub scrub.", Driver.HUNGER)
+            // ---- cleanup crew pack (research 43)
+            n == "glassgraze" && k == BrainKind.URCHIN -> Line("rasping algae off the rock with its five little teeth", "graze the rock", "Crunch crunch.", Driver.HUNGER)
+            n == "withdraw" -> Line("pulled into its shell until the coast is clear", "hide in its shell", "Nobody home!", Driver.FEAR, 2)
+            n == "flipped" -> Line(if (label.startsWith("Flipped over, trying")) "on its back, reaching out with its foot to flip over" else "stuck on its back", "flip back over", "Little help? Almost…", Driver.HEALTH, 3)
+            n == "forage" && k == BrainKind.CONCH -> Line("hopping across the sand on its pointy foot, grazing as it goes", "hop around the sand", "Boing! Yum, sand snacks.", Driver.HUNGER)
+            n == "bury" && k == BrainKind.CONCH -> Line("buried in the sand with just its eyes poking out", "dig into the sand", "Peekaboo eyes.", Driver.REST, 0)
+            n == "escape" && k == BrainKind.CONCH -> Line("leaping away as fast as a conch can", "leap away from danger", "Boing boing boing!", Driver.FEAR, 3)
+            n == "hold" && k == BrainKind.URCHIN -> Line("clamped down with its spines pointed at you", "hold on tight", "Spiky, don't touch!", Driver.FEAR, 2)
             // ---- clownfish
             n == "host" -> Line(if (label.startsWith("Wiggling")) "wiggling in ${e.host}" else "hanging around ${e.host}, its home", "go home to ${e.host}", if (label.startsWith("Wiggling")) "Wiggle wiggle!" else "Home sweet home.", Driver.HOME)
             n == "anemone" && k == BrainKind.CLOWN -> Line(if (label.startsWith("Stung")) "zipping away from the anemone's sting" else "touching the new anemone to get used to it", "get used to the anemone", if (label.startsWith("Stung")) "Ouch, tingly!" else "Hello, new home?", Driver.HOME)
@@ -504,6 +512,9 @@ object Thoughts {
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"
         BrainKind.ASTREA -> "astrea snail"
+        BrainKind.TROCHUS -> "trochus snail"
+        BrainKind.CONCH -> "fighting conch"
+        BrainKind.URCHIN -> "tuxedo urchin"
         BrainKind.ASTERINA -> "asterina star"
         BrainKind.DIAMOND_GOBY -> "diamond goby"
         BrainKind.LEOPARD_WRASSE -> "leopard wrasse"

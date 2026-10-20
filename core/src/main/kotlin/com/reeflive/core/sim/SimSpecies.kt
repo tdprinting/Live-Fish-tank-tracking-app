@@ -392,6 +392,12 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     NASSARIUS(listOf("nassarius"), false),
     ASTREA(listOf("lithopoma", "astraea", "astrea"), false),
     ASTERINA(listOf("asterina", "aquilonastra"), false),
+    /** Trochus / Tectus top snails (research 43 §4): glass and rock grazers that can right themselves when flipped. */
+    TROCHUS(listOf("trochus", "tectus"), false),
+    /** True conchs (Strombidae: Florida fighting conch *Strombus alatus*, research 43 §3): leap over the sand on the operculum. */
+    CONCH(listOf("strombus", "conomurex", "lobatus"), false),
+    /** Regular sea urchins (tuxedo urchin *Mespilia globulus*, research 43 §2): tube-foot crawlers that cover with debris. */
+    URCHIN(listOf("mespilia", "tripneustes", "lytechinus", "salmacis"), false),
     /** Sand-sifting sleeper gobies (diamond goby, *Valenciennea puellaris*; research 16; in the owner's tank). */
     DIAMOND_GOBY(listOf("valenciennea"), true),
     /** Leopard wrasses (blue star leopard wrasse, *Macropharyngodon bipartitus*; research video fish_leopard_wrasse). */
@@ -409,6 +415,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     /** Organisms that never swim freely (Steering uses surface-constrained or no movement). */
     val isBenthic: Boolean get() = !isFish
     val isSessile: Boolean get() = this == FEATHER_DUSTER
+    /** Snails: astrea, nassarius, trochus and conch (hermits take their empty shells, dino toxin hits them). */
+    val isSnail: Boolean get() = this == ASTREA || this == NASSARIUS || this == TROCHUS || this == CONCH
 
     companion object {
         fun resolve(s: SimSpecies): BrainKind {
@@ -426,6 +434,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
             "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
+            "trochus" to TROCHUS, "top_snail" to TROCHUS, "conch" to CONCH, "fighting_conch" to CONCH, "urchin" to URCHIN, "tuxedo_urchin" to URCHIN,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,

@@ -100,6 +100,10 @@ object StressModel {
         BrainKind.SALLY_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.NASSARIUS to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.ASTREA to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
+        BrainKind.TROCHUS to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
+        BrainKind.CONCH to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
+        // echinoderms: poor osmoregulators, salinity swings hit hard (research 43 §2)
+        BrainKind.URCHIN to doubleArrayOf(1.1, 1.6, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.ASTERINA to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.BRITTLE_STAR to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.1, 1.3, 0.5, 0.8),
         BrainKind.FEATHER_DUSTER to doubleArrayOf(1.0, 1.2, 0.9, 0.7, 0.7, 0.8, 1.0, 1.2),

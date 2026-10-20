@@ -61,6 +61,10 @@ object Stocking {
         StockEntry("nassarius_sp", StockGroup.INVERTS, "Nassarius snail", 1.5),
         StockEntry("lithopoma_tectum", StockGroup.INVERTS, "Astrea snail", 3.5),
         StockEntry("asterina_sp", StockGroup.INVERTS, "Asterina starfish", 1.2),
+        // cleanup crew pack (research 43): a glass grazer that rights itself, a leaping sand conch, a debris-wearing urchin
+        StockEntry("tectus_fenestratus", StockGroup.INVERTS, "Trochus snail", 2.5),
+        StockEntry("strombus_alatus", StockGroup.INVERTS, "Fighting conch", 5.5),
+        StockEntry("mespilia_globulus", StockGroup.INVERTS, "Tuxedo urchin", 4.0),
         // not in the owner's tank: the closest thing to a reef squid, to see what it does with this stock (research cephalopod_squid)
         StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
         // research 40: walks until it finds a crevice, stings corals in reach, splits, and clowns may move in

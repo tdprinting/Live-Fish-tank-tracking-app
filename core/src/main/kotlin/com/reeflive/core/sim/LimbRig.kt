@@ -51,6 +51,9 @@ abstract class LimbRig(val count: Int = LIMBS) {
     /** The animal died or left the tank: drop any seat this rig owns ([Organism.seatOn]). */
     open fun unseat(o: Organism) {}
 
+    /** Last word before [out] is copied into the pose (a dead flame scallop gapes, [ClamRig]). */
+    open fun beforePose(o: Organism) {}
+
     protected fun put(i: Int, x: Double, y: Double, z: Double, w: Double) {
         out[i * 4] = x.toFloat(); out[i * 4 + 1] = y.toFloat(); out[i * 4 + 2] = z.toFloat(); out[i * 4 + 3] = w.toFloat()
     }
@@ -65,6 +68,9 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> ShrimpLimbs()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             BrainKind.ANEMONE -> AnemoneRig()
+            BrainKind.TROCHUS -> SnailRig(SnailRig.TROCHUS)
+            BrainKind.CONCH -> SnailRig(SnailRig.CONCH)
+            BrainKind.URCHIN -> UrchinRig()
             else -> null
         }
 
