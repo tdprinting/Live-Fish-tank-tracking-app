@@ -49,7 +49,10 @@ BUDGET = {
     # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
     "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
     "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,
-    "tank": 11000, "rockscape": 62000, "equipment": 9000, "aiptasia": 300,
+    "tank": 11000, "rockscape": 62000, "equipment": 9000,
+    # pests (tools/blender/pests.py): one aiptasia polyp drawn once per polyp (AiptasiaDraw caps the count), the
+    # Berghia nudibranch (drawn like the micro critters), the syringe / laser props of the treatment animation
+    "aiptasia": 1500, "berghia": 2400, "pest_tools": 900,
     "kenya": 14000, "gsp_neon": 1500, "gsp_mat": 2500, "zoa": 1500, "clove": 3000, "mushroom": 1100,
     "mushroom_hairy": 1500, "mushroom_hairy_mound": 3500,
     # Tee's photos 2026-10-13 (docs/research/video/tee_tank_photos.md): leathers and the big corallimorph; raised in
@@ -63,7 +66,7 @@ BUDGET = {
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
 LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
 # scene assets outside the default view: the supply shelf is drawn only in Supplies mode (SupplyShelf.kt)
-OFF_VIEW = {"supply_shelf"}
+OFF_VIEW = {"supply_shelf", "pest_tools"}
 # on-screen triangle ceilings (docs/ASSETS.md §8): High = LOD0 scene + all polyp instances + fish at LOD1 (default
 # camera > 60 cm); Medium = *_lod1.glb wherever one exists, polyp instance tables halved, fish at LOD1
 # +2k each (2026-10): the owner's diamond goby and leopard wrasse joined the default tank (two more fish at LOD1)
@@ -79,7 +82,7 @@ BODY_BUDGET = {"engineer_goby": 5600}
 # body COLOR_0.a at its front end: the squid body starts at the arm crown (its arms, part "leg", are the snout)
 SNOUT_A = {"bobtail_squid": 0.3}
 # sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
-SANDBOX_ONLY = {"bobtail_squid",
+SANDBOX_ONLY = {"bobtail_squid", "aiptasia", "berghia",
                 "gsp_mat"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}

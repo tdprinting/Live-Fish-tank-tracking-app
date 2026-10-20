@@ -3,6 +3,7 @@ package com.reeflive.app.ui.live
 import androidx.compose.ui.graphics.Color
 import com.reeflive.app.render.BurstKind
 import com.reeflive.app.ui.components.ReefGlyphs
+import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.FoodKind
@@ -302,6 +303,19 @@ object LiveReactions {
             Reaction(it.fx, "Zap! That's one. ${count - 1} more to go, and some split if you're unlucky.", HermieMood.EXCITED, it.feedback.withEffect("A dab of paste kills the biggest; one in five leaves a baby behind"))
         }
     }
+
+    /** A pest product on its way to the biggest open aiptasia (the tool animation plays it; [treated] says how it went). */
+    fun treatAiptasia(t: AiptasiaTreatment, left: Int) = Feedback(
+        when (t) { AiptasiaTreatment.LASER -> "Laser on the pest"; else -> "${t.label} for the pest" },
+        if (t == AiptasiaTreatment.LASER) "Aiming at the biggest pest anemone ($left in the tank)" else "Into the biggest pest anemone's mouth ($left in the tank)",
+    )
+
+    /** How a dose went: [killed] it is dying, otherwise it pulled into the rock just in time. */
+    fun treated(t: AiptasiaTreatment, killed: Boolean): Pair<String, HermieMood> = if (killed) when (t) {
+        AiptasiaTreatment.LASER -> "Zapped! It shrivels right up." to HermieMood.EXCITED
+        AiptasiaTreatment.AIPTASIA_X -> "Got it! Watch it shrink away over the next few minutes." to HermieMood.EXCITED
+        else -> "Got it! It goes white and shrinks away. Watch for babies nearby." to HermieMood.EXCITED
+    } else "It ducked into the rock just in time! Try again when it's open and nobody is poking it." to HermieMood.SURPRISED
 
     /** Hermie on the test kit's readings: the worst one, or all clear. */
     fun testKit(readouts: List<WaterReadout>): String {

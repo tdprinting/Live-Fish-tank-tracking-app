@@ -208,7 +208,7 @@ class PeppermintShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             var best: Coral? = null
             var bs = Double.MAX_VALUE
             for (p in c.sim.corals) {
-                if (p.kind != CoralKind.AIPTASIA || p.tissue <= 0.01 || p in taken) continue
+                if (p.kind != CoralKind.AIPTASIA || p.tissue <= 0.01 || p.treatment != null || p in taken) continue
                 val d = p.pos.distanceTo(c.o.pos)
                 if (d > AIPTASIA_REACH_CM) continue
                 val big = p.size >= com.reeflive.core.sim.AiptasiaModel.MATURE
@@ -250,7 +250,8 @@ class PeppermintShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (p != null) {
                 val big = p.size >= com.reeflive.core.sim.AiptasiaModel.MATURE
                 if (!big || c.rng.chance(LARGE_KILL_P)) {
-                    p.tissue = 0.0
+                    // eaten whole (the pest model's bite: it pulls in, dies and is cleared like any other)
+                    com.reeflive.core.sim.AiptasiaModel.bite(c.sim, p, 2.0)
                     aiptasiaEaten++
                     c.o.eat(c.o.mealGrams * (if (big) 0.8 else 0.4))
                     c.o.counters.add(com.reeflive.core.sim.Counters.K.FEED, c.t)
