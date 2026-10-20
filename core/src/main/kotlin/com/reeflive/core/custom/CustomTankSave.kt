@@ -48,6 +48,8 @@ data class CustomTankSave(
     val rocks: String = "",
     /** Pest controllers living in the rock (PestState.save: "berghia" population, "peppermint" count). */
     val pests: Map<String, Double> = emptyMap(),
+    /** Sand dollars, stars, today's care list and goals (docs/ECONOMY.md; added after v1 as a defaulted field). */
+    val economy: com.reeflive.core.custom.economy.SavedEconomy = com.reeflive.core.custom.economy.SavedEconomy(),
 )
 
 @Serializable

@@ -5,6 +5,7 @@ import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
+import { initCare } from './care.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -49,6 +50,8 @@ export function startLive(applyReadings) {
   onReadingsNeeded = applyReadings;
   if (started) return;
   started = true;
+  // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
+  window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -324,6 +327,8 @@ const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
 function renderCard() {
   if (!ui.card) return;
+  // opening the tank check is testing the water (My tank's daily job)
+  if (ui.card === 'FIX' || ui.card === 'HEALTH') MY.testedWater();
   const sb = editable();
   let h = '';
   switch (ui.card) {
@@ -350,7 +355,7 @@ function timeSlider(stops) {
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
 function viewCard() {
-  const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight']];
+  const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
   return `${timeSlider(STOPS)}
     <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
