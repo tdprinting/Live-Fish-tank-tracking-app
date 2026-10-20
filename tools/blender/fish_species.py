@@ -817,8 +817,8 @@ def paint_chromis(cv, fl):
     """Blue-green chromis, Chromis viridis (research 41 §2.1): iridescent apple-green to pale blue, bluer and brighter
     on the back, a silvery-green belly; the colour is structural, so most of it comes from the high iridescence."""
     u, v = cv.u, cv.v
-    cv.vgrad("#D8F2E6", "#6ED2B8", 0.0, 0.85)
-    cv.blend(S(0.7, 1.0, v), "#58B8D8", 0.6)                  # bluer along the back
+    cv.vgrad("#D4F0DC", "#62CC98", 0.0, 0.85)
+    cv.blend(S(0.72, 1.0, v), "#4AB0C8", 0.55)                # bluer along the back
     cv.blend(1 - S(0.1, 0.3, v), "#E8F6F0", 0.6)              # silvery belly
     cv.blend(S(0.8, 1.0, u), "#70C8C0", 0.4)
     mucus(cv, 0.03, 421)
