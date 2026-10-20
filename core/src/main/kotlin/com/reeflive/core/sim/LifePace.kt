@@ -18,6 +18,14 @@ enum class LifePace(val pace: Double, val label: String, val blurb: String) {
     companion object {
         const val MIN = 1.0
         const val MAX = 30.0
+        /**
+         * Growing pace on top of [pace] for fish below [YOUNG_UNTIL] of their adult size (any pace above real time).
+         * The sheets' straight-line growth rates are adult averages; real juveniles grow much faster, and in a game a
+         * raised baby should reach breeding size in a week or two of play at Fast (clown 2.5 to 6 cm in about 8 days,
+         * hippo tang to its 12 cm maturity in about 8 days). Aging is untouched: pets live as long as real ones.
+         */
+        const val YOUNG_BOOST = 12.0
+        const val YOUNG_UNTIL = 0.85
         val DEFAULT = FAST
 
         /** The choice closest to [pace] (a save keeps the number). */

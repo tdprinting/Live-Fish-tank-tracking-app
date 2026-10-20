@@ -33,12 +33,22 @@ class LifePaceTest {
         val gSlow = slow.organisms.single().lengthCm - l0
         val gFast = fast.organisms.single().lengthCm - l0
         assertTrue("grew at all", gSlow > 0)
-        assertEquals(7.0, gFast / gSlow, 0.3)
+        // a 3 cm clown is a youngster: Fast also gives it the youngsters' growth spurt
+        assertEquals(7.0 * LifePace.YOUNG_BOOST, gFast / gSlow, 3.0)
         assertEquals(slow.simTimeSec, fast.simTimeSec, 1e-6)
         assertEquals("a day of play is a tank week", 7.0, (fast.lifeSec - 10 * 3600.0) / 86400.0, 1e-4)
         assertEquals(slow.minuteOfDay, fast.minuteOfDay, 1e-6)
         assertEquals(slow.organisms.single().hunger, fast.organisms.single().hunger, 0.05)
         assertEquals(slow.organisms.single().ageSec, fast.organisms.single().ageSec, 1e-6)
+    }
+
+    @Test fun aRaisedBabyClownReachesBreedingSizeInAboutAWeekAtFast() {
+        val sim = tank(LifePace.FAST.pace)
+        val nemo = sim.organisms.single()
+        nemo.lengthCm = 2.5
+        var days = 0
+        while (nemo.lengthCm < com.reeflive.core.sim.Reproduction.FEMALE_MATURE_CM && days < 60) { sim.advanceAbstract(86400.0); days++ }
+        assertTrue("took $days days", days in 5..14)
     }
 
     @Test fun paceAndGameClockSurviveSaveAndOlderSavesTakeTheDefault() {

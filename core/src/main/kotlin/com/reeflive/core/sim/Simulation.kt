@@ -1045,7 +1045,9 @@ class Simulation private constructor(
         val g = o.species.growthCmPerYear
         if (g <= 0 || o.lengthCm >= o.species.maxLengthCm) return
         val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < 450 && o.lengthCm > 15) 0.3 else 1.0
-        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt
+        // My tank's game pace: youngsters shoot up to near adult size (where they can breed) in a week or two of play
+        val young = if (lifePace > 1.0 && o.lengthCm < LifePace.YOUNG_UNTIL * o.species.typicalAdultCm) LifePace.YOUNG_BOOST else 1.0
+        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt * young
     }
 
     /**
