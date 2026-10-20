@@ -117,6 +117,7 @@ class AcclimationBags {
         var from = Vec3.ZERO
         var to = Vec3.ZERO
         var fromH = Vec3.X
+        var mid = Vec3.ZERO
     }
 
     /** A crawler that left the net and is sinking to the rock or sand below. */
@@ -622,7 +623,8 @@ class AcclimationBags {
         b.dipPos = Vec3(spot.x, hoopY, spot.z)
         // the order they slide out of the bag
         val pourStart = T_CUT + 0.9
-        val gap = min(0.35, (T_POUR - 0.5 - pourStart) / n)
+        // the last one must be in the net before it is lifted away
+        val gap = min(0.35, (T_POUR - 0.1 - SLIDE_S - FALL_S - pourStart) / n)
         for ((k, rd) in b.riders.withIndex()) rd.exitAt = pourStart + k * gap
     }
 
@@ -695,13 +697,18 @@ class AcclimationBags {
             when (rd.stage) {
                 IN_BAG -> if (t >= rd.exitAt) {
                     rd.stage = SLIDING; rd.t = 0.0; rd.from = rd.lp; rd.fromH = rd.lh
-                    // nose first along the neck
-                    rd.to = Vec3(0.0, MOUTH * r + rd.half, 0.0)
+                    // up the bag's own axis, nose first along the neck (a straight line from the side of the bulb
+                    // cuts through the shoulder); each animal takes a slightly different lane
+                    val a = b.riders.indexOf(rd) * 2.39996
+                    val lane = if (b.count > 1) 0.12 * r else 0.0
+                    rd.mid = Vec3(cos(a) * lane, -0.1 * r, sin(a) * lane)
+                    rd.to = Vec3(cos(a) * lane * 0.5, MOUTH * r + rd.half, sin(a) * lane * 0.5)
                 }
                 SLIDING -> {
-                    val k = smooth(rd.t / SLIDE_S)
-                    rd.lp = rd.from.lerp(rd.to, k)
-                    rd.lh = rd.fromH.lerp(Vec3.Y, k).normalized(Vec3.Y)
+                    val k = rd.t / SLIDE_S
+                    rd.lp = if (k < SLIDE_SPLIT) rd.from.lerp(rd.mid, smooth(k / SLIDE_SPLIT))
+                    else rd.mid.lerp(rd.to, smooth((k - SLIDE_SPLIT) / (1 - SLIDE_SPLIT)))
+                    rd.lh = rd.fromH.lerp(Vec3.Y, smooth(k / SLIDE_SPLIT)).normalized(Vec3.Y)
                     if (rd.t >= SLIDE_S) {
                         rd.stage = FALLING; rd.t = 0.0
                         rd.from = bagToWorld(b, rd.lp); rd.fromH = bagDirToWorld(b, rd.lh)
@@ -715,7 +722,10 @@ class AcclimationBags {
                 FALLING -> {
                     val k = (rd.t / FALL_S).coerceIn(0.0, 1.0)
                     rd.lp = rd.from.lerp(rd.to, k * k)
-                    rd.lh = rd.fromH.lerp(Vec3(-b.tipX, -0.2, -b.tipZ), k).normalized(rd.fromH)
+                    // tips head first out of the neck and falls nose-down
+                    val down = Vec3(-b.tipX * 0.4, -0.9, -b.tipZ * 0.4).normalized()
+                    val level = Vec3(-b.tipX, -0.2, -b.tipZ).normalized()
+                    rd.lh = (if (k < 0.6) rd.fromH.lerp(down, smooth(k / 0.6)) else down.lerp(level, smooth((k - 0.6) / 0.4))).normalized(rd.fromH)
                     if (rd.t >= FALL_S) {
                         rd.stage = IN_NET; rd.t = 0.0
                         rd.lp = worldToNet(b, rd.to)
@@ -725,7 +735,8 @@ class AcclimationBags {
                 IN_NET -> {
                     // they lie in the bottom of the mesh, sliding to its low side as it turns
                     rd.lp = rd.lp + netDown(b) * (4.0 * dt)
-                    rd.lh = rd.lh.rejectFrom(netDown(b)).normalized(rd.lh)
+                    // rolls level in the mesh instead of snapping flat
+                    rd.lh = Vec3.rotateToward(rd.lh, rd.lh.rejectFrom(netDown(b)).normalized(rd.lh), 4.0 * dt)
                 }
             }
         }
@@ -960,7 +971,8 @@ class AcclimationBags {
         const val T_NET_TURN = 7.0
         const val T_END = 8.0
         private const val BAG_AWAY_S = 0.8
-        private const val SLIDE_S = 0.3
+        private const val SLIDE_S = 0.6
+        private const val SLIDE_SPLIT = 0.4
         private const val FALL_S = 0.35
 
         /**
