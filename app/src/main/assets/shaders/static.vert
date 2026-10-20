@@ -1,7 +1,7 @@
 #version 300 es
 #include "common.glsl"
 // Static geometry: rock, sand, tank, equipment. With SOFTCORAL defined: soft-coral / macro / algae-card
-// sway and extension (ARCHITECTURE §8.4 item 2). Coral COLOR_0: R thickness, G sway phase, B sway weight.
+// sway and extension (ARCHITECTURE §8.4 item 2). Coral COLOR_0: R thickness, G sway phase, B sway weight, A softness.
 
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
@@ -38,13 +38,15 @@ void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
     vec3 p = w.xyz;
 #ifdef SOFTCORAL
+    // COLOR_0.a: how soft the tissue is (1 soft coral; 0 a stony coral's skeleton, which neither shrinks nor sways)
+    float soft = aColor.a;
     // extension: shrink toward the base (retracted colonies are ~55% size)
-    p = uBase + (p - uBase) * mix(0.55, 1.0, clamp(uExtension, 0.0, 1.0));
+    p = uBase + (p - uBase) * (1.0 - soft * (1.0 - mix(0.55, 1.0, clamp(uExtension, 0.0, 1.0))));
     float h = clamp((p.y - uBase.y) / max(uHeight, 1.0), 0.0, 1.0);
     if (uSwayMode > 0.5) {
-        p += treeSway(p, uBase, uHeight, uPhase, uSwayDir, uSwayAmp, uWake);
+        p += soft * treeSway(p, uBase, uHeight, uPhase, uSwayDir, uSwayAmp, uWake);
     } else {
-        float weight = max(aColor.b, h * 0.5);
+        float weight = max(aColor.b, h * 0.5) * soft;
         float ph = uTime * 1.3 + p.y * 0.15 + uPhase + aColor.g * 6.2831;
         p += uSwayDir * sin(ph) * uSwayAmp * weight;
         p.y -= 0.15 * uSwayAmp * weight * (0.5 + 0.5 * sin(ph * 1.7));

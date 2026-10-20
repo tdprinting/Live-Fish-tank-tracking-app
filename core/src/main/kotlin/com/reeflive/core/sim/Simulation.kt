@@ -704,11 +704,13 @@ class Simulation private constructor(
         coralCatchAcc += dt
         if (coralCatchAcc < 1.0) return
         coralCatchAcc = 0.0
-        if (corals.isEmpty() || food.particles.none { !it.eaten && it.kind.coralCatchable }) return
+        if (corals.isEmpty() || food.particles.none { !it.eaten && (it.kind.coralCatchable || it.kind in StonyCorals.MEATY) }) return
         for (c in corals) {
             if (c.tissue < 0.1 || c.extension < 0.3 || c.kind == CoralKind.MACRO) continue
-            val reach = (2.0 + CoralGrowth.extent(c)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
-            val f = food.nearest(c.pos, reach) { it.kind.coralCatchable } ?: continue
+            // stony LPS also take mysis and brine shrimp, and reach further with their night tentacles out
+            val stony = c.kind.stony
+            val reach = (2.0 + CoralGrowth.extent(c) + (if (stony) 3.0 * c.tentacles else 0.0)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
+            val f = food.nearest(c.pos, reach) { it.kind.coralCatchable || (stony && it.kind in StonyCorals.MEATY) } ?: continue
             food.consume(f)
             c.fed = min(1.0, c.fed + CORAL_FED_PER_CATCH)
         }
@@ -1042,6 +1044,7 @@ class Simulation private constructor(
             val c = corals[i]
             if (c.tissue <= CoralHealth.DEAD_TISSUE) continue
             CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${nextFragId()}" }?.let { born += it }
+            StonyCorals.developSweepers(c, corals, dtMin)
             // zoas and clove bud along runners, mushrooms split, leathers bud (coral_health §3)
             if (CoralHealth.profile(c.species).spreadEveryDays > 0 && c.size >= CoralHealth.profile(c.species).spreadMinSize) {
                 val own = corals.count { it.species.id == c.species.id && it.tissue > CoralHealth.DEAD_TISSUE } + born.count { it.species.id == c.species.id }
@@ -1177,6 +1180,8 @@ class Simulation private constructor(
                 CoralKind.MUSHROOM -> shroom += 5 * open
                 // leather polyps are small particle feeders (est.; tee_tank_photos.md)
                 CoralKind.LEATHER -> small += 80 * open
+                // Euphyllia and the meaty LPS catch pods and plankton with their tentacles, most at night (est.)
+                CoralKind.EUPHYLLIA, CoralKind.LPS -> small += 60 * (open + c.tentacles)
                 CoralKind.MACRO -> macro += 0.5 * c.tissue
                 else -> {}
             }
@@ -1854,10 +1859,14 @@ class Simulation private constructor(
         val id = seed.id.ifBlank { "${sp.id}#${idCounter++}" }
         if (sp.isCoral) {
             val a = seed.placement?.let { rock.anchors[it] ?: rock.anchors["coral_$it"] }
-                ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
-            val pos = (a?.pos ?: Vec3(60.0, 10.0, 20.0)) + (seed.offset ?: Vec3.ZERO)
-            val normal = if (seed.offset != null) Vec3.Y else a?.normal ?: Vec3.Y
-            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, normal, rng.nextDouble() * 6.28, seed.offset ?: Vec3.ZERO)
+                ?: if (sp.coralKind.stony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
+            // a stony coral has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
+            val offset = seed.offset ?: if (a == null && sp.coralKind.stony)
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                else null
+            val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
+            val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y
+            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, normal, rng.nextDouble() * 6.28, offset ?: Vec3.ZERO)
             return Organism(id, sp, 1.0, seed.nickname, null, rng.fork(id.hashCode().toLong()))   // placeholder (not added)
         }
         val size = if (seed.sizeCm > 0) seed.sizeCm else sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm)

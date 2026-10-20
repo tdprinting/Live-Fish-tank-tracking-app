@@ -39,6 +39,12 @@ class DrawPart(
      * without one (fish.vert uJaw).
      */
     val jaw: FloatArray = node.floats("jaw")?.takeIf { it.size >= 4 }?.copyOf(4) ?: FloatArray(4)
+    /**
+     * Polyp motion mode (`extras.polypMode`, polyp.vert uPolypMode), parsed once: 0 ordinary polyps, 1 night
+     * tentacles (Euphyllia sweepers, LPS feeding tentacles) that grow out with the colony's [CoralPose.tentacles],
+     * 2 LPS day tentacles (Euphyllia: whole strands that bend and shorten).
+     */
+    val polypMode: Float = node.float("polypMode") ?: 0f
     /** `extras.alphaTest`, parsed once (the draw loop reads it for every part every frame). */
     val alphaTest: Float? = node.float("alphaTest")
     /**

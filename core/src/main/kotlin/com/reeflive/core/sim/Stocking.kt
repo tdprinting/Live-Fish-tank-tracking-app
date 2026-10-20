@@ -77,6 +77,11 @@ object Stocking {
         StockEntry("lobophytum_sp", StockGroup.CORALS, "Pink lobed leather", 10.0),
         StockEntry("sinularia_sp", StockGroup.CORALS, "Finger leather", 12.0),
         StockEntry("amplexidiscus_fenestrafer", StockGroup.CORALS, "Elephant ear mushroom", 13.0),
+        // stony corals (docs/research/stony_corals.md): not in Tee's tank, models built about StonyCorals.STUDIO
+        StockEntry("fimbriaphyllia_ancora", StockGroup.CORALS, "Hammer coral", 12.0),
+        StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
+        StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
+        StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
     )
 
     fun entry(speciesId: String): StockEntry? = CATALOG.firstOrNull { it.speciesId == speciesId }
@@ -97,12 +102,15 @@ object Stocking {
     )
 
     /** Same fallback spot as [Simulation.addFromSeed] when a coral has no anchor. */
-    private val NO_ANCHOR = Vec3(60.0, 10.0, 20.0)
+    private val NO_ANCHOR = StonyCorals.STUDIO
 
     /** Clear space around a new colony (cm), by how wide the model is. */
     fun spacingCm(k: CoralKind): Double = when (k) {
         CoralKind.KENYA -> 16.0
+        // Euphyllia: retail spacing 6-10 in so the sweepers do not reach (stony_corals.md §1-3)
+        CoralKind.EUPHYLLIA -> 15.0
         CoralKind.GSP, CoralKind.LEATHER -> 12.0
+        CoralKind.LPS -> 10.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -117,7 +125,7 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }

@@ -1,0 +1,105 @@
+{
+  "id": "fimbriaphyllia_divisa",
+  "kind": "CORAL",
+  "common": "Frogspawn coral",
+  "scientific": "Fimbriaphyllia divisa",
+  "family": "Euphylliidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 3,
+  "lifespanYears": 50,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/frogspawn.glb",
+  "colors": {
+    "primary": "#6E8C5E",
+    "secondary": "#D3C8A0",
+    "accent": "#F2A8D2"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.2,
+    "lightHi": 0.75,
+    "flow": "LOW",
+    "growth": "Moderate",
+    "stingCm": 15,
+    "ground": "ANY",
+    "aggression": "Sweepers reach about 15 cm (6 in) beyond the coral at night",
+    "fluorescence": 0.5
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; small meaty foods once or twice a week when the tentacles are out.",
+  "temperamentSummary": "Thick tentacles that split into knobby branches at the tips, like a clump of frog eggs.",
+  "careNotes": [
+    "PAR about 75-150 and gentle indirect flow: tentacles should sway, not lie flat.",
+    "Alkalinity 8-10 dKH, calcium 400-450, magnesium 1250-1400.",
+    "Sweepers reach about 15 cm at night, so leave room around it.",
+    "Brown jelly, recession and sudden light changes are its usual troubles."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.6,
+  "starvationDays": 9999
+}
