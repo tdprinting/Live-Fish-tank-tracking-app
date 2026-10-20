@@ -715,6 +715,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uPhase", 0f)
         p.set1f("uBleach", 0f)
         p.set1f("uBrown", 0f)
+        setCoralHealth(p, null)
         p.set3f("uSwayDir", 1f, 0f, 0f)
         p.set1f("uSwayAmp", 0f)
         p.set1f("uSwayMode", 0f)
@@ -754,11 +755,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             // a GSP mat drawn on the rock is a skin on it: no dome of its own to cast a shadow
             if (gspOnRock(m, c)) continue
             val copy = c != null && c.isCopy
-            if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
+            val shifted = setCoralShift(c, m)
             for (part in m.parts) {
                 if (part.kind != MaterialKind.SOFT_CORAL || !castsShadow(part)) continue
                 if (c != null && copy && !nearHome(part, c)) continue
-                pc.setMat4("uModel", onRock(c, if (copy) M.mul(coralShift, part.node.world, coralModel) else part.node.world))
+                pc.setMat4("uModel", onRock(c, if (shifted) M.mul(coralShift, part.node.world, coralModel) else part.node.world))
                 coralUniforms(pc, m, c)
                 part.mesh.draw(); drawCalls++
             }
@@ -871,8 +872,26 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         return out
     }
 
-    /** Translation for the coral copy being drawn, and scratch for its part matrices. */
+    /** Move (a copy) and grow / shrink (colony size) for the coral being drawn, and scratch for its part matrices. */
     private val coralShift = M.identity()
+
+    /**
+     * Fills [coralShift] for [c]: moved by its copy offset and scaled by its colony size about its home spot. Size only
+     * applies to a copy (just its own clump is drawn) or a compact model, never to one mesh spread over many colonies.
+     * False when the model draws where it was built (no matrix needed).
+     */
+    private fun setCoralShift(c: CoralPose?, m: GpuModel): Boolean {
+        if (c == null) return false
+        val b = m.bounds
+        val compact = b[3] - b[0] <= MAX_SCALED_MODEL_CM && b[5] - b[2] <= MAX_SCALED_MODEL_CM
+        val k = if (c.isCopy || compact) c.drawScale else 1f
+        if (!c.isCopy && k == 1f) return false
+        coralShift[0] = k; coralShift[5] = k; coralShift[10] = k
+        coralShift[12] = c.homeX * (1 - k) + c.offsetX
+        coralShift[13] = c.homeY * (1 - k) + c.offsetY
+        coralShift[14] = c.homeZ * (1 - k) + c.offsetZ
+        return true
+    }
     private val coralModel = FloatArray(16)
 
     /** A copy keeps only the clump around its home anchor (zoa and mushroom models hold two clumps). */
@@ -908,6 +927,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uPhase", c?.swayPhase ?: 0f)
         p.set1f("uBleach", c?.bleach ?: 0f)
         p.set1f("uBrown", c?.brown ?: 0f)
+        setCoralHealth(p, c)
         val flow = c?.flow ?: 8f
         val v = flowScratch
         ParticleField.flowAt(interp.current?.flowGrid, (b[0] + b[3]) * 0.5f + ox, b[4] + oy, (b[2] + b[5]) * 0.5f + oz, 0f, v)
@@ -988,7 +1008,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             return
         }
         val copy = c != null && c.isCopy
-        if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
+        val shifted = setCoralShift(c, m)
         for (part in m.parts) {
             val isPolyp = part.kind == MaterialKind.POLYP
             if (isPolyp != polyps) continue
@@ -1000,7 +1020,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             p.use()
             p.setMat4("uModel", onRock(c, when {
-                !copy -> if (isPolyp) IDENTITY else part.node.world
+                !shifted -> if (isPolyp) IDENTITY else part.node.world
                 isPolyp -> coralShift
                 else -> M.mul(coralShift, part.node.world, coralModel)
             }))
@@ -1060,6 +1080,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     p.set1f("uExtension", r.extension); p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.4f)
                     p.set1f("uSwayMode", 0f)
                     p.set1f("uBleach", 0f); p.set1f("uBrown", 0f)
+                    setCoralHealth(p, null)
                 }
                 part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
                 continue
@@ -1149,6 +1170,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val flow = interp.current?.flowStrength ?: 1f
         p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.12f * flow.coerceIn(0f, 2f))
         p.set1f("uBleach", l[8]); p.set1f("uBrown", 0f)
+        setCoralHealth(p, null)
+    }
+
+    /**
+     * Receding tissue (uDead = 1 − living tissue: patches of the colony melt away, their edges dull) and the colour the
+     * colony bleaches to. Set on every draw that uses the coral programs, since uniforms persist in a program.
+     */
+    private fun setCoralHealth(p: ShaderProgram, c: CoralPose?) {
+        p.set1f("uDead", if (c == null) 0f else (1f - c.tissue).coerceIn(0f, 1f))
+        val t = c?.bleachTint
+        if (t == null) p.set3f("uBleachTint", 0.89f, 0.89f, 0.89f) else p.set3f("uBleachTint", t[0], t[1], t[2])
     }
 
     private fun rigidModel(r: FishRig, out: FloatArray) {
@@ -1647,6 +1679,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val IDENTITY = M.identity()
         /** Parts of a coral model within this distance of its home anchor make up one colony (sandbox copies). */
         const val COPY_RADIUS_CM = 25f
+        /** Widest model drawn grown / shrunk by its colony size (wider ones hold several colonies in one mesh). */
+        const val MAX_SCALED_MODEL_CM = 30f
 
         /**
          * Tree-coral motion (Kenya, extras.swayMode = 1), from Tee's clip (research/video/coral_kenya.md [H],

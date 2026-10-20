@@ -994,19 +994,78 @@ class Simulation private constructor(
         return n
     }
 
+    /** Doses in the last day (sim s, param, amount): the care button keeps inside a day's safe swing. */
+    private val doseLog = ArrayList<Triple<Double, String, Double>>()
+    /** Last care-button feeding (sim s). */
+    var reefCareAt = -1e12
+
+    fun dosedLast24h(id: String): Double {
+        doseLog.removeAll { simTimeSec - it.first > 86400 }
+        var n = 0.0
+        for (d in doseLog) if (d.second == id) n += d.third
+        return n
+    }
+
+    /** Tank Health's care button ([CoralCare]): doses and feeds what the corals and inverts need now. */
+    private fun reefCare() {
+        var fed = 0.0; var n = 0
+        for (c in corals) if (c.tissue > 0.1 && c.kind != CoralKind.MACRO && c.kind != CoralKind.AIPTASIA) { fed += c.fed; n++ }
+        val live = organisms.filter { it.alive }
+        val anemones = live.filter { it.brainKind == BrainKind.ANEMONE }
+        val dusters = live.filter { it.brainKind == BrainKind.FEATHER_DUSTER }
+        val plan = CoralCare.plan(
+            water.s, if (n == 0) Double.NaN else fed / n, anemones.size, dusters.size, live.count { CoralCare.isCrustacean(it.brainKind) },
+            (simTimeSec - reefCareAt) / 3600, ::dosedLast24h,
+        )
+        for (item in plan.items) when (item.kind) {
+            CoralCare.Kind.MAGNESIUM -> apply(Command.Dose("mg", item.amount))
+            CoralCare.Kind.CALCIUM -> apply(Command.Dose("ca", item.amount))
+            CoralCare.Kind.ALKALINITY -> apply(Command.Dose("alk", item.amount))
+            CoralCare.Kind.IODINE -> apply(Command.Dose("i", item.amount))
+            CoralCare.Kind.CORAL_FOOD -> apply(Command.Feed(FoodKind.CORAL_FOOD, FoodKind.CORAL_FOOD.typicalDoseGrams))
+            CoralCare.Kind.PHYTO -> { reefCareAt = simTimeSec; for (d in dusters) apply(Command.Feed(FoodKind.PLANKTON, FoodKind.PLANKTON.typicalDoseGrams, d.pos, target = true)) }
+            CoralCare.Kind.ANEMONE_FOOD -> { reefCareAt = simTimeSec; for (a in anemones) apply(Command.Feed(FoodKind.MYSIS, FoodKind.MYSIS.typicalDoseGrams * 0.3, a.pos, target = true)) }
+        }
+    }
+
     /** Colony growth, Kenya branch drops and neighbour competition (CoralGrowth; coverage gaps C-1, C-2). */
     private fun coralGrowth(dtMin: Double) {
         if (corals.isEmpty()) return
         CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
         val born = ArrayList<Coral>()
         val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
-        for (c in corals) {
+        var taken: List<Vec3>? = null
+        for (i in corals.indices) {
+            val c = corals[i]
+            if (c.tissue <= CoralHealth.DEAD_TISSUE) continue
             CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${nextFragId()}" }?.let { born += it }
+            // zoas and clove bud along runners, mushrooms split, leathers bud (coral_health §3)
+            if (CoralHealth.profile(c.species).spreadEveryDays > 0 && c.size >= CoralHealth.profile(c.species).spreadMinSize) {
+                val own = corals.count { it.species.id == c.species.id && it.tissue > CoralHealth.DEAD_TISSUE } + born.count { it.species.id == c.species.id }
+                if (corals.size + born.size >= Stocking.MAX_CORALS) continue
+                val spots = taken ?: corals.map { it.pos }.also { taken = it }
+                CoralHealth.maybeSpread(c, CoralGrowth.vigor(c, water.s), water.s, rock, growthRng, dtMin, own, spots) { "${c.id}~${nextFragId()}" }?.let { born += it }
+            }
         }
         for (f in born) {
             corals += f
             pendingEventsSink += SimEvent.CoralSpawned(f.id.substringBefore('~'), f.id, simTimeSec)
         }
+        coralDeaths()
+    }
+
+    /** A colony whose tissue is gone is reported once and cleared away [CoralHealth.CLEAR_DAYS] later (aiptasia stay for their own model). */
+    private fun coralDeaths() {
+        var clear = false
+        for (c in corals) {
+            if (c.kind == CoralKind.AIPTASIA || c.tissue > CoralHealth.DEAD_TISSUE) continue
+            if (c.diedAt.isNaN()) {
+                c.diedAt = simTimeSec
+                val cause = if (c.need >= 0) CoralNeed.entries[c.need].words else "it was too stressed for too long"
+                pendingEventsSink += SimEvent.CoralDied(c.id, c.nickname.ifBlank { c.species.common }, cause, simTimeSec)
+            } else if (simTimeSec - c.diedAt > CoralHealth.CLEAR_DAYS * 86400) clear = true
+        }
+        if (clear) corals.removeAll { it.kind != CoralKind.AIPTASIA && !it.diedAt.isNaN() && simTimeSec - it.diedAt > CoralHealth.CLEAR_DAYS * 86400 }
     }
 
     /** Collects events from the health/coral models; flushed to the log once per tick. */
@@ -1334,7 +1393,9 @@ class Simulation private constructor(
             }
             is Command.Feed -> { feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
+            is Command.ReefCare -> reefCare()
             is Command.Dose -> {
+                doseLog += Triple(simTimeSec, c.paramId.lowercase(), c.delta)
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
                 fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, rock.waterLevelCm - 1, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
@@ -1918,6 +1979,7 @@ class Simulation private constructor(
             },
             gusts = gustArray(),
             care = water.careState(),
+            reefCareAt = reefCareAt,
         )
     }
 
