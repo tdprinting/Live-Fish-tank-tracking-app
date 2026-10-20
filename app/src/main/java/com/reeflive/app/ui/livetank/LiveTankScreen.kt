@@ -1289,7 +1289,9 @@ fun LiveTankScreen(
         }
         GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
     }
-    fact?.let { f ->
+    // the "While you were away" card goes first; the fact waits until it is closed
+    val awayOpen = vm.away.collectAsStateWithLifecycle().value != null
+    fact?.takeIf { !awayOpen }?.let { f ->
         LiveDialog(title = f.kind.title, body = f.text, confirm = "Cool!", onConfirm = { fact = null }, onDismiss = { fact = null }, dismiss = "Close")
     }
     ask?.let { a ->
