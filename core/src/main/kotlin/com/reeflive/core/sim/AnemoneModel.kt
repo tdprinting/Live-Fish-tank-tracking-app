@@ -330,6 +330,7 @@ class AnemoneModel(private val sim: Simulation) {
         cs.foot = p; cs.normal = nrm; cs.settled = true; cs.lineage = s.lineage
         cs.bubbliness = s.bubbliness; cs.dayLight = s.dayLight; cs.bubble = s.bubble * 0.5; cs.healing = 1.0
         s.healing = 1.0; s.splits++; s.bubble *= 0.5
+        sim.careLog.anemoneSplits++
         // the parent moves half a disc the other way
         surfaceUnder(s.foot - side * (0.45 * half)).let { (q, qn) -> s.foot = q; s.normal = qn }
         child.placeAt(discCenter(child, cs), o.heading)
