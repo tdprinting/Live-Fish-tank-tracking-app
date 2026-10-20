@@ -115,7 +115,7 @@ and the banner say so, and sliding back to 1× returns to the real tank.
 
 | Option | What it does | Feedback |
 |---|---|---|
-| Lamps: Real clock / Day / Dusk / Night / Moonlight | Render-only light look (`render/ViewLight.kt`, read by `TankRenderer`). The sim's light schedule and photosynthesis do not change. | The tank relights at once. The tile stays lit, and the banner says it is only the look. |
+| Lamps: Real clock / Day / Dusk / Night / Moonlight / Blue light | Render-only light look (`render/ViewLight.kt`, read by `TankRenderer`). The sim's light schedule and photosynthesis do not change. Blue light is actinic only: the grade keeps it blue and fluorescent corals glow. | The tank relights at once. The tile stays lit, and the banner says it is only the look. |
 | Torch | A warm beam over the tank that follows your finger (touches pass through to the tank) | The beam, with the rest of the tank dimmed a little. Banner: "Drag on the tank to shine it around". |
 | Feed | Opens the supply shelf (#47), the same as the Supplies bubble; the tour stops | The camera swings to the shelf |
 | Auto tour | The follow camera visits each living animal for 12 s in turn. A tap on the water stops it. | The camera moves, and a banner explains it |
