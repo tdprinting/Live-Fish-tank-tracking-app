@@ -30,6 +30,8 @@ data class HealthContext(
     val hypo: Boolean = false,
     /** Vibrio-type pathogen pressure 0..1 from the bacteria layer ([BacteriaModel.pathogenPressure], research 18 §5). */
     val pathogenPressure: Double = 0.0,
+    /** My tank's grace while the keeper is away (custom AwayCatchUp): slow decline cannot kill, sudden disaster still can. */
+    val grace: Boolean = false,
 )
 
 /**
@@ -69,6 +71,8 @@ object HealthModel {
     const val K_REGEN = 0.0003
     const val K_LETHAL = 0.0004
     const val K_STARVE = 0.003
+    /** Lowest health slow decline can bring an animal to during the away grace ([HealthContext.grace]). */
+    const val GRACE_HEALTH = 0.05
     const val HUNGER_DIVISOR = 1440.0 * 1.4
     /** Extra stress target on the second blenny in a tank under 400 L (B-10); with chronic decay it fades colour and drains immunity. */
     const val BLENNY_EXCESS_STRESS = 0.10
@@ -361,6 +365,7 @@ object HealthModel {
         if (o.lethalExposure) dh -= K_LETHAL * (1 + min(4.0, overshoot))
         if (o.health < 1) dh += K_REGEN * (1 - o.stress) * (1 - stage)
         o.health = (o.health + dh * dtMin).coerceAtMost(1.0)
+        if (ctx.grace && !o.lethalExposure) o.health = max(o.health, GRACE_HEALTH)
         if (o.health <= 0) {
             o.health = 0.0
             kill(o, causeOf(o, sEnv), ctx.simTimeSec, events)
