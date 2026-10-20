@@ -46,6 +46,8 @@ import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.TankSpot
 import com.reeflive.core.sim.TankSpots
 import com.reeflive.core.sim.HungryFeed
+import com.reeflive.core.sim.CoralCare
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
@@ -201,6 +203,8 @@ object ReefSandbox {
             }
             // Tank Health "Feed the hungry ones" (core HungryFeed): each hungry animal's favourite food dropped above it
             "feedHungry" -> { send(Command.FeedHungry); return true }
+            // Tank Health "Care for corals and inverts" (core CoralCare): doses and feeds what they need now
+            "reefCare" -> { send(Command.ReefCare); return true }
             "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
@@ -541,6 +545,27 @@ object ReefSandbox {
     /** The [n]th "Did you know?" this browser has shown: {title, text} (core ReefFacts). */
     fun fact(n: Double): String = com.reeflive.core.live.ReefFacts.nth(n.toLong()).let { f ->
         JSON.stringify(obj { it.title = f.kind.title; it.text = f.text })
+    }
+
+    /** Coral news from My tank's catch-up (bleached, died, budded while away), once; "" when none. */
+    fun coralNews(): String = ReefMyTank.coralNews.also { ReefMyTank.coralNews = "" }
+
+    /**
+     * Tank Health's corals (core CoralHealth / CoralCare): {words, price, corals: [{name, health, pale, need}]}, where
+     * [words] is what the care button would give now ("" = nothing needed) and [need] a colony's main trouble.
+     */
+    fun corals(): String {
+        val s = sim ?: return "{}"
+        val plan = CoralCare.plan(s.latest)
+        val list = s.corals.filter { it.kind != com.reeflive.core.sim.CoralKind.AIPTASIA && it.tissue > CoralHealth.DEAD_TISSUE }.map { c ->
+            obj {
+                it.name = c.nickname.ifBlank { c.species.common }
+                it.health = CoralHealth.health(c)
+                it.pale = c.bleach > 0.3
+                it.need = if (c.need >= 0) com.reeflive.core.sim.CoralNeed.entries[c.need].words else null
+            }
+        }
+        return JSON.stringify(obj { it.words = plan.words; it.price = plan.price; it.corals = list.toTypedArray() })
     }
 
     /** Tank Health's hunger list (core HungryFeed): [{id, name, hunger, fish, hungry, food}], fish first. */

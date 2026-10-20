@@ -112,6 +112,8 @@ class Simulation private constructor(
     private val commands = ConcurrentLinkedQueue<Command>()
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
+    /** Coral budding and splitting (CoralHealth.maybeSpread) roll here, so they leave the growth and pest stream untouched. */
+    private val spreadRng = Rng(seed xor 0x5B4EADL)
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
 
@@ -1034,7 +1036,6 @@ class Simulation private constructor(
         CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
         val born = ArrayList<Coral>()
         val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
-        var taken: List<Vec3>? = null
         for (i in corals.indices) {
             val c = corals[i]
             if (c.tissue <= CoralHealth.DEAD_TISSUE) continue
@@ -1043,8 +1044,7 @@ class Simulation private constructor(
             if (CoralHealth.profile(c.species).spreadEveryDays > 0 && c.size >= CoralHealth.profile(c.species).spreadMinSize) {
                 val own = corals.count { it.species.id == c.species.id && it.tissue > CoralHealth.DEAD_TISSUE } + born.count { it.species.id == c.species.id }
                 if (corals.size + born.size >= Stocking.MAX_CORALS) continue
-                val spots = taken ?: corals.map { it.pos }.also { taken = it }
-                CoralHealth.maybeSpread(c, CoralGrowth.vigor(c, water.s), water.s, rock, growthRng, dtMin, own, spots) { "${c.id}~${nextFragId()}" }?.let { born += it }
+                CoralHealth.maybeSpread(c, CoralGrowth.vigor(c, water.s), rock, spreadRng, dtMin, own, corals) { "${c.id}~${nextFragId()}" }?.let { born += it }
             }
         }
         for (f in born) {

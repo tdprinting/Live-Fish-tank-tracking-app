@@ -90,7 +90,7 @@ class Coral(
         matRadius = if (kind == CoralKind.GSP) GspPolyps.matRadius(this).toFloat() else 0f,
         pokes = GspPolyps.pokesFor(this, simTimeSec),
         stress = stress.toFloat(), need = need, fed = fed.toFloat(),
-        drawScale = CoralHealth.drawScale(this).toFloat(), bleachTint = CoralHealth.profile(species).tint,
+        drawScale = CoralHealth.drawScale(this).toFloat(), bleachTint = CoralHealth.profile(species).tint, name = nickname.ifBlank { species.common },
     )
 }
 
@@ -214,13 +214,13 @@ object CoralSim {
         val (sCa, _) = HealthModel.stressOf(w.ca, CA_SOFT)
         val (sMg, _) = HealthModel.stressOf(w.mg, MG_SOFT)
         // Iodine (coral_health §2): soft corals that shed (leathers, Kenya) use it up; carbon strips it and only water
-        // changes or a dose bring it back. Used up below ~0.03 ppm (est.).
+        // changes or a dose bring it back. Used up below ~0.025 ppm (est.).
         val pr = CoralHealth.profile(c.species)
-        val sI = pr.iodineNeed * ((0.035 - w.i) / 0.03).coerceIn(0.0, 1.0)
+        val sI = pr.iodineNeed * ((0.025 - w.i) / 0.025).coerceIn(0.0, 1.0)
         // Hunger: in ultra-clean water a coral lives on what it catches; caught food ([Coral.fed]) makes up for it.
         // Organ pipe, clove and mushrooms lean on food more than the light-fed leathers and Kenya (coral_health §2).
         val lowNut = 0.5 * ((1.0 - w.no3) / 1.0).coerceIn(0.0, 1.0) + 0.5 * ((0.02 - w.po4) / 0.02).coerceIn(0.0, 1.0)
-        val sHunger = if (c.kind == CoralKind.MACRO) 0.0 else (0.2 + 0.8 * pr.feedNeed) * (1 - c.fed.coerceIn(0.0, 1.0)) * lowNut
+        val sHunger = if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else (0.2 + 0.8 * pr.feedNeed) * (1 - c.fed.coerceIn(0.0, 1.0)) * lowNut
         val caMgWeight = if (c.kind == CoralKind.ORGAN_PIPE) 0.8 else if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else 0.3
         val sLight = if (minutesSinceOn == null) 0.0 else when {
             lightIntensity > p.lightHi -> ((lightIntensity - p.lightHi) / 0.15).coerceIn(0.0, 1.0)
@@ -233,7 +233,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, c.algaeCover * 0.3)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3)
         var prod = 1.0
         var top = 0.15; var worst = -1
         for (i in parts.indices) {
@@ -287,7 +287,7 @@ object CoralSim {
         val loss = 0.00004 * smoothstep(0.7, 1.0, c.bleach) * (0.15 + 0.85 * smoothstep(0.2, 0.6, c.stress)) + 0.00005 * smoothstep(8.0, 12.0, c.dhw) + 0.0002 * sNh3 +
             0.00003 * c.algaeCover + 0.0003 * sCu + (if (sgLethal) 0.002 else 0.0) + 0.0002 * max(0.0, sPh - 0.6) +
             0.00002 * c.neighborStress + 0.00003 * c.overgrown + PATHOGEN_TISSUE_LOSS * sPath + 0.0003 * sH2s +
-            RECEDE_PER_MIN * smoothstep(0.65, 0.95, c.stress) + 0.00002 * sHunger * c.bleach
+            (if (c.kind == CoralKind.AIPTASIA) 0.0 else RECEDE_PER_MIN * smoothstep(0.65, 0.95, c.stress)) + 0.00002 * sHunger * c.bleach
         c.tissue += (-loss * pr.recede + (if (c.stress < 0.1 && c.tissue < 1 && c.tissue > CoralHealth.DEAD_TISSUE) 0.00002 * pr.recovery else 0.0)) * dtMin
         // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
         if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0

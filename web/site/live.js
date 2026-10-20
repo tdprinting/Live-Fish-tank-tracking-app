@@ -106,6 +106,8 @@ function tick() {
   P = JSON.parse(SB.panel());
   if (!P) return;
   animals = JSON.parse(SB.animals());
+  const news = SB.coralNews();
+  if (news) toast(news);
   const s = JSON.parse(live.state());
   ui.clockAt = s;
   if (s) $('clock').textContent = `${PHASE_ICON[s.phase] ?? ''} ${hhmm(s.time)}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
@@ -385,6 +387,9 @@ function healthCard() {
   return `<div id="healthLive">${healthLive()}</div>
     <div class="options"><button class="opt wide" id="feedHungry" data-feedhungry><span class="ico">${icon('feedTin')}</span><span class="lbl"></span></button></div>
     <div class="hunger" id="hungerRows"></div>
+    <div id="coralLive"></div>
+    <div class="options"><button class="opt wide" id="reefCare" data-reefcare><span class="ico">${icon('branch')}</span><span class="lbl"></span></button></div>
+    <div class="hunger" id="coralRows"></div>
     <h4>Water &amp; gear</h4>${fixList()}
     <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
 }
@@ -413,8 +418,24 @@ function refreshHealth() {
   const b = $('feedHungry');
   b.querySelector('.lbl').textContent = hungry ? (hungry === 1 ? 'Feed the hungry one' : `Feed all ${hungry} hungry ones`) : 'Nobody is hungry right now';
   b.classList.toggle('on', hungry > 0); b.classList.toggle('lock', !hungry);
+  refreshCorals();
   $('hungerRows').innerHTML = rows.map((r) => `<div class="stat ${r.hungry ? 'hungry' : ''}"><span>${esc(r.name)}${r.food ? ` <small class="muted">likes ${esc(r.food.toLowerCase())}</small>` : ''}</span>
     <i class="meter"><i class="hunger" style="width:${Math.round(Math.max(0, Math.min(1, r.hunger)) * 100)}%"></i></i></div>`).join('');
+}
+/** Corals & inverts: how each coral is doing (core CoralHealth) and the one-tap care button (core CoralCare). */
+function refreshCorals() {
+  const c = JSON.parse(SB.corals() || '{}');
+  ui.coralCare = c;
+  const list = c.corals || [];
+  const pale = list.filter((k) => k.pale).length;
+  const sick = list.filter((k) => !k.pale && k.health < 0.7).length;
+  const note = !list.length ? 'No corals yet' : pale ? `${pale} turning pale` : sick ? `${sick} not happy` : 'All doing well';
+  $('coralLive').innerHTML = `<h4>Corals &amp; inverts <span class="note ${pale ? 'danger' : sick ? 'caution' : 'good'}">${note}</span></h4>`;
+  const b = $('reefCare');
+  b.querySelector('.lbl').textContent = c.words ? 'Give corals and inverts what they need' : 'Corals and inverts have all they need';
+  b.classList.toggle('on', !!c.words); b.classList.toggle('lock', !c.words);
+  $('coralRows').innerHTML = list.map((k) => `<div class="stat ${k.health < 0.7 ? 'hungry' : ''}"><span>${esc(k.name)}${k.need ? ` <small class="muted">${esc(k.need)}</small>` : ''}</span>
+    <i class="meter"><i class="${k.health >= 0.7 ? 'good' : k.health >= 0.4 ? 'caution' : 'danger'}" style="width:${Math.round(Math.max(0, Math.min(1, k.health)) * 100)}%"></i></i></div>`).join('');
 }
 function fixList() {
   const f = JSON.parse(SB.fixes());
@@ -570,6 +591,16 @@ $('card').addEventListener('click', (e) => {
     SB.act('feedHungry', null, 0); cue('PELLET');
     say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
     closeCard(); return;
+  }
+  if ('reefcare' in d) {
+    sbOnly(() => {
+      const c = ui.coralCare || {};
+      if (!c.words) { say('The corals and inverts have all they need right now.'); cue('TICK'); return; }
+      SB.act('reefCare', null, 0); cue('PELLET');
+      say(`Coral care! In goes ${c.words}.`);
+      closeCard();
+    });
+    return;
   }
   if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
   if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }

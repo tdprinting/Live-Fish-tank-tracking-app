@@ -137,7 +137,7 @@ object CoralHealth {
      * A new colony from [c] when its spreading roll comes up this step, or null. [own] is how many colonies of the
      * species the tank already has. The parent gives up a little of its size (the piece that left).
      */
-    fun maybeSpread(c: Coral, v: Double, w: WaterState, rock: RockData, rng: Rng, dtMin: Double, own: Int, taken: List<Vec3>, id: () -> String): Coral? {
+    fun maybeSpread(c: Coral, v: Double, rock: RockData, rng: Rng, dtMin: Double, own: Int, others: List<Coral>, id: () -> String): Coral? {
         val p = profile(c.species)
         if (p.spreadEveryDays <= 0.0 || own >= MAX_OWN_COLONIES || v < 0.4 || c.tissue < 0.8 || c.bleach > 0.3) return null
         if (c.size < p.spreadMinSize) return null
@@ -148,7 +148,7 @@ object CoralHealth {
             CoralSpread.BUD -> 1.0 to 6.0
             else -> return null
         }
-        val baby = place(c, rock, rng, id(), near, far, taken) ?: return null
+        val baby = place(c, rock, rng, id(), near, far, others) ?: return null
         val g = CoralGrowth.growth(c.kind)
         when (g.form) {
             CoralGrowth.Form.ENCRUSTING -> {
@@ -166,10 +166,11 @@ object CoralHealth {
 
     /**
      * A spot on top of the rock beside [c] (or null): within [near]..[far] cm of its edge, facing up, not on the sand,
-     * with room above, and not on another colony. The baby keeps the parent's model and home anchor, moved by its
+     * with room above, not on another colony and out of reach of other species' stings and terpenes (a bud that lands
+     * there is killed, so the colonies that last are the ones in the clear). The baby keeps the parent's model and home anchor, moved by its
      * offset (as a copy from Add life), so it draws and saves like any other colony.
      */
-    fun place(c: Coral, rock: RockData, rng: Rng, id: String, near: Double, far: Double, taken: List<Vec3>): Coral? {
+    fun place(c: Coral, rock: RockData, rng: Rng, id: String, near: Double, far: Double, others: List<Coral>): Coral? {
         val r0 = CoralGrowth.extent(c)
         repeat(6) {
             val ang = rng.nextDouble() * 2 * PI
@@ -177,11 +178,23 @@ object CoralHealth {
             val spot = Stocking.surfaceSpot(rock, c.pos.x + cos(ang) * r, c.pos.z + sin(ang) * r) ?: return@repeat
             val (p, n) = spot
             if (n.y < 0.5 || p.y < rock.sandTopCm + 0.5 || p.y > rock.waterLevelCm - 8) return@repeat
-            if (taken.any { it.distanceTo(p) < 2.5 }) return@repeat
+            if (others.any { o -> o.tissue > DEAD_TISSUE && o.pos.distanceTo(p) < CoralGrowth.extent(o) + clearance(c, o) }) return@repeat
             val home = c.restPos - c.offset
             return Coral(id, c.species, budName(c.nickname), c.anchor, p, Vec3.Y, rng.nextDouble() * 6.28, offset = p - home)
         }
         return null
+    }
+
+    /** Gap a bud of [c] needs from [o]: room to grow from its own kind, the reach of either one's chemical weapons from others. */
+    private fun clearance(c: Coral, o: Coral): Double {
+        if (o.species.id == c.species.id) return 1.0
+        fun reach(k: CoralKind) = when (k) {
+            CoralKind.LEATHER -> CoralGrowth.LEATHER_RANGE_CM
+            CoralKind.KENYA -> CoralGrowth.KENYA_RANGE_CM
+            CoralKind.ZOA, CoralKind.AIPTASIA -> CoralGrowth.STING_RANGE_CM
+            else -> 1.0
+        }
+        return maxOf(reach(c.kind), reach(o.kind), 2.0) + 1.0
     }
 
     private fun budName(parent: String): String {
@@ -226,6 +239,14 @@ object CoralHealth {
             2 -> "${d[0]} and ${d[1]}"
             else -> d.dropLast(1).joinToString(", ") + " and " + d.last()
         }
+    }
+
+    /** One coral on the Tank Health card: its name, health 0..1, whether it is turning pale, and its main trouble. */
+    data class Row(val name: String, val health: Double, val pale: Boolean, val need: CoralNeed?)
+
+    /** Tank Health rows for the living corals in a snapshot (aiptasia are pests, not listed). */
+    fun rows(corals: List<CoralPose>): List<Row> = corals.filter { it.tissue > DEAD_TISSUE && CoralKind.resolve(it.speciesId) != CoralKind.AIPTASIA }.map {
+        Row(it.name.ifBlank { it.speciesId }, health(it), it.bleach > 0.3f, if (it.need >= 0) CoralNeed.entries[it.need] else null)
     }
 
     /** The commonest need among struggling colonies, for a one-line hint ("Corals: 2 pale, it is too dark"). */

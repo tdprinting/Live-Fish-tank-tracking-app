@@ -170,6 +170,7 @@ import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.CoralKind
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.DryRockShape
 import com.reeflive.app.ui.live.AquascapeBar
@@ -258,6 +259,11 @@ fun LiveTankScreen(
     // the follow camera's on-screen buttons (zoom, swing round): FollowOverlay presses, the renderer drains
     val followCam = remember { FollowCamControl() }
     val banner = remember { ActionBannerState() }
+    // corals that bleached, died or budded while the app was closed (My tank catch-up)
+    val coralNews by vm.coralNews.collectAsStateWithLifecycle()
+    LaunchedEffect(coralNews) {
+        if (coralNews.isNotEmpty()) { banner.show(Feedback("Your corals while you were away", coralNews.joinToString(" ")), Candy.green); vm.clearCoralNews() }
+    }
     val hermie = remember { HermieState() }
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
     val audio = remember { TankAudio(context.applicationContext) }
@@ -841,6 +847,14 @@ fun LiveTankScreen(
             banner.show(Feedback("Dinner time!", "Each hungry animal gets its favourite food, dropped right above it"), Candy.orange)
             cue(LiveReactions.feed(FoodKind.PELLET)) { vm.feedHungry() }
         },
+        coralRows = if (open == LiveCategory.FIX) CoralHealth.rows(hud.corals) else emptyList(),
+        coralCare = if (open == LiveCategory.FIX && myTank) com.reeflive.core.sim.CoralCare.plan(hud) else null,
+        onReefCare = if (myTank) ({
+            tick()
+            val plan = vm.reefCarePlan()
+            banner.show(Feedback("Coral care!", "In goes " + plan.words), Candy.green)
+            cue(LiveReactions.feed(FoodKind.CORAL_FOOD)) { vm.reefCare() }
+        }) else null,
         onFix = { f -> tick(); playFix(f) },
         onFixAll = {
             tick()

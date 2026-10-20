@@ -106,12 +106,19 @@ object ReefMyTank {
 
     internal fun leave() { save(); pausedAt = now() }
 
+    /** What happened to the corals while the page was away ("" = nothing), read once by the page ([ReefSandbox.coralNews]). */
+    var coralNews = ""
+
     private fun catchUp() {
         val s = sim ?: return
         if (pausedAt < 0) return
         val secs = FastForward.simSeconds((now() - pausedAt).toLong(), 1.0)
         pausedAt = -1.0
-        if (secs >= FastForward.MIN_SIM_SEC) { s.advanceAbstract(secs); s.stepWall(0.0) }
+        if (secs >= FastForward.MIN_SIM_SEC) {
+            val before = com.reeflive.core.sim.CoralHealth.marks(s.corals)
+            s.advanceAbstract(secs); s.stepWall(0.0)
+            com.reeflive.core.sim.CoralHealth.changes(before, s.corals).takeIf { it.isNotEmpty() }?.let { coralNews = it.joinToString(" ") }
+        }
     }
 
     private fun load() {

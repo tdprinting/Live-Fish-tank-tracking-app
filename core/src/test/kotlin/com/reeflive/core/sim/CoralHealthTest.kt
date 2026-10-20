@@ -105,7 +105,7 @@ class CoralHealthTest {
         val rng = Rng(3)
         var baby: Coral? = null
         var days = 0
-        while (baby == null && days < 400) { days++; baby = CoralHealth.maybeSpread(zoa, 1.0, goodWater(), rock, rng, 1440.0, 1, emptyList()) { "zoa~1" } }
+        while (baby == null && days < 400) { days++; baby = CoralHealth.maybeSpread(zoa, 1.0, rock, rng, 1440.0, 1, emptyList()) { "zoa~1" } }
         println("zoa budded after $days days at full vigour")
         val b = baby!!
         assertTrue("on the rock next to it: ${b.pos.distanceTo(zoa.pos)}", b.pos.distanceTo(zoa.pos) in 3.0..15.0)
@@ -113,7 +113,7 @@ class CoralHealthTest {
         assertEquals("Zoas bud", b.nickname)
         assertTrue(b.size < 1.0 && b.isCopy())
         val sick = Coral("z2", zoa.species, "Z", "", p, Vec3.Y, 0.0).also { it.size = 1.6; it.bleach = 0.6 }
-        repeat(400) { assertEquals(null, CoralHealth.maybeSpread(sick, 1.0, goodWater(), rock, rng, 1440.0, 1, emptyList()) { "x" }) }
+        repeat(400) { assertEquals(null, CoralHealth.maybeSpread(sick, 1.0, rock, rng, 1440.0, 1, emptyList()) { "x" }) }
     }
 
     private fun Coral.isCopy() = toPose().isCopy

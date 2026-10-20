@@ -122,6 +122,20 @@ class SimulationHolder(
     /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
     val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
 
+    /** What happened to My tank's corals while the app was away (core CoralHealth.changes); the screen shows and clears it. */
+    private val _coralNews = MutableStateFlow<List<String>>(emptyList())
+    val coralNews: StateFlow<List<String>> = _coralNews.asStateFlow()
+    fun clearCoralNews() { _coralNews.value = emptyList() }
+
+    /** [advance] on [sim], noting what changed for its corals when it is My tank. */
+    private inline fun withCoralNews(sim: Simulation, advance: () -> Unit) {
+        if (sim !== customSim) { advance(); return }
+        val before = com.reeflive.core.sim.CoralHealth.marks(sim.corals)
+        advance()
+        val lines = com.reeflive.core.sim.CoralHealth.changes(before, sim.corals)
+        if (lines.isNotEmpty()) _coralNews.value = lines
+    }
+
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
@@ -403,7 +417,7 @@ class SimulationHolder(
         customSim = sim
         customBase = CustomTank.baseAfterRestore(save, species!!)
         // the time away, at 1x: the tank lived on while the app was closed
-        sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0)
+        withCoralNews(sim) { sim.advanceAbstract(CustomTank.catchUpSeconds(save.savedAtMs, nowMs()).takeIf { it >= FastForward.MIN_SIM_SEC } ?: 0.0) }
         sim.stepWall(0.0)
         lastWallMs[sim] = nowMs()
         _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
@@ -447,7 +461,7 @@ class SimulationHolder(
         val last = lastWallMs[sim] ?: now
         lastWallMs[sim] = now
         val secs = FastForward.simSeconds(now - last, speed = 1.0)
-        if (secs >= FastForward.MIN_SIM_SEC) sim.advanceAbstract(secs)
+        if (secs >= FastForward.MIN_SIM_SEC) withCoralNews(sim) { sim.advanceAbstract(secs) }
         else sim.stepWall(0.0)
         publish(sim)
     }

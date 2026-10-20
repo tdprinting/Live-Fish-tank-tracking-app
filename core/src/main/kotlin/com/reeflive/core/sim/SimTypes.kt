@@ -408,6 +408,8 @@ data class CoralPose(
     val drawScale: Float = 1f,
     /** Linear RGB its tissue fades to as it bleaches ([CoralProfile.tint]); null = white. Shared, never copied. */
     val bleachTint: FloatArray? = null,
+    /** The colony's name (the keeper's, else its species'). */
+    val name: String = "",
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }
