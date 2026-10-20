@@ -156,6 +156,8 @@ data class SandboxActions(
     /** "Pests & treatments" tab. */
     val onAddAiptasia: () -> Unit = {},
     val onRemoveAiptasia: () -> Unit = {},
+    /** A pest product from the shelf: the tool goes to the biggest open aiptasia and doses it ([AiptasiaTreatment]). */
+    val onTreatAiptasia: (com.reeflive.core.sim.AiptasiaTreatment) -> Unit = {},
     val onAddPestControl: (PestController) -> Unit = {},
     val onStartTreatment: (TreatmentKind) -> Unit = {},
     val onStopTreatment: (TreatmentKind) -> Unit = {},

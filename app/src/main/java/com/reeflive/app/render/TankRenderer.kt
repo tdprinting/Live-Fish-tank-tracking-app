@@ -100,6 +100,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var snow: MarineSnow? = null
     /** Bristleworms, amphipods, mysids and the other visible microfauna (core CritterField). */
     private val micro = MicroCritterVisuals()
+    private val aiptasia = AiptasiaDraw()
     /** Clownfish eggs, larvae and fry (core BroodField) and the nursery tank they are raised in. */
     private val brood = BroodVisuals()
     private val nursery = NurseryScene()
@@ -293,6 +294,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         updateFlipperTilt(dt)
         nurseryRequest?.let { camera.lookAtNursery(it); nurseryRequest = null }
         brood.update(cur, liveSdf, dt, quality)
+        aiptasia.update(cur, dt * (cur?.speed?.toFloat() ?: 1f).coerceIn(1f, 4f))
         micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
             store.model(k.model)?.parts?.sumOf { it.mesh.triangles } ?: 0
         }
@@ -332,6 +334,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
         val careModel = store.model(CareLayout.MODEL)
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
+        val pestModel = if (careScene.busy) store.model(PestScene.MODEL) else null
+        if (pestModel != null) white?.let { drawCalls += careScene.drawPest(pestModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
         val nurseryLit = light.intensity > 0.03f
@@ -341,6 +345,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         updateWake(rigs, dt)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = false)
         for ((m, pose) in corals) drawCoral(m, pose, progs, cur, polyps = true)
+        if (aiptasia.polyps.isNotEmpty()) store.model(AiptasiaDraw.MODEL)?.let { drawAiptasia(it, progs) }
         // fish bodies, inverts
         for (r in rigs) drawOrganism(r, progs, pass = 0)
         for (r in micro.visible) drawOrganism(r, progs, pass = 0)
@@ -392,6 +397,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
         // care props: the clear skimmer cup, the jug and hose, water in the bucket, pour streams
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
+        if (pestModel != null) white?.let { drawCalls += careScene.drawPest(pestModel, progs.generic, it, blended = true) }
         // the fish net's mesh bag, see-through over the body it carries
         if (netScene.visible) drawCalls += netScene.drawMesh(progs.generic)
         if (brood.nurseryCount > 0) white?.let { drawCalls += nursery.drawClear(progs.generic, it, cur?.brood?.rotifers ?: 0f, nurseryLit, brood.field) }
@@ -844,6 +850,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         val used = HashSet<String>()
         for (c in s.corals) {
+            // pest anemones are drawn one polyp each by AiptasiaDraw
+            if (aiptasia.isAiptasia(c.speciesId)) continue
             val paths = registry.coralModels(c.speciesId)
             if (paths.isNotEmpty() && paths.none { store.exists(it) }) {
                 // own GLB not shipped yet (hairy mushroom): borrow a stand-in model, moved to this colony's spot
@@ -948,6 +956,45 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uSwayMode", if (tree) 1f else 0f)
         if (tree) setWake(p, b, ox, oy, oz) else p.set4f("uWake", 0f, 0f, 0f, 0f)
         p.set3f("uSssColor", 0.9f, 0.55f, 0.45f)
+    }
+
+    private val aiptasiaTmp = FloatArray(16)
+
+    /** Every aiptasia polyp ([AiptasiaDraw]) with the soft-coral program: its own matrix, sway and paleness. */
+    private fun drawAiptasia(m: GpuModel, progs: Programs) {
+        val w = white ?: return
+        val part = m.parts.firstOrNull() ?: return
+        val p = progs.softCoral
+        p.use()
+        part.material.apply(p, w, alphaTestOverride = null)
+        p.set1f("uExtension", 1f)
+        p.set1f("uSwayMode", 0f)
+        p.set4f("uWake", 0f, 0f, 0f, 0f)
+        p.set1f("uBrown", 0f)
+        p.set3f("uSssColor", 0.95f, 0.62f, 0.4f)
+        val ex = camera.eye[0]; val ey = camera.eye[1]; val ez = camera.eye[2]
+        val v = flowScratch
+        for (a in aiptasia.polyps) {
+            val dx = a.x - ex; val dy = a.y - ey; val dz = a.z - ez
+            val mm = aiptasia.matrix(a)
+            // a polyp under a few pixels is left out (a big outbreak is mostly small lacerates far off)
+            if (a.height * a.height < AIPTASIA_MIN_ANGLE * AIPTASIA_MIN_ANGLE * (dx * dx + dy * dy + dz * dz)) continue
+            val world = if (part.identityWorld) mm else M.mul(mm, part.node.world, aiptasiaTmp)
+            val moved = rockDraw.isMoved(a.rockPiece)
+            p.setMat4("uModel", if (moved) rockDraw.apply(a.rockPiece, world, rockCoral) else world)
+            val bx = if (moved) rockCoral[12] else mm[12]; val by = if (moved) rockCoral[13] else mm[13]; val bz = if (moved) rockCoral[14] else mm[14]
+            p.set3f("uBase", bx, by, bz)
+            p.set1f("uHeight", a.height.coerceAtLeast(0.5f))
+            p.set1f("uPhase", a.phase)
+            p.set1f("uBleach", a.bleach)
+            ParticleField.flowAt(interp.current?.flowGrid, bx, by + a.height, bz, 0f, v)
+            val l = sqrt(v[0] * v[0] + v[2] * v[2])
+            if (l > 1e-3f) p.set3f("uSwayDir", v[0] / l, 0f, v[2] / l) else p.set3f("uSwayDir", 0.95f, 0f, 0.3f)
+            val amp = 0.12f * a.height * (a.flow / 12f).coerceIn(0.3f, 2f)
+            p.set1f("uSwayAmp", amp)
+            p.set1f("uBodySwayAmp", amp)
+            part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
+        }
     }
 
     /** Head position and speed (cm/s) of every organism this frame, for the tree-coral fish ripple. */
@@ -1696,6 +1743,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val SURFACE_BAND_CM = 2.5f
         /** OrganismPose.motionMode of the bubble-tip anemone (polyp.vert anemone mode). */
         const val ANEMONE_MODE = 6
+        /** Aiptasia polyps smaller than this (visible height / distance) are not drawn (~2 px at phone size). */
+        const val AIPTASIA_MIN_ANGLE = 0.004f
         /** Padding (cm) around a coral model's bounds for a tap to count as on the coral. */
         const val CORAL_PAD = 1.0f
         private const val HOLD_NONE = 0

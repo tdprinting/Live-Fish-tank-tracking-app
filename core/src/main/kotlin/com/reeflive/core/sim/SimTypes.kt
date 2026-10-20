@@ -152,8 +152,13 @@ sealed class Command {
     data class Maintain(val task: MaintenanceTask) : Command()
 
     // ---- pests (coverage gap C-4) ----
-    /** Sandbox add-pest: [count] aiptasia on the aiptasia anchors (then as lacerates). */
-    data class AddAiptasia(val count: Int = 1) : Command()
+    /**
+     * Add-pest: [count] aiptasia on the aiptasia anchors (then as lacerates). With [nearCoralId] it is a hitchhiker
+     * that came in on that new frag (My tank stores): one small polyp on the rock beside it.
+     */
+    data class AddAiptasia(val count: Int = 1, val nearCoralId: String? = null) : Command()
+    /** Kill one aiptasia ([polypId], null = the biggest) with a keeper's product; a closed polyp often escapes. */
+    data class TreatAiptasia(val treatment: AiptasiaTreatment, val polypId: String? = null) : Command()
     /** Remove up to [count] aiptasia, biggest first: injected ([chemical]) or scraped; both can leave fragments. */
     data class RemoveAiptasia(val count: Int = 1, val chemical: Boolean = true) : Command()
     /** Add aiptasia controllers (peppermint shrimp, Berghia nudibranchs). */
@@ -273,6 +278,8 @@ sealed class SimEvent {
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
     /** A colony's tissue is gone ([CoralHealth]); [cause] is plain words for its main stress at the end. */
     data class CoralDied(val id: String, val name: String, val cause: String, override val simTimeSec: Double) : SimEvent()
+    /** The keeper dosed aiptasia [polypId] with [treatment]: [killed] false = it snapped shut into the rock in time. */
+    data class AiptasiaTreated(val polypId: String, val treatment: AiptasiaTreatment, val killed: Boolean, override val simTimeSec: Double) : SimEvent()
     /** Breeding ([Brood], research 28): a clutch laid, larvae hatched (and whether the keeper is catching them), the nursery's larvae became fry, a baby moved to the display. */
     data class EggsLaid(val spec: String, val eggs: Int, override val simTimeSec: Double) : SimEvent()
     data class Hatched(val spec: String, val larvae: Int, val raising: Boolean, override val simTimeSec: Double) : SimEvent()
@@ -478,6 +485,9 @@ data class SimSnapshot(
      * current output (0 = off, 1 = as installed, up to 2 with the sandbox flow slider) and its exit speed (cm/s).
      */
     val pumps: FloatArray = FloatArray(0),
+    /** Berghia nudibranchs in the tank (fractional population) and the aiptasia polyp they are eating now. */
+    val berghia: Float = 0f,
+    val berghiaPrey: String? = null,
     /** The nori sheet on its clip as a cloth (node positions and material per cell), null when there is none. */
     val nori: NoriPose? = null,
     /** Live touch puffs in the water, [com.reeflive.core.geom.FlowGust.STRIDE] floats each (coral sway, burst specks). */
