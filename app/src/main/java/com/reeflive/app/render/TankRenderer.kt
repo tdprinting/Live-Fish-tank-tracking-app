@@ -80,6 +80,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private var programs: Programs? = null
     private var frame: FrameUniforms? = null
     private var post: PostFx? = null
+    /** The surface itself has no MSAA (the web canvas): anti-aliasing comes from [PostFx]'s MSAA target instead, so
+     *  the post pass runs whenever the quality asks for MSAA. Set before the GL surface is created. */
+    var msaaInPost = false
+    private fun wantsPost() = quality.bloom || (msaaInPost && quality.msaa > 0)
     private var particlesGl: ParticleRenderer? = null
     // dynamic sand bed + suspended clouds (SIMULATION §16, SandVisuals.kt)
     private var sandFx: SandFx? = null
@@ -197,7 +201,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val (v, i) = Placeholder.spindle()
         placeholder = Mesh.create(v, i)
         postFailed = false
-        post = if (quality.bloom) createPost() else null
+        post = if (wantsPost()) createPost() else null
         snow = MarineSnow()
         // kick off the static scene and shared textures
         SCENE_MODELS.forEach { store.model(it) }
@@ -297,7 +301,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         particles.step(dt, time, cur, viewProjM = camera.viewProj)
 
         // 4. draw
-        val usePost = post?.ok == true && (quality.bloom || lens.amount > 0f)
+        val usePost = post?.ok == true && (wantsPost() || lens.amount > 0f)
         if (usePost) post!!.begin() else { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0); Gl.check("bind default"); GLES30.glViewport(0, 0, width, height); Gl.check("viewport") }
         GLES30.glClearColor(0.012f, 0.016f, 0.024f, 1f); Gl.check("glClearColor")
         GLES30.glDepthMask(true) // the post path leaves the depth mask off, which would make glClear skip depth
