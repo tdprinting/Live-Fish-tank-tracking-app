@@ -1115,8 +1115,8 @@ class MicrofaunaModel(private val config: TankConfig) {
         const val WORM_BOOM_FROM = 4.0
         const val WORM_BOOM_TO = 12.0
         const val WORM_BOOM_K = 3.0
-        /** Detritus (mg TAN-eq) one adult bristleworm clears a day at full food (5 % of 200 mg wet food ≈ 1 mg TAN-eq). */
-        const val WORM_SCAV_TAN_MG = 1.0
+        /** Detritus (mg TAN-eq) one adult bristleworm clears a day at full food (est.: a lean tank of ~100 worms clears an eighth of its detritus a day). */
+        const val WORM_SCAV_TAN_MG = 0.05
         const val TOXIN_H = 48.0
         /**
          * Copper leaching back out of rock after a treatment keeps r × 0.5 (§4 says 30 d; held for 60 d after the copper

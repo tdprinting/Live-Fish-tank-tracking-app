@@ -467,8 +467,9 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             addDetritusTanGrams(micro.deadWetG * MICRO_TAN_PER_WET_G)
             micro.deadWetG = 0.0
         }
-        // the bristleworms' cleanup (research 42): detritus they eat is half mineralised to ammonia at once, half becomes
-        // worm (it comes back as detritus when they die or leaves the water when something eats them)
+        // the bristleworms' cleanup (research 42): detritus they eat becomes worm (it comes back as detritus when they die,
+        // through the model's dead mass, or leaves the water when something eats them); their excretion is part of the
+        // bacterial mineralisation the detritus would have had anyway, so none is added here as fresh ammonia
         if (micro.scavengedTanG > 0) {
             val availG = s.detritus * s.volumeL / 1000 * WORM_MAX_SHARE
             val g = min(micro.scavengedTanG, availG)
@@ -476,8 +477,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             if (g > 0) {
                 val ppm = g * 1000 / s.volumeL
                 s.detritus -= ppm
-                s.nh3Total += 0.5 * ppm
-                nExportMg += 0.5 * ppm * N_TAN * s.volumeL
+                nExportMg += ppm * N_TAN * s.volumeL
             }
         }
     }
