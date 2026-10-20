@@ -124,6 +124,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private val strokeFrom = floatArrayOf(FLIPPER_REST_X, FLIPPER_REST_Y)
     private val pointer = FloatArray(2)
     private val flipperModel = FloatArray(16)
+    /** In-plane lean of the Flipper (rad, + = counter-clockwise seen from the front): it trails the motion, then wobbles upright. */
+    private var flipperTilt = 0f
+    private var flipperTiltVel = 0f
+    private var flipperPrevX = FLIPPER_REST_X
     private val shift = M.identity()
     private var store = AssetStore(assets, initialQuality)
     private val registry = ModelRegistry()
@@ -274,6 +278,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         handleHeld(now, cur)
         updateLens(dt)
         if (cleaning) dragFlipper(dt)
+        updateFlipperTilt(dt)
         nurseryRequest?.let { camera.lookAtNursery(it); nurseryRequest = null }
         brood.update(cur, liveSdf, dt, quality)
         micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
@@ -546,9 +551,23 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         main.post { l?.onScrape(s) }
     }
 
-    /** The Flipper node's model matrix: its modelled pose shifted to the current pad position on the glass. */
+    /** A damped spring leans the pad against its sideways speed, so it swings behind the finger and settles with a small wobble. */
+    private fun updateFlipperTilt(dt: Float) {
+        if (dt <= 0f) return
+        val h = dt.coerceAtMost(0.05f)
+        val vx = (flipper[0] - flipperPrevX) / h
+        flipperPrevX = flipper[0]
+        val target = (-vx * FLIPPER_LEAN_PER_CMS).coerceIn(-FLIPPER_MAX_LEAN, FLIPPER_MAX_LEAN)
+        flipperTiltVel += (FLIPPER_TILT_K * (target - flipperTilt) - FLIPPER_TILT_DAMP * flipperTiltVel) * h
+        flipperTilt += flipperTiltVel * h
+    }
+
+    /** The Flipper node's model matrix: its modelled pose turned by the lean about the pad centre, then shifted to the current pad position. */
     private fun flipperMatrix(world: FloatArray): FloatArray {
-        shift[12] = flipper[0] - FLIPPER_REST_X; shift[13] = flipper[1] - FLIPPER_REST_Y
+        val c = kotlin.math.cos(flipperTilt); val sn = kotlin.math.sin(flipperTilt)
+        shift[0] = c; shift[1] = sn; shift[4] = -sn; shift[5] = c
+        shift[12] = flipper[0] - (c * FLIPPER_REST_X - sn * FLIPPER_REST_Y)
+        shift[13] = flipper[1] - (sn * FLIPPER_REST_X + c * FLIPPER_REST_Y)
         return M.mul(shift, world, flipperModel)
     }
 
@@ -1499,6 +1518,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val FLIPPER_HALF_H = GlassStroke.FLIPPER_H / 2
         /** Glide rate (1/s) of the pad toward the finger. */
         const val FLIPPER_FOLLOW = 18f
+        /** Lean per cm/s of sideways speed, its cap (rad, about 14 degrees) and the lean spring's stiffness and damping. */
+        const val FLIPPER_LEAN_PER_CMS = 0.012f
+        const val FLIPPER_MAX_LEAN = 0.25f
+        const val FLIPPER_TILT_K = 60f
+        const val FLIPPER_TILT_DAMP = 9f
         /** Texture unit of `uGlassMask` ([ShaderProgram.SAMPLER_UNITS]) and the core GlassMask grid. */
         const val GLASS_MASK_UNIT = 11
         const val GLASS_MASK_W = com.reeflive.core.sim.GlassMask.W
