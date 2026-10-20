@@ -17,6 +17,8 @@ import com.reeflive.core.custom.AwayCatchUp
 import com.reeflive.core.custom.AwaySummary
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
+import com.reeflive.core.custom.economy.Offers
+import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
 import com.reeflive.core.custom.economy.StoreVisit
 import com.reeflive.core.custom.economy.EconomyView
@@ -76,6 +78,8 @@ data class StoreVisitUi(
     val at: Int,
     val coins: Int,
     val speciesOf: Map<String, String>,
+    /** The store's offer for each of the keeper's animals and corals (the Sell sheet). */
+    val offers: List<SellOffer> = emptyList(),
 )
 
 /** The street of stores for the Add life card: each store and whether it is open to this keeper. */
@@ -313,7 +317,27 @@ class SimulationHolder(
         val day = today()
         val d = display
         val speciesOf = d?.organisms?.associate { it.id to it.species.id }.orEmpty()
-        _visit.value = StoreVisitUi(store, visitTanks.map { it to StoreVisit.cards(e, store, it, mine, day) }, at, e.state.coins, speciesOf)
+        _visit.value = StoreVisitUi(
+            store, visitTanks.map { it to StoreVisit.cards(e, store, it, mine, day) }, at, e.state.coins, speciesOf, Offers.offers(store, mine, day),
+        )
+    }
+
+    /** Sells the keeper's animal or coral [id] to the store being visited (docs/ECONOMY.md §6). */
+    fun sell(id: String) {
+        scope.launch {
+            val store = visiting ?: return@launch
+            val e = economyLive ?: return@launch
+            val mine = customSim ?: return@launch
+            val o = Offers.offers(store, mine, today()).firstOrNull { it.id == id } ?: return@launch
+            if (!e.sell(store, o, today())) return@launch
+            mine.enqueue(if (o.coral) Command.RemoveCoral(id) else Command.RemoveOrganism(id))
+            // out of the tank now, though the tank itself waits until the keeper is home
+            mine.stepWall(0.0)
+            for (g in e.takeGains()) _gains.tryEmit(g)
+            _economy.value = e.view(mine)
+            saveCustom()
+            publishVisit()
+        }
     }
 
     /** Walks out (the bag goes back on the shelves); My tank catches up on the minutes spent shopping. */

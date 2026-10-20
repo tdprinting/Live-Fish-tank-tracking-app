@@ -1221,6 +1221,7 @@ fun LiveTankScreen(
                 onTank = { i -> tick(); storePick = null; vm.showStoreTank(i) },
                 onLeave = { tick(); storePick = null; vm.leaveStore(); if (hermieOn) hermie.say("Back home. Come again soon!", HermieMood.HAPPY) },
                 onCheckout = { bag, done -> vm.checkout(bag) { r -> scope.launch { done(r) } } },
+                onSell = { o -> vm.sell(o.id); if (hermieOn) hermie.say("Sold ${o.name} for ${o.amount} sand dollars! The store will take good care of it.", HermieMood.HAPPY) },
                 say = { if (hermieOn) hermie.say(it, HermieMood.SURPRISED) },
                 tick = { tick() },
                 topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),

@@ -220,6 +220,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun enterStore(store: com.reeflive.core.custom.economy.FishStore) = holder.enterStore(store)
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
+    fun sell(id: String) = holder.sell(id)
     fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
     /** "While you were away" in My tank: the catch-up's progress, then what happened. */
     val away: StateFlow<com.reeflive.app.live.AwayUi?> = holder.awayState
