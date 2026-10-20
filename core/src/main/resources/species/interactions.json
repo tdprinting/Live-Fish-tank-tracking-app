@@ -895,5 +895,167 @@
   "b": "pseudochromis_indigo",
   "risk": "L",
   "note": "Different homes; little conflict"
+ },
+ {
+  "a": "amphiprion_ocellaris",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "ecsenius_bicolor",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "May chase the tang off its grazing patch near its hole",
+  "threat": "ecsenius_bicolor"
+ },
+ {
+  "a": "sphaeramia_nematoptera",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "labroides_dimidiatus",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Both use holes; usually ignore each other"
+ },
+ {
+  "a": "cirrhitichthys_falco",
+  "b": "ecsenius_bicolor",
+  "risk": "M",
+  "note": "Perch competition; hawkfish may chase blennies",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "ecsenius_bicolor",
+  "risk": "H",
+  "note": "Blennies fight over rock territory"
+ },
+ {
+  "a": "ecsenius_stigmatura",
+  "b": "ecsenius_bicolor",
+  "risk": "H",
+  "note": "Ecsenius blennies squabble over holes and perches"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "ecsenius_bicolor",
+  "risk": "M",
+  "note": "Dottyback may chase blennies from its ledge",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "ecsenius_bicolor",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "ecsenius_bicolor",
+  "b": "zoanthus_sp",
+  "risk": "L",
+  "note": "An underfed bicolor may nip polyps",
+  "threat": "ecsenius_bicolor"
+ },
+ {
+  "a": "ecsenius_bicolor",
+  "b": "ecsenius_bicolor",
+  "risk": "H",
+  "note": "One bicolor blenny per tank unless a bonded pair"
+ },
+ {
+  "a": "amphiprion_ocellaris",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "paracanthurus_hepatus",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "sphaeramia_nematoptera",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "labroides_dimidiatus",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "pholidichthys_leucotaenia",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Both use holes; usually ignore each other"
+ },
+ {
+  "a": "cirrhitichthys_falco",
+  "b": "ecsenius_midas",
+  "risk": "M",
+  "note": "Perch competition; hawkfish may chase blennies",
+  "threat": "cirrhitichthys_falco"
+ },
+ {
+  "a": "salarias_fasciatus",
+  "b": "ecsenius_midas",
+  "risk": "H",
+  "note": "Blennies fight over rock territory"
+ },
+ {
+  "a": "ecsenius_stigmatura",
+  "b": "ecsenius_midas",
+  "risk": "H",
+  "note": "Ecsenius blennies squabble over holes and perches"
+ },
+ {
+  "a": "pseudochromis_indigo",
+  "b": "ecsenius_midas",
+  "risk": "M",
+  "note": "Dottyback may chase blennies from its ledge",
+  "threat": "pseudochromis_indigo"
+ },
+ {
+  "a": "valenciennea_puellaris",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "macropharyngodon_bipartitus",
+  "b": "ecsenius_midas",
+  "risk": "L",
+  "note": "Little overlap"
+ },
+ {
+  "a": "ecsenius_midas",
+  "b": "ecsenius_midas",
+  "risk": "H",
+  "note": "One midas blenny per tank unless a bonded pair"
+ },
+ {
+  "a": "ecsenius_bicolor",
+  "b": "ecsenius_midas",
+  "risk": "H",
+  "note": "Ecsenius blennies squabble over holes and perches"
  }
 ]

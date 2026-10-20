@@ -606,6 +606,87 @@ def fins_tailspot(cv):
     FL.paint_fin_slot(cv, 5, base="#C8B88A", alpha=0.45, rays=3, ray_color="#8A7A5A")
 
 
+def paint_bicolor(cv, fl):
+    """Ecsenius bicolor, bicolour phase (research 50 §1b; FishBase: "black anteriorly, yellow posteriorly"; hobby
+    sources: blue-black to dark brown front, orange-yellow rear). The split falls a little behind the dorsal-fin
+    origin and runs obliquely back toward the belly [DESIGN ESTIMATE from photos]; a pink-orange curved mark behind
+    the eye on every colour form [OBSERVATION OzAnimals]; scaleless skin, slightly paler throat."""
+    u, v = cv.u, cv.v
+    front = P.Canvas(cv.w, cv.h)
+    front.vgrad("#2A2238", "#1A1626", 0.0, 1.0)
+    rear = P.Canvas(cv.w, cv.h)
+    rear.vgrad("#F2A21E", "#E68A12", 0.0, 1.0)
+    # oblique split: ~0.52 L at the back, ~0.42 L on the belly, with a soft orange-brown seam
+    split = 0.42 + 0.10 * v
+    t = S(split - 0.03, split + 0.05, u)[..., None]
+    cv.rgb = front.rgb * (1 - t) + rear.rgb * t
+    seam = P.band(u - split, -0.03, 0.05, 0.02)
+    cv.blend(seam, "#7A3A20", 0.35)
+    # a faint blue sheen over the dark forebody (males brighter and bluer; research 50 §1b)
+    n1 = P.fbm(cv.h, cv.w, 30, 3, 91)
+    cv.blend((1 - S(split - 0.12, split, u)) * S(0.35, 0.9, v) * S(0.45, 0.7, n1), "#34407A", 0.35)
+    cv.blend((1 - S(0.08, 0.22, u)) * (1 - S(0.15, 0.4, v)), "#4A4058", 0.45)   # paler throat
+    mucus(cv, 0.05, 92)
+    scales_overlay(cv, 9, 0.025)   # scaleless; a faint skin texture only
+    lv = fl.lv
+    # the curved pink-orange mark from behind the eye down toward the opercle
+    pts = [(0.135, 0.74), (0.15, 0.68), (0.155, 0.6), (0.15, 0.53)]
+    cv.blend(fl.stroke(pts, [0.004, 0.005, 0.005, 0.003], soft=0.003), "#E86A7A", 0.85)
+    # the yellow rear warms to orange at the peduncle
+    cv.blend(S(0.8, 0.98, u), "#F08A10", 0.4)
+    dark_mouth(cv, fl, u1=0.02, v0=0.36, v1=0.44, color="#120A12", op=0.6)
+
+
+def fins_bicolor(cv):
+    """Dorsal dark over the forebody, yellow-orange over the rear (the split carries up into the fin); anal the same;
+    caudal and its rays orange-yellow; pectorals clear yellowish; pelvics dark."""
+    def split(Tsplit, front, rear):
+        def fn(T, Sx, rgb):
+            m = S(Tsplit - 0.06, Tsplit + 0.06, T)[..., None]
+            return hex2rgb(front) * (1 - m) + hex2rgb(rear) * m
+        return fn
+    FL.paint_fin_slot(cv, 0, base="#2A2238", alpha=0.6, rays=30, ray_color="#1A1420", margin="#4A5AA8", margin_w=0.06,
+                      base_fn=split(0.42, "#2A2238", "#E8961C"))
+    FL.paint_fin_slot(cv, 2, base="#E8961C", alpha=0.55, rays=20, ray_color="#B86A10",
+                      base_fn=split(0.15, "#3A2A30", "#E8961C"))
+    FL.paint_fin_slot(cv, 3, base="#F0A020", alpha=0.6, rays=13, ray_color="#C07410")
+    FL.paint_fin_slot(cv, 4, base="#E8C060", alpha=0.35, rays=13, ray_color="#B8903A")
+    FL.paint_fin_slot(cv, 5, base="#2A2238", alpha=0.5, rays=3, ray_color="#1A1420")
+
+
+def paint_midas(cv, fl):
+    """Ecsenius midas, the common golden-orange phase (research 50 §2b; FishBase "golden orange, black spot around the
+    anus"; hobby: orange to salmon body with gold and yellow highlights, blue flashes on the fins and round the eye).
+    The orange phase mimics and schools with lyretail anthias (Pseudanthias squamipinnis)."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F4B03A", "#E07A1C", 0.0, 1.0)
+    cv.blend(S(0.55, 1.0, v), "#D86A1A", 0.35)          # deeper orange back
+    cv.blend(1 - S(0.0, 0.35, v), "#F8D070", 0.45)      # gold belly
+    n1 = P.fbm(cv.h, cv.w, 40, 3, 95)
+    cv.blend(S(0.55, 0.7, n1) * P.band(v, 0.25, 0.85, 0.1), "#F8C850", 0.25)   # gold highlights
+    mucus(cv, 0.05, 96)
+    scales_overlay(cv, 9, 0.025)
+    # a soft salmon cast on the head, the snout a touch darker
+    cv.blend(1 - S(0.06, 0.2, u), "#E8844A", 0.35)
+    # blue ring round the eye (u 0.075, v 0.67) drawn on the skin round the eyeball
+    ring = fl.disc(0.075, 0.67, 0.046, 0.004) - fl.disc(0.075, 0.67, 0.04, 0.004)
+    cv.blend(np.clip(ring, 0, 1), "#3A8AE8", 0.45)
+    # black spot round the vent, just ahead of the anal fin origin, low on the flank
+    cv.blend(fl.disc(0.47, 0.06, 0.018, 0.006), "#151010", 0.9)
+    dark_mouth(cv, fl, u1=0.02, v0=0.36, v1=0.44, color="#3A1A10", op=0.55)
+
+
+def fins_midas(cv):
+    """Orange-yellow fins with thin blue margins on the dorsal, anal and the lyre tail's lobes (research 50 §2b)."""
+    FL.paint_fin_slot(cv, 0, base="#F0A030", alpha=0.5, rays=30, ray_color="#C87818", margin="#3A8AE8", margin_w=0.07)
+    FL.paint_fin_slot(cv, 2, base="#F0A030", alpha=0.5, rays=20, ray_color="#C87818", margin="#3A8AE8", margin_w=0.08)
+    FL.paint_fin_slot(cv, 3, base="#F4B040", alpha=0.55, rays=14, ray_color="#C87818",
+                      base_fn=lambda T, Sx, rgb: rgb * (1 - (np.abs(T - 0.5) > 0.42)[..., None] * 0.6)
+                      + hex2rgb("#3A8AE8") * (np.abs(T - 0.5) > 0.42)[..., None] * 0.6)
+    FL.paint_fin_slot(cv, 4, base="#F4C060", alpha=0.35, rays=13, ray_color="#C89838")
+    FL.paint_fin_slot(cv, 5, base="#F0B040", alpha=0.45, rays=3, ray_color="#C87818")
+
+
 def paint_dottyback(cv, fl):
     """Electric Indigo dottyback (P. fridmani x P. sankeyi, ORA: "three colours: light blue to turquoise top, a
     sharply defined black band down the body, fresh white underside, tail filament"; ref_dottyback.jpg): vivid
@@ -1042,6 +1123,40 @@ SPECIES = {
         cirri=dict(u=0.065, h=0.035, blades=2),
         paint=paint_tailspot, fins=fins_tailspot, irid=0.2, rough=0.35, length_cm=5.5,
     ),
+    "bicolor_blenny": dict(
+        # Ecsenius bicolor (research 50 §1a): elongate combtooth blenny, deeper than the tailspot (depth ~0.2 L, a
+        # design estimate between the male 0.19 and female 0.23), blunt rounded head with high eyes, one long
+        # continuous dorsal notched over the spines, rounded caudal, small supraorbital cirri [DESIGN ESTIMATE]
+        profile=[(0, 0.09, 0.075, 0.0), (0.06, 0.18, 0.13, 0.01), (0.16, 0.20, 0.13, 0.0), (0.4, 0.19, 0.12, 0.0),
+                 (0.65, 0.15, 0.09, 0.0), (0.85, 0.095, 0.05, 0.0), (1.0, 0.05, 0.022, 0.0)],
+        body_tris=3000, ring=28, p_exp=0.95, belly_bias=0.1,
+        dorsal=dict(u0=0.13, u1=0.91, h=[(0.13, 0.03), (0.17, 0.10), (0.42, 0.09), (0.47, 0.07), (0.52, 0.10),
+                                         (0.87, 0.09), (0.91, 0.02)], rake=25, n=30),
+        anal=dict(u0=0.5, u1=0.91, h=[(0.5, 0.02), (0.54, 0.075), (0.87, 0.07), (0.91, 0.02)], rake=30, n=18),
+        caudal=dict(length=0.14, span=0.2, shape="rounded"),
+        pectoral=dict(u=0.18, length=0.17, width=0.14, zf=-0.25, shape="round"),
+        pelvic=dict(u=0.12, length=0.065),
+        eye=dict(u=0.07, zf=0.55, r=0.055, iris="#D88A30", ring="#1A1410", outer="#2A2030", ring_w=0.1),
+        cirri=dict(u=0.065, h=0.03, blades=2),
+        paint=paint_bicolor, fins=fins_bicolor, irid=0.2, rough=0.35, length_cm=9.0,
+    ),
+    "midas_blenny": dict(
+        # Ecsenius midas (research 50 §2a): the largest, slimmest Ecsenius (13 cm), built for swimming in the water
+        # column: a long even body (depth ~0.18 L), blunt head, long dorsal, and a lunate caudal whose outer rays
+        # run out into lyre lobes in adults like the anthias it schools with [DESIGN ESTIMATE from photos]
+        profile=[(0, 0.08, 0.07, 0.0), (0.06, 0.16, 0.115, 0.01), (0.16, 0.18, 0.12, 0.0), (0.4, 0.175, 0.11, 0.0),
+                 (0.65, 0.14, 0.085, 0.0), (0.85, 0.09, 0.048, 0.0), (1.0, 0.06, 0.022, 0.0)],
+        body_tris=3000, ring=28, p_exp=0.92, belly_bias=0.08,
+        dorsal=dict(u0=0.13, u1=0.92, h=[(0.13, 0.03), (0.17, 0.10), (0.44, 0.095), (0.49, 0.075), (0.54, 0.105),
+                                         (0.88, 0.10), (0.92, 0.02)], rake=25, n=30),
+        anal=dict(u0=0.5, u1=0.92, h=[(0.5, 0.02), (0.54, 0.08), (0.88, 0.075), (0.92, 0.02)], rake=30, n=18),
+        caudal=dict(length=0.2, span=0.26, shape="lyre"),
+        pectoral=dict(u=0.18, length=0.16, width=0.13, zf=-0.2, shape="round"),
+        pelvic=dict(u=0.12, length=0.06),
+        eye=dict(u=0.075, zf=0.52, r=0.052, iris="#E0A030", ring="#2A6ED8", outer="#E8902A", ring_w=0.12),
+        cirri=dict(u=0.07, h=0.028, blades=2),
+        paint=paint_midas, fins=fins_midas, irid=0.3, rough=0.32, length_cm=11.0,
+    ),
     "dottyback": dict(
         profile=[(0, 0.045, 0.035, -0.012), (0.05, 0.14, 0.08, -0.004), (0.14, 0.22, 0.105, 0.0), (0.3, 0.26, 0.115, 0.0),
                  (0.5, 0.265, 0.11, 0.0), (0.7, 0.22, 0.09, 0.0), (0.86, 0.15, 0.06, 0.0), (1.0, 0.11, 0.04, 0.0)],
@@ -1156,7 +1271,7 @@ SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin
                                         ring_w=0.07, pupil=0.4))
 
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
-            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse",
+            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny",
             "royal_gramma", "banggai", "watchman_goby"]
 
 

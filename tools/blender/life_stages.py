@@ -238,6 +238,22 @@ def tailspot_juvenile(cv, fl):
     _lighten(cv, 0.15)
 
 
+def bicolor_juvenile(cv, fl):
+    """Juvenile bicolor blenny: no source describes it (research 50 §1b, [UNKNOWN]); painted as the bicolour phase,
+    the dark front browner and the rear a paler yellow [L]."""
+    FS.paint_bicolor(cv, fl)
+    dark = _mask_hue(cv, lambda r, g, b: (0.3 - (r + g + b) / 3) * 5)
+    cv.blend(dark, "#4A3A3A", 0.35)
+    _lighten(cv, 0.1, "#FFF0B0")
+
+
+def midas_juvenile(cv, fl):
+    """Juvenile midas blenny: paler lemon-yellow before the adult's deep gold (research 50 §2b gives no juvenile
+    colour) [L]."""
+    FS.paint_midas(cv, fl)
+    _lighten(cv, 0.18, "#FFF2A0")
+
+
 def dottyback_juvenile(cv, fl):
     """Juvenile Electric Indigo: lavender with the black band less sharply defined [L]."""
     FS.paint_dottyback(cv, fl)
@@ -324,6 +340,8 @@ FORMS = {
     "hawkfish": ("cirrhitichthys_falco", {"juvenile": hawk_juvenile, "adult": FS.paint_hawkfish}),
     "lawnmower_blenny": ("salarias_fasciatus", {"juvenile": lawnmower_juvenile, "adult": FS.paint_lawnmower}),
     "tailspot_blenny": ("ecsenius_stigmatura", {"juvenile": tailspot_juvenile, "adult": FS.paint_tailspot}),
+    "bicolor_blenny": ("ecsenius_bicolor", {"juvenile": bicolor_juvenile, "adult": FS.paint_bicolor}),
+    "midas_blenny": ("ecsenius_midas", {"juvenile": midas_juvenile, "adult": FS.paint_midas}),
     "dottyback": ("pseudochromis_indigo", {"juvenile": dottyback_juvenile, "adult": FS.paint_dottyback}),
     "diamond_goby": ("valenciennea_puellaris", {"juvenile": diamond_juvenile, "adult": FS.paint_diamond_goby}),
     "leopard_wrasse": ("macropharyngodon_bipartitus", {"juvenile": leopard_juvenile, "female": FS.paint_leopard_wrasse, "male": leopard_male}),

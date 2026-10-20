@@ -19,8 +19,8 @@ class SpeciesDbTest {
         // leather, elephant ear), the bobtail squid (sandbox only, research cephalopod_squid) and the rainbow bubble tip
         // anemone (research 40).
         // + royal gramma, Banggai cardinal and yellow watchman goby (research 50, popular fish pack batch 1)
-        assertEquals(38, db.size)
-        assertEquals(14, db.all.count { it.kind == SpeciesKind.FISH })
+        assertEquals(40, db.size)
+        assertEquals(16, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(12, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(11, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
@@ -48,7 +48,7 @@ class SpeciesDbTest {
             "algae_tufts", "asterina", "astrea", "banggai", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
             "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "royal_gramma", "sally_lightfoot", "shrimp", "skunk_shrimp",
-            "tailspot_blenny", "tang", "watchman_goby", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone",
+            "tailspot_blenny", "bicolor_blenny", "midas_blenny", "tang", "watchman_goby", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {
             val all = listOfNotNull(s.model) + s.variantModels.values

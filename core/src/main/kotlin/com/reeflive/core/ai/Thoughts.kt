@@ -176,6 +176,9 @@ object Thoughts {
             n == "dash" -> Line("darting out to grab plankton", "dart out for plankton", "Snack!", Driver.HUNGER, 2)
             n == "perchhole" -> Line(if (tgt != null) "sitting by its hole, watching $tgt" else "sitting by its hole, looking around", "sit by its hole", "Just watching.", Driver.HOME)
             n == "prospect" -> Line("exploring its new home", "check out its new home", "Ooh, new place!", Driver.CURIOSITY, 2)
+            n == "midwater" -> Line(if (tgt != null) "swimming up in the open water beside $tgt, picking plankton" else "swimming up in the open water, picking plankton",
+                "swim up for plankton", "So many tiny snacks!", Driver.HUNGER, 2)
+            n == "holefight" -> Line("fighting for a hole to call home", "fight for a hole", "That hole should be mine!", Driver.TERRITORY, 3)
             n == "cavedart" -> Line("darting between little caves", "dart between the caves", "Zip zip!", Driver.ROUTINE)
             n == "territory" -> Line("guarding its territory from ${tgt ?: "intruders"}", "guard its territory", "My cave!", Driver.TERRITORY, 3)
             // ---- engineer goby
