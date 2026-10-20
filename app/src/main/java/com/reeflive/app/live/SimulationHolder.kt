@@ -113,6 +113,10 @@ class SimulationHolder(
     /** Sandbox speed multiplier (1..1000). Reality always runs at 1x. */
     val speed: StateFlow<Double> = _speed.asStateFlow()
 
+    private val _lifePace = MutableStateFlow(com.reeflive.core.sim.LifePace.DEFAULT)
+    /** My tank's growing speed for slow biology (Simulation.lifePace); motion stays at [speed]. */
+    val lifePace: StateFlow<com.reeflive.core.sim.LifePace> = _lifePace.asStateFlow()
+
     private val _peek = MutableStateFlow(LivePeek())
     /** Dashboard peek summary; follows the reality sim (kept up to date even while the tab is away). */
     val peek: StateFlow<LivePeek> = _peek.asStateFlow()
@@ -199,6 +203,11 @@ class SimulationHolder(
         scope.launch { sandbox?.speed = s; if (_mode.value == SimMode.CUSTOM) customSim?.speed = s }
     }
 
+    fun setLifePace(p: com.reeflive.core.sim.LifePace) {
+        _lifePace.value = p
+        scope.launch { customSim?.lifePace = p.pace }
+    }
+
     /** Sets up a new, empty "My tank" in [build] (replacing none: call [startOverCustomTank] first) and shows it. */
     fun startCustomTank(build: TankBuild, name: String = "My tank") {
         scope.launch {
@@ -207,6 +216,7 @@ class SimulationHolder(
             val seed = now xor 0x5EEDL
             val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
             sim.speed = 1.0
+            sim.lifePace = _lifePace.value.pace
             customSim?.let { lastWallMs.remove(it) }
             customSim = sim
             val eco = economyLive ?: Economy()
@@ -428,6 +438,7 @@ class SimulationHolder(
         val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull()
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         customSim = sim
+        _lifePace.value = com.reeflive.core.sim.LifePace.of(sim.lifePace)
         customBase = CustomTank.baseAfterRestore(save, species!!)
         economyLive = Economy(save.economy)
         // the time away, at 1x: the tank lived on while the app was closed

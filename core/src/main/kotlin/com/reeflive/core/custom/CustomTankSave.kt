@@ -31,6 +31,10 @@ data class CustomTankSave(
     val seed: Long = 1L,
     /** The time speed the keeper left it at (1 = real time). */
     val speed: Double = 1.0,
+    /** How fast slow biology runs ([com.reeflive.core.sim.Simulation.lifePace]; older saves take the default). */
+    val lifePace: Double = com.reeflive.core.sim.LifePace.DEFAULT.pace,
+    /** The game-biology clock ([com.reeflive.core.sim.Simulation.lifeSec]); null in older saves = [simTimeSec]. */
+    val lifeSec: Double? = null,
     val water: Map<String, Double> = emptyMap(),
     val equipment: Map<String, Double> = emptyMap(),
     /** Microfauna totals by group name (pods, worms…: what a squid, a goby or a mandarin lives on). */

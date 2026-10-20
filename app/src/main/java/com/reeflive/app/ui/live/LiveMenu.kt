@@ -149,6 +149,9 @@ class LiveTools(
     val onFixAll: () -> Unit = {},
     /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
     val myTank: Boolean = false,
+    /** My tank's growing speed (slow biology only; animals still move at real speed). */
+    val lifePace: com.reeflive.core.sim.LifePace = com.reeflive.core.sim.LifePace.DEFAULT,
+    val onLifePace: (com.reeflive.core.sim.LifePace) -> Unit = {},
 )
 
 /**
@@ -546,6 +549,13 @@ private fun ColumnScope.CardBody(
             LiveSectionTitle("Time")
             TimeSlider(tools.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
             LiveHelp("Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
+            if (tools.myTank) {
+                LiveSectionTitle("Growing speed")
+                Tiles(tone, close, com.reeflive.core.sim.LifePace.entries.map { p ->
+                    T(p.label, lifePaceGlyph(p), on = tools.lifePace == p, closes = false) { tools.onLifePace(p) }
+                })
+                LiveHelp(tools.lifePace.blurb + ". Growing, spreading and babies speed up; the fish still swim at real speed.")
+            }
             LiveSectionTitle("Lamps")
             Tiles(tone, close, ViewLight.entries.map { v ->
                 T(v.label, viewLightGlyph(v), on = tools.viewLight == v, closes = false) { tools.onViewLight(v) }
@@ -605,4 +615,10 @@ private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
     ViewLight.NIGHT -> ReefGlyphs.moon
     ViewLight.MOON -> ReefGlyphs.moon
     ViewLight.BLUE -> ReefGlyphs.uvLamp
+}
+
+private fun lifePaceGlyph(p: com.reeflive.core.sim.LifePace): ReefGlyph = when (p) {
+    com.reeflive.core.sim.LifePace.REAL -> ReefGlyphs.clockSun
+    com.reeflive.core.sim.LifePace.FAST -> ReefGlyphs.seaweed
+    com.reeflive.core.sim.LifePace.FASTER -> ReefGlyphs.timelapse
 }

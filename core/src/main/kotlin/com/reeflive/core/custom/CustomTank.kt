@@ -67,6 +67,8 @@ object CustomTank {
             savedAtMs = nowMs,
             simTimeSec = sim.simTimeSec,
             speed = sim.speed,
+            lifePace = sim.lifePace,
+            lifeSec = sim.lifeSec,
             water = WaterFields.read(w.s),
             equipment = eq,
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
@@ -173,6 +175,9 @@ object CustomTank {
         }
         sim.brood.load(save.brood)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
+        sim.lifePace = save.lifePace
+        // stamps in the save (eggs, nursery cohorts) are on this clock; before it existed they were on the sim clock
+        sim.lifeSec = save.lifeSec?.takeIf { it.isFinite() } ?: save.simTimeSec
         sim.reserveIds(save.nextIds.organism, save.nextIds.frag, save.nextIds.bag)
         return sim
     }

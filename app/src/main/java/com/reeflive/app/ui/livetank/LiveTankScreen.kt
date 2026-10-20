@@ -281,6 +281,7 @@ fun LiveTankScreen(
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
+    val lifePace by vm.lifePace.collectAsStateWithLifecycle()
     val quality by vm.quality.collectAsStateWithLifecycle()
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
@@ -780,6 +781,11 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        lifePace = lifePace,
+        onLifePace = { p ->
+            tick(); vm.setLifePace(p)
+            banner.show(Feedback("Growing speed: ${p.label}", "${p.blurb}. Fish still swim at real speed."), Candy.purple)
+        },
         speed = if (sandbox) speed else 1.0,
         simTimeSec = hud.simTimeSec,
         onSpeed = { x ->

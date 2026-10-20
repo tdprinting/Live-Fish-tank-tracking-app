@@ -9,6 +9,7 @@ import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.LifePace
 import com.reeflive.core.sim.Simulation
 import kotlinx.browser.localStorage
 import kotlin.math.roundToInt
@@ -64,6 +65,7 @@ object ReefMyTank {
         val seed = t.toLong() xor 0x5EEDL
         val s = CustomTank.fresh(build, species, rock, secOfDay.toDouble(), seed)
         s.speed = 1.0
+        s.lifePace = LifePace.DEFAULT.pace
         s.stepWall(0.0)
         sim = s
         val eco = economy ?: Economy()
@@ -84,6 +86,17 @@ object ReefMyTank {
     }
 
     /** Names an animal; it is kept in the next save. */
+    /** Growing speed choices for slow biology (LifePace): `[{id, label, blurb, on}]`. */
+    fun paces(): String {
+        val cur = sim?.let { LifePace.of(it.lifePace) }
+        return JSON.stringify(LifePace.entries.map { p -> obj { it.id = p.name; it.label = p.label; it.blurb = p.blurb; it.on = p == cur } }.toTypedArray())
+    }
+
+    fun setPace(id: String) {
+        val p = LifePace.entries.firstOrNull { it.name == id } ?: return
+        sim?.lifePace = p.pace
+    }
+
     fun rename(id: String, name: String) { sim?.enqueue(Command.Rename(id, name)) }
 
     /** Today as the economy counts days: the keeper's local calendar day. */
