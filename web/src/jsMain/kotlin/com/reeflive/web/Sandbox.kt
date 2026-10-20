@@ -204,7 +204,8 @@ object ReefSandbox {
             // Tank Health "Feed the hungry ones" (core HungryFeed): each hungry animal's favourite food dropped above it
             "feedHungry" -> { send(Command.FeedHungry); return true }
             // Tank Health "Care for corals and inverts" (core CoralCare): doses and feeds what they need now
-            "reefCare" -> { send(Command.ReefCare); return true }
+            // in My tank the supplies cost [num] sand dollars (docs/ECONOMY.md)
+            "reefCare" -> { if (mine && !ReefMyTank.spendCare(num.toInt())) return false; send(Command.ReefCare); return true }
             "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too

@@ -74,7 +74,7 @@ private fun CoralSection(corals: List<CoralHealth.Row>, care: CoralCare.Plan?, o
     if (onReefCare != null && care != null) {
         if (!care.isEmpty) {
             LiveTile(ReefGlyphs.branch, "Give corals and inverts what they need", Candy.green,
-                onClick = { onReefCare(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Adds " + care.words)
+                onClick = { onReefCare(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Adds " + care.words + " (${care.price} sand dollars)")
         } else LiveHelp("Corals and inverts have everything they need right now.")
     }
     if (corals.isEmpty()) { LiveHelp("No corals yet. Add some from Add life."); return }

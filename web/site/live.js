@@ -5,6 +5,7 @@ import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
+import { initCare } from './care.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -49,6 +50,8 @@ export function startLive(applyReadings) {
   onReadingsNeeded = applyReadings;
   if (started) return;
   started = true;
+  // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
+  window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -345,6 +348,8 @@ const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
 function renderCard() {
   if (!ui.card) return;
+  // opening the tank check is testing the water (My tank's daily job)
+  if (ui.card === 'FIX' || ui.card === 'HEALTH') MY.testedWater();
   const sb = editable();
   let h = '';
   switch (ui.card) {
@@ -432,7 +437,7 @@ function refreshCorals() {
   const note = !list.length ? 'No corals yet' : pale ? `${pale} turning pale` : sick ? `${sick} not happy` : 'All doing well';
   $('coralLive').innerHTML = `<h4>Corals &amp; inverts <span class="note ${pale ? 'danger' : sick ? 'caution' : 'good'}">${note}</span></h4>`;
   const b = $('reefCare');
-  b.querySelector('.lbl').textContent = c.words ? 'Give corals and inverts what they need' : 'Corals and inverts have all they need';
+  b.querySelector('.lbl').textContent = c.words ? `Give corals and inverts what they need (${c.price} sand dollars)` : 'Corals and inverts have all they need';
   b.classList.toggle('on', !!c.words); b.classList.toggle('lock', !c.words);
   $('coralRows').innerHTML = list.map((k) => `<div class="stat ${k.health < 0.7 ? 'hungry' : ''}"><span>${esc(k.name)}${k.need ? ` <small class="muted">${esc(k.need)}</small>` : ''}</span>
     <i class="meter"><i class="${k.health >= 0.7 ? 'good' : k.health >= 0.4 ? 'caution' : 'danger'}" style="width:${Math.round(Math.max(0, Math.min(1, k.health)) * 100)}%"></i></i></div>`).join('');
@@ -596,7 +601,8 @@ $('card').addEventListener('click', (e) => {
     sbOnly(() => {
       const c = ui.coralCare || {};
       if (!c.words) { say('The corals and inverts have all they need right now.'); cue('TICK'); return; }
-      SB.act('reefCare', null, 0); cue('PELLET');
+      if (!SB.act('reefCare', null, c.price || 0)) { say(`Not enough sand dollars: coral care costs ${c.price}. Do today's chores to earn more.`); cue('TICK'); return; }
+      cue('PELLET');
       say(`Coral care! In goes ${c.words}.`);
       closeCard();
     });

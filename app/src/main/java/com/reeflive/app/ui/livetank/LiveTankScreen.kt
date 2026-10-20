@@ -117,6 +117,11 @@ import com.reeflive.app.ui.live.HermiePill
 import com.reeflive.app.ui.live.HermieState
 import com.reeflive.app.ui.live.HudMode
 import com.reeflive.app.ui.live.MyTankSetupCard
+import com.reeflive.app.ui.live.CareCard
+import com.reeflive.app.ui.live.MoneyChip
+import com.reeflive.app.ui.live.RewardFxLayer
+import com.reeflive.app.ui.live.RewardFxState
+import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveCategory
 import com.reeflive.app.ui.live.LiveDialog
@@ -318,6 +323,10 @@ fun LiveTankScreen(
     // the menu's levers: My tank only (Watch's fast-forward copy keeps Watch's menu)
     val levers = sandbox && !lapseFork
     val customInfo by vm.custom.collectAsStateWithLifecycle()
+    // My tank's sand dollars (docs/ECONOMY.md): the chip in the HUD opens the Care card; Tank Health counts as testing
+    val economy by vm.economy.collectAsStateWithLifecycle()
+    var careOpen by rememberSaveable { mutableStateOf(false) }
+    val rewardFx = remember { RewardFxState() }
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
     // "Show buttons" pill or Back undo it
@@ -852,8 +861,10 @@ fun LiveTankScreen(
         onReefCare = if (myTank) ({
             tick()
             val plan = vm.reefCarePlan()
-            banner.show(Feedback("Coral care!", "In goes " + plan.words), Candy.green)
-            cue(LiveReactions.feed(FoodKind.CORAL_FOOD)) { vm.reefCare() }
+            if (vm.reefCare(plan.price)) {
+                banner.show(Feedback("Coral care!", "In goes " + plan.words), Candy.green)
+                cue(LiveReactions.feed(FoodKind.CORAL_FOOD))
+            } else banner.show(Feedback("Not enough sand dollars", "Coral care costs ${plan.price}. Do today's chores to earn more."), Candy.orange)
         }) else null,
         onFix = { f -> tick(); playFix(f) },
         onFixAll = {
@@ -901,6 +912,7 @@ fun LiveTankScreen(
                     // a fresh test each pick: the kit's own rounding and read error, not the sim's exact numbers
                     kitReadouts = testKitReadouts(hud.water, kotlin.random.Random(pickSerial * 7919L + hud.simTimeSec.toLong()))
                     testKit = true
+                    vm.testedWater()
                     if (hermieOn) hermie.say(LiveReactions.testKit(kitReadouts), HermieMood.HAPPY)
                 }
                 else -> pickJob[0] = scope.launch {
@@ -1099,6 +1111,9 @@ fun LiveTankScreen(
                 echo(LiveReactions.netOut(st.nickname.ifBlank { st.common }))
             },
             followCam = followCam,
+            economy = if (myTank) economy else null,
+            onMoney = { tick(); careOpen = true },
+            rewardFx = rewardFx,
         )
         AnimatedVisibility(
             visible = menuUp,
@@ -1189,6 +1204,19 @@ fun LiveTankScreen(
                 })
             }
         }
+        // My tank: money coming in is cheered by Hermie; the Tank Health card is the water test
+        LaunchedEffect(Unit) {
+            vm.gains.collect { g ->
+                rewardFx.cheer(g)
+                if (!hermieOn) return@collect
+                if (g.levelUp > 0) hermie.say("Level ${g.levelUp}! ${com.reeflive.core.custom.economy.Levels.opens(g.levelUp)}".trim(), HermieMood.EXCITED)
+                else hermie.say("+${g.amount} sand dollars: ${g.label}", HermieMood.HAPPY)
+            }
+        }
+        LaunchedEffect(open) { if (open == LiveCategory.FIX) vm.testedWater() }
+        val eco = economy
+        if (careOpen && myTank && eco != null) CareCard(eco, onCollect = { tick(); vm.collectHappyBonus() }, onDismiss = { careOpen = false })
+        if (myTank) RewardFxLayer(rewardFx)
         // the net lifted a body out: the toilet goodbye (once per body)
         LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }
         flushing?.let { f ->
@@ -1406,6 +1434,9 @@ private fun HudLayer(
     bottom: Dp,
     onNetOut: (OrganismStats) -> Unit,
     followCam: FollowCamControl,
+    economy: EconomyView? = null,
+    onMoney: () -> Unit = {},
+    rewardFx: RewardFxState? = null,
 ) {
     val reduce = ReefTheme.reduceMotion
     val sandbox = hudState.mode != HudMode.WATCH
@@ -1424,6 +1455,7 @@ private fun HudLayer(
         ) {
             // the meter starts folded to its face (tap shows "Tank happy N %") and Hermie takes the rest of the row
             val pills: @Composable RowScope.() -> Unit = {
+                if (economy != null && rewardFx != null) MoneyChip(economy, onMoney, rewardFx)
                 AnimatedVisibility(meterOn, enter = fadeIn(liveSpec(reduce)) + scaleIn(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + scaleOut(liveSpec(reduce))) {
                     HappyMeterPill(happy, onMeterOff, startFolded = true)
                 }
