@@ -30,7 +30,7 @@ out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vUv;
 out vec4 vColor;
-#ifdef ROCK
+#if defined(ROCK) || defined(GSPMAT)
 out vec3 vObj;   // object-space position: rock.frag pins its detail to the rock
 #endif
 
@@ -57,11 +57,15 @@ void main() {
         p.y += textureLod(uSandMap, suv, 0.0).r;
     }
 #endif
-    vWorld = p;
     vNormal = normalize(mat3(uModel) * aNormal);
+#ifdef GSPMAT
+    // the stolon mat is a skin about a millimetre thick over the rock it copies
+    p += vNormal * 0.07;
+#endif
+    vWorld = p;
     vUv = aUv;
     vColor = aColor;
-#ifdef ROCK
+#if defined(ROCK) || defined(GSPMAT)
     vObj = aPos;
 #endif
     gl_Position = uViewProj * vec4(p, 1.0);

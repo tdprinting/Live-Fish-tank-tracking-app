@@ -39,6 +39,22 @@ daily deflation cycle, predation by tank mates, and the bulb-tip mechanism have 
 - Feeding-linked extension: hungry animals extend "sweeper" tentacles and the bulbs retract at rest (retail
   sources). **[weak]**
 - Stress and flow causes of stringy tips: **not sourced**. Treat as unknown. The sim should not hard-wire a cause.
+- Anemonefish: SeaLifeBase's species account (main reference Fautin 2007, *Hexacorallians of the World*) says the bulb
+  "is said to be related to presence of fish and may be absent", in which case the tentacle has a **white ring where
+  the equator of the bulb would have formed**. A taxonomic snippet (Plazi) adds that tentacle shape varies within one
+  animal (bulbed, finger-like or mixed) and that bulb-tipped animals in aquaria often go gradually stringy.
+  **[secondary]** (Fautin & Allen 1997 and Delbeek 2002 full text still not retrieved.)
+- Habitat: shallow animals (small, clonal, in bright water) tend to bulb; large solitary deep animals tend to be stringy
+  (SeaLifeBase; Enature). **[secondary / weak]**
+- No source gives how fast bulbs come and go, or whether bubbled tentacles are shorter.
+- Tentacle mechanics when a clown nestles (how far they part, how they spring back) are unmeasured; the bioRxiv
+  preprint (2024, doi 10.1101/2024.02.22.581653) shows acclimated clown mucus cuts nematocyst firing but not tentacle
+  motion. **[primary, preprint]**
+
+Sim (2026-10-20): the bubble drive mixes the suspected causes (hosted clown strongest, then light, calm, settled,
+fed; hunger and bleaching make it stringy) and is sharpened so most animals read clearly bubbled or clearly stringy.
+Stringy tentacles show the pale equator ring. Fish in the crown bend whole tentacles away about their bases through an
+underdamped spring (about 0.9 Hz, damping 0.45): **DESIGN ESTIMATE**.
 
 ### 1.4 Color morphs
 - Standard green, rose, orange, and red forms are listed, with green and rose most common in aquaria (Wikipedia,
@@ -434,3 +450,7 @@ Secondary and hobby:
 - Reef Central, deflation and light threads. https://forums.reefcentral.com/threads/gbta-questions.1160415 ;
   https://www.marinecolorado.org/threads/bubble-tip-no-more.21916
 - reefs.com, Delbeek 2002 context. https://www.reefs.com/forum/goto/post?id=1629466
+- SeaLifeBase. Entacmaea quadricolor species summary (main ref. Fautin 2007). https://sealifebase.ca/summary/SpeciesSummary.php?id=129744
+- Plazi treatment of Entacmaea quadricolor (snippet). https://publication.plazi.org/GgServer/html/038187876444FFCC1BD2F8B1FB9475D8
+- Enature. Entacmaea quadricolor. https://www.enature.qa/specie/entacmaea-quadricolor
+- bioRxiv 2024. Anemonefish mucus and host nematocyst discharge. https://www.biorxiv.org/content/10.1101/2024.02.22.581653v1

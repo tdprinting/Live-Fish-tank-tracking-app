@@ -113,7 +113,9 @@ class TankTouchTest {
         s.enqueue(Command.TouchTank(gsp.pos, TouchSurface.ROCK))
         s.advance(0.1)
         assertEquals("a rock tap on a colony is a coral tap", TouchSurface.CORAL, s.lastTouch!!.surface)
-        assertTrue("the tapped GSP retracts: ${gsp.disturb}", gsp.disturb >= 0.6)
+        // a GSP mat closes around the tap (GspPolyps), and only a little as a whole
+        assertTrue("the tapped GSP polyps retract: ${GspPolyps.closedAt(gsp, gsp.pos, s.simTimeSec)}", GspPolyps.closedAt(gsp, gsp.pos, s.simTimeSec) > 0.9)
+        assertTrue("the rest of the mat stays out: ${gsp.disturb}", gsp.disturb in 0.05..0.5)
         assertTrue("colonies far away do not", far.all { it.disturb < 0.6 })
 
         val nass = s.o("nass1")

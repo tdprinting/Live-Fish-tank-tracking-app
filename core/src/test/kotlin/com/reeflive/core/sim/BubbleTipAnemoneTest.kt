@@ -120,6 +120,57 @@ class BubbleTipAnemoneTest {
         assertTrue(sim.anemones.welcomes(sim.bta(), nemo))
     }
 
+    @Test fun tentaclesFollowNestlingClownsSmoothly() {
+        val sim = btaSim(DefaultStock.all.filter { it.speciesId == "amphiprion_ocellaris" })
+        sim.advance(600.0)
+        val o = sim.bta()
+        for (h in sim.anemones.hosts.values) { h.willing = true; h.hostId = o.id; h.acclim = 1.0 }
+        val clowns = sim.organisms.filter { it.species.id == "amphiprion_ocellaris" }
+        val up = sim.anemones.discUp(sim.anemones.state(o))
+        val (x, z) = AnemoneRig.basis(up)
+        val rig = o.limbRig as AnemoneRig
+        var prev: FloatArray? = null
+        var maxStep = 0f
+        var maxJump = 0.0
+        var bothBent = 0
+        // the pair circles through the crown, half a turn apart
+        for (i in 0 until 400) {
+            val a = i * 0.03
+            clowns.forEachIndexed { j, f ->
+                val ang = a + j * Math.PI
+                f.placeAt(o.pos + up * 2.5 + x * (4.0 * kotlin.math.cos(ang)) + z * (4.0 * kotlin.math.sin(ang)), f.heading)
+            }
+            sim.advance(0.05)
+            val l = rig.out
+            prev?.let { p ->
+                maxStep = maxOf(maxStep, kotlin.math.abs(l[10] - p[10]), kotlin.math.abs(l[11] - p[11]))
+                if (l[10] > 0.3f) maxJump = maxOf(maxJump, Vec3(l[5] - p[5].toDouble(), l[6] - p[6].toDouble(), l[7] - p[7].toDouble()).length())
+            }
+            if (i > 100 && l[10] > 0.6f && l[11] > 0.6f) bothBent++
+            prev = l.copyOf()
+        }
+        assertTrue("strength eases, no snaps (max step $maxStep)", maxStep < 0.2f)
+        assertTrue("contact point glides with the fish (max jump $maxJump cm)", maxJump < 1.5)
+        assertTrue("both clowns part the tentacles ($bothBent ticks)", bothBent > 200)
+    }
+
+    @Test fun hostedAnemoneBubblesAndALonelyOneGoesStringy() {
+        val clowns = DefaultStock.all.filter { it.speciesId == "amphiprion_ocellaris" }
+        fun run(hosted: Boolean): Double {
+            val sim = btaSim(clowns)
+            sim.advanceAbstract(60.0)
+            val o = sim.bta()
+            val s = sim.anemones.state(o)
+            s.bubbliness = 0.9
+            for (h in sim.anemones.hosts.values) { h.willing = hosted; if (hosted) { h.hostId = o.id; h.acclim = 1.0 } }
+            sim.hours(48.0)
+            return s.bubble
+        }
+        val withClowns = run(true)
+        val alone = run(false)
+        assertTrue("hosted bubbles more ($withClowns vs $alone)", withClowns > alone + 0.25)
+    }
+
     @Test fun saveStateRoundTrips() {
         val sim = btaSim(DefaultStock.all.filter { it.speciesId == "amphiprion_ocellaris" })
         sim.advanceAbstract(60.0)

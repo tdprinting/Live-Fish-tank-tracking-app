@@ -41,6 +41,18 @@ class SurfacePatch private constructor(val cells: List<Vec3>, val dist: DoubleAr
         return best
     }
 
+    /** The reachable surface cell nearest [p] within [tolerance] cm, or null. */
+    fun nearestCell(p: Vec3, tolerance: Double = 2.5): Vec3? {
+        var best: Vec3? = null
+        var bestD = tolerance * tolerance
+        for (i in cells.indices) {
+            if (!dist[i].isFinite()) continue
+            val d2 = cells[i].distanceSqTo(p)
+            if (d2 <= bestD) { bestD = d2; best = cells[i] }
+        }
+        return best
+    }
+
     private fun upperBound(r: Double): Int {
         var lo = 0; var hi = sorted.size
         while (lo < hi) { val m = (lo + hi) ushr 1; if (sorted[m] <= r) lo = m + 1 else hi = m }

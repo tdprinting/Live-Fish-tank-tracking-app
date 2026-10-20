@@ -186,6 +186,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // A new context: every GL object from a previous one is gone.
         store.onContextLost(quality)
         rockDraw.onContextLost()
+        gspMats.onContextLost()
         Texture.resetCaps()
         Gl.currentProgram = 0
         initGl()
@@ -218,6 +219,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private fun releaseGl() {
         programs?.release(); programs = null
+        gspMats.release()
         frame?.release(); frame = null
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
@@ -236,6 +238,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         store.release()
         store.onContextLost(quality)
         rockDraw.onContextLost()
+        gspMats.onContextLost()
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -429,6 +432,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             for (k in corals.indices) {
                 val (m, pose) = corals[k]
+                // GSP grows as a thin skin on the rock (GspMatDraw): nothing for the eye to bump into
+                if (gspMats.isGsp(m)) continue
                 val copy = pose != null && pose.isCopy
                 val ox = if (copy) pose!!.offsetX else 0f; val oy = if (copy) pose!!.offsetY else 0f; val oz = if (copy) pose!!.offsetZ else 0f
                 for (i in m.parts.indices) {
@@ -672,6 +677,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
     }
     private val rockDraw = RockPoseDraw()
+    /** Green star polyp mats built on the drawn rock (GspMatDraw). */
+    private val gspMats = GspMatDraw()
+
+    /**
+     * True when [c] is a green star polyp colony drawn as a mat on its rock ([gspMats]) instead of its GLB.
+     */
+    private fun gspOnRock(m: GpuModel, c: CoralPose?): Boolean {
+        if (c == null || !gspMats.isGsp(m)) return false
+        val rock = store.model(ROCK)?.parts?.firstOrNull { it.kind == MaterialKind.ROCK }
+        return gspMats.ready(c, m, rock, sdf, rockDraw, quality.polypDensity)
+    }
     private val rockModel = FloatArray(16)
     private val rockCoral = FloatArray(16)
 
@@ -735,6 +751,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val pc = progs.shadowCoral
         pc.use()
         for ((m, c) in coralModels(cur)) {
+            // a GSP mat drawn on the rock is a skin on it: no dome of its own to cast a shadow
+            if (gspOnRock(m, c)) continue
             val copy = c != null && c.isCopy
             if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
             for (part in m.parts) {
@@ -845,8 +863,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 out += copy to c
                 continue
             }
-            val m = anchored ?: candidates.firstOrNull { it.path !in used } ?: continue
-            if (used.add(m.path)) out += m to c
+            // GSP grows on the rock from its own placement (GspMatDraw): every colony can share the one GLB polyp
+            val gsp = c.matRadius > 0f
+            val m = anchored ?: candidates.firstOrNull { it.path !in used } ?: (if (gsp) candidates.firstOrNull() else null) ?: continue
+            if (used.add(m.path) || gsp) out += m to c
         }
         return out
     }
@@ -951,6 +971,22 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private fun drawCoral(m: GpuModel, c: CoralPose?, progs: Programs, s: SimSnapshot?, polyps: Boolean) {
         val w = white ?: return
+        if (c != null && gspOnRock(m, c)) {
+            if (!polyps) {
+                val t = gspMats.drawMat(progs.gspMat, c, rockDraw)
+                if (t > 0) { drawCalls++; triangles += t }
+                return
+            }
+            val part = m.parts.firstOrNull { it.kind == MaterialKind.POLYP } ?: return
+            val p = progs.polyp
+            p.use()
+            part.material.apply(p, w, alphaTestOverride = part.alphaTest ?: if (part.material.src.blended) 0.3f else null)
+            coralUniforms(p, m, c)
+            p.set1f("uSwayAmp", 0.25f * (c.flow / 12f).coerceIn(0.2f, 1.5f))
+            val t = gspMats.drawPolyps(p, c, rockDraw, s?.simTimeSec ?: 0.0)
+            if (t > 0) { drawCalls++; triangles += t }
+            return
+        }
         val copy = c != null && c.isCopy
         if (c != null && copy) { coralShift[12] = c.offsetX; coralShift[13] = c.offsetY; coralShift[14] = c.offsetZ }
         for (part in m.parts) {
@@ -1082,7 +1118,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /**
      * Bubble-tip anemone uniforms from its [com.reeflive.core.sim.AnemoneRig] pose (r.limbs): model frame from the disc axis
      * (same basis as AnemoneRig.basis), scaled from the model's built span to the animal's, plus bubble / contraction /
-     * feeding curl, the fish pushing into it and bleaching.
+     * feeding curl, the (up to two) fish pushing into it and bleaching.
      */
     private fun anemoneUniforms(p: ShaderProgram, r: FishRig, m: GpuModel) {
         val l = r.limbs
@@ -1106,7 +1142,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uExtension", 1f - l[1])
         p.set4f("uAnem", l[0], l[1], l[2], l[3])
         p.set4f("uAnemPush", l[5], l[6], l[7], l[9])
-        p.set4f("uAnemMisc", l[4], k, 0f, 0f)
+        p.set4f("uAnemPushB", l[17], l[18], l[19], l[21])
+        p.set4f("uAnemDrift", l[25], l[26], l[27], 0f)
+        p.set4f("uAnemDriftB", l[29], l[30], l[31], 0f)
+        p.set4f("uAnemMisc", l[10], k, l[11], 0f)
         val flow = interp.current?.flowStrength ?: 1f
         p.set3f("uSwayDir", 0.95f, 0f, 0.3f); p.set1f("uSwayAmp", 0.12f * flow.coerceIn(0f, 2f))
         p.set1f("uBleach", l[8]); p.set1f("uBrown", 0f)

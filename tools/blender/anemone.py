@@ -43,12 +43,12 @@ SIDES = 8
 def tentacle_profile(h, bubble, bp):
     """Radius (fraction of the stringy length) and length factor at hinge h for bubble 0..1, bulb centre bp."""
     h = np.asarray(h, float)
-    lf = 1.0 - 0.38 * bubble
+    lf = 1.0 - 0.5 * bubble
     rs = 0.085 * (1.0 - 0.5 * h)
-    bulb = np.exp(-((h - bp) / 0.22) ** 2)
-    rb = 0.075 * (1.0 - 0.3 * h) + 0.09 * bulb
-    nip = S(bp + 0.14, bp + 0.3, h)
-    rb = rb * (1 - nip) + 0.05 * nip
+    bulb = np.exp(-((h - bp) / 0.25) ** 2)
+    rb = 0.045 * (1.0 - 0.3 * h) + 0.13 * bulb
+    nip = S(bp + 0.16, bp + 0.32, h)
+    rb = rb * (1 - nip) + 0.035 * nip
     r = rs + (rb - rs) * bubble
     cap = np.sqrt(np.clip(1.0 - ((h - 0.93) / 0.07) ** 2, 0.0, 1.0))
     r = np.where(h > 0.93, r * cap, r)
@@ -273,7 +273,7 @@ def preview(outdir, size=(900, 900), samples=48):
         g = T.WGeo(); g.add(V, F, UV, COL); g.obj("Disc", None, None, [md], smooth=True)
         g2 = T.WGeo()
         for pos, up, length, ph, var in rows:
-            bp = 0.5 + 0.25 * var
+            bp = 0.55 + 0.2 * var
             pV = []
             pUV = []
             for h in RINGS[:-1]:
