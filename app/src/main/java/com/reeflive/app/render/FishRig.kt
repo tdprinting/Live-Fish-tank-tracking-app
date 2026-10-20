@@ -19,6 +19,9 @@ class FishRig(val id: String) {
     val spine = FloatArray(64)
     /** uFrame: 16 × vec4 quaternion xyzw mapping model X/Y/Z to world. */
     val frames = FloatArray(64)
+    /** Body-wave envelope (shader uEnv): amplitude(u) = envHead + (1 - envHead) u^envExp, set from the body type. */
+    var envExp = 2f; var envHead = 0.1f
+    private var envBrain: String? = null
     var phase = 0f; var amp = 0f; var waveLen = 1f; var pectoral = 0f; var finClamp = 0f
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
@@ -68,6 +71,7 @@ class FishRig(val id: String) {
             len = sqrt(len).coerceAtLeast(1e-6f)
             for (c in 0 until 4) frames[i * 4 + c] /= len
         }
+        if (b.brain !== envBrain) { envBrain = b.brain; envFor(b.brain) }
         phase = lerpPhase(pa.swimPhase, b.swimPhase, t)
         amp = lerp(pa.amp, b.amp, t); waveLen = lerp(pa.waveLen, b.waveLen, t)
         pectoral = lerp(pa.pectoral, b.pectoral, t); finClamp = lerp(pa.finClamp, b.finClamp, t)
@@ -86,6 +90,22 @@ class FishRig(val id: String) {
 
     private val bendScratch = FloatArray(64)
 
+    /**
+     * Body-wave envelope per swimming mode (Lighthill 1960; Hess & Videler 1984; Gillis 1998; Videler 1993): eels and
+     * gobies bend along the whole body (linear growth, a lively head), carangiform and body-caudal fish keep the front
+     * half nearly rigid and put the wave in the rear third, and the labriform and acanthuriform rowers (tang, wrasse,
+     * clown) are stiff to the peduncle and only flick the tail.
+     */
+    private fun envFor(brain: String?) {
+        when (brain) {
+            "EEL", "ENGINEER_GOBY" -> { envExp = 1.1f; envHead = 0.25f }
+            "CARDINAL", "DOTTYBACK" -> { envExp = 2.4f; envHead = 0.05f }
+            "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE" -> { envExp = 3.2f; envHead = 0.03f }
+            "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
+            else -> { envExp = 2f; envHead = 0.1f }
+        }
+    }
+
     /** Fills this rig from an in-tank microfauna pose (core [CritterPose]); critters are not interpolated. */
     /** Clown eggs, larvae and fry (core BroodField): drawn like the microfauna, never picked. */
     fun setBrood(p: com.reeflive.core.sim.BroodPose) {
@@ -101,6 +121,7 @@ class FishRig(val id: String) {
         alive = true; visible = true; posture = 0; bagged = false
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0; fade = 0f
+        envExp = 2f; envHead = 0.1f; envBrain = null
         touched = true
     }
 
@@ -117,6 +138,7 @@ class FishRig(val id: String) {
         alive = true; visible = true; posture = 0; bagged = false
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0
+        envExp = 2f; envHead = 0.1f; envBrain = null
         touched = true
     }
 
