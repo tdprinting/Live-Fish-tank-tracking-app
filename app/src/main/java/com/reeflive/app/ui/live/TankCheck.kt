@@ -19,7 +19,44 @@ import com.reeflive.app.ui.components.GlyphBadge
 import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.core.sim.CareFix
+import com.reeflive.core.sim.HungerRow
 import com.reeflive.core.sim.TankDoctor
+
+/**
+ * The Tank Health card: the water at a glance, who is hungry (a bar per animal and one button that feeds every hungry
+ * one its favourite food, core HungryFeed), then the tank check's fixes ([TankCheckBody]).
+ */
+@Composable
+internal fun TankHealthBody(
+    readouts: List<WaterReadout>,
+    hunger: List<HungerRow>,
+    onFeedHungry: () -> Unit,
+    fixes: List<CareFix>,
+    busy: Int,
+    tone: Color,
+    onFix: (CareFix) -> Unit,
+    onFixAll: () -> Unit,
+    close: () -> Unit,
+) {
+    if (readouts.isNotEmpty()) WaterStrip(readouts)
+    LiveSectionTitle("Hungry tummies")
+    val hungry = hunger.count { it.hungry }
+    if (hungry > 0) {
+        LiveTile(ReefGlyphs.feedTin, if (hungry == 1) "Feed the hungry one" else "Feed all $hungry hungry ones", Candy.orange,
+            onClick = { onFeedHungry(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Each gets its favourite food, dropped right above it")
+    } else if (hunger.isNotEmpty()) {
+        LiveHelp("Everyone is full. Check back in a few hours.")
+    } else {
+        LiveHelp("No animals yet. Add some from Add life.")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (r in hunger) {
+            StatBar(r.name + r.food?.let { " · likes ${it.label.lowercase()}" }.orEmpty(), r.hunger, higherIsBetter = false)
+        }
+    }
+    LiveSectionTitle("Water & gear")
+    TankCheckBody(fixes, busy, tone, onFix, onFixAll, close)
+}
 
 /**
  * The "Fix tank" card: what the tank check (core TankDoctor) says the tank needs, most urgent first, each with its own

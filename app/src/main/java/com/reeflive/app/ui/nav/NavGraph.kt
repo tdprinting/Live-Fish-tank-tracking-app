@@ -75,7 +75,8 @@ fun ReefRoot(settings: AppSettings, pendingRoute: String?, onRouteConsumed: () -
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     var quickLog by remember { mutableStateOf<QuickLogRequest?>(null) }
-    val start = remember { if (settings.onboarded) Routes.DASHBOARD else Routes.ONBOARDING }
+    // the app opens on the live tank (My tank, its main feature); the tracker is a tab away
+    val start = remember { if (settings.onboarded) Routes.LIVE else Routes.ONBOARDING }
     val fade = if (settings.reduceMotion) 100 else 150
     val openLog: (List<String>) -> Unit = { ids -> quickLog = QuickLogRequest(ids) }
 

@@ -45,6 +45,8 @@ import com.reeflive.core.sim.SpotMenu
 import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.TankSpot
 import com.reeflive.core.sim.TankSpots
+import com.reeflive.core.sim.HungryFeed
+import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
 import com.reeflive.core.sim.timelapse.TimelapseChange
@@ -197,6 +199,8 @@ object ReefSandbox {
                 burst(if (k == FoodKind.ALGAE_WAFER || k == FoodKind.PRAWN || k == FoodKind.KRILL) BurstKind.PLOP else BurstKind.SPLASH, FEED_SPOT)
                 return true
             }
+            // Tank Health "Feed the hungry ones" (core HungryFeed): each hungry animal's favourite food dropped above it
+            "feedHungry" -> { send(Command.FeedHungry); return true }
             "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
@@ -532,6 +536,20 @@ object ReefSandbox {
             o.happy = tankHappiness(snap.stats, readouts.map { it.status })
             o.aiptasia = s.aiptasiaCount
         })
+    }
+
+    /** The [n]th "Did you know?" this browser has shown: {title, text} (core ReefFacts). */
+    fun fact(n: Double): String = com.reeflive.core.live.ReefFacts.nth(n.toLong()).let { f ->
+        JSON.stringify(obj { it.title = f.kind.title; it.text = f.text })
+    }
+
+    /** Tank Health's hunger list (core HungryFeed): [{id, name, hunger, fish, hungry, food}], fish first. */
+    fun hunger(): String {
+        val s = sim ?: return "[]"
+        val sp = live.species ?: return "[]"
+        return JSON.stringify(HungryFeed.rows(s.latest.stats) { id -> sp.takeIf { it.has(id) }?.get(id) }.map { r ->
+            obj { it.id = r.id; it.name = r.name; it.hunger = r.hunger; it.fish = r.isFish; it.hungry = r.hungry; it.food = r.food?.label }
+        }.toTypedArray())
     }
 
     /** Living fish and inverts for the follow list / tour, with their card data. */

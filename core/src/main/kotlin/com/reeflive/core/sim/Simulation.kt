@@ -1316,6 +1316,11 @@ class Simulation private constructor(
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
             is Command.Feed -> { feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
+            is Command.FeedHungry -> {
+                val drops = HungryFeed.plan(organisms, rock.waterLevelCm, rock.lengthCm, rock.widthCm)
+                for (d in drops) feed(d.kind, d.grams, d.at)
+                if (drops.isNotEmpty()) touchMemory.fed()
+            }
             is Command.WaterChange -> water.waterChange(c.fraction, c.mix)
             is Command.Dose -> {
                 water.dose(c.paramId, c.delta)

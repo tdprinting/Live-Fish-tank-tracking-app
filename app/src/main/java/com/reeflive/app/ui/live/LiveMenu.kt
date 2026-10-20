@@ -67,9 +67,11 @@ import com.reeflive.core.sim.PestController
 import kotlinx.coroutines.delay
 
 /*
- * The live-tank menu (UI_STYLE §10.1): a few big candy bubbles. Supplies (feed, care, clean glass, test kit, ...) live
- * on the 3D supply shelf beside the tank (SupplyShelf.kt), so the Supplies bubble swings the camera there instead of
- * opening a card; the sandbox adds Add life, Tank (lights, pumps, water sliders, medicine) and Trouble. Landscape: a slim rail
+ * The live-tank menu (UI_STYLE §10.1): a few big candy bubbles a child can read. Look (time, follow, tour, sub,
+ * microscope), Supplies (feed, care, clean glass, test kit, ... on the 3D supply shelf beside the tank, SupplyShelf.kt:
+ * the bubble swings the camera there instead of opening a card), Tank Health (water, hunger bars, auto feed, fixes) and
+ * Settings; My tank adds Add life and Tank (lights, water, gear, rockwork; the grown-up sliders, medicine and the
+ * on-purpose trouble fold out under "More"). Landscape: a slim rail
  * of bubbles down the left edge (≈ 84 dp), so the tank keeps the rest of the screen; tapping a bubble opens a compact
  * glass card beside it (at most ~35 % of the width). Portrait: a dock of the same bubbles above the app's bottom bar,
  * the card opening above it. Cards are big tiles first; a "More" button folds out the grown-up sliders. A card closes
@@ -79,21 +81,24 @@ import kotlinx.coroutines.delay
 
 /** Menu categories, each with its candy tone in [LiveTheme]. */
 enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: String) {
+    /** Both modes: time slider, follow a fish, auto tour, submarine, look closer, screensaver (Watch adds the lamp looks). */
+    VIEW("Look", ReefGlyphs.eye, "Look around"),
     /** Not a card: swings the camera to the supply shelf ([LiveTools.onSupplies]). */
     SUPPLIES("Supplies", ReefGlyphs.feedTin, "Supply shelf"),
-    /** The tank check: what the tank needs, each fix played in the 3D tank (TankCheckBody). */
-    FIX("Fix tank", ReefGlyphs.waveSparkle, "Fix my tank"),
+    /** Water, hunger bars with "Feed the hungry ones", and the tank check's fixes, each played in the 3D tank (TankHealthBody). */
+    FIX("Tank Health", ReefGlyphs.heart, "Tank Health"),
     LIFE("Add life", ReefGlyphs.fish, "Add life"),
-    LIGHT("Tank", ReefGlyphs.sun, "Light, water & gear"),
+    /** Lights, water, gear and rockwork; its More folds out the sliders, medicine and the on-purpose trouble. */
+    LIGHT("Tank", ReefGlyphs.sun, "Lights, water & gear"),
+    /** Not a bubble any more (its tiles live under Tank → More): kept as the purple tone of the trouble presets. */
     TROUBLE("Trouble", ReefGlyphs.whatIf, "Tank trouble"),
-    MORE("More", ReefGlyphs.sparkleTip, "More"),
-    /** Watch mode only: lamps look, torch, follow a fish, auto tour, cinematic, sound, time slider. */
-    VIEW("Watch", ReefGlyphs.eye, "Watch the tank"),
+    MORE("Settings", ReefGlyphs.sparkleTip, "Settings & help"),
     ;
 
     companion object {
-        /** Watch mode can watch, use the shelf (feed, clean the glass, test, look), fix the tank and More: the rest needs the pretend tank. */
-        fun shown(sandbox: Boolean): List<LiveCategory> = if (sandbox) entries.filter { it != VIEW } else listOf(VIEW, SUPPLIES, FIX, MORE)
+        /** Watch can look, use the shelf, check the tank's health and change settings; My tank adds Add life and Tank. */
+        fun shown(sandbox: Boolean): List<LiveCategory> =
+            if (sandbox) listOf(VIEW, SUPPLIES, FIX, LIFE, LIGHT, MORE) else listOf(VIEW, SUPPLIES, FIX, MORE)
     }
 }
 
@@ -147,6 +152,9 @@ class LiveTools(
     val fixing: Int = 0,
     val onFix: (com.reeflive.core.sim.CareFix) -> Unit = {},
     val onFixAll: () -> Unit = {},
+    /** Tank Health: every living animal's hunger bar (core HungryFeed) and "Feed the hungry ones". */
+    val hunger: List<com.reeflive.core.sim.HungerRow> = emptyList(),
+    val onFeedHungry: () -> Unit = {},
     /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
     val myTank: Boolean = false,
 )
@@ -412,7 +420,7 @@ private fun MenuCard(
                         trailing = { Glyph(ReefGlyphs.chevronUp, size = 18.dp, tint = s.onCandy, modifier = Modifier.graphicsLayer { rotationZ = 180f + turn }) },
                     )
                     AnimatedVisibility(more, enter = fadeIn(liveSpec(reduce)) + expandVertically(liveSpec(reduce)), exit = fadeOut(liveSpec(reduce, ReefMotion.FAST)) + shrinkVertically(liveSpec(reduce))) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { MoreBody(c, panel, actions) }
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { MoreBody(c, panel, actions, tools, close) }
                     }
                 }
             }
@@ -420,18 +428,19 @@ private fun MenuCard(
     }
 }
 
-private fun hasMore(c: LiveCategory, sandbox: Boolean) = sandbox && c in setOf(LiveCategory.LIGHT, LiveCategory.LIFE, LiveCategory.TROUBLE)
+private fun hasMore(c: LiveCategory, sandbox: Boolean) = sandbox && c in setOf(LiveCategory.LIGHT, LiveCategory.LIFE)
 
 @Composable
-private fun MoreBody(c: LiveCategory, panel: SandboxPanelState, actions: SandboxActions) {
+private fun MoreBody(c: LiveCategory, panel: SandboxPanelState, actions: SandboxActions, tools: LiveTools, close: () -> Unit) {
     when (c) {
         LiveCategory.LIGHT -> {
             LightMore(panel, actions)
             WaterMore(panel, actions, withMode = false)
             CleanMore(actions)
+            TroubleTiles(LiveTheme.style.tone(LiveCategory.TROUBLE), close, actions, tools)
+            TroubleMore(panel, actions)
         }
         LiveCategory.LIFE -> LifeMore(panel, actions)
-        LiveCategory.TROUBLE -> TroubleMore(panel, actions)
         else -> Unit
     }
 }
@@ -483,9 +492,8 @@ private fun ColumnScope.CardBody(
     when (c) {
         // never a card: the bubble opens the 3D supply shelf (feed, care and tools live there)
         LiveCategory.SUPPLIES -> Unit
-        LiveCategory.FIX -> TankCheckBody(tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close)
+        LiveCategory.FIX -> TankHealthBody(tools.readouts, tools.hunger, tools.onFeedHungry, tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close)
         LiveCategory.LIGHT -> {
-            if (tools.readouts.isNotEmpty()) WaterStrip(tools.readouts)
             LiveHelp("Feeding, water changes, doses and cleaning are on the supply shelf.")
             LiveSectionTitle("Water")
             Tiles(tone, close, listOf(
@@ -510,7 +518,9 @@ private fun ColumnScope.CardBody(
                 T("Carbon", ReefGlyphs.carbon, on = isOn("eq_carbon"), closes = false) { flip("eq_carbon") },
                 T("Algae garden", ReefGlyphs.refugium, on = isOn("eq_refugium"), closes = false) { flip("eq_refugium") },
                 T("Germ zapper", ReefGlyphs.uvLamp, on = isOn("eq_uv"), closes = false) { flip("eq_uv") },
+                T("Build rockwork", ReefGlyphs.rocks, sub = "Add white dry rock") { tools.onAquascape() },
             ))
+            LiveHelp("More has the exact sliders, medicine and trouble you can cause on purpose.")
         }
         LiveCategory.LIFE -> {
             StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset, myTank = tools.myTank)
@@ -523,75 +533,71 @@ private fun ColumnScope.CardBody(
                 T("Spare shells", ReefGlyphs.shell) { actions.onAddSpareShells() },
             ))
         }
-        LiveCategory.TROUBLE -> {
-            LiveHelp("Break something on purpose, then speed up time (in More) to see what happens. Only the pretend tank changes.")
-            Tiles(tone, close, listOf(
-                T("Heater breaks", ReefGlyphs.plugOff, danger = true) { actions.onHeater(false) },
-                T("Heater stuck on", ReefGlyphs.flame, danger = true) { actions.onPreset(SandboxPreset.HEATER_STUCK) },
-                T("Fix heater", ReefGlyphs.flame) { actions.onHeater(true) },
-                T("Pumps stop tonight", ReefGlyphs.powerhead) { actions.onPumpFailTonight() },
-                T("Lamp goes out", ReefGlyphs.moon) { actions.onLights(false) },
-                T("Power cut", ReefGlyphs.plugOff, danger = true) { actions.onPreset(SandboxPreset.POWER_OUTAGE) },
-                T("Heat wave", ReefGlyphs.thermometer) { tools.onHeatWave() },
-                T("Salt crash", ReefGlyphs.dropDown, danger = true) { actions.onPreset(SandboxPreset.SALINITY_CRASH) },
-                T("Copper spill", ReefGlyphs.copperBottle, danger = true) { actions.onPreset(SandboxPreset.COPPER_OVERDOSE) },
-                T("Too much food", ReefGlyphs.crumbs) { actions.onPreset(SandboxPreset.OVERFEEDING) },
-                T("Rockslide", ReefGlyphs.rocks, danger = true) { actions.onPreset(SandboxPreset.ROCKSLIDE) },
-                T("No water changes", ReefGlyphs.calendarX) { actions.onPreset(SandboxPreset.MISSED_WATER_CHANGES) },
-                T("Pest anemone", ReefGlyphs.pestAnemone) { actions.onAddAiptasia() },
-                T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },
-            ))
-        }
+        LiveCategory.TROUBLE -> Unit
         LiveCategory.VIEW -> {
             LiveSectionTitle("Time")
             TimeSlider(tools.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
-            LiveHelp("Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
-            LiveSectionTitle("Lamps")
-            Tiles(tone, close, ViewLight.entries.map { v ->
-                T(v.label, viewLightGlyph(v), on = tools.viewLight == v, closes = false) { tools.onViewLight(v) }
-            } + T("Torch", ReefGlyphs.led, on = tools.torchOn, closes = false, sub = "Drag to aim") { tools.onTorch() })
-            LiveSectionTitle("Look around")
-            Tiles(tone, close, listOf(
-                T("Feed", ReefGlyphs.feedTin, sub = "Supply shelf") { tools.onOpenFeed() },
-                T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
-                T("Submarine", ReefGlyphs.bubbles, on = tools.subOn, sub = "Swim with the fish") { tools.onSubmarine() },
-                T("Cinematic", ReefGlyphs.eyeOff, sub = "Hide buttons") { tools.onHide() },
-                T("Screensaver", ReefGlyphs.moon, sub = "Relax and watch") { tools.onScreensaver() },
-                T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
-            ))
+            LiveHelp(if (tools.sandbox) SandboxFriendly.speedHelp(panel.speed) else "Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
             if (tools.fish.isNotEmpty()) {
                 LiveSectionTitle("Follow a fish")
                 Tiles(tone, close, tools.fish.map { (id, name) -> T(name, ReefGlyphs.fish) { tools.onFollowFish(id) } })
             }
+            LiveSectionTitle("Look around")
+            Tiles(tone, close, listOfNotNull(
+                T(if (tools.touring) "Stop tour" else "Auto tour", ReefGlyphs.eye, on = tools.touring) { tools.onTour() },
+                T("Submarine", ReefGlyphs.bubbles, on = tools.subOn, sub = "Swim with the fish") { tools.onSubmarine() },
+                T("Look closer", ReefGlyphs.microscope, sub = "Tiny critters") { tools.onMicroscope() },
+                if (tools.sandbox) T(if (panel.timelapseStatus == null) "Time-lapse" else "See time-lapse", ReefGlyphs.timelapse, sub = panel.timelapseStatus) { actions.onTimelapse() } else null,
+                T("Torch", ReefGlyphs.led, on = tools.torchOn, closes = false, sub = "Drag to aim") { tools.onTorch() },
+                T("Screensaver", ReefGlyphs.moon, sub = "Relax and watch") { tools.onScreensaver() },
+                T("Hide buttons", ReefGlyphs.eyeOff, sub = "Just the tank") { tools.onHide() },
+            ))
+            if (!tools.sandbox) {
+                // the lamp looks only change the picture: My tank has real lights under Tank
+                LiveSectionTitle("Lamp look")
+                Tiles(tone, close, ViewLight.entries.map { v ->
+                    T(v.label, viewLightGlyph(v), on = tools.viewLight == v, closes = false) { tools.onViewLight(v) }
+                })
+            }
         }
         LiveCategory.MORE -> {
-            if (tools.sandbox) {
-                LiveSectionTitle("Time")
-                // one slider from real time to 1000x (was four speed tiles)
-                TimeSlider(panel.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
-                LiveHelp(SandboxFriendly.speedHelp(panel.speed))
-                Tiles(tone, close, listOf(
-                    T(if (panel.timelapseStatus == null) "Time-lapse" else "See time-lapse", ReefGlyphs.timelapse, sub = panel.timelapseStatus) { actions.onTimelapse() },
-                    T(if (tools.myTank) "Start over" else "Reset tank", ReefGlyphs.reset, danger = true) { actions.onReset() },
-                ))
-            } else {
-                if (tools.readouts.isNotEmpty()) WaterStrip(tools.readouts)
-            }
-            LiveSectionTitle("Tools")
+            LiveSectionTitle("Sound & helpers")
             Tiles(tone, close, listOfNotNull(
-                T("What can I do?", ReefGlyphs.help) { tools.onHelp() },
-                onTuck?.let { t -> T(if (tucked) "Show menu" else "Tuck menu", ReefGlyphs.chevronUp) { t() } },
-                T("Look closer", ReefGlyphs.microscope) { tools.onMicroscope() },
                 T(if (tools.soundOn) "Sound on" else "Sound off", if (tools.soundOn) ReefGlyphs.speaker else ReefGlyphs.speakerOff, on = tools.soundOn, closes = false) { tools.onSound() },
-                T("Knock glass", ReefGlyphs.touch) { tools.onTapGlass() },
-                T("Build rockwork", ReefGlyphs.rocks, sub = "Add white dry rock") { tools.onAquascape() },
-                T("Hide buttons", ReefGlyphs.eyeOff) { tools.onHide() },
                 T("Hermie", null, on = tools.hermieOn, closes = false, icon = { HermieArt(HermieMood.HAPPY, remember { Animatable(0f) }, true, Modifier.size(36.dp)) }) { tools.onHermie() },
                 T("Happy meter", ReefGlyphs.heart, on = tools.meterOn, closes = false) { tools.onMeter() },
                 T("Thought bubbles", ReefGlyphs.bubbles, on = tools.thoughtsOn, closes = false, sub = "What fish think") { tools.onThoughts() },
+                onTuck?.let { t -> T(if (tucked) "Show menu" else "Tuck menu", ReefGlyphs.chevronUp) { t() } },
             ))
+            LiveSectionTitle("Help")
+            Tiles(tone, close, listOf(T("What can I do?", ReefGlyphs.help) { tools.onHelp() }))
+            if (tools.sandbox) {
+                LiveSectionTitle(if (tools.myTank) "Start again" else "Reset")
+                Tiles(tone, close, listOf(T(if (tools.myTank) "Start over" else "Reset tank", ReefGlyphs.reset, danger = true) { actions.onReset() }))
+            }
         }
     }
+}
+
+/** Tank → More: break something on purpose, then speed up time (Look) to see what happens. */
+@Composable
+private fun TroubleTiles(tone: Color, close: () -> Unit, actions: SandboxActions, tools: LiveTools) {
+    LiveSectionTitle("Make trouble on purpose")
+    LiveHelp(if (tools.myTank) "This is your saved tank, so trouble here sticks. Tank Health can fix most of it." else "Break something on purpose, then speed up time to see what happens.")
+    Tiles(tone, close, listOf(
+        T("Heater breaks", ReefGlyphs.plugOff, danger = true) { actions.onHeater(false) },
+        T("Heater stuck on", ReefGlyphs.flame, danger = true) { actions.onPreset(SandboxPreset.HEATER_STUCK) },
+        T("Pumps stop tonight", ReefGlyphs.powerhead) { actions.onPumpFailTonight() },
+        T("Power cut", ReefGlyphs.plugOff, danger = true) { actions.onPreset(SandboxPreset.POWER_OUTAGE) },
+        T("Heat wave", ReefGlyphs.thermometer) { tools.onHeatWave() },
+        T("Salt crash", ReefGlyphs.dropDown, danger = true) { actions.onPreset(SandboxPreset.SALINITY_CRASH) },
+        T("Copper spill", ReefGlyphs.copperBottle, danger = true) { actions.onPreset(SandboxPreset.COPPER_OVERDOSE) },
+        T("Too much food", ReefGlyphs.crumbs) { actions.onPreset(SandboxPreset.OVERFEEDING) },
+        T("Rockslide", ReefGlyphs.rocks, danger = true) { actions.onPreset(SandboxPreset.ROCKSLIDE) },
+        T("No water changes", ReefGlyphs.calendarX) { actions.onPreset(SandboxPreset.MISSED_WATER_CHANGES) },
+        T("Pest anemone", ReefGlyphs.pestAnemone) { actions.onAddAiptasia() },
+        T("A fish gets sick", ReefGlyphs.flask) { actions.onInfect(Disease.ICH) },
+    ))
 }
 
 /** A card left alone closes itself after this long (longer with the grown-up sliders out): long enough to read. */
