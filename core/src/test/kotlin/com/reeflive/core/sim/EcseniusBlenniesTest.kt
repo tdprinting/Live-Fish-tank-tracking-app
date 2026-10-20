@@ -117,4 +117,29 @@ class EcseniusBlenniesTest {
         assertTrue("moved to a hole that fits or gave it up: ${now?.name}", now == null || now.fits(m))
         assertFalse("still holds the outgrown hole", first!!.name in sim.holeClaims.heldBy(m) && !first.fits(m))
     }
+
+    @Test
+    fun aHomelessBlennyIsStressedAndFightsForAHole() {
+        // no lawnmower: the four blenny holes go to the first four Ecsenius, the fifth has none
+        val stock = DefaultStock.all.filter { TestTank.catalog[it.speciesId].brainKind != BrainKind.LAWNMOWER_BLENNY }
+        val sim = TestTank.sim(stock, seed = 11L, startHour = 9.0)
+        for ((k, id) in listOf("ecsenius_bicolor", "ecsenius_midas", "ecsenius_stigmatura", "ecsenius_bicolor").withIndex()) add(sim, id, 5.0 + 0.2 * k, "E$k")
+        sim.advance(30.0)
+        val ecs = sim.organisms.filter { it.brainKind == BrainKind.PEEKER_BLENNY }
+        assertEquals(5, ecs.size)
+        val brains = ecs.map { sim.agentOf(it)!!.brain as PeekerBlennyBrain }
+        val homeless = ecs.filterIndexed { i, _ -> brains[i].hole == null }
+        assertTrue("one blenny has no hole", homeless.isNotEmpty())
+        assertTrue("homeless blenny is stressed ${homeless[0].socialStress}", homeless.all { it.socialStress >= PeekerBlennyBrain.HOMELESS_STRESS - 1e-9 })
+        val holes = sim.rock.holes.all.filter { it.singleOccupant }
+        var shared = 0; var tick = 0
+        sim.advance(2 * 3600.0) {
+            if (++tick % 4 != 0) return@advance
+            for (h in holes) if (sim.organisms.count { it.alive && h.holds(it.pos) } > 1) shared++
+        }
+        assertTrue("hole fights ${brains.sumOf { it.holeFights }}", brains.sumOf { it.holeFights } >= 1)
+        assertEquals("ticks with two heads in one hole", 0, shared)
+        val held = sim.organisms.filter { it.alive }.flatMap { sim.holeClaims.heldBy(it) }
+        assertEquals("a hole held twice", held.size, held.toSet().size)
+    }
 }
