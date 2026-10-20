@@ -756,6 +756,9 @@ class AcclimationBags {
     private fun release(sim: Simulation, b: Bag) {
         b.released = true
         val rock = sim.rock
+        // stowaways ride in on the frag plugs or in the bag water (research 42)
+        val at = Vec3(b.x, rock.sandTopCm + 4, b.z)
+        if (b.coral) repeat(b.count) { Hitchhikers.onAdded(sim, HitchSource.CORAL_FRAG, at) } else Hitchhikers.onAdded(sim, HitchSource.ANIMAL, at)
         if (b.coral) {
             Stocking.addMany(sim, b.speciesId, b.count)
             b.releasedIds += "coral"

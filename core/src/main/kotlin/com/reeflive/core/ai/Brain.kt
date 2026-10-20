@@ -321,6 +321,15 @@ object Predation {
                 prey.isFish && prey.sleeping && prey.lengthCm < 0.8 * pred.lengthCm -> 0.4
                 else -> 0.0
             }
+            // research 42 §A.4: hermits it can pull from a small shell, shrimp soft from a molt, feather dusters, and a
+            // small fish asleep on the rock (the kill itself is only the nightly matrix roll)
+            BrainKind.ARROW_CRAB -> when {
+                prey.brainKind == BrainKind.HERMIT && prey.lengthCm < pred.lengthCm -> 0.3
+                (prey.brainKind == BrainKind.CLEANER_SHRIMP || prey.brainKind == BrainKind.BANDED_SHRIMP) && prey.molting -> 0.5
+                prey.brainKind == BrainKind.FEATHER_DUSTER -> 0.3
+                prey.isFish && prey.sleeping && prey.lengthCm < pred.lengthCm -> 0.3
+                else -> 0.0
+            }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0

@@ -1549,7 +1549,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     val sandRest = SandRest(this)
 
     init {
-        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
+        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this), WormSnap(this, 20.0, 0.5))
     }
 
 
@@ -2444,7 +2444,7 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
-        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
+        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(), WormSnap(this, 15.0, 0.4, 0.6),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             // night, sickness or stress: in its cave, head just inside the mouth (was a Sleep hover outside it)
             InHole(this, home, cave, "Resting in its cave", { c ->

@@ -56,6 +56,8 @@ object HeatModel {
     val CLOWN = Profile("clownfish", 36.5, 31.5, 120.0, 1.0, 0.3, 20.0)
     val CLEANER_WRASSE = Profile("cleaner wrasse", 36.5, 31.0, 90.0, 1.0, 0.3, 15.0)
     val SALLY = Profile("Sally Lightfoot", 36.5, 31.0, 60.0, 1.0, 1.0, 20.0)
+    // arrow crab (est., research 42): a subtidal Caribbean reef crab kept at 22-27 °C, no semi-terrestrial reserve; like the shrimp's band, a rock refuge
+    val ARROW_CRAB = Profile("arrow crab (est.)", 35.0, 30.0, 30.0, 1.1, 0.5, 12.0)
     val DOTTYBACK = Profile("dottyback", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val HAWKFISH = Profile("hawkfish", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val ENGINEER_GOBY = Profile("engineer goby", 38.0, 32.5, 2160.0, 0.9, 1.0, 25.0)
@@ -85,6 +87,7 @@ object HeatModel {
         BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
         BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
+        BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY

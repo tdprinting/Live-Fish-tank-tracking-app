@@ -279,6 +279,10 @@ sealed class SimEvent {
     data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
     /** The aquascape builder added ([added]) or took out a rock (save the tank's rock layout). */
     data class RockscapeChanged(val rock: String, val added: Boolean, override val simTimeSec: Double) : SimEvent()
+    /** A pest or critter rode in uninvited ([Hitchhikers]): [kind] its id, [label] how to say it ("A bristleworm"). */
+    data class Hitchhiker(val kind: String, val label: String, override val simTimeSec: Double) : SimEvent()
+    /** The bristleworms are booming ([count] in the tank, far past a lean tank's): too much food is reaching the bottom. */
+    data class WormBoom(val count: Int, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -439,6 +443,8 @@ data class SimSnapshot(
     val eggClutches: List<EggClutchPose> = emptyList(),
     /** Pods, plankton and the other microfauna (research 10) for the microscope view and its readout. */
     val microfauna: MicrofaunaState = MicrofaunaState.EMPTY,
+    /** The bristleworms the sim has out (individually simulated, catchable); the renderer draws these instead of its own. */
+    val worms: List<CritterPose> = emptyList(),
     /** Bacterial guilds (research 18) for the Bacteria card: levels, trends and what each is doing to the tank. */
     val bacteria: BacteriaState = BacteriaState.EMPTY,
     /** The toy submarine while Submarine mode is on (null = off). */

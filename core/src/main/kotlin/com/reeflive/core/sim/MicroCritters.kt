@@ -109,11 +109,13 @@ class CritterField(
     /**
      * Advances the critters by [dt] seconds of wall time. [focusX] is the camera's look-at x (cm) where the tiny glass
      * pods are shown; [qualityScale] (0..1) scales the caps. [food] is the snapshot's food xyz list and [fishHeads]
-     * the xyz of every organism's head (tentacles retract from them).
+     * the xyz of every organism's head (tentacles retract from them). [simWorms]: the sim moves the bristleworms itself
+     * ([WormField], so predators can catch them); none are made here.
      */
     fun update(
         state: MicrofaunaState, dt: Double, focusX: Double = L / 2, qualityScale: Double = 1.0,
         food: FloatArray = FloatArray(0), fishHeads: FloatArray = FloatArray(0), sand: SandGridSnapshot? = null,
+        simWorms: Boolean = false,
     ): List<CritterPose> {
         ensurePools()
         sandGrid = sand
@@ -128,7 +130,7 @@ class CritterField(
         }
         val h = dt.coerceIn(0.0, 0.1)
         for (k in CritterKind.entries) {
-            target[k.ordinal] = wanted(k, state, qualityScale)
+            target[k.ordinal] = if (simWorms && k == CritterKind.BRISTLEWORM) 0 else wanted(k, state, qualityScale)
             spawnCooldown[k.ordinal] -= h
             var n = critters.count { it.kind == k && it.state != RETREAT && it.state != GONE }
             if (k == CritterKind.TENTACLE) n = (n + CritterKind.TENTACLES_PER_WORM - 1) / CritterKind.TENTACLES_PER_WORM   // worms, not tentacles

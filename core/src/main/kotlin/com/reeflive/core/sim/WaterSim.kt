@@ -467,6 +467,19 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             addDetritusTanGrams(micro.deadWetG * MICRO_TAN_PER_WET_G)
             micro.deadWetG = 0.0
         }
+        // the bristleworms' cleanup (research 42): detritus they eat is half mineralised to ammonia at once, half becomes
+        // worm (it comes back as detritus when they die or leaves the water when something eats them)
+        if (micro.scavengedTanG > 0) {
+            val availG = s.detritus * s.volumeL / 1000 * WORM_MAX_SHARE
+            val g = min(micro.scavengedTanG, availG)
+            micro.scavengedTanG = 0.0
+            if (g > 0) {
+                val ppm = g * 1000 / s.volumeL
+                s.detritus -= ppm
+                s.nh3Total += 0.5 * ppm
+                nExportMg += 0.5 * ppm * N_TAN * s.volumeL
+            }
+        }
     }
 
     /**
@@ -680,6 +693,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val HOB_ROT = 0.03               // /h of the floss's load mineralised once it has sat for days
         const val HOB_ROT_START_H = 48.0
         const val HOB_ROT_FULL_H = 168.0
+        /** Most of the detritus pool the worms can clear in one microfauna step (they cannot reach it all). */
+        const val WORM_MAX_SHARE = 0.05
         const val SIPHON_SHARE = 0.4           // detritus a gravel-vac pass takes out
         const val SOCK_ROT = 0.02              // /h of the sock's load released once it is older than ~2-5 days
         const val DOC_PER_G = 0.04             // g DOC leached per g food

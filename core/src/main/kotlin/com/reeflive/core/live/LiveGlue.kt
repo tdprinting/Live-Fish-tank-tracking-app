@@ -134,6 +134,8 @@ data class LivePeek(
             is SimEvent.Eaten -> "${e.preyId} was eaten by ${e.predatorId}"
             is SimEvent.Fed -> "Fed ${e.grams} g"
             is SimEvent.NearMiss -> "${e.preyId} had a close call with ${e.predatorId}"
+            is SimEvent.Hitchhiker -> "${e.label} hitchhiked into the tank"
+            is SimEvent.WormBoom -> "Bristleworms are booming (${e.count}): feed a little less"
             else -> null   // Cleaned, Chase, Pose, Jolt, TerritoryReset, Quiver, LegRock: too frequent for the peek
         }
 
