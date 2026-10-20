@@ -1,5 +1,10 @@
 package com.reeflive.app.ui.live
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +25,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -32,6 +41,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.custom.economy.EconomyView
 import kotlin.math.PI
 import kotlin.math.cos
@@ -42,12 +52,23 @@ import kotlin.math.sin
  * today's chores, the bonuses, the level bar and the goals. The web page draws the same in site/care.js.
  */
 
-/** Sand dollars and level for the HUD's top row; a dot when a chore or the happy bonus is waiting. */
+/**
+ * Sand dollars and level for the HUD's top row; a dot when a chore or the happy bonus is waiting. The number counts
+ * up as money comes in and the chip gulps when a coin burst lands in it ([RewardFxState]).
+ */
 @Composable
-fun MoneyChip(e: EconomyView, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MoneyChip(e: EconomyView, onClick: () -> Unit, fx: RewardFxState, modifier: Modifier = Modifier) {
+    val reduce = ReefTheme.reduceMotion
+    val shown by animateIntAsState(e.coins, if (reduce) tween(0) else tween(900, delayMillis = 700), label = "coins")
+    val gulp = remember { Animatable(0f) }
+    LaunchedEffect(fx.landed) {
+        if (fx.landed != 0L && !reduce) { gulp.snapTo(1f); gulp.animateTo(0f, spring(dampingRatio = 0.3f, stiffness = 380f)) }
+    }
     LivePill(
-        "${e.coins}", onClick, modifier, tone = Candy.yellow,
-        leading = { Canvas(Modifier.size(22.dp)) { drawSandDollar() } },
+        "$shown", onClick,
+        modifier.rewardTarget(fx).graphicsLayer { val k = 1f + 0.18f * gulp.value; scaleX = k; scaleY = 2f - k },
+        tone = Candy.yellow,
+        leading = { Canvas(Modifier.size(22.dp).graphicsLayer { rotationZ = gulp.value * 40f }) { drawSandDollar() } },
         trailing = {
             Text("★${e.level}", style = LiveTheme.style.buttonText.copy(fontSize = 13.sp), color = Candy.navy)
             if (e.attention) Box(Modifier.size(9.dp).clip(CircleShape).background(Candy.red))
@@ -98,7 +119,12 @@ fun CareCard(e: EconomyView, onCollect: () -> Unit, onDismiss: () -> Unit) {
             e.tasks.forEach { t ->
                 LivePanel(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp), tint = if (t.done) Candy.green else null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (t.done) "✓" else "○", style = s.titleText, color = if (t.done) Candy.green else s.label, modifier = Modifier.width(28.dp))
+                        // a done job's tick pops in with a bounce
+                        val pop by animateFloatAsState(if (t.done) 1f else 0f, spring(dampingRatio = 0.35f, stiffness = 300f), label = "tick")
+                        Text(
+                            if (t.done) "✓" else "○", style = s.titleText, color = if (t.done) Candy.green else s.label,
+                            modifier = Modifier.width(28.dp).graphicsLayer { val k = 1f + 0.5f * pop * (1f - pop) * 4f; scaleX = k; scaleY = k },
+                        )
                         Column(Modifier.weight(1f)) {
                             Text(t.task.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.label)
                             if (!t.done) Text(t.task.hint, style = MaterialTheme.typography.bodySmall, color = s.labelDim)

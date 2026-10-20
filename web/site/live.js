@@ -51,7 +51,7 @@ export function startLive(applyReadings) {
   if (started) return;
   started = true;
   // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
-  initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
+  window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },

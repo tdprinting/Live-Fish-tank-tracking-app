@@ -209,7 +209,11 @@ Kept as simple as the rest of the kid-friendly UI: big pictures, one number, one
 4. **Inside a store:** the storefront picture on top with the store's name and a one-line greeting, then two tabs:
    * **Buy:** a grid of animal cards (picture, name, price, a "Deal" or "Wanted" ribbon, locks).
    * **Sell:** your animals with the store's offer for each; the wanted ones float to the top.
-5. **Hermie** (the hermit crab helper) explains each new thing once: the first task, the first store, the first sale.
+5. **Rewards feel like a game:** every payment sends sand dollars bubbling up out of the tank, wobbling along a curve
+   into the money chip, which gulps and counts up while a big "+15" floats away. A finished job's tick pops. A level-up
+   dims the water, rushes bubbles and a little school of fish past, and pops a big glowing star with what just opened.
+   All of it respects "reduce motion". (Android `RewardFx.kt`, web `care.js`.)
+6. **Hermie** (the hermit crab helper) explains each new thing once: the first task, the first store, the first sale.
 
 Android (Compose) and web (`web/site`) get the same screens and words.
 
