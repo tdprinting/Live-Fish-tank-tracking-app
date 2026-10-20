@@ -25,7 +25,9 @@ import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
+import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.PestController
+import com.reeflive.core.sim.SimEvent
 import com.reeflive.core.sim.SimSnapshot
 import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.DryRockShape
@@ -40,9 +42,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Renderer quality tier (ARCHITECTURE §8.7). */
 enum class LiveQuality { LOW, MEDIUM, HIGH }
@@ -229,6 +234,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val gains: kotlinx.coroutines.flow.SharedFlow<com.reeflive.core.custom.economy.Gain> = holder.gains
     fun testedWater() { if (mode.value == SimMode.CUSTOM) holder.testedWater() }
     fun collectHappyBonus() = holder.collectHappyBonus()
+    // fish stores (docs/ECONOMY.md §5)
+    val visit: StateFlow<com.reeflive.app.live.StoreVisitUi?> = holder.visitState
+    val paid: kotlinx.coroutines.flow.SharedFlow<Pair<Int, Int>> = holder.paid
+    fun storeFronts(): List<com.reeflive.app.live.StoreFrontUi> = holder.storeFronts()
+    fun enterStore(store: com.reeflive.core.custom.economy.FishStore) = holder.enterStore(store)
+    fun showStoreTank(i: Int) = holder.showStoreTank(i)
+    fun leaveStore() = holder.leaveStore()
+    fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
     /** Names an animal (kept with it in My tank; the pretend tank forgets it on Reset). */
     fun rename(id: String, nickname: String) { if (mode.value != SimMode.REALITY) holder.enqueue(Command.Rename(id, nickname)) }
 
@@ -301,6 +314,19 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // pests, treatments, maintenance (sandbox only)
     fun addAiptasia(count: Int = 1) = sandbox { holder.enqueue(Command.AddAiptasia(count)) }
     fun removeAiptasia(count: Int = 1) = holder.enqueue(Command.RemoveAiptasia(count))
+    /**
+     * Doses aiptasia [polypId] with [treatment]; [onResult] gets whether it took (false: the polyp snapped shut into the
+     * rock in time), read off the sim's [SimEvent.AiptasiaTreated] within a few seconds.
+     */
+    fun treatAiptasia(treatment: AiptasiaTreatment, polypId: String?, onResult: (Boolean) -> Unit = {}) {
+        holder.enqueue(Command.TreatAiptasia(treatment, polypId))
+        viewModelScope.launch {
+            val e = withTimeoutOrNull(8_000) {
+                holder.snapshots.mapNotNull { s -> s.events.firstOrNull { it is SimEvent.AiptasiaTreated && (polypId == null || it.polypId == polypId) } }.first()
+            } as? SimEvent.AiptasiaTreated
+            if (e != null) onResult(e.killed)
+        }
+    }
     fun addPestControl(controller: PestController, count: Int = 1) = sandbox { holder.enqueue(Command.AddPestControl(controller, count)) }
     /** Starts [kind] for its default duration (UV runs until stopped) on every fish. */
     fun startTreatment(kind: TreatmentKind) = sandbox { holder.enqueue(Command.StartTreatment(kind)) }

@@ -948,6 +948,36 @@ def d_aiptasia_bottle(c):
     c.fine(["Shake well. Apply", "2-3 mL directly", "into the mouth."], 0.03, 0.15, 0.24, px=6, fill="#3A3A3A")
 
 
+def d_joes_juice(c):
+    """Blue Life Joe's Juice style bottle wrap: white with a blue band."""
+    c.rect(0, 0, 1, 1, fill="#FFFFFF")
+    c.rect(0, 0.0, 1, 0.3, fill="#1E4FB0")
+    c.text("Blue Life", "bold_it", 12, 0.5, 0.15, "#FFFFFF", max_w=0.5)
+    c.text("JOE'S", "black", 18, 0.5, 0.44, "#1E4FB0", max_w=0.5)
+    c.text("JUICE", "black", 18, 0.5, 0.6, "#141414", max_w=0.5)
+    c.text("Aiptasia eliminator", "bold", 7, 0.5, 0.74, "#2A2A2A", max_w=0.56)
+    c.text("20 mL", "sans_b", 8, 0.5, 0.86, "#1E4FB0")
+
+
+def d_kalk(c):
+    """A plain tub of pickling lime / kalkwasser powder for the home-made paste."""
+    c.rect(0, 0, 1, 1, fill="#F4F2EC")
+    c.rect(0, 0.0, 1, 0.22, fill="#2E8A4A")
+    c.text("KALKWASSER", "black", 14, 0.5, 0.11, "#FFFFFF", max_w=0.56)
+    c.text("calcium hydroxide", "bold", 9, 0.5, 0.38, "#1A3A22", max_w=0.56)
+    c.text("PICKLING LIME", "black", 12, 0.5, 0.52, "#2E8A4A", max_w=0.56)
+    c.fine(["Mix to a thick paste.", "Into the pest's mouth", "with a blunt syringe."], 0.24, 0.64, 0.76, px=6.5, fill="#3A3A3A", align="m")
+
+
+def d_laser_box(c):
+    """Aiptasia laser pen box front: dark with a green beam."""
+    c.rect(0, 0, 1, 1, fill="#141A22")
+    c.poly([(0.04, 0.72), (0.96, 0.3), (0.96, 0.36), (0.04, 0.76)], fill="#3CD070")
+    c.text("AIPTASIA", "black", 15, 0.5, 0.22, "#FFFFFF", max_w=0.9)
+    c.text("LASER", "black", 22, 0.5, 0.5, "#3CD070", max_w=0.9)
+    c.text("point • zap • gone", "bold", 7, 0.5, 0.88, "#C8D2DA", max_w=0.9)
+
+
 def d_drip_kit(c):
     """A drip-acclimation kit cup wrap."""
     c.rect(0, 0, 1, 1, fill="#FFFFFF")
@@ -1103,6 +1133,9 @@ DECALS = {
     "zap_pest": (3.8, 8.0, d_aiptasia_box),
     "zap_pest_bottle": (1.24 * math.radians(220), 2.6, d_aiptasia_bottle),
     "settle_in": (2.6 * math.radians(200), 3.6, d_drip_kit),
+    "joes_juice": (1.29 * math.radians(220), 3.7, d_joes_juice),
+    "kalk_paste": (2.04 * math.radians(220), 4.1, d_kalk),
+    "pest_laser": (9.0, 2.6, d_laser_box),
     "glass_cleaner": (7.2, 10.6, d_flipper_box),
     "glass_cleaner_top": (6.0, 2.0, d_flipper_top),
     "test_kit": (10.0, 6.0, d_api_kit),
