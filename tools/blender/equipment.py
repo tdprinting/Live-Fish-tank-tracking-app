@@ -3,7 +3,7 @@
 Nodes (direct children of Root, extras.part = "equipment" unless noted):
   PowerheadLeft, PowerheadBack, PowerheadRight  (extras.dir = jet direction, extras.jet = nozzle point)
   Heater, HeaterLED ("light"), IntakeTube, Flipper (inside + outside halves, label texture),
-  FrontMagnet, FrontMagnetBracket, HoseArc, CableLeft, FeedRing, HobFilter, ReturnPipe, ReturnNozzle (extras.outflow), Skimmer
+  FrontMagnet, FrontMagnetBracket, HoseArc, CableLeft, HobFilter, ReturnPipe, ReturnNozzle (extras.outflow), Skimmer
   (its collection cup is care_tools.glb, seated at SKIMMER_CUP),
   AtoBox, AtoLED ("light"), Jar, AiPrimeL/R (puck, heat-sink, gooseneck, clamp, power cable, lens plate) and
   AiPrimeL_Lens/AiPrimeR_Lens (part "emitter": 4 x 4 LED dots whose emissive the runtime sets to the light color).
@@ -116,6 +116,8 @@ def flipper_label(path):
     text("FLIPPER", 14, 4, 3)
     text("FLOAT", 46, 31, 2)
     img = np.rot90(img, k=-1)  # clockwise: reads top-to-bottom on the upright cleaner
+    for r0 in (4, 150):  # blue brand stripes at both ends
+        img[r0:r0 + 4, 6:42] = (0.12, 0.39, 0.84)
     C.write_png(path, (np.clip(img, 0, 1) * 255).astype(np.uint8))
     return path
 
@@ -162,6 +164,38 @@ def box_add(g, lo, hi, mat=0):
     g.add(V, F, T.box_uv(V, lo, hi), mat=mat)
 
 
+def slab(g, x0, x1, y0, y1, z0, z1, r=1.0, bevel=0.2, face="+z", mat=1, face_mat=None, uv_face=None):
+    """Rounded-corner slab (corner radius r in x/y, chamfer `bevel` on both end faces) along z, closed. The end cap on
+    the `face` side ("+z" or "-z") gets `face_mat` with planar UV over x0..x1 / y0..y1 (the label side)."""
+    r = min(r, (x1 - x0) / 2 - 1e-3, (y1 - y0) / 2 - 1e-3)
+    pts = []
+    for cx, cy, a0 in ((x1 - r, y1 - r, 0), (x0 + r, y1 - r, 90), (x0 + r, y0 + r, 180), (x1 - r, y0 + r, 270)):
+        for k in range(5):
+            a = math.radians(a0 + 90 * k / 4)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    pts = np.array(pts)
+    n = len(pts)
+    cen = pts.mean(axis=0)
+
+    def ring(z, inset):
+        p = cen + (pts - cen) * np.maximum(0.0, 1 - inset / np.maximum(np.linalg.norm(pts - cen, axis=1), 1e-6))[:, None]
+        return np.c_[p[:, 0], p[:, 1], np.full(n, z)]
+
+    rings = [ring(z0, bevel), ring(z0 + bevel, 0), ring(z1 - bevel, 0), ring(z1, bevel)]
+    V = np.concatenate(rings)
+    F = []
+    for j in range(3):
+        for i in range(n):
+            a, b = j * n + i, j * n + (i + 1) % n
+            F.append((a, b, b + n, a + n))
+    top = tuple(range(3 * n, 4 * n))
+    bot = tuple(range(n - 1, -1, -1))
+    uv = np.c_[(V[:, 0] - x0) / (x1 - x0), (V[:, 1] - y0) / (y1 - y0)]
+    g.add(V, F + [top, bot], uv, mat=mat)
+    if face_mat is not None:  # the two cap faces are the last two entries of FM
+        g.FM[-2 if face == "+z" else -1] = face_mat
+
+
 def puck(g, pc, size=12.2, h=3.6, n=24, mat=0):
     """Rounded-square prism (superellipse) centred at pc, closed."""
     ring = []
@@ -189,7 +223,6 @@ def build():
     grey = C.material("bracket_grey", "#9CA59A", rough=0.6)
     tube_grey = C.material("tube_grey", "#8A8F94", rough=0.4)
     clear = C.material("clear", "#DDE8E6", rough=0.15, alpha=0.4, blend=True, double=True)
-    ringm = C.material("ring_clear", "#E6EEF0", rough=0.15, alpha=0.5, blend=True, double=True)
     nozzle_white = C.material("nozzle_white", "#EEEEE8", rough=0.4)
     hob = C.material("hob", "#2A2C30", rough=0.55)
     cap = C.material("cap_grey", "#8C8F93", rough=0.4)
@@ -202,6 +235,8 @@ def build():
     lens = C.material("ai_lens", "#DDE8FF", rough=0.2, emissive="#DDE8FF", emissive_strength=3.0)
     label = C.material("flipper_label", "#FFFFFF", rough=0.45,
                        image=C.load_image(flipper_label(os.path.join(C.BUILD, "flipper_label.png")), name="flipper_label"))
+    blue = C.material("flipper_blue", "#1E63D6", rough=0.45)
+    felt = C.material("flipper_felt", "#23262A", rough=0.95)
     slots = C.material("cartridge", "#D0D0D0", rough=0.6,
                        image=C.load_image(slot_tex(os.path.join(C.BUILD, "cartridge.png")), name="cartridge"))
     GTH = T.GT
@@ -288,18 +323,21 @@ def build():
     g.add(V, F, uv, mat=1)
     objs.append(g.obj("IntakeTube", root, "equipment", [tube_grey, black], smooth=True))
 
-    # --- Flipper: inner half on the front glass inner face + outer (label) half on the outer face, each sitting on
-    # 1 mm felt pads that touch the glass, so the halves are flush on either side of the pane. x 2-8 (1 cm in from
-    # the spec's x 1-7) and a 1.3 cm outer half keep the label inside the tank's left edge from the default orbit.
+    # --- Flipper Float: a magnetic scraper in two halves. The outer half (label side, a soft-edged shell with a pull
+    # tab) sits flush on the outside of the pane; the inner half is a rounded body with a continuous felt pad that
+    # touches the glass, a blue scrubber rail and a grip bar on its water side. Centre (5, 23) never changes (the
+    # renderer slides it from there); the outer half is a separate shell on the far face of the glass.
     g = T.WGeo()
     FX0, FX1 = 2.0, 8.0
-    box_add(g, (FX0, 13, D - 1.6), (FX1, 33, D - 0.1))
-    box_add(g, (FX0, 13, D + GTH + 0.1), (FX1, 33, D + GTH + 1.4))
-    for px in (FX0 + 0.6, FX1 - 1.6):
-        for py in (14, 31):
-            box_add(g, (px, py, D - 0.1), (px + 1.0, py + 1.0, D), mat=1)
-            box_add(g, (px, py, D + GTH), (px + 1.0, py + 1.0, D + GTH + 0.1), mat=1)
-    objs.append(g.obj("Flipper", root, "equipment", [label, grille]))
+    FCX = (FX0 + FX1) / 2
+    slab(g, FX0, FX1, 13, 33, D + GTH + 0.1, D + GTH + 1.4, r=1.1, bevel=0.22, face="+z", mat=1, face_mat=0)
+    slab(g, FCX - 1.5, FCX + 1.5, 33.0, 34.4, D + GTH + 0.1, D + GTH + 0.8, r=0.5, bevel=0.15, mat=2)  # pull tab
+    slab(g, FX0, FX1, 13, 33, D - 1.5, D - 0.2, r=1.1, bevel=0.22, face="-z", mat=1, face_mat=1)
+    slab(g, FX0 + 0.55, FX1 - 0.55, 13.55, 32.45, D - 0.2, D, r=0.7, bevel=0.05, mat=3)  # felt pad on the glass
+    slab(g, FCX - 0.8, FCX + 0.8, 15, 31, D - 1.95, D - 1.5, r=0.7, bevel=0.15, mat=2)  # grip bar on the water side
+    slab(g, FX0 + 0.3, FX0 + 0.8, 14, 32, D - 1.6, D - 1.45, r=0.2, bevel=0.05, mat=2)  # scrubber rails
+    slab(g, FX1 - 0.8, FX1 - 0.3, 14, 32, D - 1.6, D - 1.45, r=0.2, bevel=0.05, mat=2)
+    objs.append(g.obj("Flipper", root, "equipment", [label, grille, blue, felt], smooth=True))
 
     # --- FrontMagnet: black cylinder on the sand facing the viewer + grey-green bracket to its left
     g = T.WGeo()
@@ -316,23 +354,25 @@ def build():
     g.add(V, F)
     objs.append(g.obj("FrontMagnetBracket", root, "equipment", [grey]))
 
-    # --- HoseArc: clear tube arcing down the left end (photo: from under the surface to the left foot rocks), capped
+    # --- HoseArc: the left powerhead's clear air/feed line. It leaves a hose barb on the top of the powerhead, rises in
+    # a gentle curve and runs along the back glass (held by a small suction clip), then crosses the back rim and drops
+    # outside the tank like the other cables, so it touches nothing but the powerhead, the clip and the rim.
     g = T.WGeo()
-    tube_path(g, [(8, 24, 21), (13, 32, 18), (22, 36, 16), (30, 34, 13)], 0.8, 10, n=7)
-    objs.append(g.obj("HoseArc", root, "equipment", [clear], smooth=True))
+    V, F, uv = cylinder((9.0, 30.9, 18.0), (9.0, 31.9, 18.0), 0.55, 10)  # hose barb on the powerhead body
+    g.add(V, F, uv, mat=1)
+    tube_path(g, [(9.0, 31.4, 18.0), (9.0, 33.4, 17.6), (8.2, 35.4, 14.0), (7.0, 36.6, 9.0), (6.0, 37.0, 4.0),
+                  (5.6, 37.4, 1.3), (5.5, RIM_Y - 0.9, 0.7), (5.5, RIM_Y + 1.1, -1.5), (5.5, RIM_Y - 3.4, -2.4)],
+              0.5, 10, n=6)
+    box_add(g, (4.6, 36.2, 0.05), (6.4, 38.4, 1.25), mat=1)  # suction clip on the back glass
+    objs.append(g.obj("HoseArc", root, "equipment", [clear, black], smooth=True))
 
-    # --- CableLeft: from the Flipper down the left glass along the sand, up the back-left corner and over the rim
+    # --- CableLeft: the powerhead's controller lead, down the left glass along the sand, up the back-left corner and
+    # over the rim (it starts at the powerhead's magnet plate, not at the Flipper, which slides free of it)
     g = T.WGeo()
-    tube_path(g, [(4.5, 13, D - 1.1), (2.0, 9.0, D - 3.0), (0.7, 7.5, D - 8.0), (0.7, 8.0, 26), (0.7, 7.5, 14),
+    tube_path(g, [(1.0, 26.0, 19.6), (0.9, 18.0, 19.6), (0.8, 10.0, 19.0), (0.7, 7.8, 14.0), (0.8, 8.0, 8.0),
                   (0.8, 8, 1.2), (0.6, 22, 0.6), (0.6, RIM_Y - 0.8, 0.6), (0.6, RIM_Y + 1.1, -1.6),
                   (0.6, RIM_Y - 3.4, -2.4)], 0.35, 6, n=4)
     objs.append(g.obj("CableLeft", root, "equipment", [cable], smooth=True))
-
-    # --- FeedRing floating at the surface
-    g = T.WGeo()
-    V, F = torus((41, WY + 0.2, 23.4), 4.5, 0.35, 24, 6)
-    g.add(V, F)
-    objs.append(g.obj("FeedRing", root, "equipment", [ringm], smooth=True))
 
     # Back rim (tank.py rim_geos): skirt outer face z -1.035 from RIM_Y - 3.8 to the lip top RIM_Y; the lip runs
     # inward to z 1.765 with its underside at RIM_Y - 0.5; below the skirt the back glass outer face is at z -0.635.

@@ -118,7 +118,7 @@ object ReefLive {
                 s.stepWall(0.0)
                 sim = s; reality = s
 
-                val gl = cnv.getContext("webgl2", js("({antialias: true, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance'})"))
+                val gl = cnv.getContext("webgl2", js("({antialias: false, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance'})"))
                     ?: throw IllegalStateException("This browser has no WebGL 2")
                 GLES30.gl = gl
                 val q = runCatching { RenderQuality.valueOf(quality.uppercase()) }.getOrDefault(RenderQuality.HIGH)
@@ -127,6 +127,8 @@ object ReefLive {
                 r.snapshotProvider = { sim?.latest }
                 r.projection = projection
                 r.demoWhenEmpty = false
+                // the canvas has no MSAA of its own (it doubled the work on 3x phones): PostFx anti-aliases
+                r.msaaInPost = true
                 r.listener = object : TankViewListener {
                     // a tap right on an animal also touches it: snails and crabs tuck in, fish just get picked (TankTouch)
                     override fun onPick(id: String?) { if (id != null) sim?.enqueue(Command.TouchAnimal(id)); emit("onPick", id) }
@@ -176,13 +178,14 @@ object ReefLive {
     private var current = RenderQuality.HIGH
 
     /**
-     * HIGH draws at the screen's full resolution (3x on iPhone Pro / Pro Max); lower presets cap it. [scaleStep] trims
-     * it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
+     * HIGH draws at up to 2 pixels per CSS pixel: with 4x MSAA that looks the same as 3x on a 3x iPhone screen, for
+     * less than half the pixels (fill rate is what limits phones and iPads here). Lower presets cap it further.
+     * [scaleStep] trims it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
      */
     private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
-        RenderQuality.HIGH -> 3.0
-        RenderQuality.MEDIUM -> 2.0
-        RenderQuality.LOW -> 1.5
+        RenderQuality.HIGH -> 2.0
+        RenderQuality.MEDIUM -> 1.5
+        RenderQuality.LOW -> 1.0
     }) * SCALES[scaleStep]
 
     private var scaleStep = 0
@@ -584,7 +587,7 @@ object ReefLive {
 
     private const val TICK = 0.05
     /** Render-resolution multipliers tried in order while frames are slow (1 → ⅔ of the device pixel ratio). */
-    private val SCALES = doubleArrayOf(1.0, 0.9, 0.8, 0.72, 0.67)
+    private val SCALES = doubleArrayOf(1.0, 0.9, 0.8, 0.72, 0.64, 0.57, 0.5)
     private const val ADAPT_FRAMES = 45
     private const val SLOW_DT = 1.0 / 48
     private const val FAST_DT = 1.0 / 57
