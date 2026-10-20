@@ -153,9 +153,9 @@ class DynamicRockSdf(
         if (b is SdfGrid) {
             ox = b.origin.x; oy = b.origin.y; oz = b.origin.z; cell = b.cell
             // a bigger tank than the bake (My tank builds): the grid grows to the glass, the base reads as open water there
-            nx = max(b.nx, kotlin.math.ceil((lengthCm - ox) / cell).toInt() + 1)
-            ny = max(b.ny, kotlin.math.ceil((heightCm - oy) / cell).toInt() + 1)
-            nz = max(b.nz, kotlin.math.ceil((widthCm - oz) / cell).toInt() + 1)
+            nx = max(b.nx, floor((lengthCm - ox) / cell).toInt() + 1)
+            ny = max(b.ny, floor((heightCm - oy) / cell).toInt() + 1)
+            nz = max(b.nz, floor((widthCm - oz) / cell).toInt() + 1)
         } else {
             cell = 1.0; ox = 0.5; oy = 0.5; oz = 0.5
             nx = floor(lengthCm).toInt(); ny = floor(heightCm).toInt(); nz = floor(widthCm).toInt()
