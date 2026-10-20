@@ -298,7 +298,8 @@ class Reproduction(private val sim: Simulation) {
     /** Spawnings so far (tests). */
     var tangSpawns = 0; private set
 
-    private fun tangs() = sim.organisms.filter { it.alive && it.brainKind == BrainKind.TANG }
+    /** Only blue tangs pair: other tang species share TangBrain but never cross with them. */
+    private fun tangs() = sim.organisms.filter { it.alive && it.brainKind == BrainKind.TANG && it.species.id == BLUE_TANG_ID }
 
     /**
      * P. hepatus are gonochores with no outward sex difference ([S]): a fish's sex is fixed but unseen. Once two or more
@@ -413,6 +414,7 @@ class Reproduction(private val sim: Simulation) {
     }
 
     companion object {
+        const val BLUE_TANG_ID = "paracanthurus_hepatus"
         const val TANG_READY_DAYS = 10.0
         const val TANG_COURT_MIN_S = 900.0
         const val TANG_COURT_MAX_S = 1800.0
