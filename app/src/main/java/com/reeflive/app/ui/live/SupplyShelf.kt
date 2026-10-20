@@ -68,6 +68,7 @@ import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.WaterState
@@ -136,6 +137,9 @@ enum class SupplyItem(
     MICROSCOPE("microscope", ShelfRow.TOOLS, "Look closer", note = "The tiny life in the tank", product = "Student microscope"),
     KNOCKER("knocker", ShelfRow.TOOLS, "Knock glass", note = "Tap tap! Who comes to look?", product = "Rubber mallet"),
     MOVE_ROCKS("move_rocks", ShelfRow.TOOLS, "Move rocks", true, note = "Shuffle the rockwork", product = "CaribSea LifeRock"),
+    JOES_JUICE("joes_juice", ShelfRow.TOOLS, "Joe's Juice", note = "Feed a pest anemone its last meal", product = "Blue Life Joe's Juice"),
+    KALK_PASTE("kalk_paste", ShelfRow.TOOLS, "Kalk paste", note = "Home-made pest paste in a syringe", product = "Kalkwasser (pickling lime) paste"),
+    PEST_LASER("pest_laser", ShelfRow.TOOLS, "Pest laser", note = "Zap a pest anemone with light", product = "Aiptasia laser pen"),
     ;
 
     val label: String get() = food?.label ?: title.orEmpty()
@@ -150,6 +154,7 @@ enum class SupplyItem(
         WATER_SMALL -> "Small water change"
         DOSE_ALK -> "Alkalinity"
         GLASS_CLEANER -> "Glass cleaner"
+        ZAP_PEST -> "Aiptasia-X"
         else -> label
     }
 
@@ -174,6 +179,7 @@ enum class SupplyItem(
         MICROSCOPE -> ReefGlyphs.microscope
         KNOCKER -> ReefGlyphs.touch
         MOVE_ROCKS -> ReefGlyphs.rocks
+        JOES_JUICE, KALK_PASTE, PEST_LASER -> ReefGlyphs.pestAnemone
         else -> ReefGlyphs.feedTin
     }
 
@@ -191,7 +197,10 @@ enum class SupplyItem(
         NEW_SOCK -> "Fits a clean felt sock: traps drifting muck. Left in past 2-3 days it rots back to ammonia"
         FRESH_CARBON -> "Fresh carbon: clears yellow water and coral toxins in a day. Slowly strips iodine too"
         TRIM_ALGAE -> "Cuts the red macro by a third and the refugium by half: the nitrate in it leaves too"
-        ZAP_PEST -> "Kills the biggest pest anemone. One in five leaves a baby behind"
+        ZAP_PEST -> "Injected into the biggest open pest anemone: it shrinks away in about 5 minutes. A closed one often escapes"
+        JOES_JUICE -> "Fed over a pest anemone's mouth: gone in about 15 minutes. A bit more likely to leave a baby behind"
+        KALK_PASTE -> "Cheap lime paste: kills in about half an hour, but 1 in 5 drops a baby. Keep it off the corals"
+        PEST_LASER -> "A second of light: the pest shrivels at once and rarely splits. It can duck into the rock first"
         SETTLE_IN -> "Resets everyone's comfort point to today's water: shock from swings fades"
         GLASS_CLEANER -> "Wipes the algae film off the front glass where you drag"
         TEST_KIT -> "Reads KH, Ca, NO3, PO4 like a real kit: colour cards round, drops are ±1"
@@ -242,7 +251,10 @@ enum class SupplyItem(
             NEW_SOCK -> actions.onMaintain(MaintenanceTask.CHANGE_SOCK)
             FRESH_CARBON -> actions.onMaintain(MaintenanceTask.REPLACE_CARBON)
             TRIM_ALGAE -> actions.onMaintain(MaintenanceTask.HARVEST_MACRO)
-            ZAP_PEST -> actions.onRemoveAiptasia()
+            ZAP_PEST -> actions.onTreatAiptasia(AiptasiaTreatment.AIPTASIA_X)
+            JOES_JUICE -> actions.onTreatAiptasia(AiptasiaTreatment.JOES_JUICE)
+            KALK_PASTE -> actions.onTreatAiptasia(AiptasiaTreatment.KALK_PASTE)
+            PEST_LASER -> actions.onTreatAiptasia(AiptasiaTreatment.LASER)
             SETTLE_IN -> actions.onAcclimateAll()
             GLASS_CLEANER -> if (!tools.cleaning) tools.onCleanGlass()
             MICROSCOPE -> tools.onMicroscope()

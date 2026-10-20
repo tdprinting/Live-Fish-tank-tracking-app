@@ -74,6 +74,9 @@ class Coral(
     var placedAtSec = Double.NaN
     /** Last time a disturbance fragmented this aiptasia polyp (AiptasiaModel). */
     var lastFragAt = -1e9
+    /** Aiptasia being killed by a keeper's treatment ([AiptasiaModel.treat]): which one, and sim seconds until gone. */
+    var treatment: AiptasiaTreatment? = null
+    var treatLeftSec = 0.0
 
     fun toPose(simTimeSec: Double = 0.0) = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
