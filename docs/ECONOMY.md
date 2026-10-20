@@ -132,11 +132,13 @@ Base prices are close to US store prices in 2026. "Level" is when it can be boug
 | Ocellaris clownfish | fish | 1 | 25 |
 | Pajama cardinalfish | fish | 1 | 20 |
 | Lawnmower blenny | fish | 1 | 25 |
+| Blue-green chromis (each; schools of 5+ are calm) | fish | 1 | 12 |
 | Kenya tree coral | coral | 1 | 15 |
 | Green mushroom | coral | 1 | 15 |
 | Green star polyps | coral | 1 | 20 |
 | Clove polyps | coral | 1 | 20 |
 | Bicolor blenny | fish | 2 | 30 |
+| Firefish goby | fish | 2 | 30 |
 | Skunk cleaner shrimp | invert | 2 | 30 |
 | Coral banded shrimp | invert | 2 | 25 |
 | Sally Lightfoot crab | invert | 2 | 20 |
