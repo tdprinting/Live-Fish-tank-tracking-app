@@ -7,7 +7,7 @@ import org.junit.Test
 class ReefFactsTest {
     @Test fun noFactRepeatsUntilAllWereShown() {
         val n = ReefFacts.all.size
-        assertTrue("a sizable list: $n", n >= 50)
+        assertTrue("a sizable list: $n", n >= 300)
         val start = 20_380L
         assertEquals(n, (0 until n).map { ReefFacts.nth(start + it) }.toSet().size)
     }
