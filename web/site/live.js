@@ -387,7 +387,7 @@ function lifeCard(sb) {
     <p class="muted">Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and it floats until they are ready.</p>
     <div class="pills"><span class="muted">How many</span>${[1, 2, 3, 5, 10].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
     ${ui.addGroup !== 'CORALS' ? `<div class="pills"><span class="muted">Size</span>${C.sizes.map((z) => `<button class="pillbtn ${ui.addSize === z.id ? 'on' : ''}" data-size="${z.id}">${esc(z.label)}</button>`).join('')}</div>` : ''}
-    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, `species:${s.id}:${STOCK_ICON[s.group]}`, s.name, false, !sb)).join('')}</div>
+    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, `species:${s.species || s.id}:${STOCK_ICON[s.group]}`, s.name, false, !sb)).join('')}</div>
     <h4>Helpers</h4><div class="options">
       ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
       ${tile('data-pest="PEPPERMINT_SHRIMP"', 'shrimp', 'Peppermint shrimp', false, !sb)}${tile('data-pest="BERGHIA"', 'slug', 'Berghia slugs', false, !sb)}

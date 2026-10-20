@@ -63,6 +63,8 @@ object BroodSpecs {
             // pajama cardinals feed on plankton at night, exactly when the larvae hatch (research 02 §3C)
             BrainKind.CARDINAL to 0.9, BrainKind.DOTTYBACK to 0.4, BrainKind.HAWK to 0.35, BrainKind.TANG to 0.3,
             BrainKind.CLOWN to 0.25, BrainKind.LEOPARD_WRASSE to 0.2, BrainKind.WRASSE to 0.1, BrainKind.DIAMOND_GOBY to 0.1,
+            // fairy wrasses pick zooplankton all day: a clown larva in the open water is just that (research 42 §1)
+            BrainKind.FAIRY_WRASSE to 0.6,
         ),
     )
 

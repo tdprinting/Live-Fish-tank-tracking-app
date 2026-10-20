@@ -854,7 +854,7 @@ class Simulation private constructor(
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
-        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
+        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
         val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.sandTopCm + 0.6
         val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
         val vy = if (buoyant) 1.2 else -2.0
@@ -1024,7 +1024,7 @@ class Simulation private constructor(
     private fun growth(o: Organism, dtMin: Double) {
         val g = o.species.growthCmPerYear
         if (g <= 0 || o.lengthCm >= o.species.maxLengthCm) return
-        val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < 450 && o.lengthCm > 15) 0.3 else 1.0
+        val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < LifeCycle.minVolumeL(o) && o.lengthCm > 0.6 * o.species.typicalAdultCm) 0.3 else 1.0
         o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt
     }
 
@@ -1565,7 +1565,7 @@ class Simulation private constructor(
             if (d > 30) continue
             var s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0) * StressModel.skittishMult(o)
             // a wrasse in its mucus cocoon needs twice the disturbance to wake (06 §5.5)
-            if (o.sleeping && o.brainKind == BrainKind.WRASSE) s *= 0.5
+            if (o.sleeping && (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.FAIRY_WRASSE && o.cocoon > 0.5)) s *= 0.5
             o.startle = max(o.startle, s)
             StressModel.addSocial(o, TAP_SOCIAL * s)
             agents[o]?.brain?.onTap(agents[o]!!.ctx, point, s)

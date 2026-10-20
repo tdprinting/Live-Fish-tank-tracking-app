@@ -638,7 +638,7 @@ fun LiveTankScreen(
         onTimelapse = { echo(LiveReactions.timelapse()); lapse = true },
         onAddMany = { id, n, size ->
             tick()
-            val card = stockCards.firstOrNull { it.speciesId == id }
+            val card = stockCards.firstOrNull { it.key == id }
             // new animals come in a shop bag: it goes in the keeper's hand, to be dragged onto the tank
             if (card != null) { open = null; bagCarry = BagCarry(card, n, size) }
             else cue(LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
@@ -938,7 +938,7 @@ fun LiveTankScreen(
     val onBagDrop: (BagCarry, Float) -> Unit = { b, gx ->
         bagCarry = null
         tick()
-        vm.floatBag(b.card.speciesId, b.count, b.size, gx)
+        vm.floatBag(b.card.key, b.count, b.size, gx)
         echo(LiveReactions.bagIn(b.card, b.count, gx))
     }
     val onCarryCancel: () -> Unit = { carry = null; tick() }

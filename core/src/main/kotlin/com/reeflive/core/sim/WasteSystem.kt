@@ -126,7 +126,7 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
         sink[i] = (SINK_MIN + (SINK_MAX - SINK_MIN) * rng.nextDouble()).toFloat()
         tint[i] = when (o.brainKind) {
             BrainKind.TANG, BrainKind.LAWNMOWER_BLENNY -> 1     // algae diet: green-brown
-            BrainKind.CARDINAL, BrainKind.WRASSE -> 2            // plankton and parasites: pale
+            BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE -> 2            // plankton and parasites: pale
             else -> 0
         }.toByte()
         seed[i] = rng.nextDouble().toFloat()

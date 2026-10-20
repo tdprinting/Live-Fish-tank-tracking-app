@@ -57,6 +57,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             particles.burst(TankBurst(if (kind == 0) BurstKind.SPLASH else BurstKind.BUBBLES, x, y, z, amount = 0.6f + r * 0.15f), interp.current)
         }
     }
+    /** Mucus cocoons round sleeping fairy wrasses. */
+    private val cocoonScene = CocoonScene()
     /** "Fix my tank" care animations (skimmer cup, sock, doses, water changes); null = only the props at rest. */
     @Volatile var care: CareShowControl? = null
     private val careScene = CareScene().also { cs ->
@@ -231,6 +233,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         placeholder?.release(); placeholder = null
         subScene.release()
         bagScene.release()
+        cocoonScene.release()
         netScene.release()
         nursery.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
@@ -390,6 +393,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         // acclimation bags: see-through plastic over the animals riding in them
         if (bagScene.count > 0) white?.let { drawCalls += bagScene.draw(progs.generic, it) }
+        // fairy wrasse cocoons: clear slime over the sleeping fish
+        white?.let { drawCalls += cocoonScene.draw(progs.generic, it, rigs) }
         // care props: the clear skimmer cup, the jug and hose, water in the bucket, pour streams
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = true) }
         // the fish net's mesh bag, see-through over the body it carries
@@ -1163,12 +1168,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
         p.set2f("uEnv", r.envExp, r.envHead)
-        p.set4f("uFin", r.pectoral, r.finClamp, r.gill, r.gillRate)
+        // a flashing male fairy wrasse spreads every fin past rest (negative clamp) and his colours deepen (negative desat)
+        p.set4f("uFin", r.pectoral, r.finClamp - DISPLAY_FLARE * r.display, r.gill, r.gillRate)
         // x: pectoral stroke phase (cycles, wrapped to [0,1) so float precision holds), y: stroke sweep, z: C-start bend, w: mode
         p.set4f("uMotion", r.pecPhase - kotlin.math.floor(r.pecPhase), r.pecAmp, r.bend, r.motionMode.toFloat())
         // shrimp picking / feeding strokes (mouth)
         p.set1f("uPick", r.mouth)
-        p.set1f("uDesat", r.desat)
+        p.set1f("uDesat", r.desat - DISPLAY_SATURATE * r.display)
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)
         p.set1f("uDead", if (r.alive) 0f else 1f)
@@ -1598,6 +1604,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     companion object {
     /** Largest coral part box (cm, any side) the eye treats as solid; bigger ones are spreads of small colonies. */
     private const val MAX_EYE_BOX_CM = 20f
+    /** Male fairy wrasse flash (core Organism.display): fin flare past rest and colour boost at full display. */
+    private const val DISPLAY_FLARE = 0.5f
+    private const val DISPLAY_SATURATE = 0.35f
 
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"

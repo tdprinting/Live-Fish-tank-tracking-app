@@ -340,6 +340,10 @@ data class OrganismPose(
     val limbs: FloatArray = NO_LIMBS,
     /** Still in an acclimation bag ([AcclimationBags]): drawn, but not pickable and not yet in the tank. */
     val bagged: Boolean = false,
+    /** Courtship flash 0..1 ([Organism.display]): fins flared and colours brightened. */
+    val display: Float = 0f,
+    /** Mucus cocoon 0..1 around a sleeping wrasse ([Organism.cocoon]). */
+    val cocoon: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
