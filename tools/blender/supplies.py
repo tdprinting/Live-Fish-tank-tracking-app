@@ -15,7 +15,9 @@ look-alike of a real reef-keeping product, in its real container shape with its 
                         with its tag, Seachem Matrix Carbon jar, curved scissors on a backing card, Red Sea
                         Aiptasia-X kit (box, bottle, syringe), a drip-acclimation cup with airline and valve
   row 2 TOOLS (bottom): Flipper Edge magnet and its box, API Reef Master test kit tub + Salifert KH box and a vial,
-                        student microscope, rubber mallet, CaribSea LifeRock carton with rock and tongs
+                        student microscope, rubber mallet, CaribSea LifeRock carton with rock and tongs, Blue Life
+                        Joe's Juice bottle and syringe, a tub of kalkwasser (pickling lime) with a cup of white paste
+                        and a blunt syringe, an aiptasia laser pen on its box
 
 Labels come from one 2048² atlas (supply_labels.py, JPEG) UV-mapped onto wrap bands, pouch fronts, box faces and
 cards; it also holds the lit "Supplies" sign and the soft backdrop of the back panel. The runtime names every prop on
@@ -64,12 +66,13 @@ FEED = ["flake", "pellet", "floating_pellet", "algae_wafer", "mysis", "brine", "
         "nori", "coral_food", "plankton", "pods"]
 CARE = ["water_change", "water_small", "dose_alk", "dose_ca", "dose_mg", "new_sock", "fresh_carbon",
         "trim_algae", "zap_pest", "settle_in"]
-TOOLS = ["glass_cleaner", "test_kit", "microscope", "knocker", "move_rocks"]
+TOOLS = ["glass_cleaner", "test_kit", "microscope", "knocker", "move_rocks", "joes_juice", "kalk_paste", "pest_laser"]
 ROWS = [FEED, CARE, TOOLS]
 # props are modelled near real proportions, then scaled per row (and per item) to fill their slots: bigger print reads
 # better at phone size. CLEAR = free height over each board (a picked prop must fit, lifted).
 ROW_SCALE = (1.15, 1.05, 1.0)
-SCALE = {"glass_cleaner": 1.12, "test_kit": 1.15, "move_rocks": 1.1, "microscope": 0.95, "water_change": 1.04}
+SCALE = {"glass_cleaner": 0.74, "test_kit": 0.745, "move_rocks": 0.84, "microscope": 0.95, "water_change": 1.04,
+         "joes_juice": 1.25, "kalk_paste": 1.15, "pest_laser": 1.1}
 CLEAR = (TOP_Y - ROW_Y[0], ROW_Y[0] - BOARD - ROW_Y[1], ROW_Y[1] - BOARD - ROW_Y[2])
 SEA_GLASS = ["#F2C17A", "#9EDFA6", "#8CD3EA"]   # row edging: amber (feed), green (care), blue (tools)
 
@@ -538,6 +541,29 @@ def build_prop(item, x, y, z):
         for s in (-1, 1):
             p.add(*cyl((x + 6.3, y + 1.2, z + 3.2 + 0.4 * s), (x + 1.6, y + 9.6, z + 1.4 + 0.2 * s), 0.22, 6), "#9AA4AC", 0.2, 0.8)
         p.add(*blob((x + 6.3, y + 1.3, z + 3.2), (0.6, 0.6, 0.9), 6, 3), "#1E7FD8", 0.4)
+    elif item == "joes_juice":
+        # Blue Life Joe's Juice: a 20 mL white bottle with its blue label, the dosing syringe lying in front
+        bottle(p, "joes_juice", x - 1.2, y, z - 0.6, 1.25, 4.2, "#F6F6F4", "#1E4FB0", cap_h=1.0, neck_r=0.5, band=(0.06, 0.94))
+        sy = y + 0.5
+        p.add(*cyl((x - 3.6, sy, z + 2.4), (x + 2.6, sy, z + 2.4), 0.45, 12), "#E4F2F8", 0.15)
+        p.add(*cyl((x + 2.6, sy, z + 2.4), (x + 4.2, sy, z + 2.4), 0.12, 6), "#F2F2F2", 0.4)
+        p.add(*cyl((x - 4.4, sy, z + 2.4), (x - 3.6, sy, z + 2.4), 0.12, 6), "#F2F2F2", 0.4)
+        p.add(*cyl((x - 4.7, sy, z + 2.4), (x - 4.4, sy, z + 2.4), 0.55, 10), "#F2F2F2", 0.4)
+    elif item == "kalk_paste":
+        # home-made kalk paste: a tub of pickling lime, a little cup of white paste, a blunt syringe across the cup
+        screw_jar(p, "kalk_paste", x - 1.8, y, z - 0.8, 2.0, 4.6, "#F4F2EC", "#2E8A4A", 1.2, band=(0.06, 0.95), cap_r=2.1)
+        p.add(*lathe([(0.9, 0), (1.1, 0.2), (1.25, 1.6), (1.15, 1.7), (0.01, 1.7)], (x + 2.6, y, z + 1.8), 14), "#D8E8F0", 0.2)
+        p.add(*blob((x + 2.6, y + 1.65, z + 1.8), (1.05, 0.25, 1.05), 10, 4), "#FBFBF6", 0.7)
+        p.add(*cyl((x + 0.2, y + 1.9, z + 2.6), (x + 4.4, y + 2.4, z + 1.2), 0.32, 10), "#E4F2F8", 0.15)
+        p.add(*cyl((x + 4.4, y + 2.4, z + 1.2), (x + 5.0, y + 2.47, z + 1.0), 0.13, 6), "#F2F2F2", 0.4)
+    elif item == "pest_laser":
+        # an aiptasia laser pen lying on its retail box
+        fbox(p, (x, y + 1.3, z), (9.0, 2.6, 4.2), "#141A22", 0.45, decals={"+z": "pest_laser"})
+        py = y + 3.25
+        p.add(*cyl((x - 4.0, py, z + 0.4), (x + 3.4, py, z + 0.4), 0.62, 14), "#22262A", 0.3, 0.7)
+        p.add(*cyl((x + 3.4, py, z + 0.4), (x + 4.0, py, z + 0.4), 0.62, 14, r1=0.32), "#22262A", 0.3, 0.7)
+        p.add(*cyl((x + 3.98, py, z + 0.4), (x + 4.06, py, z + 0.4), 0.24, 10), "#9FE8FF", 0.05)
+        p.add(*obox_((x - 0.6, py + 0.6, z + 0.4), (0.8, 0.22, 0.36)), "#3CD070", 0.3)
     else:
         raise ValueError(item)
     return p

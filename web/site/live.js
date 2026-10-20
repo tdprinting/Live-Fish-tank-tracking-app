@@ -70,6 +70,7 @@ export function startLive(applyReadings) {
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
     onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'FIX') renderCard(); },
+    onPestTreated: (r) => { say(r > 0 ? 'Got it! Watch it shrink away.' : r === 0 ? "It ducked into the rock just in time! Try again when it's open." : 'No pest anemones right now. Nothing to treat!'); setTimeout(tick, 150); },
     onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'FIX') renderCard(); },
     // a rock settled or toppled after the sand under it was dug out: remember where it lies now
     onRocks: (state) => { store.set('reeflive.rocks', state); say('Crunch! A rock shifted. The gobies dug out too much sand under it.'); },
@@ -787,13 +788,16 @@ const SUPPLIES = [
   { id: 'trim_algae', row: 1, label: 'Trim algae', sandbox: true, run: () => act('maintain', 'HARVEST_MACRO', 0, 'Snip snip! The algae garden is trimmed.') },
   { id: 'siphon', row: 1, label: 'Siphon gunk', run: () => act('maintain', 'SIPHON_SAND', 0, 'Slurp! Fish poop and mulm vacuumed off the sand.') },
   { id: 'rinse_filter', row: 1, label: 'Rinse filter', run: () => act('maintain', 'RINSE_FILTER', 0, 'The filter floss is rinsed. Trapped poop is gone before it rots.') },
-  { id: 'zap_pest', row: 1, label: 'Zap pest', sandbox: true, run: () => act('aiptasia', null, -1, 'Zap! One pest anemone gone.') },
+  { id: 'zap_pest', row: 1, label: 'Aiptasia-X', sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'AIPTASIA_X', 0, 'Aiptasia-X into the biggest pest anemone\'s mouth...'); } },
   { id: 'settle_in', row: 1, label: 'Settle in', sandbox: true, run: () => act('acclimate', null, 0, 'Everyone gets used to the water now.') },
   { id: 'glass_cleaner', row: 2, label: 'Clean glass', run: () => { closeShelf(); setCleaning(true); } },
   { id: 'test_kit', row: 2, label: 'Test kit', run: () => testKit() },
   { id: 'microscope', row: 2, label: 'Look closer', run: () => { closeShelf(); openMicro(); } },
   { id: 'knocker', row: 2, label: 'Knock glass', run: () => { closeShelf(); act('knock'); cue('CLICK'); } },
   { id: 'move_rocks', row: 2, label: 'Move rocks', sandbox: true, run: () => act('rearrangeRock', null, 0, 'Rocks shuffled! Watch everyone find a new spot.') },
+  { id: 'joes_juice', row: 2, label: "Joe's Juice", sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'JOES_JUICE', 0, "Joe's Juice over the biggest pest anemone's mouth..."); } },
+  { id: 'kalk_paste', row: 2, label: 'Kalk paste', sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'KALK_PASTE', 0, 'A syringe of kalk paste for the biggest pest anemone...'); } },
+  { id: 'pest_laser', row: 2, label: 'Pest laser', sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'LASER', 0, 'Aiming the laser at the biggest pest anemone...'); } },
 ];
 const ROWS = [['feedTin', 'Feed'], ['droplet', 'Care'], ['flask', 'Tools']];
 function supplyLabel(s) { return s.food ? C.foods.find((f) => f.id === s.food)?.label ?? s.food : s.label; }

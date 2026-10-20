@@ -169,6 +169,8 @@ import com.reeflive.app.ui.nav.reefViewModel
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.sim.AiptasiaTreatment
+import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.CoralKind
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.DryRockShape
@@ -654,7 +656,27 @@ fun LiveTankScreen(
             val pests = hud.corals.count { CoralKind.resolve(it.speciesId) == CoralKind.AIPTASIA && it.tissue > 0.01f }
             if (pests > 0) cue(LiveReactions.removeAiptasia(pests)) { vm.removeAiptasia() } else cue(LiveReactions.removeAiptasia(0))
         },
-        onAddPestControl = { c -> tick(); cue(LiveReactions.pestControl(c)) { vm.addPestControl(c) } },
+        onTreatAiptasia = { t ->
+            tick()
+            // the tool goes to the biggest polyp that is still whole; the sim says whether it took or the polyp hid
+            val live = hud.corals.filter { CoralKind.resolve(it.speciesId) == CoralKind.AIPTASIA && it.tissue > 0.5f }
+            val target = live.maxByOrNull { it.size }
+            if (target == null) cue(LiveReactions.removeAiptasia(0))
+            else {
+                banner.show(LiveReactions.treatAiptasia(t, live.size), Candy.green)
+                val act = if (t == AiptasiaTreatment.LASER) CareAct.LASER else CareAct.INJECT
+                val tint = when (t) { AiptasiaTreatment.KALK_PASTE -> 0xF4F4EE; AiptasiaTreatment.JOES_JUICE -> 0xE8F0FF; else -> 0xF2EEE2 }
+                val at = floatArrayOf(target.restX, target.restY, target.restZ, target.restNx, target.restNy, target.restNz)
+                careShow.play(CareJob(act, tint, at = at, onImpact = {
+                    vm.treatAiptasia(t, target.id) { killed ->
+                        val (line, mood) = LiveReactions.treated(t, killed)
+                        if (hermieOn) hermie.say(line, mood)
+                        banner.show(Feedback(if (killed) "Got it!" else "It hid!", line), if (killed) Candy.green else Candy.orange)
+                    }
+                }))
+            }
+        },
+        onAddPestControl = { c -> tick(); cue(LiveReactions.pestControl(c)) { vm.addPestControl(c, if (c == PestController.BERGHIA) 3 else 1) } },
         onStartTreatment = { k ->
             tick()
             cue(LiveReactions.treatment(k, true)) { vm.startTreatment(k) }

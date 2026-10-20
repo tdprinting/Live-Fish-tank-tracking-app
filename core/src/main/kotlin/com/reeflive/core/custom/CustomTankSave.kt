@@ -46,6 +46,8 @@ data class CustomTankSave(
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
     /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
     val rocks: String = "",
+    /** Pest controllers living in the rock (PestState.save: "berghia" population, "peppermint" count). */
+    val pests: Map<String, Double> = emptyMap(),
 )
 
 @Serializable
