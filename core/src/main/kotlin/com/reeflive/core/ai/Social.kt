@@ -36,20 +36,33 @@ object Social {
      */
     fun summarize(o: Organism, byId: Map<String, Organism>, now: Double, max: Int = 5): List<com.reeflive.core.sim.RelationInfo> {
         if (o.relations.isEmpty()) return emptyList()
-        return o.relations.values.asSequence()
-            .mapNotNull { r -> byId[r.otherId]?.takeIf { it.alive }?.let { r to it } }
-            .map { (r, other) -> Triple(r, other, salience(r)) }
-            .filter { it.third >= 0.08 }
-            .sortedByDescending { it.third }
-            .take(max)
-            .map { (r, other, _) ->
-                com.reeflive.core.sim.RelationInfo(
-                    other.id, other.nickname, other.species.common, labelOf(r),
-                    r.familiarity.toFloat(), r.fear.toFloat(), r.harassedBy.toFloat(), r.harassed.toFloat(), r.dominance.toFloat(),
-                    r.cleanings, if (r.lastSeenAt < -1e8) -1f else (now - r.lastSeenAt).toFloat().coerceAtLeast(0f),
-                    r.intrusions.toFloat(), r.cleanerTrust.toFloat(),
-                )
-            }.toList()
+        // (plain loops: this runs for every animal over all its relations on every snapshot, 20 times a second; the
+        // pick below is the stable descending sort's first [max], ties kept in relation order)
+        val rs = ArrayList<Relation>(); val os = ArrayList<Organism>(); val ss = ArrayList<Double>()
+        for (r in o.relations.values) {
+            val sal = salience(r)
+            if (sal < 0.08) continue
+            val other = byId[r.otherId] ?: continue
+            if (!other.alive) continue
+            rs.add(r); os.add(other); ss.add(sal)
+        }
+        val n = min(max, rs.size)
+        if (n == 0) return emptyList()
+        val taken = BooleanArray(rs.size)
+        val out = ArrayList<com.reeflive.core.sim.RelationInfo>(n)
+        repeat(n) {
+            var b = -1
+            for (i in rs.indices) if (!taken[i] && (b < 0 || ss[i] > ss[b])) b = i
+            taken[b] = true
+            val r = rs[b]; val other = os[b]
+            out.add(com.reeflive.core.sim.RelationInfo(
+                other.id, other.nickname, other.species.common, labelOf(r),
+                r.familiarity.toFloat(), r.fear.toFloat(), r.harassedBy.toFloat(), r.harassed.toFloat(), r.dominance.toFloat(),
+                r.cleanings, if (r.lastSeenAt < -1e8) -1f else (now - r.lastSeenAt).toFloat().coerceAtLeast(0f),
+                r.intrusions.toFloat(), r.cleanerTrust.toFloat(),
+            ))
+        }
+        return out
     }
 
     fun salience(r: Relation): Double =
