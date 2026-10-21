@@ -292,7 +292,7 @@ object ReefMyTank {
         for (i in 0 until n) {
             val t = bText[i] ?: continue
             if (!proj.project(bPos[i * 3], bPos[i * 3 + 1], bPos[i * 3 + 2], bPt)) continue
-            out += obj { o -> o.text = t; o.x = bPt[0]; o.y = bPt[1]; o.a = bAlpha[i] }
+            out.add(obj { o -> o.text = t; o.x = bPt[0]; o.y = bPt[1]; o.a = bAlpha[i] })
         }
         return JSON.stringify(out.toTypedArray())
     }
