@@ -19,8 +19,14 @@ enum class StockSize(val label: String, val fraction: Double, val floorCm: Doubl
     fun lengthCm(adultCm: Double): Double = max(adultCm * fraction, min(floorCm, adultCm))
 }
 
-/** One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. */
-data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double)
+/**
+ * One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. [role] sells one sex
+ * form as its own item (a male fairy wrasse is a different fish in the shop); its [key] is "speciesId@male", which
+ * every add path takes in place of the species id ([Stocking.speciesOf], [Stocking.roleOf]).
+ */
+data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double, val role: String? = null) {
+    val key: String = if (role == null) speciesId else "$speciesId@${role.lowercase()}"
+}
 
 /**
  * Sandbox stocking tests ([Command.AddMany]): add many of one species to see what overstocking does. The new
@@ -54,8 +60,22 @@ object Stocking {
         // research 16: sand sifter (in the owner's tank since 2026-10)
         StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),
         StockEntry("macropharyngodon_bipartitus", StockGroup.FISH, "Blue star leopard wrasse", 10.0),
+        // research 42: Zebrasoma grazers (they fight each other) and a harem plankton picker sold by sex
+        StockEntry("zebrasoma_flavescens", StockGroup.FISH, "Yellow tang", 18.0),
+        StockEntry("zebrasoma_xanthurum", StockGroup.FISH, "Purple tang", 20.0),
+        StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (female)", 8.0, role = "FEMALE"),
+        StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (male)", 8.0, role = "MALE"),
+        // research 41: firefish (needs a lid) and a blue-green chromis shoal
+        StockEntry("nemateleotris_magnifica", StockGroup.FISH, "Firefish goby", 7.0),
+        StockEntry("chromis_viridis", StockGroup.FISH, "Blue-green chromis", 7.5),
+        // research 50: popular reef fish pack, batch 1
+        StockEntry("gramma_loreto", StockGroup.FISH, "Royal gramma", 6.5),
+        StockEntry("pterapogon_kauderni", StockGroup.FISH, "Banggai cardinalfish", 6.5),
+        StockEntry("cryptocentrus_cinctus", StockGroup.FISH, "Yellow watchman goby", 7.5),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
+        // research 42: hides by day, eats aiptasia at night
+        StockEntry("lysmata_boggessi", StockGroup.INVERTS, "Peppermint shrimp", 4.0),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
         StockEntry("paguristes_cadenati", StockGroup.INVERTS, "Scarlet hermit crab", 3.0),
         StockEntry("percnon_gibbesi", StockGroup.INVERTS, "Sally Lightfoot crab", 3.0),
@@ -64,10 +84,16 @@ object Stocking {
         StockEntry("nassarius_sp", StockGroup.INVERTS, "Nassarius snail", 1.5),
         StockEntry("lithopoma_tectum", StockGroup.INVERTS, "Astrea snail", 3.5),
         StockEntry("asterina_sp", StockGroup.INVERTS, "Asterina starfish", 1.2),
+        // cleanup crew pack (research 43): a glass grazer that rights itself, a leaping sand conch, a debris-wearing urchin
+        StockEntry("tectus_fenestratus", StockGroup.INVERTS, "Trochus snail", 3.0),
+        StockEntry("strombus_alatus", StockGroup.INVERTS, "Fighting conch", 7.0),
+        StockEntry("mespilia_globulus", StockGroup.INVERTS, "Tuxedo urchin", 5.0),
         // not in the owner's tank: the closest thing to a reef squid, to see what it does with this stock (research cephalopod_squid)
         StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
         // research 40: walks until it finds a crevice, stings corals in reach, splits, and clowns may move in
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
+        // research 42: a file clam for a crevice; starves without daily phytoplankton
+        StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
@@ -80,9 +106,24 @@ object Stocking {
         StockEntry("lobophytum_sp", StockGroup.CORALS, "Pink lobed leather", 10.0),
         StockEntry("sinularia_sp", StockGroup.CORALS, "Finger leather", 12.0),
         StockEntry("amplexidiscus_fenestrafer", StockGroup.CORALS, "Elephant ear mushroom", 13.0),
+        // stony corals (docs/research/stony_corals.md): not in Tee's tank, models built about StonyCorals.STUDIO
+        StockEntry("fimbriaphyllia_ancora", StockGroup.CORALS, "Hammer coral", 12.0),
+        StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
+        StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
+        StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
     )
 
-    fun entry(speciesId: String): StockEntry? = CATALOG.firstOrNull { it.speciesId == speciesId }
+    /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
+    fun entry(key: String): StockEntry? = CATALOG.firstOrNull { it.key == key } ?: CATALOG.firstOrNull { it.speciesId == key }
+
+    /** Species id of a stock key. */
+    fun speciesOf(key: String): String = key.substringBefore('@')
+
+    /** Sex role a stock key sells ("MALE"), or null for any. */
+    fun roleOf(key: String): String? = key.substringAfter('@', "").uppercase().ifEmpty { null }
+
+    /** Shop size for [role]: a sold male is a grown fish (only mature fish show male colors). */
+    fun sizeFor(role: String?, size: StockSize): StockSize = if (role == "MALE" && size == StockSize.JUVENILE) StockSize.ADULT else size
     fun inGroup(g: StockGroup): List<StockEntry> = CATALOG.filter { it.group == g }
 
     /**
@@ -100,12 +141,15 @@ object Stocking {
     )
 
     /** Same fallback spot as [Simulation.addFromSeed] when a coral has no anchor. */
-    private val NO_ANCHOR = Vec3(60.0, 10.0, 20.0)
+    private val NO_ANCHOR = StonyCorals.STUDIO
 
     /** Clear space around a new colony (cm), by how wide the model is. */
     fun spacingCm(k: CoralKind): Double = when (k) {
         CoralKind.KENYA -> 16.0
+        // Euphyllia: retail spacing 6-10 in so the sweepers do not reach (stony_corals.md §1-3)
+        CoralKind.EUPHYLLIA -> 15.0
         CoralKind.GSP, CoralKind.LEATHER -> 12.0
+        CoralKind.LPS -> 10.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -120,23 +164,25 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
 
-    /** Adds up to [count] of [speciesId]; returns how many were added (caps: per add and whole tank). */
-    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
+    /** Adds up to [count] of stock [key] (a species id, or "id@male"); returns how many were added (caps: per add and whole tank). */
+    fun addMany(sim: Simulation, key: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
+        val speciesId = speciesOf(key)
+        val role = roleOf(key)
         sim.species.ensure(speciesId)
         val sp = sim.species[speciesId]
         if (sp.isCoral) return addCorals(sim, sp, count)
-        val cm = if (sizeCm > 0) sizeCm else size.lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
-        return addAnimals(sim, sp, count, cm)
+        val cm = if (sizeCm > 0) sizeCm else sizeFor(role, size).lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
+        return addAnimals(sim, sp, count, cm, role)
     }
 
     private fun nextNumber(existing: Int, i: Int) = existing + i + 1
 
-    private fun addAnimals(sim: Simulation, sp: SimSpecies, count: Int, sizeCm: Double): Int {
+    private fun addAnimals(sim: Simulation, sp: SimSpecies, count: Int, sizeCm: Double, role: String?): Int {
         val room = MAX_ANIMALS - sim.organisms.count { it.alive }
         val n = min(count.coerceIn(0, MAX_ANIMALS_PER_ADD), max(0, room))
         if (n == 0) return 0
@@ -145,7 +191,7 @@ object Stocking {
         val already = sim.organisms.count { it.species.id == sp.id }
         val margin = 12.0
         for (i in 0 until n) {
-            val o = sim.addFromSeed(LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", sizeCm))
+            val o = sim.addFromSeed(LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", sizeCm, role))
             // newcomers: nobody knows them yet (06 §3.3 priority effects)
             o.arrivalTime = sim.simTimeSec; o.clock = sim.simTimeSec
             if (o.isFish) {
@@ -169,16 +215,23 @@ object Stocking {
         val room = MAX_CORALS - sim.corals.size
         val want = min(count.coerceIn(0, MAX_CORALS_PER_ADD), max(0, room))
         if (want == 0) return 0
+        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
+        for ((p, _) in spots) placeCoral(sim, sp, p)
+        return spots.size
+    }
+
+    /**
+     * One colony of [sp] at [p] on the rock or sand: its species' model moved there from the anchor it was built
+     * around (the keeper's pick, [CoralPicks], or a free spot from [coralSpots]). Returns its id.
+     */
+    fun placeCoral(sim: Simulation, sp: SimSpecies, p: Vec3): String {
         val home = homeAnchor(sim.rock, sp)
         val homePos = home?.pos ?: NO_ANCHOR
-        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
         val already = sim.corals.count { it.species.id == sp.id }
-        spots.forEachIndexed { i, (p, _) ->
-            sim.addFromSeed(
-                LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", 0.0, placement = home?.name, offset = p - homePos),
-            )
-        }
-        return spots.size
+        sim.addFromSeed(
+            LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, 0)}", 0.0, placement = home?.name, offset = p - homePos),
+        )
+        return sim.corals.last().id
     }
 
     /**

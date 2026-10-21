@@ -154,6 +154,7 @@ internal class NurseryScene {
             when (care.foodKind) {
                 CareKind.BRINE -> p.set4f("uBaseColor", 1f, 0.45f, 0.15f, 0.9f * a)
                 CareKind.PELLETS -> p.set4f("uBaseColor", 0.45f, 0.28f, 0.15f, 0.95f * a)
+                CareKind.COPEPODS -> p.set4f("uBaseColor", 0.95f, 0.88f, 0.7f, 0.75f * a)
                 else -> p.set4f("uBaseColor", 0.85f, 0.95f, 0.8f, 0.7f * a)
             }
             p.set3f("uEmissive", 0.02f * glow, 0.02f * glow, 0.015f * glow)

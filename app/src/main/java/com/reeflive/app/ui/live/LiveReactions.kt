@@ -466,7 +466,7 @@ object LiveReactions {
     /** A shop bag dropped onto the water at tank x [x]: it floats 30 minutes before the animals come out. */
     fun bagIn(card: StockCard, count: Int, x: Float) = Reaction(
         TankFx(
-            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, TankDims.LENGTH_F - 8f), TankDims.WATER_LEVEL_F, TankDims.DEPTH_F * 0.5f),
+            FxKind.SPARKLE, FxPoint(x.coerceIn(8f, com.reeflive.app.render.Camera.TANK[0] - 8f), com.reeflive.app.render.Camera.WATER_Y, com.reeflive.app.render.Camera.TANK[2] * 0.5f),
             tint = Color(0xFF5FD7FF),
             caption = if (count == 1) "${card.name} is floating" else "$count × ${card.name} floating",
         ),
@@ -485,6 +485,13 @@ object LiveReactions {
         TankFx(FxKind.SPEED, FxSpots.LIGHT, amount = if (on) 2f else 1f, caption = if (on) "Hurry up: 60×" else "Normal speed"),
         if (on) "Zoom! Time flies until the bags open." else "Back to your speed.",
         if (on) HermieMood.EXCITED else HermieMood.HAPPY,
+    )
+
+    /** A new coral was put on the spot the keeper picked (CoralPickLayer). */
+    fun coralPlaced(name: String) = Reaction(
+        TankFx(FxKind.HEARTS, FxSpots.CENTRE, caption = "$name placed"),
+        "Nice spot! Your $name will grow right there.",
+        HermieMood.EXCITED,
     )
 
     fun addSimple(name: String) = Reaction(TankFx(FxKind.BAG, FxSpots.RELEASE, caption = name), "Welcome, $name!", HermieMood.EXCITED)

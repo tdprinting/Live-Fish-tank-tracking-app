@@ -30,6 +30,10 @@ enum class GrazerType(val gPerDay: Double, val kGraze: Double, val refCm: Double
     TAILSPOT(0.075, 1.0, 5.5, doubleArrayOf(0.8, 0.8, 0.2, 0.0, 0.0, 0.0, 0.0), doubleArrayOf(0.2, 0.0, 1.0, 0.5)),
     /** Not in research 09; asterina stars graze film lightly (est.). */
     ASTERINA(0.01, 1.0, 1.0, doubleArrayOf(0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0), doubleArrayOf(1.0, 0.3, 1.0, 1.0)),
+    /** Not in research 09: the fighting conch grazes diatoms, film and cyano off the sand surface only (research 43 §3; rate est.). */
+    CONCH(0.1, 1.0, 7.0, doubleArrayOf(1.0, 0.8, 0.2, 0.5, 0.1, 0.0, 0.0), doubleArrayOf(0.0, 1.0, 0.0, 0.0)),
+    /** Not in research 09: the tuxedo urchin rasps film, hair and coralline off rock and glass (research 43 §2; rate est.). */
+    URCHIN(0.12, 1.0, 5.0, doubleArrayOf(0.6, 0.8, 0.7, 0.1, 0.1, 0.2, 0.7), doubleArrayOf(0.8, 0.1, 1.0, 1.0)),
     ;
 
     companion object {
@@ -43,6 +47,9 @@ enum class GrazerType(val gPerDay: Double, val kGraze: Double, val refCm: Double
             BrainKind.LAWNMOWER_BLENNY -> LAWNMOWER
             BrainKind.PEEKER_BLENNY -> TAILSPOT
             BrainKind.ASTERINA -> ASTERINA
+            BrainKind.TROCHUS -> TROCHUS
+            BrainKind.CONCH -> CONCH
+            BrainKind.URCHIN -> URCHIN
             else -> when {
                 o.species.id.startsWith("trochus", true) || o.species.id.startsWith("tectus", true) -> TROCHUS
                 o.species.id.startsWith("turbo", true) -> TURBO

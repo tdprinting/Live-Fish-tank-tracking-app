@@ -25,7 +25,22 @@ class ThoughtsTest {
         sim.addFromSeed(LivestockSeed("euprymna_berryi", "Squiddy", 6.0, id = "squid"))
         sim.species.ensure("entacmaea_quadricolor")
         sim.addFromSeed(LivestockSeed("entacmaea_quadricolor", "Bubbles", 20.0, id = "bta"))
-        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
+        sim.species.ensure("cirrhilabrus_rubripinnis")
+        sim.addFromSeed(LivestockSeed("cirrhilabrus_rubripinnis", "Red", 8.5, "MALE", id = "fairy"))
+        for ((sp, id) in listOf("nemateleotris_magnifica" to "fire", "chromis_viridis" to "chromis")) {
+            sim.species.ensure(sp)
+            sim.addFromSeed(LivestockSeed(sp, "", 6.5, id = id))
+        }
+        for ((id, cm) in listOf("tectus_fenestratus" to 3.0, "strombus_alatus" to 7.0, "mespilia_globulus" to 5.0)) {
+            sim.species.ensure(id)
+            sim.addFromSeed(LivestockSeed(id, "", cm, id = id))
+        }
+        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie", "gramma_loreto" to "Royal", "cryptocentrus_cinctus" to "Watch")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
+        for (id in listOf("lysmata_boggessi", "ctenoides_scaber")) sim.species.ensure(id)
+        sim.addFromSeed(LivestockSeed("lysmata_boggessi", "Minty", 4.0, id = "pep"))
+        sim.addFromSeed(LivestockSeed("ctenoides_scaber", "Flame", 6.0, id = "clam"))
+        sim.species.ensure("stenorhynchus_seticornis")
+        sim.addFromSeed(LivestockSeed("stenorhynchus_seticornis", "Pokey", 4.5, id = "arrow"))
         sim.species.put(SimSpecies("mystery_fish", kind = "FISH", common = "Mystery fish"))
         sim.species.put(SimSpecies("mystery_critter", kind = "INVERT", common = "Mystery critter"))
         sim.addFromSeed(LivestockSeed("mystery_fish", "Mo", 6.0, id = "gfish"))

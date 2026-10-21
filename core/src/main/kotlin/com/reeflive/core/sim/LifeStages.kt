@@ -58,6 +58,11 @@ data class LifeStageSpec(
     /** Texture forms that differ by sex (e.g. the leopard wrasse terminal male); null = no visible colour difference. */
     val maleForm: String? = null,
     val femaleForm: String? = null,
+    /**
+     * Texture form a grown fish turns to at night (yellow tang: brown with a white band; purple tang: darker), mixed by
+     * [Organism.nightColor]; null = no night colours. Shown in the sex-form slot, so it applies only where no sex form is.
+     */
+    val nightForm: String? = null,
 ) {
     val system: SexSystem get() = SexSystem.parse(sexSystem)
     private val sorted: List<StageSpec> get() = stages.sortedBy { it.fromCm }
@@ -184,6 +189,9 @@ object LifeStages {
             SexRole.CHANGING_TO_FEMALE -> (sp.maleForm) to (1f - o.sexChange.toFloat())
             SexRole.FEMALE -> sp.femaleForm to (if (sp.femaleForm != null) 1f else 0f)
             else -> null to 0f
+        }.let { (f, m) ->
+            val night = sp.nightForm
+            if (night != null && (f == null || m <= 0f) && o.nightColor > 0.01) night to o.nightColor.toFloat() else f to m
         }
         return LifeForm(
             stage = st.id, stageLabel = st.labelText,

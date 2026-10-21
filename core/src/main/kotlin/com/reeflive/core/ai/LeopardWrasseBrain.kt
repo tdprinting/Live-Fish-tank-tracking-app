@@ -116,7 +116,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
         val kenya = c.sim.corals.filter { it.kind == CoralKind.KENYA && it.tissue > 0.05 }.minByOrNull { it.pos.x }
         forageCentre = kenya?.pos ?: Vec3(c.rock.lengthCm * 0.5, c.zoneY(0.35), c.rock.widthCm * 0.5)
         sleepSpot = findSleepSpot(c, forageCentre)
-        install(SandSleep(), Pick(), LeopardFeed(), HoverHome(this, { forageCentre }, { 18.0 }, "Hovering in the coral"),
+        install(SandSleep(), Pick(), LeopardFeed(), WormSnap(this, 12.0, 0.35, 0.55), HoverHome(this, { forageCentre }, { 18.0 }, "Hovering in the coral"),
             Flee(this, { cc, from -> cc.coverPoint(from) }, "Darting away"), SurfaceGasp(this), Flash(this))
     }
 

@@ -1,0 +1,105 @@
+{
+  "id": "euphyllia_glabrescens",
+  "kind": "CORAL",
+  "common": "Torch coral",
+  "scientific": "Euphyllia glabrescens",
+  "family": "Euphylliidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 15,
+  "growthCmPerYear": 3,
+  "lifespanYears": 50,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.0,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/torch.glb",
+  "colors": {
+    "primary": "#7C8F4A",
+    "secondary": "#C9B776",
+    "accent": "#B8FF4A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.25,
+    "lightHi": 0.8,
+    "flow": "MODERATE",
+    "growth": "Moderate",
+    "stingCm": 20,
+    "ground": "ANY",
+    "aggression": "The strongest sting of the three: sweepers up to ~20-25 cm at night; give 15-25 cm",
+    "fluorescence": 0.7
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; small meaty foods (mysis, chopped shrimp) now and then.",
+  "temperamentSummary": "Long flowing tentacles with round glowing tips, like a bunch of torches; very long sweepers at night.",
+  "careNotes": [
+    "PAR about 100-200 and moderate, indirect flow.",
+    "Alkalinity swings over about 1 dKH a day often start tissue recession.",
+    "The most aggressive Euphyllia: its sweepers reach 20 cm or more, so give it the most space.",
+    "Brown jelly and recession are the usual killers; keep the water steady."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.55,
+  "starvationDays": 9999
+}

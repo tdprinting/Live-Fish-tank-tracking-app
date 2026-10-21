@@ -308,6 +308,7 @@ body:not(.on-live) .brand, body:not(.on-live) .tabs { display: none; }
 .opt.build { align-items: flex-start; text-align: left; padding: 10px 12px; gap: 2px; font-size: 13px; }
 .opt.build strong { font-size: 15px; }
 .opt.build small { opacity: .75; }
+.opt.build .tank-sketch { width: 128px; height: auto; align-self: center; margin-bottom: 4px; }
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; font-size: 15px; font-weight: 600;
   font-variant-numeric: tabular-nums; cursor: pointer; position: relative; white-space: nowrap; }
 .status #happyFace { font-size: 18px; }
@@ -518,6 +519,16 @@ dialog h2 { font-family: var(--display); font-size: 22px; margin-top: 0; }
 .spotpop .opts button .ico svg { width: 30px; height: 30px; }
 .spotpop .opts button:active .ico { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) { .spotpop.pop .card, .spotpop.pop .ring, .aimbar .ico img { animation: none; } }
+/* top right: the status capsule (opens Tank Health) and the settings button */
+.topright { display: inline-flex; gap: 8px; align-items: center; pointer-events: auto; }
+.gearbtn { padding: 7px 10px; }
+.gearbtn svg { width: 22px; height: 22px; }
+.gearbtn.on { background: #fff; }
+/* Tank Health: the feed button spans the row, then a hunger bar per animal */
+.opt.wide { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 8px; font-size: 15px; padding: 12px; }
+.hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
+.hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
 /* the fish stores (stores.js; Android StoreScreens.kt) */
 .street { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 4px; }
 .front { position: relative; padding: 0; border: 2.5px solid var(--navy); border-radius: 16px; overflow: hidden; background: #0b1b33; cursor: pointer; text-align: left; box-shadow: 0 3px 0 var(--navy); }
