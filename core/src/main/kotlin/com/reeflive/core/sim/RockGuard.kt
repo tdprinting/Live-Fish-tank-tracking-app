@@ -177,10 +177,19 @@ class RockGuard(
             for (i in 0 until BodySpline.POINTS) if (blocked(o.pos - o.heading * (seg * i), br, i)) { rawBad = true; break }
             if (!rawBad) o.spline.releaseCorrection() else if (o.spline.rigid) o.spline.holdCorrection()
         }
+        // a trail adopts the re-laid stations as its points and is sampled again from them, which can shift a station
+        // back into the rock (a goby's tail 0.34 cm into the crack by its burrow): one more pass from the new shape
+        if (relay(o, br) && o.spline.override == null && !o.spline.rigid) relay(o, br)
+    }
+
+    /** Re-lays the body round the rock if any station is blocked; true if it did. */
+    private fun relay(o: Organism, br: Double): Boolean {
+        val sdf = rock.sdf
         o.spline.sampleStations(pos)
+        framesOk = false
         var bad = false
         for (i in 0 until BodySpline.POINTS) if (blocked(pos[i], br, i)) { bad = true; break }
-        if (!bad) return
+        if (!bad) return false
         bodyFixes++
         val seg = o.spline.length / (BodySpline.POINTS - 1)
         val out = ArrayList<Vec3>(BodySpline.POINTS)
@@ -229,6 +238,7 @@ class RockGuard(
             prev = c
         }
         finish(o, out, br)
+        return true
     }
 
     private fun finish(o: Organism, out: List<Vec3>, br: Double) {
