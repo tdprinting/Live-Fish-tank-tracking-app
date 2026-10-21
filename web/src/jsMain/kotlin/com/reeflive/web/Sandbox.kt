@@ -48,6 +48,8 @@ import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.TankSpot
 import com.reeflive.core.sim.TankSpots
 import com.reeflive.core.sim.HungryFeed
+import com.reeflive.core.sim.CoralCare
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.TreatmentKind
 import com.reeflive.core.sim.WaterState
@@ -222,14 +224,17 @@ object ReefSandbox {
             }
             // Tank Health "Feed the hungry ones" (core HungryFeed): each hungry animal's favourite food dropped above it
             "feedHungry" -> { send(Command.FeedHungry); return true }
-            "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
+            // Tank Health "Care for corals and inverts" (core CoralCare): doses and feeds what they need now
+            // in My tank the supplies cost [num] sand dollars (docs/ECONOMY.md)
+            "reefCare" -> { if (mine && !ReefMyTank.spendCare(num.toInt())) return false; send(Command.ReefCare); return true }
+            "knock" -> { val t = com.reeflive.app.render.Camera.TANK; send(Command.TapGlass(com.reeflive.core.geom.Vec3(t[0] / 2.0, 25.0, t[2].toDouble()))); burst(BurstKind.TAP, floatArrayOf(t[0] / 2f, 25f, t[2] - 1.7f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
             "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
-            // clownfish breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
+            // clownfish and blue tang breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
             "breed" -> {
                 val a = arg ?: return false
-                if (a == "SPAWN_NOW" && !sandbox) return false
+                if (a.startsWith("SPAWN_NOW") && !sandbox) return false
                 send(Command.Breed(a)); return true
             }
         }
@@ -570,6 +575,24 @@ object ReefSandbox {
         JSON.stringify(obj { it.title = f.kind.title; it.text = f.text })
     }
 
+    /**
+     * Tank Health's corals (core CoralHealth / CoralCare): {words, price, corals: [{name, health, pale, need}]}, where
+     * [words] is what the care button would give now ("" = nothing needed) and [need] a colony's main trouble.
+     */
+    fun corals(): String {
+        val s = sim ?: return "{}"
+        val plan = CoralCare.plan(s.latest)
+        val list = s.corals.filter { it.kind != com.reeflive.core.sim.CoralKind.AIPTASIA && it.tissue > CoralHealth.DEAD_TISSUE }.map { c ->
+            obj {
+                it.name = c.nickname.ifBlank { c.species.common }
+                it.health = CoralHealth.health(c)
+                it.pale = c.bleach > 0.3
+                it.need = if (c.need >= 0) com.reeflive.core.sim.CoralNeed.entries[c.need].words else null
+            }
+        }
+        return JSON.stringify(obj { it.words = plan.words; it.price = plan.price; it.corals = list.toTypedArray() })
+    }
+
     /** Tank Health's hunger list (core HungryFeed): [{id, name, hunger, fish, hungry, food}], fish first. */
     fun hunger(): String {
         val s = sim ?: return "[]"
@@ -602,7 +625,7 @@ object ReefSandbox {
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
             // the parents' "Family" panel (core Brood): eggs, larvae, the nursery and its buttons
-            it.family = sim?.latest?.brood?.panel?.takeIf { p -> p.shows(st.speciesId) }?.let { p ->
+            it.family = sim?.latest?.brood?.panelFor(st.speciesId)?.let { p ->
                 obj { f ->
                     f.title = p.title; f.lines = p.lines.toTypedArray()
                     f.actions = p.actions.filter { a -> !a.sandboxOnly || sandbox }.map { a ->

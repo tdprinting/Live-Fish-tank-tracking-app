@@ -15,6 +15,8 @@ sealed class Command {
     data object FeedHungry : Command()
     data class WaterChange(val fraction: Double, val mix: WaterState = WaterState.FRESH_MIX) : Command()
     data class Dose(val paramId: String, val delta: Double) : Command()
+    /** Tank Health's "Care for corals and inverts": doses and feeds what [CoralCare.plan] lists for the tank now. */
+    object ReefCare : Command()
     data class Lights(val on: Boolean?, val overrideIntensity: Double? = null) : Command()
     data class Heater(val working: Boolean, val setC: Double? = null, val stuckOn: Boolean = false) : Command()
     data class Powerheads(val on: Boolean) : Command()
@@ -276,6 +278,8 @@ sealed class SimEvent {
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
+    /** A colony's tissue is gone ([CoralHealth]); [cause] is plain words for its main stress at the end. */
+    data class CoralDied(val id: String, val name: String, val cause: String, override val simTimeSec: Double) : SimEvent()
     /** The keeper dosed aiptasia [polypId] with [treatment]: [killed] false = it snapped shut into the rock in time. */
     data class AiptasiaTreated(val polypId: String, val treatment: AiptasiaTreatment, val killed: Boolean, override val simTimeSec: Double) : SimEvent()
     /** Breeding ([Brood], research 28): a clutch laid, larvae hatched (and whether the keeper is catching them), the nursery's larvae became fry, a baby moved to the display. */
@@ -404,6 +408,19 @@ data class CoralPose(
      * position (world axes), first and last touch (sim s), strength; null when none.
      */
     val pokes: FloatArray? = null,
+    /** Overall stress 0..1 and the main reason ([CoralNeed] ordinal, −1 none), for the Tank Health card. */
+    val stress: Float = 0f,
+    val need: Int = -1,
+    /** Recent caught food 0..1 ([Coral.fed]): the care button feeds the corals when it runs low. */
+    val fed: Float = 0f,
+    /** Size the renderer draws the colony at about its home spot (grown or shrunk; 1 = as modelled). */
+    val drawScale: Float = 1f,
+    /** Stony corals: night tentacles out 0..1 (Euphyllia sweepers, LPS feeding tentacles); renderer `uPolypDrive`. */
+    val tentacles: Float = 0f,
+    /** Linear RGB its tissue fades to as it bleaches ([CoralProfile.tint]); null = white. Shared, never copied. */
+    val bleachTint: FloatArray? = null,
+    /** The colony's name (the keeper's, else its species'). */
+    val name: String = "",
 ) {
     val isCopy: Boolean get() = offsetX != 0f || offsetY != 0f || offsetZ != 0f
 }
@@ -439,6 +456,8 @@ data class SimSnapshot(
     val flowStrength: Float = 1f,
     /** A tank started from scratch (My tank, [Simulation.bareScape]): the renderer leaves out the owner's static colonies. */
     val bareScape: Boolean = false,
+    /** The tank's box and look ([Simulation.shape]): the renderer draws the glass, equipment and camera to it. */
+    val shape: TankShape = TankShape.STOCK,
     /** Water-surface heightfield (cm, sx × sz, x fastest) and its dims (SIMULATION §9.7). */
     val surfaceHeights: FloatArray = FloatArray(0),
     val surfaceDims: IntArray = IntArray(2),
@@ -497,6 +516,8 @@ data class SimSnapshot(
     val builtRocks: List<BuiltRock>? = null,
     /** The live rock field once rocks have moved or been added / taken out (taps and the camera hit rocks where they are now). */
     val rockSdf: com.reeflive.core.geom.Sdf? = null,
+    /** Sim time of the last care-button feeding ([CoralCare]); far past when never. */
+    val reefCareAt: Double = -1e12,
     /** My tank: the coral out of its bag waiting for the keeper to pick a spot, with its best spots ([CoralPicks]). */
     val coralPick: CoralPickPose? = null,
 ) {

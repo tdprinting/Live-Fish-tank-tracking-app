@@ -89,8 +89,9 @@ object AiptasiaModel {
     fun peppermintCount(sim: Simulation): Int = sim.pests.peppermint +
         sim.organisms.count { it.alive && (it.species.id.contains("boggessi") || it.species.id.contains("wurdemanni")) }
 
-    fun step(sim: Simulation, dtMin: Double, night: Boolean = false) {
-        val days = dtMin / 1440
+    /** [lifeMin]: the step on the game clock ([Simulation.lifePace]) for growth and spread; a zapped polyp dies on [dtMin]. */
+    fun step(sim: Simulation, dtMin: Double, night: Boolean = false, lifeMin: Double = dtMin) {
+        val days = lifeMin / 1440
         dying(sim, dtMin * 60)
         val rng = sim.growthRng
         val w = sim.water.s

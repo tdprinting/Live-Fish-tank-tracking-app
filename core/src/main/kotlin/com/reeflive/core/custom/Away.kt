@@ -1,5 +1,6 @@
 package com.reeflive.core.custom
 
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.Simulation
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -66,6 +67,8 @@ object AwayReport {
     class Before(
         val alive: Map<String, String>,
         val no3: Double, val po4: Double, val sg: Double, val film: Double, val hair: Double, val cup: Float, val sockH: Float, val full: Float,
+        /** Each coral colony's health on leaving ([CoralHealth.changes] words what happened to them). */
+        val corals: List<CoralHealth.Mark> = emptyList(),
     )
 
     fun capture(sim: Simulation): Before {
@@ -73,7 +76,7 @@ object AwayReport {
         val c = w.careState()
         return Before(
             sim.organisms.filter { it.alive }.associate { it.id to name(it.nickname, it.species.common) },
-            w.s.no3, w.s.po4, w.s.sg, w.s.film, w.s.algaeHair, c.skimmerCup, c.sockAgeH, c.waterFull,
+            w.s.no3, w.s.po4, w.s.sg, w.s.film, w.s.algaeHair, c.skimmerCup, c.sockAgeH, c.waterFull, CoralHealth.marks(sim.corals),
         )
     }
 
@@ -97,6 +100,7 @@ object AwayReport {
         if (c.waterFull < 0.97f && c.waterFull < b.full - 0.005f) lines += "Water evaporated: the tank needs a top-off (salinity ${"%.3f".fmt(w.s.sg)})."
         if (w.s.no3 > b.no3 + 3) lines += "Nitrate went up to ${w.s.no3.roundToInt()}."
         if (w.s.po4 > b.po4 + 0.05 && w.s.po4 > 0.1) lines += "Phosphate went up to ${"%.2f".fmt(w.s.po4)}."
+        lines += CoralHealth.changes(b.corals, sim.corals)
         if (w.s.film > b.film + 0.08) lines += "Algae grew on the glass."
         if (w.s.algaeHair > b.hair + 0.05) lines += "Hair algae is spreading on the rocks."
         val days = awaySec / AwayCatchUp.DAY
