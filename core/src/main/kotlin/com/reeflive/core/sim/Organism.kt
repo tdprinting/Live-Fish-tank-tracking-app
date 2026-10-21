@@ -102,6 +102,15 @@ class Organism(
     var quiver = 0.0
     var spineFlare = 0.0
     var dorsalRaise = 0.0
+    /**
+     * Courtship / rivalry flash 0..1 (fairy wrasse males, research 42 §1): fins flared wide and colours at their
+     * brightest. Set by the brain, eased off in [com.reeflive.core.ai.SpeciesBrain.preTick]; drawn by the renderer.
+     */
+    var display = 0.0
+    /** Night colours 0..1 (yellow and purple tang, research 42 §2), eased in while it sleeps and out after it wakes. */
+    var nightColor = 0.0
+    /** Mucus cocoon 0 (none) .. 1 (finished) around a sleeping wrasse (posture 4), research 42 §1. */
+    var cocoon = 0.0
     var legRock = 0.0
     /** Shrimp limb hooks (research 17): banded shrimp claw display 0..1 and antenna grooming 0..1. */
     var clawDisplay = 0.0
@@ -196,6 +205,10 @@ class Organism(
     var pecAmp = 0.0
     /** Escape flexion: signed C-bend of the body (fish) or tail-flip flexion of the abdomen (shrimp), −1..1. */
     var bend = 0.0
+    /** First-dorsal fold 0 (raised) .. 1 (laid flat): the firefish's flicking signal fin ([OrganismPose.finFold]). */
+    var finFold = 0.0
+    /** A leap at the surface in progress ([JumpModel]): the sim flies the body and the brain waits. */
+    var leap: Leap? = null
 
     /**
      * Per-limb pose for the brittle star's arms, the crab's legs and claws and the shrimp's limb signals
@@ -296,8 +309,10 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind == BrainKind.BANDED_SHRIMP || brainKind == BrainKind.CLEANER_SHRIMP) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
-            limbs = limbRig?.out?.copyOf() ?: NO_LIMBS,
+            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind == BrainKind.SALLY_CRAB || brainKind == BrainKind.ARROW_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
+            display = display.toFloat(), cocoon = cocoon.toFloat(),
+            finFold = finFold.toFloat(),
             tone = skinTone.toFloat(),
         )
     }

@@ -1,0 +1,107 @@
+{
+  "id": "strombus_alatus",
+  "kind": "INVERT",
+  "common": "Fighting conch",
+  "scientific": "Strombus alatus",
+  "family": "Strombidae",
+  "maxLengthCm": 11,
+  "typicalAdultCm": 7.0,
+  "lifespanYears": 6,
+  "depthRatio": 0.6,
+  "massCoeff": 0.08,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.07,
+    "burstBL": 1.1,
+    "tailHzCruise": 0,
+    "turnRateDeg": 45,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.1,
+    "openWater": 0.0,
+    "coverAffinity": 0.0
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.4,
+    "curiosity": 0.3,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "ALGAE",
+    "DIATOMS",
+    "CYANO",
+    "DETRITUS",
+    "NORI",
+    "PELLET"
+  ],
+  "feedsPerDay": 3,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 23,
+      "optHi": 27,
+      "tolLo": 20,
+      "tolHi": 29,
+      "lethalLo": 16,
+      "lethalHi": 32
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 21,
+  "model": "models/fighting_conch.glb",
+  "colors": {
+    "primary": "#B8692E",
+    "secondary": "#EAD8B6",
+    "accent": "#D8A428"
+  },
+  "brain": "conch",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Sand grazer: diatoms, film algae, cyano and leftovers on the sand. Add an algae wafer in a tank with a clean sand bed.",
+  "temperamentSummary": "Peaceful. Hops over the sand on its sickle-shaped foot, waving its big stalked eyes, and buries for hours at a time.",
+  "careNotes": [
+    "Needs open sand, at least 5 cm deep, and room to roam: about one conch per 30 gallons.",
+    "It starves in a brand new tank with no film on the sand: feed sinking algae wafers.",
+    "The name is for the males' shoving matches; they are completely harmless."
+  ]
+}

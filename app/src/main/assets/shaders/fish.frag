@@ -59,7 +59,8 @@ void main() {
     // symptoms
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-    albedo = mix(albedo, vec3(lum), clamp(uDesat, 0.0, 1.0));
+    // negative = more saturated (a displaying male fairy wrasse)
+    albedo = max(mix(albedo, vec3(lum), clamp(uDesat, -0.5, 1.0)), 0.0);
     if (abs(uTone) > 0.01 && (uPart < 1.5)) {
         // melanophores spread in soft blotches over the back first: dark goes on mottled, pale washes the blotches out
         vec2 gb = vUv * vec2(9.0, 5.0);
@@ -132,7 +133,7 @@ void main() {
 #else
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.04, 0.15, specScale);
     // thin-film iridescence (LUT ramp by view angle) added to the specular response
-    vec3 irid = toLinear(texture(uIridLut, vec2(ndv, 0.5)).rgb) * uIridStrength * (1.0 - uDesat);
+    vec3 irid = toLinear(texture(uIridLut, vec2(ndv, 0.5)).rgb) * uIridStrength * (1.0 - clamp(uDesat, 0.0, 1.0));
     vec3 Lk;
     vec3 rad = fixtureLight(0, vWorld, Lk) + fixtureLight(1, vWorld, Lk);
     float shade = gShadow;

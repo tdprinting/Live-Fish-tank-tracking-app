@@ -31,17 +31,31 @@ CARDS = {
     "pseudochromis_indigo": "dottyback",
     "valenciennea_puellaris": "diamond_goby",
     "macropharyngodon_bipartitus": "leopard_wrasse",
+    "zebrasoma_flavescens": "yellow_tang",
+    "zebrasoma_xanthurum": "purple_tang",
+    "cirrhilabrus_rubripinnis": "fairy_wrasse",
+    "nemateleotris_magnifica": "firefish",
+    "chromis_viridis": "chromis",
+    "gramma_loreto": "royal_gramma",
+    "pterapogon_kauderni": "banggai",
+    "cryptocentrus_cinctus": "watchman_goby",
     "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",
+    "lysmata_boggessi": "peppermint_shrimp",
+    "ctenoides_scaber": "flame_scallop",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
     "percnon_gibbesi": "sally_lightfoot",
+    "stenorhynchus_seticornis": "arrow_crab",
     "ophiocoma_sp": "brittle_star",
     "sabellastarte_sp": "feather_duster",
     "nassarius_sp": "nassarius",
     "lithopoma_tectum": "astrea",
     "asterina_sp": "asterina",
+    "tectus_fenestratus": "trochus",
+    "strombus_alatus": "fighting_conch",
+    "mespilia_globulus": "tuxedo_urchin",
     "capnella_sp": "kenya",
     "briareum_sp": "gsp_mat",
     "clavularia_sp": "clove",
@@ -52,8 +66,8 @@ CARDS = {
     "zoanthus_sp": "zoa",
 }
 TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
-HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "shrimp", "skunk_shrimp", "gsp_mat",
-        "organ_pipe", "clove"}
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "flame_scallop", "gsp_mat",
+        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
 
 
 def render_card(species, glb, size=512, samples=32):

@@ -1,0 +1,146 @@
+{
+  "kind": "FISH",
+  "id": "pterapogon_kauderni",
+  "common": "Banggai cardinalfish",
+  "scientific": "Pterapogon kauderni",
+  "family": "Apogonidae",
+  "maxLengthCm": 8.0,
+  "typicalAdultCm": 6.5,
+  "growthCmPerYear": 3,
+  "lifespanYears": 4,
+  "depthRatio": 0.5,
+  "massCoeff": 0.022,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.6,
+    "burstBL": 4,
+    "tailHzCruise": 2.0,
+    "turnRateDeg": 180,
+    "waveLen": 0.9,
+    "ampCruise": 0.03,
+    "ampBurst": 0.08
+  },
+  "zone": {
+    "yMin": 0.25,
+    "yMax": 0.6,
+    "openWater": 0.35,
+    "coverAffinity": 0.65
+  },
+  "activity": "CREPUSCULAR",
+  "senses": {
+    "visionCm": 110,
+    "darkVision": 0.5,
+    "lateralBL": 1.5,
+    "chem": 0.5
+  },
+  "territorialRadius": 8,
+  "homeRadiusCm": 25,
+  "temperament": {
+    "aggression": 0.2,
+    "boldness": 0.35,
+    "curiosity": 0.3,
+    "skittishness": 0.7
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "CYCLOPS",
+    "PODS",
+    "ZOOPLANKTON",
+    "FLAKE",
+    "PELLET"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.3,
+    "VELVET": 0.3,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.75,
+  "starvationDays": 21,
+  "size": {
+    "lod0Tris": 3400
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 3.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 4.5
+  },
+  "model": "models/banggai.glb",
+  "colors": {
+    "primary": "#D8DCE0",
+    "secondary": "#0C0C0E",
+    "accent": "#FAFAF6"
+  },
+  "iridescence": 0.3,
+  "brain": "cardinal",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Copepods and mysis taken from the water; it eats most at dusk.",
+  "temperamentSummary": "Slow, calm hoverer that stays near spiny cover; males squabble, so keep a pair.",
+  "careNotes": [
+    "Captive-bred fish only: wild Banggais are endangered.",
+    "The male carries the eggs in his mouth for about a month and spits out tiny finished babies.",
+    "Babies hide in an anemone's tentacles.",
+    "Keep one pair; extra males get chased."
+  ]
+}

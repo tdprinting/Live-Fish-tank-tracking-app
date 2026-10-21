@@ -7,15 +7,18 @@ import com.reeflive.core.custom.AwaySummary
 import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
+import com.reeflive.core.sim.Stocking
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.BuyResult
 import com.reeflive.core.custom.economy.DisplayTank
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
+import com.reeflive.core.custom.economy.Offers
 import com.reeflive.core.custom.economy.StoreVisit
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.LifePace
 import com.reeflive.core.sim.Simulation
 import kotlinx.browser.localStorage
 import kotlin.math.roundToInt
@@ -56,9 +59,12 @@ object ReefMyTank {
         })
     }
 
-    /** The tanks to pick from: `[{id, label, blurb, gallons, size}]`. */
+    /** The tanks to pick from: `[{id, label, blurb, gallons, size, l, h, d (cm), rimless, filter}]` (the picker draws each to scale). */
     fun builds(): String = JSON.stringify(TankBuilds.all.map { b ->
-        obj { it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel }
+        obj {
+            it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel
+            it.l = b.shape.lengthCm; it.h = b.shape.heightCm; it.d = b.shape.depthCm; it.rimless = b.rimless; it.filter = b.filter.name
+        }
     }.toTypedArray())
 
     /** Sets up a new, empty tank in build [buildId] and shows it when the page is in My tank. */
@@ -71,6 +77,7 @@ object ReefMyTank {
         val seed = t.toLong() xor 0x5EEDL
         val s = CustomTank.fresh(build, species, rock, secOfDay.toDouble(), seed)
         s.speed = 1.0
+        s.lifePace = LifePace.DEFAULT.pace
         s.stepWall(0.0)
         sim = s
         val eco = economy ?: Economy()
@@ -91,6 +98,17 @@ object ReefMyTank {
     }
 
     /** Names an animal; it is kept in the next save. */
+    /** Growing speed choices for slow biology (LifePace): `[{id, label, blurb, on}]`. */
+    fun paces(): String {
+        val cur = sim?.let { LifePace.of(it.lifePace) }
+        return JSON.stringify(LifePace.entries.map { p -> obj { it.id = p.name; it.label = p.label; it.blurb = p.blurb; it.on = p == cur } }.toTypedArray())
+    }
+
+    fun setPace(id: String) {
+        val p = LifePace.entries.firstOrNull { it.name == id } ?: return
+        sim?.lifePace = p.pace
+    }
+
     fun rename(id: String, name: String) { sim?.enqueue(Command.Rename(id, name)) }
 
     /** Today as the economy counts days: the keeper's local calendar day. */
@@ -122,6 +140,9 @@ object ReefMyTank {
 
     /** The keeper opened Tank Health (the water test): today's "Test the water" chore. */
     fun testedWater() { if (sim != null) economy?.testedWater(today()) }
+
+    /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
+    fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
 
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
@@ -175,7 +196,7 @@ object ReefMyTank {
                     tk.title = t.title; tk.animals = t.animals
                     tk.items = StoreVisit.cards(e, store, t, mine, day).map { c ->
                         obj {
-                            it.id = c.speciesId; it.name = c.name; it.group = c.group.name; it.price = c.price; it.left = c.left
+                            it.id = c.speciesId; it.species = Stocking.speciesOf(c.speciesId); it.name = c.name; it.group = c.group.name; it.price = c.price; it.left = c.left
                             it.deal = c.deal; it.wanted = c.wanted; it.level = c.level; it.locked = c.locked; it.warning = c.warning
                         }
                     }.toTypedArray()
@@ -233,6 +254,35 @@ object ReefMyTank {
     }
 
     fun inStore(): Boolean = visiting != null
+
+    /**
+     * The store's offer for each of the keeper's animals and corals (docs/ECONOMY.md §6):
+     * `[{id, name, speciesId, group, coral, pet, amount, wanted, cm, tooSmallCm}]`, wanted first.
+     */
+    fun offers(): String {
+        val store = visiting ?: return "[]"
+        val mine = sim ?: return "[]"
+        return JSON.stringify(Offers.offers(store, mine, today()).map { o ->
+            obj {
+                it.id = o.id; it.name = o.name; it.speciesId = o.speciesId; it.group = o.group.name; it.coral = o.coral; it.pet = o.pet
+                it.amount = o.amount; it.wanted = o.wanted; it.cm = o.lengthCm; it.tooSmallCm = o.tooSmallCm
+            }
+        }.toTypedArray())
+    }
+
+    /** Sells animal or coral [id] to the store being visited; returns what it paid (0 = not sold). */
+    fun sell(id: String): Int {
+        val store = visiting ?: return 0
+        val mine = sim ?: return 0
+        val e = economy ?: return 0
+        val o = Offers.offers(store, mine, today()).firstOrNull { it.id == id } ?: return 0
+        if (!e.sell(store, o, today())) return 0
+        mine.enqueue(if (o.coral) Command.RemoveCoral(id) else Command.RemoveOrganism(id))
+        // out of the tank now, though the tank itself waits until the keeper is home
+        mine.stepWall(0.0)
+        save()
+        return o.amount
+    }
 
     /** Writes the tank to this browser's storage (the page calls it every 30 s and when it is hidden). */
     fun save() {

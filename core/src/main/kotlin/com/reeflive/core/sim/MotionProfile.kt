@@ -160,17 +160,40 @@ object MotionProfiles {
         // head-down among coral branches to pick; bobbing-and-weaving travel (LiveAquaria [M]); pecs 3–5.5 Hz [L]
         BrainKind.LEOPARD_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 3.0, pecHzMax = 5.5, rowBodyAmp = 0.02,
             bobPitch = 0.06, bobHz = 1.6, bankGain = 1.0, cStartDeg = 120.0),
+        // fairy wrasse: quick labriform hoverer in the current (pectoral rowing, research 42 §1 [L]); fast pecs, a
+        // little bob while it picks, a sharp C-start into the rock when scared
+        BrainKind.FAIRY_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.2, pecHzHover = 3.5, pecHzMax = 6.0, rowBodyAmp = 0.015,
+            bobPitch = 0.04, bobHz = 1.2, bankGain = 1.1, cStartDeg = 130.0),
         // body-caudal darter, tail 3–4 Hz, burst-and-coast between rock cover [L]
         BrainKind.DOTTYBACK to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.5, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
             glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),
+        // firefish (research 41 §1.3): hovers nearly still on sculling pectorals with a slow body-caudal wave, bursts
+        // with a fast C-start into its hole; slender body bends more than a cardinal's [L]
+        BrainKind.FIREFISH to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 3.0, pecHzMax = 4.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.2,
+            glideS = 0.3, beatsPerBout = 2.0, bankGain = 0.8, cStartDeg = 150.0),
+        // chromis: damselfish are classic labriform flappers (Drucker & Jensen 1996 used the surfperch; damselfish row the
+        // same way, Webb 1973 [M]); pecs 3.5–7 Hz, the tail joins only when it hurries [L]
+        BrainKind.CHROMIS to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.6, pecHzHover = 3.5, pecHzMax = 7.0, rowBodyAmp = 0.02,
+            strouhal = 0.28, tailPP = 0.18, bankGain = 1.2, cStartDeg = 120.0),
+        // royal gramma (research 50 §1): hangs almost still at its cave on sculling pectorals, a slow body-caudal wave,
+        // fast darts back into the cave [L]
+        BrainKind.GRAMMA to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.8, pecHzMax = 4.0, strouhal = 0.28, tailPP = 0.18, tailHzMin = 1.2,
+            glideS = 0.5, beatsPerBout = 2.0, bankGain = 1.0, cStartDeg = 140.0),
+        // watchman goby: rests propped on its fused pelvics, hops off the bottom in short bursts like the sleeper gobies [L]
+        BrainKind.WATCHMAN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 2.0, strouhal = 0.3, tailPP = 0.22, tailHzMin = 1.6,
+            glideS = 0.3, beatsPerBout = 2.0, sinkCmS = 2.5, bankGain = 0.5, cStartDeg = 130.0),
         BrainKind.GENERIC_FISH to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.5, pecHzMax = 5.0),
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
         BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         BrainKind.CLEANER_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 25.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
+        // a smaller Lysmata, quicker and more skittish in its stop-go: short dashes between pauses (research 42 [M][E])
+        BrainKind.PEPPERMINT_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.8, walkBurstCmS = 22.0, stopGoMoveS = 1.0, stopGoPauseS = 1.0, footprintBL = 0.3, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
+        // slow, deliberate stilt-walk 0.5–2 cm/s with long pauses; a fast scramble to cover only when startled (research 42) [L]
+        BrainKind.ARROW_CRAB to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 6.0, stopGoMoveS = 3.0, stopGoPauseS = 2.0),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)
         BrainKind.BRITTLE_STAR to MotionProfile(Gait.ARM_ROW, walkCmS = 1.5, walkBurstCmS = 4.0, rowHz = 0.23, rowSweep = 0.35),
@@ -180,10 +203,18 @@ object MotionProfiles {
         // the fast glider): ~6 cm/min grazing, ~18 cm/min when it hurries (it was 30 cm/min, so its glass trails, §11.1,
         // ran five times too long)
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.1, walkBurstCmS = 0.3),
+        // a trochus glides a little faster than the astrea (several cm/min on the glass; no measured rate, research 43 §4) [L]
+        BrainKind.TROCHUS to MotionProfile(Gait.GLIDE, walkCmS = 0.12, walkBurstCmS = 0.35),
+        // the conch's leaps are placed by its brain (ConchBrain.leapToward); these caps only bound the steering [L]
+        BrainKind.CONCH to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 8.0),
+        // tube-foot crawl, a few cm per minute (no Mespilia data, research 43 §2; regular urchins ~1–5 cm/min) [L]
+        BrainKind.URCHIN to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.12),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
         BrainKind.ANEMONE to MotionProfile(Gait.SESSILE),
+        // wedged in its crevice; the brain moves it itself when it claps away (research 42 §2.3)
+        BrainKind.FILE_CLAM to MotionProfile(Gait.SESSILE),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),

@@ -53,8 +53,10 @@ import com.reeflive.app.live.StoreVisitUi
 import com.reeflive.app.ui.components.SpeciesAvatar
 import com.reeflive.core.custom.economy.BuyResult
 import com.reeflive.core.custom.economy.FishStore
+import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
 import com.reeflive.core.sim.StockGroup
+import com.reeflive.core.sim.Stocking
 import com.reeflive.core.species.SpeciesKind
 
 /**
@@ -121,6 +123,7 @@ fun BoxScope.StoreOverlay(
     onTank: (Int) -> Unit,
     onLeave: () -> Unit,
     onCheckout: (List<String>, (BuyResult) -> Unit) -> Unit,
+    onSell: (SellOffer) -> Unit,
     say: (String) -> Unit,
     tick: () -> Unit,
     topInset: androidx.compose.ui.unit.Dp,
@@ -130,6 +133,7 @@ fun BoxScope.StoreOverlay(
     val bag = remember(v.store) { mutableStateListOf<String>() }
     var picked by remember(v.store) { mutableStateOf<String?>(null) }
     var counter by remember(v.store) { mutableStateOf(false) }
+    var selling by remember(v.store) { mutableStateOf(false) }
     LaunchedEffect(tankPick) { if (tankPick != null) picked = tankPick }
     val (tank, cards) = v.tanks[v.at.coerceIn(0, v.tanks.size - 1)]
     val all = remember(v) { v.tanks.flatMap { it.second }.associateBy { it.speciesId } }
@@ -152,6 +156,7 @@ fun BoxScope.StoreOverlay(
                         Text(v.store.label, style = s.titleText.copy(fontSize = 17.sp), color = s.label)
                         Text("${tank.title} · ${tank.animals} animals", style = MaterialTheme.typography.labelSmall, color = s.labelDim)
                     }
+                    LivePill("Sell", { tick(); selling = true }, tone = Candy.green)
                 }
             }
             Box(Modifier.weight(1f))
@@ -178,6 +183,7 @@ fun BoxScope.StoreOverlay(
             cards.forEach { c -> ShelfTile(c, bag.count { it == c.speciesId }, picked == c.speciesId) { tick(); picked = if (picked == c.speciesId) null else c.speciesId } }
         }
     }
+    if (selling) SellSheet(v, onSell, tick) { selling = false }
     if (counter) Counter(bag, all, v.coins, total, { add(it) }, remove, { counter = false }) {
         onCheckout(bag.toList()) { r ->
             when (r) {
@@ -206,7 +212,7 @@ private fun ShelfTile(c: ShelfCard, inBag: Int, on: Boolean, onTap: () -> Unit) 
     Box {
         LivePanel(Modifier.width(104.dp), contentPadding = PaddingValues(6.dp), tint = if (on) Candy.yellow else null, onClick = onTap) {
             Box(Modifier.fillMaxWidth().alpha(if (c.locked) 0.5f else 1f), contentAlignment = Alignment.Center) {
-                SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 52.dp)
+                SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 52.dp)
             }
             Text(c.name, style = s.buttonText.copy(fontSize = 12.sp), color = s.label, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.fillMaxWidth().height(32.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -229,7 +235,7 @@ private fun ShelfCardPanel(c: ShelfCard, inBag: Int, money: Int, onAdd: () -> Un
     val s = LiveTheme.style
     LivePanel(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 72.dp)
+            SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 72.dp)
             Column(Modifier.weight(1f)) {
                 Text(c.name, style = s.titleText.copy(fontSize = 18.sp), color = s.label)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -279,7 +285,7 @@ private fun Counter(
                 val c = all[id] ?: return@forEach
                 val n = bag.count { it == id }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 40.dp)
+                    SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 40.dp)
                     Text(c.name, style = MaterialTheme.typography.bodyMedium, color = s.label, modifier = Modifier.weight(1f))
                     LivePill("−", { onLess(id) }, tone = Candy.white)
                     Text("$n", style = s.buttonText, color = s.label)
@@ -298,6 +304,46 @@ private fun Counter(
                 LivePill("Keep shopping", onClose, tone = Candy.white)
                 LivePill(if (short > 0) "Need $short more" else "Pay $total", if (short > 0 || bag.isEmpty()) null else onPay, tone = Candy.green, selected = short <= 0 && bag.isNotEmpty())
             }
+        }
+    }
+}
+
+/** The Sell sheet (docs/ECONOMY.md §6): the store's offer for each of the keeper's animals, wanted ones first. */
+@Composable
+private fun SellSheet(v: StoreVisitUi, onSell: (SellOffer) -> Unit, tick: () -> Unit, onClose: () -> Unit) {
+    val s = LiveTheme.style
+    var goodbye by remember { mutableStateOf<SellOffer?>(null) }
+    Dialog(onDismissRequest = onClose) {
+        Column(
+            Modifier.widthIn(max = 420.dp).livePanel(s).background(s.panel.copy(alpha = 0.94f)).verticalScroll(rememberScrollState()).padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Sell to ${v.store.label}", style = s.titleText, color = s.label)
+            LiveHelp("Grown-up, healthy animals are worth more. Wanted ones pay extra today.")
+            if (v.offers.isEmpty()) LiveHelp("Nothing in your tank to sell yet.")
+            v.offers.forEach { o ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SpeciesAvatar(o.speciesId, if (o.coral) SpeciesKind.CORAL else if (o.group == StockGroup.FISH) SpeciesKind.FISH else SpeciesKind.INVERT, emptyMap(), size = 40.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(o.name + if (o.wanted) "  · Wanted!" else "", style = MaterialTheme.typography.bodyMedium, color = s.label)
+                        val why = o.tooSmallCm?.let { "Too little: grows to ${"%.1f".format(it)} cm (now ${"%.1f".format(o.lengthCm)})" }
+                            ?: if (o.amount == 0) "This store does not buy these" else null
+                        why?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = s.labelDim) }
+                    }
+                    if (o.amount > 0) LivePill("${o.amount}", { tick(); if (o.pet) goodbye = o else onSell(o) }, tone = Candy.green,
+                        leading = { Canvas(Modifier.size(16.dp)) { drawSandDollar() } })
+                }
+            }
+            goodbye?.let { o ->
+                LivePanel(tint = Candy.pink) {
+                    Text("Say goodbye to ${o.name}?", style = s.buttonText, color = s.label)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                        LivePill("Keep", { goodbye = null }, tone = Candy.white)
+                        LivePill("Sell for ${o.amount}", { goodbye = null; onSell(o) }, tone = Candy.green)
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { LivePill("Done", onClose, tone = Candy.white) }
         }
     }
 }

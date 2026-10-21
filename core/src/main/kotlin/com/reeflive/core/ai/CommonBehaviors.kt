@@ -547,3 +547,34 @@ fun nearestOther(c: Ctx, r: Double, filter: (com.reeflive.core.sim.Organism) -> 
     c.p.neighbors(c.o.pos, r).filter { it !== c.o && it.alive && filter(it) }.minByOrNull { it.pos.distanceTo(c.o.pos) }
 
 fun minD(a: Double, b: Double) = min(a, b)
+
+/**
+ * A fish that eats bristleworms (research 42 §B.5: hawkfish, dottybacks, leopard and six-line wrasses) darts at one
+ * out on the rock within [radius] cm and pulls it off before it backs into its hole; [chance] of a grip per strike.
+ * Mostly at dusk and after a feed, when the worms come out while the fish are still awake.
+ */
+class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val weight: Double = 0.7) : Behavior("wormsnap", "Snapping up a bristleworm") {
+    private var w: com.reeflive.core.sim.WormField.Worm? = null
+    var caught = 0; private set
+    override val committed: Boolean get() = elapsed < 2.5
+    // idle unless a worm is out: no utility noise, so the other behaviours' random draws are unchanged
+    override val noisy: Boolean get() = false
+    override fun score(c: Ctx): Double {
+        if (c.o.hunger < 0.2 || c.o.sleeping) return 0.0
+        w = c.sim.worms.nearest(c.o.pos, radius)
+        return if (w != null) weight * (0.6 + 0.4 * c.o.hunger) else 0.0
+    }
+    override fun update(c: Ctx, out: SteerIntent) {
+        val ww = w ?: run { finished = true; return }
+        if (!ww.exposed) { w = null; finished = true; return }
+        // the mouth goes to the worm, the body stays off the rock it lies on
+        val at = ww.head + ww.normal * (0.25 * c.L)
+        out.seek(at, c.o.burstSpeed * 0.8, arrive = 0.4, urgency = 0.8)
+        if (c.o.pos.distanceTo(at) < 1.0 + 0.15 * c.L) {
+            if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G); c.o.mouth = 1.0 }
+            w = null; finished = true
+        }
+        if (elapsed > 5) { w = null; finished = true }
+    }
+    companion object { const val WORM_SNAP_G = 0.05 }
+}

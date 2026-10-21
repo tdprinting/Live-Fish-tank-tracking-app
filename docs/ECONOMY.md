@@ -211,7 +211,7 @@ Which store sells what:
 
 ## 6. Selling
 
-Anything alive in the tank can be sold, from the store's **Sell** tab. The store shows its offer for each of your
+Anything alive in the tank can be sold, from the **Sell** button inside a store. The store shows its offer for each of your
 animals; tap **Sell**, the net catches it (the existing net-out animation), and the money arrives.
 
 **Offer = base price × store buy-back rate × health × size bonus × wanted bonus**

@@ -17,7 +17,13 @@ import kotlin.math.min
  * close above and on most sides, found once by scanning the rock SDF. Every pose is checked against the rock at the
  * tang's nose, tail, fin tips and flanks, so a wedged or rubbing tang touches the rock without passing into it.
  */
-class TangShelters(private val c: Ctx) {
+class TangShelters(
+    private val c: Ctx,
+    /** Body half-extents as fractions of total length (defaults: the P. hepatus disc; [forSpecies] for the others). */
+    val halfLen: Double = HALF_LEN,
+    val halfDepth: Double = HALF_DEPTH,
+    val halfThick: Double = HALF_THICK,
+) {
     /** A pose that keeps the whole body out of the rock: centre, heading, up, and the rock's outward normal. */
     data class Pose(val pos: Vec3, val heading: Vec3, val up: Vec3, val normal: Vec3, val entry: Vec3)
 
@@ -35,7 +41,7 @@ class TangShelters(private val c: Ctx) {
         if (cur == null || v != scannedVersion && !rp!!.anyAwake && c.t - scannedAt >= RESCAN_S) {
             scannedVersion = v; scannedAt = c.t
             if (cur != null) generation++
-            return scan().also { scanned = it }
+            return sharedScan(v).also { scanned = it }
         }
         return cur
     }
@@ -44,6 +50,16 @@ class TangShelters(private val c: Ctx) {
     private var scannedAt = -1e9
     /** Bumped each time the rocks moved and the shelters were found again (the bed is refitted then). */
     var generation = 0; private set
+
+    /**
+     * The scan does not depend on the body, so every fish of one sim shares it (two tangs and a harem of fairy wrasses
+     * would otherwise each walk the whole rock SDF at load): one slot, keyed by the sim and its rock version.
+     */
+    private fun sharedScan(version: Long): List<Spot> {
+        val k = lastScan
+        if (k != null && k.sim === c.sim && k.rock === c.rock && k.version == version) return k.spots
+        return scan().also { lastScan = ScanKey(c.sim, c.rock, version, it) }
+    }
 
     private fun scan(): List<Spot> {
         val rock = c.rock
@@ -80,7 +96,7 @@ class TangShelters(private val c: Ctx) {
     }
 
     /** How far above the body centre (cm) the rock may be and still be a roof over its back: half a body length above the dorsal tip. */
-    fun roofMax(L: Double) = min(ROOF_CM, (HALF_DEPTH + ROOF_ABOVE) * L)
+    fun roofMax(L: Double) = min(ROOF_CM, (halfDepth + ROOF_ABOVE) * L)
 
     /**
      * How tucked in a fish posed at [p] is (0 out in the open .. 1 walled in): the share of short rays from its flanks,
@@ -92,7 +108,7 @@ class TangShelters(private val c: Ctx) {
         var hits = 0
         for (d in Sdf.COVER_DIRS) if (d.y > -0.5 && sdf.raycast(p, d, SNUG_REACH * L) != null) hits++
         val roofAt = sdf.raycast(p, Vec3.Y, ROOF_CM)
-        val roofScore = if (roofAt == null) 0.0 else 1.0 - smoothstep(HALF_DEPTH * L, roofMax(L) + 0.5 * L, roofAt)
+        val roofScore = if (roofAt == null) 0.0 else 1.0 - smoothstep(halfDepth * L, roofMax(L) + 0.5 * L, roofAt)
         return 0.7 * hits / UPPER_DIRS + 0.3 * roofScore
     }
 
@@ -100,7 +116,7 @@ class TangShelters(private val c: Ctx) {
     fun clear(p: Vec3, h: Vec3, up: Vec3, L: Double, margin: Double = 0.05): Boolean {
         val sdf = c.rock.sdf
         val side = (h cross up).normalized(Vec3.Z)
-        val a = HALF_LEN * L; val b = HALF_DEPTH * L; val t = HALF_THICK * L
+        val a = halfLen * L; val b = halfDepth * L; val t = halfThick * L
         val pts = arrayOf(
             p, p + h * a, p - h * a, p + up * b, p - up * b, p + side * t, p - side * t,
             p + h * (0.6 * a) + up * (0.6 * b), p + h * (0.6 * a) - up * (0.6 * b),
@@ -132,8 +148,8 @@ class TangShelters(private val c: Ctx) {
         for (turn in TURNS) {
             val h = if (turn == 0.0) h0 else Vec3.rotateAbout(h0, Vec3.Y, turn)
             val up = rolledUpToward(h, n, roll)
-            var d = HALF_THICK * L + minGap
-            val hi = HALF_DEPTH * L + 2.5
+            var d = halfThick * L + minGap
+            val hi = halfDepth * L + 2.5
             while (d <= hi) {
                 val p = surf + n * d
                 if ((!roof || sdf.raycast(p, Vec3.Y, roofMax(L)) != null) && clear(p, h, up, L)) {
@@ -155,8 +171,8 @@ class TangShelters(private val c: Ctx) {
             val q = p + n * d
             if (!clear(q, h, up, L)) return null
             // room to turn in any direction without touching rock (the body's half length is free all round)
-            if (c.rock.sdf.dist(q) >= HALF_LEN * L + 0.5 && c.rock.inWater(q, HALF_LEN * L) &&
-                q.y > c.sim.sand.surfaceY(q.x, q.z) + HALF_LEN * L) return q
+            if (c.rock.sdf.dist(q) >= halfLen * L + 0.5 && c.rock.inWater(q, halfLen * L) &&
+                q.y > c.sim.sand.surfaceY(q.x, q.z) + halfLen * L) return q
             d += 1.0
         }
         return null
@@ -230,7 +246,18 @@ class TangShelters(private val c: Ctx) {
         }
     }
 
+    private class ScanKey(val sim: Any, val rock: Any, val version: Long, val spots: List<Spot>)
+
     companion object {
+        private var lastScan: ScanKey? = null
+
+        /** Shelters fitted to [o]'s body: the slender fairy wrasse and the tall-finned sailfin tangs differ from the blue tang's disc. */
+        fun forSpecies(c: Ctx): TangShelters = when {
+            c.o.brainKind == com.reeflive.core.sim.BrainKind.FAIRY_WRASSE -> TangShelters(c, 0.48, 0.14, 0.07)
+            c.o.species.zebrasoma -> TangShelters(c, 0.47, 0.31, 0.075)
+            else -> TangShelters(c)
+        }
+
         /** Body half-extents as fractions of total length: nose/tail, dorsal/anal fin tips, flank (P. hepatus disc) [L]. */
         const val HALF_LEN = 0.48
         const val HALF_DEPTH = 0.27
