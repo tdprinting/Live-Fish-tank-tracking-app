@@ -567,7 +567,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 #storeUi { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
 #storeUi > * { pointer-events: auto; }
 #storeUi .sthead { position: absolute; left: 12px; top: calc(env(safe-area-inset-top) + 64px); display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 16px; }
-#storeUi .door { width: 44px; height: 44px; border-radius: 12px; border: 2.5px solid var(--navy); background: var(--pillFill); font-size: 22px; cursor: pointer; }
+#storeUi .sback { height: 44px; padding: 0 16px 0 12px; border-radius: 22px; border: 2.5px solid var(--navy); background: var(--pillFill); color: var(--navy); font: 800 17px/1 var(--display); cursor: pointer; white-space: nowrap; }
+#storeUi .sback:active { transform: scale(0.95); }
 #storeUi .stname { display: flex; flex-direction: column; }
 #storeUi .stname b { font: 600 17px/1.15 var(--display); }
 #storeUi .stname small { color: var(--labelDim); }
@@ -609,6 +610,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .counter .pm { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--navy); background: var(--pillFill); color: var(--navy); font-weight: 700; cursor: pointer; }
 .counter .ctotal { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font: 600 18px/1.2 var(--display); }
 .counter .ctotal b { display: inline-flex; align-items: center; gap: 4px; color: #FFE14D; }
+/* the counter sits over the 3D checkout desk: no dimming, docked low so the desk shows above it */
+#storeUi .caremodal { background: transparent; align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .fxplus.minus { color: #FF9AA5; font-size: 26px; }
 /* "While you were away" (care.js; Android WelcomeBack.kt) */
 .dayarc { position: relative; height: 90px; border-radius: 16px; overflow: hidden; margin-bottom: 10px; transition: background .4s; }

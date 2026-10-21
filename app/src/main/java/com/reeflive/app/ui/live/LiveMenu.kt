@@ -70,7 +70,7 @@ import kotlinx.coroutines.delay
  * The live-tank menu (UI_STYLE §10.1): a few big candy bubbles a child can read. Look (time, follow, tour, sub,
  * microscope), Supplies (feed, care, clean glass, test kit, ... on the 3D supply shelf beside the tank, SupplyShelf.kt:
  * the bubble swings the camera there instead of opening a card), Tank Health (water, hunger bars, auto feed, fixes) and
- * Settings; My tank adds Add life and Tank (lights, water, gear, rockwork; the grown-up sliders, medicine and the
+ * Settings; My tank adds Shop and Tank (lights, water, gear, rockwork; the grown-up sliders, medicine and the
  * on-purpose trouble fold out under "More"). Landscape: a slim rail
  * of bubbles down the left edge (≈ 84 dp), so the tank keeps the rest of the screen; tapping a bubble opens a compact
  * glass card beside it (at most ~35 % of the width). Portrait: a dock of the same bubbles above the app's bottom bar,
@@ -87,7 +87,7 @@ enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: Stri
     SUPPLIES("Supplies", ReefGlyphs.feedTin, "Supply shelf"),
     /** Water, hunger bars with "Feed the hungry ones", and the tank check's fixes, each played in the 3D tank (TankHealthBody). */
     FIX("Tank Health", ReefGlyphs.heart, "Tank Health"),
-    LIFE("Add life", ReefGlyphs.fish, "Add life"),
+    LIFE("Shop", ReefGlyphs.shop, "Fish stores"),
     /** Lights, water, gear and rockwork; its More folds out the sliders, medicine and the on-purpose trouble. */
     LIGHT("Tank", ReefGlyphs.sun, "Lights, water & gear"),
     /** Not a bubble any more (its tiles live under Tank → More): kept as the purple tone of the trouble presets. */
@@ -96,7 +96,7 @@ enum class LiveCategory(val label: String, val glyph: ReefGlyph, val title: Stri
     ;
 
     companion object {
-        /** Watch can look, use the shelf, check the tank's health and change settings; My tank adds Add life and Tank. */
+        /** Watch can look, use the shelf, check the tank's health and change settings; My tank adds Shop and Tank. */
         fun shown(sandbox: Boolean): List<LiveCategory> =
             if (sandbox) listOf(VIEW, SUPPLIES, FIX, LIFE, LIGHT, MORE) else listOf(VIEW, SUPPLIES, FIX, MORE)
     }
@@ -169,7 +169,7 @@ class LiveTools(
     /** My tank's growing speed (slow biology only; animals still move at real speed). */
     val lifePace: com.reeflive.core.sim.LifePace = com.reeflive.core.sim.LifePace.DEFAULT,
     val onLifePace: (com.reeflive.core.sim.LifePace) -> Unit = {},
-    /** My tank's fish stores (docs/ECONOMY.md §5): Add life shows their storefronts instead of the free gallery. */
+    /** My tank's fish stores (docs/ECONOMY.md §5): Shop shows their storefronts instead of the free gallery. */
     val stores: List<com.reeflive.app.live.StoreFrontUi> = emptyList(),
     val onStore: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
     val onStoreShut: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
