@@ -171,6 +171,8 @@ object MotionProfiles {
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
         BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         BrainKind.CLEANER_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 25.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
+        // a smaller Lysmata, quicker and more skittish in its stop-go: short dashes between pauses (research 42 [M][E])
+        BrainKind.PEPPERMINT_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.8, walkBurstCmS = 22.0, stopGoMoveS = 1.0, stopGoPauseS = 1.0, footprintBL = 0.3, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
@@ -188,6 +190,8 @@ object MotionProfiles {
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
         BrainKind.ANEMONE to MotionProfile(Gait.SESSILE),
+        // wedged in its crevice; the brain moves it itself when it claps away (research 42 §2.3)
+        BrainKind.FILE_CLAM to MotionProfile(Gait.SESSILE),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),

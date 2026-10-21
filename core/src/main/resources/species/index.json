@@ -18,6 +18,7 @@
     "zebrasoma_flavescens",
     "stenopus_hispidus",
     "lysmata_amboinensis",
+    "lysmata_boggessi",
     "clibanarius_tricolor",
     "paguristes_cadenati",
     "percnon_gibbesi",
@@ -27,6 +28,7 @@
     "lithopoma_tectum",
     "asterina_sp",
     "entacmaea_quadricolor",
+    "ctenoides_scaber",
     "euprymna_berryi",
     "capnella_sp",
     "briareum_sp",
@@ -39,6 +41,10 @@
     "lobophytum_sp",
     "sinularia_sp",
     "amplexidiscus_fenestrafer",
-    "gracilaria_sp"
+    "gracilaria_sp",
+    "fimbriaphyllia_ancora",
+    "euphyllia_glabrescens",
+    "fimbriaphyllia_divisa",
+    "duncanopsammia_axifuga"
   ]
 }

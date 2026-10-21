@@ -77,6 +77,8 @@ class RockData(
     /** The loose rocks the scape is made of (empty: one solid scape that never moves). */
     val pieces: List<RockPieceDef> = emptyList(),
     holes: HoleSet = HoleSet(HoleSet.fromAnchors(anchors)),
+    /** Glass bottom to the top of the glass (the movable rock field covers up to here). */
+    val heightCm: Double = TankDims.HEIGHT_CM,
 ) {
     /** Anchors as built; [anchors] follows rocks that moved (dynamic rockscape). */
     val restAnchors: AnchorSet = anchors
@@ -97,8 +99,16 @@ class RockData(
     fun forSim(): RockData {
         if (pieces.isEmpty()) return this
         val base = (sdf as? DynamicRockSdf)?.base ?: sdf
-        return RockData(DynamicRockSdf(base, pieces, lengthCm, TankDims.HEIGHT_CM, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces, restHoles)
+        return RockData(DynamicRockSdf(base, pieces, lengthCm, heightCm, widthCm), restAnchors, lengthCm, widthCm, sandTopCm, waterLevelCm, pieces, restHoles, heightCm)
     }
+
+    /**
+     * The same rock in a tank of another size (My tank builds): the box changes, the rock stays where it was built
+     * until the simulation fits it in ([Simulation.fitStockScape]).
+     */
+    fun inTank(shape: TankShape): RockData =
+        if (shape.isStock) this
+        else RockData(sdf, restAnchors, shape.lengthCm, shape.depthCm, shape.sandTopCm, shape.waterLevelCm, pieces, restHoles, shape.heightCm)
 
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
     fun envDist(p: Vec3): Double = minOf(

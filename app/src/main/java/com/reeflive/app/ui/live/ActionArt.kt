@@ -698,8 +698,8 @@ private fun DrawScope.waterChange(fx: TankFx, f: FxFrame) {
     val dropCm = (frac / 0.25f * 3f).coerceIn(1.2f, 6f)
     val down = ease(f.span(300f, 1500f)) * (1f - ease(f.span(1900f, 3100f)))
     val d = dropCm * down
-    val wy = TankDims.WATER_LEVEL_F - 0.4f
-    val gz = TankDims.DEPTH_F; val gl = TankDims.LENGTH_F
+    val wy = com.reeflive.app.render.Camera.WATER_Y - 0.4f
+    val gz = com.reeflive.app.render.Camera.TANK[2]; val gl = com.reeflive.app.render.Camera.TANK[0]
     // 1) the waterline band on the front glass
     val a0 = f.project(0f, wy, gz); val a1 = f.project(gl, wy, gz)
     val b0 = f.project(0f, wy - d, gz); val b1 = f.project(gl, wy - d, gz)
@@ -875,7 +875,7 @@ private fun DrawScope.freshPour(f: FxFrame) {
 private fun DrawScope.pumpFx(fx: TankFx, f: FxFrame) {
     val pal = f.pal
     val u = f.unit
-    val mirror = fx.at.x > TankDims.LENGTH_F / 2f
+    val mirror = fx.at.x > com.reeflive.app.render.Camera.TANK[0] / 2f
     val on = fx.kind == FxKind.PUMP_ON
     // blade angle: integrate a speed that ramps up (on) or down (off)
     val t = f.ms / 1000f

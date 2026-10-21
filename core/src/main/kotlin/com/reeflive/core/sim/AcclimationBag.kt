@@ -222,7 +222,7 @@ class AcclimationBags {
         val sp = sim.species[speciesId]
         val coral = sp.isCoral
         val inBags = bags.sumOf { if (it.coral == coral) it.count else 0 }
-        val room = if (coral) Stocking.MAX_CORALS - sim.corals.size - inBags else Stocking.MAX_ANIMALS - sim.organisms.count { it.alive } - inBags
+        val room = if (coral) Stocking.MAX_CORALS - sim.corals.size - sim.coralPicks.count - inBags else Stocking.MAX_ANIMALS - sim.organisms.count { it.alive } - inBags
         val cap = if (coral) Stocking.MAX_CORALS_PER_ADD else Stocking.MAX_ANIMALS_PER_ADD
         val n = min(count.coerceIn(0, cap), max(0, room))
         if (n == 0) return 0
@@ -771,7 +771,8 @@ class AcclimationBags {
         b.released = true
         val rock = sim.rock
         if (b.coral) {
-            Stocking.addMany(sim, b.speciesId, b.count)
+            // My tank: the colonies wait in the cup for the keeper to pick their spot
+            if (sim.coralPicks.byHand) sim.coralPicks.add(b.speciesId, b.count) else Stocking.addMany(sim, b.speciesId, b.count)
             b.releasedIds += "coral"
             return
         }

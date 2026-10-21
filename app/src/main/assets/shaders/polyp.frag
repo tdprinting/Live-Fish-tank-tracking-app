@@ -21,6 +21,8 @@ uniform float uRoughness;
 uniform vec3 uEmissive;
 uniform float uAlphaCutoff;
 uniform float uBleach;
+uniform vec3 uBleachTint;  // what bleached tissue fades to (per species)
+uniform float uDead;       // 1 - living tissue: receding colony
 uniform float uBrown;
 
 out vec4 fragColor;
@@ -34,7 +36,13 @@ void main() {
     // bubble-tip anemone: magenta tips on swollen bulbs (Tee's photos 2026-10-15)
     albedo = mix(albedo, vec3(0.95, 0.12, 0.5), vTip * 0.85);
     albedo = mix(albedo, vec3(0.86, 0.84, 0.78), vRing * 0.65);
-    albedo = mix(albedo, vec3(0.89), clamp(uBleach, 0.0, 1.0));
+    albedo = mix(albedo, uBleachTint, clamp(uBleach, 0.0, 1.0));
+    // receding: patches of a dying colony melt away (world-space noise), the edge of the living tissue goes dull
+    if (uDead > 0.001) {
+        float n = clamp((vnoise(vWorld * 0.45) * 0.7 + vnoise(vWorld * 1.7 + 5.0) * 0.3 - 0.5) * 2.4 + 0.5, 0.0, 1.0);
+        if (n < uDead * 1.02) discard;
+        albedo = mix(vec3(0.55, 0.5, 0.42), albedo, smoothstep(uDead, uDead + 0.12, n));
+    }
     albedo = mix(albedo, vec3(0.195, 0.102, 0.042), clamp(uBrown, 0.0, 1.0) * 0.4);
     vec3 N = normalize(vNormal);
     vec3 V = normalize(uCamPos.xyz - vWorld);

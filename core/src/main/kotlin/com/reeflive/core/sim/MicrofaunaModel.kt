@@ -132,7 +132,7 @@ enum class PodPredator(
                 BrainKind.CLOWN -> CLOWN
                 BrainKind.TANG -> TANG
                 BrainKind.BANDED_SHRIMP -> BANDED_SHRIMP
-                BrainKind.CLEANER_SHRIMP -> CLEANER_SHRIMP
+                BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> CLEANER_SHRIMP
                 BrainKind.HERMIT -> HERMIT
                 BrainKind.SALLY_CRAB -> CRAB
                 BrainKind.BRITTLE_STAR -> BRITTLE_STAR

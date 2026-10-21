@@ -67,6 +67,8 @@ object Stocking {
         StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (male)", 8.0, role = "MALE"),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
+        // research 42: hides by day, eats aiptasia at night
+        StockEntry("lysmata_boggessi", StockGroup.INVERTS, "Peppermint shrimp", 4.0),
         StockEntry("clibanarius_tricolor", StockGroup.INVERTS, "Blue-leg hermit crab", 1.8),
         StockEntry("paguristes_cadenati", StockGroup.INVERTS, "Scarlet hermit crab", 3.0),
         StockEntry("percnon_gibbesi", StockGroup.INVERTS, "Sally Lightfoot crab", 3.0),
@@ -79,6 +81,8 @@ object Stocking {
         StockEntry("euprymna_berryi", StockGroup.INVERTS, "Hummingbird bobtail squid", 6.0),
         // research 40: walks until it finds a crevice, stings corals in reach, splits, and clowns may move in
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
+        // research 42: a file clam for a crevice; starves without daily phytoplankton
+        StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
@@ -91,6 +95,11 @@ object Stocking {
         StockEntry("lobophytum_sp", StockGroup.CORALS, "Pink lobed leather", 10.0),
         StockEntry("sinularia_sp", StockGroup.CORALS, "Finger leather", 12.0),
         StockEntry("amplexidiscus_fenestrafer", StockGroup.CORALS, "Elephant ear mushroom", 13.0),
+        // stony corals (docs/research/stony_corals.md): not in Tee's tank, models built about StonyCorals.STUDIO
+        StockEntry("fimbriaphyllia_ancora", StockGroup.CORALS, "Hammer coral", 12.0),
+        StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
+        StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
+        StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
     )
 
     /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
@@ -121,12 +130,15 @@ object Stocking {
     )
 
     /** Same fallback spot as [Simulation.addFromSeed] when a coral has no anchor. */
-    private val NO_ANCHOR = Vec3(60.0, 10.0, 20.0)
+    private val NO_ANCHOR = StonyCorals.STUDIO
 
     /** Clear space around a new colony (cm), by how wide the model is. */
     fun spacingCm(k: CoralKind): Double = when (k) {
         CoralKind.KENYA -> 16.0
+        // Euphyllia: retail spacing 6-10 in so the sweepers do not reach (stony_corals.md §1-3)
+        CoralKind.EUPHYLLIA -> 15.0
         CoralKind.GSP, CoralKind.LEATHER -> 12.0
+        CoralKind.LPS -> 10.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -141,7 +153,7 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? =
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
@@ -192,16 +204,23 @@ object Stocking {
         val room = MAX_CORALS - sim.corals.size
         val want = min(count.coerceIn(0, MAX_CORALS_PER_ADD), max(0, room))
         if (want == 0) return 0
+        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
+        for ((p, _) in spots) placeCoral(sim, sp, p)
+        return spots.size
+    }
+
+    /**
+     * One colony of [sp] at [p] on the rock or sand: its species' model moved there from the anchor it was built
+     * around (the keeper's pick, [CoralPicks], or a free spot from [coralSpots]). Returns its id.
+     */
+    fun placeCoral(sim: Simulation, sp: SimSpecies, p: Vec3): String {
         val home = homeAnchor(sim.rock, sp)
         val homePos = home?.pos ?: NO_ANCHOR
-        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
         val already = sim.corals.count { it.species.id == sp.id }
-        spots.forEachIndexed { i, (p, _) ->
-            sim.addFromSeed(
-                LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", 0.0, placement = home?.name, offset = p - homePos),
-            )
-        }
-        return spots.size
+        sim.addFromSeed(
+            LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, 0)}", 0.0, placement = home?.name, offset = p - homePos),
+        )
+        return sim.corals.last().id
     }
 
     /**

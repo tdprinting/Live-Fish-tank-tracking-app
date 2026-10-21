@@ -157,6 +157,10 @@ object CoralGrowth {
         CoralKind.AIPTASIA -> Growth(Form.NONE, 1.0, 0.0)
         // [M] (tee_tank_photos.md): "a 5 cm frag can reach about 20 cm across within a year" -> x4 / yr = 0.4 %/day
         CoralKind.LEATHER -> Growth(Form.TREE, 4.0, 0.004, maxSize = 2.5)
+        // stony_corals.md: no measured aquarium rates; retail "moderate". A 3-head frag doubling its heads in about a
+        // year is ~0.2 %/day of size; the skeleton caps how big a colony gets in a home tank (est.)
+        CoralKind.EUPHYLLIA -> Growth(Form.TREE, 3.5, 0.002, maxSize = 2.2)
+        CoralKind.LPS -> Growth(Form.TREE, 2.5, 0.002, maxSize = 2.2)
         CoralKind.GENERIC -> Growth(Form.NONE, 3.0, 0.0)
     }
 
@@ -200,7 +204,7 @@ object CoralGrowth {
         }
         val algae = 1 - c.algaeCover
         val sr = 0.7 + 0.3 * ((w.sr - 4) / 3).coerceIn(0.0, 1.0)
-        val ca = if (c.kind == CoralKind.ORGAN_PIPE) WaterSim.calcificationFactor(w) else 0.9 + 0.1 * ((w.ca - 300) / 100).coerceIn(0.0, 1.0)
+        val ca = if (c.kind == CoralKind.ORGAN_PIPE || c.kind.stony) WaterSim.calcificationFactor(w) else 0.9 + 0.1 * ((w.ca - 300) / 100).coerceIn(0.0, 1.0)
         // target feeding (coral powder, cyclops, plankton) adds a little heterotrophic growth (design estimate, ≤ +15 %)
         val fed = 1.0 + FED_BOOST * c.fed.coerceIn(0.0, 1.0)
         return (health * light * nut * algae * sr * ca * fed).coerceIn(0.0, 1.2)
@@ -258,7 +262,9 @@ object CoralGrowth {
         val hit = rock.sdf.raycast(start, Vec3(0.0, -1.0, 0.0), start.y - rock.sandTopCm) ?: return null
         val p = start + Vec3(0.0, -hit, 0.0)
         if (p.y < rock.sandTopCm + 0.5) return null
-        val frag = Coral(id, c.species, "${c.nickname} branch", "", p, rock.sdf.gradient(p), rng.nextDouble() * 6.28)
+        // drawn as the parent's model moved to where it landed (a copy), so a branch shows and saves like an added colony
+        val home = c.restPos - c.offset
+        val frag = Coral(id, c.species, "${c.nickname.substringBefore(" branch")} branch", c.anchor, p, rock.sdf.gradient(p), rng.nextDouble() * 6.28, offset = p - home)
         frag.size = 0.3
         frag.tissue = 0.9
         return frag
@@ -268,7 +274,7 @@ object CoralGrowth {
 
     /** Raw neighbour pressure on [victim] from [aggressor]: chemical stress and the fraction smothered. */
     fun pressure(aggressor: Coral, victim: Coral, carbonEfficiency: Double): Pair<Double, Double> {
-        if (aggressor === victim || aggressor.kind == victim.kind || aggressor.tissue < 0.05) return 0.0 to 0.0
+        if (aggressor === victim || StonyCorals.tolerates(aggressor, victim) || aggressor.tissue < 0.05) return 0.0 to 0.0
         val d = aggressor.pos.distanceTo(victim.pos) - extent(aggressor) - extent(victim)
         val vigour = aggressor.tissue * min(aggressor.size, 2.5)
         return when (aggressor.kind) {
@@ -280,6 +286,8 @@ object CoralGrowth {
                 0.25 * (1 - d / LEATHER_RANGE_CM).coerceIn(0.0, 1.0) * vigour * (1 - 0.6 * carbonEfficiency) to 0.0
             // 03 D: zoa/paly toxin; sting neighbours on contact (K)
             CoralKind.ZOA -> 0.3 * (1 - d / STING_RANGE_CM).coerceIn(0.0, 1.0) * vigour to 0.0
+            // Euphyllia sweepers and LPS night tentacles sting what they reach (StonyCorals)
+            CoralKind.EUPHYLLIA, CoralKind.LPS -> StonyCorals.pressure(aggressor, victim, d) to 0.0
             // aiptasia sting what they touch (est.)
             CoralKind.AIPTASIA -> 0.2 * (1 - d / STING_RANGE_CM).coerceIn(0.0, 1.0) * aggressor.tissue to 0.0
             // 03 D: GSP acts by overgrowth, not sting: the mat smothers what it reaches

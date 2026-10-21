@@ -42,7 +42,7 @@ BUDGET = {
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "bobtail_squid": 4600,
     "yellow_tang": 6000, "purple_tang": 6000, "fairy_wrasse": 4800,
-    "shrimp": 4200, "skunk_shrimp": 4200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "brittle_star": 2000,
+    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "brittle_star": 2000,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
     "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,
@@ -51,6 +51,7 @@ BUDGET = {
     # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
     "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
     "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,
+    "brood_tang_egg": 600, "brood_tang_larva": 1000, "brood_tang_postlarva": 1500, "brood_tang_fry": 1800,
     "tank": 11000, "rockscape": 62000, "equipment": 9000,
     # pests (tools/blender/pests.py): one aiptasia polyp drawn once per polyp (AiptasiaDraw caps the count), the
     # Berghia nudibranch (drawn like the micro critters), the syringe / laser props of the treatment animation
@@ -61,6 +62,8 @@ BUDGET = {
     # the 2026-10-15 coral remake (lobed / ridged leathers, taco-folded ear), paid for by fewer GSP ribbon segments
     "toadstool_leather": 1000, "leather_pink": 1500, "finger_leather": 1500, "elephant_ear": 1100,
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
+    # stony corals (tools/blender/stony_corals.py; sandbox / My tank only): skeleton + mantle bodies, tentacles instanced
+    "hammer": 1500, "torch": 1500, "frogspawn": 1600, "duncan": 2000,
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
     "supply_shelf": 18000,
@@ -85,7 +88,7 @@ BODY_BUDGET = {"engineer_goby": 5600}
 SNOUT_A = {"bobtail_squid": 0.3}
 # sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
 SANDBOX_ONLY = {"bobtail_squid", "aiptasia", "berghia",
-                "gsp_mat"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
+                "gsp_mat", "hammer", "torch", "frogspawn", "duncan"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}

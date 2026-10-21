@@ -30,6 +30,8 @@ object SpeciesBrains {
             BrainKind.FAIRY_WRASSE -> FairyWrasseBrain(c)
             BrainKind.BOBTAIL_SQUID -> BobtailSquidBrain(c)
             BrainKind.ANEMONE -> AnemoneBrain(c)
+            BrainKind.PEPPERMINT_SHRIMP -> PeppermintShrimpBrain(c)
+            BrainKind.FILE_CLAM -> FileClamBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)
         }

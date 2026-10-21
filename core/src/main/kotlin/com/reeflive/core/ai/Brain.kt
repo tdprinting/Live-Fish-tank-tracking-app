@@ -279,7 +279,7 @@ object Predation {
             BrainKind.EEL -> when {
                 pred.posture == 3 -> L + 4.0                // head out of the den: only right in front of it
                 me.brainKind == BrainKind.WRASSE -> 2 * L
-                me.brainKind == BrainKind.BANDED_SHRIMP || me.brainKind == BrainKind.CLEANER_SHRIMP -> 12.0
+                me.brainKind.isShrimp -> 12.0
                 me.brainKind == BrainKind.HERMIT -> 8.0
                 me.brainKind == BrainKind.BRITTLE_STAR -> 4.0
                 me.isFish && me.brainKind != BrainKind.EEL -> 3 * L
@@ -288,6 +288,8 @@ object Predation {
             BrainKind.HAWK -> when (me.brainKind) {
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> 1.5 * L
                 BrainKind.CLEANER_SHRIMP -> 8.0
+                // a peppermint is small, out in the open at night, and a favourite hawkfish meal (research 42 §1.6 [M])
+                BrainKind.PEPPERMINT_SHRIMP -> 10.0
                 BrainKind.HERMIT -> 5.0
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
@@ -304,7 +306,7 @@ object Predation {
         if (!prey.alive || prey === pred || prey.molting && !prey.visible) return 0.0
         return when (pred.brainKind) {
             BrainKind.EEL -> when (prey.brainKind) {
-                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> 1.0
+                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> 1.0
                 BrainKind.HERMIT -> 0.8
                 BrainKind.CARDINAL -> if (night) 0.5 else 0.1
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY, BrainKind.DOTTYBACK -> if (prey.posture == 3) 0.0 else 0.3
@@ -322,6 +324,7 @@ object Predation {
             }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
+                BrainKind.PEPPERMINT_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.8 else 0.0
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0
                 BrainKind.HERMIT -> 0.4
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
@@ -344,6 +347,10 @@ fun Ctx.zoneY(f: Double) = rock.sandTopCm + f * (rock.waterLevelCm - rock.sandTo
 
 /** Clearance a swimmer keeps from rock (SIMULATION §4.3). */
 val Ctx.clearance: Double get() = 0.6 * o.collisionLength + 1.0
+
+/** A spot picked in Tee's 48 × 18 in tank, at the same place along and across this tank's glass (My tank builds). */
+fun Ctx.inTank(p: Vec3): Vec3 = if (rock.lengthCm == com.reeflive.core.sim.TankDims.LENGTH_CM && rock.widthCm == com.reeflive.core.sim.TankDims.DEPTH_CM) p
+    else Vec3(p.x * rock.lengthCm / com.reeflive.core.sim.TankDims.LENGTH_CM, p.y, p.z * rock.widthCm / com.reeflive.core.sim.TankDims.DEPTH_CM)
 
 /** Push a point into open water with at least [clear] cm to rock and a glass margin. */
 fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
