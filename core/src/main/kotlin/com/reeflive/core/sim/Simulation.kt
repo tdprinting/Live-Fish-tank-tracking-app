@@ -72,6 +72,20 @@ class Simulation private constructor(
     var simTimeSec: Double = startTimeSec; private set
     var speed: Double = 1.0
         set(v) { field = v.coerceIn(0.0, 1000.0) }
+    /**
+     * Game pace of slow biology ([LifePace]): growth, coral growth and spread, breeding, nursery fry, anemone splits,
+     * pest and asterina populations and molts run this many times faster than the sim clock, while motion, hunger,
+     * water chemistry, fouling, lights and damage from bad water stay on it. 1 = real (Watch, stores); My tank
+     * defaults to [LifePace.DEFAULT]. Unlike [speed] it does not fast-forward the tank, so animals still move at real speed.
+     */
+    var lifePace: Double = 1.0
+        set(v) { field = if (v.isFinite()) v.coerceIn(LifePace.MIN, LifePace.MAX) else 1.0 }
+    /** The game-biology clock: advances [lifePace] game seconds per sim second (equals [simTimeSec] at pace 1). */
+    var lifeSec: Double = startTimeSec
+    /** Sim seconds that [days] game days of slow biology take (for stamps: `simTimeSec + lifeDays(x)`). */
+    fun lifeDays(days: Double): Double = days * 86400.0 / lifePace
+    /** Game days since the sim-clock stamp [sinceSimSec]. */
+    fun lifeAge(sinceSimSec: Double): Double = (simTimeSec - sinceSimSec) * lifePace / 86400.0
     var predationEnabled: Boolean = config.predationEnabled
     /** Σ BL² / footprint (06 §3.4) and its aggression multiplier, refreshed every chemistry tick. */
     var crowding: Double = com.reeflive.core.ai.PairMatrix.CROWDING_BASE; private set
@@ -648,6 +662,7 @@ class Simulation private constructor(
     // ============================================================== core loop
     private fun advanceInternal(simDt: Double, dtB: Double) {
         simTimeSec += simDt
+        lifeSec += simDt * lifePace
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
         flow.now = simTimeSec
@@ -879,6 +894,9 @@ class Simulation private constructor(
     private fun chemTick() {
         val w = water
         val dtMin = CHEM_DT / 60
+        // slow biology on the game clock (lifePace); everything else in this tick stays on the sim clock
+        val lifeDt = CHEM_DT * lifePace
+        val lifeMin = dtMin * lifePace
         val light = LightSchedule.intensity(lightCh)
         cachedSinceOn = lights.minutesSinceLightsOn(simTimeSec)
         cachedUntilOff = if (cachedSinceOn != null) lights.minutesUntilLightsOff(simTimeSec) else null
@@ -889,10 +907,10 @@ class Simulation private constructor(
         var fecalBio = 0.0
         for (o in organisms) if (o.alive && o.isFish && !o.sleeping) fecalBio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC)
         w.fecalBioIndex = fecalBio
-        repro.step(CHEM_DT)
-        brood.step(CHEM_DT)
-        SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
-        shrimpBreeding.step(CHEM_DT / 60.0)
+        repro.step(lifeDt)
+        brood.step(lifeDt)
+        SexRoles.step(organisms, lifeDt)   // protogynous / bidirectional sex roles (life_stages.md)
+        shrimpBreeding.step(lifeMin)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
@@ -929,10 +947,10 @@ class Simulation private constructor(
                 infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure, healthGrace)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
-            if (o.alive) growth(o, dtMin)
+            if (o.alive) growth(o, lifeMin)
         }
-        coralGrowth(dtMin)
-        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON)
+        coralGrowth(lifeMin)
+        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON, lifeMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
@@ -942,7 +960,7 @@ class Simulation private constructor(
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % (2 * Math.PI)
         }
-        crustaceanMolts(dtMin)
+        crustaceanMolts()
         dinoToxin(dtMin)
         flatwormToxin()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3), and fear, grudges and
@@ -956,7 +974,7 @@ class Simulation private constructor(
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
-        anemones.step(dtMin)
+        anemones.step(dtMin, lifeMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
@@ -1088,7 +1106,9 @@ class Simulation private constructor(
         val g = o.species.growthCmPerYear
         if (g <= 0 || o.lengthCm >= o.species.maxLengthCm) return
         val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < 450 && o.lengthCm > 15) 0.3 else 1.0
-        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt
+        // My tank's game pace: youngsters shoot up to near adult size (where they can breed) in a week or two of play
+        val young = if (lifePace > 1.0 && o.lengthCm < LifePace.YOUNG_UNTIL * o.species.typicalAdultCm) LifePace.YOUNG_BOOST else 1.0
+        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt * young
     }
 
     /**
@@ -1215,7 +1235,8 @@ class Simulation private constructor(
         }
     }
 
-    private fun crustaceanMolts(dtMin: Double) {
+    /** Molts come every few game weeks ([lifeDays]); the soft-shell days after one stay on the sim clock. */
+    private fun crustaceanMolts() {
         for (o in organisms) {
             if (!o.alive) continue
             val (lo, hi, dur) = when (o.brainKind) {
@@ -1225,7 +1246,7 @@ class Simulation private constructor(
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 else -> continue
             }
-            if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
+            if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
             if (!o.molting && simTimeSec >= o.nextMoltAt) {
                 o.molting = true; o.moltUntil = simTimeSec + dur * 3600; o.lastMoltAt = simTimeSec
                 val shellPos = rock.clampToWater(o.pos.withY(rock.sandTopCm + 0.3) + Vec3(rng.signed() * 4, 0.0, 4.0), 2.0).withY(rock.sandTopCm + 0.3)
@@ -1237,7 +1258,7 @@ class Simulation private constructor(
                 // failed molts are more likely with low Ca/Mg/iodine (research 04 §4C)
                 val bad = (water.s.ca < 360 || water.s.mg < 1150 || water.s.i < 0.02)
                 if (bad && rng.chance(0.25)) HealthModel.kill(o, "failed molt", simTimeSec, pendingEventsSink)
-                o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
+                o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
             }
         }
     }
@@ -1246,7 +1267,7 @@ class Simulation private constructor(
         val stars = organisms.filter { it.alive && it.brainKind == BrainKind.ASTERINA }
         if (stars.isEmpty() || stars.size >= ASTERINA_CAP) return
         // fissiparity: each healthy star splits on average every ~30 days
-        for (s in stars) if (s.health > 0.8 && s.hunger < 0.6 && rng.chance(1.0 / (30 * 1440))) {
+        for (s in stars) if (s.health > 0.8 && s.hunger < 0.6 && rng.chance(lifePace / (30 * 1440))) {
             val child = addFromSeed(LivestockSeed(s.species.id, s.nickname.substringBefore(" #") + " #" + (stars.size + 1), s.lengthCm * 0.6))
             child.placeAt(s.pos + Vec3(rng.signed() * 2, 0.0, rng.signed() * 2), s.heading)
             break

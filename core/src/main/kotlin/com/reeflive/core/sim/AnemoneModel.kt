@@ -153,7 +153,8 @@ class AnemoneModel(private val sim: Simulation) {
 
     // ------------------------------------------------------------------ chemistry-tick step
 
-    fun step(dtMin: Double) {
+    /** [lifeMin]: the same step on the game clock ([Simulation.lifePace]), for splitting. */
+    fun step(dtMin: Double, lifeMin: Double = dtMin) {
         val list = anemones()
         if (list.isEmpty() && hosts.isEmpty()) return
         ensureRng()
@@ -174,7 +175,7 @@ class AnemoneModel(private val sim: Simulation) {
             stingNeighbours(o, s, list, dtMin)
         }
         clowns(list, night, dtMin)
-        if (list.size < MAX_ANEMONES) for (o in list) if (maybeSplit(o, state(o), dtMin)) break
+        if (list.size < MAX_ANEMONES) for (o in list) if (maybeSplit(o, state(o), lifeMin)) break
     }
 
     private fun wander(o: Organism, s: State, dtMin: Double) {

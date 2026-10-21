@@ -381,10 +381,16 @@ function timeSlider(stops) {
     <input type="range" data-time min="0" max="${stops.length - 1}" step="1" value="${i}" data-stops="${stops.join(',')}"></label>`;
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
+// My tank: how fast slow things (growing, spreading, babies) happen; animals still move at real speed
+function paceTiles() {
+  const ps = JSON.parse(MY.paces());
+  const ico = { REAL: 'clockSun', FAST: 'seaweed', FASTER: 'timelapse' };
+  return `<h4>Growing speed</h4><div class="options">${ps.map((p) => tile(`data-pace="${p.id}" title="${esc(p.blurb)}"`, ico[p.id], p.label, p.on)).join('')}</div>`;
+}
 function lookCard(sb) {
   const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
-  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
+  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}${ui.mode === 'mine' ? paceTiles() : ''}
     ${fish.length ? `<h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('')}</div>` : ''}
     <h4>Look around</h4><div class="options">${tile('data-tour', 'camera', ui.tour ? 'Stop tour' : 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
       ${tile('data-microscope', 'microscope', 'Look closer')}${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-torch', 'torch', 'Torch', ui.torch)}
@@ -625,6 +631,11 @@ $('card').addEventListener('click', (e) => {
   if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
   if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
+  else if (d.pace) {
+    MY.setPace(d.pace);
+    const p = JSON.parse(MY.paces()).find((x) => x.id === d.pace);
+    if (p) say(`${p.blurb}. Fish still swim at real speed.`);
+  }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);
   else if ('feedshelf' in d) { closeCard(); openShelf(); return; }
