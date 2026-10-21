@@ -42,6 +42,8 @@ def run(step, args):
         import microfauna
         for k, fn in microfauna.MICRO_BUILDERS.items():
             fn()
+        import cleanup_crew  # trochus, fighting conch, tuxedo urchin (docs/research/43_cleanup_crew.md)
+        cleanup_crew.build_all()
         import squid  # sandbox bobtail squid (docs/research/cephalopod_squid.md)
         squid.build_all()
         import file_clam  # flame scallop (docs/research/42_peppermint_shrimp_flame_scallop.md)

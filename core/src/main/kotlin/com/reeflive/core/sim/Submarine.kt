@@ -350,7 +350,7 @@ object SubmarineRules {
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val BURROWERS = setOf(BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE)
     /** Animals with nothing to show (snails, stars) or no escape to play. */
-    private val INDIFFERENT = setOf(BrainKind.ASTREA, BrainKind.ASTERINA, BrainKind.BRITTLE_STAR, BrainKind.GENERIC_INVERT)
+    private val INDIFFERENT = setOf(BrainKind.ASTREA, BrainKind.TROCHUS, BrainKind.URCHIN, BrainKind.ASTERINA, BrainKind.BRITTLE_STAR, BrainKind.GENERIC_INVERT)
 
     private fun interest(o: Organism) = 0.5 * o.curiosity + 0.5 * o.boldness
 

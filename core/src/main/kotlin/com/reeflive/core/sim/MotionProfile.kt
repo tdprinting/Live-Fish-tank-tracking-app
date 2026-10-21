@@ -196,6 +196,12 @@ object MotionProfiles {
         // the fast glider): ~6 cm/min grazing, ~18 cm/min when it hurries (it was 30 cm/min, so its glass trails, §11.1,
         // ran five times too long)
         BrainKind.ASTREA to MotionProfile(Gait.GLIDE, walkCmS = 0.1, walkBurstCmS = 0.3),
+        // a trochus glides a little faster than the astrea (several cm/min on the glass; no measured rate, research 43 §4) [L]
+        BrainKind.TROCHUS to MotionProfile(Gait.GLIDE, walkCmS = 0.12, walkBurstCmS = 0.35),
+        // the conch's leaps are placed by its brain (ConchBrain.leapToward); these caps only bound the steering [L]
+        BrainKind.CONCH to MotionProfile(Gait.GLIDE, walkCmS = 0.5, walkBurstCmS = 8.0),
+        // tube-foot crawl, a few cm per minute (no Mespilia data, research 43 §2; regular urchins ~1–5 cm/min) [L]
+        BrainKind.URCHIN to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.12),
         // tube-foot glide ≈ 0.2 cm/s (A. stellifera crawling paper) [M][L]
         BrainKind.ASTERINA to MotionProfile(Gait.GLIDE, walkCmS = 0.2, walkBurstCmS = 0.3),
         BrainKind.FEATHER_DUSTER to MotionProfile(Gait.SESSILE),
