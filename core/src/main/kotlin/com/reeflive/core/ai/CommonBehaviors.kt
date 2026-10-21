@@ -392,7 +392,8 @@ open class Sleep(val b: SpeciesBrain, label: String = "Sleeping", val nightWeigh
 /** Visit a cleaning station (wrasse or skunk shrimp): pose until cleaned (SIMULATION §4.4, 04 §13C). */
 open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior("visit", "Visiting cleaner") {
     private var station: CleaningStation? = null
-    /** A hawkfish that gave up hovering at the station goes back to its perch until then. */
+    /** A hawkfish that gave up hovering at the station goes back to its perch until then; any fish that could not reach
+     *  its pose spot leaves the station for [RETRY_S] (see [update]). */
     private var retryAt = -1e9
     override fun score(c: Ctx): Double {
         val o = c.o
@@ -420,7 +421,7 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         if (st == null || !st.open) { finished = true; return }
         val o = c.o
         // no swim bladder: a hawkfish hovers only briefly, then waits on a perch for the cleaner to come to it
-        val maxWait = if (o.brainKind == BrainKind.HAWK) HAWK_HOVER_S else 90.0
+        val maxWait = if (o.brainKind == BrainKind.HAWK) HAWK_HOVER_S else GIVE_UP_S
         if (o.brainKind == BrainKind.HAWK && elapsed > maxWait) retryAt = c.t + HAWK_RETRY_S
         val pose = c.safe(st.pos + Vec3(0.0, 0.0, 1.0) * (o.lengthCm * 0.8 + 2))
         val d = o.pos.distanceTo(pose)
@@ -439,13 +440,23 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
             o.finClamp = 0.0
         }
         if (c.t - o.lastCleanedAt < 2) { st.release(); finished = true }
-        if (elapsed > maxWait) { if (st.client === o) st.release(); finished = true }
+        // a pose spot it cannot get to (a dottyback under a ledge, the climb out too tight for its steering) held
+        // the station for 80 min, re-picked every 90 s, and the wrasse could not reach it there either: go about its
+        // day and let the cleaner find it elsewhere
+        if (elapsed > maxWait) {
+            if (o.brainKind != BrainKind.HAWK && !(st.client === o && st.clientReady)) retryAt = c.t + RETRY_S
+            if (st.client === o) st.release()
+            finished = true
+        }
     }
 
     companion object {
         /** Longest a hawkfish hovers at a station (s) and how long it then stays on its perch before trying again. */
         @Ev(Evidence.DESIGN_ESTIMATE, "Cirrhitidae lack a swim bladder: perch-bound, short hovering bouts") const val HAWK_HOVER_S = 12.0
         const val HAWK_RETRY_S = 300.0
+        const val GIVE_UP_S = 90.0
+        /** [I]: long enough for the fish to move on and meet the wrasse on its rounds (06 §5.6 #4 allows 90 min). */
+        const val RETRY_S = 600.0
     }
     override fun exit(c: Ctx) {
         // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station

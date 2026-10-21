@@ -210,6 +210,8 @@ class Simulation private constructor(
     val holeClaims = HoleClaims { it in organisms }
     /** Keeps bodies out of solid rock except in holes that fit them (SIMULATION §4.11). */
     val rockGuard = RockGuard(rock, { x, z -> sand.surfaceY(x, z) }, holeClaims)
+    /** Whole bodies (mesh profiles) inside the glass and on the sand (SIMULATION §24.3). */
+    val bodyBounds = BodyBounds(sand, rock.lengthCm, rock.widthCm, rock.sdf)
 
     // ============================================================== dynamic rockscape
     /** Loose rocks as rigid bodies while [dynamicRocks] is on (null for a scape without separate rocks). */
@@ -924,11 +926,30 @@ class Simulation private constructor(
             if (!o.alive || o.leap != null) continue
             val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.burrowMouth = burrowMouthOf(o, a)
             sandContact.preClamp(o)
+            bodyBounds.apply(o)
+            val relaid = rockGuard.bodyFixes
             rockGuard.apply(o)
+            // (a body the rock guard re-laid round the rock is kept inside the glass and on the sand)
+            if (rockGuard.bodyFixes != relaid) bodyBounds.apply(o)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
+        }
+    }
+
+    /** The mouth of the burrow [o] digs under the rock nearest it (the gobies), else null ([Organism.burrowMouth]). */
+    private fun burrowMouthOf(o: Organism, a: Agent): Vec3? = when (val b = a.brain) {
+        is com.reeflive.core.ai.DiamondGobyBrain -> b.burrow
+        is com.reeflive.core.ai.WatchmanGobyBrain -> b.burrow
+        else -> if (o.brainKind != BrainKind.ENGINEER_GOBY) null else {
+            var best: Burrow? = null; var bd = Double.MAX_VALUE
+            for (w in sand.burrows) if (w.owner == o.id) {
+                val dx = w.mouthX - o.pos.x; val dz = w.mouthZ - o.pos.z; val d = dx * dx + dz * dz
+                if (d < bd) { bd = d; best = w }
+            }
+            best?.let { Vec3(it.mouthX, sand.surfaceY(it.mouthX, it.mouthZ), it.mouthZ) }
         }
     }
 
@@ -947,8 +968,13 @@ class Simulation private constructor(
             a.steering.apply(a.intent)
             o.attached = true
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.burrowMouth = burrowMouthOf(o, a)
             sandContact.preClamp(o)
+            bodyBounds.apply(o)
+            val relaid = rockGuard.bodyFixes
             rockGuard.apply(o)
+            // (a body the rock guard re-laid round the rock is kept inside the glass and on the sand)
+            if (rockGuard.bodyFixes != relaid) bodyBounds.apply(o)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
