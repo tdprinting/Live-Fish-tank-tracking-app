@@ -8,7 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
-import { initRadio, radioKick, radioOn, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
+import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -96,7 +96,12 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
-    initRadio({ SB, store, ctx: audioCtx, volume: () => ui.volume, say });
+    initRadio({
+      SB, store, ctx: audioCtx, say,
+      records: () => (ui.mode === 'mine' ? JSON.parse(MY.records()) : []),
+      buy: (file) => { const ok = ui.mode === 'mine' && MY.buyRecord(file); if (ok) MY.save(); return ok; },
+      coins: () => (ui.mode === 'mine' ? JSON.parse(MY.economy())?.coins ?? null : null),
+    });
     initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
@@ -624,6 +629,8 @@ function settingsCard(sb) {
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
       ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
       ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
+      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
+      ${ui.records ? radioShelfHtml(esc) : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
@@ -682,6 +689,8 @@ $('card').addEventListener('click', (e) => {
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if ('radio' in d) radioToggle();
   else if (d.radiostep) radioStep(Number(d.radiostep));
+  else if ('records' in d) ui.records = !ui.records;
+  else if (d.record != null) radioPick(Number(d.record));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -775,8 +784,11 @@ $('card').addEventListener('input', (e) => {
     store.set('reeflive.heaterC', Number(r.value));
     SB.act('heater', 'set', Number(r.value));
   } else if ('volume' in d) {
-    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume); radioVolume();
+    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume);
     r.previousElementSibling.textContent = `${Math.round(ui.volume * 100)}%`;
+  } else if ('radiovol' in d) {
+    radioVolume(Number(r.value));
+    r.previousElementSibling.textContent = `${Math.round(Number(r.value) * 100)}%`;
   }
 });
 

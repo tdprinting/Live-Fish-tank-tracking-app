@@ -164,6 +164,9 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Takes one use of a shelf supply in My tank (or one serving of any fish food, [fishFood]). */
     fun useSupply(id: String?, fishFood: Boolean = false) = holder.useSupply(id, fishFood)
     /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
+    /** Buys a radio record in My tank's record shop; false when it cannot (not My tank, owned, or too dear). */
+    fun buyRecord(file: String): Boolean = mode.value == SimMode.CUSTOM && holder.buyRecord(file)
+
     fun reefCare(price: Int): Boolean = if (mode.value == SimMode.CUSTOM) holder.reefCare(price) else { holder.enqueue(Command.ReefCare); true }
     /** Corals news from the time away (shown once by the screen). */
     val coralNews: StateFlow<List<String>> = holder.coralNews

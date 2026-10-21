@@ -120,7 +120,7 @@ internal fun LinkRow(title: String, subtitle: String?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun VolumeRow(volume: Float, onChange: (Float) -> Unit) {
+private fun VolumeRow(volume: Float, onChange: (Float) -> Unit, what: String = "Tank sounds volume") {
     val c = ReefTheme.colors
     // local value while dragging; DataStore is written once the drag ends
     var v by remember(volume) { mutableStateOf(volume) }
@@ -130,7 +130,7 @@ private fun VolumeRow(volume: Float, onChange: (Float) -> Unit) {
             value = v,
             onValueChange = { v = it },
             onValueChangeFinished = { onChange(v) },
-            modifier = Modifier.weight(1f).semantics { contentDescription = "Tank sounds volume" },
+            modifier = Modifier.weight(1f).semantics { contentDescription = what },
             colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.glass),
         )
         Text("${(v * 100).roundToInt()}%", style = ReefTheme.numbers.label, color = c.textSecondary, modifier = Modifier.width(44.dp))
@@ -151,6 +151,7 @@ data class SettingsActions(
     val onLiveQuality: (LiveQuality) -> Unit = {},
     val onTankSounds: (Boolean) -> Unit = {},
     val onRadio: (Boolean) -> Unit = {},
+    val onRadioVolume: (Float) -> Unit = {},
     val onDynamicRocks: (Boolean) -> Unit = {},
     val onTankAlerts: (Boolean) -> Unit = {},
     val onTankVolume: (Float) -> Unit = {},
@@ -209,8 +210,9 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
             Group("Live Tank") {
                 PillsRow("Quality", listOf("Low", "Medium", "High"), s.liveQuality.ordinal) { actions.onLiveQuality(LiveQuality.entries[it]) }
                 SwitchRow("Tank sounds", "Water flow, pumps, feeding and alerts", s.tankSounds, actions.onTankSounds)
+                if (s.tankSounds) VolumeRow(s.tankVolume, actions.onTankVolume)
                 SwitchRow("Tank radio", "Quiet, calm songs from a little radio beside the tank", s.radioOn, actions.onRadio)
-                if (s.tankSounds || s.radioOn) VolumeRow(s.tankVolume, actions.onTankVolume)
+                if (s.radioOn) VolumeRow(s.radioVolume, actions.onRadioVolume, "Music volume")
                 SwitchRow("Rocks can shift", "A rock can settle or topple when the gobies dig out too much sand under it. Off keeps the rockscape fixed", s.dynamicRocks, actions.onDynamicRocks)
             }
             SectionHeader("Tank & parameters")
@@ -263,6 +265,7 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
             onTankSounds = { go { g.settings.setTankSounds(it) } },
             onRadio = { go { g.settings.setRadioOn(it) } },
+            onRadioVolume = { go { g.settings.setRadioVolume(it) } },
             onDynamicRocks = { go { g.settings.setDynamicRocks(it) } },
             onTankAlerts = { on ->
                 go { g.settings.setTankAlerts(on); if (on) g.settings.setNotifications(true) }

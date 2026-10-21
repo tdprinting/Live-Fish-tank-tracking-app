@@ -179,6 +179,11 @@ object ReefMyTank {
         val e = economy?.takeIf { sim != null && ReefSandbox.isMine() } ?: return true
         return (e.useFishFood() != null).also { if (it) save() }
     }
+    /** The record shop: buys radio song [file] at its RadioStation price; false when it cannot (owned, too dear, no tank). */
+    fun buyRecord(file: String): Boolean = sim != null && economy?.buyRecord(file, today()) == true
+
+    /** Radio songs bought in this tank, as a JSON array of files (`[]` without a tank). */
+    fun records(): String = JSON.stringify(economy?.state?.records.orEmpty().toTypedArray())
 
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
