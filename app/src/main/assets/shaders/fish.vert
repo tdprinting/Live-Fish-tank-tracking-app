@@ -16,7 +16,7 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop, 8 snail, 9 urchin)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
@@ -367,6 +367,101 @@ void clamPose(inout vec3 local, inout vec3 n) {
     n.xy = vec2(c * n.x - s * n.y, s * n.x + c * n.y);
 }
 
+// Snails (motion mode 8, core SnailRig: trochus, fighting conch). The shell is rigid at the organism; COLOR_0.r = class
+// (0 shell, 0.25 foot, 0.4 operculum, 0.5 head / snout, 0.75 tentacle, 1 eye), b = t along an appendage, a = phase seed.
+// uLimb[0] = (pedal-wave phase, body out 0..1, rasp 0..1, righting reach 0..1), uLimb[1] = (tentacle wave phase,
+// aperture xyz), uLimb[2] = (leap phase, vault 0..1, eyestalks out 0..1, -), uLimb[3] = (-, operculum tip xyz).
+// Withdrawn parts gather at the aperture; the conch's shell vaults forward over its operculum tip, tail up.
+void snailPose(inout vec3 local, inout vec3 n) {
+    float cls = aColor.r;
+    float t = aColor.b;
+    float seed = aColor.a;
+    vec4 A = uLimb[0];
+    vec4 B = uLimb[1];
+    vec4 Lp = uLimb[2];
+    vec4 T = uLimb[3];
+    vec3 ap = B.yzw;
+    bool foot = cls > 0.2 && cls < 0.45;
+    if (cls > 0.1) {
+        if (cls > 0.6) {
+            // tentacles and eyestalks wave slowly, each on its own phase, the tips most
+            float ph = 2.0 * PI * (B.x + seed) - 2.5 * t;
+            local.y += 0.025 * t * t * sin(ph);
+            local.z += 0.02 * t * t * cos(ph * 0.8);
+        } else if (cls > 0.45) {
+            // snout: the radula's rasping strokes (~1.5 Hz), the tip working side to side and down
+            float r = A.z * t;
+            local.z += 0.02 * r * sin(2.0 * PI * (1.5 * uTime + seed));
+            local.y -= 0.012 * r * (0.5 + 0.5 * sin(2.0 * PI * 3.0 * uTime));
+        } else if (cls < 0.3) {
+            // sole: a faint ripple of the pedal waves along the rim
+            local.y += 0.006 * sin(2.0 * PI * (A.x * 3.0 + local.x * 3.0));
+        }
+        if (foot && T.y * T.y + T.z * T.z > 0.0) {
+            // conch: the foot reaches forward and down to plant the operculum before each vault
+            float ph = Lp.x;
+            float fr = smoothstep(0.0, 0.4, ph) * (1.0 - smoothstep(0.55, 0.85, ph));
+            local.x += 0.1 * t * fr;
+            local.y -= 0.02 * t * fr;
+        }
+        // righting: foot and head swing over the side about the body axis to grip, stretching out
+        float reach = clamp(A.w, 0.0, 1.0);
+        if (reach > 0.001) {
+            vec3 r = local - ap;
+            float ang = reach * 1.9;
+            float c = cos(ang), s = sin(ang);
+            r = vec3(r.x * (1.0 + 0.25 * reach), c * r.y - s * r.z, s * r.y + c * r.z);
+            local = ap + r * (1.0 + 0.3 * reach);
+            n = vec3(n.x, c * n.y - s * n.z, s * n.y + c * n.z);
+        }
+        // in or out of the shell (the conch pulls its eyes in first)
+        float e = cls > 0.6 ? min(A.y, Lp.z) : A.y;
+        local = ap + (local - ap) * mix(0.1, 1.0, clamp(e, 0.0, 1.0));
+    }
+    // conch vault: all but the foot swings forward over the operculum tip, nose down and tail up
+    float v = clamp(Lp.y, 0.0, 1.0);
+    if (v > 0.001 && !foot) {
+        vec3 piv = T.yzw;
+        vec3 r = local - piv;
+        float ang = -0.45 * v;
+        float c = cos(ang), s = sin(ang);
+        local = piv + vec3(c * r.x - s * r.y, s * r.x + c * r.y, r.z) + vec3(0.0, 0.06 * v, 0.0);
+        n = vec3(c * n.x - s * n.y, s * n.x + c * n.y, n.z);
+    }
+}
+
+// Tuxedo urchin (motion mode 9, core UrchinRig). COLOR_0.r = class (0 test, 0.25 spine, 0.5 tube foot, 0.75 debris,
+// 1 teeth), b = t along a spine / foot (debris: piece index / 7), a = phase seed. uLimb[0] = (tube-foot wave phase,
+// feet reaching 0..1, cover 0..1, bristle 0..1), uLimb[1] = (spine sway phase, test centre xyz), uLimb[2] = (-, poke
+// direction xyz). Spines sway and point toward a poke; tube feet wave or draw in; debris pieces past the cover shrink
+// away into the test.
+void urchinPose(inout vec3 local, inout vec3 n) {
+    float cls = aColor.r;
+    float t = aColor.b;
+    float seed = aColor.a;
+    vec4 A = uLimb[0];
+    vec4 B = uLimb[1];
+    vec3 cen = B.yzw;
+    if (cls > 0.15 && cls < 0.35) {
+        vec3 rn = normalize(local - cen);
+        float sw = 0.004 * sin(2.0 * PI * (B.x + seed));
+        vec3 dir = uLimb[2].yzw;
+        vec3 toward = vec3(0.0);
+        if (A.w > 0.001 && dot(dir, dir) > 1e-4) {
+            vec3 d = normalize(dir);
+            toward = A.w * (d - rn * dot(d, rn)) * 0.03 * max(dot(d, rn) + 0.3, 0.0);
+        }
+        local += t * (vec3(sw, 0.0, -sw) + toward);
+    } else if (cls > 0.4 && cls < 0.6) {
+        float ph = 2.0 * PI * (A.x + seed) - 2.0 * t;
+        local += t * vec3(0.012 * sin(ph), 0.01 * cos(ph), 0.012 * cos(ph * 0.7));
+        local = cen + (local - cen) * mix(1.0 - 0.35 * t, 1.0, clamp(A.y, 0.0, 1.0));
+    } else if (cls > 0.65 && cls < 0.85) {
+        float shown = clamp(A.z * 7.0 - t * 7.0, 0.0, 1.0);
+        local = cen + (local - cen) * shown;
+    }
+}
+
 void main() {
     vec3 local = aPos;
     vec3 n = aNormal;
@@ -410,6 +505,18 @@ void main() {
     if (mode > 6.5 && mode < 7.5) {
         // flame scallop: a rigid shell at the organism, valves and fringe posed from the sim (no spine)
         clamPose(local, n);
+        vec3 wl = uSpine[0].xyz + qrot(uFrame[0], local * uScale);
+        vWorld = wl;
+        vNormal = normalize(qrot(uFrame[0], n));
+        vUv = aUv;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
+        gl_Position = uViewProj * vec4(wl, 1.0);
+        return;
+    }
+
+    if (mode > 7.5 && mode < 9.5) {
+        // snails and the urchin: a rigid body at the organism, soft parts posed from the sim (no spine)
+        if (mode < 8.5) snailPose(local, n); else urchinPose(local, n);
         vec3 wl = uSpine[0].xyz + qrot(uFrame[0], local * uScale);
         vWorld = wl;
         vNormal = normalize(qrot(uFrame[0], n));

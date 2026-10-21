@@ -70,6 +70,9 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.FILE_CLAM -> ClamRig()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             BrainKind.ANEMONE -> AnemoneRig()
+            BrainKind.TROCHUS -> SnailRig(SnailRig.TROCHUS)
+            BrainKind.CONCH -> SnailRig(SnailRig.CONCH)
+            BrainKind.URCHIN -> UrchinRig()
             else -> null
         }
 

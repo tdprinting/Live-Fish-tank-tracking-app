@@ -31,6 +31,10 @@ class ThoughtsTest {
             sim.species.ensure(sp)
             sim.addFromSeed(LivestockSeed(sp, "", 6.5, id = id))
         }
+        for ((id, cm) in listOf("tectus_fenestratus" to 3.0, "strombus_alatus" to 7.0, "mespilia_globulus" to 5.0)) {
+            sim.species.ensure(id)
+            sim.addFromSeed(LivestockSeed(id, "", cm, id = id))
+        }
         for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
         for (id in listOf("lysmata_boggessi", "ctenoides_scaber")) sim.species.ensure(id)
         sim.addFromSeed(LivestockSeed("lysmata_boggessi", "Minty", 4.0, id = "pep"))

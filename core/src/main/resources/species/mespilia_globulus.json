@@ -1,0 +1,111 @@
+{
+  "id": "mespilia_globulus",
+  "kind": "INVERT",
+  "common": "Tuxedo urchin",
+  "scientific": "Mespilia globulus",
+  "family": "Temnopleuridae",
+  "maxLengthCm": 8,
+  "typicalAdultCm": 5.0,
+  "lifespanYears": 5,
+  "depthRatio": 0.75,
+  "massCoeff": 0.12,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.01,
+    "burstBL": 0.025,
+    "tailHzCruise": 0,
+    "turnRateDeg": 30,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 1.0,
+    "openWater": 0.0,
+    "coverAffinity": 0.3
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 60,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.1,
+    "skittishness": 0.2
+  },
+  "diet": [
+    "ALGAE",
+    "DIATOMS",
+    "CORALLINE",
+    "NORI"
+  ],
+  "feedsPerDay": 4,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 24,
+      "tolLo": 22,
+      "tolHi": 27,
+      "lethalLo": 18,
+      "lethalHi": 28
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.02,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.03
+    }
+  },
+  "hardiness": 0.6,
+  "starvationDays": 21,
+  "model": "models/tuxedo_urchin.glb",
+  "colors": {
+    "primary": "#1C2C5E",
+    "secondary": "#B04A22",
+    "accent": "#E8E0D0"
+  },
+  "brain": "urchin",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Grazer: film, hair algae and coralline algae on rock and glass. Offer nori clipped low once the rocks are clean.",
+  "temperamentSummary": "Peaceful, slow and reef safe. Holds shells and rubble over its back like a hat, more in bright light.",
+  "careNotes": [
+    "Wears bits of shell, rubble and algae on top, mostly under bright light; it drops most of them at night.",
+    "It grazes coralline algae too, so purple rock may get bare patches.",
+    "Very sensitive to salinity swings and copper: drip acclimate slowly and keep the salinity steady.",
+    "Glue frags down: it can bulldoze loose ones over."
+  ]
+}
