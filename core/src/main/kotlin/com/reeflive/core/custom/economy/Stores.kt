@@ -39,7 +39,10 @@ object PriceBook {
         l("nemateleotris_magnifica", 2, 40), l("ecsenius_bicolor", 2, 65), l("ecsenius_stigmatura", 3, 30), l("valenciennea_puellaris", 3, 35),
         l("pholidichthys_leucotaenia", 3, 30), l("labroides_dimidiatus", 3, 40), l("cirrhitichthys_falco", 4, 40), l("pseudochromis_indigo", 4, 50),
         l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis@female", 4, 50), l("cirrhilabrus_rubripinnis@male", 5, 80), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),
-        l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250), l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
+        l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250),
+        // research 60: rare and expensive fish, late-game Deep Reef Imports animals
+        l("zebrasoma_gemmatum", 8, 1000), l("chaetodon_daedalma", 9, 2500),
+        l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
         l("clibanarius_tricolor", 1, 5), l("lysmata_boggessi", 1, 13), l("paguristes_cadenati", 1, 15), l("percnon_gibbesi", 2, 15),
         l("ophiocoma_sp", 2, 25), l("stenorhynchus_seticornis", 3, 18), l("mithraculus_sculptus", 1, 12), l("thor_amboinensis", 2, 19), l("lysmata_debelius", 2, 60),
         l("alpheus_bellulus", 3, 45), l("hymenocera_picta", 5, 65), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),

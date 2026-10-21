@@ -39,6 +39,8 @@ CARDS = {
     "gramma_loreto": "royal_gramma",
     "pterapogon_kauderni": "banggai",
     "cryptocentrus_cinctus": "watchman_goby",
+    "zebrasoma_gemmatum": "gem_tang",
+    "chaetodon_daedalma": "wrought_iron_butterfly",
     "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",
