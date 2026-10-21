@@ -134,8 +134,10 @@ enum class PodPredator(
                 BrainKind.CARDINAL -> CARDINAL
                 BrainKind.WRASSE -> CLEANER_WRASSE
                 BrainKind.HAWK -> HAWKFISH
-                BrainKind.DOTTYBACK -> DOTTYBACK
-                BrainKind.ENGINEER_GOBY -> SAND_GOBY
+                // royal gramma: copepods and isopods picked near its cave, like the dottyback (research 50 §1 fact 27)
+                BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
+                // watchman goby: snaps small crustaceans by its sand burrow (research 50 §3 fact 97)
+                BrainKind.ENGINEER_GOBY, BrainKind.WATCHMAN_GOBY -> SAND_GOBY
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
                 BrainKind.CLOWN -> CLOWN
                 BrainKind.TANG -> TANG

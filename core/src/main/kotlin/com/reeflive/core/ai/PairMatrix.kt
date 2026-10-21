@@ -94,6 +94,7 @@ object PairMatrix {
     fun actorMatches(r: PairRow, o: Organism, sim: Simulation): Boolean = when (r.actor) {
         "CLOWN_F" -> o.brainKind == BrainKind.CLOWN && ClownQueue.isDominant(o, sim)
         "CLOWN_M" -> o.brainKind == BrainKind.CLOWN && !ClownQueue.isDominant(o, sim)
+        "BANGGAI_M" -> isBanggaiMale(o)
         else -> (if (r.subActor) subKind(r.actor, o) == true else o.brainKind.name == r.actor) &&
             (r.actorSpecies.isEmpty() || o.species.id in r.actorSpecies)
     }
@@ -126,6 +127,7 @@ object PairMatrix {
                 // the cleaner is "never chased sustainedly because of the cleaning role" (06 §3.1, S:Cheney08);
                 // rows that do target it name it (dottyback, other wrasse)
                 "ANY_FISH" -> t.isFish && t.brainKind != BrainKind.WRASSE
+                "BANGGAI_M" -> isBanggaiMale(t)
                 else -> if (r.subTargets) subKind(k, t) ?: (t.brainKind.name == k) else t.brainKind.name == k
             }
         }
@@ -141,6 +143,9 @@ object PairMatrix {
             else -> true
         }
     }
+
+    /** A male Banggai cardinal (the pajama cardinal shares its brain kind but not its squabbles; research 50 §2). */
+    fun isBanggaiMale(o: Organism): Boolean = o.brainKind == BrainKind.CARDINAL && o.sexFemale == false && o.species.id.startsWith("pterapogon")
 
     fun isCleaning(t: Organism): Boolean = (t.brain.current?.name ?: "") == "work"
 
@@ -162,6 +167,10 @@ object PairMatrix {
         BrainKind.FIREFISH -> 1.5
         BrainKind.CHROMIS -> 2.5
         BrainKind.EEL -> 9.5
+        // research 50: the gramma holds its cave against most small fish but gives way to a dottyback; the watchman
+        // holds its burrow mouth
+        BrainKind.GRAMMA -> 4.5
+        BrainKind.WATCHMAN_GOBY -> 2.5
         else -> if (o.isFish) 3.0 else 0.0
     }
 

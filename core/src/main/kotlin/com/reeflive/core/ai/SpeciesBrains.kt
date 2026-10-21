@@ -38,6 +38,8 @@ object SpeciesBrains {
             BrainKind.ANEMONE -> AnemoneBrain(c)
             BrainKind.PEPPERMINT_SHRIMP -> PeppermintShrimpBrain(c)
             BrainKind.FILE_CLAM -> FileClamBrain(c)
+            BrainKind.GRAMMA -> GrammaBrain(c)
+            BrainKind.WATCHMAN_GOBY -> WatchmanGobyBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)
         }

@@ -68,6 +68,10 @@ object Stocking {
         // research 41: firefish (needs a lid) and a blue-green chromis shoal
         StockEntry("nemateleotris_magnifica", StockGroup.FISH, "Firefish goby", 7.0),
         StockEntry("chromis_viridis", StockGroup.FISH, "Blue-green chromis", 7.5),
+        // research 50: popular reef fish pack, batch 1
+        StockEntry("gramma_loreto", StockGroup.FISH, "Royal gramma", 6.5),
+        StockEntry("pterapogon_kauderni", StockGroup.FISH, "Banggai cardinalfish", 6.5),
+        StockEntry("cryptocentrus_cinctus", StockGroup.FISH, "Yellow watchman goby", 7.5),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         // research 42: hides by day, eats aiptasia at night

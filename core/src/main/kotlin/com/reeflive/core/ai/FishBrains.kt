@@ -810,9 +810,26 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             Sleep(this, "Resting at the cave", 0.35), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
 
+    /** A Banggai cardinal (*Pterapogon kauderni*, research 50 §2) rather than Tee's pajama: it hovers over spiny cover. */
+    val banggai: Boolean = o.species.id.startsWith("pterapogon")
+    init { if (banggai) o.spline.glassGuard = true }
+    private var nextHostCheck = 0.0
+
     override fun initialPlace(c: Ctx) {
         spot = c.rock.anchors["SHADE_CARD"]?.pos ?: c.rock.anchors["HOVER_CARDINAL"]?.pos ?: spots.minBy { it.distanceTo(o.homePos.takeIf { h -> h != Vec3.ZERO } ?: spots[o.rng.nextInt(spots.size)]) }
+        if (banggai) spot = banggaiSpot(c) ?: c.safe(spot + Vec3(c.rng.signed() * 12.0, 4.0, c.rng.signed() * 4.0))
         super.initialPlace(c)
+    }
+
+    /**
+     * Where a Banggai hovers: over a bubble tip anemone when there is one (wild adults hover over long-spined urchins
+     * and the young among anemone tentacles, research 50 §2 facts 55-56; the tank has no urchin). The young keep down
+     * in the tentacles, adults a few cm above the disc. Null without an anemone.
+     */
+    private fun banggaiSpot(c: Ctx): Vec3? {
+        val host = c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.ANEMONE }.minByOrNull { it.pos.distanceTo(o.pos) } ?: return null
+        val up = if (o.lengthCm < BANGGAI_YOUNG_CM) 2.5 + 0.3 * host.lengthCm else 6.0 + 0.3 * host.lengthCm
+        return c.safe(host.pos + Vec3(c.rng.signed() * 2.0, up, c.rng.signed() * 2.0))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
@@ -825,6 +842,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         o.hoverRadius = dayRadius(c)
         // clamped fins out of cover under bright light (06 §5.6 #13)
         o.brightExposed = !c.p.night && c.p.light > 0.6 && c.rock.sdf.cover(o.pos) < 0.3
+        // anemones walk: a Banggai follows its host once a minute
+        if (banggai && c.t >= nextHostCheck) { nextHostCheck = c.t + 60.0; banggaiSpot(c)?.let { if (it.distanceTo(spot) > 6.0) setPocket(it) } }
     }
 
     /**
@@ -846,6 +865,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             if (cave.distanceTo(spot) <= 40.0) k = min(k, 0.6)
         }
         if (o.timidUntil > c.t) k *= 0.7
+        if (banggai && o.lengthCm < BANGGAI_YOUNG_CM) k *= 0.35
         k *= 1 + 0.5 * o.stressState.lowPh
         k *= StressModel.homeRadiusMult(o).coerceAtLeast(0.4)
         return BASE_RADIUS * k
@@ -954,6 +974,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > next || o.pos.distanceTo(wp) < c.L) {
                 next = c.t + c.rng.range(4.0, 9.0)
                 wp = c.safe(schoolTarget(c, spot + c.rng.unitVector() * (forageRadius(c) * (0.3 + 0.7 * c.rng.nextDouble()))))
+                // a Banggai turning at the glass swings its tail through it: its waypoints keep a body length off
+                if (banggai) wp = c.offGlass(wp, c.L + 1.0)
             }
             // drifting plankton only: a particle on the sand or wedged against the rock is out of reach of a mid-water
             // picker (the body cannot get its head there), and one it has chased for STUCK_S without closing is dropped
@@ -996,6 +1018,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 
     companion object {
         const val BASE_RADIUS = 12.0
+        /** Banggai young below this length (cm) keep down among the anemone's tentacles [L]. */
+        const val BANGGAI_YOUNG_CM = 3.0
         /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
         const val HOVER_PITCH = 0.17
         /** Seconds outside its zone without closing on the pocket before the hover takes a detour round the rock. */

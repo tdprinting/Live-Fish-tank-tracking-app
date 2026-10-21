@@ -102,9 +102,9 @@ class FishRig(val id: String) {
     private fun envFor(brain: String?) {
         when (brain) {
             "EEL", "ENGINEER_GOBY" -> { envExp = 1.1f; envHead = 0.25f }
-            "CARDINAL", "DOTTYBACK", "FIREFISH" -> { envExp = 2.4f; envHead = 0.05f }
+            "CARDINAL", "DOTTYBACK", "FIREFISH", "GRAMMA" -> { envExp = 2.4f; envHead = 0.05f }
             "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE", "FAIRY_WRASSE", "CHROMIS" -> { envExp = 3.2f; envHead = 0.03f }
-            "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
+            "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY", "WATCHMAN_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
             else -> { envExp = 2f; envHead = 0.1f }
         }
     }

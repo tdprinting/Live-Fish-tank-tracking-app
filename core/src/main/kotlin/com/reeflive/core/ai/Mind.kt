@@ -342,6 +342,7 @@ class Mind(val o: Organism) {
         fun anticipates(k: BrainKind): Boolean = k.isFish && k !in NO_ANTICIPATION
         private val NO_ANTICIPATION = setOf(
             BrainKind.EEL, BrainKind.HAWK, BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE,
+            BrainKind.WATCHMAN_GOBY,
         )
     }
 }
