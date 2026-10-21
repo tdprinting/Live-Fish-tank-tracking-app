@@ -102,6 +102,7 @@ object StressModel {
         BrainKind.HERMIT to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.SALLY_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.ARROW_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
+        BrainKind.EMERALD_CRAB to doubleArrayOf(1.0, 1.3, 1.2, 1.1, 1.1, 1.2, 0.6, 0.8),
         BrainKind.NASSARIUS to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.ASTREA to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.TROCHUS to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),

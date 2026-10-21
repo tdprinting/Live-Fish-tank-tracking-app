@@ -221,7 +221,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         /** A still body leaves its impression after this long (s), pressed about this deep (cm). */
         const val REST_S = 20.0
         @Ev(Evidence.DESIGN_ESTIMATE) const val IMPRESS_DEPTH = 0.12
-        private val TRAIL_KINDS = setOf(BrainKind.NASSARIUS, BrainKind.CONCH, BrainKind.HERMIT, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.BRITTLE_STAR)
+        private val TRAIL_KINDS = setOf(BrainKind.NASSARIUS, BrainKind.CONCH, BrainKind.HERMIT, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB, BrainKind.BRITTLE_STAR)
         private val IMPRESSERS = setOf(BrainKind.BRITTLE_STAR, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY)
     }
 }
