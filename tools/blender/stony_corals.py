@@ -1,4 +1,5 @@
-"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn and duncan.
+"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn, duncan, gold torch, scolymia, bounce
+mushroom, acan, candy cane, open brain, bubble, Montipora cap, birdsnest, Acropora and pulsing xenia.
 
 These corals are not in Tee's tank, so they have no anchor on its rock: every GLB is built with the colony base at
 STUDIO (core StonyCorals.STUDIO) and the app draws each colony as the model moved by its offset (a copy). Same GLB
@@ -11,6 +12,7 @@ layout as corals.py (Root -> body parts + instanced polyp nodes), plus:
   polyp extras.polypMode = 2  Euphyllia day tentacles: each strand bends as a whole and shortens as it retracts
   polyp extras.polypMode = 3  inflating tissue (bubble vesicles, the open brain mantle): swells by day, deflates as
                   the night tentacles come out
+  polyp extras.polypMode = 4  pulsing xenia: each polyp beats on its own, as strong as CoralPose.tentacles (core Xenia)
 
   python tools/blender/stony_corals.py [hammer torch frogspawn duncan]
 """
@@ -849,6 +851,233 @@ def bubble():
     return root, [body, pol, nig], {"Bubbles": (len(inst), len(F) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
 
 
+# ----------------------------------------------------------------------------
+# pack 3: SPS and pulsing xenia
+# ----------------------------------------------------------------------------
+def sps_polyp(color, tip, name, seed, r=0.12):
+    """Tiny 6-point SPS polyp (8 tris): out by day, folded in at night (ordinary polyp mode)."""
+    proto = K.proto_star(r, 0.06, 6)
+    cv = P.Canvas(32, 32, color)
+    rr = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
+    cv.blend(S(0.5, 0.9, rr), tip)
+    cv.blend(1 - S(0.1, 0.25, rr), "#2A2A2A", 0.5)
+    return proto, C.material(name, rough=0.5, image=K.tex(name, cv))
+
+
+def sps_canvas(name, base, dots, rim, seed, glow=None, strength=1.0, rim_from=0.88, w=128, h=128):
+    """SPS tissue over skeleton: base colour stippled with corallite openings, a paler growing edge from v rim_from."""
+    cv = P.Canvas(w, h, base)
+    cv.multiply(0.85 + 0.25 * P.fbm(h, w, 6, 3, seed))
+    f1, _, _ = P.voronoi(h, w, 140, seed + 1)
+    cv.blend(1 - S(0.8, 1.6, f1), dots, 0.75)
+    cv.blend(S(rim_from - 0.04, rim_from + 0.06, cv.v), rim)
+    return C.material(name, rough=0.6, image=K.tex(name, cv, jpeg=True), emissive=glow, emissive_strength=strength)
+
+
+def montipora_cap():
+    """Montipora capricornis: thin plates whorling up off a rubble foot, tiny polyps over the top faces, a pale
+    growing rim (stony_corals.md §8: lower light gives broader, flatter plates)."""
+    rs = RS(701)
+    g = T.WGeo()
+    top = frag_base(g, 701, radii=(2.2, 1.0, 1.9))
+    inst = K.Instances(702)
+    plates = [(4.6, 0.5, 0.0, 250.0, 0.06), (3.6, 1.3, 2.2, 230.0, -0.06), (2.6, 2.0, 4.1, 210.0, 0.08)]
+    # the plates whorl up from one short central column on the rubble
+    import geomlib as G
+    col = np.array([STUDIO + np.array([0.0, top - STUDIO[1] - 0.3, 0.0]), STUDIO + np.array([0.1, top - STUDIO[1] + 0.8, 0.05]),
+                    STUDIO + np.array([0.05, top - STUDIO[1] + 1.5, -0.05])])
+    V, F, tv, av = G.tube(col, [0.7, 0.55, 0.45], 8, cap_start=False, cap_end=True, up=(0, 0, 1))
+    g.add(V, F, np.c_[av, 0.1 + 0.3 * tv], (0.3, 0, 0, SKELETON), mat=1)
+    for pi_, (R, dy, a0, span, tilt) in enumerate(plates):
+        rings, segs = 5, 22
+        c0 = np.array([STUDIO[0], top + dy - 0.6, STUDIO[2]])
+        th = 0.16
+        V, UV = [], []
+        for side in (0, 1):
+            for i in range(rings + 1):
+                t = i / rings
+                r = 0.4 + (R - 0.4) * t
+                for k in range(segs + 1):
+                    a = a0 + math.radians(span) * k / segs
+                    # each whorl climbs a little and its edge waves and droops slightly
+                    y = dy * 0.2 * k / segs + tilt * r * math.cos(a - a0) + 0.18 * t * math.sin(3 * a + pi_) - 0.12 * t * t
+                    x, z = r * math.cos(a), r * 0.9 * math.sin(a)
+                    V.append(c0 + np.array([x, y - side * th * (1 - 0.5 * t), z]))
+                    UV.append((k / segs, t * 0.95))
+        nn = (rings + 1) * (segs + 1)
+        F = []
+        for i in range(rings):
+            for k in range(segs):
+                a = i * (segs + 1) + k
+                F.append((a, a + segs + 1, a + segs + 2, a + 1))
+                b = nn + a
+                F.append((b, b + 1, b + segs + 2, b + segs + 1))
+        # rim
+        for k in range(segs):
+            a, b = rings * (segs + 1) + k, rings * (segs + 1) + k + 1
+            F.append((a, nn + a, nn + b, b))
+        g.add(np.array(V), F, np.array(UV), (0.3, 0, 0, SKELETON), mat=1)
+        for _ in range(int(28 * R / 4.6)):
+            t = math.sqrt(rs.uniform(0.05, 0.85))
+            k = rs.uniform(0, 1)
+            a = a0 + math.radians(span) * k
+            r = 0.4 + (R - 0.4) * t
+            y = dy * 0.2 * k + tilt * r * math.cos(a - a0) + 0.18 * t * math.sin(3 * a + pi_) - 0.12 * t * t
+            inst.add(c0 + np.array([r * math.cos(a), y + 0.02, r * 0.9 * math.sin(a)]), UP, rs.uniform(0.8, 1.2))
+    mats = [rubble_material("montipora_cap_rubble"),
+            sps_canvas("montipora_cap_tissue", "#7A3A86", "#B070C0", "#E8C8E8", 703, glow="#3A1A5A", strength=0.6)]
+    proto, pm = sps_polyp("#4FB86A", "#A8F0B0", "montipora_cap_polyp", 704)
+    root = C.empty("Root")
+    C.set_extras(root, species="montipora_capricornis", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+
+
+def branch_tree(g, start, d, length, r, depth, rs, tips, mat=1, fork=(2, 3), spread=0.55, shrink=0.72, sides=5):
+    """Recursive SPS branching: a tapering tube per branch, forking into 2-3 thinner ones; tips collect end points."""
+    import geomlib as G
+    end = start + d * length
+    mid = (start + end) / 2 + rs.normal(0, 0.08 * length, 3)
+    pts = np.array([start, mid, end])
+    r1 = r * (0.75 if depth > 0 else 0.35)
+    V, F, tv, av = G.tube(pts, np.linspace(r, r1, 3), sides, cap_start=False, cap_end=depth == 0, up=(0, 0, 1))
+    g.add(V, F, np.c_[av, 0.2 + 0.75 * tv * (1.0 if depth == 0 else 0.6)], (0.3, 0, 0, SKELETON), mat=mat)
+    if depth == 0:
+        tips.append((end, d))
+        return
+    for _ in range(rs.integers(fork[0], fork[1] + 1)):
+        nd = unit(d + rs.normal(0, spread, 3) + UP * 0.35)
+        branch_tree(g, end - d * 0.05, nd, length * rs.uniform(0.75, 0.95) * shrink / 0.72, r1, depth - 1, rs, tips,
+                    mat, fork, spread, shrink, sides)
+
+
+def birdsnest():
+    """Seriatopora hystrix: a dense tangle of thin, sharply pointed branches (stony_corals.md §8), pink."""
+    rs = RS(711)
+    g = T.WGeo()
+    top = frag_base(g, 711, radii=(2.0, 0.9, 1.8))
+    tips = []
+    for k in range(5):
+        a = 2 * math.pi * k / 5 + rs.uniform(-0.3, 0.3)
+        d = unit(np.array([math.cos(a) * 0.45, 1.0, math.sin(a) * 0.45]))
+        branch_tree(g, STUDIO + np.array([math.cos(a) * 0.5, top - STUDIO[1] - 0.1, math.sin(a) * 0.5]), d, 1.1, 0.14, 4, rs,
+                    tips, fork=(2, 2), spread=0.75, sides=4)
+    inst = K.Instances(712)
+    for p, d in tips:
+        for j in range(2):
+            q = p - d * (0.25 + 0.4 * j) + rs.normal(0, 0.03, 3)
+            inst.add(q, unit(rs.normal(0, 1, 3) + d * 0.5), rs.uniform(0.6, 0.9))
+    mats = [rubble_material("birdsnest_rubble"),
+            sps_canvas("birdsnest_tissue", "#D8789E", "#F0A8C8", "#F8E0EC", 713, glow="#5A1A3A", strength=0.5, rim_from=0.8)]
+    proto, pm = sps_polyp("#F0B8D0", "#FFF0F8", "birdsnest_polyp", 714, r=0.1)
+    root = C.empty("Root")
+    C.set_extras(root, species="seriatopora_hystrix", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+
+
+def acropora():
+    """Acropora millepora: a corymbose cushion of short upright branches off a base plate, each studded with radial
+    corallites, its axial corallite tip glowing (stony_corals.md §8: strong green or orange fluorescence)."""
+    import geomlib as G
+    rs = RS(721)
+    g = T.WGeo()
+    top = frag_base(g, 721, radii=(2.2, 0.9, 2.0))
+    # base plate the branches rise from
+    mound(g, top, 2.4, 2.1, 0.5, 722)
+    inst = K.Instances(723)
+    cnt = 22
+    for i in range(cnt):
+        t = math.sqrt((i + 0.5) / cnt)
+        a = i * math.pi * (3 - math.sqrt(5)) + rs.normal(0, 0.1)
+        foot = STUDIO * np.array([1, 0, 1]) + np.array([2.4 * t * math.cos(a), top + 0.55 * (1 - t * t), 2.1 * t * math.sin(a)])
+        d = unit(np.array([math.cos(a) * t * 0.55, 1.0, math.sin(a) * t * 0.55]) + rs.normal(0, 0.08, 3))
+        L = rs.uniform(1.6, 2.4) * (1.1 - 0.3 * t)
+        pts = np.array([foot, foot + d * L * 0.5, foot + d * L])
+        V, F, tv, av = G.tube(pts, [0.3, 0.24, 0.13], 6, cap_start=False, cap_end=True, up=(0, 0, 1))
+        g.add(V, F, np.c_[av, 0.1 + 0.88 * tv], (0.3, 0, 0, SKELETON), mat=2)
+        # radial corallites up the sides: little cups pointing out and up
+        tt1 = unit(np.cross(d, [0.0, 0.0, 1.0]))
+        tt2 = np.cross(d, tt1)
+        for j in range(5):
+            h = 0.2 + 0.65 * j / 4
+            ang = j * 2.4 + i
+            out = tt1 * math.cos(ang) + tt2 * math.sin(ang)
+            inst.add(foot + d * L * h + out * (0.28 - 0.14 * h), unit(out + d * 0.9), rs.uniform(0.85, 1.05) * (1.1 - 0.4 * h))
+    mats = [rubble_material("acropora_rubble"),
+            skeleton_canvas("acropora_plate", "#D8D2C4", "#3E7AAE", 724, 0.4),
+            sps_canvas("acropora_tissue", "#2E6A9E", "#5AA8D8", "#9AF8E8", 725, glow="#1A6A7A", strength=1.0, rim_from=0.82)]
+    # corallite: a short open cup (tube) with the polyp tissue over it
+    cup = []
+    sides = 5
+    for j, (y, r) in enumerate(((0.0, 0.1), (0.2, 0.09), (0.24, 0.05))):
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            cup.append((r * math.cos(a), y, r * math.sin(a)))
+    F = []
+    for j in range(2):
+        for k in range(sides):
+            a, b = j * sides + k, j * sides + (k + 1) % sides
+            F.append((a, b, b + sides))
+            F.append((a, b + sides, a + sides))
+    UV = [(0.5, 0.2 + 0.35 * (i // sides)) for i in range(len(cup))]
+    COL = [(0, 0, 0.5 * (i // sides), 1) for i in range(len(cup))]
+    cv = P.Canvas(16, 16, "#5AA8D8")
+    cv.blend(S(0.5, 0.9, cv.v), "#C8F8F0")
+    cm = C.material("acropora_corallite", rough=0.5, image=K.tex("acropora_corallite", cv), emissive="#1A6A7A", emissive_strength=1.0)
+    root = C.empty("Root")
+    C.set_extras(root, species="acropora_millepora", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    proto = (np.array(cup), F, np.array(UV), np.array(COL, float))
+    pol = K.polyp_node("Polyps", root, proto, [cm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(F))}
+
+
+def xenia():
+    """Pulsing xenia: soft pale stalks from a bit of rubble, each crowned with feathery 8-tentacle polyps that open
+    and close (polypMode 4, core Xenia)."""
+    import geomlib as G
+    rs = RS(731)
+    g = T.WGeo()
+    top = frag_base(g, 731, radii=(1.8, 0.8, 1.6), mat=0)
+    inst = K.Instances(732)
+    for k in range(6):
+        a = 2 * math.pi * k / 6 + rs.uniform(-0.3, 0.3)
+        rr = 0.3 if k == 0 else rs.uniform(0.6, 1.1)
+        foot = STUDIO + np.array([rr * math.cos(a), top - STUDIO[1] - 0.1, rr * math.sin(a)])
+        d = unit(np.array([math.cos(a) * 0.3, 1.0, math.sin(a) * 0.3]))
+        L = rs.uniform(1.8, 3.0)
+        pts = np.array([foot, foot + d * L * 0.4 + rs.normal(0, 0.1, 3), foot + d * L])
+        V, F, tv, av = G.tube(pts, [0.32, 0.26, 0.36], 7, cap_start=False, cap_end=True, up=(0, 0, 1))
+        g.add(V, F, np.c_[av, 0.1 + 0.85 * tv], (0.6, 0, 0.3, 1.0), mat=1)
+        head = pts[-1]
+        for j in range(8):
+            b = 2 * math.pi * j / 8 + rs.uniform(-0.2, 0.2)
+            out = np.array([math.cos(b), 0.0, math.sin(b)])
+            inst.add(head + out * 0.28 + d * 0.15, unit(out * 0.8 + d), rs.uniform(0.85, 1.1))
+        inst.add(head + d * 0.3, d, 0.9)
+    cv = P.Canvas(32, 64, "#B8A8C8")
+    cv.vgrad("#A898B8", "#D8D0E4")
+    stalk = C.material("xenia_stalk", rough=0.6, image=K.tex("xenia_stalk", cv))
+    mats = [rubble_material("xenia_rubble"), stalk]
+    fc = K.feather_canvas("#C8BCD8", "#E0D8EC", "#D8CCE8", "#F4F0FA", "#B0A0C8", pinnules=7, seed=733)
+    pm = C.material("xenia_polyp", rough=0.6, image=K.tex("xenia_polyp", fc, alpha=True), image_alpha=True,
+                    double=True, clip=True, emissive="#2A2040", emissive_strength=0.5)
+    proto = K.proto_feather_quads(8, 0.35, 0.09, 0.85, 35, 0.17, 4, 0.7)
+    root = C.empty("Root")
+    C.set_extras(root, species="xenia_umbellata")
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst, extras={"polypMode": 4, "alphaTest": 0.5})
+    nt = sum(len(f) - 2 for f in proto[1])
+    return root, [body, pol], {"Polyps": (len(inst), nt)}
+
+
 BUILDERS = {
     "gold_torch": lambda: euphyllia(EUPHYLLIA["gold_torch"]),
     "scolymia": scolymia,
@@ -861,6 +1090,10 @@ BUILDERS = {
     "candy_cane": candy_cane,
     "open_brain": open_brain,
     "bubble": bubble,
+    "montipora_cap": montipora_cap,
+    "birdsnest": birdsnest,
+    "acropora": acropora,
+    "xenia": xenia,
 }
 
 

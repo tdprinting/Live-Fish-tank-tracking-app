@@ -1,4 +1,4 @@
-# Stony corals (LPS packs 1-2): hammer, torch, frogspawn, duncan, acan, candy cane, open brain, bubble
+# Stony corals and pulsing xenia (packs 1-3)
 
 The first scleractinian (stony) corals in the sim: they build an aragonite skeleton, so they take real alkalinity and
 calcium, mind swings more than soft corals, and leave white skeleton where tissue dies. Large-polyp stony corals also
@@ -119,3 +119,34 @@ tubes with green and cream striped heads; open brain, one swollen figure-8 cushi
 green rim on a cone skeleton; bubble, 40 grape-like vesicles over thin septal walls. The open brain mantle and the
 bubbles use polyp mode 3 (polyp.vert): they swell with the colony's extension and deflate as the night tentacles come
 out, which is when the bubble's long sweepers show.
+
+## §8 Pack 3: SPS (Montipora cap, birdsnest, Acropora) and pulsing xenia
+
+Sources: stony_corals_sources.md §9-12 (ORA/Bulk Reef Supply, Top Shelf, Gensou, reeflex; Bali transplant study 2021;
+Kremien et al. 2013 and Nadir et al. 2025, PNAS; Hill et al. 2023).
+
+SPS (`CoralKind.SPS`, stony): high light (CoralSim lightLo 0.4, lightHi 1.15, PAR ~150-400), strong flow (needsFlow),
+24.5-26.7 °C and steady, polyps in at night (night extension 0.1). Phosphate weighs 0.8 in their stress (0.3 for the
+rest): high nutrients brown them and start RTN. No sweepers, so they lose every sting fight. New colonies go high on
+the rock (`StonyCorals.Place.HIGH_ROCK`, at least 8 cm over the sand). Health profiles: Acropora bleaches first
+(heat ×1.5, light ×1.4) and melts fastest (recede ×1.7, recovery ×0.5); Montipora and birdsnest a little more
+forgiving. Growth 0.5 %/day of size (Acropora several cm a year in a tank, wild A. cervicornis ~37 cm/yr).
+
+| | Montipora cap | Birdsnest | Acropora millepora | Pulsing xenia |
+|---|---|---|---|---|
+| PAR | 150-250 | 150-300 | 250-400 | 75-200 (est.) |
+| Flow | moderate | medium-high | strong, varied | moderate (a jet stops pulsing) |
+| Alk / Ca / Mg | 8-9.5 / 400-450 / 1250-1450 | 8-12 / 380-450 / 1200-1400 | 8-9.5 / 420-460 / 1300-1400 | > 8 dKH for pulsing |
+| NO3 / PO4 | low | low | 2-10 / 0.02-0.08 | any |
+| Price (level) | 35 (3) | 45 (4; ORA $38-45) | 85 (6, Deep Reef) | 20 (1) |
+
+Xenia (`CoralKind.XENIA`, soft): `Xenia.pulseTarget` = extension × alkalinity (smoothstep 6.5-8 dKH) × iodine
+(0.3 + 0.7 × smoothstep 0.01-0.035 ppm) × food (0.75 + 0.25 × fed) × calm water (a jet over 1.2× flow stops it) ×
+light, stored in `Coral.tentacles` and drawn by polyp.vert mode 4: every polyp beats on its own phase (no central
+pacemaker, Nadir 2025), a quick close and a slower open, ~0.5-1 beat a second at full pulse (est.; no published rate
+range found). It spreads as runners every ~20 days when happy (CoralHealth), and the stores warn it can crowd out
+other corals.
+
+Look: Montipora, three purple plates whorling up a short column with a pale growing rim and tiny green polyps;
+birdsnest, a pink tangle of thin pointed branches forking 4 times; Acropora, a cushion of 22 short blue branches with
+radial corallite cups and glowing cyan tips; xenia, six pale lavender stalks crowned with feathery 8-tentacle polyps.

@@ -792,8 +792,8 @@ class Simulation private constructor(
         if (corals.isEmpty() || food.particles.none { !it.eaten && (it.kind.coralCatchable || it.kind in StonyCorals.MEATY) }) return
         for (c in corals) {
             if (c.tissue < 0.1 || c.extension < 0.3 || c.kind == CoralKind.MACRO) continue
-            // stony LPS also take mysis and brine shrimp, and reach further with their night tentacles out
-            val stony = c.kind.stony
+            // large-polyp stony corals also take mysis and brine shrimp, and reach further with their night tentacles out
+            val stony = StonyCorals.hasNightTentacles(c.kind)
             val reach = (2.0 + CoralGrowth.extent(c) + (if (stony) 3.0 * c.tentacles else 0.0)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
             val f = food.nearest(c.pos, reach) { it.kind.coralCatchable || (stony && it.kind in StonyCorals.MEATY) } ?: continue
             food.consume(f)
@@ -1306,6 +1306,9 @@ class Simulation private constructor(
                 CoralKind.LEATHER -> small += 80 * open
                 // Euphyllia and the meaty LPS catch pods and plankton with their tentacles, most at night (est.)
                 CoralKind.EUPHYLLIA, CoralKind.LPS -> small += 60 * (open + c.tentacles)
+                // SPS and xenia: tiny polyps, many of them (est.)
+                CoralKind.SPS -> small += 120 * open
+                CoralKind.XENIA -> small += 40 * open
                 CoralKind.MACRO -> macro += 0.5 * c.tissue
                 else -> {}
             }
@@ -2048,7 +2051,7 @@ class Simulation private constructor(
                 ?: if (sp.fragColony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
             // a stony coral (or another frag) has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
             val offset = seed.offset ?: if (a == null && sp.fragColony)
-                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind), StonyCorals.onSand(sp)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind), StonyCorals.place(sp)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
                 else null
             val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
             val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y

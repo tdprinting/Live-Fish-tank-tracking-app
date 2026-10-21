@@ -1,0 +1,104 @@
+{
+  "id": "seriatopora_hystrix",
+  "kind": "CORAL",
+  "common": "Birdsnest coral",
+  "scientific": "Seriatopora hystrix",
+  "family": "Pocilloporidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 10,
+  "growthCmPerYear": 5,
+  "lifespanYears": 20,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 26.7,
+      "tolLo": 23.5,
+      "tolHi": 28.0,
+      "lethalLo": 20.0,
+      "lethalHi": 31.0
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 12.0,
+      "lethalLo": 5.5,
+      "lethalHi": 13.5
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 5.0,
+      "tolHi": 15.0,
+      "lethalHi": 50.0
+    },
+    "po4": {
+      "optHi": 0.05,
+      "tolHi": 0.12,
+      "lethalHi": 0.35
+    }
+  },
+  "model": "models/birdsnest.glb",
+  "colors": {
+    "primary": "#E88AB8",
+    "secondary": "#F2D0E0",
+    "accent": "#FF9AD2"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.45,
+    "lightHi": 1.1,
+    "flow": "HIGH",
+    "growth": "Fast",
+    "stingCm": 0,
+    "ground": "ROCK",
+    "aggression": "None; its fine branches break easily",
+    "fluorescence": 0.4
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic.",
+  "temperamentSummary": "A tangle of thin pointed branches like a bird's nest, usually pink or purple, its tiny polyps out in the current.",
+  "careNotes": [
+    "PAR about 150-300, medium to high flow so water reaches the middle of the colony.",
+    "Stable water: tissue peels from the base (RTN) after swings or high nutrients.",
+    "Grows fast and regrows broken branches quickly."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.5,
+  "starvationDays": 9999
+}

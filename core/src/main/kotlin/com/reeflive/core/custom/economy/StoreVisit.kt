@@ -52,6 +52,7 @@ object StoreVisit {
     private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens",
         "euphyllia_glabrescens_gold", "homophyllia_australis",
         "micromussa_lordhowensis", "caulastrea_furcata", "trachyphyllia_geoffroyi", "plerogyra_sinuosa")
+    private val SPS = setOf("montipora_capricornis", "seriatopora_hystrix", "acropora_millepora")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
@@ -67,6 +68,7 @@ object StoreVisit {
             Section("Mushrooms & polyps") { it.speciesId in MUSHROOMS_POLYPS },
             Section("Leathers") { it.speciesId in LEATHERS },
             Section("Stony corals (LPS)") { it.speciesId in STONY },
+            Section("Small-polyp stony (SPS)") { it.speciesId in SPS },
             Section("Soft corals & rare frags") { true },
         )
         // the superstore: a long wall of tanks, one for each kind of animal

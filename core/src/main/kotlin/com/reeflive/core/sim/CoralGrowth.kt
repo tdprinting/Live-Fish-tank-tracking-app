@@ -161,6 +161,11 @@ object CoralGrowth {
         // year is ~0.2 %/day of size; the skeleton caps how big a colony gets in a home tank (est.)
         CoralKind.EUPHYLLIA -> Growth(Form.TREE, 3.5, 0.002, maxSize = 2.2)
         CoralKind.LPS -> Growth(Form.TREE, 2.5, 0.002, maxSize = 2.2)
+        // SPS (stony_corals.md §8): Acropora branches several cm a year in a tank (wild A. cervicornis ~37 cm/yr),
+        // Montipora caps "fast": ~0.5 %/day of size (est.)
+        CoralKind.SPS -> Growth(Form.TREE, 3.0, 0.005, maxSize = 2.5)
+        // xenia spreads by new colonies on stolons (CoralHealth RUNNER) more than by getting bigger
+        CoralKind.XENIA -> Growth(Form.TREE, 2.5, 0.004, maxSize = 1.6)
         CoralKind.GENERIC -> Growth(Form.NONE, 3.0, 0.0)
     }
 
