@@ -182,6 +182,16 @@ object MotionProfiles {
         // watchman goby: rests propped on its fused pelvics, hops off the bottom in short bursts like the sleeper gobies [L]
         BrainKind.WATCHMAN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 2.0, strouhal = 0.3, tailPP = 0.22, tailHzMin = 1.6,
             glideS = 0.3, beatsPerBout = 2.0, sinkCmS = 2.5, bankGain = 0.5, cStartDeg = 130.0),
+        // mandarin (research 51 §1): hovers a few mm over the rock on fanning pectorals, then a short hop on to the next
+        // spot; slow, never far [L]
+        BrainKind.MANDARIN to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.25, tailPP = 0.15, tailHzMin = 1.2,
+            glideS = 0.2, beatsPerBout = 1.5, sinkCmS = 1.5, bankGain = 0.4, cStartDeg = 110.0),
+        // six line (research 51 §2): a fast, slinky labriform darter, quick pectoral rowing with tail bursts [L]
+        BrainKind.SIXLINE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.5, pecHzHover = 4.0, pecHzMax = 7.0, rowBodyAmp = 0.03,
+            bobPitch = 0.04, bobHz = 2.0, bankGain = 1.2, cStartDeg = 140.0),
+        // clown goby (research 51 §3): sits on a branch, short hops between branches on quick tail beats [L]
+        BrainKind.CLOWN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 2.0,
+            glideS = 0.2, beatsPerBout = 2.0, sinkCmS = 2.0, bankGain = 0.5, cStartDeg = 120.0),
         BrainKind.GENERIC_FISH to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.5, pecHzMax = 5.0),
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
         BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),

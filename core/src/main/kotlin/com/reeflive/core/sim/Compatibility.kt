@@ -97,6 +97,30 @@ object Compatibility {
             if (others.any { it == BrainKind.WATCHMAN_GOBY || it == BrainKind.DIAMOND_GOBY }) out += CompatibilityWarning("watchman_gobies", CompatibilityWarning.Severity.WARN,
                 "Watchman gobies chase other sand gobies away from their burrow unless they are a mated pair.")
         }
+        // research 51 (popular fish pack, batch 2)
+        if (kind == BrainKind.MANDARIN) {
+            out += CompatibilityWarning("mandarin_pods", CompatibilityWarning.Severity.WARN,
+                "Mandarins eat live pods all day. They need a mature tank (a year or more) with lots of live rock, or they slowly starve. Captive-bred ones may also eat frozen food.")
+            if (others.any { it == BrainKind.LEOPARD_WRASSE || it == BrainKind.DIAMOND_GOBY || it == BrainKind.MANDARIN || it == BrainKind.SIXLINE })
+                out += CompatibilityWarning("mandarin_rivals", CompatibilityWarning.Severity.WARN,
+                    "Other pod eaters already in the tank (leopard wrasse, diamond goby, six line, another mandarin) share its food. Watch that it stays plump.")
+        }
+        if (kind == BrainKind.SIXLINE) {
+            if (others.isNotEmpty()) out += CompatibilityWarning("sixline_bully", CompatibilityWarning.Severity.INFO,
+                "Six lines often chase fish added after them, other wrasses and small shy fish. Add it last.")
+            if (others.any { it == BrainKind.WRASSE || it == BrainKind.LEOPARD_WRASSE || it == BrainKind.SIXLINE })
+                out += CompatibilityWarning("sixline_wrasses", CompatibilityWarning.Severity.WARN,
+                    "Six lines pick on other wrasses, more so in a small tank.")
+        }
+        if (kind == BrainKind.CLOWN_GOBY) {
+            out += CompatibilityWarning("clown_goby_coral", CompatibilityWarning.Severity.INFO,
+                "Clown gobies live perched in branching coral. Give it a tree coral or rock tips; it may nip a small coral it sits on.")
+            if (others.any { it == BrainKind.SIXLINE }) out += CompatibilityWarning("clown_goby_sixline", CompatibilityWarning.Severity.INFO,
+                "A six line wrasse may chase a tiny clown goby.")
+        }
+        if (others.any { it == BrainKind.SIXLINE } && kind.isFish && kind != BrainKind.SIXLINE && kind !in setOf(BrainKind.TANG, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.EEL))
+            out += CompatibilityWarning("sixline_newcomer", CompatibilityWarning.Severity.INFO,
+                "Your six line wrasse may chase this new fish for its first days.")
         if (speciesId.startsWith("pterapogon")) {
             out += CompatibilityWarning("banggai_care", CompatibilityWarning.Severity.INFO,
                 "Buy captive-bred Banggais: wild ones are endangered. Keep one pair; extra males get chased.")

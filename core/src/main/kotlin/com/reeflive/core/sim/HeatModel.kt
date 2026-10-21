@@ -87,14 +87,14 @@ object HeatModel {
         BrainKind.TANG -> TANG
         // chromis are damselfish like the clown (Pomacentridae; est.)
         BrainKind.CLOWN, BrainKind.CHROMIS, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE -> CLEANER_WRASSE
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.SIXLINE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
         // the firefish is a dartfish, a goby relative (est.)
-        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH -> SAND_GOBY
+        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH, BrainKind.MANDARIN, BrainKind.CLOWN_GOBY -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT

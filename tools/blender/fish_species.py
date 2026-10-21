@@ -1167,6 +1167,143 @@ def fins_watchman(cv):
     FL.paint_fin_slot(cv, 5, base="#F6E8A0", alpha=0.6, rays=5, ray_color="#D8B840")
 
 
+def _maze(cv, freq, seed, warp=1.6, width=0.22, aspect=1.0):
+    """Wavy, branching worm lines (mandarin): domain-warped stripes broken by a second noise field. Returns
+    (line, edge) masks: the orange line core and the dark outline around it."""
+    u, v = cv.u, cv.v
+    n1 = P.value_noise(cv.h, cv.w, 14, 6, seed)
+    n2 = P.value_noise(cv.h, cv.w, 30, 12, seed + 1)
+    n3 = P.value_noise(cv.h, cv.w, 22, 9, seed + 2)
+    ph = (v * freq + u * freq * 0.35 * aspect + warp * (n1 - 0.5) * 4 + 0.9 * (n2 - 0.5)) % 1.0
+    d = np.abs(ph - 0.5)                                    # 0 on a line centre
+    w = width * (0.75 + 0.5 * n3)
+    line = 1 - S(w * 0.5 - 0.03, w * 0.5 + 0.03, d)
+    edge = (1 - S(w * 0.5 + 0.02, w * 0.5 + 0.09, d)) * (1 - line)
+    gaps = S(0.28, 0.36, n2)                               # break the stripes into worm-like pieces
+    return line * gaps, edge * gaps
+
+
+def paint_mandarin(cv, fl):
+    """Mandarin dragonet, Synchiropus splendidus: vivid blue body covered in wavy, maze-like orange lines outlined in
+    deep navy; the broad head greener (green-blue with finer orange lines); belly a little paler blue-green."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#2A7AE0", "#1848C0", 0.0, 1.0)                # vivid blue, deeper on the back
+    cv.blend(1 - S(0.05, 0.35, v), "#2AA0C8", 0.45)        # blue-green belly
+    head = 1 - S(0.14, 0.24, u)
+    cv.blend(head, "#2AAE98", 0.8)                         # green-blue head
+    mucus(cv, 0.012, 601)                                  # scaleless, slimy skin: no scale texture
+    line, edge = _maze(cv, 8.5, 602, width=0.32)
+    hline, hedge = _maze(cv, 14, 605, warp=1.2, width=0.28)
+    line = line * (1 - head) + hline * head
+    edge = edge * (1 - head) + hedge * head
+    cv.blend(edge, "#0C1A60", 0.85)
+    cv.blend(line * (1 - head), "#F07818", 0.97)
+    cv.blend(line * head, "#F08C20", 0.95)
+    cv.blend(line * (1 - S(0.2, 0.5, v)), "#F8A030", 0.3)  # warmer on the lower side
+    dark_mouth(cv, fl, u1=0.02, v0=0.42, v1=0.52, color="#10306A", op=0.6)
+
+
+def fins_mandarin(cv):
+    def wavy(col, n, ang=0.6, w=0.22):
+        def fn(T, Sx, rgb, a):
+            ph = (T * n + Sx * n * ang + 0.25 * np.sin(Sx * 9 + T * 5)) % 1.0
+            m = 1 - S(w * 0.5, w * 0.5 + 0.08, np.abs(ph - 0.5))
+            return rgb * (1 - m[..., None]) + hex2rgb(col) * m[..., None], a
+        return fn
+    # male's tall first dorsal (long first ray): dark navy with orange-red wavy bands, blue rim
+    FL.paint_fin_slot(cv, 0, base="#14246A", alpha=0.92, rays=4, ray_color="#0A1240", spine_count=4,
+                      spots=wavy("#E86020", 5, 1.2), margin="#3A8AF0", margin_w=0.06)
+    # second dorsal, anal, caudal: orange-red with blue wavy lines, dark blue margin
+    FL.paint_fin_slot(cv, 1, base="#E86A20", alpha=0.85, rays=9, ray_color="#B04010",
+                      spots=wavy("#2850C8", 7, 0.8), margin="#1A2A90", margin_w=0.1)
+    FL.paint_fin_slot(cv, 2, base="#E06020", alpha=0.85, rays=8, ray_color="#A83A10",
+                      spots=wavy("#2A58D0", 6, -0.9), margin="#1A2A90", margin_w=0.14)
+    FL.paint_fin_slot(cv, 3, base="#E87024", alpha=0.85, rays=10, ray_color="#B04412",
+                      spots=wavy("#2A5CD0", 6, 0.3), margin="#1A2A90", margin_w=0.08)
+    # big fan-like pectorals, nearly transparent
+    FL.paint_fin_slot(cv, 4, base="#F0E4D0", alpha=0.14, rays=20, ray_color="#C8B090", ray_alpha=0.3)
+    # large pelvics it walks on: orange with blue lines, fairly opaque
+    FL.paint_fin_slot(cv, 5, base="#E87020", alpha=0.88, rays=6, ray_color="#A84010",
+                      spots=wavy("#2A58C8", 4, 0.6), margin="#1A2A90", margin_w=0.1)
+
+
+def paint_sixline(cv, fl):
+    """Six line wrasse, Pseudocheilinus hexataenia: bluish-purple to lavender body with six bright orange horizontal
+    stripes along the upper two thirds of the flank, thin blue-violet lines between them; the stripes reach the head,
+    two running through the eye; a black, blue-edged eyespot on the upper caudal peduncle; lower side and belly paler
+    violet-blue with faint greenish dots on the lower head."""
+    u, v = cv.u, cv.v
+    lv = fl.lv
+    cv.vgrad("#8A86D8", "#6A4AB8", 0.0, 1.0)                # lavender belly -> blue-purple back
+    cv.blend(1 - S(0.05, 0.3, v), "#A8B0E8", 0.5)
+    mucus(cv, 0.01, 611)
+    scales_overlay(cv, 9, 0.04)
+    # stripes: centres in v, converging slightly toward the peduncle; the 3rd and 4th pass through the eye (v ~0.6)
+    taper = np.interp(u, [0.0, 0.15, 0.6, 0.95, 1.0], [0.75, 1.0, 1.0, 0.7, 0.6])
+    start = S(0.0, 0.03, u) * (1 - S(0.93, 0.97, u))
+    for k, c in enumerate((0.38, 0.47, 0.56, 0.65, 0.75, 0.86)):
+        cen = 0.6 + (c - 0.6) * taper
+        hw = np.interp(u, [0.0, 0.2, 0.7, 1.0], [0.006, 0.0085, 0.0075, 0.005])
+        d = np.abs(v - cen) * lv
+        m = (1 - S(hw - 0.002, hw + 0.002, d)) * start
+        if k == 0:
+            m = m * S(0.1, 0.2, u)                         # the lowest stripe starts behind the gill
+        cv.blend(m, "#F28A1C", 0.97)
+    # thin blue-violet lines between the stripes
+    for c in (0.425, 0.515, 0.605, 0.7, 0.805):
+        cen = 0.6 + (c - 0.6) * taper
+        d = np.abs(v - cen) * lv
+        cv.blend((1 - S(0.0015, 0.003, d)) * start * S(0.08, 0.18, u), "#6A7AF0", 0.6)
+    # lower head: small greenish-blue dots; snout a little orange
+    rs = np.random.default_rng(612)
+    dots, _ = fl.spots(rs, 18, 0.0025, 0.004, 0.01, (0.03, 0.2, 0.2, 0.45))
+    cv.blend(dots, "#7AD8C8", 0.8)
+    # black eyespot edged in blue on the upper caudal peduncle
+    cv.blend(fl.disc(0.905, 0.8, 0.026, 0.004), "#5AA0F8", 0.95)
+    cv.blend(fl.disc(0.905, 0.8, 0.019, 0.003), "#080810", 0.98)
+    dark_mouth(cv, fl, u1=0.02, v0=0.48, v1=0.54, color="#5A2050", op=0.6)
+
+
+def fins_sixline(cv):
+    # continuous dorsal: orange-violet, a violet base and an orange band toward the rim
+    def dorsal_fn(T, Sx, rgb):
+        m = S(0.3, 0.65, Sx)[..., None]
+        return rgb * (1 - m) + hex2rgb("#E07A3A") * m
+    FL.paint_fin_slot(cv, 0, base="#7A4AB8", alpha=0.8, rays=23, ray_color="#5A3090", spine_count=11, base_fn=dorsal_fn,
+                      margin="#B0A0F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 2, base="#7A54C0", alpha=0.75, rays=12, ray_color="#5A3090", spine_count=3, base_fn=dorsal_fn,
+                      margin="#B0A0F0", margin_w=0.07)
+
+    def tail_fn(T, Sx, rgb):                               # green-tinted tail, violet at the base
+        m = S(0.1, 0.45, Sx)[..., None]
+        return rgb * (1 - m) + hex2rgb("#7AB07A") * m
+    FL.paint_fin_slot(cv, 3, base="#6A5AB8", alpha=0.72, rays=14, ray_color="#4A6A60", base_fn=tail_fn,
+                      margin="#A8D0A0", margin_w=0.05)
+    FL.paint_fin_slot(cv, 4, base="#E8E4F4", alpha=0.18, rays=13, ray_color="#C0B8D8", ray_alpha=0.35)
+    FL.paint_fin_slot(cv, 5, base="#B8A8E8", alpha=0.45, rays=5, ray_color="#8A78C0")
+
+
+def paint_clown_goby(cv, fl):
+    """Yellow clown goby, Gobiodon okinawae: solid bright lemon yellow all over, a touch deeper on the back and paler
+    on the throat; scaleless, mucus-covered skin, so only a faint texture."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#FAEE5A", "#F0D418", 0.0, 1.0)
+    cv.blend(1 - S(0.05, 0.3, v), "#FCF4A0", 0.45)        # pale throat and belly
+    cv.blend(S(0.85, 1.0, v), "#E8C410", 0.35)
+    mucus(cv, 0.008, 621)
+    dark_mouth(cv, fl, u1=0.025, v0=0.42, v1=0.52, color="#B08A10", op=0.5)
+
+
+def fins_clown_goby(cv):
+    FL.paint_fin_slot(cv, 0, base="#F4E030", alpha=0.62, rays=6, ray_color="#D8BC18", spine_count=6,
+                      margin="#F8EE80", margin_w=0.06)
+    FL.paint_fin_slot(cv, 1, base="#F4E030", alpha=0.62, rays=10, ray_color="#D8BC18", margin="#F8EE80", margin_w=0.06)
+    FL.paint_fin_slot(cv, 2, base="#F2DC2C", alpha=0.62, rays=9, ray_color="#D8BC18", margin="#F8EE80", margin_w=0.06)
+    FL.paint_fin_slot(cv, 3, base="#F4E030", alpha=0.65, rays=15, ray_color="#D8BC18", margin="#F8EE80", margin_w=0.05)
+    FL.paint_fin_slot(cv, 4, base="#F6EA70", alpha=0.45, rays=16, ray_color="#E0C830")
+    FL.paint_fin_slot(cv, 5, base="#F6E860", alpha=0.6, rays=6, ray_color="#E0C830")
+
+
 SPECIES = {
     "clown_orange": dict(
         # A. ocellaris: oval, depth ~0.44 SL at the spiny dorsal, caudal peduncle ~0.19 SL deep
@@ -1509,6 +1646,60 @@ SPECIES = {
         mouth=dict(u=0.085, seam=-0.25, gape_deg=30),
         paint=paint_watchman, fins=fins_watchman, irid=0.15, rough=0.32, length_cm=8.0,
     ),
+    "mandarin": dict(
+        # Synchiropus splendidus: elongate, goby-like callionymid, roughly round in section, a broad flat head wider
+        # than deep with big high-set eyes, small protrusible terminal mouth; the male's first dorsal (IV) tall and
+        # pointed with a long first ray, second dorsal and anal long and low, rounded caudal; huge fan pectorals and
+        # large pelvics it "walks" on
+        profile=[(0, 0.05, 0.06, -0.015), (0.04, 0.13, 0.16, -0.01), (0.1, 0.19, 0.22, 0.0), (0.2, 0.22, 0.22, 0.0),
+                 (0.34, 0.225, 0.19, 0.0), (0.5, 0.2, 0.15, 0.0), (0.68, 0.155, 0.105, 0.0), (0.84, 0.115, 0.07, 0.0),
+                 (1.0, 0.095, 0.045, 0.0)],
+        body_tris=3200, ring=28, p_exp=0.95, belly_bias=0.16, back_pinch=0.12, head_flatten=0.12,
+        dorsal=dict(u0=0.3, u1=0.43, h=[(0.3, 0.05), (0.315, 0.4), (0.34, 0.27), (0.38, 0.15), (0.43, 0.03)],
+                    rake=22, n=8),
+        dorsal2=dict(u0=0.5, u1=0.86, h=[(0.5, 0.03), (0.53, 0.11), (0.7, 0.12), (0.82, 0.11), (0.86, 0.02)],
+                     rake=26, n=12),
+        anal=dict(u0=0.56, u1=0.86, h=[(0.56, 0.03), (0.59, 0.09), (0.8, 0.1), (0.86, 0.02)], rake=28, n=10),
+        caudal=dict(length=0.24, span=0.26, shape="rounded"),
+        pectoral=dict(u=0.24, length=0.24, width=0.2, zf=0.05, shape="round"),
+        pelvic=dict(u=0.19, length=0.17, base=0.07),
+        eye=dict(u=0.1, zf=0.55, r=0.052, iris="#D83020", ring="#7A1010", outer="#C82818", ring_w=0.12, pupil=0.42),
+        paint=paint_mandarin, fins=fins_mandarin, irid=0.2, rough=0.3, length_cm=7.0,
+    ),
+    "sixline_wrasse": dict(
+        # Pseudocheilinus hexataenia: small, moderately elongate, compressed labrid, depth ~0.3 SL, pointed head with a
+        # small terminal mouth; one continuous dorsal (IX,11-12), anal III,9, rounded-truncate caudal
+        profile=[(0, 0.04, 0.03, -0.006), (0.05, 0.15, 0.075, -0.002), (0.14, 0.25, 0.105, 0.0), (0.3, 0.3, 0.12, 0.0),
+                 (0.48, 0.29, 0.11, 0.0), (0.66, 0.235, 0.09, 0.0), (0.82, 0.165, 0.065, 0.0), (0.92, 0.14, 0.05, 0.0),
+                 (1.0, 0.135, 0.035, 0.0)],
+        body_tris=3200, ring=28, p_exp=0.85, belly_bias=0.06, back_pinch=0.15,
+        dorsal=dict(u0=0.2, u1=0.87, h=[(0.2, 0.02), (0.24, 0.06), (0.5, 0.07), (0.78, 0.085), (0.85, 0.07), (0.87, 0.02)],
+                    rake=26, n=28),
+        anal=dict(u0=0.56, u1=0.87, h=[(0.56, 0.02), (0.6, 0.065), (0.8, 0.08), (0.85, 0.06), (0.87, 0.02)], rake=28, n=14),
+        caudal=dict(length=0.19, span=0.24, shape="rounded"),
+        pectoral=dict(u=0.25, length=0.13, width=0.09, zf=-0.05, shape="round"),
+        pelvic=dict(u=0.29, length=0.08),
+        eye=dict(u=0.085, zf=0.32, r=0.04, iris="#E04A20", ring="#8A2010", outer="#C83A1C", ring_w=0.12, pupil=0.42),
+        paint=paint_sixline, fins=fins_sixline, irid=0.3, rough=0.3, length_cm=7.5,
+    ),
+    "clown_goby": dict(
+        # Gobiodon okinawae: tiny, deep, strongly compressed boxy coral goby, depth ~0.4 SL, a blunt rounded head with
+        # small eyes, two dorsals close together (VI + I,10), anal I,9, rounded caudal, pelvics fused into a disc
+        profile=[(0, 0.1, 0.07, -0.025), (0.04, 0.25, 0.12, -0.012), (0.11, 0.38, 0.16, -0.004), (0.24, 0.44, 0.17, 0.0),
+                 (0.42, 0.44, 0.15, 0.0), (0.6, 0.37, 0.12, 0.0), (0.76, 0.26, 0.085, 0.0), (0.88, 0.2, 0.06, 0.0),
+                 (1.0, 0.18, 0.04, 0.0)],
+        body_tris=3200, ring=30, p_exp=0.72, belly_bias=0.08, back_pinch=0.15, gill=(0.24, 0.38, 0.06, 0.26),
+        dorsal=dict(u0=0.33, u1=0.47, h=[(0.33, 0.03), (0.35, 0.12), (0.39, 0.13), (0.44, 0.1), (0.47, 0.03)],
+                    rake=26, n=7),
+        dorsal2=dict(u0=0.49, u1=0.83, h=[(0.49, 0.03), (0.52, 0.11), (0.72, 0.12), (0.8, 0.1), (0.83, 0.02)],
+                     rake=26, n=12),
+        anal=dict(u0=0.56, u1=0.83, h=[(0.56, 0.03), (0.59, 0.1), (0.77, 0.1), (0.83, 0.02)], rake=28, n=10),
+        caudal=dict(length=0.22, span=0.3, shape="rounded"),
+        pectoral=dict(u=0.27, length=0.15, width=0.12, zf=-0.1, shape="round"),
+        pelvic=dict(u=0.27, length=0.08, base=0.07),
+        eye=dict(u=0.1, zf=0.42, r=0.034, iris="#3A3010", ring="#141008", outer="#5A4A18", ring_w=0.12, pupil=0.5),
+        paint=paint_clown_goby, fins=fins_clown_goby, irid=0.15, rough=0.28, length_cm=3.5,
+    ),
 }
 SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin,
                                fins=lambda cv: fins_clown(cv, darwin=True),
@@ -1523,7 +1714,7 @@ SPECIES["purple_tang"] = dict(SPECIES["yellow_tang"], paint=paint_purple_tang, f
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
             "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny", "firefish", "chromis",
             "yellow_tang", "purple_tang", "fairy_wrasse",
-            "royal_gramma", "banggai", "watchman_goby"]
+            "royal_gramma", "banggai", "watchman_goby", "mandarin", "sixline_wrasse", "clown_goby"]
 
 
 # ----------------------------------------------------------------------------

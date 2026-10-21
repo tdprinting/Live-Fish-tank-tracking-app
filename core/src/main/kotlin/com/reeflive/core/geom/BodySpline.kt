@@ -46,6 +46,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     private var boxMaxX = Double.POSITIVE_INFINITY
     private var boxMinZ = Double.NEGATIVE_INFINITY
     private var boxMaxZ = Double.POSITIVE_INFINITY
+    private var boxMaxY = Double.POSITIVE_INFINITY
 
     fun reset(headPos: Vec3, headingDir: Vec3) {
         head = headPos; heading = headingDir.normalized()
@@ -297,8 +298,8 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             while (true) {
                 if (j >= poly.size) {
                     cur = cur + lastDir * remaining
-                    if (cur.x < boxMinX || cur.x > boxMaxX || cur.z < boxMinZ || cur.z > boxMaxZ)
-                        cur = Vec3(cur.x.coerceIn(boxMinX, boxMaxX), cur.y, cur.z.coerceIn(boxMinZ, boxMaxZ))
+                    if (cur.x < boxMinX || cur.x > boxMaxX || cur.z < boxMinZ || cur.z > boxMaxZ || cur.y > boxMaxY)
+                        cur = Vec3(cur.x.coerceIn(boxMinX, boxMaxX), min(cur.y, boxMaxY), cur.z.coerceIn(boxMinZ, boxMaxZ))
                     break
                 }
                 val nxt = if (shift == null) poly[j] else poly[j] + shift
@@ -341,16 +342,17 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     }
 
     /**
-     * Keeps trail points inside the glass box [minX]..[maxX] × [minZ]..[maxZ] (a fish that turned about at the glass
+     * Keeps trail points inside the glass box [minX]..[maxX] × [minZ]..[maxZ] and under the water line [maxY] (a fish that turned about at the glass
      * had its tail relax straight back through it), and the stations sampled past the trail's end too (a hovering fish
      * has a short trail and its tail is drawn straight on from it). The head is the caller's to place.
      */
-    fun keepInside(minX: Double, maxX: Double, minZ: Double, maxZ: Double) {
+    fun keepInside(minX: Double, maxX: Double, minZ: Double, maxZ: Double, maxY: Double = Double.POSITIVE_INFINITY) {
         if (rigid || !glassGuard) return
-        boxMinX = minX; boxMaxX = maxX; boxMinZ = minZ; boxMaxZ = maxZ
+        boxMinX = minX; boxMaxX = maxX; boxMinZ = minZ; boxMaxZ = maxZ; boxMaxY = maxY
         for (i in trail.indices) {
             val p = trail[i]
-            if (p.x < minX || p.x > maxX || p.z < minZ || p.z > maxZ) trail[i] = Vec3(p.x.coerceIn(minX, maxX), p.y, p.z.coerceIn(minZ, maxZ))
+            if (p.x < minX || p.x > maxX || p.z < minZ || p.z > maxZ || p.y > maxY)
+                trail[i] = Vec3(p.x.coerceIn(minX, maxX), min(p.y, maxY), p.z.coerceIn(minZ, maxZ))
         }
     }
 

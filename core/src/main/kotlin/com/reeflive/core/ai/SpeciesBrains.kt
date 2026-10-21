@@ -40,6 +40,9 @@ object SpeciesBrains {
             BrainKind.FILE_CLAM -> FileClamBrain(c)
             BrainKind.GRAMMA -> GrammaBrain(c)
             BrainKind.WATCHMAN_GOBY -> WatchmanGobyBrain(c)
+            BrainKind.MANDARIN -> MandarinBrain(c)
+            BrainKind.SIXLINE -> SixlineBrain(c)
+            BrainKind.CLOWN_GOBY -> ClownGobyBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)
         }

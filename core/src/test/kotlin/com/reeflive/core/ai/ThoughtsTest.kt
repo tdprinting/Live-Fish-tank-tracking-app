@@ -35,7 +35,7 @@ class ThoughtsTest {
             sim.species.ensure(id)
             sim.addFromSeed(LivestockSeed(id, "", cm, id = id))
         }
-        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie", "gramma_loreto" to "Royal", "cryptocentrus_cinctus" to "Watch")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
+        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie", "gramma_loreto" to "Royal", "cryptocentrus_cinctus" to "Watch", "synchiropus_splendidus" to "Mandy", "pseudocheilinus_hexataenia" to "Stripes", "gobiodon_okinawae" to "Lemon")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
         for (id in listOf("lysmata_boggessi", "ctenoides_scaber")) sim.species.ensure(id)
         sim.addFromSeed(LivestockSeed("lysmata_boggessi", "Minty", 4.0, id = "pep"))
         sim.addFromSeed(LivestockSeed("ctenoides_scaber", "Flame", 6.0, id = "clam"))

@@ -148,6 +148,15 @@
       "habituation": 0.3, "newcomerMult": 2.0, "evidence": "50 §3 facts 88, 107: aggressive to its own kind and other shrimp gobies at the burrow; a mated pair is left alone; rates [I]" },
     { "id": "banggai_males", "actor": "BANGGAI_M", "targets": ["BANGGAI_M"], "type": "aggression", "anchor": "body", "triggerRadius": 12,
       "pEvent": 0.4, "maxRatePerH": 6, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 12, "chaseSpeedBL": 4, "stressToTarget": 0.04,
-      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "50 §2: males squabble in aquaria, keep a pair (hobby consensus); rates [I]" }
+      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "50 §2: males squabble in aquaria, keep a pair (hobby consensus); rates [I]" },
+    { "id": "sixline_wrasses", "actor": "SIXLINE", "targets": ["WRASSE", "LEOPARD_WRASSE", "SIXLINE"], "type": "aggression", "anchor": "body", "triggerRadius": 20,
+      "pEvent": 0.6, "maxRatePerH": 8, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE_NIP", "chaseLen": 25, "chaseSpeedBL": 7, "stressToTarget": 0.05,
+      "habituation": 0.3, "newcomerMult": 2.5, "evidence": "51 §2 facts 64-66, 84: bullies other wrasses, worst toward newcomers and in small tanks; rates [I]" },
+    { "id": "mandarin_mandarin", "actor": "MANDARIN", "targets": ["MANDARIN"], "type": "aggression", "anchor": "body", "triggerRadius": 10,
+      "pEvent": 0.4, "maxRatePerH": 6, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 10, "chaseSpeedBL": 3, "stressToTarget": 0.04,
+      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "51 §1 facts 17-18: keep one or a mated pair (two males fight); a mated pair is left alone; rates [I]" },
+    { "id": "clown_goby_coral", "actor": "CLOWN_GOBY", "targets": ["CLOWN_GOBY"], "type": "aggression", "anchor": "coral", "triggerRadius": 10,
+      "pEvent": 0.5, "maxRatePerH": 6, "floorRatePerH": 2, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 6, "chaseSpeedBL": 4, "stressToTarget": 0.03,
+      "habituation": 0.4, "newcomerMult": 1.5, "evidence": "51 §3 facts 94, 121: squabbles with its own kind over a colony until they pair; rates [I]" }
   ]
 }

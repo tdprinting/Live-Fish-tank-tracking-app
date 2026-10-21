@@ -122,7 +122,7 @@ class Steering(private val c: Ctx) {
         if (intent.kinematic || intent.crawl) relSpeed = sp
         val relax = 4.0 * (1 - sp / (0.6 * max(o.cruiseSpeed, 0.5))).coerceIn(0.0, 1.0) + 0.15
         o.spline.update(o.pos, o.heading, dt, if (o.brainKind == BrainKind.EEL) relax * 0.15 else relax)
-        o.spline.keepInside(GLASS_KEEP_CM, c.rock.lengthCm - GLASS_KEEP_CM, GLASS_KEEP_CM, c.rock.widthCm - GLASS_KEEP_CM)
+        o.spline.keepInside(GLASS_KEEP_CM, c.rock.lengthCm - GLASS_KEEP_CM, GLASS_KEEP_CM, c.rock.widthCm - GLASS_KEEP_CM, c.rock.waterLevelCm - GLASS_KEEP_CM)
         animate(o, intent, dt, sp)
     }
 
@@ -671,7 +671,7 @@ class Steering(private val c: Ctx) {
     }
 
     companion object {
-        /** Body trail points stay this far (cm) inside the glass. */
+        /** Body trail points stay this far (cm) inside the glass and under the water line. */
         const val GLASS_KEEP_CM = 0.1
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
         const val C_STAGE1 = 0.12
