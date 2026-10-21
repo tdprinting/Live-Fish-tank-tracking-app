@@ -16,7 +16,7 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop / maxima clam, 8 snail, 9 urchin)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop / maxima clam, 8 snail, 9 urchin, 10 sea cucumber)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
@@ -32,6 +32,9 @@ uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x bod
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
 uniform vec4 uLimb[40];    // per-limb pose (layout per animal: core BrittleArms (40) / CrabLegs (19) / ShrimpLimbs (15) / HermitLegs (15))
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
+
+// Sea cucumber mouth centre in model space at the oral ring's spine station (tools/blender/sea_cucumber.py)
+const vec3 CUKE_MOUTH = vec3(0.006, 0.0137, 0.0);
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
@@ -698,6 +701,15 @@ void main() {
             local.y += h * a * sin(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
             local.x -= h * 0.6 * a * cos(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
         }
+    } else if (mode > 9.5 && mode < 10.5) {
+        // sea cucumber oral tentacles (R = t along, G = feeding order): folded in over the mouth when not feeding
+        // (uPick = out); feeding, one at a time presses down on the sand, then bends back into the mouth to be wiped
+        float t = aColor.r;
+        float c = fract(uSwim.w - aColor.g);
+        float dip = smoothstep(0.0, 0.05, c) * (1.0 - smoothstep(0.05, 0.1, c));
+        float eat = smoothstep(0.05, 0.09, c) * (1.0 - smoothstep(0.11, 0.15, c));
+        local.y -= uPick * t * 0.012 * dip;
+        local = mix(local, CUKE_MOUTH, uPick * t * 0.85 * eat + (1.0 - uPick) * t * 0.8);
     } else if (mode < 0.5 || mode > 1.5) {
         // legs / antennae: sweep with the appendage phase along the hinge (B) coordinate
         float sweep = sin(uSwim.w * 2.0 * PI + hinge * 4.0 + u * 5.0);
@@ -713,6 +725,15 @@ void main() {
     if (part > 0.5 && part < 1.5) {
         uw = clamp(u - local.x, 0.0, 1.0);
         local.x += uw - u;
+    }
+
+    // Sea cucumber (mode 10, core SeaCucumberBrain): uFin.x = contraction (0 relaxed .. 1 balled up: shorter and fatter,
+    // the body drawn toward the head along the spine), uMotion.xy = crawl wave (phase, amplitude): a swelling that runs
+    // head to tail as the body creeps forward on its tube feet.
+    if (mode > 9.5 && mode < 10.5) {
+        float k = uFin.x;
+        uw = u * (1.0 - 0.35 * k);
+        if (part < 0.5) local.yz *= 1.0 + 0.3 * k + 0.07 * uMotion.y * sin(2.0 * PI * (3.0 * u - uMotion.x));
     }
 
     // Life-stage proportions (a juvenile engineer goby is stubbier than the eel-like adult): scale depth and width

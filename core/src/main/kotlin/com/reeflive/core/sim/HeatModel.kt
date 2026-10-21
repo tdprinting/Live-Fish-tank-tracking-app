@@ -106,7 +106,7 @@ object HeatModel {
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
         BrainKind.EEL -> MORAY
-        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.GENERIC_INVERT -> ECHINODERM
+        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.SEA_CUCUMBER, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
         // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)

@@ -225,6 +225,7 @@ object MotionProfiles {
         // wedged in its crevice; the brain moves it itself when it claps away (research 42 §2.3)
         BrainKind.FILE_CLAM to MotionProfile(Gait.SESSILE),
         BrainKind.GIANT_CLAM to MotionProfile(Gait.SESSILE),
+        BrainKind.SEA_CUCUMBER to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.1),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),

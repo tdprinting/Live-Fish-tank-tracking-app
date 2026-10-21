@@ -194,7 +194,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
          * feather duster (its tube is anchored down in the sand; the crown stands above it), or a diamond goby in its own
          * burrow under a rock (its burrow is not dug into the grid; the engineer goby's are).
          */
-        fun exempt(o: Organism): Boolean = o.posture == 5 || o.inSand || o.brainKind == BrainKind.FEATHER_DUSTER || o.brainKind == BrainKind.ANEMONE || o.brainKind == BrainKind.FILE_CLAM || o.brainKind == BrainKind.GIANT_CLAM ||
+        fun exempt(o: Organism): Boolean = o.posture == 5 || o.inSand || o.brainKind == BrainKind.FEATHER_DUSTER || o.brainKind == BrainKind.ANEMONE || o.brainKind == BrainKind.FILE_CLAM || o.brainKind == BrainKind.GIANT_CLAM || o.brainKind == BrainKind.SEA_CUCUMBER ||
             o.brainKind == BrainKind.DIAMOND_GOBY && o.posture == 3
 
         /** Height of the body reference point over the sand when the body rests on it (cm). */

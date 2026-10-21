@@ -105,6 +105,7 @@ object Stocking {
         StockEntry("tridacna_maxima", StockGroup.INVERTS, "Maxima clam", 8.0),
         StockEntry("ophiarachna_incrassata", StockGroup.INVERTS, "Green serpent star", 25.0),
         StockEntry("neopetrolisthes_maculatus", StockGroup.INVERTS, "Porcelain crab", 1.8),
+        StockEntry("holothuria_hilla", StockGroup.INVERTS, "Tiger tail sea cucumber", 25.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),

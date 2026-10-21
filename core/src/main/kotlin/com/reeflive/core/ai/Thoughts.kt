@@ -121,6 +121,9 @@ object Thoughts {
             n == "feed" -> feedLine(e, label)
             n == "graze" && k == BrainKind.EMERALD_CRAB -> Line("scooping bubble algae off the rock with its spoon claws", "scoop some bubble algae", "Pop, crunch!", Driver.HUNGER)
             n == "nip" && k == BrainKind.EMERALD_CRAB -> Line("nibbling coral polyps because it is hungry (naughty!)", "nibble a coral", "So hungry…", Driver.HUNGER, 2)
+            n == "contract" && k == BrainKind.SEA_CUCUMBER -> Line("balled up into a firm, fat sausage${e.because()}", "stay tucked up", "Not touching me!", Driver.FEAR, 2)
+            n == "hide" && k == BrainKind.SEA_CUCUMBER -> Line(if (label.startsWith("Creeping")) "creeping slowly back to its spot under the rock" else "lying with its head under the rock and its tail out on the sand", "wait for dark", if (label.startsWith("Creeping")) "Slow and steady." else "Too bright. Snooze.", Driver.REST)
+            n == "sift" && k == BrainKind.SEA_CUCUMBER -> Line("creeping over the sand, mopping it clean with the little tentacles round its mouth", "clean more sand", "Mop, mop, yum.", Driver.HUNGER)
             n == "retreat" && k == BrainKind.PORCELAIN_CRAB -> Line("scuttling backwards under its anemone${e.because()}", "hide under the tentacles", "Back under the tentacles!", Driver.FEAR, 2)
             n == "filter" && k == BrainKind.PORCELAIN_CRAB -> Line(if (label.startsWith("Resting")) "resting its feathery fans for a moment" else "sweeping the water with its feathery fans to catch tiny bits of food", "catch more plankton", if (label.startsWith("Resting")) "Phew, arm break." else "Swish, swish, snack!", Driver.HUNGER)
             n == "spar" && k == BrainKind.PORCELAIN_CRAB -> Line("shoving a rival crab with its big flat claws", "keep its anemone", "This anemone is taken!", Driver.TERRITORY, 2)
@@ -592,6 +595,7 @@ object Thoughts {
         BrainKind.PISTOL_SHRIMP -> "pistol shrimp"
         BrainKind.FILE_CLAM -> "flame scallop"
         BrainKind.GIANT_CLAM -> "maxima clam"
+        BrainKind.SEA_CUCUMBER -> "sea cucumber"
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"

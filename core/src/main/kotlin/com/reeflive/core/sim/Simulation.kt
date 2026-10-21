@@ -1243,6 +1243,7 @@ class Simulation private constructor(
                 BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
                 BrainKind.GIANT_CLAM -> com.reeflive.core.ai.GiantClamBrain.abstractFeed(o, this, dtMin)
                 BrainKind.PORCELAIN_CRAB -> com.reeflive.core.ai.PorcelainCrabBrain.abstractFeed(o, this, dtMin)
+                BrainKind.SEA_CUCUMBER -> com.reeflive.core.ai.SeaCucumberBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1409,6 +1410,8 @@ class Simulation private constructor(
             val age = simTimeSec - since
             val dt = carcassRelease(o, age, dtMin)
             if (dt > 0) { o.carcassTanReleasedG += dt; water.addDetritusTanGrams(dt) }
+            // a dead sea cucumber leaches its holothurin (research 45 §4)
+            if (o.brainKind == BrainKind.SEA_CUCUMBER) com.reeflive.core.ai.SeaCucumberBrain.carcassLeach(o, this, age, dtMin)
             if (age > 48 * 3600) { removed += o; it.remove() }
         }
         removed.forEach { agents.remove(it) }
@@ -2110,6 +2113,9 @@ class Simulation private constructor(
     }
 
     fun agentOf(o: Organism): Agent? = agents[o]
+
+    /** A brain's own death sentence for [o] (a sea cucumber sucked into a pump), with its event. */
+    fun killNow(o: Organism, cause: String) = HealthModel.kill(o, cause, simTimeSec, pendingEventsSink)
 
     fun lightChannels(): DoubleArray = lightCh.copyOf()
     val lightIntensity: Double get() = LightSchedule.intensity(lightCh)

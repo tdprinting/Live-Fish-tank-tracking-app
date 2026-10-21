@@ -47,6 +47,7 @@ CARDS = {
     "tridacna_maxima": "maxima_clam",
     "ophiarachna_incrassata": "serpent_star",
     "neopetrolisthes_maculatus": "porcelain_crab",
+    "holothuria_hilla": "tiger_tail_cucumber",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
     "percnon_gibbesi": "sally_lightfoot",
@@ -75,7 +76,7 @@ CARDS = {
 }
 TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
 HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "maxima_clam", "gsp_mat",
-        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
+        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin", "tiger_tail_cucumber"}
 
 # models built gape along +x that sit gape up in the tank
 GAPE_UP = {"maxima_clam"}

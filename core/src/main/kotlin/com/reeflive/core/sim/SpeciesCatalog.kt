@@ -126,6 +126,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.GIANT_CLAM -> base.copy(kind = "INVERT", common = "Maxima clam", maxLengthCm = 25.0, typicalAdultCm = 15.0, depthRatio = 0.42, massCoeff = 0.12,
                     locomotion = Locomotion("SESSILE", 0.0, 0.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 0.5, hardiness = 0.55,
                     starvationDays = 40.0, homeRadiusCm = 5.0, model = "models/maxima_clam.glb", buoyantWhenDead = false)
+                BrainKind.SEA_CUCUMBER -> base.copy(kind = "INVERT", common = "Tiger tail sea cucumber", maxLengthCm = 30.0, typicalAdultCm = 25.0, depthRatio = 0.12, massCoeff = 0.02,
+                    activity = "NOCTURNAL", locomotion = Locomotion("CRAWLING", 0.003, 0.006, 0.0, 6.0), diet = listOf("DETRITUS", "PELLET"), feedsPerDay = 1.0,
+                    hardiness = 0.5, starvationDays = 60.0, homeRadiusCm = 60.0, model = "models/tiger_tail_cucumber.glb", buoyantWhenDead = false)
                 BrainKind.HERMIT -> base.copy(kind = "INVERT", common = "Hermit crab", maxLengthCm = 3.0, depthRatio = 0.8, massCoeff = 0.08, activity = "NOCTURNAL",
                     locomotion = Locomotion("WALKING", 0.15, 1.0, 0.0, 90.0), diet = listOf("ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"), feedsPerDay = 2.0,
                     grazer = true, hardiness = 0.85, homeRadiusCm = 40.0, model = "models/hermit.glb")

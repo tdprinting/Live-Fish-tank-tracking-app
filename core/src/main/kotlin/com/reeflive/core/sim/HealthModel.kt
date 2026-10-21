@@ -66,6 +66,9 @@ object HealthModel {
     @Ev(Evidence.DESIGN_ESTIMATE, "17 §3.3 toxic above 0.02-0.05 mg/L [K]")
     val H2S_FISH = ToleranceRange(optHi = 0.005, tolHi = 0.03, lethalHi = 0.2)
     val H2S_INVERT = ToleranceRange(optHi = 0.003, tolHi = 0.02, lethalHi = 0.12)
+    /** Holothurin index ([WaterState.holothurin]): a whole cucumber's dump in its tank (1.0) is lethal to fish [E]. */
+    val HOLOTHURIN_FISH = ToleranceRange(optHi = 0.03, tolHi = 0.2, lethalHi = 0.6)
+    val HOLOTHURIN_INVERT = ToleranceRange(optHi = 0.1, tolHi = 0.5, lethalHi = 1.5)
     const val K_STRESS = 0.00016
     const val K_DISEASE = 0.00035
     const val K_REGEN = 0.0003
@@ -250,6 +253,8 @@ object HealthModel {
         for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else if (k == "temp") acclimatedTemp(o, tr) else tr)
         // hydrogen sulfide from stirred deep sand (research 18 §3.3)
         if (w.h2s > 0) add("h2s", w.h2s, if (o.isFish) H2S_FISH else H2S_INVERT)
+        // sea cucumber saponins (research 45 §4): gill poison for fish, milder for inverts, the cucumber itself immune
+        if (w.holothurin > 0 && o.brainKind != BrainKind.SEA_CUCUMBER) add("holothurin", w.holothurin, if (o.isFish) HOLOTHURIN_FISH else HOLOTHURIN_INVERT)
         if (!o.acclTemp.isNaN()) {
             val st = if (o.isFish) FISH_STEPS else if (o.brainKind.isCrab) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)

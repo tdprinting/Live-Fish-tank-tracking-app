@@ -181,7 +181,7 @@ object TankTouch {
     fun animalReaction(o: Organism): TouchReaction {
         if (!o.alive || o.molting || o.isFish) return TouchReaction.NONE
         return when (o.brainKind) {
-            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE, BrainKind.FILE_CLAM, BrainKind.GIANT_CLAM -> TouchReaction.DUCK
+            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE, BrainKind.FILE_CLAM, BrainKind.GIANT_CLAM, BrainKind.SEA_CUCUMBER -> TouchReaction.DUCK
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP,
             BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP -> TouchReaction.FREEZE
             BrainKind.PISTOL_SHRIMP -> TouchReaction.DUCK

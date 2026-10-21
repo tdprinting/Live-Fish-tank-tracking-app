@@ -461,6 +461,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     HARLEQUIN_SHRIMP(listOf("hymenocera"), false),
     /** Pistol (snapping) shrimp (*Alpheus*, research 44 §4): digs the burrow it shares with a watchman goby; snaps. */
     PISTOL_SHRIMP(listOf("alpheus"), false),
+    /**
+     * Sea cucumbers (tiger tail, *Holothuria hilla*, research 45 §4): long soft deposit feeders that creep over the
+     * sand at night mopping it up with their oral tentacles; half hidden under the rock by day; toxic when stressed.
+     */
+    SEA_CUCUMBER(listOf("holothuria", "bohadschia", "actinopyga"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -506,6 +511,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
             "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
             "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
+            "sea_cucumber" to SEA_CUCUMBER, "cucumber" to SEA_CUCUMBER, "tiger_tail_cucumber" to SEA_CUCUMBER,
         )
 
         fun byId(id: String): BrainKind? {

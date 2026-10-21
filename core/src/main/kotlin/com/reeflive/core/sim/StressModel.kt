@@ -122,6 +122,8 @@ object StressModel {
         BrainKind.FILE_CLAM to doubleArrayOf(1.2, 1.3, 1.0, 0.8, 0.8, 0.9, 1.1, 1.2),
         // research 45 §1: wants stable water; a reef-flat animal, more tolerant of heat and light than the file clam (est.)
         BrainKind.GIANT_CLAM to doubleArrayOf(1.0, 1.3, 1.0, 0.9, 0.9, 1.0, 1.0, 1.1),
+        // an echinoderm: salinity- and copper-sensitive, wants stable water (research 45 §4)
+        BrainKind.SEA_CUCUMBER to doubleArrayOf(1.1, 1.6, 1.3, 1.2, 1.1, 1.2, 0.6, 0.7),
     )
     private val SENS_DEFAULT_FISH = doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9)
     private val SENS_DEFAULT_INVERT = doubleArrayOf(1.1, 1.3, 1.2, 1.2, 1.1, 1.3, 0.6, 0.8)
