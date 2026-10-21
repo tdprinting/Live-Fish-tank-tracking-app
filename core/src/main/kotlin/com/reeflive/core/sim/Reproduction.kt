@@ -303,7 +303,7 @@ class Reproduction(private val sim: Simulation) {
         val f = cl.filter { it.sexFemale == true }.maxByOrNull { it.lengthCm }
         val m = cl.filter { it.sexFemale == false }.maxByOrNull { it.lengthCm }
         if (f == null || m == null) { line.readiness = maxOf(0.0, line.readiness - dt / 86400.0); return }
-        val ok = fit(f, CARDINAL_MATURE_CM, now) && fit(m, CARDINAL_MATURE_CM, now) && inRange(sim.water.s)
+        val ok = fit(f, CARDINAL_MATURE_CM) && fit(m, CARDINAL_MATURE_CM) && inRange(sim.water.s)
         line.readiness = (line.readiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
         if (line.readiness >= 1.0 && now >= line.cooldownUntil && sim.perception.night) {
             m.mouthbrooding = true; line.brooder = m; line.readiness = 0.0
@@ -401,7 +401,7 @@ class Reproduction(private val sim: Simulation) {
             if (tangPhase == TangPhase.IDLE) { tangForced = true; startCourting(f, m, now) }
             return
         }
-        val ok = tangForced || fit(f, 0.0, now) && fit(m, 0.0, now) && inRange(sim.water.s)
+        val ok = tangForced || fit(f, 0.0) && fit(m, 0.0) && inRange(sim.water.s)
         when (tangPhase) {
             TangPhase.IDLE -> {
                 tangReadiness = (tangReadiness + if (ok) dt / (TANG_READY_DAYS * 86400.0) else -dt / (TANG_READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
