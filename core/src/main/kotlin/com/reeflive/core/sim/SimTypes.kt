@@ -371,6 +371,8 @@ data class OrganismPose(
     val cocoon: Float = 0f,
     /** Firefish dorsal flick (research 41 §1.2): 0 = the long first dorsal raised as built, 1 = folded down along the back. */
     val finFold: Float = 0f,
+    /** Skin shade −1 pale .. +1 dark and mottled (a fish's own colour change, [Organism.skinTone]). */
+    val tone: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())

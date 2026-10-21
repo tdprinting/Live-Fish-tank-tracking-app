@@ -1296,6 +1296,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // shrimp picking / feeding strokes (mouth)
         p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat - DISPLAY_SATURATE * r.display)
+        p.set1f("uTone", r.tone)
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)
         p.set1f("uDead", if (r.alive) 0f else 1f)
