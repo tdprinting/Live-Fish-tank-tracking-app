@@ -27,10 +27,13 @@ object SpeciesBrains {
             BrainKind.ASTERINA -> AsterinaBrain(c)
             BrainKind.DIAMOND_GOBY -> DiamondGobyBrain(c)
             BrainKind.LEOPARD_WRASSE -> LeopardWrasseBrain(c)
+            BrainKind.FAIRY_WRASSE -> FairyWrasseBrain(c)
             BrainKind.BOBTAIL_SQUID -> BobtailSquidBrain(c)
             BrainKind.FIREFISH -> FirefishBrain(c)
             BrainKind.CHROMIS -> ChromisBrain(c)
             BrainKind.ANEMONE -> AnemoneBrain(c)
+            BrainKind.PEPPERMINT_SHRIMP -> PeppermintShrimpBrain(c)
+            BrainKind.FILE_CLAM -> FileClamBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)
         }

@@ -48,11 +48,16 @@ class Simulation private constructor(
     ) : this(config, species, rock.forSim(), seed, startTimeSec, initialWater, livestock, lights, Unit)
 
     var config: TankConfig = config; private set
+    /**
+     * The tank's box and look (My tank builds set theirs, [CustomTank]): the renderer sizes the glass, equipment and
+     * camera to it, and equipment-side spots built for Tee's tank (jets, the HOB, feeding) are placed by it.
+     */
+    var shape: TankShape = TankShape(config.lengthCm, config.heightCm, config.widthCm)
     val rng = Rng(seed)
     var water = WaterSim(config, initialWater); private set
     val organisms = ArrayList<Organism>()
     val corals = ArrayList<Coral>()
-    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm)
+    val flow = FlowField(config.powerheads, rock.sdf, config.lengthCm, config.waterLevelCm, tankDepth = config.widthCm)
     val food = FoodSystem(rock, flow, rng.fork(7))
     val perception = Perception(this)
     /** Breeding and sex change (coverage B-1..B-3), stepped in the chemistry tick. */
@@ -72,6 +77,20 @@ class Simulation private constructor(
     var simTimeSec: Double = startTimeSec; private set
     var speed: Double = 1.0
         set(v) { field = v.coerceIn(0.0, 1000.0) }
+    /**
+     * Game pace of slow biology ([LifePace]): growth, coral growth and spread, breeding, nursery fry, anemone splits,
+     * pest and asterina populations and molts run this many times faster than the sim clock, while motion, hunger,
+     * water chemistry, fouling, lights and damage from bad water stay on it. 1 = real (Watch, stores); My tank
+     * defaults to [LifePace.DEFAULT]. Unlike [speed] it does not fast-forward the tank, so animals still move at real speed.
+     */
+    var lifePace: Double = 1.0
+        set(v) { field = if (v.isFinite()) v.coerceIn(LifePace.MIN, LifePace.MAX) else 1.0 }
+    /** The game-biology clock: advances [lifePace] game seconds per sim second (equals [simTimeSec] at pace 1). */
+    var lifeSec: Double = startTimeSec
+    /** Sim seconds that [days] game days of slow biology take (for stamps: `simTimeSec + lifeDays(x)`). */
+    fun lifeDays(days: Double): Double = days * 86400.0 / lifePace
+    /** Game days since the sim-clock stamp [sinceSimSec]. */
+    fun lifeAge(sinceSimSec: Double): Double = (simTimeSec - sinceSimSec) * lifePace / 86400.0
     var predationEnabled: Boolean = config.predationEnabled
     /** Σ BL² / footprint (06 §3.4) and its aggression multiplier, refreshed every chemistry tick. */
     var crowding: Double = com.reeflive.core.ai.PairMatrix.CROWDING_BASE; private set
@@ -116,6 +135,8 @@ class Simulation private constructor(
     private val commands = ConcurrentLinkedQueue<Command>()
     /** Coral growth, branch drops and pest rolls draw from their own stream so they leave the behaviour RNG untouched. */
     val growthRng = Rng(seed xor 0x6C0A1L)
+    /** Coral budding and splitting (CoralHealth.maybeSpread) roll here, so they leave the growth and pest stream untouched. */
+    private val spreadRng = Rng(seed xor 0x5B4EADL)
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
 
@@ -236,9 +257,12 @@ class Simulation private constructor(
             val p = ap[a.name] ?: -1
             if (p >= 0 && f.gone[p]) {
                 // its rock was taken out: the spot drops to the sand below
-                val sy = sand.surfaceY(a.pos.x.coerceIn(0.0, rock.lengthCm), a.pos.z.coerceIn(0.0, rock.widthCm))
-                a.copy(pos = Vec3(a.pos.x, sy + 1.0, a.pos.z), points = a.points?.map { Vec3(it.x, sy + 1.0, it.z) })
-            } else if (p < 0 || !f.moved[p]) a else {
+                val at = fitFree(a.pos)
+                val sy = sand.surfaceY(at.x, at.z)
+                a.copy(pos = Vec3(at.x, sy + 1.0, at.z), points = a.points?.map { val q = fitFree(it); Vec3(q.x, sy + 1.0, q.z) })
+            } else if (p < 0) {
+                if (fitted) a.copy(pos = fitFree(a.pos), points = a.points?.map { fitFree(it) }) else a
+            } else if (!f.moved[p]) a else {
                 val m = f.xf[p]
                 a.copy(pos = xfPoint(m, a.pos), dir = a.dir?.let { xfDir(m, it) }, normal = a.normal?.let { xfDir(m, it) }, points = a.points?.map { xfPoint(m, it) })
             }
@@ -254,7 +278,8 @@ class Simulation private constructor(
             val p = hp[h.name] ?: -1
             // its rock was taken out: the hole is gone with it (its dweller shelters on the rock face instead)
             if (p >= 0 && f.gone[p]) null
-            else if (p < 0 || !f.moved[p]) h else {
+            else if (p < 0) { if (fitted) h.copy(mouth = fitFree(h.mouth), path = h.path.map { fitFree(it) }) else h }
+            else if (!f.moved[p]) h else {
                 val m = f.xf[p]
                 h.copy(mouth = xfPoint(m, h.mouth), axis = xfDir(m, h.axis), path = h.path.map { xfPoint(m, it) }, up = xfDir(m, h.up))
             }
@@ -273,6 +298,52 @@ class Simulation private constructor(
             c.pos = xfPoint(f.xf[p], c.restPos); c.normal = xfDir(f.xf[p], c.restNormal); c.patch = null
         }
         fluid?.let { fl -> for (k in 0 until fl.nz) for (j in 0 until fl.ny) for (i in 0 until fl.nx) fl.solid[fl.idx(i, j, k)] = rock.sdf.dist(fl.center(i, j, k)) < 0.0 }
+    }
+
+    /**
+     * How far the stock rocks were moved to fit a tank of another size ([fitStockScape]); spots that sit on no rock
+     * (sand-level caves, burrows) move with them.
+     */
+    var scapeShift: Vec3 = Vec3.ZERO; private set
+    private val fitted: Boolean get() = scapeShift != Vec3.ZERO || !shape.isStock
+
+    /**
+     * A spot on no rock, in this tank: equipment-side spots (at the water line or a glass of Tee's tank: the HOB
+     * outflow, the nori clip, feeding spots) follow the glass they were at ([TankShape.map]); the others move with
+     * the rocks ([scapeShift]). Kept inside the water.
+     */
+    private fun fitFree(p: Vec3): Vec3 {
+        if (!fitted) return p
+        val edge = p.y > TankDims.WATER_LEVEL_CM - 6 || p.x < TankShape.EDGE_CM || p.x > TankDims.LENGTH_CM - TankShape.EDGE_CM ||
+            p.z < TankShape.EDGE_CM || p.z > TankDims.DEPTH_CM - TankShape.EDGE_CM
+        val q = if (edge) shape.map(p) else p + scapeShift
+        return Vec3(q.x.coerceIn(1.0, rock.lengthCm - 1.0), q.y.coerceIn(0.5, rock.waterLevelCm), q.z.coerceIn(1.0, rock.widthCm - 1.0))
+    }
+
+    /**
+     * Fits Tee's rockscape into this tank when it is another size (a My tank build): of the rocks that fit, the run
+     * with the most rock stays, centred along the glass; the rest are taken out (RockPhysics.fitInto). [savedShift]
+     * (a reopened tank whose rocks were already fitted and saved) only restores where the free spots went.
+     */
+    fun fitStockScape(savedShift: Vec3? = null) {
+        val rp = rockPhysics ?: return
+        if (savedShift != null) { scapeShift = savedShift; refreshRockDependents(); return }
+        if (shape.isStock) return
+        rp.build()
+        val dx = rp.fitInto(rock.lengthCm, rock.widthCm) ?: 0.0
+        scapeShift = Vec3(dx, 0.0, 0.0)
+        refreshRockDependents()
+    }
+
+    /**
+     * Adds saved animals and colonies after the rockwork is in place (a reopened My tank), so each starts at its spot
+     * on the rock as it is now.
+     */
+    fun addRestored(livestock: List<LivestockSeed>) {
+        livestock.forEach { addFromSeed(it) }
+        corals.forEach { it.established = true }
+        perception.rebuild()
+        latest = snapshot()
     }
 
     /** Which rock each new colony grows on (a colony placed after its rock moved is re-expressed in the rock's frame). */
@@ -506,7 +577,7 @@ class Simulation private constructor(
 
     // ---- water physics (SIMULATION §9.7): optional Navier–Stokes flow + surface waves ----
     var fluid: com.reeflive.core.geom.FluidSim? = null; private set
-    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm)
+    val surface = com.reeflive.core.geom.WaterSurface(rock.lengthCm, rock.widthCm).also { w -> w.hobPos = w.hobPos?.let { shape.map(it).withY(rock.waterLevelCm) } }
     private var fluidAcc = 0.0
     private var lastFlowGridAt = -1e9
     private var flowGridCache: com.reeflive.core.geom.FlowGrid? = null
@@ -517,6 +588,7 @@ class Simulation private constructor(
     /** Turn on the grid flow solver (Live Tank); spins it up for 20 s of sim time before handing it to [flow]. */
     fun enableFluid(quality: com.reeflive.core.geom.FluidQuality) {
         val f = com.reeflive.core.geom.FluidSim(rock.lengthCm, rock.widthCm, rock.sandTopCm, rock.waterLevelCm, quality,
+            pumps = com.reeflive.core.geom.Pump.defaults().map { it.copy(pos = shape.map(it.pos), intake = it.intake?.let { i -> shape.map(i) }) },
             solidAt = { p -> rock.sdf.dist(p) < 0.0 })
         f.strength = water.flowStrength; f.powerheadsOn = water.s.flowOn
         repeat(200) { f.step(0.1, water.heaterOutputW, heaterPos) }
@@ -646,6 +718,7 @@ class Simulation private constructor(
     // ============================================================== core loop
     private fun advanceInternal(simDt: Double, dtB: Double) {
         simTimeSec += simDt
+        lifeSec += simDt * lifePace
         while (scheduled.isNotEmpty() && scheduled[0].first <= simTimeSec) apply(scheduled.removeAt(0).second)
         updateLights()
         flow.now = simTimeSec
@@ -704,11 +777,13 @@ class Simulation private constructor(
         coralCatchAcc += dt
         if (coralCatchAcc < 1.0) return
         coralCatchAcc = 0.0
-        if (corals.isEmpty() || food.particles.none { !it.eaten && it.kind.coralCatchable }) return
+        if (corals.isEmpty() || food.particles.none { !it.eaten && (it.kind.coralCatchable || it.kind in StonyCorals.MEATY) }) return
         for (c in corals) {
             if (c.tissue < 0.1 || c.extension < 0.3 || c.kind == CoralKind.MACRO) continue
-            val reach = (2.0 + CoralGrowth.extent(c)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
-            val f = food.nearest(c.pos, reach) { it.kind.coralCatchable } ?: continue
+            // stony LPS also take mysis and brine shrimp, and reach further with their night tentacles out
+            val stony = c.kind.stony
+            val reach = (2.0 + CoralGrowth.extent(c) + (if (stony) 3.0 * c.tentacles else 0.0)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
+            val f = food.nearest(c.pos, reach) { it.kind.coralCatchable || (stony && it.kind in StonyCorals.MEATY) } ?: continue
             food.consume(f)
             c.fed = min(1.0, c.fed + CORAL_FED_PER_CATCH)
         }
@@ -864,7 +939,7 @@ class Simulation private constructor(
     }
 
     private fun deadPhysics(o: Organism, dt: Double) {
-        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
+        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
         val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.sandTopCm + 0.6
         val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
         val vy = if (buoyant) 1.2 else -2.0
@@ -883,6 +958,9 @@ class Simulation private constructor(
     private fun chemTick() {
         val w = water
         val dtMin = CHEM_DT / 60
+        // slow biology on the game clock (lifePace); everything else in this tick stays on the sim clock
+        val lifeDt = CHEM_DT * lifePace
+        val lifeMin = dtMin * lifePace
         val light = LightSchedule.intensity(lightCh)
         cachedSinceOn = lights.minutesSinceLightsOn(simTimeSec)
         cachedUntilOff = if (cachedSinceOn != null) lights.minutesUntilLightsOff(simTimeSec) else null
@@ -893,10 +971,10 @@ class Simulation private constructor(
         var fecalBio = 0.0
         for (o in organisms) if (o.alive && o.isFish && !o.sleeping) fecalBio += Math.pow(o.massG, 0.8) * HealthModel.metabolicMult(w.s.tempC)
         w.fecalBioIndex = fecalBio
-        repro.step(CHEM_DT)
-        brood.step(CHEM_DT)
-        SexRoles.step(organisms, CHEM_DT)   // protogynous / bidirectional sex roles (life_stages.md)
-        shrimpBreeding.step(CHEM_DT / 60.0)
+        repro.step(lifeDt)
+        brood.step(lifeDt)
+        SexRoles.step(organisms, lifeDt)   // protogynous / bidirectional sex roles (life_stages.md)
+        shrimpBreeding.step(lifeMin)
         w.lightIntensity = light
         w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
@@ -934,20 +1012,22 @@ class Simulation private constructor(
                 infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure, healthGrace)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
-            if (o.alive) growth(o, dtMin)
+            if (o.alive) growth(o, lifeMin)
         }
-        coralGrowth(dtMin)
-        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON)
+        coralGrowth(lifeMin)
+        if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON, lifeMin)
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
             val tissueBefore = c.tissue
-            CoralSim.step(c, w.s, light * w.clarity, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength, w.bacteria.coralPathogenStress)
+            // My tank: each colony sees the light where it sits (deeper and under ledges is dimmer; CoralSpots)
+            val here = if (bareScape) localLight(c) else 1.0
+            CoralSim.step(c, w.s, light * w.clarity * here, cachedSinceOn, cachedUntilOff, dtMin, simTimeSec, pendingEventsSink, flowStrength, w.bacteria.coralPathogenStress)
             // Dying coral tissue decomposes (die-off cascade, research 05 §11)
             if (c.tissue < tissueBefore) w.addDetritusTanGrams((tissueBefore - c.tissue) * c.kind.biomass * CORAL_TAN_PER_COLONY)
             c.swayPhase = (c.swayPhase + dtMin * 60 * 0.3) % (2 * Math.PI)
         }
-        crustaceanMolts(dtMin)
+        crustaceanMolts()
         dinoToxin(dtMin)
         flatwormToxin()
         // co-residents grow familiar at 0.15/day even while the behaviour layer is off (06 §3.3), and fear, grudges and
@@ -961,7 +1041,7 @@ class Simulation private constructor(
         }
         asterinaPopulation()
         invertEcology.step(dtMin)
-        anemones.step(dtMin)
+        anemones.step(dtMin, lifeMin)
         corpses(dtMin)
         autoFeed()
         maintenance()
@@ -1005,19 +1085,77 @@ class Simulation private constructor(
         return n
     }
 
+    /** Doses in the last day (sim s, param, amount): the care button keeps inside a day's safe swing. */
+    private val doseLog = ArrayList<Triple<Double, String, Double>>()
+    /** Last care-button feeding (sim s). */
+    var reefCareAt = -1e12
+
+    fun dosedLast24h(id: String): Double {
+        doseLog.removeAll { simTimeSec - it.first > 86400 }
+        var n = 0.0
+        for (d in doseLog) if (d.second == id) n += d.third
+        return n
+    }
+
+    /** Tank Health's care button ([CoralCare]): doses and feeds what the corals and inverts need now. */
+    private fun reefCare() {
+        var fed = 0.0; var n = 0
+        for (c in corals) if (c.tissue > 0.1 && c.kind != CoralKind.MACRO && c.kind != CoralKind.AIPTASIA) { fed += c.fed; n++ }
+        val live = organisms.filter { it.alive }
+        val anemones = live.filter { it.brainKind == BrainKind.ANEMONE }
+        val dusters = live.filter { it.brainKind == BrainKind.FEATHER_DUSTER }
+        val plan = CoralCare.plan(
+            water.s, if (n == 0) Double.NaN else fed / n, anemones.size, dusters.size, live.count { CoralCare.isCrustacean(it.brainKind) },
+            (simTimeSec - reefCareAt) / 3600, ::dosedLast24h,
+        )
+        for (item in plan.items) when (item.kind) {
+            CoralCare.Kind.MAGNESIUM -> apply(Command.Dose("mg", item.amount))
+            CoralCare.Kind.CALCIUM -> apply(Command.Dose("ca", item.amount))
+            CoralCare.Kind.ALKALINITY -> apply(Command.Dose("alk", item.amount))
+            CoralCare.Kind.IODINE -> apply(Command.Dose("i", item.amount))
+            CoralCare.Kind.CORAL_FOOD -> apply(Command.Feed(FoodKind.CORAL_FOOD, FoodKind.CORAL_FOOD.typicalDoseGrams))
+            CoralCare.Kind.PHYTO -> { reefCareAt = simTimeSec; for (d in dusters) apply(Command.Feed(FoodKind.PLANKTON, FoodKind.PLANKTON.typicalDoseGrams, d.pos, target = true)) }
+            CoralCare.Kind.ANEMONE_FOOD -> { reefCareAt = simTimeSec; for (a in anemones) apply(Command.Feed(FoodKind.MYSIS, FoodKind.MYSIS.typicalDoseGrams * 0.3, a.pos, target = true)) }
+        }
+    }
+
     /** Colony growth, Kenya branch drops and neighbour competition (CoralGrowth; coverage gaps C-1, C-2). */
     private fun coralGrowth(dtMin: Double) {
         if (corals.isEmpty()) return
         CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
         val born = ArrayList<Coral>()
         val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
-        for (c in corals) {
+        for (i in corals.indices) {
+            val c = corals[i]
+            if (c.tissue <= CoralHealth.DEAD_TISSUE) continue
             CoralGrowth.step(c, water.s, rock, growthRng, dtMin, kenyas + born.size) { "${c.id}~${nextFragId()}" }?.let { born += it }
+            StonyCorals.developSweepers(c, corals, dtMin)
+            // zoas and clove bud along runners, mushrooms split, leathers bud (coral_health §3)
+            if (CoralHealth.profile(c.species).spreadEveryDays > 0 && c.size >= CoralHealth.profile(c.species).spreadMinSize) {
+                val own = corals.count { it.species.id == c.species.id && it.tissue > CoralHealth.DEAD_TISSUE } + born.count { it.species.id == c.species.id }
+                if (corals.size + born.size >= Stocking.MAX_CORALS) continue
+                CoralHealth.maybeSpread(c, CoralGrowth.vigor(c, water.s), rock, spreadRng, dtMin, own, corals) { "${c.id}~${nextFragId()}" }?.let { born += it }
+            }
         }
         for (f in born) {
             corals += f
             pendingEventsSink += SimEvent.CoralSpawned(f.id.substringBefore('~'), f.id, simTimeSec)
         }
+        coralDeaths()
+    }
+
+    /** A colony whose tissue is gone is reported once and cleared away [CoralHealth.CLEAR_DAYS] later (aiptasia stay for their own model). */
+    private fun coralDeaths() {
+        var clear = false
+        for (c in corals) {
+            if (c.kind == CoralKind.AIPTASIA || c.tissue > CoralHealth.DEAD_TISSUE) continue
+            if (c.diedAt.isNaN()) {
+                c.diedAt = simTimeSec
+                val cause = if (c.need >= 0) CoralNeed.entries[c.need].words else "it was too stressed for too long"
+                pendingEventsSink += SimEvent.CoralDied(c.id, c.nickname.ifBlank { c.species.common }, cause, simTimeSec)
+            } else if (simTimeSec - c.diedAt > CoralHealth.CLEAR_DAYS * 86400) clear = true
+        }
+        if (clear) corals.removeAll { it.kind != CoralKind.AIPTASIA && !it.diedAt.isNaN() && simTimeSec - it.diedAt > CoralHealth.CLEAR_DAYS * 86400 }
     }
 
     /** Collects events from the health/coral models; flushed to the log once per tick. */
@@ -1035,8 +1173,10 @@ class Simulation private constructor(
     private fun growth(o: Organism, dtMin: Double) {
         val g = o.species.growthCmPerYear
         if (g <= 0 || o.lengthCm >= o.species.maxLengthCm) return
-        val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < 450 && o.lengthCm > 15) 0.3 else 1.0
-        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt
+        val stunt = if (o.brainKind == BrainKind.TANG && water.s.volumeL < LifeCycle.minVolumeL(o) && o.lengthCm > 0.6 * o.species.typicalAdultCm) 0.3 else 1.0
+        // My tank's game pace: youngsters shoot up to near adult size (where they can breed) in a week or two of play
+        val young = if (lifePace > 1.0 && o.lengthCm < LifePace.YOUNG_UNTIL * o.species.typicalAdultCm) LifePace.YOUNG_BOOST else 1.0
+        o.lengthCm += g / (365 * 1440) * dtMin * o.health * stunt * young
     }
 
     /**
@@ -1076,6 +1216,8 @@ class Simulation private constructor(
                 // filter feeders and detritivores live partly on detritus / bacterioplankton
                 BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.NASSARIUS ->
                     o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
+                // the flame scallop lives on phytoplankton only (research 42 §2.4)
+                BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1127,6 +1269,8 @@ class Simulation private constructor(
                 CoralKind.MUSHROOM -> shroom += 5 * open
                 // leather polyps are small particle feeders (est.; tee_tank_photos.md)
                 CoralKind.LEATHER -> small += 80 * open
+                // Euphyllia and the meaty LPS catch pods and plankton with their tentacles, most at night (est.)
+                CoralKind.EUPHYLLIA, CoralKind.LPS -> small += 60 * (open + c.tentacles)
                 CoralKind.MACRO -> macro += 0.5 * c.tissue
                 else -> {}
             }
@@ -1163,17 +1307,20 @@ class Simulation private constructor(
         }
     }
 
-    private fun crustaceanMolts(dtMin: Double) {
+    /** Molts come every few game weeks ([lifeDays]); the soft-shell days after one stay on the sim clock. */
+    private fun crustaceanMolts() {
         for (o in organisms) {
             if (!o.alive) continue
             val (lo, hi, dur) = when (o.brainKind) {
                 // research 12: adult intermolt ≈ 25–26 d at 26 °C (S); Q10 = 2 temperature scaling (D)
                 BrainKind.BANDED_SHRIMP -> ShrimpBreeding.stenopusIntermoltDays(water.s.tempC).let { Triple(0.92 * it, 1.08 * it, 36.0) }
                 BrainKind.CLEANER_SHRIMP -> Triple(21.0, 42.0, 36.0)
+                // research 42 §1.4: small Lysmata molt every 1-3 weeks and hide about a day after [E]
+                BrainKind.PEPPERMINT_SHRIMP -> Triple(10.0, 21.0, 24.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 else -> continue
             }
-            if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
+            if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
             if (!o.molting && simTimeSec >= o.nextMoltAt) {
                 o.molting = true; o.moltUntil = simTimeSec + dur * 3600; o.lastMoltAt = simTimeSec
                 val shellPos = rock.clampToWater(o.pos.withY(rock.sandTopCm + 0.3) + Vec3(rng.signed() * 4, 0.0, 4.0), 2.0).withY(rock.sandTopCm + 0.3)
@@ -1185,7 +1332,7 @@ class Simulation private constructor(
                 // failed molts are more likely with low Ca/Mg/iodine (research 04 §4C)
                 val bad = (water.s.ca < 360 || water.s.mg < 1150 || water.s.i < 0.02)
                 if (bad && rng.chance(0.25)) HealthModel.kill(o, "failed molt", simTimeSec, pendingEventsSink)
-                o.nextMoltAt = simTimeSec + rng.range(lo, hi) * 86400
+                o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
             }
         }
     }
@@ -1194,7 +1341,7 @@ class Simulation private constructor(
         val stars = organisms.filter { it.alive && it.brainKind == BrainKind.ASTERINA }
         if (stars.isEmpty() || stars.size >= ASTERINA_CAP) return
         // fissiparity: each healthy star splits on average every ~30 days
-        for (s in stars) if (s.health > 0.8 && s.hunger < 0.6 && rng.chance(1.0 / (30 * 1440))) {
+        for (s in stars) if (s.health > 0.8 && s.hunger < 0.6 && rng.chance(lifePace / (30 * 1440))) {
             val child = addFromSeed(LivestockSeed(s.species.id, s.nickname.substringBefore(" #") + " #" + (stars.size + 1), s.lengthCm * 0.6))
             child.placeAt(s.pos + Vec3(rng.signed() * 2, 0.0, rng.signed() * 2), s.heading)
             break
@@ -1273,7 +1420,7 @@ class Simulation private constructor(
     fun feedPoint(anchor: String?): Vec3 = when (anchor) {
         // Tee feeds by hand at the back middle, right beside the return outlet (video T97 0:01-0:03): the return jet then
         // sweeps the pinch forward and sideways before it sinks
-        null -> rock.anchors.pos("HAND_FEED", HAND_FEED).withY(rock.waterLevelCm - 0.3)
+        null -> rock.anchors.pos("HAND_FEED", shape.map(HAND_FEED)).withY(rock.waterLevelCm - 0.3)
         "CAVE_EEL" -> rock.anchors.pos("CAVE_EEL", Vec3(62.0, 3.8, 32.5)) + Vec3(-2.0, 7.0, 5.0)
         "DUSTER_TUBE" -> rock.anchors.pos("DUSTER_TUBE", Vec3(86.0, 4.5, 27.3)) + Vec3(2.0, 12.0, 1.0)
         else -> rock.anchors.pos(anchor, Vec3(41.0, rock.waterLevelCm - 6, 26.0))
@@ -1346,7 +1493,11 @@ class Simulation private constructor(
                     emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
                 }
             is Command.AddPestControl -> when (c.controller) {
-                PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
+                // real peppermint shrimp now (research 42): they go straight onto the rock and hunt the polyps themselves
+                PestController.PEPPERMINT_SHRIMP -> if (c.count > 0) {
+                    species.ensure(AiptasiaModel.PEPPERMINT_ID)
+                    repeat(c.count) { addFromSeed(LivestockSeed(AiptasiaModel.PEPPERMINT_ID, "Peppermint", 0.0)) }
+                } else pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
             is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
@@ -1356,7 +1507,9 @@ class Simulation private constructor(
                 if (drops.isNotEmpty()) touchMemory.fed()
             }
             is Command.WaterChange -> { if (c.fraction >= CareLog.MIN_CHANGE) careLog.waterChanges++; water.waterChange(c.fraction, c.mix) }
+            is Command.ReefCare -> reefCare()
             is Command.Dose -> {
+                doseLog += Triple(simTimeSec, c.paramId.lowercase(), c.delta)
                 water.dose(c.paramId, c.delta)
                 // the dose enters at the HOB return and spreads through the flow before it is well mixed
                 fluid?.let { f -> doseTracerParam = c.paramId; f.injectDose(rock.anchors.pos("HOB_OUTFLOW", Vec3(73.0, rock.waterLevelCm - 1, 3.0)) + Vec3(0.0, -2.0, 4.0), c.delta, 1.0) }
@@ -1370,7 +1523,12 @@ class Simulation private constructor(
                 // new arrivals enter at the surface like a release from the acclimation cup
                 if (o.isFish) o.placeAt(Vec3(rock.lengthCm / 2 + rng.signed() * 10, rock.waterLevelCm - 4, rock.widthCm * 0.6), Vec3(rng.signed(), 0.0, rng.signed()))
             }
-            is Command.Breed -> Brood.Act.entries.firstOrNull { it.name == c.act }?.let { brood.act(it) }
+            is Command.Breed -> {
+                // "ACT" for the clowns, "ACT:<spec key>" for the other breeding species (Brood.id)
+                val name = c.act.substringBefore(':')
+                val spec = BroodSpecs.byKey(c.act.substringAfter(':', BroodSpecs.CLOWN.key)) ?: BroodSpecs.CLOWN
+                Brood.Act.entries.firstOrNull { it.name == name }?.let { brood.act(it, spec) }
+            }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
             is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
@@ -1394,6 +1552,7 @@ class Simulation private constructor(
             is Command.FloatBag -> bags.float(this, c.speciesId, c.count, c.size, c.sizeCm, c.x, c.z)
             is Command.NetOut -> net.request(this, c.id)
             is Command.HurryBags -> { bags.hurry = c.on && bags.floating > 0; if (c.openNow) bags.openAll() }
+            is Command.PlaceCoral -> coralPicks.place(this, c.spot)
             is Command.SetSpeed -> speed = c.speed
             is Command.ResetToReality -> resetTo(c.water, c.livestock)
             is Command.SetSize -> organisms.firstOrNull { it.id == c.id }?.let { it.lengthCm = c.sizeCm.coerceIn(0.5, it.species.maxLengthCm * 1.2) }
@@ -1588,7 +1747,7 @@ class Simulation private constructor(
             if (d > 30) continue
             var s = o.skittishness * (1 - d / 30) * (if (night) 1.5 else 1.0) * StressModel.skittishMult(o)
             // a wrasse in its mucus cocoon needs twice the disturbance to wake (06 §5.5)
-            if (o.sleeping && o.brainKind == BrainKind.WRASSE) s *= 0.5
+            if (o.sleeping && (o.brainKind == BrainKind.WRASSE || o.brainKind == BrainKind.FAIRY_WRASSE && o.cocoon > 0.5)) s *= 0.5
             o.startle = max(o.startle, s)
             StressModel.addSocial(o, TAP_SOCIAL * s)
             agents[o]?.brain?.onTap(agents[o]!!.ctx, point, s)
@@ -1599,6 +1758,16 @@ class Simulation private constructor(
     val submarine = Submarine()
     /** Acclimation bags floating in the tank (sandbox Add life, [Command.FloatBag]). */
     val bags = AcclimationBags()
+    /** Corals out of their bag waiting for the keeper to pick a spot (My tank, [Command.PlaceCoral]). */
+    val coralPicks = CoralPicks()
+    /** [CoralSpots.lightAt] for [c], cached until it or the rockwork moves. */
+    private fun localLight(c: Coral): Double {
+        val rev = rockRevision()
+        if (c.lightHere.isNaN() || c.lightAtRev != rev) { c.lightHere = CoralSpots.lightAt(rock, c.pos, c.normal); c.lightAtRev = rev }
+        return c.lightHere
+    }
+    /** Changes whenever rocks move, are added or taken out (spot suggestions are recomputed then). */
+    fun rockRevision(): Long = rockPhysics?.version ?: 0L
     /** The fish net that takes dead animals out ([Command.NetOut]). */
     val net = FishNet()
     val subSense = com.reeflive.core.ai.SubmarineSense()
@@ -1794,7 +1963,7 @@ class Simulation private constructor(
         setFlow(true)
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); brood.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
-        submarine.reset(); subSense.clear(); bags.clear(); net.clear()
+        submarine.reset(); subSense.clear(); bags.clear(); coralPicks.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
         lights.forcedOn = null; lights.intensityOverride = null
         predationEnabled = config.predationEnabled
@@ -1808,10 +1977,14 @@ class Simulation private constructor(
         val id = seed.id.ifBlank { "${sp.id}#${idCounter++}" }
         if (sp.isCoral) {
             val a = seed.placement?.let { rock.anchors[it] ?: rock.anchors["coral_$it"] }
-                ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
-            val pos = (a?.pos ?: Vec3(60.0, 10.0, 20.0)) + (seed.offset ?: Vec3.ZERO)
-            val normal = if (seed.offset != null) Vec3.Y else a?.normal ?: Vec3.Y
-            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, normal, rng.nextDouble() * 6.28, seed.offset ?: Vec3.ZERO)
+                ?: if (sp.coralKind.stony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
+            // a stony coral has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
+            val offset = seed.offset ?: if (a == null && sp.coralKind.stony)
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                else null
+            val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
+            val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y
+            corals += Coral(id, sp, seed.nickname, a?.name ?: "", pos, normal, rng.nextDouble() * 6.28, offset ?: Vec3.ZERO)
             return Organism(id, sp, 1.0, seed.nickname, null, rng.fork(id.hashCode().toLong()))   // placeholder (not added)
         }
         val size = if (seed.sizeCm > 0) seed.sizeCm else sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm)
@@ -1912,6 +2085,7 @@ class Simulation private constructor(
         buildSnapshot().copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             bareScape = bareScape,
+            shape = shape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
             rockPoses = rockPoses(),
             rockVersion = rockPhysics?.version ?: 0L,
@@ -1920,6 +2094,7 @@ class Simulation private constructor(
             brood = brood.view,
             builtRocks = builtRocks(),
             rockSdf = rock.dynamic?.takeIf { it.active },
+            coralPick = coralPicks.pose(this),
         ).let { s ->
             if (!bags.any) s
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
@@ -1974,6 +2149,7 @@ class Simulation private constructor(
             },
             gusts = gustArray(),
             care = water.careState(),
+            reefCareAt = reefCareAt,
         )
     }
 
@@ -2078,7 +2254,7 @@ class Simulation private constructor(
         /** [Coral.fed] gained per caught particle and its e-folding time (≈ 2 days). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_PER_CATCH = 0.08
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_DECAY_MIN = 2 * 1440.0
-        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
+        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }
 }

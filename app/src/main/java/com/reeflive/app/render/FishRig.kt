@@ -26,6 +26,8 @@ class FishRig(val id: String) {
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
     var alive = true; var visible = true; var posture = 0
+    /** Fairy wrasse: male flash display 0..1 (fins flared, colours up); mucus cocoon 0..1 around a sleeping fish. */
+    var display = 0f; var cocoon = 0f
     /** Still riding in an acclimation bag: drawn, but not pickable. */
     var bagged = false
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
@@ -81,6 +83,7 @@ class FishRig(val id: String) {
         eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t, APPENDAGE_WRAP)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
         alive = b.alive; visible = b.visible; posture = b.posture; bagged = b.bagged
+        display = lerp(pa.display, b.display, t); cocoon = lerp(pa.cocoon, b.cocoon, t)
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
         bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
         lerpLimbs(if (pa.limbs.size == b.limbs.size) pa.limbs else b.limbs, b.limbs, t)
@@ -100,7 +103,7 @@ class FishRig(val id: String) {
         when (brain) {
             "EEL", "ENGINEER_GOBY" -> { envExp = 1.1f; envHead = 0.25f }
             "CARDINAL", "DOTTYBACK", "FIREFISH" -> { envExp = 2.4f; envHead = 0.05f }
-            "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE", "CHROMIS" -> { envExp = 3.2f; envHead = 0.03f }
+            "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE", "FAIRY_WRASSE", "CHROMIS" -> { envExp = 3.2f; envHead = 0.03f }
             "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
             else -> { envExp = 2f; envHead = 0.1f }
         }
@@ -118,7 +121,7 @@ class FishRig(val id: String) {
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = 0f
         pectoral = 0.6f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
-        alive = true; visible = true; posture = 0; bagged = false
+        alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0; fade = 0f
         envExp = 2f; envHead = 0.1f; envBrain = null
@@ -135,7 +138,7 @@ class FishRig(val id: String) {
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage
         pectoral = 0f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
-        alive = true; visible = true; posture = 0; bagged = false
+        alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
         limbCount = 0
         envExp = 2f; envHead = 0.1f; envBrain = null

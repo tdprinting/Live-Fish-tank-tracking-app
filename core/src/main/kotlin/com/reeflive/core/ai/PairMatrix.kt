@@ -13,6 +13,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
+/** Row kinds finer than a BrainKind ([PairMatrix.subKind]). */
+private val SUB_KINDS = setOf("ZEBRASOMA", "XANTHURUM", "FAIRY_WRASSE_M")
+
 /** One row of `sim/interactions.json` (research 06 §5.3). See the file's `doc` field for units. */
 @Serializable
 data class PairRow(
@@ -53,6 +56,10 @@ data class PairRow(
     val killDusk: Double = 0.0,
     val evidence: String = "",
 ) {
+    /** The actor / a target is a [PairMatrix.subKind] (resolved once, so plain rows keep the cheap kind compare). */
+    @kotlinx.serialization.Transient val subActor: Boolean = actor in SUB_KINDS
+    @kotlinx.serialization.Transient val subTargets: Boolean = targets.any { it in SUB_KINDS }
+
     val displayOnly: Boolean get() = type == "standoff" || type == "ignore" || chaseLen <= 0.0 || bout == "MUTUAL_DISPLAY" || bout == "ORIENT_HOP"
 }
 
@@ -87,8 +94,27 @@ object PairMatrix {
     fun actorMatches(r: PairRow, o: Organism, sim: Simulation): Boolean = when (r.actor) {
         "CLOWN_F" -> o.brainKind == BrainKind.CLOWN && ClownQueue.isDominant(o, sim)
         "CLOWN_M" -> o.brainKind == BrainKind.CLOWN && !ClownQueue.isDominant(o, sim)
-        else -> o.brainKind.name == r.actor && (r.actorSpecies.isEmpty() || o.species.id in r.actorSpecies)
+        else -> (if (r.subActor) subKind(r.actor, o) == true else o.brainKind.name == r.actor) &&
+            (r.actorSpecies.isEmpty() || o.species.id in r.actorSpecies)
     }
+
+    /**
+     * Row kinds finer than a [BrainKind] (research 42): ZEBRASOMA = the sailfin tangs (yellow, purple), XANTHURUM = the
+     * purple tang alone, FAIRY_WRASSE_M = a male fairy wrasse (or a female far through the change). Null for a plain kind.
+     */
+    fun subKind(k: String, o: Organism): Boolean? = when (k) {
+        "ZEBRASOMA" -> o.brainKind == BrainKind.TANG && o.species.zebrasoma
+        "XANTHURUM" -> o.brainKind == BrainKind.TANG && o.species.id == XANTHURUM_ID
+        "FAIRY_WRASSE_M" -> o.brainKind == BrainKind.FAIRY_WRASSE && FairyWrasseBrain.isMale(o)
+        else -> null
+    }
+
+    /** A brain gets the bout rows its kind (or one of its [subKind]s) can act in; the sub-kind rows are checked again each scan. */
+    fun mayAct(r: PairRow, o: Organism): Boolean =
+        r.actor == o.brainKind.name || o.brainKind == BrainKind.CLOWN && r.actor.startsWith("CLOWN_") ||
+            r.actor == "FAIRY_WRASSE_M" && o.brainKind == BrainKind.FAIRY_WRASSE || r.subActor && subKind(r.actor, o) == true
+
+    const val XANTHURUM_ID = "zebrasoma_xanthurum"
 
     fun targetMatches(r: PairRow, actor: Organism, t: Organism): Boolean {
         if (t === actor || !t.alive || !t.visible) return false
@@ -100,7 +126,7 @@ object PairMatrix {
                 // the cleaner is "never chased sustainedly because of the cleaning role" (06 §3.1, S:Cheney08);
                 // rows that do target it name it (dottyback, other wrasse)
                 "ANY_FISH" -> t.isFish && t.brainKind != BrainKind.WRASSE
-                else -> t.brainKind.name == k
+                else -> if (r.subTargets) subKind(k, t) ?: (t.brainKind.name == k) else t.brainKind.name == k
             }
         }
         if (!kindOk) return false
@@ -111,6 +137,7 @@ object PairMatrix {
             "gobyJuvenile" -> t.brainKind != BrainKind.ENGINEER_GOBY || t.lengthCm < GobyBrain.ADULT_CM
             "notCleaning" -> !isCleaning(t)
             "sleeping" -> t.sleeping
+            "notZebrasoma" -> !t.species.zebrasoma
             else -> true
         }
     }
@@ -127,6 +154,7 @@ object PairMatrix {
         BrainKind.TANG -> 7.0 + max(0.0, (o.lengthCm - 7.5) / 2.0)
         BrainKind.HAWK -> 6.0
         BrainKind.WRASSE -> 4.0
+        BrainKind.FAIRY_WRASSE -> 3.5
         BrainKind.ENGINEER_GOBY -> 3.0
         BrainKind.PEEKER_BLENNY -> 2.0
         BrainKind.CARDINAL -> 1.0
@@ -398,6 +426,10 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                     return
                 }
                 if (t.brainKind == BrainKind.TANG) t.spineFlare = 1.0   // 06 §5.4 SPINE_FLARE reaction
+                // a sailfin tang squaring up raises its fins and turns its scalpel toward the rival (research 42 §2-3)
+                if (o.brainKind == BrainKind.TANG) o.spineFlare = 1.0
+                // a male fairy wrasse facing another male flashes at him (research 42 §1)
+                if (r.actor == "FAIRY_WRASSE_M") o.display = 1.0
                 val displayS = if (r.displayOnly) 1.0 else a.latency
                 if (phaseT >= displayS) {
                     phase = if (r.displayOnly && !dart) 2 else 1; phaseT = 0.0; travelled = 0.0
@@ -410,7 +442,13 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 if (o.isFish) out.seek(t.pos, speed, arrive = 0.3 * c.L, urgency = 0.85)
                 else { out.crawl = true; out.seek(t.pos, speed, arrive = 0.5, urgency = 0.85) }
                 val contact = o.pos.distanceTo(t.pos) < 0.3 * c.L + 0.5 * t.lengthCm + 0.5
-                if (contact && !r.displayOnly) { nip = true; o.mouth = 1.0 }
+                if (contact && !r.displayOnly) { nip = true; if (r.bout == "LATERAL_TAIL_SLAP") o.spineFlare = 1.0 else o.mouth = 1.0 }
+                // a tail slap: alongside the rival it swings broadside and lashes the tail, spine out (research 42 §2-3)
+                if (r.bout == "LATERAL_TAIL_SLAP" && o.pos.distanceTo(t.pos) < c.L + 0.5 * t.lengthCm) {
+                    out.faceDir = (toT cross Vec3.Y).normalized(o.heading)
+                    out.tailMul = 2.5; out.rollExtra = 0.2
+                    o.spineFlare = 1.0
+                }
                 val limit = if (r.displayOnly) 2 * c.L else len
                 // a host defender breaks off once the intruder is out of the halo: it does not leave its anemone [I]
                 val fled = r.anchor == "host" && t.pos.distanceTo(anchorOf(c, r)) > r.triggerRadius + r.triggerBL * c.L

@@ -83,6 +83,12 @@ enum class PodPredator(
     SAND_GOBY(100.0, true, false, true, doubleArrayOf(0.2, 0.0, 0.1, 0.6, 0.1, 0.3, 0.6, 0.2, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0), sandAccess = 1.0),
     BLENNY(50.0, true, false, true, doubleArrayOf(0.3, 0.0, 0.0, 0.1, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
     CLOWN(60.0, true, false, true, doubleArrayOf(0.4, 0.6, 0.4, 0.1, 0.0, 0.3, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+    /**
+     * Fairy wrasse (*Cirrhilabrus*, research 42 §1): picks zooplankton (copepods, mysids, larvae) out of the current by day
+     * in the column above the reef (FishBase trophic level 3.1). Intake per fish at the cardinal's order for a smaller
+     * body (est.); a good mid-water searcher, so a cardinal-like half saturation.
+     */
+    FAIRY_WRASSE(200.0, true, false, true, doubleArrayOf(0.6, 1.0, 1.0, 0.4, 0.3, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.0, hiddenAccess = 0.0, halfSat = 10000.0),
     TANG(10.0, true, false, true, doubleArrayOf(0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
     /** Mandarin-class specialist (research 10 §3.3 "predator overgrazing"): 1,000-3,000 pods a day, picks into the film. */
     MANDARIN(2000.0, true, false, true, doubleArrayOf(1.0, 0.5, 0.8, 0.3, 0.2, 0.3, 0.5, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.5, hiddenAccess = 0.15, halfSat = 800.0),
@@ -126,12 +132,13 @@ enum class PodPredator(
                 BrainKind.CLOWN -> CLOWN
                 BrainKind.TANG -> TANG
                 BrainKind.BANDED_SHRIMP -> BANDED_SHRIMP
-                BrainKind.CLEANER_SHRIMP -> CLEANER_SHRIMP
+                BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> CLEANER_SHRIMP
                 BrainKind.HERMIT -> HERMIT
                 BrainKind.SALLY_CRAB -> CRAB
                 BrainKind.BRITTLE_STAR -> BRITTLE_STAR
                 BrainKind.DIAMOND_GOBY -> SAND_SIFTER
                 BrainKind.LEOPARD_WRASSE -> LEOPARD_WRASSE
+                BrainKind.FAIRY_WRASSE -> FAIRY_WRASSE
                 BrainKind.BOBTAIL_SQUID -> BOBTAIL_SQUID
                 else -> null
             }
@@ -318,6 +325,9 @@ class MicrofaunaModel(private val config: TankConfig) {
      * weighted pod-equivalents over the same sum at the reference capacity. Feeds the leopard wrasse's picks.
      */
     fun rockPreyIndex(): Double = preyIndex(PodPredator.LEOPARD_WRASSE, MicroHabitat.ROCK, MicroHabitat.GLASS, MicroHabitat.SAND)
+
+    /** Zooplankton a fairy wrasse finds drifting in the water column now, relative to a mature tank (feeds its column picks). */
+    fun columnPreyIndex(): Double = preyIndex(PodPredator.FAIRY_WRASSE, MicroHabitat.COLUMN)
 
     /** [pt]-weighted pod-equivalents in [habitats] now over the same sum at the reference capacity (0 = sterile, ≈ 1 = mature). */
     fun preyIndex(pt: PodPredator, vararg habitats: MicroHabitat): Double {

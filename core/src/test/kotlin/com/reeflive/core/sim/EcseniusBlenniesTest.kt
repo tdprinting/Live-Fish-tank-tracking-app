@@ -61,8 +61,8 @@ class EcseniusBlenniesTest {
 
     @Test
     fun midasForagesUpInTheWaterWhileTheBicolorStaysOnTheRock() {
-        val (midF, mb) = highShare("ecsenius_midas", 3L)
-        val (bicF, _) = highShare("ecsenius_bicolor", 3L)
+        val (midF, mb) = highShare("ecsenius_midas", 4L)
+        val (bicF, _) = highShare("ecsenius_bicolor", 4L)
         assertTrue("midas open-water bouts ${mb.midwaterBouts} (high $midF, bicolor $bicF)", mb.midwaterBouts >= 5)
         assertTrue("midas in open water $midF vs bicolor $bicF", midF > 0.15 && midF > 3 * bicF)
     }

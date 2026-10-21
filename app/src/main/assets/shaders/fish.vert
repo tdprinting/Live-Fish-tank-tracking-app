@@ -16,7 +16,7 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
@@ -331,6 +331,42 @@ void squidPose(float part, float hinge, inout vec3 local) {
     }
 }
 
+// Flame scallop (motion mode 7, core ClamRig): uLimb[0] = (tentacle wave phase, gape 0..1, extension 0..1, swim
+// trail 0..1), uLimb[1].y = writhe. COLOR_0: r valve side (1 upper), g class (0 shell, 0.5 mantle, 1 tentacle),
+// b t along a tentacle, a phase seed. The valves turn about the hinge line (x -0.5, y 0, along Z); the mantle lip and
+// tentacles ride their valve, the tentacles retract toward the beak, writhe, and stream back (+X) while it swims.
+void clamPose(inout vec3 local, inout vec3 n) {
+    float side = aColor.r > 0.5 ? 1.0 : -1.0;
+    float cls = aColor.g;
+    float t = aColor.b;
+    float gape = clamp(uLimb[0].y, 0.0, 1.0);
+    float ext = clamp(uLimb[0].z, 0.0, 1.0);
+    float trail = clamp(uLimb[0].w, 0.0, 1.0);
+    if (cls > 0.25) {
+        vec2 d = local.xz - vec2(-0.43, 0.0);
+        vec2 dir = d / max(length(d), 1e-4);
+        // the mantle lip swells out past the margin as it opens to feed
+        float push = cls < 0.75 ? 0.025 * ext : 0.0;
+        if (cls > 0.75) {
+            // tentacles: draw back toward the beak, writhe (slow wave, own phase), stream back while swimming
+            push = -0.3 * t * (1.0 - ext);
+            float ph = 2.0 * PI * (uLimb[0].x + aColor.a) - 3.0 * t;
+            float w = (0.35 + 0.65 * uLimb[1].y) * t * ext;
+            local.xz += vec2(-dir.y, dir.x) * (0.05 * w * sin(ph));
+            local.y += side * 0.03 * w * cos(ph * 0.7);
+            local.x += trail * t * 0.18;
+            local.z *= 1.0 - 0.45 * trail * t;
+        }
+        local.xz += dir * push;
+    }
+    // valve angle: up to ~32 deg between the valves [E: photographs]; the lips open 70 % as far as their shell
+    float ang = side * gape * 0.28 * (cls > 0.25 ? 0.7 : 1.0);
+    vec2 r = local.xy - vec2(-0.5, 0.0);
+    float c = cos(ang), s = sin(ang);
+    local.xy = vec2(-0.5, 0.0) + vec2(c * r.x - s * r.y, s * r.x + c * r.y);
+    n.xy = vec2(c * n.x - s * n.y, s * n.x + c * n.y);
+}
+
 void main() {
     vec3 local = aPos;
     vec3 n = aNormal;
@@ -363,6 +399,17 @@ void main() {
             local = uEyePivot + vec3(c * r.x + s * r.z, r.y, -s * r.x + c * r.z);
             n = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
         }
+        vec3 wl = uSpine[0].xyz + qrot(uFrame[0], local * uScale);
+        vWorld = wl;
+        vNormal = normalize(qrot(uFrame[0], n));
+        vUv = aUv;
+        vColor = vec4(aColor.r, 0.0, aColor.ba);
+        gl_Position = uViewProj * vec4(wl, 1.0);
+        return;
+    }
+    if (mode > 6.5 && mode < 7.5) {
+        // flame scallop: a rigid shell at the organism, valves and fringe posed from the sim (no spine)
+        clamPose(local, n);
         vec3 wl = uSpine[0].xyz + qrot(uFrame[0], local * uScale);
         vWorld = wl;
         vNormal = normalize(qrot(uFrame[0], n));

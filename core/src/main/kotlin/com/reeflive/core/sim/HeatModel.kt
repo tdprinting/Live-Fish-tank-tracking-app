@@ -79,12 +79,12 @@ object HeatModel {
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
-        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> SHRIMP
+        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> SHRIMP
         BrainKind.ASTREA -> TURBO_SNAIL
         BrainKind.TANG -> TANG
         // chromis are damselfish like the clown (Pomacentridae; est.)
         BrainKind.CLOWN, BrainKind.CHROMIS, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.DOTTYBACK -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
@@ -99,10 +99,12 @@ object HeatModel {
         BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
+        // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)
+        BrainKind.FILE_CLAM -> TUBE_WORM
     }
 
     fun isSnail(kind: BrainKind) = kind == BrainKind.ASTREA || kind == BrainKind.NASSARIUS
-    fun isShrimp(kind: BrainKind) = kind == BrainKind.CLEANER_SHRIMP || kind == BrainKind.BANDED_SHRIMP
+    fun isShrimp(kind: BrainKind) = kind.isShrimp
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */

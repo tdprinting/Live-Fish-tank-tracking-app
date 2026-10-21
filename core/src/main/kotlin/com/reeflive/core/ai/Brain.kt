@@ -79,10 +79,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         // Shared layers for every brain: matrix-driven rivalry (research 05 §17) and the sick/moribund behavior.
         val extra = buildList {
             // research 06 pair matrix (territory triggers + display bouts); the generic rivalry only for animals without rows
-            val pairRows = PairMatrix.rows.filter { r ->
-                r.type != "predation" && r.type != "defensive" &&
-                    (r.actor == o.brainKind.name || o.brainKind == BrainKind.CLOWN && r.actor.startsWith("CLOWN_"))
-            }
+            val pairRows = PairMatrix.rows.filter { r -> r.type != "predation" && r.type != "defensive" && PairMatrix.mayAct(r, o) }
             if (pairRows.isNotEmpty()) add(PairBouts(this@SpeciesBrain, pairRows))
             else if (o.isFish && o.brainKind != BrainKind.ENGINEER_GOBY && o.brainKind != BrainKind.CARDINAL && o.brainKind != BrainKind.CHROMIS) add(Rivalry(this@SpeciesBrain))
             if (o.brainKind == BrainKind.CLOWN) add(Yield(this@SpeciesBrain))
@@ -128,6 +125,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         o.clock = c.t
         o.mouth *= exp(-dt * 5)
         o.spineFlare *= exp(-dt * 3)
+        o.display *= exp(-dt * 1.5)
         if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
@@ -302,7 +300,7 @@ object Predation {
             BrainKind.EEL -> when {
                 pred.posture == 3 -> L + 4.0                // head out of the den: only right in front of it
                 me.brainKind == BrainKind.WRASSE -> 2 * L
-                me.brainKind == BrainKind.BANDED_SHRIMP || me.brainKind == BrainKind.CLEANER_SHRIMP -> 12.0
+                me.brainKind.isShrimp -> 12.0
                 me.brainKind == BrainKind.HERMIT -> 8.0
                 me.brainKind == BrainKind.BRITTLE_STAR -> 4.0
                 me.isFish && me.brainKind != BrainKind.EEL -> 3 * L
@@ -311,8 +309,10 @@ object Predation {
             BrainKind.HAWK -> when (me.brainKind) {
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> 1.5 * L
                 BrainKind.CLEANER_SHRIMP -> 8.0
+                // a peppermint is small, out in the open at night, and a favourite hawkfish meal (research 42 §1.6 [M])
+                BrainKind.PEPPERMINT_SHRIMP -> 10.0
                 BrainKind.HERMIT -> 5.0
-                BrainKind.CARDINAL -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
+                BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
                 // research cephalopod_squid: a bobtail squid out of the sand is the size of the hawk's usual prey
                 BrainKind.BOBTAIL_SQUID -> if (me.posture == 5) 0.0 else 2.5 * L
@@ -330,11 +330,12 @@ object Predation {
         if (!prey.alive || prey === pred || prey.molting && !prey.visible) return 0.0
         return when (pred.brainKind) {
             BrainKind.EEL -> when (prey.brainKind) {
-                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> 1.0
+                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> 1.0
                 BrainKind.HERMIT -> 0.8
                 BrainKind.CARDINAL -> if (night) 0.5 else 0.1
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY, BrainKind.DOTTYBACK -> if (prey.posture == 3) 0.0 else 0.3
                 BrainKind.WRASSE -> if (night) 0.2 else 0.0
+                BrainKind.FAIRY_WRASSE -> if (night) 0.3 else 0.05
                 BrainKind.CLOWN -> 0.1
                 BrainKind.BRITTLE_STAR -> 0.1
                 else -> 0.0
@@ -347,9 +348,10 @@ object Predation {
             }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
+                BrainKind.PEPPERMINT_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.8 else 0.0
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0
                 BrainKind.HERMIT -> 0.4
-                BrainKind.CARDINAL -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
+                BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
                 BrainKind.BRITTLE_STAR -> 0.1
                 // research cephalopod_squid: an exposed bobtail squid is soft prey for a hawkfish (buried in the sand it is not found)
                 BrainKind.BOBTAIL_SQUID -> if (prey.posture == 5 || prey.lengthCm > 1.2 * pred.lengthCm) 0.0 else 0.5
@@ -372,6 +374,10 @@ fun Ctx.zoneY(f: Double) = rock.sandTopCm + f * (rock.waterLevelCm - rock.sandTo
 
 /** Clearance a swimmer keeps from rock (SIMULATION §4.3). */
 val Ctx.clearance: Double get() = 0.6 * o.collisionLength + 1.0
+
+/** A spot picked in Tee's 48 × 18 in tank, at the same place along and across this tank's glass (My tank builds). */
+fun Ctx.inTank(p: Vec3): Vec3 = if (rock.lengthCm == com.reeflive.core.sim.TankDims.LENGTH_CM && rock.widthCm == com.reeflive.core.sim.TankDims.DEPTH_CM) p
+    else Vec3(p.x * rock.lengthCm / com.reeflive.core.sim.TankDims.LENGTH_CM, p.y, p.z * rock.widthCm / com.reeflive.core.sim.TankDims.DEPTH_CM)
 
 /** Push a point into open water with at least [clear] cm to rock and a glass margin. */
 fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
