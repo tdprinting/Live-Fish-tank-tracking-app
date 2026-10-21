@@ -1,6 +1,10 @@
 package com.reeflive.core.geom
 
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.sin
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -273,7 +277,11 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         val mix = if (ov == null || ov.isEmpty()) 0.0 else overrideMix
         if (mix < 1.0) {
             if (rigid) for (i in 0 until POINTS) pos[i] = head - heading * (seg * i)
-            else walk(trail, 0, head, seg, pos)
+            else {
+                walk(trail, 0, head, seg, pos)
+                // not while the rock guard holds a re-laid shape or a den path is blending (those stations must match it)
+                if (!held && mix == 0.0 && bendSpread > 0.0) spreadBend(pos)
+            }
         }
         if (mix > 0.0) {
             // the path starts at the head: shift it so its first point coincides with the current head
@@ -283,6 +291,82 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             walk(shifted, 1, head, seg, dst)
             if (mix < 1.0) for (i in 0 until POINTS) pos[i] = pos[i].lerp(scratch[i], mix)
         }
+    }
+
+    /**
+     * How much of the head→tail bend is spread smoothly along the body (0 = the raw head trail, follow-the-leader).
+     * A fish does not trace its head's path like a train: entering a turn its whole body curls into one C while the
+     * rear is still on the old line (Gray 1933; Webb 1983; Wu et al. 2007, koi routine turns), so on the raw trail
+     * the front half bent and the back half stayed straight until it reached the corner. Eels keep most of the trail.
+     */
+    var bendSpread = 0.0
+    /** Where along the body (0 snout .. 1 tail) the spread bend peaks; stiff-headed fish bend behind the head. */
+    var bendPeak = 0.5
+    private val bendScratch = DoubleArray(POINTS * 4)
+
+    /**
+     * Redistributes the joint turns of [pos] (head→tail stations) toward a smooth profile peaked at [bendPeak], keeping
+     * the head segment, every segment length and the total turn (so the tail's direction is the trail's). Rotation
+     * vectors are summed in world space, exact for a bend in one plane and close for the gentle 3-D ones.
+     */
+    private fun spreadBend(pos: Array<Vec3>) {
+        val n = POINTS - 1
+        val b = bendScratch   // per segment: unit dir xyz, length
+        for (i in 0 until n) {
+            val dx = pos[i + 1].x - pos[i].x; val dy = pos[i + 1].y - pos[i].y; val dz = pos[i + 1].z - pos[i].z
+            val l = sqrt(dx * dx + dy * dy + dz * dz)
+            if (l < 1e-9) return
+            b[i * 4] = dx / l; b[i * 4 + 1] = dy / l; b[i * 4 + 2] = dz / l; b[i * 4 + 3] = l
+        }
+        // total turn and its weight sum
+        var rx = 0.0; var ry = 0.0; var rz = 0.0; var ra = 0.0; var ws = 0.0
+        for (j in 1 until n) {
+            val ax = b[(j - 1) * 4 + 1] * b[j * 4 + 2] - b[(j - 1) * 4 + 2] * b[j * 4 + 1]
+            val ay = b[(j - 1) * 4 + 2] * b[j * 4] - b[(j - 1) * 4] * b[j * 4 + 2]
+            val az = b[(j - 1) * 4] * b[j * 4 + 1] - b[(j - 1) * 4 + 1] * b[j * 4]
+            val sa = sqrt(ax * ax + ay * ay + az * az)
+            val ca = b[(j - 1) * 4] * b[j * 4] + b[(j - 1) * 4 + 1] * b[j * 4 + 1] + b[(j - 1) * 4 + 2] * b[j * 4 + 2]
+            if (sa > 1e-12) { val k = atan2(sa, ca) / sa; rx += ax * k; ry += ay * k; rz += az * k; ra += atan2(sa, ca) }
+            ws += bendWeight(j.toDouble() / n)
+        }
+        if (ra < 1e-4) return
+        val m = bendSpread
+        // rebuild from the head: each joint turns by the mix of its own turn and its share of the total
+        var px = b[0]; var py = b[1]; var pz = b[2]
+        var cx = pos[1].x; var cy = pos[1].y; var cz = pos[1].z
+        for (j in 1 until n) {
+            // own joint turn (from the raw segments)
+            val ux = b[(j - 1) * 4]; val uy = b[(j - 1) * 4 + 1]; val uz = b[(j - 1) * 4 + 2]
+            val vx = b[j * 4]; val vy = b[j * 4 + 1]; val vz = b[j * 4 + 2]
+            var ax = uy * vz - uz * vy; var ay = uz * vx - ux * vz; var az = ux * vy - uy * vx
+            val sa = sqrt(ax * ax + ay * ay + az * az)
+            val k = if (sa > 1e-12) atan2(sa, ux * vx + uy * vy + uz * vz) / sa else 0.0
+            val share = bendWeight(j.toDouble() / n) / ws
+            ax = (1 - m) * ax * k + m * rx * share; ay = (1 - m) * ay * k + m * ry * share; az = (1 - m) * az * k + m * rz * share
+            val ang = sqrt(ax * ax + ay * ay + az * az)
+            if (ang > 1e-12) {
+                // Rodrigues: rotate the previous rebuilt direction about (ax, ay, az) by ang
+                val kx = ax / ang; val ky = ay / ang; val kz = az / ang
+                val c = cos(ang); val s = sin(ang); val d = (kx * px + ky * py + kz * pz) * (1 - c)
+                val nx = px * c + (ky * pz - kz * py) * s + kx * d
+                val ny = py * c + (kz * px - kx * pz) * s + ky * d
+                val nz = pz * c + (kx * py - ky * px) * s + kz * d
+                val l = sqrt(nx * nx + ny * ny + nz * nz)
+                px = nx / l; py = ny / l; pz = nz / l
+            }
+            val len = b[j * 4 + 3]
+            cx += px * len; cy += py * len; cz += pz * len
+            pos[j + 1] = if (cx < boxMinX || cx > boxMaxX || cz < boxMinZ || cz > boxMaxZ)
+                Vec3(cx.coerceIn(boxMinX, boxMaxX), cy, cz.coerceIn(boxMinZ, boxMaxZ)) else Vec3(cx, cy, cz)
+        }
+    }
+
+    /** Spread-bend weight at body station [u]: sin² hump moved to peak at [bendPeak], ~0 at snout and tail tip. */
+    private fun bendWeight(u: Double): Double {
+        val p = bendPeak.coerceIn(0.2, 0.8)
+        val v = if (u < p) 0.5 * u / p else 0.5 + 0.5 * (u - p) / (1 - p)
+        val s = sin(PI * v)
+        return s * s + 0.02
     }
 
     /** Stations every [seg] cm along head → [poly][startIdx..], extended straight past its end. */
