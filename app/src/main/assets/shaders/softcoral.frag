@@ -17,6 +17,8 @@ uniform float uRoughness;
 uniform vec3 uEmissive;     // material fluorescence colour
 uniform float uExtension;
 uniform float uBleach;
+uniform vec3 uBleachTint;  // what bleached tissue fades to (per species)
+uniform float uDead;       // 1 - living tissue: receding colony
 uniform float uBrown;
 uniform float uAlphaCutoff;
 uniform vec3 uSssColor;
@@ -31,8 +33,19 @@ void main() {
     if (uAlgaeBloom < 0.02 || vColor.b > uAlgaeBloom * 1.25) discard;
 #endif
     if (uAlphaCutoff > 0.0 && alpha < uAlphaCutoff) discard;
-    albedo = mix(albedo, vec3(0.89), clamp(uBleach, 0.0, 1.0));
+    albedo = mix(albedo, uBleachTint, clamp(uBleach, 0.0, 1.0));
+    // receding: patches of a dying colony melt away (world-space noise), the edge of the living tissue goes dull
+    // a stony coral's skeleton (COLOR_0.a < 0.5) stays where the tissue has gone: bare white limestone
+    float bare = 0.0;
+    if (uDead > 0.001) {
+        float n = clamp((vnoise(vWorld * 0.45) * 0.7 + vnoise(vWorld * 1.7 + 5.0) * 0.3 - 0.5) * 2.4 + 0.5, 0.0, 1.0);
+        if (n < uDead * 1.02) {
+            if (vColor.a > 0.5) discard;
+            bare = 1.0;
+        } else albedo = mix(vec3(0.55, 0.5, 0.42), albedo, smoothstep(uDead, uDead + 0.12, n));
+    }
     albedo = mix(albedo, vec3(0.195, 0.102, 0.042), clamp(uBrown, 0.0, 1.0) * 0.4);
+    if (bare > 0.5) albedo = vec3(0.80, 0.78, 0.72) * (0.85 + 0.25 * vnoise(vWorld * 3.0));
 
     vec3 N = normalize(vNormal);
     vec3 V = normalize(uCamPos.xyz - vWorld);
@@ -63,7 +76,7 @@ void main() {
     float ndv = max(dot(Ng, V), 0.0);
     col += pow(1.0 - ndv, 2.5) * 0.35 * (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5 * albedo;
     // fluorescence: emissive scaled by blue light and extension (bleached tissue loses it)
-    col += uEmissive * uBlueFraction * lightIntensity() * mix(0.4, 1.0, uExtension) * (1.0 - uBleach) * 1.5;
+    col += uEmissive * uBlueFraction * lightIntensity() * mix(0.4, 1.0, uExtension) * (1.0 - uBleach) * (1.0 - bare) * 1.5;
     col = applyWater(col, vWorld);
     fragColor = vec4(tonemap(col), 1.0);
 }

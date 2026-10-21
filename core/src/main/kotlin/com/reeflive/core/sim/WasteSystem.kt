@@ -145,9 +145,12 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
         water.wasteToDetritus(rest); mulmPpm += rest
     }
 
+    /** [HOB_INTAKE] on this tank's glass (My tank builds of other sizes). */
+    private val intakeAt: Vec3 by lazy { TankShape(rock.lengthCm, rock.heightCm, rock.widthCm).map(HOB_INTAKE) }
+
     private fun stepPellets(dt: Double, t: Double, tempC: Double, organisms: List<Organism>, water: WaterSim, hobOn: Boolean) {
         if (count == 0) return
-        val intake = rock.anchors.pos("HOB_INTAKE", HOB_INTAKE)
+        val intake = rock.anchors.pos("HOB_INTAKE", intakeAt)
         val leachK = 1 - exp(-dt * LEACH_PER_H / 3600)
         val breakdownS = BREAKDOWN_H_25C * Q10.pow((25.0 - tempC) / 10.0) * 3600
         var leached = 0.0

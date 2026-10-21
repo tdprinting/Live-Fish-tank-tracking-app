@@ -16,6 +16,7 @@ import com.reeflive.core.custom.economy.StoreVisit
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.LifePace
 import com.reeflive.core.sim.Simulation
 import kotlinx.browser.localStorage
 import kotlin.math.roundToInt
@@ -56,9 +57,12 @@ object ReefMyTank {
         })
     }
 
-    /** The tanks to pick from: `[{id, label, blurb, gallons, size}]`. */
+    /** The tanks to pick from: `[{id, label, blurb, gallons, size, l, h, d (cm), rimless, filter}]` (the picker draws each to scale). */
     fun builds(): String = JSON.stringify(TankBuilds.all.map { b ->
-        obj { it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel }
+        obj {
+            it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel
+            it.l = b.shape.lengthCm; it.h = b.shape.heightCm; it.d = b.shape.depthCm; it.rimless = b.rimless; it.filter = b.filter.name
+        }
     }.toTypedArray())
 
     /** Sets up a new, empty tank in build [buildId] and shows it when the page is in My tank. */
@@ -71,6 +75,7 @@ object ReefMyTank {
         val seed = t.toLong() xor 0x5EEDL
         val s = CustomTank.fresh(build, species, rock, secOfDay.toDouble(), seed)
         s.speed = 1.0
+        s.lifePace = LifePace.DEFAULT.pace
         s.stepWall(0.0)
         sim = s
         val eco = economy ?: Economy()
@@ -91,6 +96,17 @@ object ReefMyTank {
     }
 
     /** Names an animal; it is kept in the next save. */
+    /** Growing speed choices for slow biology (LifePace): `[{id, label, blurb, on}]`. */
+    fun paces(): String {
+        val cur = sim?.let { LifePace.of(it.lifePace) }
+        return JSON.stringify(LifePace.entries.map { p -> obj { it.id = p.name; it.label = p.label; it.blurb = p.blurb; it.on = p == cur } }.toTypedArray())
+    }
+
+    fun setPace(id: String) {
+        val p = LifePace.entries.firstOrNull { it.name == id } ?: return
+        sim?.lifePace = p.pace
+    }
+
     fun rename(id: String, name: String) { sim?.enqueue(Command.Rename(id, name)) }
 
     /** Today as the economy counts days: the keeper's local calendar day. */
@@ -122,6 +138,9 @@ object ReefMyTank {
 
     /** The keeper opened Tank Health (the water test): today's "Test the water" chore. */
     fun testedWater() { if (sim != null) economy?.testedWater(today()) }
+
+    /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
+    fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
 
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
