@@ -249,6 +249,14 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
     fun sell(id: String) = holder.sell(id)
+    // the room: stands for My tank (core room/Decor.kt)
+    val roomShop: StateFlow<com.reeflive.app.live.RoomShopUi?> = holder.roomShop
+    val roomControl get() = holder.roomControl
+    fun decorBuy(key: String, onResult: (com.reeflive.core.custom.room.DecorResult) -> Unit) = holder.decorBuy(key, onResult)
+    fun decorUse(key: String) = holder.decorUse(key)
+    fun decorTry(key: String?) = holder.decorTry(key)
+    /** The camera steps back to show the tank on its stand. */
+    fun showRoom() = holder.roomControl.showRoom()
     /** The 3D shop drawn around the display tank while visiting a store. */
     val storeRoom get() = holder.storeRoom
     /** Walks to the checkout counter in 3D ([on]) or back to the tank. */

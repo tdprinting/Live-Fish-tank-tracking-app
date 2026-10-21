@@ -61,6 +61,8 @@ object ReefLive {
     internal val shelf = SupplyShelfControl()
     /** A fish store visit drawn around the display tank (ReefMyTank.visit); taps on other tanks / the counter come back. */
     internal val room = com.reeflive.app.render.StoreRoomControl()
+    /** The stand and room round the tank (My tank's bought ones; Tee's in Watch). */
+    internal val homeRoom = com.reeflive.app.render.RoomControl()
     /** Tap-to-place food and gear taps (render TankAimControl). */
     private val aim = com.reeflive.app.render.TankAimControl()
     private var touch: TouchController? = null
@@ -169,6 +171,7 @@ object ReefLive {
                 room.onStand = { i -> emit("onStoreStand", i) }
                 room.onCounter = { emit("onStoreCounter", null) }
                 r.storeRoom = room
+                r.room = homeRoom
                 r.bursts = ReefSandbox.bursts
                 r.care = ReefSandbox.care
                 renderer = r
@@ -418,6 +421,10 @@ object ReefLive {
     fun resetCamera() { renderer?.resetCamera() }
     /** Glide to the nursery tank beside the display (clownfish babies) or back. */
     fun nursery(on: Boolean) { renderer?.lookAtNursery(on) }
+    /** Steps back to see the tank on its stand in its room (the room shop). */
+    fun showRoom() { homeRoom.showRoom() }
+    /** Draws the stand and room round the tank or not (frame-cost checks, ?stats). */
+    fun roomVisible(on: Boolean) { homeRoom.visible = on }
     /** The page's answer to `onTouch(surface)`: touch the tank where that tap landed (ripple or sand puff, Command.TouchTank). */
     /**
      * Aquascape builder: the page's answer to `onTouch` while it is open. Drops a dry rock of [shape]

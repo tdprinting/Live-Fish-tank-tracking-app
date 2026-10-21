@@ -98,6 +98,8 @@ object HeatModel {
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.EMERALD_CRAB -> EMERALD_CRAB
+        // a small reef crab of the same water (est., like the emerald crab)
+        BrainKind.PORCELAIN_CRAB -> EMERALD_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
@@ -109,11 +111,13 @@ object HeatModel {
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
         BrainKind.EEL -> MORAY
-        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.GENERIC_INVERT -> ECHINODERM
+        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.SEA_CUCUMBER, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
         // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)
         BrainKind.FILE_CLAM -> TUBE_WORM
+        // giant clams bleach in heat like corals (GiantClamBrain); the animal itself is a hardy reef-flat bivalve (est.)
+        BrainKind.GIANT_CLAM -> TUBE_WORM
     }
 
     fun isSnail(kind: BrainKind) = kind.isSnail

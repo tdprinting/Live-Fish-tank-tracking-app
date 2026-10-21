@@ -66,10 +66,11 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.SALLY_CRAB -> CrabLegs()
             BrainKind.ARROW_CRAB -> CrabLegs.arrow()
             BrainKind.EMERALD_CRAB -> CrabLegs.emerald()
+            BrainKind.PORCELAIN_CRAB -> CrabLegs.porcelain()
             BrainKind.HERMIT -> HermitLegs(seed)
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
             BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> ShrimpLimbs()
-            BrainKind.FILE_CLAM -> ClamRig()
+            BrainKind.FILE_CLAM, BrainKind.GIANT_CLAM -> ClamRig()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             BrainKind.ANEMONE -> AnemoneRig()
             BrainKind.TROCHUS -> SnailRig(SnailRig.TROCHUS)
@@ -122,6 +123,8 @@ class CrabLegs(
     private val minHz: Double = 1.5,
     private val maxHz: Double = MAX_HZ,
     private val pickHz: Double = PICK_HZ,
+    /** Feather-fan beat per fan (Hz), 0 = no fans (only the porcelain crab has them; the two beat in turn). */
+    private val fanHz: Double = 0.0,
 ) : LimbRig(COUNT) {
     var clock = 0.0; private set
     private var moving = 0.0
@@ -147,6 +150,12 @@ class CrabLegs(
     var pick = 0.0
     /** Pressed flat into a crevice, legs drawn in. */
     var tucked = false
+    /** Filter fanning 0..1 (porcelain crab). */
+    var fan = 0.0
+    private var fanS = 0.0
+    private var fanClock = 0.0
+    /** Completed fan sweeps (both fans), for tests. */
+    var fanSweeps = 0L; private set
 
     override fun step(o: Organism, dt: Double, speed: Double) {
         val (f, u, _) = frame(o)
@@ -186,9 +195,19 @@ class CrabLegs(
         if (floor(clawClock * 2) != floor(lastClaw * 2) && pickS > 0.3) pickStrokes++
         lastClaw = clawClock
         val reachC = 0.25 + 0.65 * pickS
-        put(8, frac(clawClock), pickS, reachC, 0.0)
-        put(9, frac(clawClock + 0.5), pickS, reachC, 0.0)
-        pick = 0.0; tucked = false; travel = Vec3.ZERO
+        if (fanHz > 0) {
+            // the fans ride the chela entries: x = sweep phase (the claws only use it while picking), w = fanning
+            fanS += (fan - fanS) * min(1.0, dt * 3)
+            val last = fanClock
+            if (fanS > 0.05) fanClock = (fanClock + fanHz * (0.5 + 0.5 * fanS) * dt) % 1000.0
+            if (floor(fanClock * 2) != floor(last * 2)) fanSweeps++
+            put(8, frac(fanClock), pickS, reachC, fanS)
+            put(9, frac(fanClock + 0.5), pickS, reachC, fanS)
+        } else {
+            put(8, frac(clawClock), pickS, reachC, 0.0)
+            put(9, frac(clawClock + 0.5), pickS, reachC, 0.0)
+        }
+        pick = 0.0; tucked = false; fan = 0.0; travel = Vec3.ZERO
     }
 
     companion object {
@@ -214,6 +233,13 @@ class CrabLegs(
          * carapace lengths a stride at 1-3.5 Hz (est.); the spoon claws scoop quickly when it grazes.
          */
         fun emerald() = CrabLegs(strideW = 0.4, minHz = 1.0, maxHz = 3.5, pickHz = 2.5)
+
+        /**
+         * Porcelain crab (research 45 §2): quick little steps on short legs, forward, sideways or backwards; the claws
+         * stay out in front (they do not feed); the feather fans sweep in turn at ~1 Hz each (est.; no rate published).
+         */
+        fun porcelain() = CrabLegs(strideW = 0.4, minHz = 1.5, maxHz = 4.5, pickHz = 1.0, fanHz = FAN_HZ)
+        const val FAN_HZ = 1.0
     }
 }
 

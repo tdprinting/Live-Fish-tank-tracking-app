@@ -1047,6 +1047,75 @@ def build_brittle_star():
     return finish(root, objs, os.path.join(C.MODELS, "brittle_star.glb"), 2000)
 
 
+def build_serpent_star():
+    """Green serpent star, Ophiarachna incrassata (research 45 §3): a big, smooth, robust ophiuroid on the brittle star
+    rig. Disc to ~5 cm, arms ~4 disc diameters, thick and rounded, banded dark across every few segments; short, blunt
+    yellowish arm spines laid back along the arm (not the black star's long bristles); the disc green with fine pale
+    yellow-green speckles and dark-rimmed radial shields; paler yellow-green underneath with yellow tube feet."""
+    C.reset_scene()
+    at = Atlas(512, 256, 4)
+    nseg = BG.SEGMENTS
+
+    def arm(cv):
+        # u = along the arm (0 disc .. 1 tip), v = dorsal-ness (1 dorsal midline .. 0 ventral midline)
+        cv.vgrad("#8FA43A", "#3F6A1E")
+        ph = (cv.u * nseg) % 1.0
+        dpl = np.minimum(ph, 1 - ph)
+        cv.blend(S(0.2, 0.45, dpl) * S(0.5, 0.85, cv.v), "#4F7D22", 0.5)       # smooth, slightly domed plates
+        cv.blend((1 - S(0.0, 0.1, dpl)) * S(0.3, 0.7, cv.v), "#24401A", 0.5)   # fine joints
+        # dark green-black cross bands every ~5 segments, narrowing toward the tip
+        b = np.abs(((cv.u * nseg / 5.0) % 1.0) - 0.5) * 2
+        cv.blend((1 - S(0.0, 0.45 - 0.2 * cv.u, b)) * S(0.35, 0.8, cv.v), "#1A2A12", 0.75)
+        cv.blend(P.value_noise(cv.h, cv.w, 140, 10, 17) * S(0.5, 0.9, cv.v), "#B8C860", 0.18)
+        # underside: pale plates and yellow tube feet
+        cv.blend(1 - S(0.12, 0.3, cv.v), "#B9C277", 0.7)
+        tf = np.exp(-(((ph - 0.5) / 0.14) ** 2 + ((cv.v - 0.28) / 0.05) ** 2))
+        cv.blend(np.clip(tf * 1.4, 0, 1), "#E3C93A", 0.7)
+    at.paint_strip(0, arm)
+
+    def disc(cv):
+        # u = angle (arm k at k/5), v = radius (0 rim .. 1 centre)
+        cv.vgrad("#4B7424", "#5C8A2A")
+        rs = np.random.default_rng(45)
+        for (cu, cvv) in P.poisson(rs, 260, 0.03, (0.0, 1.0, 0.08, 0.98)):
+            cv.blend(P.ellipse(cv, cu, cvv, 0.006, 0.02, 0.3), "#C9D872", 0.8)   # pale speckles
+        a5 = (cv.u * 5) % 1.0
+        for c in (0.08, 0.92):                                                   # radial shields with dark rims
+            m = np.exp(-(((a5 - c) / 0.05) ** 2 + ((cv.v - 0.18) / 0.11) ** 2))
+            cv.blend(S(0.25, 0.4, m) * (1 - S(0.5, 0.65, m)), "#203A14", 0.8)
+            cv.blend(S(0.55, 0.75, m), "#6E9A30", 0.7)
+        cv.blend(1 - S(0.0, 0.1, cv.v), "#A9B866", 0.6)                         # paler underside rim
+    at.paint_strip(1, disc)
+    at.paint_strip(2, lambda cv: cv.vgrad("#C2C25A", "#E8E39A"))                # yellowish blunt spines
+    tex = os.path.join(C.BUILD, "serpent_star_atlas.png")
+    at.cv.save(tex)
+    mat = C.material("serpent_mat", rough=0.4, image=C.load_image(tex, name="serpent_star"))
+
+    pivots = BG.pivots()
+    root = make_root("Root", dict(species="serpent_star", lengthCm=35.0, unit="arm span 1.0, disc at origin",
+                                  arms=5, roughness=0.4, limbRig="brittle_arms", limbPivots=pivots,
+                                  discToSpan=round(2 * BRITTLE_DISC_R, 3)))
+    # disc: a thicker, rounder dome than the black star's, gently scalloped
+    gd = G.Geo()
+    Vd, Fd = G.ellipsoid((0, 0, 0.02), (BRITTLE_DISC_R * 1.04, BRITTLE_DISC_R * 1.04, 0.022), 20, 7)
+    ang = np.arctan2(Vd[:, 1], Vd[:, 0])
+    Vd[:, :2] *= (1 + 0.07 * np.cos(5 * ang))[:, None]
+    Vd[:, 2] = np.maximum(Vd[:, 2], 0.004)
+    rad = np.linalg.norm(Vd[:, :2], axis=1) / (BRITTLE_DISC_R * 1.1)
+    top = Vd[:, 2] >= 0.02
+    vv = np.where(top, 1 - np.clip(rad, 0, 1), 0.0)
+    xs = Vd[:, 0]
+    gd.add(Vd, Fd, at.uv(1, (ang / (2 * math.pi)) % 1, vv), np.stack([0 * xs, 0 * xs, 0 * xs, np.clip(0.5 - xs, 0, 1)], -1))
+    disc_o = geo_obj("Body", gd, root, "body", [mat])
+    # arms: thick, smooth and rounded, short blunt spines on every other ring laid back along the arm
+    thick = lambda tt: 0.016 * (1 - 0.8 * np.asarray(tt, float) ** 1.3)
+    ga = BG.arms(at.uv, girth=1.0, spine_len=(0.004, 0.005), spine_side=0.45, spine_fwd=0.85, spine_every=2, radius=thick)
+    geo_obj("Arms", ga, root, "leg", [mat], extras={"count": 5, "limbPivots": pivots})
+    objs = [o for o in C.all_descendants(root) if o.type == "MESH"]
+    C.recalc_normals(disc_o)
+    return finish(root, objs, os.path.join(C.MODELS, "serpent_star.glb"), 2000)
+
+
 # ----------------------------------------------------------------------------
 # snails and asterina
 # ----------------------------------------------------------------------------
@@ -1531,6 +1600,7 @@ INVERT_BUILDERS = {
     "hermit_blue": lambda: build_hermit("blue"),
     "hermit_scarlet": lambda: build_hermit("scarlet"),
     "brittle_star": build_brittle_star,
+    "serpent_star": build_serpent_star,
     "nassarius": build_nassarius,
     "astrea": build_astrea,
     "asterina": build_asterina,

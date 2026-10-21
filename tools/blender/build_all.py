@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "sdf"))
 
 STEPS = ["selftest", "textures", "fish", "inverts", "rockscape", "sdf", "tank", "corals", "equipment", "details",
-         "supplies", "care", "cards"]
+         "supplies", "care", "room", "cards"]
 
 
 def run(step, args):
@@ -50,6 +50,12 @@ def run(step, args):
         squid.build_all()
         import file_clam  # flame scallop (docs/research/42_peppermint_shrimp_flame_scallop.md)
         file_clam.build()
+        import porcelain_crab  # porcelain crab (docs/research/45_clam_crab_star_cucumber.md)
+        porcelain_crab.build_porcelain_crab()
+        import maxima_clam  # maxima clam (docs/research/45_clam_crab_star_cucumber.md)
+        maxima_clam.build()
+        import sea_cucumber  # tiger tail sea cucumber (docs/research/45_clam_crab_star_cucumber.md)
+        sea_cucumber.build()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)
@@ -77,6 +83,13 @@ def run(step, args):
     elif step == "care":
         import care_tools
         care_tools.build()
+    elif step == "room":
+        import stands  # My tank's stands and room (core custom/room/Decor.kt)
+        for sid in stands.STANDS:
+            stands.build(sid)
+        import rooms
+        for sc in rooms.SCENES:
+            rooms.build(sc)
     elif step == "cards":
         import render_cards
         render_cards.build()
