@@ -544,7 +544,7 @@ private fun ColumnScope.CardBody(
                 T("Spare shells", ReefGlyphs.shell) { actions.onAddSpareShells() },
             ))
         } else {
-            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset, myTank = tools.myTank)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.key, n, size) }, actions.onReset, myTank = tools.myTank)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },

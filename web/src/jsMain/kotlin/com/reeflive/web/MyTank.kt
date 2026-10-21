@@ -7,6 +7,7 @@ import com.reeflive.core.custom.AwaySummary
 import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
+import com.reeflive.core.sim.Stocking
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.BuyResult
 import com.reeflive.core.custom.economy.DisplayTank
@@ -194,7 +195,7 @@ object ReefMyTank {
                     tk.title = t.title; tk.animals = t.animals
                     tk.items = StoreVisit.cards(e, store, t, mine, day).map { c ->
                         obj {
-                            it.id = c.speciesId; it.name = c.name; it.group = c.group.name; it.price = c.price; it.left = c.left
+                            it.id = c.speciesId; it.species = Stocking.speciesOf(c.speciesId); it.name = c.name; it.group = c.group.name; it.price = c.price; it.left = c.left
                             it.deal = c.deal; it.wanted = c.wanted; it.level = c.level; it.locked = c.locked; it.warning = c.warning
                         }
                     }.toTypedArray()

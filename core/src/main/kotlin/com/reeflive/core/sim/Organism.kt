@@ -102,6 +102,15 @@ class Organism(
     var quiver = 0.0
     var spineFlare = 0.0
     var dorsalRaise = 0.0
+    /**
+     * Courtship / rivalry flash 0..1 (fairy wrasse males, research 42 §1): fins flared wide and colours at their
+     * brightest. Set by the brain, eased off in [com.reeflive.core.ai.SpeciesBrain.preTick]; drawn by the renderer.
+     */
+    var display = 0.0
+    /** Night colours 0..1 (yellow and purple tang, research 42 §2), eased in while it sleeps and out after it wakes. */
+    var nightColor = 0.0
+    /** Mucus cocoon 0 (none) .. 1 (finished) around a sleeping wrasse (posture 4), research 42 §1. */
+    var cocoon = 0.0
     var legRock = 0.0
     /** Shrimp limb hooks (research 17): banded shrimp claw display 0..1 and antenna grooming 0..1. */
     var clawDisplay = 0.0
@@ -296,6 +305,7 @@ class Organism(
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
             motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
+            display = display.toFloat(), cocoon = cocoon.toFloat(),
         )
     }
 

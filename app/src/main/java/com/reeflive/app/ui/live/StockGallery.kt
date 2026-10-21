@@ -82,6 +82,8 @@ data class StockCard(
     val sizeCm: Double,
     val group: StockGroup,
     val colors: Map<String, String> = emptyMap(),
+    /** What the add takes ([StockEntry.key]): the species id, or "id@male" for a card that sells one sex. */
+    val key: String = speciesId,
 ) {
     val kind: SpeciesKind get() = when (group) {
         StockGroup.FISH -> SpeciesKind.FISH
@@ -107,7 +109,7 @@ data class StockUi(
     companion object {
         /** Every addable species, in catalog order, with sheet colours from [colorsOf]. */
         fun catalogCards(colorsOf: (String) -> Map<String, String>): List<StockCard> =
-            Stocking.CATALOG.map { StockCard(it.speciesId, it.common, it.typicalCm, it.group, colorsOf(it.speciesId)) }
+            Stocking.CATALOG.map { StockCard(it.speciesId, it.common, it.typicalCm, it.group, colorsOf(it.speciesId), it.key) }
     }
 }
 
