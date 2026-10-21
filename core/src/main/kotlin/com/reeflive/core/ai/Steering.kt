@@ -259,7 +259,18 @@ class Steering(private val c: Ctx) {
             val prev = wantSmooth
             val ws = if (prev == null) w else (prev + (w - prev) * (1 - exp(-rate * dt))).normalized(w)
             wantSmooth = ws
-            o.heading = Vec3.rotateToward(o.heading, ws, turnRate * dt * (if (urgent) 1.0 else 0.3 + 0.7 * drive))
+            var omega = turnRate * (if (urgent) 1.0 else 0.3 + 0.7 * drive)
+            val gait = o.motion.gait
+            if (!urgent && o.isFish && (gait == Gait.LABRIFORM || gait == Gait.BODY_CAUDAL)) {
+                // a routine turn carves an arc no tighter than the species' radius at this speed; nearly still, a
+                // pectoral rower pivots on its fins (MotionProfile.turnRadiusBL). Perch-hoppers and eel-like bodies
+                // steer each short hop onto its landing spot and keep their own turning
+                val labriform = gait == Gait.LABRIFORM
+                if (labriform) omega = max(omega, 0.45 * turnRate)
+                val still = 1 - smoothstep(0.2, 0.8, rawSpeed / cruise)
+                omega = min(omega, rawSpeed / (o.motion.turnRadiusBL * o.lengthCm) + omega * still)
+            }
+            o.heading = Vec3.rotateToward(o.heading, ws, omega * dt)
         } else wantSmooth = o.heading
         // C-start stage 1: the head snaps round away from the threat far faster than a routine turn
         if (cStartT in 0.0..C_STAGE1 && o.isFish) o.heading = Vec3.rotateAbout(cHeading, Vec3.Y, cSign * cAngle * smoothstep(0.0, C_STAGE1, cStartT)).normalized(o.heading)
