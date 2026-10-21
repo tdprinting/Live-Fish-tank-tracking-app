@@ -1,0 +1,118 @@
+{
+  "id": "tridacna_crocea",
+  "kind": "INVERT",
+  "common": "Ultra crocea clam",
+  "scientific": "Tridacna crocea",
+  "family": "Cardiidae (Tridacninae)",
+  "maxLengthCm": 15,
+  "typicalAdultCm": 8,
+  "growthCmPerYear": 1.5,
+  "lifespanYears": 20,
+  "depthRatio": 0.42,
+  "massCoeff": 0.12,
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 2,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.8,
+    "openWater": 0.0,
+    "coverAffinity": 0.0
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 5,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.0,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "PHYTOPLANKTON",
+    "PLANKTON"
+  ],
+  "feedsPerDay": 0.5,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29.5,
+      "lethalLo": 18,
+      "lethalHi": 32
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.022,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.03
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.4
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 80
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.05
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "hardiness": 0.45,
+  "starvationDays": 40,
+  "size": {
+    "lod0Tris": 3400
+  },
+  "model": "models/crocea_clam.glb",
+  "colors": {
+    "primary": "#E3B21E",
+    "secondary": "#D9D4C8",
+    "accent": "#2AD8E8"
+  },
+  "brain": "giant_clam",
+  "buoyantWhenDead": false,
+  "minTankGallons": 50,
+  "careLevel": "Advanced",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Mostly fed by the algae living in its mantle, which turn light into food. It also filters some phytoplankton from the water; small clams need more of it.",
+  "temperamentSummary": "The boring clam: a small clam that grinds itself into the rock, showing only its dazzling mantle. 'Ultra' grade: gold with electric blue-green lines.",
+  "careNotes": [
+    "Needs the most light of any clam: about 250-400 PAR, high on the rock right under the lamps.",
+    "Bores into rock and never sits on the sand.",
+    "Bleaches in too little light, too much heat or a sudden jump in light; keep calcium and alkalinity steady.",
+    "Farmed (ORA) ultra grade sells for about $120-300, a lot for a 3-4 cm clam."
+  ]
+}
