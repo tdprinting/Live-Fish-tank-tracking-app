@@ -164,6 +164,7 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         /** Cubes (one per frozen kind), the nori sheet (clip + tiles). */
         private const val MAX_FOOD_EXTRA = 16 + FoodVisuals.NORI_COLS * FoodVisuals.NORI_ROWS
         const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP + MAX_WASTE
+        /** HOB return on the tank on screen ([TankRenderer] moves it with the glass for a My tank build). */
         val HOB = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2.3f)
         private val NULL_SINK = PointSink { _, _, _, _, _, _, _, _, _, _, _, _ -> }
 

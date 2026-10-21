@@ -31,12 +31,15 @@ object CustomTank {
             volumeL = build.liters, no3 = 0.5, po4 = 0.01, detritus = 0.02, algaeHair = 0.0, macro = 0.0, coralline = 0.02,
             diatoms = 0.0, cyano = 0.0, silicate = 0.3, microbes = 0.5, doc = 0.5,
         )
-        val sim = Simulation(build.config(seed), species, rock, seed, startTimeSec, water, emptyList())
+        val sim = Simulation(build.config(seed), species, rock.inTank(build.shape), seed, startTimeSec, water, emptyList())
         applyBuild(sim, build)
+        // Tee's rockscape, cut down and centred when the tank is smaller than his
+        sim.fitStockScape()
         return sim
     }
 
     private fun applyBuild(sim: Simulation, build: TankBuild) {
+        sim.shape = build.shape
         sim.bareScape = true
         // the keeper's own tank has a living rockscape: rocks settle when dug under, and it can be rebuilt
         sim.setDynamicRocks(true)
@@ -63,6 +66,7 @@ object CustomTank {
             "uv" to b(w.uv), "refugium" to b(w.refugium), "ato" to b(w.ato), "gfo" to b(w.s.gfoActive),
             "predation" to b(sim.predationEnabled),
         )
+        val shift = sim.scapeShift
         return base.copy(
             savedAtMs = nowMs,
             simTimeSec = sim.simTimeSec,
@@ -74,6 +78,7 @@ object CustomTank {
             corals = corals,
             brood = sim.brood.save(),
             rocks = sim.rockState(),
+            scapeFit = listOf(shift.x, shift.y, shift.z),
             pests = sim.pests.save(),
             nextIds = SavedIds(
                 organism = maxOf(base.nextIds.organism, nextNumber(animals.map { it.id } + corals.map { it.id }, "#")),
@@ -139,12 +144,19 @@ object CustomTank {
             val off = Vec3(it.offsetX, it.offsetY, it.offsetZ)
             LivestockSeed(it.speciesId, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id, offset = off.takeIf { o -> o != Vec3.ZERO })
         }
-        val sim = Simulation(build.config(save.seed), species, rock, save.seed, save.simTimeSec, water, seeds)
+        val sim = Simulation(build.config(save.seed), species, rock.inTank(build.shape), save.seed, save.simTimeSec, water, emptyList())
         applyBuild(sim, build)
-        sim.restoreRocks(save.rocks)
+        // the rockwork goes in first, so every animal and colony starts at its spot as the rock stands now. A tank of
+        // another size saved before its glass was drawn to size ran in Tee's 48 in box: its rocks are fitted afresh.
+        val fit = save.scapeFit?.takeIf { it.size == 3 }?.let { Vec3(it[0], it[1], it[2]) }
+        val sized = fit != null || build.shape.isStock
+        if (sized) sim.restoreRocks(save.rocks)
+        sim.fitStockScape(fit.takeIf { sized && save.rocks.isNotBlank() })
+        sim.addRestored(seeds)
         // loose colonies (dropped branches, frags) sit where they were
         for (c in anchored) if (c.anchor.isBlank() && c.x != 0.0) {
-            sim.corals += Coral(c.id, species[c.speciesId], c.nickname, "", Vec3(c.x, c.y, c.z), Vec3(c.nx, c.ny, c.nz), 0.0)
+            val at = if (sized) Vec3(c.x, c.y, c.z) else build.shape.clampToWater(Vec3(c.x, c.y, c.z), 2.0)
+            sim.corals += Coral(c.id, species[c.speciesId], c.nickname, "", at, Vec3(c.nx, c.ny, c.nz), 0.0)
         }
         val byId = known.associateBy { it.id }
         for (o in sim.organisms) byId[o.id]?.let { load(o, it); sim.anemones.loadState(o, it.state) }

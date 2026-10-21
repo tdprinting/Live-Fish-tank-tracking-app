@@ -3,7 +3,6 @@ package com.reeflive.app.render
 import android.opengl.GLES30
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import com.reeflive.core.sim.TankDims
 
 /**
  * Real-time shadows from the two AI Primes: one orthographic depth pass looking straight down over the tank interior
@@ -29,15 +28,33 @@ class ShadowMap(quality: RenderQuality) {
     /** Re-render the fish into the map every frame (High). */
     val dynamic: Boolean = quality == RenderQuality.HIGH
 
-    /** World → shadow clip (column-major), orthographic; depth grows downward from [Y_TOP]. */
-    val matrix = FloatArray(16).also { m ->
-        m[0] = 2f / (X1 - X0); m[12] = -2f * X0 / (X1 - X0) - 1f
-        m[9] = 2f / (Z1 - Z0); m[13] = -2f * Z0 / (Z1 - Z0) - 1f
-        m[6] = -2f / (Y_TOP - Y_BOTTOM); m[14] = 2f * Y_TOP / (Y_TOP - Y_BOTTOM) - 1f
-        m[15] = 1f
-    }
+    /** World → shadow clip (column-major), orthographic; depth grows downward from the top of the glass. */
+    val matrix = FloatArray(16)
     /** cm per shadow texel along x (the PCF kernel is sized in cm). */
-    val cmPerTexel: Float = if (width > 0) (X1 - X0) / width else 1f
+    var cmPerTexel: Float = 1f; private set
+    private val fitted = FloatArray(3)
+
+    init { fit() }
+
+    /**
+     * Footprint over the tank on screen ([Camera.TANK]: the interior plus 1 cm); a My tank of another size refits it.
+     * Returns true when it changed (the cached static layer must be redrawn).
+     */
+    fun fit(): Boolean {
+        val t = Camera.TANK
+        if (t[0] == fitted[0] && t[1] == fitted[1] && t[2] == fitted[2]) return false
+        t.copyInto(fitted)
+        val x1 = t[0] + 1f; val z1 = t[2] + 1f; val yTop = t[1] - 1f
+        val m = matrix
+        m.fill(0f)
+        m[0] = 2f / (x1 - X0); m[12] = -2f * X0 / (x1 - X0) - 1f
+        m[9] = 2f / (z1 - Z0); m[13] = -2f * Z0 / (z1 - Z0) - 1f
+        m[6] = -2f / (yTop - Y_BOTTOM); m[14] = 2f * yTop / (yTop - Y_BOTTOM) - 1f
+        m[15] = 1f
+        cmPerTexel = if (width > 0) (x1 - X0) / width else 1f
+        signature = Long.MIN_VALUE; staticSignature = Long.MIN_VALUE
+        return true
+    }
 
     private val tex: Int = Gl.genTexture()
     private val fbo: Int = initTarget(tex)
@@ -160,12 +177,12 @@ class ShadowMap(quality: RenderQuality) {
     companion object {
         /** Texture unit of `uShadowMap` ([ShaderProgram.SAMPLER_UNITS]). */
         const val UNIT = 14
-        /** Shadow footprint (cm): the tank interior plus 1 cm. */
-        const val X0 = -1f; const val X1 = TankDims.LENGTH_F + 1f
-        const val Z0 = -1f; const val Z1 = TankDims.DEPTH_F + 1f
-        const val Y_BOTTOM = -1f; const val Y_TOP = TankDims.HEIGHT_F - 1f
+        /** Shadow footprint (cm): the tank interior plus 1 cm (the far sides follow the tank, [fit]). */
+        const val X0 = -1f
+        const val Z0 = -1f
+        const val Y_BOTTOM = -1f
         /** Casters whose centre is above this (fixtures, rim, gooseneck) are left out. */
-        const val CASTER_MAX_Y = TankDims.WATER_LEVEL_F
+        val CASTER_MAX_Y: Float get() = Camera.WATER_Y
         /** How dark a full shadow gets (ambient, caustic bounce and scatter still reach in). */
         const val STRENGTH = 0.85f
         /** World-space lift toward the light before the depth compare (cm). */

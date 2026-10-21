@@ -13,6 +13,8 @@ import com.reeflive.core.sim.AlgaeCover
 import com.reeflive.core.sim.CritterKind
 import com.reeflive.core.sim.CoralPose
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.TankDims
+import com.reeflive.core.sim.TankShape
 import com.reeflive.core.sim.TouchSurface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -239,6 +241,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         nursery.release()
         listOf(white, flatNormal, neutralRough, zero, surfaceTex, glassMaskTex).forEach { it?.release() }
         white = null; flatNormal = null; neutralRough = null; zero = null; surfaceTex = null; glassMaskTex = null; glassMaskData = null
+        fit.release()
         store.release()
         store.onContextLost(quality)
         rockDraw.onContextLost()
@@ -268,6 +271,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         interp.push(snap, now)
         val rigs = interp.update(now)
         val cur = interp.current
+        applyShape(cur?.shape ?: TankShape.STOCK)
         rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L, cur?.builtRocks)
         val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
 
@@ -326,7 +330,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         GLES30.glDepthMask(true) // the post path leaves the depth mask off, which would make glClear skip depth
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("glClear")
 
-        val tank = store.model(TANK); val rock = store.model(ROCK); val equipment = store.model(EQUIPMENT); val algae = store.model(ALGAE)
+        val tank = fit.tank(store.model(TANK), Camera.shape); val rock = store.model(ROCK); val equipment = equipmentModel(); val algae = store.model(ALGAE)
         val details = store.model(DETAILS)
         // My tank starts bare: none of Tee's static colonies, no algae tufts or glass film until its own algae grow
         val bare = cur?.bareScape == true
@@ -433,7 +437,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val g = cur?.sandGrid
         if (g != null) c.setSandGrid(g.height, g.nx, g.nz, g.cellXCm, g.cellZCm) else c.setSandGrid(null, 0, 0, 1f, 1f)
         val corals = coralModels(cur)
-        val equipment = store.model(EQUIPMENT)
+        val equipment = equipmentModel()
         if (corals !== collidersCorals || equipment !== collidersEquipment) {
             collidersCorals = corals; collidersEquipment = equipment
             c.clearBoxes()
@@ -628,9 +632,11 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 else -> progs.generic
             }
             p.use()
+            // painted on a pane (algae film, strands, magnet cleaner): stretched with the glass of a My tank build
+            val pane = if (part.pane && !Camera.shape.isStock) fit.pane(part, Camera.shape) else null
             // a loose rock that moved (dynamic rockscape) draws at its own pose, with what grows on it
-            val pieces = if (part.node.name != FLIPPER_NODE && m.path in ROCK_ATTACHED) rockDraw.meshes(part) else null
-            p.setMat4("uModel", if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
+            val pieces = if (pane == null && part.node.name != FLIPPER_NODE && m.path in ROCK_ATTACHED) rockDraw.meshes(part) else null
+            p.setMat4("uModel", if (pane != null) IDENTITY else if (part.node.name == FLIPPER_NODE) flipperMatrix(part.node.world) else part.node.world)
             part.material.apply(p, w)
             p.set1f("uLedDies", if (part.kind == MaterialKind.EMITTER) 1f else 0f) // AI Prime LED cluster (generic.frag)
             when (part.kind) {
@@ -656,7 +662,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 }
                 else -> Unit
             }
-            if (pieces == null) { part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles }
+            if (pane != null) { pane.draw(); drawCalls++; triangles += pane.triangles }
+            else if (pieces == null) { part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles }
             else drawPieces(p, part, pieces)
         }
     }
@@ -684,12 +691,18 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     /** [part] split by rock: each group at its rock's pose (−1: the rock still where it was built). */
     private fun drawPieces(p: ShaderProgram, part: DrawPart, pieces: List<Pair<Int, Mesh>>) {
+        val trim = scapeTrimmed
         for ((piece, mesh) in pieces) {
+            // Tee's rocks cut down for a smaller My tank: whatever sits on no rock stays out (it would hang past the glass)
+            if (piece < 0 && trim) continue
             p.setMat4("uModel", if (piece >= 0) rockDraw.apply(piece, part.node.world, rockModel) else part.node.world)
             mesh.draw(); drawCalls++; triangles += mesh.triangles
         }
     }
     private val rockDraw = RockPoseDraw()
+    private val fit = TankFit()
+    /** The tank on screen is smaller than Tee's: its rocks were fitted (every one moved or taken out). */
+    private val scapeTrimmed: Boolean get() = Camera.shape.lengthCm < TankDims.LENGTH_CM - 0.1 || Camera.shape.depthCm < TankDims.DEPTH_CM - 0.1
     /** Green star polyp mats built on the drawn rock (GspMatDraw). */
     private val gspMats = GspMatDraw()
 
@@ -714,6 +727,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             // full extension: the shader scales every vertex toward the model's base by uExtension, and this model
             // spans the whole tank (0.3 pulled tufts up to ~15 cm off the rock)
             coralUniforms(p, m, null, 1f)
+            val pane = if (part.pane && !Camera.shape.isStock) fit.pane(part, Camera.shape) else null
+            if (pane != null) { p.setMat4("uModel", IDENTITY); pane.draw(); drawCalls++; triangles += pane.triangles; continue }
             val pieces = rockDraw.meshes(part)
             if (pieces == null) { part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles } else drawPieces(p, part, pieces)
         }
@@ -756,7 +771,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // the magnet cleaner moves with the finger
         val p = progs.shadow
         p.use()
-        store.model(EQUIPMENT)?.parts?.forEach { part ->
+        equipmentModel()?.parts?.forEach { part ->
             if (part.node.name == FLIPPER_NODE && (part.kind == MaterialKind.ROCK || part.kind == MaterialKind.GENERIC) && castsShadow(part)) {
                 p.setMat4("uModel", flipperMatrix(part.node.world)); part.mesh.draw(); drawCalls++
             }
@@ -802,11 +817,34 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     }
 
     /** Shadow casters that never move: rock, equipment (bar the magnet cleaner) and the still reef details. */
+    /** equipment.glb as the tank on screen has it ([TankFit]: moved with its glass, left out where the build has none). */
+    private fun equipmentModel(): GpuModel? = fit.equipment(store.model(EQUIPMENT), Camera.shape)
+
+    /**
+     * Sizes everything drawn to the tank on screen when it changes (a My tank build of another size opens): the box
+     * and framing ([Camera.applyShape]), the eye's glass clamp, the shadow footprint and the HOB effect points. The
+     * shell and equipment refit lazily ([TankFit]).
+     */
+    private fun applyShape(s: TankShape) {
+        if (s == Camera.shape) return
+        Camera.applyShape(s)
+        camera.colliders.lengthX = Camera.TANK[0]; camera.colliders.depthZ = Camera.TANK[2]
+        collidersEquipment = null
+        shadowMap?.fit()
+        val w = TankDims.WATER_LEVEL_CM
+        fun put(a: FloatArray, x: Double, y: Double, z: Double) { a[0] = s.mapX(x).toFloat(); a[1] = s.mapY(y).toFloat(); a[2] = s.mapZ(z).toFloat() }
+        put(ParticleField.HOB, 73.0, w - 0.7, 2.3)
+        put(BurstField.HOB_OUT, 73.0, w - 0.7, 2.0)
+        put(BurstField.HOB_IN, 114.5, w - 3.0, 2.0)
+        CareLayout.fitTo(s)
+        camera.reset()
+    }
+
     private fun drawStaticShadowCasters(progs: Programs, bare: Boolean) {
         val p = progs.shadow
         p.use()
         for (key in SHADOW_STATIC) {
-            val m = store.model(key) ?: continue
+            val m = (if (key == EQUIPMENT) equipmentModel() else store.model(key)) ?: continue
             for (part in m.parts) {
                 if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part) || part.node.name == FLIPPER_NODE) continue
                 p.setMat4("uModel", part.node.world)
