@@ -336,7 +336,7 @@ object ReefMyTank {
         val run = awayRun
         if (run != null) {
             run.step()
-            if (run.finished) { awayRun = null; awaySummary = run.summary().takeIf { it.worthShowing }; sim?.let(::noteCoralNews) }
+            if (run.finished) { awayRun = null; awaySummary = run.summary().takeIf { it.worthShowing } }
             if (!run.finished) return JSON.stringify(obj { o ->
                 o.running = true; o.progress = run.progress; o.daysDone = run.doneSec / AwayCatchUp.DAY; o.days = run.totalSec / AwayCatchUp.DAY
             })
