@@ -81,10 +81,12 @@ def fmt(a):
 
 def main():
     rows = []
+    none = []
     for m in models():
         parts, root = glbread.read(os.path.join(MODELS, m))
         prof, hull = profile(parts)
         if prof is None:
+            none.append(m)
             continue
         rows.append((m, prof, hull))
         print(f"{m}: depth {prof[:, 0].max() - prof[:, 1].min():.3f} width {2 * prof[:, 2].max():.3f} hull {len(hull)}")
@@ -100,8 +102,10 @@ def main():
         f.write("internal val BODY_HULL_DATA: Map<String, FloatArray> by lazy {\n    mapOf(\n")
         for m, _, hull in rows:
             f.write(f'        "{m}" to floatArrayOf({fmt(hull)}),\n')
-        f.write("    )\n}\n")
-    print("wrote", OUT, len(rows), "models")
+        f.write("    )\n}\n\n")
+        f.write("/** Animal models the bake read and found no body or shell part in (sessile: drawn by their own rigs). */\n")
+        f.write("internal val BODY_PROFILE_NONE: Set<String> = setOf(" + ", ".join(f'"{m}"' for m in none) + ")\n")
+    print("wrote", OUT, len(rows), "models,", len(none), "without a body")
 
 
 if __name__ == "__main__":

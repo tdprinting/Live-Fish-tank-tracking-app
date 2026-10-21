@@ -98,3 +98,6 @@ internal val BODY_HULL_DATA: Map<String, FloatArray> by lazy {
         "models/purple_tang.glb" to floatArrayOf(0.4900f, -0.0752f, 0.0000f, 0.4900f, -0.0729f, 0.0080f, 0.4900f, -0.0585f, 0.0125f, 0.4900f, -0.0585f, -0.0125f, 0.4900f, -0.0729f, -0.0080f, 0.2523f, 0.1990f, 0.0124f, 0.2523f, 0.2021f, 0.0000f, 0.2523f, 0.1990f, -0.0124f, 0.1336f, -0.2422f, 0.0000f, 0.1336f, -0.2385f, 0.0172f, 0.1336f, 0.2385f, 0.0132f, 0.1336f, 0.2422f, 0.0000f, 0.1336f, 0.2385f, -0.0132f, 0.1336f, -0.2385f, -0.0172f, -0.3454f, -0.0543f, 0.0000f, -0.3454f, -0.0510f, 0.0072f, -0.3454f, 0.0000f, 0.0146f, -0.3454f, 0.0535f, 0.0034f, -0.3454f, 0.0543f, 0.0000f, -0.3454f, 0.0535f, -0.0034f, -0.3454f, 0.0000f, -0.0146f, -0.3454f, -0.0510f, -0.0072f, 0.5000f, -0.0585f, 0.0000f, -0.3488f, 0.0000f, 0.0000f, 0.3229f, 0.0350f, -0.0607f, 0.3229f, 0.0350f, 0.0607f),
     )
 }
+
+/** Animal models the bake read and found no body or shell part in (sessile: drawn by their own rigs). */
+internal val BODY_PROFILE_NONE: Set<String> = setOf("models/bubble_tip_anemone.glb", "models/feather_duster.glb")

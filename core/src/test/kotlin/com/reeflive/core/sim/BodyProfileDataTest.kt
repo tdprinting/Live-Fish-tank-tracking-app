@@ -15,7 +15,7 @@ class BodyProfileDataTest {
             val t = f.readText()
             if (!Regex("\"kind\"\\s*:\\s*\"(FISH|INVERT)\"").containsMatchIn(t)) continue
             for (m in Regex("\"(models/[^\"]+\\.glb)\"").findAll(t).map { it.groupValues[1] })
-                if (File(assets, m).isFile && m !in BODY_PROFILE_DATA) missing += "${f.name}: $m"
+                if (File(assets, m).isFile && m !in BODY_PROFILE_DATA && m !in BODY_PROFILE_NONE) missing += "${f.name}: $m"
         }
         assertTrue("models without a baked body (run tools/collision/bake_body_profiles.py):\n" + missing.joinToString("\n"), missing.isEmpty())
     }
