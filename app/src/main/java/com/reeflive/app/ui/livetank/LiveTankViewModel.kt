@@ -149,6 +149,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.setMode(m)
     }
     fun setSpeed(v: Double) = holder.setSpeed(v)
+    val lifePace = holder.lifePace
+    fun setLifePace(p: com.reeflive.core.sim.LifePace) = holder.setLifePace(p)
     fun select(id: String?) { _selectedOrganismId.value = id; if (id == null) _followId.value = null }
     fun follow(id: String?) { _followId.value = id; if (id != null) _selectedOrganismId.value = id }
     fun setQuality(q: LiveQuality) { _quality.value = q }

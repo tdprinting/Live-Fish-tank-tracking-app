@@ -73,7 +73,7 @@ class ShrimpBreeding(private val sim: Simulation) {
                         val mate = shrimps.firstOrNull { it.id == o.mateId && it.pos.distanceTo(o.pos) <= MATE_REACH_CM }
                         if (mate != null) {
                             matings++; fertileClutches++
-                            clutches[o.id] = Clutch(true, t, t + rng.range(INCUBATION_DAYS_MIN, INCUBATION_DAYS_MAX) * 86400)
+                            clutches[o.id] = Clutch(true, t, t + sim.lifeDays(rng.range(INCUBATION_DAYS_MIN, INCUBATION_DAYS_MAX)))
                         }
                     }
                 }
