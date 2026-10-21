@@ -97,7 +97,7 @@ data class SavedDecor(
 )
 
 /** Why a decor purchase did not go through. */
-enum class DecorResult { OK, OWNED, LEVEL_LOCKED, TOO_POOR, UNKNOWN }
+enum class DecorResult { OK, OWNED, LEVEL_LOCKED, TOO_POOR, UNKNOWN, ROOM_FULL }
 
 /**
  * The room shop: stands, their colours and add-ons, priced against the care pay (about 40-80 sand dollars a day, so a
