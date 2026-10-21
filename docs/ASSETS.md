@@ -339,6 +339,11 @@ Budgets (`tools/validate_glb.py`): `algae_tufts` 450 → **1100**, new `reef_det
 
 ### 4.2 Peppermint shrimp and flame scallop (research 42)
 - `peppermint_shrimp.glb` (`inverts.build_shrimp("peppermint")`, 4 cm, 3.3k tris): the skunk shrimp body painted glassy pink-white with thin red lengthwise carapace lines, red abdominal rings, red-white banded antennae and a red tail.
+- Shrimp pack (research 44), all `inverts.build_shrimp(kind)` on the Lysmata leg layout (so core `ShrimpLimbs` SKUNK rest tips fit them all):
+  - `fire_shrimp.glb` ("fire", 3.5 cm, 3.3k tris): blood red with small white dots, white legs and antennae.
+  - `sexy_shrimp.glb` ("sexy", 1.5 cm, 3.3k tris): stout olive-brown body with blue-rimmed white saddles; `_raise_tail` bends the abdomen up over the back (2 rad over 0.34 units), pleopods included. Normalised on the straight body length.
+  - `harlequin_shrimp.glb` ("harlequin", 4 cm, 4.2k tris): porcelain white with violet-rimmed pink blotches; P2 is a pair of flat petal chelae (class 3 CLAW, atlas strip 4, UV spread across the blade) and the antennules carry flat leaves.
+  - `pistol_shrimp.glb` ("pistol", 4 cm, 3.9k tris): cream with noisy dark red-brown tiger saddles; P1 is a swollen right snapping claw plus a slender left one (class 3); small eyes under the carapace hood.
 - `flame_scallop.glb` (`tools/blender/file_clam.py`, 6 cm, 3.1k tris): two cream valves with radial file ribs, a red mantle lip and 56 red tentacles with pale tips. COLOR_0: r valve side (1 upper), g class (0 shell, 0.5 mantle, 1 tentacle), b t along a tentacle, a phase seed. `fish.vert` mode 7 (`clamPose`) opens the valves about the hinge (x -0.5) from `ClamRig`, and retracts, writhes and streams the tentacles.
 
 ### 5. Tank, water, equipment (`tools/blender/tank.py`)

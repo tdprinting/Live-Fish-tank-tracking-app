@@ -1,0 +1,115 @@
+{
+  "id": "alpheus_bellulus",
+  "kind": "INVERT",
+  "common": "Tiger pistol shrimp",
+  "scientific": "Alpheus bellulus",
+  "family": "Alpheidae",
+  "maxLengthCm": 5,
+  "typicalAdultCm": 4,
+  "growthCmPerYear": 2,
+  "lifespanYears": 4,
+  "depthRatio": 0.2,
+  "massCoeff": 0.01,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 6,
+    "tailHzCruise": 0,
+    "turnRateDeg": 160,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.03,
+    "yMax": 0.6,
+    "openWater": 0.02,
+    "coverAffinity": 0.95
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 15,
+  "temperament": {
+    "aggression": 0.4,
+    "boldness": 0.3,
+    "curiosity": 0.3,
+    "skittishness": 0.85
+  },
+  "diet": [
+    "DETRITUS",
+    "MYSIS",
+    "BRINE",
+    "PELLET"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 26,
+      "tolLo": 21,
+      "tolHi": 28,
+      "lethalLo": 17,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 30,
+  "size": {
+    "lod0Tris": 3900
+  },
+  "model": "models/pistol_shrimp.glb",
+  "colors": {
+    "primary": "#EFE2C8",
+    "secondary": "#7E2C30",
+    "accent": "#F0B080"
+  },
+  "brain": "pistol_shrimp",
+  "minTankGallons": 30,
+  "careLevel": "Moderate",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Mostly eats detritus and bits it digs up; takes mysis and pellets that fall near its burrow.",
+  "temperamentSummary": "Nearly blind. Lives in a sand burrow it shares with a watchman goby: it digs, the goby keeps watch, and it keeps an antenna on the goby.",
+  "careNotes": [
+    "Its big right claw snaps shut so fast it fires a bubble that pops with a loud crack, loud enough to hear through the glass.",
+    "Pair it with a yellow watchman goby: the shrimp bulldozes sand out of their burrow while the goby stands guard and flicks its tail when danger comes.",
+    "Needs at least 5 cm (2 in) of sand at the foot of a rock to dig in; it will move sand and small rocks around.",
+    "Without a goby partner it stays hidden in its burrow most of the time.",
+    "It can snap at small fish or shrimp that crowd its burrow."
+  ]
+}

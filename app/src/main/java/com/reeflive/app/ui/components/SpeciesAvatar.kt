@@ -42,7 +42,7 @@ fun avatarShapeFor(speciesId: String, kind: SpeciesKind?): AvatarShape {
     val id = speciesId.lowercase()
     return when {
         id.startsWith("pholidichthys") -> AvatarShape.ELONGATED
-        id.startsWith("stenopus") || id.startsWith("lysmata") -> AvatarShape.SHRIMP
+        id.startsWith("stenopus") || id.startsWith("lysmata") || id.startsWith("thor") || id.startsWith("hymenocera") || id.startsWith("alpheus") -> AvatarShape.SHRIMP
         id.startsWith("ophiocoma") || id.startsWith("asterina") || id.startsWith("mespilia") -> AvatarShape.STAR
         id.startsWith("nassarius") || id.startsWith("lithopoma") || id.startsWith("tectus") || id.startsWith("strombus") -> AvatarShape.SHELL
         id.startsWith("clibanarius") || id.startsWith("paguristes") || id.startsWith("percnon") || id.startsWith("stenorhynchus") || id.startsWith("mithraculus") -> AvatarShape.CRAB
