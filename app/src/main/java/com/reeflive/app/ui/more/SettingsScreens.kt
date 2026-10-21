@@ -150,6 +150,7 @@ data class SettingsActions(
     val onGlassBlur: (Boolean) -> Unit = {},
     val onLiveQuality: (LiveQuality) -> Unit = {},
     val onTankSounds: (Boolean) -> Unit = {},
+    val onRadio: (Boolean) -> Unit = {},
     val onDynamicRocks: (Boolean) -> Unit = {},
     val onTankAlerts: (Boolean) -> Unit = {},
     val onTankVolume: (Float) -> Unit = {},
@@ -208,7 +209,8 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
             Group("Live Tank") {
                 PillsRow("Quality", listOf("Low", "Medium", "High"), s.liveQuality.ordinal) { actions.onLiveQuality(LiveQuality.entries[it]) }
                 SwitchRow("Tank sounds", "Water flow, pumps, feeding and alerts", s.tankSounds, actions.onTankSounds)
-                if (s.tankSounds) VolumeRow(s.tankVolume, actions.onTankVolume)
+                SwitchRow("Tank radio", "Quiet, calm songs from a little radio beside the tank", s.radioOn, actions.onRadio)
+                if (s.tankSounds || s.radioOn) VolumeRow(s.tankVolume, actions.onTankVolume)
                 SwitchRow("Rocks can shift", "A rock can settle or topple when the gobies dig out too much sand under it. Off keeps the rockscape fixed", s.dynamicRocks, actions.onDynamicRocks)
             }
             SectionHeader("Tank & parameters")
@@ -260,6 +262,7 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onGlassBlur = { go { g.settings.setGlassBlur(it) } },
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
             onTankSounds = { go { g.settings.setTankSounds(it) } },
+            onRadio = { go { g.settings.setRadioOn(it) } },
             onDynamicRocks = { go { g.settings.setDynamicRocks(it) } },
             onTankAlerts = { on ->
                 go { g.settings.setTankAlerts(on); if (on) g.settings.setNotifications(true) }

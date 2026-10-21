@@ -32,6 +32,8 @@ enum class GrazerType(val gPerDay: Double, val kGraze: Double, val refCm: Double
     ASTERINA(0.01, 1.0, 1.0, doubleArrayOf(0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0), doubleArrayOf(1.0, 0.3, 1.0, 1.0)),
     /** Not in research 09: the fighting conch grazes diatoms, film and cyano off the sand surface only (research 43 §3; rate est.). */
     CONCH(0.1, 1.0, 7.0, doubleArrayOf(1.0, 0.8, 0.2, 0.5, 0.1, 0.0, 0.0), doubleArrayOf(0.0, 1.0, 0.0, 0.0)),
+    /** Not in research 09: the emerald crab scoops bubble algae first, then hair and film, off the rock at night (research 43 §1; rate est.). */
+    EMERALD_CRAB(0.08, 1.0, 3.0, doubleArrayOf(0.2, 0.3, 0.6, 0.1, 0.0, 1.0, 0.0), doubleArrayOf(0.0, 0.0, 0.7, 1.0)),
     /** Not in research 09: the tuxedo urchin rasps film, hair and coralline off rock and glass (research 43 §2; rate est.). */
     URCHIN(0.12, 1.0, 5.0, doubleArrayOf(0.6, 0.8, 0.7, 0.1, 0.1, 0.2, 0.7), doubleArrayOf(0.8, 0.1, 1.0, 1.0)),
     ;
@@ -50,6 +52,7 @@ enum class GrazerType(val gPerDay: Double, val kGraze: Double, val refCm: Double
             BrainKind.TROCHUS -> TROCHUS
             BrainKind.CONCH -> CONCH
             BrainKind.URCHIN -> URCHIN
+            BrainKind.EMERALD_CRAB -> EMERALD_CRAB
             else -> when {
                 o.species.id.startsWith("trochus", true) || o.species.id.startsWith("tectus", true) -> TROCHUS
                 o.species.id.startsWith("turbo", true) -> TURBO

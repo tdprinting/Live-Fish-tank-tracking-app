@@ -5,7 +5,7 @@ const CODE = `reeflive-code-${BUILD}`;
 const DATA = `reeflive-data-${BUILD}`;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'corals.js', 'flush.js', 'care.js', 'stores.js', 'room.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
+  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'corals.js', 'flush.js', 'care.js', 'stores.js', 'radio.js', 'room.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
   self.skipWaiting();
 });
 
@@ -17,6 +17,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // radio songs stream with range requests (206s can't be cached): let the browser fetch them itself
+  if (url.pathname.includes('/sounds/radio_')) return;
   const isData = /\/(assets|res)\//.test(url.pathname) && !url.pathname.endsWith('index.json');
   e.respondWith(isData ? cacheFirst(e.request) : networkFirst(e.request));
 });
