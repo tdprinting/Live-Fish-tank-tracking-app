@@ -66,6 +66,7 @@ BUDGET = {
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     # stony corals (tools/blender/stony_corals.py; sandbox / My tank only): skeleton + mantle bodies, tentacles instanced
     "hammer": 1500, "torch": 1500, "frogspawn": 1600, "duncan": 2000,
+    "acan": 1000, "candy_cane": 2000, "open_brain": 1400, "bubble": 1000,
     "gold_torch": 1500, "scolymia": 1800, "bounce_mushroom": 1200,
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
@@ -91,7 +92,8 @@ BODY_BUDGET = {"engineer_goby": 5600}
 SNOUT_A = {"bobtail_squid": 0.3}
 # sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
 SANDBOX_ONLY = {"bobtail_squid", "aiptasia", "berghia",
-                "gsp_mat", "hammer", "torch", "frogspawn", "duncan", "gold_torch", "scolymia", "bounce_mushroom"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
+                "gsp_mat", "hammer", "torch", "frogspawn", "duncan", "gold_torch", "scolymia", "bounce_mushroom",
+                "acan", "candy_cane", "open_brain", "bubble"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}

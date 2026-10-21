@@ -457,6 +457,15 @@ of focus, so it never pulls the eye away.
   (free, "Room's own"); bought ones: Seafoam or Navy paint 60, Sunny stripes 90, White boards 100, Wave print 120,
   Brick 140, Wood panels 140 (L3); Walnut planks 80, Blue carpet 90, White tiles 100, Checkerboard 120, Slate 140
   (L3). A new scene starts on its own walls and floor; bought ones go back up for free.
+* **More tanks** (`room/RoomTanks.kt`, Tee 2026-10-21): up to four tanks, one against each wall (back, right, front,
+  left), seen one at a time; arrows either side of the view turn round the room to the next one. For sale in the room
+  shop: Nano cube 400 (L1), 40 gallon 800 (L2), 60 gallon 1400 (L3), 120 gallon 2600 (L5); a new one starts empty on
+  the next free wall and comes into view. The tank in view is the top-level save; the others ride in
+  `CustomTankSave.others` as whole saves (no money or look of their own) and catch up on their time away when the
+  keeper turns to them, exactly like reopening the app. Money, level, stand and room are shared. The room turns with
+  the view (`HomeRoomScene`: Shell and Center* nodes rotate so that wall stands behind the tank; Left*, Right* and
+  Tank* props stay with the tank), so each wall shows its own side of the room. Start over on one of several tanks
+  removes just that one.
 * **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`,
-  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use). Defaulted fields, no codec bump; kept across Start
-  over like the money.
+  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use), `side` and `others`. Defaulted fields, no codec bump
+  (an older save is one tank on the back wall); kept across Start over like the money.

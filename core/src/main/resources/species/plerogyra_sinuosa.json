@@ -1,0 +1,105 @@
+{
+  "id": "plerogyra_sinuosa",
+  "kind": "CORAL",
+  "common": "Bubble coral",
+  "scientific": "Plerogyra sinuosa",
+  "family": "Plerogyridae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 2,
+  "lifespanYears": 40,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 23.0,
+      "tolHi": 28.0,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/bubble.glb",
+  "colors": {
+    "primary": "#D8E4C8",
+    "secondary": "#A8C890",
+    "accent": "#C8FF9A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.15,
+    "lightHi": 0.6,
+    "flow": "LOW",
+    "growth": "Slow",
+    "stingCm": 12,
+    "ground": "ANY",
+    "aggression": "Aggressive: long sweeper tentacles at night; give 15 cm (6 in)",
+    "fluorescence": 0.3
+  },
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; target feed meaty foods a few times a week.",
+  "temperamentSummary": "Covered in grape-like water-filled bubbles by day; at night the bubbles shrink and long stinging tentacles come out.",
+  "careNotes": [
+    "PAR about 50-150 and very gentle flow; the bubbles shrink in light that is too strong.",
+    "The skeleton has thin sharp walls: place it carefully so the bubbles are not cut.",
+    "Calcium 380-440, magnesium 1300-1400.",
+    "Its sweepers sting hard at night, so give it room."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.7,
+  "starvationDays": 9999
+}

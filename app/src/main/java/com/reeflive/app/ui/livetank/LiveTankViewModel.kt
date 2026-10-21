@@ -255,6 +255,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun decorBuy(key: String, onResult: (com.reeflive.core.custom.room.DecorResult) -> Unit) = holder.decorBuy(key, onResult)
     fun decorUse(key: String) = holder.decorUse(key)
     fun decorTry(key: String?) = holder.decorTry(key)
+    /** Turns round the room to the keeper's next tank (+1 / -1). */
+    fun turnStep(dir: Int) = holder.turnStep(dir)
     /** The camera steps back to show the tank on its stand. */
     fun showRoom() = holder.roomControl.showRoom()
     /** The 3D shop drawn around the display tank while visiting a store. */
