@@ -6,7 +6,10 @@
 // light rig, not the AI Prime fixtures: those lights repeat every uBay cm along x (so they follow the bays wherever
 // the renderer draws them), a cool glow spills from every tank's water onto the stands and the floor, and a
 // store-coloured hemisphere fills the rest. Kinds (StoreRoomScene.kindOf, from the material name): 0 paint,
-// 1 floor tiles, 2 lamp / screen / neon (emissive), 3 glass, 4 tank water, 5 metal (gold, fixtures).
+// 1 floor tiles, 2 lamp / screen / neon (emissive), 3 glass, 4 tank water, 5 metal (gold, fixtures), 6 a tank's
+// lamp (glows in its tank's light colour), 7 rising bubbles, 8 egg crate, 9 vertex-painted (people, fish, corals).
+// uGlowCol is set per bay: the colour of that tank's light (core DisplayLight.glow), so a frag tank glows purple and
+// throws a slow caustic shimmer onto its stand and the floor in front of it.
 
 in vec3 vWorld;
 in vec3 vNormal;
@@ -23,11 +26,30 @@ uniform float uKind;
 uniform float uBay;           // bay pitch (cm, StoreRoomLayout.BAY)
 uniform vec3 uLampCol;        // the store's light colour (linear radiance of a tank light)
 uniform vec3 uFillCol;        // hemisphere fill: x sky, the floor bounce is a darker share of it
-uniform vec3 uGlowCol;        // tank water glow spilling into the room
+uniform vec3 uGlowCol;        // this bay's tank light colour: its water, its lamp and the glow it spills
+uniform float uRoomX;         // x of the live tank's centre: the bays (and their lights) repeat from it
 
 out vec4 fragColor;
 
-const float CX = 60.95;       // tank centre x (TankDims.LENGTH / 2)
+
+// A slow caustic ripple (two drifting wave sets): the light that comes out of a tank through its moving surface.
+float shimmer(vec3 p) {
+    float a = sin(p.x * 0.19 + uTime * 1.3) * sin(p.z * 0.16 - uTime * 1.05);
+    float b = sin((p.x + p.z) * 0.11 - uTime * 0.7 + p.y * 0.05);
+    return 0.72 + 0.28 * a * a * 2.0 + 0.12 * b;
+}
+
+// Bubbles rising up a column or a skimmer: round dots on a grid that scrolls up, each column at its own speed.
+float bubbles(vec3 p) {
+    vec2 q = vec2(p.x + p.z * 0.7, p.y);
+    float col = floor(q.x / 1.1);
+    float speed = 9.0 + 6.0 * hash12(vec2(col, 3.1));
+    vec2 g = vec2(q.x / 1.1, (q.y - uTime * speed) / 1.6 + hash12(vec2(col, 7.7)) * 4.0);
+    vec2 f = fract(g) - 0.5;
+    float on = step(0.45, hash12(floor(g) + vec2(0.0, 17.0)));
+    float r = 0.18 + 0.16 * hash12(floor(g));
+    return on * (1.0 - smoothstep(r - 0.06, r, length(f)));
+}
 
 // One bay's lights at bay centre x [bx]: the tank light (down, over the tank) and the ceiling panel over the aisle.
 vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough) {
@@ -47,11 +69,11 @@ vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough)
     L = d * inversesqrt(d2);
     ndl = max(dot(N, L), 0.0);
     c += uLampCol * (max(L.y, 0.0) * 26000.0 / (d2 + 4000.0)) * (diff * ndl + F0 * ggxSpec(N, V, L, max(rough, 0.3)) * ndl * 0.5);
-    // the tank's water glow, from its front face
+    // the tank's water glow, from its front face, rippling like light through a moving surface
     vec3 t = vec3(clamp(p.x, bx - 60.0, bx + 60.0), 20.0, 46.0) - p;
     float t2 = dot(t, t);
     vec3 Lt = t * inversesqrt(t2);
-    c += uGlowCol * (max(dot(N, Lt), 0.0) * 1800.0 / (t2 + 2500.0)) * diff;
+    c += uGlowCol * (max(dot(N, Lt), 0.0) * 1800.0 / (t2 + 2500.0)) * diff * shimmer(p);
     return c;
 }
 
@@ -71,6 +93,26 @@ void main() {
         fragColor = vec4(tonemap(uEmissive + albedo * 0.15), alpha);
         return;
     }
+    if (kind == 6) {
+        // a display tank's lamp: as bright as its emissive, in its tank's light colour
+        float e = dot(uEmissive, vec3(0.2126, 0.7152, 0.0722));
+        vec3 hue = uGlowCol / max(max(uGlowCol.r, max(uGlowCol.g, uGlowCol.b)), 1e-3);
+        fragColor = vec4(tonemap(e * mix(vec3(1.0), hue, 0.7) + albedo * 0.1), alpha);
+        return;
+    }
+    if (kind == 7) {
+        // bubbles: only the dots are drawn, bright where the light catches them
+        float b = bubbles(p);
+        if (b < 0.02) discard;
+        fragColor = vec4(tonemap(mix(uFillCol * 2.0, vec3(1.0), 0.6) + uGlowCol), b * 0.75);
+        return;
+    }
+    if (kind == 9) albedo *= vColor.rgb;
+    if (kind == 8) {
+        // egg crate: a square grid of white plastic bars (1.3 cm cells) with the dark water showing through
+        vec2 f = abs(fract(p.xz / 1.3) - 0.5);
+        albedo *= mix(0.25, 1.0, step(0.36, max(f.x, f.y)));
+    }
     float rough = uRoughness;
     float metal = kind == 5 ? 1.0 : 0.0;
     if (kind == 1) {
@@ -86,8 +128,8 @@ void main() {
     vec3 F0 = mix(vec3(0.04), albedo, metal);
 
     // the two nearest bays' lights (the lights repeat every bay)
-    float n = floor((p.x - CX) / uBay);
-    vec3 col = bayLight(p, N, V, CX + n * uBay, diff, F0, rough) + bayLight(p, N, V, CX + (n + 1.0) * uBay, diff, F0, rough);
+    float n = floor((p.x - uRoomX) / uBay);
+    vec3 col = bayLight(p, N, V, uRoomX + n * uBay, diff, F0, rough) + bayLight(p, N, V, uRoomX + (n + 1.0) * uBay, diff, F0, rough);
     // hemisphere fill; corners near the floor a little darker
     vec3 amb = mix(uFillCol * 0.35, uFillCol, N.y * 0.5 + 0.5) * diff;
     amb *= mix(0.7, 1.0, smoothstep(-82.0, -60.0, p.y));
@@ -98,8 +140,9 @@ void main() {
     vec3 Fr = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - ndv, 5.0);
     col += Fr * mix(uFillCol * 0.3, uLampCol * 3.0, smoothstep(0.0, 1.0, R.y)) * (kind == 1 ? 0.6 : 1.0);
     if (kind == 4) {
-        // a stocked tank's water seen from the room: lit from above, glowing in the store's water colour
-        col = albedo * (0.25 + 0.75 * smoothstep(0.0, 38.0, p.y)) + uEmissive;
+        // a stocked tank's water seen from the room: lit from above in its light's colour, rippling
+        float lit = 0.25 + 0.75 * smoothstep(-80.0, 38.0, p.y);
+        col = (albedo * 0.35 + uGlowCol * 1.6) * lit * shimmer(p * 1.7) + uEmissive * 0.25;
     } else if (kind == 3) {
         // glass: mostly reflection
         col = Fr * (uLampCol * 2.0 + uFillCol) + albedo * 0.05;

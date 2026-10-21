@@ -263,6 +263,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
         applyRequests()
         applyShelf(dt)
+        storeScene.time = time
         storeScene.apply(storeRoom, camera) { store.model(it) }
         store.pump(2)
 
@@ -1338,6 +1339,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
      * A tap in a store: another tank walks there, the counter opens the checkout, and a tap on the live tank from the
      * aisle (not on an animal) walks up close to it. True when the tap was used.
      */
+    private val liveTankBox = floatArrayOf(-6f, StoreRoomLayout.FLOOR_Y, -6f, 0f, 0f, 0f)
+
     private fun storeTap(t: CameraInput.Tap, o: FloatArray, dir: FloatArray, rigs: Collection<FishRig>): Boolean {
         val room = storeRoom ?: return false
         if (!storeScene.active || t.kind != CameraInput.TapKind.PICK) return false
@@ -1345,7 +1348,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (hit == StoreRoomScene.COUNTER) { room.onCounter?.let { cb -> main.post { cb() } }; return true }
         if (hit >= 0) { room.onStand?.let { cb -> main.post { cb(hit) } }; return true }
         if (Picker.pick(o, dir, rigs, fingerSlack()) != null) return false
-        val tankBox = LIVE_TANK_BOX
+        // the live tank on its stand, at the size of its glass
+        val tankBox = liveTankBox
+        tankBox[3] = Camera.TANK[0] + 6f; tankBox[4] = Camera.TANK[1] + 2f; tankBox[5] = Camera.TANK[2] + 6f
         return SupplyShelfScene.rayBox(o, dir, tankBox, 4f) != null && camera.storeZoomIn()
     }
 
@@ -1721,7 +1726,6 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
         /** The live tank with its stand (a store's aisle view: a tap here walks up to it). */
-        private val LIVE_TANK_BOX = floatArrayOf(-6f, StoreRoomLayout.FLOOR_Y, -6f, com.reeflive.core.sim.TankDims.LENGTH_F + 6f, com.reeflive.core.sim.TankDims.HEIGHT_F + 2f, com.reeflive.core.sim.TankDims.DEPTH_F + 6f)
         /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
         private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
         /** The sub's hull as a capsule for the eye (cm). */

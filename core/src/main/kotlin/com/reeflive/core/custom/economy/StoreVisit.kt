@@ -1,9 +1,6 @@
 package com.reeflive.core.custom.economy
 
-import com.reeflive.core.custom.CustomTank
-import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.sim.RockData
-import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.StockGroup
@@ -11,8 +8,11 @@ import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Stocking
 import kotlin.math.min
 
-/** One display tank in a store (ECONOMY §5 "Visiting a store"): a section's sign and what swims in it today. */
-data class DisplayTank(val title: String, val items: List<StockItem>) {
+/**
+ * One display tank in a store (ECONOMY §5 "Visiting a store"): a section's sign, what swims in it today and how the
+ * tank is set up ([StoreDisplays]: its size and type, rock, light and decor corals).
+ */
+data class DisplayTank(val title: String, val items: List<StockItem>, val setup: DisplaySetup = StoreDisplays.setup(FishStore.SHELLYS, title)) {
     /** Animals swimming in it (a few of each; snails by the handful but not all of them). */
     val animals: Int get() = items.sumOf { StoreVisit.shown(it) }
 }
@@ -76,29 +76,38 @@ object StoreVisit {
         val left = Stores.stock(store, day).toMutableList()
         val out = ArrayList<DisplayTank>()
         // Deep Reef's window tank: its priciest animal, alone under a spotlight
-        if (store == FishStore.DEEP_REEF) left.maxByOrNull { it.price }?.let { left -= it; out += DisplayTank("The showpiece", listOf(it)) }
+        if (store == FishStore.DEEP_REEF) left.maxByOrNull { it.price }?.let { left -= it; out += DisplayTank("The showpiece", listOf(it), StoreDisplays.setup(store, "The showpiece")) }
         for (s in sections(store)) {
             val mine = left.filter { s.takes(it.listing) }
             if (mine.isEmpty()) continue
             left -= mine.toSet()
-            out += DisplayTank(s.title, mine)
+            out += DisplayTank(s.title, mine, StoreDisplays.setup(store, s.title))
         }
-        if (left.isNotEmpty()) out += DisplayTank("More", left)
+        if (left.isNotEmpty()) out += DisplayTank("More", left, StoreDisplays.setup(store, "More"))
         return out
     }
 
     fun shown(item: StockItem): Int = min(item.count, MAX_SHOWN)
 
     /**
-     * The sim for one display tank: a lit, cycled 40 breeder (noon, so the lights are on whatever the keeper's clock
-     * says) with today's animals in it at shop size. The host runs it like any tank while it is on screen.
+     * The sim for one display tank: its setup's tank, rock and light ([StoreDisplays.build]; noon, so the lights are
+     * on whatever the keeper's clock says) with today's animals in it at shop size. The host runs it like any tank
+     * while it is on screen.
      */
     fun build(tank: DisplayTank, species: SpeciesCatalog, rock: RockData, seed: Long): Simulation {
         tank.items.forEach { species.ensure(it.listing.speciesId) }
-        val sim = CustomTank.fresh(TankBuilds.BREEDER, species, rock, 12 * 3600.0, seed)
-        sim.setDynamicRocks(false)
-        // the store keeps its display tanks fed
-        for (it in tank.items) sim.enqueue(Command.AddMany(it.listing.speciesId, shown(it), size = StockSize.JUVENILE))
+        val sim = StoreDisplays.build(tank, species, rock, seed) { s, plugs ->
+            // the store keeps its display tanks fed; frags sit on the racks' plugs
+            val rng = s.rng.fork(57)
+            for (it in tank.items) {
+                val id = it.listing.speciesId
+                when {
+                    !species[id].isCoral -> Stocking.addMany(s, id, shown(it), size = StockSize.JUVENILE)
+                    plugs != null -> StoreDisplays.onPlugs(s, id, shown(it), plugs, rng)
+                    else -> StoreDisplays.onRock(s, id, shown(it))
+                }
+            }
+        }
         sim.stepWall(0.0)
         return sim
     }

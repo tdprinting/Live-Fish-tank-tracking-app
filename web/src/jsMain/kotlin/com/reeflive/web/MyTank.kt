@@ -162,7 +162,7 @@ object ReefMyTank {
         tanks = StoreVisit.tanks(store, today())
         tankAt = -1
         showTank(0)
-        ReefLive.room.enter(store.id, tanks.size, 0)
+        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup })
         return visitJson(mine)
     }
 

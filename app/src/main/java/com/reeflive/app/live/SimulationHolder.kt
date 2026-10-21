@@ -313,7 +313,7 @@ class SimulationHolder(
         display = d
         lastWallMs[d] = nowMs()
         val store = visiting!!
-        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k) else storeRoom.show(k)
+        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k, visitTanks.map { it.setup }) else storeRoom.show(k)
         publishVisit(k)
         publish(d)
     }
