@@ -1908,6 +1908,32 @@ No animal enters solid rock. The rock's real openings come from `anchors.json` `
 - **Test** `RockPenetrationTest`: full default stock, 3 × 1800 s (09:00, 14:00, 20:30), every head and spine station checked every other tick: none inside rock (−0.3 cm tolerance) outside a fitting hole; blennies use their holes and the tailspot backs in tail first; every species-tagged hole fits its animal.
 
 
+### 24.3 Whole bodies from the mesh (`sim/BodyProfile.kt`, `sim/BodyBounds.kt`)
+
+Tee's rule: no part of any body goes through the rock, the sand or the glass. The guards above kept the spine line out;
+the body round it (a tang is 0.48 BL deep) went through. Now every animal's real body is baked from its GLB
+(`tools/collision/bake_body_profiles.py` → `BodyProfileData.kt`, re-run after a model changes): at each of the 16 spine
+stations the body's top, bottom and half-width (body, shell, eyes) and the median fins' top and bottom, in body lengths.
+A station's body is an elliptic section on the drawn frame (forward along the spine, up from `Organism.up`), the fins a
+blade counted at half their height (`FIN_GIVE`: fins fold on contact). `BodyProfile.support` is how far it reaches in a
+direction.
+
+- **Glass and sand** (`BodyBounds`, before the rock guard, and again after a rock re-lay): no station's section may reach
+  past the glass or under the live sand surface (read under the belly's middle and both sides). A rigid body moves back
+  whole; a trail has its stations moved and adopts that shape (the tail slides along the glass, the belly rests on the
+  sand). A lift never brings a station up into the rock: wedged between rock and sand, the body shoves the sand aside.
+- **Rock** (`RockGuard`): a station is blocked when the field there reads less than its body's reach against the field
+  gradient, unless that contact lies under the sand (a buried rock foot) or the station is in a hole that fits it. The
+  re-lay projects stations out to their reach. The per-cell mask stores each cell's lowest field value, so a station
+  skips the lookup when its body cannot reach the rock there. A centreline lying on the sand may read only 0.3 cm into a
+  rock foot (it was 1 cm, and a watchman's tail showed through).
+- **Left to their own rigs**: crawlers on their seats, shells drawn rigid at the organism (crabs, hermits, snails, the
+  urchin, the scallop, the brittle star's disc), invertebrates walking a surface, burrowing or buried animals, and a goby
+  within 1.5 BL of the burrow it digs under the rock (`Organism.burrowMouth`): those keep the spine-line rules.
+- **Test** `BodyPenetrationTest`: full default stock, 3 × 600 s, every station's extreme points toward the rock, down and
+  toward the four panes, every 10th tick: rock ≤ 0.5 cm, sand ≤ 0.4 cm, glass ≤ 0.3 cm. Before: glass up to 7 cm (a
+  tail swung through the front pane; one diamond goby's head 39 cm out), sand 1.5 cm, rock 1.5 cm.
+
 ## 25. Peppermint shrimp and flame scallop (research 42, `ai/PeppermintBrain.kt`, `ai/FileClamBrain.kt`, `sim/ClamRig.kt`)
 - **Peppermint shrimp** (`lysmata_boggessi`, `BrainKind.PEPPERMINT_SHRIMP`; `BrainKind.byId` tells it from the skunk cleaner of the same genus). Shares the shrimp systems (`isShrimp`: touch, submarine, heat, breeding, molting every 10-21 d, banded-shrimp and hawkfish rows in `interactions.json`). Hides by day in a shaded den away from banded shrimp; forays at night (`NightForage`, `ShrimpForage`), nipping zoas only when very hungry.
 - **Aiptasia hunting** (`HuntAiptasia`): about 1 polyp/day when starved, 0.15 when fed (Calado & Narciso 2005, proxy species). It walks to the nearest free polyp within 60 cm (small first), picks for 25-80 s, then kills it (`tissue = 0`); an established polyp is usually shrugged off (25 % kill) unless the shrimp is hungry. Fast time: `AiptasiaModel` counts the live peppermints in the tank (plus any abstract `pests.peppermint`); "Add pest control: peppermint" now floats real shrimp in a bag.
