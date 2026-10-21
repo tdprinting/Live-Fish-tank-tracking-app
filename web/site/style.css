@@ -672,3 +672,7 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .record strong { font-size: 12px; line-height: 1.2; }
 .record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
+/* the music corner bar under the 3D record stand and radio (radio.js musicBarHtml) */
+.musicbar p { margin: 2px 0 8px; }
+.musicbar .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.musicbar .card-head .rlbl { display: flex; align-items: center; gap: 6px; }

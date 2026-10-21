@@ -63,6 +63,8 @@ object ReefLive {
     internal val room = com.reeflive.app.render.StoreRoomControl()
     /** The stand and room round the tank (My tank's bought ones; Tee's in Watch). */
     internal val homeRoom = com.reeflive.app.render.RoomControl()
+    /** The record stand and the radio left of the tank (radio.js drives it). */
+    internal val music = com.reeflive.app.render.MusicCornerControl()
     /** Tap-to-place food and gear taps (render TankAimControl). */
     private val aim = com.reeflive.app.render.TankAimControl()
     private var touch: TouchController? = null
@@ -172,6 +174,12 @@ object ReefLive {
                 room.onCounter = { emit("onStoreCounter", null) }
                 r.storeRoom = room
                 r.room = homeRoom
+                music.onRecord = { i -> emit("onMusicRecord", i) }
+                music.onVolume = { v, done -> emit("onMusicVolume", obj { it.volume = v; it.done = done }) }
+                music.onTune = { emit("onMusicTune", null) }
+                music.onPower = { emit("onMusicPower", null) }
+                music.onView = { on -> emit("onMusicView", on) }
+                r.music = music
                 r.bursts = ReefSandbox.bursts
                 r.care = ReefSandbox.care
                 renderer = r
@@ -421,6 +429,12 @@ object ReefLive {
     fun nursery(on: Boolean) { renderer?.lookAtNursery(on) }
     /** Steps back to see the tank on its stand in its room (the room shop). */
     fun showRoom() { homeRoom.showRoom() }
+    /** Glides to the music corner (the record stand and the radio) or back to the tank. */
+    fun musicOpen(on: Boolean) { music.open(on) }
+    /** The radio's state for the music corner: song playing (-1 off), playable records (bit per song), volume, offered record (-1 none). */
+    fun musicState(playing: Int, ownedMask: Int, volume: Double, selected: Int) {
+        music.playing = playing; music.ownedMask = ownedMask; music.volume = volume.toFloat(); music.selected = selected
+    }
     /** Draws the stand and room round the tank or not (frame-cost checks, ?stats). */
     fun roomVisible(on: Boolean) { homeRoom.visible = on }
     /** The page's answer to `onTouch(surface)`: touch the tank where that tap landed (ripple or sand puff, Command.TouchTank). */

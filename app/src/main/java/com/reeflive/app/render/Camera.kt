@@ -119,6 +119,10 @@ class Camera {
     /** Looking at the nursery tank beside the display (core NurseryTank); any drag, pinch or reset glides back. */
     var nurseryOn = false; private set
     private var nurseryMix = 0f
+    /** Looking at the music corner left of the tank (MusicCorner.kt); a drag, pinch or reset glides back. */
+    var musicOn = false; private set
+    /** Travel progress to the music corner (0 the tank view, 1 there). */
+    var musicMix = 0f; private set
     /**
      * Submarine mode ([SubmarineScene]): while on, the eye and aim ease to [rideEye] / [rideAim] (set every frame) in
      * place of the orbit or follow camera; turning it off glides back to the default tank view.
@@ -170,6 +174,7 @@ class Camera {
     /** Animated return to the default view; stops any follow. */
     fun reset() {
         nurseryOn = false
+        musicOn = false
         if (followId != null) releaseFollow()
         glide()
         if (storeOn) {
@@ -186,6 +191,7 @@ class Camera {
     fun roomView() {
         if (storeOn || shelfOn) return
         nurseryOn = false
+        musicOn = false
         if (followId != null) releaseFollow()
         glide()
         target[0] = TANK[0] / 2; target[1] = ROOM_TARGET_Y; target[2] = DEFAULT_TARGET[2]
@@ -305,6 +311,28 @@ class Camera {
         return nurseryMix > 0.5f
     }
 
+    /**
+     * Blends the music corner framing (the record stand and the radio, square on and a little above) over [eye] /
+     * [aim] on the same arc. True while the eye is mostly there.
+     */
+    private fun blendMusic(dt: Float): Boolean {
+        val goal = if (musicOn) 1f else 0f
+        if (musicMix != goal) {
+            val d = dt / SHELF_TRAVEL_S
+            musicMix = if (goal > musicMix) kotlin.math.min(goal, musicMix + d) else max(goal, musicMix - d)
+        }
+        if (musicMix <= 0f) return false
+        val a = MusicCornerLayout.VIEW_AIM
+        val tanHalf = kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat())
+        val dist = max(MusicCornerLayout.VIEW_HALF_H / tanHalf, MusicCornerLayout.VIEW_HALF_W / (tanHalf * max(aspect, 0.1f)))
+        val e = smooth01(musicMix)
+        val ex = a[0] + dist * 0.08f; val ey = a[1] + dist * 0.22f; val ez = a[2] + dist
+        eye[0] += (ex - eye[0]) * e; eye[1] += (ey - eye[1]) * e; eye[2] += (ez - eye[2]) * e
+        aim[0] += (a[0] - aim[0]) * e; aim[1] += (a[1] - aim[1]) * e; aim[2] += (a[2] - aim[2]) * e
+        eye[1] += sin(PI.toFloat() * e) * SHELF_ARC_UP
+        return musicMix > 0.5f
+    }
+
     /** Advances the shelf travel and look springs, then blends the shelf framing over [eye] / [aim]. */
     private fun blendShelf(dt: Float) {
         val goal = if (shelfOn) 1f else 0f
@@ -382,6 +410,7 @@ class Camera {
     /** Puts [b] back at once (no glide: the caller fades through black). */
     fun restore(b: Bookmark) {
         nurseryOn = false
+        musicOn = false
         val id = b.followId
         // follow state first: releasing a follow re-aims the orbit goals at the eye, which the bookmark then replaces
         if (id == null) { if (followId != null) releaseFollow() } else {
@@ -462,6 +491,14 @@ class Camera {
         if (fZoomS.omega != OMEGA_TOUCH) fZoomS.omega = OMEGA_TOUCH
     }
 
+    /** Glides to the music corner ([on]) or back to the tank view; stops any follow. */
+    fun lookAtMusic(on: Boolean) {
+        if (on && (storeOn || shelfOn)) return
+        if (on && followId != null) releaseFollow()
+        if (on) nurseryOn = false
+        musicOn = on
+    }
+
     /** Glides to the nursery tank ([on]) or back to the tank view; stops any follow. */
     fun lookAtNursery(on: Boolean) {
         if (on && followId != null) releaseFollow()
@@ -472,6 +509,7 @@ class Camera {
     fun orbit(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
         if (shelfOn) { shelfDrag(dxPx, dyPx, viewHeightPx); return }
         if (nurseryOn) { nurseryOn = false; return }
+        if (musicOn) { musicOn = false; return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         if (rideOn) {
             rideYaw -= dxPx * k
@@ -509,6 +547,7 @@ class Camera {
     fun zoom(factor: Float) {
         if (factor <= 0f || shelfOn) return
         if (nurseryOn) { nurseryOn = false; return }
+        if (musicOn) { musicOn = false; return }
         if (touching) zoomPending += -ln(factor)
         if (followId != null) { touchFeel(); followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE) }
         else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(maxDistance), ZOOM_GIVE) }
@@ -605,7 +644,7 @@ class Camera {
             initialized = true
         }
         blendShelf(step)
-        val inNursery = blendNursery(step)
+        val inNursery = blendNursery(step) or blendMusic(step)
         // Clearances from the near plane this framing will get, so the near plane can never cut into anything solid.
         val pre = eyeAimDistance()
         val corner = EyeCollider.nearCornerDistance(nearFor(pre), fovY, aspect)
