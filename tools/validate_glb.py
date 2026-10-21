@@ -35,11 +35,12 @@ NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
 # triangle budgets for LOD0 files: (total max, body max) ; None = not checked
 FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish",
         "lawnmower_blenny", "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse",
+        "bicolor_blenny", "midas_blenny",
         "bobtail_squid"]  # the squid is unit length facing +X too (arm tips = "snout"; tools/blender/squid.py)
 BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
-    "diamond_goby": 4800, "leopard_wrasse": 4800, "bobtail_squid": 4600,
+    "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "bobtail_squid": 4600,
     "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "brittle_star": 2000,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen

@@ -47,6 +47,9 @@ object Stocking {
         StockEntry("cirrhitichthys_falco", StockGroup.FISH, "Falco hawkfish", 6.5),
         StockEntry("salarias_fasciatus", StockGroup.FISH, "Lawnmower blenny", 11.0),
         StockEntry("ecsenius_stigmatura", StockGroup.FISH, "Tailspot blenny", 5.5),
+        // research 50: two more Ecsenius; the bicolor grazes round its hole, the midas picks plankton up in the water
+        StockEntry("ecsenius_bicolor", StockGroup.FISH, "Bicolor blenny", 9.0),
+        StockEntry("ecsenius_midas", StockGroup.FISH, "Midas blenny", 11.0),
         StockEntry("pseudochromis_indigo", StockGroup.FISH, "Indigo dottyback", 6.5),
         // research 16: sand sifter (in the owner's tank since 2026-10)
         StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),

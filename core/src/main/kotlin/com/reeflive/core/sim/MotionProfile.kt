@@ -194,5 +194,18 @@ object MotionProfiles {
         BrainKind.GENERIC_INVERT to MotionProfile(Gait.WALK),
     )
 
+    /**
+     * Species that move unlike the rest of their brain kind. The midas blenny is the one Ecsenius that lives up in the
+     * water column, feeding on plankton 2-3 m above the reef with the anthias it mimics (research 50 §2c, FishBase): like
+     * every combtooth blenny it has no swim bladder, so it holds station by sculling its pectorals and beating its long
+     * lyre tail steadily; it sinks far slower between beats than a perching blenny [L].
+     */
+    private val bySpecies: Map<String, MotionProfile> = mapOf(
+        "ecsenius_midas" to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.8,
+            glideS = 0.25, beatsPerBout = 3.0, sinkCmS = 0.5, bankGain = 0.8, cStartDeg = 120.0),
+    )
+
     fun of(kind: BrainKind): MotionProfile = table[kind] ?: if (kind.isFish) table.getValue(BrainKind.GENERIC_FISH) else table.getValue(BrainKind.GENERIC_INVERT)
+
+    fun of(kind: BrainKind, speciesId: String): MotionProfile = bySpecies[speciesId] ?: of(kind)
 }
