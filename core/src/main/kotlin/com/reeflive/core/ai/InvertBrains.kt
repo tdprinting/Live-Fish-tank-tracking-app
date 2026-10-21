@@ -380,9 +380,18 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (client != null && threat == null) {
                 out.rollExtra = 0.07 * sin(2 * PI * 0.6 * c.t)
                 c.o.appendagePhase += c.dt * 2.5
+            } else {
+                // alone it picks now and then at the ledge with the small chelae (a surface scavenger, research 12 [M])
+                // and its long white antennae drift and twitch
+                val idle = threat == null && !groomClock.grooming
+                if (idle && c.t > nextPick) { pickUntil = c.t + c.rng.range(2.5, 6.0); nextPick = pickUntil + c.rng.range(6.0, 16.0) }
+                if (idle && c.t < pickUntil) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.5 * c.t))
+                c.o.appendagePhase += c.dt * 1.0
             }
-            groomClock.tick(c, threat == null && client == null)
+            groomClock.tick(c, threat == null && client == null && c.t >= pickUntil)
         }
+        private var pickUntil = -1.0
+        private var nextPick = 0.0
     }
 
     /**
@@ -624,9 +633,15 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 client && c.p.neighbors(station.pos, APPROACH_CM + 5).any { it.isFish && it.alive } -> SWAY_ROLL * sin(2 * PI * SWAY_HZ * c.t)
                 else -> 0.0
             }
-            // antennae sweep faster while a client is about (advertising)
-            c.o.appendagePhase += c.dt * (if (rocking) 4.0 else if (client) 2.0 else 0.5)
+            // between clients it picks at the station rock (Lysmata are surface grazers too, research 12/42 [M]) and
+            // keeps the antennae moving; they sweep faster while a client is about (advertising)
+            val idle = !client && !rocking && threat == null && !groomClock.grooming
+            if (idle && c.t > nextPick) { pickUntil = c.t + c.rng.range(2.5, 6.0); nextPick = pickUntil + c.rng.range(6.0, 16.0) }
+            if (idle && c.t < pickUntil) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.6 * c.t))
+            c.o.appendagePhase += c.dt * (if (rocking) 4.0 else if (client) 2.0 else 1.2)
         }
+        private var pickUntil = -1.0
+        private var nextPick = 0.0
     }
 
     /**

@@ -20,7 +20,8 @@ kotlin {
             kotlin.include("com/reeflive/core/**", "com/reeflive/app/render/**", "com/reeflive/web/**", "shims/**",
                 // Plain-Kotlin pieces of the Android live screen, shared so both apps offer the same sandbox.
                 "com/reeflive/app/ui/live/SandboxParams.kt", "com/reeflive/app/ui/live/LiveTips.kt",
-                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/ui/live/ThoughtLines.kt", "com/reeflive/app/audio/TankSoundMix.kt", "java/**", "android/**", "javax/**")
+                "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/ui/live/ThoughtLines.kt", "com/reeflive/app/audio/TankSoundMix.kt",
+                "com/reeflive/app/audio/RadioStation.kt", "java/**", "android/**", "javax/**")
             kotlin.exclude(
                 "com/reeflive/core/care/**", "com/reeflive/core/extras/**", "com/reeflive/core/io/**",
                 "com/reeflive/app/render/TankGlView.kt", "com/reeflive/app/render/TankView.kt",
@@ -95,7 +96,8 @@ val whatsNewTask = tasks.register("whatsNew") {
 
 /**
  * Safari can't decode every Ogg file, so the tank sounds also ship as AAC (.m4a) when ffmpeg is available (it is on
- * GitHub's Ubuntu runners). The page tries .m4a first and falls back to the .ogg.
+ * GitHub's Ubuntu runners). The page tries .m4a first and falls back to the .ogg. The radio songs are already
+ * band-limited like a small speaker, so they take a low bitrate.
  */
 val soundsM4a = layout.buildDirectory.dir("generated/sounds")
 val soundsTask = tasks.register("webSounds") {
@@ -109,7 +111,7 @@ val soundsTask = tasks.register("webSounds") {
         if (ffmpeg == null) { logger.warn("ffmpeg not found: web sounds ship as .ogg only"); return@doLast }
         src.asFile.listFiles().orEmpty().filter { it.extension == "ogg" }.forEach { f ->
             val dst = File(dir, f.nameWithoutExtension + ".m4a")
-            val p = ProcessBuilder(ffmpeg.path, "-y", "-loglevel", "error", "-i", f.path, "-c:a", "aac", "-b:a", "96k", dst.path).inheritIO().start()
+            val p = ProcessBuilder(ffmpeg.path, "-y", "-loglevel", "error", "-i", f.path, "-c:a", "aac", "-b:a", if (f.name.startsWith("radio_")) "40k" else "96k", dst.path).inheritIO().start()
             if (p.waitFor() != 0) logger.warn("ffmpeg failed on ${f.name}")
         }
     }

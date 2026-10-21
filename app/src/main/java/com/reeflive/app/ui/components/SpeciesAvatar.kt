@@ -45,7 +45,7 @@ fun avatarShapeFor(speciesId: String, kind: SpeciesKind?): AvatarShape {
         id.startsWith("stenopus") || id.startsWith("lysmata") -> AvatarShape.SHRIMP
         id.startsWith("ophiocoma") || id.startsWith("asterina") || id.startsWith("mespilia") -> AvatarShape.STAR
         id.startsWith("nassarius") || id.startsWith("lithopoma") || id.startsWith("tectus") || id.startsWith("strombus") -> AvatarShape.SHELL
-        id.startsWith("clibanarius") || id.startsWith("paguristes") || id.startsWith("percnon") -> AvatarShape.CRAB
+        id.startsWith("clibanarius") || id.startsWith("paguristes") || id.startsWith("percnon") || id.startsWith("stenorhynchus") || id.startsWith("mithraculus") -> AvatarShape.CRAB
         id.startsWith("sabellastarte") -> AvatarShape.DUSTER
         id.startsWith("entacmaea") -> AvatarShape.ANEMONE
         kind == SpeciesKind.CORAL -> AvatarShape.CORAL
