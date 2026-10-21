@@ -26,9 +26,9 @@ class DrawPart(
     val prim: GlbPrimitive? = null,
 ) {
     val part: String get() = node.part
-    /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
+    /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic, 4 first dorsal: folds by uFold). */
     val finKind: Float = node.name.lowercase().let { n ->
-        when { "pectoral" in n -> 1f; "caudal" in n -> 2f; "pelvic" in n -> 3f; else -> 0f }
+        when { "pectoral" in n -> 1f; "caudal" in n -> 2f; "pelvic" in n -> 3f; n == "findorsal" -> 4f; else -> 0f }
     }
     val eyePivot: FloatArray = node.vec3("pivot") ?: floatArrayOf(0.4f, 0.05f, 0f)
     val identityWorld: Boolean = M.isIdentity(node.world)

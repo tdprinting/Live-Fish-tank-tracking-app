@@ -158,6 +158,9 @@ object PairMatrix {
         BrainKind.ENGINEER_GOBY -> 3.0
         BrainKind.PEEKER_BLENNY -> 2.0
         BrainKind.CARDINAL -> 1.0
+        // research 41: shy hoverers at the bottom of the order
+        BrainKind.FIREFISH -> 1.5
+        BrainKind.CHROMIS -> 2.5
         BrainKind.EEL -> 9.5
         else -> if (o.isFish) 3.0 else 0.0
     }

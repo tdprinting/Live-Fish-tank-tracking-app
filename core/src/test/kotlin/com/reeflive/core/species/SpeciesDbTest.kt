@@ -18,8 +18,8 @@ class SpeciesDbTest {
         // hairy mushroom the clowns host, 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger
         // leather, elephant ear), the bobtail squid (sandbox only, research cephalopod_squid) and the rainbow bubble tip
         // anemone (research 40), and the peppermint shrimp and flame scallop (research 42).
-        assertEquals(46, db.size)
-        assertEquals(16, db.all.count { it.kind == SpeciesKind.FISH })
+        assertEquals(48, db.size)
+        assertEquals(18, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(14, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(15, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
@@ -46,7 +46,7 @@ class SpeciesDbTest {
         val shipped = setOf(
             "algae_tufts", "asterina", "astrea", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
-            "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
+            "chromis", "firefish", "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "bicolor_blenny", "midas_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone",
             "hammer", "torch", "frogspawn", "duncan",
             "peppermint_shrimp", "flame_scallop",

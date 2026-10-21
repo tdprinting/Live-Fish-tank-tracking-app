@@ -18,6 +18,7 @@ uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenn
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
+uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
@@ -455,9 +456,11 @@ void main() {
         }
     } else if (part < 1.5) {
         // fins: clamp folds toward the body (hinge-weighted, up to ~60 deg) and flutter
-        float clampA = uFin.y * hinge;
-        local.x -= clampA * 0.06;
-        local.y *= 1.0 - 0.45 * clampA * step(abs(local.z), abs(local.y));
+        // the first dorsal (uShape.w = 4) also folds down on its own: a firefish lays its tall flag back along the body
+        float fold = uFold * step(3.5, uShape.w);
+        float clampA = max(uFin.y, fold) * hinge;
+        local.x -= clampA * (0.06 + 0.12 * fold);
+        local.y *= 1.0 - mix(0.45, 0.8, fold) * clampA * step(abs(local.z), abs(local.y));
         local.z *= 1.0 - 0.45 * clampA * step(abs(local.y), abs(local.z));
         float flutter = 0.006 * sin(time * 9.0 + u * 6.0) * hinge * (1.0 - 0.7 * uFin.y);
         if (uShape.w > 0.5 && uShape.w < 1.5) {
