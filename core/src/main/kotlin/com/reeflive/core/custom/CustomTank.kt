@@ -41,6 +41,8 @@ object CustomTank {
     private fun applyBuild(sim: Simulation, build: TankBuild) {
         sim.shape = build.shape
         sim.bareScape = true
+        // new corals wait for the keeper to pick their spot (CoralPicks)
+        sim.coralPicks.byHand = true
         // the keeper's own tank has a living rockscape: rocks settle when dug under, and it can be rebuilt
         sim.setDynamicRocks(true)
         sim.water.skimmer = build.skimmer
@@ -56,9 +58,10 @@ object CustomTank {
 
     fun capture(sim: Simulation, base: CustomTankSave, nowMs: Long): CustomTankSave {
         val animals = sim.organisms.filter { it.alive }.map { save(it).copy(state = sim.anemones.saveState(it)) } + sim.bags.unreleased().map { save(it).copy(arrivalTime = sim.simTimeSec) }
-        val corals = sim.corals.filter { it.tissue > 0.01 }.map { save(it) } + sim.bags.unopenedCorals().flatMap { (sp, n) ->
-            (0 until n).map { i -> SavedCoral("$sp#bagged${sim.tickCount}_$i", sp, sim.species[sp].common) }
-        }
+        val corals = sim.corals.filter { it.tissue > 0.01 }.map { save(it) }
+        // colonies still in a bag or waiting for their spot: picked when the tank is opened again
+        val toPlace = sim.coralPicks.ids() + sim.bags.unopenedCorals().flatMap { (sp, n) -> List(n) { sp } } +
+            base.toPlace.filterNot { sim.species.has(it) }
         val w = sim.water
         val eq = mapOf(
             "heater_set_c" to w.heaterSetC, "heater_working" to b(w.heaterWorking), "flow_strength" to w.flowStrength,
@@ -78,6 +81,7 @@ object CustomTank {
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
             animals = animals,
             corals = corals,
+            toPlace = toPlace,
             brood = sim.brood.save(),
             rocks = sim.rockState(),
             scapeFit = listOf(shift.x, shift.y, shift.z),
@@ -126,7 +130,7 @@ object CustomTank {
 
     /** Species ids a host must load before [restore] (sheets are loaded per id). */
     fun speciesIds(save: CustomTankSave): List<String> =
-        (save.animals + save.dormant).map { it.speciesId }.plus((save.corals + save.dormantCorals).map { it.speciesId }).distinct()
+        (save.animals + save.dormant).map { it.speciesId }.plus((save.corals + save.dormantCorals).map { it.speciesId }).plus(save.toPlace).distinct()
 
     /**
      * Rebuilds the saved tank at its saved sim time (the host then skips it forward by [catchUpSeconds]). Animals of
@@ -188,6 +192,7 @@ object CustomTank {
             if (n.isFinite() && n >= 0) w.micro.setTotal(g, n)
         }
         sim.brood.load(save.brood)
+        sim.coralPicks.restore(save.toPlace.filter { species.has(it) })
         sim.pests.restore(save.pests)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
         sim.lifePace = save.lifePace
