@@ -98,9 +98,9 @@ class EconomyTest {
 
     @Test fun levelsFollowStarPoints() {
         assertEquals(1, Levels.level(0))
-        assertEquals(1, Levels.level(99))
-        assertEquals(2, Levels.level(100))
-        assertEquals(4, Levels.level(600))
+        assertEquals(1, Levels.level(59))
+        assertEquals(2, Levels.level(60))
+        assertEquals(4, Levels.level(360))
         assertEquals(10, Levels.level(1_000_000))
     }
 

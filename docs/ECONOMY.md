@@ -28,11 +28,12 @@ anything.** Every number below is a starting point to tune after Tee plays it.
 * Name: **sand dollars** (a real sea animal, and it sounds like money). Drawn as a little round sand dollar glyph,
   never an emoji, in the gold accent colour of the Abyss theme.
 * Shown as a chip at the top of My tank: `[sand dollar] 245  ★ 3`. Tap it to open the **Care card** (section 4).
-* Prices are about one sand dollar per US dollar a real store charges, so a clownfish is about 25 and a blue tang
-  about 80. Kids can compare with real price tags, and the relative values stay realistic.
+* Prices are **two sand dollars per US dollar** a real store charges (`PriceBook.SCALE`), so a chromis is 30, a
+  clownfish 60 and a yellow tang 260. Relative values stay realistic, and a new fish takes a few days of care to
+  save for (Tee, 2026-10-20: "make the user work for their points").
 * Money never goes below zero, and nothing costs money every day (no rent, no food bill). A kid who forgets the
   tank for a week loses nothing but the daily pay they missed.
-* **Starting money:** 100 sand dollars, enough for a clownfish pair and a clean-up crew on day one.
+* **Starting money:** 60 sand dollars: one clownfish, or two chromis, or a clean-up crew on day one.
 * **Never stuck:** if the tank has no animals and you cannot afford the cheapest one, Shelly's Pet Shop gives you
   a free starter (a pair of snails) once a day.
 
@@ -44,15 +45,15 @@ cannot be farmed for levels). Levels open stores and the rarer animals.
 | Level | Star points | Opens | Rough day (doing the daily list) |
 |---|---|---|---|
 | 1 | 0 | Shelly's Pet Shop | day 1 |
-| 2 | 100 | Frag Shack | day 2 |
-| 3 | 300 | more animals at both | day 4 |
-| 4 | 600 | Big Blue Aquatics | day 8 |
-| 5 | 1000 | a 4th daily task | day 13 |
-| 6 | 1500 | Deep Reef Imports | day 19 |
-| 7 | 2100 | the rarest animals | day 26 |
-| 8-10 | 2800 / 3600 / 4500 | a new tank badge each | 5-8 weeks |
+| 2 | 60 | Frag Shack | day 2 |
+| 3 | 180 | more animals at both | day 4 |
+| 4 | 360 | Big Blue Aquatics | day 8 |
+| 5 | 600 | a 4th daily task | day 13 |
+| 6 | 900 | Deep Reef Imports | day 20 |
+| 7 | 1260 | the rarest animals | day 28 |
+| 8-10 | 1680 / 2160 / 2700 | a new tank badge each | 6-9 weeks |
 
-Formula: level *n* needs 50 · *n* · (*n* − 1) star points. Levelling up plays a short celebration (Hermie the hermit
+Formula: level *n* needs 30 · *n* · (*n* − 1) star points. Levelling up plays a short celebration (Hermie the hermit
 cheers, coins burst from the sand) and says what opened ("Big Blue Aquatics is open!").
 
 ## 4. Earning: the daily care list
@@ -63,29 +64,31 @@ keeper already has, so doing a task also keeps the tank healthy. The list is cho
 
 | Task | Done when | Pays |
 |---|---|---|
-| Feed your fish | any feeding (twice a day counts as one task) | 10 |
-| Feed your corals | coral food (powder, phyto) | 10 |
-| Test the water | open the test kit / tank check | 10 |
-| Top off the water | top-off with the tank below full | 10 |
-| Empty the skimmer cup | cup more than half full | 15 |
-| Swap the filter sock | sock older than 2 days | 15 |
-| Clean the glass | scrape when there is algae on the glass | 15 |
-| Siphon the sand | siphon with detritus on the sand | 20 |
-| Harvest macroalgae | trim the refugium | 15 |
-| Swap the carbon | carbon spent | 15 |
-| Water change | 10-25 % change (at most one a week asks for it) | 30 |
+| Feed your fish | any feeding (twice a day counts as one task) | 5 |
+| Feed your corals | coral food (powder, phyto) | 5 |
+| Test the water | open the test kit / tank check | 5 |
+| Top off the water | top-off with the tank below full | 5 |
+| Empty the skimmer cup | cup more than half full | 8 |
+| Swap the filter sock | sock older than 2 days | 8 |
+| Clean the glass | scrape when there is algae on the glass | 8 |
+| Siphon the sand | siphon with detritus on the sand | 10 |
+| Harvest macroalgae | trim the refugium | 8 |
+| Swap the carbon | carbon spent | 8 |
+| Water change | 10-25 % change (at most one a week asks for it) | 15 |
 
-* **All done bonus:** finishing the whole list pays **+25**.
+* **All done bonus:** finishing the whole list pays **+15**.
 * **Streak:** each day in a row the list is finished adds +10 % to that day's pay, up to **+50 % at 5 days**. Missing
   a day drops the streak back to 0 (no other penalty).
-* **Happy tank bonus:** once a day, tap "Collect" on the Care card: **2 per thriving fish or invert, 1 per healthy
-  coral** (health above 70 %), capped at 60. More animals pay more, but only if they are doing well, so
+* **Happy tank bonus:** once a day, tap "Collect" on the Care card: **1 per thriving fish, invert or healthy
+  coral** (health above 70 %), capped at 30. More animals pay more, but only if they are doing well, so
   overstocking stops paying.
 * **Bad care costs pay, not money:** a sick or dying animal simply stops counting for the happy tank bonus.
 * **Speeding up time does not pay faster.** Tasks and bonuses are per real day, so fast-forward is for watching, not
   for farming.
 
-A normal day: 3 tasks (~40) + all done (25) + happy tank (10-40) ≈ **75-105 sand dollars**, ~110-150 with a streak.
+A normal day: 3 tasks (~20) + all done (15) + happy tank (5-20) ≈ **40-55 sand dollars**, ~60-80 with a streak.
+So a chromis (30) is a day of care, a clownfish (60) a day or two, a yellow tang (260) about four days with a
+streak and a purple tang (500) about a week.
 
 ### Goals (one-time rewards)
 
@@ -150,11 +153,13 @@ school, shrimp clean, corals sway). Each store is split into sections, each sect
 
 ### Prices and unlock levels
 
-Base prices follow 2025-26 US store prices (LiveAquaria and local-store listings, one sand dollar a dollar): cheap
-schooling fish and clean-up crew cost a few dollars to ~15, most fish and frags 25-65, tangs, the leopard wrasse and the
-bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of care earns roughly 60-150.
+Base prices follow 2025-26 US store prices (LiveAquaria and local-store listings). The table and `PriceBook.LISTINGS`
+are in **real US dollars**; the game charges `SCALE` (2) sand dollars per dollar, before each store's own price level.
+Cheap schooling fish and clean-up crew cost a few dollars to ~15, most fish and frags 25-65, tangs, the leopard wrasse
+and the bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of care earns roughly 40-80 sand
+dollars (20-40 real dollars' worth).
 
-| Species | Group | Level | Price |
+| Species | Group | Level | Real price ($) |
 |---|---|---|---|
 | Nassarius snail | invert | 1 | 3 |
 | Astrea snail | invert | 1 | 4 |
@@ -302,7 +307,7 @@ quietly feeds My tank, so nothing ever goes hungry. Both change:
 ## 10. Saving
 
 The wallet, stars, streak, today's tasks, goals and the stores' "sold out today" counts are saved in My tank's save
-as one new field (`CustomTankSave.economy`). It has defaults, so existing tanks open with 100 sand dollars and
+as one new field (`CustomTankSave.economy`). It has defaults, so existing tanks open with 60 sand dollars and
 level 1, and the animals already in them are simply theirs (no codec version bump: an added defaulted field needs no
 migration, as with `brood`). Daily things are keyed by the local date (`yyyy-mm-dd`), so a phone clock change can at
 worst re-roll one day's list, never pay twice for a task.

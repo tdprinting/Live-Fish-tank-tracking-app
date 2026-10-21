@@ -47,17 +47,17 @@ data class LedgerEntry(val day: String, val label: String, val amount: Int)
 
 /** The daily chores (docs/ECONOMY.md §4). [pay] is before the streak bonus. */
 enum class CareTask(val id: String, val label: String, val pay: Int, val hint: String) {
-    FEED_FISH("feed_fish", "Feed your fish", 10, "Any food from the shelf counts."),
-    FEED_CORALS("feed_corals", "Feed your corals", 10, "Coral powder, cyclops or plankton."),
-    TEST_WATER("test_water", "Test the water", 10, "Open Tank Health to test it."),
-    TOP_OFF("top_off", "Top off the water", 10, "Add fresh water for what evaporated."),
-    EMPTY_SKIMMER("empty_skimmer", "Empty the skimmer cup", 15, "The cup is getting full."),
-    CHANGE_SOCK("change_sock", "Swap the filter sock", 15, "The sock is dirty."),
-    CLEAN_GLASS("clean_glass", "Clean the glass", 15, "Slide the scraper over the front glass."),
-    SIPHON_SAND("siphon_sand", "Siphon the sand", 20, "Suck the gunk out of the sand."),
-    HARVEST_MACRO("harvest_macro", "Harvest macroalgae", 15, "Trim the refugium."),
-    REPLACE_CARBON("replace_carbon", "Swap the carbon", 15, "The carbon is used up."),
-    WATER_CHANGE("water_change", "Water change", 30, "Swap 10-25 % for fresh salt water.");
+    FEED_FISH("feed_fish", "Feed your fish", 5, "Any food from the shelf counts."),
+    FEED_CORALS("feed_corals", "Feed your corals", 5, "Coral powder, cyclops or plankton."),
+    TEST_WATER("test_water", "Test the water", 5, "Open Tank Health to test it."),
+    TOP_OFF("top_off", "Top off the water", 5, "Add fresh water for what evaporated."),
+    EMPTY_SKIMMER("empty_skimmer", "Empty the skimmer cup", 8, "The cup is getting full."),
+    CHANGE_SOCK("change_sock", "Swap the filter sock", 8, "The sock is dirty."),
+    CLEAN_GLASS("clean_glass", "Clean the glass", 8, "Slide the scraper over the front glass."),
+    SIPHON_SAND("siphon_sand", "Siphon the sand", 10, "Suck the gunk out of the sand."),
+    HARVEST_MACRO("harvest_macro", "Harvest macroalgae", 8, "Trim the refugium."),
+    REPLACE_CARBON("replace_carbon", "Swap the carbon", 8, "The carbon is used up."),
+    WATER_CHANGE("water_change", "Water change", 15, "Swap 10-25 % for fresh salt water.");
 
     companion object {
         fun byId(id: String): CareTask? = entries.firstOrNull { it.id == id }
@@ -85,7 +85,7 @@ enum class Goal(val id: String, val label: String, val reward: Int) {
 object Levels {
     const val MAX = 10
 
-    fun starsFor(level: Int): Int = 50 * level * (level - 1)
+    fun starsFor(level: Int): Int = 30 * level * (level - 1)
 
     fun level(stars: Int): Int {
         var n = 1
@@ -401,17 +401,17 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         (listOf(LedgerEntry(day, label, amount)) + state.ledger).take(LEDGER_MAX)
 
     companion object {
-        const val START_COINS = 100
-        const val ALL_DONE_BONUS = 25
+        const val START_COINS = 60
+        const val ALL_DONE_BONUS = 15
         const val STREAK_STEP = 0.1
         const val STREAK_DAYS = 5
-        const val HAPPY_PER_ANIMAL = 2
+        const val HAPPY_PER_ANIMAL = 1
         const val HAPPY_PER_CORAL = 1
-        const val HAPPY_CAP = 60
+        const val HAPPY_CAP = 30
         const val THRIVING = 0.7
         const val LEDGER_MAX = 30
 
-        /** Happy tank bonus now: 2 per thriving animal, 1 per healthy coral, capped. */
+        /** Happy tank bonus now: 1 per thriving animal, 1 per healthy coral, capped. */
         fun happyBonus(sim: Simulation): Int {
             var n = 0
             for (o in sim.organisms) if (o.alive && o.health > THRIVING) n += HAPPY_PER_ANIMAL
