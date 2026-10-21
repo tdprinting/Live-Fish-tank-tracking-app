@@ -388,9 +388,11 @@ open class Sleep(val b: SpeciesBrain, label: String = "Sleeping", val nightWeigh
 /** Visit a cleaning station (wrasse or skunk shrimp): pose until cleaned (SIMULATION §4.4, 04 §13C). */
 open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior("visit", "Visiting cleaner") {
     private var station: CleaningStation? = null
+    /** A station it could not reach in [GIVE_UP_S] is left for a while, not re-tried at once (see [update]). */
+    private var retryAt = -1e9
     override fun score(c: Ctx): Double {
         val o = c.o
-        if (c.t - o.lastCleanedAt < 600 || c.p.night) return 0.0
+        if (c.t - o.lastCleanedAt < 600 || c.p.night || c.t < retryAt) return 0.0
         val st = choose(c) ?: return 0.0
         if (st.client != null && st.client !== o) return 0.0
         val ich = if (o.disease == Disease.ICH) o.diseaseStage * 3 else 0.0
@@ -430,13 +432,26 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
             o.finClamp = 0.0
         }
         if (c.t - o.lastCleanedAt < 2) { st.release(); finished = true }
-        if (elapsed > 90) { if (st.client === o) st.release(); finished = true }
+        // a pose spot it cannot get to (a dottyback under a ledge, the climb out too tight for its steering) held
+        // the station for 80 min, re-picked every 90 s, and the wrasse could not reach it there either: go about its
+        // day and let the cleaner find it elsewhere
+        if (elapsed > GIVE_UP_S) {
+            if (!(st.client === o && st.clientReady)) retryAt = c.t + RETRY_S
+            if (st.client === o) st.release()
+            finished = true
+        }
     }
     override fun exit(c: Ctx) {
         // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station
         // there stopped the shrimp's clean at its antenna tap, the pose lapsed, the fish came back to visit, and the two
         // looped every 1.5 s (a dottyback at the skunk shrimp for minutes)
         station?.let { if (it.client === c.o && !(c.o.poseFor === it.cleaner && c.o.poseUntil > c.t)) it.release() }
+    }
+
+    companion object {
+        const val GIVE_UP_S = 90.0
+        /** [I]: long enough for the fish to move on and meet the wrasse on its rounds (06 §5.6 #4 allows 90 min). */
+        const val RETRY_S = 600.0
     }
 }
 
