@@ -1383,17 +1383,27 @@ Sources: [research 10](research/10_microfauna.md) §2.2 diel behaviour and §5.3
 - Amphipod: stop-go scuttle (legs 6.5 Hz), rare side-swim bouts rolled 90° at 5 cm/s (pleopods 12 Hz), lands on the nearest rock or drops to the sand; flees into cover when a fish comes within 5 cm.
 - Mysids: a loose swarm 3 cm off a cave mouth, 2.5 Hz positional jitter, heading into the main flow; a fish within 6 cm makes one tail-flip backward ~7 BL.
 - Calanoids: 1-3 mm hops every 0.5-2 s biased upward toward the light, sinking ~0.7 mm/s between.
-- Pods, isopods, snails, flatworms: correlated random walks on their surface with pauses (pods dart 2-5 mm).
+- Pods, isopods, snails, flatworms: correlated random walks on their surface with pauses (pods dart 2-5 mm). On rock, amphipods and isopods lean down the slope into crevices and under ledges, and red planaria (*Convolutriloba*, photosynthetic symbionts) lean up toward the light; isopods drop back into the rock when a fish comes within 5 cm, as amphipods do.
 - Skeleton shrimp: grip with the rear pereopods and stand off the rock, swaying as a 0.7 Hz pendulum in the flow with the gnathopods held up; let go and drop into the turf to hide.
 - *Homotrema*: never moves; it appears and disappears only with the population.
 - Spaghetti-worm tentacles: creep out over the sand at 1.2 mm/s along gently curving paths; pull back within ~2 s when a fish's head comes within 4 cm, then stay in for 20-60 s.
 Hiding animals back into their surface and vanish; nothing is ever teleported in view.
 
+**On the rock, too small for a model** (`rock.frag` `rockLife`, densities `MicroCritterVisuals.rockLife` = `visible(group, ROCK)` per cm², owner request 2026-10-21 "more realistic graphics and models for the microfauna on the rocks"). Drawn only where they resolve (pods below ~0.015 cm per pixel, forams below ~0.04), one animal per lattice cell:
+- Harpacticoids (x): ~1 mm, a prosome 2.5× as long as wide with faint somite rings, a narrow urosome, short antennules that tap while walking, two caudal rami, a red naupliar eye. Half are *Tigriopus* (pale orange with the red astaxanthin gut), half *Tisbe* (glassy with a dark diatom gut); 30 % are gravid with one egg sac under the urosome. They crawl 1-3 mm/s in bouts with pauses, now and then a dart.
+- Cyclopoids (w, new): oval prosome, slender urosome, antennules swept back, pale grey with a dark gut; 40 % carry the paired egg sacs. They sit and then hop.
+- Podocopid ostracods (y): a smooth oval, slightly kidney-shaped bivalved carapace with the hinge line down the back, a paler rim, the brown gut through the shell and a black eye; antennae flicker out of the front at 3-4 Hz while they scurry, with a slight roll.
+- The pods are translucent (mixed at 40-80 % over the rock), crowd into 2.4 cm patches, and shrink out of sight into the turf when one of the four animal heads nearest the camera (`uPred`) comes within ~1.2-3 cm, coming back once it has gone.
+- *Homotrema rubrum* (z): 2-5 mm with a few up to 8 mm, mostly on shaded rock and undersides, in the Bermuda morphotype proportions (hemispherical 37 %, globose 19 %, knobby 17 %, encrusting 12 %, columnar 3 %). Deep red (#B0302A), pitted with pores up close, paler knob tips, 10 % pale-pink empty tests; the normal is tilted over each dome so the fixtures light one side. The 3D `micro_foram` model is the knobby form (a pitted cushion with 7 stubby rounded branches, 576 triangles).
+- Cost (SwiftShader, rock + sand only, 1600×1200): about +6 % frame time against the previous version with the camera at the rock face, +4 % from across the tank; nothing on Low.
+
+Research correction: research 17 §1.1 says *Tigriopus* carries paired egg sacs; harpacticoids, *Tigriopus* included, carry a single ventral egg sac (paired sacs are the cyclopoid mark), so that is what is drawn [K].
+
 **Rendering.** Each critter is a 16-station spine + frames, drawn with the organism shaders (the same spline skinning as fish and inverts), never picked or followed. Models are built by `tools/blender/microfauna.py`. Nearest first, skipping anything under ~3 px, until 12k (High) / 2k (Medium) triangles are spent; off on Low. `tools/validate_glb.py` counts that budget in its on-screen estimate.
 
 **Accuracy audit** (2026-10-13): an independent review against research 10/17 checked sizes, speeds, beat rates and diel exposure; its findings (tentacle diel cycle, predator flight, mysid jitter amplitude, fireworm length up to 12 cm, calanoid antennule length, podocopid eye size, paired mysid eyes, missing water-column pods) are fixed here.
 
-**Tests** (`MicroCrittersTest`): more worms and amphipods at night than by day from a mature tank's own model; they withdraw when the lights come on; every body has its length and sits on rock, sand or glass; tentacles retract from a passing fish.
+**Tests** (`MicroCrittersTest`): more worms and amphipods at night than by day from a mature tank's own model; they withdraw when the lights come on; every body has its length and sits on rock, sand or glass; tentacles retract from a passing fish; amphipods and isopods on the rock hide from a fish nosing over them.
 
 ## 18. Bacteria layer (`sim/BacteriaModel.kt`, research 18)
 

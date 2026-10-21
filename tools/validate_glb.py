@@ -48,7 +48,7 @@ BUDGET = {
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
     "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,
     "micro_snail": 1400, "micro_flatworm": 200, "micro_tentacle": 800, "micro_caprellid": 2000, "micro_ostracod": 700,
-    "micro_foram": 300, "micro_calanoid": 600,
+    "micro_foram": 600, "micro_calanoid": 600,
     # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
     "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
     "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,
