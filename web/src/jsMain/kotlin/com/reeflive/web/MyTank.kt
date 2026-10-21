@@ -136,6 +136,9 @@ object ReefMyTank {
     /** The keeper opened Tank Health (the water test): today's "Test the water" chore. */
     fun testedWater() { if (sim != null) economy?.testedWater(today()) }
 
+    /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
+    fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
+
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
 

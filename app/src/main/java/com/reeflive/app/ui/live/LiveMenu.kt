@@ -155,6 +155,10 @@ class LiveTools(
     /** Tank Health: every living animal's hunger bar (core HungryFeed) and "Feed the hungry ones". */
     val hunger: List<com.reeflive.core.sim.HungerRow> = emptyList(),
     val onFeedHungry: () -> Unit = {},
+    /** Tank Health: each coral's health (core CoralHealth) and, in My tank, the one-tap coral and invert care (core CoralCare). */
+    val coralRows: List<com.reeflive.core.sim.CoralHealth.Row> = emptyList(),
+    val coralCare: com.reeflive.core.sim.CoralCare.Plan? = null,
+    val onReefCare: (() -> Unit)? = null,
     /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
     val myTank: Boolean = false,
     /** My tank's growing speed (slow biology only; animals still move at real speed). */
@@ -499,7 +503,8 @@ private fun ColumnScope.CardBody(
     when (c) {
         // never a card: the bubble opens the 3D supply shelf (feed, care and tools live there)
         LiveCategory.SUPPLIES -> Unit
-        LiveCategory.FIX -> TankHealthBody(tools.readouts, tools.hunger, tools.onFeedHungry, tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close)
+        LiveCategory.FIX -> TankHealthBody(tools.readouts, tools.hunger, tools.onFeedHungry, tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close,
+            tools.coralRows, tools.coralCare, tools.onReefCare)
         LiveCategory.LIGHT -> {
             LiveHelp("Feeding, water changes, doses and cleaning are on the supply shelf.")
             LiveSectionTitle("Water")
