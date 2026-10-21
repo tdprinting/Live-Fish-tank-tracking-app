@@ -8,6 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
+import { initRoom, roomHtml, roomClick, endTry } from './room.js';
 import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
@@ -60,9 +61,10 @@ export function startLive(applyReadings) {
   window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   // the fish stores: walking a store's display tanks replaces the tank in the 3D view until you leave (stores.js)
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
+  // the room shop: stands for the tank, tried on in 3D before buying (room.js)
+  initRoom({ my: MY, live, say, cue: (n) => cue(n), onChange: () => renderCard() });
   live.start($('tank'), new URL('.', location.href).href, pictureArg(), {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
-    // frames stayed slow at the lowest resolution: the tank stepped its Picture down, and keeps it for next time
     // Auto settled on a cheaper (or climbed back to a richer) preset: start from it next visit
     onQuality: (q) => store.set('reeflive.autoLevel', q),
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -268,6 +270,7 @@ function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
   if (window.reefstores?.active()) window.reefstores.leave(true);
+  endTry(true);
   ui.mode = m;
   SB.setMode(m);
   ui.picked = null; ui.following = null; live.follow(null); renderFish();
@@ -519,6 +522,7 @@ function lifeCard(sb) {
   // My tank buys its animals at the fish stores (docs/ECONOMY.md §5); the free gallery stays in the Sandbox
   if (ui.mode === 'mine') {
     return `${streetHtml()}
+    ${roomHtml()}
     <h4>Helpers</h4><div class="options">
       ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
       ${tile('data-shells', 'shell', 'Spare shells', false, !sb)}</div>`;
@@ -694,6 +698,7 @@ $('card').addEventListener('click', (e) => {
   else if ('records' in d) ui.records = !ui.records;
   else if (d.record != null) radioPick(Number(d.record));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
+  else if (d.room) { roomClick(d.room, closeCard); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
   else if (d.count) ui.addCount = Number(d.count);

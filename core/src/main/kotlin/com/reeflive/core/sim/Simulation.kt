@@ -995,7 +995,8 @@ class Simulation private constructor(
         SexRoles.step(organisms, lifeDt)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(lifeMin)
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) } +
+            com.reeflive.core.ai.GiantClamBrain.demandDkhPerDay(organisms)
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
         w.alleloSourcePerHour = CoralGrowth.alleloSource(corals)
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
@@ -1241,6 +1242,9 @@ class Simulation private constructor(
                     o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
                 // the flame scallop lives on phytoplankton only (research 42 §2.4)
                 BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.GIANT_CLAM -> com.reeflive.core.ai.GiantClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.PORCELAIN_CRAB -> com.reeflive.core.ai.PorcelainCrabBrain.abstractFeed(o, this, dtMin)
+                BrainKind.SEA_CUCUMBER -> com.reeflive.core.ai.SeaCucumberBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1366,6 +1370,8 @@ class Simulation private constructor(
                 BrainKind.ARROW_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(25.0, 45.0, 24.0) else continue
                 // research 43 §1: every 4-8 weeks while growing (care guides); a majid too, so none after the terminal molt
                 BrainKind.EMERALD_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(28.0, 56.0, 24.0) else continue
+                // research 45 §2: a small anomuran that keeps molting as it grows (est., like the shrimp)
+                BrainKind.PORCELAIN_CRAB -> Triple(25.0, 45.0, 24.0)
                 else -> continue
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
@@ -1405,6 +1411,8 @@ class Simulation private constructor(
             val age = simTimeSec - since
             val dt = carcassRelease(o, age, dtMin)
             if (dt > 0) { o.carcassTanReleasedG += dt; water.addDetritusTanGrams(dt) }
+            // a dead sea cucumber leaches its holothurin (research 45 §4)
+            if (o.brainKind == BrainKind.SEA_CUCUMBER) com.reeflive.core.ai.SeaCucumberBrain.carcassLeach(o, this, age, dtMin)
             if (age > 48 * 3600) { removed += o; it.remove() }
         }
         removed.forEach { agents.remove(it) }
@@ -2106,6 +2114,9 @@ class Simulation private constructor(
     }
 
     fun agentOf(o: Organism): Agent? = agents[o]
+
+    /** A brain's own death sentence for [o] (a sea cucumber sucked into a pump), with its event. */
+    fun killNow(o: Organism, cause: String) = HealthModel.kill(o, cause, simTimeSec, pendingEventsSink)
 
     fun lightChannels(): DoubleArray = lightCh.copyOf()
     val lightIntensity: Double get() = LightSchedule.intensity(lightCh)

@@ -87,6 +87,10 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
     var storeRoom: StoreRoomControl?
         get() = renderer.storeRoom
         set(v) { renderer.storeRoom = v }
+    /** The stand and room round the tank at home (My tank's bought ones, or Tee's). */
+    var room: RoomControl
+        get() = renderer.room
+        set(v) { renderer.room = v }
     /** The supply shelf beside the tank (Supplies mode): open / close, row focus, locked props and taps. */
     var shelf: SupplyShelfControl?
         get() = renderer.shelf

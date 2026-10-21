@@ -72,6 +72,7 @@ fun TankView(
     aim: TankAimControl? = null,
     /** A fish store visit: the shop drawn around the display tank ([StoreRoomControl]); null = at home. */
     storeRoom: StoreRoomControl? = null,
+    room: RoomControl? = null,
     /** Screensaver mode over this view ([CinemaSession]); it drives the camera while active. */
     cinema: CinemaSession? = null,
 ) {
@@ -83,7 +84,7 @@ fun TankView(
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson, followCam = followCam,
-        nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim, storeRoom = storeRoom, cinema = cinema,
+        nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim, storeRoom = storeRoom, room = room, cinema = cinema,
     )
 }
 
@@ -125,6 +126,7 @@ fun TankView(
     onSpot: ((com.reeflive.core.sim.TankSpot, Float, Float) -> Unit)? = null,
     aim: TankAimControl? = null,
     storeRoom: StoreRoomControl? = null,
+    room: RoomControl? = null,
     cinema: CinemaSession? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
@@ -183,6 +185,7 @@ fun TankView(
                         v.care = care
                         v.aim = aim
                         v.storeRoom = storeRoom
+                        room?.let { v.room = it }
                         if (followCam != null) v.followCam = followCam
                         cinema?.attach(v.renderer) { v.height.toFloat() }
                         view = v
@@ -202,6 +205,7 @@ fun TankView(
                     v.care = care
                     v.aim = aim
                     v.storeRoom = storeRoom
+                    room?.let { v.room = it }
                     v.subFirstPerson = subFirstPerson
                     v.nurseryRequest = nurseryRequest
                     if (followCam != null) v.followCam = followCam
