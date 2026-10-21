@@ -448,6 +448,289 @@ def moonlit_drift():
     return mix
 
 
+# ---------------------------------------------------------------- record shop songs (bought with sand dollars)
+def steelpan(m, dur, amp=1.0):
+    """Steel drum: a bright ringing note with near-harmonic overtones."""
+    return mallet(m, dur, [(1, 1.0), (2.0, 0.55), (3.0, 0.22), (4.02, 0.1)], [0.7, 0.35, 0.18, 0.08], amp, attack=0.004)
+
+
+def musicbox(m, dur, amp=1.0):
+    return mallet(m, dur, [(1, 1.0), (3.0, 0.25), (5.9, 0.08)], [0.6, 0.15, 0.05], amp, attack=0.001)
+
+
+def clap(amp=1.0):
+    n = int(0.09 * SR)
+    x = noise(n, 900, 3200) * env(n, 0.002, 0.018, 0.01)
+    return amp * (x + 0.6 * np.roll(x, int(0.011 * SR)))
+
+
+def strum_bar(song, lane, bar, notes, hits, amp, swing=0.0, damp=0.991, bright=0.75):
+    """Strums [notes] at [hits] = [(beat, 'd'|'u', gain)]: down strums low to high, up strums high to low."""
+    for bt, d, g in hits:
+        seq = notes if d == "d" else notes[::-1]
+        for k, m in enumerate(seq):
+            song.put(lane, pluck(m, 0.45, damp, bright, amp * g), bar, bt + k * 0.02, swing)
+
+
+def uke_voicing(c):
+    return sorted(60 + ((m - 60) % 12) for m in c[:3]) + [67 + ((c[0] - 67) % 12)]
+
+
+def window_seat():
+    """Flying to the ocean: a cabin chime, airy celesta arpeggios over a soft engine hum, a whistled tune."""
+    song = Song(bpm=100, beats=4, bars=32)
+    key = 64  # E
+    prog = [chord(64, "add9"), chord(61, "m7"), chord(57, "M7"), chord(59, "sus2")] * 2
+    rhythm = [[(0, 1.5), (1.5, 0.5), (2, 2)], [(0, 1), (1, 1), (2, 1), (3, 1)], [(0, 3), (3, 1)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 68, 83, 71, 71)
+    b = phrase(prog, rhythm[2:] + rhythm[:2], key, MAJOR, 68, 85, 76, 72)
+    song.put("fx", glock(88, 0.5, 0.6), 0, 0)  # "ding": the seatbelt sign goes off
+    song.put("fx", glock(84, 0.8, 0.6), 0, 0.5)
+    for bar in range(32):
+        c = prog[bar % 8]
+        if bar >= 2:
+            for k, m in enumerate([c[0] + 12, c[1] + 12, c[2] + 12, c[1] + 24]):
+                song.put("arp", celesta(m, 0.5, 0.4), bar, k)
+                song.put("arp", celesta(m + 7 if k % 2 else m + 12, 0.4, 0.25), bar, k + 0.5)
+            song.put("pad", pad([m + 12 for m in c[:3]], 4 * song.beat, 0.3), bar, 0)
+            song.put("bass", bass(c[0] - 24, 1.5, 0.7), bar, 0)
+            song.put("bass", bass(c[0] - 24 + 7, 0.8, 0.45), bar, 2.5)
+    play_melody(song, "mel", a, 4, whistle, 0.5)
+    play_melody(song, "mel", b, 12, glock, 0.5)
+    play_melody(song, "mel", a, 20, whistle, 0.5)
+    hum = noise(song.n, 90, 400) * np.clip(1 - t_axis(song.n) / 20, 0.15, 1)
+    mix = song.lane("arp") * 0.5 + song.lane("pad") * 0.4 + song.lane("bass") * 0.5 + song.lane("mel") * 0.6
+    mix += song.lane("fx") * 0.6 + 0.05 * hum
+    return mix
+
+
+def five_oclock_dock():
+    """Happy hour on the dock: a steel drum tune over a calypso ukulele and bass, shakers in eighths."""
+    song = Song(bpm=112, beats=4, bars=34)
+    key = 65  # F
+    prog = [chord(65, "M"), chord(58, "M"), chord(60, "7"), chord(65, "M"),
+            chord(65, "M"), chord(62, "m"), chord(67, "7"), chord(60, "7")]
+    rhythm = [[(0, 1), (1, 0.5), (1.5, 1), (2.5, 1.5)], [(0, 0.5), (0.5, 0.5), (1, 1), (2, 2)],
+              [(0, 1.5), (1.5, 1), (2.5, 1.5)], [(0, 3), (3, 1)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 69, 86, 77, 81)
+    b = phrase(prog, rhythm[1:] + rhythm[:1], key, MAJOR, 69, 88, 81, 82)
+    hits = [(0, "d", 0.9), (1, "u", 0.5), (1.5, "d", 0.6), (2.5, "u", 0.6), (3, "d", 0.5), (3.5, "u", 0.6)]
+    for bar in range(34):
+        c = prog[bar % 8]
+        strum_bar(song, "uke", bar, uke_voicing(c), hits, 0.55, swing=0.05)
+        song.put("bass", bass(c[0] - 24, 0.6, 0.8), bar, 0)
+        song.put("bass", bass(c[0] - 17, 0.4, 0.6), bar, 1.5)
+        song.put("bass", bass(c[0] - 24, 0.6, 0.7), bar, 2)
+        for e in range(8):
+            song.put("perc", shaker(0.1, 0.35 if e % 2 else 0.2), bar, e * 0.5, swing=0.05)
+    play_melody(song, "mel", a, 2, steelpan, 0.8)
+    play_melody(song, "mel", b, 10, steelpan, 0.8)
+    play_melody(song, "mel", a, 18, steelpan, 0.8)
+    play_melody(song, "mel2", [(bi, bt, ln, m - 12) for bi, bt, ln, m in a], 18, marimba, 0.5)
+    play_melody(song, "mel", b, 26, steelpan, 0.8)
+    mix = song.lane("uke") * 0.8 + song.lane("bass") * 0.5 + song.lane("perc") * 0.5
+    mix += song.lane("mel") * 0.55 + song.lane("mel2") * 0.4 + 0.04 * waves(song.n, period=8)
+    return mix
+
+
+def sandcastle_sunshine():
+    """A happy beach day: bright ukulele, hand claps, a glockenspiel tune and a whistled answer."""
+    song = Song(bpm=116, beats=4, bars=36)
+    key = 67  # G
+    prog = [chord(67, "M"), chord(64, "m"), chord(60, "M"), chord(62, "M")] * 2
+    rhythm = [[(0, 0.5), (0.5, 0.5), (1, 1), (2, 1), (3, 1)], [(0, 1.5), (1.5, 0.5), (2, 2)],
+              [(0, 1), (1, 1), (2, 0.5), (2.5, 0.5), (3, 1)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 71, 88, 79, 91)
+    b = phrase(prog, rhythm[::-1], key, MAJOR, 69, 84, 74, 92)
+    hits = [(0, "d", 1.0), (1, "d", 0.7), (1.5, "u", 0.5), (2.5, "u", 0.5), (3, "d", 0.7), (3.5, "u", 0.5)]
+    for bar in range(36):
+        c = prog[bar % 8]
+        strum_bar(song, "uke", bar, uke_voicing(c), hits, 0.6)
+        song.put("bass", bass(c[0] - 24, 0.8, 0.7), bar, 0)
+        song.put("bass", bass(c[0] - 24 + 7, 0.6, 0.5), bar, 2)
+        if bar >= 4:
+            song.put("perc", clap(0.5), bar, 1)
+            song.put("perc", clap(0.5), bar, 3)
+    play_melody(song, "mel", a, 4, glock, 0.55)
+    play_melody(song, "mel", b, 12, whistle, 0.45)
+    play_melody(song, "mel", a, 20, glock, 0.55)
+    play_melody(song, "mel", b, 28, whistle, 0.45)
+    mix = song.lane("uke") * 0.8 + song.lane("bass") * 0.5 + song.lane("perc") * 0.35 + song.lane("mel") * 0.6
+    mix += 0.06 * waves(song.n, period=7)
+    return mix
+
+
+def turtle_glide():
+    """Swimming with the turtles: slow and floaty, harp ripples and vibraphone over warm pads and the swell."""
+    song = Song(bpm=68, beats=4, bars=20)
+    key = 58  # Bb
+    prog = [chord(58, "M7"), chord(63, "M7"), chord(55, "m7"), chord(60, "sus2")] * 2
+    rhythm = [[(0, 2), (2, 2)], [(0, 3), (3, 1)], [(0, 1), (1, 1), (2, 2)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 70, 84, 74, 101)
+    for bar in range(20):
+        c = prog[bar % 8]
+        song.put("pad", pad(c, 4 * song.beat, 0.45), bar, 0)
+        song.put("bass", bass(c[0] - 12, 2.5, 0.35), bar, 0)
+        for k, m in enumerate([c[0], c[1], c[2], c[0] + 12, c[2] + 12, c[1] + 12]):
+            song.put("harp", pluck(m + 12, 1.6, 0.997, 0.8, 0.35), bar, k * 0.25)
+    play_melody(song, "mel", a, 4, vibes, 0.6)
+    play_melody(song, "mel", a, 12, celesta, 0.5)
+    mix = song.lane("pad") * 0.5 + song.lane("bass") * 0.4 + song.lane("harp") * 0.5 + song.lane("mel") * 0.6
+    mix += 0.3 * waves(song.n, period=11)
+    return mix
+
+
+def sea_breeze_bossa():
+    """A sea breeze bossa nova: nylon guitar with the off-beat chord pushes, a soft flute line, a shaker."""
+    song = Song(bpm=124, beats=4, bars=36)
+    key = 62  # D
+    prog = [chord(62, "M7"), chord(59, "m7"), chord(64, "m7"), chord(57, "7"),
+            chord(54, "m7"), chord(59, "7"), chord(64, "m7"), chord(57, "7")]
+    rhythm = [[(0, 1.5), (1.5, 1), (2.5, 1.5)], [(0, 2), (2, 1), (3, 1)], [(0, 0.5), (0.5, 1), (1.5, 2.5)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 69, 85, 74, 111)
+    b = phrase(prog, rhythm[2:] + rhythm[:2], key, MAJOR, 69, 86, 78, 112)
+    pushes = [(0, 1.0), (1.5, 0.8), (3, 0.8)], [(0.5, 0.8), (2, 0.8), (3.5, 0.7)]
+    for bar in range(36):
+        c = prog[bar % 8]
+        song.put("gtr", pluck(c[0] - 12, 0.9, 0.995, 0.5, 0.8), bar, 0)
+        song.put("gtr", pluck(c[0] - 5 if c[0] - 5 < 57 else c[0] - 17, 0.9, 0.995, 0.5, 0.7), bar, 2)
+        for bt, g in pushes[bar % 2]:
+            for k, m in enumerate(c[1:]):
+                song.put("gtr", pluck(m, 0.4, 0.99, 0.55, 0.35 * g), bar, bt + k * 0.01)
+        for e in range(8):
+            song.put("perc", shaker(0.08, 0.3 if e % 2 else 0.18), bar, e * 0.5)
+    play_melody(song, "mel", a, 4, whistle, 0.45)
+    play_melody(song, "mel", b, 12, whistle, 0.45)
+    play_melody(song, "mel", a, 20, vibes, 0.6)
+    play_melody(song, "mel", b, 28, whistle, 0.45)
+    mix = song.lane("gtr") * 0.85 + song.lane("perc") * 0.45 + song.lane("mel") * 0.55
+    mix += 0.04 * waves(song.n, period=9)
+    return mix
+
+
+def starfish_lullaby():
+    """A starfish lullaby: a music box waltz over a hushed pad."""
+    song = Song(bpm=84, beats=3, bars=30)
+    key = 65  # F
+    prog = [chord(65, "M"), chord(62, "m"), chord(58, "M"), chord(60, "7"),
+            chord(65, "M"), chord(57, "m"), chord(58, "M"), chord(60, "7")]
+    rhythm = [[(0, 1), (1, 1), (2, 1)], [(0, 2), (2, 1)], [(0, 1), (1, 1), (2, 1)], [(0, 3)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 77, 93, 81, 121)
+    b = phrase(prog[4:] + prog[:4], rhythm, key, MAJOR, 77, 93, 84, 122)
+    for bar in range(30):
+        c = prog[bar % 8]
+        song.put("pad", pad(c, 3 * song.beat, 0.35), bar, 0)
+        song.put("box", musicbox(c[0] + 12, 0.6, 0.35), bar, 0)
+        song.put("box", musicbox(c[2] + 12, 0.5, 0.25), bar, 1)
+        song.put("box", musicbox(c[1] + 12, 0.5, 0.25), bar, 2)
+    play_melody(song, "mel", a, 2, musicbox, 0.6)
+    play_melody(song, "mel", b, 10, musicbox, 0.6)
+    play_melody(song, "mel", a, 18, musicbox, 0.6)
+    mix = song.lane("pad") * 0.45 + song.lane("box") * 0.5 + song.lane("mel") * 0.7
+    mix += 0.12 * waves(song.n, period=12)
+    return mix
+
+
+def tiki_twilight():
+    """Tiki torches at twilight: lazy ukulele, a sliding lap steel and a few firefly twinkles."""
+    song = Song(bpm=76, beats=4, bars=24)
+    key = 60  # C
+    prog = [chord(60, "6"), chord(57, "m7"), chord(65, "M7"), chord(67, "7")] * 2
+    rhythm = [[(0, 2), (2, 1), (3, 1)], [(0, 3), (3, 1)], [(0, 1.5), (1.5, 2.5)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 67, 81, 72, 131)
+    r = np.random.default_rng(133)
+    hits = [(0, "d", 0.9), (2, "d", 0.7), (3, "u", 0.5)]
+    for bar in range(24):
+        c = prog[bar % 8]
+        strum_bar(song, "uke", bar, uke_voicing(c), hits, 0.55, damp=0.993)
+        song.put("bass", bass(c[0] - 24, 1.5, 0.6), bar, 0)
+        song.put("bass", bass(c[0] - 17, 1.0, 0.4), bar, 2)
+        if r.random() < 0.6:
+            song.put("fly", glock(int(r.choice([c[0] + 24, c[1] + 24, c[2] + 24])), 1.0, 0.3), bar, float(r.choice([0.5, 1.5, 2.5, 3.5])))
+    for bar0 in (4, 12):
+        for bi, bt, ln, m in a:
+            song.put("lead", steel(m, ln * song.beat, 0.7, slide_from=m - 2 if ln >= 1.5 else None), bar0 + bi, bt)
+    mix = song.lane("uke") * 0.8 + song.lane("bass") * 0.45 + song.lane("lead") * 0.5 + song.lane("fly") * 0.4
+    mix += 0.08 * waves(song.n, period=10)
+    return mix
+
+
+def kelp_forest_sway():
+    """Kelp forest sway: a gently rocking marimba pattern in D dorian, pizzicato bass and a celesta tune."""
+    song = Song(bpm=92, beats=4, bars=28)
+    key = 62  # D dorian
+    prog = [chord(62, "m7"), chord(67, "7"), chord(62, "m7"), chord(60, "M"),
+            chord(58, "M7"), chord(60, "M"), chord(62, "m7"), chord(57, "m7")]
+    rhythm = [[(0, 1.5), (1.5, 0.5), (2, 2)], [(0, 1), (1, 1), (2, 1), (3, 1)], [(0, 3), (3, 1)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, DORIAN, 69, 86, 74, 141)
+    for bar in range(28):
+        c = prog[bar % 8]
+        for k, m in enumerate([c[0], c[2], c[1] + 12, c[2], c[0] + 12, c[2], c[1] + 12, c[2]]):
+            song.put("osc", marimba(m, 0.4, 0.5 if k % 2 == 0 else 0.35), bar, k * 0.5)
+        song.put("bass", bass(c[0] - 24, 0.5, 0.8), bar, 0)
+        song.put("bass", bass(c[2] - 24, 0.4, 0.55), bar, 2)
+        song.put("bass", bass(c[0] - 12, 0.4, 0.45), bar, 3)
+        song.put("pad", pad(c, 4 * song.beat, 0.25), bar, 0)
+    play_melody(song, "mel", a, 4, celesta, 0.6)
+    play_melody(song, "mel", a, 12, vibes, 0.6)
+    play_melody(song, "mel", [(bi, bt, ln, m + 12) for bi, bt, ln, m in a], 20, celesta, 0.5)
+    mix = song.lane("osc") * 0.5 + song.lane("bass") * 0.5 + song.lane("pad") * 0.45 + song.lane("mel") * 0.65
+    mix += 0.08 * waves(song.n, period=12)
+    return mix
+
+
+def postcard_reef():
+    """A postcard from the reef: tiptoeing pizzicato bass, twinkly celesta and a marimba tune."""
+    song = Song(bpm=96, beats=4, bars=28)
+    key = 57  # A
+    prog = [chord(57, "M"), chord(62, "M"), chord(54, "m"), chord(64, "7")] * 2
+    rhythm = [[(0, 0.5), (0.5, 0.5), (1, 1), (2, 2)], [(0, 1), (1, 0.5), (1.5, 0.5), (2, 2)],
+              [(0, 1.5), (1.5, 0.5), (2, 1), (3, 1)], [(0, 4)]] * 2
+    a = phrase(prog, rhythm, key, LYDIAN, 69, 86, 76, 151)
+    b = phrase(prog, rhythm[1:] + rhythm[:1], key, MAJOR, 69, 86, 81, 152)
+    for bar in range(28):
+        c = prog[bar % 8]
+        walk = [c[0] - 24, c[2] - 24, c[0] - 12, c[2] - 24]
+        for bt, m in enumerate(walk):
+            song.put("bass", bass(m, 0.25, 0.75), bar, bt)
+        for bt in (0.5, 1.5, 2.5, 3.5):
+            song.put("twk", celesta(c[1] + 24, 0.25, 0.25), bar, bt)
+    play_melody(song, "mel", a, 4, marimba, 0.9)
+    play_melody(song, "mel", b, 12, marimba, 0.9)
+    play_melody(song, "mel", a, 20, glock, 0.5)
+    mix = song.lane("bass") * 0.5 + song.lane("twk") * 0.45 + song.lane("mel") * 0.75
+    mix += 0.04 * waves(song.n, period=10)
+    return mix
+
+
+def dolphin_dance():
+    """Dolphins playing in the bow wave: a bouncy marimba tune, off-beat ukulele and a glockenspiel sparkle."""
+    song = Song(bpm=126, beats=4, bars=36)
+    key = 60  # C
+    prog = [chord(60, "M"), chord(65, "M"), chord(57, "m"), chord(67, "7")] * 2
+    rhythm = [[(0, 0.5), (0.5, 0.5), (1, 0.5), (1.5, 0.5), (2, 1), (3, 1)], [(0, 1), (1, 1), (2, 2)],
+              [(0, 0.5), (0.5, 0.5), (1, 1), (2, 0.5), (2.5, 0.5), (3, 1)], [(0, 3), (3, 1)]] * 2
+    a = phrase(prog, rhythm, key, MAJOR, 72, 88, 76, 161)
+    b = phrase(prog, rhythm[2:] + rhythm[:2], key, MAJOR, 72, 88, 79, 162)
+    hits = [(0.5, "d", 0.7), (1.5, "d", 0.7), (2.5, "d", 0.7), (3.5, "d", 0.7)]
+    for bar in range(36):
+        c = prog[bar % 8]
+        strum_bar(song, "uke", bar, uke_voicing(c), hits, 0.5, damp=0.985)
+        song.put("bass", bass(c[0] - 24, 0.5, 0.8), bar, 0)
+        song.put("bass", bass(c[2] - 24, 0.5, 0.6), bar, 2)
+        if bar >= 4:
+            song.put("perc", clap(0.4), bar, 1)
+            song.put("perc", clap(0.4), bar, 3)
+    play_melody(song, "mel", a, 4, marimba, 0.9)
+    play_melody(song, "mel", b, 12, marimba, 0.9)
+    play_melody(song, "mel2", [(bi, bt, ln, m + 12) for bi, bt, ln, m in b], 12, glock, 0.3)
+    play_melody(song, "mel", a, 20, marimba, 0.9)
+    play_melody(song, "mel", b, 28, marimba, 0.9)
+    mix = song.lane("uke") * 0.7 + song.lane("bass") * 0.5 + song.lane("perc") * 0.3
+    mix += song.lane("mel") * 0.7 + song.lane("mel2") * 0.5
+    return mix
+
+
 # ---------------------------------------------------------------- the radio
 def radio(x, seed):
     """A small table radio across the room: small-speaker band, warm saturation, faint hiss and crackle, slow drift."""
@@ -494,6 +777,17 @@ SONGS = [
     ("radio_clownfish_waltz", clownfish_waltz),
     ("radio_hammock_ukulele", hammock_ukulele),
     ("radio_moonlit_drift", moonlit_drift),
+    # the record shop: bought with sand dollars in My tank (RadioStation prices them)
+    ("radio_window_seat", window_seat),
+    ("radio_five_oclock_dock", five_oclock_dock),
+    ("radio_sandcastle_sunshine", sandcastle_sunshine),
+    ("radio_turtle_glide", turtle_glide),
+    ("radio_sea_breeze_bossa", sea_breeze_bossa),
+    ("radio_starfish_lullaby", starfish_lullaby),
+    ("radio_tiki_twilight", tiki_twilight),
+    ("radio_kelp_forest_sway", kelp_forest_sway),
+    ("radio_postcard_reef", postcard_reef),
+    ("radio_dolphin_dance", dolphin_dance),
 ]
 
 

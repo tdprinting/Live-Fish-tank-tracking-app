@@ -25,7 +25,7 @@ class SerpentStarTest {
         assertEquals(BrainKind.BRITTLE_STAR, db[id].brainKind)
         assertEquals("models/serpent_star.glb", db[id].model)
         assertTrue(Stocking.entry(id) != null)
-        assertEquals(35, PriceBook.listing(id)!!.price)
+        assertEquals(35 * PriceBook.SCALE, PriceBook.listing(id)!!.price)
         val sim = sim(16.0, LivestockSeed("nemateleotris_magnifica", "Fire", 6.0, id = "ff"))
         val s = sim.organisms.first { it.id == "s" }
         val b = sim.agentOf(s)!!.brain

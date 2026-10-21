@@ -66,17 +66,25 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     vec2 uv = (p.xz + refr + n.xz * (p.y * 0.55)) * uCausticScale;
     float t = uTime;
     float busy = 0.6 + 0.6 * uFlowStrength;
-    uv += vec2(sin(uv.y * 9.0 + t * 1.9), cos(uv.x * 8.0 - t * 1.6)) * (0.02 * busy);
+    // Medium / Low (the cheaper presets slow devices step down to): no per-read mip bias, which some GPUs pay for with a
+    // derivative per read, so the net is a little crisper; Low also skips the chop warp and the second drifting read
+    if (uQuality >= 0.5) uv += vec2(sin(uv.y * 9.0 + t * 1.9), cos(uv.x * 8.0 - t * 1.6)) * (0.02 * busy);
     vec2 uvA = uv + t * vec2(0.031, 0.019) * busy;
     vec2 uvB = uv * 1.37 - t * vec2(0.024, -0.033) * busy;
-    float blur = 1.0 + depth * 0.02;
-    float a = texture(uCaustic, uvA, blur).r;
+    float a;
     vec3 b;
-    if (uCausticDispersion > 0.5) {
-        vec2 disp = vec2(0.0035, 0.0025) * (1.0 + depth * 0.03);
-        b = vec3(texture(uCaustic, uvB + disp, blur).r, texture(uCaustic, uvB, blur).r, texture(uCaustic, uvB - disp, blur).r);
+    if (uQuality >= 1.5) {
+        float blur = 1.0 + depth * 0.02;
+        a = texture(uCaustic, uvA, blur).r;
+        if (uCausticDispersion > 0.5) {
+            vec2 disp = vec2(0.0035, 0.0025) * (1.0 + depth * 0.03);
+            b = vec3(texture(uCaustic, uvB + disp, blur).r, texture(uCaustic, uvB, blur).r, texture(uCaustic, uvB - disp, blur).r);
+        } else {
+            b = vec3(texture(uCaustic, uvB, blur).r);
+        }
     } else {
-        b = vec3(texture(uCaustic, uvB, blur).r);
+        a = texture(uCaustic, uvA).r;
+        b = vec3(uQuality >= 0.5 ? texture(uCaustic, uvB).r : a);
     }
     vec3 sum = a + b;
     // where the passing waves are steepest the surface focuses harder: the net brightens in travelling bands

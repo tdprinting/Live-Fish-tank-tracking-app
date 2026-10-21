@@ -55,6 +55,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.withFrameNanos
+import com.reeflive.app.render.CinemaSession
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
@@ -65,9 +69,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reeflive.app.appGraph
-import com.reeflive.app.audio.RadioStation
+import com.reeflive.core.radio.RadioStation
 import com.reeflive.app.audio.TankAudio
 import com.reeflive.app.audio.TankRadio
+import com.reeflive.app.ui.live.RecordShelf
 import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.FollowCamControl
@@ -295,9 +300,6 @@ fun LiveTankScreen(
     DisposableEffect(radio) { onDispose { radio.release() } }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { radio.onResume() }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { radio.onPause() }
-    LaunchedEffect(settings.loaded, settings.radioOn, settings.radioTrack, settings.tankVolume) {
-        if (settings.loaded) radio.set(settings.radioOn, settings.radioTrack, settings.tankVolume)
-    }
     val soundOn = settings.tankSounds
     val toggleSound: () -> Unit = { scope.launch { settingsRepo.setTankSounds(!soundOn) } }
     val tick: () -> Unit = audio::uiTick
@@ -341,10 +343,27 @@ fun LiveTankScreen(
     val customInfo by vm.custom.collectAsStateWithLifecycle()
     // My tank's sand dollars (docs/ECONOMY.md): the chip in the HUD opens the Care card; Tank Health counts as testing
     val economy by vm.economy.collectAsStateWithLifecycle()
+    // records bought in My tank join the radio everywhere (kept in settings too, so Watch mode plays them)
+    val boughtRecords = economy?.records.orEmpty()
+    LaunchedEffect(boughtRecords) { if (!settings.radioOwned.containsAll(boughtRecords)) settingsRepo.addRadioOwned(boughtRecords) }
+    val owned = settings.radioOwned + boughtRecords
+    val radioTrack = RadioStation.playableOr(settings.radioTrack, owned)
+    LaunchedEffect(settings.loaded, settings.radioOn, radioTrack, settings.radioVolume, owned) {
+        if (settings.loaded) radio.set(settings.radioOn, radioTrack, settings.radioVolume, owned)
+    }
+    var recordsOpen by remember { mutableStateOf(false) }
     var careOpen by rememberSaveable { mutableStateOf(false) }
     // walking a fish store's display tanks (docs/ECONOMY.md §5): the 3D view shows the store's tank meanwhile
     val visit by vm.visit.collectAsStateWithLifecycle()
     var storePick by remember { mutableStateOf<String?>(null) }
+    // taps in the 3D shop: another display tank walks there, the counter opens the till
+    var counterRequest by remember { mutableIntStateOf(0) }
+    DisposableEffect(vm.storeRoom) {
+        val room = vm.storeRoom
+        room.onStand = { i -> storePick = null; vm.showStoreTank(i) }
+        room.onCounter = { counterRequest++ }
+        onDispose { room.onStand = null; room.onCounter = null }
+    }
     val rewardFx = remember { RewardFxState() }
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
@@ -404,7 +423,7 @@ fun LiveTankScreen(
     // doses given in the last sim day, so a second dose the same day is flagged as a swing (core DoseCheck)
     val doseLog = remember { DoseCheck.Log() }
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
-    // the shop bag in hand after an animal is picked in Add life (dragged onto the tank to float)
+    // the shop bag in hand after an animal is picked in the Shop (dragged onto the tank to float)
     var bagCarry by remember { mutableStateOf<BagCarry?>(null) }
     /** The keeper tapped "Later" on the coral spot picker (a pill brings it back). */
     var coralPickHidden by remember { mutableStateOf(false) }
@@ -835,21 +854,22 @@ fun LiveTankScreen(
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
         radioOn = settings.radioOn,
-        radioSong = RadioStation.song(settings.radioTrack).title,
+        radioSong = RadioStation.song(radioTrack).title,
         onRadio = {
             tick()
             val on = !settings.radioOn
             scope.launch { settingsRepo.setRadioOn(on) }
-            val song = RadioStation.song(settings.radioTrack)
+            val song = RadioStation.song(radioTrack)
             banner.show(if (on) Feedback("Radio on: ${song.title}", "${song.blurb}, playing softly beside the tank") else Feedback("Radio off", "Just the tank sounds now"), Candy.purple)
         },
         onRadioStep = { step ->
             tick()
-            val next = RadioStation.step(settings.radioTrack, step)
+            val next = RadioStation.step(radioTrack, step, owned)
             scope.launch { settingsRepo.setRadioTrack(next) }
             val song = RadioStation.song(next)
             banner.show(Feedback("Now playing: ${song.title}", song.blurb), Candy.purple)
         },
+        onRecords = { tick(); open = null; recordsOpen = true },
         onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
         onAquascape = { tick(); open = null; vm.select(null); vm.follow(null); cleaning = false; scaping = true },
         onHide = { tick(); chromeHidden = true },
@@ -1085,7 +1105,50 @@ fun LiveTankScreen(
         }
     }
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
+    // ---- idle screensaver (Tee): 30 s with no touch fades into screensaver mode; one tap fades back to this view
+    val cinema = remember { CinemaSession() }
+    var cineOn by remember { mutableStateOf(false) }
+    val cineFade = remember { mutableFloatStateOf(0f) }
+    val cineChrome = remember { mutableFloatStateOf(0f) }
+    val cineCaption = remember { mutableStateOf("") }
+    val cineCaptionAlpha = remember { mutableFloatStateOf(0f) }
+    val lastInput = remember { longArrayOf(SystemClock.uptimeMillis()) }
+    val awayNow = vm.away.collectAsStateWithLifecycle().value != null
+    // never mid-action: a store walk, a dialog or card that waits on the keeper, a drag, the shelf, a tool mode
+    val idleBlocked by rememberUpdatedState(
+        lapse || micro || careOpen || storePick != null || visit != null || ask != null || fact != null || cleaning ||
+            scaping || supplies || carry != null || bagCarry != null || aimFood != null || dial != null || flushing != null ||
+            subUi.on || awayNow || lapseState is TimelapseState.Running,
+    )
+    BackHandler(enabled = cineOn) { cinema.exit() }
+    LaunchedEffect(cinema) {
+        var last = 0L
+        while (true) {
+            withFrameNanos { now ->
+                val dt = if (last == 0L) 0f else (now - last) / 1e9f
+                last = now
+                val clock = SystemClock.uptimeMillis()
+                // back from the background or another screen: the idle clock starts over
+                if (dt > 1f) lastInput[0] = clock
+                if (cinema.active) {
+                    cinema.update(dt, vm.snapshots.value)
+                    cineFade.floatValue = cinema.fade
+                    // the controls fade out with the first dip and back in with the way out
+                    cineChrome.floatValue = if (cinema.leaving) cinema.fade else maxOf(cineChrome.floatValue, cinema.fade)
+                    cineCaptionAlpha.floatValue = cinema.captionAlpha
+                    cinema.caption?.let { if (it != cineCaption.value) cineCaption.value = it }
+                    if (!cinema.active) { cineOn = false; cineFade.floatValue = 0f; cineChrome.floatValue = 0f; lastInput[0] = clock }
+                } else if (!idleBlocked && clock - lastInput[0] > IDLE_SCREENSAVER_MS) {
+                    if (cinema.enter()) cineOn = true else lastInput[0] = clock
+                }
+            }
+        }
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize().pointerInput(Unit) {
+        // any touch anywhere (seen before the controls and the tank take it) restarts the idle clock
+        awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); lastInput[0] = SystemClock.uptimeMillis() } }
+    }) {
         val landscape = maxWidth > maxHeight
         val reduce = ReefTheme.reduceMotion
         val s = LiveTheme.style
@@ -1117,7 +1180,10 @@ fun LiveTankScreen(
             followCam = followCam,
             onSpot = onSpot,
             aim = aim,
+            cinema = cinema,
         )
+        // every control and card sits in this layer, faded out while the screensaver plays (their state is untouched)
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - cineChrome.floatValue }) {
         // gear taps mean "rock goes here" while building and nothing from inside the sub
         SideEffect { aim.gearTaps = !scaping && !subUi.on }
         val spotShown = spotTap
@@ -1285,7 +1351,7 @@ fun LiveTankScreen(
             Box(Modifier.fillMaxSize().padding(16.dp).statusBarsPadding(), contentAlignment = Alignment.Center) {
                 MyTankSetupCard(onPick = { b ->
                     tick(); vm.startCustomTank(b)
-                    if (hermieOn) hermie.say("A brand new ${b.label}! Open Add life to bring in your first animals.", HermieMood.EXCITED)
+                    if (hermieOn) hermie.say("A brand new ${b.label}! Tap Shop to visit the fish stores and bring home your first animals.", HermieMood.EXCITED)
                     open = LiveCategory.LIFE
                 })
             }
@@ -1307,6 +1373,8 @@ fun LiveTankScreen(
         visit?.let { v ->
             if (myTank) StoreOverlay(
                 v, storePick,
+                counterRequest = counterRequest,
+                onCounter = { on -> vm.storeCounter(on) },
                 onTank = { i -> tick(); storePick = null; vm.showStoreTank(i) },
                 onLeave = { tick(); storePick = null; vm.leaveStore(); if (hermieOn) hermie.say("Back home. Come again soon!", HermieMood.HAPPY) },
                 onCheckout = { bag, done -> vm.checkout(bag) { r -> scope.launch { done(r) } } },
@@ -1347,6 +1415,9 @@ fun LiveTankScreen(
                 onDismiss = { lapse = false },
             )
         }
+        }
+        // screensaver mode over the keeper's own view (idle for 30 s): every touch only leaves it
+        if (cineOn) CinemaOverlay(cinema, cineFade, cineCaption, cineCaptionAlpha)
     }
     dial?.let { g ->
         val start = when (g) {
@@ -1355,6 +1426,32 @@ fun LiveTankScreen(
         }
         GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
     }
+    if (recordsOpen) RecordShelf(
+        on = settings.radioOn, playing = radioTrack, owned = owned, coins = if (myTank) economy?.coins else null,
+        volume = settings.radioVolume,
+        onToggle = { tick(); scope.launch { settingsRepo.setRadioOn(!settings.radioOn) } },
+        onVolume = { v -> scope.launch { settingsRepo.setRadioVolume(v) } },
+        onPlay = { i ->
+            tick()
+            scope.launch { settingsRepo.setRadioTrack(i); if (!settings.radioOn) settingsRepo.setRadioOn(true) }
+            val song = RadioStation.song(i)
+            banner.show(Feedback("Now playing: ${song.title}", song.blurb), Candy.purple)
+        },
+        onBuy = { i ->
+            val song = RadioStation.song(i)
+            when {
+                !myTank -> { tick(); banner.show(Feedback(song.title, "Buy it in My tank with ${song.price} sand dollars"), Candy.yellow) }
+                vm.buyRecord(song.file) -> {
+                    tick()
+                    scope.launch { settingsRepo.addRadioOwned(setOf(song.file)); settingsRepo.setRadioTrack(i); settingsRepo.setRadioOn(true) }
+                    banner.show(Feedback("New record: ${song.title}!", "${song.blurb}. It's on the radio now"), Candy.green)
+                    if (hermieOn) hermie.say("A new record! Let's give it a spin.", HermieMood.EXCITED)
+                }
+                else -> { tick(); banner.show(Feedback("Not enough sand dollars", "${song.title} costs ${song.price}. Do today's care jobs to earn more"), Candy.yellow) }
+            }
+        },
+        onDismiss = { recordsOpen = false },
+    )
     // the "While you were away" card goes first; the fact waits until it is closed
     val awayOpen = vm.away.collectAsStateWithLifecycle().value != null
     fact?.takeIf { !awayOpen }?.let { f ->
@@ -1459,6 +1556,7 @@ private fun TankArea(
     followCam: FollowCamControl,
     onSpot: (TankSpot, Float, Float) -> Unit,
     aim: TankAimControl,
+    cinema: CinemaSession,
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
@@ -1491,6 +1589,8 @@ private fun TankArea(
             followCam = followCam,
             onSpot = onSpot,
             aim = aim,
+            storeRoom = vm.storeRoom,
+            cinema = cinema,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
@@ -1672,5 +1772,44 @@ private fun HudLayer(
         ) {
             SandboxTipsCard(onDismiss = onDismissTips, sandbox = sandbox, myTank = hudState.mode == HudMode.MY_TANK)
         }
+    }
+}
+
+
+/** Idle time before the Live tank fades into screensaver mode. */
+private const val IDLE_SCREENSAVER_MS = 30_000L
+
+/** Screensaver layer over the live tank: the dip to black, the animal caption, and a touch catcher (a tap leaves). */
+@Composable
+private fun CinemaOverlay(
+    cinema: CinemaSession,
+    fade: androidx.compose.runtime.FloatState,
+    caption: androidx.compose.runtime.State<String>,
+    captionAlpha: androidx.compose.runtime.FloatState,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(cinema) {
+                // every pointer event is eaten so nothing reaches the tank or the controls; a press leaves
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        e.changes.forEach { it.consume() }
+                        if (e.changes.any { it.pressed }) cinema.exit()
+                    }
+                }
+            },
+    ) {
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade.floatValue }.background(androidx.compose.ui.graphics.Color.Black))
+        androidx.compose.material3.Text(
+            caption.value,
+            color = androidx.compose.ui.graphics.Color.White,
+            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 32.dp, bottom = 40.dp)
+                .graphicsLayer { alpha = captionAlpha.floatValue },
+        )
     }
 }

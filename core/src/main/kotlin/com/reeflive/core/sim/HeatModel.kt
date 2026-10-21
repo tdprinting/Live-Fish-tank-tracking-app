@@ -81,6 +81,10 @@ object HeatModel {
     // (Hill & Scott 2012); the slow bleaching is AnemoneModel's, this is only the acute heat response, like the tube worm.
     val ANEMONE = Profile("bubble tip anemone (est.)", 35.0, 30.0, 120.0, 1.0, 0.0, 15.0)
 
+    // Deep-reef / warm-temperate fish (est., research 60): the wrought iron butterfly comes from 20-25 °C Japanese water,
+    // so it is taken as two degrees less heat-tolerant than the tropical reef fish, with little shelter from it.
+    val DEEP_REEF = Profile("deep-reef fish (est.)", 34.5, 29.0, 60.0, 1.1, 0.2, 12.0)
+
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
@@ -102,6 +106,7 @@ object HeatModel {
         // the firefish is a dartfish, a goby relative (est.)
         BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
+        BrainKind.BUTTERFLY -> DEEP_REEF
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL

@@ -161,6 +161,9 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
     fun feedHungry() = holder.enqueue(Command.FeedHungry)
     /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
+    /** Buys a radio record in My tank's record shop; false when it cannot (not My tank, owned, or too dear). */
+    fun buyRecord(file: String): Boolean = mode.value == SimMode.CUSTOM && holder.buyRecord(file)
+
     fun reefCare(price: Int): Boolean = if (mode.value == SimMode.CUSTOM) holder.reefCare(price) else { holder.enqueue(Command.ReefCare); true }
     /** Corals news from the time away (shown once by the screen). */
     val coralNews: StateFlow<List<String>> = holder.coralNews
@@ -243,6 +246,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
     fun sell(id: String) = holder.sell(id)
+    /** The 3D shop drawn around the display tank while visiting a store. */
+    val storeRoom get() = holder.storeRoom
+    /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
+    fun storeCounter(on: Boolean) = holder.storeRoom.counter(on)
     fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
     /** "While you were away" in My tank: the catch-up's progress, then what happened. */
     val away: StateFlow<com.reeflive.app.live.AwayUi?> = holder.awayState

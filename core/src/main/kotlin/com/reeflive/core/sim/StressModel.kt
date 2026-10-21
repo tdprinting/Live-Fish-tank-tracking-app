@@ -90,6 +90,8 @@ object StressModel {
         BrainKind.WRASSE to doubleArrayOf(1.2, 1.1, 1.1, 1.2, 1.0, 1.2, 0.9, 0.9),
         // fairy wrasse (est.): a plankton picker from the current, sensitive to low oxygen; likes flow
         BrainKind.FAIRY_WRASSE to doubleArrayOf(1.1, 1.0, 1.0, 1.2, 1.0, 1.3, 0.9, 0.8),
+        // butterflyfish (est., research 60): clear outer-reef water; touchy about temperature, ammonia, nitrite and oxygen
+        BrainKind.BUTTERFLY to doubleArrayOf(1.3, 1.1, 1.1, 1.3, 1.2, 1.3, 0.9, 0.9),
         BrainKind.ENGINEER_GOBY to doubleArrayOf(0.8, 0.9, 0.9, 1.0, 1.0, 1.1, 0.7, 0.8),
         BrainKind.EEL to doubleArrayOf(0.8, 0.9, 0.9, 0.8, 1.0, 1.0, 0.7, 0.8),
         BrainKind.HAWK to doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9),
@@ -153,6 +155,8 @@ object StressModel {
         BrainKind.CARDINAL -> 28.0
         BrainKind.TANG -> 28.5
         BrainKind.WRASSE -> 29.5
+        // research 60: a 20-25 °C fish stops coping well above 27
+        BrainKind.BUTTERFLY -> 27.5
         else -> if (isFish) 30.5 else 29.5
     }
 
@@ -300,7 +304,7 @@ object StressModel {
 
     /** Column swimmers surface to gasp; benthic fish hide instead (S:Yu23). */
     fun isColumnFish(kind: BrainKind, night: Boolean) = when (kind) {
-        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE -> true
+        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.BUTTERFLY -> true
         BrainKind.CARDINAL -> true
         else -> false
     }

@@ -30,7 +30,7 @@ class PorcelainCrabTest {
         assertEquals(3, o.toPose().motionMode)
         assertTrue(o.limbRig is CrabLegs)
         assertTrue(BrainKind.PORCELAIN_CRAB.isCrab)
-        assertEquals(18, PriceBook.listing(id)!!.price)
+        assertEquals(18 * PriceBook.SCALE, PriceBook.listing(id)!!.price)
         assertTrue(Stocking.entry(id) != null)
         assertTrue(Stores.warning(sim, id)!!.contains("anemone"))
     }

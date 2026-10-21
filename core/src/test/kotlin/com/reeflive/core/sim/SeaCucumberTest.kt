@@ -40,7 +40,7 @@ class SeaCucumberTest {
         assertEquals(BrainKind.SEA_CUCUMBER, o.brainKind)
         assertEquals(10, o.toPose().motionMode)
         assertTrue(sim.agentOf(o)!!.brain is SeaCucumberBrain)
-        assertEquals(40, PriceBook.listing(id)!!.price)
+        assertEquals(40 * PriceBook.SCALE, PriceBook.listing(id)!!.price)
         assertTrue(Stocking.entry(id) != null)
         assertTrue(Stores.warning(sim, id)!!.contains("per tank"))
     }

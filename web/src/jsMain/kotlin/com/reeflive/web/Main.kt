@@ -59,6 +59,8 @@ object ReefLive {
     internal var rock: RockData? = null
     internal var renderer: TankRenderer? = null
     internal val shelf = SupplyShelfControl()
+    /** A fish store visit drawn around the display tank (ReefMyTank.visit); taps on other tanks / the counter come back. */
+    internal val room = com.reeflive.app.render.StoreRoomControl()
     /** Tap-to-place food and gear taps (render TankAimControl). */
     private val aim = com.reeflive.app.render.TankAimControl()
     private var touch: TouchController? = null
@@ -71,8 +73,8 @@ object ReefLive {
     private var applied: Map<String, Double> = emptyMap()
     internal val scenarioQueue = ArrayList<Pair<Double, Command>>()
     private var pendingTouch: Pair<Vec3, TouchSurface>? = null
-    /** Screensaver camera while on (same director as the Android screensaver). */
-    private var director: com.reeflive.app.render.CinemaDirector? = null
+    /** Screensaver mode over the keeper's view (same as the Android Live tank): [screensaver], [cinema]. */
+    private val cinemaSession = com.reeflive.app.render.CinemaSession()
     private var fingerDown = false
     /** Camera projection the renderer publishes every frame (bag drops and the bag timers). */
     private val projection = com.reeflive.app.render.TankProjection()
@@ -137,7 +139,7 @@ object ReefLive {
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
                     // pressed and held on an animal: follow it (the page buzzes and says who)
                     override fun onHoldAnimal(id: String) { r.follow(id); emit("onFollow", id); emit("onHold", id) }
-                    override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
+                    override fun onFollowLost(id: String) { if (cinemaSession.active) cinemaSession.followLost() else emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
                     override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
@@ -164,6 +166,9 @@ object ReefLive {
                 r.aim = aim
                 shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
                 r.shelf = shelf
+                room.onStand = { i -> emit("onStoreStand", i) }
+                room.onCounter = { emit("onStoreCounter", null) }
+                r.storeRoom = room
                 r.bursts = ReefSandbox.bursts
                 r.care = ReefSandbox.care
                 renderer = r
@@ -278,7 +283,7 @@ object ReefLive {
         adapt(dt)
         val c = canvas
         if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
-        director?.update(dt.toFloat(), sim?.latest)
+        cinemaSession.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
         if (statsOn) stats(dt, t1 - t0, now() - t1)
         window.requestAnimationFrame(::frame)
@@ -446,23 +451,14 @@ object ReefLive {
     /** Screensaver mode on/off: slow cinematic moves and animal follows; read [cinema] each frame for the overlay. */
     fun screensaver(on: Boolean) {
         val r = renderer ?: return
-        if (on == (director != null)) return
-        if (on) {
-            director = com.reeflive.app.render.CinemaDirector(r.input, object : com.reeflive.app.render.CinemaDirector.Control {
-                override fun follow(id: String?) { r.follow(id); emit("onFollow", id) }
-                override fun resetCamera() = r.resetCamera()
-                override fun viewHeightPx(): Float = (canvas?.height ?: 1).toFloat()
-            }).also { it.start() }
-        } else {
-            director = null
-            r.follow(null); emit("onFollow", null); r.resetCamera()
-        }
+        cinemaSession.attach(r) { (canvas?.height ?: 1).toFloat() }
+        if (on) cinemaSession.enter() else cinemaSession.exit()
     }
 
-    /** Screensaver overlay state as JSON {fade, caption, alpha}, or "null" when off. */
+    /** Screensaver overlay state as JSON {fade, caption, alpha, leaving}, or "null" once it is fully over. */
     fun cinema(): String {
-        val d = director ?: return "null"
-        return JSON.stringify(obj { it.fade = d.fade; it.caption = d.caption ?: ""; it.alpha = d.captionAlpha })
+        if (!cinemaSession.active) return "null"
+        return JSON.stringify(obj { it.fade = cinemaSession.fade; it.caption = cinemaSession.caption ?: ""; it.alpha = cinemaSession.captionAlpha; it.leaving = cinemaSession.leaving })
     }
     /**
      * Submarine mode (as the Android live menu): launch or park the toy sub; [visible] false hides it from the fish;

@@ -27,7 +27,7 @@ class GiantClamTest {
         assertEquals("models/maxima_clam.glb", db[id].model)
         assertTrue(LimbRig.forKind(BrainKind.GIANT_CLAM, 1L) is ClamRig)
         assertTrue(Stocking.entry(id) != null)
-        assertEquals(110, PriceBook.listing(id)!!.price)
+        assertEquals(110 * PriceBook.SCALE, PriceBook.listing(id)!!.price)
         val (sim, _) = sim(16.0)
         assertTrue(Stores.warning(sim, id)!!.contains("light"))
     }

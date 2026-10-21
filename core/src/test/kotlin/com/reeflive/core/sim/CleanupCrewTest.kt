@@ -35,9 +35,9 @@ class CleanupCrewTest {
 
     @Test fun storesSellThemAtTheirPrices() {
         val p = com.reeflive.core.custom.economy.PriceBook
-        assertEquals(8, p.listing(trochus)!!.price)
-        assertEquals(18, p.listing(conch)!!.price)
-        assertEquals(30, p.listing(urchin)!!.price)
+        assertEquals(8 * p.SCALE, p.listing(trochus)!!.price)
+        assertEquals(18 * p.SCALE, p.listing(conch)!!.price)
+        assertEquals(30 * p.SCALE, p.listing(urchin)!!.price)
         val sim = sim(trochus, 3.0)
         sim.species.ensure(conch)
         sim.water.bacteria.sandDepthCm = 1.0

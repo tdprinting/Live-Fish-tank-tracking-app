@@ -450,6 +450,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
     WATCHMAN_GOBY(listOf("cryptocentrus", "amblyeleotris", "stonogobiops"), true),
+    /** Butterflyfish (wrought iron butterfly, *Chaetodon daedalma*, research 60 §2): roves the rock pecking, pairs up. */
+    BUTTERFLY(listOf("chaetodon", "heniochus", "forcipiger", "chelmon"), true),
     /**
      * Fire shrimp (*Lysmata debelius*, research 44 §1): a shy, mostly nocturnal Lysmata cleaner that keeps a cave and
      * cleans fish that come to its mouth. The genus resolves to [CLEANER_SHRIMP], so the species id picks this brain.
@@ -509,6 +511,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
+            "butterfly" to BUTTERFLY, "butterflyfish" to BUTTERFLY,
             "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
             "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
             "sea_cucumber" to SEA_CUCUMBER, "cucumber" to SEA_CUCUMBER, "tiger_tail_cucumber" to SEA_CUCUMBER,
