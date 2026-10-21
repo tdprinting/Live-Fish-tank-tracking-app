@@ -401,5 +401,17 @@ of focus, so it never pulls the eye away.
   `HomeRoomLayout.RADIO`). Drawn by `render/HomeRoom.kt` with `room.frag`: its own daylight by the sim clock, the lamp
   in the evening, the tank's light spilling onto the wall, ceiling and floor; far patterns fade and colours are muted.
   About 25 draw calls and 10k static triangles. Watch (Tee's tank) always shows the classic white stand.
-* **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`, the
-  stand and colour in use, the extras on). A defaulted field, no codec bump; kept across Start over like the money.
+* **Scenes** (`Decor.SCENES`, one `room_<id>.glb` each): Cozy living room (free), Sunny window 300 (L1, garden view,
+  curtains), Beach house 450 (L2, white boards, sea view, surfboard), Snowy cabin 500 (L3, log walls, a fireplace that
+  lights the room, snowy pines), Blossom garden 550 (L3, paper screens, tatami, cherry trees), City loft 650 (L4,
+  brick, a tall window over the lit-up city), Space station 900 (L5, metal panels, portholes onto the Earth). Every
+  scene keeps the side table at the radio spot. Windows are `view_<name>` materials: room.frag paints the view
+  procedurally from the eye ray (sky by the sim's day, stars, sea glints, lit windows at night, falling snow and
+  petals), soft shapes only so it reads as out of focus. No textures.
+* **Walls and floors** (`Decor.WALLS` / `FLOORS`, room.frag `wallPattern` / `floorPattern`): each scene brings its own
+  (free, "Room's own"); bought ones: Seafoam or Navy paint 60, Sunny stripes 90, White boards 100, Wave print 120,
+  Brick 140, Wood panels 140 (L3); Walnut planks 80, Blue carpet 90, White tiles 100, Checkerboard 120, Slate 140
+  (L3). A new scene starts on its own walls and floor; bought ones go back up for free.
+* **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`,
+  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use). Defaulted fields, no codec bump; kept across Start
+  over like the money.
