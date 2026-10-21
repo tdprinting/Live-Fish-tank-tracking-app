@@ -199,6 +199,8 @@ bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of ca
 | Blue star leopard wrasse | fish | 6 | 150 |
 | Hummingbird bobtail squid | invert | 7 | 80 |
 | Purple tang | fish | 7 | 250 |
+| Gem tang (rare, research 60) | fish | 8 | 1000 |
+| Wrought iron butterflyfish (rare; eats fanworms) | fish | 9 | 2500 |
 
 Asterina stars and bristleworms are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later
 gets a price from its size and care level (`PriceBook` default) until it is listed here.

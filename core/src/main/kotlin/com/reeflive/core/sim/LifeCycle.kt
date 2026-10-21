@@ -44,7 +44,9 @@ object LifeCycle {
     fun minVolumeL(speciesId: String, k: BrainKind): Double = SPECIES_MIN_L[speciesId] ?: minVolumeL(k)
     fun minVolumeL(o: Organism): Double = minVolumeL(o.species.id, o.brainKind)
 
-    private val SPECIES_MIN_L = mapOf("zebrasoma_flavescens" to 380.0, "zebrasoma_xanthurum" to 475.0)
+    private val SPECIES_MIN_L = mapOf("zebrasoma_flavescens" to 380.0, "zebrasoma_xanthurum" to 475.0,
+        // research 60: gem tang 125-240 gal recommended, taken as 150 gal; wrought iron butterfly, a 15 cm rover
+        "zebrasoma_gemmatum" to 570.0, "chaetodon_daedalma" to 570.0)
 
     fun lifespanSec(s: SimSpecies) = s.lifespanYears.coerceAtLeast(0.1) * SEC_PER_YEAR
 

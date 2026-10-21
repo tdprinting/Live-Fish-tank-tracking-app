@@ -447,6 +447,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
     WATCHMAN_GOBY(listOf("cryptocentrus", "amblyeleotris", "stonogobiops"), true),
+    /** Butterflyfish (wrought iron butterfly, *Chaetodon daedalma*, research 60 §2): roves the rock pecking, pairs up. */
+    BUTTERFLY(listOf("chaetodon", "heniochus", "forcipiger", "chelmon"), true),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -489,6 +491,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
+            "butterfly" to BUTTERFLY, "butterflyfish" to BUTTERFLY,
         )
 
         fun byId(id: String): BrainKind? {

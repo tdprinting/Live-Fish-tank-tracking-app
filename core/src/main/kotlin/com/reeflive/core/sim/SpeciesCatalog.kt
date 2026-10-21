@@ -179,6 +179,11 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("LABRIFORM", 0.6, 6.0, 2.2, 260.0, 0.9, 0.04, 0.1), zone = Zone(0.0, 0.15, 0.1, 0.8),
                     temperament = Temperament(0.3, 0.45, 0.5, 0.7), diet = listOf("MYSIS", "BRINE", "PODS", "PELLET", "FLAKE", "MEATY"),
                     hardiness = 0.85, starvationDays = 24.0, homeRadiusCm = 15.0, iridescence = 0.15, model = "models/watchman_goby.glb")
+                BrainKind.BUTTERFLY -> base.copy(common = "Wrought iron butterflyfish", family = "Chaetodontidae", maxLengthCm = 15.0, typicalAdultCm = 13.0,
+                    depthRatio = 0.62, massCoeff = 0.024, lifespanYears = 10.0, locomotion = Locomotion("LABRIFORM", 1.2, 6.0, 3.0, 260.0, 0.9, 0.03, 0.08),
+                    zone = Zone(0.15, 0.8, 0.5, 0.5), temperament = Temperament(0.15, 0.55, 0.75, 0.45),
+                    diet = listOf("MYSIS", "BRINE", "MEATY", "PODS", "NORI", "FLAKE", "PELLET"), feedsPerDay = 4.0,
+                    hardiness = 0.5, starvationDays = 14.0, homeRadiusCm = 70.0, iridescence = 0.3, model = "models/wrought_iron_butterfly.glb")
                 BrainKind.GENERIC_FISH -> base
                 BrainKind.GENERIC_INVERT -> base.copy(kind = "INVERT", locomotion = Locomotion("CRAWLING", 0.05, 0.2))
             }
