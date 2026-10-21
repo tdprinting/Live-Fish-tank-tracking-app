@@ -1116,7 +1116,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             }
             coralUniforms(p, m, c)
             if (isPolyp) p.set1f("uSwayAmp", (if (m.isTree) TREE_FLUTTER else 0.25f) * ((c?.flow ?: 8f) / 12f).coerceIn(0.2f, 1.5f))
+            if (part.polypMode != 0f) { p.set1f("uPolypMode", part.polypMode); p.set1f("uPolypDrive", c?.tentacles ?: 0f) }
             part.mesh.draw(); drawCalls++; triangles += part.mesh.triangles
+            // every other polyp draw (GSP mats, anemone, duster crown) expects the ordinary mode
+            if (part.polypMode != 0f) p.set1f("uPolypMode", 0f)
         }
     }
 

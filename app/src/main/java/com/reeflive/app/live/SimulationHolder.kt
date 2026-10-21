@@ -216,6 +216,8 @@ class SimulationHolder(
     private var economyLive: Economy? = null
     /** A long time-away catch-up in progress ([beginAway]). */
     private var away: AwayCatchUp? = null
+    /** The corals' health marks when a long catch-up began, for the coral news when it ends. */
+    private var awayCorals: List<com.reeflive.core.sim.CoralHealth.Mark>? = null
     private var lastEconomyMs = 0L
     /** The display tank on screen while visiting a store (My tank waits meanwhile, then catches up). */
     private var display: Simulation? = null
@@ -624,7 +626,8 @@ class SimulationHolder(
     private fun beginAway(sim: Simulation, seconds: Double) {
         if (seconds < FastForward.MIN_SIM_SEC) return
         val run = AwayCatchUp(sim, seconds)
-        if (seconds < AwayCatchUp.REPORT_SEC) { run.runAll(); return }
+        if (seconds < AwayCatchUp.REPORT_SEC) { withCoralNews(sim) { run.runAll() }; return }
+        awayCorals = com.reeflive.core.sim.CoralHealth.marks(sim.corals)
         away = run
         _away.value = AwayUi(run.progress, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, null)
     }
@@ -635,6 +638,11 @@ class SimulationHolder(
         run.step()
         if (run.finished) {
             away = null
+            awayCorals?.let { before ->
+                val lines = com.reeflive.core.sim.CoralHealth.changes(before, sim.corals)
+                if (lines.isNotEmpty()) _coralNews.value = lines
+            }
+            awayCorals = null
             val s = run.summary()
             _away.value = if (s.worthShowing) AwayUi(1.0, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, s) else null
             lastWallMs[sim] = nowMs()

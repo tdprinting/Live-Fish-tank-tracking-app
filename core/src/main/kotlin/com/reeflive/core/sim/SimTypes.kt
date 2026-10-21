@@ -413,6 +413,8 @@ data class CoralPose(
     val fed: Float = 0f,
     /** Size the renderer draws the colony at about its home spot (grown or shrunk; 1 = as modelled). */
     val drawScale: Float = 1f,
+    /** Stony corals: night tentacles out 0..1 (Euphyllia sweepers, LPS feeding tentacles); renderer `uPolypDrive`. */
+    val tentacles: Float = 0f,
     /** Linear RGB its tissue fades to as it bleaches ([CoralProfile.tint]); null = white. Shared, never copied. */
     val bleachTint: FloatArray? = null,
     /** The colony's name (the keeper's, else its species'). */
