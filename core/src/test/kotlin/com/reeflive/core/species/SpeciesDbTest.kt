@@ -17,9 +17,9 @@ class SpeciesDbTest {
         // plus the diamond goby (research 16) and blue star leopard wrasse (both added to the tank 2026-10), the
         // hairy mushroom the clowns host, 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger
         // leather, elephant ear), the bobtail squid (sandbox only, research cephalopod_squid) and the rainbow bubble tip
-        // anemone (research 40), and the arrow crab (research 42).
-        assertEquals(36, db.size)
-        assertEquals(11, db.all.count { it.kind == SpeciesKind.FISH })
+        // anemone (research 40), the bicolor and midas blennies, and the arrow crab (research 42).
+        assertEquals(38, db.size)
+        assertEquals(13, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(13, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(11, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
@@ -47,7 +47,7 @@ class SpeciesDbTest {
             "algae_tufts", "asterina", "astrea", "bobtail_squid", "brittle_star", "cardinal", "clove", "clown_darwin", "clown_orange",
             "diamond_goby", "dottyback", "engineer_goby", "feather_duster", "gsp_mat", "gsp_neon", "hawkfish", "hermit_blue", "hermit_scarlet",
             "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
-            "tailspot_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone", "arrow_crab",
+            "tailspot_blenny", "bicolor_blenny", "midas_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone", "arrow_crab",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {
             val all = listOfNotNull(s.model) + s.variantModels.values

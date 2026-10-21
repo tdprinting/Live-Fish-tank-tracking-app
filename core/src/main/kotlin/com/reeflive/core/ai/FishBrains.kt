@@ -4,6 +4,7 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.smoothstep
 import com.reeflive.core.sim.Anchor
 import com.reeflive.core.sim.HoleKind
+import com.reeflive.core.sim.HoleSet
 import com.reeflive.core.sim.RockHole
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Disease
@@ -2189,10 +2190,54 @@ class BlennyRival(val b: SpeciesBrain, val radius: Double, val centre: Vec3) : B
     }
 }
 
+/**
+ * How one Ecsenius species spends its day (research 30, 50). The tailspot, bicolor and midas share the hole life (tail
+ * first in, head out, perch beside it, home at night) but split the daylight differently: the bicolor is a benthic
+ * grazer that rarely leaves the rock, the midas a plankton picker that spends most of the day up in the water column.
+ */
+class EcseniusStyle(
+    /** Day share of the hole's score (the rest goes to perching, grazing and excursions). */
+    val inHoleDay: Double,
+    /** Seconds between unprompted plankton darts, and how far it sees drifting food. */
+    val dashMinS: Double, val dashMaxS: Double, val dashSeeCm: Double,
+    /** How high above the hole a dart climbs (cm). */
+    val dashRiseLo: Double, val dashRiseHi: Double,
+    /** Weight of rock grazing. */
+    val graze: Double,
+    /** Weight of open-water foraging (0 = never; the midas only). */
+    val midwater: Double = 0.0,
+    /** Rasps a nori sheet on its clip. */
+    val nori: Boolean = false,
+) {
+    companion object {
+        /** Tailspot: peeks, darts up for plankton every minute or so, grazes a little (research 30, 10 §7). */
+        val TAILSPOT = EcseniusStyle(0.38, 30.0, 90.0, 45.0, 10.0, 20.0, 0.4)
+        /**
+         * Bicolor: "found solitary in abandoned tubes" (FishBase), grazes film and hair algae round its hole and starves
+         * without it (research 50 §1c-d); a water-column dart is rare (DESIGN ESTIMATE 0.03 per bout).
+         */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "50 §4a") val BICOLOR = EcseniusStyle(0.35, 180.0, 420.0, 25.0, 6.0, 12.0, 0.9, nori = true)
+        /**
+         * Midas: feeds on zooplankton 2-3 m above the benthos (FishBase), in and out of crevices, ~20 % of the day at its
+         * hole (research 50 §2c, §4b DESIGN ESTIMATE); darts often and climbs high.
+         */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "50 §4b") val MIDAS = EcseniusStyle(0.2, 15.0, 45.0, 70.0, 15.0, 35.0, 0.25, midwater = 1.0)
+
+        fun of(speciesId: String): EcseniusStyle = when (speciesId) {
+            "ecsenius_bicolor" -> BICOLOR
+            "ecsenius_midas" -> MIDAS
+            else -> TAILSPOT
+        }
+    }
+}
+
 // =====================================================================================
-// Tailspot blenny (Ecsenius stigmatura): peeks from its hole, darts up for plankton
+// Ecsenius blennies (tailspot E. stigmatura, bicolor E. bicolor, midas E. midas): peek from a hole, perch,
+// graze, dart up for plankton; the midas also forages in open water
 // =====================================================================================
 class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
+    /** This species' day budget (research 50). */
+    val style: EcseniusStyle = EcseniusStyle.of(o.species.id)
     /** Its home: a modelled hole that fits its body, its own (HOLE_TAILSPOT) first (ASSETS §3.6); null = rock-face shelter. */
     private var hole0: RockHole? = c.rock.holes.claimHome(o, setOf(HoleKind.HOLE),
         (c.rock.anchors["HOLE_TAILSPOT"] ?: c.rock.anchors["HOLE_BLENNY_2"])?.pos, c.sim.holeClaims)
@@ -2209,15 +2254,17 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     val inHole = InHole(this, hole, holePos, "Peeking from its hole",
         // by day it spends about half its time head-out in the hole and the rest perched round it or darting out
         // (research 30: Ecsenius perch on rock by their holes; DESIGN ESTIMATE share); it was in the hole 95 % of the day
-        { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else 0.38) + (if (c.o.health < 0.5) 0.3 else 0.0) },
+        { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else style.inHoleDay) + (if (c.o.health < 0.5) 0.3 else 0.0) },
         // head-out inspection by day; a full retreat (head in) while threatened, freshly startled or timid (research 10 §7)
         { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) })
 
     init {
-        install(
+        install(*listOfNotNull(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, 0.4), Prospect(), GlassCurious(this),
-            Flee(this, { c, _ -> c.safe(holePos + holeOut * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this))
+            PlanktonDash(), PerchNearHole(), Graze(this, style.graze), Prospect(), GlassCurious(this),
+            Flee(this, { c, _ -> c.safe(holePos + holeOut * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
+            if (style.midwater > 0) MidwaterForage() else null,
+            if (style.nori) NibbleNori(this, 0.6, quiet = true) else null, HoleFight()).toTypedArray())
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest = hole?.let { holeRest(c, it, if (night) -0.5 else 1.5) } ?: rockShelterRest(c, shelterAt)
@@ -2236,7 +2283,107 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun preTick(c: Ctx) {
         super.preTick(c)
-        if (c.t >= nextHoleCheck) { nextHoleCheck = c.t + 300; findSpareHole(c); reconsiderHole(c) }
+        if (c.t >= nextHoleCheck) {
+            nextHoleCheck = c.t + 300
+            leaveOutgrownHole(c); findSpareHole(c); reconsiderHole(c); yieldToRival(c); pickHoleToFight(c)
+        }
+        takeWonHole(c)
+        // no hole of its own: a blenny out on the open rock face is chronically on edge (it has nowhere to retreat to)
+        if (hole == null && o.socialStress < HOMELESS_STRESS) o.socialStress = HOMELESS_STRESS
+    }
+
+    /** A hole held by a blenny it could beat, to fight for (null = none worth trying); refreshed with the hole checks. */
+    private var fightFor: RockHole? = null
+    private var nextFight = 0.0
+    /** A hole it won, moved into once the loser has backed out of it (two bodies are never in one hole). */
+    private var wonHole: RockHole? = null
+    /** Hole fights started and won (tests, captions). */
+    var holeFights = 0; private set
+    var holeWins = 0; private set
+
+    /**
+     * Homeless (every fitting hole held): it picks the nearest fitting hole held by another Ecsenius no more than a little
+     * bigger than itself, to fight for. Blennies compete for holes and bigger ones win them (Wilson, Fisher & Pratchett
+     * 2013; research 50 §1c, §2c); the lawnmower's own hole is left alone (it is the bigger, more aggressive fish).
+     */
+    private fun pickHoleToFight(c: Ctx) {
+        fightFor = null
+        if (hole != null || wonHole != null || c.t < nextFight) return
+        val claims = c.sim.holeClaims
+        var best: RockHole? = null
+        var bestD = Double.MAX_VALUE
+        for (h in c.rock.holes.all) {
+            if (h.kind != HoleKind.HOLE || !h.fits(o) || h.depth < HoleSet.MIN_DEPTH_CM) continue
+            val holder = claims.holder(h) ?: continue
+            if (holder === o || holder.brainKind != BrainKind.PEEKER_BLENNY || holder.lengthCm > FIGHT_SIZE_RATIO * o.lengthCm) continue
+            val d = h.mouth.distanceTo(o.pos)
+            if (d < bestD) { bestD = d; best = h }
+        }
+        fightFor = best
+    }
+
+    /** Moves into a hole it won once the loser's body is out of it. */
+    private fun takeWonHole(c: Ctx) {
+        val h = c.rock.holes.live(wonHole) ?: run { wonHole = null; return }
+        val holder = c.sim.holeClaims.holder(h)
+        if (holder != null && holder !== o) { wonHole = null; return }   // someone else got there first
+        for (n in c.p.neighbors(h.mouth, h.depth + 2.0)) if (n !== o && n.alive && h.contains(n.pos, 0.3)) return
+        wonHole = null
+        moveTo(c, h)
+    }
+
+    /** It lost its hole in a fight: it backs out and shelters on the rock face, hiding for a while (timidUntil). */
+    fun evicted(c: Ctx) {
+        hole?.let { c.sim.holeClaims.release(it, o) }
+        hole = null
+        inHole.hole = null; inHole.shelter = shelterAt
+        o.homePos = shelterAt
+        o.timidUntil = c.t + 600
+        nextFight = c.t + c.rng.range(FIGHT_COOLDOWN_S, 2 * FIGHT_COOLDOWN_S)
+    }
+
+    /**
+     * The fight for a hole: it swims to the mouth, raises its dorsal and charges the holder; the holder answers from the
+     * hole. The bigger fish usually wins and the resident has the edge (prior residence; [RESIDENT_EDGE] is a design
+     * estimate). The loser hides; the winner moves in once the hole is empty.
+     */
+    inner class HoleFight : Behavior("holefight", "Fighting for a hole") {
+        private var target: RockHole? = null
+        override val committed: Boolean get() = !finished && elapsed < 25
+        /** No score noise (and no random draw) while it has nothing to fight for. */
+        override val noisy: Boolean get() = fightFor != null
+        override fun score(c: Ctx): Double {
+            if (c.p.night || threat != null || fightFor == null || hole != null || c.t < nextFight || c.o.timidUntil > c.t) return 0.0
+            return 0.5 + 0.3 * c.o.aggression
+        }
+        override fun enter(c: Ctx) { target = fightFor; holeFights++ }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val h = c.rock.holes.live(target) ?: run { finished = true; return }
+            val holder = c.sim.holeClaims.holder(h)
+            if (holder == null || holder === c.o) { fightFor = null; finished = true; return }
+            val stand = c.safe(h.mouth + h.axis * (c.clearance + 1.5), c.clearance * 0.8)
+            out.seek(c.viaOpenWater(stand), c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.7)
+            out.faceDir = h.axis * -1.0
+            if (c.o.pos.distanceTo(stand) < 3.0 || elapsed > 20) {
+                val hb = c.sim.agentOf(holder)?.brain as? PeekerBlennyBrain
+                hb?.onAttacked(c.sim.agentOf(holder)!!.ctx, c.o.pos, 0.4, c.o)
+                val me = c.o.lengthCm
+                val them = holder.lengthCm * RESIDENT_EDGE
+                if (hb != null && c.rng.chance(me / (me + them))) {
+                    hb.evicted(c.sim.agentOf(holder)!!.ctx)
+                    wonHole = h
+                    holeWins++
+                } else {
+                    // lost: it backs off, stressed, and hides before it tries again
+                    c.o.socialStress += 0.05
+                    c.o.timidUntil = c.t + 600
+                }
+                holder.socialStress += 0.03
+                fightFor = null
+                nextFight = c.t + c.rng.range(FIGHT_COOLDOWN_S, 2 * FIGHT_COOLDOWN_S)
+                finished = true
+            }
+        }
     }
 
     /**
@@ -2259,6 +2406,42 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         moveTo(c, best)
     }
 
+    /**
+     * Ecsenius squabbles (research 50 §1c, §2c: bicolor and midas fight other blennies over holes): an Ecsenius chased off
+     * by another one whose hole is within [MOVE_AWAY_CM] moves to the free fitting hole farthest from it. Only the
+     * harassed one moves, so the bully keeps its home; with no such hole it stays and keeps hiding (timidUntil).
+     */
+    fun yieldToRival(c: Ctx) {
+        val claims = c.sim.holeClaims
+        for (r in c.sim.organisms) {
+            if (r === o || !r.alive || r.brainKind != BrainKind.PEEKER_BLENNY) continue
+            val rel = o.relations[r.id] ?: continue
+            if (rel.harassedBy <= 0.2 && rel.fear <= 0.3) continue
+            val rh = (c.sim.agentOf(r)?.brain as? PeekerBlennyBrain)?.holePos ?: continue
+            if (holePos.distanceTo(rh) >= MOVE_AWAY_CM) continue
+            val best = c.rock.holes.all.filter { it.kind == HoleKind.HOLE && it.fits(o) && it.mouth.distanceTo(rh) >= MOVE_AWAY_CM && claims.usableBy(it, o) }
+                .maxByOrNull { it.mouth.distanceTo(rh) } ?: return
+            if (best !== hole) moveTo(c, best)
+            return
+        }
+    }
+
+    /**
+     * A blenny that has grown too thick for its hole moves to a bigger one (hole diameter rises with blenny length,
+     * Wilson, Fisher & Pratchett 2013); with none free it gives the hole up and shelters on the rock face, so it never
+     * backs into a bore narrower than its body.
+     */
+    private fun leaveOutgrownHole(c: Ctx) {
+        val h = hole ?: return
+        if (h.fits(o)) return
+        val bigger = c.rock.holes.homeFor(o, setOf(HoleKind.HOLE), holePos, claims = c.sim.holeClaims)
+        if (bigger != null) { moveTo(c, bigger); return }
+        c.sim.holeClaims.release(h, o)
+        hole = null
+        inHole.hole = null; inHole.shelter = shelterAt
+        o.homePos = shelterAt
+    }
+
     /** Move house: claim [h] first, then let the old hole go (it is never shared, not even for a tick). */
     private fun moveTo(c: Ctx, h: RockHole) {
         if (!c.sim.holeClaims.claim(h, o)) return
@@ -2270,7 +2453,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     /**
      * A blenny without a hole (every fitting one held when it arrived) keeps looking: it takes the first spare hole that
-     * fits. A held hole is contested only through the blenny war (pair row lmb_tailspot), whose loser moves out.
+     * fits. A held hole is contested through the blenny war (pair row lmb_tailspot), whose loser moves out, and by
+     * [HoleFight] against another Ecsenius.
      */
     private fun findSpareHole(c: Ctx) {
         if (hole != null) return
@@ -2288,6 +2472,20 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val PROSPECT_S = 86400.0
         /** Longest committed trip to a prospecting site (s) [L]. */
         const val PROSPECT_TRIP_S = 25.0
+        /** How far above its hole a midas holds station, and how far from home it forages (cm; 2-3 m on the reef scaled to the tank) [L]. */
+        const val MIDWATER_RISE_LO = 15.0
+        const val MIDWATER_RISE_HI = 35.0
+        const val MIDWATER_RANGE_CM = 50.0
+        /** Social stress floor while it has no hole (out on the rock face) [L]. */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "50; owner direction 2026-10-20") const val HOMELESS_STRESS = 0.12
+        /** It only fights holders up to this much longer than itself [L]. */
+        const val FIGHT_SIZE_RATIO = 1.15
+        /** The resident's edge in a hole fight, as a length multiplier (prior-residence advantage) [L]. */
+        const val RESIDENT_EDGE = 1.3
+        /** Shortest wait between hole fights (s) [L]. */
+        const val FIGHT_COOLDOWN_S = 1200.0
+        /** Open water round a foraging station: this far from any rock (cm) [L]. */
+        const val MIDWATER_CLEAR_CM = 5.0
     }
 
     /**
@@ -2340,15 +2538,15 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         override val committed: Boolean get() = !finished && elapsed < 16
         override fun score(c: Ctx): Double {
             if (c.p.night) return 0.0
-            f = c.findFood(45.0) { !it.settled }
+            f = c.findFood(style.dashSeeCm) { !it.settled }
             if (f != null && c.o.hunger > 0.12) return 0.8
             return if (c.t > next && c.o.hunger > 0.2) 0.5 + 0.35 * c.o.hunger else 0.0
         }
         override fun enter(c: Ctx) {
             back = false
             excursions++
-            next = c.t + c.rng.range(30.0, 90.0)
-            target = f?.pos ?: c.safe(holePos + holeOut * 6.0 + Vec3(c.rng.signed() * 5, c.rng.range(10.0, 20.0), 0.0))
+            next = c.t + c.rng.range(style.dashMinS, style.dashMaxS)
+            target = f?.pos ?: c.safe(holePos + holeOut * 6.0 + Vec3(c.rng.signed() * 5, c.rng.range(style.dashRiseLo, style.dashRiseHi), 0.0))
         }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
@@ -2368,6 +2566,78 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 if (o.pos.distanceTo(mouth) < 2.5) { returns++; finished = true }
                 else if (elapsed > 12) finished = true
             }
+        }
+    }
+
+    /** Open-water bouts so far (tests, captions). */
+    var midwaterBouts = 0; private set
+
+    /**
+     * The midas blenny's open-water foraging (research 50 §2c: zooplankton 2-3 m above the benthos; the orange phase
+     * schools with lyretail anthias, FishBase). It climbs to a station well above its hole, holds there sculling into the
+     * current and snaps passing plankton, and keeps station with a nearby mid-water fish (a chromis or anthias school, a
+     * cardinal) when one is there. It never strays past [MIDWATER_RANGE_CM] from home and drops home to its hole when
+     * startled (Flee outranks it).
+     */
+    inner class MidwaterForage : Behavior("midwater", "Picking plankton in open water") {
+        private var base = Vec3.ZERO
+        private var station = Vec3.ZERO
+        private var nextDrift = 0.0
+        private var dur = 60.0
+        private var nextSnap = 0.0
+        private var restUntil = -1e9
+        private var buddy: Organism? = null
+        private var nextBuddy = 0.0
+        override fun score(c: Ctx): Double {
+            if (c.p.night || threat != null || c.t < restUntil || c.o.timidUntil > c.t) return 0.0
+            // outranks perching and grazing (it lives up in the water by day), not a food rush or a flight
+            return (0.7 + 0.2 * c.o.hunger) * c.activity * style.midwater
+        }
+        override fun enter(c: Ctx) {
+            midwaterBouts++
+            dur = c.rng.range(40.0, 150.0)
+            val up = c.rng.range(MIDWATER_RISE_LO, MIDWATER_RISE_HI)
+            val y = min(holePos.y + up, c.zoneY(c.o.species.zone.yMax))
+            // a station in open water out in front of the hole, clear of the rock (a point inside a rock arch would be
+            // projected down onto the rock face, and it would "forage" sitting on the rock)
+            station = c.safe(holePos + holeOut * 8.0 + Vec3(0.0, 0.5 * up, 0.0))
+            for (i in 0 until 6) {
+                val p = Vec3(holePos.x + c.rng.signed() * 15, y, (holePos.z + holeOut.z * 10 + c.rng.signed() * 6).coerceIn(6.0, c.rock.widthCm - 6))
+                if (c.rock.sdf.dist(p) > MIDWATER_CLEAR_CM) { station = c.safe(p); break }
+            }
+            base = station; nextDrift = c.t + c.rng.range(2.0, 6.0)
+            buddy = null; nextBuddy = 0.0
+        }
+        override fun exit(c: Ctx) { restUntil = c.t + c.rng.range(10.0, 40.0) }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val o = c.o
+            // every few seconds: the nearest mid-water fish of similar size to keep station beside (a school mate; not a
+            // sand dweller, nor a clown that would defend its host)
+            if (c.t >= nextBuddy) {
+                nextBuddy = c.t + 4.0
+                buddy = c.p.neighbors(o.pos, 30.0).firstOrNull {
+                    it !== o && it.alive && it.isFish && it.brainKind != BrainKind.PEEKER_BLENNY && it.brainKind != BrainKind.LAWNMOWER_BLENNY &&
+                        it.brainKind != BrainKind.CLOWN && it.species.zone.openWater >= 0.3 && it.species.zone.yMin >= 0.15 &&
+                    it.pos.y > holePos.y && it.lengthCm < 2.5 * o.lengthCm
+                }
+            }
+            // it never hangs still: it shifts about its station every few seconds, as a plankton picker works the water
+            if (c.t >= nextDrift) {
+                nextDrift = c.t + c.rng.range(2.0, 6.0)
+                val p = base + Vec3(c.rng.signed() * 8, c.rng.signed() * 4, c.rng.signed() * 5)
+                if (c.rock.sdf.dist(p) > MIDWATER_CLEAR_CM) station = c.safe(p)
+            }
+            val b = buddy
+            val goal = if (b != null && b.alive && b.pos.distanceTo(holePos) < MIDWATER_RANGE_CM) c.safe(b.pos + Vec3(0.0, -2.0, 0.0) - b.heading * 3.0) else station
+            out.seek(goal, o.cruiseSpeed * (if (b != null) 1.1 else 0.7), arrive = 3.0)
+            if (o.pos.distanceTo(goal) < 4.0) { out.hover = true; out.pectoral = 1.0 }
+            // snap at drifting particles in reach, else pick unseen plankton now and then
+            if (c.t >= nextSnap) {
+                nextSnap = c.t + c.rng.range(2.5, 7.0)
+                val f = c.findFood(8.0) { !it.settled }
+                if (f != null) c.bite(f) else if (o.hunger > 0.15) { o.hunger = max(0.0, o.hunger - 0.004); o.mouth = 1.0 }
+            }
+            if (elapsed > dur || o.pos.distanceTo(holePos) > MIDWATER_RANGE_CM) finished = true
         }
     }
 

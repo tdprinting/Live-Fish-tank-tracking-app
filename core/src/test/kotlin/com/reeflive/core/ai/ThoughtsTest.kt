@@ -25,6 +25,7 @@ class ThoughtsTest {
         sim.addFromSeed(LivestockSeed("euprymna_berryi", "Squiddy", 6.0, id = "squid"))
         sim.species.ensure("entacmaea_quadricolor")
         sim.addFromSeed(LivestockSeed("entacmaea_quadricolor", "Bubbles", 20.0, id = "bta"))
+        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
         sim.species.ensure("stenorhynchus_seticornis")
         sim.addFromSeed(LivestockSeed("stenorhynchus_seticornis", "Pokey", 4.5, id = "arrow"))
         sim.species.put(SimSpecies("mystery_fish", kind = "FISH", common = "Mystery fish"))
