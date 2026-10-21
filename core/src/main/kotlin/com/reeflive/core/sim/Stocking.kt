@@ -134,10 +134,10 @@ object Stocking {
         StockEntry("euphyllia_glabrescens_gold", StockGroup.CORALS, "Gold torch coral", 15.0),
         StockEntry("rhodactis_inchoata", StockGroup.CORALS, "Bounce mushroom", 6.0),
         StockEntry("homophyllia_australis", StockGroup.CORALS, "Scolymia", 8.0),
-        StockEntry("montipora_capricornis", StockGroup.CORALS, "Montipora cap", 10.0),
-        StockEntry("seriatopora_hystrix", StockGroup.CORALS, "Birdsnest coral", 8.0),
-        StockEntry("acropora_millepora", StockGroup.CORALS, "Acropora", 8.0),
-        StockEntry("xenia_umbellata", StockGroup.CORALS, "Pulsing xenia", 5.0),
+        StockEntry("montipora_capricornis", StockGroup.CORALS, "Montipora cap", 12.0),
+        StockEntry("seriatopora_hystrix", StockGroup.CORALS, "Birdsnest coral", 10.0),
+        StockEntry("acropora_millepora", StockGroup.CORALS, "Acropora", 12.0),
+        StockEntry("xenia_umbellata", StockGroup.CORALS, "Pulsing xenia", 6.0),
     )
 
     /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
