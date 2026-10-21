@@ -17,6 +17,7 @@ uniform float uHasTexture;
 uniform float uRoughness;
 uniform float uIridStrength;
 uniform float uDesat;
+uniform float uTone;         // own colour change, -1 pale .. +1 dark and mottled (lawnmower blenny, research 51)
 uniform float uIchSpots;     // 0..1 white spot coverage (ich)
 uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
@@ -59,6 +60,15 @@ void main() {
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     albedo = mix(albedo, vec3(lum), clamp(uDesat, 0.0, 1.0));
+    if (abs(uTone) > 0.01 && (uPart < 1.5)) {
+        // melanophores spread in soft blotches over the back first: dark goes on mottled, pale washes the blotches out
+        vec2 gb = vUv * vec2(9.0, 5.0);
+        vec2 cb = floor(gb);
+        float blot = 1.0 - smoothstep(0.15, 0.5, length(fract(gb) - (vec2(hash12(cb + 4.2), hash12(cb + 8.6)) * 0.5 + 0.25)));
+        float k = clamp(uTone, -1.0, 1.0);
+        if (k > 0.0) albedo *= 1.0 - k * (0.35 + 0.4 * blot);
+        else albedo = mix(albedo, vec3(lum) * 0.5 + vec3(0.55, 0.52, 0.45) * 0.5, -k * 0.6);
+    }
 #ifndef FIN
     // the mouth lining (fish.vert writes it to vColor.g for a model with a jaw): dark flesh, seen in shadow
     if (uPart < 0.5) albedo = mix(albedo, vec3(0.09, 0.035, 0.04), 0.9 * clamp(vColor.g, 0.0, 1.0));

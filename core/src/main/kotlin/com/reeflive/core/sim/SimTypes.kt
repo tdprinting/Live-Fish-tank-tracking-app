@@ -349,6 +349,8 @@ data class OrganismPose(
     val limbs: FloatArray = NO_LIMBS,
     /** Still in an acclimation bag ([AcclimationBags]): drawn, but not pickable and not yet in the tank. */
     val bagged: Boolean = false,
+    /** Skin shade −1 pale .. +1 dark and mottled (a fish's own colour change, [Organism.skinTone]). */
+    val tone: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
