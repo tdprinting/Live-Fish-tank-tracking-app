@@ -61,9 +61,11 @@ class MicroCritterVisuals {
             order += r
         }
         // the bristleworms are the sim's own (core WormField: they eat the food and the predators catch them)
+        // (they come at the 20 Hz sim tick: eased per frame so they glide instead of stepping)
+        val ease = (1f - kotlin.math.exp(-dt * WORM_EASE)).coerceIn(0f, 1f)
         for (p in s.worms) {
             val r = rigs.getOrPut(p.id) { FishRig(p.id) }
-            r.setCritter(p)
+            r.blendCritter(p, ease)
             order += r
         }
         // the Berghia nudibranchs the keeper added crawl to the aiptasia the sim says they are eating
@@ -109,6 +111,8 @@ class MicroCritterVisuals {
         const val FADE_ANGULAR_SIZE = 0.009f
         /** Cap on the per-cm² rock densities handed to the shader (one animal per lattice cell is its own limit). */
         const val MAX_ROCK_DENSITY = 8f
+        /** Easing rate (1/s) of the sim's 20 Hz worm poses toward the latest tick. */
+        const val WORM_EASE = 18f
         const val MICRO_TRIS_HIGH = 12000
         const val MICRO_TRIS_MEDIUM = 2000
     }
