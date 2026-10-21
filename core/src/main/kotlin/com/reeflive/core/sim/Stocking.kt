@@ -19,8 +19,14 @@ enum class StockSize(val label: String, val fraction: Double, val floorCm: Doubl
     fun lengthCm(adultCm: Double): Double = max(adultCm * fraction, min(floorCm, adultCm))
 }
 
-/** One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. */
-data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double)
+/**
+ * One species the sandbox can add: it has a species sheet and a 3D model the renderer draws. [role] sells one sex
+ * form as its own item (a male fairy wrasse is a different fish in the shop); its [key] is "speciesId@male", which
+ * every add path takes in place of the species id ([Stocking.speciesOf], [Stocking.roleOf]).
+ */
+data class StockEntry(val speciesId: String, val group: StockGroup, val common: String, val typicalCm: Double, val role: String? = null) {
+    val key: String = if (role == null) speciesId else "$speciesId@${role.lowercase()}"
+}
 
 /**
  * Sandbox stocking tests ([Command.AddMany]): add many of one species to see what overstocking does. The new
@@ -54,6 +60,11 @@ object Stocking {
         // research 16: sand sifter (in the owner's tank since 2026-10)
         StockEntry("valenciennea_puellaris", StockGroup.FISH, "Diamond goby", 12.0),
         StockEntry("macropharyngodon_bipartitus", StockGroup.FISH, "Blue star leopard wrasse", 10.0),
+        // research 42: Zebrasoma grazers (they fight each other) and a harem plankton picker sold by sex
+        StockEntry("zebrasoma_flavescens", StockGroup.FISH, "Yellow tang", 18.0),
+        StockEntry("zebrasoma_xanthurum", StockGroup.FISH, "Purple tang", 20.0),
+        StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (female)", 8.0, role = "FEMALE"),
+        StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (male)", 8.0, role = "MALE"),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         // research 42: hides by day, eats aiptasia at night
@@ -91,7 +102,17 @@ object Stocking {
         StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
     )
 
-    fun entry(speciesId: String): StockEntry? = CATALOG.firstOrNull { it.speciesId == speciesId }
+    /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
+    fun entry(key: String): StockEntry? = CATALOG.firstOrNull { it.key == key } ?: CATALOG.firstOrNull { it.speciesId == key }
+
+    /** Species id of a stock key. */
+    fun speciesOf(key: String): String = key.substringBefore('@')
+
+    /** Sex role a stock key sells ("MALE"), or null for any. */
+    fun roleOf(key: String): String? = key.substringAfter('@', "").uppercase().ifEmpty { null }
+
+    /** Shop size for [role]: a sold male is a grown fish (only mature fish show male colors). */
+    fun sizeFor(role: String?, size: StockSize): StockSize = if (role == "MALE" && size == StockSize.JUVENILE) StockSize.ADULT else size
     fun inGroup(g: StockGroup): List<StockEntry> = CATALOG.filter { it.group == g }
 
     /**
@@ -137,18 +158,20 @@ object Stocking {
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
 
-    /** Adds up to [count] of [speciesId]; returns how many were added (caps: per add and whole tank). */
-    fun addMany(sim: Simulation, speciesId: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
+    /** Adds up to [count] of stock [key] (a species id, or "id@male"); returns how many were added (caps: per add and whole tank). */
+    fun addMany(sim: Simulation, key: String, count: Int, sizeCm: Double = 0.0, size: StockSize = StockSize.JUVENILE): Int {
+        val speciesId = speciesOf(key)
+        val role = roleOf(key)
         sim.species.ensure(speciesId)
         val sp = sim.species[speciesId]
         if (sp.isCoral) return addCorals(sim, sp, count)
-        val cm = if (sizeCm > 0) sizeCm else size.lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
-        return addAnimals(sim, sp, count, cm)
+        val cm = if (sizeCm > 0) sizeCm else sizeFor(role, size).lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
+        return addAnimals(sim, sp, count, cm, role)
     }
 
     private fun nextNumber(existing: Int, i: Int) = existing + i + 1
 
-    private fun addAnimals(sim: Simulation, sp: SimSpecies, count: Int, sizeCm: Double): Int {
+    private fun addAnimals(sim: Simulation, sp: SimSpecies, count: Int, sizeCm: Double, role: String?): Int {
         val room = MAX_ANIMALS - sim.organisms.count { it.alive }
         val n = min(count.coerceIn(0, MAX_ANIMALS_PER_ADD), max(0, room))
         if (n == 0) return 0
@@ -157,7 +180,7 @@ object Stocking {
         val already = sim.organisms.count { it.species.id == sp.id }
         val margin = 12.0
         for (i in 0 until n) {
-            val o = sim.addFromSeed(LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", sizeCm))
+            val o = sim.addFromSeed(LivestockSeed(sp.id, "${sp.common.ifBlank { sp.id }} #${nextNumber(already, i)}", sizeCm, role))
             // newcomers: nobody knows them yet (06 §3.3 priority effects)
             o.arrivalTime = sim.simTimeSec; o.clock = sim.simTimeSec
             if (o.isFish) {

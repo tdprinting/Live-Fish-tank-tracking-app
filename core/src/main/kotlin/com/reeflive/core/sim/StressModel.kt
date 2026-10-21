@@ -88,6 +88,8 @@ object StressModel {
         BrainKind.TANG to doubleArrayOf(1.3, 1.1, 1.0, 1.2, 1.1, 1.3, 1.0, 1.1),
         BrainKind.CARDINAL to doubleArrayOf(1.3, 1.0, 1.0, 1.2, 1.1, 1.4, 1.5, 0.9),
         BrainKind.WRASSE to doubleArrayOf(1.2, 1.1, 1.1, 1.2, 1.0, 1.2, 0.9, 0.9),
+        // fairy wrasse (est.): a plankton picker from the current, sensitive to low oxygen; likes flow
+        BrainKind.FAIRY_WRASSE to doubleArrayOf(1.1, 1.0, 1.0, 1.2, 1.0, 1.3, 0.9, 0.8),
         BrainKind.ENGINEER_GOBY to doubleArrayOf(0.8, 0.9, 0.9, 1.0, 1.0, 1.1, 0.7, 0.8),
         BrainKind.EEL to doubleArrayOf(0.8, 0.9, 0.9, 0.8, 1.0, 1.0, 0.7, 0.8),
         BrainKind.HAWK to doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9),
@@ -282,7 +284,7 @@ object StressModel {
 
     /** Column swimmers surface to gasp; benthic fish hide instead (S:Yu23). */
     fun isColumnFish(kind: BrainKind, night: Boolean) = when (kind) {
-        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE -> true
+        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE -> true
         BrainKind.CARDINAL -> true
         else -> false
     }

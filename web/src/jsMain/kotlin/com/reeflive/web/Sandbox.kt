@@ -101,7 +101,7 @@ object ReefSandbox {
         c.scenarios = Scenario.entries.map { e -> obj { it.id = e.name; it.label = e.label } }.toTypedArray()
         c.foods = FoodKind.entries.map { f -> obj { it.id = f.name; it.label = f.label; it.blurb = f.blurb; it.group = f.group.label; it.grams = f.typicalDoseGrams } }.toTypedArray()
         c.stock = Stocking.CATALOG.filter { live.species?.has(it.speciesId) != false }.map { e ->
-            obj { it.id = e.speciesId; it.group = e.group.name; it.groupLabel = e.group.label; it.name = e.common; it.cm = e.typicalCm }
+            obj { it.id = e.key; it.species = e.speciesId; it.group = e.group.name; it.groupLabel = e.group.label; it.name = e.common; it.cm = e.typicalCm }
         }.toTypedArray()
         c.sizes = StockSize.entries.map { e -> obj { it.id = e.name; it.label = e.label } }.toTypedArray()
         c.diseases = Disease.entries.map { e -> obj { it.id = e.name; it.label = DISEASE_LABELS[e] ?: e.name } }.toTypedArray()
@@ -272,14 +272,15 @@ object ReefSandbox {
             "rearrangeRock" -> { send(Command.RearrangeRock); burst(BurstKind.SILT, ROCK_SPOT, amount = 1.5f) }
             "predation" -> { predation = num > 0; send(Command.SetPredation(predation)) }
             "add" -> {
-                val e = Stocking.CATALOG.firstOrNull { it.speciesId == arg } ?: return false
+                val e = Stocking.CATALOG.firstOrNull { it.key == arg } ?: return false
                 val count = num.toInt().coerceAtLeast(1)
-                if (count == 1) send(Command.AddOrganism(e.speciesId, if (e.group == StockGroup.CORALS) 0.0 else e.typicalCm * StockSize.JUVENILE.fraction, ""))
-                else send(Command.AddMany(e.speciesId, count))
+                val cm = if (e.group == StockGroup.CORALS) 0.0 else e.typicalCm * Stocking.sizeFor(e.role, StockSize.JUVENILE).fraction
+                if (count == 1) send(Command.AddOrganism(e.speciesId, cm, "", role = e.role))
+                else send(Command.AddMany(e.key, count))
                 burst(BurstKind.BUBBLES, RELEASE_SPOT)
             }
             "bag" -> {
-                // arg = "speciesId:SIZE:x" (tank cm along the front glass), num = count: a shop bag floated there
+                // arg = "stockKey:SIZE:x" (tank cm along the front glass), num = count: a shop bag floated there
                 val parts = (arg ?: return false).split(":")
                 val size = runCatching { StockSize.valueOf(parts.getOrElse(1) { "JUVENILE" }) }.getOrDefault(StockSize.JUVENILE)
                 val x = parts.getOrNull(2)?.toDoubleOrNull() ?: 60.0
@@ -289,7 +290,7 @@ object ReefSandbox {
             // My tank: the coral out of its bag goes on offered spot [num] (−1: the best one)
             "placeCoral" -> send(Command.PlaceCoral(num.toInt()))
             "addSized" -> {
-                // arg = "speciesId:SIZE", num = count
+                // arg = "stockKey:SIZE", num = count
                 val (id, size) = (arg ?: return false).split(":").let { it[0] to StockSize.valueOf(it.getOrElse(1) { "JUVENILE" }) }
                 send(Command.AddMany(id, num.toInt().coerceAtLeast(1), size = size))
                 burst(BurstKind.BUBBLES, RELEASE_SPOT)

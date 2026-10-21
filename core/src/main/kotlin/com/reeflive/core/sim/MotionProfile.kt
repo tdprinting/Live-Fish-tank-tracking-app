@@ -160,6 +160,10 @@ object MotionProfiles {
         // head-down among coral branches to pick; bobbing-and-weaving travel (LiveAquaria [M]); pecs 3–5.5 Hz [L]
         BrainKind.LEOPARD_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 3.0, pecHzMax = 5.5, rowBodyAmp = 0.02,
             bobPitch = 0.06, bobHz = 1.6, bankGain = 1.0, cStartDeg = 120.0),
+        // fairy wrasse: quick labriform hoverer in the current (pectoral rowing, research 42 §1 [L]); fast pecs, a
+        // little bob while it picks, a sharp C-start into the rock when scared
+        BrainKind.FAIRY_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.2, pecHzHover = 3.5, pecHzMax = 6.0, rowBodyAmp = 0.015,
+            bobPitch = 0.04, bobHz = 1.2, bankGain = 1.1, cStartDeg = 130.0),
         // body-caudal darter, tail 3–4 Hz, burst-and-coast between rock cover [L]
         BrainKind.DOTTYBACK to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.5, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
             glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),

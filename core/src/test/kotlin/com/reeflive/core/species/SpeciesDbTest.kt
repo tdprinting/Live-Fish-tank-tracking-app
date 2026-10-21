@@ -18,8 +18,8 @@ class SpeciesDbTest {
         // hairy mushroom the clowns host, 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger
         // leather, elephant ear), the bobtail squid (sandbox only, research cephalopod_squid) and the rainbow bubble tip
         // anemone (research 40), and the peppermint shrimp and flame scallop (research 42).
-        assertEquals(43, db.size)
-        assertEquals(13, db.all.count { it.kind == SpeciesKind.FISH })
+        assertEquals(46, db.size)
+        assertEquals(16, db.all.count { it.kind == SpeciesKind.FISH })
         assertEquals(14, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(15, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
@@ -50,6 +50,7 @@ class SpeciesDbTest {
             "tailspot_blenny", "bicolor_blenny", "midas_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone",
             "hammer", "torch", "frogspawn", "duncan",
             "peppermint_shrimp", "flame_scallop",
+            "yellow_tang", "purple_tang", "fairy_wrasse",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {
             val all = listOfNotNull(s.model) + s.variantModels.values
@@ -70,9 +71,9 @@ class SpeciesDbTest {
     }
 
     @Test
-    fun tankSizeWarningsForTangAndEngineerGobyOnly() {
+    fun tankSizeWarningsForTangsAndEngineerGobyOnly() {
         val outgrow = db.all.filter { db.outgrowsTank(it.id, 60.0) }.map { it.id }.toSet()
-        assertEquals(setOf("paracanthurus_hepatus", "pholidichthys_leucotaenia"), outgrow)
+        assertEquals(setOf("paracanthurus_hepatus", "pholidichthys_leucotaenia", "zebrasoma_flavescens", "zebrasoma_xanthurum"), outgrow)
         assertNull(db["echidna_nebulosa"])
     }
 

@@ -51,6 +51,8 @@ data class SimSpecies(
     val coral: CoralNeeds? = null,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
+    /** Sailfin tangs (*Zebrasoma*: yellow, purple): grazers that fight their own genus hardest (research 42 §2-4). */
+    val zebrasoma: Boolean by lazy { id.startsWith("zebrasoma") }
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
     val sensesOrDefault: SensesSpec by lazy { senses ?: SensesSpec.defaultFor(this) }
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
@@ -401,6 +403,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     /** Leopard wrasses (blue star leopard wrasse, *Macropharyngodon bipartitus*; research video fish_leopard_wrasse). */
     LEOPARD_WRASSE(listOf("macropharyngodon"), true),
     /**
+     * Fairy wrasses (red fairy wrasse, *Cirrhilabrus rubripinnis*; research 42 §1): mid-water plankton pickers in a
+     * one-male harem, protogynous, the male flashes; they sleep in a mucus cocoon in a crevice and jump when startled.
+     */
+    FAIRY_WRASSE(listOf("cirrhilabrus", "paracheilinus"), true),
+    /**
      * Bobtail squid (*Euprymna berryi* and relatives, Sepiolidae; research cephalopod_squid). Sandbox only. A mollusc, so not a fish
      * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
      */
@@ -446,6 +453,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
+            "fairy_wrasse" to FAIRY_WRASSE, "flasher_wrasse" to FAIRY_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
             "peppermint_shrimp" to PEPPERMINT_SHRIMP, "peppermint" to PEPPERMINT_SHRIMP,

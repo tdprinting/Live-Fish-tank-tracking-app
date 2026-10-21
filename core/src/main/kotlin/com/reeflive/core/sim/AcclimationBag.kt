@@ -131,6 +131,7 @@ class AcclimationBags {
         val sizeCm: Double,
         val coral: Boolean,
         val radius: Double,
+        val role: String?,
         var x: Double, var z: Double,
         val startTempC: Double,
     ) {
@@ -214,7 +215,9 @@ class AcclimationBags {
      * in several bags, as shops pack them; the bags land side by side. Returns how many animals were bagged (the
      * same tank caps as [Stocking.addMany]).
      */
-    fun float(sim: Simulation, speciesId: String, count: Int, size: StockSize, sizeCm: Double, x: Double, z: Double?): Int {
+    fun float(sim: Simulation, key: String, count: Int, size: StockSize, sizeCm: Double, x: Double, z: Double?): Int {
+        val speciesId = Stocking.speciesOf(key)
+        val role = Stocking.roleOf(key)
         sim.species.ensure(speciesId)
         val sp = sim.species[speciesId]
         val coral = sp.isCoral
@@ -223,7 +226,7 @@ class AcclimationBags {
         val cap = if (coral) Stocking.MAX_CORALS_PER_ADD else Stocking.MAX_ANIMALS_PER_ADD
         val n = min(count.coerceIn(0, cap), max(0, room))
         if (n == 0) return 0
-        val cm = if (coral) 0.0 else if (sizeCm > 0) sizeCm else size.lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
+        val cm = if (coral) 0.0 else if (sizeCm > 0) sizeCm else Stocking.sizeFor(role, size).lengthCm(sp.typicalAdultCm.coerceAtMost(sp.maxLengthCm))
         val swimmer = !coral && (sp.brainKind.isFish || MotionProfiles.of(sp.brainKind).gait == Gait.FIN_JET)
         val perBag = when { coral -> PER_BAG_CORAL; swimmer -> PER_BAG_SWIMMER; else -> PER_BAG_CRAWLER }
         val room4bags = max(1, MAX_BAGS - bags.size)
@@ -239,7 +242,7 @@ class AcclimationBags {
             // side by side around the drop point; [constrain] then settles them apart
             val off = (k - (nBags - 1) / 2.0) * (2 * r + 1.0)
             val b = Bag(
-                nextId++, sp.id, sp.common.ifBlank { sp.id }, here, cm, coral, r,
+                nextId++, sp.id, Stocking.entry(key)?.common ?: sp.common.ifBlank { sp.id }, here, cm, coral, r, role,
                 x + off, z ?: (rock.widthCm * 0.5), tank + TRANSIT_TEMP_OFFSET_C,
             )
             b.y = rock.waterLevelCm + DROP_HEIGHT_CM + k * 1.5
@@ -256,7 +259,7 @@ class AcclimationBags {
         val r = b.radius
         for (i in 0 until b.count) {
             val id = "${sp.id}#bag${b.id}_$i"
-            val o = Organism(id, sp, cm, "${b.common} #${already + i + 1}", null, sim.rng.fork(id.hashCode().toLong()))
+            val o = Organism(id, sp, cm, "${b.common} #${already + i + 1}", b.role, sim.rng.fork(id.hashCode().toLong()))
             val rd = Rider(o, swimmer)
             // spread through the bulb (swimmers) or over its floor (crawlers); [settle] then fits the whole bodies
             val a = i * 2.39996
@@ -780,12 +783,12 @@ class AcclimationBags {
             val o = rd.o
             b.releasedIds += o.id
             if (rd.swimmer) {
-                val real = sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, id = o.id))
+                val real = sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, b.role, id = o.id))
                 arrive(sim, real, b)
                 val out = b.netFacing.horizontal().normalized(Vec3(b.tipX, 0.0, b.tipZ))
                 real.placeAt(rock.clampToWater(o.pos, 1.0), (out + Vec3(0.0, -0.2, 0.0)).normalized(o.heading))
             } else if (o.brainKind.isSessile) {
-                arrive(sim, sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, id = o.id)), b)
+                arrive(sim, sim.addFromSeed(LivestockSeed(b.speciesId, o.nickname, b.sizeCm, b.role, id = o.id)), b)
             } else {
                 // sink straight down from the net to the rock or sand under it (spread a little as they tumble out)
                 val sx = (o.pos.x + sim.rng.signed() * 1.5).coerceIn(4.0, rock.lengthCm - 4)
@@ -813,7 +816,7 @@ class AcclimationBags {
             val d = to.length()
             val step = f.v * dt
             if (d <= step + 0.05) {
-                val real = sim.addFromSeed(LivestockSeed(o.species.id, o.nickname, o.lengthCm, id = o.id))
+                val real = sim.addFromSeed(LivestockSeed(o.species.id, o.nickname, o.lengthCm, o.role, id = o.id))
                 real.arrivalTime = sim.simTimeSec; real.clock = sim.simTimeSec
                 HeatModel.acclimate(real, sim.water.s.tempC)
                 real.homePos = f.target

@@ -152,6 +152,11 @@ object Thoughts {
             n == "work" -> Line(if (client != null) "cleaning ${possessive(client)} ${e.part()}" else "looking for a fish to clean", "clean a fish", "Cleaning time!", Driver.CLEANER_JOB, 3)
             n == "surf" -> Line("checking the rocks for customers", "look for fish to clean", "Who needs a clean?", Driver.CLEANER_JOB)
             n == "cocoon" -> Line("sleeping in a slimy bubble blanket", "make its slimy sleeping bag", "Zzz…", Driver.REST, 0)
+            // ---- fairy wrasse
+            n == "plankton" -> Line("hanging in the current, picking plankton out of the water", "pick plankton in the current", "Snap! Snap!", Driver.HUNGER)
+            n == "harem" -> Line(if (tgt != null) "swimming back to stay near $tgt" else "staying close to its group", "stay with the group", "Wait for me!", Driver.HOME)
+            n == "flashing" -> Line(if (tgt != null) "flashing his bright fins to show off for $tgt" else "flashing his bright fins to show off", "show off his fins", "Look at me!", Driver.FAMILY, 3)
+            n == "rush" -> Line("dashing up with a partner in a spawning rush", "dance up with a partner", "Up we go!", Driver.FAMILY, 3)
             // ---- moray
             n == "headout" -> Line("poking its head out of its den", "peek out of the den", "Peekaboo.", Driver.HOME)
             n == "roam" -> Line("roaming over the rocks", "roam the rocks", "Out for a slither.", Driver.CURIOSITY, 2)
@@ -533,6 +538,7 @@ object Thoughts {
         BrainKind.ASTERINA -> "asterina star"
         BrainKind.DIAMOND_GOBY -> "diamond goby"
         BrainKind.LEOPARD_WRASSE -> "leopard wrasse"
+        BrainKind.FAIRY_WRASSE -> "fairy wrasse"
         BrainKind.BOBTAIL_SQUID -> "bobtail squid"
         BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
