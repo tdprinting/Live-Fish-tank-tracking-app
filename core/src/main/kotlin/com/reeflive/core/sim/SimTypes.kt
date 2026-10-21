@@ -280,6 +280,8 @@ sealed class SimEvent {
     data class TerritoryReset(override val simTimeSec: Double) : SimEvent()
     data class Quiver(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
     data class LegRock(val id: String, val toId: String, override val simTimeSec: Double) : SimEvent()
+    /** A pistol shrimp's claw snap (a cavitation crack, research 44 §4), at fish [toId] if any. */
+    data class Snap(val id: String, val toId: String?, override val simTimeSec: Double) : SimEvent()
     /** A new colony appeared from [parentId]: a dropped Kenya branch (03 A1) or an aiptasia lacerate (03 C2). */
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
     /** A colony's tissue is gone ([CoralHealth]); [cause] is plain words for its main stress at the end. */

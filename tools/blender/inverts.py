@@ -137,10 +137,151 @@ def leg_path(base, knee, ankle, foot, n=8):
     return smooth_path([base, knee, ankle, foot], n)
 
 
+# ----------------------------------------------------------------------------
+# Shrimp pack (research 44): fire shrimp (Lysmata debelius), sexy shrimp (Thor amboinensis), harlequin shrimp
+# (Hymenocera picta) and tiger pistol shrimp (Alpheus bellulus). All four share the Lysmata leg layout (so the sim's
+# rest-tip tables, core ShrimpLimbs SKUNK_*, hold for them); what differs is the paint, the body build, the big claws
+# (pistol: one huge snapping claw on P1; harlequin: flat petal-like P2 chelae) and the sexy shrimp's raised tail.
+# ----------------------------------------------------------------------------
+NEW_SHRIMP = ("fire", "sexy", "harlequin", "pistol")
+# body length rostrum..telson (cm) of a typical trade animal (research 44)
+NEW_SHRIMP_CM = {"fire": 3.5, "sexy": 1.5, "harlequin": 4.0, "pistol": 4.0}
+CLAW_STRIP = 4
+
+
+def _spots(cv, seed, n, r, box=(0.08, 0.95, 0.3, 1.0), fill="#FFFFFF", rim=None, rim_w=0.3, rmin=None, jitter=0.35):
+    """Round spots on a body strip; v spans half the girth, so a round spot is ~3.5x taller in v than in u."""
+    rs = np.random.default_rng(seed)
+    for (cu, cvv) in P.poisson(rs, n, rmin or 2.2 * r, box):
+        rr = r * rs.uniform(1 - jitter, 1 + jitter)
+        if rim:
+            cv.blend(P.ellipse(cv, cu, cvv, rr * (1 + rim_w), rr * (1 + rim_w) * 3.5, 0.2), rim)
+        cv.blend(P.ellipse(cv, cu, cvv, rr, rr * 3.5, 0.2), fill)
+
+
+def _paint_new_shrimp(at, kind):
+    if kind == "fire":
+        # Lysmata debelius: deep blood red all over with a few small white dots on the carapace and abdomen; the long
+        # antennae and the walking and picking legs are white; red tail fan with paler tips (research 44 §1 [M]).
+        RED = "#B3121E"
+
+        def body(cv):
+            cv.vgrad("#C21A24", "#9A0C18", 0.0, 1.0)
+            for tb in (0.47, 0.55, 0.63, 0.71, 0.79, 0.87):
+                cv.blend(P.band(cv.u, tb - 0.004, tb + 0.004, 0.003), "#5A0610", 0.3)
+            _spots(cv, 21, 22, 0.007, box=(0.12, 0.85, 0.35, 0.98), fill="#FBF4F0")
+            cv.blend(P.band(cv.u, -0.1, 0.05, 0.02), "#E04050", 0.5)
+            cv.multiply(0.94 + 0.12 * P.fbm(cv.h, cv.w, 40, 3, 5))
+        at.paint_strip(0, body)
+        at.paint_strip(1, lambda cv: (cv.vgrad("#F4F0EE", "#FFFFFF"), cv.blend(P.band(cv.u, -0.1, 0.12, 0.04), RED, 0.8)))
+        at.paint_strip(2, lambda cv: (cv.vgrad("#F6F2F0", "#FFFFFF"), cv.blend(P.band(cv.u, -0.1, 0.05, 0.03), RED, 0.6)))
+        at.paint_strip(3, lambda cv: (cv.vgrad("#B0101C", "#C4202A"), cv.blend(S(0.9, 0.98, cv.u), "#F0C8C8", 0.6)))
+    elif kind == "sexy":
+        # Thor amboinensis: translucent olive-brown with big white saddles on the carapace and each abdominal
+        # segment, every saddle rimmed in thin blue; legs translucent with white bands (research 44 §3 [M]).
+        def body(cv):
+            cv.vgrad("#9A7440", "#6E5228", 0.0, 1.0)  # olive-brown (WP: "olive-brown, white patches outlined in blue")
+            for cu, cvv, ru in ((0.16, 0.86, 0.035), (0.3, 0.9, 0.05), (0.32, 0.45, 0.03), (0.5, 0.92, 0.035),
+                                (0.62, 0.9, 0.035), (0.74, 0.88, 0.03), (0.6, 0.4, 0.028), (0.86, 0.85, 0.03)):
+                cv.blend(P.ellipse(cv, cu, cvv, ru * 1.25, ru * 1.25 * 3.0, 0.2), "#5E8ED0", 0.9)
+                cv.blend(P.ellipse(cv, cu, cvv, ru, ru * 3.0, 0.2), "#F8F6F2")
+            _spots(cv, 31, 30, 0.004, box=(0.05, 0.95, 0.1, 0.8), fill="#F2E2C8", rmin=0.03)
+            cv.multiply(0.92 + 0.14 * P.fbm(cv.h, cv.w, 40, 3, 6))
+        at.paint_strip(0, body)
+        at.paint_strip(1, lambda cv: (cv.vgrad("#D49A64", "#E8B888"), [cv.blend(P.band(cv.u, t0, t0 + 0.07, 0.02), "#FAF6F0", 0.85)
+                                                                      for t0 in (0.3, 0.62, 0.9)]))
+        at.paint_strip(2, lambda cv: (cv.vgrad("#E0B080", "#F0D0A8"), [cv.blend(P.band(cv.u, t0, t0 + 0.05, 0.02), "#FAF6F0", 0.8)
+                                                                      for t0 in np.arange(0.1, 1.0, 0.2)]))
+
+        def tail(cv):
+            cv.vgrad("#B05A20", "#C06A2C")
+            cv.blend(P.band(cv.u, 0.45, 0.7, 0.05), "#F8F4EE", 0.9)
+            cv.blend(P.band(cv.u, 0.42, 0.73, 0.02) * (1 - P.band(cv.u, 0.47, 0.68, 0.02)), "#5E8ED0", 0.7)
+        at.paint_strip(3, tail)
+    elif kind == "harlequin":
+        # Hymenocera picta: porcelain white, covered in big pink-to-magenta blotches each edged in deep blue-violet;
+        # the same blotches on the flat petal claws and leaf antennules; legs white with violet bands (research 44 §2).
+        PINK, RIM = "#C8467E", "#3E2E8E"
+
+        def body(cv):
+            cv.vgrad("#F2ECE4", "#FBF8F4", 0.0, 1.0)
+            _spots(cv, 41, 14, 0.032, box=(0.08, 0.92, 0.15, 1.0), fill=PINK, rim=RIM, rim_w=0.22, rmin=0.09, jitter=0.25)
+            cv.multiply(0.95 + 0.08 * P.fbm(cv.h, cv.w, 30, 3, 7))
+        at.paint_strip(0, body)
+        at.paint_strip(1, lambda cv: (cv.vgrad("#F4F0EC", "#FCFAF8"), [cv.blend(P.band(cv.u, t0, t0 + 0.06, 0.02), RIM, 0.6)
+                                                                      for t0 in (0.25, 0.55, 0.85)]))
+        at.paint_strip(2, lambda cv: (cv.vgrad("#F4F0EC", "#FCFAF8"), [cv.blend(P.band(cv.u, t0, t0 + 0.04, 0.02), PINK, 0.7)
+                                                                      for t0 in np.arange(0.12, 1.0, 0.18)]))
+
+        def tail(cv):
+            cv.vgrad("#F4EEE8", "#FBF8F4")
+            cv.blend(P.ellipse(cv, 0.55, 0.5, 0.16, 0.5, 0.2), RIM)
+            cv.blend(P.ellipse(cv, 0.55, 0.5, 0.12, 0.38, 0.2), PINK)
+        at.paint_strip(3, tail)
+
+        def claw(cv):
+            cv.vgrad("#F2ECE4", "#FBF8F4")
+            _spots(cv, 43, 9, 0.05, box=(0.3, 0.95, 0.1, 0.9), fill=PINK, rim=RIM, rim_w=0.2, rmin=0.15, jitter=0.2)
+        at.paint_strip(CLAW_STRIP, claw)
+    else:  # pistol
+        # Alpheus bellulus, the tiger pistol shrimp: a cream-white body under irregular dark red-brown to purple
+        # "tiger" saddles and blotches, the big snapping claw mottled the same with a pale finger; legs pale banded
+        # orange (research 44 §4 [M]).
+        BLOTCH = "#7E2C30"
+
+        def tiger(cv, seed, k=1.0):
+            n = P.fbm(cv.h, cv.w, 14, 4, seed)
+            n2 = P.fbm(cv.h, cv.w, 30, 3, seed + 1)
+            stripes = 0.5 + 0.5 * np.sin(cv.u * 2 * math.pi * 7 + 7.0 * n + 2.0 * cv.v)
+            m = S(0.5, 0.7, stripes * (0.5 + 0.8 * n) + 0.35 * (n2 - 0.5)) * k
+            cv.blend(m, BLOTCH, 0.95)
+            cv.blend(m * S(0.6, 1.0, cv.v), "#4E2440", 0.4)
+
+        def body(cv):
+            cv.vgrad("#E8DCC4", "#F4ECDC", 0.0, 1.0)
+            tiger(cv, 51, S(0.08, 0.14, cv.u) * (1 - S(0.92, 0.97, cv.u)))
+            cv.blend(P.band(cv.u, -0.1, 0.07, 0.02), "#F2E8D8", 0.8)
+        at.paint_strip(0, body)
+        at.paint_strip(1, lambda cv: (cv.vgrad("#ECD8B8", "#F6EAD6"), [cv.blend(P.band(cv.u, t0, t0 + 0.06, 0.02), "#D06A34", 0.6)
+                                                                      for t0 in (0.2, 0.5, 0.8)]))
+        at.paint_strip(2, lambda cv: (cv.vgrad("#E89A60", "#F2C08C"), [cv.blend(P.band(cv.u, t0, t0 + 0.05, 0.02), "#F6EEE0", 0.8)
+                                                                      for t0 in np.arange(0.1, 1.0, 0.2)]))
+        at.paint_strip(3, lambda cv: (cv.vgrad("#E4D4BC", "#F0E4D0"), tiger(cv, 53, S(0.1, 0.3, cv.u)), cv.blend(S(0.85, 0.95, cv.u), "#7E2C30", 0.6)))
+
+        def claw(cv):
+            cv.vgrad("#E4D6BE", "#F2E8D6")
+            tiger(cv, 55, 1 - S(0.82, 0.88, cv.u))
+            cv.blend(S(0.86, 0.92, cv.u), "#F0B080", 0.7)  # pale orange fingers
+        at.paint_strip(CLAW_STRIP, claw)
+
+
+def _raise_tail(objs, spine, xp=-0.06, bend=2.0, arc=0.34):
+    """Thor amboinensis holds its abdomen cocked up over its back: bends everything behind x = xp upward along a
+    circular arc (`bend` radians over `arc` of length, straight beyond). Walking legs stay put; the pleopods follow."""
+    zp = float(np.interp(xp, spine[::-1, 0], spine[::-1, 2]))
+    rc = arc / bend
+    for o in objs:
+        V = C.get_verts(o)
+        sel = V[:, 0] < xp
+        if o.name == "Legs":
+            sel &= np.abs(C.get_cols(o)[:, 0] - 6 / 8) < 0.02
+        d = xp - V[sel, 0]
+        h = V[sel, 2] - zp
+        th = np.minimum(d, arc) / rc
+        extra = np.maximum(d - arc, 0.0)
+        x = xp - (rc - h) * np.sin(th) - extra * np.cos(th)
+        z = zp + rc - (rc - h) * np.cos(th) + extra * np.sin(th)
+        V[sel, 0] = x
+        V[sel, 2] = z
+        o.data.vertices.foreach_set("co", V.ravel())
+        o.data.update()
+
+
 def build_shrimp(kind="banded"):
     C.reset_scene()
     banded = kind == "banded"
-    at = Atlas(512, 256, 4)
+    big_claw = kind in ("pistol", "harlequin")
+    at = Atlas(512, 320, 5) if big_claw else Atlas(512, 256, 4)
     if banded:
         # strip 0: body bands along the spine (rostrum -> telson), set on the segments: white rostrum and front of the
         # carapace, red band behind the eyes, white mid-carapace band, red rear carapace, white abdominal segments 1-2,
@@ -212,6 +353,8 @@ def build_shrimp(kind="banded"):
             cv.blend(P.band(cv.u, 0.55, 0.66, 0.03), "#F2D8D2", 0.8)
             cv.blend(S(0.88, 0.96, cv.u), CLR, 0.85)
         at.paint_strip(3, tail)
+    elif kind in NEW_SHRIMP:
+        _paint_new_shrimp(at, kind)
     else:  # skunk cleaner
         def body(cv):
             # Aquarium of the Pacific [M]: "pale amber body ... one white band down the carapace center separates two
@@ -246,7 +389,7 @@ def build_shrimp(kind="banded"):
     meye = C.material(f"{kind}_eye", color="#050505", rough=0.1)
 
     sid = {"banded": "shrimp", "skunk": "skunk_shrimp"}.get(kind, f"{kind}_shrimp")
-    root = make_root("Root", dict(species=sid, lengthCm=5.0 if banded else 4.0 if kind == "peppermint" else 6.0,
+    root = make_root("Root", dict(species=sid, lengthCm=5.0 if banded else 4.0 if kind == "peppermint" else NEW_SHRIMP_CM.get(kind, 6.0),
                                   unit="body length 1.0 = rostrum..telson, facing +X", iridescence=0.0,
                                   roughness=0.5 if banded else 0.3))
     # --- body spine (x forward, z up) ------------------------------------------
@@ -264,6 +407,9 @@ def build_shrimp(kind="banded"):
         rad = [(0.0, 0.004), (0.12, 0.016), (0.16, 0.055), (0.3, 0.098), (0.45, 0.1), (0.6, 0.092), (0.8, 0.07),
                (0.95, 0.048), (1.0, 0.04)]
         squash = 0.8
+        # sexy shrimp: a short stout body; harlequin: broad and flattened; pistol: slim (research 44 [M] photos)
+        k_r, squash = {"sexy": (1.3, 0.85), "harlequin": (1.2, 0.72), "pistol": (0.92, 0.8)}.get(kind, (1.0, squash))
+        rad = [(t, r * k_r) for t, r in rad]
     gb = G.Geo()
     V, F, UV, COL, spine, R = shrimp_body(at, 0, keys, rad, n=48, sides=14, squash=squash)
     gb.add(V, F, UV, COL)
@@ -309,6 +455,8 @@ def build_shrimp(kind="banded"):
     for li, x in enumerate(leg_x):
         if banded and li == 2:
             continue
+        if (kind == "pistol" and li == 0) or (kind == "harlequin" and li == 1):
+            continue  # built below as the big claws
         cls = PICK if li < 2 else WALK
         for side in (1, -1):
             base = np.array([x, side * 0.05, -0.05])
@@ -389,6 +537,79 @@ def build_shrimp(kind="banded"):
                 n += len(Vc)
             bases.append((gc, n, 0.12))
         geo_obj("Claws", gc, root, "leg", [mshell], extras={"claw": True})
+    elif big_claw:
+        gc = G.Geo()
+
+        def claw_part(V, F, base, along, length, h0, h1, across=None):
+            """Adds a claw piece: UV along the claw strip and hinge h0..h1 by projection on `along`; `across` (centre,
+            unit axis, half width) spreads the strip's v over a flat blade so its spots land round."""
+            t = np.clip(((V - base) @ along) / length, 0.0, 1.0)
+            a = (np.full(len(V), 0.5) + 0.3 * np.sign(V[:, 2] - base[2])) if across is None else \
+                0.5 + 0.45 * ((V - across[0]) @ across[1]) / across[2]
+            gc.add(V, F, at.uv(CLAW_STRIP, h0 + (h1 - h0) * t, a),
+                   np.stack([np.full(len(V), CLAW / 8), np.zeros(len(V)), h0 + (h1 - h0) * t, np.zeros(len(V))], -1))
+            return len(V)
+
+        def frame(d, up=(0, 0, 1.0)):
+            d = np.asarray(d, float); d = d / np.linalg.norm(d)
+            w = np.cross(np.asarray(up), d); w /= np.linalg.norm(w)
+            return d, w, np.cross(d, w)
+
+        if kind == "pistol":
+            # Alpheus: P1 chelipeds, very unequal. The snapping claw (the right, as in A. bellulus) is a swollen palm nearly as long
+            # as the carapace, held forward under the head, with a hammer-like dactyl over a short fixed finger; the
+            # minor claw is slender (research 44 §4; Wikipedia Alpheidae [M]).
+            for side, big in ((-1, True), (1, False)):
+                base = np.array([0.33, side * 0.05, -0.05])
+                n = 0
+                d, w, nz = frame([1.0, side * 0.18, -0.12])
+                elbow = base + np.array([0.04, side * 0.07, -0.01])
+                wrist = elbow + d * (0.1 if big else 0.12)
+                pts = smooth_path([base, elbow, wrist], 8)
+                Vt, Ft, tv, av = G.tube(pts, np.linspace(0.016, 0.022 if big else 0.012, 8), 6, cap_end=False)
+                arm = float(np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1)))
+                full = arm + (0.36 if big else 0.2)
+                n += claw_part(Vt, Ft, base, d, full, 0.0, arm / full * 1.0)
+                if big:
+                    palm_c = wrist + d * 0.13
+                    Vp, Fp = G.ellipsoid(palm_c, (0.16, 0.085, 0.07), 14, 8, rot=np.stack([d, w, nz], -1))
+                    n += claw_part(Vp, Fp, wrist, d, 0.36, arm / full, (arm + 0.26) / full)
+                    tip0 = palm_c + d * 0.13
+                    # dactyl: a thick hammer on top; fixed finger below, shorter
+                    Vd, Fd = G.ellipsoid(tip0 + d * 0.05 + nz * 0.028, (0.07, 0.034, 0.03), 10, 6, rot=np.stack([d, w, nz], -1))
+                    n += claw_part(Vd, Fd, wrist, d, 0.36, arm / full, 1.0)
+                    Vf, Ff = G.ellipsoid(tip0 + d * 0.035 - nz * 0.02, (0.05, 0.026, 0.022), 8, 5, rot=np.stack([d, w, nz], -1))
+                    n += claw_part(Vf, Ff, wrist, d, 0.36, arm / full, 1.0)
+                else:
+                    Vp, Fp = G.ellipsoid(wrist + d * 0.06, (0.07, 0.022, 0.02), 8, 6, rot=np.stack([d, w, nz], -1))
+                    n += claw_part(Vp, Fp, wrist, d, 0.2, arm / full, (arm + 0.13) / full)
+                    for sg in (1, -1):
+                        Vf, Ff = G.cone(wrist + d * 0.12 + nz * 0.006 * sg, wrist + d * 0.2 + nz * 0.002 * sg, 0.008, 4)
+                        n += claw_part(Vf, Ff, wrist, d, 0.2, (arm + 0.12) / full, 1.0)
+                bases.append((gc, n, 0.33))
+        else:
+            # Hymenocera: P2 ends in a huge flat chela like a petal, held out to the sides and a little forward,
+            # flat face turned outward, which it waves as it walks (research 44 §2 [M]).
+            for side in (1, -1):
+                base = np.array([0.22, side * 0.06, -0.04])
+                n = 0
+                elbow = base + np.array([0.06, side * 0.14, 0.06])
+                wrist = elbow + np.array([0.08, side * 0.08, 0.06])
+                pts = smooth_path([base, elbow, wrist], 8)
+                Vt, Ft, tv, av = G.tube(pts, np.linspace(0.014, 0.012, 8), 6, cap_end=False)
+                arm = float(np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1)))
+                full = arm + 0.42
+                d, w, nz = frame([1.0, side * 0.55, 0.35], up=(0, side * 1.0, 0.25))
+                n += claw_part(Vt, Ft, base, wrist - base, float(np.linalg.norm(wrist - base)) * full / arm, 0.0, arm / full)
+                # the flat palm (leaf blade) and its two short fingers at the far end
+                pc = wrist + d * 0.19
+                Vp, Fp = G.ellipsoid(pc, (0.2, 0.12, 0.018), 16, 8, rot=np.stack([d, nz, w], -1))
+                n += claw_part(Vp, Fp, wrist, d, 0.42, arm / full, (arm + 0.39) / full, across=(pc, nz, 0.12))
+                for sg in (1, -1):
+                    Vf, Ff = G.cone(pc + d * 0.15 + nz * 0.04 * sg, pc + d * 0.23 + nz * 0.015 * sg, 0.016, 4)
+                    n += claw_part(Vf, Ff, wrist, d, 0.42, (arm + 0.36) / full, 1.0)
+                bases.append((gc, n, 0.22))
+        geo_obj("Claws", gc, root, "leg", [mshell], extras={"claw": True})
 
     # --- antennae: one long pair + the antennule flagella (Stenopus: 2 pairs, the antennules biramous so
     # four short whips; Lysmata: long white antennae and a forked antennule pair, research 17) ----------
@@ -414,12 +635,28 @@ def build_shrimp(kind="banded"):
         ln = np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1))
         pts = head + (pts - head) * (L / ln)
         limb(ga, pts, np.linspace(0.006, 0.0015, 16), 4, cls, pair, 2, head[0], cap_end=False)
+        if kind == "harlequin" and cls == ANTL and pair == 0:
+            # Hymenocera's antennules carry a broad flat leaf (the "petal" feelers), spotted like the claws
+            a = pts[3]
+            dd = pts[6] - pts[2]
+            dd /= np.linalg.norm(dd)
+            ww = np.cross([0, 0, 1.0], dd); ww /= np.linalg.norm(ww)
+            Vl, Fl = G.ellipsoid(a + dd * 0.07, (0.085, 0.045, 0.01), 10, 6, rot=np.stack([dd, ww, np.cross(dd, ww)], -1))
+            hl = np.clip(0.18 + ((Vl - a) @ dd) / L, 0.0, 1.0)
+            ga.add(Vl, Fl, at.uv(CLAW_STRIP, 0.4 + 2 * (hl - 0.18), np.full(len(Vl), 0.5)),
+                   np.stack([np.full(len(Vl), ANTL / 8), np.full(len(Vl), pair / 8), hl, np.zeros(len(Vl))], -1))
+            bases.append((ga, len(Vl), head[0]))
     geo_obj("Antennae", ga, root, "antenna", [mshell], extras={"count": len(ants)})
 
     # --- eyes on stalks ---------------------------------------------------------------------
     ge = G.Geo()
     for side in (1, -1):
         b0 = spine[3] + np.array([0.0, side * 0.025, 0.035])
+        if kind == "pistol":
+            # Alpheus' eyes sit under the hooded front of the carapace (orbital hoods): small, barely showing
+            Ve, Fe = G.ellipsoid(spine[3] + np.array([0.01, side * 0.03, 0.02]), (0.016, 0.014, 0.014), 8, 6)
+            ge.add(Ve, Fe, None, [(0, 0, 0, 0.1)] * len(Ve), mat=1)
+            continue
         tip = b0 + np.array([0.03, side * 0.045, 0.03])
         Vt, Ft, tv, av = G.tube([b0, tip], [0.01, 0.009], 6, cap_end=False)
         ge.add(Vt, Ft, None, [(0, 0, 0, 0.1)] * len(Vt), mat=0)
@@ -427,7 +664,9 @@ def build_shrimp(kind="banded"):
         ge.add(Ve, Fe, None, [(0, 0, 0, 0.1)] * len(Ve), mat=1)
     eyes = geo_obj("Eyes", ge, root, "eye", [mshell, meye])
     objs = [o for o in C.all_descendants(root) if o.type == 'MESH']
-    # normalize: rostrum tip .. telson = 1.0, centered, facing +X
+    if kind == "sexy":
+        _raise_tail([o for o in objs if o.name in ("Body", "Legs")], spine)
+    # normalize: rostrum tip .. telson = 1.0, centered, facing +X (the straight body's length, also for the sexy shrimp)
     xs = np.r_[spine[:, 0], end[0] - 0.13]
     x0, x1 = xs.min(), xs.max()
     sc = 1.0 / (x1 - x0)
@@ -442,7 +681,7 @@ def build_shrimp(kind="banded"):
     for o in objs:
         if o.name not in ("Legs", "Claws", "Antennae"):
             continue
-        g = [b for b in bases if b[0] is {"Legs": gl, "Antennae": ga}.get(o.name, gc if banded else None)]
+        g = [b for b in bases if b[0] is {"Legs": gl, "Antennae": ga}.get(o.name, gc if banded or big_claw else None)]
         cols = C.get_cols(o)
         i = 0
         for _, n, bx in g:
@@ -1285,6 +1524,10 @@ INVERT_BUILDERS = {
     "shrimp": lambda: build_shrimp("banded"),
     "skunk_shrimp": lambda: build_shrimp("skunk"),
     "peppermint_shrimp": lambda: build_shrimp("peppermint"),
+    "fire_shrimp": lambda: build_shrimp("fire"),
+    "sexy_shrimp": lambda: build_shrimp("sexy"),
+    "harlequin_shrimp": lambda: build_shrimp("harlequin"),
+    "pistol_shrimp": lambda: build_shrimp("pistol"),
     "hermit_blue": lambda: build_hermit("blue"),
     "hermit_scarlet": lambda: build_hermit("scarlet"),
     "brittle_star": build_brittle_star,

@@ -1,0 +1,115 @@
+{
+  "id": "thor_amboinensis",
+  "kind": "INVERT",
+  "common": "Sexy shrimp",
+  "scientific": "Thor amboinensis",
+  "family": "Thoridae",
+  "maxLengthCm": 2,
+  "typicalAdultCm": 1.5,
+  "growthCmPerYear": 1.5,
+  "lifespanYears": 2,
+  "depthRatio": 0.2,
+  "massCoeff": 0.01,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.3,
+    "burstBL": 10,
+    "tailHzCruise": 0,
+    "turnRateDeg": 160,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.03,
+    "yMax": 0.6,
+    "openWater": 0.02,
+    "coverAffinity": 0.95
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 12,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.5,
+    "curiosity": 0.5,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "PELLET",
+    "FLAKE"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 26.5,
+      "tolLo": 21,
+      "tolHi": 28,
+      "lethalLo": 17,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 30,
+  "size": {
+    "lod0Tris": 3400
+  },
+  "model": "models/sexy_shrimp.glb",
+  "colors": {
+    "primary": "#7A6038",
+    "secondary": "#F4F4F0",
+    "accent": "#4A6FA5"
+  },
+  "brain": "sexy_shrimp",
+  "minTankGallons": 5,
+  "careLevel": "Easy",
+  "reefSafe": "Mostly",
+  "copperSensitive": true,
+  "dietSummary": "Scraps from its anemone's meals, mucus and plankton; takes mysis and brine a few times a week.",
+  "temperamentSummary": "Tiny and peaceful. Lives in a little group on an anemone (or a coral when there is none), tail cocked up over its back, wagging it as it walks.",
+  "careNotes": [
+    "Named for the way it sways its raised tail as it walks.",
+    "Keep three or more; they live together on an anemone, or on mushrooms or other corals when there is no anemone.",
+    "Only about 1.5 cm long, so any fish big enough to swallow it will.",
+    "It may nibble a little mucus off its host; it rarely bothers anything else.",
+    "Copper kills it; drip acclimate because it is small and sensitive."
+  ]
+}

@@ -523,6 +523,8 @@ class CritterField(
         if (c.moving) {
             c.limb += 6.5 * h
             c.heading = rotateAbout(c.heading, c.normal, rng.signed() * 1.5 * h)
+            // gammarids are cryptic: they work down into crevices and under ledges
+            if (c.scene == MicroScene.ROCK) lean(c, -1.0, 0.6 * h)
             crawlOnSurface(c, c.kind.speedCmS * h)
             if (rng.chance(0.9 * h)) c.moving = false
         } else {
@@ -557,11 +559,20 @@ class CritterField(
             sink(c, h); return
         }
         val k = c.kind
+        // isopods are prey too: they drop back into the rock when a fish comes close (research 10 §5.3)
+        if (k == CritterKind.ISOPOD && c.scene == MicroScene.ROCK && fishNear(c.head, 5.0)) { c.state = RETREAT; c.timer = 0.0; return }
         c.phase += 0.5 * h
         val turn = when (k) { CritterKind.COPEPOD -> 2.5; CritterKind.ISOPOD -> 1.2; else -> 0.5 }
         if (c.moving) {
             c.limb += (if (k == CritterKind.COPEPOD) 3.0 else 2.0) * h
             c.heading = rotateAbout(c.heading, c.normal, rng.signed() * turn * h)
+            // Convolutriloba carries photosynthetic symbionts and gathers in the light (research 17 §14.4); isopods
+            // keep to the shaded undersides and crevices
+            if (c.scene == MicroScene.ROCK) when (k) {
+                CritterKind.FLATWORM -> lean(c, 1.0, 0.6 * h)
+                CritterKind.ISOPOD -> lean(c, -1.0, 0.8 * h)
+                else -> Unit
+            }
             val dart = if (k == CritterKind.COPEPOD && rng.chance(0.05 * h)) rng.range(0.2, 0.5) else 0.0
             crawlOnSurface(c, k.speedCmS * h + dart)
             if (k != CritterKind.SNAIL && k != CritterKind.FLATWORM && rng.chance(0.4 * h)) c.moving = false
@@ -617,6 +628,14 @@ class CritterField(
         var prev = c.head
         for (p in c.trail) { s += prev.distanceTo(p); prev = p }
         return s
+    }
+
+    /** Turns the heading by up to [rate] rad toward up the slope ([sign] 1) or down it (-1). */
+    private fun lean(c: Critter, sign: Double, rate: Double) {
+        val up = Vec3.Y.rejectFrom(c.normal)
+        if (up.lengthSq() < 1e-4) return
+        val side = (c.normal cross c.heading) dot up.normalized()
+        c.heading = rotateAbout(c.heading, c.normal, (side * sign).coerceIn(-1.0, 1.0) * rate).normalized(c.heading)
     }
 
     private fun steerTo(c: Critter, goal: Vec3): Double {

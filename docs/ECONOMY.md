@@ -97,6 +97,34 @@ A **Goals** list on the Care card for the big moments: first fish (+25), first c
 fish kept 30 days (+100), finish the list 7 days in a row (+100), reach level 5 (+100), raise baby fish from the
 nursery (+150). Goals give star points too, so they speed up levels.
 
+### Reef moments and the reef journal
+
+Real things happening in the tank pay once, the first time the keeper's tank does them, and each one pops a **Reef
+moment** card with the animals' names, a true reef fact and a sparkle sound (`core/custom/economy/Journal.kt`). They
+come straight from sim events, so they cannot be farmed and they teach how a reef works:
+
+| Moment | Sim event | Pays |
+|---|---|---|
+| Cleaning station | a cleaner cleans a fish (`Cleaned`) | 8 |
+| Please clean me! | a fish poses for a cleaner (`Pose`) | 5 |
+| A brand new shell | a shrimp or crab molts (`Molted`) | 8 |
+| Who's the boss? | the smaller clown quivers at the bigger one (`Quiver`) | 5 |
+| Eggs! | a pair spawns (`EggsLaid`) | 10 |
+| Hatching night | the eggs hatch (`Hatched`) | 10 |
+| Tiny fish | nursery larvae become fry (`Metamorphosed`) | 10 |
+| A coral baby | a Kenya branch drops or a coral spreads (`CoralSpawned`, not aiptasia) | 8 |
+| Surprise visitor | a hitchhiker rides in (`Hitchhiker`) | 5 |
+| Feeling better | a sick animal recovers (`Recovered`) | 10 |
+
+All ten together pay 79 once. **Fish birthdays:** each fish (bought, not the starting stock) is cheered by name at
+1 week, 1 month, 100 days and 1 year in the tank, paying 3 / 6 / 10 / 25; a long time away that passes several at once
+pays only the biggest. Birthdays are kept per animal and dropped when it leaves (sold, netted out or died), so a fish
+bought later starts fresh and nothing is paid twice. Every payout goes through `earn`, so it adds star points and a
+ledger line.
+
+The **Reef journal** at the bottom of the Care card lists the moments (found ones show their fact on tap; the rest are
+"???" with a hint of what to look for) and every kind of animal the tank has kept.
+
 ## 5. Spending: the fish stores
 
 Four stores in town, each with its own look, price level, stock and taste in what it buys back. Store prices change

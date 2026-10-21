@@ -109,4 +109,19 @@ class MicroCrittersTest {
         val after = run(f, s, 3.0, fish)
         assertTrue("tentacles retract (${out} -> ${reach(after)})", reach(after) < out * 0.7)
     }
+
+    @Test fun crypticPodsHideFromAFishAndWorkDownTheRock() {
+        val f = CritterField(sdf)
+        val s = mature(22.0)
+        val poses = run(f, s, 120.0)
+        val rockPods = poses.filter { (it.kind == CritterKind.AMPHIPOD || it.kind == CritterKind.ISOPOD) && abs(sdf.dist(Vec3(it.spine[0].toDouble(), it.spine[1].toDouble(), it.spine[2].toDouble()))) < 0.6 }
+        assertTrue("night shows amphipods or isopods on the rock", rockPods.isNotEmpty())
+        // a fish noses over every one of them: they drop back into the rock
+        // (the field reuses its pose objects, so copy what we need first)
+        val ids = rockPods.map { it.id }.toSet()
+        val fish = FloatArray(rockPods.size * 3) { i -> rockPods[i / 3].spine[i % 3] }
+        val after = run(f, s, 2.0, fish)
+        val still = after.count { it.id in ids }
+        assertTrue("pods hide from the fish ($still of ${rockPods.size} still out)", still < rockPods.size)
+    }
 }

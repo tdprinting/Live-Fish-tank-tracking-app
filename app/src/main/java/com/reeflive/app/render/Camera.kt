@@ -371,6 +371,31 @@ class Camera {
         distLogGoal = max(distLogGoal + ln(0.7f), ln(FOCUS_DISTANCE))
     }
 
+    /** A saved orbit / follow view: screensaver mode puts it back when the keeper taps to leave. */
+    class Bookmark internal constructor(
+        internal val target: FloatArray, internal val yaw: Float, internal val pitch: Float, internal val distLog: Float,
+        internal val followId: String?, internal val fYaw: Float, internal val fPitch: Float, internal val fZoom: Float,
+    )
+
+    fun bookmark() = Bookmark(target.copyOf(), yawGoal, pitchGoal, distLogGoal, followId, followYaw, followPitch, followZoomLog)
+
+    /** Puts [b] back at once (no glide: the caller fades through black). */
+    fun restore(b: Bookmark) {
+        nurseryOn = false
+        val id = b.followId
+        // follow state first: releasing a follow re-aims the orbit goals at the eye, which the bookmark then replaces
+        if (id == null) { if (followId != null) releaseFollow() } else {
+            follow(id)
+            followYaw = b.fYaw; followPitch = b.fPitch; followZoomLog = b.fZoom
+            fYawS.snap(followYaw); fPitchS.snap(followPitch); fZoomS.snap(followZoomLog)
+        }
+        yawInertia.stop(); pitchInertia.stop()
+        for (i in 0 until 3) target[i] = b.target[i]
+        yawGoal = b.yaw; pitchGoal = b.pitch; distLogGoal = b.distLog
+        yawS.snap(yawGoal); pitchS.snap(pitchGoal); distLogS.snap(distLogGoal); targetS.snap(target)
+        snappy()
+    }
+
     /** Starts (id != null) or stops following. Stopping keeps the current view and resumes orbiting around it. */
     fun follow(id: String?) {
         if (id == followId) return

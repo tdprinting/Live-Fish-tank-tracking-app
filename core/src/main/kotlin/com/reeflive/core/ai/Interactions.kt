@@ -33,6 +33,10 @@ object Interactions {
         put(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, 0.35)
         // the banded shrimp bullies the smaller peppermints off its ledge (research 42 §1.6 [M])
         put(BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, 0.5)
+        // research 44 §1: a fire shrimp "tolerates only its mate"; the banded shrimp bullies the small shrimp too [E]
+        put(BrainKind.FIRE_SHRIMP, BrainKind.FIRE_SHRIMP, 0.6)
+        put(BrainKind.BANDED_SHRIMP, BrainKind.FIRE_SHRIMP, 0.35)
+        put(BrainKind.BANDED_SHRIMP, BrainKind.SEXY_SHRIMP, 0.3)
     }
 
     private val handledBySpecies: Set<Pair<BrainKind, BrainKind>> = setOf(
