@@ -83,6 +83,7 @@ class SixlineBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Dart : Behavior("dart", "Darting through the rock") {
         private var spot = Vec3.ZERO
         private var stand = Vec3.ZERO
+        private var face = Vec3.X
         private var nextPick = 0.0
         private var left = 0
         private var bestD = Double.MAX_VALUE
@@ -101,13 +102,13 @@ class SixlineBrain(c: Ctx) : SpeciesBrain(c) {
                 val st = c.safe(want, 0.6 * o.collisionLength)
                 if (st.distanceTo(want) > 1.5) continue
                 // it picks head-down at the spot, so the body trails back and up from the stand: that must be clear too
-                val face = (sp.first - st).normalized(o.heading)
-                val back = face * -o.lengthCm + Vec3.Y * (PICK_PITCH * o.lengthCm)
+                val f = (sp.first - st).normalized(o.heading)
+                val back = f * -o.lengthCm + Vec3.Y * (PICK_PITCH * o.lengthCm)
                 if (c.rock.sdf.dist(st + back * 0.5) < TAIL_CLEAR_CM || c.rock.sdf.dist(st + back) < TAIL_CLEAR_CM) continue
-                spot = sp.first; stand = st
+                spot = sp.first; stand = st; face = f
                 return
             }
-            spot = den; stand = denMouth(c)
+            spot = den; stand = denMouth(c); face = (den - stand).normalized(o.heading)
         }
 
         override fun update(c: Ctx, out: SteerIntent) {
@@ -121,7 +122,8 @@ class SixlineBrain(c: Ctx) : SpeciesBrain(c) {
             }
             out.seek(stand, o.cruiseSpeed * 0.4, arrive = 1.0)
             out.hover = true; out.pectoral = 1.0
-            out.faceDir = (spot - o.pos).normalized(o.heading)
+            // the way it was checked to fit from the stand (aiming at the spot from wherever it is swings the tail about)
+            out.faceDir = face
             out.pitchBias = -PICK_PITCH
             if (c.t >= nextPick) {
                 nextPick = c.t + c.rng.range(PICK_MIN_S, PICK_MAX_S)
