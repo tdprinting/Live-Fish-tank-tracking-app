@@ -2,7 +2,7 @@
 
 package com.reeflive.web
 
-import com.reeflive.app.audio.RadioStation
+import com.reeflive.core.radio.RadioStation
 import com.reeflive.app.audio.TankSoundMix
 import com.reeflive.app.render.BurstKind
 import com.reeflive.app.render.CareAct
@@ -696,7 +696,7 @@ object ReefSandbox {
     /** The table radio's songs and levels (RadioStation, shared with Android). */
     fun radio(): String = JSON.stringify(obj { r ->
         r.gain = RadioStation.GAIN; r.tuneGain = RadioStation.TUNE_GAIN; r.tune = RadioStation.TUNE_FILE
-        r.songs = RadioStation.songs.map { s -> obj { it.file = s.file; it.title = s.title; it.blurb = s.blurb } }.toTypedArray()
+        r.songs = RadioStation.songs.map { s -> obj { it.file = s.file; it.title = s.title; it.blurb = s.blurb; it.price = s.price; it.art = s.art } }.toTypedArray()
     })
 
     // ------------------------------------------------------------------ microscope

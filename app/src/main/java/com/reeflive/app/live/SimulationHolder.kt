@@ -432,6 +432,21 @@ class SimulationHolder(
         return true
     }
 
+    /**
+     * The record shop (My tank): buys radio song [file] at its RadioStation price. False (nothing happens) when there
+     * is no My tank, it is owned already or the keeper cannot afford it.
+     */
+    fun buyRecord(file: String): Boolean {
+        val song = com.reeflive.core.radio.RadioStation.songs.firstOrNull { it.file == file } ?: return false
+        val view = _economy.value ?: return false
+        if (file in view.records || song.price > view.coins) return false
+        scope.launch {
+            val sim = customSim ?: return@launch
+            if (economyLive?.buyRecord(file, today()) == true) updateEconomy(sim, force = true)
+        }
+        return true
+    }
+
     /** Collects today's happy tank bonus. */
     fun collectHappyBonus() {
         scope.launch { val sim = customSim ?: return@launch; economyLive?.collectHappy(sim, today()); updateEconomy(sim, force = true) }

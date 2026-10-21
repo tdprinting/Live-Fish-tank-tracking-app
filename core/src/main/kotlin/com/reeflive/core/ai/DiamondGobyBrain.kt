@@ -693,11 +693,19 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Startle: a flinch away, then a dash low over the sand into the burrow mouth (kinematic like its other moves, so it can reach the mouth under the rock). */
     inner class BurrowDash : Flee(this@DiamondGobyBrain, { _, _ -> mouth(0.5) }, "Diving into its burrow") {
+        /** Startled while already down its burrow: it stays there (the flinch burst it back out across the sand). */
+        private var inside = false
+        override fun enter(c: Ctx) { super.enter(c); inside = o.posture == 3 && o.pos.distanceTo(mouth(0.5)) < 3 }
         override fun update(c: Ctx, out: SteerIntent) {
             super.update(c, out)
             val burst = o.burstSpeed / max(o.cruiseSpeed, 0.1)
             val from = out.fleeFrom
             out.target = null; out.hover = false; out.fleeFrom = null
+            if (inside) {
+                out.place(offRock(burrow + inDir * 0.2), inDir, Vec3.Y, 3.0)
+                out.posture = 3
+                return
+            }
             if (from != null) {
                 // the flinch: a burst straight away from the threat, along the bed
                 val away = horizontalHeading(o.pos - from, o.heading)

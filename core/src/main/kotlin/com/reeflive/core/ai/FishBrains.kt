@@ -433,6 +433,19 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
 // =====================================================================================
 // Blue tang (TangBrain)
 // =====================================================================================
+/**
+ * Grazing for a big deep-bodied fish: only rock spots where the body, standing off the rock nose-in, has its tail
+ * inside the glass and under the water line (a back face close to the glass would put the tail through it).
+ */
+class RoomyGraze(b: SpeciesBrain, weight: Double) : Graze(b, weight) {
+    override fun accept(c: Ctx, p: Vec3, n: Vec3): Boolean {
+        val tail = p + n * (0.5 * c.o.collisionLength + 0.6 + c.o.collisionLength)
+        val m = 1.0
+        return tail.x > m && tail.x < c.rock.lengthCm - m && tail.z > m && tail.z < c.rock.widthCm - m &&
+            tail.y < c.rock.waterLevelCm - m - 0.3 * c.o.species.depthRatio * c.L
+    }
+}
+
 class TangBrain(c: Ctx) : SpeciesBrain(c) {
     /** Coral bites so far (C-3; each disturbs the colony briefly). */
     var coralNips = 0
@@ -452,11 +465,15 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     var scareFrom: Vec3 = Vec3.ZERO; private set
     /** Its favourite sleeping crevice: the overhang nearest the SLEEP_TANG anchor that fits its body lying on its side. */
     private var bed: TangShelters.Pose? = null
+    /** Where its sleeping crevice is (other crevice sleepers keep out of it). */
+    val bedPos: Vec3? get() = bed?.pos
     private var bedFor = -1.0
 
     init {
+        // the species added after the glass guard (research 60's gem tang) keep their tails inside the glass when they turn
+        if (o.species.id == GEM_TANG_ID) o.spline.glassGuard = true
         val flee = Flee(this, { c, from -> shelters.pick(c.o.pos, from, c.o.lengthCm, TangHide.HIDE_ROLL)?.entry ?: c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover")
-        if (zebra) install(Patrol(), Graze(this, ZEBRA_GRAZE_WEIGHT), NibbleNori(this, 1.5), TangFeed(), flee,
+        if (zebra) install(Patrol(), if (o.species.id == GEM_TANG_ID) RoomyGraze(this, ZEBRA_GRAZE_WEIGHT) else Graze(this, ZEBRA_GRAZE_WEIGHT), NibbleNori(this, 1.5), TangFeed(), flee,
             TangSleep(), TangHide(this), TangRub(this), TangZoom(this), VisitCleaner(this, ZEBRA_CLEANER), Flash(this), GlassCurious(this), SurfaceGasp(this))
         else install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
             flee, TangSleep(), TangHide(this), TangRub(this), TangZoom(this), TangSpawn(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
@@ -508,8 +525,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     private fun otherBeds(c: Ctx): List<Vec3> {
         var out: ArrayList<Vec3>? = null
         for (n in c.sim.organisms) {
-            if (n === o || !n.alive || n.brainKind != BrainKind.TANG) continue
-            val p = (c.sim.agentOf(n)?.brain as? TangBrain)?.bed?.pos ?: continue
+            if (n === o || !n.alive || n.brainKind != BrainKind.TANG && n.brainKind != BrainKind.BUTTERFLY) continue
+            val p = when (val b = c.sim.agentOf(n)?.brain) { is TangBrain -> b.bed?.pos; is ButterflyBrain -> b.bedPos; else -> null } ?: continue
             (out ?: ArrayList<Vec3>().also { out = it }) += p
         }
         return out ?: emptyList()
@@ -531,8 +548,22 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val a = sleepAnchor(c)
         if (night) bedPose(c)?.let { return Rest(it.pos, it.heading) }
-        return if (night && a != null) Rest(c.safe(a.pos, 0.6 * c.o.collisionLength + 0.5), a.dir ?: Vec3.X * -1.0)
+        val r = if (night && a != null) Rest(c.safe(a.pos, 0.6 * c.o.collisionLength + 0.5), a.dir ?: Vec3.X * -1.0)
         else Rest(c.safe(c.inTank(Vec3(60.0, c.zoneY(0.6), 24.0))), Vec3.X)
+        // a long guarded body (the gem tang) hovers where its whole tail fits, not with the tail pressed on the glass
+        return if (o.spline.glassGuard) roomyRest(c, r) else r
+    }
+
+    /** [r] moved so the tail fits inside the glass; turned along the glass when rock blocks that move. */
+    private fun roomyRest(c: Ctx, r: Rest): Rest {
+        fun fits(p: Vec3, h: Vec3): Boolean {
+            val t = p - h * c.L
+            return t.x > 0.5 && t.x < c.rock.lengthCm - 0.5 && t.z > 0.5 && t.z < c.rock.widthCm - 0.5
+        }
+        val q = c.tailInside(r.pos, r.heading)
+        if (fits(q, r.heading)) return Rest(q, r.heading)
+        val h = if (r.pos.x > c.rock.lengthCm / 2) Vec3.X else Vec3.X * -1.0
+        return Rest(c.tailInside(r.pos, h), h)
     }
 
     inner class TangFeed : Feed(this@TangBrain, 100.0) {
@@ -552,6 +583,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         const val SIDE_REST_ROLL = 1.22
         /** Sailfin tangs (Zebrasoma) sleep wedged in nearly upright, rolled ~20° (DESIGN ESTIMATE; research 42 §2 [L]). */
         const val ZEBRA_REST_ROLL = 0.35
+        /** The gem tang, *Zebrasoma gemmatum* (research 60 §1): a sailfin tang that also keeps its tail inside the glass. */
+        const val GEM_TANG_ID = "zebrasoma_gemmatum"
         /** Zebrasoma graze filamentous algae most of the day (FishBase trophic level 2.0, research 42 §2-3 [H]). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "42 §2: mainly filamentous algae [H]; share of day [L]") const val ZEBRA_GRAZE_WEIGHT = 1.8
         /** Extra pull toward the cleaner: sailfin tangs are regular cleaner clients (DESIGN ESTIMATE). */
@@ -621,8 +654,15 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         private fun pick(c: Ctx) {
             val L = c.L
             val o = c.o
-            if (L > 15) { wp = c.safe(o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)); return }
-            val lo = 12.0; val hi = c.rock.lengthCm - 12.0
+            if (L > 15) {
+                var p = o.pos + c.rng.unitVector().let { Vec3(it.x, it.y * 0.3, it.z) } * max(0.5 * L, 10.0)
+                // a long guarded body (the gem tang) keeps a body length off the glass so it can turn without its tail on the pane
+                if (o.spline.glassGuard) p = Vec3(p.x.coerceIn(1.3 * L, c.rock.lengthCm - 1.3 * L), p.y, p.z.coerceIn(0.8 * L, c.rock.widthCm - 0.8 * L))
+                wp = c.safe(p); return
+            }
+            // a long guarded body (the gem tang) turns back a little further from the end glass, so its tail swings clear
+            val m = if (o.spline.glassGuard) max(12.0, 1.3 * L) else 12.0
+            val lo = m; val hi = c.rock.lengthCm - m
             // at an end, or now and then mid-run, turn back on a new height band
             if (goRight && o.pos.x > hi - 6 || !goRight && o.pos.x < lo + 6 || c.rng.chance(TURN_BACK)) {
                 goRight = !goRight
@@ -630,7 +670,9 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             }
             val x = (o.pos.x + (if (goRight) 1 else -1) * c.rng.range(LEG_MIN_CM, LEG_MAX_CM)).coerceIn(lo, hi)
             val y = c.zoneY((band + c.rng.range(-0.08, 0.08)).coerceIn(0.25, 0.92))
-            wp = c.safe(Vec3(x, y, rockFront(c, x, y) + c.rng.range(1.0, 2.0) * L), 1.5)
+            var z = rockFront(c, x, y) + c.rng.range(1.0, 2.0) * L
+            if (o.spline.glassGuard) z = z.coerceIn(0.8 * L, c.rock.widthCm - 0.8 * L)
+            wp = c.safe(Vec3(x, y, z), 1.5)
             pace = c.rng.range(0.7, 1.3)
             if (c.rng.chance(PAUSE_CHANCE)) {
                 pauseUntil = c.t + c.rng.range(1.5, 4.0)
@@ -731,6 +773,8 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         private fun plainUpdate(c: Ctx, out: SteerIntent) {
             super.update(c, out)
             val o = c.o
+            // a long guarded body goes over the rock to its rest, not into the pocket between rock and back glass
+            if (o.spline.glassGuard) out.target?.let { out.target = c.viaOpenWater(it) }
             if (!o.sleeping) { lyingFor = 0.0; return }
             o.desat = max(o.desat, 0.3)
             val r = restSpot(c, true)

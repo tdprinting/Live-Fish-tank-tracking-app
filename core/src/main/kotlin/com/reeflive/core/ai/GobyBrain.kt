@@ -390,6 +390,10 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         private var sHead = 0.0
         private var digFor = 3.0
         private var carrying = 0.0
+        /** Where the head was when an urgent behaviour (a cleaner's pose) cut in down the tunnel, to back out from there. */
+        private var leftB: Burrow? = null
+        private var leftS = 0.0
+        private var leftAt = Vec3.ZERO
         override val committed: Boolean get() = phase in 1..4
         override val label: String get() = when (phase) {
             1 -> "Sliding into its burrow"; 2 -> "Digging under the rock"; 3 -> "Backing out with a mouthful of sand"
@@ -398,6 +402,16 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx): Double = if (c.p.night || c.t < nextAt || c.o.waryLevel > 0.3) 0.0 else if (adult) 0.93 else 0.72
         override fun enter(c: Ctx) {
             phase = 0; timer = 0.0; carrying = 0.0
+            // still down the tunnel where it was interrupted: it backs out from there (heading for the mouth from inside
+            // pinned it under the rock until the trip timed out)
+            val lb = leftB
+            leftB = null
+            if (lb != null && c.o.pos.distanceTo(leftAt) < 1.5) {
+                b = lb; sHead = leftS; sDig = leftS
+                dump = spoilAt(lb, 0.0).let { it.withY(sand.surfaceY(it.x, it.z) + 1.2) }
+                phase = 3
+                return
+            }
             val pick = chooseDig()
             b = pick?.first; sDig = pick?.second ?: 0.0
             val side = c.rng.signed() * 5.0
@@ -414,6 +428,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
         }
         override fun exit(c: Ctx) {
             val o = c.o
+            if (phase in 1..3 && !finished && sHead > 0.0) { leftB = b; leftS = sHead; leftAt = o.pos }
             o.inSand = false
             // interrupted with sand in its mouth (a scare): it lets the mouthful fall where it is
             if (carrying > 0) { sand.spit(o.pos.x, sand.surfaceY(o.pos.x, o.pos.z) + 0.5, o.pos.z, carrying, 1.0, plume = 2); carrying = 0.0 }

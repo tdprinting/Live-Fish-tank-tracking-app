@@ -21,7 +21,7 @@ kotlin {
                 // Plain-Kotlin pieces of the Android live screen, shared so both apps offer the same sandbox.
                 "com/reeflive/app/ui/live/SandboxParams.kt", "com/reeflive/app/ui/live/LiveTips.kt",
                 "com/reeflive/app/ui/live/LiveUiState.kt", "com/reeflive/app/ui/live/ThoughtLines.kt", "com/reeflive/app/audio/TankSoundMix.kt",
-                "com/reeflive/app/audio/RadioStation.kt", "java/**", "android/**", "javax/**")
+                "java/**", "android/**", "javax/**")
             kotlin.exclude(
                 "com/reeflive/core/care/**", "com/reeflive/core/extras/**", "com/reeflive/core/io/**",
                 "com/reeflive/app/render/TankGlView.kt", "com/reeflive/app/render/TankView.kt",
@@ -143,6 +143,11 @@ tasks.register<Sync>("site") {
         include("species_*.webp")
         rename("species_(.*)", "$1")
         into("species")
+    }
+    // the radio's record sleeves (tools/graphics/vinyl_art.py), for the record shelf
+    from(rootProject.layout.projectDirectory.dir("app/src/main/res/drawable-nodpi")) {
+        include("vinyl_*.webp")
+        into("vinyl")
     }
     // the fish stores' storefront pictures (tools/blender/stores.py), for My tank's store screens
     from(rootProject.layout.projectDirectory.dir("app/src/main/res/drawable-nodpi")) {
