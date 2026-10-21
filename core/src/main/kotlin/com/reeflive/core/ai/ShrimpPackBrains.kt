@@ -48,6 +48,8 @@ class ShrimpRoam(val b: SpeciesBrain, val nav: ShrimpNav, val home: (Ctx) -> Vec
             c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.8 * c.t))
             return
         }
+        // on the move the picking legs keep tapping the rock ahead, lighter and slower than a picking stop
+        c.o.mouth = max(c.o.mouth, 0.3 + 0.2 * sin(2 * PI * 1.2 * c.t))
         when (nav.drive(c, out, w.pos, w.up, c.o.cruiseSpeed, arrive = 1.2, canHop = c.rock.envDist(c.o.pos) > shrimpStance(c.o) + 1.5)) {
             ShrimpNav.Status.ARRIVED -> {
                 dwellUntil = c.t + c.rng.range(4.0, 14.0); next = dwellUntil + 1.0; wp = null
@@ -564,6 +566,8 @@ class PistolShrimpBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val (b, d) = burrow(c)
             out.crawl = true; out.surfaceOffset = shrimpStance(c.o); out.allowGlass = false
+            // the slender second legs sort through the load for food as it goes (research 44 §4) [M]
+            c.o.mouth = max(c.o.mouth, 0.45 + 0.3 * sin(2 * PI * 1.6 * c.t))
             when (phase) {
                 0 -> {   // shoving the load out
                     val to = mouth(c, dumpAt)
