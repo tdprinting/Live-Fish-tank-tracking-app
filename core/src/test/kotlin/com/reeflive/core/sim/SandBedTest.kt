@@ -42,8 +42,9 @@ class SandBedTest {
             if (kotlin.math.abs(t - 5.0) < 0.026) finesUpAt5s = s.suspended(Grain.SILT) + s.suspended(Grain.DETRITUS)
             if (s.particleCount == 0) { allGoneAt = t; break }
         }
-        // sand falls ~5 cm (+ the jet's rise) at 2.7–8 cm/s: down within ~3 s; the haze of silt and mulm takes 10–60 s
-        assertTrue("coarse sand settled at $coarseGoneAt s", coarseGoneAt in 0.5..3.5)
+        // sand falls ~5 cm (+ the jet's rise) at 1.1–14 cm/s (0.125–1.4 mm grains): the last, finest grains are down
+        // within ~6 s; the haze of silt and mulm takes 10–60 s
+        assertTrue("coarse sand settled at $coarseGoneAt s", coarseGoneAt in 0.5..6.0)
         assertTrue("fines still up at 5 s: $finesUpAt5s", finesUpAt5s > 0)
         assertTrue("everything settled at $allGoneAt s", allGoneAt in 10.0..60.0)
         // a puff only moves sand: none is made or lost

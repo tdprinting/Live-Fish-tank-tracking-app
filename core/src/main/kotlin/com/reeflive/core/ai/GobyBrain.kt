@@ -460,7 +460,11 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                     placeIn(bb, out, wriggle = 1.8, nudge = 0.25 * sin(2 * PI * 2.5 * timer))
                     if (timer > digFor) {
                         val got = sand.takeMouthful(bb.x(sDig), bb.z(sDig), mouthfulCm3(o.lengthCm))
-                        if (got > 0) bb.mouthfuls++
+                        if (got > 0) {
+                            bb.mouthfuls++
+                            // the fanning tail at the face washes the loosened fines out of the entrance as a faint haze
+                            sand.seep(bb.mouthX, sand.surfaceY(bb.mouthX, bb.mouthZ) + 0.3, bb.mouthZ, 4, -bb.dirX * 1.5, 0.8, -bb.dirZ * 1.5)
+                        }
                         carrying = got
                         o.inSand = false
                         phase = 3; timer = 0.0
