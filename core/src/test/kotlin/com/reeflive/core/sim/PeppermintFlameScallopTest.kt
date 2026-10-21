@@ -93,4 +93,29 @@ class PeppermintFlameScallopTest {
         assertTrue("without phyto it loses condition", starved.condition < fed.condition - 0.1)
         assertTrue("daily phyto keeps it fed", fed.hunger < 0.5)
     }
+
+    /** Tee 2026-10-21: the hiding peppermint looked frozen. By day it shifts its feet, picks at the rock and waves its antennae. */
+    @Test fun hidingPeppermintKeepsMoving() {
+        val sim = sim(pep, "Minty", 4.0)
+        sim.advance(30.0)
+        val o = sim.a1()
+        var prev = o.toPose()
+        var walk = 0.0; var pick = 0.0; var maxMouth = 0.0
+        val phase0 = o.appendagePhase
+        repeat(1200) {
+            sim.advance(0.05)
+            val p = o.toPose()
+            for (i in 4 until 28) walk += kotlin.math.abs(p.limbs[i] - prev.limbs[i])
+            for (i in 28 until 44) pick += kotlin.math.abs(p.limbs[i] - prev.limbs[i])
+            maxMouth = kotlin.math.max(maxMouth, p.mouth.toDouble())
+            prev = p
+            assertTrue("body clear of the rock: ${sim.rock.sdf.dist(o.pos)}", sim.rock.sdf.dist(o.pos) > -0.05)
+        }
+        println("hiding peppermint 60 s: walk $walk pick $pick mouth $maxMouth antenna ${o.appendagePhase - phase0} (${o.behaviorName})")
+        assertEquals(2, o.toPose().motionMode)
+        assertTrue("picks at the rock while hiding: $pick", pick > 5.0)
+        assertTrue("mouthparts work: $maxMouth", maxMouth > 0.3)
+        assertTrue("antennae wave: ${o.appendagePhase - phase0}", o.appendagePhase - phase0 > 60.0)
+        assertTrue("in the water", sim.rock.inWater(o.pos, 0.0))
+    }
 }

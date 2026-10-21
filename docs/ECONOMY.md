@@ -28,11 +28,12 @@ anything.** Every number below is a starting point to tune after Tee plays it.
 * Name: **sand dollars** (a real sea animal, and it sounds like money). Drawn as a little round sand dollar glyph,
   never an emoji, in the gold accent colour of the Abyss theme.
 * Shown as a chip at the top of My tank: `[sand dollar] 245  ★ 3`. Tap it to open the **Care card** (section 4).
-* Prices are about one sand dollar per US dollar a real store charges, so a clownfish is about 25 and a blue tang
-  about 80. Kids can compare with real price tags, and the relative values stay realistic.
+* Prices are **two sand dollars per US dollar** a real store charges (`PriceBook.SCALE`), so a chromis is 30, a
+  clownfish 60 and a yellow tang 260. Relative values stay realistic, and a new fish takes a few days of care to
+  save for (Tee, 2026-10-20: "make the user work for their points").
 * Money never goes below zero, and nothing costs money every day (no rent, no food bill). A kid who forgets the
   tank for a week loses nothing but the daily pay they missed.
-* **Starting money:** 100 sand dollars, enough for a clownfish pair and a clean-up crew on day one.
+* **Starting money:** 60 sand dollars: one clownfish, or two chromis, or a clean-up crew on day one.
 * **Never stuck:** if the tank has no animals and you cannot afford the cheapest one, Shelly's Pet Shop gives you
   a free starter (a pair of snails) once a day.
 
@@ -44,15 +45,15 @@ cannot be farmed for levels). Levels open stores and the rarer animals.
 | Level | Star points | Opens | Rough day (doing the daily list) |
 |---|---|---|---|
 | 1 | 0 | Shelly's Pet Shop | day 1 |
-| 2 | 100 | Frag Shack | day 2 |
-| 3 | 300 | more animals at both | day 4 |
-| 4 | 600 | Big Blue Aquatics | day 8 |
-| 5 | 1000 | a 4th daily task | day 13 |
-| 6 | 1500 | Deep Reef Imports | day 19 |
-| 7 | 2100 | the rarest animals | day 26 |
-| 8-10 | 2800 / 3600 / 4500 | a new tank badge each | 5-8 weeks |
+| 2 | 60 | Frag Shack | day 2 |
+| 3 | 180 | more animals at both | day 4 |
+| 4 | 360 | Big Blue Aquatics | day 8 |
+| 5 | 600 | a 4th daily task | day 13 |
+| 6 | 900 | Deep Reef Imports | day 20 |
+| 7 | 1260 | the rarest animals | day 28 |
+| 8-10 | 1680 / 2160 / 2700 | a new tank badge each | 6-9 weeks |
 
-Formula: level *n* needs 50 · *n* · (*n* − 1) star points. Levelling up plays a short celebration (Hermie the hermit
+Formula: level *n* needs 30 · *n* · (*n* − 1) star points. Levelling up plays a short celebration (Hermie the hermit
 cheers, coins burst from the sand) and says what opened ("Big Blue Aquatics is open!").
 
 ## 4. Earning: the daily care list
@@ -63,29 +64,31 @@ keeper already has, so doing a task also keeps the tank healthy. The list is cho
 
 | Task | Done when | Pays |
 |---|---|---|
-| Feed your fish | any feeding (twice a day counts as one task) | 10 |
-| Feed your corals | coral food (powder, phyto) | 10 |
-| Test the water | open the test kit / tank check | 10 |
-| Top off the water | top-off with the tank below full | 10 |
-| Empty the skimmer cup | cup more than half full | 15 |
-| Swap the filter sock | sock older than 2 days | 15 |
-| Clean the glass | scrape when there is algae on the glass | 15 |
-| Siphon the sand | siphon with detritus on the sand | 20 |
-| Harvest macroalgae | trim the refugium | 15 |
-| Swap the carbon | carbon spent | 15 |
-| Water change | 10-25 % change (at most one a week asks for it) | 30 |
+| Feed your fish | any feeding (twice a day counts as one task) | 5 |
+| Feed your corals | coral food (powder, phyto) | 5 |
+| Test the water | open the test kit / tank check | 5 |
+| Top off the water | top-off with the tank below full | 5 |
+| Empty the skimmer cup | cup more than half full | 8 |
+| Swap the filter sock | sock older than 2 days | 8 |
+| Clean the glass | scrape when there is algae on the glass | 8 |
+| Siphon the sand | siphon with detritus on the sand | 10 |
+| Harvest macroalgae | trim the refugium | 8 |
+| Swap the carbon | carbon spent | 8 |
+| Water change | 10-25 % change (at most one a week asks for it) | 15 |
 
-* **All done bonus:** finishing the whole list pays **+25**.
+* **All done bonus:** finishing the whole list pays **+15**.
 * **Streak:** each day in a row the list is finished adds +10 % to that day's pay, up to **+50 % at 5 days**. Missing
   a day drops the streak back to 0 (no other penalty).
-* **Happy tank bonus:** once a day, tap "Collect" on the Care card: **2 per thriving fish or invert, 1 per healthy
-  coral** (health above 70 %), capped at 60. More animals pay more, but only if they are doing well, so
+* **Happy tank bonus:** once a day, tap "Collect" on the Care card: **1 per thriving fish, invert or healthy
+  coral** (health above 70 %), capped at 30. More animals pay more, but only if they are doing well, so
   overstocking stops paying.
 * **Bad care costs pay, not money:** a sick or dying animal simply stops counting for the happy tank bonus.
 * **Speeding up time does not pay faster.** Tasks and bonuses are per real day, so fast-forward is for watching, not
   for farming.
 
-A normal day: 3 tasks (~40) + all done (25) + happy tank (10-40) ≈ **75-105 sand dollars**, ~110-150 with a streak.
+A normal day: 3 tasks (~20) + all done (15) + happy tank (5-20) ≈ **40-55 sand dollars**, ~60-80 with a streak.
+So a chromis (30) is a day of care, a clownfish (60) a day or two, a yellow tang (260) about four days with a
+streak and a purple tang (500) about a week.
 
 ### Goals (one-time rewards)
 
@@ -93,6 +96,34 @@ A **Goals** list on the Care card for the big moments: first fish (+25), first c
 (+50), a clownfish pair hosting (+75), first sale (+25), first anemone split (+50), first coral frag sold (+50), a
 fish kept 30 days (+100), finish the list 7 days in a row (+100), reach level 5 (+100), raise baby fish from the
 nursery (+150). Goals give star points too, so they speed up levels.
+
+### Reef moments and the reef journal
+
+Real things happening in the tank pay once, the first time the keeper's tank does them, and each one pops a **Reef
+moment** card with the animals' names, a true reef fact and a sparkle sound (`core/custom/economy/Journal.kt`). They
+come straight from sim events, so they cannot be farmed and they teach how a reef works:
+
+| Moment | Sim event | Pays |
+|---|---|---|
+| Cleaning station | a cleaner cleans a fish (`Cleaned`) | 8 |
+| Please clean me! | a fish poses for a cleaner (`Pose`) | 5 |
+| A brand new shell | a shrimp or crab molts (`Molted`) | 8 |
+| Who's the boss? | the smaller clown quivers at the bigger one (`Quiver`) | 5 |
+| Eggs! | a pair spawns (`EggsLaid`) | 10 |
+| Hatching night | the eggs hatch (`Hatched`) | 10 |
+| Tiny fish | nursery larvae become fry (`Metamorphosed`) | 10 |
+| A coral baby | a Kenya branch drops or a coral spreads (`CoralSpawned`, not aiptasia) | 8 |
+| Surprise visitor | a hitchhiker rides in (`Hitchhiker`) | 5 |
+| Feeling better | a sick animal recovers (`Recovered`) | 10 |
+
+All ten together pay 79 once. **Fish birthdays:** each fish (bought, not the starting stock) is cheered by name at
+1 week, 1 month, 100 days and 1 year in the tank, paying 3 / 6 / 10 / 25; a long time away that passes several at once
+pays only the biggest. Birthdays are kept per animal and dropped when it leaves (sold, netted out or died), so a fish
+bought later starts fresh and nothing is paid twice. Every payout goes through `earn`, so it adds star points and a
+ledger line.
+
+The **Reef journal** at the bottom of the Care card lists the moments (found ones show their fact on tap; the rest are
+"???" with a hint of what to look for) and every kind of animal the tank has kept.
 
 ## 5. Spending: the fish stores
 
@@ -121,9 +152,13 @@ a little every day so it pays to shop around.
 
 ### Visiting a store
 
-A store is a place you walk around, not a list. Inside, the big 3D view **becomes the store's display tanks**: real
-little tanks with the day's stock swimming in them, several of each species, run by the same sim as your tank (fish
-school, shrimp clean, corals sway). Each store is split into sections, each section is one or more tanks:
+A store is a place you walk around, not a list. Inside, the big 3D view **becomes the store** (Tee, 2026-10-20: "an
+actual 3D modeled store with stands for each tank and a simple flat environment with checkout counter"): a tiled
+floor, the store's walls, a row of display tanks on their own stands under hanging tank lights, and the checkout
+counter at the end of the aisle (till, card reader, a jar of sand dollars, bagged fish waiting to go home). The tank
+you stand at is a real little tank with the day's stock swimming in it, several of each species, run by the same sim
+as your tank (fish school, shrimp clean, corals sway); the other tanks along the aisle are stocked models. Each store
+is split into sections, each section is one tank:
 
 | Store | Sections (one display tank each) |
 |---|---|
@@ -132,29 +167,33 @@ school, shrimp clean, corals sway). Each store is split into sections, each sect
 | Big Blue | Community fish · Bigger fish · Shrimp & crabs · Corals |
 | Deep Reef | The showpiece tank (its rarest animal alone) · Rare fish · Rare inverts & corals |
 
-* **Browse:** swipe left/right (or tap the arrows) to walk from tank to tank; tabs on top name the sections
-  ("Fish", "Clean-up crew", "Corals"). A tank's sign says its name and how many animals are in it.
+* **Browse:** you walk in looking down the aisle at the first tank on its stand. Tap another tank (or the arrows, or
+  a section tab) to walk over to it; tap the live tank to step up close, pinch and drag to look round. Tabs on top
+  name the sections ("Starter fish", "Clean-up crew", "Easy corals").
 * **Pick:** tap an animal in the tank (the camera swims up to it, like the close-up follow cam) or its card in the strip
   below. The card shows the picture, name, price, size, "Easy / Medium / Expert", how many are left, ribbons (Deal,
   Wanted), and one warning line when it fits your tank badly. **Add to bag** drops it in the bag; tap again for one more.
   Locked animals still swim in the tank, so kids see what they are saving for; their card says "Level 4" or "Need 35".
 * **The shop bag** (bottom right) shows how many animals and the total, and turns red when the total is more than
   you have.
-* **Check out:** the counter screen lists the bag, the total, and your sand dollars before and after. **Pay** sends the
+* **Check out:** tap the counter in 3D (or the bag button) and you walk to it; the till lists the bag, the total, and your sand dollars before and after. **Pay** sends the
   coins flying out of the money chip into the till (the reward animation run backwards), then you are back home with
   the bags floating at the top of your tank. Not enough money: the Pay button says "Need 20 more" and points at the
   Care card.
-* **Leave without buying** is always one tap (the door icon); the bag empties back onto the shelves.
+* **Leave without buying** is always one tap: the **‹ Back** button at the top left (or the phone's back gesture);
+  the bag empties back onto the shelves.
 * Performance: only one display tank runs at a time (your own tank pauses while you shop, then catches up as if you
   were away for those minutes), and display tanks are small (a 40 gallon breeder with a few rocks).
 
 ### Prices and unlock levels
 
-Base prices follow 2025-26 US store prices (LiveAquaria and local-store listings, one sand dollar a dollar): cheap
-schooling fish and clean-up crew cost a few dollars to ~15, most fish and frags 25-65, tangs, the leopard wrasse and the
-bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of care earns roughly 60-150.
+Base prices follow 2025-26 US store prices (LiveAquaria and local-store listings). The table and `PriceBook.LISTINGS`
+are in **real US dollars**; the game charges `SCALE` (2) sand dollars per dollar, before each store's own price level.
+Cheap schooling fish and clean-up crew cost a few dollars to ~15, most fish and frags 25-65, tangs, the leopard wrasse
+and the bubble tip anemone 130-250. "Level" is when it can be bought at all. A day of care earns roughly 40-80 sand
+dollars (20-40 real dollars' worth).
 
-| Species | Group | Level | Price |
+| Species | Group | Level | Real price ($) |
 |---|---|---|---|
 | Nassarius snail | invert | 1 | 3 |
 | Astrea snail | invert | 1 | 4 |
@@ -271,6 +310,14 @@ lit, readable as tiny thumbnails:
 * **Big Blue Aquatics:** a big blue box store with a wall of tanks, a giant fish mural and a neon sign.
 * **Deep Reef Imports:** a dark glass shop front, one large lit display tank with a rare fish, gold lettering.
 
+**Interiors** (`tools/blender/store_rooms.py` → `store_room_<id>.glb`, drawn by `render/StoreRoom.kt` with
+`store.frag`): the same modules in each store's colours and light: a 180 cm **Bay** (tiled floor, back wall with a
+stripe and a framed fish poster, ceiling panel, a hanging tank light), the **Stand** under every tank, a stocked
+**PropTank** for the tanks you are not standing at, the **Counter**, the store's **Sign** over the first tank and
+**EndL / EndR** walls closing the aisle. The renderer repeats them along x around the live display tank (which stays
+at the origin), so a store with any number of sections needs no new model. Shelly's is warm cream and teal, Frag
+Shack a dark garage under blue-violet lights, Big Blue bright white and blue with a neon sign, Deep Reef black and gold.
+
 ## 9. While you are away
 
 The tank keeps living when the app is closed, like a real one: fish grow, get hungry, make waste; algae grows;
@@ -302,7 +349,7 @@ quietly feeds My tank, so nothing ever goes hungry. Both change:
 ## 10. Saving
 
 The wallet, stars, streak, today's tasks, goals and the stores' "sold out today" counts are saved in My tank's save
-as one new field (`CustomTankSave.economy`). It has defaults, so existing tanks open with 100 sand dollars and
+as one new field (`CustomTankSave.economy`). It has defaults, so existing tanks open with 60 sand dollars and
 level 1, and the animals already in them are simply theirs (no codec version bump: an added defaulted field needs no
 migration, as with `brood`). Daily things are keyed by the local date (`yyyy-mm-dd`), so a phone clock change can at
 worst re-roll one day's list, never pay twice for a task.
@@ -321,7 +368,7 @@ worst re-roll one day's list, never pay twice for a task.
 
 1. **Earn:** sand dollars, levels, the daily care list, goals and the Care card. (Everything still free to add.)
 2. **Fish store models:** the four Blender stores and their pictures.
-3. **Buy:** the stores with prices, stock, deals and locked animals; My tank's Add life becomes Stores.
+3. **Buy:** the stores with prices, stock, deals and locked animals; My tank's Add life became the Shop button (Tee).
 4. **Sell:** the Sell tab, offers, wanted lists, coral fragging, selling raised baby fish.
 5. **Away time:** the full catch-up, hunger while away and the welcome-back card.
 

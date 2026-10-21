@@ -7,6 +7,13 @@ behaviour caption, joined by 8 s glides or a soft dip through black. It drives t
 Live tank → Look around → Screensaver (`tv/ScreensaverActivity`, tap to exit), and the web app's Screensaver tile.
 On phones the same dream can be picked in Settings → Display → Screen saver.
 
+**Idle screensaver** (`render/CinemaSession`): on the phone Live tank screen and the web / iPhone page, 30 s with no
+touch (or mouse / key on the web) fades into screensaver mode over whatever the keeper was looking at. One tap fades
+back through black to exactly that view: the camera and any follow come back via `Camera.bookmark` / `restore`
+(`TankRenderer.saveView` / `restoreView`), and the buttons, cards and menus were only faded out, never closed. The tap
+never reaches the tank. It does not start mid-action: a store walk, dialog or confirm, a carried prop or bag, the
+shelf, cleaning, aquascaping, the submarine, the microscope, an away summary or a running time-lapse.
+
 The normal `reeflive.apk` also installs on Fire TV and Android TV. On a TV it adds:
 
 - **TV app** (`tv/TvTankActivity`): opening ReefLive on a TV (detected by `tv/isTv`) always goes straight to

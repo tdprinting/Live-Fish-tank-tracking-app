@@ -438,8 +438,9 @@ class Simulation private constructor(
     /**
      * Drops a white dry rock of [shape] over ([x], [z]) ([Command.PlaceRock]): it starts just above whatever is under its
      * footprint, falls and settles. Works with the rockscape static too (only the new rock moves). Returns its name.
+     * [agedDays] > 0 drops a rock that has already been in water that long (a store display's cured live rock).
      */
-    fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1): String? {
+    fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1, agedDays: Double = 0.0): String? {
         val rp = rockPhysics ?: return null
         rp.build()
         resolveCoralRocks()
@@ -471,7 +472,7 @@ class Simulation private constructor(
         }
         val height = b[4] - b[1]
         val bottom = min(top + DROP_GAP_CM, max(top + 0.5, rock.waterLevelCm - height))
-        val body = rp.addRock(shape, sd, px, bottom, pz, yaw, simTimeSec)
+        val body = rp.addRock(shape, sd, px, bottom, pz, yaw, simTimeSec - agedDays * 86400.0)
         emit(SimEvent.RockscapeChanged(body.name, true, simTimeSec))
         return body.name
     }
@@ -904,6 +905,8 @@ class Simulation private constructor(
             if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
             // a leap at the surface flies the body; the brain waits until it is back in the water (JumpModel)
             if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
+            val holder = o.heldBy
+            if (holder != null) { if (holder.alive && holder in organisms) continue else o.heldBy = null }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             if (o.leap != null) continue
@@ -1229,7 +1232,9 @@ class Simulation private constructor(
             if (!o.alive) continue
             val rise = HealthModel.hungerRatePerMin(o, water.s.tempC)
             when (o.brainKind) {
-                BrainKind.WRASSE, BrainKind.CLEANER_SHRIMP ->
+                // the harlequin eats only stars (research 44 §2)
+                BrainKind.HARLEQUIN_SHRIMP -> com.reeflive.core.ai.HarlequinShrimpBrain.abstractFeed(o, this)
+                BrainKind.WRASSE, BrainKind.CLEANER_SHRIMP, BrainKind.FIRE_SHRIMP ->
                     if (day && clients > 0) o.hunger = max(0.0, o.hunger - rise * (0.15 + 0.05 * clients).coerceAtMost(0.6) * 1.5 * dtMin)
                 // filter feeders and detritivores live partly on detritus / bacterioplankton
                 BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.NASSARIUS ->
@@ -1350,6 +1355,11 @@ class Simulation private constructor(
                 BrainKind.CLEANER_SHRIMP -> Triple(21.0, 42.0, 36.0)
                 // research 42 §1.4: small Lysmata molt every 1-3 weeks and hide about a day after [E]
                 BrainKind.PEPPERMINT_SHRIMP -> Triple(10.0, 21.0, 24.0)
+                // research 44: no intermolt data for these; Lysmata-like weeks for the fire shrimp, "roughly monthly"
+                // (retailers) for the sexy shrimp, monthly for the harlequin and pistol [E]
+                BrainKind.FIRE_SHRIMP -> Triple(21.0, 42.0, 36.0)
+                BrainKind.SEXY_SHRIMP -> Triple(21.0, 35.0, 24.0)
+                BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> Triple(25.0, 45.0, 24.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 // a spider crab (Majoidea) stops molting at maturity (terminal molt of puberty, Hartnoll 1963); young
                 // arrow crabs molt about monthly (est.)
@@ -2306,7 +2316,8 @@ class Simulation private constructor(
         /** [Coral.fed] gained per caught particle and its e-folding time (≈ 2 days). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_PER_CATCH = 0.08
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_DECAY_MIN = 2 * 1440.0
-        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB)
+        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB,
+            BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.PISTOL_SHRIMP)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }
 }

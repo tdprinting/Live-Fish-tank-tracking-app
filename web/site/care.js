@@ -73,7 +73,8 @@ export function initCare({ my, isMine, say, cue, host }) {
     if (!v) { chip.classList.add('hidden'); return; }
     let delay = 0;
     for (const g of v.gains || []) {
-      if (g.levelUp > 0) say(`Level ${g.levelUp}! ${g.opens}`.trim()); else say(`+${g.amount} sand dollars: ${g.label}`);
+      if (g.levelUp > 0) say(`Level ${g.levelUp}! ${g.opens}`.trim()); else if (!g.story) say(`+${g.amount} sand dollars: ${g.label}`);
+      if (g.story) moment(g);
       setTimeout(() => { burst(g.amount); cue?.('TICK'); }, delay);
       if (g.levelUp > 0) setTimeout(() => levelUp(g), delay + 900);
       delay += 450;
@@ -110,10 +111,51 @@ export function initCare({ my, isMine, say, cue, host }) {
       <div class="happyrow"><p>${happy}</p>${!v.happyPaid && v.happyBonus > 0 ? '<button class="pill collect" id="careCollect">Collect</button>' : ''}</div>
       <h4>Goals</h4>
       ${v.goals.map((g) => `<div class="goal ${g.done ? 'done' : ''}"><span>${g.done ? '★' : '☆'}</span><span class="what">${esc(g.label)}</span><span class="pay">+${g.reward}</span></div>`).join('')}
+      ${journal(v.journal)}
       <div class="carefoot"><button class="pill" id="careClose">Close</button></div>
     </div>`;
     modal.querySelector('#careClose').addEventListener('click', () => { cue?.('TICK'); close(); });
+    modal.querySelectorAll('.jm.found').forEach((el) => el.addEventListener('click', () => { cue?.('TICK'); el.classList.toggle('open'); }));
     modal.querySelector('#careCollect')?.addEventListener('click', () => { cue?.('TICK'); my.collectHappy(); poll(); render(); });
+  }
+
+  /** The reef journal: moments found (tap one to read its fact again; the rest are "???" with a hint) and animals kept. */
+  function journal(j) {
+    if (!j) return '';
+    const found = j.moments.filter((m) => m.found).length;
+    return `<h4>Reef journal · ${found} of ${j.moments.length} moments</h4>
+      ${j.moments.map((m) => `<div class="jm ${m.found ? 'found' : ''}"><span class="jicon">${m.found ? '✨' : '?'}</span>
+        <span class="what"><b>${m.found ? esc(m.title) : '???'}</b><small>${esc(m.found ? m.fact : m.hint)}</small></span><span class="pay">+${m.reward}</span></div>`).join('')}
+      ${j.kept.length ? `<p class="muted">Animals you've kept (${j.kept.length} kinds): ${j.kept.map(esc).join(', ')}</p>` : ''}
+      <p class="muted">Fish birthdays at 1 week, 1 month, 100 days and 1 year pay a little too.</p>`;
+  }
+
+  // ---- reef moment and birthday cards (Android RewardFx MomentCard): one at a time, tap or wait for the next
+  const stories = [];
+  let storyEl = null, storyTimer = 0;
+  function moment(g) {
+    if (stories.length < 4) stories.push(g);
+    if (!storyEl) nextStory();
+  }
+  function nextStory() {
+    clearTimeout(storyTimer);
+    if (storyEl) { const old = storyEl; old.classList.add('out'); setTimeout(() => old.remove(), 260); storyEl = null; }
+    const g = stories.shift();
+    if (!g) return;
+    const st = g.story, bday = st.title.startsWith('Happy birthday');
+    const d = document.createElement('div');
+    d.className = 'momentcard glass';
+    const stars = Array.from({ length: 8 }, () =>
+      `<i class="tw" style="left:${(Math.random() * 96).toFixed(1)}%;top:${(Math.random() * 90).toFixed(1)}%;animation-delay:${(Math.random() * 1.6).toFixed(2)}s"></i>`).join('');
+    d.innerHTML = `${stars}<div class="mhead"><span class="micon">${bday ? '🎂' : '✨'}</span><div><small>${bday ? 'Fish birthday' : 'Reef moment!'}</small>
+      <b>${esc(st.title)}</b></div><span class="pay">+${g.amount}</span></div>
+      <p class="mline">${esc(st.headline)}</p><p class="mfact">${esc(st.fact)}</p>
+      <p class="muted">${stories.length ? 'Tap for the next one' : 'Saved in your reef journal'}</p>`;
+    d.addEventListener('click', () => { cue?.('TICK'); nextStory(); });
+    document.body.appendChild(d);
+    storyEl = d;
+    cue?.('SPARKLE');
+    storyTimer = setTimeout(nextStory, 11000);
   }
 
   /** The chip's number rolls up (or down) to [to], then the chip gulps. */

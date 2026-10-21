@@ -36,6 +36,8 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val generic = p("generic", "static.vert", "generic.frag")
     /** The supply shelf beside the tank (SupplyShelfScene): its own room light rig instead of the fixtures. */
     val shelf = p("shelf", "static.vert", "shelf.frag")
+    /** A fish store's room around the display tank (StoreRoomScene): its own light rig. */
+    val store = p("store", "static.vert", "store.frag")
     val softCoral = p("softcoral", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1"))
     val card = p("card", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1", "CARD" to "1"))
     val polyp = p("polyp", "polyp.vert", "polyp.frag")
@@ -53,7 +55,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
     val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, shelf, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
+    fun all() = listOf(rock, sand, generic, shelf, store, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 
@@ -191,7 +193,7 @@ class FrameUniforms {
         val WATER_LEVEL: Float get() = Camera.WATER_Y
         const val SAND_TOP = Camera.SAND_Y
         const val CAUSTIC_STRENGTH = 0.85f
-        const val CAUSTIC_SCALE = 0.045f
+        const val CAUSTIC_SCALE = 0.03f
         /**
          * Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7). Somewhat above pure seawater so
          * the blue-green fall-off reads across a 122 cm tank (a side view keeps ~40 % of red).

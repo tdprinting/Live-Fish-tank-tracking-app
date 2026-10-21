@@ -35,6 +35,8 @@ class WatchmanGobyBrain(c: Ctx) : SpeciesBrain(c) {
     var snaps = 0; private set
     var spits = 0; private set
     private var nextSpit = 0.0
+    /** The pistol shrimp sharing its burrow (research 44 §4): it does the digging, so the goby stops spitting sand. */
+    var partnerShrimp: Organism? = null
 
     init {
         val partner = c.sim.organisms.firstOrNull { it !== o && it.alive && it.brainKind == BrainKind.WATCHMAN_GOBY &&
@@ -228,7 +230,7 @@ class WatchmanGobyBrain(c: Ctx) : SpeciesBrain(c) {
      * onto the apron, keeping the mouth open (shrimp gobies are reported to dig when unpaired; Reef Builders 2015).
      */
     inner class SpitSand : Behavior("spit", "Spitting sand out of its burrow") {
-        override fun score(c: Ctx) = if (!c.p.night && c.t > nextSpit && threat == null) 0.5 else 0.0
+        override fun score(c: Ctx) = if (!c.p.night && c.t > nextSpit && threat == null && partnerShrimp?.alive != true) 0.5 else 0.0
         override fun update(c: Ctx, out: SteerIntent) {
             if (elapsed < 2.0) {
                 val m = mouth(0.4)

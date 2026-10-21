@@ -22,6 +22,8 @@ class CinemaDirector(private val input: CameraInput, private val control: Contro
         fun resetCamera()
         /** Height of the tank view in pixels (the camera input's units). */
         fun viewHeightPx(): Float
+        /** [exit] reached black: put the keeper's own view back (instantly; the fade hides it). */
+        fun restore() {}
     }
 
     /** Camera pose this director believes it set (orbit units of [Camera]); x is the target's sideways shift, cm. */
@@ -31,7 +33,7 @@ class CinemaDirector(private val input: CameraInput, private val control: Contro
 
     private class Shot(val from: Pose, val to: Pose, val seconds: Float)
 
-    private enum class Phase { SHOT, GLIDE, DIP_OUT, BLACK, FOLLOW }
+    private enum class Phase { SHOT, GLIDE, DIP_OUT, BLACK, FOLLOW, EXIT_OUT, EXIT_IN }
 
     /** 0 = clear, 1 = black. */
     var fade = 0f; private set
@@ -60,8 +62,25 @@ class CinemaDirector(private val input: CameraInput, private val control: Contro
         fade = 1f
     }
 
+    /** Start from the view on screen: a slow fade to black, then the scenes (idle screensaver). */
+    fun startFromView() {
+        nextIsFollow = false
+        phase = Phase.DIP_OUT; t = 0f
+        fade = 0f
+    }
+
+    /** Leave: a quick fade to black, [Control.restore], then a fade back in; [done] once clear. */
+    fun exit() {
+        if (phase == Phase.EXIT_OUT || phase == Phase.EXIT_IN) return
+        fadeIn = 0f
+        phase = Phase.EXIT_OUT; t = 0f
+    }
+
+    /** [exit] has finished: drop the director. */
+    var done = false; private set
+
     /** Skip to the next scene through black (remote "next"). */
-    fun next() { if (phase != Phase.BLACK && phase != Phase.DIP_OUT) { nextIsFollow = phase != Phase.FOLLOW; phase = Phase.DIP_OUT; t = 0f } }
+    fun next() { if (phase == Phase.SHOT || phase == Phase.GLIDE || phase == Phase.FOLLOW) { nextIsFollow = phase != Phase.FOLLOW; phase = Phase.DIP_OUT; t = 0f } }
 
     /** The followed animal left the tank: move on. */
     fun followLost() { if (phase == Phase.FOLLOW) next() }
@@ -94,6 +113,21 @@ class CinemaDirector(private val input: CameraInput, private val control: Contro
                     else -> 1f
                 }
                 if (t >= FOLLOW_S) { nextIsFollow = false; phase = Phase.DIP_OUT; t = 0f }
+            }
+            Phase.EXIT_OUT -> {
+                // from wherever the fade is, reach black quickly
+                fade = minOf(1f, fade + dt / EXIT_OUT_S)
+                captionAlpha = minOf(captionAlpha, 1f - fade)
+                if (fade >= 1f) {
+                    control.follow(null)
+                    control.restore()
+                    phase = Phase.EXIT_IN; t = 0f
+                }
+            }
+            Phase.EXIT_IN -> {
+                captionAlpha = 0f
+                fade = 1f - smooth(t / EXIT_IN_S)
+                if (t >= EXIT_IN_S) { fade = 0f; done = true }
             }
             Phase.DIP_OUT -> {
                 fade = smooth(t / FADE_OUT_S)
@@ -207,6 +241,8 @@ class CinemaDirector(private val input: CameraInput, private val control: Contro
         const val BLACK_S = 0.9f
         const val FOLLOW_S = 30f
         const val FOLLOW_SWING = 0.035f
+        const val EXIT_OUT_S = 0.35f
+        const val EXIT_IN_S = 0.6f
 
         private fun s(y0: Float, p0: Float, d0: Float, x0: Float, y1: Float, p1: Float, d1: Float, x1: Float, sec: Float) =
             Shot(Pose(y0, p0, d0, x0), Pose(y1, p1, d1, x1), sec)

@@ -380,9 +380,18 @@ class BandedShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (client != null && threat == null) {
                 out.rollExtra = 0.07 * sin(2 * PI * 0.6 * c.t)
                 c.o.appendagePhase += c.dt * 2.5
+            } else {
+                // alone it picks now and then at the ledge with the small chelae (a surface scavenger, research 12 [M])
+                // and its long white antennae drift and twitch
+                val idle = threat == null && !groomClock.grooming
+                if (idle && c.t > nextPick) { pickUntil = c.t + c.rng.range(2.5, 6.0); nextPick = pickUntil + c.rng.range(6.0, 16.0) }
+                if (idle && c.t < pickUntil) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.5 * c.t))
+                c.o.appendagePhase += c.dt * 1.0
             }
-            groomClock.tick(c, threat == null && client == null)
+            groomClock.tick(c, threat == null && client == null && c.t >= pickUntil)
         }
+        private var pickUntil = -1.0
+        private var nextPick = 0.0
     }
 
     /**
@@ -484,7 +493,11 @@ private const val ADVERT_CM = 12.0
 // =====================================================================================
 // Skunk cleaner shrimp (Lysmata amboinensis): station, rocking advert, climbs onto clients
 // =====================================================================================
-class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
+/**
+ * [shy]: the fire shrimp's variant ([FireShrimpBrain], research 44 §1): its station is the mouth of a dark cave away
+ * from the skunk cleaners', and it offers far fewer cleanings.
+ */
+open class CleanerShrimpBrain(c: Ctx, private val shy: Boolean = false) : SpeciesBrain(c) {
     val anchor: Anchor? = c.rock.anchors["STATION_SHRIMP"]
     private val anchorPos: Vec3 = anchor?.pos ?: Vec3(106.0, 28.0, 16.0)
     val nav = ShrimpNav(o)
@@ -498,8 +511,16 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
      */
     fun sit(c: Ctx): Rest {
         perch?.let { return it }
-        val taken = c.sim.organisms.filter { it !== o && it.brainKind == BrainKind.CLEANER_SHRIMP }
+        val taken = c.sim.organisms.filter { it !== o && it.brainKind == o.brainKind }
             .mapNotNull { (c.sim.agentOf(it)?.brain as? CleanerShrimpBrain)?.homeSpot }
+        if (shy) {
+            // a cave mouth: shaded, near its mate's, away from the skunk cleaners' station
+            val skunks = listOfNotNull(anchor?.pos) + c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.CLEANER_SHRIMP }.map { it.homePos }
+            val r = shadedPerch(c, taken.firstOrNull() ?: ledgeNear(c, skunks), 12.0, taken)
+            perch = r
+            station.pos = c.safe(r.pos + (r.up ?: Vec3.Y) * 3.5, 2.0)
+            return r
+        }
         val r = shrimpPerch(c, anchorPos, 14.0, 1, taken, Vec3(0.0, 0.6, 0.8),
             accept = { _, n -> n.y > -0.3 && n.z > -0.35 },
             score = { q, n -> q.distanceTo(anchorPos) + 4.0 * max(0.0, -n.z) + 2.0 * c.rock.sdf.cover(q + n * 3.0) })
@@ -515,7 +536,9 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         c.p.stations += station
-        install(Station(), Climb(), ShrimpForage(this, nav, 25.0, 20.0, "Grabbing food"), MoltHide(this) { sit(it) }, TailFlip(this, nav) { sit(it) })
+        val roam = if (!shy) emptyArray() else arrayOf<Behavior>(ShrimpRoam(this, nav, { sit(it).pos }, FireShrimpBrain.NIGHT_FORAY_CM,
+            { c -> if (!c.p.night || c.o.molting) 0.0 else 0.42 + 0.2 * c.o.hunger }, "Walking the rock at night"))
+        install(Station(), Climb(), ShrimpForage(this, nav, 25.0, 20.0, "Grabbing food"), MoltHide(this) { sit(it) }, TailFlip(this, nav) { sit(it) }, *roam)
     }
 
     override fun restSpot(c: Ctx, night: Boolean) = sit(c)
@@ -582,7 +605,7 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 rockUntil = c.t + c.rng.range(1.0, 3.0)
                 c.sim.emit(SimEvent.LegRock(c.o.id, f.id, c.sim.simTimeSec))
             }
-            if (station.client == null && c.rng.chance(if (pred) 0.28 else 0.51)) {
+            if (station.client == null && c.rng.chance((if (pred) 0.28 else 0.51) * (if (shy) FireShrimpBrain.CLEAN_SHARE else 1.0))) {
                 st.cleans++
                 station.client = f; station.clientReady = true
                 f.poseFor = c.o; f.poseUntil = c.t + 25.0
@@ -595,13 +618,15 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     inner class Station : Behavior("station", "Advertising at station") {
         override val label: String get() = when {
-            nav.swimming -> "Swimming back to its station"
-            !home -> "Walking back to its station"
+            nav.swimming -> if (shy) "Swimming back to its cave" else "Swimming back to its station"
+            !home -> if (shy) "Walking back to its cave" else "Walking back to its station"
             groomClock.grooming -> "Grooming its antennae"
+            shy -> "Waiting in the mouth of its cave"
             else -> "Advertising at station"
         }
         private var home = true
-        override fun score(c: Ctx) = 0.5
+        // the fire shrimp keeps to its cave by day and spends much of the night out on the rock
+        override fun score(c: Ctx) = if (shy && c.p.night) 0.4 else 0.5
         override fun enter(c: Ctx) { nav.reset() }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = sit(c)
@@ -624,9 +649,15 @@ class CleanerShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 client && c.p.neighbors(station.pos, APPROACH_CM + 5).any { it.isFish && it.alive } -> SWAY_ROLL * sin(2 * PI * SWAY_HZ * c.t)
                 else -> 0.0
             }
-            // antennae sweep faster while a client is about (advertising)
-            c.o.appendagePhase += c.dt * (if (rocking) 4.0 else if (client) 2.0 else 0.5)
+            // between clients it picks at the station rock (Lysmata are surface grazers too, research 12/42 [M]) and
+            // keeps the antennae moving; they sweep faster while a client is about (advertising)
+            val idle = !client && !rocking && threat == null && !groomClock.grooming
+            if (idle && c.t > nextPick) { pickUntil = c.t + c.rng.range(2.5, 6.0); nextPick = pickUntil + c.rng.range(6.0, 16.0) }
+            if (idle && c.t < pickUntil) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.6 * c.t))
+            c.o.appendagePhase += c.dt * (if (rocking) 4.0 else if (client) 2.0 else 1.2)
         }
+        private var pickUntil = -1.0
+        private var nextPick = 0.0
     }
 
     /**

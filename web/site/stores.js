@@ -9,7 +9,7 @@ const pic = (it) => `<img class="sp" src="species/${it.species || it.id}.webp" a
 let my, say, cue, onLeave;
 let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
 
-/** The street for My tank's "Add life" card: one storefront per store, locked ones dark with their level. */
+/** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
   let s = null;
   try { s = JSON.parse(my.stores()); } catch { s = null; }
@@ -28,7 +28,7 @@ export function initStores(opts) {
   ui.className = 'hidden';
   (document.getElementById('live') || document.body).appendChild(ui);
   ui.addEventListener('click', onClick);
-  return { enter, active: () => data != null, pick, leave };
+  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter() };
 }
 
 function enter(id) {
@@ -39,7 +39,23 @@ function enter(id) {
   document.body.classList.add('instore');
   ui.classList.remove('hidden');
   cue?.('TICK');
-  say?.(d.greeting);
+  say?.(`${d.greeting} Tap a tank to walk over to it, and the counter to pay.`);
+  render();
+}
+
+/** The checkout: the camera walks to the counter in 3D and the till opens. */
+function openCounter() {
+  if (!data) return;
+  counterOpen = true;
+  picked = null;
+  my.storeCounter(true);
+  cue?.('TICK');
+  render();
+}
+
+function closeCounter() {
+  counterOpen = false;
+  my.storeCounter(false);
   render();
 }
 
@@ -146,7 +162,7 @@ function render() {
   const p = picked && item(picked);
   ui.innerHTML = `
     <div class="sthead glass">
-      <button class="door" data-sleave aria-label="Leave the store">🚪</button>
+      <button class="sback" data-sleave aria-label="Leave the store and go home">‹ Back</button>
       <div class="stname"><b>${esc(data.label)}</b><small>${esc(t.title)} · ${t.animals} animals</small></div>
       <button class="pill sellbtn" data-ssell>Sell</button>
     </div>
@@ -233,8 +249,8 @@ function onClick(e) {
   else if (d.sadd) add(d.sadd);
   else if (d.sremove) remove(d.sremove);
   else if ('sclose' in d) { picked = null; render(); }
-  else if ('scounter' in d) { counterOpen = true; cue?.('TICK'); render(); }
-  else if ('scounterclose' in d) { counterOpen = false; render(); }
+  else if ('scounter' in d) openCounter();
+  else if ('scounterclose' in d) closeCounter();
   else if ('spay' in d) pay();
-  else if ('scounterbg' in d && e.target === b) { counterOpen = false; render(); }
+  else if ('scounterbg' in d && e.target === b) closeCounter();
 }

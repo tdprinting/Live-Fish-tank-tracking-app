@@ -40,6 +40,8 @@ data class SavedEconomy(
     val giftDay: String = "",
     /** Newest first, at most [Economy.LEDGER_MAX]: the "where did my money go" list. */
     val ledger: List<LedgerEntry> = emptyList(),
+    /** Reef moments seen, animals kept and fish birthdays ([Journal]). */
+    val journal: SavedJournal = SavedJournal(),
 )
 
 @Serializable
@@ -47,17 +49,17 @@ data class LedgerEntry(val day: String, val label: String, val amount: Int)
 
 /** The daily chores (docs/ECONOMY.md §4). [pay] is before the streak bonus. */
 enum class CareTask(val id: String, val label: String, val pay: Int, val hint: String) {
-    FEED_FISH("feed_fish", "Feed your fish", 10, "Any food from the shelf counts."),
-    FEED_CORALS("feed_corals", "Feed your corals", 10, "Coral powder, cyclops or plankton."),
-    TEST_WATER("test_water", "Test the water", 10, "Open Tank Health to test it."),
-    TOP_OFF("top_off", "Top off the water", 10, "Add fresh water for what evaporated."),
-    EMPTY_SKIMMER("empty_skimmer", "Empty the skimmer cup", 15, "The cup is getting full."),
-    CHANGE_SOCK("change_sock", "Swap the filter sock", 15, "The sock is dirty."),
-    CLEAN_GLASS("clean_glass", "Clean the glass", 15, "Slide the scraper over the front glass."),
-    SIPHON_SAND("siphon_sand", "Siphon the sand", 20, "Suck the gunk out of the sand."),
-    HARVEST_MACRO("harvest_macro", "Harvest macroalgae", 15, "Trim the refugium."),
-    REPLACE_CARBON("replace_carbon", "Swap the carbon", 15, "The carbon is used up."),
-    WATER_CHANGE("water_change", "Water change", 30, "Swap 10-25 % for fresh salt water.");
+    FEED_FISH("feed_fish", "Feed your fish", 5, "Any food from the shelf counts."),
+    FEED_CORALS("feed_corals", "Feed your corals", 5, "Coral powder, cyclops or plankton."),
+    TEST_WATER("test_water", "Test the water", 5, "Open Tank Health to test it."),
+    TOP_OFF("top_off", "Top off the water", 5, "Add fresh water for what evaporated."),
+    EMPTY_SKIMMER("empty_skimmer", "Empty the skimmer cup", 8, "The cup is getting full."),
+    CHANGE_SOCK("change_sock", "Swap the filter sock", 8, "The sock is dirty."),
+    CLEAN_GLASS("clean_glass", "Clean the glass", 8, "Slide the scraper over the front glass."),
+    SIPHON_SAND("siphon_sand", "Siphon the sand", 10, "Suck the gunk out of the sand."),
+    HARVEST_MACRO("harvest_macro", "Harvest macroalgae", 8, "Trim the refugium."),
+    REPLACE_CARBON("replace_carbon", "Swap the carbon", 8, "The carbon is used up."),
+    WATER_CHANGE("water_change", "Water change", 15, "Swap 10-25 % for fresh salt water.");
 
     companion object {
         fun byId(id: String): CareTask? = entries.firstOrNull { it.id == id }
@@ -85,7 +87,7 @@ enum class Goal(val id: String, val label: String, val reward: Int) {
 object Levels {
     const val MAX = 10
 
-    fun starsFor(level: Int): Int = 50 * level * (level - 1)
+    fun starsFor(level: Int): Int = 30 * level * (level - 1)
 
     fun level(stars: Int): Int {
         var n = 1
@@ -123,6 +125,7 @@ data class EconomyView(
     val happyPaid: Boolean,
     val goals: List<GoalView>,
     val ledger: List<LedgerEntry>,
+    val journal: JournalView,
 ) {
     /** Something on the Care card waits for a tap or a chore (the dot on the money chip). */
     val attention: Boolean get() = !happyPaid && happyBonus > 0 || tasks.any { !it.done }
@@ -131,8 +134,11 @@ data class EconomyView(
 data class TaskView(val task: CareTask, val pay: Int, val done: Boolean)
 data class GoalView(val goal: Goal, val done: Boolean)
 
-/** Money that just came in, for the coins-flying cheer; [levelUp] is the new level when this one crossed it. */
-data class Gain(val amount: Int, val label: String, val levelUp: Int = 0)
+/**
+ * Money that just came in, for the coins-flying cheer; [levelUp] is the new level when this one crossed it, [story]
+ * the reef moment or birthday card that goes with it.
+ */
+data class Gain(val amount: Int, val label: String, val levelUp: Int = 0, val story: Story? = null)
 
 /**
  * The live economy of one My tank. Confined to the thread that runs the sim (Android's sim thread, the web page's
@@ -154,6 +160,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     private var seenSplits = 0
     private var seenBabies = 0
     private var seenLog: CareLog? = null
+    private val journal = Journal()
 
     val level: Int get() = Levels.level(state.stars)
 
@@ -183,6 +190,8 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         if (log.anemoneSplits > seenSplits) { seenSplits = log.anemoneSplits; goal(Goal.ANEMONE_SPLIT) }
         if (log.babiesReleased > seenBabies) { seenBabies = log.babiesReleased; goal(Goal.BABY_FISH) }
         checkGoals(sim)
+        val j = journal.update(sim, state.journal) { amount, label, story -> earn(amount, label, today, story) }
+        if (j != state.journal) state = state.copy(journal = j)
         return state != before
     }
 
@@ -304,6 +313,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
             happyPaid = s.happyPaid,
             goals = Goal.entries.map { GoalView(it, it.id in s.goals) },
             ledger = s.ledger,
+            journal = JournalView(Moment.entries.map { MomentView(it, it.id in s.journal.moments) }, s.journal.kept.map { speciesLabel(it) }),
         )
     }
 
@@ -388,12 +398,12 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         if (Goal.LEVEL_5.id !in have && level >= 5) goal(Goal.LEVEL_5)
     }
 
-    private fun earn(amount: Int, label: String, today: String) {
+    private fun earn(amount: Int, label: String, today: String, story: Story? = null) {
         if (amount <= 0) return
         val was = level
         state = state.copy(coins = state.coins + amount, stars = state.stars + amount, ledger = ledger(today, label, amount))
         val now = level
-        gains += Gain(amount, label, if (now > was) now else 0)
+        gains += Gain(amount, label, if (now > was) now else 0, story)
         if (now > was && now >= 5) goal(Goal.LEVEL_5)
     }
 
@@ -401,17 +411,17 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         (listOf(LedgerEntry(day, label, amount)) + state.ledger).take(LEDGER_MAX)
 
     companion object {
-        const val START_COINS = 100
-        const val ALL_DONE_BONUS = 25
+        const val START_COINS = 60
+        const val ALL_DONE_BONUS = 15
         const val STREAK_STEP = 0.1
         const val STREAK_DAYS = 5
-        const val HAPPY_PER_ANIMAL = 2
+        const val HAPPY_PER_ANIMAL = 1
         const val HAPPY_PER_CORAL = 1
-        const val HAPPY_CAP = 60
+        const val HAPPY_CAP = 30
         const val THRIVING = 0.7
         const val LEDGER_MAX = 30
 
-        /** Happy tank bonus now: 2 per thriving animal, 1 per healthy coral, capped. */
+        /** Happy tank bonus now: 1 per thriving animal, 1 per healthy coral, capped. */
         fun happyBonus(sim: Simulation): Int {
             var n = 0
             for (o in sim.organisms) if (o.alive && o.health > THRIVING) n += HAPPY_PER_ANIMAL

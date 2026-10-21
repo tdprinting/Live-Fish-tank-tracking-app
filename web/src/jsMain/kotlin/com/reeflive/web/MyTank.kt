@@ -118,7 +118,8 @@ object ReefMyTank {
      * Ticks off the chores done since the last call and returns the Care card's data (the page calls it about once a
      * second in My tank): `{coins, level, levelStars, levelNeed, tasks:[{id,label,hint,pay,done}], allDoneBonus,
      * allDonePaid, streak, multiplier, happyBonus, happyPaid, attention, goals:[{id,label,reward,done}],
-     * gains:[{amount,label,levelUp,opens}]}`, or "null" with no tank.
+     * journal:{moments:[{id,title,hint,fact,reward,found}], kept:[name]}, gains:[{amount,label,levelUp,opens,story?:{title,
+     * headline,fact}}]}`, or "null" with no tank.
      */
     fun economy(): String {
         val s = sim ?: return "null"
@@ -132,8 +133,17 @@ object ReefMyTank {
             o.allDoneBonus = v.allDoneBonus; o.allDonePaid = v.allDonePaid; o.streak = v.streak; o.multiplier = v.multiplier
             o.happyBonus = v.happyBonus; o.happyPaid = v.happyPaid; o.attention = v.attention
             o.goals = v.goals.map { g -> obj { it.id = g.goal.id; it.label = g.goal.label; it.reward = g.goal.reward; it.done = g.done } }.toTypedArray()
+            o.journal = obj { j ->
+                j.moments = v.journal.moments.map { m ->
+                    obj { it.id = m.moment.id; it.title = m.moment.title; it.hint = m.moment.hint; it.fact = m.moment.fact; it.reward = m.moment.reward; it.found = m.found }
+                }.toTypedArray()
+                j.kept = v.journal.kept.toTypedArray()
+            }
             o.gains = gains.map { g ->
-                obj { it.amount = g.amount; it.label = g.label; it.levelUp = g.levelUp; it.opens = com.reeflive.core.custom.economy.Levels.opens(g.levelUp) }
+                obj {
+                    it.amount = g.amount; it.label = g.label; it.levelUp = g.levelUp; it.opens = com.reeflive.core.custom.economy.Levels.opens(g.levelUp)
+                    g.story?.let { st -> it.story = obj { o2 -> o2.title = st.title; o2.headline = st.headline; o2.fact = st.fact } }
+                }
             }.toTypedArray()
         })
     }
@@ -179,6 +189,7 @@ object ReefMyTank {
         tanks = StoreVisit.tanks(store, today())
         tankAt = -1
         showTank(0)
+        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup })
         return visitJson(mine)
     }
 
@@ -214,8 +225,12 @@ object ReefMyTank {
         val d = StoreVisit.build(t, species, rock, (today().hashCode() * 31 + i).toLong())
         display = d; tankAt = i
         if (ReefSandbox.isMine()) ReefLive.sim = d
+        ReefLive.room.show(i)
         return true
     }
+
+    /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
+    fun storeCounter(on: Boolean) { if (visiting != null) ReefLive.room.counter(on) }
 
     /** The species id of an animal tapped in the display tank (its card), or "". */
     fun displaySpecies(id: String): String =
@@ -250,6 +265,7 @@ object ReefMyTank {
     fun leaveStore() {
         if (visiting == null) return
         visiting = null; tanks = emptyList(); tankAt = -1; display = null
+        ReefLive.room.leave()
         if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
     }
 
@@ -309,7 +325,7 @@ object ReefMyTank {
 
     internal fun leave() {
         // walking out of My tank from a store: the pause already started at the store's door
-        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; return }
+        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
         save(); pausedAt = now()
     }
 

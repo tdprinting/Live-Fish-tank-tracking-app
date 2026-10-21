@@ -10,11 +10,29 @@ in vec2 vCoord;
 in float vSeed;
 in float vLight;
 in vec3 vWorld;
+in float vKind;
 
 out vec4 fragColor;
 
 void main() {
     int li = int(vLight + 0.5);
+    if (vKind > 6.5) {
+        // lens halo: a hot core and a wide soft bloom in the lamp's colour, so the fixtures read as lit (and their
+        // colour shows what the lamps are doing: white daylight, blue actinics, dim moonlight)
+        float r2 = dot(vec2(vCoord.x, vCoord.y * 2.0 - 1.0), vec2(vCoord.x, vCoord.y * 2.0 - 1.0));
+        float g = exp(-r2 * 18.0) * 1.4 + exp(-r2 * 4.0) * 0.35;
+        g *= 1.0 - smoothstep(0.7, 1.0, r2);
+        vec3 c = uLightColor[li].rgb / max(uLightColor[li].w, 1e-3);
+        fragColor = vec4(tonemap(c * 1.5), g * clamp(uLightColor[li].w * 3.0, 0.0, 1.0) * (0.6 + 0.4 * uShaftStrength));
+        return;
+    }
+    if (vKind > 5.5) {
+        // beam in the air: faint haze lit by the lamp, brightest near the lens and along the cone's axis
+        float ac = 1.0 - abs(vCoord.x);
+        float a = ac * ac * (1.0 - vCoord.y * 0.6) * 0.07 * uShaftStrength * uLightColor[li].w;
+        fragColor = vec4(tonemap(uLightColor[li].rgb * 1.2), a);
+        return;
+    }
     float across = 1.0 - abs(vCoord.x);
     across = across * across * (3.0 - 2.0 * across);
     // scrolling noise along the shaft plus a slower surface flicker
@@ -28,7 +46,7 @@ void main() {
     float dist = length(toFrag);
     float nearFade = smoothstep(6.0, 28.0, dist);
     float topFade = 1.0 - smoothstep(0.55, 0.92, abs(toFrag.y) / max(dist, 1e-3));
-    float a = 0.45 * uShaftStrength * uLightColor[li].w * along * across * (0.45 + n) * flicker * nearFade * topFade;
+    float a = 0.6 * uShaftStrength * uLightColor[li].w * along * across * (0.45 + n) * flicker * nearFade * topFade;
     vec3 col = uLightColor[li].rgb * 1.2;
     col = applyWater(col, vWorld);
     fragColor = vec4(tonemap(col), a);

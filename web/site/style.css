@@ -230,12 +230,10 @@ dialog::backdrop { background: rgba(3,9,18,.6); }
 }
 
 /* screensaver: covers the chrome, takes every tap (tap = exit); the tank shows through */
-.saver { position: absolute; inset: 0; z-index: 40; cursor: none; }
+.saver { position: fixed; inset: 0; z-index: 40; cursor: none; touch-action: none; }
 .saver-black { position: absolute; inset: 0; background: #000; opacity: 1; pointer-events: none; }
 .saver-caption { position: absolute; left: max(32px, var(--safe-left, 0px)); bottom: calc(var(--safe-bottom, 0px) + 36px); font: 500 22px/1.3 Outfit, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.8); opacity: 0; pointer-events: none; }
 .saver-hint { position: absolute; left: 50%; bottom: calc(var(--safe-bottom, 0px) + 36px); transform: translateX(-50%); padding: 8px 18px; border-radius: 20px; background: rgba(4,16,32,.6); color: #e1f0f8; font: 500 15px system-ui, sans-serif; transition: opacity .6s; pointer-events: none; }
-body.saver-on header.bar { display: none; }
-body.saver-on .saver { position: fixed; }
 /* Submarine mode (Android SubmarineControls): steering stick bottom left, up / down bottom right, options on top */
 .subbing #chrome, .subbing #showChrome { display: none !important; }
 .subui { position: absolute; inset: 0; pointer-events: none; }
@@ -448,6 +446,34 @@ dialog h2 { font-family: var(--display); font-size: 22px; margin-top: 0; }
 .carecard .streak { color: #FFB13D; }
 .happyrow { display: flex; align-items: center; gap: 10px; }
 .happyrow p { flex: 1; }
+/* reef journal (care.js journal) and the reef moment / birthday card (care.js nextStory) */
+.jm { display: flex; align-items: center; gap: 8px; padding: 4px; margin: 2px 0; color: var(--labelDim); }
+.jm.found { color: inherit; cursor: pointer; }
+.jm .jicon { width: 22px; text-align: center; }
+.jm .what { flex: 1; display: flex; flex-direction: column; }
+.jm small { color: var(--labelDim); }
+.jm.found small { display: none; }
+.jm.found.open small { display: block; color: inherit; }
+.jm .pay { color: #FFE14D; font-weight: 700; }
+.jm.found .pay { color: var(--labelDim); }
+.momentcard { position: fixed; z-index: 96; left: 50%; bottom: 96px; width: min(420px, calc(100% - 32px)); transform: translateX(-50%);
+  padding: 16px 18px; border-radius: 22px; border: 2px solid rgba(255,225,77,.8); overflow: hidden; cursor: pointer;
+  background: linear-gradient(#1A3F66f2, #0B1C33f2); color: #F2F6FF; animation: mpop .5s cubic-bezier(.3,1.6,.5,1); }
+.momentcard.out { animation: mout .25s ease-in forwards; }
+.momentcard .mhead { display: flex; align-items: center; gap: 10px; }
+.momentcard .micon { font-size: 26px; }
+.momentcard .mhead div { flex: 1; display: flex; flex-direction: column; }
+.momentcard small { color: #FFE14D; font-weight: 700; font-size: 13px; }
+.momentcard b { font: 700 22px/1.2 var(--display); }
+.momentcard .pay { color: #FFE14D; font: 700 22px/1 var(--display); }
+.momentcard .mline { font-weight: 600; font-size: 17px; margin: 8px 0 4px; }
+.momentcard .mfact { font-size: 15px; line-height: 1.35; opacity: .88; margin: 0 0 6px; }
+.momentcard .muted { font-size: 12px; margin: 0; }
+.momentcard .tw { position: absolute; width: 10px; height: 10px; background: #FFE14D; opacity: .2; pointer-events: none;
+  clip-path: polygon(50% 0, 61% 38%, 100% 38%, 69% 61%, 80% 100%, 50% 76%, 20% 100%, 31% 61%, 0 38%, 39% 38%); animation: twinkle 1.6s ease-in-out infinite; }
+@keyframes mpop { from { transform: translateX(-50%) scale(.7); opacity: 0; } }
+@keyframes mout { to { transform: translateX(-50%) translateY(20px); opacity: 0; } }
+@keyframes twinkle { 50% { opacity: .65; transform: scale(1.5); } }
 .carecard .pill { border: 2.5px solid var(--navy); background: var(--pillFill); color: var(--navy); font-weight: 700; padding: 8px 16px; }
 .carecard .pill.collect { background: #8EE66B; }
 .carefoot { display: flex; justify-content: flex-end; margin-top: 10px; }
@@ -484,7 +510,7 @@ dialog h2 { font-family: var(--display); font-size: 22px; margin-top: 0; }
 .lvopens { font: 700 20px/1.3 var(--display); color: #FFE14D; margin-top: 6px; }
 .lvtap { font-size: 14px; color: rgba(242,246,255,.7); margin-top: 14px; }
 @media (prefers-reduced-motion: reduce) {
-  .levelup .rays, .levelup .lb, .levelup .lf, .lstar, .lvbox, .money.gulp, .money.gulp .sanddollar, .job.done .tick { animation: none !important; }
+  .levelup .rays, .levelup .lb, .levelup .lf, .lstar, .lvbox, .money.gulp, .money.gulp .sanddollar, .job.done .tick, .momentcard, .momentcard .tw { animation: none !important; }
   .levelup .lb, .levelup .lf { display: none; }
 }
 /* touch controls: food in hand waiting for a tap, and the gear's pop-out menu (Android TankSpotPopup) */
@@ -541,7 +567,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 #storeUi { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
 #storeUi > * { pointer-events: auto; }
 #storeUi .sthead { position: absolute; left: 12px; top: calc(env(safe-area-inset-top) + 64px); display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 16px; }
-#storeUi .door { width: 44px; height: 44px; border-radius: 12px; border: 2.5px solid var(--navy); background: var(--pillFill); font-size: 22px; cursor: pointer; }
+#storeUi .sback { height: 44px; padding: 0 16px 0 12px; border-radius: 22px; border: 2.5px solid var(--navy); background: var(--pillFill); color: var(--navy); font: 800 17px/1 var(--display); cursor: pointer; white-space: nowrap; }
+#storeUi .sback:active { transform: scale(0.95); }
 #storeUi .stname { display: flex; flex-direction: column; }
 #storeUi .stname b { font: 600 17px/1.15 var(--display); }
 #storeUi .stname small { color: var(--labelDim); }
@@ -583,6 +610,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .counter .pm { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--navy); background: var(--pillFill); color: var(--navy); font-weight: 700; cursor: pointer; }
 .counter .ctotal { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font: 600 18px/1.2 var(--display); }
 .counter .ctotal b { display: inline-flex; align-items: center; gap: 4px; color: #FFE14D; }
+/* the counter sits over the 3D checkout desk: no dimming, docked low so the desk shows above it */
+#storeUi .caremodal { background: transparent; align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .fxplus.minus { color: #FF9AA5; font-size: 26px; }
 /* "While you were away" (care.js; Android WelcomeBack.kt) */
 .dayarc { position: relative; height: 90px; border-radius: 16px; overflow: hidden; margin-bottom: 10px; transition: background .4s; }
