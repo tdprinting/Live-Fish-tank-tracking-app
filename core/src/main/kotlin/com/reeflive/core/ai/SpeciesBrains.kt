@@ -19,7 +19,7 @@ object SpeciesBrains {
             BrainKind.BANDED_SHRIMP -> BandedShrimpBrain(c)
             BrainKind.CLEANER_SHRIMP -> CleanerShrimpBrain(c)
             BrainKind.HERMIT -> HermitBrain(c)
-            BrainKind.BRITTLE_STAR -> BrittleStarBrain(c)
+            BrainKind.BRITTLE_STAR -> if (c.o.species.brain == "serpent_star") SerpentStarBrain(c) else BrittleStarBrain(c)
             BrainKind.SALLY_CRAB -> SallyCrabBrain(c)
             BrainKind.ARROW_CRAB -> ArrowCrabBrain(c)
             BrainKind.EMERALD_CRAB -> EmeraldCrabBrain(c)

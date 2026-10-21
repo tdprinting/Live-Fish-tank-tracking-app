@@ -45,6 +45,7 @@ CARDS = {
     "lysmata_boggessi": "peppermint_shrimp",
     "ctenoides_scaber": "flame_scallop",
     "tridacna_maxima": "maxima_clam",
+    "ophiarachna_incrassata": "serpent_star",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
     "percnon_gibbesi": "sally_lightfoot",
@@ -71,7 +72,7 @@ CARDS = {
     "tubipora_musica": "organ_pipe",
     "zoanthus_sp": "zoa",
 }
-TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
+TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
 HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "maxima_clam", "gsp_mat",
         "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
 

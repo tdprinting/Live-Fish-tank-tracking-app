@@ -19,7 +19,7 @@ from common import bpy  # noqa: E402
 FISH_SHEET = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "hawkfish", "lawnmower_blenny",
               "tailspot_blenny", "dottyback", "engineer_goby", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny",
               "yellow_tang", "purple_tang", "fairy_wrasse", "royal_gramma", "banggai", "watchman_goby"]
-INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "sally_lightfoot", "brittle_star", "feather_duster",
+INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "sally_lightfoot", "brittle_star", "serpent_star", "feather_duster",
                 "nassarius", "astrea", "asterina", "trochus", "fighting_conch", "tuxedo_urchin"]
 
 
@@ -131,7 +131,7 @@ def render_fish(sid, w=640, h=380, samples=48):
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     ctr = (lo + hi) / 2
     ext = hi - lo
-    top_view = sid in ("brittle_star", "asterina")
+    top_view = sid in ("brittle_star", "serpent_star", "asterina")
     if sid.startswith("brood_clown_eggs"):
         top_view = True
     elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",

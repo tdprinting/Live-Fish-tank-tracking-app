@@ -236,6 +236,7 @@ object Thoughts {
                 "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
             n == "clam" -> clamLine(label)
             n == "giantclam" -> giantClamLine(label)
+            n == "fishgrab" -> Line("wrapping an arm round a sleeping fish", "eat it", "Gotcha!", Driver.HUNGER, 3)
             // ---- shrimp pack (research 44)
             n == "dance" -> Line("swaying its tail on ${if (label.contains("anemone")) "its anemone" else if (label.contains("coral")) "its coral" else "the rock"}",
                 "keep dancing", "Wiggle wiggle!", Driver.HOME, 1)
@@ -593,7 +594,7 @@ object Thoughts {
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
         BrainKind.ARROW_CRAB -> "arrow crab"
         BrainKind.EMERALD_CRAB -> "emerald crab"
-        BrainKind.BRITTLE_STAR -> "brittle star"
+        BrainKind.BRITTLE_STAR -> if (o.species.brain == "serpent_star") "serpent star" else "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"
         BrainKind.ASTREA -> "astrea snail"
