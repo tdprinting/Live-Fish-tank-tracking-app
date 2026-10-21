@@ -148,6 +148,28 @@ class FishRig(val id: String) {
     }
 
     /**
+     * [setCritter] eased toward [p] by [k] (0..1) when this rig already shows the same critter: the sim's bristleworms
+     * come at the 20 Hz sim tick, and an eased spine and frames glide between ticks instead of stepping (frames are
+     * lerped on the same hemisphere and renormalised).
+     */
+    fun blendCritter(p: CritterPose, k: Float) {
+        if (!touchedOnce || speciesId != p.kind.speciesId || k >= 1f) { setCritter(p); touchedOnce = true; return }
+        for (i in 0 until 16) {
+            for (c in 0 until 3) spine[i * 4 + c] += (p.spine[i * 3 + c] - spine[i * 4 + c]) * k
+            val o = i * 4
+            val dot = frames[o] * p.frames[o] + frames[o + 1] * p.frames[o + 1] + frames[o + 2] * p.frames[o + 2] + frames[o + 3] * p.frames[o + 3]
+            val sgn = if (dot < 0f) -1f else 1f
+            var n = 0f
+            for (c in 0 until 4) { frames[o + c] += (sgn * p.frames[o + c] - frames[o + c]) * k; n += frames[o + c] * frames[o + c] }
+            val inv = if (n > 1e-12f) 1f / kotlin.math.sqrt(n) else 1f
+            for (c in 0 until 4) frames[o + c] *= inv
+        }
+        phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage; scale = p.scale
+        touched = true
+    }
+    private var touchedOnce = false
+
+    /**
      * x of each limb is a phase in [0, 1) cycles (interpolated across the 1 → 0 wrap); y, z, w are plain scalars. (A rig
      * that sends a plain value in x keeps it inside (0, 1) and changing by well under 0.5 a tick, as BrittleArms does.)
      */

@@ -561,9 +561,14 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
     override val committed: Boolean get() = elapsed < 2.5
     // idle unless a worm is out: no utility noise, so the other behaviours' random draws are unchanged
     override val noisy: Boolean get() = false
+    /** A worm it could not get to in one dart, left alone a while: tucked where the fish cannot reach, it kept a
+     * hawkfish darting at it, one 5 s try after another, for most of a minute off its perch. */
+    private var skip: String? = null
+    private var skipUntil = 0.0
     override fun score(c: Ctx): Double {
         if (c.o.hunger < 0.2 || c.o.sleeping) return 0.0
         w = c.sim.worms.nearest(c.o.pos, radius)
+        if (w != null && w?.key == skip && c.t < skipUntil) w = null
         return if (w != null) weight * (0.6 + 0.4 * c.o.hunger) else 0.0
     }
     override fun update(c: Ctx, out: SteerIntent) {
@@ -576,7 +581,7 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
             if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G); c.o.mouth = 1.0 }
             w = null; finished = true
         }
-        if (elapsed > 5) { w = null; finished = true }
+        if (elapsed > 5) { skip = ww.key; skipUntil = c.t + SKIP_S; w = null; finished = true }
     }
-    companion object { const val WORM_SNAP_G = 0.05 }
+    companion object { const val WORM_SNAP_G = 0.05; const val SKIP_S = 90.0 }
 }
