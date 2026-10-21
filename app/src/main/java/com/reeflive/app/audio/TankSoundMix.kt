@@ -19,6 +19,8 @@ enum class Cue(val minGapMs: Long) {
     CLICK(1_500),
     TICK(120),
     ALERT(4_000),
+    /** A reef moment or a fish's birthday (the journal card). */
+    SPARKLE(1_500),
 }
 
 /** Pure mapping from sim state and events to sounds (kept free of Android so it is unit-tested). */
@@ -77,7 +79,7 @@ object TankSoundMix {
     fun cueFor(e: SimEvent): Cue? = when (e) {
         is SimEvent.Fed -> Cue.FEED
         is SimEvent.Died, is SimEvent.Eaten -> Cue.ALERT
-        is SimEvent.Molted, is SimEvent.Cleaned, is SimEvent.LegRock, is SimEvent.Jolt -> Cue.CLICK
+        is SimEvent.Molted, is SimEvent.Cleaned, is SimEvent.LegRock, is SimEvent.Jolt, is SimEvent.Snap -> Cue.CLICK
         else -> null
     }
 

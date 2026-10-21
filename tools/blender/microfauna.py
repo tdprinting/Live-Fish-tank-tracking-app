@@ -790,27 +790,60 @@ def build_ostracod():
 # Homotrema rubrum (red foram)
 # ----------------------------------------------------------------------------
 def build_foram():
-    """Homotrema rubrum (research 17 §14.2): sessile red foram on shaded rock undersides, 2-5 mm (up to 8); most are
-    hemispherical or globose with a knobbly surface pitted by pores; deep red wall (degraded symbiont chlorophyll),
-    pale where weathered. Modelled as a squat knobbly dome sitting on z = 0 (unit = diameter)."""
+    """Homotrema rubrum (research 17 §14.2): sessile red foram on shaded rock and undersides, 2-5 mm (up to 8). The
+    model is the knobby morphotype: a low pitted cushion cemented to the rock with stubby branches standing up from
+    it, their rounded tips paler where the wall is thinnest. The deep red wall (#B0302A, degraded symbiont chlorophyll)
+    is pitted all over by pores. Unit = diameter 1.0, sits on z = 0, top +Z. (The other morphotypes, and the small
+    ones too small for a model, are drawn on the rock by rock.frag.)"""
     C.reset_scene()
-    cv = P.Canvas(64, 64, "#B8202A")
-    cv.multiply(0.8 + 0.3 * P.fbm(64, 64, 10, 3, 81))
-    cv.blend(S(0.75, 0.85, P.value_noise(64, 64, 24, 24, 82)), "#5A0C12", 0.7)   # pores
-    tex = os.path.join(C.BUILD, "micro_foram.png")
-    cv.save(tex)
-    mat = C.material("foram_mat", rough=0.7, image=C.load_image(tex, name="micro_foram"))
-    root = make_root("Root", dict(species="micro_foram", lengthCm=0.4, iridescence=0.0, roughness=0.7,
+    at = Atlas(128, 64, 2)
+
+    def wall(cv):
+        cv.rgb[:] = P.Canvas(cv.w, cv.h, "#B0302A").rgb
+        cv.multiply(0.8 + 0.3 * P.fbm(cv.h, cv.w, 10, 3, 81))
+        cv.blend(S(0.78, 0.86, P.value_noise(cv.h, cv.w, 20, 20, 82)), "#4A080C", 0.8)   # pores
+
+    def branch(cv):
+        cv.rgb[:] = P.Canvas(cv.w, cv.h, "#B0302A").rgb
+        cv.multiply(0.85 + 0.25 * P.fbm(cv.h, cv.w, 10, 3, 83))
+        cv.blend(S(0.78, 0.86, P.value_noise(cv.h, cv.w, 10, 24, 84)), "#4A080C", 0.7)
+        cv.blend(S(0.7, 0.95, cv.u), "#D68C86", 0.8)   # pale rounded tips (u runs base -> tip)
+    at.paint_strip(0, wall)
+    at.paint_strip(1, branch)
+    img = save_atlas(at, "micro_foram")
+    mat = C.material("foram_mat", rough=0.6, image=img)
+    root = make_root("Root", dict(species="micro_foram", lengthCm=0.4, iridescence=0.0, roughness=0.6,
                                   unit="diameter 1.0, sits on z = 0, top +Z"))
-    Ve, Fe = G.ellipsoid((0, 0, 0), (0.5, 0.5, 0.38), 14, 7)
-    ang = np.arctan2(Ve[:, 1], Ve[:, 0])
-    Ve[:, :2] *= (1 + 0.07 * np.sin(5 * ang) * np.sin(3 * Ve[:, 2] * 8))[:, None]
-    Ve[:, 2] = np.maximum(Ve[:, 2], 0.0)
+    rng = np.random.default_rng(17)
     g = G.Geo()
-    g.add(Ve, Fe, np.stack([0.5 + Ve[:, 0], 0.5 + Ve[:, 1]], -1), col_u(Ve, 0.0, 0.5))
+    # cushion: a squat dome with a lumpy rim, cemented flat at z = 0
+    Ve, Fe = G.ellipsoid((0, 0, 0), (0.5, 0.5, 0.22), 12, 6)
+    ang = np.arctan2(Ve[:, 1], Ve[:, 0])
+    Ve[:, :2] *= (1 + 0.08 * np.sin(4 * ang + 0.7) + 0.05 * np.sin(7 * ang))[:, None]
+    Ve[:, 2] = np.maximum(Ve[:, 2], 0.0)
+    g.add(Ve, Fe, at.uv(0, 0.5 + Ve[:, 0], 0.5 + Ve[:, 1]), col_u(Ve, 0.0, 0.5))
+    # stubby knobs: 7 short rounded branches leaning out from the crown, thick at the base, domed tips, one forked
+    def knob(base, axis, h, rad, tv0=0.0):
+        k = np.linspace(0, 1, 5)
+        pts = base[None, :] + axis[None, :] * (h * k)[:, None]
+        r = rad * (1.25 - 0.3 * k) * np.sqrt(np.clip(1 - ((k - 0.55) / 0.45).clip(0) ** 2, 0.05, 1))
+        V, F, tv, av, T, N, B = ell_tube(pts, r, r, 6, cap_start=False, cap_end=True)
+        g.add(V, F, at.uv(1, tv0 + (1 - tv0) * tv, av), col_u(V, 0.0, 0.5))
+    for i in range(7):
+        a0 = i / 7 * 2 * math.pi + rng.uniform(-0.3, 0.3)
+        r0 = 0.1 + 0.16 * (i % 2)
+        base = np.array([r0 * math.cos(a0), r0 * math.sin(a0), 0.15 - 0.25 * r0 * r0])
+        axis = np.array([math.cos(a0) * rng.uniform(0.3, 0.6), math.sin(a0) * rng.uniform(0.3, 0.6), 1.0])
+        axis /= np.linalg.norm(axis)
+        h = rng.uniform(0.1, 0.18)
+        rad = rng.uniform(0.06, 0.08)
+        knob(base, axis, h, rad)
+        if i == 2:   # forked: a second knob off the side of this one
+            side = np.array([-math.sin(a0), math.cos(a0), 0.8]); side /= np.linalg.norm(side)
+            knob(base + axis * h * 0.5, side, h * 0.6, rad * 0.75, 0.4)
     o = geo_obj("Body", g, root, "body", [mat])
     C.recalc_normals(o)
-    return finish(root, [o], os.path.join(C.MODELS, "micro_foram.glb"), 300)
+    return finish(root, [o], os.path.join(C.MODELS, "micro_foram.glb"), 600)
 
 
 # ----------------------------------------------------------------------------
