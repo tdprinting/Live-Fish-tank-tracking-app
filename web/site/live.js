@@ -20,6 +20,8 @@ const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } },
 };
+/** The Picture setting for the tank: a preset, or AUTO with the level the last visit settled on. */
+const pictureArg = () => (ui.quality === 'AUTO' ? `AUTO:${store.get('reeflive.autoLevel', 'HIGH')}` : ui.quality);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let C = null;              // catalog (static tables)
@@ -28,7 +30,8 @@ let animals = [];          // living animals (cards)
 const ui = {
   mode: 'watch', watchFast: false, speed: 1, card: null, more: false, tab: 'WATER', controlMode: 'SET',
   picked: null, following: null, tour: false, shelf: false, shelfRow: 0, cleaning: false, chromeHidden: false,
-  torch: false, viewLight: 'REAL', quality: store.get('reeflive.quality', 'HIGH'),
+  torch: false, viewLight: 'REAL', // Picture: AUTO (follows the device) or a preset picked by hand. A new key: the old one also held automatic drops
+  quality: store.get('reeflive.picture', 'AUTO'),
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
   water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
   rocks: store.get('reeflive.rocksDynamic', true),
@@ -60,10 +63,10 @@ export function startLive(applyReadings) {
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   // the room shop: stands for the tank, tried on in 3D before buying (room.js)
   initRoom({ my: MY, live, say, cue: (n) => cue(n), onChange: () => renderCard() });
-  live.start($('tank'), new URL('.', location.href).href, ui.quality, {
+  live.start($('tank'), new URL('.', location.href).href, pictureArg(), {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
-    // frames stayed slow at the lowest resolution: the tank stepped its Picture down, and keeps it for next time
-    onQuality: (q) => { ui.quality = q; store.set('reeflive.quality', q); },
+    // Auto settled on a cheaper (or climbed back to a richer) preset: start from it next visit
+    onQuality: (q) => store.set('reeflive.autoLevel', q),
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
     onPick: (id) => { if (id) buzz(5); if (window.reefstores?.active()) { window.reefstores.pick(id); return; } if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
@@ -640,7 +643,7 @@ function settingsCard(sb) {
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
-      <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
+      <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['AUTO', 'LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
     <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}${tile('data-camreset', 'eye', 'Reset view')}</div>
     ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}`;
 }
@@ -764,7 +767,7 @@ $('card').addEventListener('click', (e) => {
   else if ('happyToggle' in d) { ui.happy = !ui.happy; store.set('reeflive.happy', ui.happy); }
   else if ('thoughtsToggle' in d) setThoughts(!thoughts.on);
   else if ('camreset' in d) { ui.following = null; ui.tour = false; live.follow(null); live.resetCamera(); }
-  else if (d.quality) { ui.quality = d.quality; store.set('reeflive.quality', ui.quality); live.setQuality(ui.quality); }
+  else if (d.quality) { ui.quality = d.quality; store.set('reeflive.picture', ui.quality); live.setQuality(pictureArg()); }
   else return;
   renderCard();
 });

@@ -127,7 +127,7 @@ object ReefLive {
                 val gl = cnv.getContext("webgl2", js("({antialias: false, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance'})"))
                     ?: throw IllegalStateException("This browser has no WebGL 2")
                 GLES30.gl = gl
-                val q = runCatching { RenderQuality.valueOf(quality.uppercase()) }.getOrDefault(RenderQuality.HIGH)
+                val q = parseQuality(quality) ?: RenderQuality.HIGH
                 current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
@@ -208,41 +208,85 @@ object ReefLive {
     })
 
     private var scaleStep = 0
-    private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
-    private var floorWindows = 0
+    private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0; private var floorWindows = 0
+    /** Picture "Auto" (the default): the preset follows the device; a preset picked by hand is kept as picked. */
+    private var auto = true
+    /** Seconds of frames not judged yet: loading and preset switches hitch, and must not count as a slow device. */
+    private var grace = START_GRACE
+    // the slow-down being tried: mean frame time before it, where it started, and steps taken since
+    private var tryBase = -1.0; private var tryStep = 0; private var tryQuality = RenderQuality.HIGH; private var trySteps = 0
+    /** Fewer pixels did not help (a 30 fps cap in Low Power Mode, or the CPU is the limit): stop trading sharpness. */
+    private var frozen = false
+    private var steppedDown = false
+
+    /** "HIGH" / "MEDIUM" / "LOW" picked by hand, or "AUTO" / "AUTO:<level it settled on last time>". */
+    private fun parseQuality(q: String): RenderQuality? {
+        val u = q.uppercase()
+        auto = u.startsWith("AUTO")
+        val level = if (auto) u.substringAfter(':', "HIGH") else u
+        return runCatching { RenderQuality.valueOf(level) }.getOrNull()
+    }
+
+    /** Lowest [SCALES] notch: a hand-picked preset loses at most a fifth of its sharpness; Auto goes to 0.72 before it
+     *  sheds effects, and all the way down only on Low. */
+    private fun floorStep(): Int = when {
+        !auto -> 2
+        current != RenderQuality.LOW -> 3
+        else -> SCALES.size - 1
+    }
 
     /**
      * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
-     * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
-     * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
-     * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
-     * Still slow at the lowest scale for [FLOOR_WINDOWS] windows: the picture drops one preset (HIGH → MEDIUM → LOW,
-     * shedding bloom, 4x MSAA, fish in the shadow map, caustic colour fringes...) at about the same pixel count, and
-     * the page stores it as the new Picture setting ("onQuality"), so a slow device starts fast next time.
+     * resolution down one [SCALES] notch, to [floorStep]; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back
+     * up. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone. On Auto, still slow at the
+     * floor for [FLOOR_WINDOWS] windows drops one preset (HIGH → MEDIUM → LOW, shedding bloom, 4x MSAA, fish in the
+     * shadow map...) at about the same pixel count; the page remembers it ("onQuality") for the next visit, and a
+     * visit that runs fast at full resolution climbs back a preset. Every two steps down are checked: if frames did
+     * not get at least 7% faster, pixels were not the limit, so the picture goes back to where it was and stays.
      */
     private fun adapt(dt: Double) {
         if (dt <= 0.0) return
+        if (grace > 0.0) { grace -= dt; return }
         windowTime += min(dt, 0.1); windowFrames++
         if (windowFrames < ADAPT_FRAMES) return
         val mean = windowTime / windowFrames
         windowTime = 0.0; windowFrames = 0
-        if (mean > SLOW_DT && scaleStep == SCALES.size - 1 && current != RenderQuality.LOW) {
-            if (++floorWindows >= FLOOR_WINDOWS) stepQualityDown()
+        if (mean > SLOW_DT) {
+            goodWindows = 0
+            if (frozen) return
+            if (tryBase < 0.0) { tryBase = mean; tryStep = scaleStep; tryQuality = current; trySteps = 0 }
+            else if (trySteps >= 2) {
+                if (mean > tryBase * 0.93) { setPicture(tryQuality, tryStep); frozen = true; tryBase = -1.0; return }
+                tryBase = mean; tryStep = scaleStep; tryQuality = current; trySteps = 0
+            }
+            if (scaleStep < floorStep()) { scaleStep++; trySteps++; floorWindows = 0 }
+            else if (auto && current != RenderQuality.LOW && ++floorWindows >= FLOOR_WINDOWS) {
+                val from = cap(current) * SCALES[scaleStep]
+                val v = RenderQuality.entries[current.ordinal + 1]
+                // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
+                setPicture(v, SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from + 1e-6 } ?: SCALES.size - 1)
+                steppedDown = true; trySteps++
+            }
+        } else {
+            tryBase = -1.0; floorWindows = 0
+            if (mean >= FAST_DT) { goodWindows = 0; return }
+            if (++goodWindows < GOOD_WINDOWS) return
+            goodWindows = 0
+            if (scaleStep > 0) { scaleStep--; return }
+            // full resolution and still fast: a preset an earlier, slower visit settled on can come back up
+            if (auto && !steppedDown && current != RenderQuality.HIGH) setPicture(RenderQuality.entries[current.ordinal - 1], 0)
         }
-        else if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0; floorWindows = 0 }
-        else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
-        else goodWindows = 0
     }
 
-    private fun stepQualityDown() {
-        val from = cap(current)
-        val v = RenderQuality.entries[current.ordinal + 1]
-        current = v; goodWindows = 0; floorWindows = 0
-        // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
-        scaleStep = SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from * SCALES.last() + 1e-6 } ?: SCALES.size - 1
-        renderer?.setQuality(v)
+    private fun setPicture(q: RenderQuality, step: Int) {
+        scaleStep = step
+        if (q != current) {
+            current = q
+            renderer?.setQuality(q)
+            grace = SWITCH_GRACE
+            if (auto) emit("onQuality", q.name)
+        }
         resize()
-        emit("onQuality", v.name)
     }
 
     private fun status(text: String) { emit("onStatus", text) }
@@ -306,7 +350,7 @@ object ReefLive {
         fun f(v: Double) = ((v * 10).roundToInt() / 10.0).toString()
         emit("onStats", "${(stFrames / stTime).roundToInt()} fps · worst ${(stWorst * 1000).roundToInt()} ms\n" +
             "sim ${f(stSim / stFrames)} ms · draw ${f(stDraw / stFrames)} ms\n" +
-            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}")
+            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}${if (auto) " (auto)" else ""}${if (frozen) " · held" else ""}")
         stFrames = 0; stTime = 0.0; stSim = 0.0; stDraw = 0.0; stWorst = 0.0
     }
 
@@ -496,9 +540,11 @@ object ReefLive {
         JSON.stringify(obj { o -> o.curious = it.curious; o.wary = it.wary; o.watch = it.watchId; o.mode = it.watchMode.name })
     } ?: "null"
     fun setQuality(q: String) {
-        val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v; scaleStep = 0; goodWindows = 0; floorWindows = 0
-        renderer?.setQuality(v)
+        val v = parseQuality(q) ?: return
+        goodWindows = 0; floorWindows = 0; tryBase = -1.0; frozen = false; steppedDown = false
+        windowTime = 0.0; windowFrames = 0
+        if (v != current) { current = v; renderer?.setQuality(v); grace = SWITCH_GRACE }
+        scaleStep = 0
         resize()
     }
 
@@ -645,6 +691,8 @@ object ReefLive {
     private const val FAST_DT = 1.0 / 57
     private const val GOOD_WINDOWS = 4
     private const val FLOOR_WINDOWS = 3
+    private const val START_GRACE = 8.0
+    private const val SWITCH_GRACE = 4.0
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }
