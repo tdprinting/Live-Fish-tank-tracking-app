@@ -18,6 +18,8 @@ import kotlin.math.sin
 data class PairRow(
     val id: String,
     val actor: String,
+    /** Species ids the row is limited to within [actor]'s kind (empty = every species of that kind). */
+    val actorSpecies: List<String> = emptyList(),
     val targets: List<String>,
     val filter: String? = null,
     val type: String,
@@ -85,7 +87,7 @@ object PairMatrix {
     fun actorMatches(r: PairRow, o: Organism, sim: Simulation): Boolean = when (r.actor) {
         "CLOWN_F" -> o.brainKind == BrainKind.CLOWN && ClownQueue.isDominant(o, sim)
         "CLOWN_M" -> o.brainKind == BrainKind.CLOWN && !ClownQueue.isDominant(o, sim)
-        else -> o.brainKind.name == r.actor
+        else -> o.brainKind.name == r.actor && (r.actorSpecies.isEmpty() || o.species.id in r.actorSpecies)
     }
 
     fun targetMatches(r: PairRow, actor: Organism, t: Organism): Boolean {

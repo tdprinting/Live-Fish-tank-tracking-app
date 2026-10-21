@@ -2,6 +2,8 @@
 
 package com.reeflive.web
 
+import com.reeflive.core.custom.AwayCatchUp
+import com.reeflive.core.custom.AwaySummary
 import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.CustomTankCodec
 import com.reeflive.core.custom.CustomTankSave
@@ -87,7 +89,7 @@ object ReefMyTank {
     fun startOver() {
         read(KEY)?.let { write(BACKUP, it) }
         runCatching { localStorage.removeItem(KEY) }
-        sim = null; base = null; loaded = true
+        sim = null; base = null; loaded = true; awayRun = null; awaySummary = null
         if (ReefSandbox.isMine()) ReefLive.sim = null
     }
 
@@ -267,10 +269,41 @@ object ReefMyTank {
     private fun catchUp() {
         val s = sim ?: return
         if (pausedAt < 0) return
-        val secs = FastForward.simSeconds((now() - pausedAt).toLong(), 1.0)
+        val secs = (now() - pausedAt).coerceAtLeast(0.0) / 1000.0
         pausedAt = -1.0
-        if (secs >= FastForward.MIN_SIM_SEC) { s.advanceAbstract(secs); s.stepWall(0.0) }
+        if (secs < FastForward.MIN_SIM_SEC) return
+        // the whole time away, up to 30 days: a short gap at once, a long one a chunk per call of [away]
+        val run = AwayCatchUp(s, secs)
+        if (secs < AwayCatchUp.REPORT_SEC) { run.runAll(); s.stepWall(0.0) } else { awayRun = run; awaySummary = null }
     }
+
+    private var awayRun: AwayCatchUp? = null
+    private var awaySummary: AwaySummary? = null
+
+    /**
+     * "While you were away" for the page (docs/ECONOMY.md §9), called every frame while it shows: runs one chunk of a
+     * long catch-up and returns `{running, progress, daysDone, days, headline, lines, deaths:[{name,cause}]}`, or
+     * "null" when there is nothing to show.
+     */
+    fun away(): String {
+        val run = awayRun
+        if (run != null) {
+            run.step()
+            if (run.finished) { awayRun = null; awaySummary = run.summary().takeIf { it.worthShowing } }
+            if (!run.finished) return JSON.stringify(obj { o ->
+                o.running = true; o.progress = run.progress; o.daysDone = run.doneSec / AwayCatchUp.DAY; o.days = run.totalSec / AwayCatchUp.DAY
+            })
+        }
+        val sm = awaySummary ?: return "null"
+        return JSON.stringify(obj { o ->
+            o.running = false; o.progress = 1.0; o.daysDone = sm.awaySec / AwayCatchUp.DAY; o.days = sm.awaySec / AwayCatchUp.DAY
+            o.headline = sm.headline; o.lines = sm.lines.toTypedArray()
+            o.deaths = sm.deaths.map { (n, c) -> obj { it.name = n; it.cause = c } }.toTypedArray()
+        })
+    }
+
+    /** The welcome-back card was closed. */
+    fun dismissAway() { awaySummary = null }
 
     private fun load() {
         if (loaded) return
@@ -284,7 +317,7 @@ object ReefMyTank {
         sim = s
         base = CustomTank.baseAfterRestore(save, species)
         economy = Economy(save.economy)
-        // closed since the last save: skip ahead by the time away
+        // closed since the last save: the time away runs on the next [catchUp]
         pausedAt = save.savedAtMs.toDouble()
         s.stepWall(0.0)
     }

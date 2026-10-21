@@ -120,9 +120,9 @@ fun LiveOverlay(
 }
 
 /**
- * Watch / Sandbox segmented pill. [onModeChange] fires on every tap; the live screen switches mode, and a tap on the
- * side already picked only brings a tucked menu back (it never hides anything). Sandbox shows coral text
- * to signal "not real" (UI_STYLE §10). Each option carries its glyph: an eye for Watch, a bucket for Sandbox.
+ * My tank / Watch segmented pill. [onModeChange] fires on every tap; the live screen switches mode, and a tap on the
+ * side already picked only brings a tucked menu back (it never hides anything). Each option carries its glyph: a fish
+ * for My tank, an eye for Watch.
  */
 @Composable
 fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifier = Modifier) {
@@ -134,8 +134,8 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
     ) {
         HudMode.values().forEach { m ->
             val sel = m == mode
-            // live theme (UI_STYLE §10.1): the picked side is a candy pill, Sandbox pink to signal "not real"
-            val tone = when (m) { HudMode.SANDBOX -> Candy.pink; HudMode.MY_TANK -> Candy.green; HudMode.WATCH -> Candy.cyan }
+            // live theme (UI_STYLE §10.1): the picked side is a candy pill
+            val tone = when (m) { HudMode.MY_TANK -> Candy.green; HudMode.WATCH -> Candy.cyan }
             val reduce = ReefTheme.reduceMotion
             val fg by animateColorAsState(if (sel) s.onCandy else s.label, ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeFg")
             val bg by animateColorAsState(if (sel) tone else tone.copy(alpha = 0f), ReefMotion.tween(reduce, ReefMotion.FAST), label = "modeBg")
@@ -155,7 +155,7 @@ fun ModeToggle(mode: HudMode, onModeChange: (HudMode) -> Unit, modifier: Modifie
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Glyph(
-                    when (m) { HudMode.SANDBOX -> ReefGlyphs.bucket; HudMode.MY_TANK -> ReefGlyphs.fish; HudMode.WATCH -> ReefGlyphs.eye },
+                    when (m) { HudMode.MY_TANK -> ReefGlyphs.fish; HudMode.WATCH -> ReefGlyphs.eye },
                     size = 20.dp, tint = fg, accent = if (sel) Color.White else s.labelDim,
                     modifier = Modifier.graphicsLayer { scaleX = grow; scaleY = grow },
                 )
@@ -403,5 +403,5 @@ private fun LiveOverlayDarkPreview() = ReefLiveTheme(darkTheme = true, reduceMot
 @Preview(name = "HUD · Lagoon", widthDp = 393, heightDp = 400, showBackground = true)
 @Composable
 private fun LiveOverlayLightPreview() = ReefLiveTheme(darkTheme = false, reduceMotion = true) {
-    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud.copy(mode = HudMode.SANDBOX), {}, {}, feedOpen = true) }
+    Box(Modifier.background(ReefTheme.colors.bg)) { LiveOverlay(previewHud.copy(mode = HudMode.MY_TANK), {}, {}, feedOpen = true) }
 }

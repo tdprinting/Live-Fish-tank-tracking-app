@@ -41,12 +41,15 @@ data class TankBuild(
         TankShape(cm(lengthIn), cm(heightIn), cm(depthIn), rimless = rimless, filter = filter, skimmer = skimmer && filter == TankFilter.HOB)
     }
 
-    /** The sim config for this build ([seed] picks the individual temperaments of the animals added later). */
+    /**
+     * The sim config for this build ([seed] picks the individual temperaments of the animals added later). No
+     * automatic feeding: in My tank the keeper feeds (a daily job, docs/ECONOMY.md §9).
+     */
     fun config(seed: Long): TankConfig {
         val s = shape
         return TankConfig(
             lengthCm = s.lengthCm, widthCm = s.depthCm, heightCm = s.heightCm, waterLevelCm = s.waterLevelCm, sandTopCm = s.sandTopCm,
-            systemLiters = liters, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed,
+            systemLiters = liters, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed, autoFeed = emptyList(),
             // the powerheads hang where they do on Tee's tank, moved with their glass (TankShape)
             powerheads = FlowField.defaultJets().map { it.copy(pos = s.map(it.pos)) },
         )
