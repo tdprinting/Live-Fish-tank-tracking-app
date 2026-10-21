@@ -1,5 +1,5 @@
-// My tank's room shop (core custom/room/Decor.kt via ReefMyTank.decor*; Android RoomShop.kt): stands, their colours and
-// extras, bought with sand dollars. A tap on something new tries it on in the 3D view (the camera steps back to show
+// My tank's room shop (core custom/room/Decor.kt via ReefMyTank.decor*; Android RoomShop.kt): stands, their colours,
+// extras, room scenes, wallpapers and floors, bought with sand dollars. A tap on something new tries it on in the 3D view (the camera steps back to show
 // the stand) with a Buy bar; a tap on something you own puts it to use.
 import { SAND_DOLLAR } from './care.js';
 
@@ -37,6 +37,20 @@ function standPic(kind, paint, trim) {
   return `<svg class="standpic" viewBox="0 0 48 33" aria-hidden="true">${tank}${body}${top}</svg>`;
 }
 
+const SCENE_ICON = { living: '🛋️', sunny: '🌳', beach: '🏖️', cabin: '❄️', blossom: '🌸', city: '🌃', space: '🪐' };
+
+/** A little drawing of a room scene: its wall, a window onto its sky, the tank on its stand. */
+function scenePic(id, sky, wall) {
+  return `<svg class="standpic" viewBox="0 0 48 33" aria-hidden="true"><rect width="48" height="33" fill="${wall}"/>
+    <rect x="9" y="3" width="30" height="20" rx="1.5" fill="${sky}" stroke="#fff8" stroke-width="1"/>
+    <text x="24" y="17" font-size="11" text-anchor="middle">${SCENE_ICON[id] || '🏠'}</text>
+    <rect x="0" y="29" width="48" height="4" fill="#0003"/><rect x="13" y="18" width="22" height="7" fill="#2b6f8f" opacity=".75"/>
+    <rect x="12" y="25" width="24" height="6" fill="#f1ede6"/></svg>`;
+}
+
+const swatchRow = (tiles) => `<div class="swatches">${tiles.map((t) => `<button class="swatch ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}" aria-label="${esc(t.label)}">
+      <span class="sw" style="background:linear-gradient(135deg, ${t.paint} 0 62%, ${t.trim} 62% 100%)"></span><small>${esc(t.label)}</small>${t.owned ? '' : t.locked ? `<small>🔒 ${t.level}</small>` : `<small class="cost">${SAND_DOLLAR}${t.price}</small>`}</button>`).join('')}</div>`;
+
 const price = (t) => t.owned ? (t.inUse ? '<span class="tag on">In use</span>' : '<span class="tag">Yours</span>')
   : t.locked ? `<span class="tag lock">🔒 Level ${t.level}</span>`
   : t.price === 0 ? '<span class="tag">Free</span>' : `<span class="tag cost">${SAND_DOLLAR}${t.price}</span>`;
@@ -49,14 +63,21 @@ export function roomHtml() {
   const stands = s.tiles.filter((t) => t.kind === 'stand');
   const colors = s.tiles.filter((t) => t.kind === 'color');
   const extras = s.tiles.filter((t) => t.kind === 'extra');
+  const scenes = s.tiles.filter((t) => t.kind === 'scene');
+  const walls = s.tiles.filter((t) => t.kind === 'wall');
+  const floors = s.tiles.filter((t) => t.kind === 'floor');
   const cur = stands.find((t) => t.inUse);
   const kind = (key) => key.split(':')[1];
-  return `<h4>Your room</h4><p class="muted">A stand for your tank. Tap one to try it on.</p>
+  return `<h4>Your room</h4><p class="muted">Make the room round your tank your own. Tap anything to try it on.</p>
+    <div class="rtiles">${scenes.map((t) => `<button class="rtile ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}">
+      ${scenePic(kind(t.key), t.paint, t.trim)}<b>${esc(t.label)}</b>${price(t)}</button>`).join('')}</div>
+    <h4>Walls</h4>${swatchRow(walls)}
+    <h4>Floor</h4>${swatchRow(floors)}
+    <h4>Stand</h4>
     <div class="rtiles">${stands.map((t) => `<button class="rtile ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}">
       ${standPic(kind(t.key), t.paint, t.trim)}<b>${esc(t.label)}</b>${price(t)}</button>`).join('')}</div>
     <h4>${esc(cur ? cur.label : 'Stand')} colours</h4>
-    <div class="swatches">${colors.map((t) => `<button class="swatch ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}" aria-label="${esc(t.label)}">
-      <span class="sw" style="background:linear-gradient(135deg, ${t.paint} 0 62%, ${t.trim} 62% 100%)"></span><small>${esc(t.label)}</small>${t.owned ? '' : `<small class="cost">${SAND_DOLLAR}${t.price}</small>`}</button>`).join('')}</div>
+    ${swatchRow(colors)}
     <h4>Extras</h4><div class="rtiles">${extras.map((t) => `<button class="rtile ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}">
       <span class="xpic">${kind(t.key) === 'glow' ? '💡' : '✨'}</span><b>${esc(t.label)}</b>${t.owned ? `<span class="tag ${t.inUse ? 'on' : ''}">${t.inUse ? 'On' : 'Off'}</span>` : price(t)}</button>`).join('')}</div>`;
 }
@@ -95,7 +116,7 @@ function buy() {
   try { r = JSON.parse(my.decorBuy(trying.key)); } catch { r = null; }
   if (r?.result === 'OK') {
     cue?.('FEED');
-    say?.(trying.kind === 'stand' ? `Your new ${trying.label.toLowerCase()} is in!` : `${trying.label}: yours now!`);
+    say?.(trying.kind === 'stand' ? `Your new ${trying.label.toLowerCase()} is in!` : trying.kind === 'scene' ? `Welcome to your ${trying.label.toLowerCase()}!` : `${trying.label}: yours now!`);
     endTry(false);
     onChange();
   } else if (r?.result === 'TOO_POOR') {

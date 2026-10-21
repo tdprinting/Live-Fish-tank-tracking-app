@@ -1,11 +1,15 @@
 package com.reeflive.app.render
 
+import com.reeflive.core.custom.room.Decor
+import com.reeflive.core.custom.room.Finish
+import com.reeflive.core.custom.room.SavedDecor
 import kotlin.math.abs
 import kotlin.math.pow
 
 /**
  * How the room around the tank looks (core custom/room/Decor.kt): the stand model and its two colours (sRGB
- * 0xRRGGBB), the extras and the room scene. One immutable value: the hosts swap it whole ([RoomControl.look]).
+ * 0xRRGGBB), the extras, the room scene and its walls and floor (a RoomStyle pattern in two colours each). One
+ * immutable value: the hosts swap it whole ([RoomControl.look]).
  */
 data class RoomLook(
     val stand: String = "classic",
@@ -14,15 +18,17 @@ data class RoomLook(
     val glow: Boolean = false,
     val brass: Boolean = false,
     val scene: String = "living",
+    val wall: Finish = Decor.scene("living").wall,
+    val floor: Finish = Decor.scene("living").floor,
 ) {
     companion object {
         /** Tee's own tank (Watch): the white cabinet in the living room. */
         val DEFAULT = RoomLook()
 
         /** The look of a My tank room. */
-        fun of(d: com.reeflive.core.custom.room.SavedDecor): RoomLook {
-            val (s, c) = com.reeflive.core.custom.room.Decor.look(d)
-            return RoomLook(s.id, c.paint, c.trim, "glow" in d.extras, "brass" in d.extras)
+        fun of(d: SavedDecor): RoomLook {
+            val (s, c) = Decor.look(d)
+            return RoomLook(s.id, c.paint, c.trim, "glow" in d.extras, "brass" in d.extras, Decor.scene(d.scene).id, Decor.wall(d), Decor.floor(d))
         }
     }
 }
@@ -61,7 +67,7 @@ object HomeRoomLayout {
  * centred on the tank. About 25 draw calls and 6k triangles, all static: no per-frame allocation.
  */
 internal class HomeRoomScene {
-    private class Piece(val part: DrawPart, val kind: Float, val grain: Float, val anchor: Int, val glowAlways: Boolean)
+    private class Piece(val part: DrawPart, val kind: Float, val grain: Float, val anchor: Int, val glowAlways: Boolean, val view: Float)
 
     private var standModel: GpuModel? = null
     private var roomModel: GpuModel? = null
@@ -71,9 +77,14 @@ internal class HomeRoomScene {
     private val mat = FloatArray(16)
     private val paint = FloatArray(3)
     private val trim = FloatArray(3)
+    private val wallA = FloatArray(3)
+    private val wallB = FloatArray(3)
+    private val floorA = FloatArray(3)
+    private val floorB = FloatArray(3)
     private var lastLook: RoomLook? = null
     private val lampPos = FloatArray(4)
     private val lampCol = FloatArray(3)
+    private var lampAnchor = ANCHOR_LEFT
 
     /** Loads (asynchronously) what [look] needs; true once both models are on the GPU. */
     fun ready(look: RoomLook, assets: (String) -> GpuModel?): Boolean {
@@ -90,6 +101,7 @@ internal class HomeRoomScene {
             lampPos[3] = 0f
             r?.parts?.firstOrNull { it.node.vec3("lampPos") != null }?.node?.let { n ->
                 val p = n.vec3("lampPos")!!
+                lampAnchor = anchorOf(n.name)
                 lampPos[0] = p[0]; lampPos[1] = p[1]; lampPos[2] = p[2]; lampPos[3] = 1f
                 val c = n.vec3("lampColor") ?: floatArrayOf(1f, 0.75f, 0.45f)
                 lampCol[0] = c[0]; lampCol[1] = c[1]; lampCol[2] = c[2]
@@ -98,6 +110,7 @@ internal class HomeRoomScene {
         if (look != lastLook) {
             lastLook = look
             srgb(look.paint, paint); srgb(look.trim, trim)
+            srgb(look.wall.a, wallA); srgb(look.wall.b, wallB); srgb(look.floor.a, floorA); srgb(look.floor.b, floorB)
         }
         return s != null || r != null
     }
@@ -117,7 +130,7 @@ internal class HomeRoomScene {
 
     private fun piece(p: DrawPart, anchor: Int): Piece {
         val n = p.material.src.name
-        return Piece(p, kindOf(n), if ("wood" in n || "plank" in n) 1f else 0f, anchor, n == "glow_pro")
+        return Piece(p, kindOf(n), if ("wood" in n || "plank" in n) 1f else 0f, anchor, n == "glow_pro", viewOf(n))
     }
 
     /**
@@ -134,15 +147,19 @@ internal class HomeRoomScene {
         p.set1f("uBrass", if (look.brass) 1f else 0f)
         p.set1f("uGlowStrip", if (look.glow) 1f else 0f)
         p.set1f("uDay", day)
-        p.set4f("uLampPos", lampPos[0] + shiftOf(ANCHOR_LEFT, len), lampPos[1], lampPos[2], lampPos[3])
+        p.set4f("uLampPos", lampPos[0] + shiftOf(lampAnchor, len), lampPos[1], lampPos[2], lampPos[3])
         val lampOn = 1f - day * 0.85f
         p.set3f("uLampCol", lampCol[0] * lampOn, lampCol[1] * lampOn, lampCol[2] * lampOn)
         p.set4f("uTankBox", len, Camera.TANK[1], dep, 0f)
         p.set4f("uFoot", -2f, len + 2f, -2f, dep + 2f)
         val centre = shiftOf(ANCHOR_CENTRE, len)
         p.set4f("uRoomBox", centre + HomeRoomLayout.STOCK_LENGTH * 0.5f - ROOM_HALF, centre + HomeRoomLayout.STOCK_LENGTH * 0.5f + ROOM_HALF, ROOM_BACK, HomeRoomLayout.FLOOR_Y)
-        p.set1f("uFloorStyle", 0f)
-        p.set1f("uWallStyle", 0f)
+        p.set1f("uFloorStyle", look.floor.style.toFloat())
+        p.set1f("uWallStyle", look.wall.style.toFloat())
+        p.set3f("uFloorA", floorA[0], floorA[1], floorA[2])
+        p.set3f("uFloorB", floorB[0], floorB[1], floorB[2])
+        p.set3f("uWallA", wallA[0], wallA[1], wallA[2])
+        p.set3f("uWallB", wallB[0], wallB[1], wallB[2])
         var calls = 0
         for (pc in roomPieces) calls += drawPiece(p, white, pc, blended, look, len)
         for (pc in pieces) calls += drawPiece(p, white, pc, blended, look, len)
@@ -157,6 +174,7 @@ internal class HomeRoomScene {
         p.set1f("uKind", pc.kind)
         p.set1f("uGrain", pc.grain)
         p.set1f("uGlowOn", if (pc.glowAlways || look.glow) 1f else 0f)
+        p.set1f("uOutside", pc.view)
         part.node.world.copyInto(mat)
         mat[12] += shiftOf(pc.anchor, len)
         p.setMat4("uModel", mat)
@@ -208,6 +226,19 @@ internal class HomeRoomScene {
             material.startsWith("rug") -> 11f
             material.startsWith("leaf") -> 12f
             material.startsWith("bin_clear") || material.startsWith("sump_glass") -> 13f
+            material.startsWith("view") -> 14f
+            material.startsWith("fire") -> 15f
+            else -> 0f
+        }
+
+        /** room.frag `uOutside` for a window material named `view_<scene>` (rooms.py). */
+        fun viewOf(material: String): Float = when (material.removePrefix("view_")) {
+            "garden" -> 1f
+            "beach" -> 2f
+            "city" -> 3f
+            "snow" -> 4f
+            "blossom" -> 5f
+            "space" -> 6f
             else -> 0f
         }
     }

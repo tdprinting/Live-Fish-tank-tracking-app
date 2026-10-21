@@ -1,0 +1,105 @@
+{
+  "id": "homophyllia_australis",
+  "kind": "CORAL",
+  "common": "Scolymia",
+  "scientific": "Homophyllia australis",
+  "family": "Lobophylliidae",
+  "maxLengthCm": 12,
+  "typicalAdultCm": 8,
+  "growthCmPerYear": 0.5,
+  "lifespanYears": 40,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.0,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/scolymia.glb",
+  "colors": {
+    "primary": "#C8324A",
+    "secondary": "#5FBF4A",
+    "accent": "#FF8A3A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.1,
+    "lightHi": 0.5,
+    "flow": "MODERATE",
+    "growth": "Slow",
+    "stingCm": 6,
+    "ground": "SAND",
+    "aggression": "Mild: short feeding tentacles at night; give 5-8 cm",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "Yes",
+  "dietSummary": "Photosynthetic, but needs meaty target feeding (mysis, brine) 2-3 times a week.",
+  "temperamentSummary": "One big fleshy cup-shaped polyp with raised radial ridges, red with a green rim; at night it opens short feeding tentacles.",
+  "careNotes": [
+    "Low light (PAR about 50-150) and moderate indirect flow; too much light hurts it more than too little.",
+    "Place it low, on the sand, with room around it; its feeding tentacles reach a few cm at night.",
+    "Spot-feed mysis or brine 2-3 times a week with the pumps off, then remove leftovers.",
+    "Fish that dump sand on it, and nipping fish, stress it; wild-collected and slow-growing, $150-450 each."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.55,
+  "starvationDays": 9999
+}

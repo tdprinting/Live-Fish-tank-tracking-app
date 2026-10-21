@@ -48,6 +48,8 @@ data class CoralInfo(
     val stingCm: Double = 0.0,
     /** Where it is placed: ROCK, SAND or ANY. */
     val ground: String = "ROCK",
+    /** A loose frag model placed on a free spot (the stony corals always are). */
+    val frag: Boolean = false,
 )
 
 /**

@@ -460,8 +460,13 @@ fun LiveTankScreen(
     val reduceMotion = ReefTheme.reduceMotion
     // a store visit starts on the sidewalk and walks in the front door, unless Reduce Motion is on
     LaunchedEffect(reduceMotion) { vm.storeRoom.walkIn = !reduceMotion }
+    // My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
+    val stock: Map<String, Int>? = if (myTank) economy?.supplies else null
+    // what has run out is not on the shelf at all (Tee): no prop, no tag
+    val shelfHidden = remember(stock) { SupplyItem.emptyIds(stock) }
     SideEffect {
         shelf.locked = SupplyItem.lockedIds(sandbox)
+        shelf.hidden = shelfHidden
         shelf.setOpen(supplies, reduceMotion)
     }
 
@@ -974,8 +979,13 @@ fun LiveTankScreen(
         fixes = if (open == LiveCategory.FIX) TankDoctor.diagnose(hud.water, hud.care).filter { it.kind !in fixQueued } else emptyList(),
         fixing = fixQueued.size,
         hunger = if (open == LiveCategory.FIX) vm.hungerRows(hud.stats) else emptyList(),
-        onFeedHungry = {
+        onFeedHungry = feed@{
             tick()
+            if (stock != null && com.reeflive.core.custom.economy.SupplyBook.FISH_FOODS.none { (stock[it] ?: 0) > 0 }) {
+                if (hermieOn) hermie.say("No fish food left on the shelf! Buy some at the fish stores: tap Shop.", HermieMood.SURPRISED)
+                return@feed
+            }
+            if (stock != null) vm.useSupply(null, fishFood = true)
             banner.show(Feedback("Dinner time!", "Each hungry animal gets its favourite food, dropped right above it"), Candy.orange)
             cue(LiveReactions.feed(FoodKind.PELLET)) { vm.feedHungry() }
         },
@@ -1026,12 +1036,15 @@ fun LiveTankScreen(
             val px = FloatArray(3)
             val at = if (projection.project(x, y + 3f, z, px)) Offset(px[0], px[1]) else null
             val locked = item.locked(sandbox)
+            val out = !locked && SupplyItem.left(stock, item.id) == 0
             pickSerial++
-            shelfPick = ShelfPick(item, at, locked, pickSerial)
+            shelfPick = ShelfPick(item, at, locked, pickSerial, out)
             pickJob[0]?.cancel()
             when {
                 locked -> if (hermieOn) hermie.say("${item.label} is for the pretend tank. Switch to Sandbox to try it!", HermieMood.SURPRISED)
+                out -> if (hermieOn) hermie.say("No ${item.label.lowercase()} left! Buy more at the fish stores: tap Shop.", HermieMood.SURPRISED)
                 item.staysOnShelf -> {
+                    if (myTank) vm.useSupply(item.id)
                     // a fresh test each pick: the kit's own rounding and read error, not the sim's exact numbers
                     kitReadouts = testKitReadouts(hud.water, kotlin.random.Random(pickSerial * 7919L + hud.simTimeSec.toLong()))
                     testKit = true
@@ -1070,13 +1083,14 @@ fun LiveTankScreen(
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
-            else -> item.use(actions, tools)
+            else -> { if (myTank) vm.useSupply(item.id); item.use(actions, tools) }
         }
     }
     val onAim: (AimHit) -> Unit = { h ->
         val k = aimFood
         if (k != null) {
             aimFood = null
+            if (myTank) SupplyItem.entries.firstOrNull { it.food == k }?.let { vm.useSupply(it.id) }
             val p = h.point
             cue(LiveReactions.feed(k, FxPoint(p.x.toFloat(), if (k.floats) SURFACE_Y else p.y.toFloat(), p.z.toFloat()))) {
                 vm.feed(k, k.typicalDoseGrams, p, target = true)
@@ -1333,6 +1347,8 @@ fun LiveTankScreen(
             showReadouts = testKit,
             projection = projection,
             locked = SupplyItem.lockedIds(sandbox),
+            hidden = shelfHidden,
+            stock = stock,
             showHint = showSupplyHint,
             landscape = landscape,
             onTag = { item: SupplyItem -> shelf.pick(item.id) },
@@ -1448,7 +1464,8 @@ fun LiveTankScreen(
             vm.paid.collect { (total, n) ->
                 storePick = null
                 if (hermieOn) hermie.say(
-                    "Paid $total! ${if (n == 1) "Your new animal is" else "Your $n new animals are"} floating in bags at the top of the tank.",
+                    if (n == 0) "Paid $total! Your supplies are waiting on the shelf at home."
+                    else "Paid $total! ${if (n == 1) "Your new animal is" else "Your $n new animals are"} floating in bags at the top of the tank.",
                     HermieMood.EXCITED,
                 )
             }

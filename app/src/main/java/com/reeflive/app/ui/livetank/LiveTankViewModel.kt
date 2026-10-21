@@ -160,6 +160,9 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
     /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
     fun feedHungry() = holder.enqueue(Command.FeedHungry)
+
+    /** Takes one use of a shelf supply in My tank (or one serving of any fish food, [fishFood]). */
+    fun useSupply(id: String?, fishFood: Boolean = false) = holder.useSupply(id, fishFood)
     /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
     /** Buys a radio record in My tank's record shop; false when it cannot (not My tank, owned, or too dear). */
     fun buyRecord(file: String): Boolean = mode.value == SimMode.CUSTOM && holder.buyRecord(file)
