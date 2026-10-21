@@ -172,6 +172,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun setQuality(q: RenderQuality) { requestedQuality = q }
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
+
+    /** Screensaver mode: remember the keeper's view now ([saveView]) and put it back later ([restoreView]); any thread. */
+    @Volatile private var saveRequested = false
+    @Volatile private var restoreRequested = false
+    @Volatile private var savedView: Camera.Bookmark? = null
+    fun saveView() { saveRequested = true }
+    fun restoreView() { restoreRequested = true }
     /** Glide the camera to the nursery tank beside the display ([on]) or back. */
     fun lookAtNursery(on: Boolean) { nurseryRequest = on }
     /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
@@ -507,6 +514,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyRequests() {
         if (followDirty) { followDirty = false; camera.follow(followRequest) }
         if (resetRequested) { resetRequested = false; camera.reset() }
+        if (saveRequested) { saveRequested = false; savedView = camera.bookmark() }
+        if (restoreRequested) { restoreRequested = false; savedView?.let { camera.restore(it) } }
         val clean = cleaningRequest
         if (clean != cleaning) {
             cleaning = clean
@@ -642,7 +651,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     // relief detail levels are procedural (rock.frag), cavity / ridge / AO ride in COLOR_0
                     // (tools/blender/rock_surface.py); only the pods and forams on the rock come from the sim
                     val life = micro.rockLife
-                    p.set4f("uMicro", life[0], life[1], life[2], 0f)
+                    p.set4f("uMicro", life[0], life[1], life[2], life[3])
+                    p.set4fv("uPred", micro.predators)
                 }
                 MaterialKind.SAND -> {
                     (if (quality.normalMaps) store.texture(SAND_NORMAL) else null)?.bind(1) ?: flatNormal?.bind(1)
@@ -680,7 +690,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
             p.set1f("uDryRock", r.dryness)
             // pods and forams move onto new rock as it cures
             val k = 1f - r.dryness
-            p.set4f("uMicro", life[0] * k, life[1] * k, life[2] * k, 0f)
+            p.set4f("uMicro", life[0] * k, life[1] * k, life[2] * k, life[3] * k)
+            p.set4fv("uPred", micro.predators)
             val mesh = rockDraw.builtMesh(r)
             mesh.draw(); drawCalls++; triangles += mesh.triangles
         }

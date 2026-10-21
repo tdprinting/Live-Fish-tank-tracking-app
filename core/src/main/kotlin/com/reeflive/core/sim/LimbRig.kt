@@ -65,8 +65,10 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.BRITTLE_STAR -> BrittleArms(seed)
             BrainKind.SALLY_CRAB -> CrabLegs()
             BrainKind.ARROW_CRAB -> CrabLegs.arrow()
+            BrainKind.EMERALD_CRAB -> CrabLegs.emerald()
             BrainKind.HERMIT -> HermitLegs(seed)
-            BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> ShrimpLimbs()
+            BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
+            BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> ShrimpLimbs()
             BrainKind.FILE_CLAM -> ClamRig()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             BrainKind.ANEMONE -> AnemoneRig()
@@ -206,6 +208,12 @@ class CrabLegs(
          * feet down); the small chelae pick quickly at what the legs and antennae find.
          */
         fun arrow() = CrabLegs(strideW = 0.5, minHz = 0.5, maxHz = 2.0, pickHz = 2.2)
+
+        /**
+         * Emerald crab (research 43 §1): a small majid on short, stout legs, walking forward or sideways about 0.4
+         * carapace lengths a stride at 1-3.5 Hz (est.); the spoon claws scoop quickly when it grazes.
+         */
+        fun emerald() = CrabLegs(strideW = 0.4, minHz = 1.0, maxHz = 3.5, pickHz = 2.5)
     }
 }
 

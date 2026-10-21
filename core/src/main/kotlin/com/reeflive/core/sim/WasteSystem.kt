@@ -296,6 +296,7 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
         val COPROPHAGY = mapOf(BrainKind.TANG to 0.6, BrainKind.CLOWN to 0.3, BrainKind.LAWNMOWER_BLENNY to 0.3,
             BrainKind.PEEKER_BLENNY to 0.4, BrainKind.DOTTYBACK to 0.2, BrainKind.CARDINAL to 0.2)
         val CUC = mapOf(BrainKind.HERMIT to 0.25, BrainKind.NASSARIUS to 0.4, BrainKind.CONCH to 0.3, BrainKind.BRITTLE_STAR to 0.3,
-            BrainKind.SALLY_CRAB to 0.2, BrainKind.ARROW_CRAB to 0.2, BrainKind.CLEANER_SHRIMP to 0.15, BrainKind.BANDED_SHRIMP to 0.15, BrainKind.PEPPERMINT_SHRIMP to 0.1)
+            BrainKind.SALLY_CRAB to 0.2, BrainKind.ARROW_CRAB to 0.2, BrainKind.EMERALD_CRAB to 0.15, BrainKind.CLEANER_SHRIMP to 0.15, BrainKind.BANDED_SHRIMP to 0.15, BrainKind.PEPPERMINT_SHRIMP to 0.1,
+            BrainKind.FIRE_SHRIMP to 0.1, BrainKind.SEXY_SHRIMP to 0.03, BrainKind.PISTOL_SHRIMP to 0.15)
     }
 }

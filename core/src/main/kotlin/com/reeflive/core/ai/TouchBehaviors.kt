@@ -141,7 +141,7 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
                 // the foot and tentacles (a crab: its legs) draw in at once and stay in
                 o.extension = (o.extension - c.dt * 4.0).coerceAtLeast(0.05)
                 o.walkAmt = 0.0
-                (b as? SallyCrabBrain)?.legs?.tucked = true
+                (o.limbRig as? com.reeflive.core.sim.CrabLegs)?.tucked = true
             }
             else -> finished = true
         }

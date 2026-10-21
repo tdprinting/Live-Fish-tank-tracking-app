@@ -311,6 +311,10 @@ object Predation {
                 BrainKind.CLEANER_SHRIMP -> 8.0
                 // a peppermint is small, out in the open at night, and a favourite hawkfish meal (research 42 §1.6 [M])
                 BrainKind.PEPPERMINT_SHRIMP -> 10.0
+                // research 44: no predation data on these four; small shrimp in the open are hawkfish food (as the
+                // peppermint) [E]; a pistol shrimp at its burrow mouth is in reach too
+                BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.HARLEQUIN_SHRIMP ->
+                    if (me.visible && me.posture != 3 && L < 0.9 * pred.lengthCm) 8.0 else 0.0
                 BrainKind.HERMIT -> 5.0
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
                 // research 50: a small gramma or watchman out of its cave or burrow fits the hawk's mouth
@@ -332,7 +336,8 @@ object Predation {
         if (!prey.alive || prey === pred || prey.molting && !prey.visible) return 0.0
         return when (pred.brainKind) {
             BrainKind.EEL -> when (prey.brainKind) {
-                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> 1.0
+                BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP,
+                BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> 1.0
                 BrainKind.HERMIT -> 0.8
                 BrainKind.CARDINAL -> if (night) 0.5 else 0.1
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY, BrainKind.DOTTYBACK -> if (prey.posture == 3) 0.0 else 0.3
@@ -357,9 +362,17 @@ object Predation {
                 prey.isFish && prey.sleeping && prey.lengthCm < pred.lengthCm -> 0.3
                 else -> 0.0
             }
+            // research 43 §1 (EWASH, care guides): an underfed emerald crab may take a small snail or a shrimp soft from a molt
+            BrainKind.EMERALD_CRAB -> when {
+                prey.brainKind.isSnail && prey.lengthCm < 0.6 * pred.lengthCm -> 0.2
+                prey.brainKind.isShrimp && prey.molting && prey.lengthCm < pred.lengthCm * 1.5 -> 0.2
+                else -> 0.0
+            }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
                 BrainKind.PEPPERMINT_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.8 else 0.0
+                BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP ->
+                    if (!prey.visible || prey.posture == 3 || prey.lengthCm > 0.9 * pred.lengthCm) 0.0 else 0.7
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0
                 BrainKind.HERMIT -> 0.4
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0

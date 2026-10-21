@@ -1,0 +1,112 @@
+{
+  "id": "hymenocera_picta",
+  "kind": "INVERT",
+  "common": "Harlequin shrimp",
+  "scientific": "Hymenocera picta",
+  "family": "Hymenoceridae",
+  "maxLengthCm": 5,
+  "typicalAdultCm": 4,
+  "growthCmPerYear": 2,
+  "lifespanYears": 6,
+  "depthRatio": 0.2,
+  "massCoeff": 0.01,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.12,
+    "burstBL": 4,
+    "tailHzCruise": 0,
+    "turnRateDeg": 110,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.03,
+    "yMax": 0.6,
+    "openWater": 0.02,
+    "coverAffinity": 0.95
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 30,
+  "temperament": {
+    "aggression": 0.1,
+    "boldness": 0.35,
+    "curiosity": 0.4,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "STARFISH"
+  ],
+  "feedsPerDay": 0.2,
+  "tolerance": {
+    "temp": {
+      "optLo": 23,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 17,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 40,
+  "size": {
+    "lod0Tris": 4200
+  },
+  "model": "models/harlequin_shrimp.glb",
+  "colors": {
+    "primary": "#F2ECE4",
+    "secondary": "#C8467E",
+    "accent": "#3E2E8E"
+  },
+  "brain": "harlequin_shrimp",
+  "minTankGallons": 10,
+  "careLevel": "Expert",
+  "reefSafe": "Yes (eats starfish)",
+  "copperSensitive": true,
+  "dietSummary": "Starfish only. A pair eats about one small asterina star every 5-7 days, or a leg of a bigger star every week or two.",
+  "temperamentSummary": "Lives in pairs. Spends the day tucked under rock and creeps out slowly to hunt stars, waving its big flat claws.",
+  "careNotes": [
+    "It eats nothing but starfish, so it needs a tank full of asterina stars (or starfish bought for it). Without them it starves.",
+    "A pair works together: they flip a star onto its back so it can't crawl away and eat it over days, starting with the tube feet.",
+    "It also eats prized stars like linckias and chocolate chips, so it is no friend to a starfish collection.",
+    "Leaves fish, corals, snails and other shrimp alone.",
+    "Sensitive to quick changes in temperature and water chemistry; drip acclimate."
+  ]
+}

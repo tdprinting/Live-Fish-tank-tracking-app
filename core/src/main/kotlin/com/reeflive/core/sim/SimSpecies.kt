@@ -400,6 +400,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     SALLY_CRAB(listOf("percnon"), false),
     /** Arrow crab (*Stenorhynchus seticornis*, research 42): long-legged spider crab, hunts bristleworms. */
     ARROW_CRAB(listOf("stenorhynchus"), false),
+    /** Emerald crab (*Mithraculus sculptus*, research 43 §1): shy majid crab, grazes bubble algae at night. */
+    EMERALD_CRAB(listOf("mithraculus"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
@@ -445,6 +447,17 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
     WATCHMAN_GOBY(listOf("cryptocentrus", "amblyeleotris", "stonogobiops"), true),
+    /**
+     * Fire shrimp (*Lysmata debelius*, research 44 §1): a shy, mostly nocturnal Lysmata cleaner that keeps a cave and
+     * cleans fish that come to its mouth. The genus resolves to [CLEANER_SHRIMP], so the species id picks this brain.
+     */
+    FIRE_SHRIMP(emptyList(), false),
+    /** Sexy shrimp (*Thor amboinensis*, research 44 §3): tiny, in groups on an anemone or coral, tail cocked and wagging. */
+    SEXY_SHRIMP(listOf("thor"), false),
+    /** Harlequin shrimp (*Hymenocera picta*, research 44 §2): lives in pairs and eats only starfish. */
+    HARLEQUIN_SHRIMP(listOf("hymenocera"), false),
+    /** Pistol (snapping) shrimp (*Alpheus*, research 44 §4): digs the burrow it shares with a watchman goby; snaps. */
+    PISTOL_SHRIMP(listOf("alpheus"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -452,7 +465,10 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     val isBenthic: Boolean get() = !isFish
     val isSessile: Boolean get() = this == FEATHER_DUSTER
     /** The three shrimp: stance, limbs, molting and most shrimp rules are shared. */
-    val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP
+    /** True crabs on the shared crab rig ([CrabLegs], [CrawlerSeat] crab seats). */
+    val isCrab: Boolean get() = this == SALLY_CRAB || this == ARROW_CRAB || this == EMERALD_CRAB
+    val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP ||
+        this == FIRE_SHRIMP || this == SEXY_SHRIMP || this == HARLEQUIN_SHRIMP || this == PISTOL_SHRIMP
     /** Snails: astrea, nassarius, trochus and conch (hermits take their empty shells, dino toxin hits them). */
     val isSnail: Boolean get() = this == ASTREA || this == NASSARIUS || this == TROCHUS || this == CONCH
 
@@ -472,7 +488,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "brittle_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "emerald_crab" to EMERALD_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "trochus" to TROCHUS, "top_snail" to TROCHUS, "conch" to CONCH, "fighting_conch" to CONCH, "urchin" to URCHIN, "tuxedo_urchin" to URCHIN,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
@@ -485,11 +501,14 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
+            "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
+            "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
         )
 
         fun byId(id: String): BrainKind? {
             // the peppermint Lysmata share the cleaner's genus: tell them apart by species (research 42)
             if (PEPPERMINT_IDS.any { id.lowercase().startsWith(it) }) return PEPPERMINT_SHRIMP
+            if (id.lowercase().startsWith("lysmata_debelius")) return FIRE_SHRIMP
             val genus = id.lowercase().substringBefore('_').substringBefore('-')
             return entries.firstOrNull { k -> k.genera.any { genus == it || genus.startsWith(it) } }
         }

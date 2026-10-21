@@ -18,9 +18,9 @@ class SpeciesDbTest {
         // hairy mushroom the clowns host, 4 corals from Tee's photos 2026-10-13 (toadstool, pink leather, finger
         // leather, elephant ear), the bobtail squid (sandbox only, research cephalopod_squid) and the rainbow bubble tip
         // anemone (research 40), and the peppermint shrimp and flame scallop (research 42), and the arrow crab, and the cleanup crew pack (research 43: trochus, fighting conch, tuxedo urchin), and a royal gramma, Banggai cardinal and yellow watchman goby (research 50).
-        assertEquals(55, db.size)
+        assertEquals(60, db.size)
         assertEquals(21, db.all.count { it.kind == SpeciesKind.FISH })
-        assertEquals(18, db.all.count { it.kind == SpeciesKind.INVERT })
+        assertEquals(23, db.all.count { it.kind == SpeciesKind.INVERT })
         assertEquals(15, db.all.count { it.kind == SpeciesKind.CORAL })
         assertEquals(1, db.all.count { it.kind == SpeciesKind.ALGAE })
     }
@@ -49,7 +49,8 @@ class SpeciesDbTest {
             "chromis", "firefish", "kenya", "lawnmower_blenny", "leopard_wrasse", "macro_red", "mushroom", "mushroom_hairy", "mushroom_hairy_mound", "nassarius", "organ_pipe", "sally_lightfoot", "shrimp", "skunk_shrimp",
             "tailspot_blenny", "bicolor_blenny", "midas_blenny", "tang", "wrasse", "zoa", "toadstool_leather", "leather_pink", "finger_leather", "elephant_ear", "bubble_tip_anemone",
             "hammer", "torch", "frogspawn", "duncan",
-            "peppermint_shrimp", "flame_scallop", "arrow_crab", "trochus", "fighting_conch", "tuxedo_urchin",
+            "peppermint_shrimp", "flame_scallop", "arrow_crab", "emerald_crab", "trochus", "fighting_conch", "tuxedo_urchin",
+            "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp",
             "yellow_tang", "purple_tang", "fairy_wrasse", "royal_gramma", "watchman_goby",
         ).map { "models/$it.glb" }.toSet()
         for (s in db.all) {

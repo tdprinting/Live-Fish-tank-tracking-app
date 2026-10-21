@@ -54,6 +54,8 @@ class Organism(
     var carcassTanReleasedG = 0.0
     /** The body is in the keeper's net ([FishNet]): the net moves it, not the sinking / floating carcass physics. */
     var netted = false
+    /** A predator holding this live animal (a harlequin shrimp's flipped star): its brain and steering wait; the holder places it. */
+    var heldBy: Organism? = null
     var deathCause: String? = null
     var mood = Mood.CALM
     val symptoms: MutableSet<Symptom> = LinkedHashSet()
@@ -224,7 +226,14 @@ class Organism(
     val limbRig: LimbRig? = LimbRig.forKind(brainKind, id.hashCode().toLong())
 
     /** The brittle star's disc never bends or turns with its path (its arms do the steering), so it is rigid too. */
-    val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic)
+    val spline = BodySpline(lengthCm, rigid = brainKind.isBenthic).apply {
+        // a fish turns with its whole body (one smooth C), an eel-like body follows its own path (BodySpline.bendSpread)
+        if (brainKind.isFish) when (brainKind) {
+            BrainKind.EEL, BrainKind.ENGINEER_GOBY -> { bendSpread = 0.3; bendPeak = 0.5 }
+            BrainKind.TANG, BrainKind.CLOWN, BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.CHROMIS -> { bendSpread = 0.85; bendPeak = 0.58 }
+            else -> { bendSpread = 0.85; bendPeak = 0.52 }
+        }
+    }
 
     /**
      * Surface seat for crawlers whose model stands on its y = 0 plane (hermits, Sally Lightfoot, brittle star, astrea;
@@ -285,7 +294,7 @@ class Organism(
     }
 
     /** How the renderer draws the body ([OrganismPose.motionMode]): 0 fish, 1 brittle-star arms, 2 shrimp, 3 crab, 4 squid, 5 hermit, 6 anemone, 7 scallop, 8 snail, 9 urchin. */
-    val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind == BrainKind.SALLY_CRAB || brainKind == BrainKind.ARROW_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
+    val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
     /** Drawn rigid at its organism (no spine skinning: fish.vert's crawler, scallop, snail and urchin paths). */
     val drawnRigid: Boolean get() = when (motionMode) { 1, 3, 5, 6, 7, 8, 9 -> true; else -> false }
 

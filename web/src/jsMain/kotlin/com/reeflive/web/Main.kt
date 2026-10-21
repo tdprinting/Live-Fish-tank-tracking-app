@@ -71,8 +71,8 @@ object ReefLive {
     private var applied: Map<String, Double> = emptyMap()
     internal val scenarioQueue = ArrayList<Pair<Double, Command>>()
     private var pendingTouch: Pair<Vec3, TouchSurface>? = null
-    /** Screensaver camera while on (same director as the Android screensaver). */
-    private var director: com.reeflive.app.render.CinemaDirector? = null
+    /** Screensaver mode over the keeper's view (same as the Android Live tank): [screensaver], [cinema]. */
+    private val cinemaSession = com.reeflive.app.render.CinemaSession()
     private var fingerDown = false
     /** Camera projection the renderer publishes every frame (bag drops and the bag timers). */
     private val projection = com.reeflive.app.render.TankProjection()
@@ -137,7 +137,7 @@ object ReefLive {
                     override fun onFollowRequest(id: String?) { r.follow(id); emit("onFollow", id) }
                     // pressed and held on an animal: follow it (the page buzzes and says who)
                     override fun onHoldAnimal(id: String) { r.follow(id); emit("onFollow", id); emit("onHold", id) }
-                    override fun onFollowLost(id: String) { director?.followLost(); emit("onFollow", null) }
+                    override fun onFollowLost(id: String) { if (cinemaSession.active) cinemaSession.followLost() else emit("onFollow", null) }
                     override fun onTapGlass(worldPoint: Vec3) { sim?.enqueue(Command.TapGlass(worldPoint)); emit("onKnock", null) }
                     // a tap with no fish under it: the page decides (undo a card / hidden buttons first), then touchTank()
                     override fun onTouchTank(worldPoint: Vec3, surface: TouchSurface) { pendingTouch = worldPoint to surface; emit("onTouch", surface.name) }
@@ -192,20 +192,25 @@ object ReefLive {
      * less than half the pixels (fill rate is what limits phones and iPads here). Lower presets cap it further.
      * [scaleStep] trims it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
      */
-    private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
+    private fun pixelRatio(): Double = cap(current) * SCALES[scaleStep]
+    private fun cap(q: RenderQuality): Double = min(window.devicePixelRatio, when (q) {
         RenderQuality.HIGH -> 2.0
         RenderQuality.MEDIUM -> 1.5
         RenderQuality.LOW -> 1.0
-    }) * SCALES[scaleStep]
+    })
 
     private var scaleStep = 0
     private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
+    private var floorWindows = 0
 
     /**
      * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
      * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
      * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
      * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
+     * Still slow at the lowest scale for [FLOOR_WINDOWS] windows: the picture drops one preset (HIGH → MEDIUM → LOW,
+     * shedding bloom, 4x MSAA, fish in the shadow map, caustic colour fringes...) at about the same pixel count, and
+     * the page stores it as the new Picture setting ("onQuality"), so a slow device starts fast next time.
      */
     private fun adapt(dt: Double) {
         if (dt <= 0.0) return
@@ -213,9 +218,23 @@ object ReefLive {
         if (windowFrames < ADAPT_FRAMES) return
         val mean = windowTime / windowFrames
         windowTime = 0.0; windowFrames = 0
-        if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0 }
+        if (mean > SLOW_DT && scaleStep == SCALES.size - 1 && current != RenderQuality.LOW) {
+            if (++floorWindows >= FLOOR_WINDOWS) stepQualityDown()
+        }
+        else if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0; floorWindows = 0 }
         else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
         else goodWindows = 0
+    }
+
+    private fun stepQualityDown() {
+        val from = cap(current)
+        val v = RenderQuality.entries[current.ordinal + 1]
+        current = v; goodWindows = 0; floorWindows = 0
+        // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
+        scaleStep = SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from * SCALES.last() + 1e-6 } ?: SCALES.size - 1
+        renderer?.setQuality(v)
+        resize()
+        emit("onQuality", v.name)
     }
 
     private fun status(text: String) { emit("onStatus", text) }
@@ -259,7 +278,7 @@ object ReefLive {
         adapt(dt)
         val c = canvas
         if (c != null) { val r = pixelRatio(); if (c.width != (c.clientWidth * r).toInt() || c.height != (c.clientHeight * r).toInt()) resize() }
-        director?.update(dt.toFloat(), sim?.latest)
+        cinemaSession.update(dt.toFloat(), sim?.latest)
         renderer?.onDrawFrame(null)
         if (statsOn) stats(dt, t1 - t0, now() - t1)
         window.requestAnimationFrame(::frame)
@@ -427,23 +446,14 @@ object ReefLive {
     /** Screensaver mode on/off: slow cinematic moves and animal follows; read [cinema] each frame for the overlay. */
     fun screensaver(on: Boolean) {
         val r = renderer ?: return
-        if (on == (director != null)) return
-        if (on) {
-            director = com.reeflive.app.render.CinemaDirector(r.input, object : com.reeflive.app.render.CinemaDirector.Control {
-                override fun follow(id: String?) { r.follow(id); emit("onFollow", id) }
-                override fun resetCamera() = r.resetCamera()
-                override fun viewHeightPx(): Float = (canvas?.height ?: 1).toFloat()
-            }).also { it.start() }
-        } else {
-            director = null
-            r.follow(null); emit("onFollow", null); r.resetCamera()
-        }
+        cinemaSession.attach(r) { (canvas?.height ?: 1).toFloat() }
+        if (on) cinemaSession.enter() else cinemaSession.exit()
     }
 
-    /** Screensaver overlay state as JSON {fade, caption, alpha}, or "null" when off. */
+    /** Screensaver overlay state as JSON {fade, caption, alpha, leaving}, or "null" once it is fully over. */
     fun cinema(): String {
-        val d = director ?: return "null"
-        return JSON.stringify(obj { it.fade = d.fade; it.caption = d.caption ?: ""; it.alpha = d.captionAlpha })
+        if (!cinemaSession.active) return "null"
+        return JSON.stringify(obj { it.fade = cinemaSession.fade; it.caption = cinemaSession.caption ?: ""; it.alpha = cinemaSession.captionAlpha; it.leaving = cinemaSession.leaving })
     }
     /**
      * Submarine mode (as the Android live menu): launch or park the toy sub; [visible] false hides it from the fish;
@@ -475,7 +485,7 @@ object ReefLive {
     } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v; scaleStep = 0; goodWindows = 0
+        current = v; scaleStep = 0; goodWindows = 0; floorWindows = 0
         renderer?.setQuality(v)
         resize()
     }
@@ -622,6 +632,7 @@ object ReefLive {
     private const val SLOW_DT = 1.0 / 48
     private const val FAST_DT = 1.0 / 57
     private const val GOOD_WINDOWS = 4
+    private const val FLOOR_WINDOWS = 3
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }

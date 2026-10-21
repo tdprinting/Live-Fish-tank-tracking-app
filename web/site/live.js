@@ -8,6 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
+import { initRadio, radioKick, radioOn, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -58,6 +59,8 @@ export function startLive(applyReadings) {
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
+    // frames stayed slow at the lowest resolution: the tank stepped its Picture down, and keeps it for next time
+    onQuality: (q) => { ui.quality = q; store.set('reeflive.quality', q); },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
     onPick: (id) => { if (id) buzz(5); if (window.reefstores?.active()) { window.reefstores.pick(id); return; } if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
@@ -90,6 +93,7 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
+    initRadio({ SB, store, ctx: audioCtx, volume: () => ui.volume, say });
     initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
@@ -127,7 +131,7 @@ function tick() {
   renderFollow();
   if (ui.card && document.activeElement?.type !== 'range' && !ui.dragging) refreshCardValues();
   updateSound();
-  if (ui.tour && ++ui.tourTicks >= 24) nextTour();
+  if (ui.tour && !ui.saver && ++ui.tourTicks >= 24) nextTour();
   if (!$('micro').classList.contains('hidden')) drawMicro();
   if (sub.on) renderSubInfo();
   checkFlush();
@@ -615,6 +619,8 @@ function settingsCard(sb) {
   const row = (attr, ico, label, on) => `<button class="toggle-row" ${attr}><span class="rlbl">${icon(ico)} ${esc(label)}</span><span class="switch ${on ? 'on' : ''}"><i></i></span></button>`;
   return `<div class="rows">
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
+      ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
+      ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
@@ -669,6 +675,8 @@ $('card').addEventListener('click', (e) => {
   else if ('saver' in d) { closeCard(); setSaver(true); return; }
   else if ('sub' in d) { setSub(!sub.on); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
+  else if ('radio' in d) radioToggle();
+  else if (d.radiostep) radioStep(Number(d.radiostep));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -762,7 +770,7 @@ $('card').addEventListener('input', (e) => {
     store.set('reeflive.heaterC', Number(r.value));
     SB.act('heater', 'set', Number(r.value));
   } else if ('volume' in d) {
-    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume);
+    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume); radioVolume();
     r.previousElementSibling.textContent = `${Math.round(ui.volume * 100)}%`;
   }
 });
@@ -979,30 +987,61 @@ function testKit() {
 }
 
 // ================================================================ screensaver
-// Full-screen calm mode: the shared CinemaDirector moves the camera; this only draws the dip-to-black and caption.
-function setSaver(on) {
-  ui.saver = on;
-  document.body.classList.toggle('saver-on', on);
-  if (on) { ui.tour = false; setChrome(true); $('showChrome').classList.add('hidden'); }
-  live.screensaver(on);
-  $('saver').classList.toggle('hidden', !on);
-  if (on) { $('saverHint').style.opacity = 1; setTimeout(() => { $('saverHint').style.opacity = 0; }, 3000); requestAnimationFrame(saverFrame); }
-  else setChrome(false);
-  if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-  if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+// Calm mode over the keeper's own view (the shared CinemaSession moves the camera): from the Screensaver tile, or
+// by itself after 30 s with no touch, mouse or key. One tap fades back to exactly where they were: camera, follow,
+// open card and buttons are all left as they were, only faded out meanwhile.
+const IDLE_MS = 30000;
+let lastInput = performance.now();
+let saverFull = false;
+['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'].forEach((ev) =>
+  document.addEventListener(ev, () => { lastInput = performance.now(); }, { capture: true, passive: true }));
+/** Never mid-action: a dialog, store walk, drag, the shelf, cleaning, netting or the microscope. */
+function saverBlocked() {
+  return !!document.querySelector('dialog[open]') || ui.shelf || ui.cleaning || ui.dragging || ui.fishDragging || ui.netting ||
+    !$('micro').classList.contains('hidden') || ($('storeUi') && !$('storeUi').classList.contains('hidden')) ||
+    !$('live').classList.contains('active') || document.visibilityState !== 'visible';
 }
+setInterval(() => {
+  if (!ui.saver && !saverBlocked() && performance.now() - lastInput > IDLE_MS) setSaver(true, false);
+}, 1000);
+function chromeLayers() { return [...document.querySelectorAll('#live > :not(#tank):not(#saver)'), document.querySelector('header.bar')].filter(Boolean); }
+function setSaver(on, full = true) {
+  if (on) {
+    if (ui.saver) return;
+    ui.saver = true;
+    live.screensaver(true);
+    $('saver').classList.remove('hidden');
+    $('saverHint').style.opacity = 1; setTimeout(() => { $('saverHint').style.opacity = 0; }, 3000);
+    saverFull = full && !!document.documentElement.requestFullscreen;
+    if (saverFull) document.documentElement.requestFullscreen().catch(() => {});
+    requestAnimationFrame(saverFrame);
+  } else if (ui.saver) {
+    live.screensaver(false);   // fades back; saverFrame tidies up once it is over
+  }
+}
+let chromeFade = 0;
 function saverFrame() {
   if (!ui.saver) return;
   const c = JSON.parse(live.cinema());
-  if (c) {
-    $('saverBlack').style.opacity = c.fade;
-    $('saverCaption').style.opacity = c.alpha;
-    if ($('saverCaption').textContent !== c.caption) $('saverCaption').textContent = c.caption;
+  if (!c) {   // over: the view is back where it was
+    ui.saver = false; chromeFade = 0;
+    $('saver').classList.add('hidden');
+    chromeLayers().forEach((el) => { el.style.opacity = ''; });
+    if (saverFull && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    lastInput = performance.now();
+    return;
   }
+  // the buttons fade out with the first dip and back in on the way out
+  chromeFade = c.leaving ? c.fade : Math.max(chromeFade, c.fade);
+  chromeLayers().forEach((el) => { el.style.opacity = 1 - chromeFade; });
+  $('saverBlack').style.opacity = c.fade;
+  $('saverCaption').style.opacity = c.alpha;
+  if ($('saverCaption').textContent !== c.caption) $('saverCaption').textContent = c.caption;
   requestAnimationFrame(saverFrame);
 }
-$('saver').addEventListener('click', () => setSaver(false));
-document.addEventListener('keydown', (e) => { if (ui.saver && e.key === 'Escape') setSaver(false); });
+// the layer takes every touch while the screensaver plays: a tap only leaves, it never reaches the tank
+['pointerdown', 'click'].forEach((ev) => $('saver').addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); setSaver(false); }));
+document.addEventListener('keydown', (e) => { if (ui.saver) { e.preventDefault(); setSaver(false); } }, { capture: true });
 
 // ================================================================ chrome, torch, cleaning
 function setChrome(hidden) {
@@ -1219,8 +1258,10 @@ function renderLapseResult() {
 
 // ================================================================ sound (TankSoundMix beds and cues, Web Audio)
 let actx = null; const buffers = {}; const loops = {};
+/** The page's one AudioContext (tank sounds and the radio share it). */
+function audioCtx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx; }
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
+const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape', SPARKLE: 'tank_reward_sparkle' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {
@@ -1236,8 +1277,7 @@ async function loadSound(name) {
 function setSoundOn(on) {
   ui.sound = on; store.set('reeflive.sound', on);
   if (on) {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-    actx.resume();
+    audioCtx().resume();
     Object.values(LOOPS).concat(Object.values(CUES)).forEach(loadSound);
   } else stopLoops();
   say(on ? 'Sound on. Listen to the bubbles!' : 'Sound off.');
@@ -1303,7 +1343,10 @@ function knockSound(gain) {
 }
 function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.min(1, cm / 1.5)) / 0.45)); }
 // iOS only allows audio after a tap: resume the context on the first touch when sound was left on
-document.addEventListener('pointerdown', () => { if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume(); }, { once: false, passive: true });
+document.addEventListener('pointerdown', () => {
+  if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume();
+  radioKick();
+}, { once: false, passive: true });
 
 // ================================================================ what is it thinking (Android ThinkingBlock / ThoughtBubbleLayer)
 // The card's "Thinking…" lines come held from Kotlin (ThoughtHold); More → "Thought bubbles" puts speech bubbles over at

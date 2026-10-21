@@ -41,6 +41,12 @@ class ThoughtsTest {
         sim.addFromSeed(LivestockSeed("ctenoides_scaber", "Flame", 6.0, id = "clam"))
         sim.species.ensure("stenorhynchus_seticornis")
         sim.addFromSeed(LivestockSeed("stenorhynchus_seticornis", "Pokey", 4.5, id = "arrow"))
+        sim.species.ensure("mithraculus_sculptus")
+        sim.addFromSeed(LivestockSeed("mithraculus_sculptus", "Emmy", 3.0, id = "emerald"))
+        for ((id, nick) in listOf("lysmata_debelius" to "Blaze", "thor_amboinensis" to "Wiggles", "hymenocera_picta" to "Harley", "alpheus_bellulus" to "Bang")) {
+            sim.species.ensure(id)
+            sim.addFromSeed(LivestockSeed(id, nick, 3.0, id = nick.lowercase()))
+        }
         sim.species.put(SimSpecies("mystery_fish", kind = "FISH", common = "Mystery fish"))
         sim.species.put(SimSpecies("mystery_critter", kind = "INVERT", common = "Mystery critter"))
         sim.addFromSeed(LivestockSeed("mystery_fish", "Mo", 6.0, id = "gfish"))
