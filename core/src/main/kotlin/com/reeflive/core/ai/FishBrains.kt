@@ -1695,6 +1695,8 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         /** Preferred hop length, cm (most perch changes are short; DESIGN ESTIMATE scaled to the tank), and the longest. */
         const val HOP_PREF_CM = 22.0
         const val HOP_MAX_CM = 70.0
+        /** A duck stuck this long (s) short of a perch it cannot reach ends: it hops to the nearest perch instead of hovering. */
+        const val DUCK_GIVEUP_S = 4.0
         /** A duck no closer to its approach point for this long (s) clamps onto the perch from where it is ... */
         const val DUCK_STALL_S = 2.0
         /** ... when the perch is this near (cm) with open water between. */
@@ -1738,6 +1740,10 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
             if (elapsed > 0.8 && there && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
                 out.place(pose.pos, pose.heading, pose.up, 8.0); out.posture = 1; out.pectoral = 1.0
                 out.target = null; out.fleeFrom = null; out.hover = false
+            } else if (elapsed > 0.8 && c.t - progressAt > DUCK_GIVEUP_S && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
+                // pressed against rock short of its cover, no way on: no swim bladder to hover there, so it settles on the
+                // nearest perch ([PerchHop]) instead of hanging in the water for the rest of the duck
+                finished = true
             }
         }
     }
@@ -2185,6 +2191,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         var mood = 0.0
         if (utility.current?.name == "bout" || utility.current?.name == "rival") mood += TONE_DISPLAY
         mood -= TONE_STRESS * worry
+        // a fresh fright blanches it on top of whatever it was already worried about (an already uneasy blenny tapped
+        // in its cave still flashes pale)
+        if (c.t - scaredAt < TONE_STARTLE_S) mood -= TONE_STARTLE
         if (night) mood += TONE_NIGHT
         return (bg + mood).coerceIn(-1.0, 1.0)
     }
@@ -2252,6 +2261,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val TONE_CAVE = 0.6
         const val TONE_DISPLAY = 0.3
         const val TONE_STRESS = 0.3
+        /** The acute blanch of a fresh scare and how long it lasts (s). */
+        const val TONE_STARTLE = 0.3
+        const val TONE_STARTLE_S = 20.0
         const val TONE_NIGHT = -0.2
         /** Colour change time constants (s): background matching, and a scare (research 51 §2). */
         const val TONE_S = 25.0

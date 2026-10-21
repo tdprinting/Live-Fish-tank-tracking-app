@@ -61,7 +61,7 @@ object TankTouch {
     const val RUN_WINDOW_S = 4.0
 
     private val POLYPS = setOf(CoralKind.GSP, CoralKind.ZOA, CoralKind.CLOVE)
-    private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB, BrainKind.HERMIT)
+    private val CRUSTACEANS = setOf(BrainKind.PORCELAIN_CRAB, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB, BrainKind.HERMIT)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.CHROMIS)
     private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.GRAMMA, BrainKind.MANDARIN, BrainKind.CLOWN_GOBY)
@@ -97,7 +97,7 @@ object TankTouch {
         // an anemone has no eyes: only a touch on or right next to it makes it pull in
         if (k == BrainKind.ANEMONE) return if (d < 0.5 * o.lengthCm + 3.0) TouchReaction.DUCK else TouchReaction.NONE
         // the flame scallop's mantle eyes see a hand at the glass: it snaps shut
-        if (k == BrainKind.FILE_CLAM) return if (d < 12.0) TouchReaction.DUCK else TouchReaction.NONE
+        if (k == BrainKind.FILE_CLAM || k == BrainKind.GIANT_CLAM) return if (d < 12.0) TouchReaction.DUCK else TouchReaction.NONE
         return when (surface) {
             TouchSurface.GLASS -> when {
                 // asleep at night: a tap close by only makes a fish shift away; nobody comes to look in the dark
@@ -182,7 +182,7 @@ object TankTouch {
     fun animalReaction(o: Organism): TouchReaction {
         if (!o.alive || o.molting || o.isFish) return TouchReaction.NONE
         return when (o.brainKind) {
-            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE, BrainKind.FILE_CLAM -> TouchReaction.DUCK
+            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE, BrainKind.FILE_CLAM, BrainKind.GIANT_CLAM, BrainKind.SEA_CUCUMBER -> TouchReaction.DUCK
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP,
             BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP -> TouchReaction.FREEZE
             BrainKind.PISTOL_SHRIMP -> TouchReaction.DUCK

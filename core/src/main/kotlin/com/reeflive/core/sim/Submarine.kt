@@ -346,11 +346,11 @@ object SubmarineRules {
     /** Sensitisation: a startle takes this much habituation away. */
     const val HABIT_STARTLE_LOSS = 0.2
 
-    private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB)
+    private val CRUSTACEANS = setOf(BrainKind.PORCELAIN_CRAB, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val BURROWERS = setOf(BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.WATCHMAN_GOBY)
     /** Animals with nothing to show (snails, stars) or no escape to play. */
-    private val INDIFFERENT = setOf(BrainKind.ASTREA, BrainKind.TROCHUS, BrainKind.URCHIN, BrainKind.ASTERINA, BrainKind.BRITTLE_STAR, BrainKind.GENERIC_INVERT)
+    private val INDIFFERENT = setOf(BrainKind.ASTREA, BrainKind.TROCHUS, BrainKind.URCHIN, BrainKind.SEA_CUCUMBER, BrainKind.ASTERINA, BrainKind.BRITTLE_STAR, BrainKind.GENERIC_INVERT)
 
     private fun interest(o: Organism) = 0.5 * o.curiosity + 0.5 * o.boldness
 
@@ -367,7 +367,7 @@ object SubmarineRules {
         if (k in INDIFFERENT) return SubReaction.NONE
         if (k == BrainKind.FEATHER_DUSTER) return if (d < 8.0 * (1 - 0.5 * habit)) SubReaction.HIDE else SubReaction.NONE
         if (k == BrainKind.ANEMONE) return SubReaction.NONE
-        if (k == BrainKind.FILE_CLAM) return SubReaction.NONE
+        if (k == BrainKind.FILE_CLAM || k == BrainKind.GIANT_CLAM) return SubReaction.NONE
         // a charge: everything that can get away does
         if (closing > STARTLE_SPEED && d < startleReach(o, habit)) return when {
             o.isFish -> SubReaction.STARTLE

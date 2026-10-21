@@ -1170,6 +1170,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             BrainKind.ARROW_CRAB -> CrawlerSeat(kind, SeatShape(0.6, 0.6, CrabModel.ARROW.contacts.copyOf()), null, CrabModel.ARROW)
             // (the emerald crab's feet stand a little over half a carapace out on every side)
             BrainKind.EMERALD_CRAB -> CrawlerSeat(kind, SeatShape(0.55, 0.55, CrabModel.EMERALD.contacts.copyOf()), null, CrabModel.EMERALD)
+            BrainKind.PORCELAIN_CRAB -> CrawlerSeat(kind, SeatShape(0.55, 0.55, CrabModel.PORCELAIN.contacts.copyOf()), null, CrabModel.PORCELAIN)
             BrainKind.BRITTLE_STAR -> if (SEAT_OTHER_CRAWLERS) CrawlerSeat(kind, SeatShape(0.22, 0.22, SeatShape.BRITTLE), null) else null
             BrainKind.ASTREA -> if (SEAT_OTHER_CRAWLERS) CrawlerSeat(kind, SeatShape(0.35, 0.35, SeatShape.ASTREA), null) else null
             else -> null
@@ -1315,6 +1316,24 @@ class CrabModel(
             clawLow = doubleArrayOf(0.71, 0.18, -0.19, 0.71, 0.18, 0.19),
             body = doubleArrayOf(-0.42, 0.182, 0.2133, -0.42, 0.17, -0.0, -0.42, 0.182, -0.2133, -0.215, 0.182, 0.3198, -0.215, 0.17, -0.0, -0.215, 0.182, -0.3198, -0.01, 0.182, 0.3291, -0.01, 0.17, -0.0, -0.01, 0.182, -0.3291, 0.195, 0.182, 0.2742, 0.195, 0.17, -0.0, 0.195, 0.182, -0.2742, 0.4, 0.182, 0.1853, 0.4, 0.17, -0.0, 0.4, 0.182, -0.1853, -0.4, 0.23, -0.3844, -0.4, 0.23, 0.3844, -0.025, 0.23, -0.5522, -0.025, 0.23, 0.5522, 0.35, 0.23, -0.3494, 0.35, 0.23, 0.3494, 0.54, 0.26, -0.0, 0.0, 0.3568, -0.0),
             flatDrop = 0.1,
+        )
+
+        /**
+         * Anemone porcelain crab (research 45 §2), measured from `porcelain_crab.glb` (tools/blender/porcelain_crab.py
+         * prints these). A flat crab low over its feet (carapace underside ~0.12); the fourth pair is the reduced fifth
+         * leg, a short stub under the back of the carapace.
+         */
+        val PORCELAIN = CrabModel(
+            hip = doubleArrayOf(0.12, 0.15, -0.4383, 0.12, 0.15, 0.4383, -0.08, 0.15, -0.4593, -0.08, 0.15, 0.4593, -0.27, 0.15, -0.423, -0.27, 0.15, 0.423, -0.38, 0.15, -0.3716, -0.38, 0.15, 0.3716),
+            tip = doubleArrayOf(0.432, 0.0, -0.9787, 0.432, 0.0, 0.9787, -0.1031, 0.0, -1.1219, -0.1031, 0.0, 1.1219, -0.5924, 0.0, -0.939, -0.5924, 0.0, 0.939, -0.591, 0.0, -0.4282, -0.591, 0.0, 0.4282),
+            knee = doubleArrayOf(0.2978, 0.3052, -0.7462, 0.2978, 0.3052, 0.7462, -0.0931, 0.3171, -0.8342, -0.0931, 0.3171, 0.8342, -0.4543, 0.3004, -0.7179, -0.4543, 0.3004, 0.7179, -0.5204, 0.1677, -0.4093, -0.5204, 0.1677, 0.4093),
+            mid = doubleArrayOf(0.3729, 0.1674, -0.8763, 0.3729, 0.1674, 0.8763, -0.0987, 0.1749, -0.9952, -0.0987, 0.1749, 0.9952, -0.5316, 0.1644, -0.8416, -0.5316, 0.1644, 0.8416, -0.5589, 0.0854, -0.4196, -0.5589, 0.0854, 0.4196),
+            legW = doubleArrayOf(0.82, 0.82, 0.865, 0.865, 0.803, 0.803, 0.366, 0.366),
+            clawPivot = doubleArrayOf(0.3, 0.16, -0.3, 0.3, 0.16, 0.3),
+            clawTip = doubleArrayOf(1.2, 0.15, -0.44, 1.2, 0.15, 0.44),
+            clawLow = doubleArrayOf(1.2, 0.15, -0.44, 1.2, 0.15, 0.44),
+            body = doubleArrayOf(-0.42, 0.124, 0.2252, -0.42, 0.115, -0.0, -0.42, 0.124, -0.2252, -0.215, 0.124, 0.2867, -0.215, 0.115, -0.0, -0.215, 0.124, -0.2867, -0.01, 0.124, 0.2992, -0.01, 0.115, -0.0, -0.01, 0.124, -0.2992, 0.195, 0.124, 0.2698, 0.195, 0.115, -0.0, 0.195, 0.124, -0.2698, 0.4, 0.124, 0.1562, 0.4, 0.115, -0.0, 0.4, 0.124, -0.1562, -0.4, 0.16, -0.3903, -0.4, 0.16, 0.3903, -0.025, 0.16, -0.4995, -0.025, 0.16, 0.4995, 0.35, 0.16, -0.3363, 0.35, 0.16, 0.3363, 0.53, 0.18, -0.0, 0.0, 0.2297, -0.0),
+            flatDrop = 0.06,
         )
     }
 }
