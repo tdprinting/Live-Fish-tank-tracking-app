@@ -51,7 +51,7 @@ uniform sampler2D uSurface;
 
 float surfaceHeight(vec2 xz) {
     if (uSurfaceDims.z < 0.5) return 0.0;
-    return texture(uSurface, clamp(xz / uTank.xz, 0.0, 1.0)).r;
+    return textureLod(uSurface, clamp(xz / uTank.xz, 0.0, 1.0), 0.0).r;
 }
 
 vec2 surfaceSlope(vec2 xz) {

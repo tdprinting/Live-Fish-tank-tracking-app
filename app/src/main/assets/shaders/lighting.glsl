@@ -28,9 +28,8 @@ vec3 hemiAmbient(vec3 n) {
     return uAmbientB.rgb + mix(HEMI_BOTTOM, HEMI_TOP, h) * (0.6 + 2.0 * lightIntensity()) + NIGHT_FLOOR;
 }
 
-// GGX specular term (D * G / (4 NdotV NdotL)), Schlick-GGX geometry.
-float ggxSpec(vec3 N, vec3 V, vec3 L, float rough) {
-    vec3 H = normalize(V + L);
+// GGX specular term (D * G / (4 NdotV NdotL)), Schlick-GGX geometry; [H] is normalize(V + L).
+float ggxSpecH(vec3 N, vec3 V, vec3 L, vec3 H, float rough) {
     float a = max(rough * rough, 0.02);
     float a2 = a * a;
     float ndh = max(dot(N, H), 0.0);
@@ -42,8 +41,14 @@ float ggxSpec(vec3 N, vec3 V, vec3 L, float rough) {
     float G = (ndl / (ndl * (1.0 - k) + k)) * (ndv / (ndv * (1.0 - k) + k));
     return D * G / (4.0 * ndv * ndl);
 }
+float ggxSpec(vec3 N, vec3 V, vec3 L, float rough) { return ggxSpecH(N, V, L, normalize(V + L), rough); }
 
-float fresnelSchlick(float cosT, float f0) { return f0 + (1.0 - f0) * pow(1.0 - clamp(cosT, 0.0, 1.0), 5.0); }
+// Schlick's (1 - cos)^5, as two squarings and a multiply.
+float fresnelSchlick(float cosT, float f0) {
+    float m = 1.0 - clamp(cosT, 0.0, 1.0);
+    float m2 = m * m;
+    return f0 + (1.0 - f0) * (m2 * m2 * m);
+}
 
 // Hue of the live fixture light, normalised so its brightest channel is 1 (follows the AI Prime schedule).
 vec3 lightTint() {
@@ -55,8 +60,9 @@ vec3 lightTint() {
 // surface focuses the lamps into a bright, wriggling net of lines (Tee's tank video 2026-10-20). Two drifting reads of
 // the shared tile, refracted by the surface slope and warped by the chop (cheap ALU, faster with more flow), are added
 // and squared: bright lines with brighter knots where the two nets cross. Deeper surfaces see a softer net (mip bias).
-// High splits the second read per channel (dispersion: thin colour fringes on the bright lines). Faces that look
-// sideways still catch part of the pattern. [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
+// High takes the second read's three channels apart (dispersion: thin colour fringes on the bright lines; the tile's G
+// and B are itself shifted either way, so no extra reads). Faces that look sideways still catch part of the pattern.
+// [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
 vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
     float depth = max(uWaterLevel - p.y, 0.0);
@@ -77,8 +83,10 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
         float blur = 1.0 + depth * 0.02;
         a = texture(uCaustic, uvA, blur).r;
         if (uCausticDispersion > 0.5) {
-            vec2 disp = vec2(0.0035, 0.0025) * (1.0 + depth * 0.03);
-            b = vec3(texture(uCaustic, uvB + disp, blur).r, texture(uCaustic, uvB, blur).r, texture(uCaustic, uvB - disp, blur).r);
+            // the tile's G and B are itself, read at uv + and - the fringe shift (tools/blender/textures.py caustic_rgb),
+            // so one read gives all three colours of a fringe
+            vec3 net = texture(uCaustic, uvB, blur).rgb;
+            b = net.grb;
         } else {
             b = vec3(texture(uCaustic, uvB, blur).r);
         }
@@ -175,14 +183,26 @@ vec3 bumpH(vec3 N, vec3 p, float h) {
     return l > 1e-20 ? r * inversesqrt(l) : N;   // degenerate (edge-on / sub-pixel) triangles: no NaN speckles
 }
 
+// What the two fixtures deliver at the pixel (radiance through the water, unit direction to the lamp), worked out once by
+// shadeLit: the extra lobes added after it (wet coat, back-light, glints, iridescence) read them back instead of
+// repeating the distance, cone and Beer-Lambert maths. They belong to the last shadeLit call, at its point.
+vec3 gRad0, gRad1, gL0, gL1;
+vec3 fixtureAt(int i, out vec3 L) {
+    if (i == 0) { L = gL0; return gRad0; }
+    L = gL1;
+    return gRad1;
+}
+
 // Wet clear-coat lobe (mucus / water film): a tight GGX highlight from both fixtures on top of the base response.
+// Follows a shadeLit call at the same point.
 vec3 wetCoat(vec3 N, vec3 V, vec3 p, float rough, float strength) {
     vec3 s = vec3(0.0);
     for (int i = 0; i < 2; i++) {
         vec3 L;
-        vec3 rad = fixtureLight(i, p, L);
+        vec3 rad = fixtureAt(i, L);
+        vec3 H = normalize(V + L);
         float ndl = max(dot(N, L), 0.0);
-        s += rad * ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), 0.02) * ndl;
+        s += rad * ggxSpecH(N, V, L, H, rough) * fresnelSchlick(max(dot(H, V), 0.0), 0.02) * ndl;
     }
     return s * strength;
 }
@@ -191,19 +211,23 @@ vec3 wetCoat(vec3 N, vec3 V, vec3 p, float rough, float strength) {
 // reuse it instead of sampling the PCF kernel again.
 float gShadow = 1.0;
 
+// One fixture's share of the direct light: Lambert (optionally wrapped) + GGX, sharing one half vector.
+vec3 fixtureDirect(vec3 rad, vec3 L, vec3 albedo, vec3 N, vec3 V, float rough, float f0, float wrap, float specScale) {
+    float ndl = dot(N, L);
+    float diff = max((ndl + wrap) / (1.0 + wrap), 0.0);
+    vec3 H = normalize(V + L);
+    float spec = ggxSpecH(N, V, L, H, rough) * fresnelSchlick(max(dot(H, V), 0.0), f0) * max(ndl, 0.0);
+    return rad * (albedo * diff + vec3(spec * specScale));
+}
+
 // Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics; direct light and
 // caustics are dimmed under nearby fish (contact shadows).
 vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float f0, float wrap, float specScale) {
     vec3 col = hemiAmbient(N) * albedo * ao;
-    vec3 direct = vec3(0.0);
-    for (int i = 0; i < 2; i++) {
-        vec3 L;
-        vec3 rad = fixtureLight(i, p, L);
-        float ndl = dot(N, L);
-        float diff = max((ndl + wrap) / (1.0 + wrap), 0.0);
-        float spec = ggxSpec(N, V, L, rough) * fresnelSchlick(max(dot(normalize(V + L), V), 0.0), f0) * max(ndl, 0.0);
-        direct += rad * (albedo * diff + vec3(spec * specScale));
-    }
+    gRad0 = fixtureLight(0, p, gL0);
+    gRad1 = fixtureLight(1, p, gL1);
+    vec3 direct = fixtureDirect(gRad0, gL0, albedo, N, V, rough, f0, wrap, specScale)
+                + fixtureDirect(gRad1, gL1, albedo, N, V, rough, f0, wrap, specScale);
     // the surface heightfield's slope (4 taps) is read once for both the flicker and the caustics
     // plus the render-only swell (common.glsl), so the waves on the surface steer and brighten the net below
     vec2 slope = p.y > uWaterLevel || (uQuality < 0.5 && uCausticStrength <= 0.0) ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
