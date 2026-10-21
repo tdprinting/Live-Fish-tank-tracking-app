@@ -1199,5 +1199,150 @@
   "b": "ecsenius_midas",
   "risk": "L",
   "note": "Both pick plankton in open water; mild competition at feeding"
+
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "synchiropus_splendidus",
+  "risk": "H",
+  "note": "Two males fight; keep one or a mated pair"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "macropharyngodon_bipartitus",
+  "risk": "M-H",
+  "note": "Both live on pods; the leopard wrasse can out-eat it"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "valenciennea_puellaris",
+  "risk": "M",
+  "note": "The diamond goby eats sand pods it also needs"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "The dottyback may bully the slow mandarin"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Its toxic slime keeps the hawkfish off"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Peaceful; different parts of the tank"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Peaceful"
+ },
+ {
+  "a": "synchiropus_splendidus",
+  "b": "lysmata_amboinensis",
+  "risk": "L",
+  "note": "Peaceful"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "pseudocheilinus_hexataenia",
+  "risk": "H",
+  "note": "Two six lines fight"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "labroides_dimidiatus",
+  "risk": "M-H",
+  "note": "It picks on other wrasses"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "macropharyngodon_bipartitus",
+  "risk": "M-H",
+  "note": "It picks on other wrasses, more so on a newcomer"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "amphiprion_ocellaris",
+  "risk": "M",
+  "note": "May chase clowns added after it"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "sphaeramia_nematoptera",
+  "risk": "M",
+  "note": "Shy cardinals get chased"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "Two feisty fish; they squabble"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "The hawkfish is too big to bully"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "The tang is too big to bully"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "lysmata_amboinensis",
+  "risk": "L",
+  "note": "Reef safe for cleaner shrimp"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "synchiropus_splendidus",
+  "risk": "M",
+  "note": "May chase a mandarin and compete for pods"
+ },
+ {
+  "a": "pseudocheilinus_hexataenia",
+  "b": "gobiodon_okinawae",
+  "risk": "M",
+  "note": "May chase the tiny clown goby"
+ },
+ {
+  "a": "gobiodon_okinawae",
+  "b": "gobiodon_okinawae",
+  "risk": "M",
+  "note": "Two squabble, then often pair"
+ },
+ {
+  "a": "gobiodon_okinawae",
+  "b": "cirrhitichthys_falco",
+  "risk": "L",
+  "note": "Its bitter slime keeps most predators off"
+ },
+ {
+  "a": "gobiodon_okinawae",
+  "b": "amphiprion_ocellaris",
+  "risk": "L",
+  "note": "Peaceful"
+ },
+ {
+  "a": "gobiodon_okinawae",
+  "b": "pseudochromis_indigo",
+  "risk": "M",
+  "note": "The dottyback may chase it"
+ },
+ {
+  "a": "gobiodon_okinawae",
+  "b": "paracanthurus_hepatus",
+  "risk": "L",
+  "note": "Peaceful"
  }
 ]

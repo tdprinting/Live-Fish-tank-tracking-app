@@ -171,6 +171,10 @@ object PairMatrix {
         // holds its burrow mouth
         BrainKind.GRAMMA -> 4.5
         BrainKind.WATCHMAN_GOBY -> 2.5
+        // research 51: the six line bosses most small peaceful fish; the mandarin and clown goby give way to everyone
+        BrainKind.SIXLINE -> 5.0
+        BrainKind.MANDARIN -> 1.0
+        BrainKind.CLOWN_GOBY -> 1.5
         // research 60: a butterfly is big but mild; it gives way to the tangs and the dottyback
         BrainKind.BUTTERFLY -> 5.0
         else -> if (o.isFish) 3.0 else 0.0
