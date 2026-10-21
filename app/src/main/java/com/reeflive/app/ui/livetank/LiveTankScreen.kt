@@ -153,6 +153,7 @@ import com.reeflive.app.ui.live.SupplyCarryLayer
 import com.reeflive.app.ui.live.BagCarry
 import com.reeflive.app.ui.live.BagCarryLayer
 import com.reeflive.app.ui.live.BagTimerLayer
+import com.reeflive.app.ui.live.CoralPickLayer
 import com.reeflive.app.ui.live.SupplyItem
 import com.reeflive.app.ui.live.SupplyShelfOverlay
 import com.reeflive.app.ui.live.SubmarineControls
@@ -179,6 +180,7 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.CoralKind
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.DryRockShape
 import com.reeflive.app.ui.live.AquascapeBar
@@ -267,6 +269,11 @@ fun LiveTankScreen(
     // the follow camera's on-screen buttons (zoom, swing round): FollowOverlay presses, the renderer drains
     val followCam = remember { FollowCamControl() }
     val banner = remember { ActionBannerState() }
+    // corals that bleached, died or budded while the app was closed (My tank catch-up)
+    val coralNews by vm.coralNews.collectAsStateWithLifecycle()
+    LaunchedEffect(coralNews) {
+        if (coralNews.isNotEmpty()) { banner.show(Feedback("Your corals while you were away", coralNews.joinToString(" ")), Candy.green); vm.clearCoralNews() }
+    }
     val hermie = remember { HermieState() }
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
     val audio = remember { TankAudio(context.applicationContext) }
@@ -289,6 +296,7 @@ fun LiveTankScreen(
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
+    val lifePace by vm.lifePace.collectAsStateWithLifecycle()
     val quality by vm.quality.collectAsStateWithLifecycle()
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
@@ -396,6 +404,8 @@ fun LiveTankScreen(
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
     // the shop bag in hand after an animal is picked in the Shop (dragged onto the tank to float)
     var bagCarry by remember { mutableStateOf<BagCarry?>(null) }
+    /** The keeper tapped "Later" on the coral spot picker (a pill brings it back). */
+    var coralPickHidden by remember { mutableStateOf(false) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
     // "Tap a supply, then drag it to the tank" until the first supply lands in the tank (remembered in settings)
@@ -685,7 +695,7 @@ fun LiveTankScreen(
         onTimelapse = { echo(LiveReactions.timelapse()); lapse = true },
         onAddMany = { id, n, size ->
             tick()
-            val card = stockCards.firstOrNull { it.speciesId == id }
+            val card = stockCards.firstOrNull { it.key == id }
             // new animals come in a shop bag: it goes in the keeper's hand, to be dragged onto the tank
             if (card != null) { open = null; bagCarry = BagCarry(card, n, size) }
             else cue(LiveReactions.addSimple(id)) { vm.addMany(id, n, size) }
@@ -845,6 +855,11 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        lifePace = lifePace,
+        onLifePace = { p ->
+            tick(); vm.setLifePace(p)
+            banner.show(Feedback("Growing speed: ${p.label}", "${p.blurb}. Fish still swim at real speed."), Candy.purple)
+        },
         speed = if (sandbox) speed else 1.0,
         simTimeSec = hud.simTimeSec,
         onSpeed = { x ->
@@ -897,6 +912,16 @@ fun LiveTankScreen(
             banner.show(Feedback("Dinner time!", "Each hungry animal gets its favourite food, dropped right above it"), Candy.orange)
             cue(LiveReactions.feed(FoodKind.PELLET)) { vm.feedHungry() }
         },
+        coralRows = if (open == LiveCategory.FIX) CoralHealth.rows(hud.corals) else emptyList(),
+        coralCare = if (open == LiveCategory.FIX && myTank) com.reeflive.core.sim.CoralCare.plan(hud) else null,
+        onReefCare = if (myTank) ({
+            tick()
+            val plan = vm.reefCarePlan()
+            if (vm.reefCare(plan.price)) {
+                banner.show(Feedback("Coral care!", "In goes " + plan.words), Candy.green)
+                cue(LiveReactions.feed(FoodKind.CORAL_FOOD))
+            } else banner.show(Feedback("Not enough sand dollars", "Coral care costs ${plan.price}. Do today's chores to earn more."), Candy.orange)
+        }) else null,
         onFix = { f -> tick(); playFix(f) },
         onFixAll = {
             tick()
@@ -1019,7 +1044,7 @@ fun LiveTankScreen(
     val onBagDrop: (BagCarry, Float) -> Unit = { b, gx ->
         bagCarry = null
         tick()
-        vm.floatBag(b.card.speciesId, b.count, b.size, gx)
+        vm.floatBag(b.card.key, b.count, b.size, gx)
         echo(LiveReactions.bagIn(b.card, b.count, gx))
     }
     val onCarryCancel: () -> Unit = { carry = null; tick() }
@@ -1210,6 +1235,18 @@ fun LiveTankScreen(
             BagTimerLayer(
                 vm.snapshots, projection, hud.bags, hud.bagHurry,
                 onHurry = { on -> tick(); vm.hurryBags(on); echo(LiveReactions.hurryBags(on)) },
+                bottomClearance = hudBottom,
+            )
+        }
+        // a coral out of its bag waits for the keeper to pick one of its glowing spots (My tank)
+        val coralPick = hud.coralPick
+        if (myTank && coralPick != null && bagCarry == null && !micro && !supplies && !subUi.on) {
+            // a new coral to place: close any open menu so the spots and their badges are in view
+            LaunchedEffect(coralPick.waiting) { if (!coralPickHidden) open = null }
+            CoralPickLayer(
+                coralPick, projection, coralPickHidden,
+                onPlace = { spot -> tick(); vm.placeCoral(spot); coralPickHidden = false; echo(LiveReactions.coralPlaced(coralPick.name)) },
+                onHide = { coralPickHidden = it },
                 bottomClearance = hudBottom,
             )
         }
@@ -1596,7 +1633,7 @@ private fun HudLayer(
             val card = st ?: lastCard
             if (card != null) {
                 val hudSnap by vm.hud.collectAsStateWithLifecycle()
-                val family = hudSnap.brood.panel?.takeIf { it.shows(card.speciesId) }?.let { p ->
+                val family = hudSnap.brood.panelFor(card.speciesId)?.let { p ->
                     p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.MY_TANK })
                 }
                 FishCard(

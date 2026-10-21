@@ -207,7 +207,7 @@ class SubmarineReact(val b: SpeciesBrain) : Behavior("submarine", "Watching the 
             SubReaction.FREEZE -> {
                 hold(out)
                 val k = smoothstep(0.0, 0.4, elapsed)
-                if (o.brainKind == BrainKind.BANDED_SHRIMP || o.brainKind == BrainKind.CLEANER_SHRIMP) o.groom = max(o.groom, 0.8 * k)
+                if (o.brainKind.isShrimp) o.groom = max(o.groom, 0.8 * k)
                 o.walkAmt = 0.0
             }
             else -> finished = true

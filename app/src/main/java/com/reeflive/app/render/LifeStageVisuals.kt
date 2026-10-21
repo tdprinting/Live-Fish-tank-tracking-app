@@ -94,9 +94,13 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
         val mf = manifest[lod0(modelPath)] ?: return
         pick(mf.base, mf.forms, a, b, mix, out.body)
         if (mf.finForms.isNotEmpty()) {
-            // fins follow the growth stages only (no sex forms)
-            val fa = form?.fromForm ?: a; val fb = form?.toForm ?: b; val fm = form?.stageMix ?: mix
-            pick(mf.finBase, mf.finForms, fa, fb, fm, out.fin)
+            // fins follow the growth stages, and a sex form where the sheet has one (fairy wrasse male: long red fins)
+            val sexFin = form?.sexForm?.takeIf { form.sexMix > 0f && form.stageMix <= 0f && (it == mf.finBase || it in mf.finForms) }
+            if (form != null && sexFin != null) pick(mf.finBase, mf.finForms, form.toForm, sexFin, form.sexMix, out.fin)
+            else {
+                val fa = form?.fromForm ?: a; val fb = form?.toForm ?: b; val fm = form?.stageMix ?: mix
+                pick(mf.finBase, mf.finForms, fa, fb, fm, out.fin)
+            }
         }
     }
 

@@ -437,8 +437,16 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     /** Coral bites so far (C-3; each disturbs the colony briefly). */
     var coralNips = 0
     fun sleepAnchor(c: Ctx): Anchor? = c.rock.anchors["SLEEP_TANG"]
-    /** Overhangs in the rockwork it can tuck under (ai/TangShelter.kt). */
-    val shelters by lazy { TangShelters(c) }
+    /** Overhangs in the rockwork it can tuck under (ai/TangShelter.kt), fitted to this species' body. */
+    val shelters by lazy { TangShelters.forSpecies(c) }
+    /**
+     * Yellow or purple tang (*Zebrasoma*, research 42 §2-3) rather than the blue tang: a dedicated algae grazer that
+     * works the rock most of the day instead of picking plankton in open water, sleeps wedged upright in its crevice
+     * in its night colours, does not play dead, and fights other tangs (pair rows zebra_*, xanthurum_tang).
+     */
+    val zebra: Boolean = c.o.species.zebrasoma
+    /** Side roll in its sleeping crevice: the blue tang lies over, a sailfin tang wedges in nearly upright. */
+    private val bedRoll: Double get() = if (zebra) ZEBRA_REST_ROLL else SIDE_REST_ROLL
     /** When and where it was last scared (a hard tap, an attack, a predator in view), for [TangHide]. */
     var scaredAt = -1e9; private set
     var scareFrom: Vec3 = Vec3.ZERO; private set
@@ -447,9 +455,19 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     private var bedFor = -1.0
 
     init {
-        install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
-            Flee(this, { c, from -> shelters.pick(c.o.pos, from, c.o.lengthCm, TangHide.HIDE_ROLL)?.entry ?: c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
-            TangSleep(), TangHide(this), TangRub(this), TangZoom(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
+        val flee = Flee(this, { c, from -> shelters.pick(c.o.pos, from, c.o.lengthCm, TangHide.HIDE_ROLL)?.entry ?: c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover")
+        if (zebra) install(Patrol(), Graze(this, ZEBRA_GRAZE_WEIGHT), NibbleNori(this, 1.5), TangFeed(), flee,
+            TangSleep(), TangHide(this), TangRub(this), TangZoom(this), VisitCleaner(this, ZEBRA_CLEANER), Flash(this), GlassCurious(this), SurfaceGasp(this))
+        else install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
+            flee, TangSleep(), TangHide(this), TangRub(this), TangZoom(this), TangSpawn(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
+    }
+
+    /** Night colours ease in over [NIGHT_COLOR_IN_S] once it is asleep (or the lights are out) and fade after it wakes. */
+    override fun postSteer(c: Ctx) {
+        super.postSteer(c)
+        if (!zebra) return
+        val dark = o.sleeping || c.p.night && c.p.light < 0.05
+        o.nightColor = if (dark) min(1.0, o.nightColor + c.dt / NIGHT_COLOR_IN_S) else max(0.0, o.nightColor - c.dt / NIGHT_COLOR_OUT_S)
     }
 
     override fun preTick(c: Ctx) {
@@ -481,9 +499,20 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             val a = sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)
             // the most walled-in crevice of the overhangs near its usual corner (P. hepatus wedges itself into a
             // crevice or under a ledge to sleep [S3][M]; a spot that is only in a rock's shadow will not do)
-            bed = shelters.pick(a, null, c.o.lengthCm, SIDE_REST_ROLL, prefer = a, tries = BED_TRIES, snuggest = true, avoid = badBeds)
+            bed = shelters.pick(a, null, c.o.lengthCm, bedRoll, prefer = a, tries = BED_TRIES, snuggest = true, avoid = badBeds + otherBeds(c))
         }
         return bed
+    }
+
+    /** Crevices other tangs already sleep in (with two tangs both would otherwise pick the snuggest one by SLEEP_TANG). */
+    private fun otherBeds(c: Ctx): List<Vec3> {
+        var out: ArrayList<Vec3>? = null
+        for (n in c.sim.organisms) {
+            if (n === o || !n.alive || n.brainKind != BrainKind.TANG) continue
+            val p = (c.sim.agentOf(n)?.brain as? TangBrain)?.bed?.pos ?: continue
+            (out ?: ArrayList<Vec3>().also { out = it }) += p
+        }
+        return out ?: emptyList()
     }
 
     private fun bedStillGood(c: Ctx, p: TangShelters.Pose) =
@@ -521,6 +550,15 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         const val SNAP_YIELD = 0.002
         /** Night side-rest roll, rad (~70°; observed 30–90°, research video fish_blue_tang [S3][M]). */
         const val SIDE_REST_ROLL = 1.22
+        /** Sailfin tangs (Zebrasoma) sleep wedged in nearly upright, rolled ~20° (DESIGN ESTIMATE; research 42 §2 [L]). */
+        const val ZEBRA_REST_ROLL = 0.35
+        /** Zebrasoma graze filamentous algae most of the day (FishBase trophic level 2.0, research 42 §2-3 [H]). */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "42 §2: mainly filamentous algae [H]; share of day [L]") const val ZEBRA_GRAZE_WEIGHT = 1.8
+        /** Extra pull toward the cleaner: sailfin tangs are regular cleaner clients (DESIGN ESTIMATE). */
+        const val ZEBRA_CLEANER = 0.25
+        /** Seconds for the night colours to come in after it settles, and to fade after it wakes (research 42 §2 [L]). */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "42 §2: night colours with a white band [M]; timing [L]") const val NIGHT_COLOR_IN_S = 600.0
+        const val NIGHT_COLOR_OUT_S = 300.0
         /** Crevices weighed when choosing a bed, and seconds it tries to get into one before picking another (DESIGN ESTIMATE). */
         const val BED_TRIES = 14
         const val BED_GIVE_UP_S = 120.0
@@ -699,7 +737,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             if (o.pos.distanceTo(r.pos) < 4.0) {
                 lyingFor += c.dt
                 val h = r.heading.horizontal().normalized(o.heading.horizontal().normalized(Vec3.X))
-                val roll = leanSign(c, r.pos, h) * SIDE_REST_ROLL * smoothstep(0.0, 20.0, lyingFor)
+                val roll = leanSign(c, r.pos, h) * bedRoll * smoothstep(0.0, 20.0, lyingFor)
                 out.place(r.pos, h, rolledUp(h, roll), 1.5)
                 out.pectoral = 0.2
             } else {
@@ -772,9 +810,26 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             Sleep(this, "Resting at the cave", 0.35), VisitCleaner(this), SurfaceGasp(this), Flash(this))
     }
 
+    /** A Banggai cardinal (*Pterapogon kauderni*, research 50 §2) rather than Tee's pajama: it hovers over spiny cover. */
+    val banggai: Boolean = o.species.id.startsWith("pterapogon")
+    init { if (banggai) o.spline.glassGuard = true }
+    private var nextHostCheck = 0.0
+
     override fun initialPlace(c: Ctx) {
         spot = c.rock.anchors["SHADE_CARD"]?.pos ?: c.rock.anchors["HOVER_CARDINAL"]?.pos ?: spots.minBy { it.distanceTo(o.homePos.takeIf { h -> h != Vec3.ZERO } ?: spots[o.rng.nextInt(spots.size)]) }
+        if (banggai) spot = banggaiSpot(c) ?: c.safe(spot + Vec3(c.rng.signed() * 12.0, 4.0, c.rng.signed() * 4.0))
         super.initialPlace(c)
+    }
+
+    /**
+     * Where a Banggai hovers: over a bubble tip anemone when there is one (wild adults hover over long-spined urchins
+     * and the young among anemone tentacles, research 50 §2 facts 55-56; the tank has no urchin). The young keep down
+     * in the tentacles, adults a few cm above the disc. Null without an anemone.
+     */
+    private fun banggaiSpot(c: Ctx): Vec3? {
+        val host = c.sim.organisms.filter { it.alive && it.brainKind == BrainKind.ANEMONE }.minByOrNull { it.pos.distanceTo(o.pos) } ?: return null
+        val up = if (o.lengthCm < BANGGAI_YOUNG_CM) 2.5 + 0.3 * host.lengthCm else 6.0 + 0.3 * host.lengthCm
+        return c.safe(host.pos + Vec3(c.rng.signed() * 2.0, up, c.rng.signed() * 2.0))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
@@ -787,6 +842,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
         o.hoverRadius = dayRadius(c)
         // clamped fins out of cover under bright light (06 §5.6 #13)
         o.brightExposed = !c.p.night && c.p.light > 0.6 && c.rock.sdf.cover(o.pos) < 0.3
+        // anemones walk: a Banggai follows its host once a minute
+        if (banggai && c.t >= nextHostCheck) { nextHostCheck = c.t + 60.0; banggaiSpot(c)?.let { if (it.distanceTo(spot) > 6.0) setPocket(it) } }
     }
 
     /**
@@ -808,6 +865,7 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             if (cave.distanceTo(spot) <= 40.0) k = min(k, 0.6)
         }
         if (o.timidUntil > c.t) k *= 0.7
+        if (banggai && o.lengthCm < BANGGAI_YOUNG_CM) k *= 0.35
         k *= 1 + 0.5 * o.stressState.lowPh
         k *= StressModel.homeRadiusMult(o).coerceAtLeast(0.4)
         return BASE_RADIUS * k
@@ -916,6 +974,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t > next || o.pos.distanceTo(wp) < c.L) {
                 next = c.t + c.rng.range(4.0, 9.0)
                 wp = c.safe(schoolTarget(c, spot + c.rng.unitVector() * (forageRadius(c) * (0.3 + 0.7 * c.rng.nextDouble()))))
+                // a Banggai turning at the glass swings its tail through it: its waypoints keep a body length off
+                if (banggai) wp = c.offGlass(wp, c.L + 1.0)
             }
             // drifting plankton only: a particle on the sand or wedged against the rock is out of reach of a mid-water
             // picker (the body cannot get its head there), and one it has chased for STUCK_S without closing is dropped
@@ -958,6 +1018,8 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 
     companion object {
         const val BASE_RADIUS = 12.0
+        /** Banggai young below this length (cm) keep down among the anemone's tentacles [L]. */
+        const val BANGGAI_YOUNG_CM = 3.0
         /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
         const val HOVER_PITCH = 0.17
         /** Seconds outside its zone without closing on the pocket before the hover takes a detour round the rock. */
@@ -1550,7 +1612,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     val sandRest = SandRest(this)
 
     init {
-        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this))
+        install(sandRest, PerchHop(), Pounce(), DuckToPerch(), SurfaceGasp(this), VisitCleaner(this), WormSnap(this, 20.0, 0.5))
     }
 
 
@@ -1974,16 +2036,116 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Territory centre: the hole mouth, else a rock face on the left stack (never inside rock). */
     val territory: Vec3 get() = hole?.mouth ?: faceShelter
 
+    /**
+     * Caves before its bore (research 51 §3, Tee 2026-10-20: "more concerned with caves and hiding than just a small
+     * hole"): when worried, at night, and for a sit-and-watch now and then in the day it backs into the nearest open
+     * cave that takes its body. Open caves are shared ([RockHole.singleOccupant] false), so this never takes a hole
+     * from another blenny; its own bore stays its territory centre.
+     */
+    private val caveBehavior = InHole(this, null, territory, "Hiding in a cave",
+        { c -> if (cave == null) 0.0 else if (c.p.night) 0.95 else 0.75 + 0.2 * worry },
+        { c -> if (c.p.night) -0.5 else CAVE_HEAD_OUT_CM })
+    /** The cave it is using now, or null. */
+    var cave: RockHole? = null; private set
+    private var caveUntil = 0.0
+    private var caveNext = c.t + CAVE_GAP_S * (o.appendagePhase / 6.28)
+    /** Visits to a cave (tests, captions). */
+    var caveVisits = 0; private set
+    /** Last scare (threat or startle), sim s. */
+    private var scaredAt = -1e9
+    /** 0..1 how uneasy it is: stress, a scare in the last minutes, a rival on top of it. */
+    var worry = 0.0; private set
+    private var checkIn = 0.0
+    private var toneTarget = 0.0
+
     init {
         install(RockGraze(),
             InHole(this, hole, territory, "Resting in its hole",
                 { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) + (if (c.t - startleAt < 12) 0.35 else 0.0) },
                 { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe(hole?.along(-(c.clearance + 1.0)) ?: territory) }, "Darting home"), SurfaceGasp(this),
+            Flee(this, { c, _ -> c.safe(coverMouth(c)) }, "Darting to cover"), SurfaceGasp(this),
             // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
-            NibbleNori(this, 0.75, quiet = true))
+            NibbleNori(this, 0.75, quiet = true),
+            caveBehavior)
     }
+
+    /** The nearest open cave that takes its body within [within] cm of [p], or null (no allocation). */
+    private fun caveNear(c: Ctx, p: Vec3, within: Double): RockHole? {
+        var best: RockHole? = null
+        var bd = within
+        for (h0 in c.rock.holes.all) {
+            if (h0.kind != HoleKind.CAVE || h0.singleOccupant || !h0.fits(o)) continue
+            val h = c.rock.holes.live(h0) ?: continue
+            val d = h.mouth.distanceTo(p)
+            if (d < bd) { bd = d; best = h }
+        }
+        return best
+    }
+
+    /** Where it darts when scared: the mouth of a cave unless its own bore is clearly nearer. */
+    private fun coverMouth(c: Ctx): Vec3 {
+        val h = hole
+        val cv = cave ?: caveNear(c, c.o.pos, CAVE_RANGE_CM)
+        if (cv != null && (h == null || cv.mouth.distanceTo(c.o.pos) < h.mouth.distanceTo(c.o.pos) + CAVE_PREF_CM)) return cv.along(-(c.clearance + 1.0))
+        return h?.along(-(c.clearance + 1.0)) ?: territory
+    }
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        if (startledRecently || threat != null) scaredAt = c.t
+        checkIn -= c.dt
+        if (checkIn <= 0) { checkIn = 1.0; check(c) }
+        // colour change eases toward its target: a scare blanches it in seconds, matching a new background takes
+        // tens of seconds (melanophore aggregation vs dispersion, research 51 §2)
+        val tau = if (c.t - scaredAt < 5.0) TONE_FAST_S else TONE_S
+        o.skinTone += (toneTarget - o.skinTone) * min(1.0, c.dt / tau)
+    }
+
+    /** Once a second: how worried it is, whether to go to or leave a cave, and the shade its skin is heading for. */
+    private fun check(c: Ctx) {
+        val scared = if (threat != null) 0.8 else if (c.t - scaredAt < SCARE_MEMORY_S) 0.5 * (1 - (c.t - scaredAt) / SCARE_MEMORY_S) + 0.3 else 0.0
+        val newcomer = (1 - (c.t - o.arrivalTime) / NEWCOMER_S).coerceIn(0.0, 1.0)
+        worry = maxOf(o.stress, o.socialStress, scared, 0.5 * newcomer).coerceIn(0.0, 1.0)
+        val night = c.p.night
+        val cv = cave
+        if (cv == null) {
+            // to a cave when uneasy, at night, or for a daytime watch from cover (deterministic spacing, no rng drawn)
+            if (night || worry > CAVE_WORRY || c.t >= caveNext) {
+                val near = caveNear(c, if (night) territory else c.o.pos, CAVE_RANGE_CM)
+                if (near != null) {
+                    cave = near; caveBehavior.hole = near; caveVisits++
+                    caveUntil = c.t + CAVE_STAY_S * (1 + 2 * worry)
+                }
+                caveNext = c.t + CAVE_GAP_S * (0.7 + 0.6 * frac(o.appendagePhase * 7.3 + caveVisits * 0.618))
+            }
+        } else if (!night && c.t > caveUntil && (worry < CAVE_WORRY || o.hunger > 0.75)) {
+            cave = null; caveBehavior.hole = null
+        }
+        toneTarget = toneFor(c, night)
+    }
+
+    /**
+     * The shade it is heading for, −1 pale .. +1 dark (research 51 sim numbers; Tee 2026-10-20: darker on rock,
+     * lighter on sand, and with its mood): background first, then mood on top.
+     */
+    private fun toneFor(c: Ctx, night: Boolean): Double {
+        val thick = 0.5 * o.species.depthRatio * o.lengthCm
+        val sandGap = o.pos.y - c.sim.sand.surfaceY(o.pos.x, o.pos.z)
+        val bg = when {
+            o.posture == 3 -> TONE_CAVE
+            sandGap < thick + 1.5 && sandGap < c.rock.sdf.dist(o.pos) -> TONE_SAND
+            c.rock.sdf.dist(o.pos) < thick + 1.5 -> TONE_ROCK
+            else -> 0.0
+        }
+        var mood = 0.0
+        if (utility.current?.name == "bout" || utility.current?.name == "rival") mood += TONE_DISPLAY
+        mood -= TONE_STRESS * worry
+        if (night) mood += TONE_NIGHT
+        return (bg + mood).coerceIn(-1.0, 1.0)
+    }
+
+    private fun frac(x: Double) = x - kotlin.math.floor(x)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
 
@@ -1994,6 +2156,8 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val h = hole
+        // nights in a cave when one is in reach (research 51 §3), else its bore
+        if (night) caveNear(c, territory, CAVE_RANGE_CM)?.let { return holeRest(c, it, -0.5) }
         return if (night) (if (h != null) holeRest(c, h, -0.5) else rockShelterRest(c, territory))
         else c.rockSurfacePoint(territory, 10.0)?.let { (p, n) -> perchOn(p, n) } ?: (if (h != null) holeRest(c, h, 1.0) else rockShelterRest(c, territory))
     }
@@ -2023,6 +2187,31 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val RASP_HUNGER = 0.018
         /** Its grazing range around its hole, cm (a territory the size of a dinner plate on the reef; DESIGN ESTIMATE). */
         const val RANGE_CM = 28.0
+        /** How far it goes for a cave, and how much nearer its own bore must be to win over one when scared (cm; DESIGN ESTIMATES). */
+        const val CAVE_RANGE_CM = 40.0
+        const val CAVE_PREF_CM = 10.0
+        /** Head out of the cave mouth while it watches (cm). */
+        const val CAVE_HEAD_OUT_CM = 1.2
+        /** Worry above which it hides; least stay; spacing of daytime watch visits (s; DESIGN ESTIMATES). */
+        const val CAVE_WORRY = 0.3
+        const val CAVE_STAY_S = 90.0
+        const val CAVE_GAP_S = 1500.0
+        /** A scare keeps it uneasy this long (s); a newcomer settles over this long (research 51: 1–3 days). */
+        const val SCARE_MEMORY_S = 300.0
+        const val NEWCOMER_S = 2 * 86400.0
+        /**
+         * Skin shade targets (research 51 "Sim numbers": background matching is sourced for the species, the direction
+         * dark on rock / pale on sand is the teleost rule and Tee's own observation; mood offsets are estimates).
+         */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.SOURCED, "research 51; FishBase Salarias fasciatus; Tee 2026-10-20") const val TONE_ROCK = 0.4
+        const val TONE_SAND = -0.5
+        const val TONE_CAVE = 0.6
+        const val TONE_DISPLAY = 0.3
+        const val TONE_STRESS = 0.3
+        const val TONE_NIGHT = -0.2
+        /** Colour change time constants (s): background matching, and a scare (research 51 §2). */
+        const val TONE_S = 25.0
+        const val TONE_FAST_S = 3.0
     }
 
     /**
@@ -2714,7 +2903,7 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
 
     init {
         // a learned crevice route out of the cave (ai/DottyPatrol.kt; research 10 §8) in place of random darts
-        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(),
+        install(CavePatrol(this, { cave }, { caveSafe }), DottyFeed(), WormSnap(this, 15.0, 0.4, 0.6),
             Flee(this, { _, _ -> caveSafe }, "Darting into its cave"),
             // night, sickness or stress: in its cave, head just inside the mouth (was a Sleep hover outside it)
             InHole(this, home, cave, "Resting in its cave", { c ->

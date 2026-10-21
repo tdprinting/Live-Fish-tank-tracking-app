@@ -1,0 +1,104 @@
+{
+  "id": "duncanopsammia_axifuga",
+  "kind": "CORAL",
+  "common": "Duncan coral",
+  "scientific": "Duncanopsammia axifuga",
+  "family": "Dendrophylliidae",
+  "maxLengthCm": 30,
+  "typicalAdultCm": 8,
+  "growthCmPerYear": 3,
+  "lifespanYears": 40,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/duncan.glb",
+  "colors": {
+    "primary": "#4E7A5A",
+    "secondary": "#A8C9A0",
+    "accent": "#7CFFB4"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.15,
+    "lightHi": 0.75,
+    "flow": "MODERATE",
+    "growth": "Moderate",
+    "stingCm": 5,
+    "ground": "ROCK",
+    "aggression": "Mild: short sweepers at night; give 7-10 cm (3-4 in)",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic, but grows best target fed (mysis, enriched brine, coral pellets) 1-3 times a week.",
+  "temperamentSummary": "Tall tube-shaped heads, each with a round green disc ringed by short tentacles; it grows new heads off the old ones.",
+  "careNotes": [
+    "PAR about 75-150, moderate flow; a strong direct jet keeps the heads shut.",
+    "One of the easiest stony corals, and it gets bigger fast when fed.",
+    "Bristleworms nip the tentacles at night; copper medicines kill it."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.75,
+  "starvationDays": 9999
+}

@@ -51,9 +51,12 @@ vec3 lightTint() {
     return s / max(max(s.r, max(s.g, s.b)), 1e-3);
 }
 
-// Stronger caustics, tinted by the live light: two scrolling samples of the shared tile refracted by the surface
-// slope. High quality splits the second sample per channel (dispersion: thin colour fringes on the bright lines).
-// Faces that look sideways still catch a little of the pattern. [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
+// Caustics on everything under water (sand, rock, corals, fish, glass), tinted by the live light: the busy, rippled
+// surface focuses the lamps into a bright, wriggling net of lines (Tee's tank video 2026-10-20). Two drifting reads of
+// the shared tile, refracted by the surface slope and warped by the chop (cheap ALU, faster with more flow), are added
+// and squared: bright lines with brighter knots where the two nets cross. Deeper surfaces see a softer net (mip bias).
+// High splits the second read per channel (dispersion: thin colour fringes on the bright lines). Faces that look
+// sideways still catch part of the pattern. [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
 vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
     float depth = max(uWaterLevel - p.y, 0.0);
@@ -62,17 +65,21 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     // vertically instead of smearing into stripes
     vec2 uv = (p.xz + refr + n.xz * (p.y * 0.55)) * uCausticScale;
     float t = uTime;
-    vec2 uvA = uv + t * vec2(0.013, 0.008);
-    vec2 uvB = uv * 1.7 - t * vec2(0.010, -0.014);
-    float a = texture(uCaustic, uvA).r;
+    float busy = 0.6 + 0.6 * uFlowStrength;
+    uv += vec2(sin(uv.y * 9.0 + t * 1.9), cos(uv.x * 8.0 - t * 1.6)) * (0.02 * busy);
+    vec2 uvA = uv + t * vec2(0.031, 0.019) * busy;
+    vec2 uvB = uv * 1.37 - t * vec2(0.024, -0.033) * busy;
+    float blur = 0.6 + depth * 0.02;
+    float a = texture(uCaustic, uvA, blur).r;
     vec3 b;
     if (uCausticDispersion > 0.5) {
         vec2 disp = vec2(0.0035, 0.0025) * (1.0 + depth * 0.03);
-        b = vec3(texture(uCaustic, uvB + disp).r, texture(uCaustic, uvB).r, texture(uCaustic, uvB - disp).r);
+        b = vec3(texture(uCaustic, uvB + disp, blur).r, texture(uCaustic, uvB, blur).r, texture(uCaustic, uvB - disp, blur).r);
     } else {
-        b = vec3(texture(uCaustic, uvB).r);
+        b = vec3(texture(uCaustic, uvB, blur).r);
     }
-    vec3 c = pow(a * b, vec3(1.25)) * 5.0;
+    vec3 sum = a + b;
+    vec3 c = sum * sum * 22.0;
     // Medium/High: side faces keep ~a third of the shimmer (light arrives steeply but not only from straight above)
     float side = uQuality >= 0.5 ? 0.32 : 0.15;
     float facing = clamp(n.y * (1.0 - side) + side, 0.0, 1.0);
@@ -141,7 +148,7 @@ float surfaceFlicker(vec3 p, vec2 slope) {
     if (uQuality < 0.5 || p.y > uWaterLevel) return 1.0;
     vec2 uv = (p.xz + slope * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
     float f = texture(uCaustic, uv + uTime * vec2(0.017, -0.012), 3.5).r;
-    return 0.82 + 0.18 * clamp(f * 28.0, 0.0, 2.2);
+    return 0.74 + 0.26 * clamp(f * 28.0, 0.0, 2.2);
 }
 
 // Bump from a scalar height h (cm) via screen-space derivatives (surface gradient, no tangents). Callers keep it in
@@ -187,7 +194,9 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
     }
     // the surface heightfield's slope (4 taps) is read once for both the flicker and the caustics
     vec2 slope = p.y > uWaterLevel || (uQuality < 0.5 && uCausticStrength <= 0.0) ? vec2(0.0) : surfaceSlope(p.xz);
-    direct *= surfaceFlicker(p, slope);
+    // the rippled surface gathers the beam into the caustic net, so the light between the lines is dimmer
+    float gather = p.y < uWaterLevel ? 0.45 * uCausticStrength * max(N.y, 0.0) : 0.0;
+    direct *= surfaceFlicker(p, slope) * (1.0 - gather);
     direct += albedo * causticColor(p, N, slope) * uCausticStrength;
 #ifndef NO_CONTACT_SHADOW
     if (uCasterCount > 0.5) direct *= contactShadow(p);

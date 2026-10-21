@@ -4,7 +4,7 @@ import { SAND_DOLLAR } from './care.js';
 
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
-const pic = (it) => `<img class="sp" src="species/${it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
+const pic = (it) => `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
 
 let my, say, cue, onLeave;
 let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;

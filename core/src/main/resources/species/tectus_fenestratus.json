@@ -1,0 +1,109 @@
+{
+  "id": "tectus_fenestratus",
+  "kind": "INVERT",
+  "common": "Trochus snail",
+  "scientific": "Tectus fenestratus",
+  "family": "Tegulidae",
+  "maxLengthCm": 5,
+  "typicalAdultCm": 3.0,
+  "lifespanYears": 5,
+  "depthRatio": 1.05,
+  "massCoeff": 0.05,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.04,
+    "burstBL": 0.12,
+    "tailHzCruise": 0,
+    "turnRateDeg": 60,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 1.0,
+    "openWater": 0.0,
+    "coverAffinity": 0.3
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 60,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.5,
+    "curiosity": 0.1,
+    "skittishness": 0.3
+  },
+  "diet": [
+    "ALGAE",
+    "DIATOMS",
+    "CYANO"
+  ],
+  "feedsPerDay": 6,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 23,
+      "optHi": 26,
+      "tolLo": 21,
+      "tolHi": 28,
+      "lethalLo": 17,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.05
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 21,
+  "model": "models/trochus.glb",
+  "colors": {
+    "primary": "#E6D6C4",
+    "secondary": "#8A3E2E",
+    "accent": "#5E4A62"
+  },
+  "brain": "trochus",
+  "minTankGallons": 10,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Herbivore: diatoms, green film and soft hair algae on glass and rock; nori or an algae wafer when the glass is clean.",
+  "temperamentSummary": "Peaceful glass and rock grazer, day and night. Unlike an astrea it can usually flip itself back over.",
+  "careNotes": [
+    "Trochus snails can right themselves when they fall on their backs, especially near rock or glass.",
+    "They sometimes spawn at night in home tanks; a few babies may turn up on the glass weeks later.",
+    "Hermit crabs may kill small trochus to take their shells: give the hermits spare shells."
+  ]
+}

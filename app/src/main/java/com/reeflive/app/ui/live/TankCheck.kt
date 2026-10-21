@@ -19,6 +19,8 @@ import com.reeflive.app.ui.components.GlyphBadge
 import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.core.sim.CareFix
+import com.reeflive.core.sim.CoralCare
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.HungerRow
 import com.reeflive.core.sim.TankDoctor
 
@@ -37,6 +39,9 @@ internal fun TankHealthBody(
     onFix: (CareFix) -> Unit,
     onFixAll: () -> Unit,
     close: () -> Unit,
+    corals: List<CoralHealth.Row> = emptyList(),
+    care: CoralCare.Plan? = null,
+    onReefCare: (() -> Unit)? = null,
 ) {
     if (readouts.isNotEmpty()) WaterStrip(readouts)
     LiveSectionTitle("Hungry tummies")
@@ -54,8 +59,30 @@ internal fun TankHealthBody(
             StatBar(r.name + r.food?.let { " · likes ${it.label.lowercase()}" }.orEmpty(), r.hunger, higherIsBetter = false)
         }
     }
+    CoralSection(corals, care, onReefCare, close)
     LiveSectionTitle("Water & gear")
     TankCheckBody(fixes, busy, tone, onFix, onFixAll, close)
+}
+
+/**
+ * Corals & inverts: a health bar per coral with its main trouble (core CoralHealth), and in My tank one button that
+ * gives corals and inverts what they need now (core CoralCare: doses, iodine, coral food, phyto, anemone food).
+ */
+@Composable
+private fun CoralSection(corals: List<CoralHealth.Row>, care: CoralCare.Plan?, onReefCare: (() -> Unit)?, close: () -> Unit) {
+    LiveSectionTitle("Corals & inverts")
+    if (onReefCare != null && care != null) {
+        if (!care.isEmpty) {
+            LiveTile(ReefGlyphs.branch, "Give corals and inverts what they need", Candy.green,
+                onClick = { onReefCare(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Adds " + care.words + " (${care.price} sand dollars)")
+        } else LiveHelp("Corals and inverts have everything they need right now.")
+    }
+    if (corals.isEmpty()) { LiveHelp("No corals yet. Add some from Add life."); return }
+    val pale = corals.count { it.pale }
+    if (pale > 0) LiveHelp(if (pale == 1) "One coral is turning pale (bleaching). Fix what bothers it and it can get its colour back." else "$pale corals are turning pale (bleaching). Fix what bothers them and they can get their colour back.")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (r in corals) StatBar(r.name + r.need?.let { " · ${it.words}" }.orEmpty(), r.health.toFloat(), higherIsBetter = true)
+    }
 }
 
 /**

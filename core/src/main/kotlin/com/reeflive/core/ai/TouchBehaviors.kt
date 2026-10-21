@@ -116,7 +116,7 @@ class TouchReact(val b: SpeciesBrain) : Behavior("touch", "Reacting to a tap") {
                 hold(out)
                 // shrimp draw their antennae in (the grooming pose's antenna stroke, held); hermits tuck their legs
                 val k = smoothstep(0.0, 0.4, elapsed)
-                if (o.brainKind == BrainKind.BANDED_SHRIMP || o.brainKind == BrainKind.CLEANER_SHRIMP) o.groom = max(o.groom, 0.8 * k)
+                if (o.brainKind.isShrimp) o.groom = max(o.groom, 0.8 * k)
                 o.walkAmt = 0.0
             }
             TouchReaction.CHECK -> {

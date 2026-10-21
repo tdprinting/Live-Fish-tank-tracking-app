@@ -307,6 +307,6 @@ class InvertEcology(private val sim: Simulation) {
         const val ABANDON_AFTER_MIN = 3 * 1440.0
         const val ABANDON_HEALTH = 0.4
         const val RESETTLE_HEALTH = 0.7
-        private val SNAILS = setOf(BrainKind.ASTREA, BrainKind.NASSARIUS)
+        private val SNAILS = setOf(BrainKind.ASTREA, BrainKind.NASSARIUS, BrainKind.TROCHUS, BrainKind.CONCH)
     }
 }

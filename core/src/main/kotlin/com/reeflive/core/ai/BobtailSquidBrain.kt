@@ -535,7 +535,7 @@ class BobtailSquidBrain(c: Ctx) : SpeciesBrain(c) {
         val L = o.lengthCm
         val soft = n.molting || (!o.clock.isNaN() && o.clock - n.lastMoltAt < 2 * 3600)
         return when (n.brainKind) {
-            BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP ->
+            BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP ->
                 if (n.lengthCm < SHRIMP_PREY_FRAC * L || soft && n.lengthCm < 1.1 * L) 1.0 else 0.0
             BrainKind.HERMIT -> if (n.lengthCm < 0.35 * L) 0.25 else 0.0
             else -> 0.0

@@ -303,6 +303,61 @@ def leopard_male(cv, fl):
     FS.mucus(cv, 0.03, 206)
 
 
+# ---------------------------------------------------------------- Zebrasoma night colours, fairy wrasse (research 42)
+def yellow_tang_night(cv, fl):
+    """Night: the yellow dulls to a brownish grey-yellow and a broad white band shows along the mid-flank [M ADW S18:
+    'darker/grayer yellow with a white lateral stripe'; 'brown' in another account]."""
+    FS.paint_yellow_tang(cv, fl)
+    u, v = cv.u, cv.v
+    cv.blend(np.ones_like(u), "#8A7238", 0.6)
+    band = P.band(v, 0.4, 0.58, 0.04) * S(0.22, 0.32, u) * (1 - S(0.8, 0.88, u))
+    cv.blend(band, "#D8D4C4", 0.55)
+    cv.blend(fl.disc(0.885, 0.5, 0.022, 0.006), "#F6F4EC", 0.9)
+
+
+def purple_tang_night(cv, fl):
+    """Night: darker and duller, with a faint pale mid-flank band like other Zebrasoma [L]."""
+    FS.paint_purple_tang(cv, fl)
+    u, v = cv.u, cv.v
+    body = 1 - S(0.96, 0.98, u)
+    cv.blend(body, "#1A1440", 0.45)
+    cv.blend(P.band(v, 0.42, 0.56, 0.04) * S(0.25, 0.35, u) * (1 - S(0.78, 0.86, u)), "#8A80B0", 0.35)
+
+
+def fairy_juvenile(cv, fl):
+    """Juvenile Cirrhilabrus: plain pale orange-pink with a white belly and a dark spot on the upper peduncle [L: common
+    to juvenile fairy wrasses]."""
+    FS.paint_fairy_female(cv, fl)
+    cv.blend(np.ones_like(cv.u), "#F2C4A8", 0.35)
+    cv.blend(fl.disc(0.88, 0.7, 0.02, 0.006), "#3A2020", 0.7)
+
+
+# ---------------------------------------------------------------- popular fish pack (research 50)
+def gramma_juvenile(cv, fl):
+    """Juvenile royal gramma: the two colours are there from settlement, softer and with a wider dappled meeting zone
+    [L: captive-bred juveniles in ORA / Biota photos]."""
+    FS.paint_royal_gramma(cv, fl)
+    _lighten(cv, 0.1, "#F0E0F8")
+
+
+def banggai_juvenile(cv, fl):
+    """Juvenile Banggai: released from the male's mouth as a miniature adult (no larval stage, research 50 §2), the
+    three bars already bold; the white pearl spots come in as it grows, so few at first, and the body is glassier [L]."""
+    u, v = cv.u, cv.v
+    FS.paint_banggai(cv, fl)
+    pearls = _mask_hue(cv, lambda r, g, b: (np.minimum(np.minimum(r, g), b) - 0.9) * 12)
+    cv.blend(pearls * S(0.6, 0.7, u), "#C8D0D4", 0.7)
+    _lighten(cv, 0.08, "#E8F0F4")
+
+
+def watchman_juvenile(cv, fl):
+    """Juvenile yellow watchman: paler yellow with the blue head spots small and faint [L]."""
+    FS.paint_watchman(cv, fl)
+    blue = _mask_hue(cv, lambda r, g, b: (b - r) * 3)
+    cv.blend(blue, "#F2E6A0", 0.45)
+    _lighten(cv, 0.1, "#FFF8D8")
+
+
 # model -> (species id, {form: painter}); the adult forms reuse the GLB's own painter
 FORMS = {
     "clown_orange": ("amphiprion_ocellaris", {"juvenile": clown_orange_juvenile, "adult": FS.paint_clown_orange}),
@@ -319,10 +374,18 @@ FORMS = {
     "dottyback": ("pseudochromis_indigo", {"juvenile": dottyback_juvenile, "adult": FS.paint_dottyback}),
     "diamond_goby": ("valenciennea_puellaris", {"juvenile": diamond_juvenile, "adult": FS.paint_diamond_goby}),
     "leopard_wrasse": ("macropharyngodon_bipartitus", {"juvenile": leopard_juvenile, "female": FS.paint_leopard_wrasse, "male": leopard_male}),
+    "yellow_tang": ("zebrasoma_flavescens", {"adult": FS.paint_yellow_tang, "night": yellow_tang_night}),
+    "purple_tang": ("zebrasoma_xanthurum", {"adult": FS.paint_purple_tang, "night": purple_tang_night}),
+    "fairy_wrasse": ("cirrhilabrus_rubripinnis", {"juvenile": fairy_juvenile, "female": FS.paint_fairy_female, "male": FS.paint_fairy_male}),
+    "royal_gramma": ("gramma_loreto", {"juvenile": gramma_juvenile, "adult": FS.paint_royal_gramma}),
+    "banggai": ("pterapogon_kauderni", {"juvenile": banggai_juvenile, "adult": FS.paint_banggai}),
+    "watchman_goby": ("cryptocentrus_cinctus", {"juvenile": watchman_juvenile, "adult": FS.paint_watchman}),
 }
 # model -> {form: fin-sheet painter}; the form whose painter is the GLB's own fin painter is the fin `base`
 FIN_FORMS = {
     "engineer_goby": {"juvenile": goby_fins_juvenile, "subadult": FS.fins_engineer_goby, "adult": goby_fins_adult},
+    # the GLB geometry has the male's long fins, its own fin sheet cuts them back (female); the male sheet shows them
+    "fairy_wrasse": {"juvenile": FS.fins_fairy_female, "female": FS.fins_fairy_female, "male": FS.fins_fairy_male},
 }
 # models whose GLB is not built yet: only flat previews are painted, on the cleaner wrasse's profile (none at present)
 PENDING_MODELS = {}

@@ -126,7 +126,7 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
         sink[i] = (SINK_MIN + (SINK_MAX - SINK_MIN) * rng.nextDouble()).toFloat()
         tint[i] = when (o.brainKind) {
             BrainKind.TANG, BrainKind.LAWNMOWER_BLENNY -> 1     // algae diet: green-brown
-            BrainKind.CARDINAL, BrainKind.WRASSE -> 2            // plankton and parasites: pale
+            BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE -> 2            // plankton and parasites: pale
             else -> 0
         }.toByte()
         seed[i] = rng.nextDouble().toFloat()
@@ -295,7 +295,7 @@ class WasteSystem(private val rock: RockData, private val flow: FlowField, priva
         /** Pellet encounters per second that end in a bite: coprophagous fish (Robertson 1982) and the clean-up crew. */
         val COPROPHAGY = mapOf(BrainKind.TANG to 0.6, BrainKind.CLOWN to 0.3, BrainKind.LAWNMOWER_BLENNY to 0.3,
             BrainKind.PEEKER_BLENNY to 0.4, BrainKind.DOTTYBACK to 0.2, BrainKind.CARDINAL to 0.2)
-        val CUC = mapOf(BrainKind.HERMIT to 0.25, BrainKind.NASSARIUS to 0.4, BrainKind.BRITTLE_STAR to 0.3,
-            BrainKind.SALLY_CRAB to 0.2, BrainKind.CLEANER_SHRIMP to 0.15, BrainKind.BANDED_SHRIMP to 0.15)
+        val CUC = mapOf(BrainKind.HERMIT to 0.25, BrainKind.NASSARIUS to 0.4, BrainKind.CONCH to 0.3, BrainKind.BRITTLE_STAR to 0.3,
+            BrainKind.SALLY_CRAB to 0.2, BrainKind.ARROW_CRAB to 0.2, BrainKind.CLEANER_SHRIMP to 0.15, BrainKind.BANDED_SHRIMP to 0.15, BrainKind.PEPPERMINT_SHRIMP to 0.1)
     }
 }

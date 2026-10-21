@@ -3,6 +3,7 @@
 // ReefLive drives the 3D view, ReefSandbox is the Android view model's actions and readings.
 import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
 import { initBags, pickBag } from './bags.js';
+import { initCorals } from './corals.js';
 import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
@@ -92,6 +93,7 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
+    initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
     renderAll();
@@ -407,10 +409,16 @@ function timeSlider(stops) {
     <input type="range" data-time min="0" max="${stops.length - 1}" step="1" value="${i}" data-stops="${stops.join(',')}"></label>`;
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
+// My tank: how fast slow things (growing, spreading, babies) happen; animals still move at real speed
+function paceTiles() {
+  const ps = JSON.parse(MY.paces());
+  const ico = { REAL: 'clockSun', FAST: 'seaweed', FASTER: 'timelapse' };
+  return `<h4>Growing speed</h4><div class="options">${ps.map((p) => tile(`data-pace="${p.id}" title="${esc(p.blurb)}"`, ico[p.id], p.label, p.on)).join('')}</div>`;
+}
 function lookCard(sb) {
   const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
-  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
+  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}${ui.mode === 'mine' ? paceTiles() : ''}
     ${fish.length ? `<h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('')}</div>` : ''}
     <h4>Look around</h4><div class="options">${tile('data-tour', 'camera', ui.tour ? 'Stop tour' : 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
       ${tile('data-microscope', 'microscope', 'Look closer')}${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-torch', 'torch', 'Torch', ui.torch)}
@@ -425,6 +433,9 @@ function healthCard() {
   return `<div id="healthLive">${healthLive()}</div>
     <div class="options"><button class="opt wide" id="feedHungry" data-feedhungry><span class="ico">${icon('feedTin')}</span><span class="lbl"></span></button></div>
     <div class="hunger" id="hungerRows"></div>
+    <div id="coralLive"></div>
+    <div class="options"><button class="opt wide" id="reefCare" data-reefcare><span class="ico">${icon('branch')}</span><span class="lbl"></span></button></div>
+    <div class="hunger" id="coralRows"></div>
     <h4>Water &amp; gear</h4>${fixList()}
     <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
 }
@@ -453,8 +464,24 @@ function refreshHealth() {
   const b = $('feedHungry');
   b.querySelector('.lbl').textContent = hungry ? (hungry === 1 ? 'Feed the hungry one' : `Feed all ${hungry} hungry ones`) : 'Nobody is hungry right now';
   b.classList.toggle('on', hungry > 0); b.classList.toggle('lock', !hungry);
+  refreshCorals();
   $('hungerRows').innerHTML = rows.map((r) => `<div class="stat ${r.hungry ? 'hungry' : ''}"><span>${esc(r.name)}${r.food ? ` <small class="muted">likes ${esc(r.food.toLowerCase())}</small>` : ''}</span>
     <i class="meter"><i class="hunger" style="width:${Math.round(Math.max(0, Math.min(1, r.hunger)) * 100)}%"></i></i></div>`).join('');
+}
+/** Corals & inverts: how each coral is doing (core CoralHealth) and the one-tap care button (core CoralCare). */
+function refreshCorals() {
+  const c = JSON.parse(SB.corals() || '{}');
+  ui.coralCare = c;
+  const list = c.corals || [];
+  const pale = list.filter((k) => k.pale).length;
+  const sick = list.filter((k) => !k.pale && k.health < 0.7).length;
+  const note = !list.length ? 'No corals yet' : pale ? `${pale} turning pale` : sick ? `${sick} not happy` : 'All doing well';
+  $('coralLive').innerHTML = `<h4>Corals &amp; inverts <span class="note ${pale ? 'danger' : sick ? 'caution' : 'good'}">${note}</span></h4>`;
+  const b = $('reefCare');
+  b.querySelector('.lbl').textContent = c.words ? `Give corals and inverts what they need (${c.price} sand dollars)` : 'Corals and inverts have all they need';
+  b.classList.toggle('on', !!c.words); b.classList.toggle('lock', !c.words);
+  $('coralRows').innerHTML = list.map((k) => `<div class="stat ${k.health < 0.7 ? 'hungry' : ''}"><span>${esc(k.name)}${k.need ? ` <small class="muted">${esc(k.need)}</small>` : ''}</span>
+    <i class="meter"><i class="${k.health >= 0.7 ? 'good' : k.health >= 0.4 ? 'caution' : 'danger'}" style="width:${Math.round(Math.max(0, Math.min(1, k.health)) * 100)}%"></i></i></div>`).join('');
 }
 function fixList() {
   const f = JSON.parse(SB.fixes());
@@ -489,7 +516,7 @@ function lifeCard(sb) {
     <p class="muted">Pick how many, then tap an animal. It comes in a bag: drag the bag onto the tank and it floats until they are ready.</p>
     <div class="pills"><span class="muted">How many</span>${[1, 2, 3, 5, 10].map((n) => `<button class="pillbtn ${ui.addCount === n ? 'on' : ''}" data-count="${n}">${n}</button>`).join('')}</div>
     ${ui.addGroup !== 'CORALS' ? `<div class="pills"><span class="muted">Size</span>${C.sizes.map((z) => `<button class="pillbtn ${ui.addSize === z.id ? 'on' : ''}" data-size="${z.id}">${esc(z.label)}</button>`).join('')}</div>` : ''}
-    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, `species:${s.id}:${STOCK_ICON[s.group]}`, s.name, false, !sb)).join('')}</div>
+    <div class="options">${list.map((s) => tile(`data-add="${s.id}"`, `species:${s.species || s.id}:${STOCK_ICON[s.group]}`, s.name, false, !sb)).join('')}</div>
     <h4>Helpers</h4><div class="options">
       ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
       ${tile('data-pest="PEPPERMINT_SHRIMP"', 'shrimp', 'Peppermint shrimp', false, !sb)}${tile('data-pest="BERGHIA"', 'slug', 'Berghia slugs', false, !sb)}
@@ -618,9 +645,25 @@ $('card').addEventListener('click', (e) => {
     say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
     closeCard(); return;
   }
+  if ('reefcare' in d) {
+    sbOnly(() => {
+      const c = ui.coralCare || {};
+      if (!c.words) { say('The corals and inverts have all they need right now.'); cue('TICK'); return; }
+      if (!SB.act('reefCare', null, c.price || 0)) { say(`Not enough sand dollars: coral care costs ${c.price}. Do today's chores to earn more.`); cue('TICK'); return; }
+      cue('PELLET');
+      say(`Coral care! In goes ${c.words}.`);
+      closeCard();
+    });
+    return;
+  }
   if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
   if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
+  else if (d.pace) {
+    MY.setPace(d.pace);
+    const p = JSON.parse(MY.paces()).find((x) => x.id === d.pace);
+    if (p) say(`${p.blurb}. Fish still swim at real speed.`);
+  }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);
   else if ('feedshelf' in d) { closeCard(); openShelf(); return; }

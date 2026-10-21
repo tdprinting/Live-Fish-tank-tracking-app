@@ -31,6 +31,10 @@ data class CustomTankSave(
     val seed: Long = 1L,
     /** The time speed the keeper left it at (1 = real time). */
     val speed: Double = 1.0,
+    /** How fast slow biology runs ([com.reeflive.core.sim.Simulation.lifePace]; older saves take the default). */
+    val lifePace: Double = com.reeflive.core.sim.LifePace.DEFAULT.pace,
+    /** The game-biology clock ([com.reeflive.core.sim.Simulation.lifeSec]); null in older saves = [simTimeSec]. */
+    val lifeSec: Double? = null,
     val water: Map<String, Double> = emptyMap(),
     val equipment: Map<String, Double> = emptyMap(),
     /** Microfauna totals by group name (pods, worms…: what a squid, a goby or a mandarin lives on). */
@@ -42,6 +46,8 @@ data class CustomTankSave(
     /** Animals of species this version cannot load, carried through untouched. */
     val dormant: List<SavedAnimal> = emptyList(),
     val dormantCorals: List<SavedCoral> = emptyList(),
+    /** Coral species ids out of their bag and waiting for the keeper to pick a spot, in order (added after v1, defaulted). */
+    val toPlace: List<String> = emptyList(),
     /** Eggs on the rock and the nursery tank's larvae / fry (added after v1 as a defaulted field: no migration needed). */
     val brood: com.reeflive.core.sim.SavedBroodState = com.reeflive.core.sim.SavedBroodState(),
     /** The rockwork when it differs from the stock scape: rocks that shifted, were added or were taken out ([Simulation.rockState]). */
@@ -116,6 +122,9 @@ data class SavedCoral(
     val size: Double = 1.0,
     val cover: Double = 0.0,
     val radiusCm: Double = 0.0,
+    /** Recent caught food 0..1 and the light it is used to (−1 unknown: an older save), for hunger and dark fading. */
+    val fed: Double = 0.0,
+    val acclLight: Double = -1.0,
 )
 
 /**

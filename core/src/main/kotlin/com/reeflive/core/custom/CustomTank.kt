@@ -35,12 +35,17 @@ object CustomTank {
         applyBuild(sim, build)
         // Tee's rockscape, cut down and centred when the tank is smaller than his
         sim.fitStockScape()
+        // cured rock carries the pods but no bristleworms yet: they ride in later on frags, rock and bags (Hitchhikers)
+        sim.water.micro.setTotal(MicroGroup.BRISTLEWORM, 0.0)
         return sim
     }
 
     private fun applyBuild(sim: Simulation, build: TankBuild) {
         sim.shape = build.shape
         sim.bareScape = true
+        // new corals wait for the keeper to pick their spot (CoralPicks)
+        sim.coralPicks.byHand = true
+        sim.hitchhikersEnabled = true
         // the keeper's own tank has a living rockscape: rocks settle when dug under, and it can be rebuilt
         sim.setDynamicRocks(true)
         sim.water.skimmer = build.skimmer
@@ -56,26 +61,30 @@ object CustomTank {
 
     fun capture(sim: Simulation, base: CustomTankSave, nowMs: Long): CustomTankSave {
         val animals = sim.organisms.filter { it.alive }.map { save(it).copy(state = sim.anemones.saveState(it)) } + sim.bags.unreleased().map { save(it).copy(arrivalTime = sim.simTimeSec) }
-        val corals = sim.corals.filter { it.tissue > 0.01 }.map { save(it) } + sim.bags.unopenedCorals().flatMap { (sp, n) ->
-            (0 until n).map { i -> SavedCoral("$sp#bagged${sim.tickCount}_$i", sp, sim.species[sp].common) }
-        }
+        val corals = sim.corals.filter { it.tissue > 0.01 }.map { save(it) }
+        // colonies still in a bag or waiting for their spot: picked when the tank is opened again
+        val toPlace = sim.coralPicks.ids() + sim.bags.unopenedCorals().flatMap { (sp, n) -> List(n) { sp } } +
+            base.toPlace.filterNot { sim.species.has(it) }
         val w = sim.water
         val eq = mapOf(
             "heater_set_c" to w.heaterSetC, "heater_working" to b(w.heaterWorking), "flow_strength" to w.flowStrength,
             "flow_on" to b(w.s.flowOn), "skimmer" to b(w.skimmer), "filter_sock" to b(w.filterSock), "carbon" to b(w.carbon),
             "uv" to b(w.uv), "refugium" to b(w.refugium), "ato" to b(w.ato), "gfo" to b(w.s.gfoActive),
-            "predation" to b(sim.predationEnabled),
+            "predation" to b(sim.predationEnabled), "lid" to b(w.lid),
         )
         val shift = sim.scapeShift
         return base.copy(
             savedAtMs = nowMs,
             simTimeSec = sim.simTimeSec,
             speed = sim.speed,
+            lifePace = sim.lifePace,
+            lifeSec = sim.lifeSec,
             water = WaterFields.read(w.s),
             equipment = eq,
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
             animals = animals,
             corals = corals,
+            toPlace = toPlace,
             brood = sim.brood.save(),
             rocks = sim.rockState(),
             scapeFit = listOf(shift.x, shift.y, shift.z),
@@ -117,14 +126,14 @@ object CustomTank {
         offsetX = c.offset.x, offsetY = c.offset.y, offsetZ = c.offset.z,
         x = c.pos.x, y = c.pos.y, z = c.pos.z, nx = c.normal.x, ny = c.normal.y, nz = c.normal.z,
         tissue = c.tissue, bleach = c.bleach, brown = c.brown, stress = c.stress, dhw = c.dhw, algaeCover = c.algaeCover,
-        size = c.size, cover = c.cover, radiusCm = c.radiusCm,
+        size = c.size, cover = c.cover, radiusCm = c.radiusCm, fed = c.fed, acclLight = if (c.acclLight.isNaN()) -1.0 else c.acclLight,
     )
 
     // ============================================================== reopen
 
     /** Species ids a host must load before [restore] (sheets are loaded per id). */
     fun speciesIds(save: CustomTankSave): List<String> =
-        (save.animals + save.dormant).map { it.speciesId }.plus((save.corals + save.dormantCorals).map { it.speciesId }).distinct()
+        (save.animals + save.dormant).map { it.speciesId }.plus((save.corals + save.dormantCorals).map { it.speciesId }).plus(save.toPlace).distinct()
 
     /**
      * Rebuilds the saved tank at its saved sim time (the host then skips it forward by [catchUpSeconds]). Animals of
@@ -165,6 +174,7 @@ object CustomTank {
         for (c in sim.corals) coralsById[c.id]?.let { s ->
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw
             c.algaeCover = s.algaeCover; c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = true
+            c.fed = s.fed.coerceIn(0.0, 1.0); if (s.acclLight >= 0) c.acclLight = s.acclLight
         }
         val eq = save.equipment
         val w = sim.water
@@ -180,13 +190,18 @@ object CustomTank {
         eq["ato"]?.let { w.ato = it > 0.5 }
         eq["gfo"]?.let { w.s.gfoActive = it > 0.5 }
         eq["predation"]?.let { sim.predationEnabled = it > 0.5 }
+        eq["lid"]?.let { w.lid = it > 0.5 }
         for ((name, n) in save.micro) {
             val g = MicroGroup.entries.firstOrNull { it.name == name } ?: continue
             if (n.isFinite() && n >= 0) w.micro.setTotal(g, n)
         }
         sim.brood.load(save.brood)
+        sim.coralPicks.restore(save.toPlace.filter { species.has(it) })
         sim.pests.restore(save.pests)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
+        sim.lifePace = save.lifePace
+        // stamps in the save (eggs, nursery cohorts) are on this clock; before it existed they were on the sim clock
+        sim.lifeSec = save.lifeSec?.takeIf { it.isFinite() } ?: save.simTimeSec
         sim.reserveIds(save.nextIds.organism, save.nextIds.frag, save.nextIds.bag)
         return sim
     }

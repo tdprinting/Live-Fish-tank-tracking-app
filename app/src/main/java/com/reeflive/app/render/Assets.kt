@@ -26,9 +26,9 @@ class DrawPart(
     val prim: GlbPrimitive? = null,
 ) {
     val part: String get() = node.part
-    /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic). */
+    /** Fin kind for the fish shader (0 median, 1 pectoral, 2 caudal, 3 pelvic, 4 first dorsal: folds by uFold). */
     val finKind: Float = node.name.lowercase().let { n ->
-        when { "pectoral" in n -> 1f; "caudal" in n -> 2f; "pelvic" in n -> 3f; else -> 0f }
+        when { "pectoral" in n -> 1f; "caudal" in n -> 2f; "pelvic" in n -> 3f; n == "findorsal" -> 4f; else -> 0f }
     }
     val eyePivot: FloatArray = node.vec3("pivot") ?: floatArrayOf(0.4f, 0.05f, 0f)
     val identityWorld: Boolean = M.isIdentity(node.world)
@@ -41,6 +41,12 @@ class DrawPart(
      * without one (fish.vert uJaw).
      */
     val jaw: FloatArray = node.floats("jaw")?.takeIf { it.size >= 4 }?.copyOf(4) ?: FloatArray(4)
+    /**
+     * Polyp motion mode (`extras.polypMode`, polyp.vert uPolypMode), parsed once: 0 ordinary polyps, 1 night
+     * tentacles (Euphyllia sweepers, LPS feeding tentacles) that grow out with the colony's [CoralPose.tentacles],
+     * 2 LPS day tentacles (Euphyllia: whole strands that bend and shorten).
+     */
+    val polypMode: Float = node.float("polypMode") ?: 0f
     /** `extras.alphaTest`, parsed once (the draw loop reads it for every part every frame). */
     val alphaTest: Float? = node.float("alphaTest")
     /**

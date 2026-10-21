@@ -56,6 +56,7 @@ import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
 import com.reeflive.core.sim.StockGroup
+import com.reeflive.core.sim.Stocking
 import com.reeflive.core.species.SpeciesKind
 
 /**
@@ -217,7 +218,7 @@ private fun ShelfTile(c: ShelfCard, inBag: Int, on: Boolean, onTap: () -> Unit) 
     Box {
         LivePanel(Modifier.width(104.dp), contentPadding = PaddingValues(6.dp), tint = if (on) Candy.yellow else null, onClick = onTap) {
             Box(Modifier.fillMaxWidth().alpha(if (c.locked) 0.5f else 1f), contentAlignment = Alignment.Center) {
-                SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 52.dp)
+                SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 52.dp)
             }
             Text(c.name, style = s.buttonText.copy(fontSize = 12.sp), color = s.label, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.fillMaxWidth().height(32.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -240,7 +241,7 @@ private fun ShelfCardPanel(c: ShelfCard, inBag: Int, money: Int, onAdd: () -> Un
     val s = LiveTheme.style
     LivePanel(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 72.dp)
+            SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 72.dp)
             Column(Modifier.weight(1f)) {
                 Text(c.name, style = s.titleText.copy(fontSize = 18.sp), color = s.label)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -290,7 +291,7 @@ private fun Counter(
                 val c = all[id] ?: return@forEach
                 val n = bag.count { it == id }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SpeciesAvatar(c.speciesId, c.kind(), emptyMap(), size = 40.dp)
+                    SpeciesAvatar(Stocking.speciesOf(c.speciesId), c.kind(), emptyMap(), size = 40.dp)
                     Text(c.name, style = MaterialTheme.typography.bodyMedium, color = s.label, modifier = Modifier.weight(1f))
                     LivePill("−", { onLess(id) }, tone = Candy.white)
                     Text("$n", style = s.buttonText, color = s.label)

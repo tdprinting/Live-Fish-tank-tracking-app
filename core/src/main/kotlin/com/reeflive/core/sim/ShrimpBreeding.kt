@@ -47,7 +47,7 @@ class ShrimpBreeding(private val sim: Simulation) {
 
     fun step(dtMin: Double) {
         val t = sim.simTimeSec
-        val shrimps = sim.organisms.filter { it.alive && (it.brainKind == BrainKind.BANDED_SHRIMP || it.brainKind == BrainKind.CLEANER_SHRIMP) }
+        val shrimps = sim.organisms.filter { it.alive && it.brainKind.isShrimp }
         if (shrimps.isEmpty() && clutches.isEmpty()) return
         clutches.keys.retainAll(shrimps.map { it.id }.toSet())
         pairUp(shrimps)
@@ -62,10 +62,11 @@ class ShrimpBreeding(private val sim: Simulation) {
             }
             // after the molt is over (soft-shelled, emerging): mating / spawning
             if (!o.molting && molt > -1e8 && t - molt < (MOLT_HIDE_H + SPAWN_WINDOW_H) * 3600 && clutches[o.id] == null && t - molt >= MOLT_HIDE_H * 3600 * 0.5) {
-                if (o.lengthCm < MIN_ADULT_CM || o.health < 0.5) continue
+                if (o.lengthCm < minAdultCm(o.brainKind) || o.health < 0.5) continue
                 when (o.brainKind) {
-                    BrainKind.CLEANER_SHRIMP -> {
-                        val partner = shrimps.any { it !== o && it.brainKind == BrainKind.CLEANER_SHRIMP && it.lengthCm >= MIN_ADULT_CM }
+                    // Lysmata: protandric simultaneous hermaphrodites that mate right after the molt (research 12, 42 §1.4)
+                    BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> {
+                        val partner = shrimps.any { it !== o && it.brainKind == o.brainKind && it.lengthCm >= minAdultCm(it.brainKind) }
                         clutches[o.id] = Clutch(partner, t, Double.NaN)
                         if (partner) { fertileClutches++; matings++ } else infertileClutches++
                     }
@@ -73,7 +74,7 @@ class ShrimpBreeding(private val sim: Simulation) {
                         val mate = shrimps.firstOrNull { it.id == o.mateId && it.pos.distanceTo(o.pos) <= MATE_REACH_CM }
                         if (mate != null) {
                             matings++; fertileClutches++
-                            clutches[o.id] = Clutch(true, t, t + rng.range(INCUBATION_DAYS_MIN, INCUBATION_DAYS_MAX) * 86400)
+                            clutches[o.id] = Clutch(true, t, t + sim.lifeDays(rng.range(INCUBATION_DAYS_MIN, INCUBATION_DAYS_MAX)))
                         }
                     }
                 }
@@ -109,6 +110,10 @@ class ShrimpBreeding(private val sim: Simulation) {
         /** Temperature scaling of that interval (DESIGN ESTIMATE). */
         @Ev(Evidence.DESIGN_ESTIMATE, "12") const val INTERMOLT_Q10 = 2.0
         const val MIN_ADULT_CM = 3.5
+        /** Peppermints are smaller: an L. boggessi breeds at about 2.5 cm (research 42 §1.3, adults 3-4 cm [M]). */
+        const val PEPPERMINT_MIN_ADULT_CM = 2.5
+
+        fun minAdultCm(k: BrainKind) = if (k == BrainKind.PEPPERMINT_SHRIMP) PEPPERMINT_MIN_ADULT_CM else MIN_ADULT_CM
         const val MATE_REACH_CM = 30.0
         const val MOLT_HIDE_H = 36.0
         const val SPAWN_WINDOW_H = 24.0
