@@ -59,6 +59,8 @@ export function startLive(applyReadings) {
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
+    // frames stayed slow at the lowest resolution: the tank stepped its Picture down, and keeps it for next time
+    onQuality: (q) => { ui.quality = q; store.set('reeflive.quality', q); },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
     onPick: (id) => { if (id) buzz(5); if (window.reefstores?.active()) { window.reefstores.pick(id); return; } if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
