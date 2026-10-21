@@ -110,23 +110,43 @@ class PeppermintShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             nav.swimming -> "Swimming back to its hiding spot"
             !home -> "Walking back to its hiding spot"
             groomClock.grooming -> "Grooming its antennae"
+            c.t < pickUntil -> "Picking at the rock"
             c.p.night -> "Resting in its hiding spot"
             else -> "Hiding in the rock"
         }
         private var home = true
+        private var nextShuffle = 0.0
+        private var shuffle = Vec3.ZERO
+        private var pickUntil = -1.0
+        private var nextPick = 0.0
         override fun score(c: Ctx) = 0.5 * (1.2 - forayDrive(c)).coerceIn(0.1, 1.0)
-        override fun enter(c: Ctx) { nav.reset() }
+        override fun enter(c: Ctx) { nav.reset(); shuffle = Vec3.ZERO; nextPick = c.t + c.rng.range(2.0, 6.0) }
         override fun update(c: Ctx, out: SteerIntent) {
             val r = den(c)
+            val n = r.up ?: Vec3.Y
             if (c.o.pos.distanceTo(r.pos) > 2.0 || nav.swimming) {
-                home = nav.drive(c, out, r.pos, r.up, c.o.cruiseSpeed * 1.3, arrive = 1.0) == ShrimpNav.Status.ARRIVED
+                home = nav.drive(c, out, r.pos, n, c.o.cruiseSpeed * 1.3, arrive = 1.0) == ShrimpNav.Status.ARRIVED
                 if (!home) return
             }
             home = true
-            out.rest(r, 1.5)
+            // a hidden Lysmata is never still: it shifts its footing, picks at the rock in front of it and waves its
+            // antennae out of the crack (research 42 §1.4 [M]; the same idle as the banded shrimp's ledge, research 12)
+            if (c.t > nextShuffle) {
+                nextShuffle = c.t + c.rng.range(4.0, 9.0)
+                val st = shrimpStance(c.o)
+                val foot = c.rock.sdf.project(r.pos - n * st + c.rng.unitVector().rejectFrom(n) * 0.6, 0.0)
+                shuffle = if (kotlin.math.abs(c.rock.sdf.dist(foot)) < 0.2) foot + c.rock.sdf.gradient(foot) * st - r.pos else Vec3.ZERO
+            }
+            out.rest(r.copy(pos = r.pos + shuffle), 1.5)
             c.o.extension = 1.0
-            c.o.appendagePhase += c.dt * 0.6
-            groomClock.tick(c, threat == null)
+            val calm = threat == null
+            if (calm && !groomClock.grooming && c.t > nextPick) {
+                pickUntil = c.t + c.rng.range(2.5, 6.0); nextPick = pickUntil + c.rng.range(5.0, 14.0)
+            }
+            val picking = calm && c.t < pickUntil
+            if (picking) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.8 * c.t))
+            c.o.appendagePhase += c.dt * (if (picking) 3.0 else if (calm) 1.6 else 0.6)
+            groomClock.tick(c, calm && !picking)
         }
     }
 
