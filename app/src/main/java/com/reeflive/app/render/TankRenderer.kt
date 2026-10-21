@@ -172,6 +172,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun setQuality(q: RenderQuality) { requestedQuality = q }
     fun follow(id: String?) { followRequest = id; followDirty = true }
     fun resetCamera() { resetRequested = true }
+
+    /** Screensaver mode: remember the keeper's view now ([saveView]) and put it back later ([restoreView]); any thread. */
+    @Volatile private var saveRequested = false
+    @Volatile private var restoreRequested = false
+    @Volatile private var savedView: Camera.Bookmark? = null
+    fun saveView() { saveRequested = true }
+    fun restoreView() { restoreRequested = true }
     /** Glide the camera to the nursery tank beside the display ([on]) or back. */
     fun lookAtNursery(on: Boolean) { nurseryRequest = on }
     /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
@@ -507,6 +514,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyRequests() {
         if (followDirty) { followDirty = false; camera.follow(followRequest) }
         if (resetRequested) { resetRequested = false; camera.reset() }
+        if (saveRequested) { saveRequested = false; savedView = camera.bookmark() }
+        if (restoreRequested) { restoreRequested = false; savedView?.let { camera.restore(it) } }
         val clean = cleaningRequest
         if (clean != cleaning) {
             cleaning = clean
