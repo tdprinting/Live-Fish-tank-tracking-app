@@ -641,8 +641,9 @@ private fun PresetCard(p: SandboxPreset, active: Boolean, modifier: Modifier, on
 // ---------------------------------------------------------------- first-time tips
 
 /**
- * First-time tips told by Hermie on a live panel: the pretend tank's when [sandbox], else the live tank's (Watch).
- * Each is shown once (remembered in settings) and again from More → "What can I do?". Words in [LiveTips].
+ * First-time tips told by Hermie on a live panel: My tank's when [myTank], Watch's fast-forward copy when [sandbox],
+ * else the live tank's (Watch). Each is shown once (remembered in settings) and again from Settings → "What can I
+ * do?". Words in [LiveTips].
  */
 @Composable
 fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbox: Boolean = true, myTank: Boolean = false) {
@@ -651,11 +652,11 @@ fun SandboxTipsCard(onDismiss: () -> Unit, modifier: Modifier = Modifier, sandbo
     val hop = remember { androidx.compose.animation.core.Animatable(0f) }
     // one glyph per line of LiveTips (zip stops at the shorter list, so a missing glyph never crashes)
     val glyphs = if (myTank) {
-        listOf(ReefGlyphs.fish, ReefGlyphs.shell, ReefGlyphs.touch, ReefGlyphs.clockSun, ReefGlyphs.reset)
+        listOf(ReefGlyphs.fish, ReefGlyphs.feedTin, ReefGlyphs.sun, ReefGlyphs.shell, ReefGlyphs.touch, ReefGlyphs.clockSun, ReefGlyphs.reset)
     } else if (sandbox) {
-        listOf(ReefGlyphs.touch, ReefGlyphs.whatIf, ReefGlyphs.sparkleTip, ReefGlyphs.reset, ReefGlyphs.eye)
+        listOf(ReefGlyphs.clockSun, ReefGlyphs.timelapse, ReefGlyphs.eye)
     } else {
-        listOf(ReefGlyphs.fish, ReefGlyphs.touch, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.bucket, ReefGlyphs.help)
+        listOf(ReefGlyphs.fish, ReefGlyphs.bubbles, ReefGlyphs.touch, ReefGlyphs.touch, ReefGlyphs.eye, ReefGlyphs.feedTin, ReefGlyphs.flipper, ReefGlyphs.heart, ReefGlyphs.fish, ReefGlyphs.help)
     }
     LivePanel(modifier = modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

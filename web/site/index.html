@@ -37,11 +37,14 @@
     <div class="chrome" id="chrome">
       <div class="top">
         <div class="seg" role="tablist" aria-label="Mode">
-          <button data-mode="watch" class="on" data-ico="eye">Watch</button><button data-mode="sandbox" data-ico="flask">Sandbox</button><button data-mode="mine" data-ico="fish">My tank</button>
+          <button data-mode="mine" data-ico="fish">My tank</button><button data-mode="watch" class="on" data-ico="eye">Watch</button>
         </div>
-        <button class="status" id="statusBtn" aria-label="How is the tank doing?">
-          <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
-        </button>
+        <span class="topright">
+          <button class="status" id="statusBtn" aria-label="Tank Health: how is the tank doing?">
+            <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
+          </button>
+          <button class="status gearbtn" id="setBtn" aria-label="Settings and help"></button>
+        </span>
       </div>
       <button class="hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
 
