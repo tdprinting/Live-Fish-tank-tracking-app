@@ -445,9 +445,11 @@ fun LiveTankScreen(
     val reduceMotion = ReefTheme.reduceMotion
     // My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
     val stock: Map<String, Int>? = if (myTank) economy?.supplies else null
-    val shelfLocked = remember(sandbox, stock) { SupplyItem.lockedIds(sandbox) + SupplyItem.emptyIds(stock) }
+    // what has run out is not on the shelf at all (Tee): no prop, no tag
+    val shelfHidden = remember(stock) { SupplyItem.emptyIds(stock) }
     SideEffect {
-        shelf.locked = shelfLocked
+        shelf.locked = SupplyItem.lockedIds(sandbox)
+        shelf.hidden = shelfHidden
         shelf.setOpen(supplies, reduceMotion)
     }
 
@@ -1307,7 +1309,8 @@ fun LiveTankScreen(
             readouts = kitReadouts,
             showReadouts = testKit,
             projection = projection,
-            locked = shelfLocked,
+            locked = SupplyItem.lockedIds(sandbox),
+            hidden = shelfHidden,
             stock = stock,
             showHint = showSupplyHint,
             landscape = landscape,

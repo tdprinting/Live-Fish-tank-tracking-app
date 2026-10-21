@@ -413,6 +413,8 @@ object ReefLive {
     fun shelfRow(row: Int) { shelf.focusRow(row) }
     fun shelfPick(id: String) { shelf.pick(id) }
     fun shelfLocked(ids: String) { shelf.locked = ids.split(",").filter { it.isNotBlank() }.toSet() }
+    /** Supplies My tank has run out of: off the shelf (no prop, no taps) until more are bought. */
+    fun shelfHidden(ids: String) { shelf.hidden = ids.split(",").filter { it.isNotBlank() }.toSet() }
     fun resetCamera() { renderer?.resetCamera() }
     /** Glide to the nursery tank beside the display (clownfish babies) or back. */
     fun nursery(on: Boolean) { renderer?.lookAtNursery(on) }

@@ -953,7 +953,8 @@ function refreshStock() {
 function left(id) { const n = stock?.left?.[id]; return n == null ? -1 : n; }
 function shelfLockIds() {
   refreshStock();
-  return SUPPLIES.filter((s) => (s.sandbox && !editable()) || left(s.id) === 0).map((s) => s.id).join(',');
+  live.shelfHidden(SUPPLIES.filter((s) => left(s.id) === 0).map((s) => s.id).join(','));
+  return SUPPLIES.filter((s) => s.sandbox && !editable()).map((s) => s.id).join(',');
 }
 function stockChanged() { live.shelfLocked(shelfLockIds()); if (ui.shelf) renderShelf(); }
 /** The badge on a shelf tile: uses left, or nothing for a tool that is kept (or anything outside My tank). */
@@ -982,7 +983,8 @@ function renderShelf() {
   const sb = editable();
   $('shelfbar').innerHTML = `<div class="card-head"><div class="pills">${ROWS.map(([i, n], k) => `<button class="pillbtn ${ui.shelfRow === k ? 'on' : ''}" data-row="${k}">${icon(i)} ${n}</button>`).join('')}</div>
     <button class="btn small ghost" data-back>Back to tank</button></div>
-    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, (s.sandbox && !sb) || left(s.id) === 0, stockBadge(s.id))).join('')}</div>`;
+    ${ui.mode === 'mine' ? '<p class="muted">What runs out leaves the shelf. Buy more at the fish stores: tap Shop.</p>' : ''}
+    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow && left(s.id) !== 0).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, (s.sandbox && !sb) || left(s.id) === 0, stockBadge(s.id))).join('')}</div>`;
   $('shelfbar').classList.remove('hidden');
 }
 const FOOD_ICON = { FLAKE: '🟠', PELLET: '🟤', FLOATING_PELLET: '🟫', ALGAE_WAFER: '🟢', MYSIS: '🦐', BRINE: '🦐', KRILL: '🦐', PRAWN: '🍤', CYCLOPS: '🔴', NORI: '🥬', CORAL_FOOD: '🪸', PLANKTON: '✨', PODS: '🐛' };

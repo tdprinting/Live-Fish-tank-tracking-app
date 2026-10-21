@@ -279,7 +279,7 @@ enum class SupplyItem(
         fun left(stock: Map<String, Int>?, id: String): Int =
             if (stock == null || SupplyBook.pack(id) == null) SupplyBook.UNLIMITED else stock[id] ?: 0
 
-        /** Props that have run out in My tank (drawn dimmed; a tap says where to buy more). */
+        /** Props that have run out in My tank: taken off the shelf until more are bought. */
         fun emptyIds(stock: Map<String, Int>?): Set<String> =
             if (stock == null) emptySet() else entries.filter { left(stock, it.id) == 0 }.map { it.id }.toSet()
     }
@@ -304,6 +304,8 @@ fun BoxScope.SupplyShelfOverlay(
     showReadouts: Boolean,
     projection: TankProjection,
     locked: Set<String>,
+    /** Props that have run out in My tank: not on the shelf, so no tag either. */
+    hidden: Set<String>,
     /** My tank's shelf counts (null outside My tank: nothing runs out). */
     stock: Map<String, Int>?,
     showHint: Boolean,
@@ -322,7 +324,7 @@ fun BoxScope.SupplyShelfOverlay(
         enter = fadeIn(tween(if (reduce) 0 else ReefMotion.SLOW, delayMillis = if (reduce) 0 else TAG_DELAY_MS)),
         exit = fadeOut(tween(if (reduce) 0 else ReefMotion.FAST)),
     ) {
-        ShelfTagLayer(projection, locked, stock, pick?.item, onTag, onRow, sideClear = if (landscape) SIDE_COLUMN else 0.dp)
+        ShelfTagLayer(projection, locked, hidden, stock, pick?.item, onTag, onRow, sideClear = if (landscape) SIDE_COLUMN else 0.dp)
     }
     // the picked prop's name, floating above it (same bounds as the GL view, so view pixels are layout pixels)
     AnimatedVisibility(
@@ -400,7 +402,10 @@ fun BoxScope.SupplyShelfOverlay(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Supply shelf", style = s.titleText, color = s.label, modifier = Modifier.semantics { heading() })
-                        LiveHelp("Drag to look along the shelf. Tap a supply or its name tag to use it.")
+                        LiveHelp(
+                            if (stock == null) "Drag to look along the shelf. Tap a supply or its name tag to use it."
+                            else "Tap a supply to use it. What runs out leaves the shelf: buy more at the fish stores.",
+                        )
                     }
                     LivePill("Back to tank", onClose, tone = Candy.white)
                 }
@@ -457,6 +462,7 @@ private const val HEADER_DROP_CM = 0.6f
 private fun ShelfTagLayer(
     projection: TankProjection,
     locked: Set<String>,
+    hidden: Set<String>,
     stock: Map<String, Int>?,
     picked: SupplyItem?,
     onTag: (SupplyItem) -> Unit,
@@ -510,6 +516,7 @@ private fun ShelfTagLayer(
         val xs = IntArray(ms.size)
         val ys = IntArray(ms.size)
         items.forEachIndexed { i, item ->
+            if (item.id in hidden) return@forEachIndexed
             val r = item.row.ordinal
             val n = SupplyShelfLayout.ROW_COUNT[r]
             val cx = SupplyShelfLayout.propX(item.slot, n)
