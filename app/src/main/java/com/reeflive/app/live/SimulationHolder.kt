@@ -81,10 +81,15 @@ data class StoreVisitUi(
     val speciesOf: Map<String, String>,
     /** The store's offer for each of the keeper's animals and corals (the Sell sheet). */
     val offers: List<SellOffer> = emptyList(),
+    /** The supplies behind the counter (foods, salt, doses, tools for the shelf at home). */
+    val supplies: List<com.reeflive.core.custom.economy.SupplyCard> = emptyList(),
 )
 
 /** The street of stores for the Add life card: each store and whether it is open to this keeper. */
 data class StoreFrontUi(val store: FishStore, val open: Boolean)
+
+/** My tank's room shop card (core room/Decor.kt): its tiles, the money, and what is being tried on. */
+data class RoomShopUi(val tiles: List<com.reeflive.core.custom.room.Decor.Tile>, val coins: Int, val trying: String?)
 
 /** "My tank" as the screen sees it: whether one is set up yet, its name and build. */
 /** The welcome-back card: how far the catch-up is ([daysDone] of [days]) and, once done, what happened. */
@@ -218,6 +223,10 @@ class SimulationHolder(
     private var lastCustomSaveMs = 0L
     /** My tank's economy; kept across "Start over" so the keeper's money and level stay theirs. */
     private var economyLive: Economy? = null
+    /** The stand and room bought for My tank (core room/Decor.kt); kept across "Start over" like the money. */
+    private var decorLive = com.reeflive.core.custom.room.SavedDecor()
+    /** The room shop is trying something on (shown, not bought). */
+    private var decorPreview: String? = null
     /** A long time-away catch-up in progress ([beginAway]). */
     private var away: AwayCatchUp? = null
     /** The corals' health marks when a long catch-up began, for the coral news when it ends. */
@@ -296,7 +305,7 @@ class SimulationHolder(
             customSim = sim
             val eco = economyLive ?: Economy()
             economyLive = eco
-            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state)
+            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state, decor = decorLive)
             customLoaded = true
             lastWallMs[sim] = now
             saveCustom()
@@ -305,6 +314,49 @@ class SimulationHolder(
             if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
         }
     }
+
+    // ---- the room: stands (core room/Decor.kt) ----
+    /** The stand and room round the tank (render HomeRoom.kt): My tank's bought ones, Tee's in Watch. */
+    val roomControl = com.reeflive.app.render.RoomControl()
+    private val _room = MutableStateFlow<RoomShopUi?>(null)
+    /** The room shop card's tiles and the money; null while there is no My tank. */
+    val roomShop: StateFlow<RoomShopUi?> = _room.asStateFlow()
+
+    private fun showDecor(m: SimMode = _mode.value) {
+        val k = decorPreview
+        roomControl.look = if (m != SimMode.CUSTOM) com.reeflive.app.render.RoomLook.DEFAULT
+            else com.reeflive.app.render.RoomLook.of(if (k != null) com.reeflive.core.custom.room.Decor.preview(decorLive, k) else decorLive)
+        val e = economyLive
+        _room.value = if (e == null) null else RoomShopUi(com.reeflive.core.custom.room.Decor.tiles(decorLive, e.level), e.state.coins, k)
+    }
+
+    /** Buys room item [key] (it goes straight into use); [onResult] gets the result on the sim thread. */
+    fun decorBuy(key: String, onResult: (com.reeflive.core.custom.room.DecorResult) -> Unit = {}) {
+        scope.launch {
+            val e = economyLive ?: return@launch
+            val (d, r) = com.reeflive.core.custom.room.Decor.buy(decorLive, key, e, today())
+            if (r == com.reeflive.core.custom.room.DecorResult.OK) {
+                decorLive = d; decorPreview = null
+                customSim?.let { updateEconomy(it, force = true) }
+                saveCustom()
+            }
+            showDecor()
+            onResult(r)
+        }
+    }
+
+    /** Puts an owned stand, colour or extra to use (an extra toggles). */
+    fun decorUse(key: String) {
+        scope.launch {
+            decorPreview = null
+            val d = com.reeflive.core.custom.room.Decor.use(decorLive, key)
+            if (d != decorLive) { decorLive = d; saveCustom() }
+            showDecor()
+        }
+    }
+
+    /** Tries [key] on in the 3D view without buying it (null ends the try-on). */
+    fun decorTry(key: String?) { scope.launch { decorPreview = key; showDecor() } }
 
     /** The four storefronts and which are open to this keeper (the Add life card in My tank). */
     fun storeFronts(): List<StoreFrontUi> = economyLive.let { e -> FishStore.entries.map { StoreFrontUi(it, e != null && e.canSee(it)) } }
@@ -353,6 +405,7 @@ class SimulationHolder(
         val speciesOf = d?.organisms?.associate { it.id to it.species.id }.orEmpty()
         _visit.value = StoreVisitUi(
             store, visitTanks.map { it to StoreVisit.cards(e, store, it, mine, day) }, at, e.state.coins, speciesOf, Offers.offers(store, mine, day),
+            com.reeflive.core.custom.economy.SupplyBook.cards(e, store),
         )
     }
 
@@ -396,10 +449,19 @@ class SimulationHolder(
             val e = economyLive ?: return@launch
             val c = e.checkout(store, bag, today())
             if (c.result != BuyResult.OK) { publishVisit(); onResult(c.result); return@launch }
+            if (c.bought.isEmpty()) {
+                // only supplies: they are on the shelf at home now and the keeper keeps shopping
+                publishVisit()
+                customSim?.let { updateEconomy(it, force = true) }
+                saveCustom()
+                _paid.tryEmit(c.total to 0)
+                onResult(BuyResult.OK)
+                return@launch
+            }
             leaveStoreNow()
             val mine = customSim
             if (mine != null) {
-                val groups = bag.groupingBy { it }.eachCount().entries.toList()
+                val groups = c.bought.groupingBy { it }.eachCount().entries.toList()
                 groups.forEachIndexed { k, (id, n) ->
                     // the bags in a row along the front glass, as if carried home and set down one by one
                     mine.enqueue(Command.FloatBag(id, n, 20.0 + (k + 0.5) * 80.0 / groups.size, size = StockSize.JUVENILE))
@@ -407,8 +469,21 @@ class SimulationHolder(
                 updateEconomy(mine, force = true)
             }
             saveCustom()
-            _paid.tryEmit(c.total to bag.size)
+            _paid.tryEmit(c.total to c.bought.size)
             onResult(BuyResult.OK)
+        }
+    }
+
+    /**
+     * Takes one use of supply [id] off My tank's shelf (core SupplyBook); the screen checks [economy]'s counts before
+     * the action, so this only keeps the books. [fishFood] takes one serving of any fish food instead.
+     */
+    fun useSupply(id: String?, fishFood: Boolean = false) {
+        scope.launch {
+            val sim = customSim ?: return@launch
+            val e = economyLive ?: return@launch
+            if (fishFood) e.useFishFood() else if (id != null) e.useSupply(id)
+            updateEconomy(sim, force = true)
         }
     }
 
@@ -612,6 +687,8 @@ class SimulationHolder(
 
     private fun switchMode(m: SimMode) {
         if (_mode.value == m && (m != SimMode.SANDBOX || sandbox != null)) return
+        decorPreview = null
+        if (m == SimMode.CUSTOM) { loadCustom(); showDecor(m) } else showDecor(m)
         val real = reality
         // My tank keeps its own speed; the other two start at real time
         if (_mode.value == SimMode.CUSTOM) { leaveStoreNow(); saveCustom(); _speed.value = 1.0 }
@@ -656,6 +733,7 @@ class SimulationHolder(
         _lifePace.value = com.reeflive.core.sim.LifePace.of(sim.lifePace)
         customBase = CustomTank.baseAfterRestore(save, species!!)
         economyLive = Economy(save.economy)
+        decorLive = save.decor
         // the time away, at 1x: the tank lived on while the app was closed (all of it, up to 30 days)
         beginAway(sim, (nowMs() - save.savedAtMs).coerceAtLeast(0L) / 1000.0)
         sim.stepWall(0.0)
@@ -712,7 +790,7 @@ class SimulationHolder(
         lastEconomyMs = now
         val changed = eco.update(sim, today())
         for (g in eco.takeGains()) _gains.tryEmit(g)
-        if (changed || force || _economy.value == null) _economy.value = eco.view(sim)
+        if (changed || force || _economy.value == null) { _economy.value = eco.view(sim); showDecor() }
         else _economy.value?.let { v -> Economy.happyBonus(sim).let { h -> if (h != v.happyBonus) _economy.value = v.copy(happyBonus = h) } }
     }
 
@@ -730,7 +808,7 @@ class SimulationHolder(
         val sim = customSim ?: return
         val base = customBase ?: return
         val now = nowMs()
-        val save = CustomTank.capture(sim, economyLive?.let { base.copy(economy = it.state) } ?: base, now)
+        val save = CustomTank.capture(sim, (economyLive?.let { base.copy(economy = it.state) } ?: base).copy(decor = decorLive), now)
         customBase = save
         lastCustomSaveMs = now
         customStore?.write(CustomTankCodec.encode(save))

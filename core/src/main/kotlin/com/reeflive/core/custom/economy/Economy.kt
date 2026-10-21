@@ -40,6 +40,12 @@ data class SavedEconomy(
     val giftDay: String = "",
     /** Newest first, at most [Economy.LEDGER_MAX]: the "where did my money go" list. */
     val ledger: List<LedgerEntry> = emptyList(),
+    /**
+     * The supply shelf ([SupplyBook]): uses left of each supply, 1 for a tool that is kept. [suppliesSet] is false
+     * in a save from before the shelf counted; [Economy] then gives it [SupplyBook.LEGACY_KIT].
+     */
+    val supplies: Map<String, Int> = emptyMap(),
+    val suppliesSet: Boolean = false,
     /** Reef moments seen, animals kept and fish birthdays ([Journal]). */
     val journal: SavedJournal = SavedJournal(),
     /** Radio songs bought from the record shop (RadioStation file ids); the free songs are never listed. */
@@ -85,7 +91,7 @@ enum class Goal(val id: String, val label: String, val reward: Int) {
     }
 }
 
-/** Levels from star points: level n needs 50 · n · (n − 1) (100, 300, 600, 1000 ...), up to [MAX]. */
+/** Levels from star points: level n needs 30 · n · (n − 1) (60, 180, 360, 600 ...), up to [MAX]. */
 object Levels {
     const val MAX = 10
 
@@ -128,6 +134,8 @@ data class EconomyView(
     val goals: List<GoalView>,
     val ledger: List<LedgerEntry>,
     val journal: JournalView,
+    /** The shelf: uses left per supply id (1 = a kept tool); ids not in [SupplyBook] never run out. */
+    val supplies: Map<String, Int> = emptyMap(),
     /** Radio songs bought from the record shop. */
     val records: Set<String> = emptySet(),
 ) {
@@ -148,8 +156,8 @@ data class Gain(val amount: Int, val label: String, val levelUp: Int = 0, val st
  * The live economy of one My tank. Confined to the thread that runs the sim (Android's sim thread, the web page's
  * frame loop): [update] reads the sim's [CareLog] counters for chores done since the last call.
  */
-class Economy(initial: SavedEconomy = SavedEconomy()) {
-    var state: SavedEconomy = initial
+class Economy(initial: SavedEconomy = SavedEconomy(supplies = SupplyBook.STARTER, suppliesSet = true)) {
+    var state: SavedEconomy = if (initial.suppliesSet) initial else initial.copy(supplies = SupplyBook.LEGACY_KIT, suppliesSet = true)
         private set
 
     /** Money that came in since [takeGains] was last called (the hosts turn these into the coin cheer). */
@@ -248,17 +256,53 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     fun checkout(store: FishStore, bag: List<String>, today: String): Checkout {
         if (bag.isEmpty()) return Checkout(BuyResult.OK, emptyList(), 0)
         if (!canSee(store)) return Checkout(BuyResult.STORE_LOCKED, emptyList(), 0)
+        val animals = bag.filter { SupplyBook.fromBag(it) == null }
+        val packs = bag.mapNotNull { SupplyBook.fromBag(it) }.groupingBy { it }.eachCount()
         val shelf = Stores.stock(store, today).associateBy { it.listing.speciesId }
         var total = 0
-        for ((id, n) in bag.groupingBy { it }.eachCount()) {
+        for ((id, n) in animals.groupingBy { it }.eachCount()) {
             val item = shelf[id] ?: return Checkout(BuyResult.NOT_IN_STOCK, emptyList(), 0)
             if (!unlocked(item.listing)) return Checkout(BuyResult.LEVEL_LOCKED, emptyList(), 0)
             if (left(store, item, today) < n) return Checkout(BuyResult.SOLD_OUT, emptyList(), 0)
             total += item.price * n
         }
+        for ((id, n) in packs) {
+            val p = SupplyBook.pack(id) ?: return Checkout(BuyResult.NOT_IN_STOCK, emptyList(), 0)
+            if (level < p.level) return Checkout(BuyResult.LEVEL_LOCKED, emptyList(), 0)
+            if (p.keeps && (n > 1 || owns(id))) return Checkout(BuyResult.SOLD_OUT, emptyList(), 0)
+            total += SupplyBook.price(store, p) * n
+        }
         if (total > state.coins) return Checkout(BuyResult.TOO_POOR, emptyList(), total)
-        for (id in bag) buy(store, id, today)
-        return Checkout(BuyResult.OK, bag, total)
+        for (id in animals) buy(store, id, today)
+        for ((id, n) in packs) buySupply(store, id, n, today)
+        return Checkout(BuyResult.OK, animals, total, packs)
+    }
+
+    // ------------------------------------------------------------ supply shelf (SupplyBook)
+
+    /** Uses of supply [id] left on the shelf; [SupplyBook.UNLIMITED] for one that never runs out. */
+    fun supplyLeft(id: String): Int = if (SupplyBook.pack(id) == null) SupplyBook.UNLIMITED else state.supplies[id] ?: 0
+
+    fun owns(id: String): Boolean = supplyLeft(id).let { it == SupplyBook.UNLIMITED || it > 0 }
+
+    /** Takes one use of [id] off the shelf (a kept tool stays); false and nothing changes when there is none. */
+    fun useSupply(id: String): Boolean {
+        val p = SupplyBook.pack(id) ?: return true
+        val n = state.supplies[id] ?: 0
+        if (n <= 0) return false
+        if (!p.keeps) state = state.copy(supplies = state.supplies + (id to n - 1))
+        return true
+    }
+
+    /** One serving of any fish food (the Tank Health "feed every hungry fish" tap): the food used, or null. */
+    fun useFishFood(): String? = SupplyBook.FISH_FOODS.firstOrNull { (state.supplies[it] ?: 0) > 0 }?.also { useSupply(it) }
+
+    /** Buys [packs] of supply [id] at [store] (paid by [checkout]): the uses go onto the shelf. */
+    private fun buySupply(store: FishStore, id: String, packs: Int, today: String) {
+        val p = SupplyBook.pack(id) ?: return
+        spend(SupplyBook.price(store, p) * packs, "${store.label}: ${p.name}${if (packs > 1) " ×$packs" else ""}", today)
+        val add = if (p.keeps) 1 else p.uses * packs
+        state = state.copy(supplies = state.supplies + (id to (if (p.keeps) 0 else state.supplies[id] ?: 0) + add))
     }
 
     /**
@@ -329,6 +373,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
             goals = Goal.entries.map { GoalView(it, it.id in s.goals) },
             ledger = s.ledger,
             journal = JournalView(Moment.entries.map { MomentView(it, it.id in s.journal.moments) }, s.journal.kept.map { speciesLabel(it) }),
+            supplies = s.supplies,
             records = s.records.toSet(),
         )
     }

@@ -63,7 +63,8 @@ object SupplyShelfLayout {
 /**
  * The UI's handle on the supply shelf (any thread; the GL thread reads it once per frame). [setOpen] swaps the camera
  * between the tank and the shelf (a smooth glide, or a cut with `instant`), [focusRow] glides to one row, [locked]
- * item ids are drawn dimmed (they still report taps, so the UI can explain why), and [onPick] hears every prop the
+ * item ids are drawn dimmed (they still report taps, so the UI can explain why), [hidden] ones are not on the shelf at
+ * all (My tank has run out of them: no draw, no shadow, no taps), and [onPick] hears every prop the
  * user taps on the main thread: its id (`Supply_<id>` without the prefix) and the world point (cm) on top of it.
  */
 class SupplyShelfControl {
@@ -72,6 +73,7 @@ class SupplyShelfControl {
     @Volatile var instant: Boolean = false
         private set
     @Volatile var locked: Set<String> = emptySet()
+    @Volatile var hidden: Set<String> = emptySet()
     @Volatile var onPick: ((item: String, x: Float, y: Float, z: Float) -> Unit)? = null
     private val rowRequest = AtomicInteger(-1)
     private val pickRequest = AtomicReference<String?>(null)
@@ -101,6 +103,8 @@ class SupplyShelfControl {
 internal class SupplyShelfScene {
     private class Prop(val id: String, val box: FloatArray) {
         var lift = 0f
+        /** Footprint half width (shelf.frag uFoot.z); 0 while the prop is hidden. */
+        var halfW = 0f
         /** Footprint slot (rows feed, care, tools in slot order) in [foot] / [footY], or -1. */
         var index = -1
     }
@@ -156,7 +160,8 @@ internal class SupplyShelfScene {
             p.index = i
             val b = p.box
             foot[i * 4] = (b[0] + b[3]) * 0.5f; foot[i * 4 + 1] = (b[2] + b[5]) * 0.5f
-            foot[i * 4 + 2] = max((b[3] - b[0]) * 0.5f, 0.01f); foot[i * 4 + 3] = (b[5] - b[2]) * 0.5f
+            p.halfW = max((b[3] - b[0]) * 0.5f, 0.01f)
+            foot[i * 4 + 2] = p.halfW; foot[i * 4 + 3] = (b[5] - b[2]) * 0.5f
             footY[i * 4] = b[1]; footY[i * 4 + 1] = b[4]
         }
         kinds = FloatArray(m.parts.size) { kindOf(m.parts[it]) }
@@ -192,10 +197,11 @@ internal class SupplyShelfScene {
      * Ray (origin [o], unit [d]) against the props' boxes (a little padded so small props are easy to hit): picks
      * and lifts the nearest, and returns its id and top-centre point, or null.
      */
-    fun pick(o: FloatArray, d: FloatArray, out: FloatArray): String? {
+    fun pick(o: FloatArray, d: FloatArray, out: FloatArray, hidden: Set<String> = emptySet()): String? {
         var best: Prop? = null
         var bestT = Float.MAX_VALUE
         for (p in props) {
+            if (p.id in hidden) continue
             val t = rayBox(o, d, p.box, PICK_PAD) ?: continue
             if (t < bestT) { bestT = t; best = p }
         }
@@ -218,8 +224,8 @@ internal class SupplyShelfScene {
         out[2] = (b.box[2] + b.box[5]) * 0.5f
     }
 
-    /** Draws the shelf with [p] (the shelf program). Returns the number of draw calls. */
-    fun draw(m: GpuModel, p: ShaderProgram, white: Texture, locked: Set<String>): Int {
+    /** Draws the shelf with [p] (the shelf program), leaving out [hidden] props. Returns the number of draw calls. */
+    fun draw(m: GpuModel, p: ShaderProgram, white: Texture, locked: Set<String>, hidden: Set<String> = emptySet()): Int {
         bind(m)
         p.use()
         // footprints follow the pick: the lifted prop's shadow rises and softens with it
@@ -231,6 +237,8 @@ internal class SupplyShelfScene {
             footY[i * 4] = y0
             footY[i * 4 + 1] = y0 + (b[4] - b[1]) * (1f + SCALE_UP * prop.lift)
             footY[i * 4 + 2] = prop.lift
+            // a hidden prop casts no shadow (shelf.frag skips a footprint with no width)
+            foot[i * 4 + 2] = if (prop.id in hidden) 0f else prop.halfW
         }
         p.set4fv("uFoot", foot)
         p.set4fv("uFootY", footY)
@@ -239,6 +247,7 @@ internal class SupplyShelfScene {
             val part = m.parts[pi]
             if (part.material.blended) continue
             val prop = byNode[part.node.name]
+            if (prop != null && prop.id in hidden) continue
             val lift = prop?.lift ?: 0f
             val dim = prop != null && prop.id in locked
             p.setMat4("uModel", if (lift > 0f && prop != null) lifted(prop, lift, part.node.world) else part.node.world)

@@ -105,6 +105,10 @@ object Stocking {
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
         // research 42: a file clam for a crevice; starves without daily phytoplankton
         StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
+        StockEntry("tridacna_maxima", StockGroup.INVERTS, "Maxima clam", 15.0),
+        StockEntry("ophiarachna_incrassata", StockGroup.INVERTS, "Green serpent star", 35.0),
+        StockEntry("neopetrolisthes_maculatus", StockGroup.INVERTS, "Porcelain crab", 1.8),
+        StockEntry("holothuria_hilla", StockGroup.INVERTS, "Tiger tail sea cucumber", 25.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
@@ -122,6 +126,9 @@ object Stocking {
         StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
         StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
         StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
+        StockEntry("euphyllia_glabrescens_gold", StockGroup.CORALS, "Gold torch coral", 15.0),
+        StockEntry("rhodactis_inchoata", StockGroup.CORALS, "Bounce mushroom", 6.0),
+        StockEntry("homophyllia_australis", StockGroup.CORALS, "Scolymia", 8.0),
     )
 
     /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
@@ -175,7 +182,7 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.fragColony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }

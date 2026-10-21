@@ -2,10 +2,13 @@
 // Kotlin), one after another. Songs stream through an <audio> element routed into the page's AudioContext, so the
 // level works on iPhone too (iOS ignores audio.volume) and nothing big is decoded into memory.
 // The record shelf (Android RecordShelf) picks a song, buys locked records with sand dollars in My tank and sets the
-// music volume.
+// music volume. The music corner in 3D (render/MusicCorner.kt: the record stand and the radio left of the tank) shows
+// the same state: musicSync hands it over, and its taps come back through radioOffer, radioStep, radioToggle and
+// radioVolume.
 let R = null;          // { songs:[{file,title,blurb,price,art}], gain, tuneGain, tune }
-let opts = null;       // { SB, store, ctx(), say, records() → bought files in My tank, buy(file) → bool, coins() → number|null }
+let opts = null;       // { SB, live, store, ctx(), say, records() → bought files in My tank, buy(file) → bool, coins() → number|null, changed() }
 let el = null, gain = null, tuneBuf = null, playing = -1;
+let offer = -1;        // a locked record pulled out on the 3D stand, waiting for Buy
 const st = { on: true, track: 0, volume: 0.6 };
 
 export function initRadio(o) {
@@ -15,6 +18,7 @@ export function initRadio(o) {
   st.volume = o.store.get('reeflive.radioVolume', 0.6);
   st.track = playableOr(o.store.get('reeflive.radioTrack', 0));
   document.addEventListener('visibilitychange', () => { if (document.hidden) el?.pause(); else sync(); });
+  musicSync();
 }
 
 export const radioOn = () => st.on;
@@ -38,16 +42,21 @@ export function radioStep(d) {
   tuneStatic();
 }
 
-/** The music volume slider (0..1). */
-export function radioVolume(v) { st.volume = v; opts.store.set('reeflive.radioVolume', v); if (R && el) sync(); }
+/** The music volume slider or the radio's knob (0..1); [done] false while a finger is still turning it. */
+export function radioVolume(v, done = true) {
+  st.volume = v;
+  if (done) opts.store.set('reeflive.radioVolume', v);
+  if (R && el) sync(); else musicSync();
+}
 
-/** A record on the shelf was tapped: play it if it is ours, else try to buy it. */
-export function radioPick(i) {
+/** A record on the shelf was tapped: play it if it is ours, else try to buy it. [quiet]: the music corner's bar says it. */
+export function radioPick(i, quiet = false) {
   const s = R.songs[i];
+  offer = -1;
   if (playable(s)) {
     if (!st.on) { st.on = true; opts.store.set('reeflive.radio', true); }
     setTrack(i); tuneStatic();
-    opts.say(`Now playing: ${s.title}. ${s.blurb}.`);
+    if (!quiet) opts.say(`Now playing: ${s.title}. ${s.blurb}.`);
     return;
   }
   if (opts.coins() == null) { opts.say(`${s.title} is in the record shop. Buy it in My tank for ${s.price} sand dollars.`); return; }
@@ -56,6 +65,36 @@ export function radioPick(i) {
   st.on = true; opts.store.set('reeflive.radio', true);
   setTrack(i); tuneStatic();
   opts.say(`A new record: ${s.title}! ${s.blurb}. Let's give it a spin.`);
+}
+
+/** A record tapped on the 3D stand: play it if it is ours, else pull it out and offer it (radioBuyOffer). */
+export function radioOffer(i) {
+  if (playable(R.songs[i])) { radioPick(i, true); return; }
+  offer = i; musicSync();
+}
+export function radioBuyOffer() { if (offer >= 0) radioPick(offer); }
+export function radioDropOffer() { if (offer >= 0) { offer = -1; musicSync(); } }
+
+/** The bar under the 3D music corner: what is on, the record offered, music on / off and back to the tank. */
+export function musicBarHtml(esc, icon) {
+  const s = radioSong(), o = offer >= 0 ? R.songs[offer] : null, coins = opts.coins();
+  const line = o ? `<strong>${esc(o.title)}</strong> · ${o.price} sand dollars` : st.on ? `Playing <strong>${esc(s.title)}</strong>` : 'The radio is off';
+  const hint = o ? `${o.blurb}. ${coins != null ? `You have ${coins} sand dollars.` : 'Records are sold in My tank.'}` : `Tap a record to play it. Turn the round knob for the volume (${Math.round(st.volume * 100)}%).`;
+  return `<div class="card-head"><span class="rlbl">${icon('vinyl')} ${line}</span><button class="btn small ghost" data-mback>Back to tank</button></div>
+    <p class="muted">${esc(hint)}</p>
+    <div class="pills">${o && coins != null ? `<button class="pillbtn on" data-mbuy>Buy for ${o.price}</button><button class="pillbtn" data-mnot>Not now</button>` : ''}
+      <button class="pillbtn ${st.on ? 'on' : ''}" data-mpower>${icon('radio')} ${st.on ? 'Music on' : 'Music off'}</button>
+      <button class="pillbtn" data-mnext>Next ${icon('skipNext')}</button></div>`;
+}
+
+/** Hands the radio's state to the 3D music corner. */
+export function musicSync() {
+  if (!R || !opts?.live) return;
+  const own = owned();
+  let mask = 0;
+  R.songs.forEach((s, i) => { if (playable(s, own)) mask |= 1 << i; });
+  opts.live.musicState(st.on ? st.track : -1, mask, st.volume, offer);
+  opts.changed?.();
 }
 
 /** The record shelf's HTML (inside Settings & help). */
@@ -97,6 +136,7 @@ function step(i, d) {
 function setTrack(i) { st.track = wrap(i); opts.store.set('reeflive.radioTrack', st.track); sync(); }
 
 function sync() {
+  musicSync();
   if (!st.on || document.hidden || st.volume <= 0) { el?.pause(); return; }
   const ctx = opts.ctx();
   if (!el) {

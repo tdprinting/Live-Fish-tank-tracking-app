@@ -51,7 +51,7 @@ class ShrimpPackTest {
             assertTrue(LimbRig.forKind(k, 1L) is ShrimpLimbs)
             assertTrue(Stocking.entry(id) != null)
         }
-        // a fire shrimp is a Lysmata but not the skunk cleaner
+        // a fire shrimp is a Lysmata but not the skunk cleaner; prices are the table's real dollars × PriceBook.SCALE
         assertEquals(BrainKind.CLEANER_SHRIMP, BrainKind.byId("lysmata_amboinensis"))
         assertEquals(60 * PriceBook.SCALE, PriceBook.listing(fire)!!.price)
         assertEquals(19 * PriceBook.SCALE, PriceBook.listing(sexy)!!.price)

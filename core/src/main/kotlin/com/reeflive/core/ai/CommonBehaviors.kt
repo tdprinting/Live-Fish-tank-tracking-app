@@ -4,6 +4,8 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.smoothstep
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Disease
+import com.reeflive.core.sim.Ev
+import com.reeflive.core.sim.Evidence
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.SimEvent
@@ -390,7 +392,8 @@ open class Sleep(val b: SpeciesBrain, label: String = "Sleeping", val nightWeigh
 /** Visit a cleaning station (wrasse or skunk shrimp): pose until cleaned (SIMULATION §4.4, 04 §13C). */
 open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior("visit", "Visiting cleaner") {
     private var station: CleaningStation? = null
-    /** A station it could not reach in [GIVE_UP_S] is left for a while, not re-tried at once (see [update]). */
+    /** A hawkfish that gave up hovering at the station goes back to its perch until then; any fish that could not reach
+     *  its pose spot leaves the station for [RETRY_S] (see [update]). */
     private var retryAt = -1e9
     override fun score(c: Ctx): Double {
         val o = c.o
@@ -417,12 +420,15 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         val st = station
         if (st == null || !st.open) { finished = true; return }
         val o = c.o
+        // no swim bladder: a hawkfish hovers only briefly, then waits on a perch for the cleaner to come to it
+        val maxWait = if (o.brainKind == BrainKind.HAWK) HAWK_HOVER_S else GIVE_UP_S
+        if (o.brainKind == BrainKind.HAWK && elapsed > maxWait) retryAt = c.t + HAWK_RETRY_S
         val pose = c.safe(st.pos + Vec3(0.0, 0.0, 1.0) * (o.lengthCm * 0.8 + 2))
         val d = o.pos.distanceTo(pose)
         if (st.client == null) st.client = o
         if (st.client !== o) {
             out.seek(c.viaOpenWater(c.safe(pose + Vec3(0.0, 4.0, 3.0))), o.cruiseSpeed * 0.6, arrive = 3.0); out.hover = true
-            if (elapsed > 40) finished = true
+            if (elapsed > min(40.0, maxWait)) finished = true
             return
         }
         out.seek(if (d > 8) c.viaOpenWater(pose) else pose, o.cruiseSpeed * (if (d > 8) 1.0 else 0.4), arrive = 3.0)
@@ -437,23 +443,26 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         // a pose spot it cannot get to (a dottyback under a ledge, the climb out too tight for its steering) held
         // the station for 80 min, re-picked every 90 s, and the wrasse could not reach it there either: go about its
         // day and let the cleaner find it elsewhere
-        if (elapsed > GIVE_UP_S) {
-            if (!(st.client === o && st.clientReady)) retryAt = c.t + RETRY_S
+        if (elapsed > maxWait) {
+            if (o.brainKind != BrainKind.HAWK && !(st.client === o && st.clientReady)) retryAt = c.t + RETRY_S
             if (st.client === o) st.release()
             finished = true
         }
+    }
+
+    companion object {
+        /** Longest a hawkfish hovers at a station (s) and how long it then stays on its perch before trying again. */
+        @Ev(Evidence.DESIGN_ESTIMATE, "Cirrhitidae lack a swim bladder: perch-bound, short hovering bouts") const val HAWK_HOVER_S = 12.0
+        const val HAWK_RETRY_S = 300.0
+        const val GIVE_UP_S = 90.0
+        /** [I]: long enough for the fish to move on and meet the wrasse on its rounds (06 §5.6 #4 allows 90 min). */
+        const val RETRY_S = 600.0
     }
     override fun exit(c: Ctx) {
         // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station
         // there stopped the shrimp's clean at its antenna tap, the pose lapsed, the fish came back to visit, and the two
         // looped every 1.5 s (a dottyback at the skunk shrimp for minutes)
         station?.let { if (it.client === c.o && !(c.o.poseFor === it.cleaner && c.o.poseUntil > c.t)) it.release() }
-    }
-
-    companion object {
-        const val GIVE_UP_S = 90.0
-        /** [I]: long enough for the fish to move on and meet the wrasse on its rounds (06 §5.6 #4 allows 90 min). */
-        const val RETRY_S = 600.0
     }
 }
 

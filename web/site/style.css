@@ -634,7 +634,45 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
 .hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
+/* supplies behind the counter (stores.js supplyShelf) and the count on each shelf tile (live.js stockBadge) */
+.counter .supplies { margin-top: 10px; max-height: 34vh; overflow-y: auto; }
+.counter .supplies summary { font: 600 16px/1.2 var(--display); cursor: pointer; padding: 4px 0; }
+.counter .crow.sup .nm small { font-size: 12px; }
+.counter .crow.sup.empty .nm small { color: #FFB13D; }
+.counter .crow .pr.owned { color: #8EE66B; }
+.counter .pm:disabled { opacity: .4; }
+.opt { position: relative; }
+.opt .cnt { position: absolute; top: -6px; right: -4px; min-width: 22px; padding: 1px 6px; border-radius: 999px; border: 2px solid var(--navy);
+  background: #fff; color: var(--navy); font: 700 12px/1.3 var(--body, inherit); font-style: normal; }
+.opt .cnt.low { background: #FFE14D; }
+.opt .cnt.out { background: #FF9AA5; }
 
+/* ---- My tank's room shop (room.js): stand tiles, colour swatches, the try-on bar */
+.rtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.rtile { position: relative; border: 2px solid var(--glassBorder); background: var(--glass); border-radius: 14px; padding: 8px 6px 6px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; text-align: center; line-height: 1.15; }
+.rtile b { font-weight: 600; }
+.rtile.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.22); }
+.rtile.lock { opacity: .5; }
+.rtile:active, .swatch:active { transform: scale(.96); }
+.standpic { width: 72px; height: 50px; }
+.xpic { font-size: 28px; line-height: 50px; height: 50px; }
+.tag { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.1); font-size: 11px; color: var(--mist); }
+.tag.on { background: rgba(92,225,230,.25); color: var(--foam); }
+.tag.cost { background: rgba(243,227,195,.16); color: #F3E3C3; font-weight: 600; }
+.tag .sanddollar, .swatch .sanddollar, .trybar .sanddollar { width: 14px; height: 14px; vertical-align: -2px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { border: 2px solid transparent; background: none; border-radius: 14px; padding: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 64px; }
+.swatch.on { border-color: var(--lagoonBright); }
+.swatch.lock { opacity: .5; }
+.swatch .sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.swatch small { font-size: 11px; color: var(--mist); }
+.swatch small.cost { color: #F3E3C3; }
+.trybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 112px); z-index: 6; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 10px 16px; border-radius: 999px; background: rgba(6,19,39,.82); border: 1px solid var(--glassBorder); max-width: calc(100% - 32px);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.trybar .what { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trybar [aria-disabled="true"] { opacity: .5; }
 /* the radio's record shelf (radio.js): vinyl sleeves, the one playing ringed, locked ones dimmed with a price */
 .records { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px 8px; padding-bottom: 4px; }
 .record { display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; color: inherit; padding: 4px; border-radius: 14px; cursor: pointer; text-align: center; }
@@ -646,3 +684,7 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .record strong { font-size: 12px; line-height: 1.2; }
 .record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
+/* the music corner bar under the 3D record stand and radio (radio.js musicBarHtml) */
+.musicbar p { margin: 2px 0 8px; }
+.musicbar .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.musicbar .card-head .rlbl { display: flex; align-items: center; gap: 6px; }

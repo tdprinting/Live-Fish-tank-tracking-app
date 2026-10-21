@@ -4,7 +4,7 @@ import { SAND_DOLLAR } from './care.js';
 
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
-const pic = (it) => `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
+const pic = (it) => it.pack ? '<span class="sp">🧴</span>' : `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
 
 let my, say, cue, onLeave;
 let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
@@ -90,14 +90,17 @@ function pick(id) {
 }
 
 const tank = () => data.tanks[at];
-const item = (id) => data.tanks.flatMap((t) => t.items).find((x) => x.id === id);
+const SUP = 'supply:';
+/** An animal card, or a supply pack ("supply:<id>" in the bag) from behind the counter. */
+const item = (id) => id.startsWith(SUP) ? supply(id.slice(SUP.length)) : data.tanks.flatMap((t) => t.items).find((x) => x.id === id);
+const supply = (id) => { const s = data.supplies?.find((x) => x.id === id); return s && { ...s, left: s.keeps ? (s.owned ? 0 : 1) : 99 }; };
 const inBag = (id) => bag.filter((x) => x === id).length;
 const total = () => bag.reduce((s, id) => s + (item(id)?.price || 0), 0);
 
 function add(id) {
   const it = item(id);
   if (!it || it.locked) return;
-  if (inBag(id) >= it.left) { say?.(`That is all the ${it.name} they have today.`); return; }
+  if (inBag(id) >= it.left) { say?.(it.keeps ? `You only need one ${it.name.toLowerCase()}.` : `That is all the ${it.name} they have today.`); return; }
   bag.push(id);
   cue?.('TICK');
   const b = ui.querySelector('.bagbtn');
@@ -117,13 +120,21 @@ function pay() {
     refresh(); render();
     return;
   }
-  const n = bag.length;
   payFx(r.total);
+  if (!r.animals) {
+    // only supplies: they are on the shelf at home now, and the keeper keeps shopping
+    bag = [];
+    refresh(); render();
+    cue?.('TICK');
+    say?.(`Paid ${r.total}! Your supplies are waiting on the shelf at home.`);
+    return;
+  }
+  const n = r.animals;
   data = null; bag = []; counterOpen = false;
   document.body.classList.remove('instore');
   ui.classList.add('hidden'); ui.innerHTML = '';
   cue?.('FEED');
-  say?.(`Paid ${r.total}! ${n === 1 ? 'Your new animal is' : `Your ${n} new animals are`} floating in bags at the top of the tank. They come out when the water in the bag is warm.`);
+  say?.(`Paid ${r.total}! ${r.supplies ? 'Your supplies are on the shelf, and ' : ''}${n === 1 ? (r.supplies ? 'your new animal is' : 'Your new animal is') : `${r.supplies ? 'your' : 'Your'} ${n} new animals are`} floating in bags at the top of the tank. They come out when the water in the bag is warm.`);
   onLeave();
 }
 
@@ -174,7 +185,7 @@ function render() {
       ${pic(it)}<span class="nm">${esc(it.name)}</span>
       <span class="pr">${it.locked ? `🔒 Lv ${it.level}` : `${SAND_DOLLAR}${it.price}`}</span>
       ${inBag(it.id) ? `<i class="inbag">${inBag(it.id)}</i>` : ''}</button>`).join('')}</div>
-    <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter ${bag.length ? '' : 'disabled'}>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
+    <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
     ${counterOpen ? counter(coins, sum) : ''}
     ${sellOpen ? sellSheet() : ''}`;
 }
@@ -205,11 +216,25 @@ function counter(coins, sum) {
   const short = sum - coins;
   return `<div class="caremodal" data-scounterbg><div class="carecard glass counter">
     <h3>The counter</h3>${rows || '<p class="muted">Your bag is empty.</p>'}
+    ${supplyShelf()}
     <div class="ctotal"><span>Total</span><b>${SAND_DOLLAR}${sum}</b></div>
     <p class="muted">You have ${coins}. After paying: <b>${Math.max(0, coins - sum)}</b></p>
     <div class="carefoot" style="gap:10px"><button class="pill" data-scounterclose>Keep shopping</button>
       <button class="pill collect" data-spay ${short > 0 || !bag.length ? 'disabled' : ''}>${short > 0 ? `Need ${short} more` : `Pay ${sum}`}</button></div>
   </div></div>`;
+}
+
+/** The supplies behind the counter (core SupplyBook): foods, salt, doses and tools for the shelf at home. */
+function supplyShelf() {
+  const rows = (data.supplies || []).map((s) => {
+    const n = inBag(SUP + s.id);
+    const have = s.keeps ? (s.owned ? 'You have one' : '') : `You have ${s.have}`;
+    const btn = s.locked ? `<span class="pr">🔒 Lv ${s.level}</span>`
+      : s.owned ? '<span class="pr owned">✓</span>'
+      : `${n ? `<button class="pm" data-sremove="${SUP}${s.id}">−</button><b>${n}</b>` : ''}<button class="pm" data-sadd="${SUP}${s.id}" ${s.keeps && n ? 'disabled' : ''}>+</button><span class="pr">${SAND_DOLLAR}${s.price}</span>`;
+    return `<div class="crow sup ${s.have === 0 && !s.keeps ? 'empty' : ''}"><span class="nm">${esc(s.name)}<br><small class="muted">${esc(s.pack)}${have ? ` · ${have}` : ''}</small></span>${btn}</div>`;
+  }).join('');
+  return `<details class="supplies" open><summary>Supplies for your shelf</summary>${rows}</details>`;
 }
 
 /** The Sell sheet (docs/ECONOMY.md §6): the store's offer for each of your animals, wanted ones first. */

@@ -45,6 +45,10 @@
     "mespilia_globulus",
     "entacmaea_quadricolor",
     "ctenoides_scaber",
+    "tridacna_maxima",
+    "ophiarachna_incrassata",
+    "neopetrolisthes_maculatus",
+    "holothuria_hilla",
     "euprymna_berryi",
     "capnella_sp",
     "briareum_sp",
@@ -61,6 +65,9 @@
     "fimbriaphyllia_ancora",
     "euphyllia_glabrescens",
     "fimbriaphyllia_divisa",
-    "duncanopsammia_axifuga"
+    "duncanopsammia_axifuga",
+    "euphyllia_glabrescens_gold",
+    "rhodactis_inchoata",
+    "homophyllia_australis"
   ]
 }

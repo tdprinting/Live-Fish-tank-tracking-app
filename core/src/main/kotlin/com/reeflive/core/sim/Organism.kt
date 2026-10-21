@@ -206,6 +206,8 @@ class Organism(
     var posture = 0
     var appendagePhase = rng.nextDouble() * 6.28
     var extension = 1.0
+    /** Symbiotic algae lost, 0 healthy .. 1 bleached white (giant clam); shown as desaturation. */
+    var bleach = 0.0
     var visible = true
     var extraRoll = 0.0
     var pitchBias = 0.0
@@ -294,7 +296,7 @@ class Organism(
     }
 
     /** How the renderer draws the body ([OrganismPose.motionMode]): 0 fish, 1 brittle-star arms, 2 shrimp, 3 crab, 4 squid, 5 hermit, 6 anemone, 7 scallop, 8 snail, 9 urchin. */
-    val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
+    val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM || brainKind == BrainKind.GIANT_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else if (brainKind == BrainKind.SEA_CUCUMBER) 10 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
     /** Drawn rigid at its organism (no spine skinning: fish.vert's crawler, scallop, snail and urchin paths). */
     val drawnRigid: Boolean get() = when (motionMode) { 1, 3, 5, 6, 7, 8, 9 -> true; else -> false }
 

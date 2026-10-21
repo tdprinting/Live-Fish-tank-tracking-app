@@ -236,9 +236,12 @@ dollars (20-40 real dollars' worth).
 | Yellow tang | fish | 5 | 130 |
 | Blue tang | fish | 5 | 150 |
 | Blue star leopard wrasse | fish | 6 | 150 |
+| Gold torch coral | coral | 6 | 250 |
 | Hummingbird bobtail squid | invert | 7 | 80 |
 | Purple tang | fish | 7 | 250 |
+| Scolymia | coral | 7 | 300 |
 | Gem tang (rare, research 60) | fish | 8 | 1000 |
+| Bounce mushroom | coral | 8 | 250 |
 | Wrought iron butterflyfish (rare; eats fanworms) | fish | 9 | 2500 |
 
 Asterina stars and bristleworms are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later
@@ -249,6 +252,46 @@ Which store sells what:
 * Frag Shack: every coral.
 * Big Blue: everything up to level 5.
 * Deep Reef: level 4 and up, plus one "rare colour" pick a day (same species, special name, 1.5× price).
+
+### Supplies for the shelf
+
+In My tank the supply shelf holds only what the keeper bought (Tee, 2026-10-21: "you have to earn points and purchase
+them at the fish shops"). A new tank starts with one tub of flakes (30 feeds) and nothing else. Every store sells every
+supply from the shelves behind its counter, at the store's price level. A pack holds a number of uses. Each use takes
+one off the shelf: a feeding, a dose, a water change, a sock, a test. Tools (`keep forever`) are bought once. The knocker,
+moving rocks, siphoning and rinsing the filter are free. A prop that has run out stands dimmed on the 3D shelf with a
+"Shop" tag, and tapping it says to buy more at the fish stores. Tank Health's "feed every hungry fish" takes one serving
+of any fish food on the shelf. Watch mode (the real tank) never runs out.
+
+Prices are real 2025-26 US prices for the product printed on the prop, charged at `PriceBook.SCALE` (2 sand dollars per
+dollar). `SupplyBook` in `core/custom/economy/Supplies.kt` holds them.
+
+| Supply | Pack | Real price ($) | Sand dollars |
+|---|---|---|---|
+| Flakes, pellets, floating pellets | 30 feeds | 6 / 7 / 8 | 12 / 14 / 16 |
+| Algae wafers | 20 wafers | 6 | 12 |
+| Mysis, brine shrimp, cyclops | 15 frozen cubes | 9 / 7 / 9 | 18 / 14 / 18 |
+| Krill | 15 feeds | 12 | 24 |
+| Prawn | 8 pieces | 8 | 16 |
+| Nori | 10 sheets | 5 | 10 |
+| Coral food (Reef-Roids) | 20 feeds | 18 | 36 |
+| Phytoplankton | 15 doses | 14 | 28 |
+| Live pods | 1 bottle | 35 | 70 |
+| Coral Pro salt | 4 big (25 %) water changes | 28 | 56 |
+| Instant Ocean salt | 10 small (10 %) water changes | 20 | 40 |
+| Alkalinity, calcium, magnesium | 20 doses | 25 each | 50 each |
+| Filter socks | 3 socks | 15 | 30 |
+| Carbon | 4 refills | 15 | 30 |
+| Aiptasia-X, Joe's Juice, kalk paste | 10 shots | 16 / 15 / 5 | 32 / 30 / 10 |
+| Test kit | 20 tests | 45 | 90 |
+| Algae scissors, drip kit | keep forever | 15 / 12 | 30 / 24 |
+| Glass cleaner (Flipper), microscope | keep forever | 30 / 40 | 60 / 80 |
+| Pest laser (level 3) | keep forever | 120 | 240 |
+
+Balance: a day of care pays about 40-80, so food is cheap per feeding (well under a sand dollar for flakes) but a new
+tank has to save up for its first tools. A weekly big water change costs 14 in salt and pays 15 on the care list.
+Saves from before the shelf counted (`SavedEconomy.suppliesSet` false) open with one pack of everything and every tool,
+so nobody loses what they were using.
 
 ## 6. Selling
 
@@ -353,7 +396,8 @@ quietly feeds My tank, so nothing ever goes hungry. Both change:
 The wallet, stars, streak, today's tasks, goals and the stores' "sold out today" counts are saved in My tank's save
 as one new field (`CustomTankSave.economy`). It has defaults, so existing tanks open with 60 sand dollars and
 level 1, and the animals already in them are simply theirs (no codec version bump: an added defaulted field needs no
-migration, as with `brood`). Daily things are keyed by the local date (`yyyy-mm-dd`), so a phone clock change can at
+migration, as with `brood`). The shelf's counts are `SavedEconomy.supplies`, with `suppliesSet` telling a new save
+(flakes only) from one made before supplies counted (a full kit). Daily things are keyed by the local date (`yyyy-mm-dd`), so a phone clock change can at
 worst re-roll one day's list, never pay twice for a task.
 
 ## 11. Code layout
@@ -382,3 +426,36 @@ worst re-roll one day's list, never pay twice for a task.
   mesh lid about 40 at Big Blue (firefish and fairy wrasses jump).
 * A store "order" quest: "Big Blue wants 3 zoa frags by Friday" for a big payout.
 * Seasonal store events (a holiday sale, a rare fish week).
+
+## 14. Your room: stands, scenes and more tanks
+
+Tee 2026-10-21: the tank stands on a stand in a room, and the keeper buys new stands, colours, extras and (next)
+room scenes, wallpaper, floors and more tanks with sand dollars. The room frames the tank softly lit and a little out
+of focus, so it never pulls the eye away.
+
+* **Stands** (`core/custom/room/Decor.kt`, models `tools/blender/stands.py` → `stand_<id>.glb`, one node per tank
+  build so doors and shelves keep their proportions): Classic cabinet (Tee's white X-door stand, free), Shaker 240
+  (L1), Iron frame 300 (L2), Modern gloss 360 (L2), Barn wood 420 (L3), Reef pro (sump window, glowing edge) 700 (L5).
+  Each has four colours (paint + trim); the first comes with it, the others are 40 each. Extras for any stand: Glow
+  strip 150 (L2, blue light on the floor) and Gold handles 80. Owned ones switch freely, an extra toggles on and off.
+* **Try before you buy:** a tap on something new shows it on the tank (the camera steps back to see the stand) with a
+  Buy / Not now bar; nothing is spent until Buy.
+* **Room** (`tools/blender/rooms.py` → `room_<scene>.glb`): the living room first (oak floor, warm walls, floor lamp,
+  plants, sofa, two sea prints, a side table left of the stand whose top is kept free for a radio:
+  `HomeRoomLayout.RADIO`). Drawn by `render/HomeRoom.kt` with `room.frag`: its own daylight by the sim clock, the lamp
+  in the evening, the tank's light spilling onto the wall, ceiling and floor; far patterns fade and colours are muted.
+  About 25 draw calls and 10k static triangles. Watch (Tee's tank) always shows the classic white stand.
+* **Scenes** (`Decor.SCENES`, one `room_<id>.glb` each): Cozy living room (free), Sunny window 300 (L1, garden view,
+  curtains), Beach house 450 (L2, white boards, sea view, surfboard), Snowy cabin 500 (L3, log walls, a fireplace that
+  lights the room, snowy pines), Blossom garden 550 (L3, paper screens, tatami, cherry trees), City loft 650 (L4,
+  brick, a tall window over the lit-up city), Space station 900 (L5, metal panels, portholes onto the Earth). Every
+  scene keeps the side table at the radio spot. Windows are `view_<name>` materials: room.frag paints the view
+  procedurally from the eye ray (sky by the sim's day, stars, sea glints, lit windows at night, falling snow and
+  petals), soft shapes only so it reads as out of focus. No textures.
+* **Walls and floors** (`Decor.WALLS` / `FLOORS`, room.frag `wallPattern` / `floorPattern`): each scene brings its own
+  (free, "Room's own"); bought ones: Seafoam or Navy paint 60, Sunny stripes 90, White boards 100, Wave print 120,
+  Brick 140, Wood panels 140 (L3); Walnut planks 80, Blue carpet 90, White tiles 100, Checkerboard 120, Slate 140
+  (L3). A new scene starts on its own walls and floor; bought ones go back up for free.
+* **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`,
+  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use). Defaulted fields, no codec bump; kept across Start
+  over like the money.

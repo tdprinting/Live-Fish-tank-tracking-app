@@ -204,6 +204,7 @@ object MotionProfiles {
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
         // slow, deliberate stilt-walk 0.5–2 cm/s with long pauses; a fast scramble to cover only when startled (research 42) [L]
         // research 43 §1: a small crab that walks steadily and scuttles home fast when startled (speeds est.)
+        BrainKind.PORCELAIN_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 8.0, stopGoMoveS = 3.0, stopGoPauseS = 3.0),
         BrainKind.EMERALD_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 6.0, stopGoMoveS = 4.0, stopGoPauseS = 2.5),
         BrainKind.ARROW_CRAB to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 6.0, stopGoMoveS = 3.0, stopGoPauseS = 2.0),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
@@ -227,6 +228,8 @@ object MotionProfiles {
         BrainKind.ANEMONE to MotionProfile(Gait.SESSILE),
         // wedged in its crevice; the brain moves it itself when it claps away (research 42 §2.3)
         BrainKind.FILE_CLAM to MotionProfile(Gait.SESSILE),
+        BrainKind.GIANT_CLAM to MotionProfile(Gait.SESSILE),
+        BrainKind.SEA_CUCUMBER to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.1),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),
