@@ -93,7 +93,8 @@ float roomAO(vec3 p, vec3 N) {
     // walls and fronts: dark where they meet the floor, a little under the ceiling
     float wallish = 1.0 - abs(N.y);
     a *= 1.0 - wallish * (0.35 * (1.0 - smoothstep(-82.0, -40.0, p.y)) + 0.25 * smoothstep(uCeil - 60.0, uCeil, p.y));
-    // contact shadows under people
+    // contact shadows under people (skipped on the lowest picture quality)
+#if QUALITY > 0
     if (floorish > 0.01) {
         int n = int(uShadowN + 0.5);
         for (int i = 0; i < 12; i++) {
@@ -103,6 +104,7 @@ float roomAO(vec3 p, vec3 N) {
             a *= 1.0 - floorish * s.w * (1.0 - smoothstep(s.z * 0.25, s.z * 1.5, d));
         }
     }
+#endif
     return a;
 }
 
