@@ -5,7 +5,7 @@ const CODE = `reeflive-code-${BUILD}`;
 const DATA = `reeflive-data-${BUILD}`;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'corals.js', 'flush.js', 'care.js', 'stores.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
+  e.waitUntil(caches.open(CODE).then((c) => c.addAll(['./', 'index.html', 'app.js', 'live.js', 'bags.js', 'corals.js', 'flush.js', 'care.js', 'stores.js', 'room.js', 'style.css', 'manifest.webmanifest', 'kotlin/ReefLive-web.mjs'])).catch(() => {}));
   self.skipWaiting();
 });
 

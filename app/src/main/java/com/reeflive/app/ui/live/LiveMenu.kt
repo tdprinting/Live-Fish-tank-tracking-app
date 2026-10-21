@@ -168,6 +168,9 @@ class LiveTools(
     val stores: List<com.reeflive.app.live.StoreFrontUi> = emptyList(),
     val onStore: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
     val onStoreShut: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
+    /** My tank's room shop (stands, colours, extras; core room/Decor.kt) and a tap on one of its tiles. */
+    val room: com.reeflive.app.live.RoomShopUi? = null,
+    val onRoomTile: (com.reeflive.core.custom.room.Decor.Tile) -> Unit = {},
 )
 
 /**
@@ -537,6 +540,7 @@ private fun ColumnScope.CardBody(
         LiveCategory.LIFE -> if (tools.myTank) {
             // My tank buys its animals at the fish stores; the free gallery stays in the sandbox
             StoreStreet(tools.stores, { close(); tools.onStore(it) }, tools.onStoreShut)
+            tools.room?.let { RoomShop(it, tools.onRoomTile) }
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },

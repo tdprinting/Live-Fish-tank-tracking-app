@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "sdf"))
 
 STEPS = ["selftest", "textures", "fish", "inverts", "rockscape", "sdf", "tank", "corals", "equipment", "details",
-         "supplies", "care", "cards"]
+         "supplies", "care", "room", "cards"]
 
 
 def run(step, args):
@@ -75,6 +75,13 @@ def run(step, args):
     elif step == "care":
         import care_tools
         care_tools.build()
+    elif step == "room":
+        import stands  # My tank's stands and room (core custom/room/Decor.kt)
+        for sid in stands.STANDS:
+            stands.build(sid)
+        import rooms
+        for sc in rooms.SCENES:
+            rooms.build(sc)
     elif step == "cards":
         import render_cards
         render_cards.build()
