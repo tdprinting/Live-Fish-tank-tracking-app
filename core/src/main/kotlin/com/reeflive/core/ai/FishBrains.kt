@@ -449,7 +449,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
     init {
         install(Patrol(), ColumnPick(), Graze(this, GRAZE_WEIGHT), NibbleNori(this, 1.2), TangFeed(), NipCorals(this), PlayDead(),
             Flee(this, { c, from -> shelters.pick(c.o.pos, from, c.o.lengthCm, TangHide.HIDE_ROLL)?.entry ?: c.safe(sleepAnchor(c)?.pos ?: Vec3(38.0, 9.1, 5.2)) }, "Darting to cover"),
-            TangSleep(), TangHide(this), TangRub(this), TangZoom(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
+            TangSleep(), TangHide(this), TangRub(this), TangZoom(this), TangSpawn(this), VisitCleaner(this, 0.1), Flash(this), GlassCurious(this), SurfaceGasp(this))
     }
 
     override fun preTick(c: Ctx) {

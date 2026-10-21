@@ -3,6 +3,7 @@ package com.reeflive.core.sim
 import com.reeflive.core.ai.rockSurfacePoint
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
+import kotlin.math.roundToInt
 
 /** One egg clutch on the rock (clown nest). Age and hatch are on the sim clock; [untendedSec] counts neglect. */
 class EggClutch(
@@ -68,6 +69,7 @@ class Reproduction(private val sim: Simulation) {
         clownSexChange(dtSec)
         clownBreeding(now, dtSec)
         cardinalBreeding(now, dtSec)
+        tangBreeding(now, dtSec)
         wrasseHarem(dtSec)
     }
 
@@ -286,7 +288,148 @@ class Reproduction(private val sim: Simulation) {
         }
     }
 
+    // ============================================================== blue tang group spawning (research 41)
+
+    enum class TangPhase { IDLE, COURTING, RUSH }
+    var tangPhase = TangPhase.IDLE; private set
+    private var tangReadiness = 0.0
+    private var tangPhaseUntil = 0.0
+    private var tangCooldownUntil = 0.0
+    private var tangForced = false
+    /** The spawning pair while courting or rushing: the female leads, the male chases (TangSpawn behaviour). */
+    var tangFemale: Organism? = null; private set
+    var tangMale: Organism? = null; private set
+    /** Spawnings so far (tests). */
+    var tangSpawns = 0; private set
+
+    /** Only blue tangs pair: other tang species share TangBrain but never cross with them. */
+    private fun tangs() = sim.organisms.filter { it.alive && it.brainKind == BrainKind.TANG && it.species.id == BLUE_TANG_ID }
+
+    /**
+     * P. hepatus are gonochores with no outward sex difference ([S]): a fish's sex is fixed but unseen. Once two or more
+     * are grown up, any not yet known are given one so the group holds both (a game choice: a real pair can turn out
+     * to be two of a kind). A sheet role wins.
+     */
+    private fun resolveTangSex(cl: List<Organism>) {
+        val grown = cl.filter { LifeStages.mature(it) }
+        if (grown.size < 2) return
+        for (o in grown.sortedWith(compareByDescending<Organism> { it.lengthCm }.thenBy { it.id })) {
+            if (o.sexFemale != null) continue
+            o.sexFemale = when {
+                o.role.equals("FEMALE", true) -> true
+                o.role.equals("MALE", true) -> false
+                else -> grown.count { it.sexFemale == true } <= grown.count { it.sexFemale == false }
+            }
+        }
+    }
+
+    private fun tangPair(cl: List<Organism>): Pair<Organism?, Organism?> {
+        val f = cl.filter { it.sexFemale == true && LifeStages.mature(it) }.maxByOrNull { it.lengthCm }
+        val m = cl.filter { it.sexFemale == false && LifeStages.mature(it) }.maxByOrNull { it.lengthCm }
+        return f to m
+    }
+
+    fun hasTangPair(): Boolean = tangPair(tangs()).let { it.first != null && it.second != null }
+
+    /** Days into the lunar month (0 new moon, ~14.8 full) on the sim clock; yellow tangs spawn around the full moon [A]. */
+    fun moonDay(now: Double = sim.simTimeSec): Double = ((now / 86400.0 + MOON_OFFSET_DAYS) % LUNAR_DAYS + LUNAR_DAYS) % LUNAR_DAYS
+    private fun nearFullMoon(now: Double) = kotlin.math.abs(moonDay(now) - LUNAR_DAYS / 2) <= TANG_MOON_WINDOW_DAYS
+    /** The last hour before lights out: P. hepatus spawn late afternoon to evening [S]. */
+    private fun dusk(now: Double) = sim.lights.intensity(now + TANG_COURT_MAX_S + 2 * TANG_RUSH_S) >= LightSchedule.LIGHTS_ON &&
+        sim.lights.intensity(now + 3600) < LightSchedule.LIGHTS_ON
+
+    private fun tangBreeding(now: Double, dt: Double) {
+        val cl = tangs()
+        resolveTangSex(cl)
+        val (f, m) = tangPair(cl)
+        if (f == null || m == null) {
+            if (tangPhase != TangPhase.IDLE) endTangSpawn()
+            tangReadiness = maxOf(0.0, tangReadiness - dt / 86400.0); sim.brood.forceTangSpawn = false
+            return
+        }
+        if (sim.brood.forceTangSpawn) {
+            sim.brood.forceTangSpawn = false
+            if (tangPhase == TangPhase.IDLE) { tangForced = true; startCourting(f, m, now) }
+            return
+        }
+        val ok = tangForced || fit(f, 0.0) && fit(m, 0.0) && inRange(sim.water.s)
+        when (tangPhase) {
+            TangPhase.IDLE -> {
+                tangReadiness = (tangReadiness + if (ok) dt / (TANG_READY_DAYS * 86400.0) else -dt / (TANG_READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
+                if (tangReadiness >= 1.0 && now >= tangCooldownUntil && nearFullMoon(now) && dusk(now)) startCourting(f, m, now)
+            }
+            // a male chases the female in loops, both paling from deep to pale blue [S], then they rush up together
+            TangPhase.COURTING -> if (!ok || sim.perception.night && !tangForced) endTangSpawn() else if (now >= tangPhaseUntil) {
+                tangPhase = TangPhase.RUSH; tangPhaseUntil = now + TANG_RUSH_S
+            }
+            TangPhase.RUSH -> if (now >= tangPhaseUntil) {
+                // at the top of the rush the eggs and milt go out in a cloud, and the pair darts back down
+                val at = Vec3(f.pos.x, sim.rock.waterLevelCm - 3.0, f.pos.z)
+                val eggs = sim.brood.clutchSize(BroodSpecs.TANG, f.lengthCm, tangSpawns + 1)
+                tangSpawns++
+                sim.brood.spawnPelagic(BroodSpecs.TANG, eggs, at, listOf(f, m))
+                tangCooldownUntil = now + rng.range(TANG_COOLDOWN_DAYS_MIN, TANG_COOLDOWN_DAYS_MAX) * 86400.0
+                tangReadiness = 0.0
+                endTangSpawn()
+            }
+        }
+    }
+
+    private fun startCourting(f: Organism, m: Organism, now: Double) {
+        tangFemale = f; tangMale = m
+        tangPhase = TangPhase.COURTING
+        tangPhaseUntil = now + rng.range(TANG_COURT_MIN_S, TANG_COURT_MAX_S)
+    }
+
+    private fun endTangSpawn() { tangPhase = TangPhase.IDLE; tangFemale = null; tangMale = null; tangForced = false }
+
+    /** The tang parents' lines on their card. */
+    fun tangLines(lines: MutableList<String>) {
+        val now = sim.simTimeSec
+        val cl = tangs()
+        val (f, m) = tangPair(cl)
+        val name = { o: Organism -> o.nickname.ifBlank { "the ${if (o === f) "female" else "male"}" } }
+        when (tangPhase) {
+            TangPhase.COURTING -> { lines += "${name(tangMale!!)} is chasing ${name(tangFemale!!)} and they have both gone pale blue. They're courting!"; return }
+            TangPhase.RUSH -> { lines += "Spawning! They race up to the surface together and let their eggs go."; return }
+            else -> {}
+        }
+        if (f == null || m == null) {
+            lines += when {
+                cl.size < 2 -> "Blue tangs need a partner to breed."
+                cl.count { LifeStages.mature(it) } < 2 -> "The tangs are too young to breed yet. They grow up at about ${LifeStageSpec.of(cl[0].species).maturityCm.roundToInt()} cm."
+                else -> "These tangs are all the same, so they can't breed."
+            }
+            return
+        }
+        val why = buildList {
+            for (o in listOf(f, m)) {
+                if (now - o.arrivalTime < PAIR_BOND_DAYS * 86400.0) add("${name(o)} is still settling in")
+                else if (o.hunger >= 0.55) add("${name(o)} is hungry")
+                else if (o.stress >= 0.35 || o.health <= 0.85 || o.disease != null) add("${name(o)} is not feeling great")
+            }
+            if (!inRange(sim.water.s)) add("the water is not right for spawning")
+        }
+        if (why.isNotEmpty()) { lines += "Not ready to spawn: ${why.distinct().joinToString(", ")}."; return }
+        val toMoon = ((LUNAR_DAYS / 2 - TANG_MOON_WINDOW_DAYS - moonDay(now)) % LUNAR_DAYS + LUNAR_DAYS) % LUNAR_DAYS
+        val days = maxOf((1.0 - tangReadiness) * TANG_READY_DAYS, (tangCooldownUntil - now) / 86400.0, if (nearFullMoon(now)) 0.0 else toMoon)
+        lines += if (days < 1) "${name(f)} and ${name(m)} may spawn this evening, just before the lights go out."
+        else "${name(f)} and ${name(m)} are a pair. Blue tangs spawn at dusk around the full moon, in about ${days.toInt() + 1} days."
+    }
+
     companion object {
+        const val BLUE_TANG_ID = "paracanthurus_hepatus"
+        const val TANG_READY_DAYS = 10.0
+        const val TANG_COURT_MIN_S = 900.0
+        const val TANG_COURT_MAX_S = 1800.0
+        const val TANG_RUSH_S = 60.0
+        /** About one spawning a lunar month (yellow tang [A]): the cooldown keeps it to one night per full moon. */
+        const val TANG_COOLDOWN_DAYS_MIN = 20.0
+        const val TANG_COOLDOWN_DAYS_MAX = 24.0
+        const val TANG_MOON_WINDOW_DAYS = 3.0
+        const val LUNAR_DAYS = 29.53
+        /** Sim day 0 falls this many days into the lunar month (DESIGN ESTIMATE: the sim has no calendar moon). */
+        const val MOON_OFFSET_DAYS = 3.0
         const val WRASSE_CHANGE_DAYS = 14.0
         const val CARDINAL_MATURE_CM = 5.0
         const val BROOD_DAYS_MIN = 6.0
