@@ -35,6 +35,8 @@ object CustomTank {
         applyBuild(sim, build)
         // Tee's rockscape, cut down and centred when the tank is smaller than his
         sim.fitStockScape()
+        // cured rock carries the pods but no bristleworms yet: they ride in later on frags, rock and bags (Hitchhikers)
+        sim.water.micro.setTotal(MicroGroup.BRISTLEWORM, 0.0)
         return sim
     }
 
@@ -43,6 +45,7 @@ object CustomTank {
         sim.bareScape = true
         // new corals wait for the keeper to pick their spot (CoralPicks)
         sim.coralPicks.byHand = true
+        sim.hitchhikersEnabled = true
         // the keeper's own tank has a living rockscape: rocks settle when dug under, and it can be rebuilt
         sim.setDynamicRocks(true)
         sim.water.skimmer = build.skimmer

@@ -113,6 +113,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.SALLY_CRAB -> base.copy(kind = "INVERT", common = "Sally Lightfoot crab", maxLengthCm = 4.0, typicalAdultCm = 3.0, depthRatio = 0.25, massCoeff = 0.03,
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.6, 8.0, 0.0, 360.0), diet = listOf("ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"),
                     feedsPerDay = 2.0, grazer = true, temperament = Temperament(0.1, 0.2, 0.4, 0.95), hardiness = 0.6, homeRadiusCm = 40.0, model = "models/sally_lightfoot.glb")
+                BrainKind.ARROW_CRAB -> base.copy(kind = "INVERT", common = "Arrow crab", maxLengthCm = 6.0, typicalAdultCm = 4.5, depthRatio = 0.6, massCoeff = 0.006,
+                    activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.25, 1.5, 0.0, 120.0), diet = listOf("MEATY", "MYSIS", "PELLET", "FLAKE", "DETRITUS"),
+                    feedsPerDay = 1.0, temperament = Temperament(0.45, 0.55, 0.6, 0.4), hardiness = 0.75, homeRadiusCm = 45.0, model = "models/arrow_crab.glb")
                 BrainKind.BRITTLE_STAR -> base.copy(kind = "INVERT", common = "Black brittle star", maxLengthCm = 20.0, depthRatio = 0.1, massCoeff = 0.002, activity = "NOCTURNAL",
                     locomotion = Locomotion("CRAWLING", 0.05, 0.4, 0.0, 60.0), diet = listOf("DETRITUS", "MYSIS", "PELLET", "FLAKE"), feedsPerDay = 1.0,
                     hardiness = 0.8, homeRadiusCm = 30.0, model = "models/brittle_star.glb")

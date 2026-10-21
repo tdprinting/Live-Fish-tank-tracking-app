@@ -120,6 +120,11 @@ object Thoughts {
             n == "sleep" -> sleepLine(e, label)
             n == "feed" -> feedLine(e, label)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
+            n == "hunt" && k == BrainKind.ARROW_CRAB -> Line("stalking a bristleworm on long, slow legs", "catch a bristleworm", "Gotcha, wormy!", Driver.HUNGER, 2)
+            n == "wormsnap" -> Line("snapping a bristleworm off the rock", "grab a bristleworm", "Worm snack!", Driver.HUNGER, 2)
+            n == "probe" -> Line("reaching into a crevice for hiding worms", "check the crevices for worms", "Any worms in there?", Driver.HUNGER)
+            n == "perch" -> Line("standing still as a stick under a ledge", "rest under a ledge", "Just chilling.", Driver.HOME, 0)
+            n == "harass" -> Line("poking at a neighbour with its claws", "poke a neighbour", "Hey, move over!", Driver.HUNGER, 2)
             n == "graze" -> Line("grazing algae off the rock", "graze some algae", "Munch munch algae.", Driver.HUNGER)
             n == "firehover" -> Line("hovering over its hole, flicking its dorsal fin", "hover over its hole", "Flick flick.", Driver.HOME)
             n == "hole" && k == BrainKind.FIREFISH && label.startsWith("Darting") ->
@@ -536,6 +541,7 @@ object Thoughts {
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
+        BrainKind.ARROW_CRAB -> "arrow crab"
         BrainKind.BRITTLE_STAR -> "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"

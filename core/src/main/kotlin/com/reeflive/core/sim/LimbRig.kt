@@ -64,6 +64,7 @@ abstract class LimbRig(val count: Int = LIMBS) {
         fun forKind(kind: BrainKind, seed: Long): LimbRig? = when (kind) {
             BrainKind.BRITTLE_STAR -> BrittleArms(seed)
             BrainKind.SALLY_CRAB -> CrabLegs()
+            BrainKind.ARROW_CRAB -> CrabLegs.arrow()
             BrainKind.HERMIT -> HermitLegs(seed)
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> ShrimpLimbs()
             BrainKind.FILE_CLAM -> ClamRig()
@@ -110,7 +111,13 @@ abstract class LimbRig(val count: Int = LIMBS) {
  * [CrawlerSeat.CRAB_SWING] of the step phase, duty factor 0.6), leg k's w = fold of a leg with no clear pose, and
  * 18 = (0, left / right chela max dip (rad), 1 = legs planted).
  */
-class CrabLegs : LimbRig(COUNT) {
+class CrabLegs(
+    /** Stride per cycle (carapace widths / lengths) and the stride rate range (Hz). */
+    private val strideW: Double = STRIDE_W,
+    private val minHz: Double = 1.5,
+    private val maxHz: Double = MAX_HZ,
+    private val pickHz: Double = PICK_HZ,
+) : LimbRig(COUNT) {
     var clock = 0.0; private set
     private var moving = 0.0
     private var side = 1.0
@@ -145,7 +152,7 @@ class CrabLegs : LimbRig(COUNT) {
         // stride frequency from speed: a stride ≈ 0.45 carapace widths at 1.5–4.5 Hz (crabs speed up mostly by stepping
         // faster, research 27: walking 1.5–4 Hz); faster than that the strides lengthen instead (Herreid & Full 1986), which
         // also keeps every step visible in the 20 Hz pose stream (at 7 Hz a swing fell between two snapshots)
-        strideHz = (speed / (STRIDE_W * L)).coerceIn(1.5, MAX_HZ)
+        strideHz = (speed / (strideW * L)).coerceIn(minHz, maxHz)
         if (moving > 0.02) clock = (clock + strideHz * dt * moving) % 1000.0
         val v = if (travel.lengthSq() > 1e-6) travel else o.vel
         // swap leading / trailing legs only on a clear change of side (a course near the body axis flipped it every tick)
@@ -169,7 +176,7 @@ class CrabLegs : LimbRig(COUNT) {
             put(k, ph, role * extAmp, lift, tuck)
         }
         pickS += (pick - pickS) * min(1.0, dt * 6)
-        val hz = PICK_HZ * (0.6 + 0.4 * pickS)
+        val hz = pickHz * (0.6 + 0.4 * pickS)
         if (pickS > 0.05) clawClock = (clawClock + hz * dt) % 1000.0
         if (floor(clawClock * 2) != floor(lastClaw * 2) && pickS > 0.3) pickStrokes++
         lastClaw = clawClock
@@ -189,6 +196,13 @@ class CrabLegs : LimbRig(COUNT) {
         const val PICK_HZ = 1.6
         /** Pose entries: the ten limb entries plus eight planted-leg IK entries and one for the chelae and the planting flag ([CrawlerSeat]). */
         const val COUNT = 19
+
+        /**
+         * Arrow crab (research 42): a slow, deliberate walker on stilts, forward or to either side, about half a carapace
+         * length a stride at 0.5–2 Hz (est. from aquarium footage descriptions; spider crabs step slowly and keep most
+         * feet down); the small chelae pick quickly at what the legs and antennae find.
+         */
+        fun arrow() = CrabLegs(strideW = 0.5, minHz = 0.5, maxHz = 2.0, pickHz = 2.2)
     }
 }
 

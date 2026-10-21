@@ -398,6 +398,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     CLEANER_SHRIMP(listOf("lysmata"), false),
     HERMIT(listOf("clibanarius", "paguristes", "calcinus"), false),
     SALLY_CRAB(listOf("percnon"), false),
+    /** Arrow crab (*Stenorhynchus seticornis*, research 42): long-legged spider crab, hunts bristleworms. */
+    ARROW_CRAB(listOf("stenorhynchus"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
@@ -458,7 +460,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
