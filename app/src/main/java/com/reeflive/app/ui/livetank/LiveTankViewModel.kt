@@ -310,7 +310,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // aquascape builder: on the tank on screen (your tank or the pretend copy); the rock layout is saved with the tank
     /** Drops a dry rock over [at]; a tap that only met the glass drops it halfway back. */
     fun placeRock(shape: DryRockShape, at: Vec3, surface: TouchSurface, turnDeg: Double) =
-        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) TankDims.DEPTH_CM / 2 else at.z, turnDeg))
+        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.app.render.Camera.TANK[2].toDouble() / 2 else at.z, turnDeg))
     /** Takes out the rock nearest [at] (null: the dry rock added last). */
     fun removeRock(at: Vec3?) = holder.enqueue(Command.RemoveRock(at))
     fun clearRocks() = holder.enqueue(Command.ClearRocks)

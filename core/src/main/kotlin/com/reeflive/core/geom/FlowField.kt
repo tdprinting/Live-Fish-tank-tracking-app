@@ -34,6 +34,7 @@ class FlowField(
     private val tankLength: Double = TankDims.LENGTH_CM,
     private val waterLevel: Double = TankDims.WATER_LEVEL_CM,
     private val pulseAmp: Double = 0.12,
+    private val tankDepth: Double = TankDims.DEPTH_CM,
 ) {
     var jets: List<Powerhead> = jets
         set(v) { field = v; gridValid = false }
@@ -126,7 +127,7 @@ class FlowField(
     private val cell = 4.0
     private val gx = kotlin.math.ceil(tankLength / cell).toInt() + 1
     private val gy = kotlin.math.ceil(waterLevel / cell).toInt() + 1
-    private val gz = kotlin.math.ceil(TankDims.DEPTH_CM / cell).toInt() + 1
+    private val gz = kotlin.math.ceil(tankDepth / cell).toInt() + 1
     private var grid = FloatArray(gx * gy * gz * 3)
     @Volatile private var gridValid = false
 

@@ -503,7 +503,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         val a = sleepAnchor(c)
         if (night) bedPose(c)?.let { return Rest(it.pos, it.heading) }
         return if (night && a != null) Rest(c.safe(a.pos, 0.6 * c.o.collisionLength + 0.5), a.dir ?: Vec3.X * -1.0)
-        else Rest(c.safe(Vec3(60.0, c.zoneY(0.6), 24.0)), Vec3.X)
+        else Rest(c.safe(c.inTank(Vec3(60.0, c.zoneY(0.6), 24.0))), Vec3.X)
     }
 
     inner class TangFeed : Feed(this@TangBrain, 100.0) {
@@ -759,7 +759,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
 // Pajama cardinal (CardinalBrain) — crepuscular hoverer
 // =====================================================================================
 class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
-    private val spots = listOf(Vec3(60.0, 13.0, 22.0), Vec3(28.0, 15.0, 34.0), Vec3(50.0, 15.0, 36.0))
+    private val spots = listOf(Vec3(60.0, 13.0, 22.0), Vec3(28.0, 15.0, 34.0), Vec3(50.0, 15.0, 36.0)).map { c.inTank(it) }
     private var spot: Vec3 = spots[0]
     /** The shade pocket it hovers beside by day (06 §1.3 SHADE_CARD). */
     val shadePocket: Vec3 get() = spot
@@ -2799,7 +2799,7 @@ class GenericFishBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
-        val home = if (o.homePos == Vec3.ZERO) c.safe(Vec3(60.0, c.zoneY((o.species.zone.yMin + o.species.zone.yMax) / 2), 20.0)) else o.homePos
+        val home = if (o.homePos == Vec3.ZERO) c.safe(c.inTank(Vec3(60.0, c.zoneY((o.species.zone.yMin + o.species.zone.yMax) / 2), 20.0))) else o.homePos
         return Rest(if (night) c.safe(home.withY(c.zoneY(0.2))) else home, Vec3.X)
     }
 

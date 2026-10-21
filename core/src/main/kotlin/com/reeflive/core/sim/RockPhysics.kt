@@ -306,6 +306,58 @@ class RockPhysics(
         version++
     }
 
+    /**
+     * Cuts the scape as built down to a smaller tank ([lengthCm] × [depthCm], My tank builds): of the rocks that fit
+     * the depth, the run along the length with the most rock that fits the length stays, moved as one group to the
+     * middle; the others are taken out. Returns the x shift (cm), or null when every rock already fits.
+     */
+    fun fitInto(lengthCm: Double, depthCm: Double, margin: Double = FIT_MARGIN_CM): Double? {
+        build()
+        val boxes = bodies.map { bodyBox(it) }
+        if (boxes.all { it[0] >= margin && it[3] <= lengthCm - margin && it[5] <= depthCm - margin }) return null
+        val span = lengthCm - 2 * margin
+        val fitsDepth = bodies.indices.filter { boxes[it][5] <= depthCm - margin && boxes[it][3] - boxes[it][0] <= span }
+        var best: List<Int> = emptyList()
+        var bestVol = -1.0
+        for (a in fitsDepth) {
+            val x0 = boxes[a][0]
+            val set = fitsDepth.filter { boxes[it][0] >= x0 && boxes[it][3] <= x0 + span }
+            val vol = set.sumOf { bodies[it].volume }
+            if (vol > bestVol) { bestVol = vol; best = set }
+        }
+        val dx = if (best.isEmpty()) 0.0 else {
+            val lo = best.minOf { boxes[it][0] }; val hi = best.maxOf { boxes[it][3] }
+            margin + (span - (hi - lo)) / 2 - lo
+        }
+        val keep = best.map { bodies[it] }
+        // lift everything out of the baked rock in one pass, then take out and move
+        field.markMoved(bodies.flatMap { it.pieces.toList() }.toIntArray())
+        for (b in bodies.toList()) if (b !in keep) removeBody(b)
+        for (b in keep) {
+            b.moved = true
+            b.pos[0] += dx
+            publish(b)
+        }
+        field.refresh()
+        recheck = true
+        version++
+        return dx
+    }
+
+    /** World box of [b]'s rock as it is now (x0, y0, z0, x1, y1, z1, cm), from its cells as built plus its move. */
+    private fun bodyBox(b: RockBody): DoubleArray {
+        val f = field
+        val r = doubleArrayOf(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE)
+        val h = f.cell / 2
+        for (p in b.pieces) {
+            val bx = f.pieceBox.getOrNull(p) ?: continue
+            r[0] = min(r[0], f.cx(bx[0]) - h); r[1] = min(r[1], f.cy(bx[1]) - h); r[2] = min(r[2], f.cz(bx[2]) - h)
+            r[3] = max(r[3], f.cx(bx[3]) + h); r[4] = max(r[4], f.cy(bx[4]) + h); r[5] = max(r[5], f.cz(bx[5]) + h)
+        }
+        if (b.moved) { val m = f.xf[b.pieces[0]]; r[0] += m[9]; r[3] += m[9]; r[1] += m[10]; r[4] += m[10]; r[2] += m[11]; r[5] += m[11] }
+        return r
+    }
+
     /** The body whose rock is nearest (x, y, z), within [maxCm]; null when none is that close. */
     fun bodyNear(x: Double, y: Double, z: Double, maxCm: Double): RockBody? {
         build()
@@ -602,6 +654,8 @@ class RockPhysics(
         const val CHECK_AWAKE_S = 0.25
         const val REFRESH_S = 0.1
         const val COOLDOWN_S = 120.0
+        /** Gap kept between a fitted rock and the glass (cm). */
+        const val FIT_MARGIN_CM = 1.5
     }
 }
 

@@ -405,7 +405,7 @@ object ReefLive {
         if (takeOut) s.enqueue(Command.RemoveRock(p))
         else {
             val sh = runCatching { com.reeflive.core.sim.DryRockShape.valueOf(shape) }.getOrDefault(com.reeflive.core.sim.DryRockShape.BOULDER)
-            val z = if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.core.sim.TankDims.DEPTH_CM / 2 else p.z
+            val z = if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.app.render.Camera.TANK[2].toDouble() / 2 else p.z
             s.enqueue(Command.PlaceRock(sh, p.x, z, turnDeg))
         }
         return true
@@ -503,8 +503,8 @@ object ReefLive {
      * point is off the tank.
      */
     fun bagDropX(px: Double, py: Double): Double {
-        if (!projection.planePointAt(px.toFloat(), py.toFloat(), TankDims.DEPTH_F + 0.8f, bagPt)) return -1.0
-        return if (bagPt[0] in 0f..TankDims.LENGTH_F && bagPt[1] in 0f..TankDims.HEIGHT_F) bagPt[0].toDouble() else -1.0
+        if (!projection.planePointAt(px.toFloat(), py.toFloat(), com.reeflive.app.render.Camera.TANK[2] + 0.8f, bagPt)) return -1.0
+        return if (bagPt[0] in 0f..com.reeflive.app.render.Camera.TANK[0] && bagPt[1] in 0f..com.reeflive.app.render.Camera.TANK[1]) bagPt[0].toDouble() else -1.0
     }
 
     /**
