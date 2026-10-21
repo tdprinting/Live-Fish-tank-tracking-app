@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.reeflive.core.units.ParamUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -39,6 +40,10 @@ data class AppSettings(
     /** The little radio beside the tank (quiet background tunes, RadioStation) and the song it is on. */
     val radioOn: Boolean = true,
     val radioTrack: Int = 0,
+    /** Music volume (0..1), its own slider; the radio plays at [com.reeflive.core.radio.RadioStation.GAIN] of it. */
+    val radioVolume: Float = DEFAULT_TANK_VOLUME,
+    /** Records bought in My tank, remembered here too so Watch mode's radio can play them. */
+    val radioOwned: Set<String> = emptySet(),
     /** The first-time sandbox tips were dismissed. */
     val sandboxHintSeen: Boolean = false,
     /** A supply was carried from the shelf into the tank once: the shelf's "tap, then drag" hint is done. */
@@ -83,6 +88,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val tankVolume = floatPreferencesKey("tankVolume")
         val radioOn = booleanPreferencesKey("radioOn")
         val radioTrack = intPreferencesKey("radioTrack")
+        val radioVolume = floatPreferencesKey("radioVolume")
+        val radioOwned = stringSetPreferencesKey("radioOwned")
         val sandboxHintSeen = booleanPreferencesKey("sandboxHintSeen")
         val supplyHintSeen = booleanPreferencesKey("supplyHintSeen")
         val watchHintSeen = booleanPreferencesKey("watchHintSeen")
@@ -113,6 +120,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             tankVolume = (p[K.tankVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
             radioOn = p[K.radioOn] ?: true,
             radioTrack = p[K.radioTrack] ?: 0,
+            radioVolume = (p[K.radioVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
+            radioOwned = p[K.radioOwned] ?: emptySet(),
             sandboxHintSeen = p[K.sandboxHintSeen] ?: false,
             supplyHintSeen = p[K.supplyHintSeen] ?: false,
             watchHintSeen = p[K.watchHintSeen] ?: false,
@@ -161,6 +170,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setTankAlerts(v: Boolean) = store.edit { it[K.tankAlerts] = v }
     suspend fun setRadioOn(v: Boolean) = store.edit { it[K.radioOn] = v }
     suspend fun setRadioTrack(v: Int) = store.edit { it[K.radioTrack] = v }
+    suspend fun setRadioVolume(v: Float) = store.edit { it[K.radioVolume] = v.coerceIn(0f, 1f) }
+    /** Adds records bought in My tank (never removes: a song once bought stays on the radio). */
+    suspend fun addRadioOwned(ids: Set<String>) = store.edit { it[K.radioOwned] = (it[K.radioOwned] ?: emptySet()) + ids }
     suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
     suspend fun setSandboxHintSeen(v: Boolean) = store.edit { it[K.sandboxHintSeen] = v }
     suspend fun setSupplyHintSeen(v: Boolean) = store.edit { it[K.supplyHintSeen] = v }

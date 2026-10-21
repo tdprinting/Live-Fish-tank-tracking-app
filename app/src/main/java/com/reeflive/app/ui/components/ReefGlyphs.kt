@@ -404,6 +404,8 @@ object ReefGlyphs {
         accent("M7 9.5l9.5-5.5", 1.5f),
         accent("M14.5 12.5h3.5M14.5 15h3.5M14.5 17.5h2", 1.5f),
     )
+    /** A vinyl record (the record shelf). */
+    val vinyl = g("vinyl", inkFill(dots("12 12 9")), accentFill(dots("12 12 3.6")), ink(dots("12 12 6.3"), 0.8f), inkFill(dots("12 12 0.9")))
     val skipNext = g("skipNext", inkFill("M6 6.5l8.5 5.5L6 17.5Z"), accent("M18 6.5v11", 2f))
     val skipBack = g("skipBack", inkFill("M18 6.5L9.5 12l8.5 5.5Z"), accent("M6 6.5v11", 2f))
     val timelapse = g(
@@ -453,7 +455,7 @@ object ReefGlyphs {
             fishWaste, halfClean, crumbs, seaweed, fuzzyRock, feedTin,
             sun, moon, flow, clockSun, powerhead, led,
             skimmer, sock, carbon, refugium, uvLamp, starfish, crab, pestAnemone, shrimp, slug, plugOff, calendarX,
-            fish, whatIf, eye, eyeOff, bucket, microscope, flipper, speaker, speakerOff, radio, skipNext, skipBack, timelapse, touch, rocks, reset,
+            fish, whatIf, eye, eyeOff, bucket, microscope, flipper, speaker, speakerOff, radio, vinyl, skipNext, skipBack, timelapse, touch, rocks, reset,
             plus, minus, close, info, help, chevronUp, heart, trash, sparkleTip, shop,
         )
     }

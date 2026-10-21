@@ -42,6 +42,8 @@ data class SavedEconomy(
     val ledger: List<LedgerEntry> = emptyList(),
     /** Reef moments seen, animals kept and fish birthdays ([Journal]). */
     val journal: SavedJournal = SavedJournal(),
+    /** Radio songs bought from the record shop (RadioStation file ids); the free songs are never listed. */
+    val records: List<String> = emptyList(),
 )
 
 @Serializable
@@ -126,6 +128,8 @@ data class EconomyView(
     val goals: List<GoalView>,
     val ledger: List<LedgerEntry>,
     val journal: JournalView,
+    /** Radio songs bought from the record shop. */
+    val records: Set<String> = emptySet(),
 ) {
     /** Something on the Care card waits for a tap or a chore (the dot on the money chip). */
     val attention: Boolean get() = !happyPaid && happyBonus > 0 || tasks.any { !it.done }
@@ -213,6 +217,17 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     fun spend(amount: Int, label: String, today: String): Boolean {
         if (amount < 0 || amount > state.coins) return false
         state = state.copy(coins = state.coins - amount, ledger = ledger(today, label, -amount))
+        return true
+    }
+
+    /**
+     * Buys radio song [id] from the record shop at its [com.reeflive.core.radio.RadioStation] price. False when it is
+     * free, unknown, already owned or there is not enough money; nothing changes then.
+     */
+    fun buyRecord(id: String, today: String): Boolean {
+        val song = com.reeflive.core.radio.RadioStation.songs.firstOrNull { it.file == id } ?: return false
+        if (song.free || id in state.records || !spend(song.price, "Record: ${song.title}", today)) return false
+        state = state.copy(records = state.records + id)
         return true
     }
 
@@ -314,6 +329,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
             goals = Goal.entries.map { GoalView(it, it.id in s.goals) },
             ledger = s.ledger,
             journal = JournalView(Moment.entries.map { MomentView(it, it.id in s.journal.moments) }, s.journal.kept.map { speciesLabel(it) }),
+            records = s.records.toSet(),
         )
     }
 

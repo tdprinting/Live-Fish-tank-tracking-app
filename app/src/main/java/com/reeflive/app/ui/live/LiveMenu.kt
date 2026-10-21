@@ -128,6 +128,8 @@ class LiveTools(
     val radioSong: String = "",
     val onRadio: () -> Unit = {},
     val onRadioStep: (Int) -> Unit = {},
+    /** Opens the record shelf (pick, buy and the music volume). */
+    val onRecords: () -> Unit = {},
     // ---- time slider (both modes) and the Watch card
     val speed: Double = 1.0,
     val simTimeSec: Double = 0.0,
@@ -607,6 +609,7 @@ private fun ColumnScope.CardBody(
                 T(if (tools.radioOn) "Radio on" else "Radio off", ReefGlyphs.radio, on = tools.radioOn, closes = false, sub = if (tools.radioOn) tools.radioSong else "Quiet tunes") { tools.onRadio() },
                 if (tools.radioOn) T("Back", ReefGlyphs.skipBack, closes = false, sub = "Last song") { tools.onRadioStep(-1) } else null,
                 if (tools.radioOn) T("Next", ReefGlyphs.skipNext, closes = false, sub = "New song") { tools.onRadioStep(1) } else null,
+                T("Records", ReefGlyphs.vinyl, sub = "Pick, buy, volume") { tools.onRecords() },
             ))
             LiveSectionTitle("Help")
             Tiles(tone, close, listOf(T("What can I do?", ReefGlyphs.help) { tools.onHelp() }))
