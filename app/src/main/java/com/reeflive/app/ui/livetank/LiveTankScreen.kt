@@ -65,7 +65,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reeflive.app.appGraph
+import com.reeflive.app.audio.RadioStation
 import com.reeflive.app.audio.TankAudio
+import com.reeflive.app.audio.TankRadio
 import com.reeflive.app.data.repo.AppSettings
 import com.reeflive.app.live.SimMode
 import com.reeflive.app.render.FollowCamControl
@@ -287,6 +289,14 @@ fun LiveTankScreen(
     LaunchedEffect(audio) {
         // full-rate snapshots: the throttled HUD flow would drop events
         vm.snapshots.collect { snap -> audio.onSnapshot(snap, powerheadShare(vm.extras.value)) }
+    }
+    // the table radio beside the tank: quiet background songs, on its own switch
+    val radio = remember { TankRadio(context.applicationContext) { next -> scope.launch { settingsRepo.setRadioTrack(next) } } }
+    DisposableEffect(radio) { onDispose { radio.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { radio.onResume() }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { radio.onPause() }
+    LaunchedEffect(settings.loaded, settings.radioOn, settings.radioTrack, settings.tankVolume) {
+        if (settings.loaded) radio.set(settings.radioOn, settings.radioTrack, settings.tankVolume)
     }
     val soundOn = settings.tankSounds
     val toggleSound: () -> Unit = { scope.launch { settingsRepo.setTankSounds(!soundOn) } }
@@ -824,6 +834,22 @@ fun LiveTankScreen(
         onStoreShut = { f -> tick(); if (hermieOn) hermie.say("Do your care jobs to level up and ${f.label} opens!", HermieMood.SURPRISED) },
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
+        radioOn = settings.radioOn,
+        radioSong = RadioStation.song(settings.radioTrack).title,
+        onRadio = {
+            tick()
+            val on = !settings.radioOn
+            scope.launch { settingsRepo.setRadioOn(on) }
+            val song = RadioStation.song(settings.radioTrack)
+            banner.show(if (on) Feedback("Radio on: ${song.title}", "${song.blurb}, playing softly beside the tank") else Feedback("Radio off", "Just the tank sounds now"), Candy.purple)
+        },
+        onRadioStep = { step ->
+            tick()
+            val next = RadioStation.step(settings.radioTrack, step)
+            scope.launch { settingsRepo.setRadioTrack(next) }
+            val song = RadioStation.song(next)
+            banner.show(Feedback("Now playing: ${song.title}", song.blurb), Candy.purple)
+        },
         onMicroscope = { tick(); micro = true; if (hermieOn) hermie.say(LiveReactions.microscope(), HermieMood.EXCITED) },
         onAquascape = { tick(); open = null; vm.select(null); vm.follow(null); cleaning = false; scaping = true },
         onHide = { tick(); chromeHidden = true },
@@ -1268,7 +1294,9 @@ fun LiveTankScreen(
         LaunchedEffect(Unit) {
             vm.gains.collect { g ->
                 rewardFx.cheer(g)
-                if (!hermieOn) return@collect
+                // a reef moment or birthday has its own card (RewardFx MomentCard) and bells
+                if (g.story != null) audio.sparkle()
+                if (!hermieOn || g.story != null && g.levelUp == 0) return@collect
                 if (g.levelUp > 0) hermie.say("Level ${g.levelUp}! ${com.reeflive.core.custom.economy.Levels.opens(g.levelUp)}".trim(), HermieMood.EXCITED)
                 else hermie.say("+${g.amount} sand dollars: ${g.label}", HermieMood.HAPPY)
             }

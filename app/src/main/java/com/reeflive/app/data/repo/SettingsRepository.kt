@@ -36,6 +36,9 @@ data class AppSettings(
     /** Live Tank ambience and event sounds, and their volume (0..1). */
     val tankSounds: Boolean = true,
     val tankVolume: Float = DEFAULT_TANK_VOLUME,
+    /** The little radio beside the tank (quiet background tunes, RadioStation) and the song it is on. */
+    val radioOn: Boolean = true,
+    val radioTrack: Int = 0,
     /** The first-time sandbox tips were dismissed. */
     val sandboxHintSeen: Boolean = false,
     /** A supply was carried from the shelf into the tank once: the shelf's "tap, then drag" hint is done. */
@@ -78,6 +81,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val paramUnits = stringPreferencesKey("paramUnits")
         val tankSounds = booleanPreferencesKey("tankSounds")
         val tankVolume = floatPreferencesKey("tankVolume")
+        val radioOn = booleanPreferencesKey("radioOn")
+        val radioTrack = intPreferencesKey("radioTrack")
         val sandboxHintSeen = booleanPreferencesKey("sandboxHintSeen")
         val supplyHintSeen = booleanPreferencesKey("supplyHintSeen")
         val watchHintSeen = booleanPreferencesKey("watchHintSeen")
@@ -106,6 +111,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             paramUnits = parseUnits(p[K.paramUnits]),
             tankSounds = p[K.tankSounds] ?: true,
             tankVolume = (p[K.tankVolume] ?: AppSettings.DEFAULT_TANK_VOLUME).coerceIn(0f, 1f),
+            radioOn = p[K.radioOn] ?: true,
+            radioTrack = p[K.radioTrack] ?: 0,
             sandboxHintSeen = p[K.sandboxHintSeen] ?: false,
             supplyHintSeen = p[K.supplyHintSeen] ?: false,
             watchHintSeen = p[K.watchHintSeen] ?: false,
@@ -152,6 +159,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setTankSounds(v: Boolean) = store.edit { it[K.tankSounds] = v }
     suspend fun setDynamicRocks(v: Boolean) = store.edit { it[K.dynamicRocks] = v }
     suspend fun setTankAlerts(v: Boolean) = store.edit { it[K.tankAlerts] = v }
+    suspend fun setRadioOn(v: Boolean) = store.edit { it[K.radioOn] = v }
+    suspend fun setRadioTrack(v: Int) = store.edit { it[K.radioTrack] = v }
     suspend fun setTankVolume(v: Float) = store.edit { it[K.tankVolume] = v.coerceIn(0f, 1f) }
     suspend fun setSandboxHintSeen(v: Boolean) = store.edit { it[K.sandboxHintSeen] = v }
     suspend fun setSupplyHintSeen(v: Boolean) = store.edit { it[K.supplyHintSeen] = v }

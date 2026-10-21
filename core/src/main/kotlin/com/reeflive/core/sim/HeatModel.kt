@@ -58,6 +58,8 @@ object HeatModel {
     val SALLY = Profile("Sally Lightfoot", 36.5, 31.0, 60.0, 1.0, 1.0, 20.0)
     // arrow crab (est., research 42): a subtidal Caribbean reef crab kept at 22-27 °C, no semi-terrestrial reserve; like the shrimp's band, a rock refuge
     val ARROW_CRAB = Profile("arrow crab (est.)", 35.0, 30.0, 30.0, 1.1, 0.5, 12.0)
+    // emerald crab (est., research 43 §1): shallow Caribbean back-reef crab kept at 24-28 °C, rock refuge like the arrow crab's
+    val EMERALD_CRAB = Profile("emerald crab (est.)", 35.5, 30.5, 30.0, 1.1, 0.5, 12.0)
     val DOTTYBACK = Profile("dottyback", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val HAWKFISH = Profile("hawkfish", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val ENGINEER_GOBY = Profile("engineer goby", 38.0, 32.5, 2160.0, 0.9, 1.0, 25.0)
@@ -81,7 +83,8 @@ object HeatModel {
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
-        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> SHRIMP
+        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
+        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> SHRIMP
         BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
         BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG
@@ -90,6 +93,7 @@ object HeatModel {
         BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.SIXLINE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.ARROW_CRAB -> ARROW_CRAB
+        BrainKind.EMERALD_CRAB -> EMERALD_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY

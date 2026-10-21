@@ -20,8 +20,10 @@ uniform float uRoughness;
 uniform float uNormalStrength; // 0 disables the normal map (Low quality)
 uniform float uDetailScale;    // normal-map uv multiplier
 // Microfauna on the rock (MicrofaunaState.visible, animals in view per cm² of rock): x harpacticoid copepods,
-// y ostracods, z forams (Homotrema); w unused. Zero turns them off.
+// y ostracods, z forams (Homotrema), w cyclopoid copepods. Zero turns them off.
 uniform vec4 uMicro;
+// Up to four fish heads near the camera (world cm; w 1 = in use): pods close to one drop into the turf.
+uniform vec4 uPred[4];
 #ifndef SAND
 // object-space position (static.vert, ROCK): the rock detail is pinned to the rock, so it rides along if a rock moves
 in vec3 vObj;
@@ -99,70 +101,217 @@ vec4 voids(vec3 p, float density) {
 // 1 while a period spans 8+ pixels, 0 below ~3 (it would only alias).
 float lodW(float freq, float fp) { return 1.0 - smoothstep(0.15, 0.33, fp * freq); }   // fp ~ 2 pixel widths
 
-const vec3 FORAM_RED = vec3(0.52, 0.04, 0.07);      // Homotrema rubrum test
-const vec3 POD_AMBER = vec3(0.62, 0.42, 0.18);      // harpacticoid: translucent tan-amber, darker gut
-const vec3 POD_GUT = vec3(0.16, 0.09, 0.05);
-const vec3 OSTRACOD = vec3(0.30, 0.27, 0.17);       // ostracod: olive-beige bean-shaped shell
+// Colours in life (research 17 §1.3, §3, §6.3, §14.2; hex values converted to linear). The pods are translucent:
+// their bodies are mixed over the rock at about half opacity and what reads is the gut, the eye and the egg sacs.
+const vec3 FORAM_RED = vec3(0.43, 0.03, 0.025);    // Homotrema rubrum test #B0302A
+const vec3 FORAM_PINK = vec3(0.67, 0.26, 0.24);    // weathered / dead test #D68C86
+const vec3 FORAM_PORE = vec3(0.12, 0.005, 0.01);
+const vec3 TIG_BODY = vec3(0.81, 0.35, 0.19);      // Tigriopus: pale orange cuticle #E8A07A
+const vec3 TIG_GUT = vec3(0.69, 0.09, 0.025);      // astaxanthin gut lining #D9542B
+const vec3 TISBE_BODY = vec3(0.70, 0.66, 0.55);    // Tisbe: nearly transparent
+const vec3 TISBE_GUT = vec3(0.19, 0.25, 0.14);     // diatom-filled gut #7A8A6A
+const vec3 POD_EYE = vec3(0.45, 0.006, 0.012);     // naupliar eye #B3121C
+const vec3 HARP_EGGS = vec3(0.30, 0.22, 0.10);
+const vec3 CYC_BODY = vec3(0.68, 0.72, 0.64);      // cyclopoid: pale grey #D7DDD2
+const vec3 CYC_GUT = vec3(0.15, 0.16, 0.07);       // #6B6E4A
+const vec3 CYC_EGGS = vec3(0.49, 0.49, 0.25);      // gravid egg sacs #B9B98A
+const vec3 OST_SHELL = vec3(0.79, 0.72, 0.58);     // podocopid carapace #E6DDC8
+const vec3 OST_GUT = vec3(0.16, 0.10, 0.045);      // #6E5A3C
 
-// Small life on the rock, only where it resolves (research 10 / 17): sessile red forams (Homotrema rubrum, 2-8 mm
-// red domes, in shaded crevices and under ledges) and crawling pods (harpacticoid copepods ~0.8 mm that dart then
-// pause; ostracods ~0.8 mm that glide). Densities come from the sim (uMicro, per cm² of rock in view). Each lives in
-// its own lattice cell and stays inside it, so nothing is cut at a cell edge; shapes are drawn in the surface plane.
-void rockLife(vec3 p, float fp, float sky, vec3 N, inout vec3 albedo, inout float rough) {
+#ifndef SAND
+// Coverage of a 2D signed distance (negative inside) with a pixel-wide edge; fp is about two pixel widths.
+float cover(float sd, float fp) { return clamp(0.5 - 2.0 * sd / max(fp, 1e-5), 0.0, 1.0); }
+float sdSeg(vec2 q, vec2 a, vec2 b) {
+    vec2 pa = q - a, ba = b - a;
+    return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+}
+float sdEll(vec2 q, vec2 r) { return (length(q / r) - 1.0) * min(r.x, r.y); }
+
+// One crawling pod drawn in its own frame: q.x along the body (cm, head +), q.y across. kind 0 harpacticoid, 1
+// cyclopoid, 2 ostracod; v per-animal variation (Tigriopus vs Tisbe, gravid females, size); moving 0..1 drives the
+// limbs. Returns the coverage and writes the colour.
+float podShape(vec2 q, float kind, vec3 v, float moving, float fp, out vec3 col) {
+    float sz = 0.8 + 0.4 * v.z;
+    q /= sz;
+    float m = 0.0;
+    if (kind < 0.5) {
+        // Harpacticoid (research 17 §1): ~1 mm, cylindrical prosome 2.5x as long as wide, a narrow urosome a third of
+        // the length, short forward antennules, two bristle-tipped caudal rami; a red naupliar eye; Tigriopus orange
+        // with a red gut, Tisbe glassy with a dark gut; a gravid female carries one egg sac under the urosome.
+        bool tig = v.x < 0.5;
+        float pro = sdEll(q - vec2(0.012, 0.0), vec2(0.036, 0.0135));
+        float uro = sdSeg(q, vec2(-0.022, 0.0), vec2(-0.048, 0.0)) - mix(0.0065, 0.004, clamp((-0.022 - q.x) / 0.026, 0.0, 1.0));
+        float body = min(pro, uro);
+        float sw = sin(uTime * 14.0 + v.y * 9.0) * 0.004 * moving;   // antennae tapping while it walks
+        float app = min(min(sdSeg(q, vec2(0.044, 0.006), vec2(0.056, 0.016 + sw)), sdSeg(q, vec2(0.044, -0.006), vec2(0.056, -0.016 - sw))) - 0.0012,
+                        min(sdSeg(q, vec2(-0.047, 0.002), vec2(-0.060, 0.004)), sdSeg(q, vec2(-0.047, -0.002), vec2(-0.060, -0.004))) - 0.0009);
+        float gut = sdSeg(q, vec2(-0.040, 0.0), vec2(0.030, 0.0)) - 0.0035;
+        float eye = length(q - vec2(0.040, 0.0)) - 0.0028;
+        float eggs = v.y < 0.3 ? sdEll(q - vec2(-0.030, 0.0), vec2(0.016, 0.010)) : 1.0;
+        // somite boundaries: faint rings across the prosome
+        float ring = smoothstep(0.75, 0.95, abs(sin((q.x - 0.012) * 260.0))) * step(pro, 0.0) * step(-0.024, q.x);
+        vec3 b = tig ? TIG_BODY : TISBE_BODY;
+        col = mix(b, b * 0.75, ring * 0.5);
+        col = mix(col, tig ? TIG_GUT : TISBE_GUT, cover(gut, fp) * 0.85);
+        col = mix(col, HARP_EGGS, cover(eggs, fp));
+        col = mix(col, POD_EYE, cover(eye, fp));
+        m = max(max(cover(body, fp) * (tig ? 0.8 : 0.45), cover(app, fp) * 0.3), cover(eggs, fp) * 0.9);
+        m = max(m, cover(gut, fp) * (tig ? 0.9 : 0.75));
+        m = max(m, cover(eye, fp));
+    } else if (kind < 1.5) {
+        // Cyclopoid (research 17 §3): oval prosome, slender urosome, antennules swept back at the sides; gravid
+        // females carry a pair of egg sacs splayed off the genital somite.
+        float pro = sdEll(q - vec2(0.012, 0.0), vec2(0.030, 0.016));
+        float uro = sdSeg(q, vec2(-0.016, 0.0), vec2(-0.044, 0.0)) - 0.0045;
+        float body = min(pro, uro);
+        float app = min(sdSeg(q, vec2(0.036, 0.008), vec2(0.020, 0.034)), sdSeg(q, vec2(0.036, -0.008), vec2(0.020, -0.034))) - 0.0012;
+        float eggs = v.y < 0.4 ? min(sdEll(q - vec2(-0.032, 0.011), vec2(0.015, 0.0065)), sdEll(q - vec2(-0.032, -0.011), vec2(0.015, 0.0065))) : 1.0;
+        float gut = sdSeg(q, vec2(-0.030, 0.0), vec2(0.026, 0.0)) - 0.004;
+        float eye = length(q - vec2(0.036, 0.0)) - 0.0026;
+        col = mix(CYC_BODY, CYC_GUT, cover(gut, fp) * 0.8);
+        col = mix(col, CYC_EGGS, cover(eggs, fp));
+        col = mix(col, POD_EYE, cover(eye, fp));
+        m = max(max(cover(body, fp) * 0.4, cover(app, fp) * 0.25), max(cover(eggs, fp) * 0.85, cover(eye, fp)));
+        m = max(m, cover(gut, fp) * 0.7);
+    } else {
+        // Podocopid ostracod (research 17 §6): a smooth oval bivalved carapace about 2:1, slightly kidney-shaped, the
+        // dorsal hinge line down the middle, a brown gut showing through and a black eye; while it walks the antennae
+        // and legs flicker out of the gape at the front (2-5 Hz strokes).
+        vec2 k = q - vec2(0.0, 0.004 * (1.0 - (q.x * q.x) / 0.0016));
+        float shell = sdEll(k, vec2(0.040, 0.022));
+        float stroke = 0.5 + 0.5 * sin(uTime * 22.0 + v.y * 7.0);
+        float ant = moving > 0.5 ? min(sdSeg(q, vec2(0.036, 0.004), vec2(0.050 + 0.008 * stroke, 0.014)), sdSeg(q, vec2(0.036, -0.004), vec2(0.050 + 0.008 * stroke, -0.012))) - 0.0012 : 1.0;
+        float hinge = abs(k.y) - 0.0012;
+        float gut = sdEll(q - vec2(-0.004, 0.0), vec2(0.022, 0.009));
+        float eye = length(q - vec2(0.026, 0.006)) - 0.0024;
+        float rim = smoothstep(-0.006, 0.0, shell);   // paler, thinner shell at the margin
+        col = mix(OST_SHELL * (0.8 + 0.25 * v.x), OST_GUT, cover(gut, fp) * 0.55);
+        col = mix(col, OST_SHELL * 1.15, rim * 0.6);
+        col *= 1.0 - 0.3 * cover(hinge, fp) * step(shell, 0.0);
+        col = mix(col, vec3(0.01), cover(eye, fp));
+        m = max(cover(shell, fp) * 0.6, cover(ant, fp) * 0.3);
+    }
+    return m;
+}
+
+// Small life on the rock, only where it resolves (research 10 / 17): sessile red forams (Homotrema rubrum, 2-8 mm,
+// on shaded rock and undersides) and crawling pods (harpacticoid and cyclopoid copepods, ostracods, ~1 mm).
+// Densities come from the sim (uMicro, per cm² of rock in view); pods gather in patches and drop into the turf when
+// a fish comes near (uPred). Each animal lives in its own lattice cell and stays inside it, so nothing is cut at a
+// cell edge; shapes are drawn in the surface plane. N (world) is tilted over the foram domes so they catch the light.
+void rockLife(vec3 p, float fp, float sky, vec3 No, mat3 toW, inout vec3 N, inout vec3 albedo, inout float rough) {
     float wf = 1.0 - smoothstep(0.03, 0.08, fp);
     if (wf > 0.0 && uMicro.z > 0.0) {
         const float FC = 1.2;
         vec3 cc = floor(p / FC);
         vec3 hh = hash33(cc + 71.0);
-        // cryptic: prefers crevices and undersides
-        float pref = mix(0.25, 1.0, 1.0 - sky) * mix(1.0, 0.35, smoothstep(0.2, 0.8, N.y));
+        // cryptic: shaded rock, crevices and undersides; rare on lit tops
+        float pref = mix(0.12, 1.0, 1.0 - sky) * mix(1.0, 0.25, smoothstep(0.2, 0.8, No.y));
         if (hh.x < min(uMicro.z * FC * FC * 1.5, 0.6) * pref) {
             vec3 c = (cc + 0.3 + 0.4 * hash33(cc + 5.0)) * FC;
             vec3 dv = p - c;
-            vec3 dt = dv - N * dot(dv, N);
-            float r = 0.1 + 0.22 * hh.y;
-            // knobby outline (short branches round the dome)
-            vec3 ax = normalize(cross(N, vec3(0.31, 0.57, 0.76)));
-            float ang = atan(dot(dt, cross(N, ax)), dot(dt, ax));
-            float rr = r * (0.9 + 0.1 * sin(ang * (3.0 + floor(hh.z * 3.0)) + hh.z * 6.0));
-            float m = clamp((rr - length(dt)) / max(fp, 1e-4) + 0.5, 0.0, 1.0) * step(abs(dot(dv, N)), FC * 0.5) * wf;
-            float dome = sqrt(max(1.0 - dot(dt, dt) / (rr * rr), 0.0));
-            albedo = mix(albedo, FORAM_RED * (0.75 + 0.5 * hh.z) * (0.7 + 0.3 * dome), m);
-            rough = mix(rough, 0.6, m);
+            vec3 dt = dv - No * dot(dv, No);
+            // 2-5 mm, now and then a big one up to 8 mm (Bermuda field guide)
+            float r = hh.y > 0.94 ? 0.3 + 1.5 * (hh.y - 0.94) : 0.1 + 0.16 * hh.y;
+            float d = length(dt);
+            if (d < r * 1.45) {
+            vec3 h2 = hash33(cc + 29.0);
+            vec3 ax = normalize(cross(No, vec3(0.31, 0.57, 0.76)));
+            float ang = atan(dot(dt, cross(No, ax)), dot(dt, ax));
+            // morphotypes in their Bermuda proportions: hemispherical 37 %, globose 19, knobby 17, encrusting 12,
+            // columnar 3 (the rest drawn hemispherical)
+            float mt = hh.z;
+            float knobs = 0.0, relief = 1.0, rr = r;
+            if (mt < 0.37 || mt >= 0.886) {
+                rr = r * (0.92 + 0.08 * sin(ang * 3.0 + h2.y * 6.0));
+            } else if (mt < 0.555) {
+                rr = r * 0.85; relief = 1.4;
+            } else if (mt < 0.726) {
+                float n = 4.0 + floor(h2.y * 4.0);
+                knobs = pow(abs(cos(ang * n * 0.5 + h2.z * 6.0)), 3.0);
+                rr = r * (0.7 + 0.35 * knobs);
+                relief = 1.2;
+            } else if (mt < 0.849) {
+                rr = r * 1.3 * (0.8 + 0.12 * sin(ang * 2.0 + h2.z * 6.0) + 0.08 * sin(ang * 5.0 + h2.y * 9.0));
+                relief = 0.35;
+            } else {
+                rr = r * 0.55; relief = 2.0;
+            }
+            float m = clamp((rr - d) / max(fp * 0.5, 1e-4) + 0.5, 0.0, 1.0) * step(abs(dot(dv, No)), FC * 0.5) * wf;
+            if (m > 0.0) {
+                float dome = sqrt(max(1.0 - d * d / (rr * rr), 0.0));
+                bool dead = h2.z < 0.1;   // a pale pink empty test now and then
+                vec3 base = dead ? FORAM_PINK : FORAM_RED * (0.85 + 0.3 * hh.y);
+                // pitted by pores (resolved only up close), paler knob tips
+                vec3 pc = floor(dt / 0.03);
+                float pore = step(0.55, hash13(pc + cc)) * (1.0 - smoothstep(0.004, 0.012, fp));
+                vec3 col = base * (0.55 + 0.45 * dome);
+                col = mix(col, FORAM_PINK, knobs * smoothstep(0.6, 1.0, d / rr) * 0.5);
+                col = mix(col, FORAM_PORE, pore * 0.5);
+                albedo = mix(albedo, col, m);
+                rough = mix(rough, 0.55, m);
+                // tilt the normal over the dome so the fixtures light one side
+                vec3 tilt = toW * (dt / max(rr, 1e-3)) * relief;
+                N = normalize(mix(N, normalize(N * max(dome, 0.15) + tilt), m * wf));
+            }
+            }
         }
     }
     float wp = 1.0 - smoothstep(0.012, 0.03, fp);
-    float pods = uMicro.x + uMicro.y;
+    float pods = uMicro.x + uMicro.y + uMicro.w;
     if (wp > 0.0 && pods > 0.0) {
         const float PC = 0.6;
         vec3 cc = floor(p / PC);
         vec3 hh = hash33(cc + 13.0);
-        if (hh.x < min(pods * PC * PC * 1.5, 0.85)) {
-            bool ostra = hh.z < uMicro.y / pods;
-            float t = uTime * (ostra ? 0.3 : 0.8) + hh.y * 17.0;
-            float seg = floor(t);
-            // harpacticoids: a quick dart, then a pause; ostracods: a steady glide
-            float k = ostra ? fract(t) : smoothstep(0.0, 0.15, fract(t));
-            vec3 a = cc + 0.2 + 0.6 * hash33(cc + seg * 1.7);
-            vec3 b = cc + 0.2 + 0.6 * hash33(cc + (seg + 1.0) * 1.7);
-            vec3 dv = p - mix(a, b, k) * PC;
-            vec3 dt = dv - N * dot(dv, N);
-            vec3 dir = b - a;
-            vec3 ax = dir - N * dot(dir, N);
-            ax *= inversesqrt(max(dot(ax, ax), 1e-8));
-            float along = dot(dt, ax);
-            float across = length(dt - ax * along);
-            float hl = ostra ? 0.04 : 0.045;   // half length (cm): ~0.8-0.9 mm animals
-            float hw = ostra ? 0.028 : 0.018;
-            float e = length(vec2(along / hl, across / hw));
-            float m = clamp((1.0 - e) * hw / max(fp, 1e-4) + 0.5, 0.0, 1.0) * step(abs(dot(dv, N)), PC * 0.5) * wp;
-            vec3 body = ostra ? OSTRACOD : mix(POD_AMBER, POD_GUT, (1.0 - smoothstep(0.0, 0.45, across / hw)) * 0.6 * step(-0.6, along / hl));
-            albedo *= 1.0 - 0.35 * wp * (1.0 - smoothstep(1.0, 1.8, e)) * (1.0 - m);   // contact shade round the body
-            albedo = mix(albedo, body, m);
-            rough = mix(rough, ostra ? 0.3 : 0.45, m);
+        // patchy: pods crowd into turf and detritus pockets (2.4 cm patches) and a little toward shaded faces
+        float clump = mix(0.25, 1.75, hash13(floor(p / 2.4) + 3.7)) * mix(1.15, 0.85, smoothstep(0.0, 0.8, No.y));
+        if (hh.x < min(pods * PC * PC * 1.5 * clump, 0.85)) {
+            float kind = hh.z * pods < uMicro.x ? 0.0 : (hh.z * pods < uMicro.x + uMicro.w ? 1.0 : 2.0);
+            vec3 v = hash33(cc + 41.0);
+            // gaits (research 17 §1.5, §3, §6.4): harpacticoids crawl 1-3 mm/s in bouts with 0.5-3 s pauses and a
+            // rare dart; cyclopoids sit, then hop in a few ms; ostracods scurry steadily with short stops
+            float rate = kind < 0.5 ? 0.45 : (kind < 1.5 ? 0.3 : 0.4);
+            float t = uTime * rate + hh.y * 17.0;
+            float seg = floor(t), f = fract(t);
+            float dart = step(0.85, hash13(cc + seg * 3.1));
+            float k = kind < 0.5 ? smoothstep(0.0, dart > 0.5 ? 0.05 : 0.45, f)
+                    : (kind < 1.5 ? smoothstep(0.0, 0.02, f) : smoothstep(0.0, 0.7, f));
+            float moving = kind < 0.5 ? step(f, dart > 0.5 ? 0.05 : 0.45) : (kind < 1.5 ? 0.0 : step(f, 0.7));
+            vec3 a = cc + 0.25 + 0.5 * hash33(cc + seg * 1.7);
+            vec3 b = cc + 0.25 + 0.5 * hash33(cc + (seg + 1.0) * 1.7);
+            vec3 cen = mix(a, b, k) * PC;
+            vec3 dv = p - cen;
+            vec3 dt = dv - No * dot(dv, No);
+            if (dot(dt, dt) < 0.0064) {
+            // fish nearby: the pod drops into the turf (shrinks out of sight), back once the fish has gone
+            float fear = 0.0;
+            if (uPred[0].w > 0.0) {
+                vec3 wc = toW * cen + uModel[3].xyz;
+                for (int i = 0; i < 4; i++) {
+                    if (uPred[i].w > 0.0) fear = max(fear, 1.0 - smoothstep(1.2, 3.0, distance(wc, uPred[i].xyz)));
+                }
+            }
+            if (fear < 0.98) {
+                vec3 dir = b - a;
+                vec3 ax = dir - No * dot(dir, No);
+                ax *= inversesqrt(max(dot(ax, ax), 1e-8));
+                vec3 sx = cross(No, ax);
+                // ostracods roll a little as they go ("tumbling seed")
+                float wob = kind > 1.5 ? 0.15 * sin(uTime * 9.0 + v.y * 6.0) * moving : 0.0;
+                vec2 q = vec2(dot(dt, ax), dot(dt, sx)) / (1.0 - fear);
+                q = vec2(q.x * cos(wob) - q.y * sin(wob), q.x * sin(wob) + q.y * cos(wob));
+                vec3 col;
+                float m = podShape(q, kind, v, moving, fp / (1.0 - fear), col) * step(abs(dot(dv, No)), PC * 0.5) * wp;
+                float shade = 1.0 - smoothstep(0.0, 0.035, length(q) - 0.03);
+                albedo *= 1.0 - 0.3 * wp * shade * (1.0 - m) * (1.0 - fear);   // contact shade round the body
+                albedo = mix(albedo, col, m);
+                rough = mix(rough, kind > 1.5 ? 0.3 : 0.4, m);
+            }
+            }
         }
     }
 }
+#endif
 
 const vec3 ROCK_BLEACH = vec3(0.50, 0.42, 0.28);   // sun-bleached cream-tan skeleton
 const vec3 ROCK_GREY = vec3(0.24, 0.21, 0.16);     // older grey limestone
@@ -446,7 +595,7 @@ void main() {
         slimeMats(op, n1, cv.y, cv.z, albedo, rough);
     }
     // the animals and forams on top of whatever covers the rock
-    if (uQuality >= 0.5) rockLife(op, fp, sky, No, albedo, rough);
+    if (uQuality >= 0.5) rockLife(op, fp, sky, No, toW, N, albedo, rough);
 #endif
 #ifdef SAND
     if (uNormalStrength > 0.0) {

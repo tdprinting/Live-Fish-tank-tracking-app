@@ -468,7 +468,7 @@ function drawStatic(m, opaque, only, light) { // TankRenderer.drawStatic
     const bind = (u, t) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t); };
     if (part.kind === 'ROCK') {
       // a well-stocked rock's microfauna (pods, ostracods, forams per cm² in view; TankRenderer reads the sim)
-      gl.uniform4f(p.u('uMicro'), 3.0, 1.0, 0.15, 0);
+      gl.uniform4f(p.u('uMicro'), 3.0, 1.0, 0.15, 1.5);
     } else if (part.kind === 'SAND') {
       bind(1, st.tex.sand_normal); bind(2, st.tex.neutral);
       gl.uniform1f(p.u('uNormalStrength'), st.lowQ ? 0 : 0.6); gl.uniform1f(p.u('uDetailScale'), 4);

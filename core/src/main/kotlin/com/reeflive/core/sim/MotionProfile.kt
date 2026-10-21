@@ -198,11 +198,19 @@ object MotionProfiles {
         BrainKind.CLEANER_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 25.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         // a smaller Lysmata, quicker and more skittish in its stop-go: short dashes between pauses (research 42 [M][E])
         BrainKind.PEPPERMINT_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.8, walkBurstCmS = 22.0, stopGoMoveS = 1.0, stopGoPauseS = 1.0, footprintBL = 0.3, bodyUpRate = 1.5),
+        // research 44: no speeds found; scaled from the Lysmata rows by size and temperament [E]. The harlequin
+        // "moves slowly, in waves" (WP); the tiny sexy shrimp scurries; the pistol shrimp bulldozes at a plod
+        BrainKind.FIRE_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 22.0, stopGoMoveS = 1.2, stopGoPauseS = 1.0, footprintBL = 0.3, bodyUpRate = 1.5),
+        BrainKind.SEXY_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 10.0, stopGoMoveS = 0.6, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
+        BrainKind.HARLEQUIN_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.7, walkBurstCmS = 12.0, stopGoMoveS = 2.0, stopGoPauseS = 1.5, footprintBL = 0.3, bodyUpRate = 1.0),
+        BrainKind.PISTOL_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 18.0, stopGoMoveS = 1.0, stopGoPauseS = 0.6, footprintBL = 0.3, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
         // slow, deliberate stilt-walk 0.5–2 cm/s with long pauses; a fast scramble to cover only when startled (research 42) [L]
+        // research 43 §1: a small crab that walks steadily and scuttles home fast when startled (speeds est.)
+        BrainKind.EMERALD_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 6.0, stopGoMoveS = 4.0, stopGoPauseS = 2.5),
         BrainKind.ARROW_CRAB to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 6.0, stopGoMoveS = 3.0, stopGoPauseS = 2.0),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)

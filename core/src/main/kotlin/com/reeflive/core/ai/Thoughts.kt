@@ -120,6 +120,9 @@ object Thoughts {
             n == "flee" -> fleeLine(e, label)
             n == "sleep" -> sleepLine(e, label)
             n == "feed" -> feedLine(e, label)
+            n == "graze" && k == BrainKind.EMERALD_CRAB -> Line("scooping bubble algae off the rock with its spoon claws", "scoop some bubble algae", "Pop, crunch!", Driver.HUNGER)
+            n == "nip" && k == BrainKind.EMERALD_CRAB -> Line("nibbling coral polyps because it is hungry (naughty!)", "nibble a coral", "So hungry…", Driver.HUNGER, 2)
+            n == "retreat" && k == BrainKind.EMERALD_CRAB -> Line("scuttling back into its rock crevice${e.because()}", "hide in its crevice", "Eek, back inside!", Driver.FEAR, 2)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
             n == "hunt" && k == BrainKind.ARROW_CRAB -> Line("stalking a bristleworm on long, slow legs", "catch a bristleworm", "Gotcha, wormy!", Driver.HUNGER, 2)
             n == "wormsnap" -> Line("snapping a bristleworm off the rock", "grab a bristleworm", "Worm snack!", Driver.HUNGER, 2)
@@ -242,6 +245,18 @@ object Thoughts {
             n == "aiptasia" -> Line(if (label.startsWith("Eating")) "picking apart a pest aiptasia anemone" else "sneaking up on a pest aiptasia anemone",
                 "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
             n == "clam" -> clamLine(label)
+            // ---- shrimp pack (research 44)
+            n == "dance" -> Line("swaying its tail on ${if (label.contains("anemone")) "its anemone" else if (label.contains("coral")) "its coral" else "the rock"}",
+                "keep dancing", "Wiggle wiggle!", Driver.HOME, 1)
+            n == "hostpick" -> Line("picking slime and tiny food off its ${if (label.contains("anemone")) "anemone" else "coral"}", "pick at its host", "Snack time.", Driver.HUNGER)
+            n == "hide" && k == BrainKind.HARLEQUIN_SHRIMP -> Line("tucked under a rock, waving its big flat claws", "come out to hunt stars", "Too bright out there.", Driver.HOME, 0)
+            n == "starhunt" -> Line("creeping up on ${tgt ?: "a starfish"}", "flip the starfish over", "A star! Dinner!", Driver.HUNGER, 3)
+            n == "stareat" -> Line("eating a starfish it flipped onto its back", "finish its starfish", "Nom, starfish.", Driver.HUNGER, 3)
+            n == "starshare" -> Line("sharing its mate's starfish", "share the starfish", "Save some for me!", Driver.FAMILY, 2)
+            n == "bulldoze" -> Line("bulldozing sand out of its burrow with its claws", "dig some more", "Dig, dig, push!", Driver.HOME, 2)
+            n == "duck" -> Line("diving down its hole${e.because()}", "peek out again", "Into the hole!", Driver.FEAR, 2)
+            n == "clawsnap" -> Line("snapping its big claw with a loud crack", "guard its burrow", "Crack! Back off!", Driver.TERRITORY, 3)
+            n == "hide" && k == BrainKind.EMERALD_CRAB -> Line("wedged into its rock crevice for the day", "hide in its crevice", "Too bright out there.", Driver.HOME, 0)
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
             n == "squeeze" -> Line("squeezing out of a gap too tight for its shell", "squeeze out of the gap", "Too tight in here!", Driver.HOME, 2)
             n == "hide" -> Line("hiding under a rock with just its arms peeking out", "hide under the rock", "Shh, hiding.", Driver.HOME, 0)
@@ -565,11 +580,16 @@ object Thoughts {
         BrainKind.DOTTYBACK -> "dottyback"
         BrainKind.BANDED_SHRIMP -> "banded shrimp"
         BrainKind.PEPPERMINT_SHRIMP -> "peppermint shrimp"
+        BrainKind.FIRE_SHRIMP -> "fire shrimp"
+        BrainKind.SEXY_SHRIMP -> "sexy shrimp"
+        BrainKind.HARLEQUIN_SHRIMP -> "harlequin shrimp"
+        BrainKind.PISTOL_SHRIMP -> "pistol shrimp"
         BrainKind.FILE_CLAM -> "flame scallop"
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
         BrainKind.ARROW_CRAB -> "arrow crab"
+        BrainKind.EMERALD_CRAB -> "emerald crab"
         BrainKind.BRITTLE_STAR -> "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"

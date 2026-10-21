@@ -192,20 +192,25 @@ object ReefLive {
      * less than half the pixels (fill rate is what limits phones and iPads here). Lower presets cap it further.
      * [scaleStep] trims it only while frames run slow ([adapt]), so a fast device always gets the full resolution.
      */
-    private fun pixelRatio(): Double = min(window.devicePixelRatio, when (current) {
+    private fun pixelRatio(): Double = cap(current) * SCALES[scaleStep]
+    private fun cap(q: RenderQuality): Double = min(window.devicePixelRatio, when (q) {
         RenderQuality.HIGH -> 2.0
         RenderQuality.MEDIUM -> 1.5
         RenderQuality.LOW -> 1.0
-    }) * SCALES[scaleStep]
+    })
 
     private var scaleStep = 0
     private var slowFrames = 0; private var windowFrames = 0; private var windowTime = 0.0; private var goodWindows = 0
+    private var floorWindows = 0
 
     /**
      * Dynamic resolution: over each [ADAPT_FRAMES]-frame window, a mean frame time above [SLOW_DT] steps the render
      * resolution down one [SCALES] notch; [GOOD_WINDOWS] windows in a row under [FAST_DT] step it back up. Pixel count
      * (MSAA samples, bloom, shafts, lens) dominates GPU time on 3x screens, so this keeps the frame rate up without
      * dropping any effect. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone.
+     * Still slow at the lowest scale for [FLOOR_WINDOWS] windows: the picture drops one preset (HIGH → MEDIUM → LOW,
+     * shedding bloom, 4x MSAA, fish in the shadow map, caustic colour fringes...) at about the same pixel count, and
+     * the page stores it as the new Picture setting ("onQuality"), so a slow device starts fast next time.
      */
     private fun adapt(dt: Double) {
         if (dt <= 0.0) return
@@ -213,9 +218,23 @@ object ReefLive {
         if (windowFrames < ADAPT_FRAMES) return
         val mean = windowTime / windowFrames
         windowTime = 0.0; windowFrames = 0
-        if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0 }
+        if (mean > SLOW_DT && scaleStep == SCALES.size - 1 && current != RenderQuality.LOW) {
+            if (++floorWindows >= FLOOR_WINDOWS) stepQualityDown()
+        }
+        else if (mean > SLOW_DT && scaleStep < SCALES.size - 1) { scaleStep++; goodWindows = 0; floorWindows = 0 }
         else if (mean < FAST_DT && scaleStep > 0) { if (++goodWindows >= GOOD_WINDOWS) { scaleStep--; goodWindows = 0 } }
         else goodWindows = 0
+    }
+
+    private fun stepQualityDown() {
+        val from = cap(current)
+        val v = RenderQuality.entries[current.ordinal + 1]
+        current = v; goodWindows = 0; floorWindows = 0
+        // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
+        scaleStep = SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from * SCALES.last() + 1e-6 } ?: SCALES.size - 1
+        renderer?.setQuality(v)
+        resize()
+        emit("onQuality", v.name)
     }
 
     private fun status(text: String) { emit("onStatus", text) }
@@ -475,7 +494,7 @@ object ReefLive {
     } ?: "null"
     fun setQuality(q: String) {
         val v = runCatching { RenderQuality.valueOf(q.uppercase()) }.getOrNull() ?: return
-        current = v; scaleStep = 0; goodWindows = 0
+        current = v; scaleStep = 0; goodWindows = 0; floorWindows = 0
         renderer?.setQuality(v)
         resize()
     }
@@ -622,6 +641,7 @@ object ReefLive {
     private const val SLOW_DT = 1.0 / 48
     private const val FAST_DT = 1.0 / 57
     private const val GOOD_WINDOWS = 4
+    private const val FLOOR_WINDOWS = 3
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }

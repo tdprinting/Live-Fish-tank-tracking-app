@@ -15,7 +15,8 @@ docs/research/video/tee_tank_night_feeding.md "Sound"): a steady bed (50 ms leve
 63-500 Hz, a smooth waterfall hump at 1-2.5 kHz (octave bands 2 kHz -20 dB, 4 kHz -27 dB under the total), hum lines at
 60, 120 and 240 Hz, and only ~0.1 drips a second.
 One-shots:
-  tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime, tank_glass_scrape
+  tank_feed_plop, tank_pellet_drop, tank_shrimp_click, tank_ui_tick, tank_alert_chime, tank_glass_scrape,
+  tank_reward_sparkle
 
 Loops are rendered a crossfade-length longer than the loop and the tail is blended into the head with an
 equal-power crossfade, so the loop point has no click. The script checks the loop-point jump afterwards.
@@ -249,6 +250,24 @@ def alert_chime():
     return normalize(fade_edges(x, 0.002, 0.25), 0.8)
 
 
+def reward_sparkle():
+    """A reef moment or birthday: four soft glassy bells rising (C6 E6 G6 C7) with a shimmer, bright but gentle."""
+    n = int(1.6 * SR)
+    x = np.zeros(n)
+
+    def bell(f0, dur, amp):
+        m = int(dur * SR)
+        t = t_axis(m)
+        y = np.zeros(m)
+        for ratio, a, tau in [(1.0, 1.0, 0.45), (2.0, 0.25, 0.25), (3.01, 0.12, 0.15), (5.4, 0.05, 0.06)]:
+            y += a * np.sin(2 * np.pi * f0 * ratio * t) * env_exp(m, tau, 0.004)
+        return amp * y
+
+    for i, f in enumerate([1046.5, 1318.5, 1568.0, 2093.0]):
+        add_at(x, bell(f, 1.0, 0.8 + 0.1 * i), int(i * 0.09 * SR))
+    return normalize(fade_edges(x, 0.002, 0.3), 0.6)
+
+
 def glass_scrape():
     """The Flipper's felt pad sliding over algae-filmed glass: a soft, slightly squeaky swish with stick-slip judder."""
     n = int(0.32 * SR)
@@ -271,6 +290,7 @@ SOUNDS = {
     "tank_ui_tick": (ui_tick, False),
     "tank_alert_chime": (alert_chime, False),
     "tank_glass_scrape": (glass_scrape, False),
+    "tank_reward_sparkle": (reward_sparkle, False),
 }
 
 
