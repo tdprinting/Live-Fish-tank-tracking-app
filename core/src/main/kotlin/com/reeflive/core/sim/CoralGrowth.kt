@@ -258,7 +258,9 @@ object CoralGrowth {
         val hit = rock.sdf.raycast(start, Vec3(0.0, -1.0, 0.0), start.y - rock.sandTopCm) ?: return null
         val p = start + Vec3(0.0, -hit, 0.0)
         if (p.y < rock.sandTopCm + 0.5) return null
-        val frag = Coral(id, c.species, "${c.nickname} branch", "", p, rock.sdf.gradient(p), rng.nextDouble() * 6.28)
+        // drawn as the parent's model moved to where it landed (a copy), so a branch shows and saves like an added colony
+        val home = c.restPos - c.offset
+        val frag = Coral(id, c.species, "${c.nickname.substringBefore(" branch")} branch", c.anchor, p, rock.sdf.gradient(p), rng.nextDouble() * 6.28, offset = p - home)
         frag.size = 0.3
         frag.tissue = 0.9
         return frag

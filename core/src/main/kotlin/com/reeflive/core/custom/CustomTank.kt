@@ -71,6 +71,8 @@ object CustomTank {
             savedAtMs = nowMs,
             simTimeSec = sim.simTimeSec,
             speed = sim.speed,
+            lifePace = sim.lifePace,
+            lifeSec = sim.lifeSec,
             water = WaterFields.read(w.s),
             equipment = eq,
             micro = MicroGroup.entries.associate { it.name to w.micro.total(it) }.filterValues { it.isFinite() },
@@ -117,7 +119,7 @@ object CustomTank {
         offsetX = c.offset.x, offsetY = c.offset.y, offsetZ = c.offset.z,
         x = c.pos.x, y = c.pos.y, z = c.pos.z, nx = c.normal.x, ny = c.normal.y, nz = c.normal.z,
         tissue = c.tissue, bleach = c.bleach, brown = c.brown, stress = c.stress, dhw = c.dhw, algaeCover = c.algaeCover,
-        size = c.size, cover = c.cover, radiusCm = c.radiusCm,
+        size = c.size, cover = c.cover, radiusCm = c.radiusCm, fed = c.fed, acclLight = if (c.acclLight.isNaN()) -1.0 else c.acclLight,
     )
 
     // ============================================================== reopen
@@ -165,6 +167,7 @@ object CustomTank {
         for (c in sim.corals) coralsById[c.id]?.let { s ->
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw
             c.algaeCover = s.algaeCover; c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = true
+            c.fed = s.fed.coerceIn(0.0, 1.0); if (s.acclLight >= 0) c.acclLight = s.acclLight
         }
         val eq = save.equipment
         val w = sim.water
@@ -187,6 +190,9 @@ object CustomTank {
         sim.brood.load(save.brood)
         sim.pests.restore(save.pests)
         sim.speed = save.speed.coerceIn(1.0, 1000.0)
+        sim.lifePace = save.lifePace
+        // stamps in the save (eggs, nursery cohorts) are on this clock; before it existed they were on the sim clock
+        sim.lifeSec = save.lifeSec?.takeIf { it.isFinite() } ?: save.simTimeSec
         sim.reserveIds(save.nextIds.organism, save.nextIds.frag, save.nextIds.bag)
         return sim
     }

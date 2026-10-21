@@ -204,7 +204,7 @@ class Brood(private val sim: Simulation) {
         val n = (eggs * spec.hatchSuccess * rng.range(0.9, 1.05)).roundToInt().coerceAtLeast(1)
         // an older display cohort is long gone by the next hatch; fold any stragglers into this one
         cohorts.removeAll { !it.inNursery }
-        val c = BroodCohort(nextId++, spec, sim.simTimeSec, n, at, parents.map { it.variant }, parents.firstOrNull()?.species?.id ?: SPECIES_FALLBACK)
+        val c = BroodCohort(nextId++, spec, sim.lifeSec, n, at, parents.map { it.variant }, parents.firstOrNull()?.species?.id ?: SPECIES_FALLBACK)
         cohorts += c
         totalHatched += n
         if (raise) lureUntil = sim.simTimeSec + LURE_MIN * 60
@@ -216,7 +216,7 @@ class Brood(private val sim: Simulation) {
     fun act(a: Act) {
         val nc = nurseryCohort()
         when (a) {
-            Act.RAISE_ON -> { raise = true; if (displayCohort()?.let { it.ageDays(sim.simTimeSec) < 0.5 } == true) lureUntil = sim.simTimeSec + LURE_MIN * 60 }
+            Act.RAISE_ON -> { raise = true; if (displayCohort()?.let { it.ageDays(sim.lifeSec) < 0.5 } == true) lureUntil = sim.simTimeSec + LURE_MIN * 60 }
             Act.RAISE_OFF -> raise = false
             Act.ROTIFERS -> if (nc != null) { rotifers = minOf(1.0, rotifers + 0.8); dirt = minOf(1.0, dirt + 0.02) }
             Act.BRINE -> if (nc != null) { brine = minOf(1.0, brine + 0.8); dirt = minOf(1.0, dirt + 0.04) }
@@ -240,7 +240,7 @@ class Brood(private val sim: Simulation) {
         // an orange × black (darwin) pair: each baby takes one parent's form (research 28 §3: assumption, see doc)
         val variant = c.parentVariants.takeIf { it.isNotEmpty() }?.let { it[rng.nextInt(it.size)] }
         c.released++; totalReleased++
-        val o = sim.addFromSeed(LivestockSeed(sp, "Baby ${c.released}", c.lengthMm / 10.0, variant = variant, ageYears = c.ageDays(sim.simTimeSec) / 365.0))
+        val o = sim.addFromSeed(LivestockSeed(sp, "Baby ${c.released}", c.lengthMm / 10.0, variant = variant, ageYears = c.ageDays(sim.lifeSec) / 365.0))
         o.arrivalTime = sim.simTimeSec; o.clock = sim.simTimeSec
         o.hunger = 0.3
         // let go at the surface by the nursery side of the tank, like a cup released by the keeper
@@ -253,9 +253,14 @@ class Brood(private val sim: Simulation) {
 
     // ============================================================== step
 
+    /**
+     * [dtSec] is on the game clock ([Simulation.lifePace]): the nursery raises fry at that pace. Larvae loose in the
+     * display live and die within a night on the sim clock (they are eaten as the keeper watches), so they step at
+     * real time. Cohort ages are on [Simulation.lifeSec].
+     */
     fun step(dtSec: Double) {
         val now = sim.simTimeSec
-        val dtH = dtSec / 3600.0
+        val dtH = dtSec / sim.lifePace / 3600.0
         val dtD = dtSec / 86400.0
         val it = cohorts.iterator()
         while (it.hasNext()) {
@@ -276,7 +281,7 @@ class Brood(private val sim: Simulation) {
      */
     private fun display(c: BroodCohort, now: Double, dtH: Double) {
         val spec = c.spec
-        val age = c.ageDays(now)
+        val age = c.ageDays(sim.lifeSec)
         var h = 0.0
         if (sim.predationEnabled) for (o in sim.organisms) {
             if (!o.alive || !o.isFish) continue
@@ -328,7 +333,7 @@ class Brood(private val sim: Simulation) {
      */
     private fun nursery(c: BroodCohort, dtD: Double) {
         val s = c.spec
-        val age = c.ageDays(sim.simTimeSec)
+        val age = c.ageDays(sim.lifeSec)
         if (autoCare) {
             // rotifers kept up while larvae, baby brine from day 5, three feeds a day, daily water changes
             if (!c.metamorphosed || c.devDays < s.metamorphDays + 5) rotifers = maxOf(rotifers, 0.75)
@@ -407,7 +412,7 @@ class Brood(private val sim: Simulation) {
     /** Card text and buttons for a parent of [spec] (null when no such fish lives here). */
     private fun panel(spec: BroodSpec): BroodPanel? {
         if (sim.organisms.none { it.alive && it.brainKind == spec.brainKind }) return null
-        val now = sim.simTimeSec
+        val now = sim.lifeSec
         val lines = ArrayList<String>()
         val acts = ArrayList<BroodAction>()
         val r = sim.repro
