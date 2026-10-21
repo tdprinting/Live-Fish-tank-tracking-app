@@ -202,7 +202,7 @@ object HealthModel {
                 m["do"] = ToleranceRange(optLo = 6.0, tolLo = 5.0, lethalLo = 3.5)
             }
             // Crustaceans need iodine to molt; the Sally Lightfoot also tolerates salinity swings poorly (SIMULATION §9.6).
-            BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> {
+            BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> {
                 m["i"] = CRUSTACEAN_IODINE
                 if (s.brainKind == BrainKind.SALLY_CRAB) m["sg"] = ToleranceRange(1.024, 1.026, 1.022, 1.027, 1.019, 1.029)
             }
@@ -286,7 +286,7 @@ object HealthModel {
         o.socialStress = max(0.0, o.socialStress - 0.1 * dtMin)
         o.startle = max(0.0, o.startle - 0.2 * dtMin)
         var sSpace = 0.0
-        if (o.brainKind == BrainKind.TANG && o.lengthCm > 10 && ctx.volumeL < 450) sSpace = 0.05 + 0.01 * (o.lengthCm - 10)
+        if (o.brainKind == BrainKind.TANG && o.lengthCm > 10 && ctx.volumeL < LifeCycle.minVolumeL(o)) sSpace = 0.05 + 0.01 * (o.lengthCm - 10)
         if (o.brainKind == BrainKind.EEL && o.lengthCm > 50) sSpace = 0.05
         val sDark = if (o.brainKind == BrainKind.WRASSE && !ctx.clientsAvailable) 0.05 else 0.0
         val sHunger = 0.3 * max(0.0, o.hunger - 0.6)

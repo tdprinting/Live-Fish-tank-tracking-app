@@ -38,9 +38,23 @@ object Compatibility {
             out += CompatibilityWarning("dottyback_cap", CompatibilityWarning.Severity.WARN,
                 "Dottybacks are aggressive toward their own kind. Keep one per tank.")
         }
-        if ((kind == BrainKind.TANG || kind == BrainKind.EEL) && others.any { it == kind }) {
+        if (kind == BrainKind.TANG && others.any { it == kind }) tangWarnings(speciesId, stock, out)
+        else if (kind == BrainKind.EEL && others.any { it == kind }) {
             out += CompatibilityWarning("conspecific_cap", CompatibilityWarning.Severity.WARN,
-                "A second ${if (kind == BrainKind.TANG) "tang" else "moray"} will be harassed and chronically stressed in this tank.")
+                "A second moray will be harassed and chronically stressed in this tank.")
+        }
+        if (kind == BrainKind.FAIRY_WRASSE) {
+            // research 42 §1: jumpers; one male per group; plankton pickers that want room to swim
+            out += CompatibilityWarning("fairy_wrasse_jumper", CompatibilityWarning.Severity.INFO,
+                "Fairy wrasses jump when they are scared, most of all at night and in their first days. An open-top tank needs a lid or a mesh cover.")
+            if (others.any { it == BrainKind.FAIRY_WRASSE }) {
+                out += CompatibilityWarning("fairy_wrasse_harem", CompatibilityWarning.Severity.INFO,
+                    "Keep one male with one or more females. Two males fight, and a group of only females turns its biggest into a male over a few weeks.")
+            }
+            if (volumeL > 0 && volumeL < FAIRY_WRASSE_MIN_L) {
+                out += CompatibilityWarning("fairy_wrasse_tank_size", CompatibilityWarning.Severity.WARN,
+                    "Fairy wrasses swim all day in the open water and need about ${FAIRY_WRASSE_MIN_L.toInt()} L. In ${volumeL.toInt()} L it will be stressed.")
+            }
         }
         if (kind == BrainKind.DIAMOND_GOBY) {
             // research 16: sand sifters strip the sand fauna; unpaired adults fight; low corals get sanded
@@ -84,12 +98,33 @@ object Compatibility {
             }
         }
         squidWarnings(kind, others, out)
-        val minV = LifeCycle.minVolumeL(kind)
+        val minV = LifeCycle.minVolumeL(speciesId, kind)
         if (minV > 0 && volumeL > 0 && volumeL < minV) {
             out += CompatibilityWarning("${kind.name.lowercase()}_tank_size", CompatibilityWarning.Severity.WARN,
                 "Adults need about ${minV.toInt()} L. In ${volumeL.toInt()} L it will be chronically stressed, grow stunted and live shorter.")
         }
         return out
+    }
+
+    /** Hobby minimum for a fairy wrasse's swimming room (≈ 55 gal; research 42 §1 cites 90 gal [M], many keep them in 55-75). */
+    const val FAIRY_WRASSE_MIN_L = 200.0
+
+    /**
+     * A tang added to a tank that already has one (research 42 §2-4): two sailfin tangs (Zebrasoma) fight worst, tail-slapping
+     * with their scalpels; the purple tang bullies every other tang; any other pair is the old one-tang rule.
+     */
+    private fun tangWarnings(speciesId: String, stock: Collection<String>, out: MutableList<CompatibilityWarning>) {
+        val newZ = speciesId.startsWith("zebrasoma")
+        val oldZ = stock.any { it.startsWith("zebrasoma") }
+        val purple = speciesId == "zebrasoma_xanthurum" || stock.any { it == "zebrasoma_xanthurum" }
+        when {
+            newZ && oldZ -> out += CompatibilityWarning("zebrasoma_pair", CompatibilityWarning.Severity.SEVERE,
+                "Two sailfin tangs (yellow and purple are both Zebrasoma) fight hard, slapping each other with the sharp spines by their tails. Keep one per tank.")
+            purple -> out += CompatibilityWarning("purple_tang_bully", CompatibilityWarning.Severity.WARN,
+                "The purple tang is the bossiest tang. It chases the other tang for days and keeps it stressed. If you try it, add the purple tang last.")
+            else -> out += CompatibilityWarning("conspecific_cap", CompatibilityWarning.Severity.WARN,
+                "A second tang will be harassed and chronically stressed in this tank.")
+        }
     }
 
     /** Predatory fish that hunt or harass a bobtail squid (research cephalopod_squid §4). */
@@ -106,7 +141,7 @@ object Compatibility {
                 out += CompatibilityWarning("squid_predator_fish", CompatibilityWarning.Severity.SEVERE,
                     "A hawkfish, dottyback or moray will hunt or harass a bobtail squid. It stays buried, stops hunting and is injured or eaten. Keep it in its own tank.")
             }
-            if (others.any { it == BrainKind.CLEANER_SHRIMP || it == BrainKind.BANDED_SHRIMP || it == BrainKind.HERMIT || it == BrainKind.SALLY_CRAB || it == BrainKind.ARROW_CRAB }) {
+            if (others.any { it.isShrimp || it == BrainKind.HERMIT || it == BrainKind.SALLY_CRAB || it == BrainKind.ARROW_CRAB }) {
                 out += CompatibilityWarning("squid_eats_crustaceans", CompatibilityWarning.Severity.WARN,
                     "Squid hunt shrimp and small crabs at night. Adult cleaner and banded shrimp are mostly too big, but small, young or freshly molted ones get eaten, and a banded shrimp can grab a sleeping squid.")
             }
@@ -119,7 +154,7 @@ object Compatibility {
         } else if (squidHere && huntsSquid(kind)) {
             out += CompatibilityWarning("squid_predator_fish", CompatibilityWarning.Severity.SEVERE,
                 "This fish hunts or harasses the bobtail squid.")
-        } else if (squidHere && (kind == BrainKind.CLEANER_SHRIMP || kind == BrainKind.BANDED_SHRIMP)) {
+        } else if (squidHere && kind.isShrimp) {
             out += CompatibilityWarning("squid_eats_crustaceans", CompatibilityWarning.Severity.WARN,
                 "The bobtail squid hunts small and freshly molted shrimp at night.")
         }

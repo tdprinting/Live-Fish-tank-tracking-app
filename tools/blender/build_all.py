@@ -44,6 +44,8 @@ def run(step, args):
             fn()
         import squid  # sandbox bobtail squid (docs/research/cephalopod_squid.md)
         squid.build_all()
+        import file_clam  # flame scallop (docs/research/42_peppermint_shrimp_flame_scallop.md)
+        file_clam.build()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)

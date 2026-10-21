@@ -857,7 +857,182 @@ def fins_leopard_wrasse(cv):
     FL.paint_fin_slot(cv, 4, base="#E8D8C0", alpha=0.18, rays=12, ray_color="#C8A880", ray_alpha=0.35)
     FL.paint_fin_slot(cv, 5, base="#C89A70", alpha=0.5, rays=5, ray_color="#8A6040")
 
+# ---------------------------------------------------------------- Zebrasoma tangs (research 42)
+def paint_yellow_tang(cv, fl):
+    """Zebrasoma flavescens: lemon yellow all over, a touch paler on the belly and face; the caudal spine sits in a white
+    sheath on the peduncle [S12 FishBase; S13]. Faint vertical scale texture (tangs have tiny ctenoid scales)."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F7D21C", "#F3C80E", 0.0, 1.0)
+    cv.blend((1 - S(0.0, 0.3, v)) * S(0.1, 0.4, u), "#FADF52", 0.45)      # paler belly
+    cv.blend(S(0.8, 1.0, v), "#E8B80A", 0.35)                            # deeper yellow along the back
+    mucus(cv, 0.04, 401)
+    scales_overlay(cv, 8, 0.035)
+    cv.blend(P.band(v, 0.48, 0.52, 0.02) * S(0.2, 0.4, u) * (1 - S(0.8, 0.9, u)), "#FFF09A", 0.18)  # lateral line
+    cv.blend(fl.disc(0.885, 0.5, 0.022, 0.006), "#F6F4EC", 0.95)        # white spine sheath
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.54, color="#B08A10", op=0.5)
+
+
+def fins_yellow_tang(cv):
+    def edge_pale(T, Sx, rgb):
+        m = S(0.75, 1.0, Sx)[..., None]
+        return rgb * (1 - 0.3 * m) + hex2rgb("#FFF2A0") * 0.3 * m
+    FL.paint_fin_slot(cv, 0, base="#F4CC14", alpha=0.9, rays=30, ray_color="#D8A808", spine_count=5, incise=0.05, base_fn=edge_pale)
+    FL.paint_fin_slot(cv, 2, base="#F4CC14", alpha=0.9, rays=24, ray_color="#D8A808", base_fn=edge_pale)
+    FL.paint_fin_slot(cv, 3, base="#F2C810", alpha=0.85, rays=18, ray_color="#D4A40A")
+    FL.paint_fin_slot(cv, 4, base="#F8E070", alpha=0.45, rays=14, ray_color="#E0C040", ray_alpha=0.6)
+    FL.paint_fin_slot(cv, 5, base="#F4CC14", alpha=0.85, rays=5, ray_color="#D8A808")
+
+
+def paint_purple_tang(cv, fl):
+    """Zebrasoma xanthurum: deep blue-purple body with fine dark horizontal lines on the flank and small black spots on
+    the head and chest; the tail (from the peduncle) bright yellow [trade descriptions S21 S24; confidence L]."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#3E3492", "#33297E", 0.0, 1.0)
+    cv.blend(S(0.75, 1.0, v), "#271E62", 0.5)
+    mucus(cv, 0.05, 411)
+    scales_overlay(cv, 8, 0.04)
+    # thin longitudinal lines over the mid and rear flank
+    lv = fl.lv
+    ph = np.abs((((v - 0.5) * lv / 0.011) % 1.0) - 0.5)
+    lines = (1 - S(0.12, 0.25, ph)) * S(0.28, 0.4, u) * (1 - S(0.86, 0.9, u)) * S(0.1, 0.2, v) * (1 - S(0.85, 0.95, v))
+    cv.blend(lines, "#1C1650", 0.55)
+    # black dots on the head and chest
+    rs = np.random.default_rng(412)
+    dots, _ = fl.spots(rs, 140, 0.0028, 0.0042, 0.0085, (0.08, 0.32, 0.3, 0.92))
+    cv.blend(dots * (1 - S(0.24, 0.34, u)), "#08061A", 0.9)
+    cv.blend(S(0.965, 0.985, u), "#F4D21A")                               # yellow from the caudal base
+    cv.blend(fl.disc(0.885, 0.5, 0.02, 0.006), "#18123E", 0.9)          # dark spine sheath
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.54, color="#140E30", op=0.6)
+
+
+def fins_purple_tang(cv):
+    FL.paint_fin_slot(cv, 0, base="#2E2478", alpha=0.92, rays=30, ray_color="#1A1450", margin="#5868D8", margin_w=0.06,
+                      spine_count=5, incise=0.05)
+    FL.paint_fin_slot(cv, 2, base="#2E2478", alpha=0.92, rays=24, ray_color="#1A1450", margin="#5868D8", margin_w=0.06)
+
+    def caudal(T, Sx, rgb):
+        rgb[:] = hex2rgb("#F4D21A")
+        return rgb
+    FL.paint_fin_slot(cv, 3, base="#F4D21A", alpha=0.95, rays=18, ray_color="#D8B000", base_fn=caudal)
+    FL.paint_fin_slot(cv, 4, base="#3A3090", alpha=0.6, rays=14, ray_color="#241C60", tip_color="#F2CC20", tip_from=0.55)
+    FL.paint_fin_slot(cv, 5, base="#2E2478", alpha=0.85, rays=5, ray_color="#1A1450")
+
+
+# ---------------------------------------------------------------- red fairy wrasse (research 42)
+def paint_fairy_female(cv, fl):
+    """Cirrhilabrus rubripinnis initial phase (female): subdued, yellowish-orange back fading to pink-red flanks and a
+    white belly [S4 S5: females 'more subdued', 'more yellow'; L for the exact shades]."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F4D8D4", "#E8907A", 0.0, 0.7)
+    cv.blend(S(0.55, 0.95, v), "#E0A04A", 0.7)                          # yellow-orange back
+    cv.blend((1 - S(0.0, 0.32, v)), "#FBF2EE", 0.7)                      # white belly
+    cv.blend(P.band(v, 0.35, 0.6, 0.06) * S(0.15, 0.4, u), "#E8667A", 0.35)  # pink mid-flank
+    mucus(cv, 0.03, 421)
+    scales_overlay(cv, 10, 0.05)
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.54, color="#B05040", op=0.5)
+
+
+def paint_fairy_male(cv, fl):
+    """Terminal male: deep scarlet red, darker over the back, a pinker belly; a thin pale-blue line from the snout under
+    the eye [S1 FishBase: red fins and body; L for the face line]."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F08C9A", "#D8283C", 0.0, 0.6)
+    cv.blend(S(0.6, 1.0, v), "#9E1426", 0.6)
+    cv.blend((1 - S(0.0, 0.25, v)) * S(0.1, 0.3, u), "#F6B8C0", 0.6)
+    mucus(cv, 0.03, 431)
+    scales_overlay(cv, 10, 0.06)
+    cv.blend(fl.stroke([(0.0, 0.47), (0.05, 0.5), (0.12, 0.52), (0.2, 0.5)], [0.0025, 0.003, 0.003, 0.002], soft=0.002),
+             "#9CD8F8", 0.7)
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.54, color="#701020", op=0.6)
+
+
+def _fairy_fins(cv, male):
+    """Male fins: deep red with a pale-blue margin, long red pelvic filaments that he spreads when he flashes. Female:
+    translucent yellowish, the GLB's long pelvic rays cut back to a short fin (alpha)."""
+    if male:
+        FL.paint_fin_slot(cv, 0, base="#C8182E", alpha=0.9, rays=20, ray_color="#8A0E1E", spine_count=11,
+                          margin="#9CD0F4", margin_w=0.07)
+        FL.paint_fin_slot(cv, 2, base="#C8182E", alpha=0.9, rays=12, ray_color="#8A0E1E", margin="#9CD0F4", margin_w=0.08)
+        FL.paint_fin_slot(cv, 3, base="#D02838", alpha=0.85, rays=13, ray_color="#8A1420", margin="#9CD0F4", margin_w=0.05)
+        FL.paint_fin_slot(cv, 4, base="#F4C0C8", alpha=0.25, rays=12, ray_color="#E09098", ray_alpha=0.4)
+        FL.paint_fin_slot(cv, 5, base="#D0182C", alpha=0.95, rays=5, ray_color="#8A0E1E", edge_fade=0.02)
+    else:
+        FL.paint_fin_slot(cv, 0, base="#F0C890", alpha=0.6, rays=20, ray_color="#D89860", spine_count=11,
+                          alpha_fn=lambda T, Sx, a: a * (1 - S(0.62, 0.7, Sx)))
+        FL.paint_fin_slot(cv, 2, base="#F2D0A8", alpha=0.55, rays=12, ray_color="#D8A070",
+                          alpha_fn=lambda T, Sx, a: a * (1 - S(0.7, 0.78, Sx)))
+        FL.paint_fin_slot(cv, 3, base="#F0B880", alpha=0.6, rays=13, ray_color="#D08850")
+        FL.paint_fin_slot(cv, 4, base="#F8E8E0", alpha=0.2, rays=12, ray_color="#E8C8B8", ray_alpha=0.35)
+        FL.paint_fin_slot(cv, 5, base="#F6E0D0", alpha=0.5, rays=5, ray_color="#E0B8A0",
+                          alpha_fn=lambda T, Sx, a: a * (1 - S(0.3, 0.36, Sx)))
+
+
+def fins_fairy_male(cv):
+    _fairy_fins(cv, True)
+
+
+def fins_fairy_female(cv):
+    _fairy_fins(cv, False)
+
 # ----------------------------------------------------------------------------
+
+def paint_firefish(cv, fl):
+    """Firefish goby, Nemateleotris magnifica (research 41 §1.1): a slender white-to-cream body with a lemon-yellow head
+    and snout, grading from about two thirds of the way back through salmon-orange to fiery red-orange at the tail base
+    (the red rear half is darker toward the back), a pale lilac sheen on the belly."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#F6F2EE", "#F2EEE6", 0.0, 1.0)
+    cv.blend(1 - S(0.06, 0.2, u), "#F2D650", 0.95)            # yellow head and snout
+    cv.blend(S(0.14, 0.22, u) * (1 - S(0.2, 0.3, u)) * S(0.5, 0.9, v), "#F4E6A0", 0.5)   # yellow nape fading back
+    cv.blend(S(0.55, 0.75, u), "#F28C52", 0.9)                # salmon orange from two thirds back
+    cv.blend(S(0.72, 0.92, u), "#D8381E", 0.95)               # fiery red rear
+    cv.blend(S(0.9, 1.0, u), "#9A1A12", 0.6)                  # darker at the tail base
+    cv.blend(1 - S(0.15, 0.35, v), "#EFE6F2", 0.35 * (1 - S(0.5, 0.8, u)))  # lilac-white belly
+    mucus(cv, 0.035, 411)
+    scales_overlay(cv, 8, 0.03)
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.52, color="#B07040", op=0.5)
+
+
+def fins_firefish(cv):
+    # first dorsal: the tall flag (spines 1-2 very long), white-pink with a red-orange upper half
+    def flag(T, Sx, rgb, a):
+        m = S(0.45, 0.8, Sx)
+        return rgb * (1 - m[..., None]) + hex2rgb("#E8502A") * m[..., None], np.maximum(a, 0.85 * m)
+    FL.paint_fin_slot(cv, 0, base="#F4E8E8", alpha=0.7, rays=6, ray_color="#E0B0A0", spine_count=6, spots=flag)
+    # second dorsal and anal: red-orange with a dark red-black margin
+    FL.paint_fin_slot(cv, 1, base="#E04A28", alpha=0.8, rays=28, ray_color="#A02814", margin="#3A0A0A", margin_w=0.1)
+    FL.paint_fin_slot(cv, 2, base="#E04A28", alpha=0.8, rays=27, ray_color="#A02814", margin="#3A0A0A", margin_w=0.1)
+    # caudal: deep red with black upper and lower edges
+    def edges(T, Sx, rgb, a):
+        m = 1 - S(0.08, 0.18, np.minimum(T, 1 - T))
+        return rgb * (1 - m[..., None]) + hex2rgb("#1A0606") * m[..., None], np.maximum(a, 0.9 * m)
+    FL.paint_fin_slot(cv, 3, base="#C82A18", alpha=0.85, rays=17, ray_color="#801408", spots=edges)
+    FL.paint_fin_slot(cv, 4, base="#F4EEE8", alpha=0.3, rays=19, ray_color="#D8C8B8")
+    FL.paint_fin_slot(cv, 5, base="#F4F0EA", alpha=0.45, rays=5, ray_color="#D8C8B8")
+
+
+def paint_chromis(cv, fl):
+    """Blue-green chromis, Chromis viridis (research 41 §2.1): iridescent apple-green to pale blue, bluer and brighter
+    on the back, a silvery-green belly; the colour is structural, so most of it comes from the high iridescence."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#D4F0DC", "#62CC98", 0.0, 0.85)
+    cv.blend(S(0.72, 1.0, v), "#4AB0C8", 0.55)                # bluer along the back
+    cv.blend(1 - S(0.1, 0.3, v), "#E8F6F0", 0.6)              # silvery belly
+    cv.blend(S(0.8, 1.0, u), "#70C8C0", 0.4)
+    mucus(cv, 0.03, 421)
+    scales_overlay(cv, 12, 0.08)
+    dark_mouth(cv, fl, u1=0.02, v0=0.5, v1=0.56, color="#3A6A60", op=0.5)
+
+
+def fins_chromis(cv):
+    FL.paint_fin_slot(cv, 0, base="#7AD0C0", alpha=0.45, rays=22, ray_color="#5AA8A0", spine_count=12,
+                      margin="#A8E8F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 2, base="#7AD0C0", alpha=0.45, rays=12, ray_color="#5AA8A0", spine_count=2,
+                      margin="#A8E8F0", margin_w=0.06)
+    FL.paint_fin_slot(cv, 3, base="#86D8C8", alpha=0.5, rays=17, ray_color="#5AA8A0", margin="#B8F0F0", margin_w=0.05)
+    FL.paint_fin_slot(cv, 4, base="#D0F0EA", alpha=0.25, rays=18, ray_color="#A0D0C8")
+    FL.paint_fin_slot(cv, 5, base="#C8F0E8", alpha=0.45, rays=6, ray_color="#90C8C0")
+
 SPECIES = {
     "clown_orange": dict(
         # A. ocellaris: oval, depth ~0.44 SL at the spiny dorsal, caudal peduncle ~0.19 SL deep
@@ -1072,14 +1247,91 @@ SPECIES = {
         eye=dict(u=0.085, zf=0.3, r=0.04, iris="#D07A30", ring="#3A3A18", outer="#A8B040", ring_w=0.16, pupil=0.4),
         paint=paint_leopard_wrasse, fins=fins_leopard_wrasse, irid=0.25, rough=0.33, length_cm=8.5,
     ),
+    "yellow_tang": dict(
+        # Zebrasoma flavescens: a deep, compressed disc (body depth ~0.55 SL; with the tall dorsal and anal the fish
+        # reads as round), a long protruding snout under a concave forehead, small terminal mouth, eye high and well
+        # back from the snout; caudal spine in a white sheath on the peduncle [FishBase S12]
+        profile=[(0, 0.04, 0.03, -0.07), (0.05, 0.065, 0.04, -0.065), (0.1, 0.11, 0.06, -0.055), (0.16, 0.22, 0.09, -0.035),
+                 (0.23, 0.38, 0.115, -0.012), (0.31, 0.52, 0.13, 0.0), (0.42, 0.58, 0.135, 0.0), (0.54, 0.55, 0.13, 0.0), (0.66, 0.46, 0.115, 0.0),
+                 (0.77, 0.33, 0.09, 0.0), (0.86, 0.19, 0.065, 0.0), (0.92, 0.14, 0.05, 0.0), (1.0, 0.13, 0.035, 0.0)],
+        body_tris=4200, ring=36, p_exp=0.7, belly_bias=0.04, back_pinch=0.18,
+        dorsal=dict(u0=0.2, u1=0.86, h=[(0.2, 0.04), (0.26, 0.15), (0.38, 0.21), (0.55, 0.22), (0.72, 0.19), (0.82, 0.12),
+                                        (0.86, 0.03)], rake=20, n=32),
+        anal=dict(u0=0.4, u1=0.86, h=[(0.4, 0.04), (0.46, 0.15), (0.6, 0.19), (0.74, 0.16), (0.82, 0.1), (0.86, 0.03)],
+                  rake=22, n=26),
+        caudal=dict(length=0.2, span=0.3, shape="truncate"),
+        pectoral=dict(u=0.3, length=0.2, width=0.12, zf=-0.05, shape="pointed"),
+        pelvic=dict(u=0.33, length=0.1),
+        eye=dict(u=0.2, zf=0.4, r=0.043, iris="#1A1A14", ring="#E8C020", outer="#0E0E0A", ring_w=0.1),
+        spine=dict(u=0.885, uv=(0.885, 0.5), size=1.2),
+        paint=paint_yellow_tang, fins=fins_yellow_tang, irid=0.08, rough=0.32, length_cm=18.0,
+    ),
+    "fairy_wrasse": dict(
+        # Cirrhilabrus rubripinnis: slender, compressed labrid (depth ~0.28 SL), pointed snout, big eye with the
+        # characteristic double pupil look of Cirrhilabrus; long continuous dorsal XI,9, anal III,9, rounded caudal.
+        # Built with the male's long pelvic filaments; the female fin sheet (the GLB's own) cuts them back by alpha.
+        profile=[(0, 0.03, 0.025, -0.006), (0.04, 0.11, 0.06, -0.003), (0.1, 0.2, 0.09, 0.0), (0.2, 0.26, 0.11, 0.0),
+                 (0.35, 0.28, 0.115, 0.0), (0.52, 0.26, 0.105, 0.0), (0.68, 0.21, 0.085, 0.0), (0.82, 0.15, 0.06, 0.0),
+                 (0.92, 0.12, 0.045, 0.0), (1.0, 0.11, 0.03, 0.0)],
+        body_tris=3200, ring=30, p_exp=0.85, belly_bias=0.06, back_pinch=0.15,
+        dorsal=dict(u0=0.2, u1=0.86, h=[(0.2, 0.02), (0.24, 0.08), (0.5, 0.09), (0.74, 0.12), (0.83, 0.11), (0.86, 0.02)],
+                    rake=26, n=30),
+        anal=dict(u0=0.52, u1=0.86, h=[(0.52, 0.02), (0.56, 0.08), (0.76, 0.1), (0.84, 0.08), (0.86, 0.02)], rake=28, n=16),
+        caudal=dict(length=0.2, span=0.22, shape="rounded"),
+        pectoral=dict(u=0.26, length=0.14, width=0.09, zf=-0.05, shape="round"),
+        pelvic=dict(u=0.28, length=0.3, base=0.04),
+        eye=dict(u=0.085, zf=0.28, r=0.046, iris="#C82838", ring="#1A1A1A", outer="#E86070", ring_w=0.14, pupil=0.44),
+        paint=paint_fairy_female, fins=fins_fairy_female, irid=0.3, rough=0.3, length_cm=8.0,
+    ),
+    "firefish": dict(
+        # Nemateleotris magnifica (research 41 §1.1): slender, compressed dartfish, depth ~0.17-0.2 SL, blunt head with a
+        # small oblique upturned mouth and large high eyes; first dorsal VI with spines 1-2 prolonged into the tall flag
+        # (~0.45 SL), long second dorsal I,28-32 and anal I,27-30, rounded-truncate tail
+        profile=[(0, 0.05, 0.04, 0.01), (0.04, 0.13, 0.085, 0.0), (0.12, 0.18, 0.105, 0.0), (0.28, 0.19, 0.1, 0.0),
+                 (0.5, 0.175, 0.085, 0.0), (0.7, 0.145, 0.065, 0.0), (0.86, 0.11, 0.045, 0.0), (1.0, 0.095, 0.03, 0.0)],
+        body_tris=3000, ring=28, p_exp=0.95, belly_bias=0.04,
+        dorsal=dict(u0=0.22, u1=0.4, h=[(0.22, 0.05), (0.24, 0.44), (0.27, 0.46), (0.31, 0.3), (0.36, 0.12), (0.4, 0.02)],
+                    rake=18, n=6),
+        dorsal2=dict(u0=0.44, u1=0.86, h=[(0.44, 0.03), (0.47, 0.09), (0.7, 0.1), (0.83, 0.09), (0.86, 0.02)],
+                     rake=26, n=28),
+        anal=dict(u0=0.46, u1=0.86, h=[(0.46, 0.03), (0.49, 0.085), (0.7, 0.095), (0.83, 0.085), (0.86, 0.02)],
+                  rake=28, n=27),
+        caudal=dict(length=0.2, span=0.2, shape="rounded"),
+        pectoral=dict(u=0.22, length=0.14, width=0.09, zf=-0.1, shape="round"),
+        pelvic=dict(u=0.22, length=0.12),
+        eye=dict(u=0.075, zf=0.38, r=0.05, iris="#E8C850", ring="#2A1A10", outer="#E8A040", ring_w=0.12, pupil=0.45),
+        paint=paint_firefish, fins=fins_firefish, irid=0.15, rough=0.33, length_cm=7.0,
+    ),
+    "chromis": dict(
+        # Chromis viridis (research 41 §2.1): deep, compressed damsel, depth ~0.46-0.5 SL, small terminal mouth, one
+        # continuous dorsal XII,9-11, anal II,9-11, deeply forked caudal with pointed lobes
+        profile=[(0, 0.05, 0.035, -0.01), (0.04, 0.17, 0.08, -0.005), (0.1, 0.31, 0.11, 0.0), (0.22, 0.43, 0.13, 0.0),
+                 (0.36, 0.47, 0.135, 0.0), (0.52, 0.44, 0.125, 0.0), (0.68, 0.33, 0.1, 0.0), (0.82, 0.2, 0.07, 0.0),
+                 (0.92, 0.14, 0.05, 0.0), (1.0, 0.13, 0.035, 0.0)],
+        body_tris=3400, ring=32, p_exp=0.75, belly_bias=0.04,
+        dorsal=dict(u0=0.22, u1=0.84, h=[(0.22, 0.03), (0.26, 0.12), (0.4, 0.13), (0.56, 0.1), (0.62, 0.13),
+                                         (0.76, 0.14), (0.84, 0.02)], rake=22, n=22),
+        anal=dict(u0=0.56, u1=0.82, h=[(0.56, 0.03), (0.6, 0.13), (0.72, 0.14), (0.8, 0.08), (0.82, 0.02)], rake=30, n=12),
+        caudal=dict(length=0.3, span=0.38, shape="forked"),
+        pectoral=dict(u=0.28, length=0.2, width=0.11, zf=-0.05, shape="pointed"),
+        pelvic=dict(u=0.3, length=0.13),
+        eye=dict(u=0.1, zf=0.3, r=0.058, iris="#C8E0D8", ring="#1A3A38", outer="#5AA8A0", ring_w=0.12, pupil=0.45),
+        paint=paint_chromis, fins=fins_chromis, irid=0.6, rough=0.25, length_cm=7.5,
+    ),
 }
 SPECIES["clown_darwin"] = dict(SPECIES["clown_orange"], paint=paint_clown_darwin,
                                fins=lambda cv: fins_clown(cv, darwin=True),
                                eye=dict(u=0.11, zf=0.33, r=0.048, iris="#E07A28", ring="#1A1410", outer="#D85A18",
                                         ring_w=0.07, pupil=0.4))
 
+# Z. xanthurum: the same Zebrasoma build as the yellow tang, a little longer in the snout and deeper in the fins
+SPECIES["purple_tang"] = dict(SPECIES["yellow_tang"], paint=paint_purple_tang, fins=fins_purple_tang, irid=0.2,
+                              eye=dict(u=0.2, zf=0.4, r=0.043, iris="#14102A", ring="#3A3080", outer="#0A0818", ring_w=0.1),
+                              length_cm=20.0)
+
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
-            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny"]
+            "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny", "firefish", "chromis",
+            "yellow_tang", "purple_tang", "fairy_wrasse"]
 
 
 # ----------------------------------------------------------------------------
@@ -1103,16 +1355,18 @@ def build_geometry(sid):
                                                                 round(math.radians(a), 4), 1.0])
     else:
         COL = np.stack([np.zeros(len(V)), G, np.zeros(len(V)), -np.ones(len(V))], -1)
-    if sid == "tang":  # caudal spine: small yellow wedge each side at u 0.92
+    spine = sp.get("spine", dict(u=0.915, uv=(0.95, 0.55), size=1.0) if sid == "tang" else None)
+    if spine:  # caudal spine (surgeonfish scalpel): a small wedge each side of the peduncle, coloured from the body at uv
         V, F, UV, COL = list(V), list(F), list(UV), list(COL)
+        k = spine["size"]
         for side in (1, -1):
-            u0 = 0.915
+            u0 = spine["u"]
             H, W, zc = prof.H(u0), prof.W(u0), prof.Zc(u0)
             b = len(V)
-            pts = [(u0 - 0.015, side * W * 0.9, zc + 0.01), (u0 + 0.02, side * W * 0.9, zc + 0.005),
-                   (u0 + 0.01, side * (W * 0.9 + 0.012), zc + 0.004), (u0 - 0.015, side * W * 0.9, zc - 0.004)]
+            pts = [(u0 - 0.015 * k, side * W * 0.9, zc + 0.01 * k), (u0 + 0.02 * k, side * W * 0.9, zc + 0.005 * k),
+                   (u0 + 0.01 * k, side * (W * 0.9 + 0.012 * k), zc + 0.004 * k), (u0 - 0.015 * k, side * W * 0.9, zc - 0.004 * k)]
             V += pts
-            UV += [(0.95, 0.55)] * 4
+            UV += [spine["uv"]] * 4
             COL += [(0, 0, 0, -1)] * 4
             F += [(b, b + 1, b + 2) if side > 0 else (b, b + 2, b + 1),
                   (b + 3, b + 2, b + 1) if side > 0 else (b + 3, b + 1, b + 2),

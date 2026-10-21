@@ -109,6 +109,34 @@
       "forms": {
         "juvenile": "textures/stages/midas_blenny_juvenile.png"
       }
+    },
+    "models/yellow_tang.glb": {
+      "species": "zebrasoma_flavescens",
+      "base": "adult",
+      "forms": {
+        "night": "textures/stages/yellow_tang_night.png"
+      }
+    },
+    "models/purple_tang.glb": {
+      "species": "zebrasoma_xanthurum",
+      "base": "adult",
+      "forms": {
+        "night": "textures/stages/purple_tang_night.png"
+      }
+    },
+    "models/fairy_wrasse.glb": {
+      "species": "cirrhilabrus_rubripinnis",
+      "base": "female",
+      "forms": {
+        "juvenile": "textures/stages/fairy_wrasse_juvenile.png",
+        "male": "textures/stages/fairy_wrasse_male.png"
+      },
+      "fins": {
+        "base": "female",
+        "forms": {
+          "male": "textures/stages/fairy_wrasse_fin_male.png"
+        }
+      }
     }
   },
   "pending": {}

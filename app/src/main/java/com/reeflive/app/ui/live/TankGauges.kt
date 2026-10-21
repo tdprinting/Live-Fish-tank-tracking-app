@@ -127,7 +127,7 @@ fun TankGaugeLayer(
             Anchored(projection, { frame }, 18f, 31f, GAUGE_Z, safe) {
                 Badge(TankGauge.SALINITY, String.format(Locale.US, "%.3f", r.sg), warn = r.sg < 1.021 || r.sg > 1.028, onClick = onDial)
             }
-            Anchored(projection, { frame }, 61f, TankDims.HEIGHT_F + 2.4f, 24f, safe) {
+            Anchored(projection, { frame }, com.reeflive.app.render.Camera.TANK[0] / 2f, com.reeflive.app.render.Camera.TANK[1] + 2.4f, com.reeflive.app.render.Camera.TANK[2] / 2f + 1f, safe) {
                 Badge(TankGauge.LIGHT, TankGauge.LIGHT.format(r.lightPct), glow = if (r.lightPct > 1.0) Candy.yellow else null, onClick = onDial)
             }
             Anchored(projection, { frame }, 96f, 31f, GAUGE_Z, safe) {
@@ -326,4 +326,4 @@ private fun DialRing(g: TankGauge, v: Double, onChange: (Double) -> Unit) {
 }
 
 /** Badges sit just outside the front glass of the resized tank (core TankDims; was z 33.8 on the old 13 in box). */
-private const val GAUGE_Z = TankDims.DEPTH_F + 0.8f
+private val GAUGE_Z: Float get() = com.reeflive.app.render.Camera.TANK[2] + 0.8f

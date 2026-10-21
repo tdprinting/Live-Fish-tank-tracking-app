@@ -65,6 +65,7 @@
   },
   "brain": "coral_soft",
   "coral": {
+    "ground": "ANY",
     "lightLo": 0.15,
     "lightHi": 0.6,
     "flow": "LOW",

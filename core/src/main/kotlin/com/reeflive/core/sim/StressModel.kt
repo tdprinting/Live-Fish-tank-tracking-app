@@ -88,6 +88,8 @@ object StressModel {
         BrainKind.TANG to doubleArrayOf(1.3, 1.1, 1.0, 1.2, 1.1, 1.3, 1.0, 1.1),
         BrainKind.CARDINAL to doubleArrayOf(1.3, 1.0, 1.0, 1.2, 1.1, 1.4, 1.5, 0.9),
         BrainKind.WRASSE to doubleArrayOf(1.2, 1.1, 1.1, 1.2, 1.0, 1.2, 0.9, 0.9),
+        // fairy wrasse (est.): a plankton picker from the current, sensitive to low oxygen; likes flow
+        BrainKind.FAIRY_WRASSE to doubleArrayOf(1.1, 1.0, 1.0, 1.2, 1.0, 1.3, 0.9, 0.8),
         BrainKind.ENGINEER_GOBY to doubleArrayOf(0.8, 0.9, 0.9, 1.0, 1.0, 1.1, 0.7, 0.8),
         BrainKind.EEL to doubleArrayOf(0.8, 0.9, 0.9, 0.8, 1.0, 1.0, 0.7, 0.8),
         BrainKind.HAWK to doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9),
@@ -96,6 +98,7 @@ object StressModel {
         BrainKind.DOTTYBACK to doubleArrayOf(0.9, 0.9, 0.9, 1.0, 1.0, 1.0, 0.8, 0.9),
         BrainKind.CLEANER_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.BANDED_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
+        BrainKind.PEPPERMINT_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.HERMIT to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.SALLY_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.ARROW_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
@@ -104,6 +107,8 @@ object StressModel {
         BrainKind.ASTERINA to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.BRITTLE_STAR to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.1, 1.3, 0.5, 0.8),
         BrainKind.FEATHER_DUSTER to doubleArrayOf(1.0, 1.2, 0.9, 0.7, 0.7, 0.8, 1.0, 1.2),
+        // a filter-feeding bivalve: touchy about salinity, pH and oxygen like the tube worm, more about temperature (est.)
+        BrainKind.FILE_CLAM to doubleArrayOf(1.2, 1.3, 1.0, 0.8, 0.8, 0.9, 1.1, 1.2),
     )
     private val SENS_DEFAULT_FISH = doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9)
     private val SENS_DEFAULT_INVERT = doubleArrayOf(1.1, 1.3, 1.2, 1.2, 1.1, 1.3, 0.6, 0.8)
@@ -280,7 +285,7 @@ object StressModel {
 
     /** Column swimmers surface to gasp; benthic fish hide instead (S:Yu23). */
     fun isColumnFish(kind: BrainKind, night: Boolean) = when (kind) {
-        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE -> true
+        BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE -> true
         BrainKind.CARDINAL -> true
         else -> false
     }

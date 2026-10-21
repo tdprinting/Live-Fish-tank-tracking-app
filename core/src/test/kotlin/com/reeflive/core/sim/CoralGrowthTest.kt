@@ -77,6 +77,7 @@ class CoralGrowthTest {
         sim.advanceAbstract(140 * 86400.0)
         val frags = sim.corals.filter { it.kind == CoralKind.KENYA && it !== kenya }
         println("C-1 day 60: Kenya size ${f(kenya60)} clove r ${f(clove60)} GSP r ${f(gsp60)}; day 200: Kenya ${f(kenya.size)}, ${frags.size} branches rooted , clove r ${f(clove.radiusCm)}, GSP r ${f(gsp.radiusCm)}")
+        println("C-1 colonies ${sim.corals.groupingBy { it.kind }.eachCount()} Kenya stress ${f(kenya.stress)} need ${kenya.need} vigour ${f(CoralGrowth.vigor(kenya, sim.water.s))} iodine ${sim.water.s.i} no3 ${f(sim.water.s.no3)}")
         assertTrue("Kenya grew: $kenya60", kenya60 > 1.2)
         assertTrue("Kenya dropped a branch that rooted", frags.isNotEmpty())
         assertTrue("frags start small and grow: ${frags.map { it.size }}", frags.all { it.size in 0.25..2.5 })

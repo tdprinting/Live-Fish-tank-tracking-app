@@ -1,0 +1,105 @@
+{
+  "id": "fimbriaphyllia_ancora",
+  "kind": "CORAL",
+  "common": "Hammer coral",
+  "scientific": "Fimbriaphyllia ancora",
+  "family": "Euphylliidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 3,
+  "lifespanYears": 50,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/hammer.glb",
+  "colors": {
+    "primary": "#4FA58A",
+    "secondary": "#C8D9A6",
+    "accent": "#8CFF6A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.2,
+    "lightHi": 0.8,
+    "flow": "LOW",
+    "growth": "Moderate",
+    "stingCm": 12,
+    "ground": "ANY",
+    "aggression": "Sweeper tentacles at night reach ~12 cm; give 15-20 cm (6-8 in) of room",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; takes mysis, brine or coral pellets when target fed once or twice a week.",
+  "temperamentSummary": "Thick tentacles with hammer- or anchor-shaped tips that sway in the current; long sweeper tentacles come out at night.",
+  "careNotes": [
+    "PAR about 75-200 and low to moderate indirect flow: a hard jet tears the tissue off the skeleton.",
+    "Keep alkalinity 8-9.5 dKH, calcium 400-450 and magnesium 1250-1350, and keep them steady.",
+    "Leave 15-20 cm (6-8 in) to other corals; hammers, frogspawn and torches mostly tolerate each other.",
+    "Watch for brown jelly: a brown slime on a receding head means take it out and dip it."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.6,
+  "starvationDays": 9999
+}

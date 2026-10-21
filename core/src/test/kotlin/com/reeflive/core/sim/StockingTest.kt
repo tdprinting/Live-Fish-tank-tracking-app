@@ -18,7 +18,8 @@ class StockingTest {
         for (e in Stocking.CATALOG) {
             assertTrue("no sheet for ${e.speciesId}", cat.has(e.speciesId))
             val sp = cat[e.speciesId]
-            assertEquals(e.speciesId, sp.common, e.common)
+            // an entry that sells one sex names it: "Red fairy wrasse (male)"
+            assertEquals(e.speciesId, sp.common, e.common.substringBefore(" ("))
             assertEquals(e.speciesId, sp.typicalAdultCm, e.typicalCm, 1e-9)
             assertEquals(e.speciesId, e.group == StockGroup.CORALS, sp.isCoral)
             val model = sp.model

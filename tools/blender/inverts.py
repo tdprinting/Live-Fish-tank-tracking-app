@@ -171,6 +171,47 @@ def build_shrimp(kind="banded"):
         # strip 3: tail fan white with a red band across the middle, white tips
         at.paint_strip(3, lambda cv: (cv.vgrad(WH, WH),
                                       cv.blend(P.band(cv.u, 0.42, 0.74, 0.03), RED)))
+    elif kind == "peppermint":
+        # Peppermint shrimp (Lysmata boggessi / L. wurdemanni, research 42 §1.3): a glassy, nearly see-through pale pink
+        # body crossed by many thin red lines, running lengthwise on the carapace and as rings around the abdominal
+        # segments; red-and-white banded antennae, legs clear with faint red bands, a red tail fan with clear edges
+        # (Rhyne & Lin 2006 colour notes; Wikipedia/AlgaeBarn photos [M]). Smaller than the skunk (3-4 cm).
+        PINK, RED, CLR = "#F3E2DC", "#C4202C", "#FAF3EF"
+
+        def body(cv):
+            v = cv.v  # flank height: 0 belly -> 1 dorsal
+            u = cv.u
+            cv.vgrad("#F2DED6", "#E2B8AC", 0.0, 1.0)
+            # carapace (u < 0.42): thin lengthwise lines, 7 across the flank
+            car = 1 - S(0.40, 0.44, u)
+            for k in range(7):
+                c0 = 0.12 + k * 0.13
+                cv.blend(P.band(v, c0 - 0.012, c0 + 0.012, 0.006) * car * S(0.05, 0.1, u), RED, 0.85)
+            # abdomen: two thin red rings per segment, with fine lengthwise ticks between them
+            ab = S(0.42, 0.46, u)
+            for tb in (0.47, 0.55, 0.63, 0.71, 0.79, 0.87):
+                cv.blend(P.band(u, tb - 0.012, tb - 0.002, 0.003) * ab, RED, 0.8)
+                cv.blend(P.band(u, tb + 0.022, tb + 0.03, 0.003) * ab, RED, 0.6)
+            for k in range(5):
+                c0 = 0.2 + k * 0.16
+                cv.blend(P.band(v, c0 - 0.008, c0 + 0.008, 0.004) * ab * (1 - S(0.9, 0.95, u)), RED, 0.45)
+            cv.blend(S(0.9, 1.0, v), "#B81C26", 0.5)  # a red dorsal line
+            cv.blend(P.band(u, -0.1, 0.06, 0.02), CLR, 0.7)  # glassy rostrum
+            n = P.fbm(cv.h, cv.w, 40, 3, 5)
+            cv.multiply(0.95 + 0.1 * n)
+        at.paint_strip(0, body)
+        # strip 1: walking legs clear with faint red bands
+        at.paint_strip(1, lambda cv: (cv.vgrad("#F4E4DE", "#FAF0EC"), [cv.blend(P.band(cv.u, t0, t0 + 0.06, 0.02), RED, 0.45)
+                                                                      for t0 in (0.18, 0.42, 0.66, 0.88)]))
+        # strip 2: antennae and picking legs banded red and white
+        at.paint_strip(2, lambda cv: (cv.vgrad(CLR, CLR), [cv.blend(P.band(cv.u, t0, t0 + 0.04, 0.01), RED, 0.8)
+                                                           for t0 in np.arange(0.04, 1.0, 0.09)]))
+
+        def tail(cv):
+            cv.vgrad("#C42630", "#D0343A")
+            cv.blend(P.band(cv.u, 0.55, 0.66, 0.03), "#F2D8D2", 0.8)
+            cv.blend(S(0.88, 0.96, cv.u), CLR, 0.85)
+        at.paint_strip(3, tail)
     else:  # skunk cleaner
         def body(cv):
             # Aquarium of the Pacific [M]: "pale amber body ... one white band down the carapace center separates two
@@ -204,8 +245,8 @@ def build_shrimp(kind="banded"):
     mshell = C.material(f"{kind}_shell", rough=0.5 if banded else 0.3, image=img)
     meye = C.material(f"{kind}_eye", color="#050505", rough=0.1)
 
-    sid = "shrimp" if banded else "skunk_shrimp"
-    root = make_root("Root", dict(species=sid, lengthCm=5.0 if banded else 6.0,
+    sid = {"banded": "shrimp", "skunk": "skunk_shrimp"}.get(kind, f"{kind}_shrimp")
+    root = make_root("Root", dict(species=sid, lengthCm=5.0 if banded else 4.0 if kind == "peppermint" else 6.0,
                                   unit="body length 1.0 = rostrum..telson, facing +X", iridescence=0.0,
                                   roughness=0.5 if banded else 0.3))
     # --- body spine (x forward, z up) ------------------------------------------
@@ -1243,6 +1284,7 @@ def _print_sally_model(W, lab, tv, lines, lens, face_k, F):
 INVERT_BUILDERS = {
     "shrimp": lambda: build_shrimp("banded"),
     "skunk_shrimp": lambda: build_shrimp("skunk"),
+    "peppermint_shrimp": lambda: build_shrimp("peppermint"),
     "hermit_blue": lambda: build_hermit("blue"),
     "hermit_scarlet": lambda: build_hermit("scarlet"),
     "brittle_star": build_brittle_star,

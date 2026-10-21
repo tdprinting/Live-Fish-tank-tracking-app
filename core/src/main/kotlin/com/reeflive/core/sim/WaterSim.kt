@@ -50,6 +50,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     // ---- filtration and export equipment (research 01 §3.5; coverage gap W-6) ----
     /** Protein skimmer: strips DOC and organics before they mineralise and adds aeration. On in Tee's tank. */
     var skimmer = true
+    /** A mesh lid over the open top (SetParam `lid`); the owner's tank has none. Jumpers bounce back in ([JumpModel]). */
+    var lid = false
     /**
      * Skimmer collection cup, 0 empty .. 1 full. Skimmate builds up from the organics the skimmer pulls out (about a
      * week to fill at a mature tank's DOC); a cup near full stops the foam reaching it, so skimming fades to nothing
@@ -348,7 +350,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         sockOn = filterSock, sockAgeH = sockAgeH.toFloat(),
         carbonOn = carbon, carbonLeft = carbonEfficiency.toFloat(),
         heaterWorking = heaterWorking, heaterStuck = heaterStuckOn, heaterSetC = heaterSetC.toFloat(),
-        waterFull = (s.volumeL / config.systemLiters).toFloat(), ato = ato,
+        waterFull = (s.volumeL / config.systemLiters).toFloat(), ato = ato, lid = lid,
     )
 
     /** Rinse the HOB floss and sponge in old tank water: the trapped waste goes down the drain. */
@@ -609,6 +611,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "detritus" -> { nInputMg += (value - s.detritus) * N_TAN * v; s.detritus = value }
 "gfo" -> s.gfoActive = value > 0.5
             "skimmer" -> skimmer = value > 0.5
+            "lid" -> lid = value > 0.5
             "skimmercup" -> skimmerCup = value
             "sock", "filtersock" -> filterSock = value > 0.5
             "carbon" -> { if (value > 0.5 && !carbon) carbonAgeH = 0.0; carbon = value > 0.5 }
