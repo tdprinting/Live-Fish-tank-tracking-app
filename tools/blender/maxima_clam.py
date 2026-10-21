@@ -44,6 +44,26 @@ FOLD_AMP = 0.045           # zig-zag of the gape, in y
 N_PHI = 50                 # around the margin (hinge end to hinge end)
 N_T = 12                   # umbo -> margin
 MANTLE_X0 = 0.015          # the mantle crest sits just above the gape, hiding the rim
+SCUTE_TS = (0.42, 0.52, 0.62, 0.71, 0.8, 0.88, 0.95)   # where along each fold crest the scutes stand
+SCUTE_W = 0.03
+# mantle palette: base gradient, sheen, mottle, streaks, dark band, edge eye spots
+MANTLE = dict(base=("#0C6FA8", "#1590B8"), sheen="#2AC4C9", mottle="#7A6A2A", streak="#1EC3F0", band="#06345A",
+              eyes="#BFF2FF", siphon=("#2A6C8A", "#0B2E40"), siphon_rim="#7FD8F0")
+
+# Other Tridacna built on the same shell and rig. The ultra crocea (boring clam, research 62 §1): a smaller (4 cm
+# farmed, to 15 cm), stubbier, thicker shell with 6-7 low folds whose scutes are worn nearly flat (it lives ground
+# into the rock); the "ultra" mantle is gold-yellow (~#E3B21E) with iridescent electric blue-green lines and spots.
+LOOKS = {
+    "crocea_clam": dict(SID="crocea_clam", LENGTH_CM=8.0, HEIGHT=0.62, INFL=0.24, N_FOLD=6, FOLD_AMP=0.032,
+                        SCUTE_TS=(0.86, 0.94), SCUTE_W=0.018,
+                        MANTLE=dict(base=("#D49A12", "#E8B820"), sheen="#F4D040", mottle="#8A5A10", streak="#1ED8E8",
+                                    band="#6A3A08", eyes="#5AF0FF", siphon=("#C08A18", "#4A3008"), siphon_rim="#2AD8E8")),
+}
+
+
+def use(look):
+    """Switches the module to another species' shell and mantle ([LOOKS])."""
+    globals().update(LOOKS[look])
 
 
 def to_b(p):
@@ -117,7 +137,7 @@ def scutes(at, upper, rng):
         a = k * math.pi / (N_FOLD * 2)
         if sgn * math.cos(k * math.pi) < 0.5:
             continue
-        for t in (0.42, 0.52, 0.62, 0.71, 0.8, 0.88, 0.95):
+        for t in SCUTE_TS:
             mx, mz = margin(a)
             x = umbo[0] + (mx - umbo[0]) * t
             z = mz * t
@@ -126,7 +146,7 @@ def scutes(at, upper, rng):
             out = np.array([mx - umbo[0], 0.0, mz])
             out /= np.linalg.norm(out)
             side = np.cross(out, [0, 1.0, 0])
-            w = 0.03 * (0.5 + 0.7 * t) * rng.uniform(0.8, 1.2)
+            w = SCUTE_W * (0.5 + 0.7 * t) * rng.uniform(0.8, 1.2)
             lift = sgn * 0.035 * t
             p0 = np.array([x, y, z])
             quad = [p0 - side * w, p0 + side * w, p0 + side * w * 0.8 + out * 0.03 + [0, lift, 0],
@@ -206,27 +226,29 @@ def build():
         # u = midline -> draped edge, v = along. Electric blue to teal with a gold-brown mottle and wavy streaks,
         # a darker band before the edge, then the bright blue-white hyaline spots along the edge.
         u, v = cv.u, cv.v
-        cv.vgrad("#0C6FA8", "#1590B8")
-        cv.blend(P.fbm(cv.h, cv.w, 6, 4, 11), "#2AC4C9", 0.45)
+        m = MANTLE
+        cv.vgrad(*m["base"])
+        cv.blend(P.fbm(cv.h, cv.w, 6, 4, 11), m["sheen"], 0.45)
         mott = P.value_noise(cv.h, cv.w, 36, 7, 5)
-        cv.blend(S(0.55, 0.8, mott) * S(0.0, 0.7, 1 - u), "#7A6A2A", 0.65)
+        cv.blend(S(0.55, 0.8, mott) * S(0.0, 0.7, 1 - u), m["mottle"], 0.65)
         streak = 0.5 + 0.5 * np.sin(v * math.pi * 26 + 4 * np.sin(u * 7))
-        cv.blend(S(0.7, 1.0, streak) * S(0.1, 0.6, u), "#1EC3F0", 0.35)
-        cv.blend(P.band(u, 0.78, 0.9, 0.04), "#06345A", 0.6)
+        cv.blend(S(0.7, 1.0, streak) * S(0.1, 0.6, u), m["streak"], 0.55 if SID != "maxima_clam" else 0.35)
+        cv.blend(P.band(u, 0.78, 0.9, 0.04), m["band"], 0.6)
         for (cu, cvv) in P.poisson(rs, 46, 0.035, (0.86, 0.95, 0.02, 0.98)):
-            cv.blend(P.ellipse(cv, cu, cvv, 0.018, 0.011, 0.3), "#BFF2FF")
+            cv.blend(P.ellipse(cv, cu, cvv, 0.018, 0.011, 0.3), m["eyes"])
         cv.blend(P.band(u, 0.0, 0.05, 0.03), "#3B3020", 0.5)   # the dark midline where the lobes meet
     at.paint_strip(1, mantle_tex)
 
     def siphon_tex(cv):
-        cv.vgrad("#2A6C8A", "#0B2E40")
-        cv.blend(P.band(cv.u, 0.0, 0.3, 0.1), "#7FD8F0", 0.5)
+        cv.vgrad(*MANTLE["siphon"])
+        cv.blend(P.band(cv.u, 0.0, 0.3, 0.1), MANTLE["siphon_rim"], 0.5)
     at.paint_strip(2, siphon_tex)
-    tex = os.path.join(C.BUILD, "maxima_clam_atlas.png")
+    tex = os.path.join(C.BUILD, f"{SID}_atlas.png")
     at.cv.save(tex)
-    img = C.load_image(tex, name="maxima_clam")
-    mshell = C.material("maxima_shell", rough=0.75, image=img)
-    mflesh = C.material("maxima_mantle", rough=0.28, image=img, double=True)
+    img = C.load_image(tex, name=SID)
+    pre = SID.replace("_clam", "")
+    mshell = C.material(f"{pre}_shell", rough=0.75, image=img)
+    mflesh = C.material(f"{pre}_mantle", rough=0.28, image=img, double=True)
 
     root = make_root("Root", dict(species=SID, lengthCm=LENGTH_CM, iridescence=0.35, roughness=0.5,
                                   unit="length 1.0 = shell length along z; hinge (x -0.5) .. gape (x +0.06); valves meet at y = 0"))
@@ -251,4 +273,7 @@ def build():
 
 
 if __name__ == "__main__":
+    for a in sys.argv[1:]:
+        if a in LOOKS:
+            use(a)
     build()

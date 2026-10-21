@@ -1504,7 +1504,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val c = storeRoom ?: return
         if (!storeScene.active) return
         val w = white ?: return
-        drawCalls += storeScene.draw(progs.store, w, c, blended)
+        drawCalls += storeScene.draw(progs.store, w, c, blended, camera.viewProj)
     }
 
     /**

@@ -110,6 +110,7 @@ object Stocking {
         // research 42: a file clam for a crevice; starves without daily phytoplankton
         StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
         StockEntry("tridacna_maxima", StockGroup.INVERTS, "Maxima clam", 15.0),
+        StockEntry("tridacna_crocea", StockGroup.INVERTS, "Ultra crocea clam", 8.0),
         StockEntry("ophiarachna_incrassata", StockGroup.INVERTS, "Green serpent star", 35.0),
         StockEntry("neopetrolisthes_maculatus", StockGroup.INVERTS, "Porcelain crab", 1.8),
         StockEntry("holothuria_hilla", StockGroup.INVERTS, "Tiger tail sea cucumber", 25.0),
