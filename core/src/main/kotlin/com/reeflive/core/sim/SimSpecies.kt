@@ -456,7 +456,16 @@ enum class CoralKind(val genera: List<String>, val demandDkhPerDay: Double, val 
     // Biomass kept small: the water model was tuned on Tee's tank, which already held these leathers unseen,
     // so they must not add a new day/night O2 and pH swing on top of it (tune).
     LEATHER(listOf("sarcophyton", "sinularia", "lobophytum", "cladiella"), 0.002, 0.05),
+    // Stony corals (stony_corals.md): an aragonite skeleton, so a real share of the tank's alkalinity and calcium.
+    // A frag-to-small-colony LPS takes ~0.02-0.03 dKH/day of this 60 gal, several times a soft coral (est.).
+    // Euphyllia: hammer, torch, frogspawn (Fimbriaphyllia since 2017 for ancora / divisa).
+    EUPHYLLIA(listOf("euphyllia", "fimbriaphyllia"), 0.03, 0.10),
+    // Large-polyp stony corals fed at night: duncan, acan, candy cane, open brain, bubble.
+    LPS(listOf("duncanopsammia", "micromussa", "acanthastrea", "caulastrea", "trachyphyllia", "plerogyra"), 0.02, 0.08),
     GENERIC(emptyList(), 0.01, 0.05);
+
+    /** Builds an aragonite skeleton: needs Ca, Mg and steady alkalinity, and leaves a white skeleton where tissue dies. */
+    val stony: Boolean get() = this == EUPHYLLIA || this == LPS
 
     companion object {
         fun resolve(id: String): CoralKind {

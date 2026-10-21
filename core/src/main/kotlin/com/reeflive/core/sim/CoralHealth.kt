@@ -116,6 +116,8 @@ object CoralHealth {
             genus.startsWith("sarcophyton") -> CoralProfile(1.3, 1.0, 0.02, 0.1, 0.35, 1.0, 0.9, CoralSpread.BUD, 150.0, 1.7, CoralProfile.CREAM)
             genus.startsWith("sinularia") -> CoralProfile(1.1, 1.0, 0.02, 0.1, 0.35, 0.9, 1.0, CoralSpread.BUD, 120.0, 1.6, CoralProfile.CREAM)
             genus.startsWith("lobophytum") -> CoralProfile(1.0, 1.0, 0.02, 0.1, 0.3, 0.9, 1.0, CoralSpread.BUD, 160.0, 1.7, CoralProfile.CREAM)
+            // duncans are the forgiving LPS (stony_corals.md §4): fed a lot, slow to bleach, recover well
+            genus.startsWith("duncanopsammia") -> CoralProfile(0.9, 1.0, 0.02, 0.5, 0.05, 0.9, 1.0, CoralSpread.NONE)
             else -> when (k) {
                 CoralKind.GSP -> CoralProfile(0.6, 0.7, 0.02, 0.1, 0.05, 0.6, 1.3, CoralSpread.NONE, tint = CoralProfile.GREY)
                 CoralKind.ZOA -> CoralProfile(0.9, 1.0, 0.02, 0.25, 0.05, 1.0, 1.0, CoralSpread.RUNNER, 50.0, 1.4, CoralProfile.PALE_PINK)
@@ -124,6 +126,10 @@ object CoralHealth {
                 CoralKind.KENYA -> CoralProfile(0.8, 0.9, 0.02, 0.05, 0.4, 0.8, 1.1, CoralSpread.BRANCHLET, tint = CoralProfile.CREAM)
                 CoralKind.ORGAN_PIPE -> CoralProfile(1.3, 1.1, 0.03, 0.5, 0.15, 1.5, 0.6, CoralSpread.NONE)
                 CoralKind.LEATHER -> CoralProfile(1.1, 1.0, 0.02, 0.1, 0.35, 0.9, 1.0, CoralSpread.BUD, 140.0, 1.7, CoralProfile.CREAM)
+                // Euphyllia (stony_corals.md §1-3): brown jelly and recession strip a stressed head in days, and a
+                // receded skeleton is slow to cover again. New heads come from the colony growing (size), not budding.
+                CoralKind.EUPHYLLIA -> CoralProfile(1.2, 1.1, 0.02, 0.3, 0.05, 1.4, 0.7, CoralSpread.NONE)
+                CoralKind.LPS -> CoralProfile(1.0, 1.1, 0.02, 0.5, 0.05, 1.1, 0.9, CoralSpread.NONE)
                 CoralKind.MACRO -> CoralProfile(0.5, 0.5, 0.0, 0.0, 0.0, 0.5, 1.5, CoralSpread.NONE)
                 CoralKind.AIPTASIA -> CoralProfile(0.4, 0.5, 0.0, 0.3, 0.0, 0.5, 1.5, CoralSpread.NONE)
                 CoralKind.GENERIC -> CoralProfile()
@@ -194,7 +200,7 @@ object CoralHealth {
             CoralKind.ZOA, CoralKind.AIPTASIA -> CoralGrowth.STING_RANGE_CM
             else -> 1.0
         }
-        return maxOf(reach(c.kind), reach(o.kind), 2.0) + 1.0
+        return maxOf(reach(c.kind), reach(o.kind), StonyCorals.maxReach(c.species), StonyCorals.maxReach(o.species), 2.0) + 1.0
     }
 
     private fun budName(parent: String): String {
