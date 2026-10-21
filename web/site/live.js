@@ -1220,7 +1220,7 @@ function renderLapseResult() {
 // ================================================================ sound (TankSoundMix beds and cues, Web Audio)
 let actx = null; const buffers = {}; const loops = {};
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
+const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape', SPARKLE: 'tank_reward_sparkle' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {

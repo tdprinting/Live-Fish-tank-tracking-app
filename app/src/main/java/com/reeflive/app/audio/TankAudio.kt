@@ -53,6 +53,7 @@ class TankAudio(context: Context) {
         Cue.CLICK to pool.load(context, R.raw.tank_shrimp_click, 1),
         Cue.TICK to pool.load(context, R.raw.tank_ui_tick, 1),
         Cue.ALERT to pool.load(context, R.raw.tank_alert_chime, 1),
+        Cue.SPARKLE to pool.load(context, R.raw.tank_reward_sparkle, 1),
     )
     private val scrapeId = pool.load(context, R.raw.tank_glass_scrape, 1)
     private var lastScrapeMs = 0L
@@ -113,6 +114,11 @@ class TankAudio(context: Context) {
             val cue = TankSoundMix.cueFor(e) ?: continue
             if (play(cue) && e is SimEvent.Fed) scatterPellets(TankSoundMix.pelletCount(e.grams))
         }
+    }
+
+    /** The reef moment / birthday card's bells. */
+    fun sparkle() {
+        if (active()) play(Cue.SPARKLE, rate = 1f, gain = 0.8f)
     }
 
     /** Soft tick for sandbox actions (rate-limited, so a dragged slider does not machine-gun). */
@@ -220,6 +226,6 @@ class TankAudio(context: Context) {
         const val MAX_STREAMS = 10
         const val GLIDE = 0.15f
         const val MIN_LEVEL = 0.003f
-        val CUE_GAIN = mapOf(Cue.FEED to 0.9f, Cue.PELLET to 0.6f, Cue.CLICK to 0.45f, Cue.TICK to 0.5f, Cue.ALERT to 0.8f)
+        val CUE_GAIN = mapOf(Cue.FEED to 0.9f, Cue.PELLET to 0.6f, Cue.CLICK to 0.45f, Cue.TICK to 0.5f, Cue.ALERT to 0.8f, Cue.SPARKLE to 0.7f)
     }
 }
