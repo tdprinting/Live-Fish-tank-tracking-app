@@ -8,7 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
-import { initRoom, roomHtml, roomClick, endTry } from './room.js';
+import { initRoom, roomHtml, roomClick, endTry, roomNav } from './room.js';
 import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
@@ -62,7 +62,7 @@ export function startLive(applyReadings) {
   // the fish stores: walking a store's display tanks replaces the tank in the 3D view until you leave (stores.js)
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   // the room shop: stands for the tank, tried on in 3D before buying (room.js)
-  initRoom({ my: MY, live, say, cue: (n) => cue(n), onChange: () => renderCard() });
+  initRoom({ my: MY, live, say, cue: (n) => cue(n), onChange: () => renderCard(), onTurn: () => { ui.picked = null; ui.following = null; live.follow(null); renderAll(); } });
   live.start($('tank'), new URL('.', location.href).href, pictureArg(), {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     // Auto settled on a cheaper (or climbed back to a richer) preset: start from it next visit
@@ -143,6 +143,7 @@ function tick() {
   if (ui.card === 'HEALTH') refreshHealth();
   renderFish();
   renderFollow();
+  roomNav(ui.mode === 'mine' && !ui.card && !ui.following && !window.reefstores?.active());
   if (ui.card && document.activeElement?.type !== 'range' && !ui.dragging) refreshCardValues();
   updateSound();
   if (ui.tour && !ui.saver && ++ui.tourTicks >= 24) nextTour();

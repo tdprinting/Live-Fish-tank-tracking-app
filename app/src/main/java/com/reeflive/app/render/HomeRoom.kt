@@ -20,15 +20,17 @@ data class RoomLook(
     val scene: String = "living",
     val wall: Finish = Decor.scene("living").wall,
     val floor: Finish = Decor.scene("living").floor,
+    /** The wall the tank in view stands against (room/RoomTanks.kt: 0 back, 1 right, 2 front, 3 left): the room turns round it. */
+    val side: Int = 0,
 ) {
     companion object {
         /** Tee's own tank (Watch): the white cabinet in the living room. */
         val DEFAULT = RoomLook()
 
         /** The look of a My tank room. */
-        fun of(d: SavedDecor): RoomLook {
+        fun of(d: SavedDecor, side: Int = 0): RoomLook {
             val (s, c) = Decor.look(d)
-            return RoomLook(s.id, c.paint, c.trim, "glow" in d.extras, "brass" in d.extras, Decor.scene(d.scene).id, Decor.wall(d), Decor.floor(d))
+            return RoomLook(s.id, c.paint, c.trim, "glow" in d.extras, "brass" in d.extras, Decor.scene(d.scene).id, Decor.wall(d), Decor.floor(d), side)
         }
     }
 }
@@ -75,6 +77,8 @@ internal class HomeRoomScene {
     private var pieces: Array<Piece> = emptyArray()
     private var roomPieces: Array<Piece> = emptyArray()
     private val mat = FloatArray(16)
+    /** The room turned so wall [RoomLook.side] stands behind the tank (identity on the back wall). */
+    private val turn = FloatArray(16)
     private val paint = FloatArray(3)
     private val trim = FloatArray(3)
     private val wallA = FloatArray(3)
@@ -147,13 +151,18 @@ internal class HomeRoomScene {
         p.set1f("uBrass", if (look.brass) 1f else 0f)
         p.set1f("uGlowStrip", if (look.glow) 1f else 0f)
         p.set1f("uDay", day)
-        p.set4f("uLampPos", lampPos[0] + shiftOf(lampAnchor, len), lampPos[1], lampPos[2], lampPos[3])
+        val cx = shiftOf(ANCHOR_CENTRE, len) + HomeRoomLayout.STOCK_LENGTH * 0.5f
+        turnFor(look.side, cx)
+        val lx = lampPos[0] + shiftOf(lampAnchor, len)
+        if (lampAnchor == ANCHOR_CENTRE) {
+            p.set4f("uLampPos", turn[0] * lx + turn[8] * lampPos[2] + turn[12], lampPos[1], turn[2] * lx + turn[10] * lampPos[2] + turn[14], lampPos[3])
+        } else p.set4f("uLampPos", lx, lampPos[1], lampPos[2], lampPos[3])
         val lampOn = 1f - day * 0.85f
         p.set3f("uLampCol", lampCol[0] * lampOn, lampCol[1] * lampOn, lampCol[2] * lampOn)
         p.set4f("uTankBox", len, Camera.TANK[1], dep, 0f)
         p.set4f("uFoot", -2f, len + 2f, -2f, dep + 2f)
-        val centre = shiftOf(ANCHOR_CENTRE, len)
-        p.set4f("uRoomBox", centre + HomeRoomLayout.STOCK_LENGTH * 0.5f - ROOM_HALF, centre + HomeRoomLayout.STOCK_LENGTH * 0.5f + ROOM_HALF, ROOM_BACK, HomeRoomLayout.FLOOR_Y)
+        val half = if (look.side % 2 == 1) (ROOM_FRONT - ROOM_BACK) * 0.5f else ROOM_HALF
+        p.set4f("uRoomBox", cx - half, cx + half, ROOM_BACK, HomeRoomLayout.FLOOR_Y)
         p.set1f("uFloorStyle", look.floor.style.toFloat())
         p.set1f("uWallStyle", look.wall.style.toFloat())
         p.set3f("uFloorA", floorA[0], floorA[1], floorA[2])
@@ -177,29 +186,68 @@ internal class HomeRoomScene {
         p.set1f("uOutside", pc.view)
         part.node.world.copyInto(mat)
         mat[12] += shiftOf(pc.anchor, len)
+        if (pc.anchor == ANCHOR_CENTRE && turn[0] != 1f) turned(mat)
         p.setMat4("uModel", mat)
         part.mesh.draw()
         return 1
     }
 
+    /**
+     * [turn] for wall [side]: a turn about the vertical that brings that wall's middle to where the back wall's is,
+     * facing the tank ([cx] the room's centre line).
+     */
+    private fun turnFor(side: Int, cx: Float) {
+        val zMid = (ROOM_BACK + ROOM_FRONT) * 0.5f
+        // the wall's middle on the floor, and the turn that faces it to +z
+        val mx: Float; val mz: Float; val c: Float; val s: Float
+        when (side) {
+            1 -> { mx = cx + ROOM_HALF; mz = zMid; c = 0f; s = 1f }
+            2 -> { mx = cx; mz = ROOM_FRONT; c = -1f; s = 0f }
+            3 -> { mx = cx - ROOM_HALF; mz = zMid; c = 0f; s = -1f }
+            else -> { mx = cx; mz = ROOM_BACK; c = 1f; s = 0f }
+        }
+        // x' = x c + z s, z' = -x s + z c; then the wall's middle lands on (cx, ROOM_BACK)
+        turn.fill(0f)
+        turn[0] = c; turn[2] = -s; turn[5] = 1f; turn[8] = s; turn[10] = c; turn[15] = 1f
+        turn[12] = cx - (c * mx + s * mz)
+        turn[14] = ROOM_BACK - (-s * mx + c * mz)
+    }
+
+    private val tmp = FloatArray(16)
+
+    /** [m] = [turn] × [m] (column-major), in place. */
+    private fun turned(m: FloatArray) {
+        for (col in 0 until 4) for (row in 0 until 4) {
+            var v = 0f
+            for (k in 0 until 4) v += turn[k * 4 + row] * m[col * 4 + k]
+            tmp[col * 4 + row] = v
+        }
+        tmp.copyInto(m)
+    }
+
     companion object {
         private const val ROOM_HALF = 360f
         private const val ROOM_BACK = -45f
+        private const val ROOM_FRONT = 460f
         private const val ANCHOR_STAND = 0
         private const val ANCHOR_CENTRE = 1
         private const val ANCHOR_LEFT = 2
         private const val ANCHOR_RIGHT = 3
         private const val KIND_GLOW = 5f
 
+        /** Tank* nodes (the rug) stay with the tank when the room turns; Shell and Center* turn with it. */
+        private const val ANCHOR_TANK = 4
+
         private fun anchorOf(node: String): Int = when {
             node.startsWith("Left") -> ANCHOR_LEFT
             node.startsWith("Right") -> ANCHOR_RIGHT
+            node.startsWith("Tank") -> ANCHOR_TANK
             else -> ANCHOR_CENTRE
         }
 
         /** How far a room node moves for a tank of length [len]: the room is authored around Tee's 4 ft tank. */
         private fun shiftOf(anchor: Int, len: Float): Float = when (anchor) {
-            ANCHOR_CENTRE -> (len - HomeRoomLayout.STOCK_LENGTH) * 0.5f
+            ANCHOR_CENTRE, ANCHOR_TANK -> (len - HomeRoomLayout.STOCK_LENGTH) * 0.5f
             ANCHOR_RIGHT -> len - HomeRoomLayout.STOCK_LENGTH
             else -> 0f
         }

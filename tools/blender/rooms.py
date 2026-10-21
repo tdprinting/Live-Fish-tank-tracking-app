@@ -9,7 +9,9 @@ the tank is not Tee's 4 ft one (render/HomeRoom.kt):
             spot left free for a radio or other small prop on its top (RADIO_SPOT, HomeRoomLayout.RADIO)
   Right*    props beyond the right end (shift with the right glass). The supply shelf hangs right of the tank
             (x 134..236 on Tee's tank, y above -6): nothing tall stands there.
-  Center*   props centred on the tank (a rug, pictures above it)
+  Center*   props centred on the tank (pictures above it); these and the Shell turn with the room when the tank in
+            view stands against another wall (RoomTanks: the room's side wall or front wall comes round behind it)
+  Tank*     props that stay with the tank whichever wall it is on (the rug in front of the stand)
 
 World cm, the tank frame (x along the tank from its left glass, y up from the glass bottom, z toward the viewer from
 the back glass); the floor at FLOOR. The shell faces inward only (back faces culled: walls never hide the room when
@@ -192,16 +194,39 @@ def plant(r, x, z, node, height=120.0, seed=3, pot="pot_terracotta", leaf="leaf_
         r.mesh(node, leaf, Vl, Fl, ao=0.85 + 0.15 * rng.random(), ao_floor=False)
 
 
-def picture(r, x0, x1, y0, y1, node, art, frame="frame_oak"):
-    """A framed print on the back wall: frame, mat, and the art's colour blocks (abstract sea and sand)."""
-    z = BACK
-    r.box(node, frame, (x0, y0, z), (x1, y1, z + 2.5), ao_floor=False)
-    r.box(node, "mat_white", (x0 + 2.5, y0 + 2.5, z + 2.5), (x1 - 2.5, y1 - 2.5, z + 2.7), ao_floor=False)
+def wall_box(r, node, mat, u0, u1, y0, y1, d0, d1, wall="back"):
+    """A box flat on a wall: [u0, u1] along it, [d0, d1] out from it into the room."""
+    x0, x1 = CX - HALF, CX + HALF
+    if wall == "back":
+        lo, hi = (u0, y0, BACK + d0), (u1, y1, BACK + d1)
+    elif wall == "front":
+        lo, hi = (u0, y0, FRONT - d1), (u1, y1, FRONT - d0)
+    elif wall == "right":
+        lo, hi = (x1 - d1, y0, u0), (x1 - d0, y1, u1)
+    else:
+        lo, hi = (x0 + d0, y0, u0), (x0 + d1, y1, u1)
+    r.box(node, mat, lo, hi, ao_floor=False)
+
+
+def picture(r, x0, x1, y0, y1, node, art, frame="frame_oak", wall="back"):
+    """A framed print on a wall ([x0, x1] along it): frame, mat, and the art's colour blocks (abstract sea and sand)."""
+    wall_box(r, node, frame, x0, x1, y0, y1, 0, 2.5, wall)
+    wall_box(r, node, "mat_white", x0 + 2.5, x1 - 2.5, y0 + 2.5, y1 - 2.5, 2.5, 2.7, wall)
     ix0, ix1, iy0, iy1 = x0 + 7, x1 - 7, y0 + 7, y1 - 7
     bands = art
     hh = (iy1 - iy0) / len(bands)
     for k, mat in enumerate(bands):
-        r.box(node, mat, (ix0, iy0 + k * hh, z + 2.7), (ix1, iy0 + (k + 1) * hh, z + 2.9), ao_floor=False)
+        wall_box(r, node, mat, ix0, ix1, iy0 + k * hh, iy0 + (k + 1) * hh, 2.7, 2.9, wall)
+
+
+def other_walls(r, arts, frame="frame_oak"):
+    """Prints on the front and side walls, centred where a tank on that wall would stand (RoomTanks: the room turns
+    round so each of the keeper's tanks has a wall of its own)."""
+    zmid = (BACK + FRONT) / 2
+    for wall, u, node in (("front", CX, "CenterArtF"), ("right", zmid, "CenterArtRW"), ("left", zmid, "CenterArtLW")):
+        a, b = arts
+        picture(r, u - 78, u - 8, 72, 132, node, a, frame, wall)
+        picture(r, u + 8, u + 78, 72, 132, node, b, frame, wall)
 
 
 def sofa(r, x0, x1, z0, z1, node, fabric="fabric_sofa", legs="wood_dark"):
@@ -289,7 +314,7 @@ def curtain(r, x0, x1, y0, y1, node, fabric="fabric_curtain", folds=5, depth=3.0
 
 def rug(r, mat="rug_wool"):
     """The rug in front of the stand (room.frag draws its border for exactly this size)."""
-    r.box("CenterRug", mat, (CX - 110, FLOOR, 70), (CX + 110, FLOOR + 0.6, 230), ao=1.0, ao_floor=False)
+    r.box("TankRug", mat, (CX - 110, FLOOR, 70), (CX + 110, FLOOR + 0.6, 230), ao=1.0, ao_floor=False)
 
 
 def fireplace(r, x0, x1, node="LeftFire"):
@@ -336,6 +361,7 @@ def light_strip(r, x0, x1, y, node):
 def sunny(r):
     """Sunny window: a big bright window onto a garden, gauzy curtains, plants either side."""
     shell(r)
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="frame_white")
     side_table(r)
     floor_lamp(r, -128.0, 6.0)
     window(r, CX - 105, CX + 105, 0, 150, "garden", nx=3, ny=2)
@@ -345,36 +371,39 @@ def sunny(r):
     plant(r, L + 120.0, 6.0, "RightPlant", height=125, seed=5)
     plant(r, CX - HALF + 40, BACK + 40, "CenterPlantCorner", height=95, seed=11, pot="pot_white")
     rug(r)
-    sofa(r, CX - HALF + 2, CX - HALF + 92, 120, 330, "CenterSofa", fabric="fabric_sun")
+    sofa(r, CX - HALF + 2, CX - HALF + 92, 275, 445, "CenterSofa", fabric="fabric_sun")
 
 
 def beach(r):
     """Beach house: white boards, a wide window onto the sea, a surfboard and a palm."""
     shell(r)
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="frame_white")
     side_table(r, wood="wood_drift")
     floor_lamp(r, -128.0, 6.0, shade="lamp_rattan")
     window(r, CX - 140, CX + 140, -10, 150, "beach", nx=4, ny=1, frame="frame_white")
     surfboard(r, L + 150.0)
     plant(r, CX - HALF + 40, BACK + 40, "CenterPlantCorner", height=150, seed=21, pot="pot_white", leaf="leaf_palm", n=9, size=22)
     rug(r, "rug_stripe")
-    sofa(r, CX - HALF + 2, CX - HALF + 92, 120, 330, "CenterSofa", fabric="fabric_linen")
+    sofa(r, CX - HALF + 2, CX - HALF + 92, 275, 445, "CenterSofa", fabric="fabric_linen")
 
 
 def cabin(r):
     """Snowy cabin: log walls, a stone fireplace, a window onto snowy pines, a plaid armchair."""
     shell(r, base="wood_dark")
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="wood_frame")
     side_table(r, wood="wood_dark")
     fireplace(r, -250.0, -150.0)
     window(r, CX - 80, CX + 80, 20, 140, "snow", nx=2, ny=2, frame="wood_frame")
     r.box("LeftWood", "wood_log", (-140, FLOOR, BACK + 4), (-112, FLOOR + 30, BACK + 34), ao=0.75)
     plant(r, L + 120.0, 6.0, "RightPlant", height=90, seed=8, pot="pot_terracotta", leaf="leaf_pine", n=13, size=12)
     rug(r, "rug_plaid")
-    sofa(r, CX + HALF - 92, CX + HALF - 2, 120, 260, "CenterChair", fabric="fabric_plaid")
+    sofa(r, CX + HALF - 92, CX + HALF - 2, 300, 440, "CenterChair", fabric="fabric_plaid")
 
 
 def blossom(r):
     """Blossom garden: paper-screen window onto cherry trees, tatami floor, a little bonsai."""
     shell(r)
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="wood_light")
     side_table(r, wood="wood_light")
     floor_lamp(r, -128.0, 6.0, shade="lamp_paper", pole="wood_dark")
     window(r, CX - 130, CX + 130, -30, 160, "blossom", nx=6, ny=4, frame="wood_light", bar=2.0)
@@ -389,17 +418,19 @@ def blossom(r):
 def city(r):
     """City loft: brick walls, a tall steel window over the city, a leather sofa, a tall plant."""
     shell(r, base="dark_steel")
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="dark_steel")
     side_table(r, wood="wood_dark")
     floor_lamp(r, -128.0, 6.0, shade="lamp_black", color=(1.0, 0.78, 0.5))
     window(r, CX - 140, CX + 140, -55, 185, "city", nx=4, ny=3, frame="dark_steel", sill=False)
     plant(r, L + 120.0, 6.0, "RightPlant", height=150, seed=13, pot="pot_dark")
     rug(r, "rug_grey")
-    sofa(r, CX - HALF + 2, CX - HALF + 92, 120, 330, "CenterSofa", fabric="fabric_leather", legs="dark_steel")
+    sofa(r, CX - HALF + 2, CX - HALF + 92, 275, 445, "CenterSofa", fabric="fabric_leather", legs="dark_steel")
 
 
 def space(r):
     """Space station: metal panels, round windows onto the Earth, glowing strip lights."""
     shell(r, base="dark_steel")
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="steel_ring")
     side_table(r, wood="steel_crate")
     porthole(r, CX - 120, 95, 42, "space", "CenterPortL")
     porthole(r, CX + 120, 95, 42, "space", "CenterPortR")
@@ -414,6 +445,7 @@ def space(r):
 def living(r):
     """Cozy living room: warm walls, oak floor, a rug, side table with the radio spot, floor lamp, plants, sofa."""
     shell(r)
+    other_walls(r, (["art_sand", "art_sea", "art_sky"], ["art_sea_deep", "art_sea", "art_foam"]), frame="frame_oak")
     side_table(r)
     floor_lamp(r, -128.0, 6.0)
     plant(r, L + 120.0, 6.0, "RightPlant", height=125, seed=5)
@@ -422,7 +454,7 @@ def living(r):
     # two prints above the tank, low-contrast sea colours
     picture(r, CX - 78, CX - 8, 72, 132, "CenterArtL", ["art_sand", "art_sea", "art_sky"])
     picture(r, CX + 8, CX + 78, 72, 132, "CenterArtR", ["art_sea_deep", "art_sea", "art_foam"])
-    sofa(r, CX - HALF + 2, CX - HALF + 92, 120, 330, "CenterSofa")
+    sofa(r, CX - HALF + 2, CX - HALF + 92, 275, 445, "CenterSofa")
 
 
 BUILDERS = dict(living=living, sunny=sunny, beach=beach, cabin=cabin, blossom=blossom, city=city, space=space)
