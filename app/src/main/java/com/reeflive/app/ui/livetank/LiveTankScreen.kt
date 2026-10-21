@@ -127,6 +127,7 @@ import com.reeflive.app.ui.live.MyTankSetupCard
 import com.reeflive.app.ui.live.CareCard
 import com.reeflive.app.ui.live.MoneyChip
 import com.reeflive.app.ui.live.StoreOverlay
+import com.reeflive.app.ui.live.RoomArrows
 import com.reeflive.app.ui.live.TryOnBar
 import com.reeflive.app.ui.live.RewardFxLayer
 import com.reeflive.app.ui.live.RewardFxState
@@ -1422,6 +1423,16 @@ fun LiveTankScreen(
         if (visit != null && myTank) StoreBubbleLayer(vm.storeRoom, projection, Modifier.fillMaxSize())
         val tradeOffer by vm.trade.collectAsStateWithLifecycle()
         tradeOffer?.let { o -> if (myTank) TradeCard(o) { yes -> tick(); vm.answerTrade(yes); if (yes && hermieOn) hermie.say("Traded! Your ${o.getName} is floating in a bag at the top of your tank.", HermieMood.EXCITED) } }
+        roomShop?.tanks?.takeIf { myTank && visit == null && open == null && trying == null && it.size > 1 }?.let { tanks ->
+            RoomArrows(tanks) { dir ->
+                tick()
+                vm.turnStep(dir)
+                vm.showRoom()
+                val i = tanks.indexOfFirst { it.active }
+                val next = tanks[((i + dir) % tanks.size + tanks.size) % tanks.size]
+                if (hermieOn) hermie.say("Here's your ${next.gallons} gallon tank!", HermieMood.HAPPY)
+            }
+        }
         trying?.let { t ->
             if (myTank && visit == null) TryOnBar(
                 t, economy?.coins ?: 0, hudBottom + 8.dp,
@@ -1432,8 +1443,18 @@ fun LiveTankScreen(
                             when (r) {
                                 com.reeflive.core.custom.room.DecorResult.OK -> {
                                     trying = null
-                                    if (hermieOn) hermie.say(if (t.key.startsWith("stand:")) "Your new ${t.label.lowercase()} is in!" else "${t.label}: yours now!", HermieMood.EXCITED)
+                                    if (t.key.startsWith("tank:")) vm.showRoom()
+                                    if (hermieOn) hermie.say(
+                                        when {
+                                            t.key.startsWith("stand:") -> "Your new ${t.label.lowercase()} is in!"
+                                            t.key.startsWith("scene:") -> "Welcome to your ${t.label.lowercase()}!"
+                                            t.key.startsWith("tank:") -> "Your new ${t.label} tank is set up on another wall. Use the arrows to turn round the room!"
+                                            else -> "${t.label}: yours now!"
+                                        },
+                                        HermieMood.EXCITED,
+                                    )
                                 }
+                                com.reeflive.core.custom.room.DecorResult.ROOM_FULL -> { trying = null; if (hermieOn) hermie.say("Every wall has a tank already!", HermieMood.SURPRISED) }
                                 com.reeflive.core.custom.room.DecorResult.TOO_POOR -> if (hermieOn) hermie.say("Not enough sand dollars yet. Do your care jobs to earn more!", HermieMood.SURPRISED)
                                 com.reeflive.core.custom.room.DecorResult.LEVEL_LOCKED -> if (hermieOn) hermie.say("That one opens at a higher level.", HermieMood.SURPRISED)
                                 else -> { trying = null; vm.decorTry(null) }

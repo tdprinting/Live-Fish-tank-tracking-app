@@ -20,6 +20,7 @@ import com.reeflive.core.custom.economy.TradeOffer
 import com.reeflive.core.custom.economy.SupplyBook
 import com.reeflive.core.custom.room.Decor
 import com.reeflive.core.custom.room.DecorResult
+import com.reeflive.core.custom.room.RoomTanks
 import com.reeflive.core.custom.room.SavedDecor
 import com.reeflive.app.render.RoomLook
 import com.reeflive.core.sim.StockSize
@@ -86,6 +87,8 @@ object ReefMyTank {
         val t = now()
         val secOfDay = js("(function(){var d=new Date();return d.getHours()*3600+d.getMinutes()*60+d.getSeconds();})()") as Int
         val seed = t.toLong() xor 0x5EEDL
+        // a bought tank: the one in view (just captured into [base]) goes round to its wall, the new one takes the next free wall
+        val prev = base?.takeIf { sim != null }
         val s = CustomTank.fresh(build, species, rock, secOfDay.toDouble(), seed)
         s.speed = 1.0
         s.lifePace = LifePace.DEFAULT.pace
@@ -93,9 +96,11 @@ object ReefMyTank {
         sim = s
         val eco = economy ?: Economy()
         economy = eco
-        base = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed, economy = eco.state, decor = decor)
+        val fresh = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed, economy = eco.state, decor = decor)
+        base = prev?.let { RoomTanks.withNew(it, fresh.copy(name = "Tank ${it.others.size + 2}")) } ?: fresh
         loaded = true
         save()
+        showRoom()
         if (ReefSandbox.isMine()) ReefLive.sim = s
         return true
     }
@@ -103,6 +108,8 @@ object ReefMyTank {
     /** Deletes the tank (the page asks first); the last save stays as a backup until the next tank is saved. */
     fun startOver() {
         read(KEY)?.let { write(BACKUP, it) }
+        // one of several tanks: it goes and the next one round comes into view
+        captureNow()?.let { RoomTanks.dropActive(it) }?.let { if (open(it)) return }
         runCatching { localStorage.removeItem(KEY) }
         sim = null; base = null; loaded = true; awayRun = null; awaySummary = null
         if (ReefSandbox.isMine()) ReefLive.sim = null
@@ -203,18 +210,18 @@ object ReefMyTank {
     /** Puts My tank's stand and room (or the one being tried on) round the tank. */
     private fun showRoom() {
         val k = previewKey
-        ReefLive.homeRoom.look = RoomLook.of(if (k != null) Decor.preview(decor, k) else decor)
+        ReefLive.homeRoom.look = RoomLook.of(if (k != null) Decor.preview(decor, k) else decor, base?.side ?: 0)
     }
 
     /**
      * The room shop card: `{coins, level, recolor, tiles:[{key, kind, label, price, level, owned, inUse, locked, paint, trim}]}`
-     * (kind: stand, color, extra; paint/trim are #rrggbb swatches).
+     * (kind: stand, color, extra, scene, wall, floor, tank; paint/trim are #rrggbb swatches).
      */
     fun decorShop(): String {
         val e = economy ?: return "null"
         return JSON.stringify(obj { o ->
             o.coins = e.state.coins; o.level = e.level; o.recolor = Decor.RECOLOR; o.preview = previewKey
-            o.tiles = Decor.tiles(decor, e.level).map { t ->
+            o.tiles = (Decor.tiles(decor, e.level) + RoomTanks.tiles(base, e.level)).map { t ->
                 obj {
                     it.key = t.key; it.kind = t.key.substringBefore(':'); it.label = t.label; it.price = t.price; it.level = t.level
                     it.owned = t.owned; it.inUse = t.inUse; it.locked = t.locked
@@ -226,9 +233,22 @@ object ReefMyTank {
 
     private fun hex(c: Int) = "#" + c.toString(16).padStart(6, '0')
 
-    /** Buys [key] (it goes straight into use). Returns `{result, coins}`; result OK, OWNED, LEVEL_LOCKED, TOO_POOR, UNKNOWN. */
+    /**
+     * Buys [key] (it goes straight into use; a `tank:<build>` is set up empty on the next free wall and comes into
+     * view). Returns `{result, coins}`; result OK, OWNED, LEVEL_LOCKED, TOO_POOR, UNKNOWN, ROOM_FULL.
+     */
     fun decorBuy(key: String): String {
         val e = economy ?: return "null"
+        if (key.startsWith("tank:")) {
+            val cur = captureNow() ?: return "null"
+            val r = RoomTanks.buy(cur, key.removePrefix("tank:"), e, today())
+            if (r == DecorResult.OK) {
+                previewKey = null
+                base = cur.copy(economy = e.state)
+                start(key.removePrefix("tank:"))
+            }
+            return JSON.stringify(obj { it.result = r.name; it.coins = e.state.coins })
+        }
         val (d, r) = Decor.buy(decor, key, e, today())
         if (r == DecorResult.OK) { decor = d; previewKey = null; showRoom(); save() }
         return JSON.stringify(obj { it.result = r.name; it.coins = e.state.coins })
@@ -246,6 +266,68 @@ object ReefMyTank {
     fun decorPreview(key: String) {
         previewKey = key.ifBlank { null }
         showRoom()
+    }
+
+    // ------------------------------------------------------------------ more tanks round the room (core room/RoomTanks.kt)
+
+    /** The tank in view as saved right now (the room's money and look on it). */
+    private fun captureNow(): CustomTankSave? {
+        val s = sim ?: return null
+        val b = base ?: return null
+        return CustomTank.capture(s, (economy?.let { b.copy(economy = it.state) } ?: b).copy(decor = decor), now().toLong())
+    }
+
+    /** Opens [save] as the tank in view (another wall's tank): its time away runs on, as when the page reopens. */
+    private fun open(save: CustomTankSave): Boolean {
+        val species = ReefLive.species ?: return false
+        val rock = ReefLive.rock ?: return false
+        val s = runCatching { CustomTank.restore(save, species, rock) }.getOrNull() ?: return false
+        s.stepWall(0.0)
+        sim = s
+        base = CustomTank.baseAfterRestore(save, species)
+        economy = Economy(save.economy)
+        decor = save.decor
+        previewKey = null
+        awayRun = null; awaySummary = null
+        write(KEY, CustomTankCodec.encode(save))
+        pausedAt = save.savedAtMs.toDouble()
+        if (ReefSandbox.isMine()) { ReefLive.sim = s; catchUp() }
+        showRoom()
+        return true
+    }
+
+    /**
+     * The keeper's tanks round the room: `{active, tanks:[{side, wall, buildId, build, gallons, name, active}]}`
+     * (side 0 back, 1 right, 2 front, 3 left), or "null" with no tank.
+     */
+    fun roomTanks(): String {
+        val b = base ?: return "null"
+        if (sim == null) return "null"
+        val all = (b.others + b).sortedBy { it.side }
+        return JSON.stringify(obj { o ->
+            o.active = b.side
+            o.tanks = all.map { t ->
+                val build = TankBuilds.byId(t.buildId)
+                obj {
+                    it.side = t.side; it.wall = RoomTanks.SIDE_NAMES[t.side.coerceIn(0, 3)]; it.buildId = build.id; it.build = build.label
+                    it.gallons = build.gallons.roundToInt(); it.name = t.name; it.active = t.side == b.side
+                }
+            }.toTypedArray()
+        })
+    }
+
+    /** Turns round the room to the next tank in direction [dir] (+1 / -1). False with one tank. */
+    fun turnStep(dir: Int): Boolean {
+        val b = base ?: return false
+        val side = RoomTanks.next(b, if (dir < 0) -1 else 1) ?: return false
+        return turnTo(side)
+    }
+
+    /** Turns round to the tank on wall [side]; the one in view is saved and waits there. */
+    fun turnTo(side: Int): Boolean {
+        val cur = captureNow() ?: return false
+        val next = RoomTanks.switchTo(cur, side) ?: return false
+        return open(next)
     }
 
     // ------------------------------------------------------------------ fish stores (docs/ECONOMY.md §5)
