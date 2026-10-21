@@ -59,6 +59,32 @@ class ShrimpRoam(val b: SpeciesBrain, val nav: ShrimpNav, val home: (Ctx) -> Vec
     }
 }
 
+/**
+ * Idle life for a resting shrimp (the peppermint's fix, thread "Peppermint shrimp and flame scallop"): every 4-9 s the
+ * rest spot shifts a few mm so the feet re-plant, and every 5-14 s a 2.5-6 s picking bout drives the small chelae and
+ * maxillipeds (o.mouth); the antennae sweep at 1.6 rad/s, 3 while picking. Without it a resting shrimp stands frozen.
+ */
+class ShrimpFidget {
+    private var nudgeAt = -1.0
+    private var off = Vec3.ZERO
+    private var pickFrom = -1.0
+    private var pickTo = -1.0
+    fun rest(c: Ctx, out: SteerIntent, r: Rest, rate: Double) {
+        if (nudgeAt < 0) { nudgeAt = c.t + c.rng.range(4.0, 9.0); pickFrom = c.t + c.rng.range(5.0, 14.0) }
+        if (c.t > nudgeAt) {
+            val up = r.up ?: Vec3.Y
+            off = (c.rng.unitVector().rejectFrom(up)).normalized(Vec3.X) * (FIDGET_BL * c.L)
+            nudgeAt = c.t + c.rng.range(4.0, 9.0)
+        }
+        if (c.t > pickTo && c.t > pickFrom) { pickTo = c.t + c.rng.range(2.5, 6.0); pickFrom = pickTo + c.rng.range(5.0, 14.0) }
+        val picking = c.t < pickTo
+        out.rest(Rest(r.pos + off, r.heading, r.up, r.posture), rate)
+        if (picking) c.o.mouth = max(c.o.mouth, 0.5 + 0.3 * sin(2 * PI * 1.8 * c.t))
+        c.o.appendagePhase += c.dt * (if (picking) 3.0 else 1.6)
+    }
+    companion object { const val FIDGET_BL = 0.06 }
+}
+
 /** A deeply shaded rock face near [near] for a shrimp to hide on (an overhang roof or the side of a cave). */
 internal fun shadedPerch(c: Ctx, near: Vec3, radius: Double, taken: List<Vec3>): Rest =
     shrimpPerch(c, near, radius, 2, taken, Vec3(0.0, 0.0, 1.0),
@@ -161,6 +187,7 @@ class SexyShrimpBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** On its host: shuffling about a little, tail up and wagging, antennae sweeping. */
     inner class Dance : Behavior("dance", "Dancing on its host") {
+        private val fidget = ShrimpFidget()
         override val label: String get() = when {
             hostAnemone != null -> "Dancing on its anemone"
             hostCoral != null -> "Dancing on its coral"
@@ -175,9 +202,8 @@ class SexyShrimpBrain(c: Ctx) : SpeciesBrain(c) {
                 wag(c, true)
                 return
             }
-            out.rest(r, 2.0)
+            fidget.rest(c, out, r, 2.0)
             out.rollExtra = 0.08 * sin(2 * PI * 0.7 * c.t + c.o.appendagePhase)
-            c.o.appendagePhase += c.dt * 0.8
             wag(c, false)
         }
     }
@@ -270,6 +296,7 @@ class HarlequinShrimpBrain(c: Ctx) : SpeciesBrain(c) {
     private fun outDrive(c: Ctx) = (1 - 0.85 * dayLight(c)) * (0.6 + 0.4 * c.o.hunger)
 
     inner class Hide : Behavior("hide", "Hiding under the rock") {
+        private val fidget = ShrimpFidget()
         override val label: String get() = if (nav.swimming || c.o.pos.distanceTo(den(c).pos) > 2.0) "Creeping back under the rock" else "Hiding under the rock"
         override fun score(c: Ctx) = 0.5 * (1.2 - outDrive(c)).coerceIn(0.1, 1.0)
         override fun enter(c: Ctx) { nav.reset() }
@@ -278,8 +305,7 @@ class HarlequinShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.o.pos.distanceTo(r.pos) > 1.5 || nav.swimming) {
                 if (nav.drive(c, out, r.pos, r.up, c.o.cruiseSpeed, arrive = 1.0) != ShrimpNav.Status.ARRIVED) return
             }
-            out.rest(r, 1.5)
-            c.o.appendagePhase += c.dt * 0.4
+            fidget.rest(c, out, r, 1.5)
         }
     }
 
