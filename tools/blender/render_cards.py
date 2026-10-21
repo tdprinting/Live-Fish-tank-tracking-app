@@ -49,6 +49,10 @@ CARDS = {
     "percnon_gibbesi": "sally_lightfoot",
     "stenorhynchus_seticornis": "arrow_crab",
     "mithraculus_sculptus": "emerald_crab",
+    "lysmata_debelius": "fire_shrimp",
+    "thor_amboinensis": "sexy_shrimp",
+    "hymenocera_picta": "harlequin_shrimp",
+    "alpheus_bellulus": "pistol_shrimp",
     "ophiocoma_sp": "brittle_star",
     "sabellastarte_sp": "feather_duster",
     "nassarius_sp": "nassarius",
@@ -67,7 +71,7 @@ CARDS = {
     "zoanthus_sp": "zoa",
 }
 TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
-HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "flame_scallop", "gsp_mat",
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "gsp_mat",
         "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
 
 
