@@ -41,34 +41,44 @@ class RockGuard(
     private var reach = 0.0
     private val fr = StationFrame()
     private val frames = Array(BodySpline.POINTS) { Vec3.ZERO }
+    private var framesOk = false
+    private var skin = HOLE_SLACK
 
     /**
      * How far (cm) station [i]'s body at [p] reaches toward the rock (its section's support against the field's
      * gradient there, oriented by the drawn frame of the station as last sampled): the clearance it needs.
      */
-    private fun need(i: Int, p: Vec3): Double {
+    private fun need(i: Int, p: Vec3, d: Double = rock.sdf.dist(p)): Double {
         val pr = prof ?: return 0.0
-        val n = rock.sdf.gradient(p)
-        gn = n
-        fr.set(cur!!, frames, i)
-        return fr.reach(pr, i, lenCm, -n.x, -n.y, -n.z).coerceAtLeast(0.0)
+        // the field's gradient by forward differences from the value already read (without building points)
+        val sdf = rock.sdf; val h = 0.5
+        var gx = sdf.distAt(p.x + h, p.y, p.z) - d
+        var gy = sdf.distAt(p.x, p.y + h, p.z) - d
+        var gz = sdf.distAt(p.x, p.y, p.z + h) - d
+        val gl = kotlin.math.sqrt(gx * gx + gy * gy + gz * gz)
+        if (gl < 1e-9) { gx = 0.0; gy = 1.0; gz = 0.0 } else { gx /= gl; gy /= gl; gz /= gl }
+        gnx = gx; gny = gy; gnz = gz
+        val o = cur!!
+        if (!framesOk) { o.spline.sampleStations(frames); framesOk = true }
+        fr.set(o, frames, i)
+        return fr.reach(pr, i, lenCm, -gx, -gy, -gz).coerceAtLeast(0.0)
     }
 
     /** The field gradient the last [need] was taken along. */
-    private var gn = Vec3.Y
+    private var gnx = 0.0; private var gny = 1.0; private var gnz = 0.0
 
     private fun blocked(p: Vec3, br: Double, i: Int): Boolean {
-        if (!mayBeRock(p, reach)) return false
+        val ri = prof?.let { it.reach(i) * lenCm } ?: 0.0
+        if (!mayBeRock(p, ri)) return false
         val d = rock.sdf.dist(p)
-        if (d >= reach - TOL) return false
-        if (blocked(rock, p, br, TOL, sandY)) return true
+        if (d >= ri - TOL) return false
+        if (blockedAt(rock, p, d, br, TOL, sandY, skin)) return true
         if (prof == null) return false
         // the body round the station: inside the rock where it reaches past the field's clearance, unless that contact
         // lies under the sand (a buried rock foot) or the station sits in a hole that fits it
-        val nd = need(i, p)
+        val nd = need(i, p, d)
         if (d >= nd - TOL) return false
-        val n = gn
-        val ex = p.x - n.x * nd; val ey = p.y - n.y * nd; val ez = p.z - n.z * nd
+        val ex = p.x - gnx * nd; val ey = p.y - gny * nd; val ez = p.z - gnz * nd
         if (ey < sandY(ex, ez) + BODY_SAND_SKIN) return false
         return !(d >= -HOLE_SLACK && rock.holes.inFittingHole(p, br))
     }
@@ -138,9 +148,11 @@ class RockGuard(
         val br = RockHole.bodyRadius(o)
         keepClaims(o)
         // a crawler on its seat is drawn where its seat rests it (CrawlerSeat): its spine line is guarded, not a body
-        // (and a goby at its burrow is in the sand pocket it dug under the rock: its spine line only)
-        val pr = if (o.seatOn || o.atBurrow) null else BodyProfile.spineOf(o)
+        // (and so is a body on a behaviour's own path into a hole, den or burrow that fits it, and a goby at its burrow,
+        // in the sand pocket it dug under the rock)
+        val pr = if (o.seatOn || o.atBurrow || o.spline.override != null) null else BodyProfile.spineOf(o)
         cur = o; prof = pr; lenCm = o.lengthCm
+        skin = if (o.isFish) SKIN_ROCK else HOLE_SLACK
         reach = if (pr == null) 0.0 else pr.maxReach * o.lengthCm
         // every station lies within a body length of the spline's head: a head that far from the rock (most fish,
         // most of the time) has nothing to check (the full check ran for every animal every tick: SIMULATION §24)
@@ -148,8 +160,8 @@ class RockGuard(
             if (o.spline.override == null && o.spline.holding) o.spline.releaseCorrection()
             return
         }
-        // the drawn frames the body sections are oriented by
-        if (pr != null) o.spline.sampleStations(frames)
+        // the drawn frames the body sections are oriented by: sampled when a body first nears the rock
+        framesOk = false
         if (blocked(o.pos, br, 0)) {
             // out onto the rock face, never down into the sand bed
             val q = sdf.project(o.pos, need(0, o.pos) + MARGIN, iterations = 16)
@@ -273,12 +285,19 @@ class RockGuard(
             // the rock feet run on under the sand: a body on or in the sand there is in sand, not in rock. Lying on the
             // sand (the skin over it) counts only where the rock is shallow: a tail skimming the sand through a rock foot
             // the sand is banked against was a body 2.6 cm inside the rock (Stripes at the goby spoil, t=34035 seed 1),
-            // and 1 cm (a watchman's tail at its burrow) still showed through, so only the field's own error is let by
-            val d = rock.sdf.dist(p)
+            // and 1 cm (a watchman's tail at its burrow) still showed through, so a fish is let by only the field's error
+            return blockedAt(rock, p, rock.sdf.dist(p), br, tol, sandY, HOLE_SLACK)
+        }
+
+        /**
+         * [blocked] with the field already read at [p] ([d]); a spine point lying on the sand may read [skin] cm into a
+         * rock foot (a fish only the field's error, [SKIN_ROCK]; a crawler's seat rests it on the foot it walks).
+         */
+        fun blockedAt(rock: RockData, p: Vec3, d: Double, br: Double, tol: Double, sandY: (Double, Double) -> Double, skin: Double): Boolean {
             if (d >= -tol) return false
             val sy = sandY(p.x, p.z)
             if (p.y < sy) return false
-            if (p.y < sy + SAND_SKIN && d >= -SKIN_ROCK) return false
+            if (p.y < sy + SAND_SKIN && d >= -skin) return false
             return d < -tol && (d < -HOLE_SLACK || !rock.holes.inFittingHole(p, br))
         }
     }

@@ -54,15 +54,20 @@ class BodyBounds(
         out.clear()
         for (i in 0 until n) {
             val p = pos[i]
-            fr.set(o, pos, i)
             var x = p.x; var y = p.y; var z = p.z
-            if (nearGlass) {
+            // (a station whose body cannot reach the glass or the sand in any direction is left alone)
+            val ri = prof.reach(i) * l + MARGIN
+            val glassHere = nearGlass && (x < ri || x > lengthCm - ri || z < ri || z > widthCm - ri)
+            val sandHere = nearSand && y - ri < sand.surfaceY(x, z) + SIDE_SLACK_CM
+            if (!glassHere && !sandHere) { out.add(p); continue }
+            fr.set(o, pos, i)
+            if (glassHere) {
                 val lo = fr.reach(prof, i, l, -1.0, 0.0, 0.0) + MARGIN; val hi = fr.reach(prof, i, l, 1.0, 0.0, 0.0) + MARGIN
                 if (x < lo) { x = lo; gx = true } else if (x > lengthCm - hi) { x = lengthCm - hi; gx = true }
                 val loZ = fr.reach(prof, i, l, 0.0, 0.0, -1.0) + MARGIN; val hiZ = fr.reach(prof, i, l, 0.0, 0.0, 1.0) + MARGIN
                 if (z < loZ) { z = loZ; gx = true } else if (z > widthCm - hiZ) { z = widthCm - hiZ; gx = true }
             }
-            if (nearSand) {
+            if (sandHere) {
                 val down = fr.reach(prof, i, l, 0.0, -1.0, 0.0)
                 // the sand under the belly's sides too (a body across a slope rests on the higher side)
                 val w = prof.halfWidth(i) * l
@@ -126,6 +131,8 @@ class BodyBounds(
     companion object {
         /** Clearance (cm) kept between the body and the glass. */
         const val MARGIN = 0.1
+        /** How much higher (cm) the sand under a belly's side may be than under its middle (slopes, mounds). */
+        const val SIDE_SLACK_CM = 1.0
         /** How much higher (cm) the sand under any station may be than under the head (mounds, burrow spoil). */
         const val MOUND_SLACK_CM = 6.0
     }

@@ -34,7 +34,7 @@ class BodyPenetrationReport(private val sim: Simulation) {
             val prof = BodyProfile.of(o.species) ?: continue
             // crawlers on their seats and rigid shells are their seats' and rigs' (reported apart); a goby at its
             // burrow is in the sand pocket it dug, and burrowing animals are in the sand by design
-            val seated = o.seatOn || o.drawnRigid || (o.crawling && !o.isFish)
+            val seated = o.seatOn || o.drawnRigid || (o.attached && !o.isFish)
             val key = o.species.id + if (seated) " [seat]" else ""
             val sandOk = SandContact.exempt(o) || o.atBurrow || o.spline.override != null
             val rockOk = o.atBurrow

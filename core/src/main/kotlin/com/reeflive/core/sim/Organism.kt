@@ -180,8 +180,6 @@ class Organism(
      * guards ([BodyBounds], [RockGuard]) keep only its spine line out, as its burrow behaviours expect.
      */
     var burrowMouth: Vec3? = null
-    /** Walking on a surface this tick (the brain's crawl intent): its crawl and seat keep its body on that surface. */
-    var crawling = false
     val atBurrow: Boolean get() = burrowMouth?.let { pos.distanceTo(it) < BURROW_ZONE_BL * lengthCm } ?: false
     var sleeping = false
     var hostAnchor: String? = placement

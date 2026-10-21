@@ -27,10 +27,15 @@ class BodyProfile(private val d: FloatArray, val hull: FloatArray) {
     fun finTop(i: Int): Double = d[i * 5 + 3].toDouble()
     fun finBottom(i: Int): Double = d[i * 5 + 4].toDouble()
 
-    /** Largest reach (BL) of the body (fins at [FIN_GIVE]) from any station, for quick rejects. */
-    val maxReach: Double = (0 until N).maxOf { i ->
+    private val stationReach = DoubleArray(N) { i ->
         max(max(top(i) + (finTop(i) - top(i)) * FIN_GIVE, -(bottom(i) + (finBottom(i) - bottom(i)) * FIN_GIVE)), halfWidth(i))
     }
+
+    /** Largest reach (BL) of station [i]'s body (fins at [FIN_GIVE]) in any direction, for quick rejects. */
+    fun reach(i: Int): Double = stationReach[i]
+
+    /** Largest reach (BL) of the body from any station. */
+    val maxReach: Double = stationReach.max()
 
     /**
      * How far (BL) station [i]'s body reaches from its spine point along a direction whose components on the station's
@@ -57,9 +62,10 @@ class BodyProfile(private val d: FloatArray, val hull: FloatArray) {
 
         /**
          * [o]'s body along its spine: null when it is drawn rigid at its organism, has no measured model, or is an
-         * invertebrate walking a surface (its crawl, seat and leg rig hold that body to the surface).
+         * invertebrate holding on to a surface (walking it, or clinging there: its crawl, seat and leg rig hold that body
+         * to the surface).
          */
-        fun spineOf(o: Organism): BodyProfile? = if (o.drawnRigid || (o.crawling && !o.isFish)) null else of(o.species)
+        fun spineOf(o: Organism): BodyProfile? = if (o.drawnRigid || (o.attached && !o.isFish)) null else of(o.species)
 
         /** The measured body of [s] (null for a species whose model has no profile: sessile animals, corals). */
         fun of(s: SimSpecies): BodyProfile? {

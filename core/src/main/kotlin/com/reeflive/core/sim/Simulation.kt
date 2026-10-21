@@ -911,7 +911,6 @@ class Simulation private constructor(
             a.steering.apply(a.intent)
             a.brain.postSteer(a.ctx)
             o.attached = a.intent.kinematic || a.intent.crawl
-            o.crawling = a.intent.crawl
         }
         takeOutJumpers()
         sandWork.step(organisms)
@@ -963,7 +962,6 @@ class Simulation private constructor(
             a.intent.kinRate = 3.0
             a.steering.apply(a.intent)
             o.attached = true
-            o.crawling = a.intent.crawl
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
             o.burrowMouth = burrowMouthOf(o, a)
             sandContact.preClamp(o)
