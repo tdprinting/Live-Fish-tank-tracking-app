@@ -2191,6 +2191,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         var mood = 0.0
         if (utility.current?.name == "bout" || utility.current?.name == "rival") mood += TONE_DISPLAY
         mood -= TONE_STRESS * worry
+        // a fresh fright blanches it on top of whatever it was already worried about (an already uneasy blenny tapped
+        // in its cave still flashes pale)
+        if (c.t - scaredAt < TONE_STARTLE_S) mood -= TONE_STARTLE
         if (night) mood += TONE_NIGHT
         return (bg + mood).coerceIn(-1.0, 1.0)
     }
@@ -2258,6 +2261,9 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val TONE_CAVE = 0.6
         const val TONE_DISPLAY = 0.3
         const val TONE_STRESS = 0.3
+        /** The acute blanch of a fresh scare and how long it lasts (s). */
+        const val TONE_STARTLE = 0.3
+        const val TONE_STARTLE_S = 20.0
         const val TONE_NIGHT = -0.2
         /** Colour change time constants (s): background matching, and a scare (research 51 §2). */
         const val TONE_S = 25.0
