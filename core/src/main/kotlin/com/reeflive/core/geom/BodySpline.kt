@@ -54,6 +54,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     fun reset(headPos: Vec3, headingDir: Vec3) {
         head = headPos; heading = headingDir.normalized()
         trail.clear()
+        spreadOff.fill(0.0); spreadAny = false
         val step = length / 16
         for (i in 1..17) trail.add(head - heading * (step * i))
         // a placement is a cut: take the current override shape at once
@@ -79,6 +80,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         lastOverride = poly
         overrideMix = 1.0
         held = true
+        spreadOff.fill(0.0); spreadAny = false
     }
 
     /** A [correct]ion or [adopt]ed trail the rock guard is holding (see [holdCorrection], [update]). */
@@ -111,6 +113,8 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     fun adopt(poly: List<Vec3>) {
         if (rigid || poly.size < 2) return
         held = true
+        // the corrected polyline is the shape to show as it is (it was taken from the stations, offsets included)
+        spreadOff.fill(0.0); spreadAny = false
         head = poly[0]
         trail.clear()
         for (i in 1 until poly.size) trail.add(poly[i])
@@ -187,6 +191,36 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             for (i in 1 until POINTS) { if (i - 1 < trail.size) trail[i - 1] = scratch[i] else trail.add(scratch[i]) }
             while (trail.size > POINTS - 1) trail.removeAt(trail.size - 1)
         }
+        updateSpread(dt)
+    }
+
+    /**
+     * Moves the stored whole-body offsets ([spreadOff], station minus raw trail station) toward the [spreadBend] shape of
+     * this tick's trail, at most [SPREAD_STEP_BL] body lengths per station per 20 Hz tick, so starting or ending a turn,
+     * or switching to a pose that keeps the trail, never pops the body. A held correction was taken from the shape
+     * shown (offsets included), so the offsets drop at once when it starts.
+     */
+    private fun updateSpread(dt: Double) {
+        if (held) { spreadOff.fill(0.0); spreadAny = false; return }
+        val on = spreadOn && bendSpread > 0.0 && overrideMix == 0.0
+        if (!on && !spreadAny) return
+        val seg = length / (POINTS - 1)
+        val raw = spreadRaw
+        walk(trail, 0, head, seg, raw)
+        for (i in 0 until POINTS) scratch[i] = raw[i]
+        if (on) spreadBend(scratch, bendSpread)
+        val cap = SPREAD_STEP_BL * length * min(dt.coerceAtLeast(0.0) / 0.05, 1.0)
+        var any = false
+        for (i in 0 until POINTS) {
+            val k = i * 3
+            val tx = scratch[i].x - raw[i].x; val ty = scratch[i].y - raw[i].y; val tz = scratch[i].z - raw[i].z
+            var dx = tx - spreadOff[k]; var dy = ty - spreadOff[k + 1]; var dz = tz - spreadOff[k + 2]
+            val d = sqrt(dx * dx + dy * dy + dz * dz)
+            if (d > cap) { val f = cap / d; dx *= f; dy *= f; dz *= f }
+            spreadOff[k] += dx; spreadOff[k + 1] += dy; spreadOff[k + 2] += dz
+            if (abs(spreadOff[k]) + abs(spreadOff[k + 1]) + abs(spreadOff[k + 2]) > 1e-6) any = true
+        }
+        spreadAny = any
     }
 
     /**
@@ -280,7 +314,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             else {
                 walk(trail, 0, head, seg, pos)
                 // not while the rock guard holds a re-laid shape or a den path is blending (those stations must match it)
-                if (!held && mix == 0.0 && bendSpread > 0.0) spreadBend(pos)
+                if (spreadAny) for (i in 1 until POINTS) {
+                    val k = i * 3
+                    var x = pos[i].x + spreadOff[k]; val y = pos[i].y + spreadOff[k + 1]; var z = pos[i].z + spreadOff[k + 2]
+                    if (x < boxMinX || x > boxMaxX || z < boxMinZ || z > boxMaxZ) { x = x.coerceIn(boxMinX, boxMaxX); z = z.coerceIn(boxMinZ, boxMaxZ) }
+                    pos[i] = Vec3(x, y, z)
+                }
             }
         }
         if (mix > 0.0) {
@@ -302,6 +341,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     var bendSpread = 0.0
     /** Where along the body (0 snout .. 1 tail) the spread bend peaks; stiff-headed fish bend behind the head. */
     var bendPeak = 0.5
+    /** Set each tick by the steering: whether the body may take the spread shape now (free swimming). */
+    var spreadOn = true
+    /** Per station (xyz): the drawn whole-body shape minus the raw trail station, eased in [updateSpread]. */
+    private val spreadOff = DoubleArray(POINTS * 3)
+    private var spreadAny = false
+    private val spreadRaw = Array(POINTS) { Vec3.ZERO }
     private val bendScratch = DoubleArray(POINTS * 4)
 
     /**
@@ -309,7 +354,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      * the head segment, every segment length and the total turn (so the tail's direction is the trail's). Rotation
      * vectors are summed in world space, exact for a bend in one plane and close for the gentle 3-D ones.
      */
-    private fun spreadBend(pos: Array<Vec3>) {
+    private fun spreadBend(pos: Array<Vec3>, mix: Double) {
         val n = POINTS - 1
         val b = bendScratch   // per segment: unit dir xyz, length
         for (i in 0 until n) {
@@ -330,7 +375,9 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             ws += bendWeight(j.toDouble() / n)
         }
         if (ra < 1e-4) return
-        val m = bendSpread
+        // a body folded back on itself (a fish that reversed) has no one turn to spread: its axis flips tick to tick
+        val m = mix * (1 - smoothstep(SPREAD_FOLD_FROM, SPREAD_FOLD_TO, sqrt(rx * rx + ry * ry + rz * rz)))
+        if (m <= 0.0) return
         // rebuild from the head: each joint turns by the mix of its own turn and its share of the total
         var px = b[0]; var py = b[1]; var pz = b[2]
         var cx = pos[1].x; var cy = pos[1].y; var cz = pos[1].z
@@ -356,8 +403,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             }
             val len = b[j * 4 + 3]
             cx += px * len; cy += py * len; cz += pz * len
-            pos[j + 1] = if (cx < boxMinX || cx > boxMaxX || cz < boxMinZ || cz > boxMaxZ)
-                Vec3(cx.coerceIn(boxMinX, boxMaxX), cy, cz.coerceIn(boxMinZ, boxMaxZ)) else Vec3(cx, cy, cz)
+            pos[j + 1] = Vec3(cx, cy, cz)
         }
     }
 
@@ -455,5 +501,10 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         /** After a held trail is let go, its relax is capped at this fraction per update for that many updates. */
         const val RELAX_EASE_STEP = 0.25
         const val RELAX_EASE_UPDATES = 6
+        /** Farthest a station's whole-body offset moves per 20 Hz tick, in body lengths. */
+        const val SPREAD_STEP_BL = 0.06
+        /** Total head→tail turn (rad) over which the spread fades out (a U-turn is left to the trail). */
+        const val SPREAD_FOLD_FROM = 1.6
+        const val SPREAD_FOLD_TO = 2.4
     }
 }
