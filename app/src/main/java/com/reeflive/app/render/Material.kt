@@ -188,7 +188,7 @@ class FrameUniforms {
         const val SHADOW_OFFSET = CASTER_OFFSET + MAX_CASTERS * 4
         const val FLOATS = SHADOW_OFFSET + 20
         const val FOG_DENSITY = 0.005f
-        const val WATER_LEVEL = Camera.WATER_Y
+        val WATER_LEVEL: Float get() = Camera.WATER_Y
         const val SAND_TOP = Camera.SAND_Y
         const val CAUSTIC_STRENGTH = 0.85f
         const val CAUSTIC_SCALE = 0.045f

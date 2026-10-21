@@ -140,6 +140,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
     fun step(organisms: List<Organism>, dt: Double, displace: Boolean) {
         if (++gc % 400 == 0) { val ids = organisms.mapTo(HashSet()) { it.id }; st.keys.retainAll(ids) }
         for (o in organisms) {
+            if (o.leap != null) continue   // in the air or out on the floor (JumpModel)
             val early = st[o.id]
             val pre = early?.pre ?: 0.0
             if (early != null) early.pre = 0.0
@@ -193,7 +194,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
          * feather duster (its tube is anchored down in the sand; the crown stands above it), or a diamond goby in its own
          * burrow under a rock (its burrow is not dug into the grid; the engineer goby's are).
          */
-        fun exempt(o: Organism): Boolean = o.posture == 5 || o.inSand || o.brainKind == BrainKind.FEATHER_DUSTER || o.brainKind == BrainKind.ANEMONE ||
+        fun exempt(o: Organism): Boolean = o.posture == 5 || o.inSand || o.brainKind == BrainKind.FEATHER_DUSTER || o.brainKind == BrainKind.ANEMONE || o.brainKind == BrainKind.FILE_CLAM ||
             o.brainKind == BrainKind.DIAMOND_GOBY && o.posture == 3
 
         /** Height of the body reference point over the sand when the body rests on it (cm). */
@@ -220,7 +221,7 @@ class SandContact(private val sand: SandBed, private val rock: com.reeflive.core
         /** A still body leaves its impression after this long (s), pressed about this deep (cm). */
         const val REST_S = 20.0
         @Ev(Evidence.DESIGN_ESTIMATE) const val IMPRESS_DEPTH = 0.12
-        private val TRAIL_KINDS = setOf(BrainKind.NASSARIUS, BrainKind.HERMIT, BrainKind.SALLY_CRAB, BrainKind.BRITTLE_STAR)
+        private val TRAIL_KINDS = setOf(BrainKind.NASSARIUS, BrainKind.CONCH, BrainKind.HERMIT, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.BRITTLE_STAR)
         private val IMPRESSERS = setOf(BrainKind.BRITTLE_STAR, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY)
     }
 }

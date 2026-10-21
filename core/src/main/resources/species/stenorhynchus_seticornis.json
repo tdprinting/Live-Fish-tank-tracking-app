@@ -1,0 +1,111 @@
+{
+  "id": "stenorhynchus_seticornis",
+  "kind": "INVERT",
+  "common": "Arrow crab",
+  "scientific": "Stenorhynchus seticornis",
+  "family": "Inachidae",
+  "maxLengthCm": 6,
+  "typicalAdultCm": 4.5,
+  "lifespanYears": 4,
+  "depthRatio": 0.6,
+  "massCoeff": 0.006,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.25,
+    "burstBL": 1.5,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.85,
+    "openWater": 0.0,
+    "coverAffinity": 0.6
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 45,
+  "temperament": {
+    "aggression": 0.45,
+    "boldness": 0.55,
+    "curiosity": 0.6,
+    "skittishness": 0.4
+  },
+  "diet": [
+    "MEATY",
+    "MYSIS",
+    "PELLET",
+    "FLAKE",
+    "DETRITUS"
+  ],
+  "feedsPerDay": 1,
+  "grazer": false,
+  "tolerance": {
+    "temp": {
+      "optLo": 23,
+      "optHi": 26,
+      "tolLo": 21,
+      "tolHi": 28,
+      "lethalLo": 17,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.026,
+      "tolLo": 1.021,
+      "tolHi": 1.027,
+      "lethalLo": 1.018,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.6,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.3
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 80
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 30,
+  "model": "models/arrow_crab.glb",
+  "colors": {
+    "primary": "#D9A85A",
+    "secondary": "#2A160C",
+    "accent": "#6A58C8"
+  },
+  "brain": "arrow_crab",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "copperSensitive": true,
+  "dietSummary": "Scavenger and hunter of small worms: bristleworms, amphipods, leftovers. Feed meaty food a few times a week.",
+  "temperamentSummary": "Slow, long-legged night prowler. Peaceful with most fish, but a hungry one grabs small sleeping fish and freshly molted shrimp.",
+  "careNotes": [
+    "The classic bristleworm hunter: it picks worms out of the rock with its small blue claws, mostly at night.",
+    "Keep one per tank; two arrow crabs fight. Small fish (firefish, small gobies) and molting shrimp are at risk if it goes hungry.",
+    "A spider crab: it stops molting once fully grown, so a lost leg on an adult never grows back."
+  ]
+}

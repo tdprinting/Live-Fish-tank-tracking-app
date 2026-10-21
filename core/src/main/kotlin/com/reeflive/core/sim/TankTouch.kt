@@ -61,10 +61,10 @@ object TankTouch {
     const val RUN_WINDOW_S = 4.0
 
     private val POLYPS = setOf(CoralKind.GSP, CoralKind.ZOA, CoralKind.CLOVE)
-    private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.HERMIT)
+    private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.HERMIT)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
-    private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK)
-    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE)
+    private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.CHROMIS)
+    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.GRAMMA)
 
     /** Polyp corals retract to touch; the other kinds (leathers, mushrooms, macro) do not visibly react to a tap. */
     fun retracts(kind: CoralKind): Boolean = kind in POLYPS
@@ -96,6 +96,8 @@ object TankTouch {
         if (k == BrainKind.FEATHER_DUSTER) return if (d < 15.0) TouchReaction.DUCK else TouchReaction.NONE
         // an anemone has no eyes: only a touch on or right next to it makes it pull in
         if (k == BrainKind.ANEMONE) return if (d < 0.5 * o.lengthCm + 3.0) TouchReaction.DUCK else TouchReaction.NONE
+        // the flame scallop's mantle eyes see a hand at the glass: it snaps shut
+        if (k == BrainKind.FILE_CLAM) return if (d < 12.0) TouchReaction.DUCK else TouchReaction.NONE
         return when (surface) {
             TouchSurface.GLASS -> when {
                 // asleep at night: a tap close by only makes a fish shift away; nobody comes to look in the dark
@@ -105,10 +107,14 @@ object TankTouch {
                 shy(o, night) -> if (d < FEEL_CM) TouchReaction.AVOID else TouchReaction.NONE
                 k in CRUSTACEANS -> if (d < FEEL_CM) still(k) else TouchReaction.NONE
                 k == BrainKind.BOBTAIL_SQUID -> if (d < FEEL_CM) TouchReaction.DUCK else TouchReaction.NONE
+                // research 41: a firefish dives into its hole at a knock close by
+                k == BrainKind.FIREFISH -> if (d < FEEL_CM) TouchReaction.DUCK else TouchReaction.NONE
                 else -> TouchReaction.NONE
             }
             TouchSurface.SAND -> when {
                 k == BrainKind.DIAMOND_GOBY && !night -> if (d < 30.0) TouchReaction.CHECK else TouchReaction.NONE
+                // research 50 §3: the watchman dives into its burrow at a knock on the sand near it
+                k == BrainKind.WATCHMAN_GOBY -> if (d < 20.0) TouchReaction.DUCK else TouchReaction.NONE
                 k == BrainKind.NASSARIUS -> if (d < 22.0 && o.curiosity >= 0.4) TouchReaction.CHECK else TouchReaction.NONE
                 d >= 15.0 -> TouchReaction.NONE
                 k in CRUSTACEANS -> still(k)
@@ -125,7 +131,7 @@ object TankTouch {
             }
             TouchSurface.ROCK, TouchSurface.CORAL -> when {
                 d >= ROCK_CM -> TouchReaction.NONE
-                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID -> TouchReaction.DUCK
+                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH || k == BrainKind.GRAMMA || k == BrainKind.WATCHMAN_GOBY -> TouchReaction.DUCK
                 o.isFish && shy(o, night) -> TouchReaction.AVOID
                 else -> TouchReaction.NONE
             }
@@ -175,8 +181,8 @@ object TankTouch {
     fun animalReaction(o: Organism): TouchReaction {
         if (!o.alive || o.molting || o.isFish) return TouchReaction.NONE
         return when (o.brainKind) {
-            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE -> TouchReaction.DUCK
-            BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP -> TouchReaction.FREEZE
+            BrainKind.HERMIT, BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.BOBTAIL_SQUID, BrainKind.ANEMONE, BrainKind.FILE_CLAM -> TouchReaction.DUCK
+            BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> TouchReaction.FREEZE
             else -> TouchReaction.TUCK
         }
     }

@@ -153,7 +153,8 @@ class AnemoneModel(private val sim: Simulation) {
 
     // ------------------------------------------------------------------ chemistry-tick step
 
-    fun step(dtMin: Double) {
+    /** [lifeMin]: the same step on the game clock ([Simulation.lifePace]), for splitting. */
+    fun step(dtMin: Double, lifeMin: Double = dtMin) {
         val list = anemones()
         if (list.isEmpty() && hosts.isEmpty()) return
         ensureRng()
@@ -174,7 +175,7 @@ class AnemoneModel(private val sim: Simulation) {
             stingNeighbours(o, s, list, dtMin)
         }
         clowns(list, night, dtMin)
-        if (list.size < MAX_ANEMONES) for (o in list) if (maybeSplit(o, state(o), dtMin)) break
+        if (list.size < MAX_ANEMONES) for (o in list) if (maybeSplit(o, state(o), lifeMin)) break
     }
 
     private fun wander(o: Organism, s: State, dtMin: Double) {
@@ -388,6 +389,9 @@ class AnemoneModel(private val sim: Simulation) {
 
     /** True when [fish] may nestle in [anemone] unharmed (a clown that has acclimated to it). */
     fun welcomes(anemone: Organism, fish: Organism): Boolean {
+        // Banggai cardinals shelter among anemone tentacles from the start (research 50 §2 fact 56: the young live with
+        // sea anemones in the wild), so the crown takes them without the clowns' acclimation
+        if (fish.brainKind == BrainKind.CARDINAL && fish.species.id.startsWith("pterapogon")) return true
         if (fish.brainKind != BrainKind.CLOWN) return false
         val h = hosts[fish.id] ?: return false
         return h.hostId == anemone.id || (h.candidateId == anemone.id && h.acclim >= 0.5)

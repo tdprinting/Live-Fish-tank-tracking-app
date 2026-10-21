@@ -17,9 +17,10 @@ import common as C  # noqa: E402
 from common import bpy  # noqa: E402
 
 FISH_SHEET = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "hawkfish", "lawnmower_blenny",
-              "tailspot_blenny", "dottyback", "engineer_goby", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny"]
+              "tailspot_blenny", "dottyback", "engineer_goby", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny",
+              "yellow_tang", "purple_tang", "fairy_wrasse", "royal_gramma", "banggai", "watchman_goby"]
 INVERT_SHEET = ["shrimp", "skunk_shrimp", "hermit_blue", "hermit_scarlet", "sally_lightfoot", "brittle_star", "feather_duster",
-                "nassarius", "astrea", "asterina"]
+                "nassarius", "astrea", "asterina", "trochus", "fighting_conch", "tuxedo_urchin"]
 
 
 def setup_cycles(w, h, samples=48):
@@ -134,7 +135,7 @@ def render_fish(sid, w=640, h=380, samples=48):
     if sid.startswith("brood_clown_eggs"):
         top_view = True
     elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
-                            "shrimp", "skunk_shrimp") else 0.16
+                            "shrimp", "skunk_shrimp", "peppermint_shrimp", "flame_scallop") else 0.16
     if top_view:
         elev = 1.6
     yaw = math.radians(-18)

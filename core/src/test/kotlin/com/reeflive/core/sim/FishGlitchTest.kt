@@ -226,4 +226,27 @@ class FishGlitchTest {
         val over = budget.filter { (c, n) -> total.count(c) > n }
         assertTrue("glitch budget exceeded: " + over.keys.joinToString { "$it=${total.count(it)} (max ${budget[it]})" } + "\n" + total.table(), over.isEmpty())
     }
+
+    /**
+     * The popular fish pack (research 50) in the owner's tank: the new kinds must not glitch, and must not go into the
+     * rock, sand or glass (no-clipping rule) while the rest of the tank lives around them.
+     */
+    @Test
+    fun popularFishPackDoesNotGlitchOrClip() {
+        val newIds = setOf("gramma_loreto", "pterapogon_kauderni", "cryptocentrus_cinctus")
+        fun packRun(seed: Long, hour: Double): Report {
+            val sim = TestTank.sim(DefaultStock.all, seed = seed, startHour = hour)
+            for (id in newIds) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, id, 0.0)) }
+            sim.addFromSeed(LivestockSeed("pterapogon_kauderni", "Banggai 2", 0.0))
+            return detect(sim, 1800.0, 0.05)
+        }
+        val runs = listOf("pack midday" to packRun(11, 12.0), "pack dusk" to packRun(12, 19.6))
+        for ((name, r) in runs) println("[$name] " + r.table())
+        val genera = newIds.map { it.substringBefore('_') + ":" }
+        val mine = runs.flatMap { it.second.hits }.filter { h -> genera.any { h.species.startsWith(it) } }
+        val bad = mine.filter { it.cause in setOf(Cause.NAN, Cause.TELEPORT, Cause.HEADING_FLIP, Cause.UP_FLIP, Cause.BODY_POP, Cause.POSE_JUMP,
+            Cause.PEN_ROCK, Cause.PEN_SAND, Cause.PEN_GLASS, Cause.PEN_SURFACE) }
+        assertTrue("new fish glitched or clipped:\n" + bad.groupBy { "${it.cause} ${it.species}" }.entries.joinToString("\n") { (k, v) ->
+            "$k ×${v.size}, first t=%.1f ${v[0].detail}".format(v[0].t) }, bad.isEmpty())
+    }
 }
