@@ -36,6 +36,8 @@ object StonyCorals {
             genus.startsWith("micromussa") -> Sting(1.0, 5.0, 0.15)                  // acan
             genus.startsWith("caulastrea") -> Sting(1.0, 6.0, 0.15)                  // candy cane
             genus.startsWith("trachyphyllia") -> Sting(1.5, 5.0, 0.12)               // open brain
+            // scolymia: one big meaty polyp; its night feeding tentacles reach a few cm past the disc (research 61 §3)
+            genus.startsWith("homophyllia") || genus.startsWith("scolymia") -> Sting(1.0, 6.0, 0.25)
             sp.coralKind == CoralKind.LPS -> Sting(1.5, 6.0, 0.2)
             else -> null
         }

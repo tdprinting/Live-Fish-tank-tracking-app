@@ -36,7 +36,7 @@ jobs:
       - name: ffmpeg for the web sounds
         run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
 
-      # Same :core sim and app render sources as the APK, compiled to JavaScript; -PcoreOnly skips the Android SDK.
+      # The :core sim and shared render sources compiled to JavaScript; -PcoreOnly skips the Android SDK.
       - name: Build web app
         run: ./gradlew -PcoreOnly :web:site --stacktrace
 
@@ -47,7 +47,7 @@ jobs:
           if-no-files-found: error
 
       # Published at https://<owner>.github.io/<repo>/ (Settings → Pages → source: gh-pages branch).
-      # Runs on every push to main, the same pushes that publish the APK, so the web app always matches Android.
+      # Runs on every push to main, so the published web app always matches main.
       - name: Publish to GitHub Pages (main only)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4

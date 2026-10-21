@@ -91,7 +91,7 @@ class SandFx {
 
 /**
  * Sand grains and mulm clouds (SIMULATION §16): each of the sim's particles ([SimSnapshot.sandClouds], stride
- * [SandBed.CLOUD_STRIDE]: x, y, z, kind + age/60, velocity, sand carried) drawn with the shared particles program. Sand
+ * [SandBed.CLOUD_STRIDE]: x, y, z, kind + age/60, velocity, sand carried, diameter, id) drawn with the shared particles program. Sand
  * and fine grains are crisp lit specks in the mixed aragonite tones (cream, white, pink, a grey fleck), a thrown clump
  * as a few grains together; silt is a faint haze that spreads as it ages; detritus brown flecks. The scene is drawn a
  * fraction of a tick behind the newest snapshot, so each particle is carried along its velocity by [aheadS] sim
@@ -129,17 +129,20 @@ class SandCloudRenderer {
             val kind = code.toInt().coerceIn(0, 3)
             val age = (code - kind).coerceIn(0f, 1f)   // age / 60 s
             val mass = clouds[b + 7]
+            val dCm = clouds[b + 8] * 0.1f
+            val id = clouds[b + 9].toInt()
             if (kind <= FINE && mass > 0f) {
-                // a grain (or a clump of a few): opaque lit specks, tone picked per particle so a spray is mixed sand
-                val grains = if (mass > 4f * SandBed.GRAIN_CM3.toFloat()) 3 else 1
-                val spread = if (grains > 1) 0.09f else 0f
+                // a pinch of grains: opaque lit specks at the grain's own size (a hair over it so a lit grain reads),
+                // tone per speck so a spray is mixed sand; a bigger packet is a few specks spread over a clump's width
+                val grains = (mass / (2f * SandBed.GRAIN_CM3.toFloat()) + 0.5f).toInt().coerceIn(1, MAX_SPLAT)
+                val spread = if (grains > 1) 0.03f + 2.5f * dCm else 0f
                 for (s in 0 until grains) {
                     val o = k * FLOATS
-                    val tone = (hash(i, s, 3) * TONES).toInt().coerceIn(0, TONES - 1) * 3
-                    out[o] = x + spread * jitter(i, s, 0)
-                    out[o + 1] = y + spread * 0.6f * jitter(i, s, 1)
-                    out[o + 2] = z + spread * jitter(i, s, 2)
-                    out[o + 3] = if (kind == FINE) 0.07f else 0.1f
+                    val tone = (hash(id, s, 3) * TONES).toInt().coerceIn(0, TONES - 1) * 3
+                    out[o] = x + spread * jitter(id, s, 0)
+                    out[o + 1] = y + spread * 0.6f * jitter(id, s, 1)
+                    out[o + 2] = z + spread * jitter(id, s, 2)
+                    out[o + 3] = GRAIN_SIZE_K * dCm * (0.8f + 0.4f * hash(id, s, 4))
                     out[o + 4] = GRAIN_TONE[tone]; out[o + 5] = GRAIN_TONE[tone + 1]; out[o + 6] = GRAIN_TONE[tone + 2]
                     out[o + 7] = 0.95f
                     k++
@@ -150,9 +153,9 @@ class SandCloudRenderer {
             val fade = 1f - 0.6f * age
             for (s in 0 until SPLAT) {
                 val o = k * FLOATS
-                out[o] = x + spread * jitter(i, s, 0)
-                out[o + 1] = y + spread * 0.6f * jitter(i, s, 1)
-                out[o + 2] = z + spread * jitter(i, s, 2)
+                out[o] = x + spread * jitter(id, s, 0)
+                out[o + 1] = y + spread * 0.6f * jitter(id, s, 1)
+                out[o + 2] = z + spread * jitter(id, s, 2)
                 out[o + 3] = SIZE[kind] * (1f + age)
                 out[o + 4] = COLOR[kind * 4]; out[o + 5] = COLOR[kind * 4 + 1]; out[o + 6] = COLOR[kind * 4 + 2]
                 out[o + 7] = COLOR[kind * 4 + 3] * fade
@@ -165,7 +168,7 @@ class SandCloudRenderer {
         GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, k * FLOATS * 4, buffer); Gl.check("glBufferSubData(sandClouds)")
         p.use()
         p.set1f("uViewportH", viewportH.toFloat())
-        p.set2f("uSizeClamp", 1.5f, 10f)
+        p.set2f("uSizeClamp", 1f, 10f)
         GLES30.glBindVertexArray(vao); Gl.check("glBindVertexArray(sandClouds)")
         // the particle shader's sprite-shape attribute is not fed here: pin it to the plain soft dot
         GLES30.glVertexAttrib4f(2, 0f, 0f, 0f, 1f); Gl.check("glVertexAttrib4f(sandClouds)")
@@ -181,6 +184,8 @@ class SandCloudRenderer {
         const val MAX_SPLAT = 3
         const val FLOATS = 8
         const val CAPACITY = SandBed.MAX_PARTICLES * 2
+        /** Drawn speck size per grain diameter: a lit grain glints a little larger than it is. */
+        const val GRAIN_SIZE_K = 1.6f
         /** Grain.FINE's ordinal: SAND and FINE are grains, SILT and DETRITUS clouds. */
         const val FINE = 1
         /** Furthest a particle is carried past its snapshot (s): a late frame never flings grains far. */
@@ -204,7 +209,7 @@ class SandCloudRenderer {
             0.52f, 0.52f, 0.50f,
         )
 
-        /** Deterministic jitter in −1..1 per (particle, splat, axis), so a cloud does not shimmer between frames. */
+        /** Deterministic jitter in −1..1 per (particle id, splat, axis), so a cloud does not shimmer between frames. */
         fun jitter(i: Int, s: Int, axis: Int): Float = hash(i, s, axis) * 2f - 1f
 
         fun hash(i: Int, s: Int, axis: Int): Float {

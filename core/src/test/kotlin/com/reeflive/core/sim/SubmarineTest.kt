@@ -96,11 +96,15 @@ class SubmarineTest {
         s.enqueue(Command.SubmarineMode(on = true))
         s.advance(0.1)
         val tang = s.o("tang")
-        s.submarine.teleport(tang.pos + Vec3(0.0, 0.0, if (tang.pos.z > 16) -8.0 else 8.0), s.rock, s.sand)
+        fun park() = s.submarine.teleport(tang.pos + Vec3(0.0, 0.0, if (tang.pos.z > 16) -8.0 else 8.0), s.rock, s.sand)
+        park()
         var early = 0; var late = 0
         var t = 0.0
         while (t < 600.0) {
             s.advance(0.5); t += 0.5
+            // the sub loiters by her: when she swims off across the tank it is parked beside her again (still, so it
+            // never closes on her), else her habituation decays while she is away and the run depends on her route
+            if (s.submarine.pos.distanceTo(tang.pos) > LOITER_CM) park()
             val r = s.subSense.reactions["tang"]
             if (r != null && r != SubReaction.NONE) { if (t < 60.0) early++ else if (t > 540.0) late++ }
         }
@@ -208,5 +212,10 @@ class SubmarineTest {
             s.advance(0.3)
             assertEquals("$mode watch ends with the fish gone", null, s.submarine.watchId)
         }
+    }
+
+    private companion object {
+        /** Farthest the parked sub is left from the fish before it is moved beside her again (cm). */
+        const val LOITER_CM = 20.0
     }
 }

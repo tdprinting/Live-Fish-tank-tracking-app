@@ -52,6 +52,8 @@ object PriceBook {
         l("amplexidiscus_fenestrafer", 4, 50), l("tubipora_musica", 5, 40),
         l("duncanopsammia_axifuga", 2, 55), l("fimbriaphyllia_ancora", 3, 60), l("fimbriaphyllia_divisa", 3, 60), l("euphyllia_glabrescens", 3, 75),
         l("caulastrea_furcata", 2, 35), l("micromussa_lordhowensis", 3, 50), l("plerogyra_sinuosa", 4, 70), l("trachyphyllia_geoffroyi", 4, 90),
+        // rare corals (research 61): a gold torch head, a scolymia polyp and a common bounce mushroom polyp
+        l("euphyllia_glabrescens_gold", 6, 250), l("homophyllia_australis", 7, 300), l("rhodactis_inchoata", 8, 250),
     )
     private val byId = LISTINGS.associateBy { it.speciesId }
 

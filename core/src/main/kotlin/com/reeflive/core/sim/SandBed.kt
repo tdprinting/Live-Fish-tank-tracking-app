@@ -127,6 +127,13 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     private val pmass = FloatArray(MAX_PARTICLES)
     /** 0 = in the water, 1 = rolling down the bed's surface ([stepGrains]). */
     private val pstate = ByteArray(MAX_PARTICLES)
+    /** This particle's own grain diameter (mm), drawn from its kind's size spread ([sampleGrain]). */
+    private val pdiam = FloatArray(MAX_PARTICLES)
+    /** Its own settling velocity (cm/s, [Settling.velocityCmS] of [pdiam]): coarse grains outrun the fines. */
+    private val pws = FloatArray(MAX_PARTICLES)
+    /** Stable per-particle id for the renderer (survives the swap in [removeAt], so specks never jump). */
+    private val pseed = FloatArray(MAX_PARTICLES)
+    private var seedNext = 0
     var particleCount = 0; private set
     private var stepCount = 0L
 
@@ -344,7 +351,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      */
     fun launchGrains(
         x: Double, y: Double, z: Double, cm3: Double, vx: Double, vy: Double, vz: Double,
-        spread: Double = 0.35, maxGrains: Int = 40, fineShare: Double = 0.2,
+        spread: Double = 0.35, maxGrains: Int = 80, fineShare: Double = 0.2,
     ): Int {
         if (cm3 <= 1e-9) return 0
         val n = min(maxGrains, ceil(cm3 / GRAIN_CM3).toInt()).coerceAtLeast(1)
@@ -381,7 +388,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
      * Blows [cm3] of held sand out of a mouth or the gill openings at (x, y, z) along (vx, vy, vz) as grains
      * ([launchGrains]), with [fines] silt particles in the plume (the fines that make the visible haze).
      */
-    fun expel(x: Double, y: Double, z: Double, cm3: Double, vx: Double, vy: Double, vz: Double, fines: Int = 0, maxGrains: Int = 30) {
+    fun expel(x: Double, y: Double, z: Double, cm3: Double, vx: Double, vy: Double, vz: Double, fines: Int = 0, maxGrains: Int = 60) {
         val v = min(cm3, heldCm3).coerceAtLeast(0.0)
         heldCm3 -= v
         if (heldCm3 < 1e-9) heldCm3 = 0.0
@@ -406,6 +413,27 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         phx[i] = vx.toFloat(); pvy[i] = vy.toFloat(); phz[i] = vz.toFloat()
         pfx[i] = 0f; pfz[i] = 0f; pkz[i] = 0f; page[i] = 0f
         pkind[i] = kind.ordinal.toByte(); pmass[i] = mass.toFloat(); pstate[i] = 0
+        val d = sampleGrain(kind)
+        pdiam[i] = d.toFloat(); pws[i] = Settling.velocityCmS(d, kind.densityGcm3).toFloat()
+        seedNext = (seedNext + 1) and 0xFFFF
+        pseed[i] = seedNext.toFloat()
+    }
+
+    /**
+     * One grain's diameter (mm): a lognormal around its kind's median, clipped to the kind's size class. Real sand is
+     * a size mix (Folk & Ward sorting σ ≈ 0.35–0.5 φ for a moderately sorted aragonite), so a cloud sorts itself as it
+     * settles: the coarse grains drop near the mouth, fine sand carries further and the silt hangs as haze.
+     */
+    private fun sampleGrain(kind: Grain): Double {
+        val o = kind.ordinal
+        return (D_MEDIAN[o] * exp(D_SIGMA[o] * rng.gaussian())).coerceIn(D_MIN[o], D_MAX[o])
+    }
+
+    /** Mean diameter (mm) of the suspended (not rolling) particles of [g], or 0 (tests). */
+    fun meanDiameterMm(g: Grain): Double {
+        var s = 0.0; var n = 0
+        for (i in 0 until particleCount) if (pkind[i].toInt() == g.ordinal && pstate[i].toInt() == 0) { s += pdiam[i]; n++ }
+        return if (n == 0) 0.0 else s / n
     }
 
     /** A free particle slot; when the pool is full a slot is recycled after its particle settles where it is. */
@@ -442,7 +470,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
                 if (canRoll && roll(i, dt)) { grains++; i++; continue }
                 land(i); rolled++; removeAt(i); landed = true; continue
             }
-            val ws = kind.settlingCmS
+            val ws = pws[i]
             if (flowAt != null && (i + stepCount) % 8 == 0L) {
                 val v = flowAt(px[i].toDouble(), py[i].toDouble(), pz[i].toDouble())
                 pfx[i] = v.x.toFloat(); pfz[i] = v.z.toFloat()
@@ -538,7 +566,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         if (i != l) {
             px[i] = px[l]; py[i] = py[l]; pz[i] = pz[l]; pvy[i] = pvy[l]; phx[i] = phx[l]; phz[i] = phz[l]
             pfx[i] = pfx[l]; pfz[i] = pfz[l]; pkz[i] = pkz[l]; page[i] = page[l]; pkind[i] = pkind[l]
-            pmass[i] = pmass[l]; pstate[i] = pstate[l]
+            pmass[i] = pmass[l]; pstate[i] = pstate[l]; pdiam[i] = pdiam[l]; pws[i] = pws[l]; pseed[i] = pseed[l]
         }
         particleCount = l
     }
@@ -558,7 +586,8 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
 
     /**
      * Particles for the renderer, stride [CLOUD_STRIDE]: x, y, z (cm), kind + age fraction (`ordinal + min(age/60 s,
-     * 0.99)`), velocity x, y, z (cm/s, so the renderer can carry a grain between sim ticks) and the sand it carries (cm³).
+     * 0.99)`), velocity x, y, z (cm/s, so the renderer can carry a grain between sim ticks), the sand it carries (cm³),
+     * its grain diameter (mm) and a stable id (0..65535) the renderer hashes its specks from.
      */
     fun cloudArray(): FloatArray {
         if (particleCount == 0) return EMPTY
@@ -569,6 +598,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             out[o + 3] = pkind[i] + min(page[i] / 60f, 0.99f)
             out[o + 4] = phx[i]; out[o + 5] = pvy[i]; out[o + 6] = phz[i]
             out[o + 7] = pmass[i]
+            out[o + 8] = pdiam[i]; out[o + 9] = pseed[i]
         }
         return out
     }
@@ -905,10 +935,12 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
     fun spit(x: Double, y: Double, z: Double, cm3: Double, r: Double = 1.4, plume: Int = 5, hx: Double = 0.0, hz: Double = 0.0) {
         val v = min(cm3, carriedCm3).coerceAtLeast(0.0)
         carriedCm3 -= v
-        // a spit from above the bed (a live goby, not the instant dig-out) pours: part of it falls as grains
+        // a spit from above the bed (a live goby, not the instant dig-out) is blown out as grains: a short forward jet
+        // that sorts as it falls, coarse grains on the heap, fine sand fanned beyond it; only what the particle budget
+        // cannot carry is laid straight down
         val air = if (plume > 0 && y > surfaceY(x, z) + 0.2) min(v * SPIT_AIRBORNE, MAX_THROW_CM3) else 0.0
         depositExact(x, z, v - air, r)
-        if (air > 0) launchGrains(x, y, z, air, hx * 0.5, -1.0, hz * 0.5, spread = 0.5, maxGrains = 30, fineShare = 0.25)
+        if (air > 0) launchGrains(x, y, z, air, hx * SPIT_JET, 0.5, hz * SPIT_JET, spread = 0.45, maxGrains = 90, fineShare = 0.3)
         if (plume > 0) puff(x, y, z, plume, 3.5, hx, hz, finesShare = 0.45)
     }
 
@@ -1351,7 +1383,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             val out = 5.0 + 4.0 * rng.nextDouble()
             launchGrains(x + px0 * sgn * 0.3 * b.widthCm, y, z + pz0 * sgn * 0.3 * b.widthCm, cm3 * share,
                 px0 * sgn * out - b.ux * 1.5, 6.0 + 4.0 * rng.nextDouble(), pz0 * sgn * out - b.uz * 1.5,
-                spread = 0.35, maxGrains = 22, fineShare = 0.25)
+                spread = 0.35, maxGrains = 44, fineShare = 0.25)
         }
     }
 
@@ -1367,7 +1399,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             // a grain carried by a decaying jet travels ≈ v × (jet decay + fall): pick v to land on the body
             val v = d / (JET_TAU_S + 0.25)
             launchGrains(sx, surfaceY(sx, sz) + 0.3, sz, cm3 * share, tx / d * v, 4.0 + 2.0 * rng.nextDouble(), tz / d * v,
-                spread = 0.25, maxGrains = 14, fineShare = 0.2)
+                spread = 0.25, maxGrains = 28, fineShare = 0.2)
         }
     }
 
@@ -1390,7 +1422,7 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
             depositExact(b.headX + b.uz * 1.6 * r, b.headZ - b.ux * 1.6 * r, 0.5 * laid, r)
             if (air > 0) {
                 val hx = b.headX - b.ux * 0.25 * b.lengthCm; val hz = b.headZ - b.uz * 0.25 * b.lengthCm
-                launchGrains(hx, surfaceY(hx, hz) + 0.2, hz, air, b.ux * 2.0, 9.0, b.uz * 2.0, spread = 0.6, maxGrains = 40, fineShare = 0.3)
+                launchGrains(hx, surfaceY(hx, hz) + 0.2, hz, air, b.ux * 2.0, 9.0, b.uz * 2.0, spread = 0.6, maxGrains = 80, fineShare = 0.3)
             }
         }
         emergences++
@@ -1422,15 +1454,15 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         const val NX = 128
         const val NZ = 48
         /** Pooled particles: cloud fines plus thrown and rolling grains (research sand_bioturbation: pool and recycle). */
-        const val MAX_PARTICLES = 1200
+        const val MAX_PARTICLES = 2000
         /** Floats per particle in [cloudArray]. */
-        const val CLOUD_STRIDE = 8
+        const val CLOUD_STRIDE = 10
         private val EMPTY = FloatArray(0)
         private const val ROLLING = 1
         /** A rolling grain rides this far over the surface (cm): half a grain. */
         const val GRAIN_LIFT = 0.03
-        /** Most sand one thrown particle stands for (cm³): a clump about 3 mm across. */
-        const val MAX_CLUMP_CM3 = 0.03
+        /** Most sand one thrown particle stands for (cm³): a clump about 2.5 mm across. */
+        const val MAX_CLUMP_CM3 = 0.015
         /** A grain landing on a face steeper than this share of [REPOSE_TAN] tumbles on (it arrives moving). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val ROLL_ON_LANDING = 0.85
         /**
@@ -1456,8 +1488,10 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         const val ROLL_SHARE = 0.6
         /** Most sand one [buryStep] or burst throws as grains (cm³); the rest is laid down directly. */
         const val MAX_THROW_CM3 = 1.0
-        /** Share of a live spit that falls as visible grains. */
-        @Ev(Evidence.DESIGN_ESTIMATE) const val SPIT_AIRBORNE = 0.4
+        /** Share of a live spit that is blown out as visible grains (the goby spits its whole mouthful into the water). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val SPIT_AIRBORNE = 0.9
+        /** Spit jet per unit of the head's push (a 2 cm/s head jerk throws the grains at ≈ 6 cm/s). */
+        @Ev(Evidence.DESIGN_ESTIMATE) const val SPIT_JET = 3.0
         /** Dug sand to the rim spots: ahead, left, right. */
         private val RIM_SHARE = doubleArrayOf(0.5, 0.25, 0.25)
         const val BASE_FRONT = 3.5
@@ -1465,8 +1499,18 @@ class SandBed(val lengthCm: Double, val widthCm: Double, val sandTopCm: Double, 
         const val MAX_DEPTH = 3.0f
         const val MAX_MOUND = 4.0f
         const val MAX_DETRITUS = 1.5f
-        /** Sand volume one cloud particle stands for (cm³). */
-        const val GRAIN_CM3 = 0.004
+        /** Sand volume one cloud particle stands for (cm³): a pinch of ≈ 15 grains of 0.5 mm. */
+        const val GRAIN_CM3 = 0.002
+        /**
+         * Grain size spread per [Grain] ordinal (SAND, FINE, SILT, DETRITUS): median (mm), lognormal σ and the clip of
+         * the size class (Wentworth: medium-coarse sand 0.25–1.4 mm, fine sand 0.125–0.25 mm (very fine sand rides with the silt haze), coarse
+         * silt 0.032–0.0625 mm (finer clay-sized fines stay in the water for the filter and are not modelled); detritus
+         * flocs 0.18–1 mm). Medians match [Grain.diameterMm] except silt, whose 63 µm is the top of its class.
+         */
+        @Ev(Evidence.ANALOGY, "Wentworth size classes; moderately sorted carbonate sand") val D_MEDIAN = doubleArrayOf(0.5, 0.18, 0.045, 0.3)
+        val D_SIGMA = doubleArrayOf(0.4, 0.25, 0.25, 0.35)
+        val D_MIN = doubleArrayOf(0.25, 0.125, 0.032, 0.18)
+        val D_MAX = doubleArrayOf(1.4, 0.25, 0.0625, 1.0)
         const val DETRITUS_PER_PARTICLE = 0.01
         /** Sand displaced by a sand-diving wrasse per cm of body length (cm³/cm): a ~9 cm fish leaves a ~1 cm³ crater. */
         @Ev(Evidence.DESIGN_ESTIMATE) const val DIVE_CM3_PER_CM = 0.12

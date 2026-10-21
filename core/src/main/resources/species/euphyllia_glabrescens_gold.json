@@ -1,0 +1,105 @@
+{
+  "id": "euphyllia_glabrescens_gold",
+  "kind": "CORAL",
+  "common": "Gold torch coral",
+  "scientific": "Euphyllia glabrescens (gold morph)",
+  "family": "Euphylliidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 15,
+  "growthCmPerYear": 3,
+  "lifespanYears": 50,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 22.5,
+      "tolHi": 28.5,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.0,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/gold_torch.glb",
+  "colors": {
+    "primary": "#D9A81E",
+    "secondary": "#8A6A2A",
+    "accent": "#7FD8FF"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.25,
+    "lightHi": 0.7,
+    "flow": "MODERATE",
+    "growth": "Moderate",
+    "stingCm": 20,
+    "ground": "ANY",
+    "aggression": "The strongest sting of the three: sweepers up to ~20-25 cm at night; give 15-25 cm",
+    "fluorescence": 0.7
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; small meaty foods (mysis, chopped shrimp) now and then.",
+  "temperamentSummary": "A rare golden colour morph of the torch: long gold tentacles with glowing blue-green tips, and the torch's very long sweepers at night.",
+  "careNotes": [
+    "Same care as any torch: PAR about 100-150 and low to moderate, indirect flow.",
+    "Rare because of its colour, not its care: a single gold head sells for $125-350, several times a plain torch.",
+    "Its sweepers reach 15-20 cm at night and sting every coral but other Euphyllia; give it the most space.",
+    "Alkalinity swings and brown jelly kill torches; keep the water steady and feed mysis now and then."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.5,
+  "starvationDays": 9999
+}

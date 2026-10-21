@@ -107,4 +107,31 @@ class SandGrainTest {
         sim.advance(5.0)
         assertEquals("sand conserved through scoop, sift and spit", v0, sim.sand.sandVolumeCm3(), 0.02 * abs(v0) + 0.3)
     }
+
+    @Test fun aCloudSortsItselfCoarseGrainsLandFirst() {
+        val s = bed()
+        s.puff(60.0, s.surfaceY(60.0, 20.0) + 0.5, 20.0, 400, 8.0, finesShare = 0.4)
+        val sand0 = s.meanDiameterMm(Grain.SAND)
+        val fine0 = s.meanDiameterMm(Grain.FINE)
+        assertTrue("sand is a size mix around 0.5 mm ($sand0)", sand0 in 0.45..0.65)
+        assertTrue("fine sand is finer ($fine0)", fine0 in 0.12..0.22)
+        repeat(10) { s.step(0.05, null) }
+        val sand1 = s.meanDiameterMm(Grain.SAND)
+        assertTrue("the coarse grains settle out first ($sand0 -> $sand1)", sand1 < sand0 - 0.03)
+        repeat(30) { s.step(0.05, null) }
+        assertTrue("silt still hangs after the sand is down", s.suspended(Grain.SILT) > 0)
+    }
+
+    @Test fun anEngineerGobySpitIsBlownOutAsGrains() {
+        val s = bed()
+        val v0 = s.sandVolumeCm3()
+        val got = s.takeMouthful(50.0, 25.0, 0.8)
+        val n0 = s.grainsLaunched
+        s.spit(56.0, s.surfaceY(56.0, 25.0) + 0.8, 25.0, got, 1.4, plume = 6, hx = 2.0, hz = 0.0)
+        assertTrue("most of the mouthful goes up as grains (${s.grainsLaunched - n0})", s.grainsLaunched - n0 >= 60)
+        repeat(100) { s.step(0.05, null) }
+        assertEquals("all down", 0, s.grainsLive)
+        assertEquals("and conserved", v0, s.sandVolumeCm3(), 1e-3)
+        assertTrue("thrown forward of the mouth", s.heightAt(58.0, 25.0) > s.heightAt(54.0, 25.0))
+    }
 }

@@ -1,4 +1,4 @@
-"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn, duncan, acan, candy cane, open brain, bubble.
+"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn and duncan.
 
 These corals are not in Tee's tank, so they have no anchor on its rock: every GLB is built with the colony base at
 STUDIO (core StonyCorals.STUDIO) and the app draws each colony as the model moved by its offset (a copy). Same GLB
@@ -319,6 +319,13 @@ EUPHYLLIA = {
                       stalk=0.6, rim=1.65, oval=1.15, per_head=40, sweepers=4, sweeper_len=8.0,
                       tissue="#6A7A58", mantle="#5E7E5E", t_body="#5E8A5C", t_mid="#86A876", t_tip="#E8B8CC",
                       t_stripe="#4A6E48", glow="#2A6A20"),
+    # gold torch (research 61 §1): the same torch, golden-yellow tentacles (~#D9A81E) with blue-green tips over a
+    # brown-gold base ("Gold Blue Tip" listings); two heads, a single-head frag that has split once
+    "gold_torch": dict(name="gold_torch", species="euphyllia_glabrescens_gold", seed=561, proto=proto_torch,
+                       heads=[(-1.6, 0.3, 3.8, 0.4), (1.5, -0.4, 3.0, -0.4)],
+                       stalk=0.55, rim=1.5, per_head=44, sweepers=5, sweeper_len=10.0,
+                       tissue="#8A6A2A", mantle="#7A5E26", t_body="#A8801C", t_mid="#D9A81E", t_tip="#7FD8E8",
+                       glow="#5A420A"),
 }
 
 
@@ -423,6 +430,141 @@ def duncan():
     pol = K.polyp_node("Polyps", root, proto, [dm], inst)
     nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
     return root, [body, pol, nig], {"Polyps": (len(inst), len(proto[1]) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Scolymia (research 61 §3): one solitary fleshy polyp, a round-to-oval cup ~8 cm across with raised radial septa
+# ridges under the tissue, a contrasting centre and rim (red centre, green rim: the "bleeding apple" look). It sits
+# low on the sand. Night: short feeding tentacles open around the mouth and the rim.
+# ----------------------------------------------------------------------------
+def scolymia():
+    rs = RS(571)
+    g = T.WGeo()
+    R, RZ, SEPTA, rings, segs = 4.0, 3.6, 36, 9, 72
+    base = STUDIO + np.array([0.0, 0.05, 0.0])
+
+    def surf(t, a):
+        """Oral surface: a shallow cup (centre sunk, the rim rolled up and over), septa ridges toward the rim."""
+        ridge = (0.5 + 0.5 * math.cos(SEPTA * a)) ** 3 * 0.22 * S(0.25, 0.8, t) * (1 - S(0.92, 1.0, t))
+        y = 1.6 + 0.9 * t ** 2 - 0.55 * S(0.85, 1.0, t) ** 2 + ridge - 0.35 * (1 - S(0.0, 0.22, t))
+        w = 1 + 0.03 * math.sin(3 * a + 0.7)
+        return base + np.array([R * t * w * math.cos(a), y, RZ * t * w * math.sin(a)])
+
+    V, UV = [surf(0.0, 0.0)], [(0.5, 0.5)]
+    for i in range(1, rings + 1):
+        t = i / rings
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            V.append(surf(t, a))
+            UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
+    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
+    for i in range(rings - 1):
+        for k in range(segs):
+            a, b = 1 + i * segs + k, 1 + i * segs + (k + 1) % segs
+            F.append((a, b, b + segs, a + segs))
+    # the outer wall: from under the rolled rim down to a narrower foot on the sand (tissue over the cup's skeleton)
+    outer = 1 + (rings - 1) * segs
+    for j, (rr, y) in enumerate(((0.97, 1.2), (0.85, 0.5), (0.6, 0.0))):
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            ridge = 0.06 * (0.5 + 0.5 * math.cos(SEPTA * a)) ** 2
+            V.append(base + np.array([(R * rr + ridge) * math.cos(a), y, (RZ * rr + ridge) * math.sin(a)]))
+            UV.append((0.5 + 0.5 * math.cos(a), 0.5 + 0.5 * math.sin(a)))
+        prev = outer if j == 0 else len(V) - 2 * segs
+        cur = len(V) - segs
+        for k in range(segs):
+            F.append((prev + k, prev + (k + 1) % segs, cur + (k + 1) % segs, cur + k))
+    g.add(np.array(V), F, np.array(UV), (0.6, 0, 0.2, MANTLE), mat=0)
+    # texture: deep red centre with a darker mouth, the septa lines paler, a green rim (UV is the top-down disc)
+    cv = P.Canvas(256, 256, "#94182E")
+    du, dv = cv.u - 0.5, cv.v - 0.5
+    rr = np.hypot(du, dv) * 2
+    ang = np.arctan2(dv, du)
+    cv.blend(1 - S(0.05, 0.14, rr), "#3A0E18", 0.85)                                  # mouth
+    cv.blend(S(0.55, 0.62, (0.5 + 0.5 * np.cos(SEPTA * ang))) * S(0.25, 0.5, rr), "#E8607A", 0.45)   # septa lines
+    cv.blend(S(0.7, 0.84, rr), "#3A8E36")                                                # green rim
+    cv.blend(S(0.86, 0.93, rr) * (1 - S(0.97, 1.0, rr)), "#7ACC6A", 0.4)                # paler rolled lip
+    cv.multiply(0.88 + 0.22 * P.fbm(256, 256, 10, 3, 572))
+    tm = C.material("scolymia_tissue", rough=0.45, image=K.tex("scolymia_tissue", cv, jpeg=True),
+                    emissive="#2A6A1E", emissive_strength=0.6)
+    # night feeding tentacles: a ring round the mouth and one inside the rim, short and translucent
+    night = K.Instances(573)
+    for ring_t, count, sc in ((0.22, 10, 0.7), (0.7, 26, 1.0)):
+        for k in range(count):
+            a = 2 * math.pi * (k + rs.uniform(-0.25, 0.25)) / count
+            p = surf(ring_t, a)
+            out = np.array([math.cos(a), 0.0, math.sin(a)])
+            night.add(p + UP * 0.03, unit(UP * 1.2 + out * 0.5), sc * rs.uniform(0.85, 1.15))
+    (sv, sf, suv, sc_), stip = strand(1.2, 0.06, 0.03, sides=4, rings=3, flag=0.0, curve=0.15)
+    nproto = merge((sv, sf, suv, sc_), ball(stip, (0.06, 0.07, 0.06), 4, 2))
+    ncv = tentacle_canvas("#C87A86", "#E0A8B0", "#F4E4E8", 574)
+    nm = C.material("scolymia_night_tentacle", rough=0.5, image=K.tex("scolymia_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="homophyllia_australis", stony=1)
+    body = g.obj("Body", root, "body", [tm], smooth=True)
+    C.recalc_normals(body)
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, nig], {"NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Bounce mushroom (research 61 §2): a Rhodactis disc on a bit of rubble whose oral surface is covered in "comically
+# enlarged" round vesicles, neon orange with green highlights, like "a ring of neon marbles" (~7 cm across). The
+# vesicles are ordinary polyps (they deflate as the disc closes). A small second disc beside it, split off by fission.
+# ----------------------------------------------------------------------------
+def proto_vesicle():
+    """A round, slightly flattened vesicle (u, v map into the vesicle canvas: orange body, green-lit crown)."""
+    V, F, UV, COL = ball((0.0, 0.3, 0.0), (0.36, 0.31, 0.36), 12, 7, v0=0.0)
+    UV = [(u, 1 - v) for u, v in UV]
+    COL = [(0.0, 0, 0.3 + 0.7 * min(1.0, max(0.0, v[1] / 0.6)), 1) for v in V]
+    return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
+
+
+def bounce_mushroom():
+    rs = RS(581)
+    g = T.WGeo()
+    top = frag_base(g, 581, radii=(2.4, 0.9, 2.1))
+    discs = [(np.array([0.0, 0.0, 0.0]), 3.4, 0.10, 0.0), (np.array([3.6, -0.3, 1.6]), 1.6, 0.08, 1.2)]
+    inst = K.Instances(582)
+    for k, (off, r, cup, tw) in enumerate(discs):
+        c = STUDIO + np.array([off[0], top - STUDIO[1] - 1.1 + off[1], off[2]])
+        n = unit(UP + np.array([off[0], 0, off[2]]) * 0.05)
+        V, F, UV, COL, q, ph = K.hairy_disc(c, n, r, cup, 590 + k, tw)
+        g.add(V, F, UV, COL, mat=1)
+        # vesicles: jittered hex grid over the oral surface, biggest in a ring part-way out ("a ring of marbles")
+        sp = 0.74
+        for j in range(int(2 * r / (sp * 0.866)) + 1):
+            for i in range(int(2 * r / sp) + 1):
+                x = -r + i * sp + (j % 2) * sp * 0.5 + rs.normal(0, sp * 0.12)
+                z = -r + j * sp * 0.866 + rs.normal(0, sp * 0.12)
+                t = math.hypot(x, z / 0.92) / r
+                if t > 0.93 or t < 0.08:
+                    continue
+                a = math.atan2(z / 0.92, x)
+                lp = K.hairy_disc_local(r, cup, ph, t, a)
+                wp = K.q_rotate(q, lp) + c
+                wn = unit(K.q_rotate(q, np.array([0.0, 1.0, 0.0])) + K.q_rotate(q, np.array([math.cos(a), 0, math.sin(a)])) * 0.25 * t)
+                size = (0.75 + 0.55 * math.exp(-((t - 0.55) / 0.22) ** 2)) * rs.uniform(0.85, 1.15) * (r / 3.4) ** 0.3
+                inst.add(wp, wn, size, phase=rs.uniform())
+    dc = P.Canvas(128, 128, "#5A4A30")
+    rr = np.hypot(dc.u - 0.5, dc.v - 0.5) * 2
+    dc.blend(S(0.85, 1.0, rr), "#7A6A48", 0.7)
+    dc.blend(1 - S(0.04, 0.1, rr), "#B85A20", 0.8)                       # orange mouth
+    dc.multiply(0.85 + 0.3 * P.fbm(128, 128, 8, 3, 583))
+    disc_m = C.material("bounce_disc", rough=0.8, image=K.tex("bounce_disc", dc, jpeg=True), double=True)
+    vc = P.Canvas(64, 64, "#FF7A1A")
+    vc.blend(S(0.55, 0.95, vc.v), "#FFB050", 0.6)                        # paler crown
+    vc.blend(S(0.55, 0.8, P.fbm(64, 64, 4, 2, 584)) * S(0.3, 0.9, vc.v), "#6CFF4A", 0.85)   # green highlights
+    vc.blend(1 - S(0.0, 0.25, vc.v), "#A8401A", 0.6)                     # darker where it meets the disc
+    vm = C.material("bounce_vesicle", rough=0.22, image=K.tex("bounce_vesicle", vc), emissive="#FF6A10",
+                    emissive_strength=0.5)
+    proto = proto_vesicle()
+    root = C.empty("Root")
+    C.set_extras(root, species="rhodactis_inchoata", fluorescent=0.9)
+    body = g.obj("Body", root, "body", [rubble_material("bounce_rubble"), disc_m], smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [vm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
 
 
 # ----------------------------------------------------------------------------
@@ -708,6 +850,9 @@ def bubble():
 
 
 BUILDERS = {
+    "gold_torch": lambda: euphyllia(EUPHYLLIA["gold_torch"]),
+    "scolymia": scolymia,
+    "bounce_mushroom": bounce_mushroom,
     "hammer": lambda: euphyllia(EUPHYLLIA["hammer"]),
     "torch": lambda: euphyllia(EUPHYLLIA["torch"]),
     "frogspawn": lambda: euphyllia(EUPHYLLIA["frogspawn"]),

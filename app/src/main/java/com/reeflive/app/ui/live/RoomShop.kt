@@ -5,10 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,49 +36,67 @@ import com.reeflive.app.live.RoomShopUi
 import com.reeflive.core.custom.room.Decor
 
 /**
- * My tank's room shop (core custom/room/Decor.kt; web room.js): stands, the stand's colours and the extras, in the
- * Shop card under the fish stores. [onTile] gets every tap: the screen tries new things on (with [TryOnBar]) and puts
- * owned ones to use.
+ * My tank's room shop (core custom/room/Decor.kt; web room.js): room scenes, walls, floors, stands, the stand's colours
+ * and the extras, in the Shop card under the fish stores. [onTile] gets every tap: the screen tries new things on (with
+ * [TryOnBar]) and puts owned ones to use.
  */
 @Composable
 fun RoomShop(ui: RoomShopUi, onTile: (Decor.Tile) -> Unit) {
-    val s = LiveTheme.style
     val stands = ui.tiles.filter { it.key.startsWith("stand:") }
     val colors = ui.tiles.filter { it.key.startsWith("color:") }
     val extras = ui.tiles.filter { it.key.startsWith("extra:") }
+    val scenes = ui.tiles.filter { it.key.startsWith("scene:") }
     LiveSectionTitle("Your room")
-    LiveHelp("A stand for your tank. Tap one to try it on.")
+    LiveHelp("Make the room round your tank your own. Tap anything to try it on.")
+    TileGrid(scenes.size, 3, Modifier.padding(top = 6.dp)) { i, cell ->
+        val t = scenes[i]
+        RoomTile(t, cell, onTile) { ScenePicture(t.key.substringAfter(':'), color(t.swatch), color(t.swatch2), Modifier.width(72.dp).height(50.dp)) }
+    }
+    LiveSectionTitle("Walls", Modifier.padding(top = 8.dp))
+    Swatches(ui.tiles.filter { it.key.startsWith("wall:") }, onTile)
+    LiveSectionTitle("Floor", Modifier.padding(top = 8.dp))
+    Swatches(ui.tiles.filter { it.key.startsWith("floor:") }, onTile)
+    LiveSectionTitle("Stand", Modifier.padding(top = 8.dp))
     TileGrid(stands.size, 3, Modifier.padding(top = 6.dp)) { i, cell ->
         val t = stands[i]
         RoomTile(t, cell, onTile) { StandPicture(t.key.substringAfter(':'), color(t.swatch), color(t.swatch2), Modifier.width(72.dp).height(50.dp)) }
     }
     LiveSectionTitle("${stands.firstOrNull { it.inUse }?.label ?: "Stand"} colours", Modifier.padding(top = 8.dp))
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        colors.forEach { t ->
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(2.dp, if (t.inUse) Candy.cyan else Color.Transparent, RoundedCornerShape(14.dp))
-                    .clickable { onTile(t) }
-                    .alpha(if (t.locked) 0.5f else 1f)
-                    .padding(4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Canvas(Modifier.size(34.dp).clip(CircleShape).border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape)) {
-                    drawRect(color(t.swatch))
-                    drawRect(color(t.swatch2), topLeft = Offset(size.width * 0.62f, 0f), size = Size(size.width * 0.38f, size.height))
-                }
-                Text(t.label, style = s.buttonText.copy(fontSize = 11.sp), color = s.labelDim, textAlign = TextAlign.Center, maxLines = 2)
-                if (!t.owned) PriceTag(t.price)
-            }
-        }
-    }
+    Swatches(colors, onTile)
     LiveSectionTitle("Extras", Modifier.padding(top = 8.dp))
     TileGrid(extras.size, 3, Modifier.padding(top = 4.dp)) { i, cell ->
         val t = extras[i]
         RoomTile(t, cell, onTile, extra = true) {
             Text(if (t.key == "extra:glow") "💡" else "✨", fontSize = 28.sp, modifier = Modifier.height(50.dp).padding(top = 6.dp))
+        }
+    }
+}
+
+/** Round two-colour swatches, four to a row: a stand's colours, the walls, the floors. */
+@Composable
+private fun Swatches(tiles: List<Decor.Tile>, onTile: (Decor.Tile) -> Unit) {
+    val s = LiveTheme.style
+    TileGrid(tiles.size, 4, Modifier.padding(top = 4.dp)) { i, cell ->
+        val t = tiles[i]
+        Column(
+            cell
+                .clip(RoundedCornerShape(14.dp))
+                .border(2.dp, if (t.inUse) Candy.cyan else Color.Transparent, RoundedCornerShape(14.dp))
+                .clickable { onTile(t) }
+                .alpha(if (t.locked) 0.5f else 1f)
+                .padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Canvas(Modifier.size(34.dp).clip(CircleShape).border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape)) {
+                drawRect(color(t.swatch))
+                drawRect(color(t.swatch2), topLeft = Offset(size.width * 0.62f, 0f), size = Size(size.width * 0.38f, size.height))
+            }
+            Text(t.label, style = s.buttonText.copy(fontSize = 11.sp), color = s.labelDim, textAlign = TextAlign.Center, maxLines = 2)
+            when {
+                t.owned -> Unit
+                t.locked -> Text("🔒 ${t.level}", style = s.buttonText.copy(fontSize = 11.sp), color = s.labelDim)
+                else -> PriceTag(t.price)
+            }
         }
     }
 }
@@ -149,6 +168,25 @@ fun BoxScope.TryOnBar(t: Decor.Tile, coins: Int, bottom: Dp, onBuy: () -> Unit, 
         PriceTag(t.price, 16.dp)
         LivePill("Buy", onBuy, tone = if (coins >= t.price) Candy.green else Color(0xFFB9C2CC))
         LivePill("Not now", onCancel, selected = false)
+    }
+}
+
+private val SCENE_ICON = mapOf("living" to "🛋️", "sunny" to "🌳", "beach" to "🏖️", "cabin" to "❄️", "blossom" to "🌸", "city" to "🌃", "space" to "🪐")
+
+/** A little drawing of a room scene: its wall, a window onto its sky, the tank on its stand (web room.js scenePic). */
+@Composable
+private fun ScenePicture(id: String, sky: Color, wall: Color, modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Canvas(Modifier.fillMaxSize()) {
+            val u = size.width / 48f
+            fun r(x: Float, y: Float, w: Float, h: Float, c: Color) = drawRect(c, Offset(x * u, y * u), Size(w * u, h * u))
+            r(0f, 0f, 48f, 33f, wall)
+            r(9f, 3f, 30f, 20f, sky)
+            r(0f, 29f, 48f, 4f, Color.Black.copy(alpha = 0.2f))
+            r(13f, 18f, 22f, 7f, Color(0xBF2B6F8F))
+            r(12f, 25f, 24f, 6f, Color(0xFFF1EDE6))
+        }
+        Text(SCENE_ICON[id] ?: "🏠", fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 

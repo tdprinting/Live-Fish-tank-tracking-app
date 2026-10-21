@@ -88,4 +88,36 @@ class DecorTest {
         }
         assertEquals(0, Decor.STANDS.count { it.price == 0 } - 1)
     }
+
+    @Test fun aNewSceneBringsItsOwnWallsAndFloor() {
+        val e = eco(2000)
+        var d = Decor.buy(SavedDecor(), "wall:navy", e, day).first
+        assertEquals("navy", Decor.wall(d).id)
+        d = Decor.buy(d, "scene:beach", e, day).first
+        assertEquals(2000 - 60 - 450, e.state.coins)
+        assertEquals("beach", Decor.scene(d.scene).id)
+        // the beach house's white boards, not the navy paint bought for the living room
+        assertEquals(RoomStyle.SHIPLAP, Decor.wall(d).style)
+        // the navy paint is still owned and goes up free in the new room; the room's own walls come back free too
+        d = Decor.use(d, "wall:navy")
+        assertEquals("navy", Decor.wall(d).id)
+        d = Decor.use(d, "wall:scene")
+        assertEquals(Decor.scene("beach").wall, Decor.wall(d))
+        assertEquals(2000 - 60 - 450, e.state.coins)
+    }
+
+    @Test fun scenesWallsAndFloorsSurviveTheSave() {
+        val e = eco(2000)
+        var d = Decor.buy(SavedDecor(), "scene:sunny", e, day).first
+        d = Decor.buy(d, "floor:checker", e, day).first
+        val back = CustomTankCodec.decode(CustomTankCodec.encode(CustomTankSave(decor = d)))!!.decor
+        assertEquals("sunny", back.scene)
+        assertEquals("checker", Decor.floor(back).id)
+        // every scene and finish is in the shop list, in use exactly once per group
+        val tiles = Decor.tiles(back, 5)
+        assertEquals(Decor.SCENES.size, tiles.count { it.key.startsWith("scene:") })
+        assertEquals(1, tiles.count { it.key.startsWith("scene:") && it.inUse })
+        assertEquals(1, tiles.count { it.key.startsWith("wall:") && it.inUse })
+        assertEquals(1, tiles.count { it.key.startsWith("floor:") && it.inUse })
+    }
 }

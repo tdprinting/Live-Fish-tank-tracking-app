@@ -634,6 +634,18 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
 .hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
+/* supplies behind the counter (stores.js supplyShelf) and the count on each shelf tile (live.js stockBadge) */
+.counter .supplies { margin-top: 10px; max-height: 34vh; overflow-y: auto; }
+.counter .supplies summary { font: 600 16px/1.2 var(--display); cursor: pointer; padding: 4px 0; }
+.counter .crow.sup .nm small { font-size: 12px; }
+.counter .crow.sup.empty .nm small { color: #FFB13D; }
+.counter .crow .pr.owned { color: #8EE66B; }
+.counter .pm:disabled { opacity: .4; }
+.opt { position: relative; }
+.opt .cnt { position: absolute; top: -6px; right: -4px; min-width: 22px; padding: 1px 6px; border-radius: 999px; border: 2px solid var(--navy);
+  background: #fff; color: var(--navy); font: 700 12px/1.3 var(--body, inherit); font-style: normal; }
+.opt .cnt.low { background: #FFE14D; }
+.opt .cnt.out { background: #FF9AA5; }
 
 /* ---- My tank's room shop (room.js): stand tiles, colour swatches, the try-on bar */
 .rtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
