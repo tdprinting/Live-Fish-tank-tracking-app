@@ -135,6 +135,8 @@ sealed class Command {
     data class NetOut(val id: String) : Command()
     /** Fast-forward while bags float ([on]) or back to the chosen speed; [openNow] tips every floating bag at once. */
     data class HurryBags(val on: Boolean, val openNow: Boolean = false) : Command()
+    /** Put the coral waiting for a spot on suggestion [spot] of [SimSnapshot.coralPick] (−1: the best one). */
+    data class PlaceCoral(val spot: Int = -1) : Command()
 
     /**
      * The owner slides the Flipper magnet scraper over [pane] from (x0, y0) to (x1, y1), in cm along the pane (x from
@@ -516,6 +518,8 @@ data class SimSnapshot(
     val rockSdf: com.reeflive.core.geom.Sdf? = null,
     /** Sim time of the last care-button feeding ([CoralCare]); far past when never. */
     val reefCareAt: Double = -1e12,
+    /** My tank: the coral out of its bag waiting for the keeper to pick a spot, with its best spots ([CoralPicks]). */
+    val coralPick: CoralPickPose? = null,
 ) {
     override fun equals(other: Any?) = this === other
     override fun hashCode() = tick.hashCode()

@@ -527,6 +527,22 @@ object ReefLive {
     }
 
     /**
+     * My tank: the coral waiting for its spot, for the page's spot picker (corals.js): name, how many wait, and per
+     * offered spot its rank (0 = best), stars, reason and the canvas pixel (x, y) just above it (−1 when off screen);
+     * "null" when no coral is waiting.
+     */
+    fun coralPick(): String {
+        val p = sim?.latest?.coralPick ?: return "null"
+        return JSON.stringify(obj {
+            it.id = p.speciesId; it.name = p.name; it.waiting = p.waiting
+            it.spots = p.spots.map { s ->
+                val on = projection.project(s.x, s.y + 8.5f, s.z, bagPt)
+                obj { o -> o.rank = s.rank; o.stars = s.stars; o.reason = s.reason; o.x = if (on) bagPt[0] else -1f; o.y = if (on) bagPt[1] else -1f }
+            }.toTypedArray()
+        })
+    }
+
+    /**
      * The last body the fish net took out (core FishNet), for the page's toilet goodbye (flush.js): key (new per
      * body), name, fish or not, and the cartoon colours; "null" before the first.
      */
