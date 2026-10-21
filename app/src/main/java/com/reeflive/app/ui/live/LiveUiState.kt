@@ -7,9 +7,12 @@ import com.reeflive.core.sim.WaterState
 import com.reeflive.core.status.Status
 import java.util.Locale
 
-/** Watch = read-only live view of the real tank; Sandbox = what-if controls. */
-/** The three tanks: yours as logged, the pretend copy, and "My tank" (built from scratch and saved). */
-enum class HudMode(val label: String) { WATCH("Watch"), SANDBOX("Sandbox"), MY_TANK("My tank") }
+/**
+ * The two tanks at the top of the live screen: "My tank" (built from scratch and saved, where every lever works; the
+ * screen opens here) and Watch (the real tank as logged, read-only). The old pretend Sandbox copy is gone; Watch's
+ * fast-forward still runs on a hidden copy so the real tank keeps real time.
+ */
+enum class HudMode(val label: String) { MY_TANK("My tank"), WATCH("Watch") }
 
 enum class DayPhase(val label: String) { NIGHT("Night"), DAWN("Dawn"), DAY("Day"), DUSK("Dusk") }
 

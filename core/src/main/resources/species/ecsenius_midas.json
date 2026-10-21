@@ -1,0 +1,148 @@
+{
+  "id": "ecsenius_midas",
+  "kind": "FISH",
+  "common": "Midas blenny",
+  "scientific": "Ecsenius midas",
+  "family": "Blenniidae",
+  "maxLengthCm": 13.0,
+  "typicalAdultCm": 11.0,
+  "growthCmPerYear": 3.0,
+  "lifespanYears": 5,
+  "depthRatio": 0.18,
+  "massCoeff": 0.011,
+  "locomotion": {
+    "mode": "PERCHING",
+    "cruiseBL": 0.9,
+    "burstBL": 4.5,
+    "tailHzCruise": 3.0,
+    "turnRateDeg": 260,
+    "waveLen": 0.85,
+    "ampCruise": 0.045,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.85,
+    "openWater": 0.35,
+    "coverAffinity": 0.6
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 120,
+    "darkVision": 0.12,
+    "lateralBL": 1.5,
+    "chem": 0.6
+  },
+  "territorialRadius": 15,
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.45,
+    "boldness": 0.65,
+    "curiosity": 0.65,
+    "skittishness": 0.45
+  },
+  "diet": [
+    "PODS",
+    "CYCLOPS",
+    "MYSIS",
+    "BRINE",
+    "FLAKE",
+    "PELLET",
+    "SPIRULINA",
+    "NORI",
+    "ALGAE"
+  ],
+  "feedsPerDay": 3,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 27.5,
+      "tolLo": 23,
+      "tolHi": 29,
+      "lethalLo": 19,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.02,
+      "tolHi": 1.026,
+      "lethalLo": 1.018,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    },
+    "no3": {
+      "optHi": 10,
+      "tolHi": 20,
+      "lethalHi": 40
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.2,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.7,
+  "starvationDays": 24,
+  "size": {
+    "lod0Tris": 3000
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 6.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 7.0
+  },
+  "model": "models/midas_blenny.glb",
+  "colors": {
+    "primary": "#F0A030",
+    "secondary": "#E07A1C",
+    "accent": "#3A8AE8"
+  },
+  "iridescence": 0.3,
+  "brain": "blenny",
+  "minTankGallons": 30,
+  "careLevel": "Easy to moderate",
+  "reefSafe": "Yes",
+  "onePerTank": true,
+  "dietSummary": "Plankton picker: swims up into the water to snap copepods and drifting food; mysis, brine, flake and pellets, plus some algae.",
+  "temperamentSummary": "Peaceful to most fish, but fights other blennies and fish of its shape. Swims in open water with anthias and chromis.",
+  "careNotes": [
+    "Unlike other blennies it feeds in open water, 2-3 m above the reef in the wild.",
+    "The orange form mimics lyretail anthias and swims with them.",
+    "Needs a tight lid: jumps when startled."
+  ]
+}

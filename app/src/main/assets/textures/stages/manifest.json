@@ -96,6 +96,20 @@
         "male": "textures/stages/leopard_wrasse_male.png"
       }
     },
+    "models/bicolor_blenny.glb": {
+      "species": "ecsenius_bicolor",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/bicolor_blenny_juvenile.png"
+      }
+    },
+    "models/midas_blenny.glb": {
+      "species": "ecsenius_midas",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/midas_blenny_juvenile.png"
+      }
+    },
     "models/yellow_tang.glb": {
       "species": "zebrasoma_flavescens",
       "base": "adult",

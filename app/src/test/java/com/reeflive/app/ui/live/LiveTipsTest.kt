@@ -12,17 +12,21 @@ class LiveTipsTest {
     }
 
     @Test fun tipsNameOnlyControlsThatExist() {
-        // the mode toggle says Watch / Sandbox (HudMode), there is no Feed or Clean button any more (the supply shelf
-        // and the Flipper on the glass replaced them), and tapping the water no longer hides the buttons
-        assertTrue(LiveTips.watch.any { "Sandbox" in it })
+        // the mode toggle says My tank / Watch (HudMode: the pretend Sandbox tank is gone), there is no Feed or Clean
+        // button any more (the supply shelf and the Flipper on the glass replaced them), the old More and Trouble
+        // bubbles became Settings and Tank → More, and tapping the water no longer hides the buttons
+        assertTrue(LiveTips.watch.any { "My tank" in it })
         assertTrue(LiveTips.sandbox.any { "Watch" in it })
-        all.forEach { t ->
+        (all + LiveTips.myTank + LiveTips.hermieMyTank).forEach { t ->
+            assertFalse(t, "Sandbox" in t)
+            assertFalse(t, "in More" in t)
+            assertFalse(t, "Trouble" in t)
             assertFalse(t, "Pretend at the top" in t)
             assertFalse(t, "Tap Feed" in t)
             assertFalse(t, t.startsWith("Clean lets you"))
             assertFalse(t, "empty water to hide" in t)
         }
-        assertTrue(HudMode.entries.map { it.label }.containsAll(listOf("Watch", "Sandbox")))
+        assertTrue(HudMode.entries.map { it.label } == listOf("My tank", "Watch"))
     }
 
     @Test fun hermieLinesFitHisBubble() {
@@ -43,7 +47,7 @@ class LiveTipsTest {
     }
 
     @Test fun thoughtBubblesAreTaught() {
-        // the fish card's "Thinking…" lines and More → "Thought bubbles" (UI_STYLE §10.9)
+        // the fish card's "Thinking…" lines and Settings → "Thought bubbles" (UI_STYLE §10.9)
         assertTrue(LiveTips.watch.any { "thinking" in it && "Thought bubbles" in it })
         assertTrue(LiveTips.hermieWatch.any { "Thought bubbles" in it })
         assertTrue(LiveTips.hermieSandbox.any { "Thought bubbles" in it })

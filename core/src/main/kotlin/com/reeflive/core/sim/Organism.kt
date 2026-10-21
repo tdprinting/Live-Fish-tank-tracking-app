@@ -243,7 +243,7 @@ class Organism(
         else -> lengthCm
     }
     /** Per-species gait and kinematics (SIMULATION §14). */
-    val motion: MotionProfile = MotionProfiles.of(brainKind)
+    val motion: MotionProfile = MotionProfiles.of(brainKind, species.id)
     /**
      * Invertebrates walk at the research speeds in cm/s (size of the shell or leg span barely matters). Fish swim at
      * the species' BL/s, cruise capped at the family field speed and burst falling in relative terms past adult size
