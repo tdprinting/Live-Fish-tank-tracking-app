@@ -46,7 +46,7 @@ object PriceBook {
         l("clibanarius_tricolor", 1, 5), l("lysmata_boggessi", 1, 13), l("paguristes_cadenati", 1, 15), l("percnon_gibbesi", 2, 15),
         l("ophiocoma_sp", 2, 25), l("stenorhynchus_seticornis", 3, 18), l("mithraculus_sculptus", 1, 12), l("thor_amboinensis", 2, 19), l("lysmata_debelius", 2, 60),
         l("alpheus_bellulus", 3, 45), l("hymenocera_picta", 5, 65), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),
-        l("entacmaea_quadricolor", 4, 150), l("tectus_fenestratus", 1, 8), l("strombus_alatus", 2, 18), l("mespilia_globulus", 3, 30), l("ctenoides_scaber", 5, 20), l("euprymna_berryi", 7, 80), l("briareum_sp", 1, 20),
+        l("entacmaea_quadricolor", 4, 150), l("tectus_fenestratus", 1, 8), l("strombus_alatus", 2, 18), l("mespilia_globulus", 3, 30), l("ctenoides_scaber", 5, 20), l("tridacna_maxima", 5, 110), l("ophiarachna_incrassata", 3, 35), l("neopetrolisthes_maculatus", 2, 18), l("holothuria_hilla", 4, 40), l("euprymna_berryi", 7, 80), l("briareum_sp", 1, 20),
         l("capnella_sp", 1, 25), l("discosoma_sp", 1, 30), l("clavularia_sp", 1, 35), l("zoanthus_sp", 2, 25),
         l("sinularia_sp", 2, 25), l("rhodactis_sp", 2, 35), l("lobophytum_sp", 3, 35), l("sarcophyton_sp", 3, 70),
         l("amplexidiscus_fenestrafer", 4, 50), l("tubipora_musica", 5, 40),
@@ -175,6 +175,16 @@ object Stores {
             return "Pistol shrimp dig burrows: they need a sand bed at least 2 inches deep."
         if (speciesId == "lysmata_debelius" && alive.count { it.species.id == speciesId } >= 2) return "Fire shrimp fight unless they are a pair. Two is the most."
         if (speciesId == "ctenoides_scaber") return "Hard to keep: needs phytoplankton every day."
+        if (speciesId == "ophiarachna_incrassata" && alive.any { it.isFish && it.lengthCm < 7.0 })
+            return "Green serpent stars can catch small fish at night when hungry. Feed it well."
+        if (speciesId == "neopetrolisthes_maculatus" && alive.none { it.brainKind == BrainKind.ANEMONE })
+            return "Porcelain crabs live with a host anemone. Without one it hides on the rock."
+        // research 45 §4: one per tank (it eats the sand's film), and a dead or badly stressed one poisons the water
+        if (speciesId == "holothuria_hilla" && alive.any { it.brainKind == BrainKind.SEA_CUCUMBER })
+            return "One sea cucumber per tank: two run out of food in the sand."
+        if (speciesId == "holothuria_hilla")
+            return "Needs a mature sand bed. If it dies or is badly stressed it releases a poison that can kill fish: run carbon and take a dead one out fast."
+        if (speciesId == "tridacna_maxima") return "Needs strong light: it lives on the light, so it goes high on the rock or on the sand right under the lamps."
         if (speciesId == "pseudochromis_indigo" && alive.any { it.species.id == speciesId }) return "Two dottybacks will fight. One is best."
         if (speciesId == "stenopus_hispidus" && alive.any { it.species.id == speciesId }) return "Two coral banded shrimp fight unless they are a pair."
         if (speciesId == "amphiprion_ocellaris" && alive.count { it.species.id == speciesId } >= 2) return "Clownfish live in pairs. A third one gets picked on."

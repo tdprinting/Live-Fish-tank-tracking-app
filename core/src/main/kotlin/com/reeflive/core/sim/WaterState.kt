@@ -62,6 +62,11 @@ data class WaterState(
     var chaeto: Double = 0.0,
     /** Dissolved hydrogen sulfide, mg/L: 0 normally; a pulse when deep anoxic sand is stirred (research 18 §3.3, [BacteriaModel]). */
     var h2s: Double = 0.0,
+    /**
+     * Holothurin (sea cucumber saponins, research 45 §4), index: 1 = a 25 cm tiger tail's whole store in 227 L, enough
+     * to kill fish within hours; carbon takes it out fast, water changes dilute it.
+     */
+    var holothurin: Double = 0.0,
 ) {
     /** Salinity in ppt (ARCHITECTURE §4.1 table, linear in SG near seawater). */
     val ppt: Double get() = ChemFns.sgToPpt(sg)
@@ -98,6 +103,7 @@ data class WaterState(
         "doc" -> doc
         "allelo" -> allelo
         "h2s" -> h2s
+        "holothurin" -> holothurin
         else -> null
     }
 
