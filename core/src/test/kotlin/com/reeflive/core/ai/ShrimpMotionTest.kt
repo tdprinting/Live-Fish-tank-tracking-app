@@ -102,4 +102,48 @@ class ShrimpMotionTest {
             }
         }
     }
+
+    /** The shrimp pack (research 44): fire, sexy, harlequin and pistol shrimp keep their legs moving too, while in view. */
+    @Test
+    fun packShrimpMoveTheirLegsAndStayOutOfTheRock() {
+        val pack = listOf("lysmata_debelius", "thor_amboinensis", "hymenocera_picta", "alpheus_bellulus")
+        for (hour in listOf(12.0, 22.0)) {
+            val s = TestTank.sim(emptyList(), seed = 3L, startHour = hour)
+            // the sexy shrimp's anemone and the pistol shrimp's goby
+            for ((id, len) in listOf("entacmaea_quadricolor" to 8.0, "cryptocentrus_cinctus" to 7.0) + pack.map { it to 3.0 }) {
+                s.species.ensure(id)
+                s.addFromSeed(com.reeflive.core.sim.LivestockSeed(id, id, len, id = id))
+            }
+            s.advance(30.0)
+            val shrimp = s.organisms.filter { it.brainKind.isShrimp }
+            assertEquals(4, shrimp.size)
+            val prev = shrimp.associate { it.id to it.toPose() }.toMutableMap()
+            val legs = HashMap<String, Double>(); val picks = HashMap<String, Double>(); val seen = HashMap<String, Int>()
+            repeat(1200) {
+                s.advance(0.05)
+                for (o in shrimp) {
+                    val p = o.toPose(); val q = prev[o.id]!!
+                    prev[o.id] = p
+                    // the pistol shrimp spends spells down its burrow, out of sight
+                    if (!o.visible) continue
+                    seen[o.id] = (seen[o.id] ?: 0) + 1
+                    var d = 0.0; for (i in 4 until 28) d += kotlin.math.abs(p.limbs[i] - q.limbs[i])
+                    var e = 0.0; for (i in 28 until 44) e += kotlin.math.abs(p.limbs[i] - q.limbs[i])
+                    legs[o.id] = (legs[o.id] ?: 0.0) + d; picks[o.id] = (picks[o.id] ?: 0.0) + e
+                    assertTrue("${o.brainKind} at $hour h clear of the rock (${s.rock.sdf.dist(o.pos)})", s.rock.sdf.dist(o.pos) > -0.05)
+                }
+            }
+            for (o in shrimp) {
+                val n = seen[o.id] ?: 0
+                println("shrimp ${o.brainKind} $hour h: seen $n, legs ${legs[o.id]} picks ${picks[o.id]} (${o.behaviorName})")
+                if (n < 400) continue
+                val f = 1200.0 / n
+                assertEquals(2, o.toPose().motionMode)
+                assertTrue("${o.brainKind} at $hour h shifts its walking legs: ${legs[o.id]}", legs[o.id]!! * f > 10.0)
+                assertTrue("${o.brainKind} at $hour h works its picking legs: ${picks[o.id]}", picks[o.id]!! * f > 5.0)
+                assertTrue("${o.brainKind} in the water", s.rock.inWater(o.pos, 0.0))
+            }
+            assertTrue("most of the pack in view", seen.count { it.value >= 400 } >= 3)
+        }
+    }
 }

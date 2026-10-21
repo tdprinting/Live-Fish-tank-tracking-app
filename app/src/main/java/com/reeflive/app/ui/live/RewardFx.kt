@@ -11,11 +11,17 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -72,9 +78,12 @@ class RewardFxState {
     var landed by mutableLongStateOf(0L)
     internal val bursts = mutableStateListOf<Burst>()
     var levelUp by mutableStateOf<Gain?>(null)
+    /** Reef moment and birthday cards waiting their turn; the first one is on screen. */
+    internal val stories = mutableStateListOf<Gain>()
 
     fun cheer(g: Gain) {
         if (g.levelUp > 0) levelUp = g
+        if (g.story != null && stories.size < 4) stories += g
         bursts += Burst(g.amount, Random.nextLong(), System.nanoTime())
     }
 
@@ -111,8 +120,88 @@ fun RewardFxLayer(fx: RewardFxState, modifier: Modifier = Modifier) {
                 for (b in fx.bursts) drawBurst(b, now, target, reduce)
             }
         }
+        MomentCard(fx, reduce, Modifier.align(Alignment.BottomCenter))
         LevelUpSplash(fx, reduce)
     }
+}
+
+private const val STORY_MS = 11_000L
+
+/**
+ * A reef moment or a fish's birthday (core economy Journal): a card pops up from the bottom with twinkling stars, the
+ * animals' names, a true reef fact and what it paid. Tap it (or wait) and the next one in line shows.
+ */
+@Composable
+private fun MomentCard(fx: RewardFxState, reduce: Boolean, modifier: Modifier) {
+    val g = fx.stories.firstOrNull()
+    LaunchedEffect(g) { if (g != null) { delay(STORY_MS); fx.stories.remove(g) } }
+    // the card keeps showing the last story while it fades out
+    val last = remember { arrayOfNulls<Gain>(1) }
+    if (g != null) last[0] = g
+    AnimatedVisibility(
+        g != null, modifier,
+        enter = fadeIn(tween(200)) + scaleIn(if (reduce) tween(0) else spring(dampingRatio = 0.5f, stiffness = 300f), initialScale = 0.7f),
+        exit = fadeOut(tween(250)),
+    ) {
+        val shown = last[0] ?: return@AnimatedVisibility
+        val story = shown.story ?: return@AnimatedVisibility
+        val twinkle = remember(shown) { Animatable(0f) }
+        LaunchedEffect(shown) { if (!reduce) twinkle.animateTo(1f, tween(STORY_MS.toInt(), easing = LinearEasing)) }
+        Box(
+            Modifier
+                .padding(horizontal = 16.dp, vertical = 96.dp)
+                .widthIn(max = 420.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xF21A3F66), Color(0xF20B1C33))))
+                .border(2.dp, Candy.yellow.copy(alpha = 0.8f), RoundedCornerShape(22.dp))
+                .clickable(remember { MutableInteractionSource() }, null) { fx.stories.remove(shown) },
+        ) {
+            Canvas(Modifier.matchParentSize()) {
+                val rng = Random(shown.label.hashCode())
+                repeat(9) { i ->
+                    val p = Offset(rng.nextFloat() * size.width, rng.nextFloat() * size.height)
+                    val k = 0.5f + 0.5f * sin(twinkle.value * 40f + i * 1.7f)
+                    translate(p.x - 8f, p.y - 8f) { scale(0.12f + 0.1f * k, Offset(8f, 8f)) { drawStarAt(Candy.yellow.copy(alpha = 0.25f + 0.35f * k)) } }
+                }
+            }
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (story.title.startsWith("Happy birthday")) "🎂" else "✨", fontSize = 26.sp,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (story.title.startsWith("Happy birthday")) "Fish birthday" else "Reef moment!",
+                            color = Candy.yellow, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        )
+                        Text(story.title, color = Candy.white, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text("+${shown.amount}", color = Candy.yellow, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
+                Text(story.headline, color = Candy.white, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(story.fact, color = Candy.white.copy(alpha = 0.85f), fontSize = 15.sp, lineHeight = 20.sp)
+                Text(
+                    if (fx.stories.size > 1) "Tap for the next one" else "Saved in your reef journal",
+                    color = Candy.white.copy(alpha = 0.55f), fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+/** [drawStar] in a 16 × 16 box at the current origin. */
+private fun DrawScope.drawStarAt(fill: Color) {
+    val p = Path()
+    for (i in 0 until 10) {
+        val r = if (i % 2 == 0) 8f else 3.8f
+        val a = (-90 + i * 36) * PI / 180
+        val x = 8f + (cos(a) * r).toFloat()
+        val y = 8f + (sin(a) * r).toFloat()
+        if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+    }
+    p.close()
+    drawPath(p, fill)
 }
 
 private fun DrawScope.drawBurst(b: RewardFxState.Burst, now: Long, target: Offset, reduce: Boolean) {

@@ -29,9 +29,17 @@ class MicroCritterVisuals {
 
     /**
      * Animals too small for a model, drawn by rock.frag where the rock is close enough to resolve them (uMicro): x
-     * harpacticoid copepods, y ostracods, z forams, per cm² of rock in view (MicrofaunaState.visible). Zero on Low.
+     * harpacticoid copepods, y ostracods, z forams, w cyclopoid copepods, per cm² of rock in view
+     * (MicrofaunaState.visible). Zero on Low.
      */
-    val rockLife = FloatArray(3)
+    val rockLife = FloatArray(4)
+
+    /**
+     * The four animal heads nearest the camera target (uPred: xyz world cm, w 1 = in use): the pods drawn by
+     * rock.frag drop into the turf when one comes within a few cm, as harpacticoids do from a grazing fish.
+     */
+    val predators = FloatArray(16)
+    private val predD = FloatArray(4)
 
     fun update(s: SimSnapshot?, sdf: Sdf?, dt: Float, camera: Camera, quality: RenderQuality, triBudget: Int, tris: (CritterKind) -> Int) {
         drawn.clear()
@@ -40,7 +48,9 @@ class MicroCritterVisuals {
             rockLife[0] = m.visible(MicroGroup.HARPACTICOID, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
             rockLife[1] = m.visible(MicroGroup.OSTRACOD, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
             rockLife[2] = m.visible(MicroGroup.FORAM, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
+            rockLife[3] = m.visible(MicroGroup.CYCLOPOID, MicroScene.ROCK).toFloat().coerceIn(0f, MAX_ROCK_DENSITY)
         }
+        nearestHeads(s, camera)
         if (s == null || sdf == null || quality == RenderQuality.LOW) return
         val f = field ?: CritterField(sdf).also { field = it }
         if (fishHeads.size != s.organisms.size * 3) fishHeads = FloatArray(s.organisms.size * 3)
@@ -102,6 +112,29 @@ class MicroCritterVisuals {
         }
     }
 
+    /** Fills [predators] with the (up to) four organism heads nearest the camera target, insertion-sorted, no allocation. */
+    private fun nearestHeads(s: SimSnapshot?, camera: Camera) {
+        predators.fill(0f)
+        if (s == null) return
+        predD.fill(Float.MAX_VALUE)
+        val tx = camera.target[0]; val ty = camera.target[1]; val tz = camera.target[2]
+        for (o in s.organisms) {
+            val sp = o.spine
+            if (sp.size < 3) continue
+            val dx = sp[0] - tx; val dy = sp[1] - ty; val dz = sp[2] - tz
+            val d = dx * dx + dy * dy + dz * dz
+            if (d >= predD[3] || d > PRED_RANGE * PRED_RANGE) continue
+            var i = 3
+            while (i > 0 && predD[i - 1] > d) {
+                predD[i] = predD[i - 1]
+                for (c in 0 until 4) predators[i * 4 + c] = predators[(i - 1) * 4 + c]
+                i--
+            }
+            predD[i] = d
+            predators[i * 4] = sp[0]; predators[i * 4 + 1] = sp[1]; predators[i * 4 + 2] = sp[2]; predators[i * 4 + 3] = 1f
+        }
+    }
+
     fun release() { field = null; berghia = null; rigs.clear(); drawn.clear(); order.clear() }
 
     companion object {
@@ -113,6 +146,8 @@ class MicroCritterVisuals {
         const val MAX_ROCK_DENSITY = 8f
         /** Easing rate (1/s) of the sim's 20 Hz worm poses toward the latest tick. */
         const val WORM_EASE = 18f
+        /** Heads farther than this from the camera target never reach the pods in view (cm). */
+        const val PRED_RANGE = 25f
         const val MICRO_TRIS_HIGH = 12000
         const val MICRO_TRIS_MEDIUM = 2000
     }
