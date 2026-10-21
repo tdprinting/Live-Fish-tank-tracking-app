@@ -61,6 +61,8 @@ data class CustomTankSave(
     val pests: Map<String, Double> = emptyMap(),
     /** Sand dollars, stars, today's care list and goals (docs/ECONOMY.md; added after v1 as a defaulted field). */
     val economy: com.reeflive.core.custom.economy.SavedEconomy = com.reeflive.core.custom.economy.SavedEconomy(),
+    /** The stand and room the keeper bought and picked (room/Decor.kt; added after v1 as a defaulted field). */
+    val decor: com.reeflive.core.custom.room.SavedDecor = com.reeflive.core.custom.room.SavedDecor(),
 )
 
 @Serializable
