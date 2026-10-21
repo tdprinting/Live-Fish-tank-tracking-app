@@ -1565,6 +1565,7 @@ class Simulation private constructor(
                 Brood.Act.entries.firstOrNull { it.name == name }?.let { brood.act(it, spec) }
             }
             is Command.RemoveOrganism -> organisms.firstOrNull { it.id == c.id }?.let { removeOrganism(it) }
+            is Command.RemoveCoral -> corals.removeAll { it.id == c.id }
             is Command.Rename -> c.nickname.trim().take(NAME_MAX).takeIf { it.isNotEmpty() }?.let { n -> organisms.firstOrNull { it.id == c.id }?.nickname = n }
             is Command.TapGlass -> tapGlass(c.worldPoint)
             is Command.TouchTank -> touchTank(c)

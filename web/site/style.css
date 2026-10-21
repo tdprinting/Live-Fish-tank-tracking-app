@@ -591,6 +591,10 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .dayarc.day .orb { background: #FFE14D; box-shadow: 0 0 0 5px rgba(255,225,77,.35), 0 0 22px #FFE14D; }
 .dayarc.night .orb { background: #F2F6FF; box-shadow: inset -8px -3px 0 #14204A; }
 .dayarc .sea { position: absolute; left: 0; right: 0; bottom: 0; height: 18%; background: rgba(31,166,201,.85); }
+#storeUi .sellbtn { margin-left: 4px; border: 2.5px solid var(--navy); background: #8EE66B; color: var(--navy); font-weight: 700; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.counter .crow .pill.collect { display: inline-flex; align-items: center; gap: 3px; border: 2.5px solid var(--navy); background: #8EE66B; color: var(--navy); font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.counter .crow .pill .sanddollar { width: 16px; height: 16px; }
+.counter .crow .rib { position: static; }
 /* top right: the status capsule (opens Tank Health) and the settings button */
 .topright { display: inline-flex; gap: 8px; align-items: center; pointer-events: auto; }
 .gearbtn { padding: 7px 10px; }

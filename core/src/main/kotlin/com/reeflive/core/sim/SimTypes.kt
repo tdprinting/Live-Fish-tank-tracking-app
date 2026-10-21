@@ -22,6 +22,8 @@ sealed class Command {
     data class Powerheads(val on: Boolean) : Command()
     data class AddOrganism(val speciesId: String, val sizeCm: Double, val nickname: String, val role: String? = null, val ageYears: Double? = null) : Command()
     data class RemoveOrganism(val id: String) : Command()
+    /** Takes the coral colony [id] out (My tank: sold to a fish store). */
+    data class RemoveCoral(val id: String) : Command()
     /** The keeper names an animal (My tank: the name is saved with it). Blank names are ignored. */
     data class Rename(val id: String, val nickname: String) : Command()
     data class TapGlass(val worldPoint: Vec3) : Command()
