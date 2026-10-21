@@ -155,6 +155,10 @@ enum class PodPredator(
                 BrainKind.DIAMOND_GOBY -> SAND_SIFTER
                 BrainKind.LEOPARD_WRASSE -> LEOPARD_WRASSE
                 BrainKind.FAIRY_WRASSE -> FAIRY_WRASSE
+                // six line: hunts small crustaceans in the rock all day, a busy picker like the leopard (research 51 §2 fact 71)
+                BrainKind.SIXLINE -> LEOPARD_WRASSE
+                // clown goby: snaps copepods drifting past its perch (research 51 §3 fact 102)
+                BrainKind.CLOWN_GOBY -> CLOWN
                 BrainKind.BOBTAIL_SQUID -> BOBTAIL_SQUID
                 BrainKind.ARROW_CRAB -> ARROW_CRAB
                 else -> null

@@ -120,6 +120,7 @@ object Thoughts {
             n == "cleansite" -> Line("cleaning a rock by ${e.host} to lay eggs on", "get a nest spot ready", "Making it spotless!", Driver.FAMILY, 3)
             n == "layeggs" -> Line("laying eggs by ${e.host}", "lay some eggs", "Eggs!", Driver.FAMILY, 3)
             n == "tendeggs" -> Line("fanning the eggs to keep them fresh", "look after the eggs", "Guarding my eggs!", Driver.FAMILY, 3)
+            n == "hole" && k == BrainKind.SIXLINE && e.o.sleeping -> Line("asleep in the rock, wrapped in a bubble of its own slime", "sleep in its slime cocoon", "Snug as a bug in a mucus rug.", Driver.REST, 2)
             n == "hole" || n.startsWith("hole_") -> holeLine(e, label)
             // ---- common behaviours, with the species' own wording where it has one
             n == "flee" -> fleeLine(e, label)
@@ -185,6 +186,15 @@ object Thoughts {
             n == "lookout" -> Line("propped up at its burrow, keeping watch", "keep watch at its burrow", "I'll keep an eye out.", Driver.HOME)
             n == "dive" -> Line("flicking its tail and diving into its burrow${e.because()}", "pop back out of its burrow", "Danger! Everyone in!", Driver.FEAR, 3)
             n == "spit" -> Line("spitting a mouthful of sand out of its burrow", "tidy its burrow", "Ptooey!", Driver.HOME, 2)
+            // ---- mandarin, six line wrasse and clown goby (research 51)
+            n == "podhop" -> Line("hopping along the rock, pecking up tiny pods", "hunt for pods", "Copepod! Another one! Yum.", Driver.HUNGER)
+            n == "spawn" && k == BrainKind.MANDARIN -> Line(if (e.o.dorsalRaise > 0.5) "raising its tall fin and dancing for its mate" else "rising to the surface with its mate to spawn",
+                "dance with its mate", "Up we go, together!", Driver.FAMILY, 3)
+            n == "spawnf" -> Line("rising up the tank with its mate in a slow spiral", "rise with its mate", "Ooh, a dance!", Driver.FAMILY, 3)
+            n == "dart" && k == BrainKind.SIXLINE -> Line("darting from crack to crack, hunting tiny critters", "hunt in the rock", "What's in here? And here?", Driver.HUNGER)
+            n == "harass" -> Line("chasing ${tgt ?: "a newcomer"} off its patch", "boss the reef", "My reef! I was here first!", Driver.TERRITORY, 3)
+            n == "cperch" -> Line(if (e.o.sleeping) "asleep tucked in its coral" else "perched in its coral, watching", "sit in its coral", "Best seat in the reef.", Driver.HOME)
+            n == "squabble" -> Line("squabbling with ${tgt ?: "another clown goby"} over the coral", "sort out who owns the coral", "Move over! …Okay, maybe we can share.", Driver.TERRITORY, 2)
             n == "hovercover" && k == BrainKind.CARDINAL && e.o.mouthbrooding ->
                 Line("carrying its eggs in its mouth (dads do that!)", "keep the eggs safe in its mouth", "Mmmf. Can't talk, eggs.", Driver.FAMILY, 3)
             // ---- cardinal
@@ -630,6 +640,9 @@ object Thoughts {
         BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GRAMMA -> "royal gramma"
         BrainKind.WATCHMAN_GOBY -> "watchman goby"
+        BrainKind.MANDARIN -> "mandarin"
+        BrainKind.SIXLINE -> "six line wrasse"
+        BrainKind.CLOWN_GOBY -> "clown goby"
         BrainKind.BUTTERFLY -> "butterflyfish"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
@@ -695,7 +708,7 @@ object Thoughts {
 
     private val PARTS = listOf("gills", "fins", "sides", "mouth")
     /** Behaviours an empty-tummy fish idles in: the "is hungry and watching for food" sentence replaces them. */
-    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout", "rove")
+    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout", "cperch", "rove")
     private val RESTING = setOf("sleep", "cocoon", "burrow", "sand", "bury", "nestle", "hovercover", "hide", "buried")
     /** Never offered as the next plan: reactions, not plans. */
     private val NO_NEXT = setOf("touch", "unwell", "heat", "flee", "tailflip", "retract", "dart", "jet", "snap", "molt", "gasp", "abandoned", "flipped", "yield")

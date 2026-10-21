@@ -171,7 +171,9 @@ import com.reeflive.app.ui.live.TankGaugeLayer
 import com.reeflive.app.ui.live.ShowControlsPill
 import com.reeflive.app.ui.live.StockUi
 import com.reeflive.app.ui.live.TankReading
+import com.reeflive.app.ui.live.StoreBubbleLayer
 import com.reeflive.app.ui.live.ThoughtBubbleLayer
+import com.reeflive.app.ui.live.TradeCard
 import com.reeflive.app.ui.live.TimelapseSheet
 import com.reeflive.app.ui.live.WaterTap
 import com.reeflive.app.ui.live.liveSpec
@@ -368,7 +370,8 @@ fun LiveTankScreen(
         val room = vm.storeRoom
         room.onStand = { i -> storePick = null; vm.showStoreTank(i) }
         room.onCounter = { counterRequest++ }
-        onDispose { room.onStand = null; room.onCounter = null }
+        room.onTrade = { vm.showTrade() }
+        onDispose { room.onStand = null; room.onCounter = null; room.onTrade = null }
     }
     val rewardFx = remember { RewardFxState() }
 
@@ -456,6 +459,8 @@ fun LiveTankScreen(
     val fixQueued = remember { mutableStateListOf<TankDoctor.Kind>() }
     var dial by remember { mutableStateOf<TankGauge?>(null) }
     val reduceMotion = ReefTheme.reduceMotion
+    // a store visit starts on the sidewalk and walks in the front door, unless Reduce Motion is on
+    LaunchedEffect(reduceMotion) { vm.storeRoom.walkIn = !reduceMotion }
     // My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
     val stock: Map<String, Int>? = if (myTank) economy?.supplies else null
     // what has run out is not on the shelf at all (Tee): no prop, no tag
@@ -1411,6 +1416,13 @@ fun LiveTankScreen(
         LaunchedEffect(open) { if (open == LiveCategory.FIX) vm.testedWater() }
         val eco = economy
         if (careOpen && myTank && eco != null) CareCard(eco, onCollect = { tick(); vm.collectHappyBonus() }, onDismiss = { careOpen = false })
+        // the shop's room tone, and the bell on the door as the walk in reaches it
+        val inStore = visit != null && myTank
+        LaunchedEffect(inStore) { audio.store(inStore, if (reduceMotion) 0L else STORE_BELL_MS) }
+        // the store's people talk in bubbles over their heads; a regular may come over with a swap
+        if (visit != null && myTank) StoreBubbleLayer(vm.storeRoom, projection, Modifier.fillMaxSize())
+        val tradeOffer by vm.trade.collectAsStateWithLifecycle()
+        tradeOffer?.let { o -> if (myTank) TradeCard(o) { yes -> tick(); vm.answerTrade(yes); if (yes && hermieOn) hermie.say("Traded! Your ${o.getName} is floating in a bag at the top of your tank.", HermieMood.EXCITED) } }
         roomShop?.tanks?.takeIf { myTank && visit == null && open == null && trying == null && it.size > 1 }?.let { tanks ->
             RoomArrows(tanks) { dir ->
                 tick()
@@ -1564,6 +1576,8 @@ private fun bannerTone(r: Reaction): Color = when (r.fx.kind) {
 
 /** How long the auto tour stays with each animal. */
 private const val TOUR_STOP_MS = 12_000L
+/** The walk in from the sidewalk reaches the store's door about now (Camera.ENTRY_S, ENTRY_HOLD): the bell rings. */
+private const val STORE_BELL_MS = 1_500L
 /** The sim's default heater set point (WaterState.heaterSetC default). */
 private const val HEATER_DEFAULT_C = 25.5
 

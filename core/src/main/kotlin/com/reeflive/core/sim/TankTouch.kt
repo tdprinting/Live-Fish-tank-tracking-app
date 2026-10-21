@@ -64,7 +64,7 @@ object TankTouch {
     private val CRUSTACEANS = setOf(BrainKind.MANTIS, BrainKind.PORCELAIN_CRAB, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB, BrainKind.HERMIT)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.CHROMIS)
-    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.GRAMMA)
+    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.GRAMMA, BrainKind.MANDARIN, BrainKind.CLOWN_GOBY)
 
     /** Polyp corals retract to touch; the other kinds (leathers, mushrooms, macro) do not visibly react to a tap. */
     fun retracts(kind: CoralKind): Boolean = kind in POLYPS
@@ -131,7 +131,8 @@ object TankTouch {
             }
             TouchSurface.ROCK, TouchSurface.CORAL -> when {
                 d >= ROCK_CM -> TouchReaction.NONE
-                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH || k == BrainKind.GRAMMA || k == BrainKind.WATCHMAN_GOBY -> TouchReaction.DUCK
+                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH || k == BrainKind.GRAMMA || k == BrainKind.WATCHMAN_GOBY ||
+                    k == BrainKind.CLOWN_GOBY || k == BrainKind.SIXLINE -> TouchReaction.DUCK
                 o.isFish && shy(o, night) -> TouchReaction.AVOID
                 else -> TouchReaction.NONE
             }

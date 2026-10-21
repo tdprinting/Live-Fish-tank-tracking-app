@@ -1,0 +1,143 @@
+{
+  "kind": "FISH",
+  "id": "synchiropus_splendidus",
+  "common": "Mandarin dragonet",
+  "scientific": "Synchiropus splendidus",
+  "family": "Callionymidae",
+  "maxLengthCm": 8.0,
+  "typicalAdultCm": 6.5,
+  "growthCmPerYear": 3.0,
+  "lifespanYears": 5,
+  "depthRatio": 0.2,
+  "massCoeff": 0.014,
+  "locomotion": {
+    "mode": "PERCHING",
+    "cruiseBL": 0.35,
+    "burstBL": 3,
+    "tailHzCruise": 1.5,
+    "turnRateDeg": 220,
+    "waveLen": 0.9,
+    "ampCruise": 0.03,
+    "ampBurst": 0.08
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.3,
+    "openWater": 0.05,
+    "coverAffinity": 0.8
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 80,
+    "darkVision": 0.1,
+    "lateralBL": 1.5,
+    "chem": 0.6
+  },
+  "territorialRadius": 0,
+  "homeRadiusCm": 35,
+  "temperament": {
+    "aggression": 0.1,
+    "boldness": 0.35,
+    "curiosity": 0.4,
+    "skittishness": 0.55
+  },
+  "diet": [
+    "PODS",
+    "CYCLOPS",
+    "BRINE",
+    "MYSIS"
+  ],
+  "feedsPerDay": 3,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.1,
+    "VELVET": 0.15,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.6,
+  "starvationDays": 10,
+  "size": {
+    "lod0Tris": 3200
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 3.5,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 5.0
+  },
+  "model": "models/mandarin.glb",
+  "colors": {
+    "primary": "#1E5AD8",
+    "secondary": "#F07A1A",
+    "accent": "#2AB8A0"
+  },
+  "iridescence": 0.35,
+  "brain": "mandarin",
+  "minTankGallons": 40,
+  "careLevel": "Expert",
+  "reefSafe": "Yes",
+  "dietSummary": "Pod specialist: pecks copepods and amphipods off rock and sand all day; captive-bred fish may learn frozen food.",
+  "temperamentSummary": "Peaceful and slow; hops along the bottom on its fins. Two males fight; a male and female pair dance up to spawn at dusk.",
+  "careNotes": [
+    "Needs a mature tank (a year or more) with lots of live rock full of pods.",
+    "Pod eaters like the leopard wrasse and diamond goby compete for its food.",
+    "Captive-bred fish are easier: some eat frozen cyclops and brine.",
+    "Keep one, or a male and female pair."
+  ]
+}

@@ -472,7 +472,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     }
 
     /**
-     * Keeps trail points inside the glass box [minX]..[maxX] × [minZ]..[maxZ] (a fish that turned about at the glass
+     * Keeps trail points inside the glass box [minX]..[maxX] × [minZ]..[maxZ] and under the water line [maxY] (a fish that turned about at the glass
      * had its tail relax straight back through it), and the stations sampled past the trail's end too (a hovering fish
      * has a short trail and its tail is drawn straight on from it), and under the water line [maxY] (a deep-bodied fish
      * nosing down near the top lifted its tail out of the water). The head is the caller's to place.
