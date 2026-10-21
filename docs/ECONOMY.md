@@ -251,6 +251,7 @@ dollars (20-40 real dollars' worth).
 | Yellow tang | fish | 5 | 130 |
 | Blue tang | fish | 5 | 150 |
 | Blue star leopard wrasse | fish | 6 | 150 |
+| Ultra crocea clam (needs the brightest spot) | invert | 6 | 150 |
 | Gold torch coral | coral | 6 | 250 |
 | Hummingbird bobtail squid | invert | 7 | 80 |
 | Purple tang | fish | 7 | 250 |

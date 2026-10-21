@@ -14,8 +14,7 @@ button { font: inherit; color: inherit; }
 h1 { font-size: 22px; margin: 0; } h2 { font-size: 17px; margin: 24px 0 8px; }
 .muted { color: var(--mist); font-size: 13px; }
 .hidden { display: none !important; }
-.glass { background: rgba(6,19,39,.62); border: 1px solid var(--glassBorder); border-radius: 18px;
-  backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); }
+.glass { background: rgba(6,19,39,.86); border: 1px solid var(--glassBorder); border-radius: 18px; }
 
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: calc(var(--safe-top) + 8px) 16px 8px; background: linear-gradient(var(--abyss2), var(--abyss1)); z-index: 3; }
@@ -274,7 +273,7 @@ dialog::backdrop { background: rgba(3,9,18,.6); }
 /* ---- live screen, "Sea-glass Arcade" (UI_STYLE §10, §10.1; same theme as the Android LiveTheme): the tank fills
    the phone, one slim top row (mode + a status capsule), a dock of candy bubbles at the bottom, and every menu a
    teal glass sheet of big candy tiles. Navy outlines and chunky drop shadows make each thing look pressable. */
-:root { --navy: #1B1340; --panel: rgba(12,88,102,.80); --labelDim: #CDEFF3; --pillFill: #E9F3FF;
+:root { --navy: #1B1340; --panel: rgba(12,88,102,.92); --labelDim: #CDEFF3; --pillFill: #E9F3FF;
   --display: Outfit, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", system-ui, sans-serif; }
 .tone-cyan { --tone: #5FD7FF; } .tone-orange { --tone: #FFB13D; } .tone-pink { --tone: #FF7AA8; } .tone-yellow { --tone: #FFE14D; }
 .tone-purple { --tone: #B18CFF; } .tone-white { --tone: #F2F6FF; } .tone-green { --tone: #8EE66B; }
@@ -290,7 +289,7 @@ body:not(.on-live) .brand, body:not(.on-live) .tabs { display: none; }
   background: radial-gradient(120% 80% at 30% 15%, rgba(255,255,255,.7), transparent 55%), var(--pillFill);
   color: var(--navy); border: 2.5px solid var(--navy); box-shadow: 0 4px 0 var(--navy); backdrop-filter: none; -webkit-backdrop-filter: none; }
 #card, .fish, .follow, .shelfbar, dialog.glass { background: var(--panel); border: 3px solid var(--navy); border-radius: 28px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 32px rgba(0,0,0,.45); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); }
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 32px rgba(0,0,0,.45); }
 .seg button, .status, .tool .lbl, .card-head strong, h4, .opt, .pillbtn, .btn, .toggle-row, .hero-t, .toast, #hermieText { font-family: var(--display); }
 
 /* top row */
@@ -669,8 +668,7 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .swatch small { font-size: 11px; color: var(--mist); }
 .swatch small.cost { color: #F3E3C3; }
 .trybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 112px); z-index: 6; display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px 10px 16px; border-radius: 999px; background: rgba(6,19,39,.82); border: 1px solid var(--glassBorder); max-width: calc(100% - 32px);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  padding: 10px 12px 10px 16px; border-radius: 999px; background: rgba(6,19,39,.88); border: 1px solid var(--glassBorder); max-width: calc(100% - 32px); }
 .trybar .what { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trybar [aria-disabled="true"] { opacity: .5; }
 /* the radio's record shelf (radio.js): vinyl sleeves, the one playing ringed, locked ones dimmed with a price */
@@ -690,3 +688,7 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .carecard.trade p { margin: 6px 0; }
 .carecard.trade .give { color: #E0A800; }
 .carecard.trade .get { color: #1E9E5A; }
+/* the music corner bar under the 3D record stand and radio (radio.js musicBarHtml) */
+.musicbar p { margin: 2px 0 8px; }
+.musicbar .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.musicbar .card-head .rlbl { display: flex; align-items: center; gap: 6px; }

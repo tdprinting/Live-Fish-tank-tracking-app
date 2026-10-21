@@ -9,7 +9,7 @@ import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
 import { initRoom, roomHtml, roomClick, endTry } from './room.js';
-import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
+import { initRadio, musicBarHtml, musicSync, radioBuyOffer, radioDropOffer, radioKick, radioOffer, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -86,6 +86,12 @@ export function startLive(applyReadings) {
     onStoreStand: (i) => window.reefstores?.walk(i),
     onStoreCounter: () => window.reefstores?.counter(),
     onStoreTrade: () => window.reefstores?.trade(),
+    // the music corner left of the tank: the record stand and the radio (radio.js)
+    onMusicView: (on) => { ui.music = on; if (!on) radioDropOffer(); renderMusic(); if (on) say('The music corner! Tap a record to play it, or turn the radio knob.'); },
+    onMusicRecord: (i) => { buzz(5); radioKick(); radioOffer(i); },
+    onMusicVolume: (v) => radioVolume(v.volume, v.done),
+    onMusicTune: () => { radioKick(); radioStep(1); },
+    onMusicPower: () => { radioKick(); radioToggle(); },
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
@@ -104,7 +110,7 @@ export function startLive(applyReadings) {
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     initRadio({
-      SB, store, ctx: audioCtx, say,
+      SB, live, store, ctx: audioCtx, say, changed: () => renderMusic(),
       records: () => (ui.mode === 'mine' ? JSON.parse(MY.records()) : []),
       buy: (file) => { const ok = ui.mode === 'mine' && MY.buyRecord(file); if (ok) MY.save(); return ok; },
       coins: () => (ui.mode === 'mine' ? JSON.parse(MY.economy())?.coins ?? null : null),
@@ -289,6 +295,7 @@ function setMode(m) {
     if ($('mytank').open) $('mytank').close();
     say('Back to your real tank. Just watch and feed.');
   }
+  musicSync();
   renderRail();
   tick();
 }
@@ -638,7 +645,7 @@ function settingsCard(sb) {
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
       ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
       ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
-      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
+      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn" data-musiccorner>See the stand</button><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
       ${ui.records ? radioShelfHtml(esc) : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
@@ -699,6 +706,7 @@ $('card').addEventListener('click', (e) => {
   else if ('radio' in d) radioToggle();
   else if (d.radiostep) radioStep(Number(d.radiostep));
   else if ('records' in d) ui.records = !ui.records;
+  else if ('musiccorner' in d) { closeCard(); live.musicOpen(true); return; }
   else if (d.record != null) radioPick(Number(d.record));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.room) { roomClick(d.room, closeCard); return; }
@@ -1018,6 +1026,24 @@ $('shelfbar').addEventListener('click', (e) => {
   else if (d.row) { ui.shelfRow = Number(d.row); live.shelfRow(ui.shelfRow); renderShelf(); }
   else if (d.supply) live.shelfPick(d.supply); // lifts the prop in 3D; the renderer calls back onShelfPick
 });
+// ---- the music corner bar (under the 3D record stand and radio)
+function renderMusic() {
+  const bar = $('musicbar');
+  if (!ui.music) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = musicBarHtml(esc, icon);
+  bar.classList.remove('hidden');
+}
+$('musicbar').addEventListener('click', (e) => {
+  const d = e.target.closest('button')?.dataset;
+  if (!d) return;
+  radioKick();
+  if ('mback' in d) live.musicOpen(false);
+  else if ('mbuy' in d) radioBuyOffer();
+  else if ('mnot' in d) radioDropOffer();
+  else if ('mpower' in d) radioToggle();
+  else if ('mnext' in d) radioStep(1);
+});
+
 /** A prop picked on the shelf (tapped in 3D or on its tag): run it like SupplyItem.use. */
 function useSupply(id) {
   const s = SUPPLIES.find((x) => x.id === id);

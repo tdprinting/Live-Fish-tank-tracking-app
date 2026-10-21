@@ -6,7 +6,8 @@ the tank is not Tee's 4 ft one (render/HomeRoom.kt):
 
   Shell     floor, walls, ceiling, baseboards: centred on the tank (shifted by half the length difference)
   Left*     props beside the left end of the stand (fixed: every tank's left glass is at x = 0); LeftTable holds the
-            spot left free for a radio or other small prop on its top (RADIO_SPOT, HomeRoomLayout.RADIO)
+            spot for the radio on its top (RADIO_SPOT, HomeRoomLayout.RADIO); the record stand (music_corner.py) stands
+            on the floor left of it, against the back wall
   Right*    props beyond the right end (shift with the right glass). The supply shelf hangs right of the tank
             (x 134..236 on Tee's tank, y above -6): nothing tall stands there.
   Center*   props centred on the tank (a rug, pictures above it)
@@ -415,7 +416,7 @@ def living(r):
     """Cozy living room: warm walls, oak floor, a rug, side table with the radio spot, floor lamp, plants, sofa."""
     shell(r)
     side_table(r)
-    floor_lamp(r, -128.0, 6.0)
+    floor_lamp(r, -168.0, 6.0)   # clear of the record stand (music_corner.py, x -127.5 .. -58.5)
     plant(r, L + 120.0, 6.0, "RightPlant", height=125, seed=5)
     plant(r, CX - HALF + 40, BACK + 40, "CenterPlantCorner", height=95, seed=11, pot="pot_white")
     rug(r)
