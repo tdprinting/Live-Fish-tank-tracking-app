@@ -28,15 +28,8 @@ void main() {
     vec3 n1 = texture(uWaterN1, uv + uTime * vec2(1.5, 0.8) / 20.0).xyz * 2.0 - 1.0;
     vec3 n2 = texture(uWaterN2, uv * 1.3 + uTime * vec2(-1.0, 1.2) / 20.0).xyz * 2.0 - 1.0;
     vec2 slope = surfaceSlope(vWorld.xz);
-    // ripple layer: four travelling wavelets (cm, s) from the return pump and powerheads' chop, scaled by uRipple
-    // (quality). Tee's tank video (2026-10-20) shows a busy, choppy surface, so the short fast one matters.
-    vec2 q = vWorld.xz;
-    float tr = uTime;
-    vec2 rip = vec2(0.8, 0.6) * cos(dot(q, vec2(0.8, 0.6)) * 0.9 + tr * 2.1) * 0.06
-             + vec2(-0.5, 0.86) * cos(dot(q, vec2(-0.5, 0.86)) * 1.45 + tr * 2.7) * 0.045
-             + vec2(0.97, -0.26) * cos(dot(q, vec2(0.97, -0.26)) * 2.3 + tr * 3.4) * 0.03
-             + vec2(0.31, 0.95) * cos(dot(q, vec2(0.31, 0.95)) * 3.7 + tr * 4.9) * 0.02;
-    rip *= uRipple * (0.6 + 0.4 * uFlowStrength);
+    // swell and chop (common.glsl swell): the same waves that lift the vertices bend the normals and the caustics
+    vec2 rip = -swell(vWorld.xz, 5).yz;
     vec3 N = normalize(vec3((n1.x + n2.x) * 0.12 - slope.x + rip.x, 1.0, (n1.y + n2.y) * 0.12 - slope.y + rip.y));
 
     vec3 I = normalize(vWorld - uCamPos.xyz);
@@ -51,6 +44,13 @@ void main() {
             pool += uLightColor[i].rgb * exp(-dot(d, d) / 450.0) * (0.05 + 0.6 * sh);
         }
     }
+    // whitewater where the return splashes in (equipment.glb ReturnNozzle, back middle): churned froth that fades out
+    // a few cm away, only while the pumps run
+    vec2 fd = (vWorld.xz - vec2(73.0, 2.0)) * vec2(1.0, 1.6);
+    float fr = exp(-dot(fd, fd) / 40.0) * clamp(uFlowStrength, 0.0, 1.0);
+    float foam = 0.0;
+    if (fr > 0.02) foam = fr * smoothstep(0.04, 0.3, texture(uCaustic, vWorld.xz * 0.12 + uTime * vec2(0.3, 0.45)).r + 0.3 * fr);
+    vec3 foamCol = lightTint() * (0.15 + 0.85 * lightIntensity()) + uAmbientB.rgb;
     vec3 col;
     float alpha;
     if (below) {
@@ -88,6 +88,7 @@ void main() {
             col += lightTint() * lightIntensity() * crinkle * crinkle * 0.12 * uRipple; // the window ripples too
         }
         col += pool;
+        col = mix(col, foamCol, foam * 0.7);
         col = applyWater(col, vWorld);
         alpha = 1.0;
     } else {
@@ -115,6 +116,8 @@ void main() {
         alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)) + sp, 0.0, 1.0);
         // the fixture glints reach the eye at their Fresnel weight once (straight alpha would scale them by F twice)
         col = env * F + glint * (F / alpha) + uFog.rgb * 0.15 + pool * 0.6 + sparkle * (1.5 / alpha);
+        col = mix(col, foamCol, foam);
+        alpha = max(alpha, foam * 0.85);
     }
     fragColor = vec4(tonemap(col), alpha);
 }
