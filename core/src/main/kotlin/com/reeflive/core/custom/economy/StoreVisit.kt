@@ -46,6 +46,7 @@ object StoreVisit {
 
     private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp")
     private val LEATHERS = setOf("sarcophyton_sp", "lobophytum_sp", "sinularia_sp")
+    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
@@ -60,6 +61,7 @@ object StoreVisit {
         FishStore.FRAG_SHACK -> listOf(
             Section("Mushrooms & polyps") { it.speciesId in MUSHROOMS_POLYPS },
             Section("Leathers") { it.speciesId in LEATHERS },
+            Section("Stony corals (LPS)") { it.speciesId in STONY },
             Section("Soft corals & rare frags") { true },
         )
         FishStore.BIG_BLUE -> listOf(
@@ -94,7 +96,7 @@ object StoreVisit {
      * says) with today's animals in it at shop size. The host runs it like any tank while it is on screen.
      */
     fun build(tank: DisplayTank, species: SpeciesCatalog, rock: RockData, seed: Long): Simulation {
-        tank.items.forEach { species.ensure(it.listing.speciesId) }
+        tank.items.forEach { species.ensure(it.listing.species) }
         val sim = CustomTank.fresh(TankBuilds.BREEDER, species, rock, 12 * 3600.0, seed)
         sim.setDynamicRocks(false)
         // the store keeps its display tanks fed
@@ -115,6 +117,9 @@ object StoreVisit {
         }
     }
 
-    /** The card for an animal tapped in a display tank ([speciesId] of the organism or coral). */
-    fun itemFor(tank: DisplayTank, speciesId: String): StockItem? = tank.items.firstOrNull { it.listing.speciesId == speciesId }
+    /** The card for an animal tapped in a display tank ([speciesId] and sex [role] of the organism or coral). */
+    fun itemFor(tank: DisplayTank, speciesId: String, role: String? = null): StockItem? {
+        val same = tank.items.filter { it.listing.species == speciesId }
+        return same.firstOrNull { Stocking.roleOf(it.listing.speciesId).equals(role, true) } ?: same.firstOrNull()
+    }
 }

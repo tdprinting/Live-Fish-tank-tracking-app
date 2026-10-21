@@ -250,7 +250,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         // (the Sally Lightfoot stands on long legs: its body may be over a dip, its feet on the rims round it)
         val onSurface = d0 < 0.5 * o.species.depthRatio * L + 0.2 + SURFACE_TOL_CM + (if (crab != null) CRAB_STAND_TOL * L else 0.0)
         // (the hermit and the Sally Lightfoot are seated whatever they do, the crab pressed into its crevice included)
-        val want = o.alive && onSurface && (kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB || crawling && o.posture == 0)
+        val want = o.alive && onSurface && (kind == BrainKind.HERMIT || crab != null || crawling && o.posture == 0)
         blend = (blend + ((if (want) 1.0 else 0.0) - blend).coerceIn(-BLEND_RATE * dt, BLEND_RATE * dt)).coerceIn(0.0, 1.0)
         if (blend <= 0.0) {
             o.seatOn = false; inited = false; legsPlanted = false; planted.fill(false)
@@ -617,7 +617,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     private var hasClean = false
 
     /** The crab's carapace and coxae only: its stance contacts stand in for the feet the leg IK places. */
-    private val BODY_END = if (crab != null) CrabModel.STANCE_FROM * 3 else shape.contacts.size
+    private val BODY_END = if (crab != null) crab.stanceFrom * 3 else shape.contacts.size
 
     private fun lowestContactAt(s: CrawlSurface, p: Vec3, u: Vec3, f: Vec3, L: Double, end: Int): Double {
         val u0 = up; val f0 = fwd; val r0 = right
@@ -748,8 +748,9 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     private fun crabStance(rig: CrabLegs) {
         crabTuck = rig.tuckAmt
         val c = shape.contacts
-        val y = CrabModel.STANCE_Y + CrabModel.FLAT_DROP * crabTuck
-        var i = CrabModel.STANCE_FROM * 3
+        val m = crab ?: return
+        val y = CrabModel.STANCE_Y + m.flatDrop * crabTuck
+        var i = m.stanceFrom * 3
         while (i < c.size) { c[i + 1] = y; i += 3 }
     }
 
@@ -1165,6 +1166,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             // (off for now: in FishGlitchTest the seat added body pops and speed spikes on these two, whose seats
             // are not yet held to a no-clip test; flip [SEAT_OTHER_CRAWLERS] once they pass both)
             BrainKind.SALLY_CRAB -> CrawlerSeat(kind, SeatShape(0.5, 0.6, CrabModel.SALLY.contacts.copyOf()), null, CrabModel.SALLY)
+            // (the arrow crab's footprint: the ring its feet stand on, about two thirds of a carapace out)
+            BrainKind.ARROW_CRAB -> CrawlerSeat(kind, SeatShape(0.6, 0.6, CrabModel.ARROW.contacts.copyOf()), null, CrabModel.ARROW)
             BrainKind.BRITTLE_STAR -> if (SEAT_OTHER_CRAWLERS) CrawlerSeat(kind, SeatShape(0.22, 0.22, SeatShape.BRITTLE), null) else null
             BrainKind.ASTREA -> if (SEAT_OTHER_CRAWLERS) CrawlerSeat(kind, SeatShape(0.35, 0.35, SeatShape.ASTREA), null) else null
             else -> null
@@ -1224,7 +1227,11 @@ abstract class LegModel(
 class CrabModel(
     hip: DoubleArray, tip: DoubleArray, knee: DoubleArray, mid: DoubleArray, legW: DoubleArray,
     clawPivot: DoubleArray, clawTip: DoubleArray, clawLow: DoubleArray, body: DoubleArray,
+    /** Stance contacts rise this far (model units) when the crab presses down ([CrabLegs.tucked]). */
+    val flatDrop: Double = FLAT_DROP,
 ) : LegModel(hip, tip, knee, mid, legW, 0.5, clawPivot, clawTip, clawLow) {
+    /** Index of the first stance contact (after the carapace points and the coxae). */
+    val stanceFrom: Int = body.size / 3 + hip.size / 3
     val contacts: DoubleArray = DoubleArray(body.size + hip.size + hip.size).also { c ->
         body.copyInto(c)
         hip.copyInto(c, body.size)
@@ -1241,7 +1248,7 @@ class CrabModel(
         const val STANCE_Y = 0.004
         /** Stance contacts rise this far (model units) pressed flat: the carapace underside (y 0.037) to ~1.5 mm off the rock. */
         const val FLAT_DROP = 0.02
-        /** Index of the first stance contact (after 18 carapace points and 8 coxae). */
+        /** Index of the Sally Lightfoot's first stance contact (after 18 carapace points and 8 coxae). */
         const val STANCE_FROM = 26
 
         /** Measured from sally_lightfoot.glb (tools/blender/inverts.py build_sally_lightfoot prints these). */
@@ -1262,6 +1269,32 @@ class CrabModel(
                 0.0065, 0.0981, -0.4991, 0.0269, 0.0796, 0.4914, 0.4234, 0.335, -0.2259, 0.4033, 0.3299, 0.2856, -0.488, 0.0949, -0.2301,
                 -0.4728, 0.0917, 0.2991, 0.4024, 0.3724, 0.0203,
             ),
+        )
+
+        /**
+         * Yellowline arrow crab (research 42), measured from `arrow_crab.glb` (tools/blender/arrow_crab.py prints these;
+         * carapace length with the rostrum 1, legs k = 2 pair + (0 left −Z, 1 right +Z)). The body rides high on the
+         * raised knees (carapace underside ~0.5 over the feet); crouched among the rock it drops by [flatDrop].
+         */
+        val ARROW = CrabModel(
+            hip = doubleArrayOf(0.08, 0.51, -0.0882, 0.08, 0.51, 0.0882, -0.02, 0.51, -0.1362, -0.02, 0.51, 0.1362, -0.13, 0.51, -0.1861, -0.13, 0.51, 0.1861, -0.24, 0.51, -0.219, -0.24, 0.51, 0.219),
+            tip = doubleArrayOf(0.665, 0.0, -1.0245, 0.665, 0.0, 1.0245, 0.1559, 0.0, -1.3879, 0.1559, 0.0, 1.3879, -0.5008, 0.0, -1.3274, -0.5008, 0.0, 1.3274, -0.9958, 0.0, -1.0016, -0.9958, 0.0, 1.0016),
+            knee = doubleArrayOf(0.4218, 0.7538, -0.6353, 0.4218, 0.7538, 0.6353, 0.0809, 0.8192, -0.8543, 0.0809, 0.8192, 0.8543, -0.3442, 0.7932, -0.8454, -0.3442, 0.7932, 0.8454, -0.6825, 0.7472, -0.6772, -0.6825, 0.7472, 0.6772),
+            mid = doubleArrayOf(0.5528, 0.3879, -0.8449, 0.5528, 0.3879, 0.8449, 0.1214, 0.4242, -1.1426, 0.1214, 0.4242, 1.1426, -0.4287, 0.4097, -1.1056, -0.4287, 0.4097, 1.1056, -0.8512, 0.3843, -0.8519, -0.8512, 0.3843, 0.8519),
+            legW = doubleArrayOf(1.768, 1.768, 1.965, 1.965, 1.886, 1.886, 1.748, 1.748),
+            clawPivot = doubleArrayOf(0.14, 0.53, -0.07, 0.14, 0.53, 0.07),
+            clawTip = doubleArrayOf(0.98, 0.15, -0.2, 0.98, 0.15, 0.2),
+            clawLow = doubleArrayOf(0.98, 0.15, -0.2, 0.98, 0.15, 0.2),
+            body = doubleArrayOf(
+                // underside (five rows of three, rear to front)
+                -0.34, 0.5047, 0.102, -0.34, 0.4978, -0.0, -0.34, 0.5047, -0.102, -0.22, 0.5154, 0.144, -0.22, 0.5034, -0.0, -0.22, 0.5154, -0.144,
+                -0.1, 0.5201, 0.1128, -0.1, 0.5059, -0.0, -0.1, 0.5201, -0.1128, 0.02, 0.5157, 0.0765, 0.02, 0.5035, -0.0, 0.02, 0.5157, -0.0765,
+                0.14, 0.5034, 0.0382, 0.14, 0.4971, -0.0, 0.14, 0.5034, -0.0382,
+                // rim, rostrum tip and the top of the dome
+                -0.33, 0.536, -0.1828, -0.33, 0.536, 0.1828, -0.1, 0.5772, -0.188, -0.1, 0.5772, 0.188, 0.13, 0.5311, -0.0691, 0.13, 0.5311, 0.0691,
+                0.62, 0.6253, -0.0, -0.1, 0.7358, -0.0,
+            ),
+            flatDrop = 0.22,
         )
     }
 }

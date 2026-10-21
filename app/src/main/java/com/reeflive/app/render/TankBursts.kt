@@ -239,17 +239,17 @@ class BurstField(seed: Int = 23) {
                 repeat(n(90)) { add(rx + g(2f), ry - 1f - rnd.nextFloat() * 6f, rz + 3f + g(2f), g(2f), -6f - rnd.nextFloat() * 8f, 5f + g(3f), 3f + rnd.nextFloat() * 2f, 0.08f, 0.06f, WHITE, 0.7f, Shape.DOT, FLOW or DRAG or BUOY_SLOW, delay = rnd.nextFloat() * 1.2f) }
             }
             BurstKind.SUCTION -> repeat(n(50)) {
-                add(rnd.nextFloat() * 100f + 10f, Camera.SAND_Y + 6f + rnd.nextFloat() * 40f, rnd.nextFloat() * 25f + 4f, 0f, 0f, 0f, 2.2f, 0.18f, 0.08f, MUCK, 0.6f, Shape.DOT, ATTRACT, delay = rnd.nextFloat() * 0.5f, cxv = HOB_IN[0], cyv = HOB_IN[1], czv = HOB_IN[2])
+                add(Camera.TANK[0] * (0.08f + rnd.nextFloat() * 0.82f), Camera.SAND_Y + 6f + rnd.nextFloat() * (Camera.WATER_Y - Camera.SAND_Y - 8f), Camera.TANK[2] * (0.09f + rnd.nextFloat() * 0.55f), 0f, 0f, 0f, 2.2f, 0.18f, 0.08f, MUCK, 0.6f, Shape.DOT, ATTRACT, delay = rnd.nextFloat() * 0.5f, cxv = HOB_IN[0], cyv = HOB_IN[1], czv = HOB_IN[2])
             }
             BurstKind.CLARITY -> repeat(n(45)) {
-                add(5f + rnd.nextFloat() * 112f, Camera.SAND_Y + 4f + rnd.nextFloat() * 46f, 3f + rnd.nextFloat() * 27f, 0f, 0f, 0f, 1f + rnd.nextFloat(), 0.5f, 0.15f, CLEAR, 0.6f, Shape.GLOW, TWINKLE or FLOW, delay = rnd.nextFloat() * 1.2f)
+                add(Camera.TANK[0] * (0.04f + rnd.nextFloat() * 0.92f), Camera.SAND_Y + 4f + rnd.nextFloat() * (Camera.WATER_Y - Camera.SAND_Y - 4f), Camera.TANK[2] * (0.07f + rnd.nextFloat() * 0.59f), 0f, 0f, 0f, 1f + rnd.nextFloat(), 0.5f, 0.15f, CLEAR, 0.6f, Shape.GLOW, TWINKLE or FLOW, delay = rnd.nextFloat() * 1.2f)
             }
             BurstKind.UV_GLOW -> {
                 val rx = HOB_OUT[0]; val ry = HOB_OUT[1]; val rz = HOB_OUT[2]
                 repeat(n(16)) { add(rx + g(1.5f), ry - 1f - rnd.nextFloat() * 4f, rz + 2f + g(2f), g(1f), -3f, 4f, 1.6f + rnd.nextFloat(), 1f, 2.2f, UV_C, 0.5f, Shape.GLOW, FLOW, delay = rnd.nextFloat() * 0.6f) }
             }
             BurstKind.LIGHT_MOTES -> repeat(n(40)) {
-                add(20f + rnd.nextFloat() * 82f, Camera.WATER_Y - 1f - rnd.nextFloat() * 18f, 4f + rnd.nextFloat() * 25f, 0f, -1f, 0f, 1.4f + rnd.nextFloat(), 0.45f, 0.2f, WARM_LIGHT, 0.7f, Shape.GLOW, TWINKLE or FLOW, delay = rnd.nextFloat() * 0.8f)
+                add(Camera.TANK[0] * (0.16f + rnd.nextFloat() * 0.67f), Camera.WATER_Y - 1f - rnd.nextFloat() * 18f, Camera.TANK[2] * (0.09f + rnd.nextFloat() * 0.55f), 0f, -1f, 0f, 1.4f + rnd.nextFloat(), 0.45f, 0.2f, WARM_LIGHT, 0.7f, Shape.GLOW, TWINKLE or FLOW, delay = rnd.nextFloat() * 0.8f)
             }
             BurstKind.SHELLS -> {
                 repeat(n(3)) { add(x + g(4f), Camera.WATER_Y - 1f, z + g(3f), 0f, -12f, 0f, 3.5f, 1.4f, 1.4f, SHELL_C, 1f, Shape.CHUNK, SINK_FAST, delay = it * 0.25f) }
@@ -502,6 +502,7 @@ class BurstField(seed: Int = 23) {
         }
 
         /** HOB return outlet and intake (equipment.glb: ReturnNozzle outflow (73, 37.4, 2.3) at the back middle, HobFilter intake x 114.5 at the right). */
+        /** HOB return and intake on the tank on screen ([TankRenderer] moves them with the glass for a My tank build). */
         val HOB_OUT = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2f)
         val HOB_IN = floatArrayOf(114.5f, Camera.WATER_Y - 3f, 2f)
 

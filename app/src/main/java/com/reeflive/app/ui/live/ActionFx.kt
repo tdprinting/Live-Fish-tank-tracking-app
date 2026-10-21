@@ -54,35 +54,43 @@ data class FxPoint(val x: Float, val y: Float, val z: Float)
 
 /** Where things happen, matched to the sim's own anchors (core RockData / Simulation) so pictures and particles agree. */
 object FxSpots {
-    /** Just under the waterline (core TankDims; the tank is 48 × 18 × 16 in). */
+    /** Just under the waterline (core TankDims; Tee's tank is 48 × 18 × 16 in). */
     private const val WY = TankDims.WATER_LEVEL_F - 0.4f
+    /**
+     * A spot picked in Tee's tank, on the tank on screen: a My tank build of another size moves it with the glass it is
+     * near (core TankShape, as the equipment is drawn).
+     */
+    private fun at(x: Float, y: Float, z: Float): FxPoint {
+        val s = com.reeflive.app.render.Camera.shape
+        return if (s.isStock) FxPoint(x, y, z) else FxPoint(s.mapX(x.toDouble()).toFloat(), s.mapY(y.toDouble()).toFloat(), s.mapZ(z.toDouble()).toFloat())
+    }
     /** Hand-feed spot at the waterline, back middle beside the return (core Simulation.HAND_FEED, video T97). */
-    val FEED = FxPoint(74f, WY, 4.5f)
+    val FEED: FxPoint get() = at(74f, WY, 4.5f)
     /** NORI_CLIP on the left glass (anchors.json). */
-    val NORI = FxPoint(2f, 27f, 40f)
+    val NORI: FxPoint get() = at(2f, 27f, 40f)
     /** HOB_OUTFLOW: `Command.Dose` enters here and spreads with the flow. */
-    val DOSE = FxPoint(73f, WY, 3f)
+    val DOSE: FxPoint get() = at(73f, WY, 3f)
     /** Where AddOrganism / AddMany release fish (tank middle, just under the surface). */
-    val RELEASE = FxPoint(61f, WY, 26f)
-    val SURFACE = FxPoint(61f, WY, 24f)
-    val CENTRE = FxPoint(61f, 21f, 24f)
-    val HEATER = FxPoint(7f, 20.5f, 5.5f)
-    val THERMO = FxPoint(18f, 29.6f, 18f)
+    val RELEASE: FxPoint get() = at(61f, WY, 26f)
+    val SURFACE: FxPoint get() = at(61f, WY, 24f)
+    val CENTRE: FxPoint get() = at(61f, 21f, 24f)
+    val HEATER: FxPoint get() = at(7f, 20.5f, 5.5f)
+    val THERMO: FxPoint get() = at(18f, 29.6f, 18f)
     /** Powerheads as the sim places them (core FlowField.defaultJets): PH-B on the left wall, PH-A on the back glass. */
-    val PUMP_LEFT = FxPoint(1.5f, 28f, 13f)
-    val PUMP_RIGHT = FxPoint(77f, 32f, 1.5f)
+    val PUMP_LEFT: FxPoint get() = at(1.5f, 28f, 13f)
+    val PUMP_RIGHT: FxPoint get() = at(77f, 32f, 1.5f)
     /** Above the tank: the lamp. */
-    val LIGHT = FxPoint(61f, TankDims.HEIGHT_F + 5f, 20f)
+    val LIGHT: FxPoint get() = at(61f, TankDims.HEIGHT_F + 5f, 20f)
     /** The sump equipment lives under the tank, out of view: shown on the back-right corner above the water. */
-    val SUMP = FxPoint(108f, WY + 6f, 3f)
-    val ROCK = FxPoint(68f, 17f, 20f)
+    val SUMP: FxPoint get() = at(108f, WY + 6f, 3f)
+    val ROCK: FxPoint get() = at(68f, 17f, 20f)
     /** coral_aiptasia_kenya_base. */
-    val AIPTASIA = FxPoint(64f, 17.5f, 21f)
-    val SAND = FxPoint(56f, 4f, 38f)
-    val GLASS = FxPoint(61f, 20f, TankDims.DEPTH_F)
+    val AIPTASIA: FxPoint get() = at(64f, 17.5f, 21f)
+    val SAND: FxPoint get() = at(56f, 4f, 38f)
+    val GLASS: FxPoint get() = at(61f, 20f, TankDims.DEPTH_F)
     /** Water change: the siphon end in the water and the bucket outside the right-hand end. */
-    val SIPHON = FxPoint(104f, 28f, 28f)
-    val BUCKET = FxPoint(132f, 40f, 28f)
+    val SIPHON: FxPoint get() = at(104f, 28f, 28f)
+    val BUCKET: FxPoint get() = at(132f, 40f, 28f)
 }
 
 /** What picture to play, with its length and the moment the action "happens" (ms). */
@@ -328,7 +336,7 @@ private fun poseMs(k: FxKind): Float = when (k) {
 
 /** Without a camera: map tank x across the screen and height down it. */
 private fun DrawScope.fallback(x: Float, y: Float): Offset =
-    Offset(size.width * (0.12f + 0.76f * (x / TankDims.LENGTH_F).coerceIn(0f, 1.1f)), size.height * (0.22f + 0.56f * (1f - y / TankDims.HEIGHT_F)))
+    Offset(size.width * (0.12f + 0.76f * (x / com.reeflive.app.render.Camera.TANK[0]).coerceIn(0f, 1.1f)), size.height * (0.22f + 0.56f * (1f - y / com.reeflive.app.render.Camera.TANK[1])))
 
 private fun DrawScope.drawCaption(layout: TextLayoutResult, cx: Float, top: Float, pal: FxPalette, alpha: Float) {
     val w = layout.size.width.toFloat()

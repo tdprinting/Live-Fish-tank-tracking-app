@@ -42,6 +42,11 @@ uniform float uMatRadius;
 uniform vec4 uPokes[8];
 uniform vec4 uPokeT[8];
 uniform float uPokeCount;
+// polyp motion mode (DrawPart.polypMode): 0 ordinary, 1 night tentacles (Euphyllia sweepers, LPS feeding tentacles)
+// that grow out of their base as uPolypDrive (core CoralPose.tentacles) rises after dark, long, thin and writhing;
+// 2 LPS day tentacles (one strand per instance, bending as a whole, shortening as the colony retracts)
+uniform float uPolypMode;
+uniform float uPolypDrive;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -208,7 +213,29 @@ void main() {
     vec3 n = aNormal;
     float open;
     float swayW = hinge;
-    if (longTent) {
+    if (uPolypMode > 0.5 && uPolypMode < 1.5) {
+        // night tentacles: stretch out of the base, bend over about a per-tentacle side axis and writhe slowly,
+        // most at the tip; fully in they shrink to a stub inside the day tentacles
+        open = clamp(uPolypDrive, 0.0, 1.0);
+        vec3 side = vec3(cos(phase), 0.0, sin(phase));
+        float wr = hinge * (0.35 + 0.25 * sin(uTime * 0.45 + phase * 3.0 - hinge * 2.0)) * open;
+        p.y *= mix(0.04, 1.0, open);
+        p.xz *= mix(0.4, 1.0, open);
+        p = rotAxis(p, side, wr);
+        n = rotAxis(n, side, wr);
+        swayW = 3.0 * hinge * hinge * open;
+    } else if (uPolypMode > 1.5 && uPolypMode < 2.5) {
+        // LPS day tentacles (Euphyllia): each strand bends as a whole about its own side axis, a slow wave running up
+        // it; retracting shortens it down into the fleshy mantle
+        open = clamp(ext * (0.9 + 0.1 * sin(uTime * 0.35 + phase)), 0.0, 1.0);
+        vec3 side = vec3(cos(phase * 1.7), 0.0, sin(phase * 1.7));
+        float wr = hinge * (0.15 + 0.2 * sin(uTime * 0.6 + phase * 5.0 - hinge * 1.6));
+        p.y *= mix(0.25, 1.0, open);
+        p.xz *= mix(0.8, 1.0, open);
+        p = rotAxis(p, side, wr);
+        n = rotAxis(n, side, wr);
+        swayW = 2.0 * hinge * hinge;
+    } else if (longTent) {
         // long tentacles stay out: only a small breathing pulse on top of the colony extension
         open = clamp(ext * (0.88 + 0.12 * sin(uTime * 0.3 + phase)), 0.0, 1.0);
         // writhe: each strand bends slowly about its own side axis, most at the tip

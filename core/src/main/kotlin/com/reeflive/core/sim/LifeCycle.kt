@@ -37,6 +37,15 @@ object LifeCycle {
     /** Tank volume (L) below which the species is chronically cramped (research 02 §10 item 1): tang 450 L, eel 130 gal. */
     fun minVolumeL(k: BrainKind): Double = when (k) { BrainKind.TANG -> 450.0; BrainKind.EEL -> 490.0; else -> 0.0 }
 
+    /**
+     * The same for one species, where the species differs from its kind (research 42: yellow tang ~100 gal ≈ 380 L, purple
+     * tang ~125 gal ≈ 475 L; the blue tang keeps the kind's 450 L).
+     */
+    fun minVolumeL(speciesId: String, k: BrainKind): Double = SPECIES_MIN_L[speciesId] ?: minVolumeL(k)
+    fun minVolumeL(o: Organism): Double = minVolumeL(o.species.id, o.brainKind)
+
+    private val SPECIES_MIN_L = mapOf("zebrasoma_flavescens" to 380.0, "zebrasoma_xanthurum" to 475.0)
+
     fun lifespanSec(s: SimSpecies) = s.lifespanYears.coerceAtLeast(0.1) * SEC_PER_YEAR
 
     /**
@@ -54,7 +63,7 @@ object LifeCycle {
     /** Extra ageing rate on top of real time: 0 = none; chronic stress and cramped tank. */
     fun extraAgingRate(o: Organism, volumeL: Double): Double {
         var extra = CHRONIC_AGING * (o.chronic - CHRONIC_FREE).coerceAtLeast(0.0)
-        val minV = minVolumeL(o.brainKind)
+        val minV = minVolumeL(o)
         if (minV > 0 && volumeL < minV) {
             val size = (o.lengthCm / (0.5 * o.species.maxLengthCm.coerceAtLeast(1.0))).coerceIn(0.3, 1.0)
             extra += CRAMPED_AGING * (1 - volumeL / minV) * size

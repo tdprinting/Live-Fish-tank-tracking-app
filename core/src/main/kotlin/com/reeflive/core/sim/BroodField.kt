@@ -95,25 +95,35 @@ class BroodField(private val sdf: Sdf?, private val config: TankConfig = TankCon
         for (c in s.eggClutches) eggPose(c)
         val night = s.lightIntensity < LightSchedule.LIGHTS_ON
         // ---- larvae loose in the display
-        val wantD = min((b.displayLarvae * quality).toInt().coerceAtMost(b.displayLarvae), (MAX_DISPLAY * quality).toInt())
+        val key = b.specKey.ifBlank { "clown" }
+        val dEggs = b.displayEggs > 0
+        val dCount = if (dEggs) b.displayEggs else b.displayLarvae
+        val wantD = min((dCount * quality).toInt().coerceAtMost(dCount), (MAX_DISPLAY * quality).toInt())
         while (display.n > wantD) display.removeAt(nearestToMouth(display, fishHeads))
-        while (display.n < wantD) spawn(display, b.displayOrigin, 2.0, 0.45)
-        val lure = if (b.luring) LURE else null
-        stepSwarm(display, h, larva = true, nurseryBox = false, attract = lure, night = night)
-        val larvaModel = "brood_${b.specKey.ifBlank { "clown" }}_larva"
-        for (i in 0 until display.n) swimmerPose(display, i, larvaModel, display.size[i], true)
+        while (display.n < wantD) spawn(display, b.displayOrigin, if (dEggs) 4.0 else 2.0, if (dEggs) EGG_CM else 0.45)
+        if (dEggs) {
+            // pelagic eggs (tangs) ride the surface current until they hatch
+            stepEggs(display, h, nurseryBox = false)
+            for (i in 0 until display.n) eggSpeck(display, i, "brood_${key}_egg")
+        } else {
+            val lure = if (b.luring) LURE else null
+            stepSwarm(display, h, larva = true, nurseryBox = false, attract = lure, night = night)
+            val larvaModel = "brood_${key}_larva"
+            for (i in 0 until display.n) swimmerPose(display, i, larvaModel, display.size[i], true)
+        }
         // ---- the nursery tank
         val wantN = min((b.nursery * quality).toInt().coerceAtMost(b.nursery), (MAX_NURSERY * quality).toInt())
         while (nursery.n > wantN) nursery.removeAt(rng.nextInt(nursery.n))
         while (nursery.n < wantN) spawn(nursery, NurseryTank.CENTER, 8.0, b.nurseryLengthMm / 10.0)
-        val fry = b.nurseryMeta >= 0.5
         stepCare(b.careSeq, b.careKind, b.nursery > 0, dt)
-        stepSwarm(nursery, h, larva = !fry, nurseryBox = true, attract = if (foodAlpha > 0.2) foodAt else null, night = night)
-        val model = "brood_${b.specKey.ifBlank { "clown" }}_" + when {
-            b.nurseryMeta < 0.5 -> "larva"
-            b.nurseryLengthMm < 12f -> "postlarva"
-            else -> "fry"
+        if (b.nurseryEggs) {
+            stepEggs(nursery, h, nurseryBox = true)
+            for (i in 0 until nursery.n) eggSpeck(nursery, i, "brood_${key}_egg")
+            return if (used == poses.size) poses else poses.subList(0, used)
         }
+        val fry = b.nurseryMeta >= 0.5
+        stepSwarm(nursery, h, larva = !fry, nurseryBox = true, attract = if (foodAlpha > 0.2) foodAt else null, night = night)
+        val model = "brood_${key}_" + when (b.nurseryStage) { 0 -> "larva"; 1 -> "postlarva"; else -> "fry" }
         for (i in 0 until nursery.n) {
             nursery.size[i] = b.nurseryLengthMm / 10.0 * (0.9 + 0.2 * ((nursery.serial[i] * 0.618) % 1.0))
             swimmerPose(nursery, i, model, nursery.size[i], !fry)
@@ -268,6 +278,36 @@ class BroodField(private val sdf: Sdf?, private val config: TankConfig = TankCon
         }
     }
 
+    /** Floating eggs: a slow upwelling drift and a little jitter, held under the surface. */
+    private fun stepEggs(sw: Swarm, h: Double, nurseryBox: Boolean) {
+        if (h <= 0) return
+        val top = if (nurseryBox) NurseryTank.WATER - 0.6 else config.waterLevelCm - 0.4
+        val lo = if (nurseryBox) Vec3(NurseryTank.X0 + 1.5, NurseryTank.Y0 + 2.0, NurseryTank.Z0 + 1.5) else Vec3(1.0, config.waterLevelCm - 8.0, 1.0)
+        val hi = if (nurseryBox) Vec3(NurseryTank.X1 - 1.5, top, NurseryTank.Z1 - 1.5) else Vec3(config.lengthCm - 1.0, top, config.widthCm - 1.0)
+        for (i in 0 until sw.n) {
+            sw.dart[i] -= h
+            if (sw.dart[i] <= 0) {
+                sw.vx[i] = rng.signed() * 0.6 + (if (nurseryBox) 0.0 else 0.8); sw.vy[i] = rng.signed() * 0.3 + 0.15; sw.vz[i] = rng.signed() * 0.6
+                sw.dart[i] = rng.range(1.0, 3.0)
+            }
+            sw.x[i] = (sw.x[i] + sw.vx[i] * h).coerceIn(lo.x, hi.x)
+            sw.y[i] = (sw.y[i] + sw.vy[i] * h).coerceIn(lo.y, hi.y)
+            sw.z[i] = (sw.z[i] + sw.vz[i] * h).coerceIn(lo.z, hi.z)
+            if (!nurseryBox && (sw.x[i] <= lo.x || sw.x[i] >= hi.x)) sw.vx[i] = -sw.vx[i]
+            sw.phase[i] += h
+        }
+    }
+
+    private fun eggSpeck(sw: Swarm, i: Int, model: String) {
+        val p = next()
+        p.id = sw.ids[i]
+        p.speciesId = model
+        val a = sw.phase[i] * 0.4
+        val fx = cos(a); val fz = sin(a)
+        writeStraight(p, Vec3(sw.x[i] + fx * EGG_CM / 2, sw.y[i], sw.z[i] + fz * EGG_CM / 2), Vec3(fx, 0.0, fz), Vec3.Y, EGG_CM)
+        p.swimPhase = 0f; p.amp = 0f; p.waveLen = 1f
+    }
+
     private fun swimmerPose(sw: Swarm, i: Int, model: String, lengthCm: Double, larva: Boolean) {
         val p = next()
         p.id = sw.ids[i]
@@ -312,6 +352,8 @@ class BroodField(private val sdf: Sdf?, private val config: TankConfig = TankCon
     companion object {
         /** Most larvae drawn in the display / young drawn in the nursery (High quality; Medium scales by 0.5). */
         const val MAX_DISPLAY = 36
+        /** A pelagic egg's size (tang eggs ~0.8 mm, research 41 [S]; drawn at 0.9 mm). */
+        const val EGG_CM = 0.09
         const val MAX_NURSERY = 28
         /** The keeper's flashlight against the front glass at the left end (larvae swim to light, research 28 §2). */
         val LURE = Vec3(8.0, 30.0, TankDims.DEPTH_CM - 2.0)

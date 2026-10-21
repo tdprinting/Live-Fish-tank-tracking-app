@@ -51,11 +51,17 @@ class MicroCritterVisuals {
         val poses = f.update(
             s.microfauna, dt * speed, focusX = camera.target[0].toDouble(),
             qualityScale = if (quality == RenderQuality.HIGH) 1.0 else 0.6,
-            food = s.food, fishHeads = fishHeads, sand = s.sandGrid,
+            food = s.food, fishHeads = fishHeads, sand = s.sandGrid, simWorms = true,
         )
         for (r in rigs.values) r.touched = false
         order.clear()
         for (p in poses) {
+            val r = rigs.getOrPut(p.id) { FishRig(p.id) }
+            r.setCritter(p)
+            order += r
+        }
+        // the bristleworms are the sim's own (core WormField: they eat the food and the predators catch them)
+        for (p in s.worms) {
             val r = rigs.getOrPut(p.id) { FishRig(p.id) }
             r.setCritter(p)
             order += r

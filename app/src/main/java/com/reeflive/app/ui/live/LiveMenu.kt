@@ -155,8 +155,15 @@ class LiveTools(
     /** Tank Health: every living animal's hunger bar (core HungryFeed) and "Feed the hungry ones". */
     val hunger: List<com.reeflive.core.sim.HungerRow> = emptyList(),
     val onFeedHungry: () -> Unit = {},
+    /** Tank Health: each coral's health (core CoralHealth) and, in My tank, the one-tap coral and invert care (core CoralCare). */
+    val coralRows: List<com.reeflive.core.sim.CoralHealth.Row> = emptyList(),
+    val coralCare: com.reeflive.core.sim.CoralCare.Plan? = null,
+    val onReefCare: (() -> Unit)? = null,
     /** My tank (saved): "Reset tank" becomes "Start over" and the Add life words say it is saved. */
     val myTank: Boolean = false,
+    /** My tank's growing speed (slow biology only; animals still move at real speed). */
+    val lifePace: com.reeflive.core.sim.LifePace = com.reeflive.core.sim.LifePace.DEFAULT,
+    val onLifePace: (com.reeflive.core.sim.LifePace) -> Unit = {},
     /** My tank's fish stores (docs/ECONOMY.md §5): Add life shows their storefronts instead of the free gallery. */
     val stores: List<com.reeflive.app.live.StoreFrontUi> = emptyList(),
     val onStore: (com.reeflive.core.custom.economy.FishStore) -> Unit = {},
@@ -496,7 +503,8 @@ private fun ColumnScope.CardBody(
     when (c) {
         // never a card: the bubble opens the 3D supply shelf (feed, care and tools live there)
         LiveCategory.SUPPLIES -> Unit
-        LiveCategory.FIX -> TankHealthBody(tools.readouts, tools.hunger, tools.onFeedHungry, tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close)
+        LiveCategory.FIX -> TankHealthBody(tools.readouts, tools.hunger, tools.onFeedHungry, tools.fixes, tools.fixing, tone, tools.onFix, tools.onFixAll, close,
+            tools.coralRows, tools.coralCare, tools.onReefCare)
         LiveCategory.LIGHT -> {
             LiveHelp("Feeding, water changes, doses and cleaning are on the supply shelf.")
             LiveSectionTitle("Water")
@@ -536,7 +544,7 @@ private fun ColumnScope.CardBody(
                 T("Spare shells", ReefGlyphs.shell) { actions.onAddSpareShells() },
             ))
         } else {
-            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.speciesId, n, size) }, actions.onReset, myTank = tools.myTank)
+            StockGallery(panel.stock, { card, n, size -> actions.onAddMany(card.key, n, size) }, actions.onReset, myTank = tools.myTank)
             LiveSectionTitle("Tiny life & helpers")
             Tiles(tone, close, listOf(
                 T("Pods", ReefGlyphs.crumbs) { actions.onMicro(MicroAction.DOSE_TISBE) },
@@ -551,6 +559,13 @@ private fun ColumnScope.CardBody(
             LiveSectionTitle("Time")
             TimeSlider(tools.speed, tools.simTimeSec, tools.onSpeed, tone = tone)
             LiveHelp(if (tools.sandbox) SandboxFriendly.speedHelp(panel.speed) else "Faster than real time runs on a pretend copy of your tank. Slide back to 1× to return to your real tank.")
+            if (tools.myTank) {
+                LiveSectionTitle("Growing speed")
+                Tiles(tone, close, com.reeflive.core.sim.LifePace.entries.map { p ->
+                    T(p.label, lifePaceGlyph(p), on = tools.lifePace == p, closes = false) { tools.onLifePace(p) }
+                })
+                LiveHelp(tools.lifePace.blurb + ". Growing, spreading and babies speed up; the fish still swim at real speed.")
+            }
             if (tools.fish.isNotEmpty()) {
                 LiveSectionTitle("Follow a fish")
                 Tiles(tone, close, tools.fish.map { (id, name) -> T(name, ReefGlyphs.fish) { tools.onFollowFish(id) } })
@@ -624,4 +639,10 @@ private fun viewLightGlyph(v: ViewLight): ReefGlyph = when (v) {
     ViewLight.NIGHT -> ReefGlyphs.moon
     ViewLight.MOON -> ReefGlyphs.moon
     ViewLight.BLUE -> ReefGlyphs.uvLamp
+}
+
+private fun lifePaceGlyph(p: com.reeflive.core.sim.LifePace): ReefGlyph = when (p) {
+    com.reeflive.core.sim.LifePace.REAL -> ReefGlyphs.clockSun
+    com.reeflive.core.sim.LifePace.FAST -> ReefGlyphs.seaweed
+    com.reeflive.core.sim.LifePace.FASTER -> ReefGlyphs.timelapse
 }
