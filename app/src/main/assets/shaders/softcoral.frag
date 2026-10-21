@@ -70,8 +70,9 @@ void main() {
     float thickness = clamp(vColor.r, 0.0, 1.0) * gShadow;   // no back-light glow inside a shadow
     for (int i = 0; i < 2; i++) {
         vec3 L;
-        vec3 rad = fixtureLight(i, vWorld, L);
-        col += rad * uSssColor * albedo * pow(clamp(dot(V, -L), 0.0, 1.0), 3.0) * thickness;
+        vec3 rad = fixtureAt(i, L);
+        float bl = clamp(dot(V, -L), 0.0, 1.0);
+        col += rad * uSssColor * albedo * (bl * bl * bl) * thickness;
     }
     float ndv = max(dot(Ng, V), 0.0);
     col += pow(1.0 - ndv, 2.5) * 0.35 * (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5 * albedo;
