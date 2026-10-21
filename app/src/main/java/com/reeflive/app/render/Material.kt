@@ -36,6 +36,8 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val generic = p("generic", "static.vert", "generic.frag")
     /** The supply shelf beside the tank (SupplyShelfScene): its own room light rig instead of the fixtures. */
     val shelf = p("shelf", "static.vert", "shelf.frag")
+    /** A fish store's room around the display tank (StoreRoomScene): its own light rig. */
+    val store = p("store", "static.vert", "store.frag")
     val softCoral = p("softcoral", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1"))
     val card = p("card", "static.vert", "softcoral.frag", mapOf("SOFTCORAL" to "1", "CARD" to "1"))
     val polyp = p("polyp", "polyp.vert", "polyp.frag")
@@ -53,7 +55,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
     val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, shelf, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
+    fun all() = listOf(rock, sand, generic, shelf, store, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 

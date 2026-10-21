@@ -299,6 +299,9 @@ class SimulationHolder(
     /** Shows display tank [i] (one runs at a time). */
     fun showStoreTank(i: Int) { scope.launch { showTankNow(i) } }
 
+    /** The 3D shop around the display tank (render StoreRoom.kt): which store, its tanks and the one shown. */
+    val storeRoom = com.reeflive.app.render.StoreRoomControl()
+
     private fun showTankNow(i: Int) {
         val n = visitTanks.size
         if (n == 0 || visiting == null) return
@@ -309,6 +312,8 @@ class SimulationHolder(
         display?.let { lastWallMs.remove(it) }
         display = d
         lastWallMs[d] = nowMs()
+        val store = visiting!!
+        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k) else storeRoom.show(k)
         publishVisit(k)
         publish(d)
     }
@@ -350,6 +355,7 @@ class SimulationHolder(
         if (visiting == null) return
         display?.let { lastWallMs.remove(it) }
         display = null; visiting = null; visitTanks = emptyList()
+        storeRoom.leave()
         _visit.value = null
         customSim?.let { catchUp(it) }
     }

@@ -124,9 +124,13 @@ a little every day so it pays to shop around.
 
 ### Visiting a store
 
-A store is a place you walk around, not a list. Inside, the big 3D view **becomes the store's display tanks**: real
-little tanks with the day's stock swimming in them, several of each species, run by the same sim as your tank (fish
-school, shrimp clean, corals sway). Each store is split into sections, each section is one or more tanks:
+A store is a place you walk around, not a list. Inside, the big 3D view **becomes the store** (Tee, 2026-10-20: "an
+actual 3D modeled store with stands for each tank and a simple flat environment with checkout counter"): a tiled
+floor, the store's walls, a row of display tanks on their own stands under hanging tank lights, and the checkout
+counter at the end of the aisle (till, card reader, a jar of sand dollars, bagged fish waiting to go home). The tank
+you stand at is a real little tank with the day's stock swimming in it, several of each species, run by the same sim
+as your tank (fish school, shrimp clean, corals sway); the other tanks along the aisle are stocked models. Each store
+is split into sections, each section is one tank:
 
 | Store | Sections (one display tank each) |
 |---|---|
@@ -135,19 +139,21 @@ school, shrimp clean, corals sway). Each store is split into sections, each sect
 | Big Blue | Community fish · Bigger fish · Shrimp & crabs · Corals |
 | Deep Reef | The showpiece tank (its rarest animal alone) · Rare fish · Rare inverts & corals |
 
-* **Browse:** swipe left/right (or tap the arrows) to walk from tank to tank; tabs on top name the sections
-  ("Fish", "Clean-up crew", "Corals"). A tank's sign says its name and how many animals are in it.
+* **Browse:** you walk in looking down the aisle at the first tank on its stand. Tap another tank (or the arrows, or
+  a section tab) to walk over to it; tap the live tank to step up close, pinch and drag to look round. Tabs on top
+  name the sections ("Starter fish", "Clean-up crew", "Easy corals").
 * **Pick:** tap an animal in the tank (the camera swims up to it, like the close-up follow cam) or its card in the strip
   below. The card shows the picture, name, price, size, "Easy / Medium / Expert", how many are left, ribbons (Deal,
   Wanted), and one warning line when it fits your tank badly. **Add to bag** drops it in the bag; tap again for one more.
   Locked animals still swim in the tank, so kids see what they are saving for; their card says "Level 4" or "Need 35".
 * **The shop bag** (bottom right) shows how many animals and the total, and turns red when the total is more than
   you have.
-* **Check out:** the counter screen lists the bag, the total, and your sand dollars before and after. **Pay** sends the
+* **Check out:** tap the counter in 3D (or the bag button) and you walk to it; the till lists the bag, the total, and your sand dollars before and after. **Pay** sends the
   coins flying out of the money chip into the till (the reward animation run backwards), then you are back home with
   the bags floating at the top of your tank. Not enough money: the Pay button says "Need 20 more" and points at the
   Care card.
-* **Leave without buying** is always one tap (the door icon); the bag empties back onto the shelves.
+* **Leave without buying** is always one tap: the **‹ Back** button at the top left (or the phone's back gesture);
+  the bag empties back onto the shelves.
 * Performance: only one display tank runs at a time (your own tank pauses while you shop, then catches up as if you
   were away for those minutes), and display tanks are small (a 40 gallon breeder with a few rocks).
 
@@ -275,6 +281,14 @@ lit, readable as tiny thumbnails:
   sign, a surfboard by the door.
 * **Big Blue Aquatics:** a big blue box store with a wall of tanks, a giant fish mural and a neon sign.
 * **Deep Reef Imports:** a dark glass shop front, one large lit display tank with a rare fish, gold lettering.
+
+**Interiors** (`tools/blender/store_rooms.py` → `store_room_<id>.glb`, drawn by `render/StoreRoom.kt` with
+`store.frag`): the same modules in each store's colours and light: a 180 cm **Bay** (tiled floor, back wall with a
+stripe and a framed fish poster, ceiling panel, a hanging tank light), the **Stand** under every tank, a stocked
+**PropTank** for the tanks you are not standing at, the **Counter**, the store's **Sign** over the first tank and
+**EndL / EndR** walls closing the aisle. The renderer repeats them along x around the live display tank (which stays
+at the origin), so a store with any number of sections needs no new model. Shelly's is warm cream and teal, Frag
+Shack a dark garage under blue-violet lights, Big Blue bright white and blue with a neon sign, Deep Reef black and gold.
 
 ## 9. While you are away
 

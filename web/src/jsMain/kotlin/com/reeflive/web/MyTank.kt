@@ -159,6 +159,7 @@ object ReefMyTank {
         tanks = StoreVisit.tanks(store, today())
         tankAt = -1
         showTank(0)
+        ReefLive.room.enter(store.id, tanks.size, 0)
         return visitJson(mine)
     }
 
@@ -194,8 +195,12 @@ object ReefMyTank {
         val d = StoreVisit.build(t, species, rock, (today().hashCode() * 31 + i).toLong())
         display = d; tankAt = i
         if (ReefSandbox.isMine()) ReefLive.sim = d
+        ReefLive.room.show(i)
         return true
     }
+
+    /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
+    fun storeCounter(on: Boolean) { if (visiting != null) ReefLive.room.counter(on) }
 
     /** The species id of an animal tapped in the display tank (its card), or "". */
     fun displaySpecies(id: String): String =
@@ -230,6 +235,7 @@ object ReefMyTank {
     fun leaveStore() {
         if (visiting == null) return
         visiting = null; tanks = emptyList(); tankAt = -1; display = null
+        ReefLive.room.leave()
         if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
     }
 
@@ -289,7 +295,7 @@ object ReefMyTank {
 
     internal fun leave() {
         // walking out of My tank from a store: the pause already started at the store's door
-        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; return }
+        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
         save(); pausedAt = now()
     }
 

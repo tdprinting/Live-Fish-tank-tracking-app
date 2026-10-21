@@ -234,6 +234,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
     fun sell(id: String) = holder.sell(id)
+    /** The 3D shop drawn around the display tank while visiting a store. */
+    val storeRoom get() = holder.storeRoom
+    /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
+    fun storeCounter(on: Boolean) = holder.storeRoom.counter(on)
     fun checkout(bag: List<String>, onResult: (com.reeflive.core.custom.economy.BuyResult) -> Unit) = holder.checkout(bag, onResult)
     /** "While you were away" in My tank: the catch-up's progress, then what happened. */
     val away: StateFlow<com.reeflive.app.live.AwayUi?> = holder.awayState

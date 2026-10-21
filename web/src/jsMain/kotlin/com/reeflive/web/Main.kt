@@ -59,6 +59,8 @@ object ReefLive {
     internal var rock: RockData? = null
     internal var renderer: TankRenderer? = null
     internal val shelf = SupplyShelfControl()
+    /** A fish store visit drawn around the display tank (ReefMyTank.visit); taps on other tanks / the counter come back. */
+    internal val room = com.reeflive.app.render.StoreRoomControl()
     /** Tap-to-place food and gear taps (render TankAimControl). */
     private val aim = com.reeflive.app.render.TankAimControl()
     private var touch: TouchController? = null
@@ -164,6 +166,9 @@ object ReefLive {
                 r.aim = aim
                 shelf.onPick = { item, _, _, _ -> emit("onShelfPick", item) }
                 r.shelf = shelf
+                room.onStand = { i -> emit("onStoreStand", i) }
+                room.onCounter = { emit("onStoreCounter", null) }
+                r.storeRoom = room
                 r.bursts = ReefSandbox.bursts
                 r.care = ReefSandbox.care
                 renderer = r

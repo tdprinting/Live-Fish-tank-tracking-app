@@ -48,6 +48,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** The tappable gear's boxes (SpotBoxes), built once the equipment model is in. */
     private var spotBoxes: List<Pair<com.reeflive.core.sim.TankSpot, FloatArray>>? = null
     private val shelfScene = SupplyShelfScene()
+    /** A fish store visit (My tank): the shop is drawn around the live display tank; null = at home. */
+    @Volatile var storeRoom: StoreRoomControl? = null
+    private val storeScene = StoreRoomScene()
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
     private val subScene = SubmarineScene()
@@ -257,6 +260,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
         applyRequests()
         applyShelf(dt)
+        storeScene.apply(storeRoom, camera) { store.model(it) }
         store.pump(2)
 
         // 1. snapshot + rigs
@@ -338,6 +342,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (pestModel != null) white?.let { drawCalls += careScene.drawPest(pestModel, progs.generic, it, blended = false) }
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
+        drawStore(progs, blended = false)
         val nurseryLit = light.intensity > 0.03f
         if (brood.nurseryCount > 0) white?.let { drawCalls += nursery.drawSolid(progs.generic, it, nurseryLit, brood.field) }
         // corals: soft bodies then polyps
@@ -368,6 +373,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // erases the particles and shafts in front of it), shafts, particles, water (eye above), equipment, glass
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GENERIC) }
+        drawStore(progs, blended = true)
+        Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         val waterFirst = camera.eye[1] < Camera.WATER_Y
         if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
         if (quality.shafts && light.intensity > 0.03f) {
@@ -1279,6 +1286,31 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         main.post { cb(id, top[0], top[1], top[2]) }
     }
 
+    // ------------------------------------------------------------------ fish store (StoreRoom.kt)
+
+    /** The store room around the live display tank: its opaque parts, or its see-through ones (tank water, glass). */
+    private fun drawStore(progs: Programs, blended: Boolean) {
+        val c = storeRoom ?: return
+        if (!storeScene.active) return
+        val w = white ?: return
+        drawCalls += storeScene.draw(progs.store, w, c, blended)
+    }
+
+    /**
+     * A tap in a store: another tank walks there, the counter opens the checkout, and a tap on the live tank from the
+     * aisle (not on an animal) walks up close to it. True when the tap was used.
+     */
+    private fun storeTap(t: CameraInput.Tap, o: FloatArray, dir: FloatArray, rigs: Collection<FishRig>): Boolean {
+        val room = storeRoom ?: return false
+        if (!storeScene.active || t.kind != CameraInput.TapKind.PICK) return false
+        val hit = storeScene.pick(room, o, dir)
+        if (hit == StoreRoomScene.COUNTER) { room.onCounter?.let { cb -> main.post { cb() } }; return true }
+        if (hit >= 0) { room.onStand?.let { cb -> main.post { cb(hit) } }; return true }
+        if (Picker.pick(o, dir, rigs, fingerSlack()) != null) return false
+        val tankBox = LIVE_TANK_BOX
+        return SupplyShelfScene.rayBox(o, dir, tankBox, 4f) != null && camera.storeZoomIn()
+    }
+
     // ------------------------------------------------------------------ taps
 
     private fun handleTap(t: CameraInput.Tap, rigs: Collection<FishRig>) {
@@ -1287,6 +1319,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.ray(t.x, t.y, width, height, dir)
         val o = camera.eye.copyOf()
         val l = listener
+        if (storeTap(t, o, dir, rigs)) return
         // tap-to-place: an armed aim takes the single tap (food from the shelf drops in where the finger lands)
         if (t.kind == CameraInput.TapKind.PICK && aim?.armed == true) { aimFrom(t.x, t.y, rigs); return }
         when (t.kind) {
@@ -1649,6 +1682,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val TANK = "models/tank.glb"
         const val ROCK = "models/rockscape.glb"
         const val EQUIPMENT = "models/equipment.glb"
+        /** The live tank with its stand (a store's aisle view: a tap here walks up to it). */
+        private val LIVE_TANK_BOX = floatArrayOf(-6f, StoreRoomLayout.FLOOR_Y, -6f, com.reeflive.core.sim.TankDims.LENGTH_F + 6f, com.reeflive.core.sim.TankDims.HEIGHT_F + 2f, com.reeflive.core.sim.TankDims.DEPTH_F + 6f)
         /** Spine points that bound an animal's three eye-collision capsules (head … tail). */
         private val EYE_SEGMENTS = intArrayOf(0, 5, 10, 15)
         /** The sub's hull as a capsule for the eye (cm). */

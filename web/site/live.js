@@ -72,6 +72,9 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // a tap on another display tank or the counter in a store's 3D aisle
+    onStoreStand: (i) => window.reefstores?.walk(i),
+    onStoreCounter: () => window.reefstores?.counter(),
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),

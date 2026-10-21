@@ -171,8 +171,66 @@ class Camera {
         nurseryOn = false
         if (followId != null) releaseFollow()
         glide()
+        if (storeOn) {
+            // in a store: the aisle view, the tank on its stand with the neighbours either side
+            target[0] = TANK[0] / 2; target[1] = STORE_TARGET_Y; target[2] = DEFAULT_TARGET[2]
+            yawGoal = 0f; pitchGoal = STORE_PITCH; distLogGoal = ln(storeAisleDistance())
+            return
+        }
         target[0] = DEFAULT_TARGET[0]; target[1] = DEFAULT_TARGET[1]; target[2] = DEFAULT_TARGET[2]
         yawGoal = 0f; pitchGoal = DEFAULT_PITCH; distLogGoal = ln(DEFAULT_DISTANCE)
+    }
+
+    // ---- fish store (StoreRoom.kt): the aisle around the live display tank ----
+    /** In a store: the orbit's limits keep the eye inside the shop, [reset] frames the aisle. */
+    var storeOn = false; private set
+    /** Where the walk is heading: the counter is one or more bays to the right of the live tank (cm along x). */
+    var storeFocusX = 0f; private set
+    private val storeShift = Spring(OMEGA_WALK)
+
+    private val maxYaw: Float get() = if (storeOn) STORE_MAX_YAW else MAX_YAW
+    private val minPitch: Float get() = if (storeOn) STORE_MIN_PITCH else MIN_PITCH
+    private val maxPitch: Float get() = if (storeOn) STORE_MAX_PITCH else MAX_PITCH
+    private val maxDistance: Float get() = if (storeOn) STORE_MAX_EFFECTIVE * DEFAULT_DISTANCE / fitDistance(aspect) else MAX_DISTANCE
+
+    /** Aisle framing (user units): the stand and tank top to floor, and a slice of the bays either side. */
+    private fun storeAisleDistance(): Float {
+        val tanHalf = kotlin.math.tan(Math.toRadians(fovY / 2.0)).toFloat()
+        val want = max(STORE_FIT_HEIGHT / tanHalf, STORE_FIT_HALF_WIDTH / (tanHalf * max(aspect, 0.1f))) + DEFAULT_TARGET[2]
+        return want.coerceAtMost(STORE_MAX_EFFECTIVE * 0.9f) * DEFAULT_DISTANCE / fitDistance(aspect)
+    }
+
+    /** Walks into a store ([on]: the aisle view) or home again (the tank view). Stops any follow. */
+    fun enterStore(on: Boolean) {
+        if (followId != null) releaseFollow()
+        storeOn = on
+        storeFocusX = 0f
+        storeShift.snap(0f)
+        reset()
+    }
+
+    /**
+     * The live tank changed to another bay: the room re-centres on it at once, so the eye jumps by [dx] (cm) to stay
+     * where it was, then walks over to the new tank.
+     */
+    fun storeWalk(dx: Float) {
+        if (!storeOn) return
+        storeShift.snap(storeShift.value + dx)
+    }
+
+    /** Walks to [x] (cm along the aisle from the live tank): the counter, or 0 for the tank. */
+    fun storeFocus(x: Float) {
+        storeFocusX = x
+        if (x != 0f) reset()
+    }
+
+    /** A tap on the live tank from the aisle: a close look at it (the normal tank view). False when already close. */
+    fun storeZoomIn(): Boolean {
+        if (!storeOn || storeFocusX != 0f || effectiveDistance < STORE_CLOSE_EFFECTIVE) return false
+        glide()
+        target[0] = DEFAULT_TARGET[0]; target[1] = DEFAULT_TARGET[1]; target[2] = DEFAULT_TARGET[2]
+        yawGoal = 0f; pitchGoal = DEFAULT_PITCH; distLogGoal = ln(DEFAULT_DISTANCE)
+        return true
     }
 
     /**
@@ -347,7 +405,7 @@ class Camera {
             followZoomLog = SoftLimit.drag(followZoomLog, d, FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
         } else {
             glide()
-            distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE)
+            distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(maxDistance), ZOOM_GIVE)
         }
     }
 
@@ -359,7 +417,7 @@ class Camera {
             followYaw += radians
         } else {
             glide()
-            yawGoal = SoftLimit.drag(yawGoal, radians, -MAX_YAW, MAX_YAW, YAW_GIVE)
+            yawGoal = SoftLimit.drag(yawGoal, radians, -maxYaw, maxYaw, YAW_GIVE)
         }
     }
 
@@ -390,8 +448,8 @@ class Camera {
             followPitch = SoftLimit.drag(followPitch, dyPx * k, FOLLOW_MIN_PITCH, FOLLOW_MAX_PITCH, PITCH_GIVE)
         } else {
             snappy()
-            yawGoal = SoftLimit.drag(yawGoal, -dxPx * k, -MAX_YAW, MAX_YAW, YAW_GIVE)
-            pitchGoal = SoftLimit.drag(pitchGoal, dyPx * k, MIN_PITCH, MAX_PITCH, PITCH_GIVE)
+            yawGoal = SoftLimit.drag(yawGoal, -dxPx * k, -maxYaw, maxYaw, YAW_GIVE)
+            pitchGoal = SoftLimit.drag(pitchGoal, dyPx * k, minPitch, maxPitch, PITCH_GIVE)
         }
     }
 
@@ -408,7 +466,7 @@ class Camera {
     fun rotate(radians: Float) {
         if (shelfOn) return
         if (followId != null) { touchFeel(); followYaw -= radians }
-        else { snappy(); yawGoal = SoftLimit.drag(yawGoal, -radians, -MAX_YAW, MAX_YAW, YAW_GIVE) }
+        else { snappy(); yawGoal = SoftLimit.drag(yawGoal, -radians, -maxYaw, maxYaw, YAW_GIVE) }
     }
 
     /** Pinch: factor > 1 zooms in (about the view centre). */
@@ -417,7 +475,7 @@ class Camera {
         if (nurseryOn) { nurseryOn = false; return }
         if (touching) zoomPending += -ln(factor)
         if (followId != null) { touchFeel(); followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE) }
-        else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE) }
+        else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(maxDistance), ZOOM_GIVE) }
     }
 
     /**
@@ -536,6 +594,10 @@ class Camera {
             ballOn = false
         } else {
             collide(step)
+        }
+        if (storeOn || storeShift.value != 0f) {
+            val sx = storeShift.step(storeFocusX, step)
+            eye[0] += sx; aim[0] += sx
         }
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
         // near plane: 3 % of the view distance, never so far out that its corners reach past the tightest clearance
@@ -672,9 +734,9 @@ class Camera {
             val d = zoomInertia.advance(dt, if (over > 0f) LIMIT_BRAKE else 0f)
             if (d != 0f) followZoomLog = SoftLimit.drag(followZoomLog, d, FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE)
         } else if (!shelfOn) {
-            val over = SoftLimit.overshoot(distLogGoal, ln(MIN_DISTANCE), ln(MAX_DISTANCE))
+            val over = SoftLimit.overshoot(distLogGoal, ln(MIN_DISTANCE), ln(maxDistance))
             val d = zoomInertia.advance(dt, if (over > 0f) LIMIT_BRAKE else 0f)
-            if (d != 0f) distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(MAX_DISTANCE), ZOOM_GIVE)
+            if (d != 0f) distLogGoal = SoftLimit.drag(distLogGoal, d, ln(MIN_DISTANCE), ln(maxDistance), ZOOM_GIVE)
         } else zoomInertia.stop()
     }
 
@@ -694,15 +756,15 @@ class Camera {
     private fun advanceOrbit(dt: Float) {
         if (!touching) {
             // fling momentum, resisted (and braked harder) past the soft limits
-            val yo = SoftLimit.overshoot(yawGoal, -MAX_YAW, MAX_YAW)
-            val po = SoftLimit.overshoot(pitchGoal, MIN_PITCH, MAX_PITCH)
+            val yo = SoftLimit.overshoot(yawGoal, -maxYaw, maxYaw)
+            val po = SoftLimit.overshoot(pitchGoal, minPitch, maxPitch)
             val dy = yawInertia.advance(dt, if (yo > 0f) LIMIT_BRAKE else 0f)
             val dp = pitchInertia.advance(dt, if (po > 0f) LIMIT_BRAKE else 0f)
-            if (dy != 0f) yawGoal = SoftLimit.drag(yawGoal, dy, -MAX_YAW, MAX_YAW, YAW_GIVE)
-            if (dp != 0f) pitchGoal = SoftLimit.drag(pitchGoal, dp, MIN_PITCH, MAX_PITCH, PITCH_GIVE)
-            yawGoal = SoftLimit.relax(yawGoal, -MAX_YAW, MAX_YAW, RELAX_RATE, dt)
-            pitchGoal = SoftLimit.relax(pitchGoal, MIN_PITCH, MAX_PITCH, RELAX_RATE, dt)
-            distLogGoal = SoftLimit.relax(distLogGoal, ln(MIN_DISTANCE), ln(MAX_DISTANCE), RELAX_RATE, dt)
+            if (dy != 0f) yawGoal = SoftLimit.drag(yawGoal, dy, -maxYaw, maxYaw, YAW_GIVE)
+            if (dp != 0f) pitchGoal = SoftLimit.drag(pitchGoal, dp, minPitch, maxPitch, PITCH_GIVE)
+            yawGoal = SoftLimit.relax(yawGoal, -maxYaw, maxYaw, RELAX_RATE, dt)
+            pitchGoal = SoftLimit.relax(pitchGoal, minPitch, maxPitch, RELAX_RATE, dt)
+            distLogGoal = SoftLimit.relax(distLogGoal, ln(MIN_DISTANCE), ln(maxDistance), RELAX_RATE, dt)
             for (i in 0 until 3) target[i] = SoftLimit.relax(target[i], TARGET_LO[i], TARGET_HI[i], RELAX_RATE, dt)
         }
         yawS.step(yawGoal, dt)
@@ -840,9 +902,9 @@ class Camera {
         for (i in 0 until 3) target[i] = aim[i].coerceIn(TARGET_LO[i], TARGET_HI[i])
         val dx = eye[0] - target[0]; val dy = eye[1] - target[1]; val dz = eye[2] - target[2]
         val d = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1f)
-        val user = (d * DEFAULT_DISTANCE / fitDistance(aspect)).coerceIn(MIN_DISTANCE * 0.7f, MAX_DISTANCE * 1.3f)
+        val user = (d * DEFAULT_DISTANCE / fitDistance(aspect)).coerceIn(MIN_DISTANCE * 0.7f, maxDistance * 1.3f)
         distLogGoal = ln(user)
-        pitchGoal = kotlin.math.asin((dy / d).coerceIn(-1f, 1f)).coerceIn(MIN_PITCH - PITCH_GIVE, MAX_PITCH + PITCH_GIVE)
+        pitchGoal = kotlin.math.asin((dy / d).coerceIn(-1f, 1f)).coerceIn(minPitch - PITCH_GIVE, maxPitch + PITCH_GIVE)
         yawGoal = atan2(dx, dz)
         yawS.snap(yawGoal); pitchS.snap(pitchGoal); distLogS.snap(distLogGoal); targetS.snap(target)
         // then ease (slowly) back inside the soft limits if the follow ended outside them
@@ -911,6 +973,20 @@ class Camera {
         const val MAX_DISTANCE = 320f
         /** Soft yaw range: a little past square-on to either side glass. */
         const val MAX_YAW = 1.75f
+        /** Store aisle (StoreRoom.kt): orbit target height, pitch and limits that keep the eye in the shop. */
+        const val STORE_TARGET_Y = 6f
+        const val STORE_PITCH = 0.16f
+        const val STORE_MAX_YAW = 0.4f
+        const val STORE_MIN_PITCH = 0f
+        const val STORE_MAX_PITCH = 0.5f
+        /** Aisle framing: floor to above the tank (half height from the target) and the tank plus some aisle (half width). */
+        const val STORE_FIT_HEIGHT = 92f
+        const val STORE_FIT_HALF_WIDTH = 105f
+        const val STORE_MAX_EFFECTIVE = 480f
+        /** Further out than this (cm), a tap on the live tank walks up to it. */
+        const val STORE_CLOSE_EFFECTIVE = 200f
+        /** Walking between tanks (rad/s of the critically damped slide). */
+        const val OMEGA_WALK = 4.5f
         const val MIN_PITCH = -0.3f
         const val MAX_PITCH = 1.38f
         const val YAW_GIVE = 0.3f

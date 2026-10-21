@@ -327,6 +327,14 @@ fun LiveTankScreen(
     // walking a fish store's display tanks (docs/ECONOMY.md §5): the 3D view shows the store's tank meanwhile
     val visit by vm.visit.collectAsStateWithLifecycle()
     var storePick by remember { mutableStateOf<String?>(null) }
+    // taps in the 3D shop: another display tank walks there, the counter opens the till
+    var counterRequest by remember { mutableIntStateOf(0) }
+    DisposableEffect(vm.storeRoom) {
+        val room = vm.storeRoom
+        room.onStand = { i -> storePick = null; vm.showStoreTank(i) }
+        room.onCounter = { counterRequest++ }
+        onDispose { room.onStand = null; room.onCounter = null }
+    }
     val rewardFx = remember { RewardFxState() }
 
     // every overlay control hidden, only the tank: only More → "Hide buttons" does this; a tap on the water, the
@@ -1242,6 +1250,8 @@ fun LiveTankScreen(
         visit?.let { v ->
             if (myTank) StoreOverlay(
                 v, storePick,
+                counterRequest = counterRequest,
+                onCounter = { on -> vm.storeCounter(on) },
                 onTank = { i -> tick(); storePick = null; vm.showStoreTank(i) },
                 onLeave = { tick(); storePick = null; vm.leaveStore(); if (hermieOn) hermie.say("Back home. Come again soon!", HermieMood.HAPPY) },
                 onCheckout = { bag, done -> vm.checkout(bag) { r -> scope.launch { done(r) } } },
@@ -1426,6 +1436,7 @@ private fun TankArea(
             followCam = followCam,
             onSpot = onSpot,
             aim = aim,
+            storeRoom = vm.storeRoom,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
