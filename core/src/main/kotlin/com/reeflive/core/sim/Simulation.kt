@@ -1087,8 +1087,11 @@ class Simulation private constructor(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
             (agents[o]?.brain as? com.reeflive.core.ai.DiamondGobyBrain)?.abstractSift(dtMin)
         }
-        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.LEOPARD_WRASSE) {
-            (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive) when (o.brainKind) {
+            BrainKind.LEOPARD_WRASSE -> (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+            BrainKind.MANDARIN -> (agents[o]?.brain as? com.reeflive.core.ai.MandarinBrain)?.abstractPick(dtMin)
+            BrainKind.SIXLINE -> (agents[o]?.brain as? com.reeflive.core.ai.SixlineBrain)?.abstractPick(dtMin)
+            else -> {}
         }
         sandTick(dtMin)
         flushEvents()
@@ -2042,7 +2045,7 @@ class Simulation private constructor(
                 ?: if (sp.fragColony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
             // a stony coral (or another frag) has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
             val offset = seed.offset ?: if (a == null && sp.fragColony)
-                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind), StonyCorals.onSand(sp)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
                 else null
             val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
             val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y
@@ -2058,6 +2061,8 @@ class Simulation private constructor(
         if (o.brainKind == BrainKind.DIAMOND_GOBY) o.acceptsPrepared = rng.chance(0.6)
         // leopard wrasses: many learn frozen mysis/cyclops, thin ones never do (Fenner, TFH; LiveAquaria)
         if (o.brainKind == BrainKind.LEOPARD_WRASSE) o.acceptsPrepared = rng.chance(0.7)
+        // research 51 §1 facts 24, 32-34: captive-bred mandarins (most sold now) often learn frozen food, wild ones seldom
+        if (o.brainKind == BrainKind.MANDARIN) o.acceptsPrepared = rng.chance(0.5)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)

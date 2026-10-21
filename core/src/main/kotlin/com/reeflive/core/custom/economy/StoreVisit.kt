@@ -50,7 +50,8 @@ object StoreVisit {
     private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp", "rhodactis_inchoata")
     private val LEATHERS = setOf("sarcophyton_sp", "lobophytum_sp", "sinularia_sp")
     private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens",
-        "euphyllia_glabrescens_gold", "homophyllia_australis")
+        "euphyllia_glabrescens_gold", "homophyllia_australis",
+        "micromussa_lordhowensis", "caulastrea_furcata", "trachyphyllia_geoffroyi", "plerogyra_sinuosa")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
@@ -68,13 +69,16 @@ object StoreVisit {
             Section("Stony corals (LPS)") { it.speciesId in STONY },
             Section("Soft corals & rare frags") { true },
         )
+        // the superstore: a long wall of tanks, one for each kind of animal
         FishStore.BIG_BLUE -> listOf(
             Section("Community fish") { fish(it) && cm(it) < 12 },
             Section("Bigger fish", ::fish),
+            Section("Clean-up crew") { it.speciesId in CLEANUP },
             Section("Shrimp & crabs", ::inverts),
-            Section("Corals", ::corals),
+            Section("Easy corals") { corals(it) && it.level <= 2 },
+            Section("Showy corals", ::corals),
         )
-        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts & corals") { true })
+        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts", ::inverts), Section("Rare corals") { true })
     }
 
     /** Today's display tanks at [store], in walking order; empty sections are skipped. */

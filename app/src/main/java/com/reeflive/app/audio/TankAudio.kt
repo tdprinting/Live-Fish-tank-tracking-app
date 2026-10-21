@@ -57,6 +57,10 @@ class TankAudio(context: Context) {
     )
     private val scrapeId = pool.load(context, R.raw.tank_glass_scrape, 1)
     private var lastScrapeMs = 0L
+    // a fish store visit: the bell on the door and the room tone of a shop full of people and filters
+    private val bellId = pool.load(context, R.raw.store_door_bell, 1)
+    private val murmurId = pool.load(context, R.raw.store_murmur_loop, 1)
+    private var inStore = false
 
     /** Loop sound id → playing stream id (absent = not playing). */
     private val loopStreams = HashMap<Int, Int>()
@@ -147,6 +151,19 @@ class TankAudio(context: Context) {
         if (stream != 0) main.postDelayed({ if (!released) pool.stop(stream) }, FLUSH_MS)
     }
 
+    /**
+     * In a fish store ([on]) or home: the shop's room tone plays under the display tank's water; walking in rings the
+     * bell on the door as it opens (after [bellDelayMs]: the walk in from the sidewalk reaches the door).
+     */
+    fun store(on: Boolean, bellDelayMs: Long = 0L) {
+        if (on == inStore) return
+        inStore = on
+        syncLoops()
+        if (on) main.postDelayed({
+            if (!released && active() && inStore && bellId in loaded) { val v = (volume * 0.7f).coerceIn(0f, 1f); pool.play(bellId, v, v, 1, 0, 1f) }
+        }, bellDelayMs)
+    }
+
     /** Clean-glass mode: the Flipper slid [cm] over the glass. A soft felt-on-glass swish, rate-limited. */
     fun scrape(cm: Float) {
         if (!active() || scrapeId !in loaded) return
@@ -188,6 +205,7 @@ class TankAudio(context: Context) {
     }
 
     private fun levelFor(id: Int): Float = when (id) {
+        murmurId -> if (inStore) STORE_MURMUR else 0f
         flowId -> target.flow
         humId -> target.hum
         hobId -> target.hob
@@ -198,7 +216,7 @@ class TankAudio(context: Context) {
     /** Starts, re-levels or stops each loop to match [target]; volumes glide (~0.3 s at 20 Hz). */
     private fun syncLoops() {
         if (released) return
-        for (id in intArrayOf(flowId, humId, hobId, bubblesId)) {
+        for (id in intArrayOf(flowId, humId, hobId, bubblesId, murmurId)) {
             val want = if (active()) levelFor(id) else 0f
             val now = current[id] ?: 0f
             val v = if (kotlin.math.abs(want - now) < 0.005f) want else now + (want - now) * GLIDE
@@ -226,6 +244,8 @@ class TankAudio(context: Context) {
         const val MAX_STREAMS = 10
         const val GLIDE = 0.15f
         const val MIN_LEVEL = 0.003f
+        /** The store's room tone, under the display tank's own water sounds. */
+        const val STORE_MURMUR = 0.35f
         val CUE_GAIN = mapOf(Cue.FEED to 0.9f, Cue.PELLET to 0.6f, Cue.CLICK to 0.45f, Cue.TICK to 0.5f, Cue.ALERT to 0.8f, Cue.SPARKLE to 0.7f)
     }
 }

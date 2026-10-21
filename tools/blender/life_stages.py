@@ -358,6 +358,29 @@ def watchman_juvenile(cv, fl):
     _lighten(cv, 0.1, "#FFF8D8")
 
 
+# ---------------------------------------------------------------- batch 2 (mandarin, six line wrasse, clown goby)
+def mandarin_juvenile(cv, fl):
+    """Juvenile mandarin: newly settled young are drab, brownish with only a hint of the maze pattern, which sharpens
+    and turns orange-on-blue as they grow [L]."""
+    FS.paint_mandarin(cv, fl)
+    cv.blend(np.ones_like(cv.u), "#7A6A48", 0.45)
+    _lighten(cv, 0.08, "#C8D0B8")
+
+
+def sixline_juvenile(cv, fl):
+    """Juvenile six line wrasse: the stripes are there early but thinner and duller on a paler lavender body [L]."""
+    FS.paint_sixline(cv, fl)
+    orange = _mask_hue(cv, lambda r, g, b: (r - b) * 3)
+    cv.blend(orange, "#C8A0B0", 0.35)
+    _lighten(cv, 0.1, "#E8E4F8")
+
+
+def clown_goby_juvenile(cv, fl):
+    """Juvenile yellow clown goby: paler, slightly translucent yellow [L]."""
+    FS.paint_clown_goby(cv, fl)
+    _lighten(cv, 0.18, "#FFF8D0")
+
+
 # model -> (species id, {form: painter}); the adult forms reuse the GLB's own painter
 FORMS = {
     "clown_orange": ("amphiprion_ocellaris", {"juvenile": clown_orange_juvenile, "adult": FS.paint_clown_orange}),
@@ -380,6 +403,9 @@ FORMS = {
     "royal_gramma": ("gramma_loreto", {"juvenile": gramma_juvenile, "adult": FS.paint_royal_gramma}),
     "banggai": ("pterapogon_kauderni", {"juvenile": banggai_juvenile, "adult": FS.paint_banggai}),
     "watchman_goby": ("cryptocentrus_cinctus", {"juvenile": watchman_juvenile, "adult": FS.paint_watchman}),
+    "mandarin": ("synchiropus_splendidus", {"juvenile": mandarin_juvenile, "adult": FS.paint_mandarin}),
+    "sixline_wrasse": ("pseudocheilinus_hexataenia", {"juvenile": sixline_juvenile, "adult": FS.paint_sixline}),
+    "clown_goby": ("gobiodon_okinawae", {"juvenile": clown_goby_juvenile, "adult": FS.paint_clown_goby}),
 }
 # model -> {form: fin-sheet painter}; the form whose painter is the GLB's own fin painter is the fin `base`
 FIN_FORMS = {

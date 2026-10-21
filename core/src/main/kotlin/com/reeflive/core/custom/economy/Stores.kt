@@ -36,6 +36,7 @@ object PriceBook {
         // fish, inverts, corals: 2025-26 US prices (LiveAquaria and store listings; captive bred where sold that way)
         l("chromis_viridis", 1, 15), l("amphiprion_ocellaris", 1, 30), l("sphaeramia_nematoptera", 1, 30), l("salarias_fasciatus", 1, 30),
         l("gramma_loreto", 1, 40), l("pterapogon_kauderni", 1, 28), l("cryptocentrus_cinctus", 1, 30),
+        l("pseudocheilinus_hexataenia", 2, 30), l("gobiodon_okinawae", 2, 30), l("synchiropus_splendidus", 4, 60),
         l("nemateleotris_magnifica", 2, 40), l("ecsenius_bicolor", 2, 65), l("ecsenius_stigmatura", 3, 30), l("valenciennea_puellaris", 3, 35),
         l("pholidichthys_leucotaenia", 3, 30), l("labroides_dimidiatus", 3, 40), l("cirrhitichthys_falco", 4, 40), l("pseudochromis_indigo", 4, 50),
         l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis@female", 4, 50), l("cirrhilabrus_rubripinnis@male", 5, 80), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),
@@ -51,6 +52,7 @@ object PriceBook {
         l("sinularia_sp", 2, 25), l("rhodactis_sp", 2, 35), l("lobophytum_sp", 3, 35), l("sarcophyton_sp", 3, 70),
         l("amplexidiscus_fenestrafer", 4, 50), l("tubipora_musica", 5, 40),
         l("duncanopsammia_axifuga", 2, 55), l("fimbriaphyllia_ancora", 3, 60), l("fimbriaphyllia_divisa", 3, 60), l("euphyllia_glabrescens", 3, 75),
+        l("caulastrea_furcata", 2, 35), l("micromussa_lordhowensis", 3, 50), l("plerogyra_sinuosa", 4, 70), l("trachyphyllia_geoffroyi", 4, 90),
         // rare corals (research 61): a gold torch head, a scolymia polyp and a common bounce mushroom polyp
         l("euphyllia_glabrescens_gold", 6, 250), l("homophyllia_australis", 7, 300), l("rhodactis_inchoata", 8, 250),
     )
@@ -87,10 +89,10 @@ enum class FishStore(
     /** Items on the shelf each day. */
     val stockSize: Int,
 ) {
-    SHELLYS("shellys", "Shelly's Pet Shop", "Hi there! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 9),
-    FRAG_SHACK("frag_shack", "Frag Shack", "Corals, corals, corals! Fresh frags under the blue lights.", 2, 0.85, 0.0, 0.0, 0.65, 9),
-    BIG_BLUE("big_blue", "Big Blue Aquatics", "Welcome to the wall of tanks! We have a bit of everything.", 4, 1.1, 0.6, 0.6, 0.5, 14),
-    DEEP_REEF("deep_reef", "Deep Reef Imports", "Only the rarest, healthiest animals. Have a look.", 6, 1.25, 0.75, 0.75, 0.75, 5);
+    SHELLYS("shellys", "Shelly's Pet Shop", "Shelly: Hi there, sweetie! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 9),
+    FRAG_SHACK("frag_shack", "Frag Shack", "Kai: Aloha! Fresh frags under the blue lights, all grown right here.", 2, 0.85, 0.0, 0.0, 0.65, 10),
+    BIG_BLUE("big_blue", "Big Blue Aquatics", "Marcus: Welcome to Big Blue! The biggest wall of tanks in town.", 4, 1.1, 0.6, 0.6, 0.5, 18),
+    DEEP_REEF("deep_reef", "Deep Reef Imports", "Celeste: Welcome to Deep Reef. Only the rarest, healthiest animals.", 6, 1.25, 0.75, 0.75, 0.75, 6);
 
     fun carries(l: Listing): Boolean = when (this) {
         SHELLYS -> l.level <= 3 && (l.group != StockGroup.CORALS || l.level <= 1)
@@ -176,6 +178,8 @@ object Stores {
             return "Pistol shrimp dig burrows: they need a sand bed at least 2 inches deep."
         if (speciesId == "lysmata_debelius" && alive.count { it.species.id == speciesId } >= 2) return "Fire shrimp fight unless they are a pair. Two is the most."
         if (speciesId == "ctenoides_scaber") return "Hard to keep: needs phytoplankton every day."
+        if (speciesId == "synchiropus_splendidus") return "Needs a grown-up tank full of tiny pods to eat, or it slowly starves."
+        if (speciesId == "pseudocheilinus_hexataenia" && alive.any { it.isFish }) return "Six lines can bully fish added after them. Best added last."
         if (speciesId == "ophiarachna_incrassata" && alive.any { it.isFish && it.lengthCm < 7.0 })
             return "Green serpent stars can catch small fish at night when hungry. Feed it well."
         if (speciesId == "neopetrolisthes_maculatus" && alive.none { it.brainKind == BrainKind.ANEMONE })

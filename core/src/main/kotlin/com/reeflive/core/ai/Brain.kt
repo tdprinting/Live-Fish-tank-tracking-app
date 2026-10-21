@@ -319,6 +319,9 @@ object Predation {
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (L < 0.5 * pred.lengthCm) 1.5 * L else 0.0
                 // research 50: a small gramma or watchman out of its cave or burrow fits the hawk's mouth
                 BrainKind.GRAMMA, BrainKind.WATCHMAN_GOBY -> if (me.posture != 3 && L < 0.6 * pred.lengthCm) 1.5 * L else 0.0
+                // research 51: a mandarin's toxic slime and a clown goby's bitter mucus keep most predators off; a small
+                // six line in the open is a hawkfish's size
+                BrainKind.SIXLINE -> if (me.posture != 3 && L < 0.6 * pred.lengthCm) 1.5 * L else 0.0
                 BrainKind.WRASSE -> if (pred.attached) pred.lengthCm else 0.0
                 // research cephalopod_squid: a bobtail squid out of the sand is the size of the hawk's usual prey
                 BrainKind.BOBTAIL_SQUID -> if (me.posture == 5) 0.0 else 2.5 * L
@@ -376,7 +379,7 @@ object Predation {
                 BrainKind.BANDED_SHRIMP -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.4 else 0.0
                 BrainKind.HERMIT -> 0.4
                 BrainKind.CARDINAL, BrainKind.FAIRY_WRASSE -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
-                BrainKind.GRAMMA, BrainKind.WATCHMAN_GOBY -> if (prey.posture == 3 || !prey.visible || prey.lengthCm > 0.5 * pred.lengthCm) 0.0 else 0.3
+                BrainKind.GRAMMA, BrainKind.WATCHMAN_GOBY, BrainKind.SIXLINE -> if (prey.posture == 3 || !prey.visible || prey.lengthCm > 0.5 * pred.lengthCm) 0.0 else 0.3
                 BrainKind.BRITTLE_STAR -> 0.1
                 // research cephalopod_squid: an exposed bobtail squid is soft prey for a hawkfish (buried in the sand it is not found)
                 BrainKind.BOBTAIL_SQUID -> if (prey.posture == 5 || prey.lengthCm > 1.2 * pred.lengthCm) 0.0 else 0.5
@@ -572,3 +575,20 @@ fun headingTo(from: Vec3, to: Vec3, fallback: Vec3 = Vec3.X): Vec3 = (to - from)
 fun horizontalHeading(v: Vec3, fallback: Vec3 = Vec3.X): Vec3 = Vec3(v.x, 0.0, v.z).normalized(fallback)
 
 fun minOfD(a: Double, b: Double) = min(a, b)
+
+/**
+ * Open water at height [y] near ([x], [z]): the nearest point at that height a [clear] cm from the rock and inside the
+ * glass (c.safe finds the nearest clear point in any direction, which under a ledge is down under the ledge).
+ */
+fun Ctx.openAt(x: Double, z: Double, y: Double, clear: Double): Vec3 {
+    val m = clear + 1.0
+    fun inside(px: Double, pz: Double) = Vec3(px.coerceIn(m, rock.lengthCm - m), y, pz.coerceIn(m, rock.widthCm - m))
+    val p0 = inside(x, z)
+    if (rock.sdf.dist(p0) >= clear) return p0
+    for (r in doubleArrayOf(5.0, 10.0, 15.0, 20.0, 30.0, 40.0)) for (k in 0 until 12) {
+        val a = k * kotlin.math.PI / 6
+        val p = inside(x + r * kotlin.math.cos(a), z + r * kotlin.math.sin(a))
+        if (rock.sdf.dist(p) >= clear) return p
+    }
+    return safe(p0, clear)
+}
