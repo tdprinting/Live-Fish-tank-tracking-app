@@ -41,7 +41,11 @@ class BodyBounds(
         val reach = prof.maxReach * l + MARGIN
         val h = o.pos
         val span = o.spline.length + h.distanceTo(o.spline.headPos) + reach
-        val sandOn = !SandContact.exempt(o) && o.spline.override == null && !o.atBurrow
+        val sandOn = !SandContact.exempt(o) && o.spline.override == null
+        // a goby at its burrow: the stations over the pocket it dug go down into it, the rest of the body stays on the
+        // sand (a watchman sliding back from its mouth sank its tail 3 cm into the sand, then a rock fix flung it up)
+        val mouth = if (o.atBurrow) o.burrowMouth else null
+        val pocket = POCKET_BL * l
         val nearGlass = h.x < span || h.x > lengthCm - span || h.z < span || h.z > widthCm - span
         val nearSand = sandOn && h.y - span < sand.surfaceY(h.x, h.z) + MOUND_SLACK_CM
         if (!nearGlass && !nearSand) return
@@ -58,7 +62,8 @@ class BodyBounds(
             // (a station whose body cannot reach the glass or the sand in any direction is left alone)
             val ri = prof.reach(i) * l + MARGIN
             val glassHere = nearGlass && (x < ri || x > lengthCm - ri || z < ri || z > widthCm - ri)
-            val sandHere = nearSand && y - ri < sand.surfaceY(x, z) + SIDE_SLACK_CM
+            val sandHere = nearSand && y - ri < sand.surfaceY(x, z) + SIDE_SLACK_CM &&
+                (mouth == null || (x - mouth.x) * (x - mouth.x) + (z - mouth.z) * (z - mouth.z) > pocket * pocket)
             if (!glassHere && !sandHere) { out.add(p); continue }
             fr.set(o, pos, i)
             if (glassHere) {
@@ -137,5 +142,7 @@ class BodyBounds(
         const val SIDE_SLACK_CM = 1.0
         /** How much higher (cm) the sand under any station may be than under the head (mounds, burrow spoil). */
         const val MOUND_SLACK_CM = 6.0
+        /** Across the burrow mouth (body lengths) a goby at its burrow may lie in the pocket it dug, below the sand. [I] */
+        const val POCKET_BL = 0.4
     }
 }
