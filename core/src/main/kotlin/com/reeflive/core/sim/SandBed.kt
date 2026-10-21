@@ -1590,7 +1590,7 @@ class SandWork(private val sand: SandBed, private val rock: RockData) {
         for (o in organisms) {
             if (!o.alive) continue
             val kind = o.brainKind
-            if (kind != BrainKind.NASSARIUS && kind != BrainKind.CONCH && kind != BrainKind.HERMIT && kind != BrainKind.SALLY_CRAB && kind != BrainKind.ARROW_CRAB && kind != BrainKind.BRITTLE_STAR) continue
+            if (kind != BrainKind.NASSARIUS && kind != BrainKind.CONCH && kind != BrainKind.HERMIT && !kind.isCrab && kind != BrainKind.BRITTLE_STAR) continue
             val p = o.pos
             val t = tracks.getOrPut(o.id) { Track(p.x, p.z, o.posture, 0.0, 0) }
             val dx = p.x - t.x; val dz = p.z - t.z

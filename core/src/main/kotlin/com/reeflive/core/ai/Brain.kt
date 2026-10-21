@@ -357,6 +357,12 @@ object Predation {
                 prey.isFish && prey.sleeping && prey.lengthCm < pred.lengthCm -> 0.3
                 else -> 0.0
             }
+            // research 43 §1 (EWASH, care guides): an underfed emerald crab may take a small snail or a shrimp soft from a molt
+            BrainKind.EMERALD_CRAB -> when {
+                prey.brainKind.isSnail && prey.lengthCm < 0.6 * pred.lengthCm -> 0.2
+                prey.brainKind.isShrimp && prey.molting && prey.lengthCm < pred.lengthCm * 1.5 -> 0.2
+                else -> 0.0
+            }
             BrainKind.HAWK -> when (prey.brainKind) {
                 BrainKind.CLEANER_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.7 else 0.0
                 BrainKind.PEPPERMINT_SHRIMP -> if (prey.lengthCm < 0.9 * pred.lengthCm) 0.8 else 0.0
