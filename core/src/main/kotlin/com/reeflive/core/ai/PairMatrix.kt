@@ -586,7 +586,10 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
             }
         }
         if (o.retaliateUntil > c.t) {
-            // chase the cheater 1–2 BL (residents; S:Bshary01)
+            // chase the cheater (residents; S:Bshary01, 1–2 BL) about a body length from where it posed, then give up:
+            // chasing a cleaner that kept fleeing took an engineer goby 32 cm from its burrow
+            val from = hold
+            if (from != null && o.pos.distanceTo(from) > c.L) { o.retaliateUntil = c.t; finished = true; return }
             out.seek(w.pos, o.burstSpeed * 0.6, arrive = 0.5, urgency = 0.8)
             return
         }
