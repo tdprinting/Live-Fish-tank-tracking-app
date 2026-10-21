@@ -31,6 +31,10 @@ uniform vec3 uFillCol;        // hemisphere fill: x sky, the floor bounce is a d
 uniform vec3 uGlowCol;        // this bay's tank light colour: its water, its lamp and the glow it spills
 uniform float uRoomX;         // x of the live tank's centre: the bays (and their lights) repeat from it
 uniform float uCeil;          // the store's ceiling height (world y): its aisle lights hang just under it
+uniform float uFront;         // the front wall's inner face (world z): daylight comes in through its windows
+// Soft contact shadows on the floor under the people and the pet (StoreRoomScene): world x, z, radius, strength.
+uniform vec4 uShadows[12];
+uniform float uShadowN;
 
 out vec4 fragColor;
 
@@ -78,6 +82,28 @@ vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough)
     vec3 Lt = t * inversesqrt(t2);
     c += uGlowCol * (max(dot(N, Lt), 0.0) * 1800.0 / (t2 + 2500.0)) * diff * shimmer(p);
     return c;
+}
+
+// Baked-looking soft occlusion, all analytic (no extra pass): the floor darkens into the back wall and under the
+// stands, the walls into the floor and ceiling, and a soft blob lies under each person.
+float roomAO(vec3 p, vec3 N) {
+    float floorish = smoothstep(0.5, 0.9, N.y) * (1.0 - smoothstep(-80.0, -70.0, p.y));
+    // floor: the shade of the stands (their fronts end ≤ 67 cm out) and of the back wall
+    float a = 1.0 - floorish * 0.45 * (1.0 - smoothstep(30.0, 95.0, p.z));
+    // walls and fronts: dark where they meet the floor, a little under the ceiling
+    float wallish = 1.0 - abs(N.y);
+    a *= 1.0 - wallish * (0.35 * (1.0 - smoothstep(-82.0, -40.0, p.y)) + 0.25 * smoothstep(uCeil - 60.0, uCeil, p.y));
+    // contact shadows under people
+    if (floorish > 0.01) {
+        int n = int(uShadowN + 0.5);
+        for (int i = 0; i < 12; i++) {
+            if (i >= n) break;
+            vec4 s = uShadows[i];
+            float d = length(p.xz - s.xy);
+            a *= 1.0 - floorish * s.w * (1.0 - smoothstep(s.z * 0.25, s.z * 1.5, d));
+        }
+    }
+    return a;
 }
 
 void main() {
@@ -171,10 +197,16 @@ void main() {
     // the two nearest bays' lights (the lights repeat every bay)
     float n = floor((p.x - uRoomX) / uBay);
     vec3 col = bayLight(p, N, V, uRoomX + n * uBay, diff, F0, rough) + bayLight(p, N, V, uRoomX + (n + 1.0) * uBay, diff, F0, rough);
-    // hemisphere fill; corners near the floor a little darker
-    vec3 amb = mix(uFillCol * 0.35, uFillCol, N.y * 0.5 + 0.5) * diff;
-    amb *= mix(0.7, 1.0, smoothstep(-82.0, -60.0, p.y));
-    col += amb;
+    float ao = roomAO(p, N);
+    // daylight through the front windows and door, falling off into the store (none at night)
+    float day = (1.0 - uNight) * smoothstep(uFront - 380.0, uFront, p.z);
+    col += vec3(0.55, 0.62, 0.72) * day * (max(N.z, 0.0) * 0.8 + max(N.y, 0.0) * 0.5) * diff;
+    // hemisphere fill with a warm bounce off the floor (soft, like light that has bounced round the room); people
+    // wrap the light a little more so they read soft and round
+    float wrap = kind == 9 ? 0.65 : 0.5;
+    vec3 amb = mix(uFillCol * 0.45, uFillCol * 1.15, N.y * wrap + (1.0 - wrap)) * diff;
+    amb += uLampCol * 0.06 * max(-N.y, 0.0) * diff;
+    col = (col * mix(1.0, ao, 0.7) + amb * ao);
     // a soft reflection of the lit room in polished and metal surfaces
     vec3 R = reflect(-V, N);
     float ndv = max(dot(N, V), 1e-3);

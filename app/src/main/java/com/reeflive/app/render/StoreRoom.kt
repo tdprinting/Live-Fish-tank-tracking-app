@@ -179,6 +179,9 @@ internal class StoreRoomScene {
     private var tailPivot = FloatArray(3)
     private var doorOpen = 0f
     private var outside = false
+    /** Soft floor shadows (store.frag uShadows): world x, z, radius, strength for each person and the pet. */
+    private val shadows = FloatArray(MAX_SHADOWS * 4)
+    private var shadowN = 0
     private val fig = FloatArray(16)
     private val torso = FloatArray(16)
 
@@ -312,9 +315,15 @@ internal class StoreRoomScene {
 
     /** Every person's part matrices, their props and the pet, for this frame. */
     private fun pose(c: StoreRoomControl) {
+        shadowN = 0
         for (a in people.agents) {
             val slot = a.person.slot
             if (slot >= MAX_PEOPLE || a.hidden) continue
+            if (shadowN < MAX_SHADOWS) {
+                val k = shadowN * 4
+                shadows[k] = worldX(c, a.x); shadows[k + 1] = a.z; shadows[k + 2] = if (a.kid) 17f else 23f; shadows[k + 3] = 0.55f
+                shadowN++
+            }
             val j = joints[slot]
             val pm = partMats[slot]
             // the figure: feet on the floor, turned to face its way
@@ -337,6 +346,11 @@ internal class StoreRoomScene {
             }
         }
         people.pet?.let { p ->
+            if (shadowN < MAX_SHADOWS && p.y < 1f) {
+                val k = shadowN * 4
+                shadows[k] = worldX(c, p.x); shadows[k + 1] = p.z; shadows[k + 2] = 16f; shadows[k + 3] = 0.45f
+                shadowN++
+            }
             identity(petMat)
             translate(petMat, worldX(c, p.x), StoreRoomLayout.FLOOR_Y + p.y + if (p.walking) abs(sin(p.walked * 0.25f)) * 1.2f else 0f, p.z)
             rotY(petMat, p.yaw)
@@ -386,6 +400,9 @@ internal class StoreRoomScene {
         p.use()
         p.set1f("uBay", bay)
         p.set1f("uCeil", ceil)
+        p.set1f("uFront", front)
+        p.set1f("uShadowN", shadowN.toFloat())
+        if (shadowN > 0) p.set4fv("uShadows", shadows, shadowN)
         p.set3f("uLampCol", theme.lamp[0], theme.lamp[1], theme.lamp[2])
         p.set3f("uFillCol", theme.fill[0], theme.fill[1], theme.fill[2])
         // the room's light repeats every bay from the live tank's centre (store.frag)
@@ -546,6 +563,7 @@ internal class StoreRoomScene {
         /** [pick] returns PERSON + slot for a tap on a person. */
         const val PERSON = 1_000_000
         private const val MAX_PEOPLE = 10
+        private const val MAX_SHADOWS = 12
         private val KIND_COUNT = DisplayKind.entries.size
         private val PROP_COUNT = Prop.entries.size
         private val LONG = DisplayKind.LONG.ordinal

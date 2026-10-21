@@ -28,6 +28,7 @@ import numpy as np
 
 import common as C
 from common import bpy
+import bmesh  # noqa: E402 (after bpy)
 import store_fronts as SF
 import store_people as SP
 from store_geo import Group, cylinder, ellipsoid, fish, mat, text, _mats
@@ -730,6 +731,58 @@ def sign_mat(t):
     return mat("sign_paint", t["sign"], 0.5)
 
 
+# ============================================================== baked shading
+def bake_ao(sets, samples=24):
+    """Bakes ambient occlusion into the vertex colour of each set of objects on its own (a person's six parts, the pet,
+    a prop), so armpits, under the chin, between the legs and the folds of clothes are softly shaded like the Cycles
+    previews, at no runtime cost (store.frag multiplies COLOR_0 in, kind 9)."""
+    scn = bpy.context.scene
+    scn.render.engine = 'CYCLES'
+    scn.cycles.device = 'CPU'
+    scn.cycles.samples = samples
+    scn.render.bake.target = 'VERTEX_COLORS'
+    if scn.world is None:
+        scn.world = bpy.data.worlds.new("bake")
+    scn.world.light_settings.distance = 14.0      # cm: creases and folds, not the whole figure
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    for objs in sets:
+        objs = [o for o in objs if o is not None and "Col" in o.data.color_attributes]
+        if not objs:
+            continue
+        for o in meshes:
+            o.hide_render = o not in objs
+        for o in objs:
+            me = o.data
+            # the builders don't care about winding (store.frag lights both sides); the bake's rays need outward faces
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            bm.to_mesh(me)
+            bm.free()
+            col = me.color_attributes["Col"]
+            ao = me.color_attributes.new("AO", 'FLOAT_COLOR', 'POINT')
+            me.color_attributes.active_color = ao
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True)
+            bpy.context.view_layer.objects.active = o
+            bpy.ops.object.bake(type='AO')
+            if os.environ.get("AO_DEBUG"):
+                v = [a.color[0] for a in ao.data]
+                print("[ao]", o.name, round(min(v), 3), round(sorted(v)[len(v) // 2], 3), round(max(v), 3))
+            # normalise by the part's own bright end (layered clothes shells occlude each other), then soften with a
+            # 0.55 floor so creases darken but nothing turns black
+            v = sorted(a.color[0] for a in ao.data)
+            top = max(v[int(len(v) * 0.9)], 0.05)
+            for c, a in zip(col.data, ao.data):
+                k = 0.55 + 0.45 * min(1.0, a.color[0] / top)
+                r, g, b, al = c.color
+                c.color = (r * k, g * k, b * k, al)
+            me.color_attributes.remove(me.color_attributes["AO"])
+            me.color_attributes.active_color = me.color_attributes["Col"]
+    for o in meshes:
+        o.hide_render = False
+
+
 # ============================================================== build
 def join_into(node, objs):
     """Joins text objects (made by [text]) into a module's node."""
@@ -780,6 +833,11 @@ def build(sid):
     sign.parent = root
     co = text("CHECKOUT", CX, 163, 67, 13, mat("sign_text", "#FFFFFF", 0.4, emit="#FFFFFF", strength=1.2), depth=0.8)
     by = {o.name: o for o in objs}
+    sets = [[by.get(f"P{slot}_{p}") for p in ("Torso", "Head", "ArmL", "ArmR", "LegL", "LegR")] for slot in range(len(SP.CASTS[sid]))]
+    sets += [[by.get("Pet_Body"), by.get("Pet_Tail")], [by.get("Pet_Sleep")]]
+    sets += [[o] for n, o in by.items() if n.startswith("Prop_")]
+    if "--no-bake" not in sys.argv:
+        bake_ao(sets)
     join_into(by["Counter"], [co])
     join_into(by["Decor1"], decor_text)
     join_into(by["Entry"], ent_text)
