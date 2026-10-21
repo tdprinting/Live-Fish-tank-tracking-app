@@ -127,6 +127,7 @@ import com.reeflive.app.ui.live.MyTankSetupCard
 import com.reeflive.app.ui.live.CareCard
 import com.reeflive.app.ui.live.MoneyChip
 import com.reeflive.app.ui.live.StoreOverlay
+import com.reeflive.app.ui.live.TryOnBar
 import com.reeflive.app.ui.live.RewardFxLayer
 import com.reeflive.app.ui.live.RewardFxState
 import com.reeflive.app.ui.live.WelcomeBackCard
@@ -358,6 +359,10 @@ fun LiveTankScreen(
     // walking a fish store's display tanks (docs/ECONOMY.md §5): the 3D view shows the store's tank meanwhile
     val visit by vm.visit.collectAsStateWithLifecycle()
     var storePick by remember { mutableStateOf<String?>(null) }
+    // the room shop's try-on: a stand (or colour, extra) shown on the tank with a Buy bar
+    val roomShop by vm.roomShop.collectAsStateWithLifecycle()
+    var trying by remember { mutableStateOf<com.reeflive.core.custom.room.Decor.Tile?>(null) }
+    LaunchedEffect(myTank) { if (!myTank && trying != null) { trying = null; vm.decorTry(null) } }
     // taps in the 3D shop: another display tank walks there, the counter opens the till
     var counterRequest by remember { mutableIntStateOf(0) }
     DisposableEffect(vm.storeRoom) {
@@ -856,6 +861,25 @@ fun LiveTankScreen(
             if (hermieOn) hermie.say(f.greeting, HermieMood.HAPPY)
         },
         onStoreShut = { f -> tick(); if (hermieOn) hermie.say("Do your care jobs to level up and ${f.label} opens!", HermieMood.SURPRISED) },
+        room = roomShop,
+        onRoomTile = { t ->
+            tick()
+            when {
+                t.owned -> {
+                    trying = null
+                    vm.decorUse(t.key); vm.showRoom()
+                    if (hermieOn) hermie.say(if (t.key.startsWith("extra:")) "${t.label} ${if (t.inUse) "off" else "on"}!" else "${t.label} it is!", HermieMood.HAPPY)
+                }
+                t.locked -> if (hermieOn) hermie.say("That one opens at level ${t.level}. Keep doing your care jobs!", HermieMood.SURPRISED)
+                else -> {
+                    trying = t
+                    open = null
+                    vm.decorTry(t.key); vm.showRoom()
+                    val coins = economy?.coins ?: 0
+                    if (hermieOn) hermie.say(if (coins >= t.price) "How does it look? Buy it to keep it." else "You need ${t.price - coins} more sand dollars for this one.", HermieMood.HAPPY)
+                }
+            }
+        },
         soundOn = soundOn,
         onSound = { tick(); toggleSound() },
         radioOn = settings.radioOn,
@@ -1382,6 +1406,28 @@ fun LiveTankScreen(
         if (visit != null && myTank) StoreBubbleLayer(vm.storeRoom, projection, Modifier.fillMaxSize())
         val tradeOffer by vm.trade.collectAsStateWithLifecycle()
         tradeOffer?.let { o -> if (myTank) TradeCard(o) { yes -> tick(); vm.answerTrade(yes); if (yes && hermieOn) hermie.say("Traded! Your ${o.getName} is floating in a bag at the top of your tank.", HermieMood.EXCITED) } }
+        trying?.let { t ->
+            if (myTank && visit == null) TryOnBar(
+                t, economy?.coins ?: 0, hudBottom + 8.dp,
+                onBuy = {
+                    tick()
+                    vm.decorBuy(t.key) { r ->
+                        scope.launch {
+                            when (r) {
+                                com.reeflive.core.custom.room.DecorResult.OK -> {
+                                    trying = null
+                                    if (hermieOn) hermie.say(if (t.key.startsWith("stand:")) "Your new ${t.label.lowercase()} is in!" else "${t.label}: yours now!", HermieMood.EXCITED)
+                                }
+                                com.reeflive.core.custom.room.DecorResult.TOO_POOR -> if (hermieOn) hermie.say("Not enough sand dollars yet. Do your care jobs to earn more!", HermieMood.SURPRISED)
+                                com.reeflive.core.custom.room.DecorResult.LEVEL_LOCKED -> if (hermieOn) hermie.say("That one opens at a higher level.", HermieMood.SURPRISED)
+                                else -> { trying = null; vm.decorTry(null) }
+                            }
+                        }
+                    }
+                },
+                onCancel = { tick(); trying = null; vm.decorTry(null) },
+            )
+        }
         visit?.let { v ->
             if (myTank) StoreOverlay(
                 v, storePick,
@@ -1604,6 +1650,7 @@ private fun TankArea(
             onSpot = onSpot,
             aim = aim,
             storeRoom = vm.storeRoom,
+            room = vm.roomControl,
             cinema = cinema,
         )
         TorchOverlay(torch, torchOn && !micro)

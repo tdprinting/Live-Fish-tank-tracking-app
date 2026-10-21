@@ -17,6 +17,10 @@ import com.reeflive.core.custom.economy.Offers
 import com.reeflive.core.custom.economy.StoreTrades
 import com.reeflive.core.custom.economy.StoreVisit
 import com.reeflive.core.custom.economy.TradeOffer
+import com.reeflive.core.custom.room.Decor
+import com.reeflive.core.custom.room.DecorResult
+import com.reeflive.core.custom.room.SavedDecor
+import com.reeflive.app.render.RoomLook
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
@@ -43,6 +47,10 @@ object ReefMyTank {
     private var pausedAt = -1.0
     /** Sand dollars, the care list and goals (docs/ECONOMY.md); kept across "Start over" like the Android app. */
     private var economy: Economy? = null
+    /** The stand and room bought for My tank (core room/Decor.kt); kept across "Start over" like the money. */
+    private var decor: SavedDecor = SavedDecor()
+    /** The shop card is trying something on (shown, not bought). */
+    private var previewKey: String? = null
 
     private fun now(): Double = js("Date.now()") as Double
     private fun read(key: String): String? = runCatching { localStorage.getItem(key) }.getOrNull()?.takeIf { it.isNotBlank() }
@@ -84,7 +92,7 @@ object ReefMyTank {
         sim = s
         val eco = economy ?: Economy()
         economy = eco
-        base = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed, economy = eco.state)
+        base = CustomTankSave(name = "My tank", buildId = build.id, createdAtMs = t.toLong(), seed = seed, economy = eco.state, decor = decor)
         loaded = true
         save()
         if (ReefSandbox.isMine()) ReefLive.sim = s
@@ -164,6 +172,56 @@ object ReefMyTank {
 
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
+
+    // ------------------------------------------------------------------ the room: stands (core room/Decor.kt)
+
+    /** Puts My tank's stand and room (or the one being tried on) round the tank. */
+    private fun showRoom() {
+        val k = previewKey
+        ReefLive.homeRoom.look = RoomLook.of(if (k != null) Decor.preview(decor, k) else decor)
+    }
+
+    /**
+     * The room shop card: `{coins, level, recolor, tiles:[{key, kind, label, price, level, owned, inUse, locked, paint, trim}]}`
+     * (kind: stand, color, extra; paint/trim are #rrggbb swatches).
+     */
+    fun decorShop(): String {
+        val e = economy ?: return "null"
+        return JSON.stringify(obj { o ->
+            o.coins = e.state.coins; o.level = e.level; o.recolor = Decor.RECOLOR; o.preview = previewKey
+            o.tiles = Decor.tiles(decor, e.level).map { t ->
+                obj {
+                    it.key = t.key; it.kind = t.key.substringBefore(':'); it.label = t.label; it.price = t.price; it.level = t.level
+                    it.owned = t.owned; it.inUse = t.inUse; it.locked = t.locked
+                    it.paint = t.swatch?.let { c -> hex(c) }; it.trim = t.swatch2?.let { c -> hex(c) }
+                }
+            }.toTypedArray()
+        })
+    }
+
+    private fun hex(c: Int) = "#" + c.toString(16).padStart(6, '0')
+
+    /** Buys [key] (it goes straight into use). Returns `{result, coins}`; result OK, OWNED, LEVEL_LOCKED, TOO_POOR, UNKNOWN. */
+    fun decorBuy(key: String): String {
+        val e = economy ?: return "null"
+        val (d, r) = Decor.buy(decor, key, e, today())
+        if (r == DecorResult.OK) { decor = d; previewKey = null; showRoom(); save() }
+        return JSON.stringify(obj { it.result = r.name; it.coins = e.state.coins })
+    }
+
+    /** Puts an owned stand, colour or extra to use (an extra toggles). */
+    fun decorUse(key: String) {
+        val d = Decor.use(decor, key)
+        previewKey = null
+        if (d != decor) { decor = d; save() }
+        showRoom()
+    }
+
+    /** Tries [key] on in the 3D view without buying it ("" ends the preview). */
+    fun decorPreview(key: String) {
+        previewKey = key.ifBlank { null }
+        showRoom()
+    }
 
     // ------------------------------------------------------------------ fish stores (docs/ECONOMY.md §5)
 
@@ -360,7 +418,7 @@ object ReefMyTank {
     fun save() {
         val s = sim ?: return
         val b = base ?: return
-        val next = CustomTank.capture(s, economy?.let { b.copy(economy = it.state) } ?: b, now().toLong())
+        val next = CustomTank.capture(s, (economy?.let { b.copy(economy = it.state) } ?: b).copy(decor = decor), now().toLong())
         base = next
         val text = CustomTankCodec.encode(next)
         read(KEY)?.let { write(BACKUP, it) }
@@ -375,11 +433,14 @@ object ReefMyTank {
 
     internal fun enter(): Simulation? {
         load()
+        showRoom()
         catchUp()
         return sim
     }
 
     internal fun leave() {
+        previewKey = null
+        ReefLive.homeRoom.look = RoomLook.DEFAULT
         // walking out of My tank from a store: the pause already started at the store's door
         if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
         save(); pausedAt = now()
@@ -436,6 +497,7 @@ object ReefMyTank {
         sim = s
         base = CustomTank.baseAfterRestore(save, species)
         economy = Economy(save.economy)
+        decor = save.decor
         // closed since the last save: the time away runs on the next [catchUp]
         pausedAt = save.savedAtMs.toDouble()
         s.stepWall(0.0)

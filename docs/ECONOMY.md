@@ -401,3 +401,24 @@ worst re-roll one day's list, never pay twice for a task.
   mesh lid about 40 at Big Blue (firefish and fairy wrasses jump).
 * A store "order" quest: "Big Blue wants 3 zoa frags by Friday" for a big payout.
 * Seasonal store events (a holiday sale, a rare fish week).
+
+## 14. Your room: stands, scenes and more tanks
+
+Tee 2026-10-21: the tank stands on a stand in a room, and the keeper buys new stands, colours, extras and (next)
+room scenes, wallpaper, floors and more tanks with sand dollars. The room frames the tank softly lit and a little out
+of focus, so it never pulls the eye away.
+
+* **Stands** (`core/custom/room/Decor.kt`, models `tools/blender/stands.py` → `stand_<id>.glb`, one node per tank
+  build so doors and shelves keep their proportions): Classic cabinet (Tee's white X-door stand, free), Shaker 240
+  (L1), Iron frame 300 (L2), Modern gloss 360 (L2), Barn wood 420 (L3), Reef pro (sump window, glowing edge) 700 (L5).
+  Each has four colours (paint + trim); the first comes with it, the others are 40 each. Extras for any stand: Glow
+  strip 150 (L2, blue light on the floor) and Gold handles 80. Owned ones switch freely, an extra toggles on and off.
+* **Try before you buy:** a tap on something new shows it on the tank (the camera steps back to see the stand) with a
+  Buy / Not now bar; nothing is spent until Buy.
+* **Room** (`tools/blender/rooms.py` → `room_<scene>.glb`): the living room first (oak floor, warm walls, floor lamp,
+  plants, sofa, two sea prints, a side table left of the stand whose top is kept free for a radio:
+  `HomeRoomLayout.RADIO`). Drawn by `render/HomeRoom.kt` with `room.frag`: its own daylight by the sim clock, the lamp
+  in the evening, the tank's light spilling onto the wall, ceiling and floor; far patterns fade and colours are muted.
+  About 25 draw calls and 10k static triangles. Watch (Tee's tank) always shows the classic white stand.
+* **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`, the
+  stand and colour in use, the extras on). A defaulted field, no codec bump; kept across Start over like the money.

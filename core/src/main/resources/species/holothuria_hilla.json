@@ -1,0 +1,119 @@
+{
+  "id": "holothuria_hilla",
+  "kind": "INVERT",
+  "common": "Tiger tail sea cucumber",
+  "scientific": "Holothuria hilla",
+  "family": "Holothuriidae",
+  "maxLengthCm": 30,
+  "typicalAdultCm": 25,
+  "growthCmPerYear": 3,
+  "lifespanYears": 5,
+  "depthRatio": 0.12,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.003,
+    "burstBL": 0.006,
+    "tailHzCruise": 0,
+    "turnRateDeg": 6,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.1,
+    "openWater": 0.0,
+    "coverAffinity": 0.7
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 60,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.0,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "DETRITUS",
+    "PELLET"
+  ],
+  "feedsPerDay": 1.0,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29.5,
+      "lethalLo": 18,
+      "lethalHi": 32
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.022,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.03
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.4
+    },
+    "no3": {
+      "optHi": 10,
+      "tolHi": 25,
+      "lethalHi": 60
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.05
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "hardiness": 0.5,
+  "starvationDays": 60,
+  "size": {
+    "lod0Tris": 4220
+  },
+  "model": "models/tiger_tail_cucumber.glb",
+  "colors": {
+    "primary": "#B9773A",
+    "secondary": "#4A2814",
+    "accent": "#D8A066"
+  },
+  "brain": "sea_cucumber",
+  "buoyantWhenDead": false,
+  "minTankGallons": 50,
+  "careLevel": "Expert",
+  "reefSafe": "Yes, with care",
+  "copperSensitive": true,
+  "dietSummary": "Eats the film of detritus, bacteria and microalgae on the sand, mopped up with a ring of sticky tentacles round its mouth. It also takes food that settles in front of it.",
+  "temperamentSummary": "Slow and harmless. Lies half under the rock by day with its tail out, and creeps over the sand at night cleaning it. Balls up tight when touched.",
+  "careNotes": [
+    "Needs a mature sand bed with plenty of natural detritus; one per tank, or they run out of food.",
+    "If it dies, or is badly stressed or bitten, it releases holothurin, a poison that can kill the fish. Run carbon and take a dead one out fast.",
+    "Can be sucked into uncovered pump intakes; cover them with a sponge.",
+    "Keep nitrate low and the water stable; copper kills it. Acclimate slowly by drip.",
+    "Keep away from large hermit crabs and fish that pick at it."
+  ]
+}
