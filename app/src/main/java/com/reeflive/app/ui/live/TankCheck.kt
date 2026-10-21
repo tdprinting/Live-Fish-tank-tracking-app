@@ -52,7 +52,7 @@ internal fun TankHealthBody(
     } else if (hunger.isNotEmpty()) {
         LiveHelp("Everyone is full. Check back in a few hours.")
     } else {
-        LiveHelp("No animals yet. Add some from Add life.")
+        LiveHelp("No animals yet. Visit the Shop to buy some.")
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (r in hunger) {

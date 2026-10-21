@@ -1303,6 +1303,69 @@ def fins_clown_goby(cv):
     FL.paint_fin_slot(cv, 4, base="#F6EA70", alpha=0.45, rays=16, ray_color="#E0C830")
     FL.paint_fin_slot(cv, 5, base="#F6E860", alpha=0.6, rays=6, ray_color="#E0C830")
 
+# ---------------------------------------------------------------- rare and expensive fish (research 60)
+def paint_gem_tang(cv, fl):
+    """Zebrasoma gemmatum: dark chocolate-brown all over, covered with small round to oval white spots on the head,
+    body and the dorsal and anal fins, a bright yellow tail [Wikipedia; research 60 §1]. Spots a little bigger and
+    sparser on the mid flank than on the head [photo read, L]."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#33251C", "#281C15", 0.0, 1.0)
+    cv.blend(S(0.78, 1.0, v), "#21170F", 0.45)                          # darker along the back
+    cv.blend((1 - S(0.0, 0.25, v)) * S(0.15, 0.5, u), "#433226", 0.35)   # a touch warmer on the belly
+    mucus(cv, 0.05, 601)
+    scales_overlay(cv, 8, 0.04)
+    rs = np.random.default_rng(602)
+    head, pts = fl.spots(rs, 120, 0.0026, 0.0038, 0.0085, (0.04, 0.3, 0.08, 0.95))
+    body, _ = fl.spots(rs, 140, 0.0042, 0.0068, 0.015, (0.26, 0.9, 0.05, 0.96), existing=pts)
+    cv.blend(head * (1 - S(0.27, 0.31, u)), "#F4F0E6", 0.92)
+    cv.blend(body * S(0.27, 0.31, u) * (1 - S(0.86, 0.9, u)), "#F2EEE2", 0.9)
+    cv.blend(S(0.965, 0.985, u), "#F2C230")                               # yellow from the caudal base
+    cv.blend(fl.disc(0.885, 0.5, 0.02, 0.006), "#1A120C", 0.9)          # dark spine sheath
+    dark_mouth(cv, fl, u1=0.02, v0=0.46, v1=0.54, color="#140C08", op=0.6)
+
+
+def fins_gem_tang(cv):
+    def pearls(T, Sx, rgb, a, n, rows):
+        ph = np.abs(((T * n + 0.5 * np.floor(Sx * rows)) % 1.0) - 0.5)
+        rw = np.abs(((Sx * rows) % 1.0) - 0.5)
+        m = (1 - S(0.1, 0.2, ph)) * (1 - S(0.1, 0.2, rw)) * (Sx < 0.88) * (Sx > 0.06)
+        return rgb * (1 - m[..., None]) + hex2rgb("#F2EEE2") * m[..., None], np.maximum(a, 0.95 * m)
+    FL.paint_fin_slot(cv, 0, base="#2A1E16", alpha=0.92, rays=30, ray_color="#1A120C", spine_count=5, incise=0.05,
+                      spots=lambda T, Sx, rgb, a: pearls(T, Sx, rgb, a, 34, 4))
+    FL.paint_fin_slot(cv, 2, base="#2A1E16", alpha=0.92, rays=24, ray_color="#1A120C",
+                      spots=lambda T, Sx, rgb, a: pearls(T, Sx, rgb, a, 26, 3))
+
+    def caudal(T, Sx, rgb):
+        rgb[:] = hex2rgb("#F2C230")
+        return rgb
+    FL.paint_fin_slot(cv, 3, base="#F2C230", alpha=0.95, rays=18, ray_color="#D49E10", base_fn=caudal)
+    FL.paint_fin_slot(cv, 4, base="#3A2A20", alpha=0.6, rays=14, ray_color="#22180F")
+    FL.paint_fin_slot(cv, 5, base="#2A1E16", alpha=0.85, rays=5, ray_color="#1A120C")
+
+
+def paint_wrought_iron(cv, fl):
+    """Chaetodon daedalma: metallic charcoal black; every scale has a pale (silvery to straw) centre inside a broad
+    black rim, so the flank reads as a black lattice, a wrought-iron grille [Wikipedia; research 60 §3]. The head and
+    snout are plain dark, the lattice fades out toward the peduncle [photo read, L]."""
+    u, v = cv.u, cv.v
+    cv.vgrad("#1E1E22", "#18181B", 0.0, 1.0)
+    mucus(cv, 0.04, 611)
+    sc = P.hex_scales(cv, 17, 612)
+    centre = (1 - S(0.0, 0.35, sc)) * S(0.2, 0.3, u) * (1 - S(0.86, 0.93, u)) * S(0.06, 0.16, v) * (1 - S(0.88, 0.97, v))
+    cv.blend(centre, "#9C9880", 0.6)
+    cv.blend(centre * S(0.45, 0.75, u), "#C4B578", 0.25)                  # straw tint over the rear flank [L]
+    cv.blend(1 - S(0.16, 0.26, u), "#141416", 0.5)                       # plain dark head
+    dark_mouth(cv, fl, u1=0.02, v0=0.45, v1=0.55, color="#0A0A0C", op=0.6)
+
+
+def fins_wrought_iron(cv):
+    FL.paint_fin_slot(cv, 0, base="#1C1C20", alpha=0.95, rays=26, ray_color="#101012", spine_count=12, incise=0.04,
+                      margin="#E8C63A", margin_w=0.12)
+    FL.paint_fin_slot(cv, 2, base="#1C1C20", alpha=0.95, rays=20, ray_color="#101012", spine_count=3, margin="#E8C63A", margin_w=0.12)
+    FL.paint_fin_slot(cv, 3, base="#232328", alpha=0.85, rays=16, ray_color="#141418", margin="#E8C63A", margin_w=0.1)
+    FL.paint_fin_slot(cv, 4, base="#D8D4C4", alpha=0.25, rays=13, ray_color="#9A968A", ray_alpha=0.45)
+    FL.paint_fin_slot(cv, 5, base="#1C1C20", alpha=0.85, rays=5, ray_color="#101012")
+
 
 SPECIES = {
     "clown_orange": dict(
@@ -1711,10 +1774,34 @@ SPECIES["purple_tang"] = dict(SPECIES["yellow_tang"], paint=paint_purple_tang, f
                               eye=dict(u=0.2, zf=0.4, r=0.043, iris="#14102A", ring="#3A3080", outer="#0A0818", ring_w=0.1),
                               length_cm=20.0)
 
+# research 60: the gem tang is a Zebrasoma built like the yellow tang (depth 1.6-1.9 in SL, Wikipedia)
+SPECIES["gem_tang"] = dict(SPECIES["yellow_tang"], paint=paint_gem_tang, fins=fins_gem_tang, irid=0.12,
+                           eye=dict(u=0.2, zf=0.4, r=0.043, iris="#120C08", ring="#3A2A1C", outer="#0A0806", ring_w=0.1),
+                           length_cm=18.0)
+
+# research 60: Chaetodon daedalma, a classic butterflyfish disc: body depth ~0.6 SL, a short pointed snout with a
+# small terminal mouth, one continuous dorsal (XII-XIII spines) and anal (III spines) whose soft parts round off
+# behind, a truncate caudal [Chaetodontidae morphology; L for the exact contour]
+SPECIES["wrought_iron_butterfly"] = dict(
+    profile=[(0, 0.04, 0.025, -0.04), (0.05, 0.1, 0.045, -0.035), (0.1, 0.2, 0.07, -0.025), (0.17, 0.36, 0.1, -0.012),
+             (0.26, 0.52, 0.12, 0.0), (0.36, 0.6, 0.128, 0.0), (0.48, 0.58, 0.122, 0.0), (0.6, 0.5, 0.11, 0.0),
+             (0.7, 0.38, 0.09, 0.0), (0.8, 0.24, 0.068, 0.0), (0.88, 0.16, 0.05, 0.0), (1.0, 0.15, 0.035, 0.0)],
+    body_tris=4200, ring=36, p_exp=0.7, belly_bias=0.03, back_pinch=0.15,
+    dorsal=dict(u0=0.24, u1=0.84, h=[(0.24, 0.04), (0.3, 0.12), (0.42, 0.15), (0.6, 0.16), (0.72, 0.15), (0.8, 0.09),
+                                    (0.84, 0.02)], rake=30, n=26),
+    anal=dict(u0=0.46, u1=0.84, h=[(0.46, 0.04), (0.52, 0.12), (0.64, 0.15), (0.75, 0.12), (0.82, 0.06), (0.84, 0.02)],
+              rake=30, n=20),
+    caudal=dict(length=0.18, span=0.28, shape="truncate"),
+    pectoral=dict(u=0.3, length=0.17, width=0.1, zf=-0.1, shape="pointed"),
+    pelvic=dict(u=0.31, length=0.12),
+    eye=dict(u=0.15, zf=0.3, r=0.05, iris="#141416", ring="#6A6658", outer="#0C0C0E", ring_w=0.12),
+    paint=paint_wrought_iron, fins=fins_wrought_iron, irid=0.3, rough=0.3, length_cm=13.0,
+)
+
 FISH_IDS = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish", "lawnmower_blenny",
             "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse", "bicolor_blenny", "midas_blenny", "firefish", "chromis",
             "yellow_tang", "purple_tang", "fairy_wrasse",
-            "royal_gramma", "banggai", "watchman_goby", "mandarin", "sixline_wrasse", "clown_goby"]
+            "royal_gramma", "banggai", "watchman_goby", "mandarin", "sixline_wrasse", "clown_goby", "gem_tang", "wrought_iron_butterfly"]
 
 
 # ----------------------------------------------------------------------------

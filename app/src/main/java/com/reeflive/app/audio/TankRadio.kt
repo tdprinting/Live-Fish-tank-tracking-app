@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import com.reeflive.app.R
+import com.reeflive.core.radio.RadioStation
 
 /**
  * The radio on the table beside the tank: plays [RadioStation] songs one after another, quietly, while the Live tab is
@@ -25,15 +26,18 @@ class TankRadio(context: Context, private val onSongEnded: (Int) -> Unit) {
     private var on = false
     private var track = 0
     private var volume = 0.6f
+    private var owned: Set<String> = emptySet()
     private var resumed = false
     private var released = false
 
-    /** User settings: radio on/off, the song it is on and the shared volume slider. */
-    fun set(on: Boolean, track: Int, volume: Float) {
+    /** User settings: radio on/off, the song it is on, the music volume and the records bought in My tank. */
+    fun set(on: Boolean, track: Int, volume: Float, owned: Set<String>) {
         if (released) return
-        val turned = on && this.on && track != this.track && player != null
+        this.owned = owned
+        val pick = RadioStation.playableOr(track, owned)
+        val turned = on && this.on && pick != this.track && player != null
         this.on = on
-        this.track = RadioStation.step(track, 0)
+        this.track = pick
         this.volume = volume.coerceIn(0f, 1f)
         if (turned) tuneStatic()
         sync()
@@ -64,7 +68,7 @@ class TankRadio(context: Context, private val onSongEnded: (Int) -> Unit) {
                 p.setOnCompletionListener {
                     // on to the next song by itself (no dial static); the caller remembers it
                     if (released) return@setOnCompletionListener
-                    track = RadioStation.step(playerTrack, 1)
+                    track = RadioStation.step(playerTrack, 1, owned)
                     sync()
                     onSongEnded(track)
                 }
@@ -101,7 +105,41 @@ class TankRadio(context: Context, private val onSongEnded: (Int) -> Unit) {
             "radio_clownfish_waltz" to R.raw.radio_clownfish_waltz,
             "radio_hammock_ukulele" to R.raw.radio_hammock_ukulele,
             "radio_moonlit_drift" to R.raw.radio_moonlit_drift,
+            "radio_window_seat" to R.raw.radio_window_seat,
+            "radio_five_oclock_dock" to R.raw.radio_five_oclock_dock,
+            "radio_sandcastle_sunshine" to R.raw.radio_sandcastle_sunshine,
+            "radio_turtle_glide" to R.raw.radio_turtle_glide,
+            "radio_sea_breeze_bossa" to R.raw.radio_sea_breeze_bossa,
+            "radio_starfish_lullaby" to R.raw.radio_starfish_lullaby,
+            "radio_tiki_twilight" to R.raw.radio_tiki_twilight,
+            "radio_kelp_forest_sway" to R.raw.radio_kelp_forest_sway,
+            "radio_postcard_reef" to R.raw.radio_postcard_reef,
+            "radio_dolphin_dance" to R.raw.radio_dolphin_dance,
             RadioStation.TUNE_FILE to R.raw.radio_tune,
         )
     }
+}
+
+/** Record sleeve pictures (RadioSong.art), named here so resource shrinking keeps them. */
+object RecordSleeves {
+    private val ids = mapOf(
+        "radio_coral_morning" to R.drawable.vinyl_coral_morning,
+        "radio_aloha_lagoon" to R.drawable.vinyl_aloha_lagoon,
+        "radio_tide_pool" to R.drawable.vinyl_tide_pool,
+        "radio_clownfish_waltz" to R.drawable.vinyl_clownfish_waltz,
+        "radio_hammock_ukulele" to R.drawable.vinyl_hammock_ukulele,
+        "radio_moonlit_drift" to R.drawable.vinyl_moonlit_drift,
+        "radio_window_seat" to R.drawable.vinyl_window_seat,
+        "radio_five_oclock_dock" to R.drawable.vinyl_five_oclock_dock,
+        "radio_sandcastle_sunshine" to R.drawable.vinyl_sandcastle_sunshine,
+        "radio_turtle_glide" to R.drawable.vinyl_turtle_glide,
+        "radio_sea_breeze_bossa" to R.drawable.vinyl_sea_breeze_bossa,
+        "radio_starfish_lullaby" to R.drawable.vinyl_starfish_lullaby,
+        "radio_tiki_twilight" to R.drawable.vinyl_tiki_twilight,
+        "radio_kelp_forest_sway" to R.drawable.vinyl_kelp_forest_sway,
+        "radio_postcard_reef" to R.drawable.vinyl_postcard_reef,
+        "radio_dolphin_dance" to R.drawable.vinyl_dolphin_dance,
+    )
+
+    fun of(file: String): Int = ids[file] ?: R.drawable.vinyl_coral_morning
 }

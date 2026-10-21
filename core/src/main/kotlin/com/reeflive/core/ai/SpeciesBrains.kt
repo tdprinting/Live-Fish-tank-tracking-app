@@ -48,6 +48,7 @@ object SpeciesBrains {
             BrainKind.MANDARIN -> MandarinBrain(c)
             BrainKind.SIXLINE -> SixlineBrain(c)
             BrainKind.CLOWN_GOBY -> ClownGobyBrain(c)
+            BrainKind.BUTTERFLY -> ButterflyBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)
             BrainKind.GENERIC_INVERT -> GenericInvertBrain(c)
         }

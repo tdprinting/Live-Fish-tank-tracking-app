@@ -60,7 +60,7 @@ import com.reeflive.core.sim.Stocking
 import com.reeflive.core.species.SpeciesKind
 
 /**
- * The fish stores (docs/ECONOMY.md §5; web stores.js): the street of storefronts on My tank's Add life card, and the
+ * The fish stores (docs/ECONOMY.md §5; web stores.js): the street of storefronts on My tank's Shop card, and the
  * overlay while walking a store's display tanks (the 3D view shows the tank; this draws the signs, the animal strip,
  * the picked animal's card, the shop bag and the counter).
  */
@@ -120,6 +120,10 @@ fun StoreStreet(fronts: List<StoreFrontUi>, onEnter: (FishStore) -> Unit, onShut
 fun BoxScope.StoreOverlay(
     v: StoreVisitUi,
     tankPick: String?,
+    /** Bumped when the counter is tapped in the 3D shop: the till opens. */
+    counterRequest: Int,
+    /** The till opened or closed: the camera walks to the counter and back. */
+    onCounter: (Boolean) -> Unit,
     onTank: (Int) -> Unit,
     onLeave: () -> Unit,
     onCheckout: (List<String>, (BuyResult) -> Unit) -> Unit,
@@ -135,6 +139,8 @@ fun BoxScope.StoreOverlay(
     var counter by remember(v.store) { mutableStateOf(false) }
     var selling by remember(v.store) { mutableStateOf(false) }
     LaunchedEffect(tankPick) { if (tankPick != null) picked = tankPick }
+    LaunchedEffect(counterRequest) { if (counterRequest > 0) { picked = null; counter = true } }
+    LaunchedEffect(counter) { onCounter(counter) }
     val (tank, cards) = v.tanks[v.at.coerceIn(0, v.tanks.size - 1)]
     val all = remember(v) { v.tanks.flatMap { it.second }.associateBy { it.speciesId } }
     val total = bag.sumOf { all[it]?.price ?: 0 }
@@ -151,7 +157,7 @@ fun BoxScope.StoreOverlay(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LivePanel(contentPadding = PaddingValues(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LivePill("🚪", onLeave, tone = Candy.white)
+                    LivePill("‹ Back", onLeave, tone = Candy.white)
                     Column {
                         Text(v.store.label, style = s.titleText.copy(fontSize = 17.sp), color = s.label)
                         Text("${tank.title} · ${tank.animals} animals", style = MaterialTheme.typography.labelSmall, color = s.labelDim)

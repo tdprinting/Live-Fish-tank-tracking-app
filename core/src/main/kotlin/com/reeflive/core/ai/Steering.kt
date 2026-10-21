@@ -58,6 +58,14 @@ class Steering(private val c: Ctx) {
     fun apply(intent: SteerIntent) {
         val o = c.o
         val dt = c.dt
+        // a glass-guarded swimmer told to stop facing a given way stops where its tail, a body length behind, is inside
+        // the glass too: otherwise the guard squashes the tail against the pane (a pecking butterfly, a tang posing for
+        // the cleaner with its back to the end glass)
+        if (o.spline.glassGuard && !intent.kinematic && !intent.crawl) {
+            val t = intent.target
+            val f = intent.faceDir
+            if (t != null && f != null) intent.target = c.tailInside(t, f)
+        }
         o.posture = intent.posture
         // a walker / glider given an empty intent (a behaviour that just finished) stays on its surface
         // instead of dropping into the swim integrator for a tick
@@ -212,7 +220,11 @@ class Steering(private val c: Ctx) {
             val d = rock.sdf.dist(look)
             if (d < clearance) a += rock.sdf.gradient(look) * ((clearance - d) * 40)
         }
-        if (!it.allowGlass) a += glassAvoid(o.pos, 0.5 * Lc.coerceAtMost(8.0) + 1)
+        if (!it.allowGlass) {
+            a += glassAvoid(o.pos, 0.5 * Lc.coerceAtMost(8.0) + 1)
+            // a glass-guarded long body keeps its tail off the pane too (the guard would squash it there)
+            if (o.spline.glassGuard) a += glassAvoid(o.pos - o.heading * (0.9 * L), 2.0)
+        }
         a = a.clampLength(maxAccel * 2)
         val steer = (desired - o.vel) * 3.0
         a += steer.clampLength(max(0.0, maxAccel * 2 - a.length()))

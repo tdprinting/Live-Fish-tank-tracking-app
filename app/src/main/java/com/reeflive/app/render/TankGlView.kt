@@ -83,6 +83,10 @@ class TankGlView(context: Context, quality: RenderQuality = RenderQuality.MEDIUM
     var bursts: TankBursts?
         get() = renderer.bursts
         set(v) { renderer.bursts = v }
+    /** A fish store visit: the shop around the display tank, walks between its tanks, taps on them and the counter. */
+    var storeRoom: StoreRoomControl?
+        get() = renderer.storeRoom
+        set(v) { renderer.storeRoom = v }
     /** The supply shelf beside the tank (Supplies mode): open / close, row focus, locked props and taps. */
     var shelf: SupplyShelfControl?
         get() = renderer.shelf

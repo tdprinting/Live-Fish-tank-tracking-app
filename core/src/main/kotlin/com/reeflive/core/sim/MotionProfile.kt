@@ -192,6 +192,10 @@ object MotionProfiles {
         // clown goby (research 51 §3): sits on a branch, short hops between branches on quick tail beats [L]
         BrainKind.CLOWN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 2.0,
             glideS = 0.2, beatsPerBout = 2.0, sinkCmS = 2.0, bankGain = 0.5, cStartDeg = 120.0),
+        // butterflyfish (research 60 §2): a deep disc that rows on its pectorals at cruise and hangs nose-down to peck;
+        // the tail joins in only for a dash (Chaetodontidae are labriform swimmers, Webb 1994 [M]) [L]
+        BrainKind.BUTTERFLY to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.8, pecHzMax = 5.5, rowBodyAmp = 0.015,
+            strouhal = 0.28, tailPP = 0.18, bankGain = 1.2, cStartDeg = 130.0),
         BrainKind.GENERIC_FISH to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.5, pecHzMax = 5.0),
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
         BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),

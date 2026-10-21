@@ -121,6 +121,17 @@ object Compatibility {
         if (others.any { it == BrainKind.SIXLINE } && kind.isFish && kind != BrainKind.SIXLINE && kind !in setOf(BrainKind.TANG, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.EEL))
             out += CompatibilityWarning("sixline_newcomer", CompatibilityWarning.Severity.INFO,
                 "Your six line wrasse may chase this new fish for its first days.")
+        // research 60 (rare and expensive species, batch 1)
+        if (kind == BrainKind.BUTTERFLY) {
+            out += CompatibilityWarning("butterfly_cool", CompatibilityWarning.Severity.INFO,
+                "Comes from cooler water off Japan: keep the tank at 22-25 °C. Feed small meaty food three or four times a day.")
+            if (others.any { it == BrainKind.FEATHER_DUSTER }) out += CompatibilityWarning("butterfly_fanworms", CompatibilityWarning.Severity.WARN,
+                "Butterflyfish eat fanworms. It will peck your feather duster's fan until the worm drops its crown.")
+            out += CompatibilityWarning("butterfly_corals", CompatibilityWarning.Severity.INFO,
+                "Not fully reef safe: a hungry one picks at zoanthids, clove polyps and star polyps.")
+        }
+        if (speciesId == "zebrasoma_gemmatum") out += CompatibilityWarning("gem_tang_care", CompatibilityWarning.Severity.INFO,
+            "A rare deep-water tang from the Indian Ocean. It wants a big tank, cooler water (24-25 °C) and greens every day. Add it last.")
         if (speciesId.startsWith("pterapogon")) {
             out += CompatibilityWarning("banggai_care", CompatibilityWarning.Severity.INFO,
                 "Buy captive-bred Banggais: wild ones are endangered. Keep one pair; extra males get chased.")

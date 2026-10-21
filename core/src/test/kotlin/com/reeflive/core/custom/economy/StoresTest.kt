@@ -33,11 +33,11 @@ class StoresTest {
     }
 
     @Test fun buyingSpendsAndRespectsLocksStockAndMoney() {
-        val e = Economy()
+        val e = Economy(SavedEconomy(coins = 500))
         val clown = Stores.stock(FishStore.SHELLYS, day).first { it.listing.speciesId == "amphiprion_ocellaris" }
         assertEquals(BuyResult.STORE_LOCKED, e.buy(FishStore.BIG_BLUE, "amphiprion_ocellaris", day))
         repeat(clown.count) { assertEquals(BuyResult.OK, e.buy(FishStore.SHELLYS, "amphiprion_ocellaris", day)) }
-        assertEquals(Economy.START_COINS - clown.price * clown.count, e.state.coins)
+        assertEquals(500 - clown.price * clown.count, e.state.coins)
         assertEquals(BuyResult.SOLD_OUT, e.buy(FishStore.SHELLYS, "amphiprion_ocellaris", day))
         // the next day the shelf is restocked
         val tomorrow = Stores.stock(FishStore.SHELLYS, "2026-10-21").first { it.listing.speciesId == "amphiprion_ocellaris" }

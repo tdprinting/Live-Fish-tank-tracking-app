@@ -42,6 +42,8 @@ CARDS = {
     "synchiropus_splendidus": "mandarin",
     "pseudocheilinus_hexataenia": "sixline_wrasse",
     "gobiodon_okinawae": "clown_goby",
+    "zebrasoma_gemmatum": "gem_tang",
+    "chaetodon_daedalma": "wrought_iron_butterfly",
     "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",

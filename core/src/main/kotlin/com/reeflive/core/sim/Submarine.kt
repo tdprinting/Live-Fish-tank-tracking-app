@@ -389,7 +389,7 @@ object SubmarineRules {
             }
             BrainKind.HAWK -> if (d < SEE_CM) SubReaction.POSTURE else SubReaction.NONE
             BrainKind.EEL -> if (d < 12.0) SubReaction.POSTURE else SubReaction.NONE
-            BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.CHROMIS, BrainKind.SIXLINE -> when {
+            BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.CHROMIS, BrainKind.SIXLINE, BrainKind.BUTTERFLY -> when {
                 interest(o) >= 0.35 -> if (d < SEE_CM) SubReaction.INVESTIGATE else SubReaction.NONE
                 d < SHY_CM -> SubReaction.AVOID
                 else -> SubReaction.NONE

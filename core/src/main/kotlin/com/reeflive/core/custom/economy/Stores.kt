@@ -19,11 +19,18 @@ data class Listing(val speciesId: String, val group: StockGroup, val level: Int,
 }
 
 /**
- * Prices and unlock levels, close to 2025-26 US store prices (one sand dollar a dollar). A species added to the sim
+ * Prices and unlock levels, close to 2025-26 US store prices (listed in real dollars; the game charges [SCALE] sand dollars per dollar). A species added to the sim
  * later and not listed here gets [fallback] from its gallery group and size until it is.
  */
 object PriceBook {
-    private fun l(id: String, level: Int, price: Int) = Listing(id, Stocking.entry(id)?.group ?: StockGroup.FISH, level, price)
+    /**
+     * Sand dollars per real dollar. The table below stays in real US dollars (easy to check against stores); the game
+     * charges [SCALE] times that so a new animal takes days of care to save for (Tee, 2026-10-20: "make the user work
+     * for their points").
+     */
+    const val SCALE = 2
+
+    private fun l(id: String, level: Int, usd: Int) = Listing(id, Stocking.entry(id)?.group ?: StockGroup.FISH, level, usd * SCALE)
 
     val LISTINGS: List<Listing> = listOf(
         // fish, inverts, corals: 2025-26 US prices (LiveAquaria and store listings; captive bred where sold that way)
@@ -33,7 +40,10 @@ object PriceBook {
         l("nemateleotris_magnifica", 2, 40), l("ecsenius_bicolor", 2, 65), l("ecsenius_stigmatura", 3, 30), l("valenciennea_puellaris", 3, 35),
         l("pholidichthys_leucotaenia", 3, 30), l("labroides_dimidiatus", 3, 40), l("cirrhitichthys_falco", 4, 40), l("pseudochromis_indigo", 4, 50),
         l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis@female", 4, 50), l("cirrhilabrus_rubripinnis@male", 5, 80), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),
-        l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250), l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
+        l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250),
+        // research 60: rare and expensive fish, late-game Deep Reef Imports animals
+        l("zebrasoma_gemmatum", 8, 1000), l("chaetodon_daedalma", 9, 2500),
+        l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
         l("clibanarius_tricolor", 1, 5), l("lysmata_boggessi", 1, 13), l("paguristes_cadenati", 1, 15), l("percnon_gibbesi", 2, 15),
         l("ophiocoma_sp", 2, 25), l("stenorhynchus_seticornis", 3, 18), l("mithraculus_sculptus", 1, 12), l("thor_amboinensis", 2, 19), l("lysmata_debelius", 2, 60),
         l("alpheus_bellulus", 3, 45), l("hymenocera_picta", 5, 65), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),
@@ -52,9 +62,9 @@ object PriceBook {
     fun listing(speciesId: String): Listing? = byId[speciesId] ?: Stocking.entry(speciesId)?.takeIf { it.speciesId !in NEVER_SOLD }
         ?.let { byId[it.key] ?: fallback(it.key, it.group, it.typicalCm) }
 
-    /** Unlisted species: about a dollar per adult centimetre plus a base, unlocking with the middle stores. */
+    /** Unlisted species: about a real dollar per adult centimetre plus a base, unlocking with the middle stores. */
     fun fallback(id: String, group: StockGroup, adultCm: Double): Listing =
-        Listing(id, group, 3, (10 + adultCm * 2.5).roundToInt().coerceIn(5, 120))
+        Listing(id, group, 3, ((10 + adultCm * 2.5).roundToInt().coerceIn(5, 120) * SCALE))
 
     /** Every species a store can carry, in gallery order. */
     val all: List<Listing> get() = Stocking.CATALOG.mapNotNull { listing(it.key) }

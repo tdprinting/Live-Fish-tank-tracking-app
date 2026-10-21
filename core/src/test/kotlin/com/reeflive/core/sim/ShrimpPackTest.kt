@@ -53,10 +53,10 @@ class ShrimpPackTest {
         }
         // a fire shrimp is a Lysmata but not the skunk cleaner
         assertEquals(BrainKind.CLEANER_SHRIMP, BrainKind.byId("lysmata_amboinensis"))
-        assertEquals(60, PriceBook.listing(fire)!!.price)
-        assertEquals(19, PriceBook.listing(sexy)!!.price)
-        assertEquals(65, PriceBook.listing(harl)!!.price)
-        assertEquals(45, PriceBook.listing(pistol)!!.price)
+        assertEquals(60 * PriceBook.SCALE, PriceBook.listing(fire)!!.price)
+        assertEquals(19 * PriceBook.SCALE, PriceBook.listing(sexy)!!.price)
+        assertEquals(65 * PriceBook.SCALE, PriceBook.listing(harl)!!.price)
+        assertEquals(45 * PriceBook.SCALE, PriceBook.listing(pistol)!!.price)
     }
 
     @Test fun fireShrimpKeepsADarkCaveByDayAndWalksTheRockAtNight() {

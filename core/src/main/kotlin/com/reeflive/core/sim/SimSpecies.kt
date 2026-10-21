@@ -453,6 +453,8 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     SIXLINE(listOf("pseudocheilinus"), true),
     /** Coral gobies (yellow clown goby, *Gobiodon okinawae*, research 51 §3): perches in coral branches. */
     CLOWN_GOBY(listOf("gobiodon", "paragobiodon"), true),
+    /** Butterflyfish (wrought iron butterfly, *Chaetodon daedalma*, research 60 §2): roves the rock pecking, pairs up. */
+    BUTTERFLY(listOf("chaetodon", "heniochus", "forcipiger", "chelmon"), true),
     /**
      * Fire shrimp (*Lysmata debelius*, research 44 §1): a shy, mostly nocturnal Lysmata cleaner that keeps a cave and
      * cleans fish that come to its mouth. The genus resolves to [CLEANER_SHRIMP], so the species id picks this brain.
@@ -509,6 +511,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
             "mandarin" to MANDARIN, "dragonet" to MANDARIN, "sixline" to SIXLINE, "six_line" to SIXLINE,
             "clown_goby" to CLOWN_GOBY, "coral_goby" to CLOWN_GOBY,
+            "butterfly" to BUTTERFLY, "butterflyfish" to BUTTERFLY,
             "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
             "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
         )

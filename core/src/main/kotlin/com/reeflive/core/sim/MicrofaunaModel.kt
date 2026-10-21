@@ -90,6 +90,11 @@ enum class PodPredator(
      * body (est.); a good mid-water searcher, so a cardinal-like half saturation.
      */
     FAIRY_WRASSE(200.0, true, false, true, doubleArrayOf(0.6, 1.0, 1.0, 0.4, 0.3, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.0, hiddenAccess = 0.0, halfSat = 10000.0),
+    /**
+     * Butterflyfish (research 60 §2): pecks the rock face all day for small crustaceans, worms and micro-snails (Wikipedia:
+     * fanworms, hydroids, tunicates, barnacles, gastropods). A rock picker like the dottyback with more worms and snails (est.).
+     */
+    BUTTERFLY(200.0, true, false, true, doubleArrayOf(0.5, 0.0, 0.2, 0.6, 0.4, 0.2, 0.3, 0.3, 0.0, 0.0, 0.0, 0.5, 0.6, 0.6, 0.3, 0.2), hiddenAccess = 0.1),
     TANG(10.0, true, false, true, doubleArrayOf(0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
     /** Mandarin-class specialist (research 10 §3.3 "predator overgrazing"): 1,000-3,000 pods a day, picks into the film. */
     MANDARIN(2000.0, true, false, true, doubleArrayOf(1.0, 0.5, 0.8, 0.3, 0.2, 0.3, 0.5, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.5, hiddenAccess = 0.15, halfSat = 800.0),
@@ -141,6 +146,7 @@ enum class PodPredator(
                 BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
                 BrainKind.CLOWN -> CLOWN
                 BrainKind.TANG -> TANG
+                BrainKind.BUTTERFLY -> BUTTERFLY
                 BrainKind.BANDED_SHRIMP -> BANDED_SHRIMP
                 BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> CLEANER_SHRIMP
                 BrainKind.HERMIT -> HERMIT

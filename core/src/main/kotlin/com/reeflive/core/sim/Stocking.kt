@@ -76,6 +76,9 @@ object Stocking {
         StockEntry("synchiropus_splendidus", StockGroup.FISH, "Mandarin dragonet", 6.5),
         StockEntry("pseudocheilinus_hexataenia", StockGroup.FISH, "Six line wrasse", 7.5),
         StockEntry("gobiodon_okinawae", StockGroup.FISH, "Yellow clown goby", 3.0),
+        // research 60: rare and expensive fish (late-game Deep Reef Imports)
+        StockEntry("zebrasoma_gemmatum", StockGroup.FISH, "Gem tang", 18.0),
+        StockEntry("chaetodon_daedalma", StockGroup.FISH, "Wrought iron butterflyfish", 13.0),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         // research 42: hides by day, eats aiptasia at night
