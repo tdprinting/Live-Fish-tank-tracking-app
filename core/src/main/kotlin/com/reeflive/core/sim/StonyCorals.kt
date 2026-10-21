@@ -43,8 +43,18 @@ object StonyCorals {
         }
     }
 
-    /** Free-living corals that sit loose on the sand bed (open brain: its swollen tissue tears on rock). */
-    fun onSand(sp: SimSpecies): Boolean = sp.id.startsWith("trachyphyllia")
+    /** Where a new colony may go: anywhere clear, only the sand bed, or high on the rock. */
+    enum class Place { ANY, SAND, HIGH_ROCK }
+
+    /**
+     * Open brains are free-living on the sand (the swollen tissue tears on rock); SPS want the strong light and flow
+     * high on the rock (stony_corals.md §7-8).
+     */
+    fun place(sp: SimSpecies): Place = when {
+        sp.id.startsWith("trachyphyllia") -> Place.SAND
+        sp.coralKind == CoralKind.SPS -> Place.HIGH_ROCK
+        else -> Place.ANY
+    }
 
     /** Meaty foods large-polyp corals catch and eat (target-fed mysis, brine shrimp, krill bits; stony_corals.md). */
     val MEATY: Set<FoodKind> = setOf(FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL)

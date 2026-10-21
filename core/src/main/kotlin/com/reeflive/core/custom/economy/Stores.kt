@@ -54,6 +54,7 @@ object PriceBook {
         l("caulastrea_furcata", 2, 35), l("micromussa_lordhowensis", 3, 50), l("plerogyra_sinuosa", 4, 70), l("trachyphyllia_geoffroyi", 4, 90),
         // rare corals (research 61): a gold torch head, a scolymia polyp and a common bounce mushroom polyp
         l("euphyllia_glabrescens_gold", 6, 250), l("homophyllia_australis", 7, 300), l("rhodactis_inchoata", 8, 250),
+        l("xenia_umbellata", 1, 20), l("montipora_capricornis", 3, 35), l("seriatopora_hystrix", 4, 45), l("acropora_millepora", 6, 85),
     )
     private val byId = LISTINGS.associateBy { it.speciesId }
 
@@ -188,6 +189,8 @@ object Stores {
             return "Needs a mature sand bed. If it dies or is badly stressed it releases a poison that can kill fish: run carbon and take a dead one out fast."
         if (speciesId == "tridacna_crocea") return "The light-hungriest clam: it bores into a rock high up, right under the lamps. Not for the sand or a dim tank."
         if (speciesId == "tridacna_maxima") return "Needs strong light: it lives on the light, so it goes high on the rock or on the sand right under the lamps."
+        if (speciesId == "xenia_umbellata") return "Spreads fast over nearby rock and can crowd out other corals."
+        if (speciesId == "acropora_millepora") return "Hard to keep: needs bright light, strong flow and very steady water."
         if (speciesId == "pseudochromis_indigo" && alive.any { it.species.id == speciesId }) return "Two dottybacks will fight. One is best."
         if (speciesId == "stenopus_hispidus" && alive.any { it.species.id == speciesId }) return "Two coral banded shrimp fight unless they are a pair."
         if (speciesId == "amphiprion_ocellaris" && alive.count { it.species.id == speciesId } >= 2) return "Clownfish live in pairs. A third one gets picked on."

@@ -106,6 +106,47 @@ class StonyCoralTest {
             assertTrue("on the sand: ${c.pos}", c.pos.y <= sim.rock.sandTopCm + 0.5)
     }
 
+    /**
+     * Pack 3: SPS go high on the rock, suffer more from phosphate than LPS; xenia pulses in good water and stops with
+     * low alkalinity, used-up iodine or a hard jet.
+     */
+    @Test
+    fun spsSitHighAndXeniaPulsesOnlyInGoodWater() {
+        for (id in listOf("montipora_capricornis", "seriatopora_hystrix", "acropora_millepora")) {
+            assertEquals(id, CoralKind.SPS, CoralKind.resolve(id))
+            assertTrue(CoralKind.SPS.stony)
+            assertNull("no sweepers", StonyCorals.sting(TestTank.catalog[id]))
+        }
+        assertEquals(CoralKind.XENIA, CoralKind.resolve("xenia_umbellata"))
+        val sim = TestTank.sim(emptyList())
+        assertEquals(2, Stocking.addMany(sim, "acropora_millepora", 2))
+        for (c in sim.corals.filter { it.species.id == "acropora_millepora" }) {
+            assertTrue("up in the light: ${c.pos}", c.pos.y >= sim.rock.sandTopCm + 8.0)
+            assertTrue(c.toPose().isCopy)
+        }
+        fun stressAt(speciesId: String, w: WaterState): Double {
+            val c = coral(speciesId, speciesId, Vec3(60.0, 25.0, 16.0))
+            repeat(120) { CoralSim.step(c, w, 0.7, 300.0, 300.0, 1.0, it * 60.0, ArrayList()) }
+            return c.stress
+        }
+        val highP = WaterState(po4 = 0.25)
+        assertTrue(stressAt("acropora_millepora", highP) > stressAt("micromussa_lordhowensis", highP))
+        fun pulse(w: WaterState, flow: Double = 1.0): Double {
+            val x = coral("xenia", "xenia_umbellata", Vec3(60.0, 25.0, 16.0))
+            repeat(6 * 60) { CoralSim.step(x, w, 0.7, 300.0, 300.0, 1.0, it * 60.0, ArrayList(), flowStrength = flow) }
+            return x.tentacles
+        }
+        val good = pulse(WaterState(i = 0.05))
+        val lowAlk = pulse(WaterState(alk = 6.3, i = 0.05))
+        val noIodine = pulse(WaterState(i = 0.0))
+        val jet = pulse(WaterState(i = 0.05), flow = 2.0)
+        println("xenia pulse: good ${"%.2f".format(good)}, alk 6.3 ${"%.2f".format(lowAlk)}, no iodine ${"%.2f".format(noIodine)}, jet ${"%.2f".format(jet)}")
+        assertTrue("pulses in good water: $good", good > 0.5)
+        assertTrue(lowAlk < 0.1)
+        assertTrue(noIodine < good * 0.5)
+        assertTrue(jet < good * 0.5)
+    }
+
     /** Stony corals build a skeleton: low calcium and an alkalinity swing stress them more than a soft coral. */
     @Test
     fun calciumAndAlkalinitySwingsHurtStonyCoralsMore() {

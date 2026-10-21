@@ -1,0 +1,105 @@
+{
+  "id": "acropora_millepora",
+  "kind": "CORAL",
+  "common": "Acropora (millepora)",
+  "scientific": "Acropora millepora",
+  "family": "Acroporidae",
+  "maxLengthCm": 60,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 4,
+  "lifespanYears": 30,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 26.7,
+      "tolLo": 23.5,
+      "tolHi": 28.0,
+      "lethalLo": 20.0,
+      "lethalHi": 31.0
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 9.5,
+      "tolLo": 7.5,
+      "tolHi": 10.5,
+      "lethalLo": 6.0,
+      "lethalHi": 12.5
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 2.0,
+      "tolHi": 10.0,
+      "lethalHi": 30.0
+    },
+    "po4": {
+      "optHi": 0.02,
+      "tolHi": 0.08,
+      "lethalHi": 0.25
+    }
+  },
+  "model": "models/acropora.glb",
+  "colors": {
+    "primary": "#3E8ACE",
+    "secondary": "#8AE0F0",
+    "accent": "#5AFFC8"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.55,
+    "lightHi": 1.2,
+    "flow": "HIGH",
+    "growth": "Fast",
+    "stingCm": 0,
+    "ground": "ROCK",
+    "aggression": "None; it loses fights with almost every LPS and soft coral",
+    "fluorescence": 0.9
+  },
+  "careLevel": "Hard",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; needs some nitrate and phosphate in the water to keep its colour.",
+  "temperamentSummary": "A bushy colony of short branches covered in little corallites, with glowing tips in blue, green or purple.",
+  "careNotes": [
+    "PAR about 250-400 and strong, changing flow.",
+    "Alkalinity 8-9.5 dKH held steady; calcium 420-460; magnesium 1300-1400.",
+    "Nitrate about 2-10 and phosphate 0.02-0.08: zero nutrients burns the tips, too much browns it.",
+    "The first coral to bleach or peel (STN/RTN) when anything changes fast; quarantine for flatworms."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.35,
+  "starvationDays": 9999
+}

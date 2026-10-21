@@ -126,6 +126,11 @@ object CoralSim {
         CoralKind.EUPHYLLIA -> Params(ToleranceRange(24.0, 27.0, 22.5, 29.0, 18.0, 31.5), 0.5, true, false, 0.8, 0.2)
         // Meaty LPS: similar temperatures, PAR ~50-150, gentle flow; the mantle shrinks at night as feeding tentacles open.
         CoralKind.LPS -> Params(ToleranceRange(24.0, 27.0, 22.5, 29.0, 18.0, 31.5), 0.6, true, false, 0.75, 0.15)
+        // SPS (stony_corals.md §8): 24-26.7 °C and steady, PAR ~150-400 (high light), strong turbulent flow; polyps
+        // retract at night. Stagnant water starves and browns them (needsFlow).
+        CoralKind.SPS -> Params(ToleranceRange(24.5, 26.7, 23.5, 28.0, 20.0, 31.0), 0.1, false, true, 1.15, 0.4)
+        // Pulsing xenia: moderate light, moderate indirect flow (a hard jet stops the pulsing, Xenia.pulseTarget)
+        CoralKind.XENIA -> Params(ToleranceRange(24.0, 27.5, 22.5, 29.0, 18.0, 32.0), 0.3, true, false, 0.95, 0.15)
         CoralKind.GENERIC -> Params(ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0), 0.3, false, false, 0.9, 0.15)
     }
 
@@ -253,7 +258,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * alkShockWeight, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * alkShockWeight, sPh, sNh3, sPo4 * (if (c.kind == CoralKind.SPS) 0.8 else 0.3), sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3)
         var prod = 1.0
         var top = 0.15; var worst = -1
         for (i in parts.indices) {
@@ -285,6 +290,7 @@ object CoralSim {
         val tau = if (c.disturb > 0.3 || sSgShock > 0.4) 2.0 else 20.0   // snap shut when touched or osmotically shocked
         c.extension += (target - c.extension) * (dtMin / tau).coerceAtMost(1.0)
         StonyCorals.stepTentacles(c, minutesSinceOn, minutesUntilOff, dtMin)
+        Xenia.stepPulse(c, w, lightIntensity, flowStrength, dtMin)
 
         // Heat: NOAA DHW accumulation (4 DHW significant, 8 severe) plus a fast acute response above the tolerance band.
         val wk = dtMin / (7 * 1440.0)
