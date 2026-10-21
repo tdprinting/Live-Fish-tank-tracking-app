@@ -172,6 +172,7 @@ object ReefLive {
                 r.shelf = shelf
                 room.onStand = { i -> emit("onStoreStand", i) }
                 room.onCounter = { emit("onStoreCounter", null) }
+                room.onTrade = { emit("onStoreTrade", null) }
                 r.storeRoom = room
                 r.room = homeRoom
                 music.onRecord = { i -> emit("onMusicRecord", i) }

@@ -248,6 +248,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun enterStore(store: com.reeflive.core.custom.economy.FishStore) = holder.enterStore(store)
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
+    /** A store regular's swap on the trade card, or null. */
+    val trade: StateFlow<com.reeflive.core.custom.economy.TradeOffer?> = holder.tradeState
+    fun showTrade() = holder.showTrade()
+    fun answerTrade(yes: Boolean) = holder.answerTrade(yes)
     fun sell(id: String) = holder.sell(id)
     // the room: stands for My tank (core room/Decor.kt)
     val roomShop: StateFlow<com.reeflive.app.live.RoomShopUi?> = holder.roomShop
