@@ -122,6 +122,7 @@ import com.reeflive.app.ui.live.MoneyChip
 import com.reeflive.app.ui.live.StoreOverlay
 import com.reeflive.app.ui.live.RewardFxLayer
 import com.reeflive.app.ui.live.RewardFxState
+import com.reeflive.app.ui.live.WelcomeBackCard
 import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.app.ui.live.HudState
 import com.reeflive.app.ui.live.LiveCategory
@@ -185,6 +186,7 @@ import com.reeflive.app.ui.live.AquascapeBar
 import com.reeflive.app.ui.live.ScapeTool
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.CareFix
+import com.reeflive.core.live.ReefFacts
 import com.reeflive.core.sim.TankDoctor
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
@@ -229,6 +231,9 @@ private fun powerheadShare(extras: Map<String, Double>): Float {
 }
 
 /** A question to confirm before something that can't be undone with one tap (reset, take a fish out, make one sick). */
+/** The app-open reef fact was shown in this launch (once per process, not on every return to the Live tab). */
+private var factShown = false
+
 private data class ConfirmAsk(val title: String, val body: String, val confirmLabel: String, val run: () -> Unit)
 
 /** Portrait dock height above the app bar (bubble 60 dp + label + padding), and with the dock tucked to one bubble. */
@@ -314,6 +319,8 @@ fun LiveTankScreen(
     // "sandbox" = every lever works: the pretend tank and My tank (the keeper's own saved tank)
     val sandbox = mode != SimMode.REALITY
     val myTank = mode == SimMode.CUSTOM
+    // the menu's levers: My tank only (Watch's fast-forward copy keeps Watch's menu)
+    val levers = sandbox && !lapseFork
     val customInfo by vm.custom.collectAsStateWithLifecycle()
     // My tank's sand dollars (docs/ECONOMY.md): the chip in the HUD opens the Care card; Tank Health counts as testing
     val economy by vm.economy.collectAsStateWithLifecycle()
@@ -337,6 +344,17 @@ fun LiveTankScreen(
         if (!sandbox && !settings.watchHintSeen) scope.launch { settingsRepo.setWatchHintSeen(true) }
     }
     var ask by remember { mutableStateOf<ConfirmAsk?>(null) }
+    // a reef fact or reef-keeping tip each time the app opens (core ReefFacts), never the same one until all were shown
+    var fact by remember { mutableStateOf<ReefFacts.Fact?>(null) }
+    LaunchedEffect(Unit) {
+        if (factShown) return@LaunchedEffect
+        factShown = true
+        val prefs = context.getSharedPreferences("reeflive_facts", android.content.Context.MODE_PRIVATE)
+        val n = prefs.getLong("n", (0L..999L).random())
+        prefs.edit().putLong("n", n + 1).apply()
+        delay(1500)
+        fact = ReefFacts.nth(n)
+    }
 
     // Back undoes whatever is on top (the handler registered last wins): the tips card, a picked fish's card (follow
     // mode has its own Back in FollowOverlay), an open menu card, hidden buttons, then the modes below
@@ -546,7 +564,8 @@ fun LiveTankScreen(
     }
 
     val hudState = HudState(
-        mode = when (mode) { SimMode.SANDBOX -> HudMode.SANDBOX; SimMode.CUSTOM -> HudMode.MY_TANK; SimMode.REALITY -> HudMode.WATCH },
+        // Watch's fast-forward copy (lapseFork) still reads as Watch: there is no Sandbox tab any more
+        mode = if (mode == SimMode.CUSTOM) HudMode.MY_TANK else HudMode.WATCH,
         speed = speed,
         simTimeSec = hud.simTimeSec,
         dayPhase = DayPhase.entries.firstOrNull { it.label == hud.dayPhase } ?: DayPhase.DAY,
@@ -760,7 +779,7 @@ fun LiveTankScreen(
         }))
     }
     val onModeChange: (HudMode) -> Unit = { m ->
-        val target = when (m) { HudMode.SANDBOX -> SimMode.SANDBOX; HudMode.MY_TANK -> SimMode.CUSTOM; HudMode.WATCH -> SimMode.REALITY }
+        val target = when (m) { HudMode.MY_TANK -> SimMode.CUSTOM; HudMode.WATCH -> SimMode.REALITY }
         // tapping the side that is already picked never hides anything: it only brings the menu back out
         railShown = true; chromeHidden = false
         if (target != mode) {
@@ -787,7 +806,7 @@ fun LiveTankScreen(
         supplies = true
     }
     val tools = LiveTools(
-        sandbox = sandbox,
+        sandbox = levers,
         myTank = myTank,
         stores = com.reeflive.core.custom.economy.FishStore.entries.map { com.reeflive.app.live.StoreFrontUi(it, (economy?.level ?: 1) >= it.level) },
         onStore = { f ->
@@ -867,6 +886,12 @@ fun LiveTankScreen(
         onSupplies = { openShelf() },
         fixes = if (open == LiveCategory.FIX) TankDoctor.diagnose(hud.water, hud.care).filter { it.kind !in fixQueued } else emptyList(),
         fixing = fixQueued.size,
+        hunger = if (open == LiveCategory.FIX) vm.hungerRows(hud.stats) else emptyList(),
+        onFeedHungry = {
+            tick()
+            banner.show(Feedback("Dinner time!", "Each hungry animal gets its favourite food, dropped right above it"), Candy.orange)
+            cue(LiveReactions.feed(FoodKind.PELLET)) { vm.feedHungry() }
+        },
         onFix = { f -> tick(); playFix(f) },
         onFixAll = {
             tick()
@@ -1252,6 +1277,9 @@ fun LiveTankScreen(
             }
         }
         if (myTank) RewardFxLayer(rewardFx)
+        // My tank lived on while the keeper was away: the days race by, then what happened
+        val awayUi by vm.away.collectAsStateWithLifecycle()
+        awayUi?.let { a -> if (myTank) WelcomeBackCard(a, onCare = { tick(); vm.dismissAway(); careOpen = true }, onDismiss = { vm.dismissAway() }) }
         // the net lifted a body out: the toilet goodbye (once per body)
         LaunchedEffect(hud.netFlush) { vm.takeFlush(hud.netFlush)?.let { flushing = it } }
         flushing?.let { f ->
@@ -1275,6 +1303,11 @@ fun LiveTankScreen(
             else -> g.paramId?.let { SandboxParams.byId(it) }?.valueIn(panel.now) ?: g.lo
         }
         GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
+    }
+    // the "While you were away" card goes first; the fact waits until it is closed
+    val awayOpen = vm.away.collectAsStateWithLifecycle().value != null
+    fact?.takeIf { !awayOpen }?.let { f ->
+        LiveDialog(title = f.kind.title, body = f.text, confirm = "Cool!", onConfirm = { fact = null }, onDismiss = { fact = null }, dismiss = "Close")
     }
     ask?.let { a ->
         LiveDialog(
@@ -1567,7 +1600,7 @@ private fun HudLayer(
             if (card != null) {
                 val hudSnap by vm.hud.collectAsStateWithLifecycle()
                 val family = hudSnap.brood.panel?.takeIf { it.shows(card.speciesId) }?.let { p ->
-                    p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.SANDBOX })
+                    p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.MY_TANK })
                 }
                 FishCard(
                     card.toFishCardState(), onFollow = { vm.follow(card.id) }, onClose = { vm.select(null) },

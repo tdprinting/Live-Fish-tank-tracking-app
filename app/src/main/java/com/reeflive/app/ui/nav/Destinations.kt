@@ -112,7 +112,7 @@ fun SettingsDestination(nav: NavHostController, onBack: () -> Unit) = SettingsRo
     onUpdates = { nav.navigate(Routes.UPDATES) },
     onWiped = {
         nav.navigate(Routes.ONBOARDING) {
-            popUpTo(Routes.DASHBOARD) { inclusive = true }
+            popUpTo(nav.graph.id) { inclusive = true }
             launchSingleTop = true
         }
     },

@@ -181,3 +181,43 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 }
+
+/** Posts one My tank "needs you" note (core CareAlerts) at the time it was planned for. */
+class CareAlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val g = applicationContext.appGraph
+        val s = g.settings.settings.first()
+        if (!s.notifications || !s.tankAlerts) return Result.success()
+        g.notifier.notifyReminder(
+            tag = "tank:${inputData.getString(CareAlertScheduler.KEY_TAG)}",
+            title = inputData.getString(CareAlertScheduler.KEY_TITLE) ?: return Result.success(),
+            text = inputData.getString(CareAlertScheduler.KEY_BODY) ?: "",
+            route = com.reeflive.app.ui.nav.Routes.LIVE,
+        )
+        return Result.success()
+    }
+}
+
+/** Schedules the planned My tank notes with WorkManager (no exact-alarm permission; a few minutes' slack is fine). */
+object CareAlertScheduler {
+    const val KEY_TAG = "tag"
+    const val KEY_TITLE = "title"
+    const val KEY_BODY = "body"
+    private const val WORK_TAG = "care_alerts"
+
+    fun schedule(context: Context, plan: List<com.reeflive.core.custom.PlannedAlert>, nowMs: Long) {
+        val wm = WorkManager.getInstance(context)
+        wm.cancelAllWorkByTag(WORK_TAG)
+        for (a in plan) {
+            wm.enqueue(
+                OneTimeWorkRequestBuilder<CareAlertWorker>()
+                    .setInitialDelay((a.atMs - nowMs).coerceAtLeast(0L), TimeUnit.MILLISECONDS)
+                    .setInputData(workDataOf(KEY_TAG to a.tag, KEY_TITLE to a.title, KEY_BODY to a.body))
+                    .addTag(WORK_TAG)
+                    .build(),
+            )
+        }
+    }
+
+    fun cancel(context: Context) { WorkManager.getInstance(context).cancelAllWorkByTag(WORK_TAG) }
+}
