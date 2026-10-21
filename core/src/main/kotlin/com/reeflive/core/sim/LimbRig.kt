@@ -69,7 +69,7 @@ abstract class LimbRig(val count: Int = LIMBS) {
             BrainKind.PORCELAIN_CRAB -> CrabLegs.porcelain()
             BrainKind.HERMIT -> HermitLegs(seed)
             BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
-            BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> ShrimpLimbs()
+            BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.MANTIS -> ShrimpLimbs()
             BrainKind.FILE_CLAM, BrainKind.GIANT_CLAM -> ClamRig()
             BrainKind.BOBTAIL_SQUID -> SquidRig()
             BrainKind.ANEMONE -> AnemoneRig()

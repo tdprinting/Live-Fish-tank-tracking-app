@@ -56,6 +56,8 @@ def run(step, args):
         maxima_clam.build()
         maxima_clam.use("crocea_clam")  # ultra crocea (docs/research/62_rare_inverts.md)
         maxima_clam.build()
+        import mantis_shrimp  # peacock mantis shrimp (docs/research/62_rare_inverts.md)
+        mantis_shrimp.build()
         import sea_cucumber  # tiger tail sea cucumber (docs/research/45_clam_crab_star_cucumber.md)
         sea_cucumber.build()
     elif step == "rockscape":
