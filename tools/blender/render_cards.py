@@ -26,6 +26,8 @@ CARDS = {
     "cirrhitichthys_falco": "hawkfish",
     "salarias_fasciatus": "lawnmower_blenny",
     "ecsenius_stigmatura": "tailspot_blenny",
+    "ecsenius_bicolor": "bicolor_blenny",
+    "ecsenius_midas": "midas_blenny",
     "pseudochromis_indigo": "dottyback",
     "valenciennea_puellaris": "diamond_goby",
     "macropharyngodon_bipartitus": "leopard_wrasse",

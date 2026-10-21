@@ -19,6 +19,9 @@ import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.GlassPane
+import com.reeflive.core.sim.HungerRow
+import com.reeflive.core.sim.HungryFeed
+import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
@@ -111,6 +114,12 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val peek: StateFlow<LivePeek> = holder.peek
 
     init {
+        // the live screen opens on My tank, the app's main tank, once per launch (a "View in Live Tank" hand-off
+        // from the livestock list is about the real tank, so that one stays on Watch)
+        if (!openedOnce) {
+            openedOnce = true
+            if (LiveFocus.followId.value == null) holder.setMode(SimMode.CUSTOM)
+        }
         viewModelScope.launch {
             holder.snapshots.sample(REAL_SAMPLE_MS).collect { snap ->
                 if (holder.mode.value == SimMode.REALITY && snap !== SimSnapshot.EMPTY) {
@@ -147,6 +156,10 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // ---- actions allowed in both modes ----
     /** Feeds [kind] at [at] (or the usual hand-feed spot); [target] = [at] is the spot the player tapped (Command.Feed.target). */
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
+    /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
+    fun feedHungry() = holder.enqueue(Command.FeedHungry)
+    /** Tank Health's hunger list for [stats]: every living animal's hunger bar and the food the auto feed picks. */
+    fun hungerRows(stats: List<OrganismStats>): List<HungerRow> = HungryFeed.rows(stats) { holder.simSpecies(it) }
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
     fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
@@ -402,6 +415,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
 
     companion object {
+        /** The first Live screen of this launch has switched to My tank. */
+        private var openedOnce = false
         const val HUD_PERIOD_MS = 250L   // 4 Hz
         const val REAL_SAMPLE_MS = 500L
         val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")
