@@ -212,12 +212,16 @@ function showFact() {
   const n = store.get('reeflive.factN', Math.floor(Math.random() * 1000));
   store.set('reeflive.factN', n + 1);
   const f = JSON.parse(SB.fact(n));
-  setTimeout(() => {
+  const show = () => {
+    // the "While you were away" card (care.js) goes first: the fact waits until it is closed
+    const away = $('awayModal');
+    if (away && !away.classList.contains('hidden')) { setTimeout(show, 1000); return; }
     $('newsTitle').textContent = `🐠 ${f.title}`;
     $('newsList').innerHTML = `<li>${esc(f.text)}</li>`;
     const d = $('news');
     if (!d.open) d.showModal();
-  }, 1500);
+  };
+  setTimeout(show, 1500);
 }
 function showNews(list = news.slice(0, 15), since = false) {
   if (!list.length) { say('Nothing new yet.'); return; }

@@ -158,8 +158,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
     /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
     fun feedHungry() = holder.enqueue(Command.FeedHungry)
-    /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now. */
-    /** In My tank it costs [price] sand dollars; false when the keeper cannot afford it. */
+    /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
     fun reefCare(price: Int): Boolean = if (mode.value == SimMode.CUSTOM) holder.reefCare(price) else { holder.enqueue(Command.ReefCare); true }
     /** Corals news from the time away (shown once by the screen). */
     val coralNews: StateFlow<List<String>> = holder.coralNews
