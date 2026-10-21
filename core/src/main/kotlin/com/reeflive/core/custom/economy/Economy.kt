@@ -40,6 +40,8 @@ data class SavedEconomy(
     val giftDay: String = "",
     /** Newest first, at most [Economy.LEDGER_MAX]: the "where did my money go" list. */
     val ledger: List<LedgerEntry> = emptyList(),
+    /** Reef moments seen, animals kept and fish birthdays ([Journal]). */
+    val journal: SavedJournal = SavedJournal(),
 )
 
 @Serializable
@@ -123,6 +125,7 @@ data class EconomyView(
     val happyPaid: Boolean,
     val goals: List<GoalView>,
     val ledger: List<LedgerEntry>,
+    val journal: JournalView,
 ) {
     /** Something on the Care card waits for a tap or a chore (the dot on the money chip). */
     val attention: Boolean get() = !happyPaid && happyBonus > 0 || tasks.any { !it.done }
@@ -131,8 +134,11 @@ data class EconomyView(
 data class TaskView(val task: CareTask, val pay: Int, val done: Boolean)
 data class GoalView(val goal: Goal, val done: Boolean)
 
-/** Money that just came in, for the coins-flying cheer; [levelUp] is the new level when this one crossed it. */
-data class Gain(val amount: Int, val label: String, val levelUp: Int = 0)
+/**
+ * Money that just came in, for the coins-flying cheer; [levelUp] is the new level when this one crossed it, [story]
+ * the reef moment or birthday card that goes with it.
+ */
+data class Gain(val amount: Int, val label: String, val levelUp: Int = 0, val story: Story? = null)
 
 /**
  * The live economy of one My tank. Confined to the thread that runs the sim (Android's sim thread, the web page's
@@ -154,6 +160,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     private var seenSplits = 0
     private var seenBabies = 0
     private var seenLog: CareLog? = null
+    private val journal = Journal()
 
     val level: Int get() = Levels.level(state.stars)
 
@@ -183,6 +190,8 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         if (log.anemoneSplits > seenSplits) { seenSplits = log.anemoneSplits; goal(Goal.ANEMONE_SPLIT) }
         if (log.babiesReleased > seenBabies) { seenBabies = log.babiesReleased; goal(Goal.BABY_FISH) }
         checkGoals(sim)
+        val j = journal.update(sim, state.journal) { amount, label, story -> earn(amount, label, today, story) }
+        if (j != state.journal) state = state.copy(journal = j)
         return state != before
     }
 
@@ -304,6 +313,7 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
             happyPaid = s.happyPaid,
             goals = Goal.entries.map { GoalView(it, it.id in s.goals) },
             ledger = s.ledger,
+            journal = JournalView(Moment.entries.map { MomentView(it, it.id in s.journal.moments) }, s.journal.kept.map { speciesLabel(it) }),
         )
     }
 
@@ -388,12 +398,12 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
         if (Goal.LEVEL_5.id !in have && level >= 5) goal(Goal.LEVEL_5)
     }
 
-    private fun earn(amount: Int, label: String, today: String) {
+    private fun earn(amount: Int, label: String, today: String, story: Story? = null) {
         if (amount <= 0) return
         val was = level
         state = state.copy(coins = state.coins + amount, stars = state.stars + amount, ledger = ledger(today, label, amount))
         val now = level
-        gains += Gain(amount, label, if (now > was) now else 0)
+        gains += Gain(amount, label, if (now > was) now else 0, story)
         if (now > was && now >= 5) goal(Goal.LEVEL_5)
     }
 

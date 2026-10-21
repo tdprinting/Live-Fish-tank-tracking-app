@@ -60,6 +60,29 @@ vec2 surfaceSlope(vec2 xz) {
     return vec2(surfaceHeight(xz + e.xy) - surfaceHeight(xz - e.xy), surfaceHeight(xz + e.yx) - surfaceHeight(xz - e.yx)) / (2.0 * e.x);
 }
 
+// Render-only swell and chop on top of the simulated heightfield: the pumps and the return keep an open-top reef's
+// surface rolling (Tee's tank video 2026-10-20). Five travelling waves (wavelength 41..4.6 cm, ~22-30 cm/s), bigger
+// with more flow, scaled by quality (uRipple). x: height (cm), yz: slope (dh/dx, dh/dz). Shared by the water surface
+// (geometry + normals) and everything lit through it (caustics, flicker), so a choppier surface throws a busier,
+// brighter shimmer.
+// x, z direction, wavenumber k (rad/cm), amplitude (cm); angular speed in SWELL_W (rad/s)
+const vec4 SWELL[5] = vec4[5](vec4(0.94, 0.34, 0.153, 0.26), vec4(-0.6, 0.8, 0.29, 0.13), vec4(0.8, -0.6, 0.52, 0.07),
+                              vec4(0.31, 0.95, 0.85, 0.04), vec4(-0.97, -0.24, 1.37, 0.022));
+const float SWELL_W[5] = float[5](3.4, 6.6, 12.5, 22.0, 37.0);
+
+// [waves]: how many of the five to sum (lighting takes the three longest; the short chop blurs out with depth).
+vec3 swell(vec2 q, int waves) {
+    float amp = uRipple * (0.55 + 0.55 * uFlowStrength);
+    vec3 r = vec3(0.0);
+    for (int i = 0; i < 5; i++) {
+        if (i >= waves) break;
+        vec4 w = SWELL[i];
+        float ph = dot(q, w.xy) * w.z + uTime * SWELL_W[i];
+        r += w.w * vec3(sin(ph), w.z * cos(ph) * w.xy);
+    }
+    return r * amp;
+}
+
 vec3 toLinear(vec3 srgb) { return pow(max(srgb, vec3(0.0)), vec3(2.2)); }
 
 // Rotate v by unit quaternion q (xyzw).

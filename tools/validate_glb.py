@@ -42,13 +42,13 @@ BUDGET = {
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "royal_gramma": 4800, "banggai": 4800, "watchman_goby": 4800, "gem_tang": 6000, "wrought_iron_butterfly": 6000, "firefish": 4800, "chromis": 4800, "bobtail_squid": 4600,
     "yellow_tang": 6000, "purple_tang": 6000, "fairy_wrasse": 4800,
-    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "brittle_star": 2000,
+    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "fire_shrimp": 4200, "sexy_shrimp": 4200, "harlequin_shrimp": 4200, "pistol_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "brittle_star": 2000,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     "trochus": 2800, "fighting_conch": 3800, "tuxedo_urchin": 5000,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
     "micro_bristleworm": 3600, "micro_amphipod": 4000, "micro_mysid": 2600, "micro_isopod": 2000, "micro_copepod": 900,
     "micro_snail": 1400, "micro_flatworm": 200, "micro_tentacle": 800, "micro_caprellid": 2000, "micro_ostracod": 700,
-    "micro_foram": 300, "micro_calanoid": 600,
+    "micro_foram": 600, "micro_calanoid": 600,
     # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
     "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
     "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,

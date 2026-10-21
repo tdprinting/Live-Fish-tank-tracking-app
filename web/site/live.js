@@ -59,6 +59,8 @@ export function startLive(applyReadings) {
   window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
+    // frames stayed slow at the lowest resolution: the tank stepped its Picture down, and keeps it for next time
+    onQuality: (q) => { ui.quality = q; store.set('reeflive.quality', q); },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
     // every touch answers (UI_STYLE §10.8): a ring glints around the animal in the tank, plus a tiny buzz here
     onPick: (id) => { if (id) buzz(5); if (window.reefstores?.active()) { window.reefstores.pick(id); return; } if (sub.on) { if (id) subWatch(id); return; } if (id) select(id); else if (!ui.following) select(null); },
@@ -1228,7 +1230,7 @@ let actx = null; const buffers = {}; const loops = {};
 /** The page's one AudioContext (tank sounds and the radio share it). */
 function audioCtx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx; }
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
+const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape', SPARKLE: 'tank_reward_sparkle' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {

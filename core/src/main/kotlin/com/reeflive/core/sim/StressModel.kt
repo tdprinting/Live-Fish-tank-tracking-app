@@ -101,6 +101,11 @@ object StressModel {
         BrainKind.CLEANER_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.BANDED_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.PEPPERMINT_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
+        BrainKind.FIRE_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
+        BrainKind.SEXY_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
+        // research 44 §2: sensitive to quick temperature and chemistry changes and to low oxygen
+        BrainKind.HARLEQUIN_SHRIMP to doubleArrayOf(1.5, 1.7, 1.4, 1.4, 1.4, 1.5, 0.6, 1.0),
+        BrainKind.PISTOL_SHRIMP to doubleArrayOf(1.2, 1.5, 1.2, 1.2, 1.2, 1.3, 0.6, 1.0),
         BrainKind.HERMIT to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.SALLY_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.ARROW_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),

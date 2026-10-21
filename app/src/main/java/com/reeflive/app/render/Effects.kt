@@ -253,7 +253,10 @@ class ParticleRenderer {
     fun release() { Gl.deleteVertexArray(vao); Gl.deleteBuffer(vbo) }
 }
 
-/** Light shafts: 6 billboarded quads per fixture (static geometry; animation is in the shader). */
+/**
+ * Light shafts: per fixture 6 billboarded underwater quads, the lamp's beam through the air above the water (index 6)
+ * and a glow halo on the lens (index 7). Static geometry; placement and animation are in shafts.vert / shafts.frag.
+ */
 class LightShafts {
     private val vao = Gl.genVertexArray()
     private val vbo = Gl.genBuffer()
@@ -265,7 +268,7 @@ class LightShafts {
         val verts = ArrayList<Float>()
         val idx = ArrayList<Short>()
         var base = 0
-        for (light in 0 until 2) for (s in 0 until 6) {
+        for (light in 0 until 2) for (s in 0 until 8) {
             val ox = (rnd.nextFloat() - 0.5f) * 18f; val oz = (rnd.nextFloat() - 0.5f) * 10f
             val width = 3f + rnd.nextFloat() * 5f; val seed = rnd.nextFloat()
             for ((cx, cy) in listOf(-1f to 0f, 1f to 0f, -1f to 1f, 1f to 1f)) {

@@ -104,6 +104,22 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.2, 8.0, 0.0, 160.0), diet = listOf("MYSIS", "BRINE", "PELLET", "FLAKE", "AIPTASIA"),
                     feedsPerDay = 1.0, temperament = Temperament(0.05, 0.3, 0.5, 0.8), hardiness = 0.75, homeRadiusCm = 30.0, brain = "peppermint_shrimp",
                     model = "models/peppermint_shrimp.glb")
+                BrainKind.FIRE_SHRIMP -> base.copy(kind = "INVERT", common = "Fire shrimp", maxLengthCm = 5.0, typicalAdultCm = 3.5, depthRatio = 0.2,
+                    activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.2, 8.0, 0.0, 160.0), diet = listOf("PARASITES", "MYSIS", "BRINE", "PELLET", "FLAKE"),
+                    feedsPerDay = 1.0, temperament = Temperament(0.3, 0.25, 0.4, 0.75), hardiness = 0.7, homeRadiusCm = 30.0, brain = "fire_shrimp",
+                    model = "models/fire_shrimp.glb")
+                BrainKind.SEXY_SHRIMP -> base.copy(kind = "INVERT", common = "Sexy shrimp", maxLengthCm = 2.0, typicalAdultCm = 1.5, depthRatio = 0.2,
+                    locomotion = Locomotion("WALKING", 0.3, 10.0, 0.0, 160.0), diet = listOf("MYSIS", "BRINE", "PELLET", "FLAKE"),
+                    feedsPerDay = 1.0, temperament = Temperament(0.0, 0.5, 0.5, 0.6), hardiness = 0.7, homeRadiusCm = 12.0, brain = "sexy_shrimp",
+                    model = "models/sexy_shrimp.glb")
+                BrainKind.HARLEQUIN_SHRIMP -> base.copy(kind = "INVERT", common = "Harlequin shrimp", maxLengthCm = 5.0, typicalAdultCm = 4.0, depthRatio = 0.2,
+                    activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.12, 4.0, 0.0, 110.0), diet = listOf("STARFISH"),
+                    feedsPerDay = 0.2, temperament = Temperament(0.1, 0.35, 0.4, 0.6), hardiness = 0.5, homeRadiusCm = 30.0, brain = "harlequin_shrimp",
+                    model = "models/harlequin_shrimp.glb")
+                BrainKind.PISTOL_SHRIMP -> base.copy(kind = "INVERT", common = "Tiger pistol shrimp", maxLengthCm = 5.0, typicalAdultCm = 4.0, depthRatio = 0.2,
+                    activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.15, 6.0, 0.0, 160.0), diet = listOf("DETRITUS", "MYSIS", "BRINE", "PELLET"),
+                    feedsPerDay = 1.0, temperament = Temperament(0.4, 0.3, 0.3, 0.85), hardiness = 0.75, homeRadiusCm = 15.0, brain = "pistol_shrimp",
+                    model = "models/pistol_shrimp.glb")
                 BrainKind.FILE_CLAM -> base.copy(kind = "INVERT", common = "Flame scallop", maxLengthCm = 7.5, typicalAdultCm = 6.0, depthRatio = 0.38, massCoeff = 0.06,
                     locomotion = Locomotion("SESSILE", 0.0, 2.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 3.0, hardiness = 0.3,
                     starvationDays = 30.0, homeRadiusCm = 10.0, model = "models/flame_scallop.glb", buoyantWhenDead = false)

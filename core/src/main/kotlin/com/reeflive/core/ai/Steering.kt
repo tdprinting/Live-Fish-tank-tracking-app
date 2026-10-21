@@ -127,6 +127,10 @@ class Steering(private val c: Ctx) {
         if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
         o.spline.override = intent.splineOverride
         val sp = o.vel.length()
+        // the whole-body turn is a swimming shape: kinematic poses (sifting, burrow watch, hole entries) and a fish
+        // hovering, backing or sculling sideways (whose trail folds back on itself) keep the trail
+        o.spline.spreadOn = !intent.kinematic && !intent.crawl && intent.splineOverride == null &&
+            sp > 0.4 * o.cruiseSpeed && (o.vel dot o.heading) > 0.7 * sp
         if (intent.kinematic || intent.crawl) relSpeed = sp
         val relax = 4.0 * (1 - sp / (0.6 * max(o.cruiseSpeed, 0.5))).coerceIn(0.0, 1.0) + 0.15
         o.spline.update(o.pos, o.heading, dt, if (o.brainKind == BrainKind.EEL) relax * 0.15 else relax)

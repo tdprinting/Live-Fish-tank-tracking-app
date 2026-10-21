@@ -87,7 +87,8 @@ object HeatModel {
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
-        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> SHRIMP
+        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
+        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> SHRIMP
         BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
         BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG

@@ -86,6 +86,10 @@ object Stocking {
         StockEntry("stenorhynchus_seticornis", StockGroup.INVERTS, "Arrow crab", 4.5),
         // research 43 §1: bubble algae grazer, hides by day
         StockEntry("mithraculus_sculptus", StockGroup.INVERTS, "Emerald crab", 3.0),
+        StockEntry("lysmata_debelius", StockGroup.INVERTS, "Fire shrimp", 3.5),
+        StockEntry("thor_amboinensis", StockGroup.INVERTS, "Sexy shrimp", 1.5),
+        StockEntry("hymenocera_picta", StockGroup.INVERTS, "Harlequin shrimp", 4.0),
+        StockEntry("alpheus_bellulus", StockGroup.INVERTS, "Tiger pistol shrimp", 4.0),
         StockEntry("ophiocoma_sp", StockGroup.INVERTS, "Black brittle star", 20.0),
         StockEntry("sabellastarte_sp", StockGroup.INVERTS, "Brown feather duster", 15.0),
         StockEntry("nassarius_sp", StockGroup.INVERTS, "Nassarius snail", 1.5),

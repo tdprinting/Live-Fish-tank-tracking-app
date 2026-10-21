@@ -16,7 +16,7 @@ out vec4 vColor;
 
 void main() {
     vec4 w = uModel * vec4(aPos, 1.0);
-    w.y += surfaceHeight(w.xz);
+    w.y += surfaceHeight(w.xz) + swell(w.xz, 5).x;
     vWorld = w.xyz;
     vNormal = vec3(0.0, 1.0, 0.0);
     vUv = aUv;
