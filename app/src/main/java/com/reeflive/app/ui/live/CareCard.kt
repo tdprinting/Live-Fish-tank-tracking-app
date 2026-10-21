@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +52,7 @@ import kotlin.math.sin
 
 /*
  * My tank's money on screen (docs/ECONOMY.md §7): the sand-dollar chip in the HUD and the Care card it opens, with
- * today's chores, the bonuses, the level bar and the goals. The web page draws the same in site/care.js.
+ * today's chores, the bonuses, the level bar, the goals and the reef journal. The web page draws the same in site/care.js.
  */
 
 /**
@@ -168,10 +171,45 @@ fun CareCard(e: EconomyView, onCollect: () -> Unit, onDismiss: () -> Unit) {
                     Text("+${g.goal.reward}", style = MaterialTheme.typography.labelMedium, color = if (g.done) s.labelDim else Candy.yellow)
                 }
             }
+            ReefJournal(e)
             Spacer(Modifier.height(4.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { LivePill("Close", onDismiss, tone = Candy.white) }
         }
     }
+}
+
+/**
+ * The reef journal: the reef moments found so far (tap one to read its fact again; ones still to find show "???" and a
+ * hint) and every kind of animal this tank has kept.
+ */
+@Composable
+private fun ReefJournal(e: EconomyView) {
+    val s = LiveTheme.style
+    val j = e.journal
+    var openId by remember { mutableStateOf<String?>(null) }
+    LiveSectionTitle("Reef journal · ${j.moments.count { it.found }} of ${j.moments.size} moments")
+    j.moments.forEach { m ->
+        Column(Modifier.fillMaxWidth().clickable(enabled = m.found) { openId = if (openId == m.moment.id) null else m.moment.id }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (m.found) "✨" else "?", color = if (m.found) Candy.yellow else s.labelDim, modifier = Modifier.width(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (m.found) m.moment.title else "???", style = MaterialTheme.typography.bodyMedium, color = if (m.found) s.label else s.labelDim)
+                    if (!m.found) Text(m.moment.hint, style = MaterialTheme.typography.bodySmall, color = s.labelDim)
+                }
+                Text("+${m.moment.reward}", style = MaterialTheme.typography.labelMedium, color = if (m.found) s.labelDim else Candy.yellow)
+            }
+            if (m.found && openId == m.moment.id) {
+                Text(m.moment.fact, style = MaterialTheme.typography.bodySmall, color = s.label, modifier = Modifier.padding(start = 24.dp, top = 2.dp))
+            }
+        }
+    }
+    if (j.kept.isNotEmpty()) {
+        Text(
+            "Animals you've kept (${j.kept.size} kinds): ${j.kept.joinToString(", ")}",
+            style = MaterialTheme.typography.bodySmall, color = s.labelDim,
+        )
+    }
+    Text("Fish birthdays at 1 week, 1 month, 100 days and 1 year pay a little too.", style = MaterialTheme.typography.bodySmall, color = s.labelDim)
 }
 
 @Composable
