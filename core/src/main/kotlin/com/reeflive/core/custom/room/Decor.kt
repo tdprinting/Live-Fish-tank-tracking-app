@@ -36,6 +36,47 @@ enum class StandExtra(val id: String, val label: String, val blurb: String, val 
 }
 
 /**
+ * A wall or floor finish: room.frag's pattern [style] ([RoomStyle]) in two colours (sRGB 0xRRGGBB). The ones in
+ * [Decor.WALLS] / [Decor.FLOORS] are sold; each [RoomScene] also brings its own (price 0, not in the shop).
+ */
+data class Finish(val id: String, val label: String, val price: Int, val level: Int, val style: Int, val a: Int, val b: Int)
+
+/** room.frag's wall (uWallStyle) and floor (uFloorStyle) patterns. */
+object RoomStyle {
+    const val PAINT = 0
+    const val STRIPES = 1
+    const val WAVES = 2
+    const val BRICK = 3
+    const val PANELS = 4
+    const val LOGS = 5
+    const val METAL = 6
+    const val SHIPLAP = 7
+
+    const val PLANKS = 0
+    const val TILE = 1
+    const val CHECKER = 2
+    const val CARPET = 3
+    const val SLATE = 4
+    const val DECK = 5
+    const val TATAMI = 6
+}
+
+/**
+ * A room the tank can stand in (tools/blender/rooms.py builds `models/room_<id>.glb`; its windows show room.frag's
+ * outside views). [sky] and [wall] colour the shop tile.
+ */
+data class RoomScene(
+    val id: String,
+    val label: String,
+    val blurb: String,
+    val price: Int,
+    val level: Int,
+    val wall: Finish,
+    val floor: Finish,
+    val sky: Int,
+)
+
+/**
  * What the keeper bought for the room and what is in use (docs/ECONOMY.md §10 "Your room"). Saved with My tank
  * ([com.reeflive.core.custom.CustomTankSave.decor], a defaulted field: older saves open on the classic white stand).
  * [owned] holds [Decor] ids: `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`.
@@ -48,6 +89,11 @@ data class SavedDecor(
     val standColor: Int = 0,
     /** Extras switched on (bought ones can be switched off again). */
     val extras: List<String> = emptyList(),
+    /** The room scene ([Decor.SCENES]). */
+    val scene: String = Decor.DEFAULT_SCENE,
+    /** Wallpaper and floor ([Decor.WALLS], [Decor.FLOORS]); empty: the scene's own. */
+    val wall: String = "",
+    val floor: String = "",
 )
 
 /** Why a decor purchase did not go through. */
@@ -81,6 +127,58 @@ object Decor {
     )
     private val byId = STANDS.associateBy { it.id }
 
+    const val DEFAULT_SCENE = "living"
+    /** The tile that puts a scene's own wall or floor back. */
+    const val OWN = "scene"
+
+    private fun own(style: Int, a: Int, b: Int) = Finish(OWN, "Room's own", 0, 1, style, a, b)
+
+    val SCENES: List<RoomScene> = listOf(
+        RoomScene("living", "Cozy living room", "Warm walls, an oak floor, a sofa and a reading lamp.", 0, 1,
+            own(RoomStyle.PAINT, 0xE6DCCB, 0xD8CCB6), own(RoomStyle.PLANKS, 0xA7774E, 0x8A6040), 0xE6DCCB),
+        RoomScene("sunny", "Sunny window", "A big bright window onto a green garden, with soft curtains.", 300, 1,
+            own(RoomStyle.PAINT, 0xF2EAD8, 0xE4D8C0), own(RoomStyle.PLANKS, 0xC29A6B, 0xA67E52), 0x9FD0EE),
+        RoomScene("beach", "Beach house", "White boards, a surfboard and the sea right outside.", 450, 2,
+            own(RoomStyle.SHIPLAP, 0xF1EFE8, 0xDAD6CC), own(RoomStyle.PLANKS, 0xD9C4A0, 0xBFA77F), 0x7CC4E0),
+        RoomScene("cabin", "Snowy cabin", "Log walls, a crackling fireplace and snowy pines outside.", 500, 3,
+            own(RoomStyle.LOGS, 0x8A5A34, 0x6B4226), own(RoomStyle.PLANKS, 0x7A5235, 0x5E3E27), 0xC9D6E2),
+        RoomScene("blossom", "Blossom garden", "Paper screens, a low table and pink cherry trees outside.", 550, 3,
+            own(RoomStyle.PAINT, 0xEFE6D6, 0xC9A27A), own(RoomStyle.TATAMI, 0xC9B98A, 0x6E7A4A), 0xF2C4D2),
+        RoomScene("city", "City loft", "Brick walls and a tall window over the city lights.", 650, 4,
+            own(RoomStyle.BRICK, 0x9A5440, 0xC9BBA8), own(RoomStyle.SLATE, 0x7A7A78, 0x5E5E5C), 0x4A5C7E),
+        RoomScene("space", "Space station", "Metal walls, round windows and the Earth floating by.", 900, 5,
+            own(RoomStyle.METAL, 0xB8C0C8, 0x8A949E), own(RoomStyle.DECK, 0x6C747C, 0x4A5158), 0x0B1430),
+    )
+    private val scenes = SCENES.associateBy { it.id }
+
+    val WALLS: List<Finish> = listOf(
+        Finish("seafoam", "Seafoam paint", 60, 1, RoomStyle.PAINT, 0xBFDDD2, 0xA9CBBF),
+        Finish("navy", "Navy paint", 60, 1, RoomStyle.PAINT, 0x2E3E5C, 0x24324C),
+        Finish("stripes", "Sunny stripes", 90, 1, RoomStyle.STRIPES, 0xF4E7C6, 0xE9C98A),
+        Finish("shiplap", "White boards", 100, 2, RoomStyle.SHIPLAP, 0xF1EFE8, 0xDAD6CC),
+        Finish("waves", "Wave print", 120, 2, RoomStyle.WAVES, 0xD9ECEE, 0x6FAFC0),
+        Finish("brick", "Brick", 140, 2, RoomStyle.BRICK, 0x9A5440, 0xC9BBA8),
+        Finish("panels", "Wood panels", 140, 3, RoomStyle.PANELS, 0x9C7148, 0x7A5236),
+    )
+    val FLOORS: List<Finish> = listOf(
+        Finish("walnut", "Walnut planks", 80, 1, RoomStyle.PLANKS, 0x5E3E27, 0x4A2E1E),
+        Finish("carpet", "Blue carpet", 90, 1, RoomStyle.CARPET, 0x5A7FA6, 0x4A6B8F),
+        Finish("tile", "White tiles", 100, 1, RoomStyle.TILE, 0xEDEBE6, 0xB9B4AA),
+        Finish("checker", "Checkerboard", 120, 2, RoomStyle.CHECKER, 0xEFEDE8, 0x2A2B2E),
+        Finish("slate", "Slate", 140, 3, RoomStyle.SLATE, 0x6E7176, 0x55585C),
+    )
+    private val walls = WALLS.associateBy { it.id }
+    private val floors = FLOORS.associateBy { it.id }
+
+    /** A scene by id; an unknown one falls back to the living room. */
+    fun scene(id: String?): RoomScene = scenes[id] ?: scenes.getValue(DEFAULT_SCENE)
+
+    /** The wall and floor in use: the bought one, or the scene's own. */
+    fun wall(d: SavedDecor): Finish = walls[d.wall] ?: scene(d.scene).wall
+    fun floor(d: SavedDecor): Finish = floors[d.floor] ?: scene(d.scene).floor
+
+    fun ownsScene(d: SavedDecor, id: String): Boolean = scenes[id]?.price == 0 || "scene:$id" in d.owned
+
     /** A stand by id; an unknown one (removed in a later version) falls back to the classic so the room still draws. */
     fun stand(id: String?): StandModel = byId[id] ?: byId.getValue(DEFAULT_STAND)
 
@@ -106,6 +204,9 @@ object Decor {
             "stand" -> byId[p.getOrNull(1)]?.price
             "color" -> byId[p.getOrNull(1)]?.let { s -> p.getOrNull(2)?.toIntOrNull()?.takeIf { it in 1 until s.colors.size }?.let { RECOLOR } }
             "extra" -> StandExtra.byId(p.getOrNull(1) ?: "")?.price
+            "scene" -> scenes[p.getOrNull(1)]?.price
+            "wall" -> if (p.getOrNull(1) == OWN) 0 else walls[p.getOrNull(1)]?.price
+            "floor" -> if (p.getOrNull(1) == OWN) 0 else floors[p.getOrNull(1)]?.price
             else -> null
         }
     }
@@ -115,6 +216,9 @@ object Decor {
         return when (p[0]) {
             "stand", "color" -> byId[p.getOrNull(1)]?.level ?: 1
             "extra" -> StandExtra.byId(p.getOrNull(1) ?: "")?.level ?: 1
+            "scene" -> scenes[p.getOrNull(1)]?.level ?: 1
+            "wall" -> walls[p.getOrNull(1)]?.level ?: 1
+            "floor" -> floors[p.getOrNull(1)]?.level ?: 1
             else -> 1
         }
     }
@@ -124,6 +228,8 @@ object Decor {
         return when (p[0]) {
             "stand" -> ownsStand(d, p[1])
             "color" -> ownsColor(d, p[1], p.getOrNull(2)?.toIntOrNull() ?: 0)
+            "scene" -> ownsScene(d, p[1])
+            "wall", "floor" -> p.getOrNull(1) == OWN || key in d.owned
             else -> key in d.owned
         }
     }
@@ -141,8 +247,8 @@ object Decor {
     }
 
     /**
-     * Puts something already owned to use: a stand (in its first colour), a stand colour (moving to that stand), or
-     * toggles an extra. Not owned: unchanged.
+     * Puts something already owned to use: a stand (in its first colour), a stand colour (moving to that stand), a
+     * scene (with its own wall and floor), a wallpaper or floor, or toggles an extra. Not owned: unchanged.
      */
     fun use(d: SavedDecor, key: String): SavedDecor {
         if (!owns(d, key)) return d
@@ -151,6 +257,9 @@ object Decor {
             "stand" -> if (d.stand == p[1]) d else d.copy(stand = p[1], standColor = 0)
             "color" -> d.copy(stand = p[1], standColor = p.getOrNull(2)?.toIntOrNull() ?: 0)
             "extra" -> if (p[1] in d.extras) d.copy(extras = d.extras - p[1]) else d.copy(extras = d.extras + p[1])
+            "scene" -> if (d.scene == p[1]) d else d.copy(scene = p[1], wall = "", floor = "")
+            "wall" -> d.copy(wall = if (p[1] == OWN) "" else p[1])
+            "floor" -> d.copy(floor = if (p[1] == OWN) "" else p[1])
             else -> d
         }
     }
@@ -166,6 +275,9 @@ object Decor {
             "stand" -> byId[p.getOrNull(1)]?.label ?: "Stand"
             "color" -> byId[p.getOrNull(1)]?.let { s -> "${s.label}: ${s.colors.getOrNull(p.getOrNull(2)?.toIntOrNull() ?: 0)?.label ?: ""}" } ?: "Stand colour"
             "extra" -> StandExtra.byId(p.getOrNull(1) ?: "")?.label ?: "Extra"
+            "scene" -> scenes[p.getOrNull(1)]?.label ?: "Room"
+            "wall" -> walls[p.getOrNull(1)]?.label ?: "Room's own walls"
+            "floor" -> floors[p.getOrNull(1)]?.label ?: "Room's own floor"
             else -> key
         }
     }
@@ -173,7 +285,10 @@ object Decor {
     /** One tile on the room shop card. */
     data class Tile(val key: String, val label: String, val price: Int, val level: Int, val owned: Boolean, val inUse: Boolean, val locked: Boolean, val swatch: Int? = null, val swatch2: Int? = null)
 
-    /** The stands, the current stand's colours and the extras, as the room shop card shows them for a keeper at [level]. */
+    /**
+     * The stands, the current stand's colours, the extras, the scenes, then the walls and floors (the scene's own
+     * first), as the room shop card shows them for a keeper at [level].
+     */
     fun tiles(d: SavedDecor, level: Int): List<Tile> {
         val out = ArrayList<Tile>()
         for (s in STANDS) out += Tile(standKey(s.id), s.label, s.price, s.level, ownsStand(d, s.id), d.stand == s.id, level < s.level, s.colors[0].paint, s.colors[0].trim)
@@ -182,6 +297,12 @@ object Decor {
             out += Tile(colorKey(cur.id, n), c.label, if (n == 0) 0 else RECOLOR, cur.level, ownsColor(d, cur.id, n), d.standColor == n, level < cur.level, c.paint, c.trim)
         }
         for (e in StandExtra.entries) out += Tile(extraKey(e.id), e.label, e.price, e.level, ownsExtra(d, e.id), e.id in d.extras, level < e.level)
+        for (r in SCENES) out += Tile("scene:${r.id}", r.label, r.price, r.level, ownsScene(d, r.id), scene(d.scene).id == r.id, level < r.level, r.sky, r.wall.a)
+        val sc = scene(d.scene)
+        out += Tile("wall:$OWN", "Room's own", 0, 1, true, wall(d) === sc.wall, false, sc.wall.a, sc.wall.b)
+        for (w in WALLS) out += Tile("wall:${w.id}", w.label, w.price, w.level, "wall:${w.id}" in d.owned, d.wall == w.id, level < w.level, w.a, w.b)
+        out += Tile("floor:$OWN", "Room's own", 0, 1, true, floor(d) === sc.floor, false, sc.floor.a, sc.floor.b)
+        for (f in FLOORS) out += Tile("floor:${f.id}", f.label, f.price, f.level, "floor:${f.id}" in d.owned, d.floor == f.id, level < f.level, f.a, f.b)
         return out
     }
 }
