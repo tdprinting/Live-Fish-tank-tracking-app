@@ -53,6 +53,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** A fish store visit (My tank): the shop is drawn around the live display tank; null = at home. */
     @Volatile var storeRoom: StoreRoomControl? = null
     private val storeScene = StoreRoomScene()
+    /** The room at home: the stand under the tank and the room behind it (My tank's bought ones, or Tee's). */
+    @Volatile var room: RoomControl = RoomControl()
+    private val homeRoom = HomeRoomScene()
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
     private val subScene = SubmarineScene()
@@ -184,6 +187,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     fun restoreView() { restoreRequested = true }
     /** Glide the camera to the nursery tank beside the display ([on]) or back. */
     fun lookAtNursery(on: Boolean) { nurseryRequest = on }
+    private var roomViewSeen = 0
     /** On-screen follow buttons (zoom, swing round): any thread; drained on the GL thread each frame. */
     @Volatile var followCam: FollowCamControl = FollowCamControl()
 
@@ -312,6 +316,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (cleaning) dragFlipper(dt)
         updateFlipperTilt(dt)
         nurseryRequest?.let { camera.lookAtNursery(it); nurseryRequest = null }
+        room.viewRequest.let { if (it != roomViewSeen) { roomViewSeen = it; camera.roomView() } }
         brood.update(cur, liveSdf, dt, quality)
         aiptasia.update(cur, dt * (cur?.speed?.toFloat() ?: 1f).coerceIn(1f, 4f))
         micro.update(cur, liveSdf, dt, camera, quality, if (quality == RenderQuality.HIGH) MicroCritterVisuals.MICRO_TRIS_HIGH else MicroCritterVisuals.MICRO_TRIS_MEDIUM) { k ->
@@ -358,6 +363,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         details?.let { drawStatic(it, progs, light, opaque = true, noCoral = bare) }
         drawShelf(progs)
         drawStore(progs, blended = false)
+        drawHome(progs, cur, blended = false)
         val nurseryLit = light.intensity > 0.03f
         if (brood.nurseryCount > 0) white?.let { drawCalls += nursery.drawSolid(progs.generic, it, nurseryLit, brood.field) }
         // corals: soft bodies then polyps
@@ -389,6 +395,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.GENERIC) }
         drawStore(progs, blended = true)
+        drawHome(progs, cur, blended = true)
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         val waterFirst = camera.eye[1] < Camera.WATER_Y
         if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
@@ -1378,6 +1385,28 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val cb = shelf?.onPick ?: return
         main.post { cb(id, top[0], top[1], top[2]) }
     }
+
+    // ------------------------------------------------------------------ the room at home (HomeRoom.kt)
+
+    /**
+     * The stand and the room round the tank (not in a fish store, which brings its own): opaque parts, or the clear
+     * ones (storage bins, the sump glass). Back faces culled: the room's walls face in, so they never hide the tank
+     * when the camera swings out past them.
+     */
+    private fun drawHome(progs: Programs, cur: SimSnapshot?, blended: Boolean) {
+        val c = room
+        if (!c.visible || storeScene.active || storeRoom?.storeId != null) return
+        val w = white ?: return
+        val look = c.look
+        if (!homeRoom.ready(look) { store.model(it) }) return
+        val hour = (((cur?.simTimeSec ?: (12 * 3600.0)) % 86400.0) / 3600.0).toFloat()
+        val day = smooth(6f, 8f, hour) * (1f - smooth(18.5f, 20.5f, hour))
+        Gl.state(depthTest = true, depthWrite = !blended, blend = if (blended) Gl.Blend.ALPHA else Gl.Blend.NONE, cull = true)
+        drawCalls += homeRoom.draw(progs.room, w, look, blended, day)
+        Gl.state(depthTest = true, depthWrite = !blended, blend = if (blended) Gl.Blend.ALPHA else Gl.Blend.NONE, cull = false)
+    }
+
+    private fun smooth(a: Float, b: Float, x: Float): Float { val t = ((x - a) / (b - a)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 
     // ------------------------------------------------------------------ fish store (StoreRoom.kt)
 

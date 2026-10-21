@@ -1,0 +1,115 @@
+{
+  "id": "neopetrolisthes_maculatus",
+  "kind": "INVERT",
+  "common": "Porcelain crab",
+  "scientific": "Neopetrolisthes maculatus",
+  "family": "Porcellanidae",
+  "maxLengthCm": 2.5,
+  "typicalAdultCm": 1.8,
+  "lifespanYears": 3,
+  "depthRatio": 0.3,
+  "massCoeff": 0.03,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.4,
+    "burstBL": 4.0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.9,
+    "openWater": 0.0,
+    "coverAffinity": 0.7
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 6,
+  "temperament": {
+    "aggression": 0.2,
+    "boldness": 0.4,
+    "curiosity": 0.3,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "PLANKTON",
+    "PHYTOPLANKTON",
+    "DETRITUS",
+    "MYSIS",
+    "BRINE"
+  ],
+  "feedsPerDay": 3,
+  "grazer": false,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28.5,
+      "lethalLo": 18,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.026,
+      "tolLo": 1.021,
+      "tolHi": 1.027,
+      "lethalLo": 1.018,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.6,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.3
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 80
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.75,
+  "starvationDays": 20,
+  "model": "models/porcelain_crab.glb",
+  "colors": {
+    "primary": "#EFE6D6",
+    "secondary": "#8A1A22",
+    "accent": "#C8B8D8"
+  },
+  "brain": "porcelain_crab",
+  "minTankGallons": 10,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "A filter feeder: it sweeps the water with two feathery fans and combs out plankton, fine food and detritus. It lives well in a fed reef tank; a little dosed plankton helps.",
+  "temperamentSummary": "Peaceful. Lives in a pair with a host anemone, sitting under the tentacles with its big flat claws out in front. Shoves away other porcelain crabs but never harms fish or corals.",
+  "careNotes": [
+    "Happiest with a host anemone (bubble tip or carpet), where it is safe from fish.",
+    "Its claws are for show and shoving, not for eating; it feeds with the feather fans by its mouth.",
+    "Two can share one anemone as a pair; a third will be chased off.",
+    "If grabbed or attacked it can drop a claw to escape and grows it back over a few molts."
+  ],
+  "size": {
+    "lod0Tris": 4152
+  }
+}

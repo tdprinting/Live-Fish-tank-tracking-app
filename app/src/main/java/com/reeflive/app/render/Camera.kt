@@ -182,6 +182,16 @@ class Camera {
         yawGoal = 0f; pitchGoal = DEFAULT_PITCH; distLogGoal = ln(DEFAULT_DISTANCE)
     }
 
+    /** A step back and a little to the side to see the tank on its stand in its room (the room shop's try-on). */
+    fun roomView() {
+        if (storeOn || shelfOn) return
+        nurseryOn = false
+        if (followId != null) releaseFollow()
+        glide()
+        target[0] = TANK[0] / 2; target[1] = ROOM_TARGET_Y; target[2] = DEFAULT_TARGET[2]
+        yawGoal = ROOM_YAW; pitchGoal = ROOM_PITCH; distLogGoal = ln(storeAisleDistance())
+    }
+
     // ---- fish store (StoreRoom.kt): the aisle around the live display tank ----
     /** In a store: the orbit's limits keep the eye inside the shop, [reset] frames the aisle. */
     var storeOn = false; private set
@@ -1022,6 +1032,10 @@ class Camera {
         const val MAX_YAW = 1.75f
         /** Store aisle (StoreRoom.kt): orbit target height, pitch and limits that keep the eye in the shop. */
         const val STORE_TARGET_Y = 6f
+        /** The room view ([roomView]): aimed between the tank and its stand, from a little right and above. */
+        const val ROOM_TARGET_Y = -16f
+        const val ROOM_YAW = 0.22f
+        const val ROOM_PITCH = 0.14f
         const val STORE_PITCH = 0.16f
         const val STORE_MAX_YAW = 0.4f
         const val STORE_MIN_PITCH = 0f

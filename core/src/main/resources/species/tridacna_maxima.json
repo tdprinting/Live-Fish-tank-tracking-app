@@ -1,0 +1,119 @@
+{
+  "id": "tridacna_maxima",
+  "kind": "INVERT",
+  "common": "Maxima clam",
+  "scientific": "Tridacna maxima",
+  "family": "Cardiidae (Tridacninae)",
+  "maxLengthCm": 25,
+  "typicalAdultCm": 15,
+  "growthCmPerYear": 2.5,
+  "lifespanYears": 25,
+  "depthRatio": 0.42,
+  "massCoeff": 0.12,
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 2,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.8,
+    "openWater": 0.0,
+    "coverAffinity": 0.0
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 5,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.0,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "PHYTOPLANKTON",
+    "PLANKTON"
+  ],
+  "feedsPerDay": 0.5,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29.5,
+      "lethalLo": 18,
+      "lethalHi": 32
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.022,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.03
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.4
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 80
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.05
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "hardiness": 0.55,
+  "starvationDays": 40,
+  "size": {
+    "lod0Tris": 3400
+  },
+  "model": "models/maxima_clam.glb",
+  "colors": {
+    "primary": "#1590B8",
+    "secondary": "#D9D4C8",
+    "accent": "#BFF2FF"
+  },
+  "brain": "giant_clam",
+  "buoyantWhenDead": false,
+  "minTankGallons": 40,
+  "careLevel": "Intermediate",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Mostly fed by the algae living in its mantle, which turn light into food. It also filters some phytoplankton from the water; small clams need more of it.",
+  "temperamentSummary": "Sits fixed to the rock or sand with its bright mantle spread in the light. Peaceful: it snaps shut with a squirt of water when a shadow or a hand passes over it.",
+  "careNotes": [
+    "Needs strong light: about 250-400 PAR. Place it high on the rock or on the sand right under the lights.",
+    "Bleaches (loses its colour and its food) in too little light, too much heat, or a sudden jump in light.",
+    "Uses calcium and alkalinity for its shell like a stony coral; keep them steady.",
+    "Some angelfish, crabs and big shrimp pick at the mantle. Watch for tiny white pyramidal snails on the shell at night.",
+    "Do not pull it off the rock: the byssal threads under the hinge tear."
+  ]
+}

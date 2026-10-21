@@ -93,6 +93,7 @@ data class SimSpecies(
         food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
         // the flame scallop lives on phytoplankton (research 42 §2.4)
         food == FoodKind.PLANKTON && brainKind == BrainKind.FILE_CLAM -> 1.5
+        food == FoodKind.PLANKTON && brainKind == BrainKind.GIANT_CLAM -> 1.2
         // hawkfish are krill specialists in the shops' experience; grazers prefer a wafer to a pellet (design estimates)
         food == FoodKind.KRILL && brainKind == BrainKind.HAWK -> 1.3
         food == FoodKind.ALGAE_WAFER && (brainKind == BrainKind.TANG || brainKind == BrainKind.LAWNMOWER_BLENNY || brainKind == BrainKind.ASTREA) -> 1.2
@@ -404,6 +405,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     ARROW_CRAB(listOf("stenorhynchus"), false),
     /** Emerald crab (*Mithraculus sculptus*, research 43 §1): shy majid crab, grazes bubble algae at night. */
     EMERALD_CRAB(listOf("mithraculus"), false),
+    PORCELAIN_CRAB(listOf("neopetrolisthes", "petrolisthes"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
@@ -445,6 +447,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
      * sticky tentacles out, filter feeding; swims off by clapping its valves when bothered.
      */
     FILE_CLAM(listOf("ctenoides", "lima", "limaria"), false),
+    GIANT_CLAM(listOf("tridacna", "hippopus"), false),
     /** Basslets (royal gramma, *Gramma loreto*, research 50 §1): holds a cave, hangs belly-to-rock (upside down under ledges). */
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
@@ -462,6 +465,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     HARLEQUIN_SHRIMP(listOf("hymenocera"), false),
     /** Pistol (snapping) shrimp (*Alpheus*, research 44 §4): digs the burrow it shares with a watchman goby; snaps. */
     PISTOL_SHRIMP(listOf("alpheus"), false),
+    /**
+     * Sea cucumbers (tiger tail, *Holothuria hilla*, research 45 §4): long soft deposit feeders that creep over the
+     * sand at night mopping it up with their oral tentacles; half hidden under the rock by day; toxic when stressed.
+     */
+    SEA_CUCUMBER(listOf("holothuria", "bohadschia", "actinopyga"), false),
     GENERIC_FISH(emptyList(), true),
     GENERIC_INVERT(emptyList(), false);
 
@@ -470,7 +478,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     val isSessile: Boolean get() = this == FEATHER_DUSTER
     /** The three shrimp: stance, limbs, molting and most shrimp rules are shared. */
     /** True crabs on the shared crab rig ([CrabLegs], [CrawlerSeat] crab seats). */
-    val isCrab: Boolean get() = this == SALLY_CRAB || this == ARROW_CRAB || this == EMERALD_CRAB
+    val isCrab: Boolean get() = this == SALLY_CRAB || this == ARROW_CRAB || this == EMERALD_CRAB || this == PORCELAIN_CRAB
     val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP ||
         this == FIRE_SHRIMP || this == SEXY_SHRIMP || this == HARLEQUIN_SHRIMP || this == PISTOL_SHRIMP
     /** Snails: astrea, nassarius, trochus and conch (hermits take their empty shells, dino toxin hits them). */
@@ -492,7 +500,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "emerald_crab" to EMERALD_CRAB, "brittle_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "emerald_crab" to EMERALD_CRAB, "porcelain_crab" to PORCELAIN_CRAB, "brittle_star" to BRITTLE_STAR, "serpent_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "trochus" to TROCHUS, "top_snail" to TROCHUS, "conch" to CONCH, "fighting_conch" to CONCH, "urchin" to URCHIN, "tuxedo_urchin" to URCHIN,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
@@ -501,13 +509,14 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
             "peppermint_shrimp" to PEPPERMINT_SHRIMP, "peppermint" to PEPPERMINT_SHRIMP,
-            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM,
+            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM, "giant_clam" to GIANT_CLAM, "maxima_clam" to GIANT_CLAM,
             "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
             "butterfly" to BUTTERFLY, "butterflyfish" to BUTTERFLY,
             "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
             "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
+            "sea_cucumber" to SEA_CUCUMBER, "cucumber" to SEA_CUCUMBER, "tiger_tail_cucumber" to SEA_CUCUMBER,
         )
 
         fun byId(id: String): BrainKind? {
