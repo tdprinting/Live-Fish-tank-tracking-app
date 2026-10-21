@@ -46,6 +46,10 @@ CARDS = {
     "lysmata_amboinensis": "skunk_shrimp",
     "lysmata_boggessi": "peppermint_shrimp",
     "ctenoides_scaber": "flame_scallop",
+    "tridacna_maxima": "maxima_clam",
+    "ophiarachna_incrassata": "serpent_star",
+    "neopetrolisthes_maculatus": "porcelain_crab",
+    "holothuria_hilla": "tiger_tail_cucumber",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
     "percnon_gibbesi": "sally_lightfoot",
@@ -72,9 +76,12 @@ CARDS = {
     "tubipora_musica": "organ_pipe",
     "zoanthus_sp": "zoa",
 }
-TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
-HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "gsp_mat",
-        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
+TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "maxima_clam", "gsp_mat",
+        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin", "tiger_tail_cucumber"}
+
+# models built gape along +x that sit gape up in the tank
+GAPE_UP = {"maxima_clam"}
 
 
 def render_card(species, glb, size=512, samples=32):
@@ -89,6 +96,13 @@ def render_card(species, glb, size=512, samples=32):
     PV.world((0.35, 0.42, 0.5), 1.0)
     objs = PV.import_glb(os.path.join(C.MODELS, glb + ".glb"))
     SP.instance_polyps(objs)
+    if glb in GAPE_UP:
+        # sits hinge down with the gape (+x) to the light, as in the tank
+        for o in objs:
+            if o.parent is None:
+                o.rotation_mode = "XYZ"
+                o.rotation_euler = (0, math.radians(-90), 0)
+        bpy.context.view_layer.update()
     meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH' and not o.hide_render]
     pts = [o.matrix_world @ Vector(c) for o in meshes for c in o.bound_box]
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))

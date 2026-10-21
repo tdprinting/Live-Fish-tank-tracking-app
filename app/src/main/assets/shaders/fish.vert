@@ -16,7 +16,7 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop, 8 snail, 9 urchin)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop / maxima clam, 8 snail, 9 urchin, 10 sea cucumber)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
@@ -32,6 +32,9 @@ uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x bod
 uniform float uLimbOn;     // 1: the model has extras.limbPivots and the pose carries limbs
 uniform vec4 uLimb[40];    // per-limb pose (layout per animal: core BrittleArms (40) / CrabLegs (19) / ShrimpLimbs (15) / HermitLegs (15))
 uniform vec4 uLimbPivot[10]; // model-space limb root xyz, w = rest limb length (model units)
+
+// Sea cucumber mouth centre in model space at the oral ring's spine station (tools/blender/sea_cucumber.py)
+const vec3 CUKE_MOUTH = vec3(0.006, 0.0137, 0.0);
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
@@ -152,7 +155,8 @@ void starArm(int k, inout vec3 local, inout vec3 n) {
 // stroke, reach): dip to the rock and come back to the mouth, alternating. Seated on a surface (core CrawlerSeat,
 // uLimb[18].w = 1) the legs are planted instead: uLimb[10 + k] rotates the rest leg about its coxa onto the foothold
 // (axis x angle), shortens it by the flex and raises the knee, A.w folds a leg that has nowhere clear to stand, and
-// uLimb[18].y / .z cap the left / right chela's dip at the surface.
+// uLimb[18].y / .z cap the left / right chela's dip at the surface. A porcelain crab's feather fans ride the chela
+// entries (COLOR_0.g = 1).
 void crabLimb(int k, inout vec3 local, inout vec3 n) {
     vec4 P = uLimbPivot[k];
     vec4 A = uLimb[k];
@@ -193,6 +197,19 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
         float yaw = 0.08 * A.y * sin(2.0 * PI * ph);
         off = rotAxis(off, vec3(0.0, 1.0, 0.0), yaw);
         n = rotAxis(n, vec3(0.0, 1.0, 0.0), yaw);
+    } else if (aColor.g > 0.5) {
+        // porcelain crab feather fan (COLOR_0.g = 1) on this chela's entry: A.x sweep phase, A.w fanning 0..1. Drawn
+        // open at the top of its sweep; it swings down and back to the mouth, folding, and stays folded when not fanning.
+        vec3 root = vec3(P.x, P.y, 0.35 * P.z);
+        vec3 o2 = local - root;
+        float t = clamp(aColor.r, 0.0, 1.0);
+        float sweep = max(0.5 - 0.5 * cos(2.0 * PI * A.x), 1.0 - A.w);
+        float ang = -1.9 * sweep;
+        o2 = rotAxis(o2, vec3(0.0, 0.0, 1.0), ang);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), ang);
+        o2 *= 1.0 - 0.55 * sweep * t;
+        local = root + o2;
+        return;
     } else {
         float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the rock
         float down = A.y * 0.5 * w + 0.15 * (A.z - 0.5);
@@ -331,7 +348,7 @@ void squidPose(float part, float hinge, inout vec3 local) {
     }
 }
 
-// Flame scallop (motion mode 7, core ClamRig): uLimb[0] = (tentacle wave phase, gape 0..1, extension 0..1, swim
+// Flame scallop and maxima clam (motion mode 7, core ClamRig): uLimb[0] = (tentacle wave phase, gape 0..1, extension 0..1, swim
 // trail 0..1), uLimb[1].y = writhe. COLOR_0: r valve side (1 upper), g class (0 shell, 0.5 mantle, 1 tentacle),
 // b t along a tentacle, a phase seed. The valves turn about the hinge line (x -0.5, y 0, along Z); the mantle lip and
 // tentacles ride their valve, the tentacles retract toward the beak, writhe, and stream back (+X) while it swims.
@@ -342,7 +359,13 @@ void clamPose(inout vec3 local, inout vec3 n) {
     float gape = clamp(uLimb[0].y, 0.0, 1.0);
     float ext = clamp(uLimb[0].z, 0.0, 1.0);
     float trail = clamp(uLimb[0].w, 0.0, 1.0);
-    if (cls > 0.25) {
+    if (cls > 0.3 && cls < 0.45) {
+        // maxima clam's draped mantle (class 0.4): drawn in toward the midline and down into the shell as it closes;
+        // t = 0 at the midline .. 1 at the hanging edge
+        float k = 1.0 - ext;
+        local.y *= mix(1.0, 0.12, k);
+        local.x -= k * (0.07 + 0.05 * t);
+    } else if (cls > 0.25) {
         vec2 d = local.xz - vec2(-0.43, 0.0);
         vec2 dir = d / max(length(d), 1e-4);
         // the mantle lip swells out past the margin as it opens to feed
@@ -678,6 +701,15 @@ void main() {
             local.y += h * a * sin(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
             local.x -= h * 0.6 * a * cos(2.0 * PI * 4.0 * time + (side > 0.0 ? 0.0 : PI));
         }
+    } else if (mode > 9.5 && mode < 10.5) {
+        // sea cucumber oral tentacles (R = t along, G = feeding order): folded in over the mouth when not feeding
+        // (uPick = out); feeding, one at a time presses down on the sand, then bends back into the mouth to be wiped
+        float t = aColor.r;
+        float c = fract(uSwim.w - aColor.g);
+        float dip = smoothstep(0.0, 0.05, c) * (1.0 - smoothstep(0.05, 0.1, c));
+        float eat = smoothstep(0.05, 0.09, c) * (1.0 - smoothstep(0.11, 0.15, c));
+        local.y -= uPick * t * 0.012 * dip;
+        local = mix(local, CUKE_MOUTH, uPick * t * 0.85 * eat + (1.0 - uPick) * t * 0.8);
     } else if (mode < 0.5 || mode > 1.5) {
         // legs / antennae: sweep with the appendage phase along the hinge (B) coordinate
         float sweep = sin(uSwim.w * 2.0 * PI + hinge * 4.0 + u * 5.0);
@@ -693,6 +725,15 @@ void main() {
     if (part > 0.5 && part < 1.5) {
         uw = clamp(u - local.x, 0.0, 1.0);
         local.x += uw - u;
+    }
+
+    // Sea cucumber (mode 10, core SeaCucumberBrain): uFin.x = contraction (0 relaxed .. 1 balled up: shorter and fatter,
+    // the body drawn toward the head along the spine), uMotion.xy = crawl wave (phase, amplitude): a swelling that runs
+    // head to tail as the body creeps forward on its tube feet.
+    if (mode > 9.5 && mode < 10.5) {
+        float k = uFin.x;
+        uw = u * (1.0 - 0.35 * k);
+        if (part < 0.5) local.yz *= 1.0 + 0.3 * k + 0.07 * uMotion.y * sin(2.0 * PI * (3.0 * u - uMotion.x));
     }
 
     // Life-stage proportions (a juvenile engineer goby is stubbier than the eel-like adult): scale depth and width

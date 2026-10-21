@@ -28,9 +28,10 @@ def arm_radius(tt):
     return 0.0105 * (1 - 0.82 * tt ** 1.25) * (1 + 0.06 * np.cos(tt * SEGMENTS * math.pi / 2) ** 2)
 
 
-def arms(uv):
+def arms(uv, girth=1.0, spine_len=(0.012, 0.018), spine_side=0.88, spine_fwd=0.35, spine_every=1, radius=None):
     """The five arms with their spines as one geomlib.Geo. uv(strip, t, around) maps atlas strips: 0 arm (t along,
-    around = dorsal-ness 1 dorsal .. 0 ventral), 2 spines (around 0 base .. 1 tip)."""
+    around = dorsal-ness 1 dorsal .. 0 ventral), 2 spines (around 0 base .. 1 tip). The keyword arguments reshape the
+    arms for other ophiuroids on the same rig (the serpent star: thicker, smooth arms, short spines laid along them)."""
     ga = G.Geo()
     t = np.linspace(0, 1, RINGS)
     for i in range(5):
@@ -41,7 +42,7 @@ def arms(uv):
         L = ARM_LEN + (ROOT_R - r0)
         pts = (r0 + L * t)[:, None] * d + np.array([0, 0, ARM_Z])
         tt = np.clip((np.linalg.norm(pts[:, :2], axis=1) - ROOT_R) / ARM_LEN, 0, 1)
-        R = arm_radius(tt)
+        R = (radius or arm_radius)(tt) * girth
         Vt, Ft, tv, av = G.tube(pts, R, SIDES, squash=SQUASH, up=perp)
         dors = 1 - np.abs(((np.asarray(av) - 0.25 + 0.5) % 1.0) - 0.5) * 2      # 1 dorsal .. 0 ventral
         tvv = np.r_[np.repeat(tt, SIDES), 1.0]          # t of each ring's station (+ the tip cap)
@@ -49,11 +50,11 @@ def arms(uv):
         ga.add(Vt, Ft, uv(0, tvv, dors), np.stack([tvv, 0 * tvv, np.full(len(Vt), i / 9), np.clip(0.5 - Vt[:, 0], 0, 1)], -1))
         # arm spines: a stout pair at every ring, about 1.4 arm-widths long near the disc, shorter distally, held out
         # to the sides and a little forward and up (O. erinaceus: long, robust spines on every arm segment)
-        for kk in range(2, RINGS - 1):
+        for kk in range(2, RINGS - 1, spine_every):
             for sgn in (1, -1):
-                Ls = 0.012 + 0.018 * (1 - tt[kk])
+                Ls = spine_len[0] + spine_len[1] * (1 - tt[kk])
                 b = pts[kk] + perp * sgn * R[kk] * 0.8
-                tip = b + perp * sgn * Ls * 0.88 + d * Ls * 0.35 + np.array([0, 0, Ls * 0.25])
+                tip = b + perp * sgn * Ls * spine_side + d * Ls * spine_fwd + np.array([0, 0, Ls * 0.25])
                 Vc, Fc = G.cone(b, tip, max(0.0018, R[kk] * 0.2), 3)
                 ga.add(Vc, Fc, uv(2, np.full(len(Vc), 0.5), np.r_[np.zeros(3), 1.0]),
                        [(tt[kk], 0, i / 9, float(np.clip(0.5 - v[0], 0, 1))) for v in Vc])
