@@ -202,7 +202,7 @@ object HealthModel {
                 m["do"] = ToleranceRange(optLo = 6.0, tolLo = 5.0, lethalLo = 3.5)
             }
             // Crustaceans need iodine to molt; the Sally Lightfoot also tolerates salinity swings poorly (SIMULATION §9.6).
-            BrainKind.SALLY_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> {
+            BrainKind.SALLY_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> {
                 m["i"] = CRUSTACEAN_IODINE
                 if (s.brainKind == BrainKind.SALLY_CRAB) m["sg"] = ToleranceRange(1.024, 1.026, 1.022, 1.027, 1.019, 1.029)
             }

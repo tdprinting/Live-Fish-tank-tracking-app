@@ -37,12 +37,14 @@ class PestState {
     /** Berghia nudibranch population (fractional: they breed and starve gradually). */
     var berghia = 0.0
     var peppermintAcc = 0.0
+    /** Established polyps owed to the peppermints (fractional, so the rare kill comes at its expected rate). */
+    var peppermintLargeAcc = 0.0
     var berghiaAcc = 0.0
     /** The polyp the Berghia are working on now (they graze one down before moving to the next). */
     var berghiaPrey: String? = null
 
     fun copyFrom(o: PestState) {
-        peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; berghiaAcc = o.berghiaAcc; berghiaPrey = o.berghiaPrey
+        peppermint = o.peppermint; berghia = o.berghia; peppermintAcc = o.peppermintAcc; peppermintLargeAcc = o.peppermintLargeAcc; berghiaAcc = o.berghiaAcc; berghiaPrey = o.berghiaPrey
     }
 
     /** For My tank saves (CustomTankSave.pests). */
@@ -66,13 +68,15 @@ class PestState {
  */
 object AiptasiaModel {
     const val SPECIES_ID = "aiptasia_sp"
+    /** The peppermint shrimp the keeper adds against aiptasia (research 42). */
+    const val PEPPERMINT_ID = "lysmata_boggessi"
     const val CAP = 60
     /** Lacerates per mature polyp per day at full food (est.; literature on A. pallida culture ~ weekly when fed). */
     const val BUD_PER_DAY = 1.0 / 14
     const val MATURE = 0.6
-    /** Polyps eaten per controller per day (est.). */
+    /** Polyps eaten per controller per day (est.; research 42 §1.5: established polyps are mostly ignored, even by a hungry shrimp). */
     const val PEPPERMINT_SMALL_PER_DAY = 0.5
-    const val PEPPERMINT_LARGE_PER_DAY = 0.08
+    const val PEPPERMINT_LARGE_PER_DAY = 0.04
     const val BERGHIA_PER_DAY = 0.4
     const val BERGHIA_BREED_PER_DAY = 0.04
     const val BERGHIA_STARVE_PER_DAY = 1.0 / 7
@@ -85,9 +89,13 @@ object AiptasiaModel {
 
     fun polyps(sim: Simulation) = sim.corals.filter { it.kind == CoralKind.AIPTASIA && it.tissue > 0.01 }
 
-    /** Peppermint shrimp present: added controllers plus any Lysmata boggessi / wurdemanni in the tank. */
+    /**
+     * Peppermint shrimp eating by the numbers: controllers from an older save ([PestState.peppermint]) plus, while the
+     * behaviour layer is off (fast time, away catch-up), the live peppermints, which otherwise hunt polyp by polyp
+     * themselves ([com.reeflive.core.ai.PeppermintShrimpBrain]).
+     */
     fun peppermintCount(sim: Simulation): Int = sim.pests.peppermint +
-        sim.organisms.count { it.alive && (it.species.id.contains("boggessi") || it.species.id.contains("wurdemanni")) }
+        (if (sim.behaviorEnabled && !sim.abstractMode) 0 else sim.organisms.count { it.alive && !it.molting && it.brainKind == BrainKind.PEPPERMINT_SHRIMP })
 
     /** [lifeMin]: the step on the game clock ([Simulation.lifePace]) for growth and spread; a zapped polyp dies on [dtMin]. */
     fun step(sim: Simulation, dtMin: Double, night: Boolean = false, lifeMin: Double = dtMin) {
@@ -126,19 +134,20 @@ object AiptasiaModel {
                 st.peppermintAcc -= 1
                 val live = polyps(sim)
                 if (live.isEmpty()) { st.peppermintAcc = 0.0; break }
-                // a shrimp-day finds a small polyp at 0.5/day, an established one only at 0.08/day
+                // a shrimp-day finds a small polyp at 0.5/day, an established one only at 0.04/day
                 val small = live.filter { it.size < MATURE }
                 val pSmall = PEPPERMINT_SMALL_PER_DAY * min(1.0, small.size / 3.0)
                 val pLarge = PEPPERMINT_LARGE_PER_DAY
                 when {
                     small.isNotEmpty() && rng.chance(pSmall) -> kill(small[rng.nextInt(small.size)])
-                    rng.chance(pLarge) -> kill(live[rng.nextInt(live.size)])
+                    // an established one now and then, at its expected rate (a dice roll here ran in streaks)
+                    else -> { st.peppermintLargeAcc += pLarge; if (st.peppermintLargeAcc >= 1) { st.peppermintLargeAcc -= 1; kill(live[rng.nextInt(live.size)]) } }
                 }
             }
         }
         if (st.berghia > 0) {
             val n = polyps(sim).size
-            val predators = sim.organisms.any { it.alive && (it.brainKind == BrainKind.CLEANER_SHRIMP || it.brainKind == BrainKind.BANDED_SHRIMP || it.brainKind == BrainKind.WRASSE) } || pep > 0
+            val predators = sim.organisms.any { it.alive && (it.brainKind.isShrimp || it.brainKind == BrainKind.WRASSE) } || pep > 0
             val badWater = sim.water.s.copper > 0.01 || sim.water.s.nh3Free > 0.02
             var rate = 0.0
             if (n > 0) rate += BERGHIA_BREED_PER_DAY * (1 - st.berghia / (2.0 * n + 2)).coerceAtLeast(-1.0) else rate -= BERGHIA_STARVE_PER_DAY

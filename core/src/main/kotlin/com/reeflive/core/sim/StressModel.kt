@@ -96,6 +96,7 @@ object StressModel {
         BrainKind.DOTTYBACK to doubleArrayOf(0.9, 0.9, 0.9, 1.0, 1.0, 1.0, 0.8, 0.9),
         BrainKind.CLEANER_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.BANDED_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
+        BrainKind.PEPPERMINT_SHRIMP to doubleArrayOf(1.3, 1.6, 1.3, 1.3, 1.3, 1.4, 0.6, 1.0),
         BrainKind.HERMIT to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.SALLY_CRAB to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.2, 1.3, 0.6, 0.8),
         BrainKind.NASSARIUS to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
@@ -103,6 +104,8 @@ object StressModel {
         BrainKind.ASTERINA to doubleArrayOf(1.1, 1.2, 1.4, 1.2, 1.1, 1.2, 0.6, 0.7),
         BrainKind.BRITTLE_STAR to doubleArrayOf(1.1, 1.4, 1.2, 1.2, 1.1, 1.3, 0.5, 0.8),
         BrainKind.FEATHER_DUSTER to doubleArrayOf(1.0, 1.2, 0.9, 0.7, 0.7, 0.8, 1.0, 1.2),
+        // a filter-feeding bivalve: touchy about salinity, pH and oxygen like the tube worm, more about temperature (est.)
+        BrainKind.FILE_CLAM to doubleArrayOf(1.2, 1.3, 1.0, 0.8, 0.8, 0.9, 1.1, 1.2),
     )
     private val SENS_DEFAULT_FISH = doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9)
     private val SENS_DEFAULT_INVERT = doubleArrayOf(1.1, 1.3, 1.2, 1.2, 1.1, 1.3, 0.6, 0.8)
