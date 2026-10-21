@@ -135,6 +135,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.EMERALD_CRAB -> base.copy(kind = "INVERT", common = "Emerald crab", maxLengthCm = 5.0, typicalAdultCm = 3.0, depthRatio = 0.45, massCoeff = 0.03,
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.25, 2.0, 0.0, 120.0), diet = listOf("ALGAE", "MEATY", "MYSIS", "PELLET", "DETRITUS"),
                     feedsPerDay = 1.0, grazer = true, temperament = Temperament(0.25, 0.25, 0.4, 0.7), hardiness = 0.8, homeRadiusCm = 30.0, model = "models/emerald_crab.glb")
+                BrainKind.PORCELAIN_CRAB -> base.copy(kind = "INVERT", common = "Porcelain crab", maxLengthCm = 2.5, typicalAdultCm = 1.8, depthRatio = 0.3, massCoeff = 0.03,
+                    locomotion = Locomotion("WALKING", 0.4, 4.0, 0.0, 120.0), diet = listOf("PLANKTON", "PHYTOPLANKTON", "DETRITUS", "MYSIS", "BRINE"),
+                    feedsPerDay = 3.0, temperament = Temperament(0.2, 0.4, 0.3, 0.6), hardiness = 0.75, homeRadiusCm = 6.0, brain = "porcelain_crab", model = "models/porcelain_crab.glb")
                 BrainKind.ARROW_CRAB -> base.copy(kind = "INVERT", common = "Arrow crab", maxLengthCm = 6.0, typicalAdultCm = 4.5, depthRatio = 0.6, massCoeff = 0.006,
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.25, 1.5, 0.0, 120.0), diet = listOf("MEATY", "MYSIS", "PELLET", "FLAKE", "DETRITUS"),
                     feedsPerDay = 1.0, temperament = Temperament(0.45, 0.55, 0.6, 0.4), hardiness = 0.75, homeRadiusCm = 45.0, model = "models/arrow_crab.glb")

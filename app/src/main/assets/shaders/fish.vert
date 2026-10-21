@@ -152,7 +152,8 @@ void starArm(int k, inout vec3 local, inout vec3 n) {
 // stroke, reach): dip to the rock and come back to the mouth, alternating. Seated on a surface (core CrawlerSeat,
 // uLimb[18].w = 1) the legs are planted instead: uLimb[10 + k] rotates the rest leg about its coxa onto the foothold
 // (axis x angle), shortens it by the flex and raises the knee, A.w folds a leg that has nowhere clear to stand, and
-// uLimb[18].y / .z cap the left / right chela's dip at the surface.
+// uLimb[18].y / .z cap the left / right chela's dip at the surface. A porcelain crab's feather fans ride the chela
+// entries (COLOR_0.g = 1).
 void crabLimb(int k, inout vec3 local, inout vec3 n) {
     vec4 P = uLimbPivot[k];
     vec4 A = uLimb[k];
@@ -193,6 +194,19 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
         float yaw = 0.08 * A.y * sin(2.0 * PI * ph);
         off = rotAxis(off, vec3(0.0, 1.0, 0.0), yaw);
         n = rotAxis(n, vec3(0.0, 1.0, 0.0), yaw);
+    } else if (aColor.g > 0.5) {
+        // porcelain crab feather fan (COLOR_0.g = 1) on this chela's entry: A.x sweep phase, A.w fanning 0..1. Drawn
+        // open at the top of its sweep; it swings down and back to the mouth, folding, and stays folded when not fanning.
+        vec3 root = vec3(P.x, P.y, 0.35 * P.z);
+        vec3 o2 = local - root;
+        float t = clamp(aColor.r, 0.0, 1.0);
+        float sweep = max(0.5 - 0.5 * cos(2.0 * PI * A.x), 1.0 - A.w);
+        float ang = -1.9 * sweep;
+        o2 = rotAxis(o2, vec3(0.0, 0.0, 1.0), ang);
+        n = rotAxis(n, vec3(0.0, 0.0, 1.0), ang);
+        o2 *= 1.0 - 0.55 * sweep * t;
+        local = root + o2;
+        return;
     } else {
         float w = 0.5 - 0.5 * cos(2.0 * PI * A.x);   // 0 at the mouth .. 1 at the rock
         float down = A.y * 0.5 * w + 0.15 * (A.z - 0.5);

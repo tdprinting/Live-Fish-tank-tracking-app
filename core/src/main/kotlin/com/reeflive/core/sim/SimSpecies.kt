@@ -403,6 +403,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     ARROW_CRAB(listOf("stenorhynchus"), false),
     /** Emerald crab (*Mithraculus sculptus*, research 43 §1): shy majid crab, grazes bubble algae at night. */
     EMERALD_CRAB(listOf("mithraculus"), false),
+    PORCELAIN_CRAB(listOf("neopetrolisthes", "petrolisthes"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
@@ -468,7 +469,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     val isSessile: Boolean get() = this == FEATHER_DUSTER
     /** The three shrimp: stance, limbs, molting and most shrimp rules are shared. */
     /** True crabs on the shared crab rig ([CrabLegs], [CrawlerSeat] crab seats). */
-    val isCrab: Boolean get() = this == SALLY_CRAB || this == ARROW_CRAB || this == EMERALD_CRAB
+    val isCrab: Boolean get() = this == SALLY_CRAB || this == ARROW_CRAB || this == EMERALD_CRAB || this == PORCELAIN_CRAB
     val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP ||
         this == FIRE_SHRIMP || this == SEXY_SHRIMP || this == HARLEQUIN_SHRIMP || this == PISTOL_SHRIMP
     /** Snails: astrea, nassarius, trochus and conch (hermits take their empty shells, dino toxin hits them). */
@@ -490,7 +491,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "emerald_crab" to EMERALD_CRAB, "brittle_star" to BRITTLE_STAR, "serpent_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "emerald_crab" to EMERALD_CRAB, "porcelain_crab" to PORCELAIN_CRAB, "brittle_star" to BRITTLE_STAR, "serpent_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
             "trochus" to TROCHUS, "top_snail" to TROCHUS, "conch" to CONCH, "fighting_conch" to CONCH, "urchin" to URCHIN, "tuxedo_urchin" to URCHIN,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,

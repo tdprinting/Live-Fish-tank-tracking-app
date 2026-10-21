@@ -94,6 +94,8 @@ object HeatModel {
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.EMERALD_CRAB -> EMERALD_CRAB
+        // a small reef crab of the same water (est., like the emerald crab)
+        BrainKind.PORCELAIN_CRAB -> EMERALD_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY

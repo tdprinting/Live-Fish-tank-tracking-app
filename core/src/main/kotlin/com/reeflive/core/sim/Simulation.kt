@@ -1242,6 +1242,7 @@ class Simulation private constructor(
                 // the flame scallop lives on phytoplankton only (research 42 §2.4)
                 BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
                 BrainKind.GIANT_CLAM -> com.reeflive.core.ai.GiantClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.PORCELAIN_CRAB -> com.reeflive.core.ai.PorcelainCrabBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1367,6 +1368,8 @@ class Simulation private constructor(
                 BrainKind.ARROW_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(25.0, 45.0, 24.0) else continue
                 // research 43 §1: every 4-8 weeks while growing (care guides); a majid too, so none after the terminal molt
                 BrainKind.EMERALD_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(28.0, 56.0, 24.0) else continue
+                // research 45 §2: a small anomuran that keeps molting as it grows (est., like the shrimp)
+                BrainKind.PORCELAIN_CRAB -> Triple(25.0, 45.0, 24.0)
                 else -> continue
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))

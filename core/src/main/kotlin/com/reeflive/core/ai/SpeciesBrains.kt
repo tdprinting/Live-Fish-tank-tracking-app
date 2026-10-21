@@ -23,6 +23,7 @@ object SpeciesBrains {
             BrainKind.SALLY_CRAB -> SallyCrabBrain(c)
             BrainKind.ARROW_CRAB -> ArrowCrabBrain(c)
             BrainKind.EMERALD_CRAB -> EmeraldCrabBrain(c)
+            BrainKind.PORCELAIN_CRAB -> PorcelainCrabBrain(c)
             BrainKind.FEATHER_DUSTER -> FeatherDusterBrain(c)
             BrainKind.NASSARIUS -> NassariusBrain(c)
             BrainKind.ASTREA -> AstreaBrain(c)

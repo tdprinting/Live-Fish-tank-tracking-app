@@ -121,6 +121,9 @@ object Thoughts {
             n == "feed" -> feedLine(e, label)
             n == "graze" && k == BrainKind.EMERALD_CRAB -> Line("scooping bubble algae off the rock with its spoon claws", "scoop some bubble algae", "Pop, crunch!", Driver.HUNGER)
             n == "nip" && k == BrainKind.EMERALD_CRAB -> Line("nibbling coral polyps because it is hungry (naughty!)", "nibble a coral", "So hungry…", Driver.HUNGER, 2)
+            n == "retreat" && k == BrainKind.PORCELAIN_CRAB -> Line("scuttling backwards under its anemone${e.because()}", "hide under the tentacles", "Back under the tentacles!", Driver.FEAR, 2)
+            n == "filter" && k == BrainKind.PORCELAIN_CRAB -> Line(if (label.startsWith("Resting")) "resting its feathery fans for a moment" else "sweeping the water with its feathery fans to catch tiny bits of food", "catch more plankton", if (label.startsWith("Resting")) "Phew, arm break." else "Swish, swish, snack!", Driver.HUNGER)
+            n == "spar" && k == BrainKind.PORCELAIN_CRAB -> Line("shoving a rival crab with its big flat claws", "keep its anemone", "This anemone is taken!", Driver.TERRITORY, 2)
             n == "retreat" && k == BrainKind.EMERALD_CRAB -> Line("scuttling back into its rock crevice${e.because()}", "hide in its crevice", "Eek, back inside!", Driver.FEAR, 2)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
             n == "hunt" && k == BrainKind.ARROW_CRAB -> Line("stalking a bristleworm on long, slow legs", "catch a bristleworm", "Gotcha, wormy!", Driver.HUNGER, 2)
@@ -594,6 +597,7 @@ object Thoughts {
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
         BrainKind.ARROW_CRAB -> "arrow crab"
         BrainKind.EMERALD_CRAB -> "emerald crab"
+        BrainKind.PORCELAIN_CRAB -> "porcelain crab"
         BrainKind.BRITTLE_STAR -> if (o.species.brain == "serpent_star") "serpent star" else "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"
