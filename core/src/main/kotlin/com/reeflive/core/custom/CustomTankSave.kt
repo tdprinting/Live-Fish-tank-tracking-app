@@ -111,6 +111,9 @@ data class SavedCoral(
     val size: Double = 1.0,
     val cover: Double = 0.0,
     val radiusCm: Double = 0.0,
+    /** Recent caught food 0..1 and the light it is used to (−1 unknown: an older save), for hunger and dark fading. */
+    val fed: Double = 0.0,
+    val acclLight: Double = -1.0,
 )
 
 /**

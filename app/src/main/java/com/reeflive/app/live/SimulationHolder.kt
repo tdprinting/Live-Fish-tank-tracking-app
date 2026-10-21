@@ -162,6 +162,20 @@ class SimulationHolder(
     /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
     val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
 
+    /** What happened to My tank's corals while the app was away (core CoralHealth.changes); the screen shows and clears it. */
+    private val _coralNews = MutableStateFlow<List<String>>(emptyList())
+    val coralNews: StateFlow<List<String>> = _coralNews.asStateFlow()
+    fun clearCoralNews() { _coralNews.value = emptyList() }
+
+    /** [advance] on [sim], noting what changed for its corals when it is My tank. */
+    private inline fun withCoralNews(sim: Simulation, advance: () -> Unit) {
+        if (sim !== customSim) { advance(); return }
+        val before = com.reeflive.core.sim.CoralHealth.marks(sim.corals)
+        advance()
+        val lines = com.reeflive.core.sim.CoralHealth.changes(before, sim.corals)
+        if (lines.isNotEmpty()) _coralNews.value = lines
+    }
+
     private val _economy = MutableStateFlow<EconomyView?>(null)
     /** My tank's sand dollars, care list and goals (docs/ECONOMY.md); null while there is no My tank. */
     val economy: StateFlow<EconomyView?> = _economy.asStateFlow()
@@ -359,6 +373,21 @@ class SimulationHolder(
     /** The keeper opened the water test (Tank Health or the shelf kit): today's "Test the water" chore. */
     fun testedWater() {
         scope.launch { val sim = customSim ?: return@launch; economyLive?.testedWater(today()); updateEconomy(sim, force = true) }
+    }
+
+    /**
+     * Tank Health's coral care button in My tank: pays [price] sand dollars for the supplies and puts them in.
+     * False (nothing happens) when the keeper cannot afford it.
+     */
+    fun reefCare(price: Int): Boolean {
+        if (price > (_economy.value?.coins ?: 0)) return false
+        scope.launch {
+            val sim = customSim ?: return@launch
+            if (economyLive?.spend(price, "Coral care", today()) == false) return@launch
+            sim.enqueue(Command.ReefCare)
+            updateEconomy(sim, force = true)
+        }
+        return true
     }
 
     /** Collects today's happy tank bonus. */
@@ -672,7 +701,7 @@ class SimulationHolder(
         lastWallMs[sim] = now
         if (sim === customSim) { beginAway(sim, (now - last).coerceAtLeast(0L) / 1000.0); publish(sim); return }
         val secs = FastForward.simSeconds(now - last, speed = 1.0)
-        if (secs >= FastForward.MIN_SIM_SEC) sim.advanceAbstract(secs)
+        if (secs >= FastForward.MIN_SIM_SEC) withCoralNews(sim) { sim.advanceAbstract(secs) }
         else sim.stepWall(0.0)
         publish(sim)
     }
