@@ -50,6 +50,7 @@ BUDGET = {
     # clownfish breeding (tools/blender/brood.py): one clutch, pooled larvae/fry (core BroodField MAX_*)
     "brood_clown_eggs_fresh": 10000, "brood_clown_eggs_dark": 10000, "brood_clown_eggs_eyed": 10000,
     "brood_clown_larva": 1000, "brood_clown_postlarva": 1000, "brood_clown_fry": 1000,
+    "brood_tang_egg": 600, "brood_tang_larva": 1000, "brood_tang_postlarva": 1500, "brood_tang_fry": 1800,
     "tank": 11000, "rockscape": 62000, "equipment": 9000,
     # pests (tools/blender/pests.py): one aiptasia polyp drawn once per polyp (AiptasiaDraw caps the count), the
     # Berghia nudibranch (drawn like the micro critters), the syringe / laser props of the treatment animation
