@@ -346,7 +346,7 @@ object SubmarineRules {
     /** Sensitisation: a startle takes this much habituation away. */
     const val HABIT_STARTLE_LOSS = 0.2
 
-    private val CRUSTACEANS = setOf(BrainKind.PORCELAIN_CRAB, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB)
+    private val CRUSTACEANS = setOf(BrainKind.MANTIS, BrainKind.PORCELAIN_CRAB, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP, BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val BURROWERS = setOf(BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.WATCHMAN_GOBY)
     /** Animals with nothing to show (snails, stars) or no escape to play. */

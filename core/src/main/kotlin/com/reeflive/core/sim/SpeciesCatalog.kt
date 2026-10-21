@@ -120,6 +120,10 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.15, 6.0, 0.0, 160.0), diet = listOf("DETRITUS", "MYSIS", "BRINE", "PELLET"),
                     feedsPerDay = 1.0, temperament = Temperament(0.4, 0.3, 0.3, 0.85), hardiness = 0.75, homeRadiusCm = 15.0, brain = "pistol_shrimp",
                     model = "models/pistol_shrimp.glb")
+                BrainKind.MANTIS -> base.copy(kind = "INVERT", common = "Peacock mantis shrimp", maxLengthCm = 18.0, typicalAdultCm = 12.0, depthRatio = 0.12,
+                    locomotion = Locomotion("WALKING", 0.25, 4.0, 0.0, 160.0), diet = listOf("PRAWN", "KRILL", "MYSIS", "PELLET"),
+                    feedsPerDay = 0.4, temperament = Temperament(0.8, 0.7, 0.6, 0.6), hardiness = 0.8, homeRadiusCm = 40.0, brain = "mantis_shrimp",
+                    model = "models/mantis_shrimp.glb")
                 BrainKind.FILE_CLAM -> base.copy(kind = "INVERT", common = "Flame scallop", maxLengthCm = 7.5, typicalAdultCm = 6.0, depthRatio = 0.38, massCoeff = 0.06,
                     locomotion = Locomotion("SESSILE", 0.0, 2.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 3.0, hardiness = 0.3,
                     starvationDays = 30.0, homeRadiusCm = 10.0, model = "models/flame_scallop.glb", buoyantWhenDead = false)

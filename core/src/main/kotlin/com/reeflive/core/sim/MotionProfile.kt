@@ -198,6 +198,9 @@ object MotionProfiles {
         BrainKind.SEXY_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 10.0, stopGoMoveS = 0.6, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         BrainKind.HARLEQUIN_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.7, walkBurstCmS = 12.0, stopGoMoveS = 2.0, stopGoPauseS = 1.5, footprintBL = 0.3, bodyUpRate = 1.0),
         BrainKind.PISTOL_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 18.0, stopGoMoveS = 1.0, stopGoPauseS = 0.6, footprintBL = 0.3, bodyUpRate = 1.5),
+        // research 62 §2: no walking speeds found; a mantis scuttles in quick dashes and darts backwards into its burrow
+        // with a tail flip [E]
+        BrainKind.MANTIS to MotionProfile(Gait.WALK, walkCmS = 3.0, walkBurstCmS = 45.0, stopGoMoveS = 1.2, stopGoPauseS = 0.8, footprintBL = 0.25, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]

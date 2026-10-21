@@ -327,6 +327,13 @@ object Predation {
                 BrainKind.CHROMIS -> if (L < 0.6 * pred.lengthCm) 1.5 * L else 0.0
                 else -> 0.0
             }
+            // research 62 §2: small fish and crawlers keep out of the club's reach of a mantis out of its burrow [E]
+            BrainKind.MANTIS -> when {
+                !pred.visible || pred.posture == 3 -> 0.0
+                me.isFish && L < 0.5 * pred.lengthCm -> 0.6 * pred.lengthCm
+                (me.brainKind.isShrimp || me.brainKind.isCrab || me.brainKind == BrainKind.HERMIT) && L < 0.6 * pred.lengthCm -> 0.5 * pred.lengthCm
+                else -> 0.0
+            }
             else -> 0.0
         }
     }
@@ -366,6 +373,17 @@ object Predation {
             BrainKind.EMERALD_CRAB -> when {
                 prey.brainKind.isSnail && prey.lengthCm < 0.6 * pred.lengthCm -> 0.2
                 prey.brainKind.isShrimp && prey.molting && prey.lengthCm < pred.lengthCm * 1.5 -> 0.2
+                else -> 0.0
+            }
+            // research 60 §11: a smasher; snails first (its staple in the wild), then hermits, crabs, small shrimp and clams
+            // it can crack (sizes [E]); a fish only at its burrow mouth ([MantisShrimpBrain.Watch])
+            BrainKind.MANTIS -> when {
+                prey.brainKind.isSnail -> if (prey.lengthCm < 0.5 * pred.lengthCm) 1.0 else 0.0
+                prey.brainKind == BrainKind.HERMIT -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.9 else 0.0
+                prey.brainKind.isCrab -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.7 else 0.0
+                prey.brainKind.isShrimp -> if (prey.lengthCm < 0.6 * pred.lengthCm) 0.6 else 0.0
+                prey.brainKind == BrainKind.URCHIN -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.3 else 0.0
+                prey.brainKind == BrainKind.FILE_CLAM || prey.brainKind == BrainKind.GIANT_CLAM -> if (prey.lengthCm < 0.5 * pred.lengthCm) 0.5 else 0.0
                 else -> 0.0
             }
             BrainKind.HAWK -> when (prey.brainKind) {

@@ -239,6 +239,7 @@ dollars (20-40 real dollars' worth).
 | Ultra crocea clam (needs the brightest spot) | invert | 6 | 150 |
 | Gold torch coral | coral | 6 | 250 |
 | Hummingbird bobtail squid | invert | 7 | 80 |
+| Peacock mantis shrimp (eats snails, crabs and small fish) | invert | 7 | 180 |
 | Purple tang | fish | 7 | 250 |
 | Scolymia | coral | 7 | 300 |
 | Gem tang (rare, research 60) | fish | 8 | 1000 |

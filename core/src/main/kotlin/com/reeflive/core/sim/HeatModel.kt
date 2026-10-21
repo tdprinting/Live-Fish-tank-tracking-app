@@ -88,7 +88,7 @@ object HeatModel {
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
-        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> SHRIMP
+        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.MANTIS -> SHRIMP
         BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
         BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG
@@ -121,7 +121,7 @@ object HeatModel {
     }
 
     fun isSnail(kind: BrainKind) = kind.isSnail
-    fun isShrimp(kind: BrainKind) = kind.isShrimp
+    fun isShrimp(kind: BrainKind) = kind.isShrimp || kind == BrainKind.MANTIS
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */

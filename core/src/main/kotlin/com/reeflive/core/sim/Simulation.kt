@@ -1235,6 +1235,7 @@ class Simulation private constructor(
             when (o.brainKind) {
                 // the harlequin eats only stars (research 44 §2)
                 BrainKind.HARLEQUIN_SHRIMP -> com.reeflive.core.ai.HarlequinShrimpBrain.abstractFeed(o, this)
+                BrainKind.MANTIS -> com.reeflive.core.ai.MantisShrimpBrain.abstractFeed(o, this)
                 BrainKind.WRASSE, BrainKind.CLEANER_SHRIMP, BrainKind.FIRE_SHRIMP ->
                     if (day && clients > 0) o.hunger = max(0.0, o.hunger - rise * (0.15 + 0.05 * clients).coerceAtMost(0.6) * 1.5 * dtMin)
                 // filter feeders and detritivores live partly on detritus / bacterioplankton
@@ -1364,6 +1365,8 @@ class Simulation private constructor(
                 BrainKind.FIRE_SHRIMP -> Triple(21.0, 42.0, 36.0)
                 BrainKind.SEXY_SHRIMP -> Triple(21.0, 35.0, 24.0)
                 BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> Triple(25.0, 45.0, 24.0)
+                // research 62 §2: adult stomatopods molt every month or two and hide for days after [I]
+                BrainKind.MANTIS -> Triple(40.0, 70.0, 72.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 // a spider crab (Majoidea) stops molting at maturity (terminal molt of puberty, Hartnoll 1963); young
                 // arrow crabs molt about monthly (est.)
