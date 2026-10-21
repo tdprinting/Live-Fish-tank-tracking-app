@@ -90,9 +90,11 @@ class BodyBounds(
                     }
                     if (lift < need - y - 1e-4) {
                         // wedged between the rock and the sand: the body pushes the sand from under itself (mass-conserving,
-                        // a little each tick) instead of lying in it
+                        // a little each tick) instead of lying in it. Out to the side away from the rock: pushed ahead along
+                        // the heading it piled up under the head (a diamond goby's head 0.7 cm in the sand at a rock foot)
                         val r0 = max(max(sand.cellX, sand.cellZ), fr.reach(prof, i, l, fr.sx, fr.sy, fr.sz))
-                        sand.bowWave(x, z, o.heading.x, o.heading.z, r0, (need - y - lift) * PI * r0 * r0 * 0.6)
+                        val side = if (r == null || r.distAt(x + fr.sx * r0, y, z + fr.sz * r0) >= r.distAt(x - fr.sx * r0, y, z - fr.sz * r0)) 1.0 else -1.0
+                        sand.bowWave(x, z, side * fr.sx, side * fr.sz, r0, (need - y - lift) * PI * r0 * r0 * 0.6)
                     }
                     if (lift > 1e-4) { y += lift; sy = true }
                 }
