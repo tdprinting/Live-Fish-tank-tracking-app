@@ -4,6 +4,8 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.geom.smoothstep
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.Disease
+import com.reeflive.core.sim.Ev
+import com.reeflive.core.sim.Evidence
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.FoodParticle
 import com.reeflive.core.sim.SimEvent
@@ -388,9 +390,11 @@ open class Sleep(val b: SpeciesBrain, label: String = "Sleeping", val nightWeigh
 /** Visit a cleaning station (wrasse or skunk shrimp): pose until cleaned (SIMULATION §4.4, 04 §13C). */
 open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior("visit", "Visiting cleaner") {
     private var station: CleaningStation? = null
+    /** A hawkfish that gave up hovering at the station goes back to its perch until then. */
+    private var retryAt = -1e9
     override fun score(c: Ctx): Double {
         val o = c.o
-        if (c.t - o.lastCleanedAt < 600 || c.p.night) return 0.0
+        if (c.t - o.lastCleanedAt < 600 || c.p.night || c.t < retryAt) return 0.0
         val st = choose(c) ?: return 0.0
         if (st.client != null && st.client !== o) return 0.0
         val ich = if (o.disease == Disease.ICH) o.diseaseStage * 3 else 0.0
@@ -413,12 +417,15 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
         val st = station
         if (st == null || !st.open) { finished = true; return }
         val o = c.o
+        // no swim bladder: a hawkfish hovers only briefly, then waits on a perch for the cleaner to come to it
+        val maxWait = if (o.brainKind == BrainKind.HAWK) HAWK_HOVER_S else 90.0
+        if (o.brainKind == BrainKind.HAWK && elapsed > maxWait) retryAt = c.t + HAWK_RETRY_S
         val pose = c.safe(st.pos + Vec3(0.0, 0.0, 1.0) * (o.lengthCm * 0.8 + 2))
         val d = o.pos.distanceTo(pose)
         if (st.client == null) st.client = o
         if (st.client !== o) {
             out.seek(c.viaOpenWater(c.safe(pose + Vec3(0.0, 4.0, 3.0))), o.cruiseSpeed * 0.6, arrive = 3.0); out.hover = true
-            if (elapsed > 40) finished = true
+            if (elapsed > min(40.0, maxWait)) finished = true
             return
         }
         out.seek(if (d > 8) c.viaOpenWater(pose) else pose, o.cruiseSpeed * (if (d > 8) 1.0 else 0.4), arrive = 3.0)
@@ -430,7 +437,13 @@ open class VisitCleaner(val b: SpeciesBrain, val extra: Double = 0.0) : Behavior
             o.finClamp = 0.0
         }
         if (c.t - o.lastCleanedAt < 2) { st.release(); finished = true }
-        if (elapsed > 90) { if (st.client === o) st.release(); finished = true }
+        if (elapsed > maxWait) { if (st.client === o) st.release(); finished = true }
+    }
+
+    companion object {
+        /** Longest a hawkfish hovers at a station (s) and how long it then stays on its perch before trying again. */
+        @Ev(Evidence.DESIGN_ESTIMATE, "Cirrhitidae lack a swim bladder: perch-bound, short hovering bouts") const val HAWK_HOVER_S = 12.0
+        const val HAWK_RETRY_S = 300.0
     }
     override fun exit(c: Ctx) {
         // handing over to the pose for this cleaner (it has started on the client) is not leaving: releasing the station
@@ -559,8 +572,10 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
     override val committed: Boolean get() = elapsed < 2.5
     // idle unless a worm is out: no utility noise, so the other behaviours' random draws are unchanged
     override val noisy: Boolean get() = false
+    /** A hawkfish that missed goes back to its perch before striking again (no swim bladder to hang about the rock). */
+    private var retryAt = -1e9
     override fun score(c: Ctx): Double {
-        if (c.o.hunger < 0.2 || c.o.sleeping) return 0.0
+        if (c.o.hunger < 0.2 || c.o.sleeping || c.t < retryAt) return 0.0
         w = c.sim.worms.nearest(c.o.pos, radius)
         return if (w != null) weight * (0.6 + 0.4 * c.o.hunger) else 0.0
     }
@@ -574,7 +589,14 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
             if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G); c.o.mouth = 1.0 }
             w = null; finished = true
         }
-        if (elapsed > 5) { w = null; finished = true }
+        if (elapsed > 5) {
+            w = null; finished = true
+            if (c.o.brainKind == BrainKind.HAWK) retryAt = c.t + HAWK_MISS_RETRY_S
+        }
     }
-    companion object { const val WORM_SNAP_G = 0.05 }
+    companion object {
+        const val WORM_SNAP_G = 0.05
+        /** Perch time (s) a hawkfish takes after a strike that could not reach its worm. */
+        const val HAWK_MISS_RETRY_S = 15.0
+    }
 }

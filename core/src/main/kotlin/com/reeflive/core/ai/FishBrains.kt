@@ -1651,6 +1651,8 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
         /** Preferred hop length, cm (most perch changes are short; DESIGN ESTIMATE scaled to the tank), and the longest. */
         const val HOP_PREF_CM = 22.0
         const val HOP_MAX_CM = 70.0
+        /** A duck stuck this long (s) short of a perch it cannot reach ends: it hops to the nearest perch instead of hovering. */
+        const val DUCK_GIVEUP_S = 4.0
         /** A duck no closer to its approach point for this long (s) clamps onto the perch from where it is ... */
         const val DUCK_STALL_S = 2.0
         /** ... when the perch is this near (cm) with open water between. */
@@ -1694,6 +1696,10 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
             if (elapsed > 0.8 && there && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
                 out.place(pose.pos, pose.heading, pose.up, 8.0); out.posture = 1; out.pectoral = 1.0
                 out.target = null; out.fleeFrom = null; out.hover = false
+            } else if (elapsed > 0.8 && c.t - progressAt > DUCK_GIVEUP_S && (t == null || t.pos.distanceTo(o.pos) > 8.0)) {
+                // pressed against rock short of its cover, no way on: no swim bladder to hover there, so it settles on the
+                // nearest perch ([PerchHop]) instead of hanging in the water for the rest of the duck
+                finished = true
             }
         }
     }
