@@ -51,6 +51,7 @@ CARDS = {
     "ctenoides_scaber": "flame_scallop",
     "tridacna_maxima": "maxima_clam",
     "tridacna_crocea": "crocea_clam",
+    "odontodactylus_scyllarus": "mantis_shrimp",
     "ophiarachna_incrassata": "serpent_star",
     "neopetrolisthes_maculatus": "porcelain_crab",
     "holothuria_hilla": "tiger_tail_cucumber",
@@ -85,7 +86,7 @@ CARDS = {
 }
 TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
 CORAL_HIGH = {"bounce_mushroom", "scolymia"}
-HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "maxima_clam", "crocea_clam", "gsp_mat",
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "mantis_shrimp", "flame_scallop", "maxima_clam", "crocea_clam", "gsp_mat",
         "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin", "tiger_tail_cucumber"}
 
 # models built gape along +x that sit gape up in the tank

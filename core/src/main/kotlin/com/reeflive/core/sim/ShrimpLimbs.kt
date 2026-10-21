@@ -76,8 +76,12 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
     /** Plants the walking legs, strokes the picking legs and steers the antennae for this tick. */
     fun plant(o: Organism, surf: CrawlSurface, dt: Double) {
         time += dt
-        val legs = if (o.brainKind == BrainKind.BANDED_SHRIMP) BANDED_LEGS else SKUNK_LEGS
-        val picks = if (o.brainKind == BrainKind.BANDED_SHRIMP) BANDED_PICKS else SKUNK_PICKS
+        val mantis = o.brainKind == BrainKind.MANTIS
+        val legs = if (o.brainKind == BrainKind.BANDED_SHRIMP) BANDED_LEGS else if (mantis) MANTIS_LEGS else SKUNK_LEGS
+        val picks = if (o.brainKind == BrainKind.BANDED_SHRIMP) BANDED_PICKS else if (mantis) MANTIS_PICKS else SKUNK_PICKS
+        // the mantis' walking legs are short under a long, low body (mantis_shrimp.py)
+        val hipDx = if (mantis) MANTIS_HIP_DX else HIP_DX; val hipY = if (mantis) MANTIS_HIP_Y else HIP_Y; val hipZ = if (mantis) MANTIS_HIP_Z else HIP_Z
+        val legBl = if (mantis) MANTIS_LEG_BL else LEG_BL; val reachBl = if (mantis) MANTIS_REACH_BL else REACH_BL
         val L = o.lengthCm
         val f = o.heading.normalized()
         val up = o.up.rejectFrom(f).normalized(Vec3.Y)
@@ -94,10 +98,10 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
         }
         riderPos = rider?.pos
         planted += ((if (grounded) 1.0 else 0.0) - planted) * ease
-        fitSeat(o, surf, rider, legs, f, up, rt, L, if (grounded) min(1.0, dt * SEAT_RATE) else ease, grounded)
+        fitSeat(o, surf, rider, legs, f, up, rt, L, if (grounded) min(1.0, dt * SEAT_RATE) else ease, grounded, if (mantis) MANTIS_BELLY_Y else BELLY_Y)
 
         // ---- walking legs ----
-        val stepCm = STEP_BL * L
+        val stepCm = (if (mantis) MANTIS_STEP_BL else STEP_BL) * L
         var swingingA = false; var swingingB = false
         for (i in 0 until 6) if (swing[i] >= 0) { if (GROUP_A[i]) swingingA = true else swingingB = true }
         for (i in 0 until 6) {
@@ -106,7 +110,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
             val side = if (i % 2 == 1) 1.0 else -1.0
             val rest = world(o, f, up, rt, legs[base], legs[base + 1], legs[base + 2] * -side)
             val home = if (!grounded) null else if (rider != null) grip(rider, rest, up, L)
-                else surf.dist(rest).let { d -> if (d > REACH_BL * L) null else project(surf, rest - surf.normal(rest) * d) }
+                else surf.dist(rest).let { d -> if (d > reachBl * L) null else project(surf, rest - surf.normal(rest) * d) }
             if (home == null) {
                 anchor[i] = null; swing[i] = -1.0; held[i] = max(0.0, held[i] - ease)
                 put(1 + i, 0.0, 0.0, 0.0, 0.0); continue
@@ -140,9 +144,9 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
                 }
             }
             // a foot never reaches further from its hip than the leg is long
-            val hip = world(o, f, up, rt, legs[base] + HIP_DX, HIP_Y, HIP_Z * -side)
+            val hip = world(o, f, up, rt, legs[base] + hipDx, hipY, hipZ * -side)
             val reach = foot - hip
-            val maxLen = LEG_BL * L
+            val maxLen = legBl * L
             if (reach.length() > maxLen) foot = hip + reach * (maxLen / reach.length())
             putOffset(1 + i, LIFT_X * lift, foot - rest, f, up, rt, L, 0.3, held[i])
         }
@@ -171,7 +175,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
                     else surf.cast(probe, -up, 0.4 * L).let { t -> if (t < 0) null else probe - up * t }
             }
             val spot = pickSpot[j] ?: (restTip + f * (0.04 * L) - up * (0.04 * L))
-            val mouth = world(o, f, up, rt, MOUTH_X, MOUTH_Y, MOUTH_Z * side)
+            val mouth = if (mantis) world(o, f, up, rt, MANTIS_MOUTH_X, MANTIS_MOUTH_Y, MANTIS_MOUTH_Z * side) else world(o, f, up, rt, MOUTH_X, MOUTH_Y, MOUTH_Z * side)
             // 0..0.35 reach out, 0.35..0.5 grip and tug, 0.5..0.85 carry back, 0.85..1 at the mouth
             val ph = pickPhase[j]
             val tip = when {
@@ -203,6 +207,49 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
         put(11, min(picking, 0.99), planted, antL, antR)
 
         if (o.brainKind == BrainKind.BANDED_SHRIMP) chelipeds(o, surf, f, up, rt, L, dt, ease)
+        if (mantis) clubs(o, f, up, rt, L, dt)
+    }
+
+    private var smashT = -1.0
+    private var smashAt: Vec3? = null
+    /** Club strikes thrown (tests). */
+    var smashes = 0; private set
+
+    /** True while a club strike is out or drawing back. */
+    val smashing: Boolean get() = smashT >= 0
+
+    /**
+     * A mantis strike at [at] (world): both clubs shoot out to it and are drawn back folded (the brain calls this on
+     * each hit). A strike already under way is not restarted.
+     */
+    fun smash(o: Organism, at: Vec3) {
+        if (smashT >= 0) return
+        smashT = 0.0; smashAt = at; smashes++
+    }
+
+    /**
+     * The peacock mantis' raptorial appendages (uLimb[13] left, [14] right, class CLAW in mantis_shrimp.glb): folded under
+     * the head at rest; a strike unfolds them so the clubs meet the target in [SMASH_OUT_S] (2.7 ms in O. scyllarus,
+     * Patek et al. 2004: well inside one frame, so it reads as a snap), stays on it a moment and folds back.
+     */
+    private fun clubs(o: Organism, f: Vec3, up: Vec3, rt: Vec3, L: Double, dt: Double) {
+        val at = smashAt
+        if (smashT >= 0) smashT += dt
+        for (s in 0 until 2) {
+            val side = if (s == 1) 1.0 else -1.0
+            val rest = world(o, f, up, rt, CLUB_X, CLUB_Y, CLUB_Z * -side)
+            var tip = rest
+            if (smashT >= 0 && at != null) {
+                val hit = rest + (at + rt * (side * 0.04 * L) - rest).clampLength(CLUB_REACH_BL * L)
+                tip = when {
+                    smashT < SMASH_OUT_S -> rest.lerp(hit, smashT / SMASH_OUT_S)
+                    smashT < SMASH_OUT_S + SMASH_HOLD_S -> hit
+                    else -> { val q = min(1.0, (smashT - SMASH_OUT_S - SMASH_HOLD_S) / SMASH_BACK_S); hit.lerp(rest, q * q * (3 - 2 * q)) }
+                }
+            }
+            putOffset(13 + s, 0.0, tip - rest, f, up, rt, L, 0.6, 1.0)
+        }
+        if (smashT > SMASH_OUT_S + SMASH_HOLD_S + SMASH_BACK_S) { smashT = -1.0; smashAt = null }
     }
 
     /** True while a cheliped strike is under way (tests, brains). */
@@ -370,7 +417,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
      * belly keeps clear of it. The sim keeps placing the animal by its head; this only settles how the body sits.
      */
     private fun fitSeat(o: Organism, surf: CrawlSurface, rider: Organism?, legs: DoubleArray, f: Vec3, up: Vec3, rt: Vec3,
-                        L: Double, k: Double, grounded: Boolean) {
+                        L: Double, k: Double, grounded: Boolean, bellyY: Double) {
         var tD = 0.0; var tP = 0.0; var tR = 0.0
         if (grounded) {
             // normal equations for g = D + P·(x − SEAT_X) + R·z over the legs that find something under them
@@ -399,7 +446,7 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
             tD = tD.coerceIn(-0.03, SEAT_MAX)
             // never press the belly into the rock or the client
             for (bx in BELLY_X) {
-                val g = gap(surf, rider, rawWorld(o, f, up, rt, bx, BELLY_Y, 0.0), up, L) ?: continue
+                val g = gap(surf, rider, rawWorld(o, f, up, rt, bx, bellyY, 0.0), up, L) ?: continue
                 val over = tD + tP * (bx - SEAT_X) - (g - BELLY_CLEAR)
                 if (over > 0) tD -= over
             }
@@ -473,6 +520,21 @@ class ShrimpLimbs : LimbRig(ENTRIES) {
         /** Strike timing: reach, hold on the fish (DESIGN ESTIMATE), let go; and how far off the skin the tip sits. */
         const val STRIKE_REACH_S = 0.18; const val HOLD_MIN_S = 0.6; const val HOLD_MAX_S = 1.5; const val RELEASE_S = 0.35
         const val GRIP_GAP_CM = 0.08
+
+        /** Peacock mantis (tools/blender/mantis_shrimp.py prints these): walking pairs 2-4 and maxillipeds 3-4, left. */
+        private val MANTIS_LEGS = doubleArrayOf(0.2031, -0.1001, -0.1339, 0.1584, -0.1001, -0.1339, 0.1137, -0.1001, -0.1339)
+        private val MANTIS_PICKS = doubleArrayOf(0.419, -0.0854, -0.0567, 0.3865, -0.0854, -0.0567)
+        const val MANTIS_HIP_DX = 0.0285; const val MANTIS_HIP_Y = -0.0285; const val MANTIS_HIP_Z = -0.0488
+        const val MANTIS_LEG_BL = 0.15; const val MANTIS_REACH_BL = 0.1; const val MANTIS_STEP_BL = 0.04
+        const val MANTIS_BELLY_Y = -0.062
+        const val MANTIS_MOUTH_X = 0.36; const val MANTIS_MOUTH_Y = -0.045; const val MANTIS_MOUTH_Z = 0.02
+        /** The folded club (the dactyl heel), left; how far the strike can carry it (body lengths). */
+        const val CLUB_X = 0.4463; const val CLUB_Y = -0.0537; const val CLUB_Z = -0.0585
+        const val CLUB_REACH_BL = 0.4
+        /** Strike out (Patek et al. 2004: 2.7 ms), on the target, folded back, s. */
+        @Ev(Evidence.SOURCED, "62 §2 Patek 2004") const val SMASH_OUT_S = 0.0027
+        const val SMASH_HOLD_S = 0.06
+        const val SMASH_BACK_S = 0.25
 
 
         /**

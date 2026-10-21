@@ -472,6 +472,11 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     /** Pistol (snapping) shrimp (*Alpheus*, research 44 §4): digs the burrow it shares with a watchman goby; snaps. */
     PISTOL_SHRIMP(listOf("alpheus"), false),
     /**
+     * Peacock mantis shrimp (*Odontodactylus scyllarus*, research 62 §2): a stomatopod, not a true shrimp (so not
+     * [isShrimp]), on the shrimp limb rig. Lives in a U-shaped sand burrow and smashes snails, hermits and crabs.
+     */
+    MANTIS(listOf("odontodactylus", "gonodactylus"), false),
+    /**
      * Sea cucumbers (tiger tail, *Holothuria hilla*, research 45 §4): long soft deposit feeders that creep over the
      * sand at night mopping it up with their oral tentacles; half hidden under the rock by day; toxic when stressed.
      */
@@ -524,6 +529,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "butterfly" to BUTTERFLY, "butterflyfish" to BUTTERFLY,
             "fire_shrimp" to FIRE_SHRIMP, "blood_shrimp" to FIRE_SHRIMP, "sexy_shrimp" to SEXY_SHRIMP,
             "harlequin_shrimp" to HARLEQUIN_SHRIMP, "pistol_shrimp" to PISTOL_SHRIMP, "snapping_shrimp" to PISTOL_SHRIMP,
+            "mantis_shrimp" to MANTIS, "mantis" to MANTIS, "peacock_mantis" to MANTIS,
             "sea_cucumber" to SEA_CUCUMBER, "cucumber" to SEA_CUCUMBER, "tiger_tail_cucumber" to SEA_CUCUMBER,
         )
 

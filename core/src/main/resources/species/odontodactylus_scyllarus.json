@@ -1,0 +1,115 @@
+{
+  "id": "odontodactylus_scyllarus",
+  "kind": "INVERT",
+  "common": "Peacock mantis shrimp",
+  "scientific": "Odontodactylus scyllarus",
+  "family": "Odontodactylidae",
+  "maxLengthCm": 18,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 3,
+  "lifespanYears": 20,
+  "depthRatio": 0.12,
+  "massCoeff": 0.012,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 6,
+    "tailHzCruise": 0,
+    "turnRateDeg": 160,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.03,
+    "yMax": 0.6,
+    "openWater": 0.02,
+    "coverAffinity": 0.95
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.8,
+    "boldness": 0.7,
+    "curiosity": 0.6,
+    "skittishness": 0.6
+  },
+  "diet": [
+    "PRAWN",
+    "KRILL",
+    "MYSIS",
+    "PELLET"
+  ],
+  "feedsPerDay": 0.4,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 18,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 40
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.8,
+  "starvationDays": 45,
+  "size": {
+    "lod0Tris": 5154
+  },
+  "model": "models/mantis_shrimp.glb",
+  "colors": {
+    "primary": "#2E9A4C",
+    "secondary": "#F28A1E",
+    "accent": "#E0402E"
+  },
+  "brain": "mantis_shrimp",
+  "minTankGallons": 40,
+  "careLevel": "Advanced",
+  "reefSafe": "No",
+  "copperSensitive": true,
+  "dietSummary": "A smasher: cracks snails, hermit crabs, crabs and clams with its clubs, and eats small fish. Takes frozen prawn, krill and mysis 2-3 times a week.",
+  "temperamentSummary": "Bold, clever and alone. Lives in a U-shaped burrow it digs in the sand, watches the tank with its swivelling eyes and hunts by day.",
+  "careNotes": [
+    "Its clubs shoot out at up to 23 metres a second (over 80 km/h), one of the fastest strikes in the animal world, hard enough to crack snail shells and even aquarium glass.",
+    "It digs a U-shaped burrow in the sand with two openings and carries sand and rubble out to keep it open: give it at least 5 cm (2 in) of sand near the rock.",
+    "Not reef safe for the cleanup crew: snails, hermits, crabs and shrimp are its food, and a small fish that comes too close can be grabbed.",
+    "Its eyes have 12 kinds of colour receptors (we have 3) and see polarized light.",
+    "Keep one per tank. It can live for many years and gets to know its keeper."
+  ]
+}
