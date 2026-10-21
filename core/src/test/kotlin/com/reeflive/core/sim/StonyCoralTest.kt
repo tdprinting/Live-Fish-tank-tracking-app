@@ -89,6 +89,23 @@ class StonyCoralTest {
         assertTrue("reabsorbed: ${torch.sweepers}", torch.sweepers < 0.1)
     }
 
+    /** Pack 2: acan, candy cane, open brain and bubble are meaty LPS; the open brain sits loose on the sand. */
+    @Test
+    fun pack2CoralsResolveAndTheOpenBrainSitsOnTheSand() {
+        val pack2 = listOf("micromussa_lordhowensis", "caulastrea_furcata", "trachyphyllia_geoffroyi", "plerogyra_sinuosa")
+        for (id in pack2) {
+            assertEquals(id, CoralKind.LPS, CoralKind.resolve(id))
+            assertNotNull("in Add life", Stocking.entry(id))
+            assertNotNull("sting", StonyCorals.sting(TestTank.catalog[id]))
+        }
+        // the bubble coral's night sweepers outreach the other meaty LPS
+        assertTrue(StonyCorals.sting(TestTank.catalog["plerogyra_sinuosa"])!!.sweeperCm > StonyCorals.sting(TestTank.catalog["micromussa_lordhowensis"])!!.sweeperCm)
+        val sim = TestTank.sim(emptyList())
+        assertEquals(2, Stocking.addMany(sim, "trachyphyllia_geoffroyi", 2))
+        for (c in sim.corals.filter { it.species.id == "trachyphyllia_geoffroyi" })
+            assertTrue("on the sand: ${c.pos}", c.pos.y <= sim.rock.sandTopCm + 0.5)
+    }
+
     /** Stony corals build a skeleton: low calcium and an alkalinity swing stress them more than a soft coral. */
     @Test
     fun calciumAndAlkalinitySwingsHurtStonyCoralsMore() {

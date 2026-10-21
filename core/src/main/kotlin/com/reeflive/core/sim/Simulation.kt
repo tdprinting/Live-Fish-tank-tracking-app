@@ -2042,7 +2042,7 @@ class Simulation private constructor(
                 ?: if (sp.fragColony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
             // a stony coral (or another frag) has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
             val offset = seed.offset ?: if (a == null && sp.fragColony)
-                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind), StonyCorals.onSand(sp)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
                 else null
             val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
             val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y
