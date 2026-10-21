@@ -119,6 +119,9 @@ object Thoughts {
             n == "flee" -> fleeLine(e, label)
             n == "sleep" -> sleepLine(e, label)
             n == "feed" -> feedLine(e, label)
+            n == "graze" && k == BrainKind.EMERALD_CRAB -> Line("scooping bubble algae off the rock with its spoon claws", "scoop some bubble algae", "Pop, crunch!", Driver.HUNGER)
+            n == "nip" && k == BrainKind.EMERALD_CRAB -> Line("nibbling coral polyps because it is hungry (naughty!)", "nibble a coral", "So hungry…", Driver.HUNGER, 2)
+            n == "retreat" && k == BrainKind.EMERALD_CRAB -> Line("scuttling back into its rock crevice${e.because()}", "hide in its crevice", "Eek, back inside!", Driver.FEAR, 2)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
             n == "hunt" && k == BrainKind.ARROW_CRAB -> Line("stalking a bristleworm on long, slow legs", "catch a bristleworm", "Gotcha, wormy!", Driver.HUNGER, 2)
             n == "wormsnap" -> Line("snapping a bristleworm off the rock", "grab a bristleworm", "Worm snack!", Driver.HUNGER, 2)
@@ -232,6 +235,7 @@ object Thoughts {
             n == "aiptasia" -> Line(if (label.startsWith("Eating")) "picking apart a pest aiptasia anemone" else "sneaking up on a pest aiptasia anemone",
                 "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
             n == "clam" -> clamLine(label)
+            n == "hide" && k == BrainKind.EMERALD_CRAB -> Line("wedged into its rock crevice for the day", "hide in its crevice", "Too bright out there.", Driver.HOME, 0)
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
             n == "squeeze" -> Line("squeezing out of a gap too tight for its shell", "squeeze out of the gap", "Too tight in here!", Driver.HOME, 2)
             n == "hide" -> Line("hiding under a rock with just its arms peeking out", "hide under the rock", "Shh, hiding.", Driver.HOME, 0)
@@ -560,6 +564,7 @@ object Thoughts {
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
         BrainKind.ARROW_CRAB -> "arrow crab"
+        BrainKind.EMERALD_CRAB -> "emerald crab"
         BrainKind.BRITTLE_STAR -> "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"

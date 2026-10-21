@@ -202,7 +202,7 @@ object HealthModel {
                 m["do"] = ToleranceRange(optLo = 6.0, tolLo = 5.0, lethalLo = 3.5)
             }
             // Crustaceans need iodine to molt; the Sally Lightfoot also tolerates salinity swings poorly (SIMULATION §9.6).
-            BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> {
+            BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB, BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> {
                 m["i"] = CRUSTACEAN_IODINE
                 if (s.brainKind == BrainKind.SALLY_CRAB) m["sg"] = ToleranceRange(1.024, 1.026, 1.022, 1.027, 1.019, 1.029)
             }
@@ -250,7 +250,7 @@ object HealthModel {
         // hydrogen sulfide from stirred deep sand (research 18 §3.3)
         if (w.h2s > 0) add("h2s", w.h2s, if (o.isFish) H2S_FISH else H2S_INVERT)
         if (!o.acclTemp.isNaN()) {
-            val st = if (o.isFish) FISH_STEPS else if (o.brainKind == BrainKind.SALLY_CRAB || o.brainKind == BrainKind.ARROW_CRAB) CRAB_STEPS else INVERT_STEPS
+            val st = if (o.isFish) FISH_STEPS else if (o.brainKind.isCrab) CRAB_STEPS else INVERT_STEPS
             add("shockTemp", abs(w.tempC - o.acclTemp) / st.temp, SHOCK_RANGE)
             add("shockSg", abs(w.sg - o.acclSg) / st.sg, SHOCK_RANGE)
             add("shockPh", abs(w.ph - o.acclPh) / st.ph, SHOCK_RANGE)

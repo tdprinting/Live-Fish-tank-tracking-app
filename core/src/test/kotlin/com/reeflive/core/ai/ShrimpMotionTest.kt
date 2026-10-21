@@ -69,4 +69,37 @@ class ShrimpMotionTest {
         val pose = s.snapshot().organisms.first { it.id == o.id }
         assertTrue(pose.limbs[0] in 0f..1f && pose.limbs[1] in 0f..1f && pose.motionMode == 2)
     }
+
+    /** Tee 2026-10-21: every shrimp keeps its legs and mouthparts moving at rest, day and night, and never sinks into rock. */
+    @Test
+    fun everyShrimpMovesItsLegsAndStaysOutOfTheRock() {
+        for (hour in listOf(12.0, 22.0)) {
+            val s = TestTank.sim(stock("banded", "skunk"), seed = 3L, startHour = hour)
+            s.species.ensure("lysmata_boggessi")
+            s.addFromSeed(com.reeflive.core.sim.LivestockSeed("lysmata_boggessi", "Minty", 4.0, id = "pep"))
+            s.advance(30.0)
+            val shrimp = s.organisms.filter { it.brainKind.isShrimp }
+            assertEquals(3, shrimp.size)
+            val prev = shrimp.associate { it.id to it.toPose() }.toMutableMap()
+            val legs = HashMap<String, Double>(); val picks = HashMap<String, Double>()
+            repeat(1200) {
+                s.advance(0.05)
+                for (o in shrimp) {
+                    val p = o.toPose(); val q = prev[o.id]!!
+                    var d = 0.0; for (i in 4 until 28) d += kotlin.math.abs(p.limbs[i] - q.limbs[i])
+                    var e = 0.0; for (i in 28 until 44) e += kotlin.math.abs(p.limbs[i] - q.limbs[i])
+                    legs[o.id] = (legs[o.id] ?: 0.0) + d; picks[o.id] = (picks[o.id] ?: 0.0) + e
+                    prev[o.id] = p
+                    assertTrue("${o.brainKind} at $hour h clear of the rock (${s.rock.sdf.dist(o.pos)})", s.rock.sdf.dist(o.pos) > -0.05)
+                }
+            }
+            for (o in shrimp) {
+                println("shrimp ${o.brainKind} $hour h: legs ${legs[o.id]} picks ${picks[o.id]} (${o.behaviorName})")
+                assertEquals(2, o.toPose().motionMode)
+                assertTrue("${o.brainKind} at $hour h shifts its walking legs: ${legs[o.id]}", legs[o.id]!! > 10.0)
+                assertTrue("${o.brainKind} at $hour h works its picking legs: ${picks[o.id]}", picks[o.id]!! > 5.0)
+                assertTrue("${o.brainKind} in the water", s.rock.inWater(o.pos, 0.0))
+            }
+        }
+    }
 }

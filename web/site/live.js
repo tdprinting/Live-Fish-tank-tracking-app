@@ -8,6 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
+import { initRadio, radioKick, radioOn, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -93,6 +94,7 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
+    initRadio({ SB, store, ctx: audioCtx, volume: () => ui.volume, say });
     initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
@@ -618,6 +620,8 @@ function settingsCard(sb) {
   const row = (attr, ico, label, on) => `<button class="toggle-row" ${attr}><span class="rlbl">${icon(ico)} ${esc(label)}</span><span class="switch ${on ? 'on' : ''}"><i></i></span></button>`;
   return `<div class="rows">
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
+      ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
+      ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
@@ -672,6 +676,8 @@ $('card').addEventListener('click', (e) => {
   else if ('saver' in d) { closeCard(); setSaver(true); return; }
   else if ('sub' in d) { setSub(!sub.on); return; }
   else if ('sound' in d) setSoundOn(!ui.sound);
+  else if ('radio' in d) radioToggle();
+  else if (d.radiostep) radioStep(Number(d.radiostep));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -765,7 +771,7 @@ $('card').addEventListener('input', (e) => {
     store.set('reeflive.heaterC', Number(r.value));
     SB.act('heater', 'set', Number(r.value));
   } else if ('volume' in d) {
-    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume);
+    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume); radioVolume();
     r.previousElementSibling.textContent = `${Math.round(ui.volume * 100)}%`;
   }
 });
@@ -1222,6 +1228,8 @@ function renderLapseResult() {
 
 // ================================================================ sound (TankSoundMix beds and cues, Web Audio)
 let actx = null; const buffers = {}; const loops = {};
+/** The page's one AudioContext (tank sounds and the radio share it). */
+function audioCtx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx; }
 const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
 const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape' };
 async function loadSound(name) {
@@ -1239,8 +1247,7 @@ async function loadSound(name) {
 function setSoundOn(on) {
   ui.sound = on; store.set('reeflive.sound', on);
   if (on) {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-    actx.resume();
+    audioCtx().resume();
     Object.values(LOOPS).concat(Object.values(CUES)).forEach(loadSound);
   } else stopLoops();
   say(on ? 'Sound on. Listen to the bubbles!' : 'Sound off.');
@@ -1306,7 +1313,10 @@ function knockSound(gain) {
 }
 function scrapeSound(cm) { cue('SCRAPE', Math.min(1, 0.45 * Math.max(0.4, Math.min(1, cm / 1.5)) / 0.45)); }
 // iOS only allows audio after a tap: resume the context on the first touch when sound was left on
-document.addEventListener('pointerdown', () => { if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume(); }, { once: false, passive: true });
+document.addEventListener('pointerdown', () => {
+  if (ui.sound && !actx) setSoundOn(true); else if (actx?.state === 'suspended') actx.resume();
+  radioKick();
+}, { once: false, passive: true });
 
 // ================================================================ what is it thinking (Android ThinkingBlock / ThoughtBubbleLayer)
 // The card's "Thinking…" lines come held from Kotlin (ThoughtHold); More → "Thought bubbles" puts speech bubbles over at

@@ -193,6 +193,8 @@ object MotionProfiles {
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
         // slow, deliberate stilt-walk 0.5–2 cm/s with long pauses; a fast scramble to cover only when startled (research 42) [L]
+        // research 43 §1: a small crab that walks steadily and scuttles home fast when startled (speeds est.)
+        BrainKind.EMERALD_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 6.0, stopGoMoveS = 4.0, stopGoPauseS = 2.5),
         BrainKind.ARROW_CRAB to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 6.0, stopGoMoveS = 3.0, stopGoPauseS = 2.0),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
         // food rush / escape run to shelter up to ~4 cm/s mean (the disc surges to ~2.5× that mid-stroke) [L] (BIOS 2014: escape speed scales with size)

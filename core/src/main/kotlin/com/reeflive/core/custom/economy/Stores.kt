@@ -40,7 +40,7 @@ object PriceBook {
         l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis@female", 4, 50), l("cirrhilabrus_rubripinnis@male", 5, 80), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),
         l("macropharyngodon_bipartitus", 6, 150), l("zebrasoma_xanthurum", 7, 250), l("nassarius_sp", 1, 3), l("lithopoma_tectum", 1, 4),
         l("clibanarius_tricolor", 1, 5), l("lysmata_boggessi", 1, 13), l("paguristes_cadenati", 1, 15), l("percnon_gibbesi", 2, 15),
-        l("ophiocoma_sp", 2, 25), l("stenorhynchus_seticornis", 3, 18), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),
+        l("ophiocoma_sp", 2, 25), l("stenorhynchus_seticornis", 3, 18), l("mithraculus_sculptus", 1, 12), l("sabellastarte_sp", 2, 30), l("stenopus_hispidus", 2, 30), l("lysmata_amboinensis", 2, 35),
         l("entacmaea_quadricolor", 4, 150), l("tectus_fenestratus", 1, 8), l("strombus_alatus", 2, 18), l("mespilia_globulus", 3, 30), l("ctenoides_scaber", 5, 20), l("euprymna_berryi", 7, 80), l("briareum_sp", 1, 20),
         l("capnella_sp", 1, 25), l("discosoma_sp", 1, 30), l("clavularia_sp", 1, 35), l("zoanthus_sp", 2, 25),
         l("sinularia_sp", 2, 25), l("rhodactis_sp", 2, 35), l("lobophytum_sp", 3, 35), l("sarcophyton_sp", 3, 70),
