@@ -100,6 +100,13 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.CLEANER_SHRIMP -> base.copy(kind = "INVERT", common = "Skunk cleaner shrimp", maxLengthCm = 7.5, depthRatio = 0.2,
                     locomotion = Locomotion("WALKING", 0.18, 8.0, 0.0, 140.0), diet = listOf("PARASITES", "FLAKE", "MYSIS", "PELLET"), feedsPerDay = 1.0,
                     temperament = Temperament(0.0, 0.8, 0.7, 0.4), hardiness = 0.7, homeRadiusCm = 20.0, model = "models/skunk_shrimp.glb")
+                BrainKind.PEPPERMINT_SHRIMP -> base.copy(kind = "INVERT", common = "Peppermint shrimp", maxLengthCm = 5.0, typicalAdultCm = 4.0, depthRatio = 0.2,
+                    activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.2, 8.0, 0.0, 160.0), diet = listOf("MYSIS", "BRINE", "PELLET", "FLAKE", "AIPTASIA"),
+                    feedsPerDay = 1.0, temperament = Temperament(0.05, 0.3, 0.5, 0.8), hardiness = 0.75, homeRadiusCm = 30.0, brain = "peppermint_shrimp",
+                    model = "models/peppermint_shrimp.glb")
+                BrainKind.FILE_CLAM -> base.copy(kind = "INVERT", common = "Flame scallop", maxLengthCm = 7.5, typicalAdultCm = 6.0, depthRatio = 0.38, massCoeff = 0.06,
+                    locomotion = Locomotion("SESSILE", 0.0, 2.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 3.0, hardiness = 0.3,
+                    starvationDays = 30.0, homeRadiusCm = 10.0, model = "models/flame_scallop.glb", buoyantWhenDead = false)
                 BrainKind.HERMIT -> base.copy(kind = "INVERT", common = "Hermit crab", maxLengthCm = 3.0, depthRatio = 0.8, massCoeff = 0.08, activity = "NOCTURNAL",
                     locomotion = Locomotion("WALKING", 0.15, 1.0, 0.0, 90.0), diet = listOf("ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"), feedsPerDay = 2.0,
                     grazer = true, hardiness = 0.85, homeRadiusCm = 40.0, model = "models/hermit.glb")

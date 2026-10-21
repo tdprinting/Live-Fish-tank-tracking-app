@@ -134,7 +134,7 @@ def render_fish(sid, w=640, h=380, samples=48):
     if sid.startswith("brood_clown_eggs"):
         top_view = True
     elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
-                            "shrimp", "skunk_shrimp") else 0.16
+                            "shrimp", "skunk_shrimp", "peppermint_shrimp", "flame_scallop") else 0.16
     if top_view:
         elev = 1.6
     yaw = math.radians(-18)

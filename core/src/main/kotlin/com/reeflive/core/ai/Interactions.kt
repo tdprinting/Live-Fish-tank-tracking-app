@@ -31,6 +31,8 @@ object Interactions {
         put(BrainKind.DOTTYBACK, BrainKind.HAWK, 0.2)
         put(BrainKind.BANDED_SHRIMP, BrainKind.BANDED_SHRIMP, 0.8)   // kills unpaired conspecifics
         put(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, 0.35)
+        // the banded shrimp bullies the smaller peppermints off its ledge (research 42 §1.6 [M])
+        put(BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, 0.5)
     }
 
     private val handledBySpecies: Set<Pair<BrainKind, BrainKind>> = setOf(

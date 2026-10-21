@@ -1209,6 +1209,8 @@ class Simulation private constructor(
                 // filter feeders and detritivores live partly on detritus / bacterioplankton
                 BrainKind.FEATHER_DUSTER, BrainKind.BRITTLE_STAR, BrainKind.NASSARIUS ->
                     o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
+                // the flame scallop lives on phytoplankton only (research 42 §2.4)
+                BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1306,6 +1308,8 @@ class Simulation private constructor(
                 // research 12: adult intermolt ≈ 25–26 d at 26 °C (S); Q10 = 2 temperature scaling (D)
                 BrainKind.BANDED_SHRIMP -> ShrimpBreeding.stenopusIntermoltDays(water.s.tempC).let { Triple(0.92 * it, 1.08 * it, 36.0) }
                 BrainKind.CLEANER_SHRIMP -> Triple(21.0, 42.0, 36.0)
+                // research 42 §1.4: small Lysmata molt every 1-3 weeks and hide about a day after [E]
+                BrainKind.PEPPERMINT_SHRIMP -> Triple(10.0, 21.0, 24.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 else -> continue
             }
@@ -1482,7 +1486,11 @@ class Simulation private constructor(
                     emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
                 }
             is Command.AddPestControl -> when (c.controller) {
-                PestController.PEPPERMINT_SHRIMP -> pests.peppermint = max(0, pests.peppermint + c.count)
+                // real peppermint shrimp now (research 42): they go straight onto the rock and hunt the polyps themselves
+                PestController.PEPPERMINT_SHRIMP -> if (c.count > 0) {
+                    species.ensure(AiptasiaModel.PEPPERMINT_ID)
+                    repeat(c.count) { addFromSeed(LivestockSeed(AiptasiaModel.PEPPERMINT_ID, "Peppermint", 0.0)) }
+                } else pests.peppermint = max(0, pests.peppermint + c.count)
                 PestController.BERGHIA -> pests.berghia = max(0.0, pests.berghia + c.count)
             }
             is Command.Feed -> { careLog.fed(c.kind); feed(c.kind, c.grams, c.at?.let { if (c.target) targetRelease(c.kind, it) else it } ?: feedPoint(null)); touchMemory.fed() }
@@ -2205,7 +2213,7 @@ class Simulation private constructor(
         /** [Coral.fed] gained per caught particle and its e-folding time (≈ 2 days). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_PER_CATCH = 0.08
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_DECAY_MIN = 2 * 1440.0
-        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.SALLY_CRAB)
+        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }
 }
