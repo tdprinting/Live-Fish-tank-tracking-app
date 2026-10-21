@@ -1302,7 +1302,9 @@ fun LiveTankScreen(
         LaunchedEffect(Unit) {
             vm.gains.collect { g ->
                 rewardFx.cheer(g)
-                if (!hermieOn) return@collect
+                // a reef moment or birthday has its own card (RewardFx MomentCard) and bells
+                if (g.story != null) audio.sparkle()
+                if (!hermieOn || g.story != null && g.levelUp == 0) return@collect
                 if (g.levelUp > 0) hermie.say("Level ${g.levelUp}! ${com.reeflive.core.custom.economy.Levels.opens(g.levelUp)}".trim(), HermieMood.EXCITED)
                 else hermie.say("+${g.amount} sand dollars: ${g.label}", HermieMood.HAPPY)
             }
