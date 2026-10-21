@@ -9,7 +9,7 @@ const pic = (it) => `<img class="sp" src="species/${it.id}.webp" alt="" onerror=
 let my, say, cue, onLeave;
 let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
 
-/** The street for My tank's "Add life" card: one storefront per store, locked ones dark with their level. */
+/** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
   let s = null;
   try { s = JSON.parse(my.stores()); } catch { s = null; }

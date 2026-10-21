@@ -394,7 +394,7 @@ fun LiveTankScreen(
     // doses given in the last sim day, so a second dose the same day is flagged as a swing (core DoseCheck)
     val doseLog = remember { DoseCheck.Log() }
     var carry by remember { mutableStateOf<SupplyItem?>(null) }
-    // the shop bag in hand after an animal is picked in Add life (dragged onto the tank to float)
+    // the shop bag in hand after an animal is picked in the Shop (dragged onto the tank to float)
     var bagCarry by remember { mutableStateOf<BagCarry?>(null) }
     var pickSerial by remember { mutableIntStateOf(0) }
     val pickJob = remember { arrayOfNulls<Job>(1) }
@@ -1230,7 +1230,7 @@ fun LiveTankScreen(
             Box(Modifier.fillMaxSize().padding(16.dp).statusBarsPadding(), contentAlignment = Alignment.Center) {
                 MyTankSetupCard(onPick = { b ->
                     tick(); vm.startCustomTank(b)
-                    if (hermieOn) hermie.say("A brand new ${b.label}! Open Add life to bring in your first animals.", HermieMood.EXCITED)
+                    if (hermieOn) hermie.say("A brand new ${b.label}! Tap Shop to visit the fish stores and bring home your first animals.", HermieMood.EXCITED)
                     open = LiveCategory.LIFE
                 })
             }

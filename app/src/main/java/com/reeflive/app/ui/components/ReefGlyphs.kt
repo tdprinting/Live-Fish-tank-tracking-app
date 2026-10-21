@@ -426,6 +426,12 @@ object ReefGlyphs {
     val chevronUp = g("chevronUp", ink("M7 14.5l5-5 5 5", 2f))
     val heart = g("heart", ink("M12 20s-7.5-4.6-7.5-10A4 4 0 0 1 12 7.6 4 4 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z"), accentFill(dots("9.3 10 1")))
     val trash = g("trash", ink("M5.5 7h13M9.5 7V4.5h5V7M7 7l.8 12a1.5 1.5 0 0 0 1.5 1.5h5.4a1.5 1.5 0 0 0 1.5-1.5L17 7"), ink("M10.3 10.5v6.5M13.7 10.5v6.5", 1.4f))
+    /** My tank's Shop bubble: a little fish store with a striped awning. */
+    val shop = g(
+        "shop",
+        ink("M5 10.5v9h14v-9"), ink("M3.5 10.5h17l-1.6-5H5.1Z"), accent("M8.4 5.6l-.7 4.9M12 5.6v4.9M15.6 5.6l.7 4.9", 1.5f),
+        ink("M10 19.5v-5h4v5"),
+    )
     val sparkleTip = g("sparkleTip", accentFill(spark(12.0, 12.0, 7.5)), inkFill(dots("12 12 1.4")), accentFill(spark(19.5, 5.0, 2.0)))
 
     /** Every glyph, for the preview sheet and tests. */
@@ -437,7 +443,7 @@ object ReefGlyphs {
             sun, moon, flow, clockSun, powerhead, led,
             skimmer, sock, carbon, refugium, uvLamp, starfish, crab, pestAnemone, shrimp, slug, plugOff, calendarX,
             fish, whatIf, eye, eyeOff, bucket, microscope, flipper, speaker, speakerOff, timelapse, touch, rocks, reset,
-            plus, minus, close, info, help, chevronUp, heart, trash, sparkleTip,
+            plus, minus, close, info, help, chevronUp, heart, trash, sparkleTip, shop,
         )
     }
 }

@@ -290,7 +290,7 @@ $('mytankList').addEventListener('click', (e) => {
   $('mytank').close();
   // ask the browser to keep this site's storage (best effort; an installed home-screen app keeps it anyway)
   try { navigator.storage?.persist?.(); } catch { /* not offered */ }
-  say('A brand new tank! Open Add life to bring in your first animals.');
+  say('A brand new tank! Tap Shop to visit the fish stores and bring home your first animals.');
   ui.card = 'LIFE'; renderCard(); renderRail(); tick();
 });
 $('mytankClose').addEventListener('click', () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(MY.info()).exists) setMode('watch'); });
@@ -312,12 +312,12 @@ function setSpeed(v) {
 
 // ================================================================ menu rail and cards
 // candy tones from the Android live theme (UI_STYLE §10.1). A few big bubbles a child can read: Look, Supplies (the 3D
-// shelf), Tank Health and, in My tank, Add life and Tank; Settings is the gear at the top (Android LiveMenu)
+// shelf), Tank Health and, in My tank, Shop and Tank; Settings is the gear at the top (Android LiveMenu)
 const CATS = {
   LOOK: { ico: 'eye', label: 'Look', tone: 'cyan' },
   SUPPLIES: { ico: 'basket', label: 'Supplies', tone: 'orange' },
   HEALTH: { ico: 'heart', label: 'Tank Health', tone: 'green' },
-  LIFE: { ico: 'fish', label: 'Add life', tone: 'pink' },
+  LIFE: { ico: 'shop', label: 'Shop', tone: 'pink' },
   TANK: { ico: 'bulb', label: 'Tank', tone: 'yellow' },
   SETTINGS: { ico: 'dots', label: 'Settings & help', tone: 'white' },
 };
@@ -451,7 +451,7 @@ const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK
   DOSE_MG: 'Coral vitamins in! Just the right amount.', DOSE_CA: 'Coral vitamins in! Just the right amount.', DOSE_ALK: 'Coral vitamins in! Just the right amount.',
   HEATER: 'New heater on. Nice and warm again.', PUMPS: 'Whoosh! The water is moving again.', FEED_CORALS: 'Yum, coral food!' };
 
-// ---- Add life
+// ---- Shop (My tank's fish stores)
 function lifeCard(sb) {
   // My tank buys its animals at the fish stores (docs/ECONOMY.md §5); the free gallery stays in the Sandbox
   if (ui.mode === 'mine') {

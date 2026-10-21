@@ -59,7 +59,7 @@ import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.species.SpeciesKind
 
 /**
- * The fish stores (docs/ECONOMY.md §5; web stores.js): the street of storefronts on My tank's Add life card, and the
+ * The fish stores (docs/ECONOMY.md §5; web stores.js): the street of storefronts on My tank's Shop card, and the
  * overlay while walking a store's display tanks (the 3D view shows the tank; this draws the signs, the animal strip,
  * the picked animal's card, the shop bag and the counter).
  */

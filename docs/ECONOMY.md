@@ -340,7 +340,7 @@ worst re-roll one day's list, never pay twice for a task.
 
 1. **Earn:** sand dollars, levels, the daily care list, goals and the Care card. (Everything still free to add.)
 2. **Fish store models:** the four Blender stores and their pictures.
-3. **Buy:** the stores with prices, stock, deals and locked animals; My tank's Add life becomes Stores.
+3. **Buy:** the stores with prices, stock, deals and locked animals; My tank's Add life became the Shop button (Tee).
 4. **Sell:** the Sell tab, offers, wanted lists, coral fragging, selling raised baby fish.
 5. **Away time:** the full catch-up, hunger while away and the welcome-back card.
 

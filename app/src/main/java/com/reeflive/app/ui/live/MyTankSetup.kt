@@ -23,7 +23,7 @@ import kotlin.math.roundToInt
 
 /**
  * "My tank" before there is one: pick a tank to set up. It starts clean and empty (cycled, ready for animals); then
- * Add life fills it, and everything in it is saved on the phone from then on.
+ * the Shop fills it, and everything in it is saved on the phone from then on.
  */
 @Composable
 fun MyTankSetupCard(onPick: (TankBuild) -> Unit, modifier: Modifier = Modifier) {
@@ -33,7 +33,7 @@ fun MyTankSetupCard(onPick: (TankBuild) -> Unit, modifier: Modifier = Modifier) 
         Text("Set up your own tank", style = s.titleText, color = s.label)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Pick a tank. It starts clean and empty, then add any animals you like from Add life. " +
+            "Pick a tank. It starts clean and empty, then buy animals at the fish stores from the Shop button. " +
                 "Everything is saved: names, personalities, how much they grow.",
             style = MaterialTheme.typography.bodyMedium, color = c.text,
         )
