@@ -1,0 +1,105 @@
+{
+  "id": "trachyphyllia_geoffroyi",
+  "kind": "CORAL",
+  "common": "Open brain coral",
+  "scientific": "Trachyphyllia geoffroyi",
+  "family": "Merulinidae",
+  "maxLengthCm": 20,
+  "typicalAdultCm": 10,
+  "growthCmPerYear": 1,
+  "lifespanYears": 50,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 23.0,
+      "tolHi": 28.0,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.5,
+      "optHi": 10.0,
+      "tolLo": 7.5,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/open_brain.glb",
+  "colors": {
+    "primary": "#B83A4A",
+    "secondary": "#3E9A6A",
+    "accent": "#7CFF9A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.15,
+    "lightHi": 0.6,
+    "flow": "LOW",
+    "growth": "Slow",
+    "stingCm": 5,
+    "ground": "SAND",
+    "aggression": "Short feeding tentacles at night; keep 5-8 cm clear so it can swell",
+    "fluorescence": 0.8
+  },
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; feed small meaty foods to its night tentacles about once a week, not more.",
+  "temperamentSummary": "A free-living fleshy brain that sits on the sand and swells up by day, in reds and greens with a glowing rim; short tentacles come out at night.",
+  "careNotes": [
+    "Keep it on the sand bed: the swollen tissue tears on rough rock.",
+    "PAR about 50-150, gentle flow; red ones want shade.",
+    "Alkalinity about 9.8 dKH, calcium 380-430.",
+    "Feeding more than once a week makes odd growth."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.7,
+  "starvationDays": 9999
+}

@@ -158,6 +158,27 @@
           "male": "textures/stages/fairy_wrasse_fin_male.png"
         }
       }
+    },
+    "models/mandarin.glb": {
+      "species": "synchiropus_splendidus",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/mandarin_juvenile.png"
+      }
+    },
+    "models/sixline_wrasse.glb": {
+      "species": "pseudocheilinus_hexataenia",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/sixline_wrasse_juvenile.png"
+      }
+    },
+    "models/clown_goby.glb": {
+      "species": "gobiodon_okinawae",
+      "base": "adult",
+      "forms": {
+        "juvenile": "textures/stages/clown_goby_juvenile.png"
+      }
     }
   },
   "pending": {}

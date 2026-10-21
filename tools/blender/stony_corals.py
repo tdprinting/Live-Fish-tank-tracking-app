@@ -1,4 +1,5 @@
-"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn and duncan.
+"""Stony corals (docs/research/stony_corals.md): hammer, torch, frogspawn, duncan, gold torch, scolymia, bounce
+mushroom, acan, candy cane, open brain, bubble, Montipora cap, birdsnest, Acropora and pulsing xenia.
 
 These corals are not in Tee's tank, so they have no anchor on its rock: every GLB is built with the colony base at
 STUDIO (core StonyCorals.STUDIO) and the app draws each colony as the model moved by its offset (a copy). Same GLB
@@ -9,6 +10,9 @@ layout as corals.py (Root -> body parts + instanced polyp nodes), plus:
   polyp extras.polypMode = 1  night tentacles (Euphyllia sweepers, duncan feeding tentacles): polyp.vert grows them
                   out with the colony's CoralPose.tentacles after dark
   polyp extras.polypMode = 2  Euphyllia day tentacles: each strand bends as a whole and shortens as it retracts
+  polyp extras.polypMode = 3  inflating tissue (bubble vesicles, the open brain mantle): swells by day, deflates as
+                  the night tentacles come out
+  polyp extras.polypMode = 4  pulsing xenia: each polyp beats on its own, as strong as CoralPose.tentacles (core Xenia)
 
   python tools/blender/stony_corals.py [hammer torch frogspawn duncan]
 """
@@ -317,6 +321,13 @@ EUPHYLLIA = {
                       stalk=0.6, rim=1.65, oval=1.15, per_head=40, sweepers=4, sweeper_len=8.0,
                       tissue="#6A7A58", mantle="#5E7E5E", t_body="#5E8A5C", t_mid="#86A876", t_tip="#E8B8CC",
                       t_stripe="#4A6E48", glow="#2A6A20"),
+    # gold torch (research 61 §1): the same torch, golden-yellow tentacles (~#D9A81E) with blue-green tips over a
+    # brown-gold base ("Gold Blue Tip" listings); two heads, a single-head frag that has split once
+    "gold_torch": dict(name="gold_torch", species="euphyllia_glabrescens_gold", seed=561, proto=proto_torch,
+                       heads=[(-1.6, 0.3, 3.8, 0.4), (1.5, -0.4, 3.0, -0.4)],
+                       stalk=0.55, rim=1.5, per_head=44, sweepers=5, sweeper_len=10.0,
+                       tissue="#8A6A2A", mantle="#7A5E26", t_body="#A8801C", t_mid="#D9A81E", t_tip="#7FD8E8",
+                       glow="#5A420A"),
 }
 
 
@@ -423,11 +434,666 @@ def duncan():
     return root, [body, pol, nig], {"Polyps": (len(inst), len(proto[1]) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
 
 
+# ----------------------------------------------------------------------------
+# Scolymia (research 61 §3): one solitary fleshy polyp, a round-to-oval cup ~8 cm across with raised radial septa
+# ridges under the tissue, a contrasting centre and rim (red centre, green rim: the "bleeding apple" look). It sits
+# low on the sand. Night: short feeding tentacles open around the mouth and the rim.
+# ----------------------------------------------------------------------------
+def scolymia():
+    rs = RS(571)
+    g = T.WGeo()
+    R, RZ, SEPTA, rings, segs = 4.0, 3.6, 36, 9, 72
+    base = STUDIO + np.array([0.0, 0.05, 0.0])
+
+    def surf(t, a):
+        """Oral surface: a shallow cup (centre sunk, the rim rolled up and over), septa ridges toward the rim."""
+        ridge = (0.5 + 0.5 * math.cos(SEPTA * a)) ** 3 * 0.22 * S(0.25, 0.8, t) * (1 - S(0.92, 1.0, t))
+        y = 1.6 + 0.9 * t ** 2 - 0.55 * S(0.85, 1.0, t) ** 2 + ridge - 0.35 * (1 - S(0.0, 0.22, t))
+        w = 1 + 0.03 * math.sin(3 * a + 0.7)
+        return base + np.array([R * t * w * math.cos(a), y, RZ * t * w * math.sin(a)])
+
+    V, UV = [surf(0.0, 0.0)], [(0.5, 0.5)]
+    for i in range(1, rings + 1):
+        t = i / rings
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            V.append(surf(t, a))
+            UV.append((0.5 + 0.5 * t * math.cos(a), 0.5 + 0.5 * t * math.sin(a)))
+    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
+    for i in range(rings - 1):
+        for k in range(segs):
+            a, b = 1 + i * segs + k, 1 + i * segs + (k + 1) % segs
+            F.append((a, b, b + segs, a + segs))
+    # the outer wall: from under the rolled rim down to a narrower foot on the sand (tissue over the cup's skeleton)
+    outer = 1 + (rings - 1) * segs
+    for j, (rr, y) in enumerate(((0.97, 1.2), (0.85, 0.5), (0.6, 0.0))):
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            ridge = 0.06 * (0.5 + 0.5 * math.cos(SEPTA * a)) ** 2
+            V.append(base + np.array([(R * rr + ridge) * math.cos(a), y, (RZ * rr + ridge) * math.sin(a)]))
+            UV.append((0.5 + 0.5 * math.cos(a), 0.5 + 0.5 * math.sin(a)))
+        prev = outer if j == 0 else len(V) - 2 * segs
+        cur = len(V) - segs
+        for k in range(segs):
+            F.append((prev + k, prev + (k + 1) % segs, cur + (k + 1) % segs, cur + k))
+    g.add(np.array(V), F, np.array(UV), (0.6, 0, 0.2, MANTLE), mat=0)
+    # texture: deep red centre with a darker mouth, the septa lines paler, a green rim (UV is the top-down disc)
+    cv = P.Canvas(256, 256, "#94182E")
+    du, dv = cv.u - 0.5, cv.v - 0.5
+    rr = np.hypot(du, dv) * 2
+    ang = np.arctan2(dv, du)
+    cv.blend(1 - S(0.05, 0.14, rr), "#3A0E18", 0.85)                                  # mouth
+    cv.blend(S(0.55, 0.62, (0.5 + 0.5 * np.cos(SEPTA * ang))) * S(0.25, 0.5, rr), "#E8607A", 0.45)   # septa lines
+    cv.blend(S(0.7, 0.84, rr), "#3A8E36")                                                # green rim
+    cv.blend(S(0.86, 0.93, rr) * (1 - S(0.97, 1.0, rr)), "#7ACC6A", 0.4)                # paler rolled lip
+    cv.multiply(0.88 + 0.22 * P.fbm(256, 256, 10, 3, 572))
+    tm = C.material("scolymia_tissue", rough=0.45, image=K.tex("scolymia_tissue", cv, jpeg=True),
+                    emissive="#2A6A1E", emissive_strength=0.6)
+    # night feeding tentacles: a ring round the mouth and one inside the rim, short and translucent
+    night = K.Instances(573)
+    for ring_t, count, sc in ((0.22, 10, 0.7), (0.7, 26, 1.0)):
+        for k in range(count):
+            a = 2 * math.pi * (k + rs.uniform(-0.25, 0.25)) / count
+            p = surf(ring_t, a)
+            out = np.array([math.cos(a), 0.0, math.sin(a)])
+            night.add(p + UP * 0.03, unit(UP * 1.2 + out * 0.5), sc * rs.uniform(0.85, 1.15))
+    (sv, sf, suv, sc_), stip = strand(1.2, 0.06, 0.03, sides=4, rings=3, flag=0.0, curve=0.15)
+    nproto = merge((sv, sf, suv, sc_), ball(stip, (0.06, 0.07, 0.06), 4, 2))
+    ncv = tentacle_canvas("#C87A86", "#E0A8B0", "#F4E4E8", 574)
+    nm = C.material("scolymia_night_tentacle", rough=0.5, image=K.tex("scolymia_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="homophyllia_australis", stony=1)
+    body = g.obj("Body", root, "body", [tm], smooth=True)
+    C.recalc_normals(body)
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, nig], {"NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Bounce mushroom (research 61 §2): a Rhodactis disc on a bit of rubble whose oral surface is covered in "comically
+# enlarged" round vesicles, neon orange with green highlights, like "a ring of neon marbles" (~7 cm across). The
+# vesicles are ordinary polyps (they deflate as the disc closes). A small second disc beside it, split off by fission.
+# ----------------------------------------------------------------------------
+def proto_vesicle():
+    """A round, slightly flattened vesicle (u, v map into the vesicle canvas: orange body, green-lit crown)."""
+    V, F, UV, COL = ball((0.0, 0.3, 0.0), (0.36, 0.31, 0.36), 12, 7, v0=0.0)
+    UV = [(u, 1 - v) for u, v in UV]
+    COL = [(0.0, 0, 0.3 + 0.7 * min(1.0, max(0.0, v[1] / 0.6)), 1) for v in V]
+    return np.array(V, float), F, np.array(UV, float), np.array(COL, float)
+
+
+def bounce_mushroom():
+    rs = RS(581)
+    g = T.WGeo()
+    top = frag_base(g, 581, radii=(2.4, 0.9, 2.1))
+    discs = [(np.array([0.0, 0.0, 0.0]), 3.4, 0.10, 0.0), (np.array([3.6, -0.3, 1.6]), 1.6, 0.08, 1.2)]
+    inst = K.Instances(582)
+    for k, (off, r, cup, tw) in enumerate(discs):
+        c = STUDIO + np.array([off[0], top - STUDIO[1] - 1.1 + off[1], off[2]])
+        n = unit(UP + np.array([off[0], 0, off[2]]) * 0.05)
+        V, F, UV, COL, q, ph = K.hairy_disc(c, n, r, cup, 590 + k, tw)
+        g.add(V, F, UV, COL, mat=1)
+        # vesicles: jittered hex grid over the oral surface, biggest in a ring part-way out ("a ring of marbles")
+        sp = 0.74
+        for j in range(int(2 * r / (sp * 0.866)) + 1):
+            for i in range(int(2 * r / sp) + 1):
+                x = -r + i * sp + (j % 2) * sp * 0.5 + rs.normal(0, sp * 0.12)
+                z = -r + j * sp * 0.866 + rs.normal(0, sp * 0.12)
+                t = math.hypot(x, z / 0.92) / r
+                if t > 0.93 or t < 0.08:
+                    continue
+                a = math.atan2(z / 0.92, x)
+                lp = K.hairy_disc_local(r, cup, ph, t, a)
+                wp = K.q_rotate(q, lp) + c
+                wn = unit(K.q_rotate(q, np.array([0.0, 1.0, 0.0])) + K.q_rotate(q, np.array([math.cos(a), 0, math.sin(a)])) * 0.25 * t)
+                size = (0.75 + 0.55 * math.exp(-((t - 0.55) / 0.22) ** 2)) * rs.uniform(0.85, 1.15) * (r / 3.4) ** 0.3
+                inst.add(wp, wn, size, phase=rs.uniform())
+    dc = P.Canvas(128, 128, "#5A4A30")
+    rr = np.hypot(dc.u - 0.5, dc.v - 0.5) * 2
+    dc.blend(S(0.85, 1.0, rr), "#7A6A48", 0.7)
+    dc.blend(1 - S(0.04, 0.1, rr), "#B85A20", 0.8)                       # orange mouth
+    dc.multiply(0.85 + 0.3 * P.fbm(128, 128, 8, 3, 583))
+    disc_m = C.material("bounce_disc", rough=0.8, image=K.tex("bounce_disc", dc, jpeg=True), double=True)
+    vc = P.Canvas(64, 64, "#FF7A1A")
+    vc.blend(S(0.55, 0.95, vc.v), "#FFB050", 0.6)                        # paler crown
+    vc.blend(S(0.55, 0.8, P.fbm(64, 64, 4, 2, 584)) * S(0.3, 0.9, vc.v), "#6CFF4A", 0.85)   # green highlights
+    vc.blend(1 - S(0.0, 0.25, vc.v), "#A8401A", 0.6)                     # darker where it meets the disc
+    vm = C.material("bounce_vesicle", rough=0.22, image=K.tex("bounce_vesicle", vc), emissive="#FF6A10",
+                    emissive_strength=0.5)
+    proto = proto_vesicle()
+    root = C.empty("Root")
+    C.set_extras(root, species="rhodactis_inchoata", fluorescent=0.9)
+    body = g.obj("Body", root, "body", [rubble_material("bounce_rubble"), disc_m], smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [vm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+
+
+# ----------------------------------------------------------------------------
+# pack 2 shared pieces
+# ----------------------------------------------------------------------------
+def cushion(rx, rz, h, rings=6, segs=24, lobes=None, waist=0.0, rim_v=0.98, flag=0.0):
+    """A fleshy cushion along +Y (local cm, base at the origin): an ellipse (rx, rz) swollen h high, its outline
+    optionally pinched at the waist (meandroid brains) and wavy (lobes = (count, depth)). UV: polar (u 0.5 + r cos,
+    v 0.5 + r sin, r = 0.5 at the rim); COLOR_0.b = hinge (0 centre .. 1 rim, so the ordinary mode folds the rim)."""
+    V, UV, COL = [(0.0, h, 0.0)], [(0.5, 0.5)], [(flag, 0, 0.0, 1)]
+    for i in range(1, rings + 1):
+        t = i / rings
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            w = 1.0 - waist * math.sin(a) ** 2 * (1 - abs(math.cos(a)))   # pinched across z at the middle
+            if lobes:
+                w *= 1 + lobes[1] * math.sin(lobes[0] * a)
+            x, z = rx * w * t * math.cos(a), rz * w * t * math.sin(a)
+            y = h * (1 - t ** 2.4) + 0.08 * h * math.sin(t * math.pi)
+            V.append((x, y, z))
+            UV.append((0.5 + 0.5 * rim_v * t * math.cos(a), 0.5 + 0.5 * rim_v * t * math.sin(a)))
+            COL.append((flag, 0, t, 1))
+    # under-lip tucked back toward the base so the edge reads thick
+    for k in range(segs):
+        a = 2 * math.pi * k / segs
+        x, y, z = V[1 + (rings - 1) * segs + k]
+        V.append((x * 0.9, -0.06 * h, z * 0.9))
+        UV.append((0.5 + 0.5 * math.cos(a), 0.5 + 0.5 * math.sin(a)))
+        COL.append((flag, 0, 0.9, 1))
+    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
+    for i in range(rings):
+        for k in range(segs):
+            a, b = 1 + i * segs + k, 1 + i * segs + (k + 1) % segs
+            F.append((a, b, b + segs, a + segs))
+    return V, F, UV, COL
+
+
+def night_ring(inst, c, n, r, count, rs, scale=1.0, lift=0.6):
+    """Night feeding tentacles from around a polyp mouth (polypMode 1)."""
+    t1 = unit(np.cross(n, [0.0, 0.0, 1.0]) if abs(n[2]) < 0.9 else np.cross(n, [1.0, 0.0, 0.0]))
+    t2 = np.cross(n, t1)
+    for k in range(count):
+        a = 2 * math.pi * (k + rs.uniform(-0.25, 0.25)) / count
+        out = t1 * math.cos(a) + t2 * math.sin(a)
+        inst.add(c + out * r, unit(out * 1.1 + n * lift), scale * rs.uniform(0.85, 1.1))
+
+
+def night_proto(length, r0=0.045, r1=0.02, curve=0.2):
+    (sv, sf, suv, sc), tip = strand(length, r0, r1, sides=4, rings=4, flag=0.0, curve=curve)
+    return merge((sv, sf, suv, sc), ball(tip, (r0 * 1.1, r0 * 1.2, r0 * 1.1), 4, 2))
+
+
+def mound(g, top, rx, rz, h, seed, mat=1):
+    """Low encrusting skeleton dome over the rubble (rigid), UV polar like a corallite rim."""
+    V, F, UV, COL = cushion(rx, rz, h, rings=5, segs=20)
+    rs = RS(seed)
+    V = np.array(V) + np.array([STUDIO[0], top - 0.1, STUDIO[2]])
+    V[:, 1] += rs.normal(0, 0.04, len(V))
+    g.add(V, F, np.array(UV) * np.array([1.0, 0.9]), (0.3, 0, 0, SKELETON), mat=mat)
+
+
+# ----------------------------------------------------------------------------
+# Acan (stony_corals.md, pack 2): an encrusting carpet of plump two-tone polyps
+# ----------------------------------------------------------------------------
+def acan():
+    rs = RS(601)
+    g = T.WGeo()
+    top = frag_base(g, 601, radii=(2.6, 0.9, 2.2))
+    mound(g, top, 2.3, 2.0, 0.8, 602)
+    mats = [rubble_material("acan_rubble"), skeleton_canvas("acan_skeleton", "#D8D0C2", "#5A2A2C", 603, 0.3)]
+    inst = K.Instances(604)
+    night = K.Instances(605)
+    # [retail]: frags of ~3 cm with 4+ polyps; ours is a 6 cm colony of 11, packed so neighbours just touch
+    centres = [(0.0, 0.0)] + [(1.45 * math.cos(a), 1.3 * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 7)[:-1]] \
+        + [(2.35 * math.cos(a + 0.5), 2.0 * math.sin(a + 0.5)) for a in np.linspace(0, 2 * math.pi, 5)[:-1]]
+    for i, (dx, dz) in enumerate(centres):
+        t = math.hypot(dx / 2.9, dz / 2.5)
+        y = top - 0.1 + 0.9 * (1 - min(t, 1) ** 2.4)
+        c = STUDIO * np.array([1, 0, 1]) + np.array([dx, y, dz])
+        n = unit(np.array([dx * 0.35, 1.0, dz * 0.35]))
+        sc = rs.uniform(0.9, 1.08) * (0.85 if i >= 7 else 1.0)
+        inst.add(c, n, sc, phase=rs.uniform())
+        night_ring(night, c + n * 0.25, n, 0.25 * sc, 6, rs, sc)
+    # polyp: puffy disc, red outer mantle, green ring, orange eye (the 'rainbow acan' look); u/v polar
+    V, F, UV, COL = cushion(0.8, 0.76, 0.6, rings=6, segs=20, lobes=(6, 0.04))
+    cv = P.Canvas(64, 64, "#A8282E")
+    r = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
+    cv.multiply(0.85 + 0.25 * P.fbm(64, 64, 6, 3, 606))
+    cv.blend(1 - S(0.36, 0.46, r), "#3FA65A")
+    cv.blend(1 - S(0.16, 0.24, r), "#E86A2E")
+    cv.blend(1 - S(0.05, 0.1, r), "#2A1A14")
+    cv.blend(S(0.88, 0.98, r), "#6A1A20")
+    # radial septal lines through the mantle
+    ang = np.arctan2(cv.v - 0.5, cv.u - 0.5)
+    cv.blend(S(0.7, 1.0, np.cos(ang * 18)) * S(0.55, 0.7, r) * (1 - S(0.9, 0.97, r)), "#C85048", 0.45)
+    pm = C.material("acan_polyp", rough=0.4, image=K.tex("acan_polyp", cv), emissive="#2E7A22", emissive_strength=0.4)
+    nproto = night_proto(0.9)
+    ncv = tentacle_canvas("#B86A5A", "#D8A890", "#F2E6D8", 607)
+    nm = C.material("acan_night_tentacle", rough=0.5, image=K.tex("acan_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="micromussa_lordhowensis", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    proto = (V, F, UV, COL)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst)
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, pol, nig], {"Polyps": (len(inst), len(F) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Candy cane (pack 2): a bunch of branching tubes, each with a striped round head
+# ----------------------------------------------------------------------------
+def candy_cane():
+    rs = RS(611)
+    g = T.WGeo()
+    top = frag_base(g, 611, radii=(2.4, 1.0, 2.1))
+    heads = []
+    # [BRS]: 1-2 in frags of 1-3 heads; ours a 10-head clump, tubes forking off each other (phaceloid)
+    for i in range(10):
+        a = i * 2.4 + rs.uniform(-0.2, 0.2)
+        rr = 0.5 + 1.6 * math.sqrt((i + 0.5) / 10)
+        dx, dz = rr * math.cos(a), rr * math.sin(a)
+        h = rs.uniform(2.4, 3.6) - 0.35 * rr
+        foot = STUDIO + np.array([dx * 0.35, top - STUDIO[1], dz * 0.35])
+        end = STUDIO + np.array([dx * 1.15, top - STUDIO[1] + h, dz * 1.15])
+        pts = np.array([foot + (end - foot) * t + np.array([math.sin(t * 2.5 + i) * 0.12, 0, math.cos(t * 2 + i) * 0.1])
+                        for t in (0, 0.35, 0.7, 0.9, 1.0)])
+        corallite(g, pts, 0.36, 0.34, 0.58, 620 + i, sides=10, ribs=5, mat=1)
+        heads.append((pts[-1], unit(pts[-1] - pts[-2] + UP * 0.9)))
+    mats = [rubble_material("candy_cane_rubble"), skeleton_canvas("candy_cane_skeleton", "#E2DCCF", "#4E5E3A", 631, 0.72)]
+    inst = K.Instances(632)
+    night = K.Instances(633)
+    for c, n in heads:
+        sc = rs.uniform(0.92, 1.08)
+        inst.add(c - n * 0.05, n, sc, phase=rs.uniform())
+        night_ring(night, c + n * 0.3, n, 0.2 * sc, 6, rs, sc, lift=0.9)
+    # head: a domed cup of fleshy tissue, green with cream radial stripes (the candy cane), a dark mouth
+    V, F, UV, COL = cushion(0.62, 0.6, 0.48, rings=5, segs=18)
+    cv = P.Canvas(64, 64, "#4E8A46")
+    r = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
+    ang = np.arctan2(cv.v - 0.5, cv.u - 0.5)
+    cv.multiply(0.88 + 0.2 * P.fbm(64, 64, 6, 3, 634))
+    cv.blend(S(0.35, 0.95, np.cos(ang * 12)) * S(0.18, 0.35, r), "#E8EACC", 0.85)
+    cv.blend(1 - S(0.12, 0.22, r), "#7CD86A")
+    cv.blend(1 - S(0.05, 0.1, r), "#22301C")
+    cv.blend(S(0.9, 0.99, r), "#3A5A30")
+    pm = C.material("candy_cane_polyp", rough=0.45, image=K.tex("candy_cane_polyp", cv), emissive="#3A9A2A", emissive_strength=1.0)
+    nproto = night_proto(1.0, 0.04, 0.018)
+    ncv = tentacle_canvas("#8A9A70", "#B8C8A0", "#F0F2E0", 635)
+    nm = C.material("candy_cane_night_tentacle", rough=0.5, image=K.tex("candy_cane_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="caulastrea_furcata", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, (V, F, UV, COL), [pm], inst)
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, pol, nig], {"Polyps": (len(inst), len(F) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Open brain (pack 2): a free-living fleshy brain on the sand, swollen by day
+# ----------------------------------------------------------------------------
+def open_brain():
+    rs = RS(641)
+    g = T.WGeo()
+    # the cone-shaped skeleton foot sitting in the sand (Trachyphyllia is free-living, no rubble)
+    pts = np.array([STUDIO + np.array([0.0, y, 0.0]) for y in (-0.2, 0.4, 1.0, 1.5, 1.7)])
+    V, F = [], []
+    segs = 20
+    for i, p in enumerate(pts):
+        rr = (1.0, 1.9, 2.8, 3.4, 3.55)[i]
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            w = 1 - 0.18 * math.sin(a) ** 2
+            V.append(p + np.array([rr * 1.25 * w * math.cos(a), 0.0, rr * 0.9 * w * math.sin(a)]) * (1 + 0.05 * math.cos(16 * a)))
+    for i in range(len(pts) - 1):
+        for k in range(segs):
+            a, b = i * segs + k, i * segs + (k + 1) % segs
+            F.append((a, b, b + segs, a + segs))
+    UV = [((k % segs) / segs, (k // segs) / len(pts) * 0.6) for k in range(len(V))]
+    g.add(np.array(V), F, np.array(UV), (0.3, 0, 0, SKELETON), mat=0)
+    mats = [skeleton_canvas("open_brain_skeleton", "#E6E0D4", "#7A3A3A", 642, 0.55)]
+    # mantle: one inflating instance, an 11 x 8 cm cushion pinched at the waist (the figure-8 / meandroid form)
+    mantle = K.Instances(643)
+    mantle.add(STUDIO + np.array([0.0, 1.55, 0.0]), UP, 1.0, phase=0.3, variant=0.5, twist=0.0)
+    V, F, UV, COL = cushion(4.6, 3.4, 2.6, rings=10, segs=44, lobes=(9, 0.06), waist=0.3)
+    # the central valley (the mouth groove) dips into the cushion along x
+    V = [(x, y - 0.9 * math.exp(-(z / 0.8) ** 2) * max(0.0, 1 - (x / 3.9) ** 2) * min(1.0, y / 0.8)
+          + 0.12 * y * math.sin(math.atan2(z, x) * 23), z) for x, y, z in V]
+    cv = P.Canvas(128, 128, "#A6303E")
+    r = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
+    ang = np.arctan2(cv.v - 0.5, cv.u - 0.5)
+    cv.multiply(0.85 + 0.25 * P.fbm(128, 128, 8, 3, 644))
+    # radial septal ridges under the tissue, lighter between dark furrows
+    cv.blend(S(0.6, 1.0, np.cos(ang * 46)) * S(0.25, 0.4, r), "#D85A66", 0.5)
+    cv.blend(S(0.8, 0.9, r) * (1 - S(0.93, 0.97, r)), "#3E9A6A", 0.7)        # green band toward the rim
+    cv.blend(S(0.95, 0.99, r), "#9AF0B0")                                        # glowing rim
+    cv.blend((1 - S(0.03, 0.08, np.abs(cv.v - 0.5))) * (1 - S(0.4, 0.5, r)), "#4A1820", 0.8)  # mouth groove
+    mm = C.material("open_brain_mantle", rough=0.35, image=K.tex("open_brain_mantle", cv), emissive="#1A6A30", emissive_strength=0.3)
+    night = K.Instances(645)
+    # night tentacles: short ones along the mouth groove and a ring inside the rim
+    for k in range(10):
+        x = -3.4 + 6.8 * k / 9
+        c = STUDIO + np.array([x, 1.55 + 1.7 * (1 - (x / 4.6) ** 2), rs.normal(0, 0.15)])
+        night.add(c, unit(np.array([rs.normal(0, 0.3), 1.0, rs.normal(0, 0.3)])), rs.uniform(0.8, 1.0))
+    for k in range(22):
+        a = 2 * math.pi * (k + rs.uniform(-0.2, 0.2)) / 22
+        w = 1.0 - 0.32 * (math.sin(a) ** 2) * (1 - abs(math.cos(a)))
+        c = STUDIO + np.array([3.7 * w * math.cos(a), 1.55 + 1.2, 2.7 * w * math.sin(a)])
+        night.add(c, unit(np.array([math.cos(a), 1.2, math.sin(a)])), rs.uniform(0.85, 1.1))
+    nproto = night_proto(1.2, 0.06, 0.025)
+    ncv = tentacle_canvas("#B87A70", "#D8B0A0", "#F2ECE0", 646)
+    nm = C.material("open_brain_night_tentacle", rough=0.5, image=K.tex("open_brain_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="trachyphyllia_geoffroyi", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    man = K.polyp_node("Mantle", root, (V, F, UV, COL), [mm], mantle, extras={"polypMode": 3})
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, man, nig], {"Mantle": (1, len(F) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# Bubble coral (pack 2): grape-like vesicles over a thin-walled skeleton
+# ----------------------------------------------------------------------------
+def bubble():
+    rs = RS(651)
+    g = T.WGeo()
+    top = frag_base(g, 651, radii=(2.8, 1.1, 2.4))
+    # skeleton: a few thin, tall septal walls in meandering valleys (mostly hidden under the bubbles by day)
+    for w in range(5):
+        z = -2.0 + w * 1.0
+        xs = np.linspace(-2.4, 2.4, 7)
+        lo = np.array([STUDIO + np.array([x, top - STUDIO[1], z + 0.25 * math.sin(x * 1.3 + w)]) for x in xs])
+        hgt = 1.9 * np.sqrt(np.clip(1 - (xs / 2.7) ** 2 - (z / 2.8) ** 2, 0.05, 1))
+        V, F = [], []
+        for i, p in enumerate(lo):
+            for k, (dy, dz) in enumerate(((0.0, -0.06), (hgt[i], -0.03), (hgt[i], 0.03), (0.0, 0.06))):
+                V.append(p + np.array([0.0, dy, dz]))
+        for i in range(len(lo) - 1):
+            for k in range(4):
+                a, b = i * 4 + k, i * 4 + (k + 1) % 4
+                F.append((a, b, b + 4, a + 4))
+        UV = [(k % 4 / 4, (V[k][1] - top) / 3.0 * 0.6 + 0.35) for k in range(len(V))]
+        g.add(np.array(V), F, np.array(UV), (0.3, 0, 0, SKELETON), mat=1)
+    mats = [rubble_material("bubble_rubble"), skeleton_canvas("bubble_skeleton", "#ECE8DE", "#C8CCB0", 652, 0.5)]
+    # bubbles over a dome: sunflower-packed, bigger in the middle
+    inst = K.Instances(653)
+    cnt = 40
+    for i in range(cnt):
+        t = math.sqrt((i + 0.5) / cnt)
+        a = i * math.pi * (3 - math.sqrt(5))
+        x, z = 3.0 * t * math.cos(a), 2.6 * t * math.sin(a)
+        y = top + 0.2 + 2.1 * math.sqrt(max(0.0, 1 - t * t)) - 0.6 * t * t
+        c = STUDIO * np.array([1, 0, 1]) + np.array([x, y, z])
+        n = unit(np.array([x * 0.5, 1.0, z * 0.5]))
+        inst.add(c - n * 0.35, n, rs.uniform(0.85, 1.15) * (1.15 - 0.35 * t), phase=rs.uniform())
+    V, F, UV, COL = ball((0.0, 0.55, 0.0), (0.64, 0.62, 0.64), 12, 7, v0=0.0, hinge=0.0, flag=0.0)
+    # vesicle: pale cream-green, a darker web where they touch, a lighter crown (light passing through water-filled tissue)
+    cv = P.Canvas(32, 64, "#C8D4B4")
+    cv.multiply(0.9 + 0.15 * P.fbm(64, 32, 4, 3, 654))
+    cv.blend(1 - S(0.15, 0.35, cv.v), "#8A9A78", 0.8)
+    cv.blend(S(0.7, 0.95, cv.v), "#EEF4DE", 0.8)
+    cv.blend(S(0.6, 1.0, np.cos(cv.u * 2 * math.pi * 9)) * (1 - S(0.4, 0.6, cv.v)), "#A8B898", 0.35)
+    bm = C.material("bubble_vesicle", rough=0.2, image=K.tex("bubble_vesicle", cv), emissive="#4A7A3A", emissive_strength=0.6)
+    night = K.Instances(655)
+    # night: long tapering sweepers between the shrunken bubbles
+    for i in range(18):
+        t = math.sqrt((i + 0.5) / 18)
+        a = i * 2.4 + 0.7
+        c = STUDIO * np.array([1, 0, 1]) + np.array([2.4 * t * math.cos(a), top + 1.6 * math.sqrt(max(0.05, 1 - t * t)), 2.0 * t * math.sin(a)])
+        night.add(c, unit(np.array([math.cos(a) * t * 1.3, 0.9, math.sin(a) * t * 1.3])), rs.uniform(0.85, 1.15))
+    nproto = night_proto(3.2, 0.06, 0.02, curve=0.25)
+    ncv = tentacle_canvas("#A8B090", "#C8D0B0", "#F4F6E8", 656)
+    nm = C.material("bubble_night_tentacle", rough=0.5, image=K.tex("bubble_night_tentacle", ncv))
+    root = C.empty("Root")
+    C.set_extras(root, species="plerogyra_sinuosa", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Bubbles", root, (V, F, UV, COL), [bm], inst, extras={"polypMode": 3})
+    nig = K.polyp_node("NightTentacles", root, nproto, [nm], night, extras={"polypMode": 1})
+    return root, [body, pol, nig], {"Bubbles": (len(inst), len(F) * 2), "NightTentacles": (len(night), len(nproto[1]) * 2)}
+
+
+# ----------------------------------------------------------------------------
+# pack 3: SPS and pulsing xenia
+# ----------------------------------------------------------------------------
+def sps_polyp(color, tip, name, seed, r=0.12):
+    """Tiny 6-point SPS polyp (8 tris): out by day, folded in at night (ordinary polyp mode)."""
+    proto = K.proto_star(r, 0.06, 6)
+    cv = P.Canvas(32, 32, color)
+    rr = np.hypot(cv.u - 0.5, cv.v - 0.5) * 2
+    cv.blend(S(0.5, 0.9, rr), tip)
+    cv.blend(1 - S(0.1, 0.25, rr), "#2A2A2A", 0.5)
+    return proto, C.material(name, rough=0.5, image=K.tex(name, cv))
+
+
+def sps_canvas(name, base, dots, rim, seed, glow=None, strength=1.0, rim_from=0.88, w=128, h=128):
+    """SPS tissue over skeleton: base colour stippled with corallite openings, a paler growing edge from v rim_from."""
+    cv = P.Canvas(w, h, base)
+    cv.multiply(0.85 + 0.25 * P.fbm(h, w, 6, 3, seed))
+    f1, _, _ = P.voronoi(h, w, 140, seed + 1)
+    cv.blend(1 - S(0.8, 1.6, f1), dots, 0.75)
+    cv.blend(S(rim_from - 0.04, rim_from + 0.06, cv.v), rim)
+    return C.material(name, rough=0.6, image=K.tex(name, cv, jpeg=True), emissive=glow, emissive_strength=strength)
+
+
+def montipora_cap():
+    """Montipora capricornis: thin plates whorling up off a rubble foot, tiny polyps over the top faces, a pale
+    growing rim (stony_corals.md §8: lower light gives broader, flatter plates)."""
+    rs = RS(701)
+    g = T.WGeo()
+    top = frag_base(g, 701, radii=(2.2, 1.0, 1.9))
+    inst = K.Instances(702)
+    plates = [(4.6, 0.5, 0.0, 250.0, 0.06), (3.6, 1.3, 2.2, 230.0, -0.06), (2.6, 2.0, 4.1, 210.0, 0.08)]
+    # the plates whorl up from one short central column on the rubble
+    import geomlib as G
+    col = np.array([STUDIO + np.array([0.0, top - STUDIO[1] - 0.3, 0.0]), STUDIO + np.array([0.1, top - STUDIO[1] + 0.8, 0.05]),
+                    STUDIO + np.array([0.05, top - STUDIO[1] + 1.5, -0.05])])
+    V, F, tv, av = G.tube(col, [0.7, 0.55, 0.45], 8, cap_start=False, cap_end=True, up=(0, 0, 1))
+    g.add(V, F, np.c_[av, 0.1 + 0.3 * tv], (0.3, 0, 0, SKELETON), mat=1)
+    for pi_, (R, dy, a0, span, tilt) in enumerate(plates):
+        rings, segs = 5, 22
+        c0 = np.array([STUDIO[0], top + dy - 0.6, STUDIO[2]])
+        th = 0.16
+        V, UV = [], []
+        for side in (0, 1):
+            for i in range(rings + 1):
+                t = i / rings
+                r = 0.4 + (R - 0.4) * t
+                for k in range(segs + 1):
+                    a = a0 + math.radians(span) * k / segs
+                    # each whorl climbs a little and its edge waves and droops slightly
+                    y = dy * 0.2 * k / segs + tilt * r * math.cos(a - a0) + 0.18 * t * math.sin(3 * a + pi_) - 0.12 * t * t
+                    x, z = r * math.cos(a), r * 0.9 * math.sin(a)
+                    V.append(c0 + np.array([x, y - side * th * (1 - 0.5 * t), z]))
+                    UV.append((k / segs, t * 0.95))
+        nn = (rings + 1) * (segs + 1)
+        F = []
+        for i in range(rings):
+            for k in range(segs):
+                a = i * (segs + 1) + k
+                F.append((a, a + segs + 1, a + segs + 2, a + 1))
+                b = nn + a
+                F.append((b, b + 1, b + segs + 2, b + segs + 1))
+        # rim
+        for k in range(segs):
+            a, b = rings * (segs + 1) + k, rings * (segs + 1) + k + 1
+            F.append((a, nn + a, nn + b, b))
+        g.add(np.array(V), F, np.array(UV), (0.3, 0, 0, SKELETON), mat=1)
+        for _ in range(int(28 * R / 4.6)):
+            t = math.sqrt(rs.uniform(0.05, 0.85))
+            k = rs.uniform(0, 1)
+            a = a0 + math.radians(span) * k
+            r = 0.4 + (R - 0.4) * t
+            y = dy * 0.2 * k + tilt * r * math.cos(a - a0) + 0.18 * t * math.sin(3 * a + pi_) - 0.12 * t * t
+            inst.add(c0 + np.array([r * math.cos(a), y + 0.02, r * 0.9 * math.sin(a)]), UP, rs.uniform(0.8, 1.2))
+    mats = [rubble_material("montipora_cap_rubble"),
+            sps_canvas("montipora_cap_tissue", "#7A3A86", "#B070C0", "#E8C8E8", 703, glow="#3A1A5A", strength=0.6)]
+    proto, pm = sps_polyp("#4FB86A", "#A8F0B0", "montipora_cap_polyp", 704)
+    root = C.empty("Root")
+    C.set_extras(root, species="montipora_capricornis", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+
+
+def branch_tree(g, start, d, length, r, depth, rs, tips, mat=1, fork=(2, 3), spread=0.55, shrink=0.72, sides=5):
+    """Recursive SPS branching: a tapering tube per branch, forking into 2-3 thinner ones; tips collect end points."""
+    import geomlib as G
+    end = start + d * length
+    mid = (start + end) / 2 + rs.normal(0, 0.08 * length, 3)
+    pts = np.array([start, mid, end])
+    r1 = r * (0.75 if depth > 0 else 0.35)
+    V, F, tv, av = G.tube(pts, np.linspace(r, r1, 3), sides, cap_start=False, cap_end=depth == 0, up=(0, 0, 1))
+    g.add(V, F, np.c_[av, 0.2 + 0.75 * tv * (1.0 if depth == 0 else 0.6)], (0.3, 0, 0, SKELETON), mat=mat)
+    if depth == 0:
+        tips.append((end, d))
+        return
+    for _ in range(rs.integers(fork[0], fork[1] + 1)):
+        nd = unit(d + rs.normal(0, spread, 3) + UP * 0.35)
+        branch_tree(g, end - d * 0.05, nd, length * rs.uniform(0.75, 0.95) * shrink / 0.72, r1, depth - 1, rs, tips,
+                    mat, fork, spread, shrink, sides)
+
+
+def birdsnest():
+    """Seriatopora hystrix: a dense tangle of thin, sharply pointed branches (stony_corals.md §8), pink."""
+    rs = RS(711)
+    g = T.WGeo()
+    top = frag_base(g, 711, radii=(2.0, 0.9, 1.8))
+    tips = []
+    for k in range(5):
+        a = 2 * math.pi * k / 5 + rs.uniform(-0.3, 0.3)
+        d = unit(np.array([math.cos(a) * 0.45, 1.0, math.sin(a) * 0.45]))
+        branch_tree(g, STUDIO + np.array([math.cos(a) * 0.5, top - STUDIO[1] - 0.1, math.sin(a) * 0.5]), d, 1.1, 0.14, 4, rs,
+                    tips, fork=(2, 2), spread=0.75, sides=4)
+    inst = K.Instances(712)
+    for p, d in tips:
+        for j in range(2):
+            q = p - d * (0.25 + 0.4 * j) + rs.normal(0, 0.03, 3)
+            inst.add(q, unit(rs.normal(0, 1, 3) + d * 0.5), rs.uniform(0.6, 0.9))
+    mats = [rubble_material("birdsnest_rubble"),
+            sps_canvas("birdsnest_tissue", "#D8789E", "#F0A8C8", "#F8E0EC", 713, glow="#5A1A3A", strength=0.5, rim_from=0.8)]
+    proto, pm = sps_polyp("#F0B8D0", "#FFF0F8", "birdsnest_polyp", 714, r=0.1)
+    root = C.empty("Root")
+    C.set_extras(root, species="seriatopora_hystrix", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(proto[1]))}
+
+
+def acropora():
+    """Acropora millepora: a corymbose cushion of short upright branches off a base plate, each studded with radial
+    corallites, its axial corallite tip glowing (stony_corals.md §8: strong green or orange fluorescence)."""
+    import geomlib as G
+    rs = RS(721)
+    g = T.WGeo()
+    top = frag_base(g, 721, radii=(2.2, 0.9, 2.0))
+    # base plate the branches rise from
+    mound(g, top, 2.4, 2.1, 0.5, 722)
+    inst = K.Instances(723)
+    cnt = 22
+    for i in range(cnt):
+        t = math.sqrt((i + 0.5) / cnt)
+        a = i * math.pi * (3 - math.sqrt(5)) + rs.normal(0, 0.1)
+        foot = STUDIO * np.array([1, 0, 1]) + np.array([2.4 * t * math.cos(a), top + 0.55 * (1 - t * t), 2.1 * t * math.sin(a)])
+        d = unit(np.array([math.cos(a) * t * 0.55, 1.0, math.sin(a) * t * 0.55]) + rs.normal(0, 0.08, 3))
+        L = rs.uniform(1.6, 2.4) * (1.1 - 0.3 * t)
+        pts = np.array([foot, foot + d * L * 0.5, foot + d * L])
+        V, F, tv, av = G.tube(pts, [0.3, 0.24, 0.13], 6, cap_start=False, cap_end=True, up=(0, 0, 1))
+        g.add(V, F, np.c_[av, 0.1 + 0.88 * tv], (0.3, 0, 0, SKELETON), mat=2)
+        # radial corallites up the sides: little cups pointing out and up
+        tt1 = unit(np.cross(d, [0.0, 0.0, 1.0]))
+        tt2 = np.cross(d, tt1)
+        for j in range(5):
+            h = 0.2 + 0.65 * j / 4
+            ang = j * 2.4 + i
+            out = tt1 * math.cos(ang) + tt2 * math.sin(ang)
+            inst.add(foot + d * L * h + out * (0.28 - 0.14 * h), unit(out + d * 0.9), rs.uniform(0.85, 1.05) * (1.1 - 0.4 * h))
+    mats = [rubble_material("acropora_rubble"),
+            skeleton_canvas("acropora_plate", "#D8D2C4", "#3E7AAE", 724, 0.4),
+            sps_canvas("acropora_tissue", "#2E6A9E", "#5AA8D8", "#9AF8E8", 725, glow="#1A6A7A", strength=1.0, rim_from=0.82)]
+    # corallite: a short open cup (tube) with the polyp tissue over it
+    cup = []
+    sides = 5
+    for j, (y, r) in enumerate(((0.0, 0.1), (0.2, 0.09), (0.24, 0.05))):
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            cup.append((r * math.cos(a), y, r * math.sin(a)))
+    F = []
+    for j in range(2):
+        for k in range(sides):
+            a, b = j * sides + k, j * sides + (k + 1) % sides
+            F.append((a, b, b + sides))
+            F.append((a, b + sides, a + sides))
+    UV = [(0.5, 0.2 + 0.35 * (i // sides)) for i in range(len(cup))]
+    COL = [(0, 0, 0.5 * (i // sides), 1) for i in range(len(cup))]
+    cv = P.Canvas(16, 16, "#5AA8D8")
+    cv.blend(S(0.5, 0.9, cv.v), "#C8F8F0")
+    cm = C.material("acropora_corallite", rough=0.5, image=K.tex("acropora_corallite", cv), emissive="#1A6A7A", emissive_strength=1.0)
+    root = C.empty("Root")
+    C.set_extras(root, species="acropora_millepora", stony=1)
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    proto = (np.array(cup), F, np.array(UV), np.array(COL, float))
+    pol = K.polyp_node("Polyps", root, proto, [cm], inst)
+    return root, [body, pol], {"Polyps": (len(inst), len(F))}
+
+
+def xenia():
+    """Pulsing xenia: soft pale stalks from a bit of rubble, each crowned with feathery 8-tentacle polyps that open
+    and close (polypMode 4, core Xenia)."""
+    import geomlib as G
+    rs = RS(731)
+    g = T.WGeo()
+    top = frag_base(g, 731, radii=(1.8, 0.8, 1.6), mat=0)
+    inst = K.Instances(732)
+    for k in range(6):
+        a = 2 * math.pi * k / 6 + rs.uniform(-0.3, 0.3)
+        rr = 0.3 if k == 0 else rs.uniform(0.6, 1.1)
+        foot = STUDIO + np.array([rr * math.cos(a), top - STUDIO[1] - 0.1, rr * math.sin(a)])
+        d = unit(np.array([math.cos(a) * 0.3, 1.0, math.sin(a) * 0.3]))
+        L = rs.uniform(1.8, 3.0)
+        pts = np.array([foot, foot + d * L * 0.4 + rs.normal(0, 0.1, 3), foot + d * L])
+        V, F, tv, av = G.tube(pts, [0.32, 0.26, 0.36], 7, cap_start=False, cap_end=True, up=(0, 0, 1))
+        g.add(V, F, np.c_[av, 0.1 + 0.85 * tv], (0.6, 0, 0.3, 1.0), mat=1)
+        head = pts[-1]
+        for j in range(8):
+            b = 2 * math.pi * j / 8 + rs.uniform(-0.2, 0.2)
+            out = np.array([math.cos(b), 0.0, math.sin(b)])
+            inst.add(head + out * 0.28 + d * 0.15, unit(out * 0.8 + d), rs.uniform(0.85, 1.1))
+        inst.add(head + d * 0.3, d, 0.9)
+    cv = P.Canvas(32, 64, "#B8A8C8")
+    cv.vgrad("#A898B8", "#D8D0E4")
+    stalk = C.material("xenia_stalk", rough=0.6, image=K.tex("xenia_stalk", cv))
+    mats = [rubble_material("xenia_rubble"), stalk]
+    fc = K.feather_canvas("#C8BCD8", "#E0D8EC", "#D8CCE8", "#F4F0FA", "#B0A0C8", pinnules=7, seed=733)
+    pm = C.material("xenia_polyp", rough=0.6, image=K.tex("xenia_polyp", fc, alpha=True), image_alpha=True,
+                    double=True, clip=True, emissive="#2A2040", emissive_strength=0.5)
+    proto = K.proto_feather_quads(8, 0.35, 0.09, 0.85, 35, 0.17, 4, 0.7)
+    root = C.empty("Root")
+    C.set_extras(root, species="xenia_umbellata")
+    body = g.obj("Body", root, "body", mats, smooth=True)
+    C.recalc_normals(body)
+    pol = K.polyp_node("Polyps", root, proto, [pm], inst, extras={"polypMode": 4, "alphaTest": 0.5})
+    nt = sum(len(f) - 2 for f in proto[1])
+    return root, [body, pol], {"Polyps": (len(inst), nt)}
+
+
 BUILDERS = {
+    "gold_torch": lambda: euphyllia(EUPHYLLIA["gold_torch"]),
+    "scolymia": scolymia,
+    "bounce_mushroom": bounce_mushroom,
     "hammer": lambda: euphyllia(EUPHYLLIA["hammer"]),
     "torch": lambda: euphyllia(EUPHYLLIA["torch"]),
     "frogspawn": lambda: euphyllia(EUPHYLLIA["frogspawn"]),
     "duncan": duncan,
+    "acan": acan,
+    "candy_cane": candy_cane,
+    "open_brain": open_brain,
+    "bubble": bubble,
+    "montipora_cap": montipora_cap,
+    "birdsnest": birdsnest,
+    "acropora": acropora,
+    "xenia": xenia,
 }
 
 

@@ -120,6 +120,7 @@ object Thoughts {
             n == "cleansite" -> Line("cleaning a rock by ${e.host} to lay eggs on", "get a nest spot ready", "Making it spotless!", Driver.FAMILY, 3)
             n == "layeggs" -> Line("laying eggs by ${e.host}", "lay some eggs", "Eggs!", Driver.FAMILY, 3)
             n == "tendeggs" -> Line("fanning the eggs to keep them fresh", "look after the eggs", "Guarding my eggs!", Driver.FAMILY, 3)
+            n == "hole" && k == BrainKind.SIXLINE && e.o.sleeping -> Line("asleep in the rock, wrapped in a bubble of its own slime", "sleep in its slime cocoon", "Snug as a bug in a mucus rug.", Driver.REST, 2)
             n == "hole" || n.startsWith("hole_") -> holeLine(e, label)
             // ---- common behaviours, with the species' own wording where it has one
             n == "flee" -> fleeLine(e, label)
@@ -127,6 +128,12 @@ object Thoughts {
             n == "feed" -> feedLine(e, label)
             n == "graze" && k == BrainKind.EMERALD_CRAB -> Line("scooping bubble algae off the rock with its spoon claws", "scoop some bubble algae", "Pop, crunch!", Driver.HUNGER)
             n == "nip" && k == BrainKind.EMERALD_CRAB -> Line("nibbling coral polyps because it is hungry (naughty!)", "nibble a coral", "So hungry…", Driver.HUNGER, 2)
+            n == "contract" && k == BrainKind.SEA_CUCUMBER -> Line("balled up into a firm, fat sausage${e.because()}", "stay tucked up", "Not touching me!", Driver.FEAR, 2)
+            n == "hide" && k == BrainKind.SEA_CUCUMBER -> Line(if (label.startsWith("Creeping")) "creeping slowly back to its spot under the rock" else "lying with its head under the rock and its tail out on the sand", "wait for dark", if (label.startsWith("Creeping")) "Slow and steady." else "Too bright. Snooze.", Driver.REST)
+            n == "sift" && k == BrainKind.SEA_CUCUMBER -> Line("creeping over the sand, mopping it clean with the little tentacles round its mouth", "clean more sand", "Mop, mop, yum.", Driver.HUNGER)
+            n == "retreat" && k == BrainKind.PORCELAIN_CRAB -> Line("scuttling backwards under its anemone${e.because()}", "hide under the tentacles", "Back under the tentacles!", Driver.FEAR, 2)
+            n == "filter" && k == BrainKind.PORCELAIN_CRAB -> Line(if (label.startsWith("Resting")) "resting its feathery fans for a moment" else "sweeping the water with its feathery fans to catch tiny bits of food", "catch more plankton", if (label.startsWith("Resting")) "Phew, arm break." else "Swish, swish, snack!", Driver.HUNGER)
+            n == "spar" && k == BrainKind.PORCELAIN_CRAB -> Line("shoving a rival crab with its big flat claws", "keep its anemone", "This anemone is taken!", Driver.TERRITORY, 2)
             n == "retreat" && k == BrainKind.EMERALD_CRAB -> Line("scuttling back into its rock crevice${e.because()}", "hide in its crevice", "Eek, back inside!", Driver.FEAR, 2)
             n == "graze" && k == BrainKind.SALLY_CRAB -> Line("tearing at hair algae with its claws", "pick at some hair algae", "Munch munch!", Driver.HUNGER)
             n == "hunt" && k == BrainKind.ARROW_CRAB -> Line("stalking a bristleworm on long, slow legs", "catch a bristleworm", "Gotcha, wormy!", Driver.HUNGER, 2)
@@ -179,6 +186,15 @@ object Thoughts {
             n == "lookout" -> Line("propped up at its burrow, keeping watch", "keep watch at its burrow", "I'll keep an eye out.", Driver.HOME)
             n == "dive" -> Line("flicking its tail and diving into its burrow${e.because()}", "pop back out of its burrow", "Danger! Everyone in!", Driver.FEAR, 3)
             n == "spit" -> Line("spitting a mouthful of sand out of its burrow", "tidy its burrow", "Ptooey!", Driver.HOME, 2)
+            // ---- mandarin, six line wrasse and clown goby (research 51)
+            n == "podhop" -> Line("hopping along the rock, pecking up tiny pods", "hunt for pods", "Copepod! Another one! Yum.", Driver.HUNGER)
+            n == "spawn" && k == BrainKind.MANDARIN -> Line(if (e.o.dorsalRaise > 0.5) "raising its tall fin and dancing for its mate" else "rising to the surface with its mate to spawn",
+                "dance with its mate", "Up we go, together!", Driver.FAMILY, 3)
+            n == "spawnf" -> Line("rising up the tank with its mate in a slow spiral", "rise with its mate", "Ooh, a dance!", Driver.FAMILY, 3)
+            n == "dart" && k == BrainKind.SIXLINE -> Line("darting from crack to crack, hunting tiny critters", "hunt in the rock", "What's in here? And here?", Driver.HUNGER)
+            n == "harass" -> Line("chasing ${tgt ?: "a newcomer"} off its patch", "boss the reef", "My reef! I was here first!", Driver.TERRITORY, 3)
+            n == "cperch" -> Line(if (e.o.sleeping) "asleep tucked in its coral" else "perched in its coral, watching", "sit in its coral", "Best seat in the reef.", Driver.HOME)
+            n == "squabble" -> Line("squabbling with ${tgt ?: "another clown goby"} over the coral", "sort out who owns the coral", "Move over! …Okay, maybe we can share.", Driver.TERRITORY, 2)
             n == "hovercover" && k == BrainKind.CARDINAL && e.o.mouthbrooding ->
                 Line("carrying its eggs in its mouth (dads do that!)", "keep the eggs safe in its mouth", "Mmmf. Can't talk, eggs.", Driver.FAMILY, 3)
             // ---- cardinal
@@ -218,7 +234,7 @@ object Thoughts {
             n == "burrow" -> Line(if (e.night) "asleep in its burrow" else "tucked away safe in its burrow", "rest in its burrow", if (e.night) "Zzz…" else "Safe and snug.", if (e.night) Driver.REST else Driver.HOME, 0)
             n == "mouthhover" && label.startsWith("Picking") -> Line("swimming up over its burrow to snap at plankton", "catch some plankton", "Snap! Tiny snack.", Driver.HUNGER)
             n == "mouthhover" -> Line("hovering at its burrow door", "hang out by its burrow", "Home sweet home.", Driver.HOME)
-            n == "dig" -> Line(if (k == BrainKind.DIAMOND_GOBY) "digging a cozy tunnel under a rock" else "carrying sand out of its burrow", "dig some more", "Dig dig dig!", Driver.HOME, 2)
+            n == "dig" -> Line(when (k) { BrainKind.DIAMOND_GOBY -> "digging a cozy tunnel under a rock"; BrainKind.MANTIS -> "hauling sand out of its burrow in its arms"; else -> "carrying sand out of its burrow" }, "dig some more", "Dig dig dig!", Driver.HOME, 2)
             n == "nightpatrol" -> Line("patrolling around at night", "patrol in the dark", "Night walk!", Driver.CURIOSITY)
             // ---- coral banded shrimp
             n == "hang" -> Line(if (label.startsWith("Grooming")) "cleaning its long antennae" else "hanging upside down under its ledge", "hang under its ledge", if (label.startsWith("Grooming")) "Neat antennae!" else "Upside down is fun.", Driver.HOME)
@@ -241,6 +257,8 @@ object Thoughts {
             n == "aiptasia" -> Line(if (label.startsWith("Eating")) "picking apart a pest aiptasia anemone" else "sneaking up on a pest aiptasia anemone",
                 "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
             n == "clam" -> clamLine(label)
+            n == "giantclam" -> giantClamLine(label)
+            n == "fishgrab" -> Line("wrapping an arm round a sleeping fish", "eat it", "Gotcha!", Driver.HUNGER, 3)
             // ---- shrimp pack (research 44)
             n == "dance" -> Line("swaying its tail on ${if (label.contains("anemone")) "its anemone" else if (label.contains("coral")) "its coral" else "the rock"}",
                 "keep dancing", "Wiggle wiggle!", Driver.HOME, 1)
@@ -251,6 +269,10 @@ object Thoughts {
             n == "starshare" -> Line("sharing its mate's starfish", "share the starfish", "Save some for me!", Driver.FAMILY, 2)
             n == "bulldoze" -> Line("bulldozing sand out of its burrow with its claws", "dig some more", "Dig, dig, push!", Driver.HOME, 2)
             n == "duck" -> Line("diving down its hole${e.because()}", "peek out again", "Into the hole!", Driver.FEAR, 2)
+            // ---- peacock mantis (research 62 §2)
+            n == "watch" -> Line("watching from its burrow, its big eyes swivelling", "wait for something to walk by", "I see everything.", Driver.HOME, 1)
+            n == "smash" -> Line("smashing ${tgt ?: "a shell"} with its clubs, fast as a bullet", "crack the shell open", "Bam! Bam! Bam!", Driver.HUNGER, 3)
+            n == "eatprey" -> Line(if (label.startsWith("Eating")) "eating its catch at the burrow" else "carrying its catch home to its burrow", "finish its meal", "Mine, all mine.", Driver.HUNGER, 2)
             n == "clawsnap" -> Line("snapping its big claw with a loud crack", "guard its burrow", "Crack! Back off!", Driver.TERRITORY, 3)
             n == "hide" && k == BrainKind.EMERALD_CRAB -> Line("wedged into its rock crevice for the day", "hide in its crevice", "Too bright out there.", Driver.HOME, 0)
             n == "hide" && k == BrainKind.SALLY_CRAB -> Line("tucked into its rock crevice", "hide in its crevice", "Can't see me!", Driver.HOME, 0)
@@ -405,6 +427,17 @@ object Thoughts {
         label.startsWith("Starving") -> Line("filtering hard, but there is too little phytoplankton to eat", "eat phytoplankton (dose some!)", "So hungry…", Driver.HUNGER, 3)
         label.startsWith("Hungry") -> Line("filtering the water for phytoplankton", "eat more phytoplankton", "More phyto, please.", Driver.HUNGER, 2)
         else -> Line("wedged in its crevice, waving its red tentacles and filtering the water", "keep filtering", "Mmm, plankton.", Driver.HUNGER)
+    }
+
+    private fun giantClamLine(label: String): Line = when {
+        label.startsWith("Snapped") -> Line("snapped its shell shut with a squirt of water", "open up again", "Who's there?!", Driver.FEAR, 2)
+        label.startsWith("Opening") -> Line("slowly spreading its mantle out again", "soak up the light", "Is it safe now?", Driver.HOME)
+        label.startsWith("Bleached") -> Line("pale and bleached: it has lost the algae that feed it", "get its colour back (steady light, cooler water)", "I feel so empty…", Driver.HUNGER, 3)
+        label.startsWith("Paling") -> Line("losing colour as its algae leave", "keep its colour (check heat and light)", "Something's not right…", Driver.HUNGER, 2)
+        label.contains("too little light") -> Line("spreading its mantle wide to catch what little light reaches it", "find more light (move it higher)", "More light, please!", Driver.HUNGER, 2)
+        label.contains("night") -> Line("resting with its mantle half drawn in for the night", "wait for the lights", "Zzz…", Driver.ROUTINE)
+        label.startsWith("Hungry") -> Line("soaking up the light to feed the algae in its mantle", "soak up more light", "Sun, please!", Driver.HUNGER)
+        else -> Line("spreading its colourful mantle in the light, letting the algae in it make food", "keep soaking up the light", "Ahh, sunshine.", Driver.ROUTINE)
     }
 
     private fun crawlLine(e: Env, label: String): Line = when (label) {
@@ -580,13 +613,17 @@ object Thoughts {
         BrainKind.SEXY_SHRIMP -> "sexy shrimp"
         BrainKind.HARLEQUIN_SHRIMP -> "harlequin shrimp"
         BrainKind.PISTOL_SHRIMP -> "pistol shrimp"
+        BrainKind.MANTIS -> "mantis shrimp"
         BrainKind.FILE_CLAM -> "flame scallop"
+        BrainKind.GIANT_CLAM -> "maxima clam"
+        BrainKind.SEA_CUCUMBER -> "sea cucumber"
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"
         BrainKind.ARROW_CRAB -> "arrow crab"
         BrainKind.EMERALD_CRAB -> "emerald crab"
-        BrainKind.BRITTLE_STAR -> "brittle star"
+        BrainKind.PORCELAIN_CRAB -> "porcelain crab"
+        BrainKind.BRITTLE_STAR -> if (o.species.brain == "serpent_star") "serpent star" else "brittle star"
         BrainKind.FEATHER_DUSTER -> "feather duster worm"
         BrainKind.NASSARIUS -> "nassarius snail"
         BrainKind.ASTREA -> "astrea snail"
@@ -603,6 +640,9 @@ object Thoughts {
         BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GRAMMA -> "royal gramma"
         BrainKind.WATCHMAN_GOBY -> "watchman goby"
+        BrainKind.MANDARIN -> "mandarin"
+        BrainKind.SIXLINE -> "six line wrasse"
+        BrainKind.CLOWN_GOBY -> "clown goby"
         BrainKind.BUTTERFLY -> "butterflyfish"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
@@ -668,7 +708,7 @@ object Thoughts {
 
     private val PARTS = listOf("gills", "fins", "sides", "mouth")
     /** Behaviours an empty-tummy fish idles in: the "is hungry and watching for food" sentence replaces them. */
-    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout", "rove")
+    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout", "cperch", "rove")
     private val RESTING = setOf("sleep", "cocoon", "burrow", "sand", "bury", "nestle", "hovercover", "hide", "buried")
     /** Never offered as the next plan: reactions, not plans. */
     private val NO_NEXT = setOf("touch", "unwell", "heat", "flee", "tailflip", "retract", "dart", "jet", "snap", "molt", "gasp", "abandoned", "flipped", "yield")

@@ -44,7 +44,9 @@ uniform vec4 uPokeT[8];
 uniform float uPokeCount;
 // polyp motion mode (DrawPart.polypMode): 0 ordinary, 1 night tentacles (Euphyllia sweepers, LPS feeding tentacles)
 // that grow out of their base as uPolypDrive (core CoralPose.tentacles) rises after dark, long, thin and writhing;
-// 2 LPS day tentacles (one strand per instance, bending as a whole, shortening as the colony retracts)
+// 2 LPS day tentacles (one strand per instance, bending as a whole, shortening as the colony retracts), 3 inflating
+// tissue (bubble vesicles, open brain mantle) that swells by day and deflates as the night tentacles come out,
+// 4 pulsing xenia polyps (uPolypDrive = pulse strength)
 uniform float uPolypMode;
 uniform float uPolypDrive;
 
@@ -235,6 +237,26 @@ void main() {
         p = rotAxis(p, side, wr);
         n = rotAxis(n, side, wr);
         swayW = 2.0 * hinge * hinge;
+    } else if (uPolypMode > 3.5) {
+        // pulsing xenia (core Xenia): each polyp is its own pacemaker; the tentacles snap shut and open again more
+        // slowly, about once a second at full pulse (uPolypDrive), and the polyps sit still when the pulse is gone
+        open = clamp(ext, 0.0, 1.0);
+        float drive = clamp(uPolypDrive, 0.0, 1.0);
+        float cyc = fract(uTime * (0.45 + 0.5 * drive) + iPhaseVar.x * 3.7);
+        float beat = drive * smoothstep(0.0, 0.18, cyc) * (1.0 - smoothstep(0.3, 0.95, cyc));
+        float fold = max(1.0 - open, 0.85 * beat) * hinge;
+        p.xz *= 1.0 - 0.8 * fold;
+        p.y *= 1.0 - 0.3 * fold;
+        n.xz *= 1.0 - 0.5 * fold;
+        swayW = hinge * (1.0 - 0.6 * beat);
+    } else if (uPolypMode > 2.5) {
+        // inflating tissue (bubble coral vesicles, the open brain's swollen mantle): the whole piece swells about its
+        // base with the colony extension and a slow breath, and deflates as the night tentacles come out
+        open = clamp(ext * (1.0 - 0.65 * clamp(uPolypDrive, 0.0, 1.0)) * (0.94 + 0.06 * sin(uTime * 0.25 + phase)), 0.0, 1.0);
+        float k = mix(0.35, 1.0, open);
+        p *= vec3(k, mix(0.25, 1.0, open), k);
+        n = normalize(n * vec3(1.0 / k, 1.0 / mix(0.25, 1.0, open), 1.0 / k));
+        swayW = 0.15 * hinge;
     } else if (longTent) {
         // long tentacles stay out: only a small breathing pulse on top of the colony extension
         open = clamp(ext * (0.88 + 0.12 * sin(uTime * 0.3 + phase)), 0.0, 1.0);

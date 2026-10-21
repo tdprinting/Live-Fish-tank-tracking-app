@@ -1918,6 +1918,32 @@ No animal enters solid rock. The rock's real openings come from `anchors.json` `
 - **Test** `RockPenetrationTest`: full default stock, 3 × 1800 s (09:00, 14:00, 20:30), every head and spine station checked every other tick: none inside rock (−0.3 cm tolerance) outside a fitting hole; blennies use their holes and the tailspot backs in tail first; every species-tagged hole fits its animal.
 
 
+### 24.3 Whole bodies from the mesh (`sim/BodyProfile.kt`, `sim/BodyBounds.kt`)
+
+Tee's rule: no part of any body goes through the rock, the sand or the glass. The guards above kept the spine line out;
+the body round it (a tang is 0.48 BL deep) went through. Now every animal's real body is baked from its GLB
+(`tools/collision/bake_body_profiles.py` → `BodyProfileData.kt`, re-run after a model changes): at each of the 16 spine
+stations the body's top, bottom and half-width (body, shell, eyes) and the median fins' top and bottom, in body lengths.
+A station's body is an elliptic section on the drawn frame (forward along the spine, up from `Organism.up`), the fins a
+blade counted at half their height (`FIN_GIVE`: fins fold on contact). `BodyProfile.support` is how far it reaches in a
+direction.
+
+- **Glass and sand** (`BodyBounds`, before the rock guard, and again after a rock re-lay): no station's section may reach
+  past the glass or under the live sand surface (read under the belly's middle and both sides). A rigid body moves back
+  whole; a trail has its stations moved and adopts that shape (the tail slides along the glass, the belly rests on the
+  sand). A lift never brings a station up into the rock: wedged between rock and sand, the body shoves the sand aside.
+- **Rock** (`RockGuard`): a station is blocked when the field there reads less than its body's reach against the field
+  gradient, unless that contact lies under the sand (a buried rock foot) or the station is in a hole that fits it. The
+  re-lay projects stations out to their reach. The per-cell mask stores each cell's lowest field value, so a station
+  skips the lookup when its body cannot reach the rock there. A centreline lying on the sand may read only 0.3 cm into a
+  rock foot (it was 1 cm, and a watchman's tail showed through).
+- **Left to their own rigs**: crawlers on their seats, shells drawn rigid at the organism (crabs, hermits, snails, the
+  urchin, the scallop, the brittle star's disc), invertebrates walking a surface, burrowing or buried animals, and a goby
+  within 1.5 BL of the burrow it digs under the rock (`Organism.burrowMouth`): those keep the spine-line rules.
+- **Test** `BodyPenetrationTest`: full default stock, 3 × 600 s, every station's extreme points toward the rock, down and
+  toward the four panes, every 10th tick: rock ≤ 0.5 cm, sand ≤ 0.4 cm, glass ≤ 0.3 cm. Before: glass up to 7 cm (a
+  tail swung through the front pane; one diamond goby's head 39 cm out), sand 1.5 cm, rock 1.5 cm.
+
 ## 25. Peppermint shrimp and flame scallop (research 42, `ai/PeppermintBrain.kt`, `ai/FileClamBrain.kt`, `sim/ClamRig.kt`)
 - **Peppermint shrimp** (`lysmata_boggessi`, `BrainKind.PEPPERMINT_SHRIMP`; `BrainKind.byId` tells it from the skunk cleaner of the same genus). Shares the shrimp systems (`isShrimp`: touch, submarine, heat, breeding, molting every 10-21 d, banded-shrimp and hawkfish rows in `interactions.json`). Hides by day in a shaded den away from banded shrimp; forays at night (`NightForage`, `ShrimpForage`), nipping zoas only when very hungry.
 - **Aiptasia hunting** (`HuntAiptasia`): about 1 polyp/day when starved, 0.15 when fed (Calado & Narciso 2005, proxy species). It walks to the nearest free polyp within 60 cm (small first), picks for 25-80 s, then kills it (`tissue = 0`); an established polyp is usually shrugged off (25 % kill) unless the shrimp is hungry. Fast time: `AiptasiaModel` counts the live peppermints in the tank (plus any abstract `pests.peppermint`); "Add pest control: peppermint" now floats real shrimp in a bag.
@@ -1936,6 +1962,12 @@ No animal enters solid rock. The rock's real openings come from `anchors.json` `
   - **Harlequin shrimp** (`HARLEQUIN_SHRIMP`, *Hymenocera picta*): hides under rock by day. A hungry one hunts asterina, flips the star (`Organism.heldBy`, which pauses its brain) and eats it over 1.5 to 3 h, then `Simulation.eaten` gives 3 days of satiety. The mate shares the meal. It eats no prepared food. In abstract mode, `abstractFeed` eats a star.
   - **Tiger pistol shrimp** (`PISTOL_SHRIMP`, *Alpheus bellulus*): moves into a free watchman goby's burrow (`WatchmanGobyBrain.partnerShrimp`, which stops the goby's own spitting). By day it bulldozes 0.4 cm3 loads from the burrow onto the apron every 20 to 120 s, keeping within `ANTENNA_CM` of the goby, and ducks in at the goby's `alarmAt` tail flick. A fish within 4 cm gets a snap (`SimEvent.Snap`, a click cue) and an `onAttacked` startle. Without a goby it digs its own burrow and comes out only at night.
   - **Economy**: sexy level 2, 19; fire level 2, 60; pistol level 3, 45; harlequin level 5, 65. The store warns about a harlequin with no asterina, a pistol shrimp without 2.5 cm of sand, and a third fire shrimp.
+- **Batch 3** (research 45, `docs/research/45_clam_crab_star_cucumber.md`):
+  - **Maxima clam** (`GIANT_CLAM`, *Tridacna maxima*, `ai/GiantClamBrain.kt`, `GiantClamTest`): sessile on `ClamRig` (motion mode 7, mantle class 0.4 draped over the rim). It settles on a lit, upward-facing rock ledge (both shell ends on rock, below the surface) or the sand, and lives on light: symbionts feed it from the PAR at its spot (`CoralSpots.lightAt`, saturating at 320, full at 550), it filters a little phytoplankton, and it takes calcium and alkalinity like a stony coral (`demandDkhPerDay`). Too little light (< 200), too much (> 750 suddenly) or heat over 30 °C bleaches it (`Organism.bleach`, shown as desaturation); a shadow, a tap or a nip closes the mantle and it reopens over seconds.
+  - **Green serpent star** (`BRITTLE_STAR` with sheet brain `serpent_star`, *Ophiarachna incrassata*, `ai/SerpentStarBrain.kt`, `SerpentStarTest`): the brittle star's rig and life (`BrittleStarBrain` now takes extra behaviours), with its own hide at the sand foot of the rock. A hungry one (> 0.55) at night grabs a small fish (≤ 0.18 of its span) asleep within an arm's reach: 35 % of grabs hold and the arm carries it to the mouth in 30 s; a miss wakes the fish and the star waits 1-3 h.
+  - **Porcelain crab** (`PORCELAIN_CRAB`, *Neopetrolisthes maculatus*, `ai/PorcelainCrabBrain.kt`, `PorcelainCrabTest`): on the shared crab rig (`CrabLegs.porcelain()`, `CrabModel.PORCELAIN`); its feather fans are the chela entries' fan branch in `crabLimb` (COLOR_0.g = 1), swept in turn at `FAN_HZ`. It takes the nearest anemone with room (two per host) and sits at its foot facing out, fanning plankton and drifting food, resting the fans every minute or so; a third crab is shoved off in a claw-pushing match and the smaller one leaves. A tap sends it scuttling backwards under the tentacles.
+  - **Tiger tail sea cucumber** (`SEA_CUCUMBER`, *Holothuria hilla*, `ai/SeaCucumberBrain.kt`, `SeaCucumberTest`): motion mode 10, a spine-skinned soft body whose spline is the head's own track (`splineOverride`), so it lies along the way it crawled and never across rock. By day it lies with its head under a ledge and the tail out; at night it creeps over open sand at 0.05 cm/s, the oral tentacles wiping the sand film into the mouth one at a time (`SandBed.sift`, settled food too). A tap balls it up (`uFin.x` contraction: shorter and fatter). Heavy stress for 30 min or a real bite spills a quarter of its holothurin, and a dead one leaches the rest over 6 h (`WaterState.holothurin`, toxic to fish through `HealthModel`, taken out by carbon, the skimmer and water changes). An uncovered pump intake within 15 cm can take it (0.001/h).
+  - **Economy**: maxima level 5, 110; porcelain level 2, 18; serpent star level 3, 35; cucumber level 4, 40. The store warns about the clam's light, a porcelain crab with no anemone, a serpent star with small fish, and a second cucumber or the cucumber's toxin.
 - **Render**: `fish.vert` modes 8 (snail) and 9 (urchin) are rigid bodies posed at `uSpine[0]`, with soft parts driven by four (snail) or three (urchin) LimbRig entries, so `uLimbOn` stays off. A dead body is set limp by `LimbRig.beforePose`.
 - **Economy**: PriceBook trochus level 1, 8; conch level 2, 18; urchin level 3, 30 (2025-26 US prices). Grazing and hunger go through the shared AlgaeModel and needs, with no clock of their own.
 

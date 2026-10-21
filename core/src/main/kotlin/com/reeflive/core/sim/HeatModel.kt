@@ -88,36 +88,40 @@ object HeatModel {
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
         BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.FIRE_SHRIMP, BrainKind.SEXY_SHRIMP,
-        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> SHRIMP
+        BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP, BrainKind.MANTIS -> SHRIMP
         BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
         BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG
         // chromis are damselfish like the clown (Pomacentridae; est.)
         BrainKind.CLOWN, BrainKind.CHROMIS, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE -> CLEANER_WRASSE
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.SIXLINE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
         BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.EMERALD_CRAB -> EMERALD_CRAB
+        // a small reef crab of the same water (est., like the emerald crab)
+        BrainKind.PORCELAIN_CRAB -> EMERALD_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
         // the firefish is a dartfish, a goby relative (est.)
-        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH -> SAND_GOBY
+        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH, BrainKind.MANDARIN, BrainKind.CLOWN_GOBY -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.BUTTERFLY -> DEEP_REEF
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
         BrainKind.EEL -> MORAY
-        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.GENERIC_INVERT -> ECHINODERM
+        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.SEA_CUCUMBER, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
         // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)
         BrainKind.FILE_CLAM -> TUBE_WORM
+        // giant clams bleach in heat like corals (GiantClamBrain); the animal itself is a hardy reef-flat bivalve (est.)
+        BrainKind.GIANT_CLAM -> TUBE_WORM
     }
 
     fun isSnail(kind: BrainKind) = kind.isSnail
-    fun isShrimp(kind: BrainKind) = kind.isShrimp
+    fun isShrimp(kind: BrainKind) = kind.isShrimp || kind == BrainKind.MANTIS
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */

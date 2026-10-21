@@ -160,6 +160,9 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
     /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
     fun feedHungry() = holder.enqueue(Command.FeedHungry)
+
+    /** Takes one use of a shelf supply in My tank (or one serving of any fish food, [fishFood]). */
+    fun useSupply(id: String?, fishFood: Boolean = false) = holder.useSupply(id, fishFood)
     /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
     /** Buys a radio record in My tank's record shop; false when it cannot (not My tank, owned, or too dear). */
     fun buyRecord(file: String): Boolean = mode.value == SimMode.CUSTOM && holder.buyRecord(file)
@@ -245,7 +248,21 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun enterStore(store: com.reeflive.core.custom.economy.FishStore) = holder.enterStore(store)
     fun showStoreTank(i: Int) = holder.showStoreTank(i)
     fun leaveStore() = holder.leaveStore()
+    /** A store regular's swap on the trade card, or null. */
+    val trade: StateFlow<com.reeflive.core.custom.economy.TradeOffer?> = holder.tradeState
+    fun showTrade() = holder.showTrade()
+    fun answerTrade(yes: Boolean) = holder.answerTrade(yes)
     fun sell(id: String) = holder.sell(id)
+    // the room: stands for My tank (core room/Decor.kt)
+    val roomShop: StateFlow<com.reeflive.app.live.RoomShopUi?> = holder.roomShop
+    val roomControl get() = holder.roomControl
+    fun decorBuy(key: String, onResult: (com.reeflive.core.custom.room.DecorResult) -> Unit) = holder.decorBuy(key, onResult)
+    fun decorUse(key: String) = holder.decorUse(key)
+    fun decorTry(key: String?) = holder.decorTry(key)
+    /** Turns round the room to the keeper's next tank (+1 / -1). */
+    fun turnStep(dir: Int) = holder.turnStep(dir)
+    /** The camera steps back to show the tank on its stand. */
+    fun showRoom() = holder.roomControl.showRoom()
     /** The 3D shop drawn around the display tank while visiting a store. */
     val storeRoom get() = holder.storeRoom
     /** Walks to the checkout counter in 3D ([on]) or back to the tank. */

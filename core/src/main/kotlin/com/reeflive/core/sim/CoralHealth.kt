@@ -111,6 +111,8 @@ object CoralHealth {
         return when {
             genus.startsWith("palythoa") -> CoralProfile(0.6, 0.8, 0.015, 0.35, 0.05, 0.8, 1.2, CoralSpread.RUNNER, 45.0, 1.4, CoralProfile.PALE_PINK)
             genus.startsWith("ricordea") -> CoralProfile(1.3, 1.4, 0.02, 0.3, 0.1, 1.2, 0.7, CoralSpread.FISSION, 90.0, 1.1)
+            // bounce mushroom (research 61 §2): slow to split, and its vesicles deflate under too much light
+            id.startsWith("rhodactis_inchoata") -> CoralProfile(0.9, 1.4, 0.012, 0.25, 0.1, 0.9, 0.9, CoralSpread.FISSION, 180.0, 1.2)
             genus.startsWith("rhodactis") -> CoralProfile(0.8, 1.2, 0.012, 0.25, 0.1, 0.8, 1.0, CoralSpread.FISSION, 60.0, 1.1)
             genus.startsWith("amplexidiscus") -> CoralProfile(0.8, 1.5, 0.01, 0.4, 0.1, 0.9, 1.0, CoralSpread.FISSION, 120.0, 1.15)
             genus.startsWith("sarcophyton") -> CoralProfile(1.3, 1.0, 0.02, 0.1, 0.35, 1.0, 0.9, CoralSpread.BUD, 150.0, 1.7, CoralProfile.CREAM)
@@ -118,6 +120,17 @@ object CoralHealth {
             genus.startsWith("lobophytum") -> CoralProfile(1.0, 1.0, 0.02, 0.1, 0.3, 0.9, 1.0, CoralSpread.BUD, 160.0, 1.7, CoralProfile.CREAM)
             // duncans are the forgiving LPS (stony_corals.md §4): fed a lot, slow to bleach, recover well
             genus.startsWith("duncanopsammia") -> CoralProfile(0.9, 1.0, 0.02, 0.5, 0.05, 0.9, 1.0, CoralSpread.NONE)
+            // acans are as forgiving as duncans; candy canes fade in strong light; open brains and bubbles bleach and
+            // deflate with a sudden light jump or heat over 28 C and tear easily (stony_corals.md §1, §3)
+            genus.startsWith("montipora") -> CoralProfile(1.2, 1.3, 0.03, 0.15, 0.05, 1.2, 0.7, CoralSpread.NONE)
+            genus.startsWith("seriatopora") -> CoralProfile(1.4, 1.3, 0.03, 0.15, 0.05, 1.5, 0.6, CoralSpread.NONE)
+            genus.startsWith("micromussa") -> CoralProfile(0.9, 1.0, 0.02, 0.5, 0.05, 0.9, 1.0, CoralSpread.NONE)
+            genus.startsWith("caulastrea") -> CoralProfile(0.9, 1.2, 0.02, 0.4, 0.05, 1.0, 1.0, CoralSpread.NONE)
+            genus.startsWith("trachyphyllia") -> CoralProfile(1.0, 1.3, 0.02, 0.4, 0.05, 1.2, 0.8, CoralSpread.NONE)
+            genus.startsWith("plerogyra") -> CoralProfile(1.1, 1.3, 0.02, 0.5, 0.05, 1.0, 0.9, CoralSpread.NONE)
+            // scolymia (research 61 §3): low light, harmed more by too much light than too little, relies on meaty
+            // target feeding; a solitary polyp, never buds
+            genus.startsWith("homophyllia") || genus.startsWith("scolymia") -> CoralProfile(1.1, 1.5, 0.015, 0.6, 0.05, 1.2, 0.8, CoralSpread.NONE)
             else -> when (k) {
                 CoralKind.GSP -> CoralProfile(0.6, 0.7, 0.02, 0.1, 0.05, 0.6, 1.3, CoralSpread.NONE, tint = CoralProfile.GREY)
                 CoralKind.ZOA -> CoralProfile(0.9, 1.0, 0.02, 0.25, 0.05, 1.0, 1.0, CoralSpread.RUNNER, 50.0, 1.4, CoralProfile.PALE_PINK)
@@ -132,6 +145,11 @@ object CoralHealth {
                 CoralKind.LPS -> CoralProfile(1.0, 1.1, 0.02, 0.5, 0.05, 1.1, 0.9, CoralSpread.NONE)
                 CoralKind.MACRO -> CoralProfile(0.5, 0.5, 0.0, 0.0, 0.0, 0.5, 1.5, CoralSpread.NONE)
                 CoralKind.AIPTASIA -> CoralProfile(0.4, 0.5, 0.0, 0.3, 0.0, 0.5, 1.5, CoralSpread.NONE)
+                // SPS: the first to bleach in heat or a light jump, and tissue melts off fast (STN/RTN) once failing,
+                // slow to come back (stony_corals.md §8, coral_health.md). Montipora / birdsnest are the forgiving ones.
+                CoralKind.SPS -> CoralProfile(1.5, 1.4, 0.03, 0.2, 0.05, 1.7, 0.5, CoralSpread.NONE)
+                // Xenia: iodine and food keep it pulsing; spreads over the rock every few weeks when happy (est.)
+                CoralKind.XENIA -> CoralProfile(0.9, 1.0, 0.02, 0.3, 0.4, 1.0, 1.2, CoralSpread.RUNNER, 20.0, 1.1)
                 CoralKind.GENERIC -> CoralProfile()
             }
         }

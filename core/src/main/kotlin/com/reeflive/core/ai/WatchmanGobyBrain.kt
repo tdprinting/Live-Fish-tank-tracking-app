@@ -78,8 +78,8 @@ class WatchmanGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Shifts a lying head point facing [face] so the tail end behind it (toward the rock edge) stays off the rock too. */
     private fun clearTail(at: Vec3, face: Vec3): Vec3 {
         val tail = at - face * o.lengthCm - Vec3.Y * (0.5 * o.lengthCm * sin(PROP_PITCH))
-        if (c.rock.sdf.dist(tail) >= ROCK_GAP_CM + 0.5) return at
-        return offRock(at + (c.rock.sdf.project(tail, ROCK_GAP_CM + 0.5) - tail))
+        if (c.rock.sdf.dist(tail) >= ROCK_GAP_CM + 0.8) return at
+        return offRock(at + (c.rock.sdf.project(tail, ROCK_GAP_CM + 0.8) - tail))
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest =
@@ -145,6 +145,9 @@ class WatchmanGobyBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Lookout : Behavior("lookout", "Keeping watch at its burrow") {
         private var nextLook = 0.0
         private var lookYaw = 0.0
+        private var nextAt = 0.0
+        private var atSpot = Vec3.ZERO
+        private var atCached = Vec3.ZERO
         override fun score(c: Ctx) = if (c.p.night) 0.0 else 0.45
         override fun update(c: Ctx, out: SteerIntent) {
             val side = if (mate != null && o.id > (mate?.id ?: "")) 1.0 else if (mate != null) -1.0 else 0.0
@@ -152,7 +155,15 @@ class WatchmanGobyBrain(c: Ctx) : SpeciesBrain(c) {
             val spot = mouth(lookoutOut) + lat
             if (c.t > nextLook) { nextLook = c.t + c.rng.range(1.5, 5.0); lookYaw = c.rng.signed() * 0.5 }
             val face = Vec3.rotateAbout(horizontalHeading(inDir * -1.0, o.heading), Vec3.Y, lookYaw)
-            val at = clearTail(offRock(Vec3(spot.x, bedY(spot.x, spot.z) + lift, spot.z)), face)
+            // clear of the rock for every way it may look (its tail swings round as it turns its head), not just this one
+            if (c.t >= nextAt || atSpot.distanceTo(spot) > 0.5) {
+                nextAt = c.t + 2.0; atSpot = spot
+                var a = offRock(Vec3(spot.x, bedY(spot.x, spot.z) + lift, spot.z))
+                val out0 = horizontalHeading(inDir * -1.0, o.heading)
+                for (k in -2..2) a = clearTail(a, Vec3.rotateAbout(out0, Vec3.Y, 0.25 * k))
+                atCached = a
+            }
+            val at = atCached
             if (o.pos.distanceTo(at) > 8.0) {
                 out.seek(at, o.cruiseSpeed * 0.8, arrive = 1.0)
                 return

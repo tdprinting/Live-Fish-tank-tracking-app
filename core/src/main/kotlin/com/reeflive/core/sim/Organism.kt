@@ -176,6 +176,13 @@ class Organism(
      * sand contact layer ([SandContact]) neither lifts it out nor pushes a bow wave. Set by the brain, cleared on exit.
      */
     var inSand = false
+    /**
+     * Mouth of the burrow this animal digs under the rock (the gobies; set by the sim every tick, null for the rest).
+     * Within [BURROW_ZONE_BL] body lengths of it the body is in the sand pocket it dug, so the whole-body sand and rock
+     * guards ([BodyBounds], [RockGuard]) keep only its spine line out, as its burrow behaviours expect.
+     */
+    var burrowMouth: Vec3? = null
+    val atBurrow: Boolean get() = burrowMouth?.let { pos.distanceTo(it) < BURROW_ZONE_BL * lengthCm } ?: false
     var sleeping = false
     var hostAnchor: String? = placement
     var homePos: Vec3 = Vec3.ZERO
@@ -199,6 +206,8 @@ class Organism(
     var posture = 0
     var appendagePhase = rng.nextDouble() * 6.28
     var extension = 1.0
+    /** Symbiotic algae lost, 0 healthy .. 1 bleached white (giant clam); shown as desaturation. */
+    var bleach = 0.0
     var visible = true
     var extraRoll = 0.0
     var pitchBias = 0.0
@@ -286,6 +295,11 @@ class Organism(
         spline.reset(p, heading)
     }
 
+    /** How the renderer draws the body ([OrganismPose.motionMode]): 0 fish, 1 brittle-star arms, 2 shrimp, 3 crab, 4 squid, 5 hermit, 6 anemone, 7 scallop, 8 snail, 9 urchin. */
+    val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM || brainKind == BrainKind.GIANT_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else if (brainKind == BrainKind.SEA_CUCUMBER) 10 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp || brainKind == BrainKind.MANTIS) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
+    /** Drawn rigid at its organism (no spine skinning: fish.vert's crawler, scallop, snail and urchin paths). */
+    val drawnRigid: Boolean get() = when (motionMode) { 1, 3, 5, 6, 7, 8, 9 -> true; else -> false }
+
     fun toPose(): OrganismPose {
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
@@ -318,7 +332,7 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            motionMode = motionMode,
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),
@@ -364,6 +378,8 @@ class Organism(
     override fun toString() = "$nickname(${species.id})"
 
     companion object {
+        /** Reach of the burrow pocket round its mouth, in body lengths ([atBurrow]). */
+        const val BURROW_ZONE_BL = 1.5
         /** [appendagePhase] wraps here (rad): 159 whole turns (≈ 999 rad), so a sine of the phase is continuous. */
         const val APPENDAGE_WRAP = 2 * kotlin.math.PI * 159
     }

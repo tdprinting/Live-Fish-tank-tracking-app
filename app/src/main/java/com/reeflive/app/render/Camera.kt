@@ -56,7 +56,7 @@ class Camera {
     /** Smoothed orbit distance in user units (see [effectiveDistance]). */
     val distance: Float get() = exp(distLogS.value)
     val fovY = 50f
-    var near = 0.5f; var far = 800f
+    var near = 0.5f; var far = TANK_FAR
 
     /** True while a finger is on the view (GL thread, from [CameraInput.drain]): soft limits only relax when false. */
     var touching = false
@@ -119,6 +119,10 @@ class Camera {
     /** Looking at the nursery tank beside the display (core NurseryTank); any drag, pinch or reset glides back. */
     var nurseryOn = false; private set
     private var nurseryMix = 0f
+    /** Looking at the music corner left of the tank (MusicCorner.kt); a drag, pinch or reset glides back. */
+    var musicOn = false; private set
+    /** Travel progress to the music corner (0 the tank view, 1 there). */
+    var musicMix = 0f; private set
     /**
      * Submarine mode ([SubmarineScene]): while on, the eye and aim ease to [rideEye] / [rideAim] (set every frame) in
      * place of the orbit or follow camera; turning it off glides back to the default tank view.
@@ -170,6 +174,7 @@ class Camera {
     /** Animated return to the default view; stops any follow. */
     fun reset() {
         nurseryOn = false
+        musicOn = false
         if (followId != null) releaseFollow()
         glide()
         if (storeOn) {
@@ -180,6 +185,17 @@ class Camera {
         }
         target[0] = DEFAULT_TARGET[0]; target[1] = DEFAULT_TARGET[1]; target[2] = DEFAULT_TARGET[2]
         yawGoal = 0f; pitchGoal = DEFAULT_PITCH; distLogGoal = ln(DEFAULT_DISTANCE)
+    }
+
+    /** A step back and a little to the side to see the tank on its stand in its room (the room shop's try-on). */
+    fun roomView() {
+        if (storeOn || shelfOn) return
+        nurseryOn = false
+        musicOn = false
+        if (followId != null) releaseFollow()
+        glide()
+        target[0] = TANK[0] / 2; target[1] = ROOM_TARGET_Y; target[2] = DEFAULT_TARGET[2]
+        yawGoal = ROOM_YAW; pitchGoal = ROOM_PITCH; distLogGoal = ln(storeAisleDistance())
     }
 
     // ---- fish store (StoreRoom.kt): the aisle around the live display tank ----
@@ -207,6 +223,7 @@ class Camera {
         storeOn = on
         storeFocusX = 0f
         storeShift.snap(0f)
+        entryT = -1f
         reset()
     }
 
@@ -224,6 +241,43 @@ class Camera {
         storeFocusX = x
         if (x != 0f) reset()
     }
+
+    // ---- walking into a store from the street (StoreRoom.kt): the eye starts on the sidewalk and goes in the door
+    private var entryT = -1f
+    private val entryDoor = FloatArray(2)
+    /** True while the walk in through the front door plays (a touch on the view skips to the aisle). */
+    val storeEntering: Boolean get() = entryT >= 0f
+
+    /**
+     * Starts the walk in from the sidewalk: the eye stands outside the front door (world x [doorX], its outer face at
+     * z [outsideZ]) looking at the store, the doors open, and it walks through them to the aisle view.
+     */
+    fun storeEntry(doorX: Float, outsideZ: Float) {
+        if (!storeOn) return
+        entryDoor[0] = doorX; entryDoor[1] = outsideZ
+        entryT = 0f
+    }
+
+    /** During the walk in: [eye] / [aim] (the aisle pose) moved along the path in from the street. */
+    private fun walkIn(step: Float) {
+        entryT += step
+        val u = entryT / ENTRY_S
+        if (u >= 1f || touching || !storeOn) { entryT = -1f; return }
+        val v = smooth01(((u - ENTRY_HOLD) / (1f - ENTRY_HOLD)).coerceIn(0f, 1f))
+        val x = entryDoor[0]; val z = entryDoor[1]
+        val eyeY = STORE_FLOOR_Y + ENTRY_EYE_H
+        // quadratic through the doorway at v = ½: control = 2 · door − (start + end) / 2
+        for (i in 0 until 3) {
+            val p0 = when (i) { 0 -> x; 1 -> eyeY; else -> z + ENTRY_BACK }
+            val p1 = when (i) { 0 -> x; 1 -> eyeY; else -> z - 6f }
+            val a0 = when (i) { 0 -> x; 1 -> eyeY - 10f; else -> z - 60f }
+            val a1 = when (i) { 0 -> x; 1 -> eyeY - 25f; else -> z - 320f }
+            eye[i] = bez(p0, 2f * p1 - 0.5f * (p0 + eye[i]), eye[i], v)
+            aim[i] = bez(a0, 2f * a1 - 0.5f * (a0 + aim[i]), aim[i], v)
+        }
+    }
+
+    private fun bez(a: Float, c: Float, b: Float, t: Float): Float { val s = 1f - t; return s * s * a + 2f * s * t * c + t * t * b }
 
     /** A tap on the live tank from the aisle: a close look at it (the normal tank view). False when already close. */
     fun storeZoomIn(): Boolean {
@@ -293,6 +347,28 @@ class Camera {
         aim[0] += (ax - aim[0]) * e; aim[1] += (ay - aim[1]) * e; aim[2] += (az - aim[2]) * e
         eye[1] += sin(PI.toFloat() * e) * SHELF_ARC_UP
         return nurseryMix > 0.5f
+    }
+
+    /**
+     * Blends the music corner framing (the record stand and the radio, square on and a little above) over [eye] /
+     * [aim] on the same arc. True while the eye is mostly there.
+     */
+    private fun blendMusic(dt: Float): Boolean {
+        val goal = if (musicOn) 1f else 0f
+        if (musicMix != goal) {
+            val d = dt / SHELF_TRAVEL_S
+            musicMix = if (goal > musicMix) kotlin.math.min(goal, musicMix + d) else max(goal, musicMix - d)
+        }
+        if (musicMix <= 0f) return false
+        val a = MusicCornerLayout.VIEW_AIM
+        val tanHalf = kotlin.math.tan(Math.toRadians(fovY / 2.0).toFloat())
+        val dist = max(MusicCornerLayout.VIEW_HALF_H / tanHalf, MusicCornerLayout.VIEW_HALF_W / (tanHalf * max(aspect, 0.1f)))
+        val e = smooth01(musicMix)
+        val ex = a[0] + dist * 0.08f; val ey = a[1] + dist * 0.22f; val ez = a[2] + dist
+        eye[0] += (ex - eye[0]) * e; eye[1] += (ey - eye[1]) * e; eye[2] += (ez - eye[2]) * e
+        aim[0] += (a[0] - aim[0]) * e; aim[1] += (a[1] - aim[1]) * e; aim[2] += (a[2] - aim[2]) * e
+        eye[1] += sin(PI.toFloat() * e) * SHELF_ARC_UP
+        return musicMix > 0.5f
     }
 
     /** Advances the shelf travel and look springs, then blends the shelf framing over [eye] / [aim]. */
@@ -372,6 +448,7 @@ class Camera {
     /** Puts [b] back at once (no glide: the caller fades through black). */
     fun restore(b: Bookmark) {
         nurseryOn = false
+        musicOn = false
         val id = b.followId
         // follow state first: releasing a follow re-aims the orbit goals at the eye, which the bookmark then replaces
         if (id == null) { if (followId != null) releaseFollow() } else {
@@ -452,6 +529,14 @@ class Camera {
         if (fZoomS.omega != OMEGA_TOUCH) fZoomS.omega = OMEGA_TOUCH
     }
 
+    /** Glides to the music corner ([on]) or back to the tank view; stops any follow. */
+    fun lookAtMusic(on: Boolean) {
+        if (on && (storeOn || shelfOn)) return
+        if (on && followId != null) releaseFollow()
+        if (on) nurseryOn = false
+        musicOn = on
+    }
+
     /** Glides to the nursery tank ([on]) or back to the tank view; stops any follow. */
     fun lookAtNursery(on: Boolean) {
         if (on && followId != null) releaseFollow()
@@ -462,6 +547,7 @@ class Camera {
     fun orbit(dxPx: Float, dyPx: Float, viewHeightPx: Float) {
         if (shelfOn) { shelfDrag(dxPx, dyPx, viewHeightPx); return }
         if (nurseryOn) { nurseryOn = false; return }
+        if (musicOn) { musicOn = false; return }
         val k = PI.toFloat() / max(viewHeightPx, 1f)
         if (rideOn) {
             rideYaw -= dxPx * k
@@ -499,6 +585,7 @@ class Camera {
     fun zoom(factor: Float) {
         if (factor <= 0f || shelfOn) return
         if (nurseryOn) { nurseryOn = false; return }
+        if (musicOn) { musicOn = false; return }
         if (touching) zoomPending += -ln(factor)
         if (followId != null) { touchFeel(); followZoomLog = SoftLimit.drag(followZoomLog, -ln(factor), FOLLOW_MIN_ZOOM_LOG, FOLLOW_MAX_ZOOM_LOG, ZOOM_GIVE) }
         else { snappy(); distLogGoal = SoftLimit.drag(distLogGoal, -ln(factor), ln(MIN_DISTANCE), ln(maxDistance), ZOOM_GIVE) }
@@ -595,7 +682,7 @@ class Camera {
             initialized = true
         }
         blendShelf(step)
-        val inNursery = blendNursery(step)
+        val inNursery = blendNursery(step) or blendMusic(step)
         // Clearances from the near plane this framing will get, so the near plane can never cut into anything solid.
         val pre = eyeAimDistance()
         val corner = EyeCollider.nearCornerDistance(nearFor(pre), fovY, aspect)
@@ -625,6 +712,9 @@ class Camera {
             val sx = storeShift.step(storeFocusX, step)
             eye[0] += sx; aim[0] += sx
         }
+        if (entryT >= 0f) walkIn(step)
+        // a store's street and far bays lie well past the tank view's far plane
+        far = if (storeOn) STORE_FAR else TANK_FAR
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
         // near plane: 3 % of the view distance, never so far out that its corners reach past the tightest clearance
         val nearCap = (minOf(colliders.bodyClearance, colliders.boxClearance) - 0.2f) / max(EyeCollider.nearCornerDistance(1f, fovY, aspect), 1e-3f)
@@ -1022,6 +1112,10 @@ class Camera {
         const val MAX_YAW = 1.75f
         /** Store aisle (StoreRoom.kt): orbit target height, pitch and limits that keep the eye in the shop. */
         const val STORE_TARGET_Y = 6f
+        /** The room view ([roomView]): aimed between the tank and its stand, from a little right and above. */
+        const val ROOM_TARGET_Y = -16f
+        const val ROOM_YAW = 0.22f
+        const val ROOM_PITCH = 0.14f
         const val STORE_PITCH = 0.16f
         const val STORE_MAX_YAW = 0.4f
         const val STORE_MIN_PITCH = 0f
@@ -1034,6 +1128,16 @@ class Camera {
         const val STORE_CLOSE_EFFECTIVE = 200f
         /** Walking between tanks (rad/s of the critically damped slide). */
         const val OMEGA_WALK = 4.5f
+        const val TANK_FAR = 800f
+        const val STORE_FAR = 4000f
+        /** The walk in from the street: seconds, the share spent standing on the sidewalk first, eye height (cm over the
+         *  floor) and how far out the sidewalk view starts (cm past the front wall). */
+        const val ENTRY_S = 4.6f
+        const val ENTRY_HOLD = 0.24f
+        const val ENTRY_EYE_H = 152f
+        const val ENTRY_BACK = 330f
+        /** The store's floor (StoreRoomLayout.FLOOR_Y). */
+        const val STORE_FLOOR_Y = -82f
         const val MIN_PITCH = -0.3f
         const val MAX_PITCH = 1.38f
         const val YAW_GIVE = 0.3f

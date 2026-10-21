@@ -105,8 +105,8 @@ class FishRig(val id: String) {
         when (brain) {
             "EEL", "ENGINEER_GOBY" -> { envExp = 1.1f; envHead = 0.25f }
             "CARDINAL", "DOTTYBACK", "FIREFISH", "GRAMMA", "CHROMIS" -> { envExp = 2.4f; envHead = 0.05f }
-            "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE", "FAIRY_WRASSE", "BUTTERFLY" -> { envExp = 3.2f; envHead = 0.03f }
-            "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY", "WATCHMAN_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
+            "TANG", "CLOWN", "WRASSE", "LEOPARD_WRASSE", "FAIRY_WRASSE", "SIXLINE", "BUTTERFLY" -> { envExp = 3.2f; envHead = 0.03f }
+            "HAWK", "LAWNMOWER_BLENNY", "PEEKER_BLENNY", "DIAMOND_GOBY", "WATCHMAN_GOBY", "MANDARIN", "CLOWN_GOBY" -> { envExp = 1.8f; envHead = 0.1f }
             else -> { envExp = 2f; envHead = 0.1f }
         }
     }

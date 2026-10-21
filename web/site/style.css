@@ -14,8 +14,7 @@ button { font: inherit; color: inherit; }
 h1 { font-size: 22px; margin: 0; } h2 { font-size: 17px; margin: 24px 0 8px; }
 .muted { color: var(--mist); font-size: 13px; }
 .hidden { display: none !important; }
-.glass { background: rgba(6,19,39,.62); border: 1px solid var(--glassBorder); border-radius: 18px;
-  backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3); }
+.glass { background: rgba(6,19,39,.86); border: 1px solid var(--glassBorder); border-radius: 18px; }
 
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: calc(var(--safe-top) + 8px) 16px 8px; background: linear-gradient(var(--abyss2), var(--abyss1)); z-index: 3; }
@@ -274,7 +273,7 @@ dialog::backdrop { background: rgba(3,9,18,.6); }
 /* ---- live screen, "Sea-glass Arcade" (UI_STYLE §10, §10.1; same theme as the Android LiveTheme): the tank fills
    the phone, one slim top row (mode + a status capsule), a dock of candy bubbles at the bottom, and every menu a
    teal glass sheet of big candy tiles. Navy outlines and chunky drop shadows make each thing look pressable. */
-:root { --navy: #1B1340; --panel: rgba(12,88,102,.80); --labelDim: #CDEFF3; --pillFill: #E9F3FF;
+:root { --navy: #1B1340; --panel: rgba(12,88,102,.92); --labelDim: #CDEFF3; --pillFill: #E9F3FF;
   --display: Outfit, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", system-ui, sans-serif; }
 .tone-cyan { --tone: #5FD7FF; } .tone-orange { --tone: #FFB13D; } .tone-pink { --tone: #FF7AA8; } .tone-yellow { --tone: #FFE14D; }
 .tone-purple { --tone: #B18CFF; } .tone-white { --tone: #F2F6FF; } .tone-green { --tone: #8EE66B; }
@@ -290,7 +289,7 @@ body:not(.on-live) .brand, body:not(.on-live) .tabs { display: none; }
   background: radial-gradient(120% 80% at 30% 15%, rgba(255,255,255,.7), transparent 55%), var(--pillFill);
   color: var(--navy); border: 2.5px solid var(--navy); box-shadow: 0 4px 0 var(--navy); backdrop-filter: none; -webkit-backdrop-filter: none; }
 #card, .fish, .follow, .shelfbar, dialog.glass { background: var(--panel); border: 3px solid var(--navy); border-radius: 28px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 32px rgba(0,0,0,.45); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); }
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 12px 32px rgba(0,0,0,.45); }
 .seg button, .status, .tool .lbl, .card-head strong, h4, .opt, .pillbtn, .btn, .toggle-row, .hero-t, .toast, #hermieText { font-family: var(--display); }
 
 /* top row */
@@ -634,7 +633,44 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
 .hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
+/* supplies behind the counter (stores.js supplyShelf) and the count on each shelf tile (live.js stockBadge) */
+.counter .supplies { margin-top: 10px; max-height: 34vh; overflow-y: auto; }
+.counter .supplies summary { font: 600 16px/1.2 var(--display); cursor: pointer; padding: 4px 0; }
+.counter .crow.sup .nm small { font-size: 12px; }
+.counter .crow.sup.empty .nm small { color: #FFB13D; }
+.counter .crow .pr.owned { color: #8EE66B; }
+.counter .pm:disabled { opacity: .4; }
+.opt { position: relative; }
+.opt .cnt { position: absolute; top: -6px; right: -4px; min-width: 22px; padding: 1px 6px; border-radius: 999px; border: 2px solid var(--navy);
+  background: #fff; color: var(--navy); font: 700 12px/1.3 var(--body, inherit); font-style: normal; }
+.opt .cnt.low { background: #FFE14D; }
+.opt .cnt.out { background: #FF9AA5; }
 
+/* ---- My tank's room shop (room.js): stand tiles, colour swatches, the try-on bar */
+.rtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.rtile { position: relative; border: 2px solid var(--glassBorder); background: var(--glass); border-radius: 14px; padding: 8px 6px 6px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; text-align: center; line-height: 1.15; }
+.rtile b { font-weight: 600; }
+.rtile.on { border-color: var(--lagoonBright); background: rgba(31,166,201,.22); }
+.rtile.lock { opacity: .5; }
+.rtile:active, .swatch:active { transform: scale(.96); }
+.standpic { width: 72px; height: 50px; }
+.xpic { font-size: 28px; line-height: 50px; height: 50px; }
+.tag { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.1); font-size: 11px; color: var(--mist); }
+.tag.on { background: rgba(92,225,230,.25); color: var(--foam); }
+.tag.cost { background: rgba(243,227,195,.16); color: #F3E3C3; font-weight: 600; }
+.tag .sanddollar, .swatch .sanddollar, .trybar .sanddollar { width: 14px; height: 14px; vertical-align: -2px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { border: 2px solid transparent; background: none; border-radius: 14px; padding: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 64px; }
+.swatch.on { border-color: var(--lagoonBright); }
+.swatch.lock { opacity: .5; }
+.swatch .sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.swatch small { font-size: 11px; color: var(--mist); }
+.swatch small.cost { color: #F3E3C3; }
+.trybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 112px); z-index: 6; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 10px 16px; border-radius: 999px; background: rgba(6,19,39,.88); border: 1px solid var(--glassBorder); max-width: calc(100% - 32px); }
+.trybar .what { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trybar [aria-disabled="true"] { opacity: .5; }
 /* the radio's record shelf (radio.js): vinyl sleeves, the one playing ringed, locked ones dimmed with a price */
 .records { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px 8px; padding-bottom: 4px; }
 .record { display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; color: inherit; padding: 4px; border-radius: 14px; cursor: pointer; text-align: center; }
@@ -646,3 +682,25 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .record strong { font-size: 12px; line-height: 1.2; }
 .record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
+
+/* a store regular's swap (stores.js tradeCard) */
+.carecard.trade h3 { margin: 0 0 6px; }
+.carecard.trade p { margin: 6px 0; }
+.carecard.trade .give { color: #E0A800; }
+.carecard.trade .get { color: #1E9E5A; }
+
+/* ---- arrows round the room to the keeper's other tanks (room.js roomNav) */
+.roomnav { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.roomnav.hidden { display: none; }
+.roomnav .turn { pointer-events: auto; position: absolute; top: 50%; transform: translateY(-50%); width: 52px; height: 64px; border-radius: 26px;
+  border: 2px solid var(--glassBorder); background: var(--glass); color: #fff; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.roomnav .turn span { font-size: 30px; line-height: 26px; }
+.roomnav .turn small { font-size: 10px; color: var(--mist); }
+.roomnav .turn.l { left: calc(env(safe-area-inset-left) + 10px); }
+.roomnav .turn.r { right: calc(env(safe-area-inset-right) + 10px); }
+.roomnav .turn:active { transform: translateY(-50%) scale(.94); }
+/* the music corner bar under the 3D record stand and radio (radio.js musicBarHtml) */
+.musicbar p { margin: 2px 0 8px; }
+.musicbar .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.musicbar .card-head .rlbl { display: flex; align-items: center; gap: 6px; }

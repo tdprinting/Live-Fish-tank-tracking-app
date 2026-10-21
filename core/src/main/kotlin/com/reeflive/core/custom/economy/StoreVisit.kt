@@ -33,8 +33,11 @@ data class ShelfCard(
     val warning: String?,
 )
 
-/** What happened at the counter: the result and the species bought, one entry per animal. */
-data class Checkout(val result: BuyResult, val bought: List<String>, val total: Int)
+/**
+ * What happened at the counter: the result, the species bought (one entry per animal) and the supply packs bought
+ * (supply id → packs, already on the shelf).
+ */
+data class Checkout(val result: BuyResult, val bought: List<String>, val total: Int, val supplies: Map<String, Int> = emptyMap())
 
 /**
  * Walking around a store: its day's shelf split into display tanks by section, and the little sim each tank runs while
@@ -44,9 +47,12 @@ object StoreVisit {
     /** Most of one species swimming in a display tank (the shelf can hold more; they are "in the back"). */
     const val MAX_SHOWN = 6
 
-    private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp")
+    private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp", "rhodactis_inchoata")
     private val LEATHERS = setOf("sarcophyton_sp", "lobophytum_sp", "sinularia_sp")
-    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens")
+    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens",
+        "euphyllia_glabrescens_gold", "homophyllia_australis",
+        "micromussa_lordhowensis", "caulastrea_furcata", "trachyphyllia_geoffroyi", "plerogyra_sinuosa")
+    private val SPS = setOf("montipora_capricornis", "seriatopora_hystrix", "acropora_millepora")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
@@ -62,15 +68,19 @@ object StoreVisit {
             Section("Mushrooms & polyps") { it.speciesId in MUSHROOMS_POLYPS },
             Section("Leathers") { it.speciesId in LEATHERS },
             Section("Stony corals (LPS)") { it.speciesId in STONY },
+            Section("Small-polyp stony (SPS)") { it.speciesId in SPS },
             Section("Soft corals & rare frags") { true },
         )
+        // the superstore: a long wall of tanks, one for each kind of animal
         FishStore.BIG_BLUE -> listOf(
             Section("Community fish") { fish(it) && cm(it) < 12 },
             Section("Bigger fish", ::fish),
+            Section("Clean-up crew") { it.speciesId in CLEANUP },
             Section("Shrimp & crabs", ::inverts),
-            Section("Corals", ::corals),
+            Section("Easy corals") { corals(it) && it.level <= 2 },
+            Section("Showy corals", ::corals),
         )
-        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts & corals") { true })
+        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts", ::inverts), Section("Rare corals") { true })
     }
 
     /** Today's display tanks at [store], in walking order; empty sections are skipped. */

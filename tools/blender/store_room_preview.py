@@ -14,7 +14,6 @@ from common import bpy
 
 import store_rooms as SR
 
-BAY = SR.BAY
 CX = SR.CX
 
 
@@ -36,12 +35,26 @@ def place(objs, name, x, z=0.0, y=0.0, yaw=0.0, base=None):
     return o
 
 
+def person(objs, slot, x, z, yaw):
+    """Person [slot] standing at world (x, floor, z) turned [yaw]: every part keeps its joint offset from the feet."""
+    for part in ("Torso", "Head", "ArmL", "ArmR", "LegL", "LegR"):
+        src = objs.get(f"P{slot}_{part}")
+        if src is None:
+            return
+        lx, ly, lz = src.matrix_world.translation
+        c, s = math.cos(yaw), math.sin(yaw)
+        o = place(objs, src.name, 0.0, yaw=yaw)
+        o.location = (x + lx * c - ly * s, -z + lx * s + ly * c, SR.FLOOR + lz)
+
+
 def main(argv):
     sid = argv[0]
     out = argv[1]
     kinds = [int(k) for k in (argv[2] if len(argv) > 2 else "2,3,4").split(",")]
     view = argv[3] if len(argv) > 3 else "aisle"
     at = 0
+    SR.configure(sid)
+    BAY = SR.BAY
     C.reset_scene()
     PV.setup_cycles(960, 540, 40)
     PV.world((0.02, 0.02, 0.025), 0.3)
@@ -63,14 +76,22 @@ def main(argv):
     for bay in range(-1, len(kinds) + 2):
         bx = L0 / 2 - CX + (bay - at) * BAY
         place(objs, "Bay", bx)
+        place(objs, "FrontDoor" if bay == 0 else "FrontBay", bx)
+        place(objs, "Roof", bx)
         if bay == -1:
             place(objs, "EndL", bx)
+            place(objs, "Entry", bx)
+            place(objs, "Neighbor", bx - BAY)
         if bay == len(kinds) + 1:
             place(objs, "EndR", bx)
+            place(objs, "Back", bx)
+            place(objs, "Neighbor", bx + BAY)
+        if bay == 0:
+            for n in ("FrontSign", "Street", "Sky", "DoorL", "DoorR", "DoorUp"):
+                place(objs, n, bx)
         if bay == len(kinds):
             place(objs, "Counter", bx)
-            place(objs, "Clerk", bx + CX, z=15.0, y=SR.FLOOR)
-            place(objs, "ClerkHead", bx + CX, z=15.0, y=SR.FLOOR + 158.6, yaw=0.3)
+            person(objs, 0, bx + CX, 15.0, 0.2)
         if bay == 0:
             place(objs, "Sign", bx)
         place(objs, f"Decor{(bay % 2 + 2) % 2}", bx)
@@ -83,23 +104,26 @@ def main(argv):
             # light under each lamp (Cycles stand-in for store.frag's bay lights)
             H = SR.KINDS[k]["H"]
             PV.add_light('AREA', (tx + L / 2, -SR.KINDS[k]["D"] / 2, H + 30), 2.5e6, size=80, color=(0.85, 0.9, 1.0))
-    # shoppers at the next tank, the walker in the aisle
-    if len(kinds) > 1:
-        nx = L0 / 2 + BAY
-        place(objs, "Shopper0", nx - 62, z=SR.KINDS[kinds[1]]["D"] + 40, y=SR.FLOOR, yaw=math.pi)
-        place(objs, "Shopper1", nx - 38, z=SR.KINDS[kinds[1]]["D"] + 32, y=SR.FLOOR, yaw=math.pi + 0.3)
-    wx = L0 / 2 - BAY * 0.55
-    place(objs, "Walker", wx, z=120, y=SR.FLOOR, yaw=math.pi / 2)
-    place(objs, "WalkerLegL", wx, z=120, y=SR.FLOOR + SR.WALK_HIP, yaw=math.pi / 2)
-    place(objs, "WalkerLegR", wx, z=120, y=SR.FLOOR + SR.WALK_HIP, yaw=math.pi / 2)
+    # the rest of the cast along the aisle in front of the tanks
+    n = sum(1 for o in objs if o.endswith("_Torso"))
+    for slot in range(1, n):
+        x = L0 / 2 + (slot - 1.5) * BAY * 0.55
+        person(objs, slot, x, 110 + (slot % 2) * 40, math.pi + 0.5 * (slot % 3 - 1))
+    if "Pet_Body" in objs:
+        place(objs, "Pet_Body", L0 / 2 + 40, z=170, y=SR.FLOOR, yaw=0.8)
+    if view == "outside":
+        sun = PV.add_light('SUN', (0, 0, 1000), 4.0, color=(1.0, 0.95, 0.85))
+        sun.rotation_euler = (math.radians(50), 0, math.radians(30))
     for bay in range(-1, len(kinds) + 2):
         bx = L0 / 2 + (bay - at) * BAY
-        PV.add_light('AREA', (bx, -170, SR.CEIL - 5), 5.0e6, size=90, color=(1.0, 0.96, 0.9))
+        PV.add_light('AREA', (bx, -170, SR.CEIL - 5), 2.0e6, size=90, color=(1.0, 0.96, 0.9))
     if view == "close":
         PV.camera((L0 / 2, -175, 30), (L0 / 2, -20, 0), lens=30)
     elif view == "counter":
         cx = L0 / 2 + len(kinds) * BAY
         PV.camera((cx - 60, -330, 70), (cx, 0, 0), lens=26)
+    elif view == "outside":
+        PV.camera((L0 / 2, -(SR.FRONT + 360), 80), (L0 / 2, -SR.FRONT, 70), lens=18)
     else:
         PV.camera((L0 / 2 + 60, -420, 95), (L0 / 2 + 90, 0, -5), lens=18)
     bpy.context.scene.camera.data.clip_end = 5000

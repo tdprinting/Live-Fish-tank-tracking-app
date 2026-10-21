@@ -210,6 +210,8 @@ class Simulation private constructor(
     val holeClaims = HoleClaims { it in organisms }
     /** Keeps bodies out of solid rock except in holes that fit them (SIMULATION §4.11). */
     val rockGuard = RockGuard(rock, { x, z -> sand.surfaceY(x, z) }, holeClaims)
+    /** Whole bodies (mesh profiles) inside the glass and on the sand (SIMULATION §24.3). */
+    val bodyBounds = BodyBounds(sand, rock.lengthCm, rock.widthCm, rock.sdf)
 
     // ============================================================== dynamic rockscape
     /** Loose rocks as rigid bodies while [dynamicRocks] is on (null for a scape without separate rocks). */
@@ -792,8 +794,8 @@ class Simulation private constructor(
         if (corals.isEmpty() || food.particles.none { !it.eaten && (it.kind.coralCatchable || it.kind in StonyCorals.MEATY) }) return
         for (c in corals) {
             if (c.tissue < 0.1 || c.extension < 0.3 || c.kind == CoralKind.MACRO) continue
-            // stony LPS also take mysis and brine shrimp, and reach further with their night tentacles out
-            val stony = c.kind.stony
+            // large-polyp stony corals also take mysis and brine shrimp, and reach further with their night tentacles out
+            val stony = StonyCorals.hasNightTentacles(c.kind)
             val reach = (2.0 + CoralGrowth.extent(c) + (if (stony) 3.0 * c.tentacles else 0.0)).coerceIn(3.0, 12.0)   // footprint radius + polyp reach, cm
             val f = food.nearest(c.pos, reach) { it.kind.coralCatchable || (stony && it.kind in StonyCorals.MEATY) } ?: continue
             food.consume(f)
@@ -924,11 +926,30 @@ class Simulation private constructor(
             if (!o.alive || o.leap != null) continue
             val a = agents[o] ?: continue
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.burrowMouth = burrowMouthOf(o, a)
             sandContact.preClamp(o)
+            bodyBounds.apply(o)
+            val relaid = rockGuard.bodyFixes
             rockGuard.apply(o)
+            // (a body the rock guard re-laid round the rock is kept inside the glass and on the sand)
+            if (rockGuard.bodyFixes != relaid) bodyBounds.apply(o)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
+        }
+    }
+
+    /** The mouth of the burrow [o] digs under the rock nearest it (the gobies), else null ([Organism.burrowMouth]). */
+    private fun burrowMouthOf(o: Organism, a: Agent): Vec3? = when (val b = a.brain) {
+        is com.reeflive.core.ai.DiamondGobyBrain -> b.burrow
+        is com.reeflive.core.ai.WatchmanGobyBrain -> b.burrow
+        else -> if (o.brainKind != BrainKind.ENGINEER_GOBY) null else {
+            var best: Burrow? = null; var bd = Double.MAX_VALUE
+            for (w in sand.burrows) if (w.owner == o.id) {
+                val dx = w.mouthX - o.pos.x; val dz = w.mouthZ - o.pos.z; val d = dx * dx + dz * dz
+                if (d < bd) { bd = d; best = w }
+            }
+            best?.let { Vec3(it.mouthX, sand.surfaceY(it.mouthX, it.mouthZ), it.mouthZ) }
         }
     }
 
@@ -947,8 +968,13 @@ class Simulation private constructor(
             a.steering.apply(a.intent)
             o.attached = true
             (o.limbRig as? ShrimpLimbs)?.plant(o, crawlSurface, dt)
+            o.burrowMouth = burrowMouthOf(o, a)
             sandContact.preClamp(o)
+            bodyBounds.apply(o)
+            val relaid = rockGuard.bodyFixes
             rockGuard.apply(o)
+            // (a body the rock guard re-laid round the rock is kept inside the glass and on the sand)
+            if (rockGuard.bodyFixes != relaid) bodyBounds.apply(o)
             o.seat?.update(o, true, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
@@ -995,7 +1021,8 @@ class Simulation private constructor(
         SexRoles.step(organisms, lifeDt)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(lifeMin)
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) } +
+            com.reeflive.core.ai.GiantClamBrain.demandDkhPerDay(organisms)
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
         w.alleloSourcePerHour = CoralGrowth.alleloSource(corals)
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
@@ -1086,8 +1113,11 @@ class Simulation private constructor(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
             (agents[o]?.brain as? com.reeflive.core.ai.DiamondGobyBrain)?.abstractSift(dtMin)
         }
-        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.LEOPARD_WRASSE) {
-            (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive) when (o.brainKind) {
+            BrainKind.LEOPARD_WRASSE -> (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+            BrainKind.MANDARIN -> (agents[o]?.brain as? com.reeflive.core.ai.MandarinBrain)?.abstractPick(dtMin)
+            BrainKind.SIXLINE -> (agents[o]?.brain as? com.reeflive.core.ai.SixlineBrain)?.abstractPick(dtMin)
+            else -> {}
         }
         sandTick(dtMin)
         flushEvents()
@@ -1234,6 +1264,7 @@ class Simulation private constructor(
             when (o.brainKind) {
                 // the harlequin eats only stars (research 44 §2)
                 BrainKind.HARLEQUIN_SHRIMP -> com.reeflive.core.ai.HarlequinShrimpBrain.abstractFeed(o, this)
+                BrainKind.MANTIS -> com.reeflive.core.ai.MantisShrimpBrain.abstractFeed(o, this)
                 BrainKind.WRASSE, BrainKind.CLEANER_SHRIMP, BrainKind.FIRE_SHRIMP ->
                     if (day && clients > 0) o.hunger = max(0.0, o.hunger - rise * (0.15 + 0.05 * clients).coerceAtMost(0.6) * 1.5 * dtMin)
                 // filter feeders and detritivores live partly on detritus / bacterioplankton
@@ -1241,6 +1272,9 @@ class Simulation private constructor(
                     o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
                 // the flame scallop lives on phytoplankton only (research 42 §2.4)
                 BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.GIANT_CLAM -> com.reeflive.core.ai.GiantClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.PORCELAIN_CRAB -> com.reeflive.core.ai.PorcelainCrabBrain.abstractFeed(o, this, dtMin)
+                BrainKind.SEA_CUCUMBER -> com.reeflive.core.ai.SeaCucumberBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }
@@ -1298,6 +1332,9 @@ class Simulation private constructor(
                 CoralKind.LEATHER -> small += 80 * open
                 // Euphyllia and the meaty LPS catch pods and plankton with their tentacles, most at night (est.)
                 CoralKind.EUPHYLLIA, CoralKind.LPS -> small += 60 * (open + c.tentacles)
+                // SPS and xenia: tiny polyps, many of them (est.)
+                CoralKind.SPS -> small += 120 * open
+                CoralKind.XENIA -> small += 40 * open
                 CoralKind.MACRO -> macro += 0.5 * c.tissue
                 else -> {}
             }
@@ -1360,12 +1397,16 @@ class Simulation private constructor(
                 BrainKind.FIRE_SHRIMP -> Triple(21.0, 42.0, 36.0)
                 BrainKind.SEXY_SHRIMP -> Triple(21.0, 35.0, 24.0)
                 BrainKind.HARLEQUIN_SHRIMP, BrainKind.PISTOL_SHRIMP -> Triple(25.0, 45.0, 24.0)
+                // research 62 §2: adult stomatopods molt every month or two and hide for days after [I]
+                BrainKind.MANTIS -> Triple(40.0, 70.0, 72.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
                 // a spider crab (Majoidea) stops molting at maturity (terminal molt of puberty, Hartnoll 1963); young
                 // arrow crabs molt about monthly (est.)
                 BrainKind.ARROW_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(25.0, 45.0, 24.0) else continue
                 // research 43 §1: every 4-8 weeks while growing (care guides); a majid too, so none after the terminal molt
                 BrainKind.EMERALD_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(28.0, 56.0, 24.0) else continue
+                // research 45 §2: a small anomuran that keeps molting as it grows (est., like the shrimp)
+                BrainKind.PORCELAIN_CRAB -> Triple(25.0, 45.0, 24.0)
                 else -> continue
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
@@ -1405,6 +1446,8 @@ class Simulation private constructor(
             val age = simTimeSec - since
             val dt = carcassRelease(o, age, dtMin)
             if (dt > 0) { o.carcassTanReleasedG += dt; water.addDetritusTanGrams(dt) }
+            // a dead sea cucumber leaches its holothurin (research 45 §4)
+            if (o.brainKind == BrainKind.SEA_CUCUMBER) com.reeflive.core.ai.SeaCucumberBrain.carcassLeach(o, this, age, dtMin)
             if (age > 48 * 3600) { removed += o; it.remove() }
         }
         removed.forEach { agents.remove(it) }
@@ -2031,10 +2074,10 @@ class Simulation private constructor(
         val id = seed.id.ifBlank { "${sp.id}#${idCounter++}" }
         if (sp.isCoral) {
             val a = seed.placement?.let { rock.anchors[it] ?: rock.anchors["coral_$it"] }
-                ?: if (sp.coralKind.stony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
-            // a stony coral has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
-            val offset = seed.offset ?: if (a == null && sp.coralKind.stony)
-                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
+                ?: if (sp.fragColony) null else rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
+            // a stony coral (or another frag) has no anchor on this rock: one added on its own goes to a free spot (as Add life places them)
+            val offset = seed.offset ?: if (a == null && sp.fragColony)
+                Stocking.coralSpots(rock, corals.map { it.pos }, 1, rng, Stocking.spacingCm(sp.coralKind), StonyCorals.place(sp)).firstOrNull()?.let { it.first - StonyCorals.STUDIO }
                 else null
             val pos = (a?.pos ?: StonyCorals.STUDIO) + (offset ?: Vec3.ZERO)
             val normal = if (offset != null) Vec3.Y else a?.normal ?: Vec3.Y
@@ -2050,6 +2093,8 @@ class Simulation private constructor(
         if (o.brainKind == BrainKind.DIAMOND_GOBY) o.acceptsPrepared = rng.chance(0.6)
         // leopard wrasses: many learn frozen mysis/cyclops, thin ones never do (Fenner, TFH; LiveAquaria)
         if (o.brainKind == BrainKind.LEOPARD_WRASSE) o.acceptsPrepared = rng.chance(0.7)
+        // research 51 §1 facts 24, 32-34: captive-bred mandarins (most sold now) often learn frozen food, wild ones seldom
+        if (o.brainKind == BrainKind.MANDARIN) o.acceptsPrepared = rng.chance(0.5)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)
@@ -2106,6 +2151,9 @@ class Simulation private constructor(
     }
 
     fun agentOf(o: Organism): Agent? = agents[o]
+
+    /** A brain's own death sentence for [o] (a sea cucumber sucked into a pump), with its event. */
+    fun killNow(o: Organism, cause: String) = HealthModel.kill(o, cause, simTimeSec, pendingEventsSink)
 
     fun lightChannels(): DoubleArray = lightCh.copyOf()
     val lightIntensity: Double get() = LightSchedule.intensity(lightCh)

@@ -4,10 +4,12 @@ import { SAND_DOLLAR } from './care.js';
 
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
-const pic = (it) => `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
+const pic = (it) => it.pack ? '<span class="sp">🧴</span>' : `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
 
 let my, say, cue, onLeave;
-let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
+let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false, offer = null;
+// the store's people talk in speech bubbles over their heads (render StorePeople; live.js styles .tbubble)
+const talk = { layer: null, els: [], raf: 0 };
 
 /** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
@@ -28,7 +30,7 @@ export function initStores(opts) {
   ui.className = 'hidden';
   (document.getElementById('live') || document.body).appendChild(ui);
   ui.addEventListener('click', onClick);
-  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter() };
+  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter(), trade: showTrade };
 }
 
 function enter(id) {
@@ -40,7 +42,68 @@ function enter(id) {
   ui.classList.remove('hidden');
   cue?.('TICK');
   say?.(`${d.greeting} Tap a tank to walk over to it, and the counter to pay.`);
+  offer = null;
   render();
+  startTalk();
+  // the bell on the door rings as the walk in from the sidewalk reaches it
+  setTimeout(() => { if (data) cue?.('BELL'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1500);
+}
+
+function startTalk() {
+  if (talk.raf) return;
+  if (!talk.layer) { talk.layer = document.createElement('div'); talk.layer.className = 'tbubbles'; document.getElementById('tank').after(talk.layer); }
+  const frame = () => {
+    if (!data) { stopTalk(); return; }
+    talk.raf = requestAnimationFrame(frame);
+    let list = [];
+    try { list = JSON.parse(my.storeBubbles()); } catch { list = []; }
+    const cnv = document.getElementById('tank'), k = cnv.clientWidth / Math.max(1, cnv.width);
+    while (talk.els.length < list.length) { const el = document.createElement('div'); el.className = 'tbubble'; el.style.maxWidth = '200px'; talk.layer.appendChild(el); talk.els.push(el); }
+    talk.els.forEach((el, i) => {
+      const b = list[i];
+      if (!b) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      if (el.textContent !== b.text) el.textContent = b.text;
+      el.style.left = `${Math.max(100, Math.min(cnv.clientWidth - 100, b.x * k))}px`;
+      el.style.top = `${Math.max(40, b.y * k - 10)}px`;
+      el.style.opacity = b.a.toFixed(2);
+    });
+  };
+  frame();
+}
+
+function stopTalk() {
+  cancelAnimationFrame(talk.raf); talk.raf = 0;
+  for (const el of talk.els) el.remove();
+  talk.els = [];
+}
+
+/** A store regular walked up with a swap (core StoreTrades): the trade card. */
+function showTrade() {
+  if (!data) return;
+  try { offer = JSON.parse(my.trade()); } catch { offer = null; }
+  if (!offer) return;
+  cue?.('TICK');
+  render();
+}
+
+function answerTrade(yes) {
+  const o = offer;
+  offer = null;
+  my.answerTrade(yes);
+  cue?.('TICK');
+  if (yes && o) say?.(`Traded! Your ${o.get} is floating in a bag at the top of your tank.`);
+  render();
+}
+
+function tradeCard(o) {
+  return `<div class="caremodal"><div class="carecard glass trade">
+    <h3>${esc(o.trader)} wants to trade!</h3>
+    <p>“${esc(o.line)}”</p>
+    <p><b class="give">You give:</b> ${o.frag ? `a frag of your ${esc(o.give)} (it stays in your tank, a little smaller)` : `one ${esc(o.give)}`}</p>
+    <p><b class="get">You get:</b> a ${esc(o.get)}, in a bag at the top of your tank</p>
+    <div class="row-gap"><button class="pill" data-strade="no">No thanks</button><button class="pill collect" data-strade="yes">Trade!</button></div>
+  </div></div>`;
 }
 
 /** The checkout: the camera walks to the counter in 3D and the till opens. */
@@ -62,7 +125,8 @@ function closeCounter() {
 function leave(quiet) {
   if (!data) return;
   my.leaveStore();
-  data = null; bag = []; picked = null; counterOpen = false;
+  data = null; bag = []; picked = null; counterOpen = false; offer = null;
+  stopTalk();
   document.body.classList.remove('instore');
   ui.classList.add('hidden');
   ui.innerHTML = '';
@@ -90,14 +154,17 @@ function pick(id) {
 }
 
 const tank = () => data.tanks[at];
-const item = (id) => data.tanks.flatMap((t) => t.items).find((x) => x.id === id);
+const SUP = 'supply:';
+/** An animal card, or a supply pack ("supply:<id>" in the bag) from behind the counter. */
+const item = (id) => id.startsWith(SUP) ? supply(id.slice(SUP.length)) : data.tanks.flatMap((t) => t.items).find((x) => x.id === id);
+const supply = (id) => { const s = data.supplies?.find((x) => x.id === id); return s && { ...s, left: s.keeps ? (s.owned ? 0 : 1) : 99 }; };
 const inBag = (id) => bag.filter((x) => x === id).length;
 const total = () => bag.reduce((s, id) => s + (item(id)?.price || 0), 0);
 
 function add(id) {
   const it = item(id);
   if (!it || it.locked) return;
-  if (inBag(id) >= it.left) { say?.(`That is all the ${it.name} they have today.`); return; }
+  if (inBag(id) >= it.left) { say?.(it.keeps ? `You only need one ${it.name.toLowerCase()}.` : `That is all the ${it.name} they have today.`); return; }
   bag.push(id);
   cue?.('TICK');
   const b = ui.querySelector('.bagbtn');
@@ -117,13 +184,21 @@ function pay() {
     refresh(); render();
     return;
   }
-  const n = bag.length;
   payFx(r.total);
+  if (!r.animals) {
+    // only supplies: they are on the shelf at home now, and the keeper keeps shopping
+    bag = [];
+    refresh(); render();
+    cue?.('TICK');
+    say?.(`Paid ${r.total}! Your supplies are waiting on the shelf at home.`);
+    return;
+  }
+  const n = r.animals;
   data = null; bag = []; counterOpen = false;
   document.body.classList.remove('instore');
   ui.classList.add('hidden'); ui.innerHTML = '';
   cue?.('FEED');
-  say?.(`Paid ${r.total}! ${n === 1 ? 'Your new animal is' : `Your ${n} new animals are`} floating in bags at the top of the tank. They come out when the water in the bag is warm.`);
+  say?.(`Paid ${r.total}! ${r.supplies ? 'Your supplies are on the shelf, and ' : ''}${n === 1 ? (r.supplies ? 'your new animal is' : 'Your new animal is') : `${r.supplies ? 'your' : 'Your'} ${n} new animals are`} floating in bags at the top of the tank. They come out when the water in the bag is warm.`);
   onLeave();
 }
 
@@ -174,9 +249,10 @@ function render() {
       ${pic(it)}<span class="nm">${esc(it.name)}</span>
       <span class="pr">${it.locked ? `🔒 Lv ${it.level}` : `${SAND_DOLLAR}${it.price}`}</span>
       ${inBag(it.id) ? `<i class="inbag">${inBag(it.id)}</i>` : ''}</button>`).join('')}</div>
-    <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter ${bag.length ? '' : 'disabled'}>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
+    <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
     ${counterOpen ? counter(coins, sum) : ''}
-    ${sellOpen ? sellSheet() : ''}`;
+    ${sellOpen ? sellSheet() : ''}
+    ${offer ? tradeCard(offer) : ''}`;
 }
 
 function card(p, coins) {
@@ -205,11 +281,25 @@ function counter(coins, sum) {
   const short = sum - coins;
   return `<div class="caremodal" data-scounterbg><div class="carecard glass counter">
     <h3>The counter</h3>${rows || '<p class="muted">Your bag is empty.</p>'}
+    ${supplyShelf()}
     <div class="ctotal"><span>Total</span><b>${SAND_DOLLAR}${sum}</b></div>
     <p class="muted">You have ${coins}. After paying: <b>${Math.max(0, coins - sum)}</b></p>
     <div class="carefoot" style="gap:10px"><button class="pill" data-scounterclose>Keep shopping</button>
       <button class="pill collect" data-spay ${short > 0 || !bag.length ? 'disabled' : ''}>${short > 0 ? `Need ${short} more` : `Pay ${sum}`}</button></div>
   </div></div>`;
+}
+
+/** The supplies behind the counter (core SupplyBook): foods, salt, doses and tools for the shelf at home. */
+function supplyShelf() {
+  const rows = (data.supplies || []).map((s) => {
+    const n = inBag(SUP + s.id);
+    const have = s.keeps ? (s.owned ? 'You have one' : '') : `You have ${s.have}`;
+    const btn = s.locked ? `<span class="pr">🔒 Lv ${s.level}</span>`
+      : s.owned ? '<span class="pr owned">✓</span>'
+      : `${n ? `<button class="pm" data-sremove="${SUP}${s.id}">−</button><b>${n}</b>` : ''}<button class="pm" data-sadd="${SUP}${s.id}" ${s.keeps && n ? 'disabled' : ''}>+</button><span class="pr">${SAND_DOLLAR}${s.price}</span>`;
+    return `<div class="crow sup ${s.have === 0 && !s.keeps ? 'empty' : ''}"><span class="nm">${esc(s.name)}<br><small class="muted">${esc(s.pack)}${have ? ` · ${have}` : ''}</small></span>${btn}</div>`;
+  }).join('');
+  return `<details class="supplies" open><summary>Supplies for your shelf</summary>${rows}</details>`;
 }
 
 /** The Sell sheet (docs/ECONOMY.md §6): the store's offer for each of your animals, wanted ones first. */
@@ -236,6 +326,8 @@ function sell(id, pet) {
 }
 
 function onClick(e) {
+  const t = e.target.closest('[data-strade]');
+  if (t) { answerTrade(t.dataset.strade === 'yes'); return; }
   const b = e.target.closest('[data-ssell],[data-ssellid],[data-ssellclose],[data-ssellbg],[data-sleave],[data-stank],[data-sgo],[data-spick],[data-sadd],[data-sremove],[data-sclose],[data-scounter],[data-scounterclose],[data-spay],[data-scounterbg]');
   if (!b) return;
   const d = b.dataset;

@@ -39,6 +39,9 @@ CARDS = {
     "gramma_loreto": "royal_gramma",
     "pterapogon_kauderni": "banggai",
     "cryptocentrus_cinctus": "watchman_goby",
+    "synchiropus_splendidus": "mandarin",
+    "pseudocheilinus_hexataenia": "sixline_wrasse",
+    "gobiodon_okinawae": "clown_goby",
     "zebrasoma_gemmatum": "gem_tang",
     "chaetodon_daedalma": "wrought_iron_butterfly",
     "euprymna_berryi": "bobtail_squid",
@@ -46,6 +49,12 @@ CARDS = {
     "lysmata_amboinensis": "skunk_shrimp",
     "lysmata_boggessi": "peppermint_shrimp",
     "ctenoides_scaber": "flame_scallop",
+    "tridacna_maxima": "maxima_clam",
+    "tridacna_crocea": "crocea_clam",
+    "odontodactylus_scyllarus": "mantis_shrimp",
+    "ophiarachna_incrassata": "serpent_star",
+    "neopetrolisthes_maculatus": "porcelain_crab",
+    "holothuria_hilla": "tiger_tail_cucumber",
     "clibanarius_tricolor": "hermit_blue",
     "paguristes_cadenati": "hermit_scarlet",
     "percnon_gibbesi": "sally_lightfoot",
@@ -71,10 +80,17 @@ CARDS = {
     "gracilaria_sp": "macro_red",
     "tubipora_musica": "organ_pipe",
     "zoanthus_sp": "zoa",
+    "euphyllia_glabrescens_gold": "gold_torch",
+    "rhodactis_inchoata": "bounce_mushroom",
+    "homophyllia_australis": "scolymia",
 }
-TOP = {"brittle_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
-HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "gsp_mat",
-        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin"}
+TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
+CORAL_HIGH = {"bounce_mushroom", "scolymia"}
+HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "mantis_shrimp", "flame_scallop", "maxima_clam", "crocea_clam", "gsp_mat",
+        "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin", "tiger_tail_cucumber"}
+
+# models built gape along +x that sit gape up in the tank
+GAPE_UP = {"maxima_clam", "crocea_clam"}
 
 
 def render_card(species, glb, size=512, samples=32):
@@ -89,6 +105,13 @@ def render_card(species, glb, size=512, samples=32):
     PV.world((0.35, 0.42, 0.5), 1.0)
     objs = PV.import_glb(os.path.join(C.MODELS, glb + ".glb"))
     SP.instance_polyps(objs)
+    if glb in GAPE_UP:
+        # sits hinge down with the gape (+x) to the light, as in the tank
+        for o in objs:
+            if o.parent is None:
+                o.rotation_mode = "XYZ"
+                o.rotation_euler = (0, math.radians(-90), 0)
+        bpy.context.view_layer.update()
     meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH' and not o.hide_render]
     pts = [o.matrix_world @ Vector(c) for o in meshes for c in o.bound_box]
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
@@ -102,7 +125,7 @@ def render_card(species, glb, size=512, samples=32):
                  color=(0.85, 0.92, 1.0))
     PV.add_light('AREA', tuple(ctr + Vector((1.0, 1.4, 0.8)) * big), 40 * big * big, size=big, color=(0.7, 0.85, 1.0))
     yaw = math.radians(-28)
-    elev = 1.45 if glb in TOP else (0.6 if glb in HIGH else 0.28)
+    elev = 1.45 if glb in TOP else (0.9 if glb in CORAL_HIGH else (0.6 if glb in HIGH else 0.28))
     d = big * 4 + 1
     loc = ctr + Vector((d * math.sin(yaw) * math.cos(elev), -d * math.cos(yaw) * math.cos(elev), d * math.sin(elev)))
     PV.camera(tuple(loc), tuple(ctr), lens=50, ortho=big * 1.12)

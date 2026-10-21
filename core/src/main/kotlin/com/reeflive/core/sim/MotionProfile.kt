@@ -189,6 +189,16 @@ object MotionProfiles {
         // watchman goby: rests propped on its fused pelvics, hops off the bottom in short bursts like the sleeper gobies [L]
         BrainKind.WATCHMAN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 2.0, strouhal = 0.3, tailPP = 0.22, tailHzMin = 1.6,
             glideS = 0.3, beatsPerBout = 2.0, sinkCmS = 2.5, bankGain = 0.5, cStartDeg = 130.0),
+        // mandarin (research 51 §1): hovers a few mm over the rock on fanning pectorals, then a short hop on to the next
+        // spot; slow, never far [L]
+        BrainKind.MANDARIN to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.25, tailPP = 0.15, tailHzMin = 1.2,
+            glideS = 0.2, beatsPerBout = 1.5, sinkCmS = 1.5, bankGain = 0.4, cStartDeg = 110.0),
+        // six line (research 51 §2): a fast, slinky labriform darter, quick pectoral rowing with tail bursts [L]
+        BrainKind.SIXLINE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.5, pecHzHover = 4.0, pecHzMax = 7.0, rowBodyAmp = 0.03,
+            bobPitch = 0.04, bobHz = 2.0, bankGain = 1.2, cStartDeg = 140.0),
+        // clown goby (research 51 §3): sits on a branch, short hops between branches on quick tail beats [L]
+        BrainKind.CLOWN_GOBY to MotionProfile(Gait.PERCH_HOP, pecHzHover = 3.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 2.0,
+            glideS = 0.2, beatsPerBout = 2.0, sinkCmS = 2.0, bankGain = 0.5, cStartDeg = 120.0),
         // butterflyfish (research 60 §2): a deep disc that rows on its pectorals at cruise and hangs nose-down to peck;
         // the tail joins in only for a dash (Chaetodontidae are labriform swimmers, Webb 1994 [M]) [L]
         BrainKind.BUTTERFLY to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.8, pecHzMax = 5.5, rowBodyAmp = 0.015,
@@ -205,12 +215,16 @@ object MotionProfiles {
         BrainKind.SEXY_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 10.0, stopGoMoveS = 0.6, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),
         BrainKind.HARLEQUIN_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 0.7, walkBurstCmS = 12.0, stopGoMoveS = 2.0, stopGoPauseS = 1.5, footprintBL = 0.3, bodyUpRate = 1.0),
         BrainKind.PISTOL_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 18.0, stopGoMoveS = 1.0, stopGoPauseS = 0.6, footprintBL = 0.3, bodyUpRate = 1.5),
+        // research 62 §2: no walking speeds found; a mantis scuttles in quick dashes and darts backwards into its burrow
+        // with a tail flip [E]
+        BrainKind.MANTIS to MotionProfile(Gait.WALK, walkCmS = 3.0, walkBurstCmS = 45.0, stopGoMoveS = 1.2, stopGoPauseS = 0.8, footprintBL = 0.25, bodyUpRate = 1.5),
         // jerky shell-dragging walk, 1–3 cm/s, stops every 1–3 s [L]
         BrainKind.HERMIT to MotionProfile(Gait.WALK, walkCmS = 1.5, walkBurstCmS = 3.0, stopGoMoveS = 2.0, stopGoPauseS = 1.2),
         // very fast for a crab; the species sheet's speeds stand (bursts 4–8 BL/s) and the brain's scuttle supplies the stop-go [L]
         BrainKind.SALLY_CRAB to MotionProfile(Gait.WALK),
         // slow, deliberate stilt-walk 0.5–2 cm/s with long pauses; a fast scramble to cover only when startled (research 42) [L]
         // research 43 §1: a small crab that walks steadily and scuttles home fast when startled (speeds est.)
+        BrainKind.PORCELAIN_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 8.0, stopGoMoveS = 3.0, stopGoPauseS = 3.0),
         BrainKind.EMERALD_CRAB to MotionProfile(Gait.WALK, walkCmS = 0.8, walkBurstCmS = 6.0, stopGoMoveS = 4.0, stopGoPauseS = 2.5),
         BrainKind.ARROW_CRAB to MotionProfile(Gait.WALK, walkCmS = 1.0, walkBurstCmS = 6.0, stopGoMoveS = 3.0, stopGoPauseS = 2.0),
         // rowing O. echinata: 1.3 ± 0.5 cm/s at 0.23 ± 0.08 Hz, speed set by cycle frequency (Astley 2012) [M];
@@ -234,6 +248,8 @@ object MotionProfiles {
         BrainKind.ANEMONE to MotionProfile(Gait.SESSILE),
         // wedged in its crevice; the brain moves it itself when it claps away (research 42 §2.3)
         BrainKind.FILE_CLAM to MotionProfile(Gait.SESSILE),
+        BrainKind.GIANT_CLAM to MotionProfile(Gait.SESSILE),
+        BrainKind.SEA_CUCUMBER to MotionProfile(Gait.GLIDE, walkCmS = 0.05, walkBurstCmS = 0.1),
         // bobtail squid: fin hovering 1–3 Hz fin beat, jet escapes and attack lunges (research cephalopod_squid [M][L]); the
         // jet speeds live in the species sheet (burstBL) and SquidRig
         BrainKind.BOBTAIL_SQUID to MotionProfile(Gait.FIN_JET, pecHzHover = 1.5, pecHzMax = 3.0, bankGain = 0.4, cStartDeg = 0.0),

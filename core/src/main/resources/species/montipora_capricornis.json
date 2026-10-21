@@ -1,0 +1,105 @@
+{
+  "id": "montipora_capricornis",
+  "kind": "CORAL",
+  "common": "Montipora cap",
+  "scientific": "Montipora capricornis",
+  "family": "Acroporidae",
+  "maxLengthCm": 60,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 6,
+  "lifespanYears": 30,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 26.7,
+      "tolLo": 23.5,
+      "tolHi": 28.0,
+      "lethalLo": 20.0,
+      "lethalHi": 31.0
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 9.5,
+      "tolLo": 7.0,
+      "tolHi": 11.0,
+      "lethalLo": 5.5,
+      "lethalHi": 13.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 5.0,
+      "tolHi": 20.0,
+      "lethalHi": 60.0
+    },
+    "po4": {
+      "optHi": 0.05,
+      "tolHi": 0.15,
+      "lethalHi": 0.4
+    }
+  },
+  "model": "models/montipora_cap.glb",
+  "colors": {
+    "primary": "#8A3E8E",
+    "secondary": "#4FB86A",
+    "accent": "#C86AFF"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.4,
+    "lightHi": 1.1,
+    "flow": "MODERATE",
+    "growth": "Fast",
+    "stingCm": 0,
+    "ground": "ROCK",
+    "aggression": "None: no sweepers, but gets stung by LPS and shaded by its own plates",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; takes phytoplankton or rotifers now and then.",
+  "temperamentSummary": "Thin swirling plates that grow out in whorls, covered in tiny polyps; purple, green or red with a pale growing rim.",
+  "careNotes": [
+    "PAR about 150-250: lower light gives broad flat plates, higher light tighter whorls. Raise the light over 2-3 weeks.",
+    "Moderate indirect flow: strong flow can lift the plates off the rock.",
+    "Alkalinity 8-9.5 dKH, calcium 400-450, magnesium 1250-1450, and steady: it builds skeleton fast.",
+    "The easiest SPS to start with."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.6,
+  "starvationDays": 9999
+}

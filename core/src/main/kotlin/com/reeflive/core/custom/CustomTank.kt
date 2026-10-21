@@ -258,6 +258,7 @@ object WaterFields {
         F("detritus", { it.detritus }, { w, v -> w.detritus = v }), F("co2_index", { it.co2Index }, { w, v -> w.co2Index = v }),
         F("doc", { it.doc }, { w, v -> w.doc = v }), F("allelo", { it.allelo }, { w, v -> w.allelo = v }),
         F("chaeto", { it.chaeto }, { w, v -> w.chaeto = v }), F("h2s", { it.h2s }, { w, v -> w.h2s = v }),
+        F("holothurin", { it.holothurin }, { w, v -> w.holothurin = v }),
     )
 
     fun read(w: WaterState): Map<String, Double> {

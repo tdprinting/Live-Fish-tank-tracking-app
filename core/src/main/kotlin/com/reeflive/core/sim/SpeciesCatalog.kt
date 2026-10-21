@@ -120,9 +120,19 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.15, 6.0, 0.0, 160.0), diet = listOf("DETRITUS", "MYSIS", "BRINE", "PELLET"),
                     feedsPerDay = 1.0, temperament = Temperament(0.4, 0.3, 0.3, 0.85), hardiness = 0.75, homeRadiusCm = 15.0, brain = "pistol_shrimp",
                     model = "models/pistol_shrimp.glb")
+                BrainKind.MANTIS -> base.copy(kind = "INVERT", common = "Peacock mantis shrimp", maxLengthCm = 18.0, typicalAdultCm = 12.0, depthRatio = 0.12,
+                    locomotion = Locomotion("WALKING", 0.25, 4.0, 0.0, 160.0), diet = listOf("PRAWN", "KRILL", "MYSIS", "PELLET"),
+                    feedsPerDay = 0.4, temperament = Temperament(0.8, 0.7, 0.6, 0.6), hardiness = 0.8, homeRadiusCm = 40.0, brain = "mantis_shrimp",
+                    model = "models/mantis_shrimp.glb")
                 BrainKind.FILE_CLAM -> base.copy(kind = "INVERT", common = "Flame scallop", maxLengthCm = 7.5, typicalAdultCm = 6.0, depthRatio = 0.38, massCoeff = 0.06,
                     locomotion = Locomotion("SESSILE", 0.0, 2.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 3.0, hardiness = 0.3,
                     starvationDays = 30.0, homeRadiusCm = 10.0, model = "models/flame_scallop.glb", buoyantWhenDead = false)
+                BrainKind.GIANT_CLAM -> base.copy(kind = "INVERT", common = "Maxima clam", maxLengthCm = 25.0, typicalAdultCm = 15.0, depthRatio = 0.42, massCoeff = 0.12,
+                    locomotion = Locomotion("SESSILE", 0.0, 0.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 0.5, hardiness = 0.55,
+                    starvationDays = 40.0, homeRadiusCm = 5.0, model = "models/maxima_clam.glb", buoyantWhenDead = false)
+                BrainKind.SEA_CUCUMBER -> base.copy(kind = "INVERT", common = "Tiger tail sea cucumber", maxLengthCm = 30.0, typicalAdultCm = 25.0, depthRatio = 0.12, massCoeff = 0.02,
+                    activity = "NOCTURNAL", locomotion = Locomotion("CRAWLING", 0.003, 0.006, 0.0, 6.0), diet = listOf("DETRITUS", "PELLET"), feedsPerDay = 1.0,
+                    hardiness = 0.5, starvationDays = 60.0, homeRadiusCm = 60.0, model = "models/tiger_tail_cucumber.glb", buoyantWhenDead = false)
                 BrainKind.HERMIT -> base.copy(kind = "INVERT", common = "Hermit crab", maxLengthCm = 3.0, depthRatio = 0.8, massCoeff = 0.08, activity = "NOCTURNAL",
                     locomotion = Locomotion("WALKING", 0.15, 1.0, 0.0, 90.0), diet = listOf("ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"), feedsPerDay = 2.0,
                     grazer = true, hardiness = 0.85, homeRadiusCm = 40.0, model = "models/hermit.glb")
@@ -132,6 +142,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.EMERALD_CRAB -> base.copy(kind = "INVERT", common = "Emerald crab", maxLengthCm = 5.0, typicalAdultCm = 3.0, depthRatio = 0.45, massCoeff = 0.03,
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.25, 2.0, 0.0, 120.0), diet = listOf("ALGAE", "MEATY", "MYSIS", "PELLET", "DETRITUS"),
                     feedsPerDay = 1.0, grazer = true, temperament = Temperament(0.25, 0.25, 0.4, 0.7), hardiness = 0.8, homeRadiusCm = 30.0, model = "models/emerald_crab.glb")
+                BrainKind.PORCELAIN_CRAB -> base.copy(kind = "INVERT", common = "Porcelain crab", maxLengthCm = 2.5, typicalAdultCm = 1.8, depthRatio = 0.3, massCoeff = 0.03,
+                    locomotion = Locomotion("WALKING", 0.4, 4.0, 0.0, 120.0), diet = listOf("PLANKTON", "PHYTOPLANKTON", "DETRITUS", "MYSIS", "BRINE"),
+                    feedsPerDay = 3.0, temperament = Temperament(0.2, 0.4, 0.3, 0.6), hardiness = 0.75, homeRadiusCm = 6.0, brain = "porcelain_crab", model = "models/porcelain_crab.glb")
                 BrainKind.ARROW_CRAB -> base.copy(kind = "INVERT", common = "Arrow crab", maxLengthCm = 6.0, typicalAdultCm = 4.5, depthRatio = 0.6, massCoeff = 0.006,
                     activity = "NOCTURNAL", locomotion = Locomotion("WALKING", 0.25, 1.5, 0.0, 120.0), diet = listOf("MEATY", "MYSIS", "PELLET", "FLAKE", "DETRITUS"),
                     feedsPerDay = 1.0, temperament = Temperament(0.45, 0.55, 0.6, 0.4), hardiness = 0.75, homeRadiusCm = 45.0, model = "models/arrow_crab.glb")
@@ -195,6 +208,18 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                     locomotion = Locomotion("LABRIFORM", 0.6, 6.0, 2.2, 260.0, 0.9, 0.04, 0.1), zone = Zone(0.0, 0.15, 0.1, 0.8),
                     temperament = Temperament(0.3, 0.45, 0.5, 0.7), diet = listOf("MYSIS", "BRINE", "PODS", "PELLET", "FLAKE", "MEATY"),
                     hardiness = 0.85, starvationDays = 24.0, homeRadiusCm = 15.0, iridescence = 0.15, model = "models/watchman_goby.glb")
+                BrainKind.MANDARIN -> base.copy(common = "Mandarin dragonet", maxLengthCm = 8.0, typicalAdultCm = 6.5, depthRatio = 0.2, massCoeff = 0.014,
+                    lifespanYears = 5.0, locomotion = Locomotion("PERCHING", 0.35, 3.0, 1.5, 220.0, 0.9, 0.03, 0.08), zone = Zone(0.0, 0.3, 0.05, 0.8),
+                    temperament = Temperament(0.1, 0.35, 0.4, 0.55), diet = listOf("PODS", "CYCLOPS", "BRINE", "MYSIS"),
+                    hardiness = 0.6, starvationDays = 10.0, homeRadiusCm = 35.0, iridescence = 0.35, model = "models/mandarin.glb")
+                BrainKind.SIXLINE -> base.copy(common = "Six line wrasse", maxLengthCm = 10.0, typicalAdultCm = 7.5, depthRatio = 0.3, massCoeff = 0.016,
+                    lifespanYears = 8.0, locomotion = Locomotion("LABRIFORM", 1.0, 8.0, 2.8, 380.0, 0.9, 0.035, 0.1), zone = Zone(0.05, 0.6, 0.15, 0.85),
+                    temperament = Temperament(0.6, 0.7, 0.6, 0.35), diet = listOf("PODS", "MYSIS", "BRINE", "CYCLOPS", "FLAKE", "PELLET"),
+                    hardiness = 0.85, homeRadiusCm = 40.0, iridescence = 0.15, model = "models/sixline_wrasse.glb")
+                BrainKind.CLOWN_GOBY -> base.copy(common = "Yellow clown goby", maxLengthCm = 3.5, typicalAdultCm = 3.0, depthRatio = 0.42, massCoeff = 0.02,
+                    lifespanYears = 4.0, locomotion = Locomotion("PERCHING", 0.6, 5.0, 3.0, 300.0, 0.9, 0.04, 0.1), zone = Zone(0.15, 0.7, 0.05, 0.9),
+                    temperament = Temperament(0.2, 0.4, 0.4, 0.5), diet = listOf("CYCLOPS", "BRINE", "MYSIS", "PODS", "ZOOPLANKTON"),
+                    hardiness = 0.75, homeRadiusCm = 10.0, iridescence = 0.1, model = "models/clown_goby.glb")
                 BrainKind.BUTTERFLY -> base.copy(common = "Wrought iron butterflyfish", family = "Chaetodontidae", maxLengthCm = 15.0, typicalAdultCm = 13.0,
                     depthRatio = 0.62, massCoeff = 0.024, lifespanYears = 10.0, locomotion = Locomotion("LABRIFORM", 1.2, 6.0, 3.0, 260.0, 0.9, 0.03, 0.08),
                     zone = Zone(0.15, 0.8, 0.5, 0.5), temperament = Temperament(0.15, 0.55, 0.75, 0.45),

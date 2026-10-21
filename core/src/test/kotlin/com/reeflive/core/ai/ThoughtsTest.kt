@@ -35,14 +35,24 @@ class ThoughtsTest {
             sim.species.ensure(id)
             sim.addFromSeed(LivestockSeed(id, "", cm, id = id))
         }
-        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie", "gramma_loreto" to "Royal", "cryptocentrus_cinctus" to "Watch", "chaetodon_daedalma" to "Iron")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
+        for ((id, nick) in listOf("ecsenius_bicolor" to "Bix", "ecsenius_midas" to "Goldie", "gramma_loreto" to "Royal", "cryptocentrus_cinctus" to "Watch", "synchiropus_splendidus" to "Mandy", "pseudocheilinus_hexataenia" to "Stripes", "gobiodon_okinawae" to "Lemon", "chaetodon_daedalma" to "Iron")) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, nick, 5.0, id = id)) }
         for (id in listOf("lysmata_boggessi", "ctenoides_scaber")) sim.species.ensure(id)
         sim.addFromSeed(LivestockSeed("lysmata_boggessi", "Minty", 4.0, id = "pep"))
+        sim.species.ensure("odontodactylus_scyllarus")
+        sim.addFromSeed(LivestockSeed("odontodactylus_scyllarus", "Punchy", 12.0, id = "mantis"))
         sim.addFromSeed(LivestockSeed("ctenoides_scaber", "Flame", 6.0, id = "clam"))
         sim.species.ensure("stenorhynchus_seticornis")
         sim.addFromSeed(LivestockSeed("stenorhynchus_seticornis", "Pokey", 4.5, id = "arrow"))
         sim.species.ensure("mithraculus_sculptus")
         sim.addFromSeed(LivestockSeed("mithraculus_sculptus", "Emmy", 3.0, id = "emerald"))
+        sim.species.ensure("ophiarachna_incrassata")
+        sim.addFromSeed(LivestockSeed("ophiarachna_incrassata", "Slinky", 30.0, id = "serpent"))
+        sim.species.ensure("tridacna_maxima")
+        sim.addFromSeed(LivestockSeed("tridacna_maxima", "Max", 12.0, id = "maxima"))
+        sim.species.ensure("neopetrolisthes_maculatus")
+        sim.addFromSeed(LivestockSeed("neopetrolisthes_maculatus", "Dot", 1.8, id = "porcelain"))
+        sim.species.ensure("holothuria_hilla")
+        sim.addFromSeed(LivestockSeed("holothuria_hilla", "Stripes", 25.0, id = "cucumber"))
         for ((id, nick) in listOf("lysmata_debelius" to "Blaze", "thor_amboinensis" to "Wiggles", "hymenocera_picta" to "Harley", "alpheus_bellulus" to "Bang")) {
             sim.species.ensure(id)
             sim.addFromSeed(LivestockSeed(id, nick, 3.0, id = nick.lowercase()))

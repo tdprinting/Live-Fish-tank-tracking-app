@@ -72,6 +72,10 @@ object Stocking {
         StockEntry("gramma_loreto", StockGroup.FISH, "Royal gramma", 6.5),
         StockEntry("pterapogon_kauderni", StockGroup.FISH, "Banggai cardinalfish", 6.5),
         StockEntry("cryptocentrus_cinctus", StockGroup.FISH, "Yellow watchman goby", 7.5),
+        // research 51: batch 2
+        StockEntry("synchiropus_splendidus", StockGroup.FISH, "Mandarin dragonet", 6.5),
+        StockEntry("pseudocheilinus_hexataenia", StockGroup.FISH, "Six line wrasse", 7.5),
+        StockEntry("gobiodon_okinawae", StockGroup.FISH, "Yellow clown goby", 3.0),
         // research 60: rare and expensive fish (late-game Deep Reef Imports)
         StockEntry("zebrasoma_gemmatum", StockGroup.FISH, "Gem tang", 18.0),
         StockEntry("chaetodon_daedalma", StockGroup.FISH, "Wrought iron butterflyfish", 13.0),
@@ -105,6 +109,12 @@ object Stocking {
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
         // research 42: a file clam for a crevice; starves without daily phytoplankton
         StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
+        StockEntry("tridacna_maxima", StockGroup.INVERTS, "Maxima clam", 15.0),
+        StockEntry("tridacna_crocea", StockGroup.INVERTS, "Ultra crocea clam", 8.0),
+        StockEntry("odontodactylus_scyllarus", StockGroup.INVERTS, "Peacock mantis shrimp", 12.0),
+        StockEntry("ophiarachna_incrassata", StockGroup.INVERTS, "Green serpent star", 35.0),
+        StockEntry("neopetrolisthes_maculatus", StockGroup.INVERTS, "Porcelain crab", 1.8),
+        StockEntry("holothuria_hilla", StockGroup.INVERTS, "Tiger tail sea cucumber", 25.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),
@@ -122,6 +132,17 @@ object Stocking {
         StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
         StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
         StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
+        StockEntry("micromussa_lordhowensis", StockGroup.CORALS, "Acan coral", 8.0),
+        StockEntry("caulastrea_furcata", StockGroup.CORALS, "Candy cane coral", 10.0),
+        StockEntry("trachyphyllia_geoffroyi", StockGroup.CORALS, "Open brain coral", 10.0),
+        StockEntry("plerogyra_sinuosa", StockGroup.CORALS, "Bubble coral", 12.0),
+        StockEntry("euphyllia_glabrescens_gold", StockGroup.CORALS, "Gold torch coral", 15.0),
+        StockEntry("rhodactis_inchoata", StockGroup.CORALS, "Bounce mushroom", 6.0),
+        StockEntry("homophyllia_australis", StockGroup.CORALS, "Scolymia", 8.0),
+        StockEntry("montipora_capricornis", StockGroup.CORALS, "Montipora cap", 12.0),
+        StockEntry("seriatopora_hystrix", StockGroup.CORALS, "Birdsnest coral", 10.0),
+        StockEntry("acropora_millepora", StockGroup.CORALS, "Acropora", 12.0),
+        StockEntry("xenia_umbellata", StockGroup.CORALS, "Pulsing xenia", 6.0),
     )
 
     /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
@@ -160,7 +181,8 @@ object Stocking {
         // Euphyllia: retail spacing 6-10 in so the sweepers do not reach (stony_corals.md §1-3)
         CoralKind.EUPHYLLIA -> 15.0
         CoralKind.GSP, CoralKind.LEATHER -> 12.0
-        CoralKind.LPS -> 10.0
+        CoralKind.LPS, CoralKind.SPS -> 10.0
+        CoralKind.XENIA -> 8.0
         CoralKind.ZOA, CoralKind.ORGAN_PIPE, CoralKind.CLOVE -> 8.0
         else -> 6.0
     }
@@ -175,7 +197,7 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.fragColony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }
@@ -226,7 +248,7 @@ object Stocking {
         val room = MAX_CORALS - sim.corals.size
         val want = min(count.coerceIn(0, MAX_CORALS_PER_ADD), max(0, room))
         if (want == 0) return 0
-        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
+        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind), StonyCorals.place(sp))
         for ((p, _) in spots) placeCoral(sim, sp, p)
         return spots.size
     }
@@ -265,9 +287,10 @@ object Stocking {
 
     /**
      * Up to [count] free spots for new colonies: upward-facing rock tops or open sand, away from the glass, with
-     * room above to grow, and at least [spacing] from [taken] colonies and each other.
+     * room above to grow, and at least [spacing] from [taken] colonies and each other, where [place] allows.
      */
-    fun coralSpots(rock: RockData, taken: List<Vec3>, count: Int, rng: com.reeflive.core.geom.Rng, spacing: Double): List<Pair<Vec3, Vec3>> {
+    fun coralSpots(rock: RockData, taken: List<Vec3>, count: Int, rng: com.reeflive.core.geom.Rng, spacing: Double,
+                   place: StonyCorals.Place = StonyCorals.Place.ANY): List<Pair<Vec3, Vec3>> {
         val out = ArrayList<Pair<Vec3, Vec3>>()
         val used = ArrayList(taken)
         var gap = spacing
@@ -280,6 +303,8 @@ object Stocking {
                 val z = rng.range(5.0, rock.widthCm - 3.0)
                 val (p, n) = surfaceSpot(rock, x, z) ?: continue
                 if (n.y < 0.6) continue                                   // too steep: it would hang off the rock
+                if (place == StonyCorals.Place.SAND && p.y > rock.sandTopCm + 0.5) continue      // free-living, on the sand
+                if (place == StonyCorals.Place.HIGH_ROCK && p.y < rock.sandTopCm + 8.0) continue // up in the light
                 if (p.y > rock.waterLevelCm - 15) continue                // no room to grow
                 if (used.any { it.distanceTo(p) < gap }) continue
                 out += p to n; used += p

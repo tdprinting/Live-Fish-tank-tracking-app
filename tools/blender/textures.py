@@ -14,7 +14,8 @@ S = P.smoothstep
 
 
 def caustic(size=512, seed=7):
-    """Tileable caustic network: Voronoi edge (F2-F1) intensity, 3 octaves, gamma 2.2. Grayscale."""
+    """Tileable caustic network: Voronoi edge (F2-F1) intensity, 3 octaves, gamma 2.2. Grayscale (caustic_rgb adds the
+    dispersion copies)."""
     acc = np.zeros((size, size), np.float32)
     for o, (n, wgt, width) in enumerate(((14, 0.55, 0.05), (28, 0.3, 0.045), (56, 0.15, 0.04))):
         f1, f2, _ = P.voronoi(size, size, n, seed + o)
@@ -25,6 +26,32 @@ def caustic(size=512, seed=7):
     acc = np.clip(acc, 0, 1) ** 2.2
     acc = acc / acc.max()
     return acc
+
+
+# uv shift of the colour fringes on the caustic lines. lighting.glsl causticColor used to take two more reads of the
+# tile, at uv +/- this shift, for the red and blue ends of a fringe; the tile now carries those two reads in its G and B
+# channels, so the whole fringe comes out of one read. 1.6 x (0.0035, 0.0025) is the shift the old code used at mid depth
+# (it grew with depth, from 1 x just under the surface to 2.2 x down on the sand).
+CAUSTIC_SPLIT = (0.0056, 0.0040)
+
+
+def caustic_rgb(acc):
+    """The caustic tile with its two dispersion copies, so one texture read gives the three colours of a fringe:
+    R the tile, G the tile as read at uv + CAUSTIC_SPLIT, B as read at uv - CAUSTIC_SPLIT (a periodic bilinear shift,
+    what the sampler itself would return; uv.x runs along the columns, uv.y down the rows). Everything else reads R."""
+    size = acc.shape[0]
+
+    def shifted(sign):
+        dx, dy = sign * CAUSTIC_SPLIT[0] * size, sign * CAUSTIC_SPLIT[1] * size
+        ix, iy = int(np.floor(dx)), int(np.floor(dy))
+        fx, fy = dx - ix, dy - iy
+
+        def at(i, j):   # out[r, c] = acc[r + i, c + j]
+            return np.roll(acc, (-i, -j), (0, 1))
+
+        return (1 - fy) * ((1 - fx) * at(iy, ix) + fx * at(iy, ix + 1)) + fy * ((1 - fx) * at(iy + 1, ix) + fx * at(iy + 1, ix + 1))
+
+    return np.stack([acc, shifted(1.0), shifted(-1.0)], axis=-1)
 
 
 def height_to_normal(hm, strength):
@@ -129,7 +156,7 @@ def quantize(rgb, step=4, seed=0):
 
 def build_all(verbose=True):
     out = {}
-    out["caustic_512.png"] = C.write_png(os.path.join(C.TEXTURES, "caustic_512.png"), caustic())
+    out["caustic_512.png"] = C.write_png(os.path.join(C.TEXTURES, "caustic_512.png"), caustic_rgb(caustic()))
     out["water_n1.png"] = C.write_png(os.path.join(C.TEXTURES, "water_n1.png"), water_normal(512, 11, 4))
     out["water_n2.png"] = C.write_png(os.path.join(C.TEXTURES, "water_n2.png"), water_normal(512, 23, 7, 4, 4.0))
     out["irid_lut.png"] = C.write_png(os.path.join(C.TEXTURES, "irid_lut.png"), irid_lut())

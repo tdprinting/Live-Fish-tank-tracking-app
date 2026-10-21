@@ -1,0 +1,113 @@
+{
+  "id": "ophiarachna_incrassata",
+  "kind": "INVERT",
+  "common": "Green serpent star",
+  "scientific": "Ophiarachna incrassata",
+  "family": "Ophiodermatidae",
+  "maxLengthCm": 50,
+  "typicalAdultCm": 35,
+  "lifespanYears": 5,
+  "depthRatio": 0.1,
+  "massCoeff": 0.004,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.04,
+    "burstBL": 0.3,
+    "tailHzCruise": 0,
+    "turnRateDeg": 90,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.5,
+    "openWater": 0.0,
+    "coverAffinity": 0.95
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 30,
+  "temperament": {
+    "aggression": 0.2,
+    "boldness": 0.6,
+    "curiosity": 0.4,
+    "skittishness": 0.4
+  },
+  "diet": [
+    "DETRITUS",
+    "MYSIS",
+    "PLANKTON",
+    "MEATY"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.8,
+  "starvationDays": 60,
+  "model": "models/serpent_star.glb",
+  "colors": {
+    "primary": "#4F7D22",
+    "secondary": "#1A2A12",
+    "accent": "#E3C93A"
+  },
+  "brain": "serpent_star",
+  "minTankGallons": 55,
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "copperSensitive": true,
+  "dietSummary": "Scavenger and opportunist: leftover food, meaty foods and detritus, which it races to at feeding time. A hungry one catches small fish resting near the rock at night.",
+  "temperamentSummary": "Hides under the rock by day with an arm or two out, comes out boldly at feeding time and roams the rock at night. Big and fast for a star.",
+  "careNotes": [
+    "Can catch and eat small fish (firefish, cardinals, gobies) at night, mostly when underfed. Feed it a piece of meaty food a few times a week.",
+    "Needs a cave or overhang near the sand big enough to hide its disc.",
+    "Sheds an arm when attacked and grows it back over a few months.",
+    "Sensitive to copper and to quick salinity changes; acclimate slowly."
+  ],
+  "size": {
+    "lod0Tris": 1965
+  }
+}

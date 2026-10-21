@@ -486,7 +486,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                         // a few grains trickle from the corners of the mouth as it lifts out
                         val bed = sand.surfaceY(s.x, s.z)
                         val spill = held * SPILL_SHARE
-                        sand.expel(s.x, bed + 0.2, s.z, spill, fwd.x * 0.5, 1.5, fwd.z * 0.5, fines = 2, maxGrains = 6)
+                        sand.expel(s.x, bed + 0.2, s.z, spill, fwd.x * 0.5, 1.5, fwd.z * 0.5, fines = 3, maxGrains = 12)
                         held -= spill
                         mouthfuls++
                         phase = 2; timer = 0.0; chew = c.rng.range(SIFT_MIN_S, SIFT_MAX_S); nextSeep = LIFT_S
@@ -524,7 +524,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                         val part = if (pulses == EXPEL_PULSES) held else held / (EXPEL_PULSES - pulses + 1)
                         for (sg in SIGNS) {
                             val g = gill(sg); val l = side(sg)
-                            sand.expel(g.x, g.y, g.z, 0.5 * part, l.x * 3.5 - fwd.x * 5.0, -0.5, l.z * 3.5 - fwd.z * 5.0, fines = 2, maxGrains = 16)
+                            sand.expel(g.x, g.y, g.z, 0.5 * part, l.x * 3.5 - fwd.x * 5.0, -0.5, l.z * 3.5 - fwd.z * 5.0, fines = 3, maxGrains = 32)
                         }
                         held -= part
                         if (pulses == 1) {
@@ -574,7 +574,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
             c.o.inSand = false
             pitch = 0.0
             // interrupted with a mouthful: it lets the sand go where it is
-            if (held > 0) { sand.expel(o.pos.x, o.pos.y, o.pos.z, held, 0.0, -1.0, 0.0, fines = 1, maxGrains = 10); held = 0.0 }
+            if (held > 0) { sand.expel(o.pos.x, o.pos.y, o.pos.z, held, 0.0, -1.0, 0.0, fines = 1, maxGrains = 20); held = 0.0 }
         }
     }
 

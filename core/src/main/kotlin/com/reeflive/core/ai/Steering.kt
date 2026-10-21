@@ -698,7 +698,7 @@ class Steering(private val c: Ctx) {
     }
 
     companion object {
-        /** Body trail points stay this far (cm) inside the glass. */
+        /** Body trail points stay this far (cm) inside the glass and under the water line. */
         const val GLASS_KEEP_CM = 0.1
         /** C-start stage durations (s), stretched from the real 20–40 ms so the bend survives the 20 Hz sim tick. */
         const val C_STAGE1 = 0.12

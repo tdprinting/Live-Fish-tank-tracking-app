@@ -35,14 +35,15 @@ NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
 # triangle budgets for LOD0 files: (total max, body max) ; None = not checked
 FISH = ["clown_orange", "clown_darwin", "tang", "cardinal", "wrasse", "engineer_goby", "hawkfish",
         "lawnmower_blenny", "tailspot_blenny", "dottyback", "diamond_goby", "leopard_wrasse",
-        "bicolor_blenny", "midas_blenny", "firefish", "chromis", "yellow_tang", "purple_tang", "fairy_wrasse", "royal_gramma", "banggai", "watchman_goby", "gem_tang", "wrought_iron_butterfly",
+        "bicolor_blenny", "midas_blenny", "firefish", "chromis", "yellow_tang", "purple_tang", "fairy_wrasse", "royal_gramma", "banggai", "watchman_goby",
+        "mandarin", "sixline_wrasse", "clown_goby", "gem_tang", "wrought_iron_butterfly",
         "bobtail_squid"]  # the squid is unit length facing +X too (arm tips = "snout"; tools/blender/squid.py)
 BUDGET = {
     "clown_orange": 5000, "clown_darwin": 5000, "tang": 5800, "cardinal": 5000, "wrasse": 4000,
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
-    "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "royal_gramma": 4800, "banggai": 4800, "watchman_goby": 4800, "gem_tang": 6000, "wrought_iron_butterfly": 6000, "firefish": 4800, "chromis": 4800, "bobtail_squid": 4600,
+    "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "royal_gramma": 4800, "banggai": 4800, "watchman_goby": 4800, "gem_tang": 6000, "wrought_iron_butterfly": 6000, "firefish": 4800, "chromis": 4800, "mandarin": 4800, "sixline_wrasse": 4800, "clown_goby": 4800, "bobtail_squid": 4600,
     "yellow_tang": 6000, "purple_tang": 6000, "fairy_wrasse": 4800,
-    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "fire_shrimp": 4200, "sexy_shrimp": 4200, "harlequin_shrimp": 4200, "pistol_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "brittle_star": 2000,
+    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "fire_shrimp": 4200, "sexy_shrimp": 4200, "harlequin_shrimp": 4200, "pistol_shrimp": 4200, "mantis_shrimp": 5200, "flame_scallop": 3200, "maxima_clam": 3600, "crocea_clam": 3600, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "tiger_tail_cucumber": 5200, "porcelain_crab": 5200, "brittle_star": 2000, "serpent_star": 2000,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     "trochus": 2800, "fighting_conch": 3800, "tuxedo_urchin": 5000,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen
@@ -65,6 +66,9 @@ BUDGET = {
     "macro_red": 6500, "organ_pipe": 2500, "algae_tufts": 1100,
     # stony corals (tools/blender/stony_corals.py; sandbox / My tank only): skeleton + mantle bodies, tentacles instanced
     "hammer": 1500, "torch": 1500, "frogspawn": 1600, "duncan": 2000,
+    "acan": 1000, "candy_cane": 2000, "open_brain": 1400, "bubble": 1000,
+    "gold_torch": 1500, "scolymia": 1800, "bounce_mushroom": 1200,
+    "montipora_cap": 2000, "birdsnest": 3200, "acropora": 1400, "xenia": 700,
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
     "supply_shelf": 18000,
@@ -89,7 +93,8 @@ BODY_BUDGET = {"engineer_goby": 5600}
 SNOUT_A = {"bobtail_squid": 0.3}
 # sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
 SANDBOX_ONLY = {"bobtail_squid", "aiptasia", "berghia",
-                "gsp_mat", "hammer", "torch", "frogspawn", "duncan"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
+                "gsp_mat", "hammer", "torch", "frogspawn", "duncan", "gold_torch", "scolymia", "bounce_mushroom",
+                "acan", "candy_cane", "open_brain", "bubble", "montipora_cap", "birdsnest", "acropora", "xenia"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}
