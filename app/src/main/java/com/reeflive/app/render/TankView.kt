@@ -72,6 +72,8 @@ fun TankView(
     aim: TankAimControl? = null,
     /** A fish store visit: the shop drawn around the display tank ([StoreRoomControl]); null = at home. */
     storeRoom: StoreRoomControl? = null,
+    /** Screensaver mode over this view ([CinemaSession]); it drives the camera while active. */
+    cinema: CinemaSession? = null,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -81,7 +83,7 @@ fun TankView(
         demoWhenEmpty = false, cleaning = cleaning, onScrape = onScrape, onFlipperTap = onFlipperTap, onFollow = onFollow, onTouchTank = onTouchTank,
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson, followCam = followCam,
-        nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim, storeRoom = storeRoom,
+        nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim, storeRoom = storeRoom, cinema = cinema,
     )
 }
 
@@ -123,8 +125,10 @@ fun TankView(
     onSpot: ((com.reeflive.core.sim.TankSpot, Float, Float) -> Unit)? = null,
     aim: TankAimControl? = null,
     storeRoom: StoreRoomControl? = null,
+    cinema: CinemaSession? = null,
 ) {
     val pick by rememberUpdatedState(onPick)
+    val cine by rememberUpdatedState(cinema)
     val followReq by rememberUpdatedState(onFollow)
     val scrape by rememberUpdatedState(onScrape)
     val flipperTap by rememberUpdatedState(onFlipperTap)
@@ -147,7 +151,11 @@ fun TankView(
             override fun onLongPress(worldPoint: Vec3) = press(worldPoint)
             override fun onFinger(worldPoint: Vec3?, speedCmS: Float, surface: TouchSurface) = finger(worldPoint, speedCmS, surface)
             override fun onFlick(worldPoint: Vec3, velocity: Vec3) = flick(worldPoint, velocity)
-            override fun onFollowLost(id: String) = lost(id)
+            override fun onFollowLost(id: String) {
+                // a screensaver follow is the director's, not the keeper's
+                val c = cine
+                if (c != null && c.active) c.followLost() else lost(id)
+            }
             override fun onScrape(stroke: GlassStroke) = scrape(stroke)
             override fun onFlipperTap() = flipperTap()
             override fun onSpot(spot: com.reeflive.core.sim.TankSpot, x: Float, y: Float) {
@@ -176,12 +184,15 @@ fun TankView(
                         v.aim = aim
                         v.storeRoom = storeRoom
                         if (followCam != null) v.followCam = followCam
+                        cinema?.attach(v.renderer) { v.height.toFloat() }
                         view = v
                     }
                 },
                 update = { v ->
                     v.setQuality(quality)
-                    v.follow(followId)
+                    // while the screensaver runs it owns the follow; the keeper's comes back with their view
+                    if (cinema?.active != true) v.follow(followId)
+                    cinema?.attach(v.renderer) { v.height.toFloat() }
                     v.demoWhenEmpty = demoWhenEmpty
                     v.setCleaning(cleaning)
                     v.projection = projection
