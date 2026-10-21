@@ -69,7 +69,7 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     uv += vec2(sin(uv.y * 9.0 + t * 1.9), cos(uv.x * 8.0 - t * 1.6)) * (0.02 * busy);
     vec2 uvA = uv + t * vec2(0.031, 0.019) * busy;
     vec2 uvB = uv * 1.37 - t * vec2(0.024, -0.033) * busy;
-    float blur = 0.6 + depth * 0.02;
+    float blur = 1.0 + depth * 0.02;
     float a = texture(uCaustic, uvA, blur).r;
     vec3 b;
     if (uCausticDispersion > 0.5) {
@@ -81,9 +81,11 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     vec3 sum = a + b;
     // where the passing waves are steepest the surface focuses harder: the net brightens in travelling bands
     float chop = clamp(length(slope) * 5.0, 0.0, 1.5);
-    vec3 c = sum * sum * (22.0 * (0.7 + 0.5 * chop));
-    // Medium/High: side faces keep ~a third of the shimmer (light arrives steeply but not only from straight above)
-    float side = uQuality >= 0.5 ? 0.32 : 0.15;
+    // linear + squared: the squared term makes crisp bright lines up close, the linear term keeps the shimmer's energy
+    // when the lines shrink below a pixel (far sand, small phone screens), where squaring a mip-blurred read fades out
+    vec3 c = min(sum * 8.0 + sum * sum * 24.0, vec3(4.0)) * (0.7 + 0.5 * chop);
+    // Medium/High: side faces keep ~40% of the shimmer (light arrives steeply but not only from straight above)
+    float side = uQuality >= 0.5 ? 0.42 : 0.2;
     float facing = clamp(n.y * (1.0 - side) + side, 0.0, 1.0);
     return c * lightTint() * (facing * lightIntensity() * exp(-0.010 * depth));
 }
@@ -198,7 +200,7 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
     // plus the render-only swell (common.glsl), so the waves on the surface steer and brighten the net below
     vec2 slope = p.y > uWaterLevel || (uQuality < 0.5 && uCausticStrength <= 0.0) ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
     // the rippled surface gathers the beam into the caustic net, so the light between the lines is dimmer
-    float gather = p.y < uWaterLevel ? 0.45 * uCausticStrength * max(N.y, 0.0) : 0.0;
+    float gather = p.y < uWaterLevel ? 0.6 * uCausticStrength * max(N.y, 0.0) : 0.0;
     direct *= surfaceFlicker(p, slope) * (1.0 - gather);
     direct += albedo * causticColor(p, N, slope) * uCausticStrength;
 #ifndef NO_CONTACT_SHADOW
