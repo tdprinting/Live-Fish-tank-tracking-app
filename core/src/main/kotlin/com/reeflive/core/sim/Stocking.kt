@@ -72,6 +72,10 @@ object Stocking {
         StockEntry("gramma_loreto", StockGroup.FISH, "Royal gramma", 6.5),
         StockEntry("pterapogon_kauderni", StockGroup.FISH, "Banggai cardinalfish", 6.5),
         StockEntry("cryptocentrus_cinctus", StockGroup.FISH, "Yellow watchman goby", 7.5),
+        // research 51: batch 2
+        StockEntry("synchiropus_splendidus", StockGroup.FISH, "Mandarin dragonet", 6.5),
+        StockEntry("pseudocheilinus_hexataenia", StockGroup.FISH, "Six line wrasse", 7.5),
+        StockEntry("gobiodon_okinawae", StockGroup.FISH, "Yellow clown goby", 3.0),
         // research 60: rare and expensive fish (late-game Deep Reef Imports)
         StockEntry("zebrasoma_gemmatum", StockGroup.FISH, "Gem tang", 18.0),
         StockEntry("chaetodon_daedalma", StockGroup.FISH, "Wrought iron butterflyfish", 13.0),

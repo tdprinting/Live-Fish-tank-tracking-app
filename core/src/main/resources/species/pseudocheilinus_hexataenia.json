@@ -1,0 +1,145 @@
+{
+  "kind": "FISH",
+  "id": "pseudocheilinus_hexataenia",
+  "common": "Six line wrasse",
+  "scientific": "Pseudocheilinus hexataenia",
+  "family": "Labridae",
+  "maxLengthCm": 10.0,
+  "typicalAdultCm": 7.5,
+  "growthCmPerYear": 3.0,
+  "lifespanYears": 8,
+  "depthRatio": 0.3,
+  "massCoeff": 0.016,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 1.0,
+    "burstBL": 8,
+    "tailHzCruise": 2.8,
+    "turnRateDeg": 380,
+    "waveLen": 0.9,
+    "ampCruise": 0.035,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.05,
+    "yMax": 0.6,
+    "openWater": 0.15,
+    "coverAffinity": 0.85
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 120,
+    "darkVision": 0.1,
+    "lateralBL": 1.5,
+    "chem": 0.5
+  },
+  "territorialRadius": 25,
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.6,
+    "boldness": 0.7,
+    "curiosity": 0.6,
+    "skittishness": 0.35
+  },
+  "diet": [
+    "PODS",
+    "MYSIS",
+    "BRINE",
+    "CYCLOPS",
+    "FLAKE",
+    "PELLET"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.25,
+    "VELVET": 0.3,
+    "BACTERIAL": 0.25
+  },
+  "hardiness": 0.85,
+  "starvationDays": 18,
+  "size": {
+    "lod0Tris": 3200
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 3.5,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "PROTOGYNOUS",
+    "maturityCm": 5.0
+  },
+  "model": "models/sixline_wrasse.glb",
+  "colors": {
+    "primary": "#7A60C8",
+    "secondary": "#F08A20",
+    "accent": "#101820"
+  },
+  "iridescence": 0.15,
+  "brain": "sixline",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Yes (risk to tiny shrimp)",
+  "dietSummary": "Hunts small crustaceans and worms in the rock all day; eats frozen and prepared foods.",
+  "temperamentSummary": "Fast and busy; often bullies new or peaceful fish and other wrasses. Sleeps in a mucus cocoon in the rock.",
+  "careNotes": [
+    "Add it last: it picks on fish added after it.",
+    "Can bully other wrasses and small peaceful fish.",
+    "Lots of rock caves to dart through.",
+    "Can jump: a lid helps."
+  ]
+}

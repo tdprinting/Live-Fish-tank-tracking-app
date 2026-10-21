@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reeflive.app.live.RoomShopUi
+import com.reeflive.app.live.RoomTankUi
 import com.reeflive.core.custom.room.Decor
 
 /**
@@ -56,6 +57,13 @@ fun RoomShop(ui: RoomShopUi, onTile: (Decor.Tile) -> Unit) {
     Swatches(ui.tiles.filter { it.key.startsWith("wall:") }, onTile)
     LiveSectionTitle("Floor", Modifier.padding(top = 8.dp))
     Swatches(ui.tiles.filter { it.key.startsWith("floor:") }, onTile)
+    val tanks = ui.tiles.filter { it.key.startsWith("tank:") }
+    LiveSectionTitle("More tanks", Modifier.padding(top = 8.dp))
+    LiveHelp("Put another tank on a different wall and turn round the room to visit it.")
+    TileGrid(tanks.size, 4, Modifier.padding(top = 6.dp)) { i, cell ->
+        val t = tanks[i]
+        RoomTile(t, cell, onTile) { TankPicture(t.label.substringBefore(' ').toIntOrNull() ?: 40, Modifier.width(60.dp).height(42.dp)) }
+    }
     LiveSectionTitle("Stand", Modifier.padding(top = 8.dp))
     TileGrid(stands.size, 3, Modifier.padding(top = 6.dp)) { i, cell ->
         val t = stands[i]
@@ -168,6 +176,45 @@ fun BoxScope.TryOnBar(t: Decor.Tile, coins: Int, bottom: Dp, onBuy: () -> Unit, 
         PriceTag(t.price, 16.dp)
         LivePill("Buy", onBuy, tone = if (coins >= t.price) Candy.green else Color(0xFFB9C2CC))
         LivePill("Not now", onCancel, selected = false)
+    }
+}
+
+/** A little drawing of a tank of [gallons] on its stand (web room.js tankPic). */
+@Composable
+private fun TankPicture(gallons: Int, modifier: Modifier) {
+    Canvas(modifier) {
+        val u = size.width / 48f
+        val w = minOf(40f, 14f + gallons * 0.22f)
+        val h = minOf(18f, 9f + gallons * 0.06f)
+        val x = 24f - w / 2f
+        drawRect(Color(0xFF2B6F8F), Offset(x * u, (24f - h) * u), Size(w * u, h * u))
+        drawRect(Color(0xCCE3D2A8), Offset((x + 1f) * u, (24f - h * 0.3f) * u), Size((w - 2f) * u, (h * 0.3f - 0.8f) * u))
+        drawRect(Color(0xFFF1EDE6), Offset((x - 1f) * u, 24f * u), Size((w + 2f) * u, 8f * u))
+    }
+}
+
+/**
+ * The arrows round the room to the keeper's other tanks (room/RoomTanks.kt; web room.js roomNav): one each side of
+ * the tank view, naming the next tank's size. [onTurn] gets -1 (left) or +1 (right).
+ */
+@Composable
+fun BoxScope.RoomArrows(tanks: List<RoomTankUi>, onTurn: (Int) -> Unit) {
+    val i = tanks.indexOfFirst { it.active }.coerceAtLeast(0)
+    for (dir in listOf(-1, 1)) {
+        val next = tanks[((i + dir) % tanks.size + tanks.size) % tanks.size]
+        Column(
+            Modifier
+                .align(if (dir < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                .padding(horizontal = 10.dp)
+                .size(width = 52.dp, height = 64.dp)
+                .livePanel(LiveTheme.style, RoundedCornerShape(26.dp))
+                .clickable { onTurn(dir) },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(if (dir < 0) "‹" else "›", fontSize = 30.sp, color = Color.White)
+            Text("${next.gallons} gal", style = LiveTheme.style.buttonText.copy(fontSize = 10.sp), color = LiveTheme.style.labelDim)
+        }
     }
 }
 

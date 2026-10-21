@@ -164,8 +164,23 @@ is split into sections, each section is one tank:
 |---|---|
 | Shelly's | Starter fish · Clean-up crew · Easy corals |
 | Frag Shack | Soft corals · Mushrooms & polyps · Leathers & rare frags |
-| Big Blue | Community fish · Bigger fish · Shrimp & crabs · Corals |
-| Deep Reef | The showpiece tank (its rarest animal alone) · Rare fish · Rare inverts & corals |
+| Big Blue | Community fish · Bigger fish · Clean-up crew · Shrimp & crabs · Easy corals · Showy corals |
+| Deep Reef | The showpiece tank (its rarest animal alone) · Rare fish · Rare inverts · Rare corals |
+
+* **Walking in** (Tee 2026-10-21): a visit starts on the sidewalk outside the store's front, the doors open (a bell
+  rings) and you walk in to the first tank. A tap skips it; Reduce Motion goes straight in.
+* **Each store is its own place**, and they get grander as they unlock (docs/research/fish_stores.md): Shelly's is a
+  small strip-mall pet shop (165 cm bays, a drop ceiling, vinyl tiles, a striped awning, a cat named Mittens on the
+  counter); Frag Shack a beach garage (concrete floor, rafters and string lights, a roll-up door, a corgi named Reef);
+  Big Blue a big-box store (190 cm bays, a 4 m open ceiling with ducts, carts, a free water test station, a fish room);
+  Deep Reef a gallery (240 cm bays, marble, a coffered ceiling, a lounge and an espresso bar).
+* **People** (core `StoreLife.kt`): every store has its own staff and regulars with names, routines and lines. They
+  walk to tanks, feed, net, test water, clean glass, sweep, ring up the till, sip coffee, take photos; kids press on the
+  glass, jump and point (and a staff member asks them not to tap). What they say shows in speech bubbles; tap someone
+  and they say hello.
+* **Trades** (core `StoreTrades.kt`): once a visit, a store's regular may walk up with a swap: a frag of one of your
+  grown corals (or one spare from a big cleanup crew) for something new to your tank of about the same value. Yes cuts
+  the frag (the colony shrinks a quarter) and floats the new animal in a bag in My tank; one swap per store per day.
 
 * **Browse:** you walk in looking down the aisle at the first tank on its stand. Tap another tank (or the arrows, or
   a section tab) to walk over to it; tap the live tank to step up close, pinch and drag to look round. Tabs on top
@@ -357,12 +372,16 @@ lit, readable as tiny thumbnails:
 * **Deep Reef Imports:** a dark glass shop front, one large lit display tank with a rare fish, gold lettering.
 
 **Interiors** (`tools/blender/store_rooms.py` → `store_room_<id>.glb`, drawn by `render/StoreRoom.kt` with
-`store.frag`): the same modules in each store's colours and light: a 180 cm **Bay** (tiled floor, back wall with a
+`store.frag`): the same modules in each store's colours, light, size and finish (root extras `bay`, `ceil`): a **Bay** (tiled floor, back wall with a
 stripe and a framed fish poster, ceiling panel, a hanging tank light), the **Stand** under every tank, a stocked
 **PropTank** for the tanks you are not standing at, the **Counter**, the store's **Sign** over the first tank and
 **EndL / EndR** walls closing the aisle. The renderer repeats them along x around the live display tank (which stays
 at the origin), so a store with any number of sections needs no new model. Shelly's is warm cream and teal, Frag
 Shack a dark garage under blue-violet lights, Big Blue bright white and blue with a neon sign, Deep Reef black and gold.
+Also per store: **Entry** (the bay inside the door) and **Back** (the staff door past the counter), the people
+(`tools/blender/store_people.py`: `P<slot>_Torso/Head/ArmL/ArmR/LegL/LegR`, each about its joint, plus `Prop_*` and the
+pet), and the outside (`tools/blender/store_fronts.py`: **FrontBay** / **FrontDoor**, door leaves, **FrontSign**,
+**Street**, **Neighbor**, **Sky**, **Roof**).
 
 ## 9. While you are away
 
@@ -457,6 +476,15 @@ of focus, so it never pulls the eye away.
   (free, "Room's own"); bought ones: Seafoam or Navy paint 60, Sunny stripes 90, White boards 100, Wave print 120,
   Brick 140, Wood panels 140 (L3); Walnut planks 80, Blue carpet 90, White tiles 100, Checkerboard 120, Slate 140
   (L3). A new scene starts on its own walls and floor; bought ones go back up for free.
+* **More tanks** (`room/RoomTanks.kt`, Tee 2026-10-21): up to four tanks, one against each wall (back, right, front,
+  left), seen one at a time; arrows either side of the view turn round the room to the next one. For sale in the room
+  shop: Nano cube 400 (L1), 40 gallon 800 (L2), 60 gallon 1400 (L3), 120 gallon 2600 (L5); a new one starts empty on
+  the next free wall and comes into view. The tank in view is the top-level save; the others ride in
+  `CustomTankSave.others` as whole saves (no money or look of their own) and catch up on their time away when the
+  keeper turns to them, exactly like reopening the app. Money, level, stand and room are shared. The room turns with
+  the view (`HomeRoomScene`: Shell and Center* nodes rotate so that wall stands behind the tank; Left*, Right* and
+  Tank* props stay with the tank), so each wall shows its own side of the room. Start over on one of several tanks
+  removes just that one.
 * **Saving:** `CustomTankSave.decor` (`SavedDecor`: owned ids `stand:<id>`, `color:<stand>:<n>`, `extra:<id>`,
-  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use). Defaulted fields, no codec bump; kept across Start
-  over like the money.
+  `scene:<id>`, `wall:<id>`, `floor:<id>`, and what is in use), `side` and `others`. Defaulted fields, no codec bump
+  (an older save is one tank on the back wall); kept across Start over like the money.

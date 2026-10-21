@@ -389,7 +389,7 @@ object SubmarineRules {
             }
             BrainKind.HAWK -> if (d < SEE_CM) SubReaction.POSTURE else SubReaction.NONE
             BrainKind.EEL -> if (d < 12.0) SubReaction.POSTURE else SubReaction.NONE
-            BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.CHROMIS, BrainKind.BUTTERFLY -> when {
+            BrainKind.TANG, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.CHROMIS, BrainKind.SIXLINE, BrainKind.BUTTERFLY -> when {
                 interest(o) >= 0.35 -> if (d < SEE_CM) SubReaction.INVESTIGATE else SubReaction.NONE
                 d < SHY_CM -> SubReaction.AVOID
                 else -> SubReaction.NONE
@@ -401,6 +401,9 @@ object SubmarineRules {
                 d < SEE_CM * 0.6 -> SubReaction.POSTURE
                 else -> SubReaction.NONE
             }
+            // research 51: the clown goby stays in its coral and tucks in; the mandarin creeps off low over the rock
+            BrainKind.CLOWN_GOBY -> if (d < 8.0) SubReaction.HIDE else SubReaction.NONE
+            BrainKind.MANDARIN -> if (d < SHY_CM + 4) SubReaction.AVOID else SubReaction.NONE
             in BURROWERS -> when {
                 d < 8.0 -> SubReaction.HIDE
                 d < SHY_CM + 4 -> SubReaction.AVOID

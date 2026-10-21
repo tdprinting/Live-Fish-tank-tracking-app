@@ -7,7 +7,9 @@ const FALLBACK = { FISH: '🐠', INVERTS: '🦐', CORALS: '🪸' };
 const pic = (it) => it.pack ? '<span class="sp">🧴</span>' : `<img class="sp" src="species/${it.species || it.id}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp',textContent:'${FALLBACK[it.group] || '🐠'}'}))">`;
 
 let my, say, cue, onLeave;
-let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false;
+let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false, offer = null;
+// the store's people talk in speech bubbles over their heads (render StorePeople; live.js styles .tbubble)
+const talk = { layer: null, els: [], raf: 0 };
 
 /** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
@@ -28,7 +30,7 @@ export function initStores(opts) {
   ui.className = 'hidden';
   (document.getElementById('live') || document.body).appendChild(ui);
   ui.addEventListener('click', onClick);
-  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter() };
+  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter(), trade: showTrade };
 }
 
 function enter(id) {
@@ -40,7 +42,68 @@ function enter(id) {
   ui.classList.remove('hidden');
   cue?.('TICK');
   say?.(`${d.greeting} Tap a tank to walk over to it, and the counter to pay.`);
+  offer = null;
   render();
+  startTalk();
+  // the bell on the door rings as the walk in from the sidewalk reaches it
+  setTimeout(() => { if (data) cue?.('BELL'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1500);
+}
+
+function startTalk() {
+  if (talk.raf) return;
+  if (!talk.layer) { talk.layer = document.createElement('div'); talk.layer.className = 'tbubbles'; document.getElementById('tank').after(talk.layer); }
+  const frame = () => {
+    if (!data) { stopTalk(); return; }
+    talk.raf = requestAnimationFrame(frame);
+    let list = [];
+    try { list = JSON.parse(my.storeBubbles()); } catch { list = []; }
+    const cnv = document.getElementById('tank'), k = cnv.clientWidth / Math.max(1, cnv.width);
+    while (talk.els.length < list.length) { const el = document.createElement('div'); el.className = 'tbubble'; el.style.maxWidth = '200px'; talk.layer.appendChild(el); talk.els.push(el); }
+    talk.els.forEach((el, i) => {
+      const b = list[i];
+      if (!b) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      if (el.textContent !== b.text) el.textContent = b.text;
+      el.style.left = `${Math.max(100, Math.min(cnv.clientWidth - 100, b.x * k))}px`;
+      el.style.top = `${Math.max(40, b.y * k - 10)}px`;
+      el.style.opacity = b.a.toFixed(2);
+    });
+  };
+  frame();
+}
+
+function stopTalk() {
+  cancelAnimationFrame(talk.raf); talk.raf = 0;
+  for (const el of talk.els) el.remove();
+  talk.els = [];
+}
+
+/** A store regular walked up with a swap (core StoreTrades): the trade card. */
+function showTrade() {
+  if (!data) return;
+  try { offer = JSON.parse(my.trade()); } catch { offer = null; }
+  if (!offer) return;
+  cue?.('TICK');
+  render();
+}
+
+function answerTrade(yes) {
+  const o = offer;
+  offer = null;
+  my.answerTrade(yes);
+  cue?.('TICK');
+  if (yes && o) say?.(`Traded! Your ${o.get} is floating in a bag at the top of your tank.`);
+  render();
+}
+
+function tradeCard(o) {
+  return `<div class="caremodal"><div class="carecard glass trade">
+    <h3>${esc(o.trader)} wants to trade!</h3>
+    <p>“${esc(o.line)}”</p>
+    <p><b class="give">You give:</b> ${o.frag ? `a frag of your ${esc(o.give)} (it stays in your tank, a little smaller)` : `one ${esc(o.give)}`}</p>
+    <p><b class="get">You get:</b> a ${esc(o.get)}, in a bag at the top of your tank</p>
+    <div class="row-gap"><button class="pill" data-strade="no">No thanks</button><button class="pill collect" data-strade="yes">Trade!</button></div>
+  </div></div>`;
 }
 
 /** The checkout: the camera walks to the counter in 3D and the till opens. */
@@ -62,7 +125,8 @@ function closeCounter() {
 function leave(quiet) {
   if (!data) return;
   my.leaveStore();
-  data = null; bag = []; picked = null; counterOpen = false;
+  data = null; bag = []; picked = null; counterOpen = false; offer = null;
+  stopTalk();
   document.body.classList.remove('instore');
   ui.classList.add('hidden');
   ui.innerHTML = '';
@@ -187,7 +251,8 @@ function render() {
       ${inBag(it.id) ? `<i class="inbag">${inBag(it.id)}</i>` : ''}</button>`).join('')}</div>
     <button class="bagbtn ${sum > coins ? 'poor' : ''}" data-scounter>🛍️ <b>${bag.length}</b>${bag.length ? ` · ${SAND_DOLLAR}${sum}` : ''}</button>
     ${counterOpen ? counter(coins, sum) : ''}
-    ${sellOpen ? sellSheet() : ''}`;
+    ${sellOpen ? sellSheet() : ''}
+    ${offer ? tradeCard(offer) : ''}`;
 }
 
 function card(p, coins) {
@@ -261,6 +326,8 @@ function sell(id, pet) {
 }
 
 function onClick(e) {
+  const t = e.target.closest('[data-strade]');
+  if (t) { answerTrade(t.dataset.strade === 'yes'); return; }
   const b = e.target.closest('[data-ssell],[data-ssellid],[data-ssellclose],[data-ssellbg],[data-sleave],[data-stank],[data-sgo],[data-spick],[data-sadd],[data-sremove],[data-sclose],[data-scounter],[data-scounterclose],[data-spay],[data-scounterbg]');
   if (!b) return;
   const d = b.dataset;

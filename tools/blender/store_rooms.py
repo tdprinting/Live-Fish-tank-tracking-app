@@ -28,17 +28,40 @@ import numpy as np
 
 import common as C
 from common import bpy
-from tank import WGeo, box
+import bmesh  # noqa: E402 (after bpy)
+import store_fronts as SF
+import store_people as SP
+from store_geo import Group, cylinder, ellipsoid, fish, mat, text, _mats
+from store_people import loft
 
 L, H, D = C.TANK
-BAY = 180.0                      # render/StoreRoom.kt StoreRoomLayout.BAY
 CX = L / 2
-X0, X1 = CX - BAY / 2, CX + BAY / 2
 FLOOR = -82.0                    # tank.py stand_geos: the floor under the stand
-CEIL = 300.0
 BACK = -70.0
-FRONT = 520.0
+FRONT = 540.0                    # the front wall's inner face (store_fronts.py); the aisle camera stays inside it
 STORES = ["shellys", "frag_shack", "big_blue", "deep_reef"]
+
+# Each store's size and quality (docs/research/fish_stores.md): bay pitch (cm, the renderer reads it from the root's
+# extras), ceiling height (world y), and its tier, which picks the floor, ceiling and wall finish: a small-town pet shop,
+# a garage frag shop, a big-box aquarium store, a gallery of rare livestock.
+CONFIG = {
+    "shellys": dict(bay=165.0, ceil=262.0, tier=0),
+    "frag_shack": dict(bay=175.0, ceil=300.0, tier=1),
+    "big_blue": dict(bay=190.0, ceil=400.0, tier=2),
+    "deep_reef": dict(bay=240.0, ceil=340.0, tier=3),
+}
+# set per store by configure()
+BAY = 180.0
+X0, X1 = CX - BAY / 2, CX + BAY / 2
+CEIL = 300.0
+
+
+def configure(sid):
+    global BAY, X0, X1, CEIL
+    cfg = CONFIG[sid]
+    BAY, CEIL = cfg["bay"], cfg["ceil"]
+    X0, X1 = CX - BAY / 2, CX + BAY / 2
+
 
 THEMES = {
     # walls, stripe, trim, floor, stand, counter, counter top, poster, poster art, sign text, water, ceiling
@@ -58,121 +81,92 @@ THEMES = {
 
 
 # ============================================================== geometry helpers (world cm)
-def ellipsoid(c, r, segs=12, rings=8):
-    """UV ellipsoid at [c] with radii [r] (x, y, z)."""
-    V, F = [], []
-    for j in range(rings + 1):
-        v = math.pi * j / rings
-        for i in range(segs):
-            u = 2 * math.pi * i / segs
-            V.append((c[0] + r[0] * math.sin(v) * math.cos(u), c[1] + r[1] * math.cos(v), c[2] + r[2] * math.sin(v) * math.sin(u)))
-    for j in range(rings):
-        for i in range(segs):
-            a, b = j * segs + i, j * segs + (i + 1) % segs
-            F.append((a, a + segs, b + segs, b))
-    return np.array(V), F
-
-
-def cylinder(c, r, h, segs=16):
-    """Upright closed cylinder: base centre [c], radius [r], height [h]."""
-    V = []
-    for y in (c[1], c[1] + h):
-        for i in range(segs):
-            u = 2 * math.pi * i / segs
-            V.append((c[0] + r * math.cos(u), y, c[2] + r * math.sin(u)))
-    V.append((c[0], c[1], c[2]))
-    V.append((c[0], c[1] + h, c[2]))
-    F = [(i, (i + 1) % segs, segs + (i + 1) % segs, segs + i) for i in range(segs)]
-    F += [(2 * segs, (i + 1) % segs, i) for i in range(segs)]
-    F += [(2 * segs + 1, segs + i, segs + (i + 1) % segs) for i in range(segs)]
-    return np.array(V), F
-
-
-class Group:
-    """One runtime node: a WGeo with its own material list (name -> slot)."""
-
-    def __init__(self, name, smooth=False):
-        self.name = name
-        self.smooth = smooth
-        self.g = WGeo()
-        self.mats = []
-        self.slots = {}
-
-    def slot(self, m):
-        if m.name not in self.slots:
-            self.slots[m.name] = len(self.mats)
-            self.mats.append(m)
-        return self.slots[m.name]
-
-    def box(self, lo, hi, m):
-        self.add(box(lo, hi), m)
-
-    def add(self, VF, m):
-        """Adds a mesh with material [m], or painted in the hex colour [m] (vertex colour, one shared material: the
-        small figures, fish and corals stay one draw call per node)."""
-        V, F = VF
-        if isinstance(m, str):
-            self.g.add(V, F, col=C.lin(m) + (1.0,), mat=self.slot(mat("paint_vcol", "#FFFFFF", 0.6)))
-        else:
-            self.g.add(V, F, mat=self.slot(m))
-
-    def build(self, root):
-        return self.g.obj(self.name, root, "store", self.mats, smooth=self.smooth)
-
-
-_mats = {}
-
-
-def mat(name, color, rough=0.6, metal=0.0, emit=None, strength=1.0, alpha=1.0):
-    if name not in _mats:
-        _mats[name] = C.material(name, color, rough=rough, metal=metal, emissive=emit, emissive_strength=strength,
-                                 alpha=alpha, blend=alpha < 1.0, double=alpha < 1.0)
-    return _mats[name]
-
-
-def fish(g, c, length, body, yaw=0.0):
-    """A little fish facing +x (turned by [yaw] about y): an egg body and a tail fan."""
-    cy, sy = math.cos(yaw), math.sin(yaw)
-    V, F = ellipsoid((0, 0, 0), (length * 0.34, length * 0.2, length * 0.1), 10, 6)
-    tail = np.array([(-length * 0.3, 0, 0), (-length * 0.52, length * 0.16, 0), (-length * 0.52, -length * 0.16, 0),
-                     (-length * 0.3, 0, 0.02), (-length * 0.52, length * 0.16, 0.02), (-length * 0.52, -length * 0.16, 0.02)])
-    TF = [(0, 1, 2), (3, 5, 4), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)]
-    for VV, FF in ((V, F), (tail, TF)):
-        R = np.c_[VV[:, 0] * cy - VV[:, 2] * sy, VV[:, 1], VV[:, 0] * sy + VV[:, 2] * cy] + np.asarray(c)
-        g.add((R, FF), body)
-
-
-def text(body, x, y, z, size, m, depth=1.2):
-    """Blender text converted to a mesh, standing on the plane z (world), reading along +x."""
-    bpy.ops.object.text_add(location=(x, -z, y), rotation=(math.radians(90), 0, 0))
-    o = bpy.context.active_object
-    o.data.body = body
-    o.data.size = size
-    o.data.extrude = depth / 2
-    o.data.align_x = 'CENTER'
-    o.data.align_y = 'CENTER'
-    o.data.materials.append(m)
-    bpy.ops.object.convert(target='MESH')
-    o = bpy.context.active_object
-    o.location.y -= depth / 2      # the back face on the wall plane, the letters toward the viewer
-    return o
-
-
 # ============================================================== modules
-def bay(t):
+def bay(t, sid):
+    """One bay of the shop in the store's own finish: floor, back wall, ceiling and its light, a poster over the tank."""
     g = Group("Bay")
-    g.box((X0, FLOOR - 1, BACK), (X1, FLOOR, FRONT), mat("floor_tile", t["floor"], 0.45))
+    tier = CONFIG[sid]["tier"]
+    floor = ("floor_tile", "floor_concrete", "floor_tile_big", "floor_marble")[tier]
+    g.box((X0, FLOOR - 1, BACK), (X1, FLOOR, FRONT), mat(floor, t["floor"], 0.45))
     g.box((X0, FLOOR, BACK - 2), (X1, CEIL, BACK), mat("wall", t["wall"], 0.9))
-    g.box((X0, 58, BACK), (X1, 72, BACK + 0.6), mat("stripe", t["stripe"], 0.5))
     g.box((X0, FLOOR, BACK), (X1, FLOOR + 10, BACK + 2), mat("trim", t["trim"], 0.5))
     g.box((X0, CEIL, BACK - 2), (X1, CEIL + 2, FRONT), mat("ceiling", t["ceil"], 0.9))
+    trim = mat("trim", t["trim"], 0.5)
+    lamp = mat("lamp_ceiling", "#FFFFFF", 0.2, emit="#FFF6E8", strength=3.0)
+    if tier == 0:
+        # a strip-mall pet shop: a painted stripe, a wainscot, a drop ceiling with a troffer over the aisle
+        g.box((X0, 58, BACK), (X1, 72, BACK + 0.6), mat("stripe", t["stripe"], 0.5))
+        g.box((X0, FLOOR + 10, BACK), (X1, 0, BACK + 0.8), mat("wainscot", "#E2CFAE", 0.8))
+        grid = mat("ceiling_grid", "#E9E4DA", 0.6)
+        for x in np.arange(X0, X1 + 0.1, 60.0):
+            g.box((x - 0.8, CEIL - 1.2, BACK), (x + 0.8, CEIL, FRONT), grid)
+        for z in np.arange(BACK, FRONT + 0.1, 60.0):
+            g.box((X0, CEIL - 1.2, z - 0.8), (X1, CEIL, z + 0.8), grid)
+        g.box((CX - 40, CEIL - 1.6, 140), (CX + 40, CEIL - 1.2, 200), lamp)
+    elif tier == 1:
+        # a garage: plywood panels on the wall, open rafters, a shop light and a string of bulbs over the aisle
+        g.box((X0, 58, BACK), (X1, 64, BACK + 0.6), mat("stripe", t["stripe"], 0.5))
+        for x in np.arange(X0 + 60, X1, 120.0):
+            g.box((x - 0.5, FLOOR + 10, BACK), (x + 0.5, CEIL, BACK + 0.5), mat("seam", "#08080A", 0.8))
+        wood = mat("rafter", "#5A4632", 0.85)
+        for x in np.arange(X0 + 15, X1, 45.0):
+            g.box((x - 3, CEIL - 22, BACK), (x + 3, CEIL, FRONT), wood)
+        g.box((CX - 60, CEIL - 34, 165), (CX + 60, CEIL - 30, 175), mat("light_housing", "#202226", 0.4, metal=0.6))
+        g.box((CX - 58, CEIL - 34.4, 167), (CX + 58, CEIL - 34, 173), lamp)
+        for x in (CX - 50, CX + 50):
+            g.box((x - 0.3, CEIL - 30, 169.7), (x + 0.3, CEIL - 22, 170.3), mat("cable", "#111111", 0.5))
+        bulb = mat("lamp_bulb", "#FFE2A8", 0.3, emit="#FFC870", strength=3.0)
+        cord = mat("cable", "#111111", 0.5)
+        n = 7
+        for k in range(n):
+            u0, u1 = k / n, (k + 1) / n
+            x0, x1 = X0 + BAY * u0, X0 + BAY * u1
+            y0 = CEIL - 26 - 22 * math.sin(math.pi * u0)
+            y1 = CEIL - 26 - 22 * math.sin(math.pi * u1)
+            g.add(_rod((x0, y0, 250), (x1, y1, 250), 0.25), cord)
+            g.add(ellipsoid((x0 + (x1 - x0) / 2, (y0 + y1) / 2 - 3, 250), (1.6, 2.2, 1.6), 8, 6), bulb)
+    elif tier == 2:
+        # a big box: a clean blue band, an open joist ceiling with a duct and high-bay lamps
+        g.box((X0, 58, BACK), (X1, 74, BACK + 0.6), mat("stripe", t["stripe"], 0.5))
+        g.box((X0, 200, BACK), (X1, 204, BACK + 0.6), mat("stripe", t["stripe"], 0.5))
+        steel = mat("joist", "#7E858E", 0.5, metal=0.0)
+        for x in np.arange(X0 + 20, X1, 95.0):
+            g.box((x - 1.5, CEIL - 30, BACK), (x + 1.5, CEIL, FRONT), steel)
+        g.add(_duct((X0, CEIL - 60, 40), (X1, CEIL - 60, 40), 22), mat("duct", "#B9C0C8", 0.35))
+        g.add(cylinder((CX, CEIL - 70, 170), 26, 18, 24), mat("light_housing", "#202226", 0.4, metal=0.6))
+        g.add(cylinder((CX, CEIL - 70.4, 170), 22, 0.4, 24), lamp)
+        g.box((CX - 0.4, CEIL - 52, 169.6), (CX + 0.4, CEIL, 170.4), mat("cable", "#111111", 0.5))
+    else:
+        # a gallery: dark wood panels with brass pinstripes, a crown moulding, a coffered ceiling with spots
+        gold = mat("gold_trim", "#C9A646", 0.25, metal=0.9)
+        g.box((X0, 58, BACK), (X1, 60, BACK + 0.8), gold)
+        for x in np.arange(X0 + 40, X1, 80.0):
+            g.box((x - 0.6, 60, BACK), (x + 0.6, CEIL - 20, BACK + 0.8), gold)
+        g.box((X0, CEIL - 20, BACK), (X1, CEIL, BACK + 8), mat("crown", "#2A2420", 0.5))
+        g.box((X0, CEIL - 21, BACK + 8), (X1, CEIL - 20, BACK + 9), gold)
+        beam = mat("coffer", "#1A1720", 0.6)
+        for x in np.arange(X0, X1 + 0.1, BAY / 2):
+            g.box((x - 5, CEIL - 18, BACK), (x + 5, CEIL, FRONT), beam)
+        for z in np.arange(BACK, FRONT + 0.1, 120.0):
+            g.box((X0, CEIL - 18, z - 5), (X1, CEIL, z + 5), beam)
+        for x in (CX - BAY / 4, CX + BAY / 4):
+            for z in (150.0, 190.0):
+                g.add(cylinder((x, CEIL - 3, z), 6, 3, 14), mat("light_housing", "#202226", 0.4, metal=0.6))
+                g.add(cylinder((x, CEIL - 3.2, z), 4.4, 0.2, 14), lamp)
     # poster over the tank: a framed print of a big fish
-    g.box((CX - 42, 104, BACK), (CX + 42, 160, BACK + 1), mat("trim", t["trim"], 0.5))
+    g.box((CX - 42, 104, BACK), (CX + 42, 160, BACK + 1), trim)
     g.box((CX - 38, 108, BACK + 1), (CX + 38, 156, BACK + 1.3), mat("poster", t["poster"], 0.7))
     fish(g, (CX, 132, BACK + 1.6), 46, t["art"])
-    # ceiling panel light over the aisle in front of the stand
-    g.box((CX - 40, CEIL - 1, 140), (CX + 40, CEIL, 200), mat("lamp_ceiling", "#FFFFFF", 0.2, emit="#FFF6E8", strength=3.0))
     return g
+
+
+def _rod(a, b, r):
+    """A thin round rod from [a] to [b]."""
+    return loft([a, b], [r, r], [r, r], 6)
+
+
+def _duct(a, b, r):
+    return loft([a, b], [r, r], [r, r], 18)
 
 
 # ============================================================== display tanks (core StoreDisplays.DisplayKind order)
@@ -478,145 +472,6 @@ def counter(t):
     return g
 
 
-# ============================================================== people (render/StoreRoom.kt animates them)
-# Each person is modelled standing at the origin, facing +z; the renderer places, turns and bobs them. The walker's
-# legs are their own nodes, hip at the origin (WALK_HIP above the floor), so they can swing.
-WALK_HIP = 83.0
-SKINS = ("#F1C7A3", "#C68E63", "#8D5A3B", "#E8B48C")
-
-
-def loft(pts, rx, rz, segs=16):
-    """A smooth closed tube through centres [pts] with elliptical rings (radii [rx], [rz]); ends close on poles."""
-    pts = np.asarray(pts, float)
-    V = [tuple(pts[0])]
-    n = len(pts)
-    for i in range(n):
-        # ring plane perpendicular to the path (mostly vertical paths: rings in the local x/z)
-        t = pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]
-        t /= np.linalg.norm(t)
-        a = np.array([1.0, 0.0, 0.0]) if abs(t[0]) < 0.9 else np.array([0.0, 0.0, 1.0])
-        u = a - np.dot(a, t) * t
-        u /= np.linalg.norm(u)
-        w = np.cross(t, u)
-        for k in range(segs):
-            th = 2 * math.pi * k / segs
-            V.append(tuple(pts[i] + u * rx[i] * math.cos(th) + w * rz[i] * math.sin(th)))
-    V.append(tuple(pts[-1]))
-    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
-    for i in range(n - 1):
-        b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
-        F += [(b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k) for k in range(segs)]
-    last = len(V) - 1
-    b = 1 + (n - 1) * segs
-    F += [(last, b + k, b + (k + 1) % segs) for k in range(segs)]
-    return np.array(V), F
-
-
-class Figure:
-    """Proportions of a simple, rounded person [h] cm tall (a kid has a bigger head for the body)."""
-
-    def __init__(self, h, kid=False):
-        self.h = h
-        self.hr = h * (0.085 if kid else 0.064)          # head radius
-        self.sh = h - 2.05 * self.hr - h * 0.03           # shoulder line
-        self.hip = self.sh * 0.6
-        self.knee = self.sh * 0.32
-        self.w = self.sh * (0.17 if kid else 0.155)       # half shoulder width
-        self.head_y = self.sh + h * 0.03 + self.hr
-
-
-def leg(g, f, x, pants, shoe, y0=0.0):
-    """One leg from the hip down to a rounded shoe, its top at height [y0] + hip (y0 = -hip: hip at the origin)."""
-    h, hip, knee = f.h, f.hip, f.knee
-    r = f.w * 0.36
-    g.add(loft([(x, y0 + hip + r * 0.4, 0), (x, y0 + hip * 0.8, 0), (x, y0 + knee, r * 0.1), (x, y0 + knee * 0.55, -r * 0.05), (x, y0 + h * 0.035, 0)],
-               [r * 0.5, r, r * 0.72, r * 0.75, r * 0.5], [r * 0.5, r, r * 0.72, r * 0.78, r * 0.5]), pants)
-    g.add(ellipsoid((x, y0 + h * 0.022, r * 0.75), (r * 0.62, h * 0.024, r * 1.45), 16, 8), shoe)
-
-
-def leg_node(name, f, pants, shoe, side):
-    """One walker leg, hip at the origin, hanging down to the floor at y = -hip."""
-    g = Group(name, smooth=True)
-    leg(g, f, side * f.w * 0.42, pants, shoe, y0=-f.hip)
-    return g
-
-
-def head(g, f, c, skin, hair, cap=None, long_hair=False):
-    """A round head centred at [c]: hair cap, dot eyes, a little nose and a smile, facing +z."""
-    x, y, z = c
-    r = f.hr
-    g.add(ellipsoid((x, y, z), (r * 0.92, r, r * 0.96), 20, 14), skin)
-    g.add(ellipsoid((x, y + r * 0.28, z - r * 0.12), (r * 0.98, r * 0.82, r * 0.96), 20, 12), hair)
-    if long_hair:
-        g.add(ellipsoid((x, y - r * 0.35, z - r * 0.45), (r * 0.95, r * 1.05, r * 0.6), 18, 10), hair)
-    for s in (-1, 1):
-        g.add(ellipsoid((x + s * r * 0.34, y + r * 0.02, z + r * 0.9), (r * 0.1, r * 0.13, r * 0.06), 10, 6), "#1A1420")
-        g.add(ellipsoid((x + s * r * 0.55, y - r * 0.28, z + r * 0.78), (r * 0.16, r * 0.1, r * 0.06), 10, 6), "#F09A8A")
-    g.add(ellipsoid((x, y - r * 0.15, z + r * 0.97), (r * 0.1, r * 0.12, r * 0.08), 10, 6), skin)
-    g.add(ellipsoid((x, y - r * 0.45, z + r * 0.86), (r * 0.24, r * 0.06, r * 0.05), 12, 4), "#B5523F")
-    for s in (-1, 1):
-        g.add(ellipsoid((x + s * r * 0.92, y - r * 0.05, z), (r * 0.12, r * 0.2, r * 0.14), 10, 6), skin)
-    if cap:
-        g.add(ellipsoid((x, y + r * 0.42, z - r * 0.05), (r * 1.02, r * 0.66, r * 1.0), 20, 10), cap)
-        g.add(ellipsoid((x, y + r * 0.35, z + r * 0.85), (r * 0.72, r * 0.1, r * 0.55), 16, 6), cap)
-
-
-def person(g, h, shirt, pants, skin, hair, with_legs=True, apron=None, cap=None, head_on=True, kid=False, long_hair=False):
-    """A simple rounded person [h] cm tall at the origin, facing +z, arms relaxed at the sides. Returns the figure."""
-    f = Figure(h, kid)
-    sh, hip, w = f.sh, f.hip, f.w
-    shoe = "#2A2A30"
-    if with_legs:
-        for s in (-1, 1):
-            leg(g, f, s * w * 0.42, pants, shoe)
-    d = w * 0.62      # body depth
-    # hips (trousers), then the shirt from the waist to the shoulders, rounded over the top
-    g.add(loft([(0, hip - w * 0.25, 0), (0, hip, 0), (0, hip + (sh - hip) * 0.3, 0)], [w * 0.55, w * 0.8, w * 0.74], [d * 0.6, d * 0.85, d * 0.8]), pants)
-    g.add(loft([(0, hip + (sh - hip) * 0.22, 0), (0, hip + (sh - hip) * 0.45, 0), (0, hip + (sh - hip) * 0.8, 0.02 * h), (0, sh, 0), (0, sh + w * 0.18, 0)],
-               [w * 0.76, w * 0.8, w * 0.9, w * 0.86, w * 0.4], [d * 0.82, d * 0.84, d * 0.95, d * 0.78, d * 0.4]), shirt)
-    if apron:
-        g.add(loft([(0, hip - w * 0.4, d * 0.62), (0, hip + (sh - hip) * 0.4, d * 0.86), (0, hip + (sh - hip) * 0.85, d * 0.9)],
-                   [w * 0.6, w * 0.66, w * 0.5], [d * 0.12, d * 0.14, d * 0.12]), apron)
-    for s in (-1, 1):
-        x0 = s * w * 0.86
-        r = w * 0.25
-        elbow = (s * w * 1.05, hip + (sh - hip) * 0.25, d * 0.05)
-        wrist = (s * w * 1.08, hip - (sh - hip) * 0.12, d * 0.28)
-        # rounded shoulder and sleeve, then the bare forearm and a round hand
-        g.add(ellipsoid((x0, sh - r * 0.45, 0), (r * 1.05, r * 1.0, r * 1.05), 14, 10), shirt)
-        g.add(loft([(x0, sh - r * 0.2, 0), (s * w * 1.03, (sh + elbow[1]) / 2, 0), (elbow[0], elbow[1] + r * 0.6, elbow[2])],
-                   [r * 1.05, r * 0.95, r * 0.9], [r * 1.05, r * 0.95, r * 0.9]), shirt)
-        g.add(loft([(elbow[0], elbow[1] + r * 0.9, elbow[2]), elbow, wrist], [r * 0.78, r * 0.78, r * 0.62], [r * 0.78, r * 0.78, r * 0.62]), skin)
-        g.add(ellipsoid((wrist[0], wrist[1] - r * 0.9, wrist[2]), (r * 0.7, r * 1.0, r * 0.8), 12, 8), skin)
-    # neck
-    g.add(loft([(0, sh, 0), (0, sh + h * 0.035, 0)], [f.hr * 0.36, f.hr * 0.34], [f.hr * 0.36, f.hr * 0.34], 12), skin)
-    if head_on:
-        head(g, f, (0, f.head_y, 0), skin, hair, cap, long_hair)
-    return f
-
-
-def clerk(t):
-    """The shop's clerk behind the counter in the store's colours; the head is its own node (it looks around)."""
-    g = Group("Clerk", smooth=True)
-    f = person(g, 170.0, t["stripe"], "#2E3440", SKINS[1], "#2B1D14", with_legs=False, apron=t["counter"], head_on=False)
-    # the head is its own node, modelled about its centre (StoreRoom.kt CLERK_HEAD_Y = f.head_y)
-    hg = Group("ClerkHead", smooth=True)
-    head(hg, f, (0, 0, 0), SKINS[1], "#2B1D14", cap=t["stripe"])
-    return g, hg, f.head_y
-
-
-def shoppers():
-    """A parent and a kid looking into a tank, and a walker crossing the aisle (legs swing)."""
-    a = Group("Shopper0", smooth=True)
-    person(a, 172.0, "#5B8DEF", "#3B4252", SKINS[0], "#6B4A2B")
-    b = Group("Shopper1", smooth=True)
-    person(b, 118.0, "#FF8FB1", "#4C566A", SKINS[3], "#E0B04A", kid=True, long_hair=True)
-    w = Group("Walker", smooth=True)
-    f = person(w, 165.0, "#7BC67E", "#2E3440", SKINS[2], "#1C1410", with_legs=False)
-    assert abs(f.hip - WALK_HIP) < 1.0, f.hip
-    return [a, b, w, leg_node("WalkerLegL", f, "#2E3440", "#2A2A30", -1), leg_node("WalkerLegR", f, "#2E3440", "#2A2A30", 1)]
-
-
 # ============================================================== store dressing (between the bays, by the back wall)
 def dressing(t, sid):
     """Two props sets that alternate along the aisle at the bay boundaries (render/StoreRoom.kt): Decor0, Decor1.
@@ -698,9 +553,168 @@ def dressing(t, sid):
     return [a, b], []
 
 
+# ============================================================== the entry bay and the back of the shop
+def entry(t, sid):
+    """The bay left of the first tank, just inside the door: what a store shows you first (docs/research/fish_stores.md:
+    the community board, the dry goods, a bench; a big store's carts, a gallery's lounge)."""
+    g = Group("Entry")
+    trim = mat("trim", t["trim"], 0.5)
+    cork = mat("cork", "#B98A5A", 0.9)
+    def board(x, y, w, h, z=BACK):
+        g.box((x - w / 2 - 3, y - h / 2 - 3, z), (x + w / 2 + 3, y + h / 2 + 3, z + 1.5), trim)
+        g.box((x - w / 2, y - h / 2, z + 1.5), (x + w / 2, y + h / 2, z + 1.8), cork)
+        for k in range(7):
+            col = ("#FFFFFF", "#FFE45A", "#9DF2FF", "#FF9EC2", "#B7F59A")[k % 5]
+            fx = x - w / 2 + 10 + (k * 37) % (w - 20)
+            fy = y - h / 2 + 10 + (k * 23) % (h - 24)
+            g.box((fx - 6, fy - 8, z + 1.8), (fx + 6, fy + 8, z + 2.0), mat(f"flyer_{col[1:]}", col, 0.8))
+            g.add(ellipsoid((fx, fy + 7, z + 2.2), (0.8, 0.8, 0.5), 6, 4), mat("pin", "#E23B3B", 0.4))
+    def shelf_unit(x, w, rows, z0=BACK, depth=36, top=150):
+        g.box((x - w / 2, FLOOR, z0), (x + w / 2, top, z0 + 3), trim)
+        for dx in (-w / 2, w / 2 - 2):
+            g.box((x + dx, FLOOR, z0), (x + dx + 2, top, z0 + depth), trim)
+        for r in range(rows):
+            y = FLOOR + 12 + r * (top - FLOOR - 20) / rows
+            g.box((x - w / 2, y, z0), (x + w / 2, y + 2, z0 + depth), mat("shelf", "#F7F1E6", 0.6))
+            for k in range(int(w // 12)):
+                col = ("#E8463C", "#2F8FE0", "#F3C33B", "#45B36B", "#9A5CE6", "#F7F7F7")[(k * 3 + r) % 6]
+                bx = x - w / 2 + 6 + k * 12
+                if (k + r) % 3 == 0:
+                    g.add(cylinder((bx, y + 2, z0 + depth / 2), 4.4, 14, 12), mat(f"pack_{col[1:]}", col, 0.6))
+                else:
+                    g.box((bx - 4.5, y + 2, z0 + 8), (bx + 4.5, y + 20, z0 + depth - 6), mat(f"pack_{col[1:]}", col, 0.6))
+    if sid == "shellys":
+        board(CX - 30, 120, 90, 60)
+        shelf_unit(CX + 45, 70, 4)
+        # a gumball machine and a bin of dog toys by the door
+        g.add(cylinder((X0 + 30, FLOOR, 360), 9, 70, 16), mat("gumball_stand", "#E23B3B", 0.4))
+        g.add(ellipsoid((X0 + 30, FLOOR + 84, 360), (14, 14, 14), 16, 10), mat("glass_gumball", "#F4FBFF", 0.04, alpha=0.3))
+        for k in range(14):
+            a = k * 2.4
+            col = CORAL_COLS[k % len(CORAL_COLS)]
+            g.add(ellipsoid((X0 + 30 + 8 * math.cos(a) * (k % 3) / 2, FLOOR + 76 + (k // 4) * 4, 360 + 8 * math.sin(a) * (k % 3) / 2), (2, 2, 2), 6, 4), col)
+        g.add(cylinder((X0 + 75, FLOOR, 400), 22, 40, 18), mat("toy_bin", "#2BA7A0", 0.6))
+        for k in range(5):
+            g.add(ellipsoid((X0 + 65 + k * 5, FLOOR + 42, 395 + (k % 2) * 8), (4, 4, 4), 8, 6), ("#FFE45A", "#E8463C", "#5BE0FF")[k % 3])
+    elif sid == "frag_shack":
+        # a whiteboard of today's frags, a sofa made of a pallet and cushions, a mini fridge of frozen food
+        g.box((CX - 50, 90, BACK), (CX + 30, 150, BACK + 1.4), mat("whiteboard", "#F7F8F8", 0.3))
+        txt = text("FRAGS\nTODAY", CX - 10, 120, BACK + 1.4, 9, mat("marker", "#2F55D4", 0.6), depth=0.2)
+        g.box((CX + 40, FLOOR, BACK), (CX + 80, FLOOR + 80, BACK + 40), mat("fridge", "#E9ECEF", 0.4))
+        g.box((CX + 42, FLOOR + 50, BACK + 40), (CX + 78, FLOOR + 76, BACK + 40.4), mat("glass_fridge", "#DDEFFF", 0.05, alpha=0.3))
+        g.box((X0 + 20, FLOOR, 40), (X0 + 150, FLOOR + 22, 100), mat("pallet", "#B38B5A", 0.9))
+        g.box((X0 + 24, FLOOR + 22, 44), (X0 + 146, FLOOR + 36, 96), mat("cushion", "#3DD9B8", 0.95))
+        g.box((X0 + 24, FLOOR + 36, 40), (X0 + 146, FLOOR + 70, 54), mat("cushion", "#3DD9B8", 0.95))
+        return g, [txt]
+    elif sid == "big_blue":
+        # carts by the door, a gondola of dry goods, the free water testing station
+        for k in range(3):
+            _cart(g, X0 + 40 + k * 9, 330 + k * 6)
+        shelf_unit(CX - 10, 120, 5, top=170)
+        g.box((CX + 60, FLOOR, BACK), (CX + 92, 30, BACK + 40), mat("counter", t["counter"], 0.6))
+        g.box((CX + 58, 30, BACK - 2), (CX + 94, 33, BACK + 42), mat("counter_top", t["top"], 0.35))
+        for k in range(5):
+            g.add(cylinder((CX + 64 + k * 6, 33, BACK + 24), 1.2, 7, 8), mat("glass_vial", "#DDEFFF", 0.05, alpha=0.35))
+        g.box((CX + 60, 110, BACK), (CX + 92, 134, BACK + 1.2), mat("sale_board", "#E8463C", 0.5))
+        txt = text("FREE\nWATER TEST", CX + 76, 122, BACK + 1.2, 4.5, mat("sign_text", "#FFFFFF", 0.4, emit="#FFFFFF", strength=1.0), depth=0.3)
+        return g, [txt]
+    else:
+        # a lounge: two leather chairs, a low table with a coffee book, a tall vase of orchids
+        leather = mat("leather", "#5A2E1E", 0.45)
+        for dx in (-40, 40):
+            x = CX + dx
+            g.box((x - 24, FLOOR, 60), (x + 24, FLOOR + 40, 108), leather)
+            g.box((x - 24, FLOOR + 40, 60), (x + 24, FLOOR + 92, 72), leather)
+            for s in (-1, 1):
+                g.box((x + s * 24 - (6 if s > 0 else 0), FLOOR + 40, 60), (x + s * 24 + (0 if s > 0 else 6), FLOOR + 60, 108), leather)
+        g.box((CX - 22, FLOOR, 128), (CX + 22, FLOOR + 36, 158), mat("crown", "#2A2420", 0.5))
+        g.box((CX - 23, FLOOR + 36, 127), (CX + 23, FLOOR + 38, 159), mat("gold_trim", "#C9A646", 0.25, metal=0.9))
+        g.box((CX - 10, FLOOR + 38, 136), (CX + 10, FLOOR + 41, 150), mat("book", "#1F6FD1", 0.6))
+        g.add(cylinder((X0 + 34, FLOOR, 10), 10, 60, 16), mat("vase", "#F4F1EA", 0.2))
+        for k in range(5):
+            a = k * 1.25
+            g.add(_rod((X0 + 34, FLOOR + 60, 10), (X0 + 34 + 12 * math.cos(a), FLOOR + 120 + k * 6, 10 + 12 * math.sin(a)), 0.5), mat("stem", "#3E6B3A", 0.7))
+            g.add(ellipsoid((X0 + 34 + 12 * math.cos(a), FLOOR + 122 + k * 6, 10 + 12 * math.sin(a)), (4, 3, 4), 8, 6), mat("orchid", "#F4E8F4", 0.6))
+        # a framed print of a coelacanth over the chairs and a little brass plaque
+        g.box((CX - 50, 100, BACK), (CX + 50, 170, BACK + 2), mat("gold_trim", "#C9A646", 0.25, metal=0.9))
+        g.box((CX - 46, 104, BACK + 2), (CX + 46, 166, BACK + 2.3), mat("poster", t["poster"], 0.7))
+        fish(g, (CX, 135, BACK + 2.6), 70, "#3A5A8A")
+    return g, []
+
+
+def _cart(g, x, z):
+    """A shopping cart parked by the door, facing into the store."""
+    wire = mat("cart", "#B9C0C8", 0.35)
+    g.box((x - 25, FLOOR + 50, z - 40), (x + 25, FLOOR + 52, z + 40), wire)
+    for dx in (-25, 23):
+        g.box((x + dx, FLOOR + 50, z - 40), (x + dx + 2, FLOOR + 90, z + 40), wire)
+    g.box((x - 25, FLOOR + 50, z + 38), (x + 25, FLOOR + 90, z + 40), wire)
+    g.box((x - 25, FLOOR + 50, z - 40), (x + 25, FLOOR + 90, z - 38), wire)
+    g.box((x - 25, FLOOR + 96, z - 50), (x + 25, FLOOR + 100, z - 46), mat("cart_handle", "#E8463C", 0.5))
+    for dx in (-20, 20):
+        for dz in (-34, 34):
+            g.add(cylinder((x + dx, FLOOR, z + dz), 4, 8, 10), mat("out_tyre", "#1A1A1C", 0.8))
+            g.box((x + dx - 1, FLOOR + 8, z + dz - 1), (x + dx + 1, FLOOR + 50, z + dz + 1), wire)
+
+
+def back(t, sid):
+    """The bay right of the counter: the door to the back, and what each store keeps there (docs/research/fish_stores.md:
+    the fish room and quarantine racks, the RO/DI station, a gallery's espresso bar)."""
+    g = Group("Back")
+    trim = mat("trim", t["trim"], 0.5)
+    dx = CX - 30
+    g.box((dx - 50, FLOOR, BACK), (dx + 50, 134, BACK + 3), trim)
+    g.box((dx - 45, FLOOR, BACK + 3), (dx + 45, 128, BACK + 4.5), mat("door_back", t["stand"], 0.55))
+    g.box((dx + 30, 20, BACK + 4.5), (dx + 34, 34, BACK + 7), mat("gold_knob", "#C9A646", 0.3, metal=0.9))
+    sign = mat("sign_board", t["stripe"], 0.5)
+    g.box((dx - 34, 96, BACK + 4.5), (dx + 34, 116, BACK + 5), sign)
+    words = {"shellys": "STAFF ONLY", "frag_shack": "FRAG LAB", "big_blue": "FISH ROOM", "deep_reef": "PRIVATE"}[sid]
+    txt = text(words, dx, 106, BACK + 5, 7, mat("sign_text", "#FFFFFF", 0.4, emit="#FFFFFF", strength=1.0), depth=0.3)
+    x = CX + 60
+    if sid == "shellys":
+        # a bird cage on a stand and bags of dog food
+        g.add(cylinder((x, FLOOR, 0), 2, 110, 8), trim)
+        cage = mat("cage", "#D8D2C0", 0.4, metal=0.0)
+        for k in range(12):
+            a = k * math.pi / 6
+            g.add(_rod((x + 18 * math.cos(a), 28, 18 * math.sin(a)), (x + 14 * math.cos(a), 74, 14 * math.sin(a)), 0.4), cage)
+        g.add(cylinder((x, 26, 0), 19, 2, 18), cage)
+        g.add(ellipsoid((x, 76, 0), (15, 8, 15), 14, 6), cage)
+        g.add(ellipsoid((x + 2, 46, 0), (3.5, 5, 3.5), 10, 6), "#5BC85A")
+        g.add(ellipsoid((x + 2, 52, 1.6), (2.8, 2.6, 2.6), 10, 6), "#F3C33B")
+        for k in range(3):
+            g.box((x - 50 + k * 6, FLOOR + k * 22, 60), (x - 14 + k * 6, FLOOR + 22 + k * 22, 86), mat("food_sack", ("#C0563E", "#2F8FE0", "#45B36B")[k], 0.8))
+    elif sid == "frag_shack":
+        # the RO/DI filters on the wall with their blue canisters and the barrel under them
+        for k in range(4):
+            g.add(cylinder((x - 20 + k * 14, 50, BACK + 10), 5, 32, 14), mat("rodi_canister", "#DDEFFF" if k < 2 else "#5FA8E8", 0.2))
+        g.box((x - 30, 86, BACK + 2), (x + 34, 90, BACK + 16), trim)
+        g.add(cylinder((x, FLOOR, -30), 26, 100, 20), mat("rodi_barrel", "#2D63C8", 0.5))
+    elif sid == "big_blue":
+        # the quarantine rack through the fish room window: rows of little tanks glowing blue
+        g.box((x - 46, 20, BACK), (x + 46, 120, BACK + 2), mat("light_housing", "#202226", 0.4, metal=0.6))
+        for r in range(3):
+            for c in range(4):
+                cx, cy = x - 33 + c * 22, 26 + r * 32
+                g.box((cx - 9, cy, BACK + 2), (cx + 9, cy + 24, BACK + 2.6), mat("water_qt", "#9FD8FF", 0.1, emit="#3FA6FF", strength=0.9, alpha=0.7))
+        g.box((x - 48, 18, BACK + 2.6), (x + 48, 122, BACK + 3.2), mat("glass_window", "#DDEFE4", 0.02, alpha=0.15))
+        g.box((x - 40, FLOOR, 10), (x + 40, FLOOR + 14, 70), mat("pallet", "#B38B5A", 0.9))
+        for k in range(6):
+            g.box((x - 36 + (k % 3) * 25, FLOOR + 14 + (k // 3) * 22, 14), (x - 14 + (k % 3) * 25, FLOOR + 36 + (k // 3) * 22, 66), mat("salt_box", "#F1F3F5", 0.6))
+    else:
+        # the espresso bar: a marble counter, a brass machine, little cups
+        g.box((x - 40, FLOOR, BACK), (x + 50, 18, BACK + 50), mat("crown", "#2A2420", 0.5))
+        g.box((x - 42, 18, BACK - 2), (x + 52, 21, BACK + 52), mat("floor_marble_top", "#E8E2D8", 0.25))
+        g.box((x - 10, 21, BACK + 10), (x + 22, 52, BACK + 36), mat("gold_espresso", "#C9A646", 0.25, metal=0.9))
+        g.add(cylinder((x + 6, 52, BACK + 23), 6, 6, 14), mat("gold_espresso", "#C9A646", 0.25, metal=0.9))
+        for k in range(4):
+            g.add(cylinder((x - 32 + k * 8, 21, BACK + 40), 2.6, 5, 12), mat("cup", "#F4F1EA", 0.3))
+    return g, [txt]
+
+
 def end_wall(t, name, x, sgn):
     g = Group(name)
-    g.box((x - (2 if sgn < 0 else 0), FLOOR, BACK - 2), (x + (0 if sgn < 0 else 2), CEIL, FRONT), mat("wall", t["wall"], 0.9))
+    g.box((x - (2 if sgn < 0 else 0), FLOOR, BACK - 2), (x + (0 if sgn < 0 else 2), CEIL + 70, FRONT + SF.WALL), mat("wall", t["wall"], 0.9))
     face = x if sgn < 0 else x - 0.6
     g.box((face, 58, BACK), (face + 0.6, 72, FRONT), mat("stripe", t["stripe"], 0.5))
     tx = x if sgn < 0 else x - 2
@@ -715,6 +729,58 @@ def sign_mat(t):
     if kind == "gold":
         return mat("gold_sign", t["sign"], 0.25, metal=0.9)
     return mat("sign_paint", t["sign"], 0.5)
+
+
+# ============================================================== baked shading
+def bake_ao(sets, samples=24):
+    """Bakes ambient occlusion into the vertex colour of each set of objects on its own (a person's six parts, the pet,
+    a prop), so armpits, under the chin, between the legs and the folds of clothes are softly shaded like the Cycles
+    previews, at no runtime cost (store.frag multiplies COLOR_0 in, kind 9)."""
+    scn = bpy.context.scene
+    scn.render.engine = 'CYCLES'
+    scn.cycles.device = 'CPU'
+    scn.cycles.samples = samples
+    scn.render.bake.target = 'VERTEX_COLORS'
+    if scn.world is None:
+        scn.world = bpy.data.worlds.new("bake")
+    scn.world.light_settings.distance = 14.0      # cm: creases and folds, not the whole figure
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    for objs in sets:
+        objs = [o for o in objs if o is not None and "Col" in o.data.color_attributes]
+        if not objs:
+            continue
+        for o in meshes:
+            o.hide_render = o not in objs
+        for o in objs:
+            me = o.data
+            # the builders don't care about winding (store.frag lights both sides); the bake's rays need outward faces
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            bm.to_mesh(me)
+            bm.free()
+            col = me.color_attributes["Col"]
+            ao = me.color_attributes.new("AO", 'FLOAT_COLOR', 'POINT')
+            me.color_attributes.active_color = ao
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True)
+            bpy.context.view_layer.objects.active = o
+            bpy.ops.object.bake(type='AO')
+            if os.environ.get("AO_DEBUG"):
+                v = [a.color[0] for a in ao.data]
+                print("[ao]", o.name, round(min(v), 3), round(sorted(v)[len(v) // 2], 3), round(max(v), 3))
+            # normalise by the part's own bright end (layered clothes shells occlude each other), then soften with a
+            # 0.55 floor so creases darken but nothing turns black
+            v = sorted(a.color[0] for a in ao.data)
+            top = max(v[int(len(v) * 0.9)], 0.05)
+            for c, a in zip(col.data, ao.data):
+                k = 0.55 + 0.45 * min(1.0, a.color[0] / top)
+                r, g, b, al = c.color
+                c.color = (r * k, g * k, b * k, al)
+            me.color_attributes.remove(me.color_attributes["AO"])
+            me.color_attributes.active_color = me.color_attributes["Col"]
+    for o in meshes:
+        o.hide_render = False
 
 
 # ============================================================== build
@@ -733,25 +799,50 @@ def join_into(node, objs):
 def build(sid):
     C.reset_scene()
     _mats.clear()
+    configure(sid)
     t = THEMES[sid]
+    st = SF.STYLES[sid]
     root = C.empty("Root")
-    C.set_extras(root, units="cm", bay=BAY, floorY=FLOOR, store=sid)
-    groups = [bay(t), counter(t), end_wall(t, "EndL", X0, -1), end_wall(t, "EndR", X1, 1), frag_racks()]
+    C.set_extras(root, units="cm", bay=BAY, floorY=FLOOR, ceil=CEIL, front=FRONT, wall=SF.WALL, store=sid,
+                 door=st["door"], doorW=st["door_w"], doorH=st["door_h"])
+    groups = [bay(t, sid), counter(t), end_wall(t, "EndL", X0, -1), end_wall(t, "EndR", X1, 1), frag_racks()]
     for k, kind in enumerate(KINDS):
         tank, fishes, reef = prop_tank(t, k, kind, sum(map(ord, sid)) + k)
         groups += [stand(t, k, kind), tank, reef, fishes, lamp(t, k, kind)]
-    body, head, _ = clerk(t)
-    groups += [body, head] + shoppers()
     decor, decor_text = dressing(t, sid)
     groups += decor
-    objs = [g.build(root) for g in groups]
+    ent, ent_text = entry(t, sid)
+    bk, bk_text = back(t, sid)
+    groups += [ent, bk]
+    # the people (core StoreLife cast, slot order), what they carry, the shop pet
+    for slot, look in enumerate(SP.CASTS[sid]):
+        groups += SP.person(slot, look)
+    groups += SP.props()
+    pet = {"shellys": "cat", "frag_shack": "dog"}.get(sid)
+    if pet:
+        groups += SP.pet(pet)
+    # outside: the front wall bay by bay, the door, the street and the neighbours
+    f = SF.Front(X0, X1, CX, FLOOR, CEIL, FRONT)
+    sign, sign_text = SF.front_sign(f, sid, t["name"])
+    groups += [SF.front_bay(f, sid, "FrontBay"), SF.front_bay(f, sid, "FrontDoor"), sign, SF.street(f, sid),
+               SF.neighbor(f, sid), SF.sky(f), SF.roof(f)] + SF.doors(f, sid)
+    objs = [g.build(root) for g in groups if not g.empty() or g.name == "FrontSign"]
     # the store's name across the back wall over the first tank, and CHECKOUT on the counter sign
     sign = text(t["name"], CX, 190, BACK, 17 if len(t["name"]) > 14 else 20, sign_mat(t), depth=1.6)
     sign.name = "Sign"
     sign.parent = root
     co = text("CHECKOUT", CX, 163, 67, 13, mat("sign_text", "#FFFFFF", 0.4, emit="#FFFFFF", strength=1.2), depth=0.8)
-    join_into(next(o for o in objs if o.name == "Counter"), [co])
-    join_into(next(o for o in objs if o.name == "Decor1"), decor_text)
+    by = {o.name: o for o in objs}
+    sets = [[by.get(f"P{slot}_{p}") for p in ("Torso", "Head", "ArmL", "ArmR", "LegL", "LegR")] for slot in range(len(SP.CASTS[sid]))]
+    sets += [[by.get("Pet_Body"), by.get("Pet_Tail")], [by.get("Pet_Sleep")]]
+    sets += [[o] for n, o in by.items() if n.startswith("Prop_")]
+    if "--no-bake" not in sys.argv:
+        bake_ao(sets)
+    join_into(by["Counter"], [co])
+    join_into(by["Decor1"], decor_text)
+    join_into(by["Entry"], ent_text)
+    join_into(by["Back"], bk_text)
+    join_into(by["FrontSign"], sign_text)
     objs = list(root.children)
     for o in objs:
         C.triangulate(o)

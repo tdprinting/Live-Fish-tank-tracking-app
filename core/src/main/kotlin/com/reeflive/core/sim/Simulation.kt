@@ -1087,8 +1087,11 @@ class Simulation private constructor(
         if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.DIAMOND_GOBY) {
             (agents[o]?.brain as? com.reeflive.core.ai.DiamondGobyBrain)?.abstractSift(dtMin)
         }
-        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive && o.brainKind == BrainKind.LEOPARD_WRASSE) {
-            (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+        if ((!behaviorEnabled || abstractMode) && !night) for (o in organisms) if (o.alive) when (o.brainKind) {
+            BrainKind.LEOPARD_WRASSE -> (agents[o]?.brain as? com.reeflive.core.ai.LeopardWrasseBrain)?.abstractPick(dtMin)
+            BrainKind.MANDARIN -> (agents[o]?.brain as? com.reeflive.core.ai.MandarinBrain)?.abstractPick(dtMin)
+            BrainKind.SIXLINE -> (agents[o]?.brain as? com.reeflive.core.ai.SixlineBrain)?.abstractPick(dtMin)
+            else -> {}
         }
         sandTick(dtMin)
         flushEvents()
@@ -2061,6 +2064,8 @@ class Simulation private constructor(
         if (o.brainKind == BrainKind.DIAMOND_GOBY) o.acceptsPrepared = rng.chance(0.6)
         // leopard wrasses: many learn frozen mysis/cyclops, thin ones never do (Fenner, TFH; LiveAquaria)
         if (o.brainKind == BrainKind.LEOPARD_WRASSE) o.acceptsPrepared = rng.chance(0.7)
+        // research 51 §1 facts 24, 32-34: captive-bred mandarins (most sold now) often learn frozen food, wild ones seldom
+        if (o.brainKind == BrainKind.MANDARIN) o.acceptsPrepared = rng.chance(0.5)
         organisms += o
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)
