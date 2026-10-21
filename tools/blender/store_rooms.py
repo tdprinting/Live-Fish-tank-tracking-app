@@ -611,7 +611,12 @@ def dressing(t, sid):
         return [a, b], []
     if sid == "big_blue":
         # a wall of small tanks: a lit rack of 3 x 3 cubes, and an endcap with a big SALE sign
-        a.box((x - 26, FLOOR, -68), (x + 26, 120, -40), trim)
+        # an open steel rack: back panel, side posts and a shelf under each row
+        a.box((x - 26, FLOOR, -70), (x + 26, 120, -67), trim)
+        for dx in (-26, 24):
+            a.box((x + dx, FLOOR, -68), (x + dx + 2, 120, -40), trim)
+        for r in range(3):
+            a.box((x - 26, FLOOR + 20 + r * 40, -68), (x + 26, FLOOR + 22 + r * 40, -40), trim)
         for r in range(3):
             for c in range(3):
                 cx, cy = x - 16 + c * 16, FLOOR + 22 + r * 40
