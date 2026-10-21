@@ -33,6 +33,7 @@ import com.reeflive.core.sim.LivestockSeed
 import com.reeflive.core.sim.Reality
 import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.SimSpecies
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.StockSize
@@ -246,6 +247,8 @@ class SimulationHolder(
 
     // ============================================================== public API (any thread)
     fun enqueue(cmd: Command) { scope.launch { active?.enqueue(cmd) } }
+    /** A loaded species sheet, or null (read from the UI thread: sheets are only added while the sims are built). */
+    fun simSpecies(id: String): SimSpecies? = species?.takeIf { it.has(id) }?.get(id)
 
     fun setMode(m: SimMode) { scope.launch { switchMode(m) } }
 
