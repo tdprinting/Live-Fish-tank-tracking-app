@@ -317,7 +317,7 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
                 // not while the rock guard holds a re-laid shape or a den path is blending (those stations must match it)
                 if (spreadAny) for (i in 1 until POINTS) {
                     val k = i * 3
-                    var x = pos[i].x + spreadOff[k]; val y = pos[i].y + spreadOff[k + 1]; var z = pos[i].z + spreadOff[k + 2]
+                    var x = pos[i].x + spreadOff[k]; val y = min(pos[i].y + spreadOff[k + 1], boxMaxY); var z = pos[i].z + spreadOff[k + 2]
                     if (x < boxMinX || x > boxMaxX || z < boxMinZ || z > boxMaxZ) { x = x.coerceIn(boxMinX, boxMaxX); z = z.coerceIn(boxMinZ, boxMaxZ) }
                     pos[i] = Vec3(x, y, z)
                 }
