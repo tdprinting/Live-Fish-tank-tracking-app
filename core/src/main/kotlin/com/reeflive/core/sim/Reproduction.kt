@@ -125,7 +125,7 @@ class Reproduction(private val sim: Simulation) {
             o.disease == null && now - o.arrivalTime > PAIR_BOND_DAYS * 86400.0
 
     private fun pairReady(f: Organism, m: Organism, now: Double) =
-        fit(f, FEMALE_MATURE_CM, now) && fit(m, MALE_MATURE_CM, now) && inRange(sim.water.s)
+        fit(f, FEMALE_MATURE_CM) && fit(m, MALE_MATURE_CM) && inRange(sim.water.s)
 
     private fun clownBreeding(now: Double, dt: Double) {
         val cl = clowns()
@@ -274,7 +274,7 @@ class Reproduction(private val sim: Simulation) {
         val f = cl.filter { it.sexFemale == true }.maxByOrNull { it.lengthCm }
         val m = cl.filter { it.sexFemale == false }.maxByOrNull { it.lengthCm }
         if (f == null || m == null) { cardReadiness = maxOf(0.0, cardReadiness - dt / 86400.0); return }
-        val ok = fit(f, CARDINAL_MATURE_CM, now) && fit(m, CARDINAL_MATURE_CM, now) && inRange(sim.water.s)
+        val ok = fit(f, CARDINAL_MATURE_CM) && fit(m, CARDINAL_MATURE_CM) && inRange(sim.water.s)
         cardReadiness = (cardReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
         if (cardReadiness >= 1.0 && now >= cardCooldownUntil && sim.perception.night) {
             m.mouthbrooding = true; brooder = m; cardReadiness = 0.0
