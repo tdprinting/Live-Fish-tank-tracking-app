@@ -32,6 +32,8 @@ object StonyCorals {
             sp.id.startsWith("fimbriaphyllia_ancora") -> Sting(3.5, 12.0, 0.35)     // hammer
             genus.startsWith("euphyllia") || genus.startsWith("fimbriaphyllia") -> Sting(4.0, 15.0, 0.35)
             genus.startsWith("duncanopsammia") -> Sting(1.5, 5.0, 0.12)              // short night sweepers, mild
+            // scolymia: one big meaty polyp; its night feeding tentacles reach a few cm past the disc (research 61 §3)
+            genus.startsWith("homophyllia") || genus.startsWith("scolymia") -> Sting(1.0, 6.0, 0.25)
             sp.coralKind == CoralKind.LPS -> Sting(1.5, 6.0, 0.2)
             else -> null
         }

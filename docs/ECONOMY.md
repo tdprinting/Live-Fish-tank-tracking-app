@@ -236,9 +236,12 @@ dollars (20-40 real dollars' worth).
 | Yellow tang | fish | 5 | 130 |
 | Blue tang | fish | 5 | 150 |
 | Blue star leopard wrasse | fish | 6 | 150 |
+| Gold torch coral | coral | 6 | 250 |
 | Hummingbird bobtail squid | invert | 7 | 80 |
 | Purple tang | fish | 7 | 250 |
+| Scolymia | coral | 7 | 300 |
 | Gem tang (rare, research 60) | fish | 8 | 1000 |
+| Bounce mushroom | coral | 8 | 250 |
 | Wrought iron butterflyfish (rare; eats fanworms) | fish | 9 | 2500 |
 
 Asterina stars and bristleworms are hitchhikers: never sold, they show up on rock by themselves. A species added to the sim later

@@ -75,8 +75,12 @@ CARDS = {
     "gracilaria_sp": "macro_red",
     "tubipora_musica": "organ_pipe",
     "zoanthus_sp": "zoa",
+    "euphyllia_glabrescens_gold": "gold_torch",
+    "rhodactis_inchoata": "bounce_mushroom",
+    "homophyllia_australis": "scolymia",
 }
 TOP = {"brittle_star", "serpent_star", "asterina", "mushroom", "mushroom_hairy", "zoa"}
+CORAL_HIGH = {"bounce_mushroom", "scolymia"}
 HIGH = {"hermit_blue", "hermit_scarlet", "sally_lightfoot", "arrow_crab", "emerald_crab", "porcelain_crab", "astrea", "nassarius", "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "flame_scallop", "maxima_clam", "gsp_mat",
         "organ_pipe", "clove", "trochus", "fighting_conch", "tuxedo_urchin", "tiger_tail_cucumber"}
 
@@ -116,7 +120,7 @@ def render_card(species, glb, size=512, samples=32):
                  color=(0.85, 0.92, 1.0))
     PV.add_light('AREA', tuple(ctr + Vector((1.0, 1.4, 0.8)) * big), 40 * big * big, size=big, color=(0.7, 0.85, 1.0))
     yaw = math.radians(-28)
-    elev = 1.45 if glb in TOP else (0.6 if glb in HIGH else 0.28)
+    elev = 1.45 if glb in TOP else (0.9 if glb in CORAL_HIGH else (0.6 if glb in HIGH else 0.28))
     d = big * 4 + 1
     loc = ctr + Vector((d * math.sin(yaw) * math.cos(elev), -d * math.cos(yaw) * math.cos(elev), d * math.sin(elev)))
     PV.camera(tuple(loc), tuple(ctr), lens=50, ortho=big * 1.12)

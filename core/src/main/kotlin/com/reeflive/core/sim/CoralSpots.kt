@@ -22,6 +22,8 @@ data class CoralNeeds(
     val flow: String = "MODERATE",
     val stingCm: Double = 0.0,
     val ground: String = "ROCK",
+    /** Its model is a loose frag (built at [StonyCorals.STUDIO]) placed on a free spot, as the stony corals are. */
+    val frag: Boolean = false,
 )
 
 /** One suggested spot for a new colony: where, how good (1..3 stars, 0..1 score) and why, in a few kid words. */

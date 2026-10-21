@@ -126,6 +126,9 @@ object Stocking {
         StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
         StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
         StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
+        StockEntry("euphyllia_glabrescens_gold", StockGroup.CORALS, "Gold torch coral", 15.0),
+        StockEntry("rhodactis_inchoata", StockGroup.CORALS, "Bounce mushroom", 6.0),
+        StockEntry("homophyllia_australis", StockGroup.CORALS, "Scolymia", 8.0),
     )
 
     /** The entry for a stock key ("speciesId" or "speciesId@male"); a bare species id finds its first entry. */
@@ -179,7 +182,7 @@ object Stocking {
         "amplexidiscus_fenestrafer" to listOf("coral_elephant_ear"),
     )
 
-    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.coralKind.stony) null else
+    fun homeAnchor(rock: RockData, sp: SimSpecies): Anchor? = if (sp.fragColony) null else
         SPECIES_HOME_ANCHORS[sp.id].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: HOME_ANCHORS[sp.coralKind].orEmpty().firstNotNullOfOrNull { rock.anchors[it] }
             ?: rock.anchors.ofType("CORAL").firstOrNull { it.name.contains(sp.coralKind.name.lowercase().take(4)) }

@@ -63,6 +63,8 @@ data class SimSpecies(
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
     val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true)
     val coralKind: CoralKind get() = CoralKind.resolve(id)
+    /** A colony whose model is a loose frag: placed on a free spot rather than on its kind's anchor (stony corals, a bounce mushroom). */
+    val fragColony: Boolean get() = coralKind.stony || coral?.frag == true
 
     private fun has(tag: String): Boolean = diet.any { it.equals(tag, ignoreCase = true) }
 
@@ -549,7 +551,7 @@ enum class CoralKind(val genera: List<String>, val demandDkhPerDay: Double, val 
     // Euphyllia: hammer, torch, frogspawn (Fimbriaphyllia since 2017 for ancora / divisa).
     EUPHYLLIA(listOf("euphyllia", "fimbriaphyllia"), 0.03, 0.10),
     // Large-polyp stony corals fed at night: duncan, acan, candy cane, open brain, bubble.
-    LPS(listOf("duncanopsammia", "micromussa", "acanthastrea", "caulastrea", "trachyphyllia", "plerogyra"), 0.02, 0.08),
+    LPS(listOf("duncanopsammia", "micromussa", "acanthastrea", "caulastrea", "trachyphyllia", "plerogyra", "homophyllia", "scolymia"), 0.02, 0.08),
     GENERIC(emptyList(), 0.01, 0.05);
 
     /** Builds an aragonite skeleton: needs Ca, Mg and steady alkalinity, and leaves a white skeleton where tissue dies. */
