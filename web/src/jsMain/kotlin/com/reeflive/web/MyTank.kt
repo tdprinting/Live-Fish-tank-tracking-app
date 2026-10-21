@@ -197,10 +197,10 @@ object ReefMyTank {
         tanks = StoreVisit.tanks(store, today())
         tankAt = -1
         showTank(0)
-        trade = StoreTrades.offer(store, mine, e, today())
+        swap = StoreTrades.offer(store, mine, e, today())
         // walk in from the street, unless the page asks for less motion
         ReefLive.room.walkIn = !kotlinx.browser.window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup }, trade?.line)
+        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup }, swap?.line)
         return visitJson(mine)
     }
 
@@ -273,7 +273,7 @@ object ReefMyTank {
     }
 
     // ---- the store's people (render StorePeople): their speech bubbles and a regular's swap
-    private var trade: TradeOffer? = null
+    private var swap: TradeOffer? = null
     private val bText = arrayOfNulls<String>(6)
     private val bPos = FloatArray(18)
     private val bAlpha = FloatArray(6)
@@ -299,14 +299,14 @@ object ReefMyTank {
 
     /** The swap the store's regular just asked about: {trader, line, give, frag, get} or "null". */
     fun trade(): String {
-        val o = trade ?: return "null"
+        val o = swap ?: return "null"
         return JSON.stringify(obj { it.trader = o.trader; it.line = o.line; it.give = o.giveName; it.frag = o.giveFrag; it.get = o.getName })
     }
 
     /** The keeper's answer: yes cuts the frag (or nets the spare) and bags the new animal for My tank. */
     fun answerTrade(yes: Boolean) {
-        val o = trade ?: return
-        trade = null
+        val o = swap ?: return
+        swap = null
         ReefLive.room.tradeReply(yes)
         if (!yes) return
         val mine = sim ?: return
@@ -320,7 +320,7 @@ object ReefMyTank {
     /** Walks out (the bag empties back onto the shelves): My tank catches up on the minutes spent shopping. */
     fun leaveStore() {
         if (visiting == null) return
-        visiting = null; tanks = emptyList(); tankAt = -1; display = null; trade = null
+        visiting = null; tanks = emptyList(); tankAt = -1; display = null; swap = null
         ReefLive.room.leave()
         if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
     }

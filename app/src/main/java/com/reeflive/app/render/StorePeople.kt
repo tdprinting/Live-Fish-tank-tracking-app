@@ -62,8 +62,6 @@ internal class StorePeople {
         var lean = 0f; var headYaw = 0f; var headPitch = 0f
         var armLp = 0f; var armLr = 0f; var armRp = 0f; var armRr = 0f
         var legL = 0f; var legR = 0f; var bob = 0f
-        /** Head top height (cm over the floor) for the bubble and picking, from the model. */
-        var headTop = 170f
     }
 
     /** The shop pet: wanders the aisle, naps at its spot. */
@@ -82,6 +80,8 @@ internal class StorePeople {
     }
 
     val agents = ArrayList<Agent>()
+    /** Each slot's head top (cm over the floor, from the model) for the bubbles and picking. */
+    val headTop = FloatArray(MAX_SLOTS) { 170f }
     var pet: Pet? = null
         private set
     var cast: StoreCast? = null
@@ -274,7 +274,7 @@ internal class StorePeople {
             Place.TANK -> {
                 if (tanks <= 1 && !near) { spot(a, Place.ENTRY); return }
                 var best = 0f; var bx = 0f; var bz = 0f
-                for (tryN in 0 until 4) {
+                repeat(4) {
                     val b = when {
                         near -> if (at + 1 < tanks) at + 1 else max(at - 1, 0)
                         else -> { var k = rnd.nextInt(max(tanks - 1, 1)); if (k >= at) k++; min(k, tanks - 1) }
@@ -289,7 +289,6 @@ internal class StorePeople {
                         clear = min(clear, (ox - x) * (ox - x) + (oz - z) * (oz - z))
                     }
                     if (clear > best) { best = clear; bx = x; bz = z }
-                    if (clear > 60f * 60f) break
                 }
                 sx = bx; sz = bz; sYaw = PI.toFloat()
             }
@@ -333,9 +332,6 @@ internal class StorePeople {
         if (!a.walking && a.mode == MODE_ROUTINE) { a.act = Act.WAVE; a.actLeft = 2.5f; a.actT = 0f; a.faceYaw = atan2(at * bay - a.x, 420f - a.z) }
     }
 
-    /** Called when the trade card closes without the trader's walk (left the store): nothing more to say. */
-    fun tradeDone() { tradeAsk = false }
-
     /** Bubbles to show: copies up to [texts].size of them (text, alpha) and their anchors (store cm). */
     fun bubbles(texts: Array<String?>, pos: FloatArray, alpha: FloatArray): Int {
         var n = 0
@@ -343,7 +339,7 @@ internal class StorePeople {
             val s = a.say ?: continue
             if (a.hidden || n >= texts.size) continue
             texts[n] = s
-            pos[n * 3] = a.x; pos[n * 3 + 1] = a.headTop + 12f + a.bob; pos[n * 3 + 2] = a.z
+            pos[n * 3] = a.x; pos[n * 3 + 1] = headTop[a.person.slot % MAX_SLOTS] + 12f + a.bob; pos[n * 3 + 2] = a.z
             alpha[n] = min(1f, min(a.sayAge * 5f, a.sayLeft * 2.5f))
             n++
         }
@@ -469,6 +465,7 @@ internal class StorePeople {
 
     companion object {
         const val MAX_BUBBLES = 3
+        const val MAX_SLOTS = 16
         const val MODE_ROUTINE = 0
         const val MODE_TRADE_GO = 1
         const val MODE_TRADE_WAIT = 2

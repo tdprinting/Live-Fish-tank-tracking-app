@@ -165,6 +165,7 @@ internal class StoreRoomScene {
     private var doorKind = DOOR_SWING1
     private var doorW = 100f
     private var entered = false
+    private var castDue = false
 
     val people = StorePeople()
     /** Each person slot's joints (model cm, from the feet): hip, neck, shoulder L / R, hip joint L / R; and the grip. */
@@ -194,7 +195,8 @@ internal class StoreRoomScene {
             entered = false
             if (id != null) theme = StoreRoomLayout.theme(id)
             cam.enterStore(id != null)
-            people.reset(id?.let { StoreLife.cast(it) }, (id?.hashCode() ?: 0).toLong() * 31 + (time * 1000f).toLong(), c?.trade)
+            if (id == null) people.reset(null, 0L, null)
+            castDue = id != null
         }
         if (id == null || c == null) return
         val m = assets(StoreRoomLayout.model(id))
@@ -218,6 +220,11 @@ internal class StoreRoomScene {
         val dt = if (lastTime < 0f) 0f else (time - lastTime).coerceIn(0f, 0.1f)
         lastTime = time
         layout(c)
+        if (castDue) {
+            // the store's people take their places once the bays are known
+            castDue = false
+            people.reset(StoreLife.cast(id), id.hashCode().toLong() * 31 + (time * 1000f).toLong(), c.trade)
+        }
         people.step(dt, c.trade, c.tradeAnswer)
         stepDoors(c, cam, dt)
         outside = cam.eye[2] > front - OUTSIDE_NEAR || cam.storeEntering
@@ -260,7 +267,7 @@ internal class StoreRoomScene {
                 val k = (g - G_PERSON) % 8
                 val wm = part.node.world
                 joints[slot][k * 3] = wm[12]; joints[slot][k * 3 + 1] = wm[13]; joints[slot][k * 3 + 2] = wm[14]
-                if (k == PART_HEAD) people.agents.getOrNull(slot)?.headTop = w[4]
+                if (k == PART_HEAD) people.headTop[slot] = w[4]
                 if (k == PART_ARM_R) part.node.vec3("grip")?.copyInto(grip[slot])
                 continue
             }
@@ -514,7 +521,7 @@ internal class StoreRoomScene {
             if (a.hidden || a.person.slot >= MAX_PEOPLE) continue
             val x = worldX(c, a.x)
             shifted[0] = x - 22f; shifted[1] = StoreRoomLayout.FLOOR_Y; shifted[2] = a.z - 22f
-            shifted[3] = x + 22f; shifted[4] = StoreRoomLayout.FLOOR_Y + a.headTop; shifted[5] = a.z + 22f
+            shifted[3] = x + 22f; shifted[4] = StoreRoomLayout.FLOOR_Y + people.headTop[a.person.slot]; shifted[5] = a.z + 22f
             val t = SupplyShelfScene.rayBox(o, d, shifted, 2f) ?: continue
             if (t < bestT) { bestT = t; best = PERSON + a.person.slot }
         }
