@@ -904,12 +904,17 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 // or on a food scent (arms snake out first, then the disc), loops food in along an arm, runs for shelter when
 // disturbed, sheds an arm tip when bitten and regrows it. The disc never turns: BrittleArms reassigns the lead arm.
 // =====================================================================================
-class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
+open class BrittleStarBrain(
+    c: Ctx,
+    homeAt: Vec3? = null,
+    extra: (BrittleStarBrain) -> List<Behavior> = { emptyList() },
+) : SpeciesBrain(c) {
     /**
      * Its hide is CREVICE_BRITTLE (ASSETS §3.6; BRITTLE_HOME is its mouth): the disc lies on the sand at the foot of the
-     * crevice, arms reaching up into it, kept clear of the rock (never inside it).
+     * crevice, arms reaching up into it, kept clear of the rock (never inside it). Another ophiuroid on this brain
+     * (the serpent star) brings its own hide in [homeAt].
      */
-    val home: Vec3 = c.rock.anchors.pos("BRITTLE_HOME", Vec3(36.0, 5.5, 10.4))
+    val home: Vec3 = homeAt ?: c.rock.anchors.pos("BRITTLE_HOME", Vec3(36.0, 5.5, 10.4))
     private val sandHome: Vec3 = Vec3(home.x, c.rock.sandTopCm + 0.4, home.z).let { p ->
         if (c.rock.sdf.dist(p) < 0.3) c.rock.sdf.project(p, 0.3).let { q -> Vec3(q.x, c.rock.sandTopCm + 0.4, q.z) } else p
     }
@@ -921,7 +926,7 @@ class BrittleStarBrain(c: Ctx) : SpeciesBrain(c) {
     val tipsOut: Int = 1 + Math.floorMod(o.id.hashCode(), 3)
 
     init {
-        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract(), lightShy)
+        install(HideUnder(), Roam(), ArmFeed(), RaceToFood(), Retract(), lightShy, *extra(this).toTypedArray())
     }
 
     /** Centre-arm reassignments while travelling (coordinated arm roles; Astley 2012). */

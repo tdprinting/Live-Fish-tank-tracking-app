@@ -181,7 +181,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.sg = 1 + salt / v1
         s.alk *= k; s.ca *= k; s.mg *= k; s.k *= k; s.sr *= k; s.i *= k; s.copper *= k
         s.nh3Total *= k; s.no2 *= k; s.no3 *= k; s.po4 *= k; s.detritus *= k; s.silicate *= k
-        s.doc *= k; s.allelo *= k; sockLoad *= k; hobLoad *= k; fecalPending *= k; s.h2s *= k
+        s.doc *= k; s.allelo *= k; sockLoad *= k; hobLoad *= k; fecalPending *= k; s.h2s *= k; s.holothurin *= k
         bacteria.concentrate(k)
         pendingFeedTan *= k; pendingFeedPo4 *= k
         s.volumeL = v1
@@ -319,6 +319,11 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         oxygenDemandPerHour += (s.doc - 2.0).coerceAtLeast(0.0) * DOC_DECAY * 2.67   // mg O2 per mg C respired
         val aOut = s.allelo * (ALLELO_DECAY + 0.01 * skimEfficiency + 0.1 * ce) * h
         s.allelo = max(0.0, s.allelo + alleloSourcePerHour * h - min(aOut, s.allelo))
+        if (s.holothurin > 0) {
+            // saponins: slow breakdown, the skimmer foams some off, fresh carbon adsorbs most within hours [E]
+            s.holothurin *= exp(-(HOLOTHURIN_DECAY + 0.02 * skimEfficiency + HOLOTHURIN_CARBON * ce) * h)
+            if (s.holothurin < 1e-4) s.holothurin = 0.0
+        }
         if (ce > 0) s.copper = max(0.0, s.copper - s.copper * 0.01 * ce * h)
         // carbon also adsorbs iodine/iodide (01 §3.5 trace stripping): crustaceans then moult worse once it runs low
         if (ce > 0) s.i = max(0.0, s.i - s.i * CARBON_IODINE * ce * h)
@@ -549,7 +554,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         s.nh3Total = m(s.nh3Total, mix.nh3Total); s.no2 = m(s.no2, mix.no2); s.no3 = m(s.no3, mix.no3); s.po4 = m(s.po4, mix.po4)
         s.k = m(s.k, mix.k); s.sr = m(s.sr, mix.sr); s.i = m(s.i, mix.i); s.copper = m(s.copper, mix.copper); s.doMgL = m(s.doMgL, mix.doMgL)
         s.silicate = m(s.silicate, mix.silicate)
-        s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo); s.h2s = m(s.h2s, mix.h2s)
+        s.doc = m(s.doc, mix.doc); s.allelo = m(s.allelo, mix.allelo); s.h2s = m(s.h2s, mix.h2s); s.holothurin = m(s.holothurin, mix.holothurin)
         s.detritus *= (1 - f)
         micro.waterChange(f)
         bacteria.waterChange(f)
@@ -627,6 +632,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "sanddepth" -> bacteria.sandDepthCm = value
             "antibiotic" -> bacteria.antibiotic = max(0.0, value)
             "h2s" -> s.h2s = max(0.0, value)
+            "holothurin" -> s.holothurin = max(0.0, value)
             "probiotic" -> bacteria.probiotic = value.coerceIn(0.0, 1.0)
             "bacteria" -> { s.bacteriaAob = value.coerceIn(B_MIN, 1.0); s.bacteriaNob = value.coerceIn(B_MIN, 1.0) }
             "heaterstuck" -> heaterStuckOn = value > 0.5
@@ -711,6 +717,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         const val DOC_CARBON = 0.08            // /h fresh carbon
         const val CARBON_IODINE = 0.004        // /h iodine adsorbed by fresh carbon (τ ≈ 10 days; est.)
         const val ALLELO_DECAY = 0.02          // /h breakdown of terpenoids in water (τ ≈ 2 days)
+        const val HOLOTHURIN_DECAY = 0.03      // /h breakdown of cucumber saponins (τ ≈ 1.5 days) [E]
+        const val HOLOTHURIN_CARBON = 0.5      // /h per unit carbon effectiveness (τ ≈ 2 h on fresh carbon) [E]
         const val MACRO_MU = 0.1 / 24          // /h max specific growth (refugium chaeto doubles in ~2-3 weeks)
         const val MACRO_CAP = 1.0
         const val CHAETO_CAP = 2.0
