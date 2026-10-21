@@ -33,6 +33,9 @@ object TimelapseFork {
         )
         dst.predationEnabled = src.predationEnabled
         dst.bareScape = src.bareScape
+        dst.shape = src.shape
+        // the rockwork as it stands (a My tank fitted to a smaller glass, rocks moved with the aquascape builder)
+        src.rockState().takeIf { it.isNotBlank() }?.let { dst.restoreRocks(it); dst.fitStockScape(src.scapeShift) }
         dst.crabLiveFishScenario = src.crabLiveFishScenario
         dst.unsourcedPredation = src.unsourcedPredation
         dst.asterinaCorallivoryScenario = src.asterinaCorallivoryScenario

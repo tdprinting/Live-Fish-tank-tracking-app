@@ -113,8 +113,6 @@ function tick() {
   P = JSON.parse(SB.panel());
   if (!P) return;
   animals = JSON.parse(SB.animals());
-  const news = SB.coralNews();
-  if (news) toast(news);
   const s = JSON.parse(live.state());
   ui.clockAt = s;
   if (s) $('clock').textContent = `${PHASE_ICON[s.phase] ?? ''} ${hhmm(s.time)}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
@@ -214,12 +212,16 @@ function showFact() {
   const n = store.get('reeflive.factN', Math.floor(Math.random() * 1000));
   store.set('reeflive.factN', n + 1);
   const f = JSON.parse(SB.fact(n));
-  setTimeout(() => {
+  const show = () => {
+    // the "While you were away" card (care.js) goes first: the fact waits until it is closed
+    const away = $('awayModal');
+    if (away && !away.classList.contains('hidden')) { setTimeout(show, 1000); return; }
     $('newsTitle').textContent = `🐠 ${f.title}`;
     $('newsList').innerHTML = `<li>${esc(f.text)}</li>`;
     const d = $('news');
     if (!d.open) d.showModal();
-  }, 1500);
+  };
+  setTimeout(show, 1500);
 }
 function showNews(list = news.slice(0, 15), since = false) {
   if (!list.length) { say('Nothing new yet.'); return; }
@@ -270,10 +272,33 @@ function setMode(m) {
 }
 
 // ================================================================ My tank: pick a tank, saved in this browser
+/**
+ * A little drawing of a tank build, every build at the same scale so the sizes compare at a glance: the glass box in
+ * a three-quarter view, water, sand, the black rim (none on a rimless tank) and the stand.
+ */
+function tankSketch(b) {
+  const k = 0.72, sk = 0.42;                      // px per cm; how much of the depth shows on the slant
+  const L = b.l * k, H = b.h * k, D = b.d * k * sk, W = (b.h - 2.5) * k, S = 4.5 * k;
+  const vw = 121.9 * k + 61 * k * sk + 4, vh = 61 * k + 61 * k * sk + 12;
+  const x0 = 2 + (vw - 4 - L - D) / 2, y0 = vh - 9;  // front-bottom-left corner, above the stand
+  const p = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const top = y0 - H, wy = y0 - W;
+  const rim = b.rimless ? '' : `<path d="M${x0} ${top}h${L}l${D} ${-D}h${-L}z" fill="none" stroke="#111" stroke-width="2.2"/>
+    <path d="M${x0} ${y0}h${L}" stroke="#111" stroke-width="2.2"/>`;
+  return `<svg class="tank-sketch" viewBox="0 0 ${vw.toFixed(0)} ${vh.toFixed(0)}" aria-hidden="true">
+    <rect x="${x0 - 2}" y="${y0 + 1}" width="${L + D + 4}" height="7" rx="1.5" fill="#6b4a2e"/>
+    <polygon points="${p([[x0 + D, wy - D], [x0 + L + D, wy - D], [x0 + L + D, y0 - D], [x0 + L, y0], [x0, y0], [x0, wy]])}" fill="#2a8fc4" opacity=".35"/>
+    <polygon points="${p([[x0, y0 - S], [x0 + L, y0 - S], [x0 + L + D, y0 - S - D], [x0 + L + D, y0 - D], [x0 + L, y0], [x0, y0]])}" fill="#e8dcc0"/>
+    <polygon points="${p([[x0, wy], [x0 + L, wy], [x0 + L + D, wy - D], [x0 + D, wy - D]])}" fill="#7fd0ff" opacity=".45"/>
+    <path d="M${x0} ${top}h${L}v${H}h${-L}z M${x0 + L} ${top}l${D} ${-D}v${H}l${-D} ${D} M${x0} ${top}l${D} ${-D}h${L}" fill="none" stroke="#bfe8ff" stroke-width="1" opacity=".9"/>
+    ${rim}
+  </svg>`;
+}
+
 function showMyTankSetup() {
   const builds = JSON.parse(MY.builds());
-  $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}"><strong>${icon('tank')} ${esc(b.label)}</strong>
-    <small>${b.gallons} gal · ${esc(b.size)}</small><span>${esc(b.blurb)}</span></button>`).join('');
+  $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}">${tankSketch(b)}<strong>${icon('tank')} ${esc(b.label)}</strong>
+    <small>${b.gallons} gal · ${esc(b.size)}${b.rimless ? ' · rimless' : ''}</small><span>${esc(b.blurb)}</span></button>`).join('');
   const d = $('mytank');
   if (!d.open) d.showModal();
 }
@@ -379,10 +404,16 @@ function timeSlider(stops) {
     <input type="range" data-time min="0" max="${stops.length - 1}" step="1" value="${i}" data-stops="${stops.join(',')}"></label>`;
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
+// My tank: how fast slow things (growing, spreading, babies) happen; animals still move at real speed
+function paceTiles() {
+  const ps = JSON.parse(MY.paces());
+  const ico = { REAL: 'clockSun', FAST: 'seaweed', FASTER: 'timelapse' };
+  return `<h4>Growing speed</h4><div class="options">${ps.map((p) => tile(`data-pace="${p.id}" title="${esc(p.blurb)}"`, ico[p.id], p.label, p.on)).join('')}</div>`;
+}
 function lookCard(sb) {
   const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
-  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
+  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}${ui.mode === 'mine' ? paceTiles() : ''}
     ${fish.length ? `<h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('')}</div>` : ''}
     <h4>Look around</h4><div class="options">${tile('data-tour', 'camera', ui.tour ? 'Stop tour' : 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
       ${tile('data-microscope', 'microscope', 'Look closer')}${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-torch', 'torch', 'Torch', ui.torch)}
@@ -623,6 +654,11 @@ $('card').addEventListener('click', (e) => {
   if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
   if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
+  else if (d.pace) {
+    MY.setPace(d.pace);
+    const p = JSON.parse(MY.paces()).find((x) => x.id === d.pace);
+    if (p) say(`${p.blurb}. Fish still swim at real speed.`);
+  }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
   else if ('torch' in d) setTorch(!ui.torch);
   else if ('feedshelf' in d) { closeCard(); openShelf(); return; }

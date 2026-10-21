@@ -227,14 +227,14 @@ object ReefSandbox {
             // Tank Health "Care for corals and inverts" (core CoralCare): doses and feeds what they need now
             // in My tank the supplies cost [num] sand dollars (docs/ECONOMY.md)
             "reefCare" -> { if (mine && !ReefMyTank.spendCare(num.toInt())) return false; send(Command.ReefCare); return true }
-            "knock" -> { send(Command.TapGlass(com.reeflive.core.geom.Vec3(61.0, 25.0, 45.7))); burst(BurstKind.TAP, floatArrayOf(61f, 25f, 44f)); return true }
+            "knock" -> { val t = com.reeflive.app.render.Camera.TANK; send(Command.TapGlass(com.reeflive.core.geom.Vec3(t[0] / 2.0, 25.0, t[2].toDouble()))); burst(BurstKind.TAP, floatArrayOf(t[0] / 2f, 25f, t[2] - 1.7f)); return true }
             "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
             "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
-            // clownfish breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
+            // clownfish and blue tang breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
             "breed" -> {
                 val a = arg ?: return false
-                if (a == "SPAWN_NOW" && !sandbox) return false
+                if (a.startsWith("SPAWN_NOW") && !sandbox) return false
                 send(Command.Breed(a)); return true
             }
         }
@@ -573,9 +573,6 @@ object ReefSandbox {
         JSON.stringify(obj { it.title = f.kind.title; it.text = f.text })
     }
 
-    /** Coral news from My tank's catch-up (bleached, died, budded while away), once; "" when none. */
-    fun coralNews(): String = ReefMyTank.coralNews.also { ReefMyTank.coralNews = "" }
-
     /**
      * Tank Health's corals (core CoralHealth / CoralCare): {words, price, corals: [{name, health, pale, need}]}, where
      * [words] is what the care button would give now ("" = nothing needed) and [need] a colony's main trouble.
@@ -626,7 +623,7 @@ object ReefSandbox {
             it.disease = st.disease?.let { d -> DISEASE_LABELS[d] ?: d.name }
             it.symptoms = c.symptoms.toTypedArray()
             // the parents' "Family" panel (core Brood): eggs, larvae, the nursery and its buttons
-            it.family = sim?.latest?.brood?.panel?.takeIf { p -> p.shows(st.speciesId) }?.let { p ->
+            it.family = sim?.latest?.brood?.panelFor(st.speciesId)?.let { p ->
                 obj { f ->
                     f.title = p.title; f.lines = p.lines.toTypedArray()
                     f.actions = p.actions.filter { a -> !a.sandboxOnly || sandbox }.map { a ->

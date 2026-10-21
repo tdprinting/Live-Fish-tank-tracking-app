@@ -1,0 +1,145 @@
+{
+  "id": "ecsenius_bicolor",
+  "kind": "FISH",
+  "common": "Bicolor blenny",
+  "scientific": "Ecsenius bicolor",
+  "family": "Blenniidae",
+  "maxLengthCm": 11.0,
+  "typicalAdultCm": 9.0,
+  "growthCmPerYear": 2.5,
+  "lifespanYears": 6,
+  "depthRatio": 0.2,
+  "massCoeff": 0.012,
+  "locomotion": {
+    "mode": "PERCHING",
+    "cruiseBL": 0.55,
+    "burstBL": 3.5,
+    "tailHzCruise": 2.3,
+    "turnRateDeg": 250,
+    "waveLen": 0.8,
+    "ampCruise": 0.04,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.45,
+    "openWater": 0.04,
+    "coverAffinity": 0.9
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 120,
+    "darkVision": 0.12,
+    "lateralBL": 1.5,
+    "chem": 0.6
+  },
+  "territorialRadius": 18,
+  "homeRadiusCm": 25,
+  "temperament": {
+    "aggression": 0.55,
+    "boldness": 0.55,
+    "curiosity": 0.6,
+    "skittishness": 0.55
+  },
+  "diet": [
+    "ALGAE",
+    "SPIRULINA",
+    "NORI",
+    "MYSIS",
+    "BRINE",
+    "PELLET"
+  ],
+  "feedsPerDay": 4,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 27.5,
+      "tolLo": 23,
+      "tolHi": 29,
+      "lethalLo": 19,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.02,
+      "tolHi": 1.026,
+      "lethalLo": 1.018,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    },
+    "no3": {
+      "optHi": 10,
+      "tolHi": 20,
+      "lethalHi": 40
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.2,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.75,
+  "starvationDays": 28,
+  "size": {
+    "lod0Tris": 3000
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 5.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "GONOCHORISTIC",
+    "maturityCm": 6.0
+  },
+  "model": "models/bicolor_blenny.glb",
+  "colors": {
+    "primary": "#1E1A2C",
+    "secondary": "#EE9418",
+    "accent": "#E86A7A"
+  },
+  "iridescence": 0.2,
+  "brain": "blenny",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Mostly (may nip corals or clam mantles when underfed)",
+  "onePerTank": true,
+  "dietSummary": "Grazer: film and hair algae off the rock all day; spirulina, nori and herbivore food, with a little mysis or brine.",
+  "temperamentSummary": "Solitary and bold. Fights other blennies and chases similar algae eaters away from its hole.",
+  "careNotes": [
+    "Lives in an old worm tube or rock hole and perches at its mouth.",
+    "Needs a tight lid: an infamous jumper.",
+    "Starves without algae to graze; feed greens if the rock is bare."
+  ]
+}

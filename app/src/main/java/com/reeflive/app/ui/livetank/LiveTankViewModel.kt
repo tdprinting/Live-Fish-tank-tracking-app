@@ -149,6 +149,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.setMode(m)
     }
     fun setSpeed(v: Double) = holder.setSpeed(v)
+    val lifePace = holder.lifePace
+    fun setLifePace(p: com.reeflive.core.sim.LifePace) = holder.setLifePace(p)
     fun select(id: String?) { _selectedOrganismId.value = id; if (id == null) _followId.value = null }
     fun follow(id: String?) { _followId.value = id; if (id != null) _selectedOrganismId.value = id }
     fun setQuality(q: LiveQuality) { _quality.value = q }
@@ -158,8 +160,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
     /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
     fun feedHungry() = holder.enqueue(Command.FeedHungry)
-    /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now. */
-    /** In My tank it costs [price] sand dollars; false when the keeper cannot afford it. */
+    /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
     fun reefCare(price: Int): Boolean = if (mode.value == SimMode.CUSTOM) holder.reefCare(price) else { holder.enqueue(Command.ReefCare); true }
     /** Corals news from the time away (shown once by the screen). */
     val coralNews: StateFlow<List<String>> = holder.coralNews
@@ -186,7 +187,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
     fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
 
-    /** A breeding / nursery button on a clown's card (core Brood.Act name). */
+    /** A breeding / nursery button on a clown's or blue tang's card (core Brood.Act name, ":tang" for tangs). */
     fun breed(act: String) = holder.enqueue(Command.Breed(act))
     private val _nurseryView = kotlinx.coroutines.flow.MutableStateFlow(0)
     /** Bumped for each "Look at the nursery" press (TankView glides the camera there). */
@@ -309,7 +310,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // aquascape builder: on the tank on screen (your tank or the pretend copy); the rock layout is saved with the tank
     /** Drops a dry rock over [at]; a tap that only met the glass drops it halfway back. */
     fun placeRock(shape: DryRockShape, at: Vec3, surface: TouchSurface, turnDeg: Double) =
-        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) TankDims.DEPTH_CM / 2 else at.z, turnDeg))
+        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.app.render.Camera.TANK[2].toDouble() / 2 else at.z, turnDeg))
     /** Takes out the rock nearest [at] (null: the dry rock added last). */
     fun removeRock(at: Vec3?) = holder.enqueue(Command.RemoveRock(at))
     fun clearRocks() = holder.enqueue(Command.ClearRocks)

@@ -153,7 +153,11 @@ class LifeStagesTest {
     fun gonochoristicAndImmatureFishShowNoSexChange() {
         val sim = TestTank.sim(listOf(LivestockSeed("paracanthurus_hepatus", "T1", 20.0, id = "t1"), LivestockSeed("paracanthurus_hepatus", "T2", 18.0, id = "t2")))
         days(sim, 20)
-        for (o in sim.organisms) { assertNull(o.sexFemale); assertEquals(0.0, o.sexChange, 0.0) }
+        // grown blue tangs get a fixed sex for breeding (one of each), but never change it
+        assertEquals(setOf(true, false), sim.organisms.map { it.sexFemale }.toSet())
+        days(sim, 20)
+        assertEquals(true, sim.organisms.first { it.id == "t1" }.sexFemale)
+        for (o in sim.organisms) assertEquals(0.0, o.sexChange, 0.0)
         assertEquals(SexRole.IMMATURE, LifeStages.form(org("cirrhitichthys_falco", 2.5)).sex)
         assertFalse(LifeStages.mature(org("labroides_dimidiatus", 3.0)))
     }

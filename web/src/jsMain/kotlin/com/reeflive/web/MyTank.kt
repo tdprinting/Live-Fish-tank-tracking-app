@@ -16,6 +16,7 @@ import com.reeflive.core.custom.economy.StoreVisit
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
+import com.reeflive.core.sim.LifePace
 import com.reeflive.core.sim.Simulation
 import kotlinx.browser.localStorage
 import kotlin.math.roundToInt
@@ -56,9 +57,12 @@ object ReefMyTank {
         })
     }
 
-    /** The tanks to pick from: `[{id, label, blurb, gallons, size}]`. */
+    /** The tanks to pick from: `[{id, label, blurb, gallons, size, l, h, d (cm), rimless, filter}]` (the picker draws each to scale). */
     fun builds(): String = JSON.stringify(TankBuilds.all.map { b ->
-        obj { it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel }
+        obj {
+            it.id = b.id; it.label = b.label; it.blurb = b.blurb; it.gallons = b.gallons.roundToInt(); it.size = b.sizeLabel
+            it.l = b.shape.lengthCm; it.h = b.shape.heightCm; it.d = b.shape.depthCm; it.rimless = b.rimless; it.filter = b.filter.name
+        }
     }.toTypedArray())
 
     /** Sets up a new, empty tank in build [buildId] and shows it when the page is in My tank. */
@@ -71,6 +75,7 @@ object ReefMyTank {
         val seed = t.toLong() xor 0x5EEDL
         val s = CustomTank.fresh(build, species, rock, secOfDay.toDouble(), seed)
         s.speed = 1.0
+        s.lifePace = LifePace.DEFAULT.pace
         s.stepWall(0.0)
         sim = s
         val eco = economy ?: Economy()
@@ -91,6 +96,17 @@ object ReefMyTank {
     }
 
     /** Names an animal; it is kept in the next save. */
+    /** Growing speed choices for slow biology (LifePace): `[{id, label, blurb, on}]`. */
+    fun paces(): String {
+        val cur = sim?.let { LifePace.of(it.lifePace) }
+        return JSON.stringify(LifePace.entries.map { p -> obj { it.id = p.name; it.label = p.label; it.blurb = p.blurb; it.on = p == cur } }.toTypedArray())
+    }
+
+    fun setPace(id: String) {
+        val p = LifePace.entries.firstOrNull { it.name == id } ?: return
+        sim?.lifePace = p.pace
+    }
+
     fun rename(id: String, name: String) { sim?.enqueue(Command.Rename(id, name)) }
 
     /** Today as the economy counts days: the keeper's local calendar day. */
@@ -266,9 +282,6 @@ object ReefMyTank {
         save(); pausedAt = now()
     }
 
-    /** What happened to the corals while the page was away ("" = nothing), read once by the page ([ReefSandbox.coralNews]). */
-    var coralNews = ""
-
     private fun catchUp() {
         val s = sim ?: return
         if (pausedAt < 0) return
@@ -277,17 +290,7 @@ object ReefMyTank {
         if (secs < FastForward.MIN_SIM_SEC) return
         // the whole time away, up to 30 days: a short gap at once, a long one a chunk per call of [away]
         val run = AwayCatchUp(s, secs)
-        awayCorals = com.reeflive.core.sim.CoralHealth.marks(s.corals)
-        if (secs < AwayCatchUp.REPORT_SEC) { run.runAll(); s.stepWall(0.0); noteCoralNews(s) } else { awayRun = run; awaySummary = null }
-    }
-
-    /** The corals' health marks when the catch-up began. */
-    private var awayCorals: List<com.reeflive.core.sim.CoralHealth.Mark>? = null
-
-    private fun noteCoralNews(s: Simulation) {
-        val before = awayCorals ?: return
-        awayCorals = null
-        com.reeflive.core.sim.CoralHealth.changes(before, s.corals).takeIf { it.isNotEmpty() }?.let { coralNews = it.joinToString(" ") }
+        if (secs < AwayCatchUp.REPORT_SEC) { run.runAll(); s.stepWall(0.0) } else { awayRun = run; awaySummary = null }
     }
 
     private var awayRun: AwayCatchUp? = null
@@ -302,7 +305,7 @@ object ReefMyTank {
         val run = awayRun
         if (run != null) {
             run.step()
-            if (run.finished) { awayRun = null; awaySummary = run.summary().takeIf { it.worthShowing }; sim?.let(::noteCoralNews) }
+            if (run.finished) { awayRun = null; awaySummary = run.summary().takeIf { it.worthShowing } }
             if (!run.finished) return JSON.stringify(obj { o ->
                 o.running = true; o.progress = run.progress; o.daysDone = run.doneSec / AwayCatchUp.DAY; o.days = run.totalSec / AwayCatchUp.DAY
             })

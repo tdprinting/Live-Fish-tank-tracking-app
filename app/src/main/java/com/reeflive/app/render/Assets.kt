@@ -34,6 +34,8 @@ class DrawPart(
     val identityWorld: Boolean = M.isIdentity(node.world)
     /** Limb pivots for the crawler limb rig (`extras.limbPivots`: 10 × vec4, model space xyz + rest length), or null. */
     val limbPivots: FloatArray? = node.floats("limbPivots")?.takeIf { it.size >= 40 }
+    /** Painted on a glass pane (`extras.pane`: algae film, strands, the magnet cleaner): stretched with the glass ([TankFit.pane]). */
+    val pane: Boolean = node.extras.containsKey("pane")
     /**
      * Fish jaw (`extras.jaw`: hinge x, y in model space, widest gape in rad, 1), parsed once; all zero for a model
      * without one (fish.vert uJaw).

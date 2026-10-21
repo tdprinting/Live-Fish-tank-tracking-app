@@ -212,7 +212,7 @@ private val NavClearance = 88.dp
 private val GaugeTopClearance = 112.dp
 
 /** Point on the front glass, centre, for the "Tap glass" action (tank cm: [TankDims], 122 × 40.6 × 45.7). */
-private val FrontGlassCentre = Vec3(TankDims.LENGTH_CM / 2, 20.0, TankDims.DEPTH_CM)
+private val FrontGlassCentre: Vec3 get() = Vec3(com.reeflive.app.render.Camera.TANK[0].toDouble() / 2, 20.0, com.reeflive.app.render.Camera.TANK[2].toDouble())
 
 private fun summarize(stats: List<OrganismStats>): FishSummary {
     val alive = stats.filter { it.alive }
@@ -295,6 +295,7 @@ fun LiveTankScreen(
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
+    val lifePace by vm.lifePace.collectAsStateWithLifecycle()
     val quality by vm.quality.collectAsStateWithLifecycle()
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
@@ -843,6 +844,11 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        lifePace = lifePace,
+        onLifePace = { p ->
+            tick(); vm.setLifePace(p)
+            banner.show(Feedback("Growing speed: ${p.label}", "${p.blurb}. Fish still swim at real speed."), Candy.purple)
+        },
         speed = if (sandbox) speed else 1.0,
         simTimeSec = hud.simTimeSec,
         onSpeed = { x ->
@@ -982,7 +988,7 @@ fun LiveTankScreen(
             // food goes in right where it was let go: the renderer finds the fish, coral, rock or sand there (onAim)
             k != null && k != FoodKind.NORI -> { tick(); aimFood = k; aim.aimAt(sx, sy) }
             item == SupplyItem.KNOCKER -> {
-                val p = Vec3(gx.coerceIn(1f, TankDims.LENGTH_F - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, TankDims.WATER_LEVEL_F).toDouble(), FrontGlassCentre.z)
+                val p = Vec3(gx.coerceIn(1f, com.reeflive.app.render.Camera.TANK[0] - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, com.reeflive.app.render.Camera.WATER_Y).toDouble(), FrontGlassCentre.z)
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
@@ -1305,7 +1311,9 @@ fun LiveTankScreen(
         }
         GaugeDial(g, start, onSet = { v -> dial = null; applyGauge(g, v) }, onDismiss = { dial = null })
     }
-    fact?.let { f ->
+    // the "While you were away" card goes first; the fact waits until it is closed
+    val awayOpen = vm.away.collectAsStateWithLifecycle().value != null
+    fact?.takeIf { !awayOpen }?.let { f ->
         LiveDialog(title = f.kind.title, body = f.text, confirm = "Cool!", onConfirm = { fact = null }, onDismiss = { fact = null }, dismiss = "Close")
     }
     ask?.let { a ->
@@ -1351,7 +1359,7 @@ private const val SHELF_LABEL_MS = 700L
 private const val SHELF_LABEL_REDUCED_MS = 300L
 private const val SHELF_TRAVEL_MS = 1000L
 /** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
-private const val SURFACE_Y = TankDims.WATER_LEVEL_F - 0.4f
+private val SURFACE_Y: Float get() = com.reeflive.app.render.Camera.WATER_Y - 0.4f
 private const val FEED_Z = 23.4f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
@@ -1598,7 +1606,7 @@ private fun HudLayer(
             val card = st ?: lastCard
             if (card != null) {
                 val hudSnap by vm.hud.collectAsStateWithLifecycle()
-                val family = hudSnap.brood.panel?.takeIf { it.shows(card.speciesId) }?.let { p ->
+                val family = hudSnap.brood.panelFor(card.speciesId)?.let { p ->
                     p.copy(actions = p.actions.filter { !it.sandboxOnly || hudState.mode == HudMode.MY_TANK })
                 }
                 FishCard(

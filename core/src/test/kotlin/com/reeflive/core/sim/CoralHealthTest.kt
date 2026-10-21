@@ -144,6 +144,17 @@ class CoralHealthTest {
         assertTrue(lines.any { it.contains("new baby colony") })
     }
 
+    /** The welcome-back card (My tank away catch-up) says which corals died or paled. */
+    @Test
+    fun welcomeBackCardTellsAboutCorals() {
+        val sim = TestTank.sim(DefaultStock.all)
+        val before = com.reeflive.core.custom.AwayReport.capture(sim)
+        val c = sim.corals.first { it.kind == CoralKind.ZOA }
+        c.tissue = 0.0
+        val s = com.reeflive.core.custom.AwayReport.summarize(before, sim, 86400.0)
+        assertTrue("${s.lines}", s.lines.any { it.startsWith(c.nickname.ifBlank { c.species.common } + " died") })
+    }
+
     @Test
     fun careButtonDosesWithinADaysSwingAndFeeds() {
         val w = WaterState(alk = 6.5, ca = 360.0, mg = 1150.0, i = 0.01, no3 = 5.0, po4 = 0.04)
