@@ -316,7 +316,7 @@ class Brood(private val sim: Simulation) {
         val n = (eggs * spec.hatchSuccess * rng.range(0.9, 1.05)).roundToInt().coerceAtLeast(1)
         // an older display cohort is long gone by the next hatch; fold any stragglers into this one
         cohorts.removeAll { !it.inNursery }
-        val c = BroodCohort(nextId++, spec, sim.simTimeSec, n, at, parents.map { it.variant }, parents.firstOrNull()?.species?.id ?: SPECIES_FALLBACK)
+        val c = BroodCohort(nextId++, spec, sim.lifeSec, n, at, parents.map { it.variant }, parents.firstOrNull()?.species?.id ?: SPECIES_FALLBACK)
         cohorts += c
         totalHatched += n
         if (raises(spec)) lureUntil = sim.simTimeSec + LURE_MIN * 60
@@ -336,12 +336,12 @@ class Brood(private val sim: Simulation) {
         cohorts.removeAll { !it.inNursery }
         val variants = parents.map { it.variant }
         val sp = parents.firstOrNull()?.species?.id ?: SPECIES_FALLBACK
-        val c = BroodCohort(nextId++, spec, now, n, at, variants, sp)
+        val c = BroodCohort(nextId++, spec, sim.lifeSec, n, at, variants, sp)
         c.eggDays = eggDays
         totalHatched += n
         if (raises(spec) && nurseryCohort() == null) {
             val caught = minOf(n * LURE_CATCH, spec.nurseryStock.toDouble())
-            val nc = BroodCohort(nextId++, spec, now, n, at, variants, sp)
+            val nc = BroodCohort(nextId++, spec, sim.lifeSec, n, at, variants, sp)
             nc.count = caught; nc.inNursery = true; nc.eggDays = eggDays
             cohorts += nc
             copepods = 0.0; rotifers = 0.0; brine = 0.0; dirt = 0.0
@@ -397,9 +397,14 @@ class Brood(private val sim: Simulation) {
 
     // ============================================================== step
 
+    /**
+     * [dtSec] is on the game clock ([Simulation.lifePace]): the nursery raises fry at that pace. Larvae loose in the
+     * display live and die within a night on the sim clock (they are eaten as the keeper watches), so they step at
+     * real time. Cohort ages are on [Simulation.lifeSec].
+     */
     fun step(dtSec: Double) {
         val now = sim.simTimeSec
-        val dtH = dtSec / 3600.0
+        val dtH = dtSec / sim.lifePace / 3600.0
         val dtD = dtSec / 86400.0
         val it = cohorts.iterator()
         while (it.hasNext()) {
@@ -421,7 +426,7 @@ class Brood(private val sim: Simulation) {
     private fun display(c: BroodCohort, now: Double, dtH: Double) {
         val spec = c.spec
         if (c.eggs) { c.eggDays -= dtH / 24; floatingEggs(c, dtH); return }
-        c.lifeDays += dtH / 24
+        c.lifeDays += dtH / 24 * sim.lifePace
         val age = c.lifeDays
         var h = 0.0
         if (sim.predationEnabled) for (o in sim.organisms) {
@@ -640,7 +645,7 @@ class Brood(private val sim: Simulation) {
     /** Card text and buttons for a parent of [spec] (null when no such fish lives here). */
     private fun panel(spec: BroodSpec): BroodPanel? {
         if (sim.organisms.none { it.alive && it.brainKind == spec.brainKind }) return null
-        val now = sim.simTimeSec
+        val now = sim.lifeSec
         val w = spec.words
         val lines = ArrayList<String>()
         val acts = ArrayList<BroodAction>()
@@ -735,7 +740,7 @@ class Brood(private val sim: Simulation) {
             val spec = BroodSpecs.byKey(c.spec) ?: continue
             val bc = BroodCohort(nextId++, spec, c.hatchedAt, c.hatched, Vec3.ZERO, c.parentVariants.map { it.ifBlank { null } }, c.speciesId)
             bc.inNursery = true; bc.count = c.count; bc.devDays = c.devDays; bc.lengthMm = c.lengthMm; bc.fed = c.fed; bc.released = c.released
-            bc.eggDays = c.eggDays; bc.lifeDays = if (c.lifeDays >= 0) c.lifeDays else bc.ageDays(sim.simTimeSec).coerceAtLeast(0.0)
+            bc.eggDays = c.eggDays; bc.lifeDays = if (c.lifeDays >= 0) c.lifeDays else bc.ageDays(sim.lifeSec).coerceAtLeast(0.0)
             cohorts += bc
         }
         refreshView()

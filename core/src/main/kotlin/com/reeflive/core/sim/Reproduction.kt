@@ -57,11 +57,15 @@ class Reproduction(private val sim: Simulation) {
     fun clownClutch(): EggClutch? = clutches.firstOrNull { it.kind == CLOWN }
 
     fun poses(): List<EggClutchPose> = clutches.map {
-        EggClutchPose(it.id, it.kind, it.pos, it.normal, it.ageDays(sim.simTimeSec).toFloat(), it.hatchDays.toFloat(), it.tenderId, it.eggs)
+        EggClutchPose(it.id, it.kind, it.pos, it.normal, it.ageDays(sim.lifeSec).toFloat(), it.hatchDays.toFloat(), it.tenderId, it.eggs)
     }
 
+    /**
+     * [dtSec] is on the game clock ([Simulation.lifePace]), and so are day-scale stamps (clutches, cooldowns, broods:
+     * `now` = [Simulation.lifeSec]); the hours-long cleaning and laying phases the keeper watches stay on the sim clock.
+     */
     fun step(dtSec: Double) {
-        val now = sim.simTimeSec
+        val now = sim.lifeSec
         clownSexChange(dtSec)
         clownBreeding(now, dtSec)
         cardinalBreeding(now, dtSec)
@@ -122,12 +126,12 @@ class Reproduction(private val sim: Simulation) {
         w.tempC in 24.0..28.5 && w.sg in 1.020..1.028 && w.ph in 7.9..8.5 && w.nh3Free < 0.05 && w.no3 < 40.0
 
     /** Stable, fed, healthy: a pair that can spawn (research 02 §1C: stable, well-fed, mature). */
-    private fun fit(o: Organism, minCm: Double, now: Double) =
+    private fun fit(o: Organism, minCm: Double) =
         o.alive && o.lengthCm >= minCm && o.hunger < 0.55 && o.stress < 0.35 && o.health > 0.85 &&
-            o.disease == null && now - o.arrivalTime > PAIR_BOND_DAYS * 86400.0
+            o.disease == null && sim.lifeAge(o.arrivalTime) > PAIR_BOND_DAYS
 
-    private fun pairReady(f: Organism, m: Organism, now: Double) =
-        fit(f, FEMALE_MATURE_CM, now) && fit(m, MALE_MATURE_CM, now) && inRange(sim.water.s)
+    private fun pairReady(f: Organism, m: Organism) =
+        fit(f, FEMALE_MATURE_CM) && fit(m, MALE_MATURE_CM) && inRange(sim.water.s)
 
     private fun clownBreeding(now: Double, dt: Double) {
         val cl = clowns()
@@ -138,11 +142,11 @@ class Reproduction(private val sim: Simulation) {
             sim.brood.forceSpawn = false
             if (clownClutch() == null && clownPhase == Phase.IDLE) {
                 forced = true; clownReadiness = 1.0; clownCooldownUntil = 0.0
-                startCleaning(f, now, 0.3)
+                startCleaning(f, 0.3)
                 return
             }
         }
-        val ok = forced || pairReady(f, m, now)
+        val ok = forced || pairReady(f, m)
         // the female builds the next clutch while the male tends this one (research 28 §1: a 12-15 day cycle)
         if (clownClutch() != null) {
             clownReadiness = (clownReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
@@ -151,13 +155,13 @@ class Reproduction(private val sim: Simulation) {
         when (clownPhase) {
             Phase.IDLE -> {
                 clownReadiness = (clownReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
-                if (clownReadiness >= 1.0 && now >= clownCooldownUntil && !sim.perception.night) startCleaning(f, now, 1.0)
+                if (clownReadiness >= 1.0 && now >= clownCooldownUntil && !sim.perception.night) startCleaning(f, 1.0)
             }
-            Phase.CLEANING -> if (!ok) abortSpawning() else if (now >= clownPhaseUntil) {
+            Phase.CLEANING -> if (!ok) abortSpawning() else if (sim.simTimeSec >= clownPhaseUntil) {
                 clownPhase = Phase.LAYING
-                clownPhaseUntil = now + rng.range(0.5, 1.0) * 3600
+                clownPhaseUntil = sim.simTimeSec + rng.range(0.5, 1.0) * 3600
             }
-            Phase.LAYING -> if (!ok) abortSpawning() else if (now >= clownPhaseUntil) layClutch(now, m, f)
+            Phase.LAYING -> if (!ok) abortSpawning() else if (sim.simTimeSec >= clownPhaseUntil) layClutch(now, m, f)
         }
     }
 
@@ -170,23 +174,23 @@ class Reproduction(private val sim: Simulation) {
 
     fun hasClownPair(): Boolean = clownPair(clowns()).let { it.first != null && it.second != null }
 
-    private fun startCleaning(f: Organism, now: Double, speed: Double) {
+    private fun startCleaning(f: Organism, speed: Double) {
         val host = sim.agentOf(f)?.brain?.anchorPos(sim.agentOf(f)!!.ctx, "host") ?: f.homePos
         pickSite(f, host)
         clownPhase = Phase.CLEANING
-        clownPhaseUntil = now + rng.range(2.0, 4.0) * 3600 * speed
+        clownPhaseUntil = sim.simTimeSec + rng.range(2.0, 4.0) * 3600 * speed
     }
 
     /** What the pair is waiting for, in the card's words. */
     fun clownWaitLine(): String {
-        val now = sim.simTimeSec
+        val now = sim.lifeSec
         val (f, m) = clownPair(clowns())
         if (f == null || m == null) return if (clowns().size < 2) "Clownfish need a partner to breed." else "The clowns are too young to pair up yet."
         val name = { o: Organism -> o.nickname.ifBlank { "the ${if (o === f) "female" else "male"}" } }
         val why = buildList {
             for (o in listOf(f, m)) {
                 if (o.lengthCm < (if (o === f) FEMALE_MATURE_CM else MALE_MATURE_CM)) add("${name(o)} is still growing")
-                else if (now - o.arrivalTime < PAIR_BOND_DAYS * 86400.0) add("${name(o)} is still settling in")
+                else if (sim.lifeAge(o.arrivalTime) < PAIR_BOND_DAYS) add("${name(o)} is still settling in")
                 else if (o.hunger >= 0.55) add("${name(o)} is hungry")
                 else if (o.stress >= 0.35 || o.health <= 0.85 || o.disease != null) add("${name(o)} is not feeling great")
             }
@@ -213,7 +217,7 @@ class Reproduction(private val sim: Simulation) {
         val eggs = sim.brood.clutchSize(spec, female.lengthCm, n)
         clutches += EggClutch("eggs#$n", CLOWN, s, siteNormal, now, sim.brood.hatchDays(spec, sim.water.s.tempC), male.id, eggs)
         clownPhase = Phase.IDLE; clownReadiness = 0.0; site = null; forced = false
-        sim.emit(SimEvent.EggsLaid(spec.key, eggs, now))
+        sim.emit(SimEvent.EggsLaid(spec.key, eggs, sim.simTimeSec))
     }
 
     /** The male's fanning keeps the eggs alive; neglect for [UNTENDED_LOSS_HOURS] kills them. Hatching waits for night. */
@@ -225,7 +229,7 @@ class Reproduction(private val sim: Simulation) {
             c.tenderId = male?.id
             val away = !sim.behaviorEnabled || sim.abstractMode
             val tended = male != null && (away || male.pos.distanceTo(c.pos) < 15.0)
-            if (!tended) c.untendedSec += dt
+            if (!tended) c.untendedSec += dt / sim.lifePace   // the male's absence counts on the sim clock
             if (c.untendedSec > UNTENDED_LOSS_HOURS * 3600) {
                 it.remove(); lostClutches++; clownCooldownUntil = now + 3 * 86400.0
                 sim.water.addDetritusTanGrams(c.eggs * 0.00001)   // unguarded eggs fungus over and are picked off
@@ -276,7 +280,7 @@ class Reproduction(private val sim: Simulation) {
         val f = cl.filter { it.sexFemale == true }.maxByOrNull { it.lengthCm }
         val m = cl.filter { it.sexFemale == false }.maxByOrNull { it.lengthCm }
         if (f == null || m == null) { cardReadiness = maxOf(0.0, cardReadiness - dt / 86400.0); return }
-        val ok = fit(f, CARDINAL_MATURE_CM, now) && fit(m, CARDINAL_MATURE_CM, now) && inRange(sim.water.s)
+        val ok = fit(f, CARDINAL_MATURE_CM) && fit(m, CARDINAL_MATURE_CM) && inRange(sim.water.s)
         cardReadiness = (cardReadiness + if (ok) dt / (READY_DAYS * 86400.0) else -dt / (READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)
         if (cardReadiness >= 1.0 && now >= cardCooldownUntil && sim.perception.night) {
             m.mouthbrooding = true; brooder = m; cardReadiness = 0.0
@@ -348,7 +352,7 @@ class Reproduction(private val sim: Simulation) {
             if (tangPhase == TangPhase.IDLE) { tangForced = true; startCourting(f, m, now) }
             return
         }
-        val ok = tangForced || fit(f, 0.0, now) && fit(m, 0.0, now) && inRange(sim.water.s)
+        val ok = tangForced || fit(f, 0.0) && fit(m, 0.0) && inRange(sim.water.s)
         when (tangPhase) {
             TangPhase.IDLE -> {
                 tangReadiness = (tangReadiness + if (ok) dt / (TANG_READY_DAYS * 86400.0) else -dt / (TANG_READY_DAYS * 86400.0 / 4)).coerceIn(0.0, 1.0)

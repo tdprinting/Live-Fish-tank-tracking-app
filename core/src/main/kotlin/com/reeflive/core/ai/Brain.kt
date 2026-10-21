@@ -346,6 +346,10 @@ fun Ctx.zoneY(f: Double) = rock.sandTopCm + f * (rock.waterLevelCm - rock.sandTo
 /** Clearance a swimmer keeps from rock (SIMULATION §4.3). */
 val Ctx.clearance: Double get() = 0.6 * o.collisionLength + 1.0
 
+/** A spot picked in Tee's 48 × 18 in tank, at the same place along and across this tank's glass (My tank builds). */
+fun Ctx.inTank(p: Vec3): Vec3 = if (rock.lengthCm == com.reeflive.core.sim.TankDims.LENGTH_CM && rock.widthCm == com.reeflive.core.sim.TankDims.DEPTH_CM) p
+    else Vec3(p.x * rock.lengthCm / com.reeflive.core.sim.TankDims.LENGTH_CM, p.y, p.z * rock.widthCm / com.reeflive.core.sim.TankDims.DEPTH_CM)
+
 /** Push a point into open water with at least [clear] cm to rock and a glass margin. */
 fun Ctx.safe(p: Vec3, clear: Double = clearance): Vec3 {
     val m = max(1.0, min(4.0, 0.3 * L))

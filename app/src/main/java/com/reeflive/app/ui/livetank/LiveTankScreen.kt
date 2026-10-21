@@ -179,6 +179,7 @@ import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.PestController
 import com.reeflive.core.sim.CoralKind
+import com.reeflive.core.sim.CoralHealth
 import com.reeflive.core.sim.DoseCheck
 import com.reeflive.core.sim.DryRockShape
 import com.reeflive.app.ui.live.AquascapeBar
@@ -211,7 +212,7 @@ private val NavClearance = 88.dp
 private val GaugeTopClearance = 112.dp
 
 /** Point on the front glass, centre, for the "Tap glass" action (tank cm: [TankDims], 122 × 40.6 × 45.7). */
-private val FrontGlassCentre = Vec3(TankDims.LENGTH_CM / 2, 20.0, TankDims.DEPTH_CM)
+private val FrontGlassCentre: Vec3 get() = Vec3(com.reeflive.app.render.Camera.TANK[0].toDouble() / 2, 20.0, com.reeflive.app.render.Camera.TANK[2].toDouble())
 
 private fun summarize(stats: List<OrganismStats>): FishSummary {
     val alive = stats.filter { it.alive }
@@ -267,6 +268,11 @@ fun LiveTankScreen(
     // the follow camera's on-screen buttons (zoom, swing round): FollowOverlay presses, the renderer drains
     val followCam = remember { FollowCamControl() }
     val banner = remember { ActionBannerState() }
+    // corals that bleached, died or budded while the app was closed (My tank catch-up)
+    val coralNews by vm.coralNews.collectAsStateWithLifecycle()
+    LaunchedEffect(coralNews) {
+        if (coralNews.isNotEmpty()) { banner.show(Feedback("Your corals while you were away", coralNews.joinToString(" ")), Candy.green); vm.clearCoralNews() }
+    }
     val hermie = remember { HermieState() }
     // tank sounds: created with the screen, released when it leaves composition, paused with the lifecycle
     val audio = remember { TankAudio(context.applicationContext) }
@@ -289,6 +295,7 @@ fun LiveTankScreen(
     val hud by vm.hud.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
+    val lifePace by vm.lifePace.collectAsStateWithLifecycle()
     val quality by vm.quality.collectAsStateWithLifecycle()
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
@@ -837,6 +844,11 @@ fun LiveTankScreen(
         onTapGlass = { actions.onTapGlass() },
         onFeed = { k -> actions.onFeed(k) },
         readouts = hudState.readouts,
+        lifePace = lifePace,
+        onLifePace = { p ->
+            tick(); vm.setLifePace(p)
+            banner.show(Feedback("Growing speed: ${p.label}", "${p.blurb}. Fish still swim at real speed."), Candy.purple)
+        },
         speed = if (sandbox) speed else 1.0,
         simTimeSec = hud.simTimeSec,
         onSpeed = { x ->
@@ -889,6 +901,16 @@ fun LiveTankScreen(
             banner.show(Feedback("Dinner time!", "Each hungry animal gets its favourite food, dropped right above it"), Candy.orange)
             cue(LiveReactions.feed(FoodKind.PELLET)) { vm.feedHungry() }
         },
+        coralRows = if (open == LiveCategory.FIX) CoralHealth.rows(hud.corals) else emptyList(),
+        coralCare = if (open == LiveCategory.FIX && myTank) com.reeflive.core.sim.CoralCare.plan(hud) else null,
+        onReefCare = if (myTank) ({
+            tick()
+            val plan = vm.reefCarePlan()
+            if (vm.reefCare(plan.price)) {
+                banner.show(Feedback("Coral care!", "In goes " + plan.words), Candy.green)
+                cue(LiveReactions.feed(FoodKind.CORAL_FOOD))
+            } else banner.show(Feedback("Not enough sand dollars", "Coral care costs ${plan.price}. Do today's chores to earn more."), Candy.orange)
+        }) else null,
         onFix = { f -> tick(); playFix(f) },
         onFixAll = {
             tick()
@@ -966,7 +988,7 @@ fun LiveTankScreen(
             // food goes in right where it was let go: the renderer finds the fish, coral, rock or sand there (onAim)
             k != null && k != FoodKind.NORI -> { tick(); aimFood = k; aim.aimAt(sx, sy) }
             item == SupplyItem.KNOCKER -> {
-                val p = Vec3(gx.coerceIn(1f, TankDims.LENGTH_F - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, TankDims.WATER_LEVEL_F).toDouble(), FrontGlassCentre.z)
+                val p = Vec3(gx.coerceIn(1f, com.reeflive.app.render.Camera.TANK[0] - 1f).toDouble(), gy.coerceIn(TankDims.SAND_TOP_F, com.reeflive.app.render.Camera.WATER_Y).toDouble(), FrontGlassCentre.z)
                 tick()
                 cue(LiveReactions.tapGlass(FxPoint(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()))) { vm.tapGlass(p) }
             }
@@ -1337,7 +1359,7 @@ private const val SHELF_LABEL_MS = 700L
 private const val SHELF_LABEL_REDUCED_MS = 300L
 private const val SHELF_TRAVEL_MS = 1000L
 /** Food dragged from the shelf goes in at the water surface, this far from the back glass (FxSpots.FEED). */
-private const val SURFACE_Y = TankDims.WATER_LEVEL_F - 0.4f
+private val SURFACE_Y: Float get() = com.reeflive.app.render.Camera.WATER_Y - 0.4f
 private const val FEED_Z = 23.4f
 
 /** A tap on the tank within this long after it skipped a picture is not also a "hide the controls" tap. */
