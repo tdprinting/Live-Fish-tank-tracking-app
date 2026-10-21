@@ -81,6 +81,8 @@ data class StoreVisitUi(
     val speciesOf: Map<String, String>,
     /** The store's offer for each of the keeper's animals and corals (the Sell sheet). */
     val offers: List<SellOffer> = emptyList(),
+    /** The supplies behind the counter (foods, salt, doses, tools for the shelf at home). */
+    val supplies: List<com.reeflive.core.custom.economy.SupplyCard> = emptyList(),
 )
 
 /** The street of stores for the Add life card: each store and whether it is open to this keeper. */
@@ -403,6 +405,7 @@ class SimulationHolder(
         val speciesOf = d?.organisms?.associate { it.id to it.species.id }.orEmpty()
         _visit.value = StoreVisitUi(
             store, visitTanks.map { it to StoreVisit.cards(e, store, it, mine, day) }, at, e.state.coins, speciesOf, Offers.offers(store, mine, day),
+            com.reeflive.core.custom.economy.SupplyBook.cards(e, store),
         )
     }
 
@@ -446,10 +449,19 @@ class SimulationHolder(
             val e = economyLive ?: return@launch
             val c = e.checkout(store, bag, today())
             if (c.result != BuyResult.OK) { publishVisit(); onResult(c.result); return@launch }
+            if (c.bought.isEmpty()) {
+                // only supplies: they are on the shelf at home now and the keeper keeps shopping
+                publishVisit()
+                customSim?.let { updateEconomy(it, force = true) }
+                saveCustom()
+                _paid.tryEmit(c.total to 0)
+                onResult(BuyResult.OK)
+                return@launch
+            }
             leaveStoreNow()
             val mine = customSim
             if (mine != null) {
-                val groups = bag.groupingBy { it }.eachCount().entries.toList()
+                val groups = c.bought.groupingBy { it }.eachCount().entries.toList()
                 groups.forEachIndexed { k, (id, n) ->
                     // the bags in a row along the front glass, as if carried home and set down one by one
                     mine.enqueue(Command.FloatBag(id, n, 20.0 + (k + 0.5) * 80.0 / groups.size, size = StockSize.JUVENILE))
@@ -457,8 +469,21 @@ class SimulationHolder(
                 updateEconomy(mine, force = true)
             }
             saveCustom()
-            _paid.tryEmit(c.total to bag.size)
+            _paid.tryEmit(c.total to c.bought.size)
             onResult(BuyResult.OK)
+        }
+    }
+
+    /**
+     * Takes one use of supply [id] off My tank's shelf (core SupplyBook); the screen checks [economy]'s counts before
+     * the action, so this only keeps the books. [fishFood] takes one serving of any fish food instead.
+     */
+    fun useSupply(id: String?, fishFood: Boolean = false) {
+        scope.launch {
+            val sim = customSim ?: return@launch
+            val e = economyLive ?: return@launch
+            if (fishFood) e.useFishFood() else if (id != null) e.useSupply(id)
+            updateEconomy(sim, force = true)
         }
     }
 

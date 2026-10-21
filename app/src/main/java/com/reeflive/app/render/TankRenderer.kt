@@ -1369,7 +1369,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (camera.shelfMix <= 0f) return
         val m = store.model(SupplyShelfLayout.MODEL) ?: return
         val w = white ?: return
-        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet())
+        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet(), shelf?.hidden ?: emptySet())
         triangles += m.triangles
     }
 
@@ -1381,7 +1381,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val dir = FloatArray(3)
         camera.ray(t.x, t.y, width, height, dir)
         val top = FloatArray(3)
-        val id = shelfScene.pick(camera.eye, dir, top) ?: return
+        val id = shelfScene.pick(camera.eye, dir, top, shelf?.hidden ?: emptySet()) ?: return
         val cb = shelf?.onPick ?: return
         main.post { cb(id, top[0], top[1], top[2]) }
     }
