@@ -1,4 +1,4 @@
-// ReefLive web: new livestock arrives in a shop bag (mirrors the Android BagCarry.kt). Picking an animal in Add life puts
+// ReefLive web: new livestock arrives in a shop bag (mirrors the Android BagCarry.kt). Picking an animal in the Shop puts
 // the bag in your hand; drag it onto the tank (or tap the tank) and it drops onto the water with a splash. It floats
 // for 30 sim minutes while the bag water evens out to the tank, a timer rides over it, and "Hurry up" fast-forwards
 // the clock. Then it tips over and the animals come out (core AcclimationBags). Self-contained: its own DOM and CSS.

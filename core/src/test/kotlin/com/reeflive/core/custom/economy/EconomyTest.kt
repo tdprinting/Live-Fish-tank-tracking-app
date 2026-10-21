@@ -98,9 +98,9 @@ class EconomyTest {
 
     @Test fun levelsFollowStarPoints() {
         assertEquals(1, Levels.level(0))
-        assertEquals(1, Levels.level(99))
-        assertEquals(2, Levels.level(100))
-        assertEquals(4, Levels.level(600))
+        assertEquals(1, Levels.level(59))
+        assertEquals(2, Levels.level(60))
+        assertEquals(4, Levels.level(360))
         assertEquals(10, Levels.level(1_000_000))
     }
 
@@ -111,6 +111,22 @@ class EconomyTest {
         e.sold(10, "Snail", "2026-10-20")
         assertEquals(Economy.START_COINS - 15, e.state.coins)
         assertEquals(0, e.state.stars)
+    }
+
+    @Test fun recordsAreBoughtOnceAndStayOwned() {
+        val e = Economy()
+        val price = com.reeflive.core.radio.RadioStation.songs.first { it.file == "radio_turtle_glide" }.price
+        assertTrue(e.buyRecord("radio_turtle_glide", "2026-10-21"))
+        assertFalse(e.buyRecord("radio_turtle_glide", "2026-10-21"))
+        assertFalse(e.buyRecord("radio_coral_morning", "2026-10-21"))  // free: nothing to buy
+        assertFalse(e.buyRecord("radio_nope", "2026-10-21"))
+        e.spend(e.state.coins, "Blue tang", "2026-10-21")
+        assertFalse(e.buyRecord("radio_dolphin_dance", "2026-10-21"))
+        assertEquals(0, e.state.coins)
+        assertEquals(Economy.START_COINS - price, e.state.ledger.first { it.label.startsWith("Record") }.let { Economy.START_COINS + it.amount })
+        assertEquals(listOf("radio_turtle_glide"), e.state.records)
+        assertTrue(e.state.ledger.any { it.label == "Record: Swimming with Turtles" })
+        assertEquals(setOf("radio_turtle_glide"), Economy(e.state).view(tank()).records)
     }
 
     @Test fun calendarDays() {

@@ -27,7 +27,7 @@ class EmeraldCrabTest {
         assertTrue(BrainKind.EMERALD_CRAB.isCrab)
         assertEquals(GrazerType.EMERALD_CRAB, GrazerType.of(o))
         assertTrue("bubble algae first", GrazerType.EMERALD_CRAB.pref[AlgaeGroup.BUBBLE.ordinal] >= 1.0)
-        assertEquals(12, PriceBook.listing(id)!!.price)
+        assertEquals(12 * PriceBook.SCALE, PriceBook.listing(id)!!.price)
         assertTrue(Stocking.entry(id) != null)
     }
 

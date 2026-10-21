@@ -154,6 +154,12 @@ object ReefMyTank {
     /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
     fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
 
+    /** The record shop: buys radio song [file] at its RadioStation price; false when it cannot (owned, too dear, no tank). */
+    fun buyRecord(file: String): Boolean = sim != null && economy?.buyRecord(file, today()) == true
+
+    /** Radio songs bought in this tank, as a JSON array of files (`[]` without a tank). */
+    fun records(): String = JSON.stringify(economy?.state?.records.orEmpty().toTypedArray())
+
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
 
@@ -189,6 +195,7 @@ object ReefMyTank {
         tanks = StoreVisit.tanks(store, today())
         tankAt = -1
         showTank(0)
+        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup })
         return visitJson(mine)
     }
 
@@ -224,8 +231,12 @@ object ReefMyTank {
         val d = StoreVisit.build(t, species, rock, (today().hashCode() * 31 + i).toLong())
         display = d; tankAt = i
         if (ReefSandbox.isMine()) ReefLive.sim = d
+        ReefLive.room.show(i)
         return true
     }
+
+    /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
+    fun storeCounter(on: Boolean) { if (visiting != null) ReefLive.room.counter(on) }
 
     /** The species id of an animal tapped in the display tank (its card), or "". */
     fun displaySpecies(id: String): String =
@@ -260,6 +271,7 @@ object ReefMyTank {
     fun leaveStore() {
         if (visiting == null) return
         visiting = null; tanks = emptyList(); tankAt = -1; display = null
+        ReefLive.room.leave()
         if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
     }
 
@@ -319,7 +331,7 @@ object ReefMyTank {
 
     internal fun leave() {
         // walking out of My tank from a store: the pause already started at the store's door
-        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; return }
+        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
         save(); pausedAt = now()
     }
 
