@@ -15,6 +15,8 @@ import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.Offers
 import com.reeflive.core.custom.economy.StoreVisit
+import com.reeflive.core.custom.economy.SupplyBook
+import com.reeflive.core.custom.economy.cards
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
@@ -154,6 +156,31 @@ object ReefMyTank {
     /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
     fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
 
+    /**
+     * The supply shelf (core SupplyBook): `{left: {id: uses left}, keeps: [tool ids]}` for every supply sold in the
+     * stores (a kept tool counts 1 once bought), or
+     * "null" outside My tank, where nothing runs out.
+     */
+    fun supplies(): String {
+        val e = economy?.takeIf { sim != null && ReefSandbox.isMine() } ?: return "null"
+        return JSON.stringify(obj { o ->
+            o.left = obj { l -> for (p in SupplyBook.PACKS) l[p.id] = e.supplyLeft(p.id) }
+            o.keeps = SupplyBook.PACKS.filter { it.keeps }.map { it.id }.toTypedArray()
+        })
+    }
+
+    /** Takes one use of supply [id] off My tank's shelf; false when it has run out (always true outside My tank). */
+    fun useSupply(id: String): Boolean {
+        val e = economy?.takeIf { sim != null && ReefSandbox.isMine() } ?: return true
+        return e.useSupply(id).also { if (it) save() }
+    }
+
+    /** One serving of any fish food for "feed every hungry fish"; false when the shelf has none. */
+    fun useFishFood(): Boolean {
+        val e = economy?.takeIf { sim != null && ReefSandbox.isMine() } ?: return true
+        return (e.useFishFood() != null).also { if (it) save() }
+    }
+
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
 
@@ -202,6 +229,12 @@ object ReefMyTank {
         val day = today()
         return JSON.stringify(obj { o ->
             o.store = store.id; o.label = store.label; o.greeting = store.greeting; o.coins = e.state.coins; o.at = tankAt
+            o.supplies = SupplyBook.cards(e, store).map { c ->
+                obj {
+                    it.id = c.pack.id; it.name = c.pack.name; it.pack = c.pack.pack; it.price = c.price; it.have = c.have
+                    it.keeps = c.pack.keeps; it.owned = c.owned; it.locked = c.locked; it.level = c.pack.level
+                }
+            }.toTypedArray()
             o.tanks = tanks.map { t ->
                 obj { tk ->
                     tk.title = t.title; tk.animals = t.animals
@@ -245,11 +278,13 @@ object ReefMyTank {
         val e = economy ?: return "null"
         val ids = (JSON.parse<Array<String>>(bag)).toList()
         val c = e.checkout(store, ids, today())
-        if (c.result == BuyResult.OK && ids.isNotEmpty()) {
+        // supplies only: they go straight onto the shelf and the keeper keeps shopping
+        if (c.result == BuyResult.OK && c.bought.isEmpty() && c.supplies.isNotEmpty()) save()
+        if (c.result == BuyResult.OK && c.bought.isNotEmpty()) {
             leaveStore()
             val mine = sim
             if (mine != null) {
-                val groups = ids.groupingBy { it }.eachCount().entries.toList()
+                val groups = c.bought.groupingBy { it }.eachCount().entries.toList()
                 groups.forEachIndexed { k, (id, n) ->
                     // the bags in a row along the front glass, as if carried home and set down one by one
                     val x = 20.0 + (k + 0.5) * 80.0 / groups.size
@@ -258,7 +293,7 @@ object ReefMyTank {
             }
             save()
         }
-        return JSON.stringify(obj { it.result = c.result.name; it.total = c.total; it.coins = e.state.coins })
+        return JSON.stringify(obj { it.result = c.result.name; it.total = c.total; it.coins = e.state.coins; it.animals = c.bought.size; it.supplies = c.supplies.values.sum() })
     }
 
     /** Walks out (the bag empties back onto the shelves): My tank catches up on the minutes spent shopping. */

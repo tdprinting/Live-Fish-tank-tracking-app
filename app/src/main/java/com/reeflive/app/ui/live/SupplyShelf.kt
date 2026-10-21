@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -68,6 +69,7 @@ import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.app.ui.theme.ReefMotion
 import com.reeflive.app.ui.theme.ReefTheme
+import com.reeflive.core.custom.economy.SupplyBook
 import com.reeflive.core.sim.AiptasiaTreatment
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.MaintenanceTask
@@ -269,12 +271,23 @@ enum class SupplyItem(
 
         /** Prop ids drawn dimmed: the sandbox-only ones while watching the real tank. */
         fun lockedIds(sandbox: Boolean): Set<String> = if (sandbox) emptySet() else entries.filter { it.sandboxOnly }.map { it.id }.toSet()
+
+        /**
+         * Uses of [id] left on My tank's shelf ([stock] is the economy's counts; null outside My tank), or
+         * [SupplyBook.UNLIMITED] when it never runs out.
+         */
+        fun left(stock: Map<String, Int>?, id: String): Int =
+            if (stock == null || SupplyBook.pack(id) == null) SupplyBook.UNLIMITED else stock[id] ?: 0
+
+        /** Props that have run out in My tank (drawn dimmed; a tap says where to buy more). */
+        fun emptyIds(stock: Map<String, Int>?): Set<String> =
+            if (stock == null) emptySet() else entries.filter { left(stock, it.id) == 0 }.map { it.id }.toSet()
     }
 }
 
 /** A prop the user just tapped: [at] is the view pixel above it (null if the camera could not project it). */
 @Immutable
-data class ShelfPick(val item: SupplyItem, val at: Offset?, val locked: Boolean, val serial: Int)
+data class ShelfPick(val item: SupplyItem, val at: Offset?, val locked: Boolean, val serial: Int, val out: Boolean = false)
 
 /**
  * The Supplies overlay, laid over the full-screen tank view while the camera looks at the shelf: a name tag under every
@@ -291,6 +304,8 @@ fun BoxScope.SupplyShelfOverlay(
     showReadouts: Boolean,
     projection: TankProjection,
     locked: Set<String>,
+    /** My tank's shelf counts (null outside My tank: nothing runs out). */
+    stock: Map<String, Int>?,
     showHint: Boolean,
     landscape: Boolean,
     onTag: (SupplyItem) -> Unit,
@@ -307,7 +322,7 @@ fun BoxScope.SupplyShelfOverlay(
         enter = fadeIn(tween(if (reduce) 0 else ReefMotion.SLOW, delayMillis = if (reduce) 0 else TAG_DELAY_MS)),
         exit = fadeOut(tween(if (reduce) 0 else ReefMotion.FAST)),
     ) {
-        ShelfTagLayer(projection, locked, pick?.item, onTag, onRow, sideClear = if (landscape) SIDE_COLUMN else 0.dp)
+        ShelfTagLayer(projection, locked, stock, pick?.item, onTag, onRow, sideClear = if (landscape) SIDE_COLUMN else 0.dp)
     }
     // the picked prop's name, floating above it (same bounds as the GL view, so view pixels are layout pixels)
     AnimatedVisibility(
@@ -442,6 +457,7 @@ private const val HEADER_DROP_CM = 0.6f
 private fun ShelfTagLayer(
     projection: TankProjection,
     locked: Set<String>,
+    stock: Map<String, Int>?,
     picked: SupplyItem?,
     onTag: (SupplyItem) -> Unit,
     onRow: (ShelfRow) -> Unit,
@@ -476,7 +492,7 @@ private fun ShelfTagLayer(
         content = {
             items.forEach { item ->
                 val slotDp = feedSlotDp * SupplyShelfLayout.ROW_COUNT[0] / SupplyShelfLayout.ROW_COUNT[item.row.ordinal]
-                ShelfTag(item, item.id in locked, item == picked, small = slotDp < 70f) { onTag(item) }
+                ShelfTag(item, item.id in locked, item == picked, small = slotDp < 70f, left = SupplyItem.left(stock, item.id)) { onTag(item) }
             }
             rows.forEach { r -> RowHeader(r) { onRow(r) } }
         },
@@ -532,27 +548,39 @@ private fun ShelfTagLayer(
 
 /** A prop's name tag: a candy price tag in its row's tone with the navy outline (faded for sandbox-only props). */
 @Composable
-private fun ShelfTag(item: SupplyItem, locked: Boolean, picked: Boolean, small: Boolean, onClick: () -> Unit) {
+private fun ShelfTag(item: SupplyItem, locked: Boolean, picked: Boolean, small: Boolean, left: Int, onClick: () -> Unit) {
     val s = LiveTheme.style
     val shape = RoundedCornerShape(7.dp)
     val fill = if (locked) Color(0xFFE9F3FF).copy(alpha = 0.72f) else item.row.tone
-    Box(
-        Modifier
-            .clip(shape)
-            .background(fill)
-            .border(if (picked) 3.dp else 2.dp, if (picked) Candy.yellow else s.outline, shape)
-            .clickable(onClickLabel = "Use ${item.label}", role = Role.Button, onClick = onClick)
-            .padding(horizontal = 3.dp, vertical = 3.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            item.tag,
-            style = s.buttonText.copy(fontSize = if (small) 10.sp else 12.sp, lineHeight = if (small) 11.sp else 14.sp, letterSpacing = 0.sp),
-            color = if (locked) s.onCandy.copy(alpha = 0.55f) else s.onCandy,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(),
+    Box {
+        Box(
+            Modifier
+                .clip(shape)
+                .background(fill)
+                .border(if (picked) 3.dp else 2.dp, if (picked) Candy.yellow else s.outline, shape)
+                .clickable(onClickLabel = "Use ${item.label}", role = Role.Button, onClick = onClick)
+                .padding(horizontal = 3.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                item.tag,
+                style = s.buttonText.copy(fontSize = if (small) 10.sp else 12.sp, lineHeight = if (small) 11.sp else 14.sp, letterSpacing = 0.sp),
+                color = if (locked) s.onCandy.copy(alpha = 0.55f) else s.onCandy,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // what is left on My tank's shelf: a count, "Shop" when it has run out (a kept tool shows nothing once bought)
+        val keeps = SupplyBook.pack(item.id)?.keeps == true
+        if (left == 0 || (left > 0 && !keeps)) Text(
+            if (left == 0) "Shop" else "×$left",
+            style = s.buttonText.copy(fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = 0.sp),
+            color = Candy.navy,
+            modifier = Modifier.align(Alignment.TopEnd).offset(4.dp, (-8).dp).clip(RoundedCornerShape(50))
+                .background(if (left == 0) Candy.pink else if (left <= 5) Candy.yellow else Color.White)
+                .border(1.5.dp, s.outline, RoundedCornerShape(50)).padding(horizontal = 4.dp),
         )
     }
 }
@@ -586,13 +614,17 @@ private fun ShelfLabel(p: ShelfPick, modifier: Modifier = Modifier) {
     LivePanel(
         modifier.widthIn(max = 240.dp).semantics { liveRegion = LiveRegionMode.Polite },
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        tint = if (p.locked) Candy.purple else item.row.tone,
+        tint = if (p.locked || p.out) Candy.purple else item.row.tone,
     ) {
         Text(item.label, style = s.buttonText.copy(fontSize = 15.sp), color = s.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (item.product.isNotEmpty()) {
             Text(item.product, style = s.buttonText.copy(fontSize = 11.sp, lineHeight = 13.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
-        val line = if (p.locked) "Pretend tank only: switch to Sandbox to use it" else item.blurb
+        val line = when {
+            p.locked -> "Pretend tank only: switch to Sandbox to use it"
+            p.out -> "All gone! Buy more at the fish stores: tap Shop."
+            else -> item.blurb
+        }
         if (line.isNotEmpty()) {
             Text(line, style = s.buttonText.copy(fontSize = 12.sp, lineHeight = 15.sp), color = s.labelDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }

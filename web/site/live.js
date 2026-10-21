@@ -56,7 +56,7 @@ export function startLive(applyReadings) {
   // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
   window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   // the fish stores: walking a store's display tanks replaces the tank in the 3D view until you leave (stores.js)
-  window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
+  window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); stockChanged(); } });
   live.start($('tank'), new URL('.', location.href).href, ui.quality, {
     onStatus: (t) => { if (t) $('loadText').textContent = t; },
     onError: (t) => { $('loadText').textContent = `Sorry, the 3D tank could not start: ${t}`; $('loading').querySelector('.spinner')?.remove(); },
@@ -263,7 +263,7 @@ function setMode(m) {
   // My tank keeps the speed it was left at; the other two start at real time
   if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
   else { ui.speed = 1; live.setSpeed(1); }
-  live.shelfLocked(editable() ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
+  live.shelfLocked(shelfLockIds());
   document.querySelectorAll('.seg [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
   if (m === 'mine') {
@@ -378,8 +378,8 @@ function icon(name) {
   const g = GLYPHS[name];
   return g ? `<svg class="gi${name === 'powerheadRight' ? ' flip' : ''}" viewBox="0 0 24 24" aria-hidden="true">${g}</svg>` : esc(name);
 }
-const tile = (attrs, ico, label, on = false, lock = false) =>
-  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${icon(ico)}</span>${esc(label)}</button>`;
+const tile = (attrs, ico, label, on = false, lock = false, badge = '') =>
+  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${icon(ico)}</span>${esc(label)}${badge}</button>`;
 const val = (id) => P?.values?.[id]?.v;
 const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
@@ -645,6 +645,8 @@ $('card').addEventListener('click', (e) => {
   if ('feedhungry' in d) {
     const n = (ui.hungerRows || []).filter((r) => r.hungry).length;
     if (!n) { say('Everyone is full right now. Check back in a few hours.'); cue('TICK'); return; }
+    if (!MY.useFishFood()) { say('No fish food left on the shelf! Buy some at the fish stores: tap Shop.'); cue('TICK'); return; }
+    stockChanged();
     SB.act('feedHungry', null, 0); cue('PELLET');
     say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
     closeCard(); return;
@@ -940,9 +942,33 @@ const SUPPLIES = [
   { id: 'pest_laser', row: 2, label: 'Pest laser', sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'LASER', 0, 'Aiming the laser at the biggest pest anemone...'); } },
 ];
 const ROWS = [['feedTin', 'Feed'], ['droplet', 'Care'], ['flask', 'Tools']];
+// My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
+let stock = null;
+function refreshStock() {
+  try { stock = ui.mode === 'mine' ? JSON.parse(MY.supplies()) : null; } catch { stock = null; }
+}
+/** Uses left of supply [id] on My tank's shelf, or -1 when it never runs out. */
+function left(id) { const n = stock?.left?.[id]; return n == null ? -1 : n; }
+function shelfLockIds() {
+  refreshStock();
+  return SUPPLIES.filter((s) => (s.sandbox && !editable()) || left(s.id) === 0).map((s) => s.id).join(',');
+}
+function stockChanged() { live.shelfLocked(shelfLockIds()); if (ui.shelf) renderShelf(); }
+/** The badge on a shelf tile: uses left, or nothing for a tool that is kept (or anything outside My tank). */
+function stockBadge(id) {
+  const n = left(id);
+  if (n < 0) return '';
+  if (stock.keeps.includes(id)) return n ? '' : '<i class="cnt out">Shop</i>';
+  return `<i class="cnt ${n ? n <= 5 ? 'low' : '' : 'out'}">${n ? `×${n}` : 'Shop'}</i>`;
+}
+function outOf(s) {
+  cue('TICK');
+  say(`No ${supplyLabel(s).toLowerCase()} left! Buy more at the fish stores: tap Shop.`);
+}
 function supplyLabel(s) { return s.food ? C.foods.find((f) => f.id === s.food)?.label ?? s.food : s.label; }
 function openShelf() {
   ui.shelf = true; closeCard();
+  stockChanged();
   ui.picked = null; renderFish();
   if (ui.following) followFish(null);
   live.shelfOpen(true); live.shelfRow(ui.shelfRow);
@@ -954,7 +980,7 @@ function renderShelf() {
   const sb = editable();
   $('shelfbar').innerHTML = `<div class="card-head"><div class="pills">${ROWS.map(([i, n], k) => `<button class="pillbtn ${ui.shelfRow === k ? 'on' : ''}" data-row="${k}">${icon(i)} ${n}</button>`).join('')}</div>
     <button class="btn small ghost" data-back>Back to tank</button></div>
-    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, s.sandbox && !sb)).join('')}</div>`;
+    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, (s.sandbox && !sb) || left(s.id) === 0, stockBadge(s.id))).join('')}</div>`;
   $('shelfbar').classList.remove('hidden');
 }
 const FOOD_ICON = { FLAKE: '🟠', PELLET: '🟤', FLOATING_PELLET: '🟫', ALGAE_WAFER: '🟢', MYSIS: '🦐', BRINE: '🦐', KRILL: '🦐', PRAWN: '🍤', CYCLOPS: '🔴', NORI: '🥬', CORAL_FOOD: '🪸', PLANKTON: '✨', PODS: '🐛' };
@@ -971,13 +997,16 @@ function useSupply(id) {
   const s = SUPPLIES.find((x) => x.id === id);
   if (!s) return;
   if (s.sandbox && !editable()) { locked(); return; }
+  if (left(s.id) === 0) { outOf(s); return; }
   if (s.food) {
     const f = C.foods.find((x) => x.id === s.food);
     // nori goes on its clip; every other food waits in the hand until the tank is tapped where it should go
-    if (s.food === 'NORI') { SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
+    if (s.food === 'NORI') { if (!MY.useSupply('nori')) { outOf(s); return; } stockChanged(); SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
     setTimeout(() => { closeShelf(); startAim(s.food); }, 500);
     return;
   }
+  if (left(s.id) > 0 && !MY.useSupply(s.id)) { outOf(s); return; }
+  stockChanged();
   s.run();
   if (s.id !== 'test_kit' && ui.shelf) setTimeout(closeShelf, 700);
 }
@@ -1490,7 +1519,7 @@ function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 42}px,
 function renderAll() {
   startThoughts();
   $('hermie').classList.toggle('hidden', !ui.hermie);
-  live.shelfLocked(SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
+  live.shelfLocked(shelfLockIds());
   renderRail();
 }
 
@@ -1520,6 +1549,8 @@ function aimFed(h) {
   const food = aimUi.food;
   if (!food) return;
   stopAim();
+  if (!MY.useSupply(food.toLowerCase())) { outOf(SUPPLIES.find((s) => s.food === food)); return; }
+  stockChanged();
   SB.feedAt(food, h.x, h.y, h.z);
   const f = C.foods.find((x) => x.id === food);
   cue(['PELLET', 'FLOATING_PELLET', 'ALGAE_WAFER'].includes(food) ? 'PELLET' : 'FEED');
