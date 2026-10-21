@@ -1,0 +1,104 @@
+{
+  "id": "caulastrea_furcata",
+  "kind": "CORAL",
+  "common": "Candy cane coral",
+  "scientific": "Caulastrea furcata",
+  "family": "Merulinidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 10,
+  "growthCmPerYear": 3,
+  "lifespanYears": 40,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 26.7,
+      "tolLo": 23.0,
+      "tolHi": 28.0,
+      "lethalLo": 18.0,
+      "lethalHi": 31.5
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 10.0,
+      "tolLo": 7.0,
+      "tolHi": 11.5,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/candy_cane.glb",
+  "colors": {
+    "primary": "#5E8A4E",
+    "secondary": "#E8E8C8",
+    "accent": "#8CFF6A"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.2,
+    "lightHi": 0.7,
+    "flow": "LOW",
+    "growth": "Moderate",
+    "stingCm": 6,
+    "ground": "ROCK",
+    "aggression": "Sweeper tentacles at night reach about 5-6 cm; give it room",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; takes mysis and other small meaty foods when target fed.",
+  "temperamentSummary": "A bunch of branching tubes, each ending in a round fleshy head striped green and white like a candy cane.",
+  "careNotes": [
+    "PAR about 100-150, gentle indirect flow: strong flow keeps it shut.",
+    "Colour fades in light that is too strong or water that is too clean.",
+    "Easy and beginner friendly; new heads split off the old ones."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.8,
+  "starvationDays": 9999
+}

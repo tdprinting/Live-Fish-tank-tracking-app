@@ -51,6 +51,7 @@ object PriceBook {
         l("sinularia_sp", 2, 25), l("rhodactis_sp", 2, 35), l("lobophytum_sp", 3, 35), l("sarcophyton_sp", 3, 70),
         l("amplexidiscus_fenestrafer", 4, 50), l("tubipora_musica", 5, 40),
         l("duncanopsammia_axifuga", 2, 55), l("fimbriaphyllia_ancora", 3, 60), l("fimbriaphyllia_divisa", 3, 60), l("euphyllia_glabrescens", 3, 75),
+        l("caulastrea_furcata", 2, 35), l("micromussa_lordhowensis", 3, 50), l("plerogyra_sinuosa", 4, 70), l("trachyphyllia_geoffroyi", 4, 90),
     )
     private val byId = LISTINGS.associateBy { it.speciesId }
 

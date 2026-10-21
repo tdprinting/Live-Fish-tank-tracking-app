@@ -32,10 +32,17 @@ object StonyCorals {
             sp.id.startsWith("fimbriaphyllia_ancora") -> Sting(3.5, 12.0, 0.35)     // hammer
             genus.startsWith("euphyllia") || genus.startsWith("fimbriaphyllia") -> Sting(4.0, 15.0, 0.35)
             genus.startsWith("duncanopsammia") -> Sting(1.5, 5.0, 0.12)              // short night sweepers, mild
+            genus.startsWith("plerogyra") -> Sting(2.0, 12.0, 0.3)                   // bubble: long, hard night sweepers
+            genus.startsWith("micromussa") -> Sting(1.0, 5.0, 0.15)                  // acan
+            genus.startsWith("caulastrea") -> Sting(1.0, 6.0, 0.15)                  // candy cane
+            genus.startsWith("trachyphyllia") -> Sting(1.5, 5.0, 0.12)               // open brain
             sp.coralKind == CoralKind.LPS -> Sting(1.5, 6.0, 0.2)
             else -> null
         }
     }
+
+    /** Free-living corals that sit loose on the sand bed (open brain: its swollen tissue tears on rock). */
+    fun onSand(sp: SimSpecies): Boolean = sp.id.startsWith("trachyphyllia")
 
     /** Meaty foods large-polyp corals catch and eat (target-fed mysis, brine shrimp, krill bits; stony_corals.md). */
     val MEATY: Set<FoodKind> = setOf(FoodKind.MYSIS, FoodKind.BRINE, FoodKind.KRILL)

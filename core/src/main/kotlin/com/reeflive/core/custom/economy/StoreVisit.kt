@@ -46,7 +46,8 @@ object StoreVisit {
 
     private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp")
     private val LEATHERS = setOf("sarcophyton_sp", "lobophytum_sp", "sinularia_sp")
-    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens")
+    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens",
+        "micromussa_lordhowensis", "caulastrea_furcata", "trachyphyllia_geoffroyi", "plerogyra_sinuosa")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
