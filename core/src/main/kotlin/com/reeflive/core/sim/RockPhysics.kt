@@ -358,6 +358,34 @@ class RockPhysics(
         return r
     }
 
+    /** Rocks set moving by an animal running into them ([bump]). */
+    var bumps = 0L; private set
+    private val bumpIw = DoubleArray(9)
+
+    /**
+     * An animal ran into the rock at (x, y, z) with impulse ([jx], [jy], [jz]) (g·cm/s, into the rock). A loose rock it
+     * is enough to move (a small piece of rubble, a dry rock the builder dropped in) takes the momentum and slides or
+     * rocks a little before friction and its weight settle it again; the glued main structure, or a rock too heavy for
+     * the hit to give it [BUMP_MIN_V], does not move. Returns true when a rock was set moving.
+     */
+    fun bump(x: Double, y: Double, z: Double, jx: Double, jy: Double, jz: Double): Boolean {
+        if (!built) return false
+        val b = bodyNear(x, y, z, BUMP_NEAR_CM) ?: return false
+        if (b.pinned || b.dropping) return false
+        val j = sqrt(jx * jx + jy * jy + jz * jz)
+        if (j * b.invMass < BUMP_MIN_V) return false
+        wake(b)
+        b.v[0] += jx * b.invMass; b.v[1] += jy * b.invMass; b.v[2] += jz * b.invMass
+        Mat3.rotateInertia(b.rot, b.invInertia, bumpIw)
+        val rx = x - b.pos[0]; val ry = y - b.pos[1]; val rz = z - b.pos[2]
+        val tx = ry * jz - rz * jy; val ty = rz * jx - rx * jz; val tz = rx * jy - ry * jx
+        b.w[0] += bumpIw[0] * tx + bumpIw[1] * ty + bumpIw[2] * tz
+        b.w[1] += bumpIw[3] * tx + bumpIw[4] * ty + bumpIw[5] * tz
+        b.w[2] += bumpIw[6] * tx + bumpIw[7] * ty + bumpIw[8] * tz
+        bumps++
+        return true
+    }
+
     /** The body whose rock is nearest (x, y, z), within [maxCm]; null when none is that close. */
     fun bodyNear(x: Double, y: Double, z: Double, maxCm: Double): RockBody? {
         build()
@@ -654,6 +682,10 @@ class RockPhysics(
         const val CHECK_AWAKE_S = 0.25
         const val REFRESH_S = 0.1
         const val COOLDOWN_S = 120.0
+        /** How near a bumped point must lie to a rock's surface to be that rock (cm). */
+        const val BUMP_NEAR_CM = 1.5
+        /** Least speed (cm/s) a hit must give a rock to set it moving; less would not show (and [V_SLEEP] stops it). */
+        const val BUMP_MIN_V = 0.5
         /** Gap kept between a fitted rock and the glass (cm). */
         const val FIT_MARGIN_CM = 1.5
     }
