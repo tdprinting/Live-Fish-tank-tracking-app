@@ -24,6 +24,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 RES_FONT = os.path.join(REPO, "app", "src", "main", "res", "font")
 
 ATLAS = 2048
+OUT_SIZE = 1024  # shipped atlas size (web download / GPU memory)
 PX_PER_CM = 44
 SS = 2          # supersampling while painting
 PAD = 6         # edge-replicated padding around each decal in the atlas (px)
@@ -1196,6 +1197,8 @@ def draw_atlas(path):
         a = np.pad(a, ((PAD, PAD), (PAD, PAD), (0, 0)), mode="edge")
         atlas[y - PAD:y + h + PAD, x - PAD:x + w + PAD] = a
     img = Image.fromarray(atlas)
+    if OUT_SIZE != ATLAS:  # painted at 2048 for crisp text, shipped at OUT_SIZE (UVs are normalised, so layout is unchanged)
+        img = img.resize((OUT_SIZE, OUT_SIZE), Image.LANCZOS)
     if path.lower().endswith((".jpg", ".jpeg")):
         img.save(path, quality=88, subsampling=0, optimize=True)
     else:
