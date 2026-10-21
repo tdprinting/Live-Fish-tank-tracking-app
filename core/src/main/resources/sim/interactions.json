@@ -4,7 +4,7 @@
   "rows": [
     { "id": "clownF_clownM", "actor": "CLOWN_F", "targets": ["CLOWN"], "type": "dominance", "anchor": "body", "triggerRadius": 0.0, "triggerBL": 0.5,
       "pEvent": 0.3, "maxRatePerH": 6, "floorRatePerH": 2, "bout": "QUIVER_YIELD", "chaseLen": 10, "chaseSpeedBL": 4.5, "stressToTarget": 0.01,
-      "habituation": 0.6, "newcomerMult": 1.0, "evidence": "S:Colleye12 display form; rates I" },
+      "habituation": 0.6, "newcomerMult": 1.0, "evidence": "S:Colleye12 display form; rates [I]" },
     { "id": "clownF_host", "actor": "CLOWN_F", "targets": ["ANY_FISH"], "filter": "notClown", "type": "aggression", "anchor": "host", "triggerRadius": 22, "lingerS": 3.0,
       "pEvent": 0.5, "maxRatePerH": 20, "floorRatePerH": 20, "bout": "STARE_DISPLAY_CHARGE_NIP", "chaseLen": 15, "chaseLenLarge": 5, "chaseSpeedBL": 4.5, "stressToTarget": 0.03,
       "habituation": 0.3, "newcomerMult": 1.5, "sensitise": true, "evidence": "S:Fleming24, S:Hayashi24" },
@@ -101,18 +101,18 @@
       "habituation": 0.0, "newcomerMult": 1.0, "evidence": "S:ADW-tang (reaction when a bout targets the tang)" },
     { "id": "gramma_gramma", "actor": "GRAMMA", "targets": ["GRAMMA"], "type": "aggression", "anchor": "cave", "triggerRadius": 20,
       "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 5, "bout": "LATERAL_DISPLAY_CHASE_NIP", "chaseLen": 25, "chaseSpeedBL": 6, "stressToTarget": 0.06,
-      "habituation": 0.2, "newcomerMult": 2.5, "evidence": "50 §1 facts 18-21: very protective of its cave; a mated pair (mateId) is left alone; rates I" },
+      "habituation": 0.2, "newcomerMult": 2.5, "evidence": "50 §1 facts 18-21: very protective of its cave; a mated pair (mateId) is left alone; rates [I]" },
     { "id": "gramma_dotty", "actor": "GRAMMA", "targets": ["DOTTYBACK"], "type": "aggression", "anchor": "cave", "triggerRadius": 18,
       "pEvent": 0.5, "maxRatePerH": 6, "floorRatePerH": 2, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 15, "chaseSpeedBL": 6, "stressToTarget": 0.04,
-      "habituation": 0.5, "newcomerMult": 2.0, "evidence": "50 §1 facts 21-22: gramma holds its cave against a dottyback at first (Reef Central anecdotes); rates I" },
+      "habituation": 0.5, "newcomerMult": 2.0, "evidence": "50 §1 facts 21-22: gramma holds its cave against a dottyback at first (Reef Central anecdotes); rates [I]" },
     { "id": "dotty_gramma", "actor": "DOTTYBACK", "targets": ["GRAMMA"], "type": "aggression", "anchor": "cave", "triggerRadius": 30,
       "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE_NIP", "chaseLen": 35, "chaseSpeedBL": 6, "stressToTarget": 0.07,
-      "habituation": 0.5, "newcomerMult": 3.0, "evidence": "50 §1 facts 21-23: dottybacks and basslets want the same caves; the settled dottyback wins; rates I" },
+      "habituation": 0.5, "newcomerMult": 3.0, "evidence": "50 §1 facts 21-23: dottybacks and basslets want the same caves; the settled dottyback wins; rates [I]" },
     { "id": "watchman_watchman", "actor": "WATCHMAN_GOBY", "targets": ["WATCHMAN_GOBY", "DIAMOND_GOBY"], "type": "aggression", "anchor": "burrow", "triggerRadius": 15,
       "pEvent": 0.7, "maxRatePerH": 10, "floorRatePerH": 4, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 15, "chaseSpeedBL": 5, "stressToTarget": 0.05,
-      "habituation": 0.3, "newcomerMult": 2.0, "evidence": "50 §3 facts 88, 107: aggressive to its own kind and other shrimp gobies at the burrow; a mated pair is left alone; rates I" },
+      "habituation": 0.3, "newcomerMult": 2.0, "evidence": "50 §3 facts 88, 107: aggressive to its own kind and other shrimp gobies at the burrow; a mated pair is left alone; rates [I]" },
     { "id": "banggai_males", "actor": "BANGGAI_M", "targets": ["BANGGAI_M"], "type": "aggression", "anchor": "body", "triggerRadius": 12,
       "pEvent": 0.4, "maxRatePerH": 6, "floorRatePerH": 3, "bout": "LATERAL_DISPLAY_CHASE", "chaseLen": 12, "chaseSpeedBL": 4, "stressToTarget": 0.04,
-      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "50 §2: males squabble in aquaria, keep a pair (hobby consensus); rates I" }
+      "habituation": 0.3, "newcomerMult": 1.5, "evidence": "50 §2: males squabble in aquaria, keep a pair (hobby consensus); rates [I]" }
   ]
 }
