@@ -191,7 +191,7 @@ class FrameUniforms {
         val WATER_LEVEL: Float get() = Camera.WATER_Y
         const val SAND_TOP = Camera.SAND_Y
         const val CAUSTIC_STRENGTH = 0.85f
-        const val CAUSTIC_SCALE = 0.04f
+        const val CAUSTIC_SCALE = 0.045f
         /**
          * Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7). Somewhat above pure seawater so
          * the blue-green fall-off reads across a 122 cm tank (a side view keeps ~40 % of red).
