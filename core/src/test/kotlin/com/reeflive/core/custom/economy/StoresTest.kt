@@ -59,7 +59,7 @@ class StoresTest {
 
     @Test fun checkoutPaysForTheWholeBagOrNothing() {
         val e = Economy(SavedEconomy(coins = 1000))
-        // only what a new player may buy: Shelly's also shows level-locked stock, and its order moves as species are added
+        // a new player buys from what level 1 unlocks (the daily shelf also shows locked animals)
         val shelf = Stores.stock(FishStore.SHELLYS, day).filter { e.unlocked(it.listing) }
         val two = shelf.take(2).map { it.listing.speciesId }
         val total = shelf.take(2).sumOf { it.price }

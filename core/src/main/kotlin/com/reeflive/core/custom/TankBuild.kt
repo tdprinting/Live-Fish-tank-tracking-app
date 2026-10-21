@@ -30,9 +30,12 @@ data class TankBuild(
     val liters: Double get() = gallons * LITERS_PER_GALLON
     val sizeLabel: String get() = "${fmt(lengthIn)} × ${fmt(depthIn)} × ${fmt(heightIn)} in"
 
-    /** The sim config for this build ([seed] picks the individual temperaments of the animals added later). */
+    /**
+     * The sim config for this build ([seed] picks the individual temperaments of the animals added later). No
+     * automatic feeding: in My tank the keeper feeds (a daily job, docs/ECONOMY.md §9).
+     */
     fun config(seed: Long): TankConfig = TankConfig(
-        systemLiters = liters, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed,
+        systemLiters = liters, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed, autoFeed = emptyList(),
     )
 
     companion object {

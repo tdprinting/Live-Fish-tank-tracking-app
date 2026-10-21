@@ -573,3 +573,20 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .counter .ctotal { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font: 600 18px/1.2 var(--display); }
 .counter .ctotal b { display: inline-flex; align-items: center; gap: 4px; color: #FFE14D; }
 .fxplus.minus { color: #FF9AA5; font-size: 26px; }
+/* "While you were away" (care.js; Android WelcomeBack.kt) */
+.dayarc { position: relative; height: 90px; border-radius: 16px; overflow: hidden; margin-bottom: 10px; transition: background .4s; }
+.dayarc.day { background: #5FB8E6; } .dayarc.night { background: #14204A; }
+.dayarc .orb { position: absolute; width: 26px; height: 26px; margin: 0 0 -13px -13px; border-radius: 50%; }
+.dayarc.day .orb { background: #FFE14D; box-shadow: 0 0 0 5px rgba(255,225,77,.35), 0 0 22px #FFE14D; }
+.dayarc.night .orb { background: #F2F6FF; box-shadow: inset -8px -3px 0 #14204A; }
+.dayarc .sea { position: absolute; left: 0; right: 0; bottom: 0; height: 18%; background: rgba(31,166,201,.85); }
+/* top right: the status capsule (opens Tank Health) and the settings button */
+.topright { display: inline-flex; gap: 8px; align-items: center; pointer-events: auto; }
+.gearbtn { padding: 7px 10px; }
+.gearbtn svg { width: 22px; height: 22px; }
+.gearbtn.on { background: #fff; }
+/* Tank Health: the feed button spans the row, then a hunger bar per animal */
+.opt.wide { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 8px; font-size: 15px; padding: 12px; }
+.hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
+.hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }

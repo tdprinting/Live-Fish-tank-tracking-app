@@ -32,7 +32,7 @@ const ui = {
   addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
 };
 let onReadingsNeeded = () => {};
-/** Every lever works: the pretend tank (Sandbox) and My tank (the keeper's own saved tank). */
+/** Every lever works: My tank (the keeper's own saved tank). Watch's fast-forward copy keeps Watch's menu. */
 const editable = () => ui.mode !== 'watch';
 let statsEl = null;
 function statsBox() {
@@ -75,9 +75,9 @@ export function startLive(applyReadings) {
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
-    onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'FIX') renderCard(); },
+    onFixed: (kind) => { say(FIX_SAY[kind] || 'Fixed!'); setTimeout(tick, 150); if (ui.card === 'HEALTH') renderCard(); },
     onPestTreated: (r) => { say(r > 0 ? 'Got it! Watch it shrink away.' : r === 0 ? "It ducked into the rock just in time! Try again when it's open." : 'No pest anemones right now. Nothing to treat!'); setTimeout(tick, 150); },
-    onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'FIX') renderCard(); },
+    onFixedAll: () => { toast('All fixed! The tank check is happy.'); if (ui.card === 'HEALTH') renderCard(); },
     // a rock settled or toppled after the sand under it was dug out: remember where it lies now
     onRocks: (state) => { store.set('reeflive.rocks', state); say('Crunch! A rock shifted. The gobies dug out too much sand under it.'); },
     // open the page with ?stats to show frame rate and timings (for checking speed on a real phone)
@@ -95,6 +95,8 @@ export function startLive(applyReadings) {
     setInterval(tick, 500);
     tick();
     say(C.tips.hello);
+    // the page opens on My tank, the main tank (Watch is the real tank as logged, one tap away)
+    setMode('mine');
     const firstVisit = !store.get('reeflive.tipsSeen', false);
     if (firstVisit) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
     checkNews(firstVisit);
@@ -118,7 +120,7 @@ function tick() {
   $('waterDot').className = `warn ${ui.worst}${ui.worst === 'good' ? ' hidden' : ''}`;
   $('happyFace').textContent = faceFor(P.happy);
   $('happyFace').classList.toggle('hidden', !ui.happy);
-  if (ui.card === 'STATUS') $('statusBody').innerHTML = statusBody();
+  if (ui.card === 'HEALTH') refreshHealth();
   renderFish();
   renderFollow();
   if (ui.card && document.activeElement?.type !== 'range' && !ui.dragging) refreshCardValues();
@@ -166,8 +168,8 @@ $('hermie').addEventListener('click', nextTip);
 $('statusBtn').addEventListener('click', () => {
   cue('TICK');
   if (ui.shelf) closeShelf();
-  if (ui.card === 'STATUS') { closeCard(); return; }
-  ui.card = 'STATUS'; ui.more = false;
+  if (ui.card === 'HEALTH') { closeCard(); return; }
+  ui.card = 'HEALTH'; ui.more = false;
   renderCard(); renderRail();
 });
 let toastTimer = 0;
@@ -177,7 +179,7 @@ function toast(text) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('toast').classList.add('hidden'), 3500);
 }
-function locked() { say('That only works in the pretend tank. Tap Sandbox at the top to try it.'); cue('TICK'); }
+function locked() { say('That only works in My tank. Tap My tank at the top to try it.'); cue('TICK'); }
 
 /** Runs a ReefSandbox action; in Watch mode sandbox-only actions explain themselves instead. */
 function act(name, arg = null, num = 0, line = null) {
@@ -192,13 +194,34 @@ function act(name, arg = null, num = 0, line = null) {
 // ---- What's new: updates merged since this browser last opened the app (whats-new.json, built from main's history)
 let news = [];
 async function checkNews(firstVisit) {
-  try { news = await (await fetch('whats-new.json', { cache: 'no-store' })).json(); } catch { return; }
-  if (!news.length) return;
-  const last = store.get('reeflive.newsSeen', 0);
-  store.set('reeflive.newsSeen', news[0].n);
-  if (firstVisit) return; // brand new: the tips come first, everything is new anyway
-  const fresh = last ? news.filter((e) => e.n > last) : news.slice(0, 8);
-  if (fresh.length) setTimeout(() => showNews(fresh, true), 1500);
+  try { news = await (await fetch('whats-new.json', { cache: 'no-store' })).json(); } catch { news = []; }
+  if (!news.length) { if (!firstVisit) showFact(); return; }
+  // remembered by PR number, not "newest number seen": updates merge out of number order (#111 after #131), so
+  // "everything above the last number" kept popping the same notes up on every visit
+  const seenList = store.get('reeflive.newsSeenIds', null);
+  const oldLast = store.get('reeflive.newsSeen', 0);
+  store.set('reeflive.newsSeenIds', news.map((e) => e.n));
+  if (firstVisit || (!seenList && oldLast)) return; // brand new (the tips come first), or saw the popup before this fix
+  const seen = new Set(seenList || []);
+  const fresh = seenList ? news.filter((e) => !seen.has(e.n)) : news.slice(0, 8);
+  if (fresh.length) { setTimeout(() => showNews(fresh, true), 1500); return; }
+  showFact();
+}
+/** No new updates: a reef fact or reef-keeping tip instead, a new one every time the app opens (core ReefFacts). */
+function showFact() {
+  const n = store.get('reeflive.factN', Math.floor(Math.random() * 1000));
+  store.set('reeflive.factN', n + 1);
+  const f = JSON.parse(SB.fact(n));
+  const show = () => {
+    // the "While you were away" card (care.js) goes first: the fact waits until it is closed
+    const away = $('awayModal');
+    if (away && !away.classList.contains('hidden')) { setTimeout(show, 1000); return; }
+    $('newsTitle').textContent = `🐠 ${f.title}`;
+    $('newsList').innerHTML = `<li>${esc(f.text)}</li>`;
+    const d = $('news');
+    if (!d.open) d.showModal();
+  };
+  setTimeout(show, 1500);
 }
 function showNews(list = news.slice(0, 15), since = false) {
   if (!list.length) { say('Nothing new yet.'); return; }
@@ -242,7 +265,7 @@ function setMode(m) {
     else say(`${info.name}: your very own ${info.build}. Everything you do here is saved.`);
   } else {
     if ($('mytank').open) $('mytank').close();
-    say(m === 'sandbox' ? 'This is a pretend tank. Nothing here changes your real one.' : 'Back to your real tank.');
+    say('Back to your real tank. Just watch and feed.');
   }
   renderRail();
   tick();
@@ -285,24 +308,22 @@ function setSpeed(v) {
 }
 
 // ================================================================ menu rail and cards
-// candy tones from the Android live theme (UI_STYLE §10.1)
+// candy tones from the Android live theme (UI_STYLE §10.1). A few big bubbles a child can read: Look, Supplies (the 3D
+// shelf), Tank Health and, in My tank, Add life and Tank; Settings is the gear at the top (Android LiveMenu)
 const CATS = {
-  VIEW: { ico: 'eye', label: 'View', tone: 'cyan' },
+  LOOK: { ico: 'eye', label: 'Look', tone: 'cyan' },
   SUPPLIES: { ico: 'basket', label: 'Supplies', tone: 'orange' },
-  FIX: { ico: 'waveSparkle', label: 'Fix tank', tone: 'green' },
+  HEALTH: { ico: 'heart', label: 'Tank Health', tone: 'green' },
   LIFE: { ico: 'fish', label: 'Add life', tone: 'pink' },
   TANK: { ico: 'bulb', label: 'Tank', tone: 'yellow' },
-  TROUBLE: { ico: 'whatIf', label: 'Trouble', tone: 'purple' },
-  MORE: { ico: 'dots', label: 'More', tone: 'white' },
-  STATUS: { ico: 'tank', label: 'How is the tank?', tone: 'green' },
+  SETTINGS: { ico: 'dots', label: 'Settings & help', tone: 'white' },
 };
 function renderRail() {
-  const cats = editable() ? ['SUPPLIES', 'FIX', 'LIFE', 'TANK', 'TROUBLE', 'MORE'] : ['VIEW', 'SUPPLIES', 'FIX', 'MORE'];
+  const cats = editable() ? ['LOOK', 'SUPPLIES', 'HEALTH', 'LIFE', 'TANK'] : ['LOOK', 'SUPPLIES', 'HEALTH'];
   $('rail').innerHTML = cats.map((c) => `<button class="tool tone-${CATS[c].tone} ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${icon(CATS[c].ico)}</span><span class="lbl">${CATS[c].label}</span></button>`).join('');
+  $('setBtn').classList.toggle('on', ui.card === 'SETTINGS');
 }
-$('rail').addEventListener('click', (e) => {
-  const c = e.target.closest('[data-cat]')?.dataset.cat;
-  if (!c) return;
+function openCat(c) {
   cue('TICK');
   if (c === 'SUPPLIES') { ui.shelf ? closeShelf() : openShelf(); return; }
   if (ui.shelf) closeShelf();
@@ -310,7 +331,10 @@ $('rail').addEventListener('click', (e) => {
   ui.card = c; ui.more = false;
   renderCard();
   renderRail();
-});
+}
+$('rail').addEventListener('click', (e) => { const c = e.target.closest('[data-cat]')?.dataset.cat; if (c) openCat(c); });
+$('setBtn').insertAdjacentHTML('afterbegin', icon('dots'));
+$('setBtn').addEventListener('click', () => openCat('SETTINGS'));
 function closeCard() { ui.card = null; $('card').classList.add('hidden'); renderRail(); }
 $('tank').addEventListener('pointerdown', () => { if (ui.card) { closeCard(); ui.cardClosedAt = performance.now(); } });
 
@@ -336,42 +360,77 @@ function renderCard() {
   const sb = editable();
   let h = '';
   switch (ui.card) {
-    case 'VIEW': h = viewCard(); break;
-    case 'FIX': h = fixCard(); break;
+    case 'LOOK': h = lookCard(sb); break;
+    case 'HEALTH': h = healthCard(); break;
     case 'LIFE': h = lifeCard(sb); break;
     case 'TANK': h = tankCard(sb); break;
-    case 'TROUBLE': h = troubleCard(sb); break;
-    case 'MORE': h = moreCard(sb); break;
-    case 'STATUS': h = `<div id="statusBody">${statusBody()}</div>`; break;
+    case 'SETTINGS': h = settingsCard(sb); break;
   }
   $('card').className = `sheet tone-${CATS[ui.card].tone}`;
   $('card').innerHTML = `<div class="card-head"><strong><span class="hico">${icon(CATS[ui.card].ico)}</span>${CATS[ui.card].label}</strong>
-    <span>${['LIFE', 'TANK', 'TROUBLE'].includes(ui.card) ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
+    <span>${['LIFE', 'TANK'].includes(ui.card) ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
     <button class="icon-btn" data-close aria-label="Close">✕</button></span></div><div class="card-body">${h}</div>`;
   $('card').classList.remove('hidden');
+  if (ui.card === 'HEALTH') refreshHealth();
 }
 
-// ---- Watch (VIEW)
+// ---- Look: time, follow a fish, tour, sub, microscope (Watch adds the lamp looks: they only change the picture)
 function timeSlider(stops) {
   const i = Math.max(0, stops.indexOf(ui.speed));
   return `<label class="slider"><span>Time</span><output>${ui.speed === 0 ? 'Paused' : ui.speed === 1 ? 'Real time' : `${ui.speed}× faster`}</output>
     <input type="range" data-time min="0" max="${stops.length - 1}" step="1" value="${i}" data-stops="${stops.join(',')}"></label>`;
 }
 const STOPS = [1, 10, 60, 240, 600, 1000];
-function viewCard() {
+function lookCard(sb) {
   const looks = [['REAL', 'clockSun', 'Real clock'], ['DAY', 'sun', 'Day'], ['DUSK', 'led', 'Dusk'], ['NIGHT', 'moon', 'Night'], ['MOON', 'moon', 'Moonlight'], ['BLUE', 'uvLamp', 'Blue light']];
   const fish = animals.slice(0, 12);
-  return `${timeSlider(STOPS)}
-    <h4>Lamp looks</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>
-    <div class="options">${tile('data-torch', 'torch', 'Torch', ui.torch)}${tile('data-feedshelf', 'feedTin', 'Feed')}${tile('data-tour', 'camera', 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
-      ${tile('data-hide', 'film', 'Cinematic')}${tile('data-saver', 'moon', 'Screensaver')}${tile('data-sound', ui.sound ? '🔊' : '🔇', ui.sound ? 'Sound on' : 'Sound off', ui.sound)}</div>
-    <h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('') || '<p class="muted">No fish yet.</p>'}</div>`;
+  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
+    ${fish.length ? `<h4>Follow a fish</h4><div class="options">${fish.map((a) => tile(`data-follow="${a.id}"`, 'fish', a.name, ui.following === a.id)).join('')}</div>` : ''}
+    <h4>Look around</h4><div class="options">${tile('data-tour', 'camera', ui.tour ? 'Stop tour' : 'Auto tour', ui.tour)}${tile('data-sub', 'sub', 'Submarine', sub.on)}
+      ${tile('data-microscope', 'microscope', 'Look closer')}${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-torch', 'torch', 'Torch', ui.torch)}
+      ${tile('data-saver', 'moon', 'Screensaver')}${tile('data-hide', 'eyeOff', 'Hide buttons')}</div>
+    ${sb ? '' : `<h4>Lamp look</h4><div class="options">${looks.map(([k, i, n]) => tile(`data-look="${k}"`, i, n, ui.viewLight === k)).join('')}</div>`}`;
 }
 
-// ---- Fix tank: the tank check's list (core TankDoctor); each fix plays in the 3D tank, then goes in
+// ---- Tank Health: the water, who is hungry (core HungryFeed) and the tank check's fixes (core TankDoctor)
 const FIX_ICON = { EMPTY_SKIMMER: 'skimmer', SWAP_SOCK: 'sock', FRESH_CARBON: 'carbon', WATER_CHANGE: 'bucket', TOP_OFF: 'droplet', LOWER_SALT: 'dropMinus', RAISE_SALT: 'dropPlus',
   DOSE_MG: 'bottle', DOSE_CA: 'bottle', DOSE_ALK: 'bottle', HEATER: 'flame', PUMPS: 'powerhead', FEED_CORALS: 'feedTin' };
-function fixCard() {
+function healthCard() {
+  return `<div id="healthLive">${healthLive()}</div>
+    <div class="options"><button class="opt wide" id="feedHungry" data-feedhungry><span class="ico">${icon('feedTin')}</span><span class="lbl"></span></button></div>
+    <div class="hunger" id="hungerRows"></div>
+    <h4>Water &amp; gear</h4>${fixList()}
+    <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
+}
+/** Happy face, water and the hunger header: no buttons inside, so the tick can rebuild it under a finger. */
+function healthLive() {
+  if (!P) return '';
+  const st = { GOOD: 'good', CAUTION: 'caution', DANGER: 'danger' };
+  const s = ui.clockAt;
+  const words = ui.worst === 'good' ? 'The water is just right.' : ui.worst === 'caution' ? 'Something in the water needs a look.' : 'The water needs help now!';
+  ui.hungerRows = JSON.parse(SB.hunger());
+  const hungry = ui.hungerRows.filter((r) => r.hungry).length;
+  return `<div class="hero"><span class="big">${faceFor(P.happy)}</span><div class="grow">
+      <div class="hero-t">Tank happy <b>${P.happy}%</b></div><i class="meter wide"><i class="${P.happy >= 70 ? 'good' : P.happy >= 40 ? 'caution' : 'danger'}" style="width:${P.happy}%"></i></i>
+      <div class="muted">${s ? `${clockText(s.time)} · ${esc(s.phase)}` : ''}</div></div></div>
+    <h4>Water <span class="note ${ui.worst}">${words}</span></h4>
+    <div class="readings">${P.readouts.map((r) => `<div class="reading ${st[r.status] ?? 'unknown'}"><span>${esc(r.label)}</span><b>${esc(r.text)}</b></div>`).join('')}</div>
+    <h4>Hungry tummies <span class="note ${hungry ? 'caution' : 'good'}">${hungry ? `${hungry} hungry` : ui.hungerRows.length ? 'Everyone is full' : 'No animals yet'}</span></h4>`;
+}
+/** Refreshes the live parts of Tank Health: the header, the feed button's words and every hunger bar. */
+function refreshHealth() {
+  const el = $('healthLive');
+  if (!el) return;
+  el.innerHTML = healthLive();
+  const rows = ui.hungerRows || [];
+  const hungry = rows.filter((r) => r.hungry).length;
+  const b = $('feedHungry');
+  b.querySelector('.lbl').textContent = hungry ? (hungry === 1 ? 'Feed the hungry one' : `Feed all ${hungry} hungry ones`) : 'Nobody is hungry right now';
+  b.classList.toggle('on', hungry > 0); b.classList.toggle('lock', !hungry);
+  $('hungerRows').innerHTML = rows.map((r) => `<div class="stat ${r.hungry ? 'hungry' : ''}"><span>${esc(r.name)}${r.food ? ` <small class="muted">likes ${esc(r.food.toLowerCase())}</small>` : ''}</span>
+    <i class="meter"><i class="hunger" style="width:${Math.round(Math.max(0, Math.min(1, r.hunger)) * 100)}%"></i></i></div>`).join('');
+}
+function fixList() {
   const f = JSON.parse(SB.fixes());
   if (!f) return '';
   if (!f.list.length) {
@@ -429,8 +488,10 @@ function tankCard(sb) {
     ${tile('data-flip="eq_skimmer"', 'skimmer', 'Skimmer', isOn('eq_skimmer'), !sb)}${tile('data-flip="eq_sock"', 'sock', 'Filter sock', isOn('eq_sock'), !sb)}
     ${tile('data-flip="eq_carbon"', 'carbon', 'Carbon', isOn('eq_carbon'), !sb)}${tile('data-flip="eq_refugium"', 'refugium', 'Algae garden', isOn('eq_refugium'), !sb)}
     ${tile('data-flip="eq_uv"', 'uvLamp', 'Germ zapper', isOn('eq_uv'), !sb)}${tile('data-opentreat', 'bottle', 'Medicine', false, !sb)}
+    ${tile('data-scape', 'rocks', 'Build rockwork', false, !sb)}
   </div>`;
-  if (ui.more || ui.treat) h += tankMore(sb);
+  if (ui.more || ui.treat) h += tankMore(sb) + troubleMore(sb);
+  else h += '<p class="muted">More has the exact sliders, medicine and trouble you can cause on purpose.</p>';
   return h;
 }
 function tankMore(sb) {
@@ -482,55 +543,35 @@ function refreshCardValues() {
   });
 }
 
-// ---- Trouble
-function troubleCard(sb) {
-  let h = `<div class="options">
-    ${tile('data-heater-act="break"', 'brokenHeater', 'Heater breaks', false, !sb)}${tile('data-heater-act="fix"', 'wrench', 'Fix heater', false, !sb)}
-    ${tile('data-preset="HEATER_STUCK"', 'flame', 'Heater stuck on', false, !sb)}${tile('data-pumpfail', 'powerhead', 'Pumps stop tonight', false, !sb)}
-    ${tile('data-lights="off"', 'lampOut', 'Lamp goes out', false, !sb)}${tile('data-preset="POWER_OUTAGE"', 'plugOff', 'Power cut', false, !sb)}
+// ---- Tank → More: trouble on purpose (it was its own bubble)
+function troubleMore(sb) {
+  let h = `<h4>Make trouble on purpose</h4><p class="muted">${ui.mode === 'mine' ? 'This is your saved tank, so trouble here sticks. Tank Health can fix most of it.' : 'Break something, then speed up time to see what happens.'}</p><div class="options">
+    ${tile('data-heater-act="break"', 'brokenHeater', 'Heater breaks', false, !sb)}${tile('data-preset="HEATER_STUCK"', 'flame', 'Heater stuck on', false, !sb)}
+    ${tile('data-pumpfail', 'powerhead', 'Pumps stop tonight', false, !sb)}${tile('data-preset="POWER_OUTAGE"', 'plugOff', 'Power cut', false, !sb)}
     ${tile('data-heatwave', 'heatWave', 'Heat wave', false, !sb)}${tile('data-preset="SALINITY_CRASH"', 'salt', 'Salt crash', false, !sb)}
     ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}${tile('data-preset="ROCKSLIDE"', 'rocks', 'Rockslide', false, !sb)}
     ${tile('data-preset="MISSED_WATER_CHANGES"', 'calendarX', 'No water changes', false, !sb)}${tile('data-aip="1"', 'pestAnemone', 'Pest anemone', false, !sb)}
     ${tile('data-aip="-1"', 'zap', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', 'sickFish', 'A fish gets sick', false, !sb)}
   </div>`;
   if (ui.sickPick) h += `<h4>Which illness?</h4><div class="options">${C.diseases.map((d) => tile(`data-infect="${d.id}"`, 'sickFish', d.label, false, !sb)).join('')}</div>`;
-  if (ui.more) {
-    h += `<h4>What-if presets</h4><div class="presets">${C.presets.map((p) => `<button class="preset ${sb ? '' : 'lock'}" data-preset="${p.id}"><strong>${esc(p.label)}</strong><span>${esc(p.blurb)}</span><em>${esc(p.hint)}</em></button>`).join('')}</div>
-      <h4>Scenarios</h4><div class="options">${C.scenarios.map((s) => tile(`data-scenario="${s.id}"`, 'waveSparkle', s.label, false, !sb)).join('')}</div>
-      <p class="muted">Slow vs sudden: fish cope with a slow change far better than a jump. Under Tank → More, "Ramp over a day" makes any slider change slowly.</p>`;
-  }
+  h += `<h4>What-if presets</h4><div class="presets">${C.presets.map((p) => `<button class="preset ${sb ? '' : 'lock'}" data-preset="${p.id}"><strong>${esc(p.label)}</strong><span>${esc(p.blurb)}</span><em>${esc(p.hint)}</em></button>`).join('')}</div>
+    <h4>Scenarios</h4><div class="options">${C.scenarios.map((s) => tile(`data-scenario="${s.id}"`, 'waveSparkle', s.label, false, !sb)).join('')}</div>
+    <p class="muted">Slow vs sudden: fish cope with a slow change far better than a jump. "Ramp over a day" above makes any slider change slowly.</p>`;
   return h;
 }
 
-// ---- More
-function moreCard(sb) {
+// ---- Settings & help (the gear at the top)
+function settingsCard(sb) {
   const row = (attr, ico, label, on) => `<button class="toggle-row" ${attr}><span class="rlbl">${icon(ico)} ${esc(label)}</span><span class="switch ${on ? 'on' : ''}"><i></i></span></button>`;
-  return `${timeSlider(sb ? [0, ...STOPS] : STOPS)}
-    <div class="options">${tile('data-lapse', 'timelapse', 'Time-lapse')}${tile('data-microscope', 'microscope', 'Look closer')}
-      ${tile('data-clean', 'flipper', 'Clean glass', ui.cleaning)}${tile('data-knock', 'touch', 'Knock')}${tile('data-hide', 'eyeOff', 'Hide buttons')}
-      ${tile('data-camreset', 'eye', 'Reset view')}${tile('data-scape', 'rocks', 'Build rockwork')}${sb ? tile('data-reset', 'reset', ui.mode === 'mine' ? 'Start over' : 'Reset tank') : ''}</div>
-    <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}</div>
-    <h4>Settings</h4><div class="rows">
+  return `<div class="rows">
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
-      <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>`;
-}
-
-// ---- How is the tank? (the status capsule's card)
-function statusBody() {
-  if (!P) return '';
-  const st = { GOOD: 'good', CAUTION: 'caution', DANGER: 'danger' };
-  const s = ui.clockAt;
-  const words = ui.worst === 'good' ? 'The water is just right.' : ui.worst === 'caution' ? 'Something in the water needs a look.' : 'The water needs help now!';
-  return `<div class="hero"><span class="big">${faceFor(P.happy)}</span><div class="grow">
-      <div class="hero-t">Tank happy <b>${P.happy}%</b></div><i class="meter wide"><i class="${P.happy >= 70 ? 'good' : P.happy >= 40 ? 'caution' : 'danger'}" style="width:${P.happy}%"></i></i>
-      <div class="muted">${s ? `${clockText(s.time)} · ${esc(s.phase)}` : ''}</div></div></div>
-    <h4>Water <span class="note ${ui.worst}">${words}</span></h4>
-    <div class="readings">${P.readouts.map((r) => `<div class="reading ${st[r.status] ?? 'unknown'}"><span>${esc(r.label)}</span><b>${esc(r.text)}</b></div>`).join('')}</div>
-    <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
+      <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
+    <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}${tile('data-camreset', 'eye', 'Reset view')}</div>
+    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}`;
 }
 
 // ---- card clicks
@@ -544,6 +585,13 @@ $('card').addEventListener('click', (e) => {
   const d = b.dataset;
   const sbOnly = (fn) => { if (!editable()) { locked(); return; } fn(); };
   if ('close' in d || b.classList.contains('tests')) { closeCard(); return; }
+  if ('feedhungry' in d) {
+    const n = (ui.hungerRows || []).filter((r) => r.hungry).length;
+    if (!n) { say('Everyone is full right now. Check back in a few hours.'); cue('TICK'); return; }
+    SB.act('feedHungry', null, 0); cue('PELLET');
+    say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
+    closeCard(); return;
+  }
   if ('fixall' in d) { SB.fix(-1); say("Let's fix it all up! Watch the tank."); cue('TICK'); closeCard(); return; }
   if (d.fix != null) { const one = document.querySelectorAll('#card [data-fix]').length === 1; SB.fix(Number(d.fix)); cue('TICK'); if (one) { closeCard(); return; } renderCard(); return; }
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
