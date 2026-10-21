@@ -44,9 +44,10 @@ object StoreVisit {
     /** Most of one species swimming in a display tank (the shelf can hold more; they are "in the back"). */
     const val MAX_SHOWN = 6
 
-    private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp")
+    private val MUSHROOMS_POLYPS = setOf("discosoma_sp", "rhodactis_sp", "amplexidiscus_fenestrafer", "zoanthus_sp", "clavularia_sp", "briareum_sp", "rhodactis_inchoata")
     private val LEATHERS = setOf("sarcophyton_sp", "lobophytum_sp", "sinularia_sp")
-    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens")
+    private val STONY = setOf("duncanopsammia_axifuga", "fimbriaphyllia_ancora", "fimbriaphyllia_divisa", "euphyllia_glabrescens",
+        "euphyllia_glabrescens_gold", "homophyllia_australis")
     private val CLEANUP = setOf("nassarius_sp", "lithopoma_tectum", "clibanarius_tricolor", "paguristes_cadenati", "percnon_gibbesi", "ophiocoma_sp", "lysmata_boggessi")
 
     private class Section(val title: String, val takes: (Listing) -> Boolean)
