@@ -239,7 +239,8 @@ class FishGlitchTest {
      */
     @Test
     fun popularFishPackDoesNotGlitchOrClip() {
-        val newIds = setOf("gramma_loreto", "pterapogon_kauderni", "cryptocentrus_cinctus")
+        val newIds = setOf("gramma_loreto", "pterapogon_kauderni", "cryptocentrus_cinctus",
+            "synchiropus_splendidus", "pseudocheilinus_hexataenia", "gobiodon_okinawae")
         fun packRun(seed: Long, hour: Double): Report {
             val sim = TestTank.sim(DefaultStock.all, seed = seed, startHour = hour)
             for (id in newIds) { sim.species.ensure(id); sim.addFromSeed(LivestockSeed(id, id, 0.0)) }

@@ -20,7 +20,9 @@ import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.Offers
 import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
+import com.reeflive.core.custom.economy.StoreTrades
 import com.reeflive.core.custom.economy.StoreVisit
+import com.reeflive.core.custom.economy.TradeOffer
 import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.core.custom.economy.Gain
 import com.reeflive.core.live.FastForward
@@ -66,6 +68,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 enum class SimMode { REALITY, SANDBOX, CUSTOM }
 
@@ -89,7 +92,16 @@ data class StoreVisitUi(
 data class StoreFrontUi(val store: FishStore, val open: Boolean)
 
 /** My tank's room shop card (core room/Decor.kt): its tiles, the money, and what is being tried on. */
-data class RoomShopUi(val tiles: List<com.reeflive.core.custom.room.Decor.Tile>, val coins: Int, val trying: String?)
+data class RoomShopUi(
+    val tiles: List<com.reeflive.core.custom.room.Decor.Tile>,
+    val coins: Int,
+    val trying: String?,
+    /** The keeper's tanks round the room (core room/RoomTanks.kt), by wall; the arrows show with more than one. */
+    val tanks: List<RoomTankUi> = emptyList(),
+)
+
+/** One of the keeper's tanks: the wall it stands on, its size and name, and whether it is the one in view. */
+data class RoomTankUi(val side: Int, val gallons: Int, val name: String, val active: Boolean)
 
 /** "My tank" as the screen sees it: whether one is set up yet, its name and build. */
 /** The welcome-back card: how far the catch-up is ([daysDone] of [days]) and, once done, what happened. */
@@ -199,6 +211,11 @@ class SimulationHolder(
     private val _visit = MutableStateFlow<StoreVisitUi?>(null)
     /** The store being visited, or null at home. */
     val visitState: StateFlow<StoreVisitUi?> = _visit.asStateFlow()
+    /** A store regular's swap, once they have walked up and asked (the trade card is up), else null. */
+    private val _trade = MutableStateFlow<TradeOffer?>(null)
+    val tradeState: StateFlow<TradeOffer?> = _trade.asStateFlow()
+    /** Today's swap at the store being visited (core StoreTrades), if a regular has one. */
+    private var tradeOffer: TradeOffer? = null
 
     private val _paid = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 4)
     /** A checkout went through: (sand dollars paid, animals bought); the screen plays the pay animation. */
@@ -294,24 +311,74 @@ class SimulationHolder(
 
     /** Sets up a new, empty "My tank" in [build] (replacing none: call [startOverCustomTank] first) and shows it. */
     fun startCustomTank(build: TankBuild, name: String = "My tank") {
+        scope.launch { setUpTank(build, name, adding = false) }
+    }
+
+    /**
+     * Sim thread. A new, empty tank in [build]; with [adding] (a tank bought for another wall, room/RoomTanks.kt) the
+     * one in view is saved and put away on its wall, and the new one takes the next free wall.
+     */
+    private fun setUpTank(build: TankBuild, name: String, adding: Boolean) {
+        ensureAssets()
+        val prev = if (adding) captureCustom() else null
+        val now = nowMs()
+        val seed = now xor 0x5EEDL
+        val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
+        sim.speed = 1.0
+        sim.lifePace = _lifePace.value.pace
+        customSim?.let { lastWallMs.remove(it) }
+        customSim = sim
+        val eco = economyLive ?: Economy()
+        economyLive = eco
+        val fresh = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state, decor = decorLive)
+        customBase = prev?.let { com.reeflive.core.custom.room.RoomTanks.withNew(it, fresh.copy(name = "Tank ${it.others.size + 2}")) } ?: fresh
+        customLoaded = true
+        lastWallMs[sim] = now
+        saveCustom()
+        _custom.value = CustomTankInfo(ready = true, exists = true, name = customBase?.name ?: name, build = build)
+        updateEconomy(sim, force = true)
+        showDecor()
+        if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
+    }
+
+    // ---- more tanks round the room (core room/RoomTanks.kt) ----
+
+    /** Sim thread. Opens [save] as the tank in view: its time away runs on, as when the app reopens. */
+    private fun openTank(save: CustomTankSave): Boolean {
+        val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull() ?: return false
+        customSim?.let { lastWallMs.remove(it) }
+        customSim = sim
+        customBase = CustomTank.baseAfterRestore(save, species!!)
+        economyLive = Economy(save.economy)
+        decorLive = save.decor
+        decorPreview = null
+        away = null; _away.value = null
+        customStore?.write(CustomTankCodec.encode(save))
+        lastCustomSaveMs = nowMs()
+        beginAway(sim, (nowMs() - save.savedAtMs).coerceAtLeast(0L) / 1000.0)
+        sim.stepWall(0.0)
+        lastWallMs[sim] = nowMs()
+        _custom.value = CustomTankInfo(ready = true, exists = true, name = save.name, build = TankBuilds.byId(save.buildId))
+        updateEconomy(sim, force = true)
+        showDecor()
+        if (_mode.value == SimMode.CUSTOM) publish(sim)
+        return true
+    }
+
+    /** The tank in view as saved right now (the room's money and look on it); sim thread. */
+    private fun captureCustom(): CustomTankSave? {
+        val sim = customSim ?: return null
+        val b = customBase ?: return null
+        return CustomTank.capture(sim, (economyLive?.let { b.copy(economy = it.state) } ?: b).copy(decor = decorLive), nowMs())
+    }
+
+    /** Turns round the room to the next tank in direction [dir] (+1 / -1); the one in view waits saved on its wall. */
+    fun turnStep(dir: Int) {
         scope.launch {
-            ensureAssets()
-            val now = nowMs()
-            val seed = now xor 0x5EEDL
-            val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
-            sim.speed = 1.0
-            sim.lifePace = _lifePace.value.pace
-            customSim?.let { lastWallMs.remove(it) }
-            customSim = sim
-            val eco = economyLive ?: Economy()
-            economyLive = eco
-            customBase = CustomTankSave(name = name, buildId = build.id, createdAtMs = now, seed = seed, economy = eco.state, decor = decorLive)
-            customLoaded = true
-            lastWallMs[sim] = now
-            saveCustom()
-            _custom.value = CustomTankInfo(ready = true, exists = true, name = name, build = build)
-            updateEconomy(sim, force = true)
-            if (_mode.value == SimMode.CUSTOM) { _speed.value = 1.0; publish(sim) }
+            leaveStoreNow()
+            val cur = captureCustom() ?: return@launch
+            val side = com.reeflive.core.custom.room.RoomTanks.next(cur, if (dir < 0) -1 else 1) ?: return@launch
+            com.reeflive.core.custom.room.RoomTanks.switchTo(cur, side)?.let { openTank(it) }
         }
     }
 
@@ -325,15 +392,31 @@ class SimulationHolder(
     private fun showDecor(m: SimMode = _mode.value) {
         val k = decorPreview
         roomControl.look = if (m != SimMode.CUSTOM) com.reeflive.app.render.RoomLook.DEFAULT
-            else com.reeflive.app.render.RoomLook.of(if (k != null) com.reeflive.core.custom.room.Decor.preview(decorLive, k) else decorLive)
+            else com.reeflive.app.render.RoomLook.of(if (k != null) com.reeflive.core.custom.room.Decor.preview(decorLive, k) else decorLive, customBase?.side ?: 0)
         val e = economyLive
-        _room.value = if (e == null) null else RoomShopUi(com.reeflive.core.custom.room.Decor.tiles(decorLive, e.level), e.state.coins, k)
+        val b = customBase?.takeIf { customSim != null }
+        val tanks = if (b == null) emptyList() else (b.others + b).sortedBy { it.side }.map { RoomTankUi(it.side, TankBuilds.byId(it.buildId).gallons.roundToInt(), it.name, it.side == b.side) }
+        _room.value = if (e == null) null else RoomShopUi(
+            com.reeflive.core.custom.room.Decor.tiles(decorLive, e.level) + com.reeflive.core.custom.room.RoomTanks.tiles(b, e.level), e.state.coins, k, tanks,
+        )
     }
 
     /** Buys room item [key] (it goes straight into use); [onResult] gets the result on the sim thread. */
     fun decorBuy(key: String, onResult: (com.reeflive.core.custom.room.DecorResult) -> Unit = {}) {
         scope.launch {
             val e = economyLive ?: return@launch
+            if (key.startsWith("tank:")) {
+                val cur = captureCustom() ?: return@launch
+                val r = com.reeflive.core.custom.room.RoomTanks.buy(cur, key.removePrefix("tank:"), e, today())
+                if (r == com.reeflive.core.custom.room.DecorResult.OK) {
+                    decorPreview = null
+                    leaveStoreNow()
+                    setUpTank(TankBuilds.byId(key.removePrefix("tank:")), "My tank", adding = true)
+                }
+                showDecor()
+                onResult(r)
+                return@launch
+            }
             val (d, r) = com.reeflive.core.custom.room.Decor.buy(decorLive, key, e, today())
             if (r == com.reeflive.core.custom.room.DecorResult.OK) {
                 decorLive = d; decorPreview = null
@@ -370,6 +453,7 @@ class SimulationHolder(
             visiting = store
             visitTanks = StoreVisit.tanks(store, today())
             display = null
+            tradeOffer = customSim?.let { StoreTrades.offer(store, it, e, today()) }
             showTankNow(0)
         }
     }
@@ -391,7 +475,7 @@ class SimulationHolder(
         display = d
         lastWallMs[d] = nowMs()
         val store = visiting!!
-        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k, visitTanks.map { it.setup }) else storeRoom.show(k)
+        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k, visitTanks.map { it.setup }, tradeOffer?.line) else storeRoom.show(k)
         publishVisit(k)
         publish(d)
     }
@@ -427,6 +511,31 @@ class SimulationHolder(
         }
     }
 
+    /** The store's regular walked up with their swap (StoreRoomControl.onTrade): the trade card shows. */
+    fun showTrade() { scope.launch { if (visiting != null) _trade.value = tradeOffer } }
+
+    /**
+     * The keeper's answer to the swap: yes cuts the frag (or nets the spare) and floats the new animal in a bag in My
+     * tank, and the regular thanks them; no, and they shrug it off. Either way, no more swaps at this store today on yes.
+     */
+    fun answerTrade(yes: Boolean) {
+        scope.launch {
+            val o = _trade.value ?: return@launch
+            _trade.value = null
+            tradeOffer = null
+            storeRoom.tradeReply(yes)
+            if (!yes) return@launch
+            val e = economyLive ?: return@launch
+            val mine = customSim ?: return@launch
+            StoreTrades.apply(mine, o)
+            e.traded(o, today())
+            mine.stepWall(0.0)
+            _economy.value = e.view(mine)
+            saveCustom()
+            publishVisit()
+        }
+    }
+
     /** Walks out (the bag goes back on the shelves); My tank catches up on the minutes spent shopping. */
     fun leaveStore() { scope.launch { leaveStoreNow() } }
 
@@ -434,6 +543,7 @@ class SimulationHolder(
         if (visiting == null) return
         display?.let { lastWallMs.remove(it) }
         display = null; visiting = null; visitTanks = emptyList()
+        tradeOffer = null; _trade.value = null
         storeRoom.leave()
         _visit.value = null
         customSim?.let { catchUp(it) }
@@ -531,6 +641,9 @@ class SimulationHolder(
     fun startOverCustomTank() {
         scope.launch {
             leaveStoreNow()
+            // one of several tanks: it goes and the next one round comes into view
+            val next = captureCustom()?.let { com.reeflive.core.custom.room.RoomTanks.dropActive(it) }
+            if (next != null && openTank(next)) return@launch
             customSim?.let { lastWallMs.remove(it) }
             customSim = null; customBase = null; customLoaded = true
             customStore?.clear()

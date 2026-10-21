@@ -56,7 +56,7 @@ class Camera {
     /** Smoothed orbit distance in user units (see [effectiveDistance]). */
     val distance: Float get() = exp(distLogS.value)
     val fovY = 50f
-    var near = 0.5f; var far = 800f
+    var near = 0.5f; var far = TANK_FAR
 
     /** True while a finger is on the view (GL thread, from [CameraInput.drain]): soft limits only relax when false. */
     var touching = false
@@ -223,6 +223,7 @@ class Camera {
         storeOn = on
         storeFocusX = 0f
         storeShift.snap(0f)
+        entryT = -1f
         reset()
     }
 
@@ -240,6 +241,43 @@ class Camera {
         storeFocusX = x
         if (x != 0f) reset()
     }
+
+    // ---- walking into a store from the street (StoreRoom.kt): the eye starts on the sidewalk and goes in the door
+    private var entryT = -1f
+    private val entryDoor = FloatArray(2)
+    /** True while the walk in through the front door plays (a touch on the view skips to the aisle). */
+    val storeEntering: Boolean get() = entryT >= 0f
+
+    /**
+     * Starts the walk in from the sidewalk: the eye stands outside the front door (world x [doorX], its outer face at
+     * z [outsideZ]) looking at the store, the doors open, and it walks through them to the aisle view.
+     */
+    fun storeEntry(doorX: Float, outsideZ: Float) {
+        if (!storeOn) return
+        entryDoor[0] = doorX; entryDoor[1] = outsideZ
+        entryT = 0f
+    }
+
+    /** During the walk in: [eye] / [aim] (the aisle pose) moved along the path in from the street. */
+    private fun walkIn(step: Float) {
+        entryT += step
+        val u = entryT / ENTRY_S
+        if (u >= 1f || touching || !storeOn) { entryT = -1f; return }
+        val v = smooth01(((u - ENTRY_HOLD) / (1f - ENTRY_HOLD)).coerceIn(0f, 1f))
+        val x = entryDoor[0]; val z = entryDoor[1]
+        val eyeY = STORE_FLOOR_Y + ENTRY_EYE_H
+        // quadratic through the doorway at v = ½: control = 2 · door − (start + end) / 2
+        for (i in 0 until 3) {
+            val p0 = when (i) { 0 -> x; 1 -> eyeY; else -> z + ENTRY_BACK }
+            val p1 = when (i) { 0 -> x; 1 -> eyeY; else -> z - 6f }
+            val a0 = when (i) { 0 -> x; 1 -> eyeY - 10f; else -> z - 60f }
+            val a1 = when (i) { 0 -> x; 1 -> eyeY - 25f; else -> z - 320f }
+            eye[i] = bez(p0, 2f * p1 - 0.5f * (p0 + eye[i]), eye[i], v)
+            aim[i] = bez(a0, 2f * a1 - 0.5f * (a0 + aim[i]), aim[i], v)
+        }
+    }
+
+    private fun bez(a: Float, c: Float, b: Float, t: Float): Float { val s = 1f - t; return s * s * a + 2f * s * t * c + t * t * b }
 
     /** A tap on the live tank from the aisle: a close look at it (the normal tank view). False when already close. */
     fun storeZoomIn(): Boolean {
@@ -674,6 +712,9 @@ class Camera {
             val sx = storeShift.step(storeFocusX, step)
             eye[0] += sx; aim[0] += sx
         }
+        if (entryT >= 0f) walkIn(step)
+        // a store's street and far bays lie well past the tank view's far plane
+        far = if (storeOn) STORE_FAR else TANK_FAR
         M.lookAt(eye[0], eye[1], eye[2], aim[0], aim[1], aim[2], view)
         // near plane: 3 % of the view distance, never so far out that its corners reach past the tightest clearance
         val nearCap = (minOf(colliders.bodyClearance, colliders.boxClearance) - 0.2f) / max(EyeCollider.nearCornerDistance(1f, fovY, aspect), 1e-3f)
@@ -1087,6 +1128,16 @@ class Camera {
         const val STORE_CLOSE_EFFECTIVE = 200f
         /** Walking between tanks (rad/s of the critically damped slide). */
         const val OMEGA_WALK = 4.5f
+        const val TANK_FAR = 800f
+        const val STORE_FAR = 4000f
+        /** The walk in from the street: seconds, the share spent standing on the sidewalk first, eye height (cm over the
+         *  floor) and how far out the sidewalk view starts (cm past the front wall). */
+        const val ENTRY_S = 4.6f
+        const val ENTRY_HOLD = 0.24f
+        const val ENTRY_EYE_H = 152f
+        const val ENTRY_BACK = 330f
+        /** The store's floor (StoreRoomLayout.FLOOR_Y). */
+        const val STORE_FLOOR_Y = -82f
         const val MIN_PITCH = -0.3f
         const val MAX_PITCH = 1.38f
         const val YAW_GIVE = 0.3f

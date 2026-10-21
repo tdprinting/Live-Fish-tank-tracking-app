@@ -63,6 +63,13 @@ data class CustomTankSave(
     val economy: com.reeflive.core.custom.economy.SavedEconomy = com.reeflive.core.custom.economy.SavedEconomy(),
     /** The stand and room the keeper bought and picked (room/Decor.kt; added after v1 as a defaulted field). */
     val decor: com.reeflive.core.custom.room.SavedDecor = com.reeflive.core.custom.room.SavedDecor(),
+    /** Which wall of the room this tank stands against (0 back, 1 right, 2 front, 3 left; room/RoomTanks.kt). */
+    val side: Int = 0,
+    /**
+     * The keeper's other tanks, on the other walls (room/RoomTanks.kt): each a whole save of its own, without its own
+     * [others], [economy] or [decor] (the room's money and look are the active tank's). Defaulted: no codec bump.
+     */
+    val others: List<CustomTankSave> = emptyList(),
 )
 
 @Serializable
