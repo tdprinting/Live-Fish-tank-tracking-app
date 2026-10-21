@@ -634,3 +634,15 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
 .hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
+
+/* the radio's record shelf (radio.js): vinyl sleeves, the one playing ringed, locked ones dimmed with a price */
+.records { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px 8px; padding-bottom: 4px; }
+.record { display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; color: inherit; padding: 4px; border-radius: 14px; cursor: pointer; text-align: center; }
+.record .disc { position: relative; width: 100%; aspect-ratio: 1; display: block; }
+.record img { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.record.now img { box-shadow: 0 0 0 3px #8ee66b; animation: spin 6s linear infinite; }
+.record.locked img { opacity: 0.45; filter: grayscale(0.4); }
+.record em { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #ffe14d; color: #111; font-style: normal; font-weight: 700; font-size: 13px; border-radius: 10px; padding: 1px 8px; }
+.record strong { font-size: 12px; line-height: 1.2; }
+.record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
