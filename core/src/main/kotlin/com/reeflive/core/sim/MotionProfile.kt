@@ -167,6 +167,14 @@ object MotionProfiles {
         // body-caudal darter, tail 3–4 Hz, burst-and-coast between rock cover [L]
         BrainKind.DOTTYBACK to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.5, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
             glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),
+        // firefish (research 41 §1.3): hovers nearly still on sculling pectorals with a slow body-caudal wave, bursts
+        // with a fast C-start into its hole; slender body bends more than a cardinal's [L]
+        BrainKind.FIREFISH to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 3.0, pecHzMax = 4.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.2,
+            glideS = 0.3, beatsPerBout = 2.0, bankGain = 0.8, cStartDeg = 150.0),
+        // chromis: damselfish are classic labriform flappers (Drucker & Jensen 1996 used the surfperch; damselfish row the
+        // same way, Webb 1973 [M]); pecs 3.5–7 Hz, the tail joins only when it hurries [L]
+        BrainKind.CHROMIS to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.6, pecHzHover = 3.5, pecHzMax = 7.0, rowBodyAmp = 0.02,
+            strouhal = 0.28, tailPP = 0.18, bankGain = 1.2, cStartDeg = 120.0),
         BrainKind.GENERIC_FISH to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 2.5, pecHzMax = 5.0),
         // walking legs 1–3 cm/s with a pause every 1–2 s; tail-flip 25–40 cm/s [M][L]
         BrainKind.BANDED_SHRIMP to MotionProfile(Gait.WALK, walkCmS = 2.0, walkBurstCmS = 30.0, stopGoMoveS = 1.5, stopGoPauseS = 0.8, footprintBL = 0.3, bodyUpRate = 1.5),

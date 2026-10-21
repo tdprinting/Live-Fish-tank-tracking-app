@@ -65,6 +65,9 @@ object Stocking {
         StockEntry("zebrasoma_xanthurum", StockGroup.FISH, "Purple tang", 20.0),
         StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (female)", 8.0, role = "FEMALE"),
         StockEntry("cirrhilabrus_rubripinnis", StockGroup.FISH, "Red fairy wrasse (male)", 8.0, role = "MALE"),
+        // research 41: firefish (needs a lid) and a blue-green chromis shoal
+        StockEntry("nemateleotris_magnifica", StockGroup.FISH, "Firefish goby", 7.0),
+        StockEntry("chromis_viridis", StockGroup.FISH, "Blue-green chromis", 7.5),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         // research 42: hides by day, eats aiptasia at night

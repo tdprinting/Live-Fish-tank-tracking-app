@@ -203,6 +203,10 @@ class Organism(
     var pecAmp = 0.0
     /** Escape flexion: signed C-bend of the body (fish) or tail-flip flexion of the abdomen (shrimp), −1..1. */
     var bend = 0.0
+    /** First-dorsal fold 0 (raised) .. 1 (laid flat): the firefish's flicking signal fin ([OrganismPose.finFold]). */
+    var finFold = 0.0
+    /** A leap at the surface in progress ([JumpModel]): the sim flies the body and the brain waits. */
+    var leap: Leap? = null
 
     /**
      * Per-limb pose for the brittle star's arms, the crab's legs and claws and the shrimp's limb signals
@@ -306,6 +310,7 @@ class Organism(
             motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind == BrainKind.SALLY_CRAB) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
             display = display.toFloat(), cocoon = cocoon.toFloat(),
+            finFold = finFold.toFloat(),
         )
     }
 

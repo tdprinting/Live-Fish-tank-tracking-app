@@ -96,11 +96,16 @@ object TankSpots {
                         urgent = true, commands = listOf(Command.Powerheads(true)))))
                 else if (editable) add(SpotOption("pumps_off", "Turn off", "plugOff", commands = listOf(Command.Powerheads(false)), gear = true))
             })
-        TankSpot.LIGHTS -> SpotMenu(spot, spot.label, if (lightsOn) "On. The corals are making food from the light." else "Off. Night time in the tank.",
+        TankSpot.LIGHTS -> SpotMenu(spot, spot.label,
+            (if (lightsOn) "On. The corals are making food from the light." else "Off. Night time in the tank.") +
+                if (care.lid) " A mesh lid keeps jumpers in." else " The top is open: firefish can jump out!",
             warn = false, options = if (!editable) emptyList() else listOf(
                 if (lightsOn) SpotOption("lights_off", "Lights off", "moon", commands = listOf(Command.Lights(false)), gear = true)
                 else SpotOption("lights_on", "Lights on", "sun", commands = listOf(Command.Lights(true)), gear = true),
                 SpotOption("lights_auto", "Auto timer", "clockSun", commands = listOf(Command.Lights(null)), gear = true),
+                // research 41 §1.8: the one sure fix for jumpers is a lid
+                if (care.lid) SpotOption("lid_off", "Take the lid off", "tank", commands = listOf(Command.SetParam("lid", 0.0)), gear = true)
+                else SpotOption("lid_on", "Put a lid on", "tank", commands = listOf(Command.SetParam("lid", 1.0)), gear = true),
             ))
         TankSpot.TOP_OFF -> {
             val missing = ((1f - care.waterFull) * 100).roundToInt()

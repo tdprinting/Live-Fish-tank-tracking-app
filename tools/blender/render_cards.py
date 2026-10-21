@@ -34,6 +34,8 @@ CARDS = {
     "zebrasoma_flavescens": "yellow_tang",
     "zebrasoma_xanthurum": "purple_tang",
     "cirrhilabrus_rubripinnis": "fairy_wrasse",
+    "nemateleotris_magnifica": "firefish",
+    "chromis_viridis": "chromis",
     "euprymna_berryi": "bobtail_squid",
     "stenopus_hispidus": "shrimp",
     "lysmata_amboinensis": "skunk_shrimp",

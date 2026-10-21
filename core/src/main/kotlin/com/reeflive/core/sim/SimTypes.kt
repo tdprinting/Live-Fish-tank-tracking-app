@@ -219,6 +219,8 @@ data class CareState(
     val heaterSetC: Float = 25.5f,
     val waterFull: Float = 1f,
     val ato: Boolean = false,
+    /** A mesh lid on the open top: jumpers bounce back in ([JumpModel]). */
+    val lid: Boolean = false,
 ) {
     /** How dirty the sock looks: clean when new, brown after about three days in. */
     val sockDirt: Float get() = (sockAgeH / 72f).coerceIn(0f, 1f)
@@ -294,6 +296,8 @@ sealed class SimEvent {
     data class RockShifted(val rock: String, val moveCm: Double, val turnDeg: Double, override val simTimeSec: Double) : SimEvent()
     /** The aquascape builder added ([added]) or took out a rock (save the tank's rock layout). */
     data class RockscapeChanged(val rock: String, val added: Boolean, override val simTimeSec: Double) : SimEvent()
+    /** A fish leapt at the surface ([JumpModel]): [what] it did (leapt, bumped the lid, went over the rim). */
+    data class Jumped(val id: String, val what: Jump, override val simTimeSec: Double) : SimEvent()
 }
 
 /**
@@ -359,6 +363,8 @@ data class OrganismPose(
     val display: Float = 0f,
     /** Mucus cocoon 0..1 around a sleeping wrasse ([Organism.cocoon]). */
     val cocoon: Float = 0f,
+    /** Firefish dorsal flick (research 41 §1.2): 0 = the long first dorsal raised as built, 1 = folded down along the back. */
+    val finFold: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
