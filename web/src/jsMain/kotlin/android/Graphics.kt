@@ -26,7 +26,7 @@ class Bitmap internal constructor(internal val bytes: ByteArray, val width: Int,
         val tex = GLES30.texture(texId)
         val type = if (bytes.size > 3 && bytes[0] == 0x89.toByte()) "image/png" else "image/jpeg"
         val blob = Blob(arrayOf(bytes), BlobPropertyBag(type))
-        val opts: dynamic = js("({premultiplyAlpha: 'none', colorSpaceConversion: 'none'})")
+        val opts: dynamic = js("({premultiplyAlpha: 'none', colorSpaceConversion: 'none', resizeQuality: 'high'})")
         opts.resizeWidth = width; opts.resizeHeight = height
         window.asDynamic().createImageBitmap(blob, opts).then { img: dynamic ->
             if (gl.isTexture(tex) as Boolean) {
