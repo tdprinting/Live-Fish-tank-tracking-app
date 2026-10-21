@@ -2036,16 +2036,116 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Territory centre: the hole mouth, else a rock face on the left stack (never inside rock). */
     val territory: Vec3 get() = hole?.mouth ?: faceShelter
 
+    /**
+     * Caves before its bore (research 51 §3, Tee 2026-10-20: "more concerned with caves and hiding than just a small
+     * hole"): when worried, at night, and for a sit-and-watch now and then in the day it backs into the nearest open
+     * cave that takes its body. Open caves are shared ([RockHole.singleOccupant] false), so this never takes a hole
+     * from another blenny; its own bore stays its territory centre.
+     */
+    private val caveBehavior = InHole(this, null, territory, "Hiding in a cave",
+        { c -> if (cave == null) 0.0 else if (c.p.night) 0.95 else 0.75 + 0.2 * worry },
+        { c -> if (c.p.night) -0.5 else CAVE_HEAD_OUT_CM })
+    /** The cave it is using now, or null. */
+    var cave: RockHole? = null; private set
+    private var caveUntil = 0.0
+    private var caveNext = c.t + CAVE_GAP_S * (o.appendagePhase / 6.28)
+    /** Visits to a cave (tests, captions). */
+    var caveVisits = 0; private set
+    /** Last scare (threat or startle), sim s. */
+    private var scaredAt = -1e9
+    /** 0..1 how uneasy it is: stress, a scare in the last minutes, a rival on top of it. */
+    var worry = 0.0; private set
+    private var checkIn = 0.0
+    private var toneTarget = 0.0
+
     init {
         install(RockGraze(),
             InHole(this, hole, territory, "Resting in its hole",
                 { c -> 0.8 * (1 - c.activity) + (if (c.o.health < 0.5) 0.3 else 0.0) + (if (c.t - startleAt < 12) 0.35 else 0.0) },
                 { c -> if (c.p.night) -0.5 else 1.0 }),
             BenthicFeed(this, 35.0),
-            Flee(this, { c, _ -> c.safe(hole?.along(-(c.clearance + 1.0)) ?: territory) }, "Darting home"), SurfaceGasp(this),
+            Flee(this, { c, _ -> c.safe(coverMouth(c)) }, "Darting to cover"), SurfaceGasp(this),
             // rasps a nori sheet on its clip (research 04: nori in its diet); quiet: no rng drawn while there is none
-            NibbleNori(this, 0.75, quiet = true))
+            NibbleNori(this, 0.75, quiet = true),
+            caveBehavior)
     }
+
+    /** The nearest open cave that takes its body within [within] cm of [p], or null (no allocation). */
+    private fun caveNear(c: Ctx, p: Vec3, within: Double): RockHole? {
+        var best: RockHole? = null
+        var bd = within
+        for (h0 in c.rock.holes.all) {
+            if (h0.kind != HoleKind.CAVE || h0.singleOccupant || !h0.fits(o)) continue
+            val h = c.rock.holes.live(h0) ?: continue
+            val d = h.mouth.distanceTo(p)
+            if (d < bd) { bd = d; best = h }
+        }
+        return best
+    }
+
+    /** Where it darts when scared: the mouth of a cave unless its own bore is clearly nearer. */
+    private fun coverMouth(c: Ctx): Vec3 {
+        val h = hole
+        val cv = cave ?: caveNear(c, c.o.pos, CAVE_RANGE_CM)
+        if (cv != null && (h == null || cv.mouth.distanceTo(c.o.pos) < h.mouth.distanceTo(c.o.pos) + CAVE_PREF_CM)) return cv.along(-(c.clearance + 1.0))
+        return h?.along(-(c.clearance + 1.0)) ?: territory
+    }
+
+    override fun preTick(c: Ctx) {
+        super.preTick(c)
+        if (startledRecently || threat != null) scaredAt = c.t
+        checkIn -= c.dt
+        if (checkIn <= 0) { checkIn = 1.0; check(c) }
+        // colour change eases toward its target: a scare blanches it in seconds, matching a new background takes
+        // tens of seconds (melanophore aggregation vs dispersion, research 51 §2)
+        val tau = if (c.t - scaredAt < 5.0) TONE_FAST_S else TONE_S
+        o.skinTone += (toneTarget - o.skinTone) * min(1.0, c.dt / tau)
+    }
+
+    /** Once a second: how worried it is, whether to go to or leave a cave, and the shade its skin is heading for. */
+    private fun check(c: Ctx) {
+        val scared = if (threat != null) 0.8 else if (c.t - scaredAt < SCARE_MEMORY_S) 0.5 * (1 - (c.t - scaredAt) / SCARE_MEMORY_S) + 0.3 else 0.0
+        val newcomer = (1 - (c.t - o.arrivalTime) / NEWCOMER_S).coerceIn(0.0, 1.0)
+        worry = maxOf(o.stress, o.socialStress, scared, 0.5 * newcomer).coerceIn(0.0, 1.0)
+        val night = c.p.night
+        val cv = cave
+        if (cv == null) {
+            // to a cave when uneasy, at night, or for a daytime watch from cover (deterministic spacing, no rng drawn)
+            if (night || worry > CAVE_WORRY || c.t >= caveNext) {
+                val near = caveNear(c, if (night) territory else c.o.pos, CAVE_RANGE_CM)
+                if (near != null) {
+                    cave = near; caveBehavior.hole = near; caveVisits++
+                    caveUntil = c.t + CAVE_STAY_S * (1 + 2 * worry)
+                }
+                caveNext = c.t + CAVE_GAP_S * (0.7 + 0.6 * frac(o.appendagePhase * 7.3 + caveVisits * 0.618))
+            }
+        } else if (!night && c.t > caveUntil && (worry < CAVE_WORRY || o.hunger > 0.75)) {
+            cave = null; caveBehavior.hole = null
+        }
+        toneTarget = toneFor(c, night)
+    }
+
+    /**
+     * The shade it is heading for, −1 pale .. +1 dark (research 51 sim numbers; Tee 2026-10-20: darker on rock,
+     * lighter on sand, and with its mood): background first, then mood on top.
+     */
+    private fun toneFor(c: Ctx, night: Boolean): Double {
+        val thick = 0.5 * o.species.depthRatio * o.lengthCm
+        val sandGap = o.pos.y - c.sim.sand.surfaceY(o.pos.x, o.pos.z)
+        val bg = when {
+            o.posture == 3 -> TONE_CAVE
+            sandGap < thick + 1.5 && sandGap < c.rock.sdf.dist(o.pos) -> TONE_SAND
+            c.rock.sdf.dist(o.pos) < thick + 1.5 -> TONE_ROCK
+            else -> 0.0
+        }
+        var mood = 0.0
+        if (utility.current?.name == "bout" || utility.current?.name == "rival") mood += TONE_DISPLAY
+        mood -= TONE_STRESS * worry
+        if (night) mood += TONE_NIGHT
+        return (bg + mood).coerceIn(-1.0, 1.0)
+    }
+
+    private fun frac(x: Double) = x - kotlin.math.floor(x)
 
     override fun anchorPos(c: Ctx, anchor: String): Vec3? = if (anchor == "hole" || anchor == "patch") territory else super.anchorPos(c, anchor)
 
@@ -2056,6 +2156,8 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
         val h = hole
+        // nights in a cave when one is in reach (research 51 §3), else its bore
+        if (night) caveNear(c, territory, CAVE_RANGE_CM)?.let { return holeRest(c, it, -0.5) }
         return if (night) (if (h != null) holeRest(c, h, -0.5) else rockShelterRest(c, territory))
         else c.rockSurfacePoint(territory, 10.0)?.let { (p, n) -> perchOn(p, n) } ?: (if (h != null) holeRest(c, h, 1.0) else rockShelterRest(c, territory))
     }
@@ -2085,6 +2187,31 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val RASP_HUNGER = 0.018
         /** Its grazing range around its hole, cm (a territory the size of a dinner plate on the reef; DESIGN ESTIMATE). */
         const val RANGE_CM = 28.0
+        /** How far it goes for a cave, and how much nearer its own bore must be to win over one when scared (cm; DESIGN ESTIMATES). */
+        const val CAVE_RANGE_CM = 40.0
+        const val CAVE_PREF_CM = 10.0
+        /** Head out of the cave mouth while it watches (cm). */
+        const val CAVE_HEAD_OUT_CM = 1.2
+        /** Worry above which it hides; least stay; spacing of daytime watch visits (s; DESIGN ESTIMATES). */
+        const val CAVE_WORRY = 0.3
+        const val CAVE_STAY_S = 90.0
+        const val CAVE_GAP_S = 1500.0
+        /** A scare keeps it uneasy this long (s); a newcomer settles over this long (research 51: 1–3 days). */
+        const val SCARE_MEMORY_S = 300.0
+        const val NEWCOMER_S = 2 * 86400.0
+        /**
+         * Skin shade targets (research 51 "Sim numbers": background matching is sourced for the species, the direction
+         * dark on rock / pale on sand is the teleost rule and Tee's own observation; mood offsets are estimates).
+         */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.SOURCED, "research 51; FishBase Salarias fasciatus; Tee 2026-10-20") const val TONE_ROCK = 0.4
+        const val TONE_SAND = -0.5
+        const val TONE_CAVE = 0.6
+        const val TONE_DISPLAY = 0.3
+        const val TONE_STRESS = 0.3
+        const val TONE_NIGHT = -0.2
+        /** Colour change time constants (s): background matching, and a scare (research 51 §2). */
+        const val TONE_S = 25.0
+        const val TONE_FAST_S = 3.0
     }
 
     /**

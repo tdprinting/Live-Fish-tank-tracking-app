@@ -187,6 +187,8 @@ class Organism(
     var gill = 0.3
     var gillRate = 1.0
     var desat = 0.0
+    /** Skin shade from the fish's own colour change, −1 pale .. +1 dark (lawnmower blenny, research 51); 0 for everyone else. */
+    var skinTone = 0.0
     var ich = 0.0
     var thin = 0.0
     var eyeCloud = 0.0
@@ -311,6 +313,7 @@ class Organism(
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),
+            tone = skinTone.toFloat(),
         )
     }
 
