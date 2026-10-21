@@ -27,6 +27,7 @@ object PriceBook {
     val LISTINGS: List<Listing> = listOf(
         // fish, inverts, corals: 2025-26 US prices (LiveAquaria and store listings; captive bred where sold that way)
         l("chromis_viridis", 1, 15), l("amphiprion_ocellaris", 1, 30), l("sphaeramia_nematoptera", 1, 30), l("salarias_fasciatus", 1, 30),
+        l("gramma_loreto", 1, 40), l("pterapogon_kauderni", 1, 28), l("cryptocentrus_cinctus", 1, 30),
         l("nemateleotris_magnifica", 2, 40), l("ecsenius_bicolor", 2, 65), l("ecsenius_stigmatura", 3, 30), l("valenciennea_puellaris", 3, 35),
         l("pholidichthys_leucotaenia", 3, 30), l("labroides_dimidiatus", 3, 40), l("cirrhitichthys_falco", 4, 40), l("pseudochromis_indigo", 4, 50),
         l("ecsenius_midas", 4, 65), l("cirrhilabrus_rubripinnis@female", 4, 50), l("cirrhilabrus_rubripinnis@male", 5, 80), l("zebrasoma_flavescens", 5, 130), l("paracanthurus_hepatus", 5, 150),

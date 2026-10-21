@@ -64,7 +64,7 @@ object TankTouch {
     private val CRUSTACEANS = setOf(BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.HERMIT)
     private val BLENNIES = setOf(BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY)
     private val FOOD_CONDITIONED = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.WRASSE, BrainKind.HAWK, BrainKind.DOTTYBACK, BrainKind.CHROMIS)
-    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE)
+    private val SHY = setOf(BrainKind.CARDINAL, BrainKind.ENGINEER_GOBY, BrainKind.DIAMOND_GOBY, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.GRAMMA)
 
     /** Polyp corals retract to touch; the other kinds (leathers, mushrooms, macro) do not visibly react to a tap. */
     fun retracts(kind: CoralKind): Boolean = kind in POLYPS
@@ -113,6 +113,8 @@ object TankTouch {
             }
             TouchSurface.SAND -> when {
                 k == BrainKind.DIAMOND_GOBY && !night -> if (d < 30.0) TouchReaction.CHECK else TouchReaction.NONE
+                // research 50 §3: the watchman dives into its burrow at a knock on the sand near it
+                k == BrainKind.WATCHMAN_GOBY -> if (d < 20.0) TouchReaction.DUCK else TouchReaction.NONE
                 k == BrainKind.NASSARIUS -> if (d < 22.0 && o.curiosity >= 0.4) TouchReaction.CHECK else TouchReaction.NONE
                 d >= 15.0 -> TouchReaction.NONE
                 k in CRUSTACEANS -> still(k)
@@ -129,7 +131,7 @@ object TankTouch {
             }
             TouchSurface.ROCK, TouchSurface.CORAL -> when {
                 d >= ROCK_CM -> TouchReaction.NONE
-                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH -> TouchReaction.DUCK
+                k in CRUSTACEANS || k in BLENNIES || k == BrainKind.HAWK || k == BrainKind.BOBTAIL_SQUID || k == BrainKind.FIREFISH || k == BrainKind.GRAMMA || k == BrainKind.WATCHMAN_GOBY -> TouchReaction.DUCK
                 o.isFish && shy(o, night) -> TouchReaction.AVOID
                 else -> TouchReaction.NONE
             }

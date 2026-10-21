@@ -36,6 +36,16 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
     /** The override being blended out after it was cleared. */
     private var lastOverride: List<Vec3>? = null
     private val scratch = Array(POINTS) { Vec3.ZERO }
+    /**
+     * Opt-in for [keepInside] (set by a species brain). Off by default: turning it on for the whole stock shifts the
+     * chaotic whole-tank runs, so the existing kinds wait for the body-collision work to adopt it.
+     */
+    var glassGuard = false
+    /** Glass box from [keepInside] (unbounded until it is called). */
+    private var boxMinX = Double.NEGATIVE_INFINITY
+    private var boxMaxX = Double.POSITIVE_INFINITY
+    private var boxMinZ = Double.NEGATIVE_INFINITY
+    private var boxMaxZ = Double.POSITIVE_INFINITY
 
     fun reset(headPos: Vec3, headingDir: Vec3) {
         head = headPos; heading = headingDir.normalized()
@@ -285,7 +295,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             var remaining = seg
             var cur = prev
             while (true) {
-                if (j >= poly.size) { cur = cur + lastDir * remaining; break }
+                if (j >= poly.size) {
+                    cur = cur + lastDir * remaining
+                    if (cur.x < boxMinX || cur.x > boxMaxX || cur.z < boxMinZ || cur.z > boxMaxZ)
+                        cur = Vec3(cur.x.coerceIn(boxMinX, boxMaxX), cur.y, cur.z.coerceIn(boxMinZ, boxMaxZ))
+                    break
+                }
                 val nxt = if (shift == null) poly[j] else poly[j] + shift
                 val d = cur.distanceTo(nxt)
                 if (d >= remaining && d > 1e-9) {
@@ -322,6 +337,20 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             val p = trail[i]
             val f = floor.y(p.x, p.z)
             if (p.y < f && floor.canLift(p, f)) trail[i] = p.withY(min(f, p.y + maxLift))
+        }
+    }
+
+    /**
+     * Keeps trail points inside the glass box [minX]..[maxX] × [minZ]..[maxZ] (a fish that turned about at the glass
+     * had its tail relax straight back through it), and the stations sampled past the trail's end too (a hovering fish
+     * has a short trail and its tail is drawn straight on from it). The head is the caller's to place.
+     */
+    fun keepInside(minX: Double, maxX: Double, minZ: Double, maxZ: Double) {
+        if (rigid || !glassGuard) return
+        boxMinX = minX; boxMaxX = maxX; boxMinZ = minZ; boxMaxZ = maxZ
+        for (i in trail.indices) {
+            val p = trail[i]
+            if (p.x < minX || p.x > maxX || p.z < minZ || p.z > maxZ) trail[i] = Vec3(p.x.coerceIn(minX, maxX), p.y, p.z.coerceIn(minZ, maxZ))
         }
     }
 

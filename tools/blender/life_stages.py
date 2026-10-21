@@ -332,6 +332,32 @@ def fairy_juvenile(cv, fl):
     cv.blend(fl.disc(0.88, 0.7, 0.02, 0.006), "#3A2020", 0.7)
 
 
+# ---------------------------------------------------------------- popular fish pack (research 50)
+def gramma_juvenile(cv, fl):
+    """Juvenile royal gramma: the two colours are there from settlement, softer and with a wider dappled meeting zone
+    [L: captive-bred juveniles in ORA / Biota photos]."""
+    FS.paint_royal_gramma(cv, fl)
+    _lighten(cv, 0.1, "#F0E0F8")
+
+
+def banggai_juvenile(cv, fl):
+    """Juvenile Banggai: released from the male's mouth as a miniature adult (no larval stage, research 50 §2), the
+    three bars already bold; the white pearl spots come in as it grows, so few at first, and the body is glassier [L]."""
+    u, v = cv.u, cv.v
+    FS.paint_banggai(cv, fl)
+    pearls = _mask_hue(cv, lambda r, g, b: (np.minimum(np.minimum(r, g), b) - 0.9) * 12)
+    cv.blend(pearls * S(0.6, 0.7, u), "#C8D0D4", 0.7)
+    _lighten(cv, 0.08, "#E8F0F4")
+
+
+def watchman_juvenile(cv, fl):
+    """Juvenile yellow watchman: paler yellow with the blue head spots small and faint [L]."""
+    FS.paint_watchman(cv, fl)
+    blue = _mask_hue(cv, lambda r, g, b: (b - r) * 3)
+    cv.blend(blue, "#F2E6A0", 0.45)
+    _lighten(cv, 0.1, "#FFF8D8")
+
+
 # model -> (species id, {form: painter}); the adult forms reuse the GLB's own painter
 FORMS = {
     "clown_orange": ("amphiprion_ocellaris", {"juvenile": clown_orange_juvenile, "adult": FS.paint_clown_orange}),
@@ -351,6 +377,9 @@ FORMS = {
     "yellow_tang": ("zebrasoma_flavescens", {"adult": FS.paint_yellow_tang, "night": yellow_tang_night}),
     "purple_tang": ("zebrasoma_xanthurum", {"adult": FS.paint_purple_tang, "night": purple_tang_night}),
     "fairy_wrasse": ("cirrhilabrus_rubripinnis", {"juvenile": fairy_juvenile, "female": FS.paint_fairy_female, "male": FS.paint_fairy_male}),
+    "royal_gramma": ("gramma_loreto", {"juvenile": gramma_juvenile, "adult": FS.paint_royal_gramma}),
+    "banggai": ("pterapogon_kauderni", {"juvenile": banggai_juvenile, "adult": FS.paint_banggai}),
+    "watchman_goby": ("cryptocentrus_cinctus", {"juvenile": watchman_juvenile, "adult": FS.paint_watchman}),
 }
 # model -> {form: fin-sheet painter}; the form whose painter is the GLB's own fin painter is the fin `base`
 FIN_FORMS = {
