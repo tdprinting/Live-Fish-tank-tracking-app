@@ -9,7 +9,7 @@ import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
 import { initRoom, roomHtml, roomClick, endTry, roomNav } from './room.js';
-import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
+import { initRadio, musicBarHtml, musicSync, radioBuyOffer, radioDropOffer, radioKick, radioOffer, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -60,7 +60,7 @@ export function startLive(applyReadings) {
   // My tank's sand dollars: the chip first in the top bar's right side, the Care card it opens
   window.reefcare = initCare({ my: MY, isMine: () => ui.mode === 'mine', say, cue: (n) => cue(n), host: document.querySelector('.topright') || $('statusBtn').parentElement });
   // the fish stores: walking a store's display tanks replaces the tank in the 3D view until you leave (stores.js)
-  window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); } });
+  window.reefstores = initStores({ my: MY, say, cue: (n) => cue(n), onLeave: () => { renderRail(); stockChanged(); } });
   // the room shop: stands for the tank, tried on in 3D before buying (room.js)
   initRoom({ my: MY, live, say, cue: (n) => cue(n), onChange: () => renderCard(), onTurn: () => { ui.picked = null; ui.following = null; live.follow(null); renderAll(); } });
   live.start($('tank'), new URL('.', location.href).href, pictureArg(), {
@@ -85,6 +85,12 @@ export function startLive(applyReadings) {
     // a tap on another display tank or the counter in a store's 3D aisle
     onStoreStand: (i) => window.reefstores?.walk(i),
     onStoreCounter: () => window.reefstores?.counter(),
+    // the music corner left of the tank: the record stand and the radio (radio.js)
+    onMusicView: (on) => { ui.music = on; if (!on) radioDropOffer(); renderMusic(); if (on) say('The music corner! Tap a record to play it, or turn the radio knob.'); },
+    onMusicRecord: (i) => { buzz(5); radioKick(); radioOffer(i); },
+    onMusicVolume: (v) => radioVolume(v.volume, v.done),
+    onMusicTune: () => { radioKick(); radioStep(1); },
+    onMusicPower: () => { radioKick(); radioToggle(); },
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
@@ -103,7 +109,7 @@ export function startLive(applyReadings) {
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
     initRadio({
-      SB, store, ctx: audioCtx, say,
+      SB, live, store, ctx: audioCtx, say, changed: () => renderMusic(),
       records: () => (ui.mode === 'mine' ? JSON.parse(MY.records()) : []),
       buy: (file) => { const ok = ui.mode === 'mine' && MY.buyRecord(file); if (ok) MY.save(); return ok; },
       coins: () => (ui.mode === 'mine' ? JSON.parse(MY.economy())?.coins ?? null : null),
@@ -278,7 +284,7 @@ function setMode(m) {
   // My tank keeps the speed it was left at; the other two start at real time
   if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
   else { ui.speed = 1; live.setSpeed(1); }
-  live.shelfLocked(editable() ? '' : SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
+  live.shelfLocked(shelfLockIds());
   document.querySelectorAll('.seg [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
   if (m === 'mine') {
@@ -289,6 +295,7 @@ function setMode(m) {
     if ($('mytank').open) $('mytank').close();
     say('Back to your real tank. Just watch and feed.');
   }
+  musicSync();
   renderRail();
   tick();
 }
@@ -393,8 +400,8 @@ function icon(name) {
   const g = GLYPHS[name];
   return g ? `<svg class="gi${name === 'powerheadRight' ? ' flip' : ''}" viewBox="0 0 24 24" aria-hidden="true">${g}</svg>` : esc(name);
 }
-const tile = (attrs, ico, label, on = false, lock = false) =>
-  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${icon(ico)}</span>${esc(label)}</button>`;
+const tile = (attrs, ico, label, on = false, lock = false, badge = '') =>
+  `<button class="opt ${on ? 'on' : ''} ${lock ? 'lock' : ''}" ${attrs}><span class="ico">${icon(ico)}</span>${esc(label)}${badge}</button>`;
 const val = (id) => P?.values?.[id]?.v;
 const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
@@ -638,7 +645,7 @@ function settingsCard(sb) {
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
       ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
       ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
-      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
+      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn" data-musiccorner>See the stand</button><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
       ${ui.records ? radioShelfHtml(esc) : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
@@ -663,6 +670,8 @@ $('card').addEventListener('click', (e) => {
   if ('feedhungry' in d) {
     const n = (ui.hungerRows || []).filter((r) => r.hungry).length;
     if (!n) { say('Everyone is full right now. Check back in a few hours.'); cue('TICK'); return; }
+    if (!MY.useFishFood()) { say('No fish food left on the shelf! Buy some at the fish stores: tap Shop.'); cue('TICK'); return; }
+    stockChanged();
     SB.act('feedHungry', null, 0); cue('PELLET');
     say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
     closeCard(); return;
@@ -697,6 +706,7 @@ $('card').addEventListener('click', (e) => {
   else if ('radio' in d) radioToggle();
   else if (d.radiostep) radioStep(Number(d.radiostep));
   else if ('records' in d) ui.records = !ui.records;
+  else if ('musiccorner' in d) { closeCard(); live.musicOpen(true); return; }
   else if (d.record != null) radioPick(Number(d.record));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.room) { roomClick(d.room, closeCard); return; }
@@ -964,9 +974,34 @@ const SUPPLIES = [
   { id: 'pest_laser', row: 2, label: 'Pest laser', sandbox: true, run: () => { closeShelf(); act('treatAiptasia', 'LASER', 0, 'Aiming the laser at the biggest pest anemone...'); } },
 ];
 const ROWS = [['feedTin', 'Feed'], ['droplet', 'Care'], ['flask', 'Tools']];
+// My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
+let stock = null;
+function refreshStock() {
+  try { stock = ui.mode === 'mine' ? JSON.parse(MY.supplies()) : null; } catch { stock = null; }
+}
+/** Uses left of supply [id] on My tank's shelf, or -1 when it never runs out. */
+function left(id) { const n = stock?.left?.[id]; return n == null ? -1 : n; }
+function shelfLockIds() {
+  refreshStock();
+  live.shelfHidden(SUPPLIES.filter((s) => left(s.id) === 0).map((s) => s.id).join(','));
+  return SUPPLIES.filter((s) => s.sandbox && !editable()).map((s) => s.id).join(',');
+}
+function stockChanged() { live.shelfLocked(shelfLockIds()); if (ui.shelf) renderShelf(); }
+/** The badge on a shelf tile: uses left, or nothing for a tool that is kept (or anything outside My tank). */
+function stockBadge(id) {
+  const n = left(id);
+  if (n < 0) return '';
+  if (stock.keeps.includes(id)) return n ? '' : '<i class="cnt out">Shop</i>';
+  return `<i class="cnt ${n ? n <= 5 ? 'low' : '' : 'out'}">${n ? `×${n}` : 'Shop'}</i>`;
+}
+function outOf(s) {
+  cue('TICK');
+  say(`No ${supplyLabel(s).toLowerCase()} left! Buy more at the fish stores: tap Shop.`);
+}
 function supplyLabel(s) { return s.food ? C.foods.find((f) => f.id === s.food)?.label ?? s.food : s.label; }
 function openShelf() {
   ui.shelf = true; closeCard();
+  stockChanged();
   ui.picked = null; renderFish();
   if (ui.following) followFish(null);
   live.shelfOpen(true); live.shelfRow(ui.shelfRow);
@@ -978,7 +1013,8 @@ function renderShelf() {
   const sb = editable();
   $('shelfbar').innerHTML = `<div class="card-head"><div class="pills">${ROWS.map(([i, n], k) => `<button class="pillbtn ${ui.shelfRow === k ? 'on' : ''}" data-row="${k}">${icon(i)} ${n}</button>`).join('')}</div>
     <button class="btn small ghost" data-back>Back to tank</button></div>
-    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, s.sandbox && !sb)).join('')}</div>`;
+    ${ui.mode === 'mine' ? '<p class="muted">What runs out leaves the shelf. Buy more at the fish stores: tap Shop.</p>' : ''}
+    <div class="options">${SUPPLIES.filter((s) => s.row === ui.shelfRow && left(s.id) !== 0).map((s) => tile(`data-supply="${s.id}"`, s.food ? `food:${s.food}` : SUPPLY_ICON[s.id] ?? 'bucket', supplyLabel(s), false, (s.sandbox && !sb) || left(s.id) === 0, stockBadge(s.id))).join('')}</div>`;
   $('shelfbar').classList.remove('hidden');
 }
 const FOOD_ICON = { FLAKE: '🟠', PELLET: '🟤', FLOATING_PELLET: '🟫', ALGAE_WAFER: '🟢', MYSIS: '🦐', BRINE: '🦐', KRILL: '🦐', PRAWN: '🍤', CYCLOPS: '🔴', NORI: '🥬', CORAL_FOOD: '🪸', PLANKTON: '✨', PODS: '🐛' };
@@ -990,18 +1026,39 @@ $('shelfbar').addEventListener('click', (e) => {
   else if (d.row) { ui.shelfRow = Number(d.row); live.shelfRow(ui.shelfRow); renderShelf(); }
   else if (d.supply) live.shelfPick(d.supply); // lifts the prop in 3D; the renderer calls back onShelfPick
 });
+// ---- the music corner bar (under the 3D record stand and radio)
+function renderMusic() {
+  const bar = $('musicbar');
+  if (!ui.music) { bar.classList.add('hidden'); return; }
+  bar.innerHTML = musicBarHtml(esc, icon);
+  bar.classList.remove('hidden');
+}
+$('musicbar').addEventListener('click', (e) => {
+  const d = e.target.closest('button')?.dataset;
+  if (!d) return;
+  radioKick();
+  if ('mback' in d) live.musicOpen(false);
+  else if ('mbuy' in d) radioBuyOffer();
+  else if ('mnot' in d) radioDropOffer();
+  else if ('mpower' in d) radioToggle();
+  else if ('mnext' in d) radioStep(1);
+});
+
 /** A prop picked on the shelf (tapped in 3D or on its tag): run it like SupplyItem.use. */
 function useSupply(id) {
   const s = SUPPLIES.find((x) => x.id === id);
   if (!s) return;
   if (s.sandbox && !editable()) { locked(); return; }
+  if (left(s.id) === 0) { outOf(s); return; }
   if (s.food) {
     const f = C.foods.find((x) => x.id === s.food);
     // nori goes on its clip; every other food waits in the hand until the tank is tapped where it should go
-    if (s.food === 'NORI') { SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
+    if (s.food === 'NORI') { if (!MY.useSupply('nori')) { outOf(s); return; } stockChanged(); SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
     setTimeout(() => { closeShelf(); startAim(s.food); }, 500);
     return;
   }
+  if (left(s.id) > 0 && !MY.useSupply(s.id)) { outOf(s); return; }
+  stockChanged();
   s.run();
   if (s.id !== 'test_kit' && ui.shelf) setTimeout(closeShelf, 700);
 }
@@ -1545,7 +1602,7 @@ function moveKnob(x, y) { $('subKnob').style.transform = `translate(${x * 42}px,
 function renderAll() {
   startThoughts();
   $('hermie').classList.toggle('hidden', !ui.hermie);
-  live.shelfLocked(SUPPLIES.filter((s) => s.sandbox).map((s) => s.id).join(','));
+  live.shelfLocked(shelfLockIds());
   renderRail();
 }
 
@@ -1575,6 +1632,8 @@ function aimFed(h) {
   const food = aimUi.food;
   if (!food) return;
   stopAim();
+  if (!MY.useSupply(food.toLowerCase())) { outOf(SUPPLIES.find((s) => s.food === food)); return; }
+  stockChanged();
   SB.feedAt(food, h.x, h.y, h.z);
   const f = C.foods.find((x) => x.id === food);
   cue(['PELLET', 'FLOATING_PELLET', 'ALGAE_WAFER'].includes(food) ? 'PELLET' : 'FEED');

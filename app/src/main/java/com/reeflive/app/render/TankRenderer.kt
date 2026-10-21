@@ -56,6 +56,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** The room at home: the stand under the tank and the room behind it (My tank's bought ones, or Tee's). */
     @Volatile var room: RoomControl = RoomControl()
     private val homeRoom = HomeRoomScene()
+    /** The record stand and the radio left of the tank at home; null = not drawn (a host without the radio). */
+    @Volatile var music: MusicCornerControl? = null
+    private val musicScene = MusicCornerScene()
     /** Submarine mode: ride inside the sub (first person) instead of chasing it. */
     @Volatile var subFirstPerson = false
     private val subScene = SubmarineScene()
@@ -316,6 +319,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (cleaning) dragFlipper(dt)
         updateFlipperTilt(dt)
         nurseryRequest?.let { camera.lookAtNursery(it); nurseryRequest = null }
+        applyMusic(dt)
         room.viewRequest.let { if (it != roomViewSeen) { roomViewSeen = it; camera.roomView() } }
         brood.update(cur, liveSdf, dt, quality)
         aiptasia.update(cur, dt * (cur?.speed?.toFloat() ?: 1f).coerceIn(1f, 4f))
@@ -1348,7 +1352,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun applyShelf(dt: Float) {
         val c = shelf
         shelfScene.apply(c, camera)
-        input.instantTaps = camera.shelfOn || camera.rideOn || aim?.armed == true
+        input.instantTaps = camera.shelfOn || camera.rideOn || camera.musicOn || aim?.armed == true
         if (c != null) store.model(SupplyShelfLayout.MODEL)
         // a tap on a prop's name tag (UI) picks it here, so it lifts like a tapped prop and reports its top point
         val req = c?.takePickRequest()
@@ -1369,7 +1373,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (camera.shelfMix <= 0f) return
         val m = store.model(SupplyShelfLayout.MODEL) ?: return
         val w = white ?: return
-        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet())
+        drawCalls += shelfScene.draw(m, progs.shelf, w, shelf?.locked ?: emptySet(), shelf?.hidden ?: emptySet())
         triangles += m.triangles
     }
 
@@ -1381,7 +1385,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val dir = FloatArray(3)
         camera.ray(t.x, t.y, width, height, dir)
         val top = FloatArray(3)
-        val id = shelfScene.pick(camera.eye, dir, top) ?: return
+        val id = shelfScene.pick(camera.eye, dir, top, shelf?.hidden ?: emptySet()) ?: return
         val cb = shelf?.onPick ?: return
         main.post { cb(id, top[0], top[1], top[2]) }
     }
@@ -1403,10 +1407,95 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val day = smooth(6f, 8f, hour) * (1f - smooth(18.5f, 20.5f, hour))
         Gl.state(depthTest = true, depthWrite = !blended, blend = if (blended) Gl.Blend.ALPHA else Gl.Blend.NONE, cull = true)
         drawCalls += homeRoom.draw(progs.room, w, look, blended, day)
+        val m = music
+        if (m != null && !blended && musicScene.ready { store.model(it) }) drawCalls += musicScene.draw(progs.room, w, m)
         Gl.state(depthTest = true, depthWrite = !blended, blend = if (blended) Gl.Blend.ALPHA else Gl.Blend.NONE, cull = false)
     }
 
     private fun smooth(a: Float, b: Float, x: Float): Float { val t = ((x - a) / (b - a)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
+
+    // ------------------------------------------------------------------ the music corner (MusicCorner.kt)
+
+    private val grabBuf = FloatArray(2)
+    private val knobBuf = FloatArray(3)
+    private var musicViewSeen = false
+    @Volatile private var knobVolume = 0f
+    @Volatile private var knobDone = false
+    private val knobPost = Runnable { music?.onVolume?.invoke(knobVolume, knobDone) }
+    private val homeTankBox = FloatArray(6)
+
+    private fun musicHome(): Boolean = room.visible && !storeScene.active && storeRoom?.storeId == null
+
+    /** Open requests, the view's comings and goings, the volume knob under a finger, and the corner's easing. */
+    private fun applyMusic(dt: Float) {
+        val c = music
+        if (c == null) {
+            if (camera.musicOn) camera.lookAtMusic(false)
+            input.knobR = 0f
+            return
+        }
+        val home = musicHome()
+        c.openRequest?.let { c.openRequest = null; camera.lookAtMusic(it && home) }
+        if (!home && camera.musicOn) camera.lookAtMusic(false)
+        if (camera.musicOn != musicViewSeen) {
+            musicViewSeen = camera.musicOn
+            val v = musicViewSeen
+            c.onView?.let { cb -> main.post { cb(v) } }
+        }
+        // a drag that started on the volume knob turns it: right or up is louder
+        val r = input.drainGrab(grabBuf)
+        if (r != 0) {
+            if (r and 1 != 0) {
+                if (!musicScene.turning) { musicScene.turning = true; musicScene.turningVolume = c.volume }
+                val k = 1f / kotlin.math.max(height * 0.35f, 1f)
+                musicScene.turningVolume = (musicScene.turningVolume + (grabBuf[0] - grabBuf[1]) * k).coerceIn(0f, 1f)
+            }
+            if (musicScene.turning) {
+                knobVolume = musicScene.turningVolume
+                knobDone = r and 2 != 0
+                main.post(knobPost)
+                if (knobDone) { c.volume = knobVolume; musicScene.turning = false }
+            }
+        }
+        // where the knob is on screen, so a finger landing on it grabs it (CameraInput.press)
+        val v = MusicCornerLayout.VOLUME
+        if (camera.musicOn && camera.musicMix > 0.9f && camera.projectSphere(v[0], v[1], v[2], v[3] + 0.4f, knobBuf)) {
+            input.knobX = knobBuf[0] * width; input.knobY = (1f - knobBuf[1]) * height; input.knobR = knobBuf[2] * height
+        } else {
+            input.knobR = 0f
+        }
+        musicScene.update(c, dt)
+    }
+
+    /**
+     * A tap on the music corner from the tank view glides there. In the music corner a tap plays (or offers) a record,
+     * the tuning knob goes on to the next song, the radio turns the music on or off, and anywhere else goes back.
+     */
+    private fun musicTap(t: CameraInput.Tap, o: FloatArray, dir: FloatArray): Boolean {
+        val c = music ?: return false
+        if (camera.musicOn) {
+            if (t.kind != CameraInput.TapKind.PICK && t.kind != CameraInput.TapKind.ZOOM) return true
+            if (!musicScene.ready { store.model(it) }) return true
+            val a = MusicCornerLayout.VIEW_AIM
+            val dx = o[0] - a[0]; val dy = o[1] - a[1]; val dz = o[2] - a[2]
+            when (val hit = musicScene.pick(o, dir, fingerSlack() * kotlin.math.sqrt(dx * dx + dy * dy + dz * dz))) {
+                MusicCornerScene.NONE -> camera.lookAtMusic(false)
+                MusicCornerScene.VOLUME -> Unit
+                MusicCornerScene.TUNE -> { musicScene.clickTune(); c.onTune?.let { cb -> main.post { cb() } } }
+                MusicCornerScene.RADIO -> c.onPower?.let { cb -> main.post { cb() } }
+                else -> c.onRecord?.let { cb -> main.post { cb(hit) } }
+            }
+            return true
+        }
+        if (t.kind != CameraInput.TapKind.PICK || !musicHome()) return false
+        val h = MusicCornerScene.hit(o, dir) ?: return false
+        // the tank in front of the corner keeps the tap (a fish, the glass)
+        homeTankBox[3] = Camera.TANK[0]; homeTankBox[4] = Camera.TANK[1]; homeTankBox[5] = Camera.TANK[2]
+        val tank = SupplyShelfScene.rayBox(o, dir, homeTankBox, 0f)
+        if (tank != null && tank < h) return false
+        camera.lookAtMusic(true)
+        return true
+    }
 
     // ------------------------------------------------------------------ fish store (StoreRoom.kt)
 
@@ -1415,7 +1504,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val c = storeRoom ?: return
         if (!storeScene.active) return
         val w = white ?: return
-        drawCalls += storeScene.draw(progs.store, w, c, blended)
+        drawCalls += storeScene.draw(progs.store, w, c, blended, camera.viewProj)
     }
 
     /**
@@ -1446,6 +1535,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val o = camera.eye.copyOf()
         val l = listener
         if (storeTap(t, o, dir, rigs)) return
+        if (musicTap(t, o, dir)) return
         // tap-to-place: an armed aim takes the single tap (food from the shelf drops in where the finger lands)
         if (t.kind == CameraInput.TapKind.PICK && aim?.armed == true) { aimFrom(t.x, t.y, rigs); return }
         when (t.kind) {

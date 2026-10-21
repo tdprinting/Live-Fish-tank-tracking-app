@@ -55,6 +55,8 @@ import com.reeflive.core.custom.economy.BuyResult
 import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
+import com.reeflive.core.custom.economy.SupplyBook
+import com.reeflive.core.custom.economy.SupplyCard
 import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.Stocking
 import com.reeflive.core.species.SpeciesKind
@@ -143,7 +145,8 @@ fun BoxScope.StoreOverlay(
     LaunchedEffect(counter) { onCounter(counter) }
     val (tank, cards) = v.tanks[v.at.coerceIn(0, v.tanks.size - 1)]
     val all = remember(v) { v.tanks.flatMap { it.second }.associateBy { it.speciesId } }
-    val total = bag.sumOf { all[it]?.price ?: 0 }
+    val packs = remember(v) { v.supplies.associateBy { SupplyBook.bagId(it.pack.id) } }
+    val total = bag.sumOf { all[it]?.price ?: packs[it]?.price ?: 0 }
     val add: (ShelfCard) -> Unit = { c ->
         if (!c.locked) {
             if (bag.count { it == c.speciesId } >= c.left) say("That is all the ${c.name} they have today.")
@@ -151,6 +154,14 @@ fun BoxScope.StoreOverlay(
         }
     }
     val remove: (String) -> Unit = { id -> bag.lastIndexOf(id).takeIf { it >= 0 }?.let { bag.removeAt(it) } }
+    val addPack: (SupplyCard) -> Unit = { c ->
+        val id = SupplyBook.bagId(c.pack.id)
+        when {
+            c.locked || c.owned -> Unit
+            c.pack.keeps && id in bag -> say("You only need one ${c.pack.name.lowercase()}.")
+            else -> { bag += id; tick() }
+        }
+    }
 
     // the sign, the bag and the section tabs along the top
     Column(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(top = topInset + 56.dp, start = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -168,7 +179,7 @@ fun BoxScope.StoreOverlay(
             Box(Modifier.weight(1f))
             LivePill(
                 if (bag.isEmpty()) "🛍️ 0" else "🛍️ ${bag.size} · $total",
-                if (bag.isEmpty()) null else ({ tick(); counter = true }),
+                { tick(); counter = true },
                 tone = if (total > v.coins) Candy.red else Candy.yellow,
             )
         }
@@ -190,8 +201,9 @@ fun BoxScope.StoreOverlay(
         }
     }
     if (selling) SellSheet(v, onSell, tick) { selling = false }
-    if (counter) Counter(bag, all, v.coins, total, { add(it) }, remove, { counter = false }) {
-        onCheckout(bag.toList()) { r ->
+    if (counter) Counter(bag, all, v.supplies, v.coins, total, { add(it) }, addPack, remove, { counter = false }) {
+        val sent = bag.toList()
+        onCheckout(sent) { r ->
             when (r) {
                 BuyResult.OK -> Unit
                 BuyResult.TOO_POOR -> say("Not enough sand dollars yet.")
@@ -200,7 +212,8 @@ fun BoxScope.StoreOverlay(
                 else -> say("The till got stuck. Try again.")
             }
         }
-        counter = false
+        // supplies only: paid and onto the shelf at home; the keeper stays in the store
+        if (sent.all { SupplyBook.fromBag(it) != null }) bag.clear() else counter = false
     }
 }
 
@@ -273,9 +286,11 @@ private fun ShelfCardPanel(c: ShelfCard, inBag: Int, money: Int, onAdd: () -> Un
 private fun Counter(
     bag: List<String>,
     all: Map<String, ShelfCard>,
+    supplies: List<SupplyCard>,
     coins: Int,
     total: Int,
     onMore: (ShelfCard) -> Unit,
+    onMorePack: (SupplyCard) -> Unit,
     onLess: (String) -> Unit,
     onClose: () -> Unit,
     onPay: () -> Unit,
@@ -288,6 +303,18 @@ private fun Counter(
         ) {
             Text("The counter", style = s.titleText, color = s.label)
             bag.distinct().forEach { id ->
+                supplies.firstOrNull { SupplyBook.bagId(it.pack.id) == id }?.let { p ->
+                    val n = bag.count { it == id }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🧴", fontSize = 22.sp, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
+                        Text(p.pack.name, style = MaterialTheme.typography.bodyMedium, color = s.label, modifier = Modifier.weight(1f))
+                        LivePill("−", { onLess(id) }, tone = Candy.white)
+                        Text("$n", style = s.buttonText, color = s.label)
+                        LivePill("+", if (p.pack.keeps) null else ({ onMorePack(p) }), tone = Candy.white)
+                        Price(p.price * n)
+                    }
+                    return@forEach
+                }
                 val c = all[id] ?: return@forEach
                 val n = bag.count { it == id }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -300,6 +327,7 @@ private fun Counter(
                 }
             }
             if (bag.isEmpty()) LiveHelp("Your bag is empty.")
+            SupplyRows(supplies, bag, onMorePack, onLess)
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Total", style = s.titleText.copy(fontSize = 18.sp), color = s.label, modifier = Modifier.weight(1f))
                 Price(total, size = 18)
@@ -309,6 +337,36 @@ private fun Counter(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
                 LivePill("Keep shopping", onClose, tone = Candy.white)
                 LivePill(if (short > 0) "Need $short more" else "Pay $total", if (short > 0 || bag.isEmpty()) null else onPay, tone = Candy.green, selected = short <= 0 && bag.isNotEmpty())
+            }
+        }
+    }
+}
+
+/** The supplies behind the counter (core SupplyBook): what is on the shelf at home, a pack's size and price. */
+@Composable
+private fun SupplyRows(supplies: List<SupplyCard>, bag: List<String>, onMore: (SupplyCard) -> Unit, onLess: (String) -> Unit) {
+    val s = LiveTheme.style
+    Text("Supplies for your shelf", style = s.titleText.copy(fontSize = 16.sp), color = s.label, modifier = Modifier.padding(top = 8.dp))
+    supplies.forEach { c ->
+        val id = SupplyBook.bagId(c.pack.id)
+        val n = bag.count { it == id }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(c.pack.name, style = MaterialTheme.typography.bodyMedium, color = s.label)
+                val have = when {
+                    c.pack.keeps -> if (c.owned) " · You have one" else ""
+                    else -> " · You have ${c.have}"
+                }
+                Text(c.pack.pack + have, style = MaterialTheme.typography.bodySmall, color = if (!c.pack.keeps && c.have == 0) Candy.orange else s.labelDim)
+            }
+            when {
+                c.locked -> Text("🔒 Lv ${c.pack.level}", style = s.buttonText.copy(fontSize = 13.sp), color = Candy.yellow)
+                c.owned -> Text("✓", style = s.buttonText, color = Candy.green)
+                else -> {
+                    if (n > 0) { LivePill("−", { onLess(id) }, tone = Candy.white); Text("$n", style = s.buttonText, color = s.label) }
+                    LivePill("+", if (c.pack.keeps && n > 0) null else ({ onMore(c) }), tone = Candy.white)
+                    Price(c.price)
+                }
             }
         }
     }

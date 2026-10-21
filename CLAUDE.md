@@ -12,7 +12,7 @@ for the section you need (`grep -n "^#" docs/X.md`, then read that range).
 ## Commands
 - Sim tests: `./gradlew -PcoreOnly :core:test` (one class: `--tests '*SandBedTest'`).
 - Web site: `./gradlew -PcoreOnly :web:site` → `web/build/site` (also type-checks the shared renderer).
-- `:app` needs the Android SDK and Google Maven: CI only (`.github/workflows/android.yml`).
+- `:app` (Android) is no longer built or published; the browser app is the product. CI (`.github/workflows/android.yml`, job `build`) runs `:core:test`; `web.yml` builds and publishes the site.
 - Headless sim tuning: `./gradlew -PcoreOnly :core:simRunner`.
 
 ## Hot paths (keep allocation-free and cheap)
@@ -24,6 +24,6 @@ for the section you need (`grep -n "^#" docs/X.md`, then read that range).
   composition.
 
 ## Conventions
-- One feature per PR; every merge to `main` publishes an APK and the web site.
+- One feature per PR; every merge to `main` publishes the web site.
 - Asset sources: `tools/blender/*.py` → committed GLBs in `app/src/main/assets/models`.
 - PR titles become the web app's "What's new" popup (built from main's merge history). Write them so Tee understands them, or add a plain line (or `""` to hide) keyed by PR number in `docs/whats-new.json`.

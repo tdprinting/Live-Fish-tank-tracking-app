@@ -49,6 +49,7 @@ class TouchController(context: Context, private val view: View, private val inpu
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 view.parent?.requestDisallowInterceptTouchEvent(true)
+                input.press(ev.getX(0), ev.getY(0))
                 tracker.down(ev.getPointerId(0), ev.getX(0), ev.getY(0), t, first = true)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -121,14 +122,50 @@ class CameraInput : GestureTracker.Sink {
         return true
     }
 
-    @Synchronized override fun touching(down: Boolean) { this.down = down; if (down) caught = true }
-    @Synchronized override fun orbit(dx: Float, dy: Float) { orbitX += dx; orbitY += dy }
+    // ---- a knob in the scene under the finger (MusicCorner: the radio's volume knob): its drag turns it, not the view
+    /** The knob on screen (px; radius 0 = none to grab). Set by the GL thread, read on the first touch. */
+    @Volatile var knobX = 0f
+    @Volatile var knobY = 0f
+    @Volatile var knobR = 0f
+    private var grabbing = false
+    /** This gesture started on the knob: its fling is dropped too. */
+    private var grabGesture = false
+    private var grabDx = 0f; private var grabDy = 0f
+    private var grabMoved = false
+    private var grabEnded = false
+
+    /** The first finger went down at ([x], [y]) px: on the knob, the drag that follows turns it. */
+    @Synchronized fun press(x: Float, y: Float) {
+        val r = knobR
+        val dx = x - knobX; val dy = y - knobY
+        grabbing = r > 0f && dx * dx + dy * dy <= (r + fingerPx * 0.5f) * (r + fingerPx * 0.5f)
+        grabGesture = grabbing
+    }
+
+    /** GL thread: the knob drag since the last frame into [out] (dx, dy px); bit 1 = moved, bit 2 = the finger lifted. */
+    @Synchronized fun drainGrab(out: FloatArray): Int {
+        if (!grabMoved && !grabEnded) return 0
+        out[0] = grabDx; out[1] = grabDy
+        val r = (if (grabMoved) 1 else 0) or (if (grabEnded) 2 else 0)
+        grabDx = 0f; grabDy = 0f; grabMoved = false; grabEnded = false
+        return r
+    }
+
+    @Synchronized override fun touching(down: Boolean) {
+        this.down = down
+        if (down) caught = true
+        else if (grabbing) { grabbing = false; grabEnded = true }
+    }
+    @Synchronized override fun orbit(dx: Float, dy: Float) {
+        if (grabbing) { grabDx += dx; grabDy += dy; grabMoved = true; return }
+        orbitX += dx; orbitY += dy
+    }
     @Synchronized override fun pan(dx: Float, dy: Float) { panX += dx; panY += dy }
     @Synchronized override fun pinch(factor: Float, focusX: Float, focusY: Float) {
         if (factor > 0f && !factor.isNaN() && !factor.isInfinite()) { zoom *= factor; this.focusX = focusX; this.focusY = focusY }
     }
     @Synchronized override fun rotate(radians: Float) { rotation += radians }
-    @Synchronized override fun fling(vx: Float, vy: Float) { flingX = vx; flingY = vy; hasFling = true }
+    @Synchronized override fun fling(vx: Float, vy: Float) { if (!grabGesture) { flingX = vx; flingY = vy; hasFling = true } }
     @Synchronized override fun tap(kind: TapKind, x: Float, y: Float) { if (taps.size < 8) taps += Tap(kind, x, y) }
 
     // ---- the held finger (after a long press): the GL thread decides whether it is a fingertip or an orbit
@@ -139,9 +176,12 @@ class CameraInput : GestureTracker.Sink {
     private var heldVx = 0f; private var heldVy = 0f
 
     @Synchronized override fun heldMove(dx: Float, dy: Float, x: Float, y: Float) {
+        // pressed and held on the knob, then turned: still the knob
+        if (grabbing) { grabDx += dx; grabDy += dy; grabMoved = true; return }
         heldDx += dx; heldDy += dy; heldX = x; heldY = y; heldMoved = true
     }
     @Synchronized override fun heldUp(x: Float, y: Float, vx: Float, vy: Float) {
+        if (grabGesture) return
         heldX = x; heldY = y; heldVx = vx; heldVy = vy; heldLifted = true
     }
 

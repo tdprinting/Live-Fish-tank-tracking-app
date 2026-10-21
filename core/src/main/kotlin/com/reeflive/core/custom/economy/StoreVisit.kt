@@ -33,8 +33,11 @@ data class ShelfCard(
     val warning: String?,
 )
 
-/** What happened at the counter: the result and the species bought, one entry per animal. */
-data class Checkout(val result: BuyResult, val bought: List<String>, val total: Int)
+/**
+ * What happened at the counter: the result, the species bought (one entry per animal) and the supply packs bought
+ * (supply id → packs, already on the shelf).
+ */
+data class Checkout(val result: BuyResult, val bought: List<String>, val total: Int, val supplies: Map<String, Int> = emptyMap())
 
 /**
  * Walking around a store: its day's shelf split into display tanks by section, and the little sim each tank runs while

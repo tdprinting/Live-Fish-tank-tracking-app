@@ -35,6 +35,7 @@ object LiveTips {
     /** My tank: the keeper's own tank, started empty and saved on this device. */
     val myTank = listOf(
         "Shop takes you to the fish stores. Buy an animal, then drag its bag onto the water.",
+        "The supply shelf starts with just flakes. Buy more food, salt and tools at the fish stores' counter.",
         "Tank Health shows who is hungry. Feed them all with one tap.",
         "Tank has the lights, heater, pumps and rocks. Its More button has the grown-up sliders.",
         "Everything here is saved: names, personalities and how much each animal grows.",
@@ -70,6 +71,7 @@ object LiveTips {
     val hermieMyTank = listOf(
         "This is your own tank. Everything here is saved!",
         "Tap Shop to buy new friends at the fish stores!",
+        "Food runs out! Buy more at the fish store counter.",
         "Tap an animal to give it a name.",
         "Feed them every day so they grow big!",
         "Tank Health feeds every hungry one with one tap!",

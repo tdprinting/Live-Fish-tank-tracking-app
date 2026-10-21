@@ -31,6 +31,8 @@ class GiantClamBrain(c: Ctx) : SpeciesBrain(c) {
         const val PAR_SAT = 320.0
         /** Day-average PAR below which its algae starve and it slowly bleaches (research 45 §0: floor ~200-250). */
         const val PAR_LOW = 200.0
+        /** The boring clam's floor: T. crocea lives shallowest of all and wants the most light (research 62 §1: 250-400). */
+        @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "62 §1") const val PAR_LOW_CROCEA = 250.0
         /** Day-average PAR above which it pales from too much light, without slow acclimation [E]. */
         const val PAR_HIGH = 750.0
         /** Water temperature above which it bleaches (°C; Tridacna bleach in sustained heat like corals) [E]. */
@@ -79,9 +81,16 @@ class GiantClamBrain(c: Ctx) : SpeciesBrain(c) {
             if (tempC > BLEACH_C) loss += 0.08 * (tempC - BLEACH_C) * day
             if (parDay > PAR_HIGH) loss += 0.05 * ((parDay - PAR_HIGH) / 250.0).coerceAtMost(2.0) * day
             // lamps are on ~40 % of the day: scale the lit-hours rate so a dim spot loses ~4 % a day at worst
-            if (lit && parDay in 0.0..PAR_LOW) loss += 0.04 * (1 - parDay / PAR_LOW) * day / 0.4
+            val low = parLow(o)
+            if (lit && parDay in 0.0..low) loss += 0.04 * (1 - parDay / low) * day / 0.4
             o.bleach = if (loss > 0) min(1.0, o.bleach + loss) else max(0.0, o.bleach - 0.03 * day)
         }
+
+        /** Day-average PAR below which [o]'s algae starve. */
+        fun parLow(o: Organism) = if (isCrocea(o)) PAR_LOW_CROCEA else PAR_LOW
+
+        /** The boring clam (*Tridacna crocea*): it bores into the rock, so it never sits on the sand. */
+        fun isCrocea(o: Organism) = o.species.id.startsWith("tridacna_crocea")
 
         private fun filterShare(o: Organism) = if (o.lengthCm < JUVENILE_CM) FILTER_JUVENILE else FILTER_ADULT
     }
@@ -124,16 +133,21 @@ class GiantClamBrain(c: Ctx) : SpeciesBrain(c) {
         for (k in c.sim.corals) taken.add(k.pos)
         for (x in c.sim.organisms) if (x !== o && x.alive && (x.brainKind == BrainKind.GIANT_CLAM || x.brainKind == BrainKind.ANEMONE)) taken.add(x.homePos)
         val along = { n: Vec3 -> Vec3.X.rejectFrom(n).normalized(Vec3.X) }
-        val hit = c.rock.perchNear(centre, 40.0, step = 3.0, spacing = 0.6 * L + 3.0, taken = taken,
+        // the boring clam grinds a pit into the rock with its foot and byssus (research 62 §1): it takes a sloping face
+        // too, and looks much further for rock before it would settle on the sand
+        val crocea = isCrocea(o)
+        val minUp = if (crocea) 0.6 else 0.8
+        val search = { r: Double -> c.rock.perchNear(centre, r, step = 3.0, spacing = 0.6 * L + 3.0, taken = taken,
             accept = { q, n ->
-                if (n.y < 0.8 || q.y < sand + 1.0 || q.y + 0.65 * L > c.rock.waterLevelCm - 3.0) false else {
+                if (n.y < minUp || q.y < sand + 1.0 || q.y + 0.65 * L > c.rock.waterLevelCm - 3.0) false else {
                     // both ends of the shell on the rock, not in it or hanging off it
                     val a = along(n) * (0.45 * L)
                     val e1 = c.rock.sdf.dist(q + a + n * (0.08 * L)); val e2 = c.rock.sdf.dist(q - a + n * (0.08 * L))
                     e1 > 0.0 && e2 > 0.0 && e1 < 0.3 * L && e2 < 0.3 * L && c.rock.sdf.dist(q + n * (0.6 * L)) > 0.45 * L
                 }
             },
-            score = { q, n -> -10.0 * CoralSpots.lightAt(c.rock, q, n) + 0.04 * q.distanceTo(centre) })
+            score = { q, n -> -10.0 * CoralSpots.lightAt(c.rock, q, n) + 0.04 * q.distanceTo(centre) }) }
+        val hit = search(40.0) ?: if (crocea) search(120.0) else null
         val (q, n) = hit ?: run {
             // the sand under open water, toward the middle where the light is best
             val x = centre.x.coerceIn(0.3 * c.rock.lengthCm, 0.7 * c.rock.lengthCm)
@@ -180,7 +194,7 @@ class GiantClamBrain(c: Ctx) : SpeciesBrain(c) {
             ext < 0.6 && flinch > 0.05 -> "Opening its mantle again"
             o.bleach > 0.5 -> "Bleached: pale, it has lost its algae"
             o.bleach > 0.15 -> "Paling: its algae are leaving"
-            !c.p.night && parDay in 0.0..PAR_LOW -> "Spreading its mantle wide: too little light here"
+            !c.p.night && parDay in 0.0..parLow(o) -> "Spreading its mantle wide: too little light here"
             c.p.night -> "Mantle half drawn in for the night"
             o.hunger > 0.6 -> "Hungry: soaking up the light"
             else -> "Mantle spread wide in the light"
