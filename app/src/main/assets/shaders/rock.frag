@@ -439,13 +439,13 @@ void main() {
     if (uSandOn > 0.5) {
         vec2 ext = max(uSandExtent, vec2(1.0));
         vec2 suv = clamp(vWorld.xz / ext, 0.0, 1.0);
-        vec4 sm = texture(uSandMap, suv);
+        vec4 sm = textureLod(uSandMap, suv, 0.0);
         vec2 ts = vec2(textureSize(uSandMap, 0));
         vec2 cell = ext / ts;
         vec2 du = vec2(1.0 / ts.x, 0.0);
         vec2 dv = vec2(0.0, 1.0 / ts.y);
-        float hx = (texture(uSandMap, suv + du).r - texture(uSandMap, suv - du).r) / (2.0 * cell.x);
-        float hz = (texture(uSandMap, suv + dv).r - texture(uSandMap, suv - dv).r) / (2.0 * cell.y);
+        float hx = (textureLod(uSandMap, suv + du, 0.0).r - textureLod(uSandMap, suv - du, 0.0).r) / (2.0 * cell.x);
+        float hz = (textureLod(uSandMap, suv + dv, 0.0).r - textureLod(uSandMap, suv - dv, 0.0).r) / (2.0 * cell.y);
         // slope of the displaced surface (the mesh normal is the flat bed's)
         N = normalize(N + vec3(-hx, 0.0, -hz) * step(0.5, N.y));
         // freshly turned sand: the damp, darker layer from below, speckled, a little glossier
@@ -610,7 +610,7 @@ void main() {
         // sparkle: a tight specular lobe on the grain's own facet, from both fixtures (none in rock/fish shadow)
         for (int i = 0; i < 2; i++) {
             vec3 L;
-            vec3 rad = fixtureLight(i, vWorld, L);
+            vec3 rad = fixtureAt(i, L);
             float s = pow(max(dot(glintN, normalize(V + L)), 0.0), 90.0);
             col += rad * s * glint * 1.6 * gShadow;
         }

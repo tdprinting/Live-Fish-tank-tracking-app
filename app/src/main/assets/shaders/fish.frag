@@ -124,8 +124,9 @@ void main() {
     // back-lit fins glow a little (thin membrane)
     // (each fixture with its own direction; none inside a shadow)
     vec3 Lb0, Lb1;
-    vec3 rad0 = fixtureLight(0, vWorld, Lb0), rad1 = fixtureLight(1, vWorld, Lb1);
-    col += albedo * (rad0 * pow(clamp(dot(V, -Lb0), 0.0, 1.0), 3.0) + rad1 * pow(clamp(dot(V, -Lb1), 0.0, 1.0), 3.0))
+    vec3 rad0 = fixtureAt(0, Lb0), rad1 = fixtureAt(1, Lb1);
+    float bl0 = clamp(dot(V, -Lb0), 0.0, 1.0), bl1 = clamp(dot(V, -Lb1), 0.0, 1.0);
+    col += albedo * (rad0 * (bl0 * bl0 * bl0) + rad1 * (bl1 * bl1 * bl1))
         * 0.35 * gShadow;
     alpha *= 0.75 + 0.25 * ndv;
     if (uIchSpots > 0.001) col = mix(col, vec3(0.8) * lightIntensity(), ichMask(vUv * 0.5) * uIchSpots * 0.6);
@@ -135,7 +136,7 @@ void main() {
     // thin-film iridescence (LUT ramp by view angle) added to the specular response
     vec3 irid = toLinear(texture(uIridLut, vec2(ndv, 0.5)).rgb) * uIridStrength * (1.0 - clamp(uDesat, 0.0, 1.0));
     vec3 Lk;
-    vec3 rad = fixtureLight(0, vWorld, Lk) + fixtureLight(1, vWorld, Lk);
+    vec3 rad = fixtureAt(0, Lk) + fixtureAt(1, Lk);
     float shade = gShadow;
     col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0)) * shade;
     // wet skin / shell: a tight clear-coat highlight over the body's own roughness

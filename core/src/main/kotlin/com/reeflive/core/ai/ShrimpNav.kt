@@ -22,8 +22,11 @@ import kotlin.math.min
  * capsule-body collision layer.
  */
 
-/** Height of a shrimp's body axis above the surface it stands on: the walking legs reach ~0.21 BL below it (shrimp model). */
-fun shrimpStance(o: Organism): Double = 0.21 * o.lengthCm
+/**
+ * Height of a shrimp's body axis above the surface it stands on: the walking legs reach ~0.21 BL below it (shrimp model);
+ * the peacock mantis stands low on short legs under a long, flat body (mantis_shrimp.glb: feet 0.1 BL under the spine).
+ */
+fun shrimpStance(o: Organism): Double = (if (o.brainKind == com.reeflive.core.sim.BrainKind.MANTIS) 0.1 else 0.21) * o.lengthCm
 
 /** Outward normal of the nearest environment surface (rock, sand, glass) at [p]. */
 fun RockData.envNormal(p: Vec3, h: Double = 0.4): Vec3 =
