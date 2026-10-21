@@ -19,6 +19,9 @@ import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
 import com.reeflive.core.sim.GlassPane
+import com.reeflive.core.sim.HungerRow
+import com.reeflive.core.sim.HungryFeed
+import com.reeflive.core.sim.rows
 import com.reeflive.core.sim.MaintenanceTask
 import com.reeflive.core.sim.MicroAction
 import com.reeflive.core.sim.OrganismStats
@@ -111,6 +114,12 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     val peek: StateFlow<LivePeek> = holder.peek
 
     init {
+        // the live screen opens on My tank, the app's main tank, once per launch (a "View in Live Tank" hand-off
+        // from the livestock list is about the real tank, so that one stays on Watch)
+        if (!openedOnce) {
+            openedOnce = true
+            if (LiveFocus.followId.value == null) holder.setMode(SimMode.CUSTOM)
+        }
         viewModelScope.launch {
             holder.snapshots.sample(REAL_SAMPLE_MS).collect { snap ->
                 if (holder.mode.value == SimMode.REALITY && snap !== SimSnapshot.EMPTY) {
@@ -140,6 +149,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         holder.setMode(m)
     }
     fun setSpeed(v: Double) = holder.setSpeed(v)
+    val lifePace = holder.lifePace
+    fun setLifePace(p: com.reeflive.core.sim.LifePace) = holder.setLifePace(p)
     fun select(id: String?) { _selectedOrganismId.value = id; if (id == null) _followId.value = null }
     fun follow(id: String?) { _followId.value = id; if (id != null) _selectedOrganismId.value = id }
     fun setQuality(q: LiveQuality) { _quality.value = q }
@@ -147,6 +158,17 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // ---- actions allowed in both modes ----
     /** Feeds [kind] at [at] (or the usual hand-feed spot); [target] = [at] is the spot the player tapped (Command.Feed.target). */
     fun feed(kind: FoodKind = FoodKind.FLAKE, grams: Double = 1.0, at: Vec3? = null, target: Boolean = false) = holder.enqueue(Command.Feed(kind, grams, at, target))
+    /** Tank Health "Feed the hungry ones": each hungry animal's favourite food dropped above it (core HungryFeed). */
+    fun feedHungry() = holder.enqueue(Command.FeedHungry)
+    /** Tank Health "Give corals and inverts what they need" (core CoralCare): doses and feeds what the tank needs now; in My tank it costs [price] sand dollars, false when the keeper cannot afford it. */
+    fun reefCare(price: Int): Boolean = if (mode.value == SimMode.CUSTOM) holder.reefCare(price) else { holder.enqueue(Command.ReefCare); true }
+    /** Corals news from the time away (shown once by the screen). */
+    val coralNews: StateFlow<List<String>> = holder.coralNews
+    fun clearCoralNews() = holder.clearCoralNews()
+    /** What [reefCare] would give now, from the latest snapshot. */
+    fun reefCarePlan(): com.reeflive.core.sim.CoralCare.Plan = com.reeflive.core.sim.CoralCare.plan(holder.snapshots.value)
+    /** Tank Health's hunger list for [stats]: every living animal's hunger bar and the food the auto feed picks. */
+    fun hungerRows(stats: List<OrganismStats>): List<HungerRow> = HungryFeed.rows(stats) { holder.simSpecies(it) }
     fun tapGlass(worldPoint: Vec3) = holder.enqueue(Command.TapGlass(worldPoint))
     /** A gentle fingertip tap on the tank at [point] (glass, sand, rock or coral): nearby animals answer (TankTouch). */
     fun touchTank(point: Vec3, surface: TouchSurface) = holder.enqueue(Command.TouchTank(point, surface))
@@ -165,7 +187,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     /** Scoop the dead animal [id] out with the fish net (core FishNet); the goodbye plays once it is out. */
     fun netOut(id: String) = holder.enqueue(Command.NetOut(id))
 
-    /** A breeding / nursery button on a clown's card (core Brood.Act name). */
+    /** A breeding / nursery button on a clown's or blue tang's card (core Brood.Act name, ":tang" for tangs). */
     fun breed(act: String) = holder.enqueue(Command.Breed(act))
     private val _nurseryView = kotlinx.coroutines.flow.MutableStateFlow(0)
     /** Bumped for each "Look at the nursery" press (TankView glides the camera there). */
@@ -279,6 +301,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     fun floatBag(speciesId: String, count: Int, size: StockSize, x: Float) = sandbox { holder.enqueue(Command.FloatBag(speciesId, count, x.toDouble(), size = size)) }
     /** Fast-forwards the clock while bags float ([on]), or back to the chosen speed. */
     fun hurryBags(on: Boolean) = sandbox { holder.enqueue(Command.HurryBags(on)) }
+    /** Puts the coral waiting for a spot (My tank) on offered spot [spot] (−1: the best one). */
+    fun placeCoral(spot: Int) = sandbox { holder.enqueue(Command.PlaceCoral(spot)) }
     fun removeOrganism(id: String) = sandbox {
         holder.enqueue(Command.RemoveOrganism(id))
         if (_selectedOrganismId.value == id) select(null)
@@ -288,7 +312,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     // aquascape builder: on the tank on screen (your tank or the pretend copy); the rock layout is saved with the tank
     /** Drops a dry rock over [at]; a tap that only met the glass drops it halfway back. */
     fun placeRock(shape: DryRockShape, at: Vec3, surface: TouchSurface, turnDeg: Double) =
-        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) TankDims.DEPTH_CM / 2 else at.z, turnDeg))
+        holder.enqueue(Command.PlaceRock(shape, at.x, if (surface == TouchSurface.GLASS || surface == TouchSurface.SURFACE) com.reeflive.app.render.Camera.TANK[2].toDouble() / 2 else at.z, turnDeg))
     /** Takes out the rock nearest [at] (null: the dry rock added last). */
     fun removeRock(at: Vec3?) = holder.enqueue(Command.RemoveRock(at))
     fun clearRocks() = holder.enqueue(Command.ClearRocks)
@@ -401,6 +425,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
     }
 
     companion object {
+        /** The first Live screen of this launch has switched to My tank. */
+        private var openedOnce = false
         const val HUD_PERIOD_MS = 250L   // 4 Hz
         const val REAL_SAMPLE_MS = 500L
         val PUMP_IDS = mapOf("pump_left" to "pump.PH-B", "pump_right" to "pump.PH-A")

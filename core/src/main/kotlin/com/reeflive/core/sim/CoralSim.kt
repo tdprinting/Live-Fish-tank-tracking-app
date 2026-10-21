@@ -51,6 +51,14 @@ class Coral(
     var necrosis = 0.0
     var skeleton = 0.0
     val melting: Boolean get() = tissue < 0.2
+    /** The biggest stress right now ([CoralNeed] ordinal), −1 when it is fine. */
+    var need = -1
+    /** Sim time it died (tissue gone; [CoralHealth.CLEAR_DAYS] later it is cleared away), NaN while alive. */
+    var diedAt = Double.NaN
+    /** Stony corals: night tentacles out 0..1 (Euphyllia sweepers, LPS feeding tentacles; [StonyCorals]). */
+    var tentacles = 0.0
+    /** Euphyllia: how developed its sweeper tentacles are 0..1 (grown against a neighbour in reach). */
+    var sweepers = 0.0
 
     // ---- growth and competition (CoralGrowth; coverage gaps C-1, C-2) ----
     /** Colony linear size relative to the placed colony (1 = as placed; mats: √(area / starting area)). */
@@ -77,6 +85,9 @@ class Coral(
     /** Aiptasia being killed by a keeper's treatment ([AiptasiaModel.treat]): which one, and sim seconds until gone. */
     var treatment: AiptasiaTreatment? = null
     var treatLeftSec = 0.0
+    /** Light here relative to mid-water ([CoralSpots.lightAt]; My tank) and the rock revision it was worked out at. */
+    var lightHere = Double.NaN
+    var lightAtRev = -1L
 
     fun toPose(simTimeSec: Double = 0.0) = CoralPose(
         id, extension.toFloat(), bleach.toFloat(), brown.toFloat(), algaeCover.toFloat(), swayPhase.toFloat(),
@@ -88,6 +99,8 @@ class Coral(
         restNx = restNormal.x.toFloat(), restNy = restNormal.y.toFloat(), restNz = restNormal.z.toFloat(),
         matRadius = if (kind == CoralKind.GSP) GspPolyps.matRadius(this).toFloat() else 0f,
         pokes = GspPolyps.pokesFor(this, simTimeSec),
+        stress = stress.toFloat(), need = need, fed = fed.toFloat(),
+        drawScale = CoralHealth.drawScale(this).toFloat(), tentacles = tentacles.toFloat(), bleachTint = CoralHealth.profile(species).tint, name = nickname.ifBlank { species.common },
     )
 }
 
@@ -108,6 +121,11 @@ object CoralSim {
         // retract at night; a direct jet makes them retract and fold (flowSensitive), stagnant water lets detritus and
         // the shed film sit on the cap (needsFlow).
         CoralKind.LEATHER -> Params(ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0), 0.25, true, true, 0.95, 0.15)
+        // Euphyllia (stony_corals.md §1): 24-26.7 °C, PAR ~75-200 (low-moderate light), low-moderate indirect flow: a
+        // hard jet tears the tissue off the skeleton (flowSensitive). Day tentacles stay half out at night.
+        CoralKind.EUPHYLLIA -> Params(ToleranceRange(24.0, 27.0, 22.5, 29.0, 18.0, 31.5), 0.5, true, false, 0.8, 0.2)
+        // Meaty LPS: similar temperatures, PAR ~50-150, gentle flow; the mantle shrinks at night as feeding tentacles open.
+        CoralKind.LPS -> Params(ToleranceRange(24.0, 27.0, 22.5, 29.0, 18.0, 31.5), 0.6, true, false, 0.75, 0.15)
         CoralKind.GENERIC -> Params(ToleranceRange(24.0, 28.0, 22.5, 29.5, 18.0, 32.0), 0.3, false, false, 0.9, 0.15)
     }
 
@@ -157,6 +175,21 @@ object CoralSim {
     @Ev(Evidence.DESIGN_ESTIMATE, "17 §5.5 [K]")
     const val PATHOGEN_TISSUE_LOSS = 0.0001
 
+    /** Tissue loss per minute under severe all-round stress (on top of the bleached-tissue loss: ~5 weeks alone; coral_health §2, est.). */
+    @Ev(Evidence.DESIGN_ESTIMATE, "coral_health §2")
+    const val RECEDE_PER_MIN = 0.00002
+
+    /** Lit minutes in a day (10 h photoperiod): [CoralProfile.darkFade] is per day of too-dim light. */
+    const val DAYLIGHT_MIN = 600.0
+
+    /** [CoralNeed] for each entry of the stress list in [step], in order. */
+    private val NEED_OF_PART = arrayOf(
+        CoralNeed.HEAT, CoralNeed.SALT, CoralNeed.SALT, CoralNeed.ALK, CoralNeed.ALK, CoralNeed.ALK, CoralNeed.POISON,
+        CoralNeed.NUTRIENTS, CoralNeed.LIGHT_HIGH, CoralNeed.LIGHT_HIGH, CoralNeed.FLOW, CoralNeed.POISON, CoralNeed.SALT,
+        CoralNeed.CA_MG, CoralNeed.CA_MG, CoralNeed.CA_MG, CoralNeed.NEIGHBOR, CoralNeed.POISON, CoralNeed.SICK,
+        CoralNeed.IODINE, CoralNeed.HUNGRY, CoralNeed.ALGAE,
+    )
+
     /** Bleaching threshold for the DHW accumulator (tank analogue of the local max monthly mean + 1 °C). */
     const val DHW_THRESHOLD_C = 29.0
     val SG_SHOCK = ToleranceRange(optHi = 0.4, tolHi = 1.0, lethalHi = 2.0)   // in units of 0.004 SG
@@ -165,6 +198,9 @@ object CoralSim {
     /** Ca and Mg bands for the mild soft-coral stress (03 C1 row "Low/unstable calcium/magnesium"; 05 §10 bands). */
     val CA_SOFT = ToleranceRange(optLo = 380.0, tolLo = 330.0, lethalLo = 200.0)
     val MG_SOFT = ToleranceRange(optLo = 1200.0, tolLo = 1050.0, lethalLo = 800.0)
+    /** Stony corals build their skeleton from it: retail care sheets ask Ca 400-450, Mg 1250-1350 (stony_corals.md). */
+    val CA_STONY = ToleranceRange(optLo = 400.0, tolLo = 350.0, lethalLo = 250.0)
+    val MG_STONY = ToleranceRange(optLo = 1250.0, tolLo = 1100.0, lethalLo = 850.0)
 
     fun step(
         c: Coral, w: WaterState, lightIntensity: Double, minutesSinceOn: Double?, minutesUntilOff: Double?,
@@ -172,7 +208,8 @@ object CoralSim {
         pathogenStress: Double = 0.0,
     ) {
         val p = params(c.kind)
-        if (c.acclSg.isNaN()) { c.acclSg = w.sg; c.acclAlk = w.alk; c.acclLight = lightIntensity.coerceAtLeast(0.6) }
+        if (c.acclSg.isNaN()) { c.acclSg = w.sg; c.acclAlk = w.alk }
+        if (c.acclLight.isNaN()) c.acclLight = lightIntensity.coerceAtLeast(0.6)
         c.acclSg += (w.sg - c.acclSg) * (1 - exp(-dtMin / 2880.0))
         c.acclAlk += (w.alk - c.acclAlk) * (1 - exp(-dtMin / 1440.0))
         if (minutesSinceOn != null && lightIntensity > 0.05) c.acclLight += (lightIntensity - c.acclLight) * (1 - exp(-dtMin / 30240.0))
@@ -192,9 +229,19 @@ object CoralSim {
         val (sK, _) = HealthModel.stressOf(w.k, HealthModel.POTASSIUM)
         val (sSr, _) = HealthModel.stressOf(w.sr, HealthModel.STRONTIUM)
         // research 03 C1: low/unstable Ca or Mg mildly stresses soft corals (they "don't need it but benefit"); calcifiers more (05 §10)
-        val (sCa, _) = HealthModel.stressOf(w.ca, CA_SOFT)
-        val (sMg, _) = HealthModel.stressOf(w.mg, MG_SOFT)
-        val caMgWeight = if (c.kind == CoralKind.ORGAN_PIPE) 0.8 else if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else 0.3
+        val (sCa, _) = HealthModel.stressOf(w.ca, if (c.kind.stony) CA_STONY else CA_SOFT)
+        val (sMg, _) = HealthModel.stressOf(w.mg, if (c.kind.stony) MG_STONY else MG_SOFT)
+        // Iodine (coral_health §2): soft corals that shed (leathers, Kenya) use it up; carbon strips it and only water
+        // changes or a dose bring it back. Used up below ~0.025 ppm (est.).
+        val pr = CoralHealth.profile(c.species)
+        val sI = pr.iodineNeed * ((0.025 - w.i) / 0.025).coerceIn(0.0, 1.0)
+        // Hunger: in ultra-clean water a coral lives on what it catches; caught food ([Coral.fed]) makes up for it.
+        // Organ pipe, clove and mushrooms lean on food more than the light-fed leathers and Kenya (coral_health §2).
+        val lowNut = 0.5 * ((1.0 - w.no3) / 1.0).coerceIn(0.0, 1.0) + 0.5 * ((0.02 - w.po4) / 0.02).coerceIn(0.0, 1.0)
+        val sHunger = if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else (0.2 + 0.8 * pr.feedNeed) * (1 - c.fed.coerceIn(0.0, 1.0)) * lowNut
+        val caMgWeight = if (c.kind == CoralKind.ORGAN_PIPE || c.kind.stony) 0.8 else if (c.kind == CoralKind.MACRO || c.kind == CoralKind.AIPTASIA) 0.0 else 0.3
+        // stony corals: retail guides warn that alkalinity swings over ~1 dKH a day start tissue recession (Euphyllia)
+        val alkShockWeight = if (c.kind.stony) 1.0 else 0.5
         val sLight = if (minutesSinceOn == null) 0.0 else when {
             lightIntensity > p.lightHi -> ((lightIntensity - p.lightHi) / 0.15).coerceIn(0.0, 1.0)
             lightIntensity < p.lightLo && lightIntensity > 0.05 -> ((p.lightLo - lightIntensity) / p.lightLo).coerceIn(0.0, 1.0) * 0.5
@@ -206,10 +253,23 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * 0.5, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * alkShockWeight, sPh, sNh3, sPo4 * 0.3, sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3)
         var prod = 1.0
-        for (s in parts) prod *= (1 - s)
+        var top = 0.15; var worst = -1
+        for (i in parts.indices) {
+            val s = parts[i]
+            prod *= (1 - s)
+            if (s > top) { top = s; worst = i }
+        }
         c.stress = 1 - prod
+        val day = minutesSinceOn != null
+        // too dim while the lights are on: the algae in the tissue starve and the colony pales over weeks (coral_health §2)
+        val dark = if (!day || p.lightLo <= 0.0) 0.0 else ((p.lightLo - lightIntensity) / p.lightLo).coerceIn(0.0, 1.0)
+        // at night the light-driven reasons rest: keep the day's answer rather than flicker to "fine"
+        if (worst >= 0 || day) c.need = if (worst < 0) -1 else NEED_OF_PART[worst].let { n ->
+            if (n == CoralNeed.HEAT && w.tempC < (p.temp.optLo ?: 24.0)) CoralNeed.COLD.ordinal
+            else if (n == CoralNeed.LIGHT_HIGH && lightIntensity < p.lightLo) CoralNeed.LIGHT_LOW.ordinal else n.ordinal
+        }
 
         c.disturb = max(0.0, c.disturb - 0.25 * dtMin)
         val flowExt = 0.5 + 0.5 * smoothstep(0.05, 0.6, flowStrength)
@@ -224,6 +284,7 @@ object CoralSim {
         if (c.melting) target = 0.0
         val tau = if (c.disturb > 0.3 || sSgShock > 0.4) 2.0 else 20.0   // snap shut when touched or osmotically shocked
         c.extension += (target - c.extension) * (dtMin / tau).coerceAtMost(1.0)
+        StonyCorals.stepTentacles(c, minutesSinceOn, minutesUntilOff, dtMin)
 
         // Heat: NOAA DHW accumulation (4 DHW significant, 8 severe) plus a fast acute response above the tolerance band.
         val wk = dtMin / (7 * 1440.0)
@@ -232,18 +293,23 @@ object CoralSim {
         // Acute pathway (research 08 §5, distinct from DHW): above T_necro tissue sloughs instead of bleaching.
         HeatModel.coralStep(c, w.tempC, minutesSinceOn == null, dtMin)
         val acute = HeatModel.coralAcute(c, w.tempC)
-        val starving = if (w.no3 < 0.5 && w.po4 < 0.01) 0.00002 else 0.0     // ultra-low nutrients pale soft corals over weeks
-        c.bleach += (0.0008 * max(0.0, sTemp - 0.5) * (if (acute) 0.0 else 1.0) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0) + 0.0003 * sLight + 0.0004 * sLightShock + starving -
-            (if (c.stress < 0.15) 0.00001 else 0.0)) * dtMin
+        // ultra-low nutrients and no food pale soft corals over weeks
+        val starving = 0.00002 * sHunger
+        val heat = (0.0008 * max(0.0, sTemp - 0.5) * (if (acute) 0.0 else 1.0) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0)) * pr.heatBleach
+        val recover = if (c.need >= 0) 0.0 else (if (c.stress < 0.15) 0.00001 else if (c.stress < 0.3) 0.000004 else 0.0) * pr.recovery
+        c.bleach += (heat + (0.0003 * (if (dark > 0) 0.0 else sLight) + 0.0004 * sLightShock) * pr.lightBleach + pr.darkFade * dark / DAYLIGHT_MIN + starving - recover) * dtMin
         c.bleach = c.bleach.coerceIn(0.0, 1.0)
         if (c.bleach > 0.5 && !c.bleachingReported) { c.bleachingReported = true; events += SimEvent.CoralBleaching(c.id, simTimeSec) }
         if (c.bleach < 0.2) c.bleachingReported = false
         c.brown += (0.0002 * ((w.po4 - 0.1) / 0.2).coerceIn(0.0, 1.0) + 0.0001 * ((w.no3 - 25) / 25).coerceIn(0.0, 1.0) - 0.00003) * dtMin
         c.brown = c.brown.coerceIn(0.0, 1.0)
-        c.tissue += (-0.00005 * (if (c.bleach > 0.8) 1.0 else 0.0) - 0.00005 * smoothstep(8.0, 12.0, c.dhw) - 0.0002 * sNh3 -
-            0.00003 * c.algaeCover - 0.0003 * sCu - (if (sgLethal) 0.002 else 0.0) - 0.0002 * max(0.0, sPh - 0.6) -
-            0.00002 * c.neighborStress - 0.00003 * c.overgrown - PATHOGEN_TISSUE_LOSS * sPath - 0.0003 * sH2s +
-            (if (c.stress < 0.1 && c.tissue < 1) 0.00002 else 0.0)) * dtMin
+        // a long bleached, starving or badly stressed colony recedes: polyps stay shut, tissue melts back (coral_health §2)
+        // bleached tissue starves while the stress lasts; once the cause is fixed it mostly waits for its algae to come back
+        val loss = 0.00004 * smoothstep(0.7, 1.0, c.bleach) * (0.15 + 0.85 * smoothstep(0.2, 0.6, c.stress)) + 0.00005 * smoothstep(8.0, 12.0, c.dhw) + 0.0002 * sNh3 +
+            0.00003 * c.algaeCover + 0.0003 * sCu + (if (sgLethal) 0.002 else 0.0) + 0.0002 * max(0.0, sPh - 0.6) +
+            0.00002 * c.neighborStress + 0.00003 * c.overgrown + PATHOGEN_TISSUE_LOSS * sPath + 0.0003 * sH2s +
+            (if (c.kind == CoralKind.AIPTASIA) 0.0 else RECEDE_PER_MIN * smoothstep(0.65, 0.95, c.stress)) + 0.00002 * sHunger * c.bleach
+        c.tissue += (-loss * pr.recede + (if (c.stress < 0.1 && c.tissue < 1 && c.tissue > CoralHealth.DEAD_TISSUE) 0.00002 * pr.recovery else 0.0)) * dtMin
         // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
         if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0
         c.tissue = c.tissue.coerceIn(0.0, 1.0 - c.skeleton)

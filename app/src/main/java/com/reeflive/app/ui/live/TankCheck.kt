@@ -19,7 +19,71 @@ import com.reeflive.app.ui.components.GlyphBadge
 import com.reeflive.app.ui.components.ReefGlyph
 import com.reeflive.app.ui.components.ReefGlyphs
 import com.reeflive.core.sim.CareFix
+import com.reeflive.core.sim.CoralCare
+import com.reeflive.core.sim.CoralHealth
+import com.reeflive.core.sim.HungerRow
 import com.reeflive.core.sim.TankDoctor
+
+/**
+ * The Tank Health card: the water at a glance, who is hungry (a bar per animal and one button that feeds every hungry
+ * one its favourite food, core HungryFeed), then the tank check's fixes ([TankCheckBody]).
+ */
+@Composable
+internal fun TankHealthBody(
+    readouts: List<WaterReadout>,
+    hunger: List<HungerRow>,
+    onFeedHungry: () -> Unit,
+    fixes: List<CareFix>,
+    busy: Int,
+    tone: Color,
+    onFix: (CareFix) -> Unit,
+    onFixAll: () -> Unit,
+    close: () -> Unit,
+    corals: List<CoralHealth.Row> = emptyList(),
+    care: CoralCare.Plan? = null,
+    onReefCare: (() -> Unit)? = null,
+) {
+    if (readouts.isNotEmpty()) WaterStrip(readouts)
+    LiveSectionTitle("Hungry tummies")
+    val hungry = hunger.count { it.hungry }
+    if (hungry > 0) {
+        LiveTile(ReefGlyphs.feedTin, if (hungry == 1) "Feed the hungry one" else "Feed all $hungry hungry ones", Candy.orange,
+            onClick = { onFeedHungry(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Each gets its favourite food, dropped right above it")
+    } else if (hunger.isNotEmpty()) {
+        LiveHelp("Everyone is full. Check back in a few hours.")
+    } else {
+        LiveHelp("No animals yet. Add some from Add life.")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (r in hunger) {
+            StatBar(r.name + r.food?.let { " · likes ${it.label.lowercase()}" }.orEmpty(), r.hunger, higherIsBetter = false)
+        }
+    }
+    CoralSection(corals, care, onReefCare, close)
+    LiveSectionTitle("Water & gear")
+    TankCheckBody(fixes, busy, tone, onFix, onFixAll, close)
+}
+
+/**
+ * Corals & inverts: a health bar per coral with its main trouble (core CoralHealth), and in My tank one button that
+ * gives corals and inverts what they need now (core CoralCare: doses, iodine, coral food, phyto, anemone food).
+ */
+@Composable
+private fun CoralSection(corals: List<CoralHealth.Row>, care: CoralCare.Plan?, onReefCare: (() -> Unit)?, close: () -> Unit) {
+    LiveSectionTitle("Corals & inverts")
+    if (onReefCare != null && care != null) {
+        if (!care.isEmpty) {
+            LiveTile(ReefGlyphs.branch, "Give corals and inverts what they need", Candy.green,
+                onClick = { onReefCare(); close() }, modifier = Modifier.fillMaxWidth(), sub = "Adds " + care.words + " (${care.price} sand dollars)")
+        } else LiveHelp("Corals and inverts have everything they need right now.")
+    }
+    if (corals.isEmpty()) { LiveHelp("No corals yet. Add some from Add life."); return }
+    val pale = corals.count { it.pale }
+    if (pale > 0) LiveHelp(if (pale == 1) "One coral is turning pale (bleaching). Fix what bothers it and it can get its colour back." else "$pale corals are turning pale (bleaching). Fix what bothers them and they can get their colour back.")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (r in corals) StatBar(r.name + r.need?.let { " · ${it.words}" }.orEmpty(), r.health.toFloat(), higherIsBetter = true)
+    }
+}
 
 /**
  * The "Fix tank" card: what the tank check (core TankDoctor) says the tank needs, most urgent first, each with its own

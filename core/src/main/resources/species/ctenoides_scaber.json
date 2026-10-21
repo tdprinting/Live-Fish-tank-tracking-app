@@ -1,0 +1,119 @@
+{
+  "id": "ctenoides_scaber",
+  "kind": "INVERT",
+  "common": "Flame scallop",
+  "scientific": "Ctenoides scaber",
+  "family": "Limidae",
+  "maxLengthCm": 7.5,
+  "typicalAdultCm": 6,
+  "growthCmPerYear": 1,
+  "lifespanYears": 3,
+  "depthRatio": 0.38,
+  "massCoeff": 0.06,
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 2,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.02,
+    "yMax": 0.7,
+    "openWater": 0.0,
+    "coverAffinity": 1.0
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 10,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.1,
+    "curiosity": 0.0,
+    "skittishness": 0.9
+  },
+  "diet": [
+    "PHYTOPLANKTON",
+    "PLANKTON"
+  ],
+  "feedsPerDay": 3,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 26,
+      "tolLo": 22,
+      "tolHi": 27.5,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.022,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.029
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.03
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.4
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 80
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.05
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "hardiness": 0.3,
+  "starvationDays": 30,
+  "size": {
+    "lod0Tris": 2800
+  },
+  "model": "models/flame_scallop.glb",
+  "colors": {
+    "primary": "#E2381E",
+    "secondary": "#EFE6DA",
+    "accent": "#FF6A3D"
+  },
+  "brain": "file_clam",
+  "buoyantWhenDead": false,
+  "minTankGallons": 30,
+  "careLevel": "Expert",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Filter feeder: strains phytoplankton and tiny particles from the water. It needs live or bottled phytoplankton every day; a normal reef tank does not have enough.",
+  "temperamentSummary": "Hides wedged in a shaded crevice with its red mantle and sticky tentacles out. Shy: snaps shut when touched and swims off by clapping its shell when bothered.",
+  "careNotes": [
+    "Hard to keep: most starve within weeks to months without phytoplankton dosed every day.",
+    "Not a true scallop: a file clam (Limidae). The flashing 'disco' or 'electric' clam is its cousin Ctenoides ales.",
+    "Likes a dim crevice; bright open rock stresses it and it will swim off to find shade.",
+    "Crabs, hermits, a coral banded shrimp and some wrasses pick at its tentacles.",
+    "A dead clam gapes wide open and fouls the water fast; take it out quickly."
+  ]
+}

@@ -56,6 +56,8 @@ object HeatModel {
     val CLOWN = Profile("clownfish", 36.5, 31.5, 120.0, 1.0, 0.3, 20.0)
     val CLEANER_WRASSE = Profile("cleaner wrasse", 36.5, 31.0, 90.0, 1.0, 0.3, 15.0)
     val SALLY = Profile("Sally Lightfoot", 36.5, 31.0, 60.0, 1.0, 1.0, 20.0)
+    // arrow crab (est., research 42): a subtidal Caribbean reef crab kept at 22-27 °C, no semi-terrestrial reserve; like the shrimp's band, a rock refuge
+    val ARROW_CRAB = Profile("arrow crab (est.)", 35.0, 30.0, 30.0, 1.1, 0.5, 12.0)
     val DOTTYBACK = Profile("dottyback", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val HAWKFISH = Profile("hawkfish", 37.5, 32.0, 480.0, 0.9, 0.5, 25.0)
     val ENGINEER_GOBY = Profile("engineer goby", 38.0, 32.5, 2160.0, 0.9, 1.0, 25.0)
@@ -79,33 +81,39 @@ object HeatModel {
 
     fun profile(kind: BrainKind): Profile = when (kind) {
         BrainKind.CARDINAL -> CARDINAL
-        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP -> SHRIMP
-        BrainKind.ASTREA -> TURBO_SNAIL
+        BrainKind.CLEANER_SHRIMP, BrainKind.BANDED_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> SHRIMP
+        BrainKind.ASTREA, BrainKind.TROCHUS -> TURBO_SNAIL
+        BrainKind.CONCH -> NERITE_SNAIL
         BrainKind.TANG -> TANG
-        BrainKind.CLOWN, BrainKind.GENERIC_FISH -> CLOWN
-        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE -> CLEANER_WRASSE
+        // chromis are damselfish like the clown (Pomacentridae; est.)
+        BrainKind.CLOWN, BrainKind.CHROMIS, BrainKind.GENERIC_FISH -> CLOWN
+        BrainKind.WRASSE, BrainKind.LEOPARD_WRASSE, BrainKind.FAIRY_WRASSE -> CLEANER_WRASSE
         BrainKind.SALLY_CRAB -> SALLY
+        BrainKind.ARROW_CRAB -> ARROW_CRAB
         BrainKind.DOTTYBACK, BrainKind.GRAMMA -> DOTTYBACK
         BrainKind.HAWK -> HAWKFISH
         BrainKind.ENGINEER_GOBY -> ENGINEER_GOBY
-        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY -> SAND_GOBY
+        // the firefish is a dartfish, a goby relative (est.)
+        BrainKind.DIAMOND_GOBY, BrainKind.WATCHMAN_GOBY, BrainKind.FIREFISH -> SAND_GOBY
         BrainKind.BOBTAIL_SQUID -> CEPHALOPOD
         BrainKind.LAWNMOWER_BLENNY, BrainKind.PEEKER_BLENNY -> BLENNY
         BrainKind.HERMIT -> HERMIT
         BrainKind.NASSARIUS -> NERITE_SNAIL
         BrainKind.EEL -> MORAY
-        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.GENERIC_INVERT -> ECHINODERM
+        BrainKind.BRITTLE_STAR, BrainKind.ASTERINA, BrainKind.URCHIN, BrainKind.GENERIC_INVERT -> ECHINODERM
         BrainKind.FEATHER_DUSTER -> TUBE_WORM
         BrainKind.ANEMONE -> ANEMONE
+        // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)
+        BrainKind.FILE_CLAM -> TUBE_WORM
     }
 
-    fun isSnail(kind: BrainKind) = kind == BrainKind.ASTREA || kind == BrainKind.NASSARIUS
-    fun isShrimp(kind: BrainKind) = kind == BrainKind.CLEANER_SHRIMP || kind == BrainKind.BANDED_SHRIMP
+    fun isSnail(kind: BrainKind) = kind.isSnail
+    fun isShrimp(kind: BrainKind) = kind.isShrimp
     /** Semi-terrestrial crabs leave the water (08 §1.3): they climb to the waterline when agitated. */
     fun climbsOut(kind: BrainKind) = kind == BrainKind.HERMIT || kind == BrainKind.SALLY_CRAB
     /** Blennies and gobies skip the visible agitation stage: they hide low instead of darting (08 §2). */
     fun hidesLow(kind: BrainKind) = kind == BrainKind.LAWNMOWER_BLENNY || kind == BrainKind.PEEKER_BLENNY || kind == BrainKind.ENGINEER_GOBY ||
-        kind == BrainKind.DIAMOND_GOBY
+        kind == BrainKind.DIAMOND_GOBY || kind == BrainKind.FIREFISH
 
     // ---------------------------------------------------------------- constants (08 §6, §7)
     const val D_AGITATED = 0.05

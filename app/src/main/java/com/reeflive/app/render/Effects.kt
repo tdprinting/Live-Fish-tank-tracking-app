@@ -11,9 +11,9 @@ import kotlin.random.Random
  * CPU particle field (ARCHITECTURE §8.4 item 9, SIMULATION §5.4): suspended particulate advected by the
  * flow (the snapshot's [FlowGrid] when the Navier-Stokes solver runs, a gentle analytic gyre otherwise)
  * plus Brownian jitter; sinking detritus (as much as the water's detritus load); bubbles entrained by the HOB return;
- * the sim's food particles, each kind with its own sprite and motion ([FoodVisuals]); and the action bursts and pump
- * jets ([BurstField]). Output is packed as (pos.xyz, size cm, r, g, b, a, shape, seed, angle, param) per point in
- * five ranges. Pure Kotlin.
+ * the sim's food particles, each kind with its own sprite and motion ([FoodVisuals]); the action bursts and pump
+ * jets ([BurstField]); and the glowing spots offered for a new coral ([CoralSpotMarkers]). Output is packed as
+ * (pos.xyz, size cm, r, g, b, a, shape, seed, angle, param) per point in five ranges. Pure Kotlin.
  */
 class ParticleField(var ambientCount: Int, seed: Int = 7) {
     private val rnd = Random(seed)
@@ -131,6 +131,8 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         val x0 = k
         if (snap != null) foodFx.packExtras(snap, time, haze = NULL_SINK, solid = sink, maxHaze = 0)
         bursts.pack(viewProj, time, haze = NULL_SINK, solid = sink, maxHaze = 0, maxSolid = BurstField.CAP)
+        // My tank: the spots offered for a new coral glow on the rock
+        CoralSpotMarkers.pack(snap?.coralPick, time, sink, CoralSpotMarkers.MAX)
         fxRange = x0 to (k - x0)
         val f0 = k
         if (snap != null) foodFx.packBodies(snap, time, MAX_FOOD, sink)
@@ -163,7 +165,8 @@ class ParticleField(var ambientCount: Int, seed: Int = 7) {
         const val MAX_BURST_HAZE = 200
         /** Cubes (one per frozen kind), the nori sheet (clip + tiles). */
         private const val MAX_FOOD_EXTRA = 16 + FoodVisuals.NORI_COLS * FoodVisuals.NORI_ROWS
-        const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP + MAX_WASTE
+        const val CAPACITY = MAX_AMBIENT + DETRITUS + MAX_BUBBLES + MAX_FOOD + MAX_FOOD_HAZE + MAX_BURST_HAZE + MAX_FOOD_EXTRA + BurstField.CAP + MAX_WASTE + CoralSpotMarkers.MAX
+        /** HOB return on the tank on screen ([TankRenderer] moves it with the glass for a My tank build). */
         val HOB = floatArrayOf(73f, Camera.WATER_Y - 0.7f, 2.3f)
         private val NULL_SINK = PointSink { _, _, _, _, _, _, _, _, _, _, _, _ -> }
 

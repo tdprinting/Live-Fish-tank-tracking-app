@@ -47,8 +47,17 @@ data class SimSpecies(
     val lifeStages: LifeStageSpec? = null,
     /** Sensing channels (Senses.kt, SIMULATION §21.1); null = defaults by brain and activity. */
     val senses: SensesSpec? = null,
+    /** Corals: the light, flow, ground and sting reach the sheet's `coral` block gives ([CoralSpots] scores spots by them). */
+    val coral: CoralNeeds? = null,
+    /**
+     * How prone the species is to leap out of the water when badly startled, 0 (never) .. 1 (firefish), read by
+     * [JumpModel] for every fish (research 41 §1.8: an open-top tank loses firefish to the floor).
+     */
+    val jumpRisk: Double = 0.0,
 ) {
     val brainKind: BrainKind get() = BrainKind.resolve(this)
+    /** Sailfin tangs (*Zebrasoma*: yellow, purple): grazers that fight their own genus hardest (research 42 §2-4). */
+    val zebrasoma: Boolean by lazy { id.startsWith("zebrasoma") }
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
     val sensesOrDefault: SensesSpec by lazy { senses ?: SensesSpec.defaultFor(this) }
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
@@ -80,6 +89,8 @@ data class SimSpecies(
         food == FoodKind.PRAWN && brainKind == BrainKind.NASSARIUS -> 1.5
         food == FoodKind.MYSIS && brainKind == BrainKind.CLEANER_SHRIMP -> 1.3
         food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
+        // the flame scallop lives on phytoplankton (research 42 §2.4)
+        food == FoodKind.PLANKTON && brainKind == BrainKind.FILE_CLAM -> 1.5
         // hawkfish are krill specialists in the shops' experience; grazers prefer a wafer to a pellet (design estimates)
         food == FoodKind.KRILL && brainKind == BrainKind.HAWK -> 1.3
         food == FoodKind.ALGAE_WAFER && (brainKind == BrainKind.TANG || brainKind == BrainKind.LAWNMOWER_BLENNY || brainKind == BrainKind.ASTREA) -> 1.2
@@ -387,22 +398,49 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     CLEANER_SHRIMP(listOf("lysmata"), false),
     HERMIT(listOf("clibanarius", "paguristes", "calcinus"), false),
     SALLY_CRAB(listOf("percnon"), false),
+    /** Arrow crab (*Stenorhynchus seticornis*, research 42): long-legged spider crab, hunts bristleworms. */
+    ARROW_CRAB(listOf("stenorhynchus"), false),
     BRITTLE_STAR(listOf("ophiocoma", "ophiarachna", "ophiolepis", "ophiomastix"), false),
     FEATHER_DUSTER(listOf("sabellastarte", "sabella", "bispira"), false),
     NASSARIUS(listOf("nassarius"), false),
     ASTREA(listOf("lithopoma", "astraea", "astrea"), false),
     ASTERINA(listOf("asterina", "aquilonastra"), false),
+    /** Trochus / Tectus top snails (research 43 §4): glass and rock grazers that can right themselves when flipped. */
+    TROCHUS(listOf("trochus", "tectus"), false),
+    /** True conchs (Strombidae: Florida fighting conch *Strombus alatus*, research 43 §3): leap over the sand on the operculum. */
+    CONCH(listOf("strombus", "conomurex", "lobatus"), false),
+    /** Regular sea urchins (tuxedo urchin *Mespilia globulus*, research 43 §2): tube-foot crawlers that cover with debris. */
+    URCHIN(listOf("mespilia", "tripneustes", "lytechinus", "salmacis"), false),
     /** Sand-sifting sleeper gobies (diamond goby, *Valenciennea puellaris*; research 16; in the owner's tank). */
     DIAMOND_GOBY(listOf("valenciennea"), true),
     /** Leopard wrasses (blue star leopard wrasse, *Macropharyngodon bipartitus*; research video fish_leopard_wrasse). */
     LEOPARD_WRASSE(listOf("macropharyngodon"), true),
     /**
+     * Fairy wrasses (red fairy wrasse, *Cirrhilabrus rubripinnis*; research 42 §1): mid-water plankton pickers in a
+     * one-male harem, protogynous, the male flashes; they sleep in a mucus cocoon in a crevice and jump when startled.
+     */
+    FAIRY_WRASSE(listOf("cirrhilabrus", "paracheilinus"), true),
+    /**
      * Bobtail squid (*Euprymna berryi* and relatives, Sepiolidae; research cephalopod_squid). Sandbox only. A mollusc, so not a fish
      * for the health, disease and social rules ([isFish] false); its FIN_JET gait still uses the swim integrator.
      */
     BOBTAIL_SQUID(listOf("euprymna", "sepiola", "sepietta", "rondeletiola"), false),
+    /** Firefish dartfish (*Nemateleotris*, research 41): hovers over its bolt hole picking plankton, dives in head first. */
+    FIREFISH(listOf("nemateleotris"), true),
+    /** Chromis damselfish (blue-green chromis, *Chromis viridis*, research 41): mid-water shoal with a pecking order. */
+    CHROMIS(listOf("chromis"), true),
     /** Bubble-tip anemone (*Entacmaea quadricolor*, research 40): walks slowly on its foot, then settles; hosts clowns. */
     ANEMONE(listOf("entacmaea"), false),
+    /**
+     * Peppermint shrimp (*Lysmata boggessi* / *L. wurdemanni*, research 42): small, shy, nocturnal Lysmata that hide in
+     * the rock by day and hunt aiptasia at night. The genus resolves to [CLEANER_SHRIMP], so the sheets name this brain.
+     */
+    PEPPERMINT_SHRIMP(emptyList(), false),
+    /**
+     * File clams, sold as "flame scallops" (*Ctenoides scaber*, research 42): wedged in a crevice with the red mantle and
+     * sticky tentacles out, filter feeding; swims off by clapping its valves when bothered.
+     */
+    FILE_CLAM(listOf("ctenoides", "lima", "limaria"), false),
     /** Basslets (royal gramma, *Gramma loreto*, research 50 §1): holds a cave, hangs belly-to-rock (upside down under ledges). */
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
@@ -413,6 +451,10 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
     /** Organisms that never swim freely (Steering uses surface-constrained or no movement). */
     val isBenthic: Boolean get() = !isFish
     val isSessile: Boolean get() = this == FEATHER_DUSTER
+    /** The three shrimp: stance, limbs, molting and most shrimp rules are shared. */
+    val isShrimp: Boolean get() = this == BANDED_SHRIMP || this == CLEANER_SHRIMP || this == PEPPERMINT_SHRIMP
+    /** Snails: astrea, nassarius, trochus and conch (hermits take their empty shells, dino toxin hits them). */
+    val isSnail: Boolean get() = this == ASTREA || this == NASSARIUS || this == TROCHUS || this == CONCH
 
     companion object {
         fun resolve(s: SimSpecies): BrainKind {
@@ -424,21 +466,30 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
         }
 
         /** Track A sheet `brain` strings that differ from the enum names; unknown strings fall back to genus/kind. */
+        private val PEPPERMINT_IDS = listOf("lysmata_boggessi", "lysmata_wurdemanni", "lysmata_rathbunae", "lysmata_ankeri")
+
         private val ALIASES = mapOf(
             "goby" to ENGINEER_GOBY, "engineer_goby" to ENGINEER_GOBY, "burrower" to ENGINEER_GOBY,
             "clownfish" to CLOWN, "tang" to TANG, "cardinal" to CARDINAL, "cleaner_wrasse" to WRASSE, "wrasse" to WRASSE,
             "hawkfish" to HAWK, "lawnmower" to LAWNMOWER_BLENNY, "blenny" to PEEKER_BLENNY, "dottyback" to DOTTYBACK,
-            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "brittle_star" to BRITTLE_STAR,
+            "banded_shrimp" to BANDED_SHRIMP, "cleaner_shrimp" to CLEANER_SHRIMP, "hermit" to HERMIT, "crab" to SALLY_CRAB, "sally_lightfoot" to SALLY_CRAB, "sally_crab" to SALLY_CRAB, "arrow_crab" to ARROW_CRAB, "brittle_star" to BRITTLE_STAR,
             "feather_duster" to FEATHER_DUSTER, "nassarius" to NASSARIUS, "snail" to ASTREA, "asterina" to ASTERINA,
+            "trochus" to TROCHUS, "top_snail" to TROCHUS, "conch" to CONCH, "fighting_conch" to CONCH, "urchin" to URCHIN, "tuxedo_urchin" to URCHIN,
             "diamond_goby" to DIAMOND_GOBY, "sand_sifter" to DIAMOND_GOBY, "sleeper_goby" to DIAMOND_GOBY,
             "leopard_wrasse" to LEOPARD_WRASSE, "sand_wrasse" to LEOPARD_WRASSE,
+            "fairy_wrasse" to FAIRY_WRASSE, "flasher_wrasse" to FAIRY_WRASSE,
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
+            "peppermint_shrimp" to PEPPERMINT_SHRIMP, "peppermint" to PEPPERMINT_SHRIMP,
+            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM,
+            "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,
         )
 
         fun byId(id: String): BrainKind? {
+            // the peppermint Lysmata share the cleaner's genus: tell them apart by species (research 42)
+            if (PEPPERMINT_IDS.any { id.lowercase().startsWith(it) }) return PEPPERMINT_SHRIMP
             val genus = id.lowercase().substringBefore('_').substringBefore('-')
             return entries.firstOrNull { k -> k.genera.any { genus == it || genus.startsWith(it) } }
         }
@@ -462,7 +513,16 @@ enum class CoralKind(val genera: List<String>, val demandDkhPerDay: Double, val 
     // Biomass kept small: the water model was tuned on Tee's tank, which already held these leathers unseen,
     // so they must not add a new day/night O2 and pH swing on top of it (tune).
     LEATHER(listOf("sarcophyton", "sinularia", "lobophytum", "cladiella"), 0.002, 0.05),
+    // Stony corals (stony_corals.md): an aragonite skeleton, so a real share of the tank's alkalinity and calcium.
+    // A frag-to-small-colony LPS takes ~0.02-0.03 dKH/day of this 60 gal, several times a soft coral (est.).
+    // Euphyllia: hammer, torch, frogspawn (Fimbriaphyllia since 2017 for ancora / divisa).
+    EUPHYLLIA(listOf("euphyllia", "fimbriaphyllia"), 0.03, 0.10),
+    // Large-polyp stony corals fed at night: duncan, acan, candy cane, open brain, bubble.
+    LPS(listOf("duncanopsammia", "micromussa", "acanthastrea", "caulastrea", "trachyphyllia", "plerogyra"), 0.02, 0.08),
     GENERIC(emptyList(), 0.01, 0.05);
+
+    /** Builds an aragonite skeleton: needs Ca, Mg and steady alkalinity, and leaves a white skeleton where tissue dies. */
+    val stony: Boolean get() = this == EUPHYLLIA || this == LPS
 
     companion object {
         fun resolve(id: String): CoralKind {

@@ -44,6 +44,10 @@ data class CoralInfo(
     val aggression: String = "None",
     val fluorescence: Double = 0.0,
     val photosynthetic: Boolean = true,
+    /** How far its stings, sweeper tentacles or chemicals reach past its edge, cm (0 = the default for its kind). */
+    val stingCm: Double = 0.0,
+    /** Where it is placed: ROCK, SAND or ANY. */
+    val ground: String = "ROCK",
 )
 
 /**

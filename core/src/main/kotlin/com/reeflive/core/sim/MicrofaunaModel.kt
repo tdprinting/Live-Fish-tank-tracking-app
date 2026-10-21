@@ -78,11 +78,18 @@ enum class PodPredator(
     //                                             H    C    Y    G    K    M    O    I    R    Ci  Ph  B    S    Sp  Fo  F
     CARDINAL(300.0, false, true, true, doubleArrayOf(0.8, 0.6, 1.0, 0.9, 0.3, 1.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), halfSat = 10000.0),
     CLEANER_WRASSE(250.0, true, false, true, doubleArrayOf(0.7, 0.3, 0.5, 0.3, 0.3, 0.2, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.3)),
-    HAWKFISH(300.0, true, false, true, doubleArrayOf(0.3, 0.1, 0.2, 1.0, 0.6, 0.8, 0.3, 0.3, 0.0, 0.0, 0.0, 0.1, 0.3, 0.0, 0.0, 0.0)),
+    // (hawkfish take small polychaetes off the rock as readily as crustaceans: FishBase diet, Cirrhitidae; bristleworm 0.4)
+    HAWKFISH(300.0, true, false, true, doubleArrayOf(0.3, 0.1, 0.2, 1.0, 0.6, 0.8, 0.3, 0.3, 0.0, 0.0, 0.0, 0.4, 0.3, 0.0, 0.0, 0.0)),
     DOTTYBACK(250.0, true, false, true, doubleArrayOf(0.3, 0.1, 0.2, 1.0, 0.5, 0.7, 0.3, 0.3, 0.0, 0.0, 0.0, 0.3, 0.3, 0.0, 0.0, 0.0), hiddenAccess = 0.1),
     SAND_GOBY(100.0, true, false, true, doubleArrayOf(0.2, 0.0, 0.1, 0.6, 0.1, 0.3, 0.6, 0.2, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0), sandAccess = 1.0),
     BLENNY(50.0, true, false, true, doubleArrayOf(0.3, 0.0, 0.0, 0.1, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
     CLOWN(60.0, true, false, true, doubleArrayOf(0.4, 0.6, 0.4, 0.1, 0.0, 0.3, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+    /**
+     * Fairy wrasse (*Cirrhilabrus*, research 42 §1): picks zooplankton (copepods, mysids, larvae) out of the current by day
+     * in the column above the reef (FishBase trophic level 3.1). Intake per fish at the cardinal's order for a smaller
+     * body (est.); a good mid-water searcher, so a cardinal-like half saturation.
+     */
+    FAIRY_WRASSE(200.0, true, false, true, doubleArrayOf(0.6, 1.0, 1.0, 0.4, 0.3, 1.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.0, hiddenAccess = 0.0, halfSat = 10000.0),
     TANG(10.0, true, false, true, doubleArrayOf(0.1, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
     /** Mandarin-class specialist (research 10 §3.3 "predator overgrazing"): 1,000-3,000 pods a day, picks into the film. */
     MANDARIN(2000.0, true, false, true, doubleArrayOf(1.0, 0.5, 0.8, 0.3, 0.2, 0.3, 0.5, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.5, hiddenAccess = 0.15, halfSat = 800.0),
@@ -109,6 +116,13 @@ enum class PodPredator(
      * past the hatchling stage. Intake and search efficiency est.
      */
     BOBTAIL_SQUID(250.0, false, true, false, doubleArrayOf(0.05, 0.0, 0.05, 0.9, 0.5, 1.0, 0.05, 0.3, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0), sandAccess = 0.6, hiddenAccess = 0.03, halfSat = 3000.0),
+    /**
+     * Yellowline arrow crab (*Stenorhynchus seticornis*, research 42): the classic bristleworm hunter of the hobby. Probes
+     * crevices with its long legs and picks worms, amphipods, isopods and tiny snails out with its small chelae, by day
+     * and more at night. A worm is 50 pod-eq, so ~250 pod-eq a day is about four worms and a few crustaceans at most
+     * (est.); it searches well (low half-saturation) but cannot reach worms deep in the rock (hidden access 0.3).
+     */
+    ARROW_CRAB(250.0, true, true, false, doubleArrayOf(0.05, 0.0, 0.05, 0.4, 0.3, 0.1, 0.1, 0.4, 0.0, 0.0, 0.0, 1.0, 0.3, 0.3, 0.0, 0.2), sandAccess = 0.8, hiddenAccess = 0.3, halfSat = 600.0),
     ;
 
     companion object {
@@ -128,13 +142,15 @@ enum class PodPredator(
                 BrainKind.CLOWN -> CLOWN
                 BrainKind.TANG -> TANG
                 BrainKind.BANDED_SHRIMP -> BANDED_SHRIMP
-                BrainKind.CLEANER_SHRIMP -> CLEANER_SHRIMP
+                BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP -> CLEANER_SHRIMP
                 BrainKind.HERMIT -> HERMIT
                 BrainKind.SALLY_CRAB -> CRAB
                 BrainKind.BRITTLE_STAR -> BRITTLE_STAR
                 BrainKind.DIAMOND_GOBY -> SAND_SIFTER
                 BrainKind.LEOPARD_WRASSE -> LEOPARD_WRASSE
+                BrainKind.FAIRY_WRASSE -> FAIRY_WRASSE
                 BrainKind.BOBTAIL_SQUID -> BOBTAIL_SQUID
+                BrainKind.ARROW_CRAB -> ARROW_CRAB
                 else -> null
             }
         }
@@ -264,6 +280,11 @@ class MicrofaunaModel(private val config: TankConfig) {
     /** Litres of macroalgae in the display (pods use it like rock) and of chaeto in a sump refugium (no fish reach it). */
     var displayMacroL = 0.0
     var refugiumL = 0.0
+    /**
+     * Uneaten food reaching the bottom (g of food per day, smoothed by the owner from the food system): what lets a
+     * bristleworm population boom in an overfed tank (research 42: "they explode with overfeeding").
+     */
+    var leftoverGPerDay = 0.0
     /** Food override in g DW m-2 of film + detritus (tests); null = from [AlgaeModel] and the detritus pool. */
     var foodOverride: Double? = null
     /** Lit-rock area override for the flatworm habitat (cm², tests). */
@@ -278,6 +299,14 @@ class MicrofaunaModel(private val config: TankConfig) {
     /** Pods eaten per day by each predator type (diagnostics, research 10 §6.3 #3). */
     val eatenByPredator = DoubleArray(PodPredator.entries.size)
     var coralCapturePerDay = 0.0; private set
+    /**
+     * Detritus (g TAN-eq) the bristleworms have eaten since the owner last drained it ([WaterSim]): the cleanup they do.
+     * Half of it is mineralised straight back to ammonia, half becomes worm.
+     */
+    var scavengedTanG = 0.0
+    /** Bristleworm scavenging food now (g m-2 of film-equivalent: detritus, leftovers, film) and its boom factor on K. */
+    var wormFood = 0.0; private set
+    var wormBoom = 1.0; private set
     var night = false; private set
     var filmGm2 = 0.0; private set
     private var cached: MicrofaunaState? = null
@@ -320,6 +349,9 @@ class MicrofaunaModel(private val config: TankConfig) {
      * weighted pod-equivalents over the same sum at the reference capacity. Feeds the leopard wrasse's picks.
      */
     fun rockPreyIndex(): Double = preyIndex(PodPredator.LEOPARD_WRASSE, MicroHabitat.ROCK, MicroHabitat.GLASS, MicroHabitat.SAND)
+
+    /** Zooplankton a fairy wrasse finds drifting in the water column now, relative to a mature tank (feeds its column picks). */
+    fun columnPreyIndex(): Double = preyIndex(PodPredator.FAIRY_WRASSE, MicroHabitat.COLUMN)
 
     /** [pt]-weighted pod-equivalents in [habitats] now over the same sum at the reference capacity (0 = sterile, ≈ 1 = mature). */
     fun preyIndex(pt: PodPredator, vararg habitats: MicroHabitat): Double {
@@ -376,6 +408,7 @@ class MicrofaunaModel(private val config: TankConfig) {
         copperResidualDays = o.copperResidualDays; fenbendazoleDays = o.fenbendazoleDays; praziquantelDays = o.praziquantelDays
         toxinHours = o.toxinHours; coralFedDays = o.coralFedDays; acc = o.acc; initialized = o.initialized; phytoMem = o.phytoMem
         displayMacroL = o.displayMacroL; refugiumL = o.refugiumL; volumeL = o.volumeL; night = o.night
+        leftoverGPerDay = o.leftoverGPerDay; wormFood = o.wormFood; wormBoom = o.wormBoom
         cached = null
     }
 
@@ -392,6 +425,16 @@ class MicrofaunaModel(private val config: TankConfig) {
         }
         present[gi] = n > 0
         established[gi] = n > 0
+        cached = null
+    }
+
+    /** [n] individuals of [g] were eaten (a predator caught one it could see): every habitat loses its share. */
+    fun remove(g: MicroGroup, n: Double) {
+        val t = total(g)
+        if (t <= 0 || n <= 0) return
+        val f = max(0.0, 1 - n / t)
+        val gi = g.ordinal
+        for (h in 0 until nh) { adults[gi * nh + h] *= f; juveniles[gi * nh + h] *= f }
         cached = null
     }
 
@@ -533,6 +576,9 @@ class MicrofaunaModel(private val config: TankConfig) {
             adultsOf(MicroGroup.ROTIFER) / volumeL
         val ciliatesPerMl = adultsOf(MicroGroup.CILIATE) / vMl
         val doc = algae?.docIndex ?: ((s.detritus - 0.3) / 1.5).coerceIn(0.0, 1.0)
+        // bristleworms: settled detritus, food that reaches the bottom uneaten and a little of the film (research 42)
+        wormFood = foodOverride ?: (0.3 * filmGm2 + DETRITUS_G_M2_PER_PPM * s.detritus + LEFTOVER_G_M2_PER_G_DAY * leftoverGPerDay * 3785.0 / max(volumeL, 1.0))
+        wormBoom = 1.0 + WORM_BOOM_K * smoothBoom(wormFood)
 
         // ---- per-group factors ----
         val fFood = DoubleArray(ng)
@@ -553,6 +599,7 @@ class MicrofaunaModel(private val config: TankConfig) {
                 Food.DOC -> doc
                 Food.LIGHT -> light
                 Food.NUTRIENTS -> 1.0
+                Food.SCAVENGE -> wormFood
             }
             fFood[gi] = if (p.food == Food.NUTRIENTS) 1.0 else food / (p.ks + food)
             if (g == MicroGroup.CILIATE) fFood[gi] = max(fFood[gi], 0.3)                 // bacteria are always about
@@ -782,6 +829,12 @@ class MicrofaunaModel(private val config: TankConfig) {
             trendPerDay[gi] = if (before > 1e-9) (total(g) - before) / before / days else 0.0
         }
 
+        // ---- bristleworm cleanup: each adult eats about 5 % of its 200 mg a day of detritus and leftovers (est.) ----
+        run {
+            val bi = MicroGroup.BRISTLEWORM.ordinal
+            scavengedTanG += adultsOf(MicroGroup.BRISTLEWORM) * WORM_SCAV_TAN_MG * fFood[bi] * days / 1000
+        }
+
         // ---- phytoplankton: N, P and light limited division; skimmer, filters, benthic filter feeders and grazers ----
         run {
             val pi = idx(MicroGroup.PHYTO, MicroHabitat.COLUMN)
@@ -813,6 +866,12 @@ class MicrofaunaModel(private val config: TankConfig) {
                 continue
             }
             if (t >= ESTABLISHED_FRAC * ref) established[gi] = true
+            // a few hitchhiked worms that never took hold (eaten, starved) are simply gone: under half a worm left
+            if (present[gi] && !established[gi] && g == MicroGroup.BRISTLEWORM && t < 0.5) {
+                for (h in 0 until nh) { adults[gi * nh + h] = 0.0; juveniles[gi * nh + h] = 0.0 }
+                present[gi] = false
+                continue
+            }
             if (!present[gi]) { for (h in 0 until nh) { adults[gi * nh + h] = 0.0; juveniles[gi * nh + h] = 0.0 }; continue }
             if (!poisoned && established[gi] && P[gi].seedFrac > 0) {
                 val floor = P[gi].seedFrac * ref
@@ -883,8 +942,14 @@ class MicrofaunaModel(private val config: TankConfig) {
                 MicroGroup.MYSID -> (if (naupliiPerL > 2) base else 0.05) * volumeL
                 else -> base * (0.3 + 0.7 * f) * volumeL
             }
+            g == MicroGroup.BRISTLEWORM -> base * size(hab) * (0.3 + 0.7 * f) * wormBoom
             else -> base * size(hab) * (0.3 + 0.7 * f)
         }
+    }
+
+    private fun smoothBoom(food: Double): Double {
+        val t = ((food - WORM_BOOM_FROM) / (WORM_BOOM_TO - WORM_BOOM_FROM)).coerceIn(0.0, 1.0)
+        return t * t * (3 - 2 * t)
     }
 
     /** Capacity at full food (reference for seeds, starting values and "% of K"). */
@@ -985,7 +1050,7 @@ class MicrofaunaModel(private val config: TankConfig) {
     }
 
     // ============================================================== parameters
-    enum class Food { FILM, DETRITUS, PHYTO, PHYTO_OR_DETRITUS, NAUPLII, DOC, LIGHT, NUTRIENTS }
+    enum class Food { FILM, DETRITUS, PHYTO, PHYTO_OR_DETRITUS, NAUPLII, DOC, LIGHT, NUTRIENTS, SCAVENGE }
     enum class Tox { COPEPOD, INVERT, TOLERANT }
 
     /**
@@ -1052,6 +1117,18 @@ class MicrofaunaModel(private val config: TankConfig) {
         const val HARP_FILM_MG = 0.005
         const val SNAIL_FILM_MG = 0.5
         const val FLATWORM_LIGHT_BONUS = 0.3
+        /**
+         * Uneaten food to bristleworm food: 1 g a day of leftovers in 3,785 L counts as this many g m-2 (scaled by the
+         * tank volume, so a gram a day in a nano is a feast). Tuned so a tank fed twice what it eats sits at the top of the
+         * boom ramp (est.).
+         */
+        const val LEFTOVER_G_M2_PER_G_DAY = 0.5
+        /** Worm food (g m-2) where the boom starts and where it is full: K up to 1 + [WORM_BOOM_K] times (hundreds in a 60). */
+        const val WORM_BOOM_FROM = 4.0
+        const val WORM_BOOM_TO = 12.0
+        const val WORM_BOOM_K = 3.0
+        /** Detritus (mg TAN-eq) one adult bristleworm clears a day at full food (est.: a lean tank of ~100 worms clears an eighth of its detritus a day). */
+        const val WORM_SCAV_TAN_MG = 0.05
         const val TOXIN_H = 48.0
         /**
          * Copper leaching back out of rock after a treatment keeps r × 0.5 (§4 says 30 d; held for 60 d after the copper
@@ -1142,8 +1219,9 @@ class MicrofaunaModel(private val config: TankConfig) {
             // phytoplankton (handled separately: N, P, light; export and grazing)
             Params(0.8, 0.9, 27.0, 7.0, 36.0, 0.3, 0.0, 0.0, Food.NUTRIENTS, 1.0, 1.0, 1.0, 1.0, 1.0,
                 k(), 0.0, 0.0, 0.0, 0.0, true, Tox.TOLERANT),
-            // bristleworm: r 0.03, G 60, lethal 36; 0.02 per cm² sand + rock
-            Params(0.03, 60.0, 27.0, 6.0, 36.0, 0.005, 0.0, 0.01, Food.DETRITUS, 1.0, 0.02, 0.5, 0.0, 0.0,
+            // bristleworm (Eurythoe-type amphinomid, research 42): r 0.05 (fission and spawning; a doubling in ~2 weeks
+            // on a feast, slow on a lean tank), G 60, lethal 36; 0.02 per cm² sand + rock, up to 4x in an overfed tank
+            Params(0.05, 60.0, 27.0, 6.0, 36.0, 0.005, 0.0, 0.01, Food.SCAVENGE, 3.0, 0.02, 0.5, 0.0, 0.0,
                 k(rock = 0.02, sand = 0.02), 50.0, 200.0, 0.5, 0.05, true, Tox.INVERT),
             // micro-snails (Collonista): r 0.03, G 60, lethal 35; 0.05 per cm² rock face
             Params(0.03, 60.0, 27.0, 6.0, 35.0, 0.005, 0.0, 0.01, Food.FILM, 1.0, 0.1, 0.7, 0.0, 0.0,

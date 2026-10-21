@@ -33,6 +33,7 @@ import com.reeflive.core.sim.LivestockSeed
 import com.reeflive.core.sim.Reality
 import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.SimSnapshot
+import com.reeflive.core.sim.SimSpecies
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.StockSize
@@ -147,6 +148,10 @@ class SimulationHolder(
     /** Sandbox speed multiplier (1..1000). Reality always runs at 1x. */
     val speed: StateFlow<Double> = _speed.asStateFlow()
 
+    private val _lifePace = MutableStateFlow(com.reeflive.core.sim.LifePace.DEFAULT)
+    /** My tank's growing speed for slow biology (Simulation.lifePace); motion stays at [speed]. */
+    val lifePace: StateFlow<com.reeflive.core.sim.LifePace> = _lifePace.asStateFlow()
+
     private val _peek = MutableStateFlow(LivePeek())
     /** Dashboard peek summary; follows the reality sim (kept up to date even while the tab is away). */
     val peek: StateFlow<LivePeek> = _peek.asStateFlow()
@@ -160,6 +165,20 @@ class SimulationHolder(
     private val _custom = MutableStateFlow(CustomTankInfo(ready = false, exists = false))
     /** "My tank": not looked at yet, none set up (show the build picker), or set up. */
     val custom: StateFlow<CustomTankInfo> = _custom.asStateFlow()
+
+    /** What happened to My tank's corals while the app was away (core CoralHealth.changes); the screen shows and clears it. */
+    private val _coralNews = MutableStateFlow<List<String>>(emptyList())
+    val coralNews: StateFlow<List<String>> = _coralNews.asStateFlow()
+    fun clearCoralNews() { _coralNews.value = emptyList() }
+
+    /** [advance] on [sim], noting what changed for its corals when it is My tank. */
+    private inline fun withCoralNews(sim: Simulation, advance: () -> Unit) {
+        if (sim !== customSim) { advance(); return }
+        val before = com.reeflive.core.sim.CoralHealth.marks(sim.corals)
+        advance()
+        val lines = com.reeflive.core.sim.CoralHealth.changes(before, sim.corals)
+        if (lines.isNotEmpty()) _coralNews.value = lines
+    }
 
     private val _economy = MutableStateFlow<EconomyView?>(null)
     /** My tank's sand dollars, care list and goals (docs/ECONOMY.md); null while there is no My tank. */
@@ -197,6 +216,8 @@ class SimulationHolder(
     private var economyLive: Economy? = null
     /** A long time-away catch-up in progress ([beginAway]). */
     private var away: AwayCatchUp? = null
+    /** The corals' health marks when a long catch-up began, for the coral news when it ends. */
+    private var awayCorals: List<com.reeflive.core.sim.CoralHealth.Mark>? = null
     private var lastEconomyMs = 0L
     /** The display tank on screen while visiting a store (My tank waits meanwhile, then catches up). */
     private var display: Simulation? = null
@@ -242,6 +263,8 @@ class SimulationHolder(
 
     // ============================================================== public API (any thread)
     fun enqueue(cmd: Command) { scope.launch { active?.enqueue(cmd) } }
+    /** A loaded species sheet, or null (read from the UI thread: sheets are only added while the sims are built). */
+    fun simSpecies(id: String): SimSpecies? = species?.takeIf { it.has(id) }?.get(id)
 
     fun setMode(m: SimMode) { scope.launch { switchMode(m) } }
 
@@ -249,6 +272,11 @@ class SimulationHolder(
         val s = speed.coerceIn(1.0, 1000.0)
         _speed.value = s
         scope.launch { sandbox?.speed = s; if (_mode.value == SimMode.CUSTOM) customSim?.speed = s }
+    }
+
+    fun setLifePace(p: com.reeflive.core.sim.LifePace) {
+        _lifePace.value = p
+        scope.launch { customSim?.lifePace = p.pace }
     }
 
     /** Sets up a new, empty "My tank" in [build] (replacing none: call [startOverCustomTank] first) and shows it. */
@@ -259,6 +287,7 @@ class SimulationHolder(
             val seed = now xor 0x5EEDL
             val sim = CustomTank.fresh(build, species!!, rock!!, localSecondsOfDay(), seed)
             sim.speed = 1.0
+            sim.lifePace = _lifePace.value.pace
             customSim?.let { lastWallMs.remove(it) }
             customSim = sim
             val eco = economyLive ?: Economy()
@@ -356,6 +385,21 @@ class SimulationHolder(
     /** The keeper opened the water test (Tank Health or the shelf kit): today's "Test the water" chore. */
     fun testedWater() {
         scope.launch { val sim = customSim ?: return@launch; economyLive?.testedWater(today()); updateEconomy(sim, force = true) }
+    }
+
+    /**
+     * Tank Health's coral care button in My tank: pays [price] sand dollars for the supplies and puts them in.
+     * False (nothing happens) when the keeper cannot afford it.
+     */
+    fun reefCare(price: Int): Boolean {
+        if (price > (_economy.value?.coins ?: 0)) return false
+        scope.launch {
+            val sim = customSim ?: return@launch
+            if (economyLive?.spend(price, "Coral care", today()) == false) return@launch
+            sim.enqueue(Command.ReefCare)
+            updateEconomy(sim, force = true)
+        }
+        return true
     }
 
     /** Collects today's happy tank bonus. */
@@ -564,6 +608,7 @@ class SimulationHolder(
         val sim = runCatching { CustomTank.restore(save, species!!, rock!!) }.getOrNull()
         if (sim == null) { _custom.value = CustomTankInfo(ready = true, exists = false); return }
         customSim = sim
+        _lifePace.value = com.reeflive.core.sim.LifePace.of(sim.lifePace)
         customBase = CustomTank.baseAfterRestore(save, species!!)
         economyLive = Economy(save.economy)
         // the time away, at 1x: the tank lived on while the app was closed (all of it, up to 30 days)
@@ -581,7 +626,8 @@ class SimulationHolder(
     private fun beginAway(sim: Simulation, seconds: Double) {
         if (seconds < FastForward.MIN_SIM_SEC) return
         val run = AwayCatchUp(sim, seconds)
-        if (seconds < AwayCatchUp.REPORT_SEC) { run.runAll(); return }
+        if (seconds < AwayCatchUp.REPORT_SEC) { withCoralNews(sim) { run.runAll() }; return }
+        awayCorals = com.reeflive.core.sim.CoralHealth.marks(sim.corals)
         away = run
         _away.value = AwayUi(run.progress, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, null)
     }
@@ -592,6 +638,11 @@ class SimulationHolder(
         run.step()
         if (run.finished) {
             away = null
+            awayCorals?.let { before ->
+                val lines = com.reeflive.core.sim.CoralHealth.changes(before, sim.corals)
+                if (lines.isNotEmpty()) _coralNews.value = lines
+            }
+            awayCorals = null
             val s = run.summary()
             _away.value = if (s.worthShowing) AwayUi(1.0, run.doneSec / AwayCatchUp.DAY, run.totalSec / AwayCatchUp.DAY, s) else null
             lastWallMs[sim] = nowMs()
@@ -669,7 +720,7 @@ class SimulationHolder(
         lastWallMs[sim] = now
         if (sim === customSim) { beginAway(sim, (now - last).coerceAtLeast(0L) / 1000.0); publish(sim); return }
         val secs = FastForward.simSeconds(now - last, speed = 1.0)
-        if (secs >= FastForward.MIN_SIM_SEC) sim.advanceAbstract(secs)
+        if (secs >= FastForward.MIN_SIM_SEC) withCoralNews(sim) { sim.advanceAbstract(secs) }
         else sim.stepWall(0.0)
         publish(sim)
     }

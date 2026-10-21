@@ -1,0 +1,146 @@
+{
+  "id": "nemateleotris_magnifica",
+  "kind": "FISH",
+  "common": "Firefish goby",
+  "scientific": "Nemateleotris magnifica",
+  "family": "Microdesmidae",
+  "maxLengthCm": 9.0,
+  "typicalAdultCm": 7.0,
+  "growthCmPerYear": 2,
+  "lifespanYears": 3,
+  "depthRatio": 0.17,
+  "massCoeff": 0.008,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.5,
+    "burstBL": 9,
+    "tailHzCruise": 2.5,
+    "turnRateDeg": 320,
+    "waveLen": 0.9,
+    "ampCruise": 0.03,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.05,
+    "yMax": 0.45,
+    "openWater": 0.3,
+    "coverAffinity": 0.85
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 100,
+    "darkVision": 0.1,
+    "lateralBL": 1.5,
+    "chem": 0.4
+  },
+  "schooling": false,
+  "territorialRadius": 12,
+  "homeRadiusCm": 15,
+  "temperament": {
+    "aggression": 0.2,
+    "boldness": 0.3,
+    "curiosity": 0.45,
+    "skittishness": 0.85
+  },
+  "diet": [
+    "MYSIS",
+    "BRINE",
+    "CYCLOPS",
+    "PODS",
+    "ZOOPLANKTON",
+    "FLAKE"
+  ],
+  "feedsPerDay": 3,
+  "jumpRisk": 0.9,
+  "tolerance": {
+    "temp": {
+      "optLo": 23.5,
+      "optHi": 27,
+      "tolLo": 21,
+      "tolHi": 28.5,
+      "lethalLo": 17,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.022,
+      "optHi": 1.026,
+      "tolLo": 1.02,
+      "tolHi": 1.027,
+      "lethalLo": 1.016,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.6,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.03
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.5
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 60
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.35,
+    "VELVET": 0.35,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.65,
+  "starvationDays": 18,
+  "size": {
+    "lod0Tris": 3200
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 4.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 1.5,
+    "sexSystem": "UNKNOWN",
+    "maturityCm": 5.0
+  },
+  "model": "models/firefish.glb",
+  "colors": {
+    "primary": "#F4EFE6",
+    "secondary": "#E2402A",
+    "accent": "#F2D24A"
+  },
+  "iridescence": 0.15,
+  "brain": "firefish",
+  "minTankGallons": 20,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Zooplankton picker: mysis, brine, cyclops and copepods caught from the water near its hole.",
+  "temperamentSummary": "Peaceful and shy; hovers by its bolt hole, flicks its long dorsal fin, darts in when scared.",
+  "careNotes": [
+    "Notorious jumper: keep a tight lid or mesh top.",
+    "Two firefish fight unless they are a mated pair.",
+    "Bullied by dottybacks and hawkfish; needs a rock hole of its own."
+  ]
+}

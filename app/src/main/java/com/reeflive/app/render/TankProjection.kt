@@ -57,7 +57,7 @@ class TankProjection {
      */
     fun planePointAt(sx: Float, sy: Float, z: Float, out: FloatArray): Boolean {
         val p = gp
-        var x = 121.9f / 2; var y = 61f / 2
+        var x = Camera.TANK[0] / 2; var y = 61f / 2
         val h = 1f
         repeat(8) {
             if (!project(x, y, z, p)) return false
