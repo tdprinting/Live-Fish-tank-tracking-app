@@ -116,13 +116,16 @@ object StoreDisplays {
         FishStore.BIG_BLUE -> when (title) {
             "Community fish" -> DisplaySetup(DisplayKind.LONG, DisplayScape.STOCK, DisplayLight.DAYLIGHT, listOf(KENYA, ZOA, SHROOM, FINGER))
             "Bigger fish" -> DisplaySetup(DisplayKind.SHOWPIECE, DisplayScape.PILLARS, DisplayLight.DAYLIGHT, listOf(TOADSTOOL, FINGER, KENYA))
+            "Clean-up crew" -> DisplaySetup(DisplayKind.RIMLESS, DisplayScape.RUBBLE, DisplayLight.DAYLIGHT, listOf(SHROOM, ZOA))
             "Shrimp & crabs" -> DisplaySetup(DisplayKind.NANO_CUBE, DisplayScape.RUBBLE, DisplayLight.DAYLIGHT, listOf(ZOA))
-            "Corals" -> DisplaySetup(DisplayKind.FRAG, DisplayScape.RACKS, DisplayLight.COOL, listOf(ZOA, CLOVE))
+            "Easy corals" -> DisplaySetup(DisplayKind.FRAG, DisplayScape.RACKS, DisplayLight.COOL, listOf(ZOA, CLOVE))
+            "Showy corals" -> DisplaySetup(DisplayKind.LONG, DisplayScape.BOMMIE, DisplayLight.ACTINIC, listOf(ZOA, GSP, HAIRY))
             else -> FALLBACK
         }
         FishStore.DEEP_REEF -> when (title) {
             "The showpiece" -> DisplaySetup(DisplayKind.SHOWPIECE, DisplayScape.MONOLITH, DisplayLight.COOL, listOf(GSP, ZOA, PINK_LEATHER, HAIRY))
             "Rare fish" -> DisplaySetup(DisplayKind.LONG, DisplayScape.ARCH, DisplayLight.COOL, listOf(TOADSTOOL, ZOA, HAIRY))
+            "Rare inverts" -> DisplaySetup(DisplayKind.RIMLESS, DisplayScape.ISLANDS, DisplayLight.COOL, listOf(ZOA, HAIRY))
             else -> DisplaySetup(DisplayKind.NANO_CUBE, DisplayScape.BOMMIE, DisplayLight.ACTINIC, listOf(ZOA, HAIRY))
         }
     }

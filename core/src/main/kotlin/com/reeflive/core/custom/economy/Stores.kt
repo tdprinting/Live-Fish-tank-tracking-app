@@ -85,10 +85,10 @@ enum class FishStore(
     /** Items on the shelf each day. */
     val stockSize: Int,
 ) {
-    SHELLYS("shellys", "Shelly's Pet Shop", "Hi there! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 9),
-    FRAG_SHACK("frag_shack", "Frag Shack", "Corals, corals, corals! Fresh frags under the blue lights.", 2, 0.85, 0.0, 0.0, 0.65, 9),
-    BIG_BLUE("big_blue", "Big Blue Aquatics", "Welcome to the wall of tanks! We have a bit of everything.", 4, 1.1, 0.6, 0.6, 0.5, 14),
-    DEEP_REEF("deep_reef", "Deep Reef Imports", "Only the rarest, healthiest animals. Have a look.", 6, 1.25, 0.75, 0.75, 0.75, 5);
+    SHELLYS("shellys", "Shelly's Pet Shop", "Shelly: Hi there, sweetie! Every reef starts with a few good friends.", 1, 1.0, 0.4, 0.4, 0.4, 9),
+    FRAG_SHACK("frag_shack", "Frag Shack", "Kai: Aloha! Fresh frags under the blue lights, all grown right here.", 2, 0.85, 0.0, 0.0, 0.65, 10),
+    BIG_BLUE("big_blue", "Big Blue Aquatics", "Marcus: Welcome to Big Blue! The biggest wall of tanks in town.", 4, 1.1, 0.6, 0.6, 0.5, 18),
+    DEEP_REEF("deep_reef", "Deep Reef Imports", "Celeste: Welcome to Deep Reef. Only the rarest, healthiest animals.", 6, 1.25, 0.75, 0.75, 0.75, 6);
 
     fun carries(l: Listing): Boolean = when (this) {
         SHELLYS -> l.level <= 3 && (l.group != StockGroup.CORALS || l.level <= 1)

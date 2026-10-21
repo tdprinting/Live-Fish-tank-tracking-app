@@ -64,13 +64,16 @@ object StoreVisit {
             Section("Stony corals (LPS)") { it.speciesId in STONY },
             Section("Soft corals & rare frags") { true },
         )
+        // the superstore: a long wall of tanks, one for each kind of animal
         FishStore.BIG_BLUE -> listOf(
             Section("Community fish") { fish(it) && cm(it) < 12 },
             Section("Bigger fish", ::fish),
+            Section("Clean-up crew") { it.speciesId in CLEANUP },
             Section("Shrimp & crabs", ::inverts),
-            Section("Corals", ::corals),
+            Section("Easy corals") { corals(it) && it.level <= 2 },
+            Section("Showy corals", ::corals),
         )
-        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts & corals") { true })
+        FishStore.DEEP_REEF -> listOf(Section("Rare fish", ::fish), Section("Rare inverts", ::inverts), Section("Rare corals") { true })
     }
 
     /** Today's display tanks at [store], in walking order; empty sections are skipped. */

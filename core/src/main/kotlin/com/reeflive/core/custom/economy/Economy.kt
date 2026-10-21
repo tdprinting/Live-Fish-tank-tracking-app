@@ -38,6 +38,8 @@ data class SavedEconomy(
     val bought: Map<String, Int> = emptyMap(),
     /** Day Shelly's last gave the free starter snails to an empty, broke tank. */
     val giftDay: String = "",
+    /** The day the keeper last traded with each store's regular (store id → day; one trade a store a day). */
+    val traded: Map<String, String> = emptyMap(),
     /** Newest first, at most [Economy.LEDGER_MAX]: the "where did my money go" list. */
     val ledger: List<LedgerEntry> = emptyList(),
     /** Reef moments seen, animals kept and fish birthdays ([Journal]). */
@@ -291,6 +293,15 @@ class Economy(initial: SavedEconomy = SavedEconomy()) {
     }
 
     private fun speciesLabel(id: String) = com.reeflive.core.sim.Stocking.entry(id)?.common ?: id
+
+    /** Whether the keeper already traded with [store]'s regular today ([StoreTrades]). */
+    fun tradedToday(store: FishStore, today: String): Boolean = state.traded[store.id] == today
+
+    /** Records a swap done with [StoreTrades.apply]: no money changes hands, the ledger notes it. */
+    fun traded(offer: TradeOffer, today: String) {
+        val label = "Traded ${offer.giveName}${if (offer.giveFrag) " frag" else ""} for ${offer.getName} with ${offer.trader}"
+        state = state.copy(traded = state.traded + (offer.store.id to today), ledger = ledger(today, label, 0))
+    }
 
     /** Money from a sale: sand dollars but no star points (so trading cannot farm levels). */
     fun sold(amount: Int, label: String, today: String) {
