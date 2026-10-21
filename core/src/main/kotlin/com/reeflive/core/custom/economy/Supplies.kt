@@ -78,6 +78,10 @@ object SupplyBook {
     /** A pack's price at [store] (its price level, like the animals). */
     fun price(store: FishStore, p: SupplyPack): Int = max(1, (p.price * store.priceMult).roundToInt())
 
+    /** The supplies behind [store]'s counter for this keeper (every store sells them all, at its own price level). */
+    fun cards(e: Economy, store: FishStore): List<SupplyCard> =
+        PACKS.map { SupplyCard(it, price(store, it), e.supplyLeft(it.id), e.level < it.level) }
+
     fun bagId(id: String) = BAG + id
     fun fromBag(entry: String): String? = if (entry.startsWith(BAG)) entry.substring(BAG.length) else null
 }
@@ -87,7 +91,3 @@ data class SupplyCard(val pack: SupplyPack, val price: Int, val have: Int, val l
     /** A kept tool the keeper already owns: nothing more to buy. */
     val owned: Boolean get() = pack.keeps && have > 0
 }
-
-/** The supplies behind [store]'s counter for this keeper (every store sells them all, at its own price level). */
-fun SupplyBook.cards(e: Economy, store: FishStore): List<SupplyCard> =
-    PACKS.map { SupplyCard(it, price(store, it), e.supplyLeft(it.id), e.level < it.level) }
