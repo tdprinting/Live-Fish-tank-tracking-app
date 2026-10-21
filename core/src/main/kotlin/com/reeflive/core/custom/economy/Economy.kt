@@ -87,7 +87,7 @@ enum class Goal(val id: String, val label: String, val reward: Int) {
     }
 }
 
-/** Levels from star points: level n needs 50 · n · (n − 1) (100, 300, 600, 1000 ...), up to [MAX]. */
+/** Levels from star points: level n needs 30 · n · (n − 1) (60, 180, 360, 600 ...), up to [MAX]. */
 object Levels {
     const val MAX = 10
 

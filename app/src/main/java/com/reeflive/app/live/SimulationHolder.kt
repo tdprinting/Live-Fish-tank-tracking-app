@@ -20,7 +20,9 @@ import com.reeflive.core.custom.economy.FishStore
 import com.reeflive.core.custom.economy.Offers
 import com.reeflive.core.custom.economy.SellOffer
 import com.reeflive.core.custom.economy.ShelfCard
+import com.reeflive.core.custom.economy.StoreTrades
 import com.reeflive.core.custom.economy.StoreVisit
+import com.reeflive.core.custom.economy.TradeOffer
 import com.reeflive.core.custom.economy.EconomyView
 import com.reeflive.core.custom.economy.Gain
 import com.reeflive.core.live.FastForward
@@ -194,6 +196,11 @@ class SimulationHolder(
     private val _visit = MutableStateFlow<StoreVisitUi?>(null)
     /** The store being visited, or null at home. */
     val visitState: StateFlow<StoreVisitUi?> = _visit.asStateFlow()
+    /** A store regular's swap, once they have walked up and asked (the trade card is up), else null. */
+    private val _trade = MutableStateFlow<TradeOffer?>(null)
+    val tradeState: StateFlow<TradeOffer?> = _trade.asStateFlow()
+    /** Today's swap at the store being visited (core StoreTrades), if a regular has one. */
+    private var tradeOffer: TradeOffer? = null
 
     private val _paid = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 4)
     /** A checkout went through: (sand dollars paid, animals bought); the screen plays the pay animation. */
@@ -318,6 +325,7 @@ class SimulationHolder(
             visiting = store
             visitTanks = StoreVisit.tanks(store, today())
             display = null
+            tradeOffer = customSim?.let { StoreTrades.offer(store, it, e, today()) }
             showTankNow(0)
         }
     }
@@ -339,7 +347,7 @@ class SimulationHolder(
         display = d
         lastWallMs[d] = nowMs()
         val store = visiting!!
-        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k, visitTanks.map { it.setup }) else storeRoom.show(k)
+        if (storeRoom.storeId != store.id) storeRoom.enter(store.id, n, k, visitTanks.map { it.setup }, tradeOffer?.line) else storeRoom.show(k)
         publishVisit(k)
         publish(d)
     }
@@ -374,6 +382,31 @@ class SimulationHolder(
         }
     }
 
+    /** The store's regular walked up with their swap (StoreRoomControl.onTrade): the trade card shows. */
+    fun showTrade() { scope.launch { if (visiting != null) _trade.value = tradeOffer } }
+
+    /**
+     * The keeper's answer to the swap: yes cuts the frag (or nets the spare) and floats the new animal in a bag in My
+     * tank, and the regular thanks them; no, and they shrug it off. Either way, no more swaps at this store today on yes.
+     */
+    fun answerTrade(yes: Boolean) {
+        scope.launch {
+            val o = _trade.value ?: return@launch
+            _trade.value = null
+            tradeOffer = null
+            storeRoom.tradeReply(yes)
+            if (!yes) return@launch
+            val e = economyLive ?: return@launch
+            val mine = customSim ?: return@launch
+            StoreTrades.apply(mine, o)
+            e.traded(o, today())
+            mine.stepWall(0.0)
+            _economy.value = e.view(mine)
+            saveCustom()
+            publishVisit()
+        }
+    }
+
     /** Walks out (the bag goes back on the shelves); My tank catches up on the minutes spent shopping. */
     fun leaveStore() { scope.launch { leaveStoreNow() } }
 
@@ -381,6 +414,7 @@ class SimulationHolder(
         if (visiting == null) return
         display?.let { lastWallMs.remove(it) }
         display = null; visiting = null; visitTanks = emptyList()
+        tradeOffer = null; _trade.value = null
         storeRoom.leave()
         _visit.value = null
         customSim?.let { catchUp(it) }

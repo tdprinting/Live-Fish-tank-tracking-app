@@ -79,6 +79,7 @@ export function startLive(applyReadings) {
     // a tap on another display tank or the counter in a store's 3D aisle
     onStoreStand: (i) => window.reefstores?.walk(i),
     onStoreCounter: () => window.reefstores?.counter(),
+    onStoreTrade: () => window.reefstores?.trade(),
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
@@ -1275,8 +1276,8 @@ function renderLapseResult() {
 let actx = null; const buffers = {}; const loops = {};
 /** The page's one AudioContext (tank sounds and the radio share it). */
 function audioCtx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx; }
-const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop' };
-const CUES = { FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape', SPARKLE: 'tank_reward_sparkle' };
+const LOOPS = { flow: 'tank_flow_loop', hum: 'tank_hum_loop', hob: 'tank_hob_loop', bubbles: 'tank_bubbles_loop', murmur: 'store_murmur_loop' };
+const CUES = { BELL: 'store_door_bell', FLUSH: 'tank_bubbles_loop', FEED: 'tank_feed_plop', PELLET: 'tank_pellet_drop', CLICK: 'tank_shrimp_click', TICK: 'tank_ui_tick', ALERT: 'tank_alert_chime', SCRAPE: 'tank_glass_scrape', SPARKLE: 'tank_reward_sparkle' };
 async function loadSound(name) {
   if (buffers[name]) return buffers[name];
   for (const ext of ['m4a', 'ogg']) {
@@ -1302,6 +1303,8 @@ function updateSound() {
   if (!ui.sound || !actx || document.hidden) return;
   const s = JSON.parse(SB.sound(ui.volume));
   if (!s) return;
+  // in a fish store: the shop's room tone under the display tank's water (stores.js rings the door bell)
+  s.murmur = window.reefstores?.active() ? 0.35 * ui.volume : 0;
   for (const [k, name] of Object.entries(LOOPS)) {
     const target = s[k];
     if (!loops[k] && buffers[name] && target > 0.001) {

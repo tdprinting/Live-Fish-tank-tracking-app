@@ -279,6 +279,55 @@ def glass_scrape():
     return normalize(fade_edges((swish * judder + squeak) * env, 0.003, 0.03), 0.55)
 
 
+def store_bell():
+    """The little brass bell on a fish store's door (render StoreRoom.kt: the doors open as the keeper walks in): a few
+    quick, slightly detuned strikes of a small bell as the clapper swings, ringing out."""
+    n = int(1.6 * SR)
+    x = np.zeros(n)
+
+    def ding(f0, amp, dur):
+        m = int(dur * SR)
+        t = t_axis(m)
+        y = np.zeros(m)
+        for ratio, a, tau in [(1.0, 1.0, 0.45), (2.32, 0.5, 0.25), (4.25, 0.28, 0.12), (6.8, 0.12, 0.06)]:
+            y += a * np.sin(2 * np.pi * f0 * ratio * t) * env_exp(m, tau, 0.0015)
+        return amp * y
+
+    rng = np.random.default_rng(7)
+    at = 0.0
+    for k, amp in enumerate((1.0, 0.75, 0.55, 0.35, 0.2)):
+        add_at(x, ding(1760.0 * (1 + rng.uniform(-0.006, 0.006)), amp, 1.2), int(at * SR))
+        at += 0.07 + 0.05 * k + rng.uniform(0, 0.03)
+    return normalize(fade_edges(x, 0.001, 0.3), 0.55)
+
+
+def store_murmur_loop():
+    """A fish store's room tone: soft voices too far off to make out (syllable-paced bursts of band-passed noise, a few
+    talkers at their own pitch), the hum of many filters and an air stone bubbling somewhere along the wall."""
+    n0, f = loop_len(12.0)
+    n = n0 + f
+    t = t_axis(n)
+    rng = np.random.default_rng(11)
+    x = np.zeros(n)
+    for k in range(5):
+        f0 = rng.uniform(140, 260)
+        voice = spectral_noise(n, f0 * 1.5, f0 * 12, tilt=-0.9)
+        # syllables: 3-5 per second, in phrases with pauses
+        syl = np.maximum(0.0, np.sin(2 * np.pi * rng.uniform(3.0, 5.0) * t + rng.uniform(0, 6))) ** 2
+        phrase = np.clip(smooth_random(n, 0.35, 1.6) - 0.6, 0, 1)
+        x += voice * syl * phrase * rng.uniform(0.6, 1.0)
+    x = 0.55 * x / (np.max(np.abs(x)) + 1e-9)
+    x += 0.10 * np.sin(2 * np.pi * 60 * t) + 0.05 * np.sin(2 * np.pi * 120 * t)
+    x += 0.15 * spectral_noise(n, 80, 600, tilt=-1.0)
+    bub = np.zeros(n)
+    k = 0
+    while k < n:
+        add_at(bub, bubble(0.03, rng.uniform(500, 1100), amp=rng.uniform(0.1, 0.3)), k)
+        k += int(rng.uniform(0.04, 0.16) * SR)
+    x += 0.35 * bub
+    return normalize(make_loop(x, n0), 0.5)
+
+
 SOUNDS = {
     "tank_flow_loop": (flow_loop, True),
     "tank_hum_loop": (hum_loop, True),
@@ -291,6 +340,8 @@ SOUNDS = {
     "tank_alert_chime": (alert_chime, False),
     "tank_glass_scrape": (glass_scrape, False),
     "tank_reward_sparkle": (reward_sparkle, False),
+    "store_door_bell": (store_bell, False),
+    "store_murmur_loop": (store_murmur_loop, True),
 }
 
 

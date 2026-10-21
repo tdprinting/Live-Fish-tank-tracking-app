@@ -275,6 +275,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         applyShelf(dt)
         storeScene.time = time
         storeScene.apply(storeRoom, camera) { store.model(it) }
+        if (storeScene.takeTradeAsk()) storeRoom?.onTrade?.let { cb -> main.post { cb() } }
         store.pump(2)
 
         // 1. snapshot + rigs
@@ -1400,6 +1401,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (!storeScene.active || t.kind != CameraInput.TapKind.PICK) return false
         val hit = storeScene.pick(room, o, dir)
         if (hit == StoreRoomScene.COUNTER) { room.onCounter?.let { cb -> main.post { cb() } }; return true }
+        if (hit >= StoreRoomScene.PERSON) { storeScene.hello(hit - StoreRoomScene.PERSON); return true }
         if (hit >= 0) { room.onStand?.let { cb -> main.post { cb(hit) } }; return true }
         if (Picker.pick(o, dir, rigs, fingerSlack()) != null) return false
         // the live tank on its stand, at the size of its glass

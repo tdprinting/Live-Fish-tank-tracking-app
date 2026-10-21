@@ -646,3 +646,9 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .record strong { font-size: 12px; line-height: 1.2; }
 .record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
+
+/* a store regular's swap (stores.js tradeCard) */
+.carecard.trade h3 { margin: 0 0 6px; }
+.carecard.trade p { margin: 6px 0; }
+.carecard.trade .give { color: #E0A800; }
+.carecard.trade .get { color: #1E9E5A; }
