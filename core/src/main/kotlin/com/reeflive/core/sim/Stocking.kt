@@ -102,6 +102,7 @@ object Stocking {
         StockEntry("entacmaea_quadricolor", StockGroup.INVERTS, "Rainbow bubble tip anemone", 20.0),
         // research 42: a file clam for a crevice; starves without daily phytoplankton
         StockEntry("ctenoides_scaber", StockGroup.INVERTS, "Flame scallop", 6.0),
+        StockEntry("tridacna_maxima", StockGroup.INVERTS, "Maxima clam", 8.0),
         StockEntry("capnella_sp", StockGroup.CORALS, "Kenya tree coral", 15.0),
         StockEntry("briareum_sp", StockGroup.CORALS, "Green star polyps", 15.0),
         StockEntry("zoanthus_sp", StockGroup.CORALS, "Zoanthids", 10.0),

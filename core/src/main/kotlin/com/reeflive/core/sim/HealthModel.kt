@@ -523,7 +523,8 @@ object HealthModel {
         if (o.health < 0.3) { sym += Symptom.LETHARGY; desat += 0.3 }
         if (o.molting) sym += Symptom.MOLTING
         heatSigns(o, sym)
-        o.desat = desat.coerceIn(0.0, 1.0)
+        // a bleaching giant clam pales to grey-white as its algae leave
+        o.desat = max(desat, 0.9 * o.bleach).coerceIn(0.0, 1.0)
         o.mood = when {
             o.sleeping -> Mood.SLEEPING
             o.disease != null && o.diseaseStage > 0.15 || o.health < 0.5 -> Mood.SICK

@@ -91,6 +91,7 @@ data class SimSpecies(
         food == FoodKind.PLANKTON && brainKind == BrainKind.FEATHER_DUSTER -> 1.2
         // the flame scallop lives on phytoplankton (research 42 §2.4)
         food == FoodKind.PLANKTON && brainKind == BrainKind.FILE_CLAM -> 1.5
+        food == FoodKind.PLANKTON && brainKind == BrainKind.GIANT_CLAM -> 1.2
         // hawkfish are krill specialists in the shops' experience; grazers prefer a wafer to a pellet (design estimates)
         food == FoodKind.KRILL && brainKind == BrainKind.HAWK -> 1.3
         food == FoodKind.ALGAE_WAFER && (brainKind == BrainKind.TANG || brainKind == BrainKind.LAWNMOWER_BLENNY || brainKind == BrainKind.ASTREA) -> 1.2
@@ -443,6 +444,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
      * sticky tentacles out, filter feeding; swims off by clapping its valves when bothered.
      */
     FILE_CLAM(listOf("ctenoides", "lima", "limaria"), false),
+    GIANT_CLAM(listOf("tridacna", "hippopus"), false),
     /** Basslets (royal gramma, *Gramma loreto*, research 50 §1): holds a cave, hangs belly-to-rock (upside down under ledges). */
     GRAMMA(listOf("gramma"), true),
     /** Shrimp gobies (yellow watchman, *Cryptocentrus cinctus*, research 50 §3): perches at its burrow mouth on watch. */
@@ -497,7 +499,7 @@ enum class BrainKind(val genera: List<String>, val isFish: Boolean) {
             "bobtail_squid" to BOBTAIL_SQUID, "squid" to BOBTAIL_SQUID, "sepiolid" to BOBTAIL_SQUID,
             "anemone" to ANEMONE, "bubble_tip_anemone" to ANEMONE,
             "peppermint_shrimp" to PEPPERMINT_SHRIMP, "peppermint" to PEPPERMINT_SHRIMP,
-            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM,
+            "file_clam" to FILE_CLAM, "flame_scallop" to FILE_CLAM, "giant_clam" to GIANT_CLAM, "maxima_clam" to GIANT_CLAM,
             "firefish" to FIREFISH, "dartfish" to FIREFISH, "chromis" to CHROMIS, "damselfish" to CHROMIS,
             "gramma" to GRAMMA, "basslet" to GRAMMA, "royal_gramma" to GRAMMA,
             "watchman_goby" to WATCHMAN_GOBY, "shrimp_goby" to WATCHMAN_GOBY, "watchman" to WATCHMAN_GOBY,

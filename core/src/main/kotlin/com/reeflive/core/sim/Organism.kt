@@ -199,6 +199,8 @@ class Organism(
     var posture = 0
     var appendagePhase = rng.nextDouble() * 6.28
     var extension = 1.0
+    /** Symbiotic algae lost, 0 healthy .. 1 bleached white (giant clam); shown as desaturation. */
+    var bleach = 0.0
     var visible = true
     var extraRoll = 0.0
     var pitchBias = 0.0
@@ -318,7 +320,7 @@ class Organism(
             appendagePhase = appendagePhase.toFloat(), extension = extension.toFloat(), visible = visible, nickname = nickname,
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
-            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
+            motionMode = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM || brainKind == BrainKind.GIANT_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 },
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),

@@ -109,6 +109,8 @@ object HeatModel {
         BrainKind.ANEMONE -> ANEMONE
         // a bivalve: no escape from heat but the swim, little acclimation (est., like the tube worm)
         BrainKind.FILE_CLAM -> TUBE_WORM
+        // giant clams bleach in heat like corals (GiantClamBrain); the animal itself is a hardy reef-flat bivalve (est.)
+        BrainKind.GIANT_CLAM -> TUBE_WORM
     }
 
     fun isSnail(kind: BrainKind) = kind.isSnail

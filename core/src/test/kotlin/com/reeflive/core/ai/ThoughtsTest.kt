@@ -43,6 +43,8 @@ class ThoughtsTest {
         sim.addFromSeed(LivestockSeed("stenorhynchus_seticornis", "Pokey", 4.5, id = "arrow"))
         sim.species.ensure("mithraculus_sculptus")
         sim.addFromSeed(LivestockSeed("mithraculus_sculptus", "Emmy", 3.0, id = "emerald"))
+        sim.species.ensure("tridacna_maxima")
+        sim.addFromSeed(LivestockSeed("tridacna_maxima", "Max", 12.0, id = "maxima"))
         for ((id, nick) in listOf("lysmata_debelius" to "Blaze", "thor_amboinensis" to "Wiggles", "hymenocera_picta" to "Harley", "alpheus_bellulus" to "Bang")) {
             sim.species.ensure(id)
             sim.addFromSeed(LivestockSeed(id, nick, 3.0, id = nick.lowercase()))

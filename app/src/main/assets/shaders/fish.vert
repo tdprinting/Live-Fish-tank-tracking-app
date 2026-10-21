@@ -16,7 +16,7 @@ uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appenda
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
 uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
-uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop, 8 snail, 9 urchin)
+uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop / maxima clam, 8 snail, 9 urchin)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
 uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space), z widest gape (rad), w 1 = has a jaw
@@ -331,7 +331,7 @@ void squidPose(float part, float hinge, inout vec3 local) {
     }
 }
 
-// Flame scallop (motion mode 7, core ClamRig): uLimb[0] = (tentacle wave phase, gape 0..1, extension 0..1, swim
+// Flame scallop and maxima clam (motion mode 7, core ClamRig): uLimb[0] = (tentacle wave phase, gape 0..1, extension 0..1, swim
 // trail 0..1), uLimb[1].y = writhe. COLOR_0: r valve side (1 upper), g class (0 shell, 0.5 mantle, 1 tentacle),
 // b t along a tentacle, a phase seed. The valves turn about the hinge line (x -0.5, y 0, along Z); the mantle lip and
 // tentacles ride their valve, the tentacles retract toward the beak, writhe, and stream back (+X) while it swims.
@@ -342,7 +342,13 @@ void clamPose(inout vec3 local, inout vec3 n) {
     float gape = clamp(uLimb[0].y, 0.0, 1.0);
     float ext = clamp(uLimb[0].z, 0.0, 1.0);
     float trail = clamp(uLimb[0].w, 0.0, 1.0);
-    if (cls > 0.25) {
+    if (cls > 0.3 && cls < 0.45) {
+        // maxima clam's draped mantle (class 0.4): drawn in toward the midline and down into the shell as it closes;
+        // t = 0 at the midline .. 1 at the hanging edge
+        float k = 1.0 - ext;
+        local.y *= mix(1.0, 0.12, k);
+        local.x -= k * (0.07 + 0.05 * t);
+    } else if (cls > 0.25) {
         vec2 d = local.xz - vec2(-0.43, 0.0);
         vec2 dir = d / max(length(d), 1e-4);
         // the mantle lip swells out past the margin as it opens to feed

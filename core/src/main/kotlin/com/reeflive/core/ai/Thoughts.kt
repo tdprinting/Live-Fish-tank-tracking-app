@@ -235,6 +235,7 @@ object Thoughts {
             n == "aiptasia" -> Line(if (label.startsWith("Eating")) "picking apart a pest aiptasia anemone" else "sneaking up on a pest aiptasia anemone",
                 "hunt aiptasia", "Aiptasia, my favourite!", Driver.HUNGER, 2)
             n == "clam" -> clamLine(label)
+            n == "giantclam" -> giantClamLine(label)
             // ---- shrimp pack (research 44)
             n == "dance" -> Line("swaying its tail on ${if (label.contains("anemone")) "its anemone" else if (label.contains("coral")) "its coral" else "the rock"}",
                 "keep dancing", "Wiggle wiggle!", Driver.HOME, 1)
@@ -399,6 +400,17 @@ object Thoughts {
         label.startsWith("Starving") -> Line("filtering hard, but there is too little phytoplankton to eat", "eat phytoplankton (dose some!)", "So hungry…", Driver.HUNGER, 3)
         label.startsWith("Hungry") -> Line("filtering the water for phytoplankton", "eat more phytoplankton", "More phyto, please.", Driver.HUNGER, 2)
         else -> Line("wedged in its crevice, waving its red tentacles and filtering the water", "keep filtering", "Mmm, plankton.", Driver.HUNGER)
+    }
+
+    private fun giantClamLine(label: String): Line = when {
+        label.startsWith("Snapped") -> Line("snapped its shell shut with a squirt of water", "open up again", "Who's there?!", Driver.FEAR, 2)
+        label.startsWith("Opening") -> Line("slowly spreading its mantle out again", "soak up the light", "Is it safe now?", Driver.HOME)
+        label.startsWith("Bleached") -> Line("pale and bleached: it has lost the algae that feed it", "get its colour back (steady light, cooler water)", "I feel so empty…", Driver.HUNGER, 3)
+        label.startsWith("Paling") -> Line("losing colour as its algae leave", "keep its colour (check heat and light)", "Something's not right…", Driver.HUNGER, 2)
+        label.contains("too little light") -> Line("spreading its mantle wide to catch what little light reaches it", "find more light (move it higher)", "More light, please!", Driver.HUNGER, 2)
+        label.contains("night") -> Line("resting with its mantle half drawn in for the night", "wait for the lights", "Zzz…", Driver.ROUTINE)
+        label.startsWith("Hungry") -> Line("soaking up the light to feed the algae in its mantle", "soak up more light", "Sun, please!", Driver.HUNGER)
+        else -> Line("spreading its colourful mantle in the light, letting the algae in it make food", "keep soaking up the light", "Ahh, sunshine.", Driver.ROUTINE)
     }
 
     private fun crawlLine(e: Env, label: String): Line = when (label) {
@@ -575,6 +587,7 @@ object Thoughts {
         BrainKind.HARLEQUIN_SHRIMP -> "harlequin shrimp"
         BrainKind.PISTOL_SHRIMP -> "pistol shrimp"
         BrainKind.FILE_CLAM -> "flame scallop"
+        BrainKind.GIANT_CLAM -> "maxima clam"
         BrainKind.CLEANER_SHRIMP -> "cleaner shrimp"
         BrainKind.HERMIT -> "hermit crab"
         BrainKind.SALLY_CRAB -> "Sally Lightfoot crab"

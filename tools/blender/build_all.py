@@ -50,6 +50,8 @@ def run(step, args):
         squid.build_all()
         import file_clam  # flame scallop (docs/research/42_peppermint_shrimp_flame_scallop.md)
         file_clam.build()
+        import maxima_clam  # maxima clam (docs/research/45_clam_crab_star_cucumber.md)
+        maxima_clam.build()
     elif step == "rockscape":
         import rockscape
         rockscape.build(bake=not args.nobake)

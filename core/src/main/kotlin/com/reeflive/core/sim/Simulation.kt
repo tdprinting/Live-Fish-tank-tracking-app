@@ -994,7 +994,8 @@ class Simulation private constructor(
         SexRoles.step(organisms, lifeDt)   // protogynous / bidirectional sex roles (life_stages.md)
         shrimpBreeding.step(lifeMin)
         w.lightIntensity = light
-        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) }
+        w.coralDemandDkhPerDay = 0.01 + corals.sumOf { it.species.coralKind.demandDkhPerDay * it.tissue * CoralGrowth.mass(it) } +
+            com.reeflive.core.ai.GiantClamBrain.demandDkhPerDay(organisms)
         w.coralBiomass = 0.3 + corals.sumOf { it.species.coralKind.biomass * it.tissue * (1 - it.bleach * 0.7) * CoralGrowth.mass(it) }
         w.alleloSourcePerHour = CoralGrowth.alleloSource(corals)
         if (!behaviorEnabled || abstractMode) abstractGrazing(dtMin)
@@ -1240,6 +1241,7 @@ class Simulation private constructor(
                     o.hunger = max(0.0, o.hunger - rise * 0.8 * (water.s.detritus / 0.2).coerceIn(0.3, 1.2) * dtMin)
                 // the flame scallop lives on phytoplankton only (research 42 §2.4)
                 BrainKind.FILE_CLAM -> com.reeflive.core.ai.FileClamBrain.abstractFeed(o, this, dtMin)
+                BrainKind.GIANT_CLAM -> com.reeflive.core.ai.GiantClamBrain.abstractFeed(o, this, dtMin)
                 else -> {}
             }
         }

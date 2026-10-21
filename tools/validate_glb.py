@@ -42,7 +42,7 @@ BUDGET = {
     "engineer_goby": 6200, "hawkfish": 5200, "lawnmower_blenny": 4600, "tailspot_blenny": 4400, "dottyback": 4400,
     "diamond_goby": 4800, "leopard_wrasse": 4800, "bicolor_blenny": 4400, "midas_blenny": 4400, "royal_gramma": 4800, "banggai": 4800, "watchman_goby": 4800, "firefish": 4800, "chromis": 4800, "bobtail_squid": 4600,
     "yellow_tang": 6000, "purple_tang": 6000, "fairy_wrasse": 4800,
-    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "fire_shrimp": 4200, "sexy_shrimp": 4200, "harlequin_shrimp": 4200, "pistol_shrimp": 4200, "flame_scallop": 3200, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "brittle_star": 2000,
+    "shrimp": 4200, "skunk_shrimp": 4200, "peppermint_shrimp": 4200, "fire_shrimp": 4200, "sexy_shrimp": 4200, "harlequin_shrimp": 4200, "pistol_shrimp": 4200, "flame_scallop": 3200, "maxima_clam": 3600, "hermit_blue": 2600, "hermit_scarlet": 2600, "sally_lightfoot": 5400, "arrow_crab": 6000, "emerald_crab": 5200, "brittle_star": 2000,
     "nassarius": 1300, "astrea": 1100, "asterina": 400, "feather_duster": 1300,
     "trochus": 2800, "fighting_conch": 3800, "tuxedo_urchin": 5000,
     # in-tank microfauna (tools/blender/microfauna.py); the renderer culls them below a few pixels on screen

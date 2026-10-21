@@ -43,6 +43,7 @@ object SpeciesBrains {
             BrainKind.HARLEQUIN_SHRIMP -> HarlequinShrimpBrain(c)
             BrainKind.PISTOL_SHRIMP -> PistolShrimpBrain(c)
             BrainKind.FILE_CLAM -> FileClamBrain(c)
+            BrainKind.GIANT_CLAM -> GiantClamBrain(c)
             BrainKind.GRAMMA -> GrammaBrain(c)
             BrainKind.WATCHMAN_GOBY -> WatchmanGobyBrain(c)
             BrainKind.GENERIC_FISH -> GenericFishBrain(c)

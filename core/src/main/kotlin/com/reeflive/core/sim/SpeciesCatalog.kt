@@ -123,6 +123,9 @@ class SpeciesCatalog(sheets: Collection<SimSpecies> = emptyList()) {
                 BrainKind.FILE_CLAM -> base.copy(kind = "INVERT", common = "Flame scallop", maxLengthCm = 7.5, typicalAdultCm = 6.0, depthRatio = 0.38, massCoeff = 0.06,
                     locomotion = Locomotion("SESSILE", 0.0, 2.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 3.0, hardiness = 0.3,
                     starvationDays = 30.0, homeRadiusCm = 10.0, model = "models/flame_scallop.glb", buoyantWhenDead = false)
+                BrainKind.GIANT_CLAM -> base.copy(kind = "INVERT", common = "Maxima clam", maxLengthCm = 25.0, typicalAdultCm = 15.0, depthRatio = 0.42, massCoeff = 0.12,
+                    locomotion = Locomotion("SESSILE", 0.0, 0.0, 0.0, 0.0), diet = listOf("PHYTOPLANKTON", "PLANKTON"), feedsPerDay = 0.5, hardiness = 0.55,
+                    starvationDays = 40.0, homeRadiusCm = 5.0, model = "models/maxima_clam.glb", buoyantWhenDead = false)
                 BrainKind.HERMIT -> base.copy(kind = "INVERT", common = "Hermit crab", maxLengthCm = 3.0, depthRatio = 0.8, massCoeff = 0.08, activity = "NOCTURNAL",
                     locomotion = Locomotion("WALKING", 0.15, 1.0, 0.0, 90.0), diet = listOf("ALGAE", "DETRITUS", "FLAKE", "MYSIS", "PELLET"), feedsPerDay = 2.0,
                     grazer = true, hardiness = 0.85, homeRadiusCm = 40.0, model = "models/hermit.glb")
