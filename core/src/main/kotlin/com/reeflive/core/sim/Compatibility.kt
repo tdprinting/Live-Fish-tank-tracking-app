@@ -141,7 +141,7 @@ object Compatibility {
                 out += CompatibilityWarning("squid_predator_fish", CompatibilityWarning.Severity.SEVERE,
                     "A hawkfish, dottyback or moray will hunt or harass a bobtail squid. It stays buried, stops hunting and is injured or eaten. Keep it in its own tank.")
             }
-            if (others.any { it.isShrimp || it == BrainKind.HERMIT || it == BrainKind.SALLY_CRAB }) {
+            if (others.any { it.isShrimp || it == BrainKind.HERMIT || it == BrainKind.SALLY_CRAB || it == BrainKind.ARROW_CRAB }) {
                 out += CompatibilityWarning("squid_eats_crustaceans", CompatibilityWarning.Severity.WARN,
                     "Squid hunt shrimp and small crabs at night. Adult cleaner and banded shrimp are mostly too big, but small, young or freshly molted ones get eaten, and a banded shrimp can grab a sleeping squid.")
             }

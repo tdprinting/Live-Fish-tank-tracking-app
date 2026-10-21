@@ -141,6 +141,8 @@ data class LivePeek(
                 Jump.HIT_LID -> "${e.id} jumped and bounced off the lid"
                 Jump.LEAPT -> null
             }
+            is SimEvent.Hitchhiker -> "${e.label} hitchhiked into the tank"
+            is SimEvent.WormBoom -> "Bristleworms are booming (${e.count}): feed a little less"
             else -> null   // Cleaned, Chase, Pose, Jolt, TerritoryReset, Quiver, LegRock: too frequent for the peek
         }
 

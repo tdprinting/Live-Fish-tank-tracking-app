@@ -137,6 +137,17 @@ class Simulation private constructor(
     val growthRng = Rng(seed xor 0x6C0A1L)
     /** Coral budding and splitting (CoralHealth.maybeSpread) roll here, so they leave the growth and pest stream untouched. */
     private val spreadRng = Rng(seed xor 0x5B4EADL)
+    /** Hitchhiker arrivals ([Hitchhikers]) have their own stream: turning them on leaves every other roll as it was. */
+    val hitchRng = Rng(seed xor 0x417C4L)
+    /** The bristleworms out where they can be seen (and caught); the rest of the population is one number. */
+    val worms = WormField(this, seed)
+    /** Pests and critters ride in on new frags, rock and animals, and now and then on their own (My tank; off elsewhere). */
+    var hitchhikersEnabled = false
+    private var lastWormBoomReport = -1e18
+    /** Food reaching the bottom uneaten since the last chemistry tick (g), for the bristleworms' food. */
+    private var leftoverAcc = 0.0
+
+    fun emitHitchhiker(k: HitchhikerKind) = emit(SimEvent.Hitchhiker(k.id, k.label, simTimeSec))
     private var fragCounter = 1
     fun nextFragId(): Int = fragCounter++
 
@@ -736,7 +747,7 @@ class Simulation private constructor(
         sand.step(min(simDt, 2.0), sandFlowAt)
         stepRocks(simDt)
         food.step(min(simDt, 1.0), simTimeSec)
-        if (food.expiredGrams > 0) water.addDetritusTanGrams(food.expiredGrams * 0.10)
+        if (food.expiredGrams > 0) { water.addDetritusTanGrams(food.expiredGrams * 0.10); leftoverAcc += food.expiredGrams }
         waste.step(simDt, simTimeSec, water.s.tempC, organisms, water, useBehavior && !abstractMode, fluid?.hobOn ?: true)
         if (useBehavior && !abstractMode) coralCatch(simDt)
         if (useBehavior && !abstractMode) gspContacts(simDt)
@@ -820,6 +831,8 @@ class Simulation private constructor(
                 if (!a.alive || a.brainKind.name != r.actor || a.lengthCm < r.minActorCm) continue
                 // the crab is an opportunist: only a hungry one tries (vendor statement, 07 gap 5)
                 if (a.brainKind == BrainKind.SALLY_CRAB && a.hunger < 0.5) continue
+                // a well-fed arrow crab sticks to worms and scraps; a hungry one tries for bigger prey (research 42)
+                if (a.brainKind == BrainKind.ARROW_CRAB && a.hunger < 0.4) continue
                 // live-fish capture by the crab is an opt-in sandbox scenario (research 11 §3)
                 val crabOnFish = a.brainKind == BrainKind.SALLY_CRAB && r.targets.any { it != "ASTREA" && it != "NASSARIUS" }
                 if (crabOnFish && !crabLiveFishScenario) continue
@@ -844,7 +857,7 @@ class Simulation private constructor(
         if (r.moltWindowH > 0) {
             val cross = a.brainKind != t.brainKind
             // banded-on-skunk kills are unsourced: a sandbox toggle, off by default (07 gap 4)
-            if (cross && !crossSpeciesShrimpKills) return false
+            if (cross && HeatModel.isShrimp(a.brainKind) && !crossSpeciesShrimpKills) return false
             if (simTimeSec - t.lastMoltAt > r.moltWindowH * 3600) return false
             // conspecifics: a pair is stable, a third animal is the one at risk (S:Wong11)
             if (!cross && organisms.count { it.alive && it.brainKind == t.brainKind } < r.minGroup) return false
@@ -877,7 +890,8 @@ class Simulation private constructor(
 
     private fun behaviorTick(dt: Double) {
         perception.rebuild()
-        if (abstractMode) { abstractPlacement(dt); return }
+        if (abstractMode) { worms.clear(); abstractPlacement(dt); return }
+        worms.step(dt)
         if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
         for (o in organisms.toList()) {
@@ -1016,6 +1030,8 @@ class Simulation private constructor(
         }
         coralGrowth(lifeMin)
         if (pests.peppermint > 0 || pests.berghia > 0 || corals.any { it.kind == CoralKind.AIPTASIA }) AiptasiaModel.step(this, dtMin, light < LightSchedule.LIGHTS_ON, lifeMin)
+        Hitchhikers.step(this, dtMin)
+        wormBoomCheck()
         for (c in corals) {
             c.flowSpeed = flow.velocityFast(c.pos).length()
             c.fed *= exp(-dtMin / CORAL_FED_DECAY_MIN)
@@ -1257,6 +1273,10 @@ class Simulation private constructor(
             preds += MicroPredator(t, o.health.coerceIn(0.0, 1.0))
         }
         m.predators = preds
+        // uneaten food reaching the bottom, a two-day running rate (the bristleworms' feast, research 42)
+        val rate = leftoverAcc * 86400 / CHEM_DT
+        leftoverAcc = 0.0
+        m.leftoverGPerDay += (rate - m.leftoverGPerDay) * (1 - exp(-CHEM_DT / (2 * 86400.0)))
         var small = 0.0; var zoa = 0.0; var shroom = 0.0; var macro = 0.0
         for (c in corals) {
             val open = c.tissue * c.extension.coerceIn(0.1, 1.0)
@@ -1278,6 +1298,18 @@ class Simulation private constructor(
         m.smallPolyps = small; m.zoaPolyps = zoa; m.mushrooms = shroom; m.displayMacroL = macro
         // pod habitat in the sump: the refugium chaeto biomass index read as litres of loose chaeto
         m.refugiumL = water.s.chaeto
+    }
+
+    /**
+     * A bristleworm boom (research 42): far past what a lean tank holds, which only overfeeding does. Reported at most
+     * every three days, with the cause, so the keeper learns to feed less.
+     */
+    private fun wormBoomCheck() {
+        val m = water.micro
+        val n = m.total(MicroGroup.BRISTLEWORM)
+        if (n < WORM_BOOM_FRAC * m.refCapacity(MicroGroup.BRISTLEWORM) || simTimeSec - lastWormBoomReport < 3 * 86400) return
+        lastWormBoomReport = simTimeSec
+        pendingEventsSink += SimEvent.WormBoom(n.toInt(), simTimeSec)
     }
 
     /**
@@ -1318,6 +1350,9 @@ class Simulation private constructor(
                 // research 42 §1.4: small Lysmata molt every 1-3 weeks and hide about a day after [E]
                 BrainKind.PEPPERMINT_SHRIMP -> Triple(10.0, 21.0, 24.0)
                 BrainKind.SALLY_CRAB -> Triple(28.0, 56.0, 24.0)
+                // a spider crab (Majoidea) stops molting at maturity (terminal molt of puberty, Hartnoll 1963); young
+                // arrow crabs molt about monthly (est.)
+                BrainKind.ARROW_CRAB -> if (o.lengthCm < ARROW_MATURE_SHARE * o.species.maxLengthCm) Triple(25.0, 45.0, 24.0) else continue
                 else -> continue
             }
             if (o.nextMoltAt == 0.0) o.nextMoltAt = simTimeSec + lifeDays(rng.range(lo, hi))
@@ -1518,6 +1553,7 @@ class Simulation private constructor(
             is Command.Heater -> { water.heaterWorking = c.working; water.heaterStuckOn = c.stuckOn; c.setC?.let { water.heaterSetC = it } }
             is Command.Powerheads -> setFlow(c.on)
             is Command.AddOrganism -> addFromSeed(LivestockSeed(c.speciesId, c.nickname, c.sizeCm, c.role, ageYears = c.ageYears)).let { o ->
+                Hitchhikers.onAdded(this, if (o.species.isCoral) HitchSource.CORAL_FRAG else HitchSource.ANIMAL, o.pos)
                 // a newcomer: nobody knows it yet (06 §3.3 priority effects)
                 o.arrivalTime = simTimeSec; o.clock = simTimeSec
                 // new arrivals enter at the surface like a release from the acclimation cup
@@ -1733,6 +1769,10 @@ class Simulation private constructor(
             // scavengers clean up most leftovers; the rest becomes detritus
             val scav = organisms.filter { it.alive && it.brainKind in SCAVENGERS }
             for (s in scav) { val g = min(left * 0.5, s.mealGrams); s.eat(g); left -= g }
+            leftoverAcc += left
+            // the bristleworms come out for what reaches the rock and sand (research 42)
+            val worms = water.micro.total(MicroGroup.BRISTLEWORM)
+            left *= 1 - (worms / (worms + WORM_LEFTOVER_HALF)).coerceAtMost(WORM_LEFTOVER_MAX)
             water.addDetritusTanGrams(left * 0.10)
         }
     }
@@ -2114,6 +2154,7 @@ class Simulation private constructor(
             algae = water.algae.snapshot(),
             eggClutches = repro.poses(),
             microfauna = water.micro.snapshot(),
+            worms = worms.poses(),
             bacteria = water.bacteria.snapshot(),
             events = evs,
             speed = speed,
@@ -2245,6 +2286,13 @@ class Simulation private constructor(
         const val SCRAPE_STIR_SEC = 1.0
         /** Social-stress input held on every fish while flatworm toxin is in the water. */
         const val TOXIN_SOCIAL = 0.3
+        /** Bristleworms at which they take half the leftovers of an abstract feed, and the most they take (est.). */
+        const val WORM_LEFTOVER_HALF = 150.0
+        const val WORM_LEFTOVER_MAX = 0.6
+        /** A worm population this many times a lean tank's capacity is a boom ([SimEvent.WormBoom]). */
+        const val WORM_BOOM_FRAC = 2.0
+        /** Arrow crabs past this share of the species' largest size have made their final molt. */
+        const val ARROW_MATURE_SHARE = 0.75
         /**
          * Detritus kept in suspension by stirring reaches the sock/skimmer: share of the column's detritus pool captured
          * per unit of suspended load that timed out ([SandBed.resuspendedPending]), capped per minute (DESIGN ESTIMATE).
@@ -2254,7 +2302,7 @@ class Simulation private constructor(
         /** [Coral.fed] gained per caught particle and its e-folding time (≈ 2 days). */
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_PER_CATCH = 0.08
         @Ev(Evidence.DESIGN_ESTIMATE) const val CORAL_FED_DECAY_MIN = 2 * 1440.0
-        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB)
+        val SCAVENGERS = setOf(BrainKind.HERMIT, BrainKind.NASSARIUS, BrainKind.BRITTLE_STAR, BrainKind.BANDED_SHRIMP, BrainKind.CLEANER_SHRIMP, BrainKind.PEPPERMINT_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB)
         private fun clampD(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi)
     }
 }
