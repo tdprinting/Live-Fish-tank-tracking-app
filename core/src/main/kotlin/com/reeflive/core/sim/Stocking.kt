@@ -72,6 +72,9 @@ object Stocking {
         StockEntry("gramma_loreto", StockGroup.FISH, "Royal gramma", 6.5),
         StockEntry("pterapogon_kauderni", StockGroup.FISH, "Banggai cardinalfish", 6.5),
         StockEntry("cryptocentrus_cinctus", StockGroup.FISH, "Yellow watchman goby", 7.5),
+        // research 60: rare and expensive fish (late-game Deep Reef Imports)
+        StockEntry("zebrasoma_gemmatum", StockGroup.FISH, "Gem tang", 18.0),
+        StockEntry("chaetodon_daedalma", StockGroup.FISH, "Wrought iron butterflyfish", 13.0),
         StockEntry("stenopus_hispidus", StockGroup.INVERTS, "Coral banded shrimp", 5.5),
         StockEntry("lysmata_amboinensis", StockGroup.INVERTS, "Skunk cleaner shrimp", 6.5),
         // research 42: hides by day, eats aiptasia at night

@@ -8,7 +8,7 @@ import { GLYPHS } from './glyphs.js';
 import { playFlush } from './flush.js';
 import { initCare } from './care.js';
 import { initStores, streetHtml } from './stores.js';
-import { initRadio, radioKick, radioOn, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
+import { initRadio, radioKick, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
 const live = ReefLive.getInstance();
 const SB = ReefSandbox.getInstance();
@@ -76,6 +76,9 @@ export function startLive(applyReadings) {
     onScrape: (cm) => scrapeSound(cm),
     onFlipperTap: () => setCleaning(true),
     onShelfPick: (id) => useSupply(id),
+    // a tap on another display tank or the counter in a store's 3D aisle
+    onStoreStand: (i) => window.reefstores?.walk(i),
+    onStoreCounter: () => window.reefstores?.counter(),
     // touch controls: food from the shelf lands where the tank is tapped; a tap on gear pops out its menu
     onAim: (h) => aimFed(h),
     onSpot: (t) => openSpot(t),
@@ -93,7 +96,12 @@ export function startLive(applyReadings) {
     live.setDynamicRocks(ui.rocks);
     C = JSON.parse(SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
-    initRadio({ SB, store, ctx: audioCtx, volume: () => ui.volume, say });
+    initRadio({
+      SB, store, ctx: audioCtx, say,
+      records: () => (ui.mode === 'mine' ? JSON.parse(MY.records()) : []),
+      buy: (file) => { const ok = ui.mode === 'mine' && MY.buyRecord(file); if (ok) MY.save(); return ok; },
+      coins: () => (ui.mode === 'mine' ? JSON.parse(MY.economy())?.coins ?? null : null),
+    });
     initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
     applyReadings();
@@ -316,7 +324,7 @@ $('mytankList').addEventListener('click', (e) => {
   $('mytank').close();
   // ask the browser to keep this site's storage (best effort; an installed home-screen app keeps it anyway)
   try { navigator.storage?.persist?.(); } catch { /* not offered */ }
-  say('A brand new tank! Open Add life to bring in your first animals.');
+  say('A brand new tank! Tap Shop to visit the fish stores and bring home your first animals.');
   ui.card = 'LIFE'; renderCard(); renderRail(); tick();
 });
 $('mytankClose').addEventListener('click', () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(MY.info()).exists) setMode('watch'); });
@@ -338,12 +346,12 @@ function setSpeed(v) {
 
 // ================================================================ menu rail and cards
 // candy tones from the Android live theme (UI_STYLE §10.1). A few big bubbles a child can read: Look, Supplies (the 3D
-// shelf), Tank Health and, in My tank, Add life and Tank; Settings is the gear at the top (Android LiveMenu)
+// shelf), Tank Health and, in My tank, Shop and Tank; Settings is the gear at the top (Android LiveMenu)
 const CATS = {
   LOOK: { ico: 'eye', label: 'Look', tone: 'cyan' },
   SUPPLIES: { ico: 'basket', label: 'Supplies', tone: 'orange' },
   HEALTH: { ico: 'heart', label: 'Tank Health', tone: 'green' },
-  LIFE: { ico: 'fish', label: 'Add life', tone: 'pink' },
+  LIFE: { ico: 'shop', label: 'Shop', tone: 'pink' },
   TANK: { ico: 'bulb', label: 'Tank', tone: 'yellow' },
   SETTINGS: { ico: 'dots', label: 'Settings & help', tone: 'white' },
 };
@@ -502,7 +510,7 @@ const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK
   DOSE_MG: 'Coral vitamins in! Just the right amount.', DOSE_CA: 'Coral vitamins in! Just the right amount.', DOSE_ALK: 'Coral vitamins in! Just the right amount.',
   HEATER: 'New heater on. Nice and warm again.', PUMPS: 'Whoosh! The water is moving again.', FEED_CORALS: 'Yum, coral food!' };
 
-// ---- Add life
+// ---- Shop (My tank's fish stores)
 function lifeCard(sb) {
   // My tank buys its animals at the fish stores (docs/ECONOMY.md §5); the free gallery stays in the Sandbox
   if (ui.mode === 'mine') {
@@ -621,6 +629,8 @@ function settingsCard(sb) {
       ${row('data-sound', ui.sound ? 'speaker' : 'speakerOff', 'Sound', ui.sound)}
       ${row('data-radio', 'radio', radioOn() ? `Radio: ${radioSong().title}` : 'Radio (quiet tunes)', radioOn())}
       ${radioOn() ? `<div class="toggle-row"><span class="rlbl muted">${esc(radioSong().blurb)}</span><span class="pills"><button class="pillbtn" data-radiostep="-1" aria-label="Last song">${icon('skipBack')} Back</button><button class="pillbtn" data-radiostep="1" aria-label="Next song">Next ${icon('skipNext')}</button></span></div>` : ''}
+      <div class="toggle-row"><span class="rlbl">${icon('vinyl')} Record shelf</span><span class="pills"><button class="pillbtn ${ui.records ? 'on' : ''}" data-records>${ui.records ? 'Hide' : 'Open'}</button></span></div>
+      ${ui.records ? radioShelfHtml(esc) : ''}
       <label class="slider"><span>Volume</span><output>${Math.round(ui.volume * 100)}%</output><input type="range" data-volume min="0" max="1" step="0.05" value="${ui.volume}"></label>
       ${row('data-hermie-toggle', 'crab', 'Hermie the helper', ui.hermie)}${row('data-happy-toggle', 'heart', 'Happy face', ui.happy)}
       ${row('data-thoughts-toggle', 'whatIf', 'Thought bubbles', thoughts.on)}
@@ -677,6 +687,8 @@ $('card').addEventListener('click', (e) => {
   else if ('sound' in d) setSoundOn(!ui.sound);
   else if ('radio' in d) radioToggle();
   else if (d.radiostep) radioStep(Number(d.radiostep));
+  else if ('records' in d) ui.records = !ui.records;
+  else if (d.record != null) radioPick(Number(d.record));
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
   else if (d.group) ui.addGroup = d.group;
@@ -770,8 +782,11 @@ $('card').addEventListener('input', (e) => {
     store.set('reeflive.heaterC', Number(r.value));
     SB.act('heater', 'set', Number(r.value));
   } else if ('volume' in d) {
-    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume); radioVolume();
+    ui.volume = Number(r.value); store.set('reeflive.volume', ui.volume);
     r.previousElementSibling.textContent = `${Math.round(ui.volume * 100)}%`;
+  } else if ('radiovol' in d) {
+    radioVolume(Number(r.value));
+    r.previousElementSibling.textContent = `${Math.round(Number(r.value) * 100)}%`;
   }
 });
 

@@ -278,6 +278,8 @@ class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0, private val quie
 
 /** Graze hair algae on rock (grazers): nose to rock, rasps every 1.5 s. */
 open class Graze(val b: SpeciesBrain, val weight: Double = 1.0, label: String = "Grazing") : Behavior("graze", label) {
+    /** Whether the rock spot at [p] (outward [n]) will do; a species can refuse spots its body would not fit at. */
+    open fun accept(c: Ctx, p: Vec3, n: Vec3): Boolean = true
     private var spot: Vec3 = Vec3.ZERO
     private var normal: Vec3 = Vec3.Y
     private var nextRasp = 0.0
@@ -291,7 +293,7 @@ open class Graze(val b: SpeciesBrain, val weight: Double = 1.0, label: String = 
         val patches = c.rock.anchors.ofType("GRAZE")
         val near = patches.sortedBy { it.pos.distanceTo(c.o.pos) + c.rng.nextDouble() * 40 }.firstOrNull()
         val sp = near?.let { c.rockSurfacePoint(it.pos, 4.0) } ?: c.rockSurfacePoint(c.o.pos, 20.0)
-        if (sp == null) { finished = true; return }
+        if (sp == null || !accept(c, sp.first, sp.second)) { finished = true; return }
         spot = sp.first; normal = sp.second
         dur = c.rng.range(10.0, 40.0)
     }
@@ -574,9 +576,14 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
     override val committed: Boolean get() = elapsed < 2.5
     // idle unless a worm is out: no utility noise, so the other behaviours' random draws are unchanged
     override val noisy: Boolean get() = false
+    /** A worm it could not get to in one dart, left alone a while: tucked where the fish cannot reach, it kept a
+     * hawkfish darting at it, one 5 s try after another, for most of a minute off its perch. */
+    private var skip: String? = null
+    private var skipUntil = 0.0
     override fun score(c: Ctx): Double {
         if (c.o.hunger < 0.2 || c.o.sleeping) return 0.0
         w = c.sim.worms.nearest(c.o.pos, radius)
+        if (w != null && w?.key == skip && c.t < skipUntil) w = null
         return if (w != null) weight * (0.6 + 0.4 * c.o.hunger) else 0.0
     }
     override fun update(c: Ctx, out: SteerIntent) {
@@ -589,7 +596,7 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
             if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G); c.o.mouth = 1.0 }
             w = null; finished = true
         }
-        if (elapsed > 5) { w = null; finished = true }
+        if (elapsed > 5) { skip = ww.key; skipUntil = c.t + SKIP_S; w = null; finished = true }
     }
-    companion object { const val WORM_SNAP_G = 0.05 }
+    companion object { const val WORM_SNAP_G = 0.05; const val SKIP_S = 90.0 }
 }

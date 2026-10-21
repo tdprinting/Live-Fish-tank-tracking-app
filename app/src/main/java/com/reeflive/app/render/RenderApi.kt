@@ -43,6 +43,8 @@
  * - `setCleaning(Boolean)`: clean-glass mode. The camera squares up to the front glass, one-finger drags slide the
  *   Flipper (equipment.glb node `Flipper`) over the pane instead of orbiting, and every slide is reported as a
  *   [GlassStroke]. Scraped stripes show through the `GlassMask` texture from the snapshot ([AlgaeVisuals]).
+ * - `storeRoom` ([StoreRoomControl]): a fish store visit. The shop (store_room_<id>.glb) is drawn around the live
+ *   display tank, the camera frames the aisle, a tap on another tank or the counter calls `onStand` / `onCounter`.
  * - `stats: StateFlow<RenderStats>`: fps, draw calls, triangles, GL errors, load progress (drives [DebugHud]).
  *
  * ## Conventions

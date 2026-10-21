@@ -440,8 +440,9 @@ class Simulation private constructor(
     /**
      * Drops a white dry rock of [shape] over ([x], [z]) ([Command.PlaceRock]): it starts just above whatever is under its
      * footprint, falls and settles. Works with the rockscape static too (only the new rock moves). Returns its name.
+     * [agedDays] > 0 drops a rock that has already been in water that long (a store display's cured live rock).
      */
-    fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1): String? {
+    fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1, agedDays: Double = 0.0): String? {
         val rp = rockPhysics ?: return null
         rp.build()
         resolveCoralRocks()
@@ -473,7 +474,7 @@ class Simulation private constructor(
         }
         val height = b[4] - b[1]
         val bottom = min(top + DROP_GAP_CM, max(top + 0.5, rock.waterLevelCm - height))
-        val body = rp.addRock(shape, sd, px, bottom, pz, yaw, simTimeSec)
+        val body = rp.addRock(shape, sd, px, bottom, pz, yaw, simTimeSec - agedDays * 86400.0)
         emit(SimEvent.RockscapeChanged(body.name, true, simTimeSec))
         return body.name
     }

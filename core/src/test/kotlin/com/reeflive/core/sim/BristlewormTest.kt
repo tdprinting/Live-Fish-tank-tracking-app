@@ -132,4 +132,69 @@ class BristlewormTest {
         assertTrue("carapace in the surface on $bodyIn ticks", bodyIn <= samples / 500)
         assertTrue("feet in the surface on $footIn leg-ticks", footIn <= samples / 200)
     }
+
+    /**
+     * Tee 2026-10-21: the worms clipped in and out of things, wobbled and rolled. Every drawn station of every worm is
+     * either clear of rock and sand by its belly height or hidden well inside (down its hole), and the body's up turns
+     * smoothly from tick to tick.
+     */
+    @Test fun wormsLieOnTheSurfaceAndMoveSmoothly() {
+        val sim = TestTank.sim(DefaultStock.corals + TestTank.seed("crab"), seed = 12L, startHour = 1.0)
+        sim.water.micro.setTotal(MicroGroup.BRISTLEWORM, 200.0)
+        sim.advance(3600.0, behaviorDt = 0.1)
+        var stations = 0; var clipped = 0; var worst = 0.0
+        val lastUp = HashMap<String, FloatArray>()
+        val turns = ArrayList<Double>()
+        val fastTurns = ArrayList<Double>()
+        var shown = 0
+        val why = HashMap<String, Int>()
+        val bigTurn = HashMap<String, Int>()
+        sim.advance(1800.0, behaviorDt = 0.05) {
+            val poses = sim.worms.poses()
+            shown = maxOf(shown, poses.size)
+            for (p in poses) {
+                val L = p.scale.toDouble()
+                val belly = WormField.LIFT_BL * L
+                val hidden = WormField.BODY_R_BL * L
+                val ups = FloatArray(48)
+                val seen = BooleanArray(16)
+                for (i in 0 until 16) {
+                    val q = Vec3(p.spine[i * 3].toDouble(), p.spine[i * 3 + 1].toDouble(), p.spine[i * 3 + 2].toDouble())
+                    val d = min(sim.rock.sdf.dist(q), q.y - sim.sand.surfaceY(q.x, q.z))
+                    stations++
+                    seen[i] = d > -hidden
+                    if (d < belly - 0.05 && d > -hidden) {
+                        clipped++; worst = min(worst, d - belly)
+                        val st = sim.worms.worms.firstOrNull { it.key == p.id }?.state ?: -1
+                        val k = "s$st i${i / 4}"; why[k] = (why[k] ?: 0) + 1
+                    }
+                    val x = p.frames[i * 4]; val y = p.frames[i * 4 + 1]; val z = p.frames[i * 4 + 2]; val w = p.frames[i * 4 + 3]
+                    ups[i * 3] = 2 * (x * y - w * z); ups[i * 3 + 1] = 1 - 2 * (x * x + z * z); ups[i * 3 + 2] = 2 * (y * z + w * x)
+                }
+                val state = sim.worms.worms.firstOrNull { it.key == p.id }?.state ?: -1
+                val caught = state == WormField.CAUGHT
+                // a startled worm whips back down its hole about four times faster than it crawls, so its body
+                // sweeps the rock's curvature faster too: judged separately
+                val into = if (state == WormField.RETREAT) fastTurns else turns
+                lastUp[p.id]?.let { prev ->
+                    // (stations hidden down the hole are not seen, so only the drawn body is judged)
+                    if (!caught) for (i in 0 until 16) if (seen[i]) {
+                        val dot = (prev[i * 3] * ups[i * 3] + prev[i * 3 + 1] * ups[i * 3 + 1] + prev[i * 3 + 2] * ups[i * 3 + 2]).toDouble()
+                        val a = Math.toDegrees(kotlin.math.acos(dot.coerceIn(-1.0, 1.0)))
+                        into += a
+                        if (a > 4) { val st = sim.worms.worms.firstOrNull { it.key == p.id }?.state ?: -1; val k = "s$st i${i / 4}"; bigTurn[k] = (bigTurn[k] ?: 0) + 1 }
+                    }
+                }
+                lastUp[p.id] = ups
+            }
+        }
+        fun p99(l: ArrayList<Double>): Double { l.sort(); return if (l.isEmpty()) 0.0 else l[(l.size * 0.99).toInt().coerceAtMost(l.size - 1)] }
+        val p99 = p99(turns)
+        val fastP99 = p99(fastTurns)
+        println("worms: up to $shown out, $stations stations, $clipped clipped (worst %.2f cm), up-vector turn per tick p99 %.2f° (retreating %.2f°), max %.1f° clipped by $why, big turns by $bigTurn".format(worst, p99, fastP99, turns.lastOrNull() ?: 0.0))
+        assertTrue("worms out", shown >= 2)
+        assertTrue("stations in the surface: $clipped of $stations", clipped <= stations / 500)
+        assertTrue("body rolls ${"%.2f".format(p99)}° a tick", p99 < 4.0)
+        assertTrue("retreating body rolls ${"%.2f".format(fastP99)}° a tick", fastP99 < 12.0)
+    }
 }

@@ -567,7 +567,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 #storeUi { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
 #storeUi > * { pointer-events: auto; }
 #storeUi .sthead { position: absolute; left: 12px; top: calc(env(safe-area-inset-top) + 64px); display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border-radius: 16px; }
-#storeUi .door { width: 44px; height: 44px; border-radius: 12px; border: 2.5px solid var(--navy); background: var(--pillFill); font-size: 22px; cursor: pointer; }
+#storeUi .sback { height: 44px; padding: 0 16px 0 12px; border-radius: 22px; border: 2.5px solid var(--navy); background: var(--pillFill); color: var(--navy); font: 800 17px/1 var(--display); cursor: pointer; white-space: nowrap; }
+#storeUi .sback:active { transform: scale(0.95); }
 #storeUi .stname { display: flex; flex-direction: column; }
 #storeUi .stname b { font: 600 17px/1.15 var(--display); }
 #storeUi .stname small { color: var(--labelDim); }
@@ -609,6 +610,8 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .counter .pm { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--navy); background: var(--pillFill); color: var(--navy); font-weight: 700; cursor: pointer; }
 .counter .ctotal { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font: 600 18px/1.2 var(--display); }
 .counter .ctotal b { display: inline-flex; align-items: center; gap: 4px; color: #FFE14D; }
+/* the counter sits over the 3D checkout desk: no dimming, docked low so the desk shows above it */
+#storeUi .caremodal { background: transparent; align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .fxplus.minus { color: #FF9AA5; font-size: 26px; }
 /* "While you were away" (care.js; Android WelcomeBack.kt) */
 .dayarc { position: relative; height: 90px; border-radius: 16px; overflow: hidden; margin-bottom: 10px; transition: background .4s; }
@@ -631,3 +634,15 @@ body.instore #rail, body.instore #card, body.instore #fish, body.instore #follow
 .hunger .stat { grid-template-columns: minmax(96px, 46%) 1fr; gap: 8px; }
 .hunger .stat > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hunger .stat.hungry > span { color: var(--caution); font-weight: 600; }
+
+/* the radio's record shelf (radio.js): vinyl sleeves, the one playing ringed, locked ones dimmed with a price */
+.records { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px 8px; padding-bottom: 4px; }
+.record { display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 0; color: inherit; padding: 4px; border-radius: 14px; cursor: pointer; text-align: center; }
+.record .disc { position: relative; width: 100%; aspect-ratio: 1; display: block; }
+.record img { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.record.now img { box-shadow: 0 0 0 3px #8ee66b; animation: spin 6s linear infinite; }
+.record.locked img { opacity: 0.45; filter: grayscale(0.4); }
+.record em { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #ffe14d; color: #111; font-style: normal; font-weight: 700; font-size: 13px; border-radius: 10px; padding: 1px 8px; }
+.record strong { font-size: 12px; line-height: 1.2; }
+.record small { font-size: 11px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@media (prefers-reduced-motion: reduce) { .record.now img { animation: none; } }
