@@ -110,6 +110,12 @@ object Thoughts {
             n == "lightshy" -> Line("pulling its arms in because the light changed", "tuck its arms in", "Too bright!", Driver.FEAR, 2)
             n == "cavedart" -> Line("patrolling between its caves", "check on its caves", "All clear here.", Driver.TERRITORY)
             n == "nori" -> Line("nibbling the nori clip", "nibble the nori clip", "Nori! Yum!", Driver.HUNGER, 2)
+            // ---- butterflyfish (research 60)
+            n == "rove" -> Line(if (e.o.mateId != null) "roving the reef with its partner" else "roving along the rock looking for things to peck",
+                "rove the reef", "So much to look at!", Driver.ROUTINE)
+            n == "rockpeck" -> Line("pecking tiny critters off the rock", "peck at the rock", "Peck, peck, peck.", Driver.HUNGER)
+            n == "duster" -> Line("pecking at ${tgt ?: "the feather duster"}'s fan (butterflies eat fanworms!)", "peck a feather duster",
+                "Ooh, a tasty fan worm!", Driver.HUNGER, 3)
             n == "nipcoral" -> Line("nibbling at a coral (naughty!)", "nibble a coral", "Just a little taste…", Driver.HUNGER, 2)
             n == "cleansite" -> Line("cleaning a rock by ${e.host} to lay eggs on", "get a nest spot ready", "Making it spotless!", Driver.FAMILY, 3)
             n == "layeggs" -> Line("laying eggs by ${e.host}", "lay some eggs", "Eggs!", Driver.FAMILY, 3)
@@ -597,6 +603,7 @@ object Thoughts {
         BrainKind.ANEMONE -> "bubble tip anemone"
         BrainKind.GRAMMA -> "royal gramma"
         BrainKind.WATCHMAN_GOBY -> "watchman goby"
+        BrainKind.BUTTERFLY -> "butterflyfish"
         BrainKind.GENERIC_FISH -> o.species.common.ifBlank { "fish" }.lowercase()
         BrainKind.GENERIC_INVERT -> o.species.common.ifBlank { "critter" }.lowercase()
     }
@@ -661,7 +668,7 @@ object Thoughts {
 
     private val PARTS = listOf("gills", "fins", "sides", "mouth")
     /** Behaviours an empty-tummy fish idles in: the "is hungry and watching for food" sentence replaces them. */
-    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout")
+    private val IDLE = setOf("hover", "host", "wander", "patrol", "hovercover", "perch", "perchhole", "mouthhover", "cavedart", "surf", "station", "firehover", "shoal", "gramhover", "lookout", "rove")
     private val RESTING = setOf("sleep", "cocoon", "burrow", "sand", "bury", "nestle", "hovercover", "hide", "buried")
     /** Never offered as the next plan: reactions, not plans. */
     private val NO_NEXT = setOf("touch", "unwell", "heat", "flee", "tailflip", "retract", "dart", "jet", "snap", "molt", "gasp", "abandoned", "flipped", "yield")

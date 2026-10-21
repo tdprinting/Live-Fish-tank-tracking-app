@@ -225,13 +225,26 @@ class KeepClear(val b: SpeciesBrain) : Behavior("keepclear", "Keeping clear") {
         c.o.focusId = w.id
         // its own shelter when that is away from the feared fish (a burrow mouth, its cave), else cover on the far side
         if (spot == null) spot = b.shelterSpot(c)?.takeIf { it.distanceTo(w.pos) > SHELTER_THREAT_CM } ?: c.coverPoint(w.pos, 25.0)
+        // a long glass-guarded body (the gem tang) has no room to turn in a pocket by the rock and glass: it moves off
+        // into open water away from the feared fish instead
+        if (c.o.spline.glassGuard) spot = roomy(c, spot!!, w.pos)
         val s = spot!!
-        out.seek(s, c.o.cruiseSpeed * 1.1, arrive = 3.0, urgency = 0.5)
+        out.seek(if (c.o.spline.glassGuard) c.viaOpenWater(s) else s, c.o.cruiseSpeed * 1.1, arrive = 3.0, urgency = 0.5)
         if (c.o.pos.distanceTo(s) < 4.0) {
             out.hover = true
             out.faceDir = (w.pos - c.o.pos).normalized(Vec3.X)   // keeps an eye on it
         }
         if (elapsed > bout || c.o.pos.distanceTo(w.pos) > 3 * c.L + 20) finished = true
+    }
+
+    private fun roomy(c: Ctx, s: Vec3, threat: Vec3): Vec3 {
+        val L = c.L
+        val r = c.rock
+        fun ok(p: Vec3) = r.sdf.dist(p) >= 0.5 * L && p.x in 1.3 * L..(r.lengthCm - 1.3 * L) && p.z in 0.8 * L..(r.widthCm - 0.8 * L)
+        if (ok(s)) return s
+        val away = (c.o.pos - threat).horizontal().normalized(Vec3.X)
+        val p = c.o.pos + away * (1.5 * L)
+        return c.safe(Vec3(p.x.coerceIn(1.3 * L, r.lengthCm - 1.3 * L), p.y, p.z.coerceIn(0.8 * L, r.widthCm - 0.8 * L)), 0.5 * L)
     }
 
     companion object {

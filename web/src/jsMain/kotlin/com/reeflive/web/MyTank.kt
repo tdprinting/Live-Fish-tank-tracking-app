@@ -162,6 +162,12 @@ object ReefMyTank {
     /** Pays [price] sand dollars for Tank Health's coral care supplies; false when the keeper cannot afford them. */
     fun spendCare(price: Int): Boolean = sim != null && economy?.spend(price, "Coral care", today()) != false
 
+    /** The record shop: buys radio song [file] at its RadioStation price; false when it cannot (owned, too dear, no tank). */
+    fun buyRecord(file: String): Boolean = sim != null && economy?.buyRecord(file, today()) == true
+
+    /** Radio songs bought in this tank, as a JSON array of files (`[]` without a tank). */
+    fun records(): String = JSON.stringify(economy?.state?.records.orEmpty().toTypedArray())
+
     /** Collects today's happy tank bonus; returns what it paid. */
     fun collectHappy(): Int { val s = sim ?: return 0; return economy?.collectHappy(s, today()) ?: 0 }
 
