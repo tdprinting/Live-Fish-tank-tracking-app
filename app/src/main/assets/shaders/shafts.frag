@@ -38,9 +38,12 @@ void main() {
     // scrolling noise along the shaft plus a slower surface flicker
     float n = texture(uCaustic, vec2(vCoord.x * 0.15 + vSeed, vCoord.y * 0.6 - uTime * 0.03)).r;
     float flicker = 0.75 + 0.25 * sin(uTime * (0.7 + vSeed) + vSeed * 31.0);
-    // surface focus above this shaft (blurred caustic read, drifts like the floor caustics)
-    vec2 su = (vWorld.xz + surfaceSlope(vWorld.xz) * 20.0) * uCausticScale * 0.45 + uTime * vec2(0.017, -0.012);
-    flicker *= 0.6 + 0.4 * clamp(texture(uCaustic, su, 3.0).r * 28.0, 0.0, 2.5);
+    // surface focus above this shaft (blurred caustic read, drifts like the floor caustics); High only, the cheaper
+    // presets keep the plain flicker (the shafts are big blended quads, so every read is paid over a lot of pixels)
+    if (uQuality >= 1.5) {
+        vec2 su = (vWorld.xz + surfaceSlope(vWorld.xz) * 20.0) * uCausticScale * 0.45 + uTime * vec2(0.017, -0.012);
+        flicker *= 0.6 + 0.4 * clamp(texture(uCaustic, su, 3.0).r * 28.0, 0.0, 2.5);
+    } else flicker *= 0.9;
     float along = (1.0 - vCoord.y) * smoothstep(0.0, 0.08, vCoord.y + 0.02);
     vec3 toFrag = vWorld - uCamPos.xyz;
     float dist = length(toFrag);
