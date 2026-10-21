@@ -11,6 +11,7 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -898,13 +899,34 @@ class Camera {
     }
 
     companion object {
-        /** Tank interior (cm): x length, y height, z depth (back glass z = 0); core [TankDims] is the source of truth. */
+        /**
+         * Tank interior (cm): x length, y height, z depth (back glass z = 0) of the tank on screen: Tee's ([TankDims])
+         * unless a My tank build of another size is showing ([applyShape]; one tank is drawn at a time).
+         */
         val TANK = floatArrayOf(TankDims.LENGTH_F, TankDims.HEIGHT_F, TankDims.DEPTH_F)
         const val SAND_Y = TankDims.SAND_TOP_F
-        const val WATER_Y = TankDims.WATER_LEVEL_F
+        var WATER_Y = TankDims.WATER_LEVEL_F
+            private set
         /** Orbit target: mid-length, a little under mid-water, mid-depth. */
         val DEFAULT_TARGET = floatArrayOf(TankDims.LENGTH_F / 2f, 19f, TankDims.DEPTH_F / 2f)
-        const val DEFAULT_DISTANCE = 150f
+        /** Default orbit distance: 150 cm for Tee's tank, nearer for a small one, further for a tall, deep one. */
+        var DEFAULT_DISTANCE = 150f
+            private set
+        /** The shape [TANK] and the framing follow, so a renderer only refits when the tank on screen changes. */
+        var shape: com.reeflive.core.sim.TankShape = com.reeflive.core.sim.TankShape.STOCK
+            private set
+
+        /** Sizes the box, water line, default framing and target box to [s] (GL thread, before the frame is drawn). */
+        fun applyShape(s: com.reeflive.core.sim.TankShape) {
+            shape = s
+            TANK[0] = s.lengthCm.toFloat(); TANK[1] = s.heightCm.toFloat(); TANK[2] = s.depthCm.toFloat()
+            WATER_Y = s.waterLevelCm.toFloat()
+            DEFAULT_TARGET[0] = TANK[0] / 2f; DEFAULT_TARGET[1] = 19f * WATER_Y / TankDims.WATER_LEVEL_F; DEFAULT_TARGET[2] = TANK[2] / 2f
+            // same share of the screen as Tee's tank by width, or by height (a tall cube) when that needs more room
+            val k = max(TANK[0] / TankDims.LENGTH_F, 0.75f * TANK[1] / TankDims.HEIGHT_F)
+            DEFAULT_DISTANCE = (TANK[2] - DEFAULT_TARGET[2]) + (150f - TankDims.DEPTH_F / 2f) * k
+            TARGET_HI[0] = TANK[0] + 4f; TARGET_HI[1] = WATER_Y + 2f; TARGET_HI[2] = TANK[2] + 6f
+        }
         const val DEFAULT_PITCH = 0.08f
         /** Closest orbit (user units; ≈ 10 cm from the target in portrait): right up to the rockwork. */
         const val MIN_DISTANCE = 12f
@@ -1031,7 +1053,7 @@ class Camera {
             val front = TANK[2] - DEFAULT_TARGET[2]          // front glass is this much nearer than the target
             val byHeight = TANK[1] * 1.04f / (2f * tanHalf)
             val byWidth = TANK[0] * 1.04f / (2f * tanHalf * max(aspect, 0.1f))
-            return (front + max(byHeight, byWidth)).coerceIn(MIN_FIT_DISTANCE, DEFAULT_DISTANCE)
+            return (front + max(byHeight, byWidth)).coerceIn(min(MIN_FIT_DISTANCE, DEFAULT_DISTANCE), DEFAULT_DISTANCE)
         }
         const val MIN_FIT_DISTANCE = 80f
 
