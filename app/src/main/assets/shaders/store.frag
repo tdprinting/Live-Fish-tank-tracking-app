@@ -52,7 +52,7 @@ float bubbles(vec3 p) {
 }
 
 // One bay's lights at bay centre x [bx]: the tank light (down, over the tank) and the ceiling panel over the aisle.
-vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough) {
+vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough, float shim) {
     vec3 c = vec3(0.0);
     // tank light: a 104 x 30 cm panel at y 117.4, over the tank, facing down
     vec3 q = vec3(clamp(p.x, bx - 52.0, bx + 52.0), 117.4, clamp(p.z, 8.0, 38.0));
@@ -73,8 +73,18 @@ vec3 bayLight(vec3 p, vec3 N, vec3 V, float bx, vec3 diff, vec3 F0, float rough)
     vec3 t = vec3(clamp(p.x, bx - 60.0, bx + 60.0), 20.0, 46.0) - p;
     float t2 = dot(t, t);
     vec3 Lt = t * inversesqrt(t2);
-    c += uGlowCol * (max(dot(N, Lt), 0.0) * 1800.0 / (t2 + 2500.0)) * diff * shimmer(p);
+    c += uGlowCol * (max(dot(N, Lt), 0.0) * 1800.0 / (t2 + 2500.0)) * diff * shim;
     return c;
+}
+
+// The fog into the store's air, the white balance and the tonemap, shared by every lit surface.
+vec4 finish(vec3 col, vec3 p, float alpha) {
+    // far bays fade into the store's air
+    float dist = length(uCamPos.xyz - p);
+    col = mix(col, uFillCol * 0.4, smoothstep(450.0, 1100.0, dist));
+    // tonemap() adapts the frame to the tank lights' colour; the room keeps its own white balance
+    col *= max(mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity())), vec3(0.2));
+    return vec4(tonemap(col), alpha);
 }
 
 void main() {
@@ -107,6 +117,21 @@ void main() {
         fragColor = vec4(tonemap(mix(uFillCol * 2.0, vec3(1.0), 0.6) + uGlowCol), b * 0.75);
         return;
     }
+    if (kind == 4) {
+        // a stocked tank's water seen from the room: lit from above in its light's colour, rippling
+        float lit = 0.25 + 0.75 * smoothstep(-80.0, 38.0, p.y);
+        fragColor = finish((albedo * 0.35 + uGlowCol * 1.6) * lit * shimmer(p * 1.7) + uEmissive * 0.25, p, alpha);
+        return;
+    }
+    if (kind == 3) {
+        // glass: mostly reflection (no room lights: it only reflects)
+        float ndv = max(dot(N, V), 1e-3);
+        vec3 F0 = vec3(0.04);
+        vec3 Fr = F0 + (max(vec3(1.0 - uRoughness), F0) - F0) * pow(1.0 - ndv, 5.0);
+        alpha = clamp(alpha + 0.35 * pow(1.0 - ndv, 3.0), 0.0, 0.8);
+        fragColor = finish(Fr * (uLampCol * 2.0 + uFillCol) + albedo * 0.05 + uEmissive, p, alpha);
+        return;
+    }
     if (kind == 9) albedo *= vColor.rgb;
     if (kind == 8) {
         // egg crate: a square grid of white plastic bars (1.3 cm cells) with the dark water showing through
@@ -127,9 +152,10 @@ void main() {
     vec3 diff = albedo * (1.0 - metal);
     vec3 F0 = mix(vec3(0.04), albedo, metal);
 
-    // the two nearest bays' lights (the lights repeat every bay)
+    // the two nearest bays' lights (the lights repeat every bay); the water ripple depends on p only
+    float shim = shimmer(p);
     float n = floor((p.x - uRoomX) / uBay);
-    vec3 col = bayLight(p, N, V, uRoomX + n * uBay, diff, F0, rough) + bayLight(p, N, V, uRoomX + (n + 1.0) * uBay, diff, F0, rough);
+    vec3 col = bayLight(p, N, V, uRoomX + n * uBay, diff, F0, rough, shim) + bayLight(p, N, V, uRoomX + (n + 1.0) * uBay, diff, F0, rough, shim);
     // hemisphere fill; corners near the floor a little darker
     vec3 amb = mix(uFillCol * 0.35, uFillCol, N.y * 0.5 + 0.5) * diff;
     amb *= mix(0.7, 1.0, smoothstep(-82.0, -60.0, p.y));
@@ -139,20 +165,6 @@ void main() {
     float ndv = max(dot(N, V), 1e-3);
     vec3 Fr = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - ndv, 5.0);
     col += Fr * mix(uFillCol * 0.3, uLampCol * 3.0, smoothstep(0.0, 1.0, R.y)) * (kind == 1 ? 0.6 : 1.0);
-    if (kind == 4) {
-        // a stocked tank's water seen from the room: lit from above in its light's colour, rippling
-        float lit = 0.25 + 0.75 * smoothstep(-80.0, 38.0, p.y);
-        col = (albedo * 0.35 + uGlowCol * 1.6) * lit * shimmer(p * 1.7) + uEmissive * 0.25;
-    } else if (kind == 3) {
-        // glass: mostly reflection
-        col = Fr * (uLampCol * 2.0 + uFillCol) + albedo * 0.05;
-        alpha = clamp(alpha + 0.35 * pow(1.0 - ndv, 3.0), 0.0, 0.8);
-    }
-    col += uEmissive * (kind == 4 ? 0.0 : 1.0);
-    // far bays fade into the store's air
-    float dist = length(uCamPos.xyz - p);
-    col = mix(col, uFillCol * 0.4, smoothstep(450.0, 1100.0, dist));
-    // tonemap() adapts the frame to the tank lights' colour; the room keeps its own white balance
-    col *= max(mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity())), vec3(0.2));
-    fragColor = vec4(tonemap(col), alpha);
+    col += uEmissive;
+    fragColor = finish(col, p, alpha);
 }
