@@ -128,6 +128,10 @@ object Stocking {
         StockEntry("euphyllia_glabrescens", StockGroup.CORALS, "Torch coral", 15.0),
         StockEntry("fimbriaphyllia_divisa", StockGroup.CORALS, "Frogspawn coral", 12.0),
         StockEntry("duncanopsammia_axifuga", StockGroup.CORALS, "Duncan coral", 8.0),
+        StockEntry("micromussa_lordhowensis", StockGroup.CORALS, "Acan coral", 8.0),
+        StockEntry("caulastrea_furcata", StockGroup.CORALS, "Candy cane coral", 10.0),
+        StockEntry("trachyphyllia_geoffroyi", StockGroup.CORALS, "Open brain coral", 10.0),
+        StockEntry("plerogyra_sinuosa", StockGroup.CORALS, "Bubble coral", 12.0),
         StockEntry("euphyllia_glabrescens_gold", StockGroup.CORALS, "Gold torch coral", 15.0),
         StockEntry("rhodactis_inchoata", StockGroup.CORALS, "Bounce mushroom", 6.0),
         StockEntry("homophyllia_australis", StockGroup.CORALS, "Scolymia", 8.0),
@@ -235,7 +239,7 @@ object Stocking {
         val room = MAX_CORALS - sim.corals.size
         val want = min(count.coerceIn(0, MAX_CORALS_PER_ADD), max(0, room))
         if (want == 0) return 0
-        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind))
+        val spots = coralSpots(sim.rock, sim.corals.map { it.pos }, want, sim.rng, spacingCm(sp.coralKind), StonyCorals.onSand(sp))
         for ((p, _) in spots) placeCoral(sim, sp, p)
         return spots.size
     }
@@ -274,9 +278,10 @@ object Stocking {
 
     /**
      * Up to [count] free spots for new colonies: upward-facing rock tops or open sand, away from the glass, with
-     * room above to grow, and at least [spacing] from [taken] colonies and each other.
+     * room above to grow, and at least [spacing] from [taken] colonies and each other; only open sand when [sandOnly].
      */
-    fun coralSpots(rock: RockData, taken: List<Vec3>, count: Int, rng: com.reeflive.core.geom.Rng, spacing: Double): List<Pair<Vec3, Vec3>> {
+    fun coralSpots(rock: RockData, taken: List<Vec3>, count: Int, rng: com.reeflive.core.geom.Rng, spacing: Double,
+                   sandOnly: Boolean = false): List<Pair<Vec3, Vec3>> {
         val out = ArrayList<Pair<Vec3, Vec3>>()
         val used = ArrayList(taken)
         var gap = spacing
@@ -289,6 +294,7 @@ object Stocking {
                 val z = rng.range(5.0, rock.widthCm - 3.0)
                 val (p, n) = surfaceSpot(rock, x, z) ?: continue
                 if (n.y < 0.6) continue                                   // too steep: it would hang off the rock
+                if (sandOnly && p.y > rock.sandTopCm + 0.5) continue      // free-living: on the sand bed, not the rock
                 if (p.y > rock.waterLevelCm - 15) continue                // no room to grow
                 if (used.any { it.distanceTo(p) < gap }) continue
                 out += p to n; used += p

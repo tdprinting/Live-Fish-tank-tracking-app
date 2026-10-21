@@ -120,6 +120,12 @@ object CoralHealth {
             genus.startsWith("lobophytum") -> CoralProfile(1.0, 1.0, 0.02, 0.1, 0.3, 0.9, 1.0, CoralSpread.BUD, 160.0, 1.7, CoralProfile.CREAM)
             // duncans are the forgiving LPS (stony_corals.md §4): fed a lot, slow to bleach, recover well
             genus.startsWith("duncanopsammia") -> CoralProfile(0.9, 1.0, 0.02, 0.5, 0.05, 0.9, 1.0, CoralSpread.NONE)
+            // acans are as forgiving as duncans; candy canes fade in strong light; open brains and bubbles bleach and
+            // deflate with a sudden light jump or heat over 28 C and tear easily (stony_corals.md §1, §3)
+            genus.startsWith("micromussa") -> CoralProfile(0.9, 1.0, 0.02, 0.5, 0.05, 0.9, 1.0, CoralSpread.NONE)
+            genus.startsWith("caulastrea") -> CoralProfile(0.9, 1.2, 0.02, 0.4, 0.05, 1.0, 1.0, CoralSpread.NONE)
+            genus.startsWith("trachyphyllia") -> CoralProfile(1.0, 1.3, 0.02, 0.4, 0.05, 1.2, 0.8, CoralSpread.NONE)
+            genus.startsWith("plerogyra") -> CoralProfile(1.1, 1.3, 0.02, 0.5, 0.05, 1.0, 0.9, CoralSpread.NONE)
             // scolymia (research 61 §3): low light, harmed more by too much light than too little, relies on meaty
             // target feeding; a solitary polyp, never buds
             genus.startsWith("homophyllia") || genus.startsWith("scolymia") -> CoralProfile(1.1, 1.5, 0.015, 0.6, 0.05, 1.2, 0.8, CoralSpread.NONE)

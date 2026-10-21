@@ -1,4 +1,4 @@
-# Stony corals (LPS pack 1): hammer, torch, frogspawn, duncan
+# Stony corals (LPS packs 1-2): hammer, torch, frogspawn, duncan, acan, candy cane, open brain, bubble
 
 The first scleractinian (stony) corals in the sim: they build an aragonite skeleton, so they take real alkalinity and
 calcium, mind swings more than soft corals, and leave white skeleton where tissue dies. Large-polyp stony corals also
@@ -97,3 +97,25 @@ colonies on their own: new heads stay on the colony (fragging is a keeper's job)
 Retail 2025-26 (BRS / ORA listings; estimates where marked): duncan 1 in, 3-5 heads $80-95 (BRS); hammer frag
 $40-120 (est.); torch frag $60-200 (est.); frogspawn frag $50-200 (est.). Game prices: duncan 55, hammer 60,
 frogspawn 60, torch 75; Frag Shack from level 2-3.
+
+## §7 Pack 2: acan, candy cane, open brain, bubble
+
+Sources are in stony_corals_sources.md §5-8 (Reef Builders, TFH/Goemans, ORA via Bulk Reef Supply, Fragbox). All four
+are `CoralKind.LPS`: the meaty-LPS chemistry bands, night feeding tentacles and meaty-food catching from pack 1.
+
+| | Acan (*Micromussa lordhowensis*) | Candy cane (*Caulastrea furcata*) | Open brain (*Trachyphyllia geoffroyi*) | Bubble (*Plerogyra sinuosa*) |
+|---|---|---|---|---|
+| Light (PAR) | 50-125 | 100-150 | 50-150, red morphs shaded | 50-150, bubbles shrink in strong light |
+| Flow | low-moderate | low, indirect | gentle | very gentle |
+| Sting day / sweepers (cm) | 1 / 5 (est.) | 1 / 6 (est.) | 1.5 / 5 (est., short) | 2 / 12 ("aggressive", long sweepers) |
+| Health profile | forgiving like duncan | light bleach ×1.2 (colour washes out) | light ×1.3, recede ×1.2, slow recovery | heat and light ×1.1/1.3 (vesicles deflate over 28 °C) |
+| Placement | rock | rock | sand only (`StonyCorals.onSand`: swollen tissue tears on rock) | rock |
+| Price (level) | 50 (3) | 35 (2; ORA frag $29-34) | 90 (4) | 70 (4) |
+
+Prices other than the candy cane are estimates from the retail ranges in the sources (not verified listings).
+
+Look: acan, an encrusting carpet of 11 plump polyps (red mantle, green ring, orange eye); candy cane, 10 branching
+tubes with green and cream striped heads; open brain, one swollen figure-8 cushion with radial ridges and a glowing
+green rim on a cone skeleton; bubble, 40 grape-like vesicles over thin septal walls. The open brain mantle and the
+bubbles use polyp mode 3 (polyp.vert): they swell with the colony's extension and deflate as the night tentacles come
+out, which is when the bubble's long sweepers show.

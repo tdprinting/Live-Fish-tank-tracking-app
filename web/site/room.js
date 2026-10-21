@@ -5,13 +5,35 @@ import { SAND_DOLLAR } from './care.js';
 
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-let my, live, say, cue, onChange;
+let my, live, say, cue, onChange, onTurn;
 let bar = null;
+let nav = null;
+let navKey = '';
 let trying = null;
 
 export function initRoom(opts) {
   ({ my, live, say, cue } = opts);
   onChange = opts.onChange || (() => {});
+  onTurn = opts.onTurn || (() => {});
+  // the arrows round the room when the keeper has more than one tank
+  nav = document.createElement('div');
+  nav.id = 'roomNav';
+  nav.className = 'roomnav hidden';
+  (document.getElementById('live') || document.body).appendChild(nav);
+  nav.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-turn]');
+    if (!b) return;
+    cue?.('TICK');
+    if (my.turnStep(Number(b.dataset.turn))) {
+      live.showRoom();
+      let r = null;
+      try { r = JSON.parse(my.roomTanks()); } catch { r = null; }
+      const t = r?.tanks.find((x) => x.active);
+      if (t) say?.(`Here's your ${t.gallons} gallon tank${t.name && t.name !== 'My tank' ? `, ${t.name}` : ''}!`);
+      navKey = '';
+      onTurn();
+    }
+  });
   bar = document.createElement('div');
   bar.id = 'tryBar';
   bar.className = 'trybar hidden';
@@ -20,6 +42,33 @@ export function initRoom(opts) {
     if (e.target.closest('[data-trybuy]')) buy();
     else if (e.target.closest('[data-tryno]')) endTry(true);
   });
+}
+
+/** Shows the arrows round the room (more than one tank, [show] when nothing covers the tank); cheap to call often. */
+export function roomNav(show) {
+  if (!nav) return;
+  let r = null;
+  if (show) { try { r = JSON.parse(my.roomTanks()); } catch { r = null; } }
+  const tanks = r?.tanks ?? [];
+  const on = show && tanks.length > 1;
+  const key = on ? JSON.stringify(r) : '';
+  if (key === navKey) return;
+  navKey = key;
+  nav.classList.toggle('hidden', !on);
+  if (!on) return;
+  const i = tanks.findIndex((t) => t.active);
+  const left = tanks[(i - 1 + tanks.length) % tanks.length];
+  const right = tanks[(i + 1) % tanks.length];
+  nav.innerHTML = `<button class="turn l" data-turn="-1" aria-label="Turn to your ${left.gallons} gallon tank"><span>‹</span><small>${left.gallons} gal</small></button>
+    <button class="turn r" data-turn="1" aria-label="Turn to your ${right.gallons} gallon tank"><span>›</span><small>${right.gallons} gal</small></button>`;
+}
+
+/** A little drawing of a tank of [gallons] on its stand (the room shop's tank tiles). */
+function tankPic(gallons) {
+  const w = Math.min(40, 14 + gallons * 0.22), h = Math.min(18, 9 + gallons * 0.06), x = 24 - w / 2;
+  return `<svg class="standpic" viewBox="0 0 48 33" aria-hidden="true"><rect x="${x}" y="${24 - h}" width="${w}" height="${h}" rx="1" fill="#2b6f8f" stroke="#cfeff8" stroke-width=".8"/>
+    <rect x="${x + 1}" y="${24 - h * 0.3}" width="${w - 2}" height="${h * 0.3 - 0.8}" fill="#e3d2a8" opacity=".8"/><text x="24" y="${22 - h * 0.4}" font-size="7" text-anchor="middle">🐠</text>
+    <rect x="${x - 1}" y="24" width="${w + 2}" height="8" fill="#f1ede6"/></svg>`;
 }
 
 /** A little drawing of a stand in its colours (the shop tile's picture). */
@@ -66,6 +115,7 @@ export function roomHtml() {
   const scenes = s.tiles.filter((t) => t.kind === 'scene');
   const walls = s.tiles.filter((t) => t.kind === 'wall');
   const floors = s.tiles.filter((t) => t.kind === 'floor');
+  const tanks = s.tiles.filter((t) => t.kind === 'tank');
   const cur = stands.find((t) => t.inUse);
   const kind = (key) => key.split(':')[1];
   return `<h4>Your room</h4><p class="muted">Make the room round your tank your own. Tap anything to try it on.</p>
@@ -73,6 +123,9 @@ export function roomHtml() {
       ${scenePic(kind(t.key), t.paint, t.trim)}<b>${esc(t.label)}</b>${price(t)}</button>`).join('')}</div>
     <h4>Walls</h4>${swatchRow(walls)}
     <h4>Floor</h4>${swatchRow(floors)}
+    <h4>More tanks</h4><p class="muted">Put another tank on a different wall and turn round the room to visit it.</p>
+    <div class="rtiles">${tanks.map((t) => `<button class="rtile ${t.locked ? 'lock' : ''}" data-room="${t.key}">
+      ${tankPic(Number.parseInt(t.label, 10) || 40)}<b>${esc(t.label)}</b>${price(t)}</button>`).join('')}</div>
     <h4>Stand</h4>
     <div class="rtiles">${stands.map((t) => `<button class="rtile ${t.inUse ? 'on' : ''} ${t.locked ? 'lock' : ''}" data-room="${t.key}">
       ${standPic(kind(t.key), t.paint, t.trim)}<b>${esc(t.label)}</b>${price(t)}</button>`).join('')}</div>
@@ -97,10 +150,14 @@ export function roomClick(key, closeCard) {
     onChange();
     return true;
   }
-  if (t.locked) { say?.(`That one opens at level ${t.level}. Keep doing your care jobs!`); return true; }
+  if (t.locked) {
+    let full = false;
+    try { full = JSON.parse(my.roomTanks())?.tanks.length >= 4; } catch { full = false; }
+    say?.(t.kind === 'tank' && full ? 'Every wall has a tank already!' : `That one opens at level ${t.level}. Keep doing your care jobs!`);
+    return true;
+  }
   trying = t;
-  my.decorPreview(key);
-  live.showRoom();
+  if (t.kind !== 'tank') { my.decorPreview(key); live.showRoom(); }
   closeCard();
   const afford = s.coins >= t.price;
   bar.innerHTML = `<span class="what"><b>${esc(t.label)}</b> ${SAND_DOLLAR}${t.price}</span>
@@ -116,11 +173,17 @@ function buy() {
   try { r = JSON.parse(my.decorBuy(trying.key)); } catch { r = null; }
   if (r?.result === 'OK') {
     cue?.('FEED');
-    say?.(trying.kind === 'stand' ? `Your new ${trying.label.toLowerCase()} is in!` : trying.kind === 'scene' ? `Welcome to your ${trying.label.toLowerCase()}!` : `${trying.label}: yours now!`);
+    say?.(trying.kind === 'stand' ? `Your new ${trying.label.toLowerCase()} is in!` : trying.kind === 'scene' ? `Welcome to your ${trying.label.toLowerCase()}!`
+      : trying.kind === 'tank' ? `Your new ${trying.label} tank is set up on another wall. Use the arrows to turn round the room!` : `${trying.label}: yours now!`);
+    const tank = trying.kind === 'tank';
     endTry(false);
+    if (tank) { live.showRoom(); navKey = ''; onTurn(); }
     onChange();
   } else if (r?.result === 'TOO_POOR') {
     say?.(`Not enough sand dollars yet. Do your care jobs to earn more!`);
+  } else if (r?.result === 'ROOM_FULL') {
+    say?.('Every wall has a tank already!');
+    endTry(true);
   } else if (r?.result === 'LEVEL_LOCKED') {
     say?.('That one opens at a higher level.');
   } else endTry(true);

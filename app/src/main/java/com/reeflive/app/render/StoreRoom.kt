@@ -177,7 +177,7 @@ internal class StoreRoomScene {
      * Draws the room's opaque ([blended] false) or see-through parts with [p] (the store program). Returns the draw
      * calls. [c] says how many bays there are, how each is set up and which is live.
      */
-    fun draw(p: ShaderProgram, white: Texture, c: StoreRoomControl, blended: Boolean): Int {
+    fun draw(p: ShaderProgram, white: Texture, c: StoreRoomControl, blended: Boolean, viewProj: FloatArray): Int {
         val m = model ?: return 0
         val tanks = c.tanks
         val at = c.at
@@ -199,6 +199,7 @@ internal class StoreRoomScene {
             when {
                 g == G_BAY || g == G_DECOR0 || g == G_DECOR1 -> for (bay in -1..tanks + 1) {
                     if (g == G_DECOR0 && (bay and 1) != 0 || g == G_DECOR1 && (bay and 1) == 0) continue
+                    if (!inView(viewProj, bayX(c, bay))) continue
                     glow(p, c, bay)
                     calls += drawAt(p, part, bayX(c, bay) - StoreRoomLayout.CX)
                 }
@@ -214,6 +215,7 @@ internal class StoreRoomScene {
                         if (kindAt(c, bay) != k) continue
                         // the live tank is the real one: only its stand and lamp come from the room
                         if (bay == at && family != G_STAND && family != G_LAMP) continue
+                        if (!inView(viewProj, bayX(c, bay))) continue
                         glow(p, c, bay)
                         val x = bayX(c, bay) - KIND_LENGTH[k] * 0.5f
                         calls += if (family == G_FISH) drawFish(p, part, x, bay) else drawAt(p, part, x)
@@ -223,6 +225,24 @@ internal class StoreRoomScene {
             }
         }
         return calls
+    }
+
+    /**
+     * False when everything of a bay centred at world [x] lies outside the left or right clip plane of [vp]. Conservative:
+     * the box is the bay's pitch plus a wide margin for the stand, props and fish, and the room's full height and depth.
+     */
+    private fun inView(vp: FloatArray, x: Float): Boolean {
+        var left = true; var right = true
+        for (i in 0 until 8) {
+            val px = if (i and 1 == 0) x - CULL_HALF_X else x + CULL_HALF_X
+            val py = if (i and 2 == 0) StoreRoomLayout.FLOOR_Y else CULL_TOP_Y
+            val pz = if (i and 4 == 0) CULL_MIN_Z else CULL_MAX_Z
+            val w = vp[3] * px + vp[7] * py + vp[11] * pz + vp[15]
+            val cx = vp[0] * px + vp[4] * py + vp[8] * pz + vp[12]
+            if (cx >= -w) left = false
+            if (cx <= w) right = false
+        }
+        return !left && !right
     }
 
     /** The tank colour for [bay]'s water, lamp and the glow it spills (−1: the store's own). */
@@ -345,6 +365,11 @@ internal class StoreRoomScene {
         private const val PI = 3.1415927f
         /** Seconds the walker stands at each end of its stroll. */
         private const val PAUSE = 4f
+        /** Bay cull box (cm) around a bay centre: wide enough for any stand, prop tank or aisle decor of the bay. */
+        private const val CULL_HALF_X = 220f
+        private const val CULL_TOP_Y = 320f
+        private const val CULL_MIN_Z = -200f
+        private const val CULL_MAX_Z = 500f
         private val KIND_COUNT = DisplayKind.entries.size
         private val LONG = DisplayKind.LONG.ordinal
         /** Each display kind's glass length and depth (cm), as its build's box. */
