@@ -74,8 +74,8 @@ object StoreRoomLayout {
 
     /** Where the people stand (store_rooms.py models each at the origin, facing +z; WALK_HIP, the clerk's head). */
     const val CLERK_Z = 15f
-    const val CLERK_HEAD_Y = 156.4f
-    const val WALK_HIP = 84f
+    const val CLERK_HEAD_Y = 158.6f
+    const val WALK_HIP = 83f
     const val WALK_Z = 132f
     /** Walking pace (cm/s) and stride (cm per leg swing cycle). */
     const val WALK_SPEED = 55f

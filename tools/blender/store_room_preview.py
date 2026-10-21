@@ -70,7 +70,7 @@ def main(argv):
         if bay == len(kinds):
             place(objs, "Counter", bx)
             place(objs, "Clerk", bx + CX, z=15.0, y=SR.FLOOR)
-            place(objs, "ClerkHead", bx + CX, z=15.0, y=SR.FLOOR + 85.0 + 170 * 0.41, yaw=0.3)
+            place(objs, "ClerkHead", bx + CX, z=15.0, y=SR.FLOOR + 158.6, yaw=0.3)
         if bay == 0:
             place(objs, "Sign", bx)
         place(objs, f"Decor{(bay % 2 + 2) % 2}", bx)

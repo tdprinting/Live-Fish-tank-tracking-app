@@ -481,76 +481,128 @@ def counter(t):
 # ============================================================== people (render/StoreRoom.kt animates them)
 # Each person is modelled standing at the origin, facing +z; the renderer places, turns and bobs them. The walker's
 # legs are their own nodes, hip at the origin (WALK_HIP above the floor), so they can swing.
-WALK_HIP = 84.0
+WALK_HIP = 83.0
 SKINS = ("#F1C7A3", "#C68E63", "#8D5A3B", "#E8B48C")
 
 
-def legs(g, hip, h, pants, shoe, spread=7.0):
-    for s in (-1, 1):
-        g.add(cylinder((s * spread / 2, h * 0.04, 0), h * 0.045, hip - h * 0.04, 10), pants)
-        g.add(ellipsoid((s * spread / 2, h * 0.02, 2.5), (h * 0.04, h * 0.025, h * 0.075), 10, 5), shoe)
+def loft(pts, rx, rz, segs=16):
+    """A smooth closed tube through centres [pts] with elliptical rings (radii [rx], [rz]); ends close on poles."""
+    pts = np.asarray(pts, float)
+    V = [tuple(pts[0])]
+    n = len(pts)
+    for i in range(n):
+        # ring plane perpendicular to the path (mostly vertical paths: rings in the local x/z)
+        t = pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]
+        t /= np.linalg.norm(t)
+        a = np.array([1.0, 0.0, 0.0]) if abs(t[0]) < 0.9 else np.array([0.0, 0.0, 1.0])
+        u = a - np.dot(a, t) * t
+        u /= np.linalg.norm(u)
+        w = np.cross(t, u)
+        for k in range(segs):
+            th = 2 * math.pi * k / segs
+            V.append(tuple(pts[i] + u * rx[i] * math.cos(th) + w * rz[i] * math.sin(th)))
+    V.append(tuple(pts[-1]))
+    F = [(0, 1 + (k + 1) % segs, 1 + k) for k in range(segs)]
+    for i in range(n - 1):
+        b0, b1 = 1 + i * segs, 1 + (i + 1) * segs
+        F += [(b0 + k, b0 + (k + 1) % segs, b1 + (k + 1) % segs, b1 + k) for k in range(segs)]
+    last = len(V) - 1
+    b = 1 + (n - 1) * segs
+    F += [(last, b + k, b + (k + 1) % segs) for k in range(segs)]
+    return np.array(V), F
 
 
-def leg_node(name, h, pants, shoe, side):
+class Figure:
+    """Proportions of a simple, rounded person [h] cm tall (a kid has a bigger head for the body)."""
+
+    def __init__(self, h, kid=False):
+        self.h = h
+        self.hr = h * (0.085 if kid else 0.064)          # head radius
+        self.sh = h - 2.05 * self.hr - h * 0.03           # shoulder line
+        self.hip = self.sh * 0.6
+        self.knee = self.sh * 0.32
+        self.w = self.sh * (0.17 if kid else 0.155)       # half shoulder width
+        self.head_y = self.sh + h * 0.03 + self.hr
+
+
+def leg(g, f, x, pants, shoe, y0=0.0):
+    """One leg from the hip down to a rounded shoe, its top at height [y0] + hip (y0 = -hip: hip at the origin)."""
+    h, hip, knee = f.h, f.hip, f.knee
+    r = f.w * 0.36
+    g.add(loft([(x, y0 + hip + r * 0.4, 0), (x, y0 + hip * 0.8, 0), (x, y0 + knee, r * 0.1), (x, y0 + knee * 0.55, -r * 0.05), (x, y0 + h * 0.035, 0)],
+               [r * 0.5, r, r * 0.72, r * 0.75, r * 0.5], [r * 0.5, r, r * 0.72, r * 0.78, r * 0.5]), pants)
+    g.add(ellipsoid((x, y0 + h * 0.022, r * 0.75), (r * 0.62, h * 0.024, r * 1.45), 16, 8), shoe)
+
+
+def leg_node(name, f, pants, shoe, side):
     """One walker leg, hip at the origin, hanging down to the floor at y = -hip."""
     g = Group(name, smooth=True)
-    hip = WALK_HIP
-    g.add(cylinder((side * 3.5, -hip + h * 0.04, 0), h * 0.045, hip - h * 0.04, 10), pants)
-    g.add(ellipsoid((side * 3.5, -hip + h * 0.02, 2.5), (h * 0.04, h * 0.025, h * 0.075), 10, 5), shoe)
+    leg(g, f, side * f.w * 0.42, pants, shoe, y0=-f.hip)
     return g
 
 
-def person(g, h, shirt, pants, skin, hair, with_legs=True, apron=None, cap=None, head=True):
-    """A friendly low-poly person [h] cm tall at the origin, facing +z (arms down, slightly forward)."""
-    hip = h * 0.51
-    sh = shirt
-    pa = pants
-    sk = skin
-    hr = hair
+def head(g, f, c, skin, hair, cap=None, long_hair=False):
+    """A round head centred at [c]: hair cap, dot eyes, a little nose and a smile, facing +z."""
+    x, y, z = c
+    r = f.hr
+    g.add(ellipsoid((x, y, z), (r * 0.92, r, r * 0.96), 20, 14), skin)
+    g.add(ellipsoid((x, y + r * 0.28, z - r * 0.12), (r * 0.98, r * 0.82, r * 0.96), 20, 12), hair)
+    if long_hair:
+        g.add(ellipsoid((x, y - r * 0.35, z - r * 0.45), (r * 0.95, r * 1.05, r * 0.6), 18, 10), hair)
+    for s in (-1, 1):
+        g.add(ellipsoid((x + s * r * 0.34, y + r * 0.02, z + r * 0.9), (r * 0.1, r * 0.13, r * 0.06), 10, 6), "#1A1420")
+        g.add(ellipsoid((x + s * r * 0.55, y - r * 0.28, z + r * 0.78), (r * 0.16, r * 0.1, r * 0.06), 10, 6), "#F09A8A")
+    g.add(ellipsoid((x, y - r * 0.15, z + r * 0.97), (r * 0.1, r * 0.12, r * 0.08), 10, 6), skin)
+    g.add(ellipsoid((x, y - r * 0.45, z + r * 0.86), (r * 0.24, r * 0.06, r * 0.05), 12, 4), "#B5523F")
+    for s in (-1, 1):
+        g.add(ellipsoid((x + s * r * 0.92, y - r * 0.05, z), (r * 0.12, r * 0.2, r * 0.14), 10, 6), skin)
+    if cap:
+        g.add(ellipsoid((x, y + r * 0.42, z - r * 0.05), (r * 1.02, r * 0.66, r * 1.0), 20, 10), cap)
+        g.add(ellipsoid((x, y + r * 0.35, z + r * 0.85), (r * 0.72, r * 0.1, r * 0.55), 16, 6), cap)
+
+
+def person(g, h, shirt, pants, skin, hair, with_legs=True, apron=None, cap=None, head_on=True, kid=False, long_hair=False):
+    """A simple rounded person [h] cm tall at the origin, facing +z, arms relaxed at the sides. Returns the figure."""
+    f = Figure(h, kid)
+    sh, hip, w = f.sh, f.hip, f.w
     shoe = "#2A2A30"
     if with_legs:
-        legs(g, hip, h, pa, shoe)
-    g.add(ellipsoid((0, hip + h * 0.02, 0), (h * 0.1, h * 0.07, h * 0.07), 12, 6), pa)
-    g.add(ellipsoid((0, hip + h * 0.16, 0), (h * 0.115, h * 0.17, h * 0.075), 14, 8), sh)
+        for s in (-1, 1):
+            leg(g, f, s * w * 0.42, pants, shoe)
+    d = w * 0.62      # body depth
+    # hips (trousers), then the shirt from the waist to the shoulders, rounded over the top
+    g.add(loft([(0, hip - w * 0.25, 0), (0, hip, 0), (0, hip + (sh - hip) * 0.3, 0)], [w * 0.55, w * 0.8, w * 0.74], [d * 0.6, d * 0.85, d * 0.8]), pants)
+    g.add(loft([(0, hip + (sh - hip) * 0.22, 0), (0, hip + (sh - hip) * 0.45, 0), (0, hip + (sh - hip) * 0.8, 0.02 * h), (0, sh, 0), (0, sh + w * 0.18, 0)],
+               [w * 0.76, w * 0.8, w * 0.9, w * 0.86, w * 0.4], [d * 0.82, d * 0.84, d * 0.95, d * 0.78, d * 0.4]), shirt)
     if apron:
-        g.add(ellipsoid((0, hip + h * 0.12, h * 0.035), (h * 0.1, h * 0.15, h * 0.05), 12, 6), apron)
+        g.add(loft([(0, hip - w * 0.4, d * 0.62), (0, hip + (sh - hip) * 0.4, d * 0.86), (0, hip + (sh - hip) * 0.85, d * 0.9)],
+                   [w * 0.6, w * 0.66, w * 0.5], [d * 0.12, d * 0.14, d * 0.12]), apron)
     for s in (-1, 1):
-        # sleeve from the shoulder, then the forearm and hand hanging just in front of the hip
-        g.add(ellipsoid((s * h * 0.13, hip + h * 0.2, 0), (h * 0.032, h * 0.09, h * 0.032), 8, 6), sh)
-        g.add(ellipsoid((s * h * 0.135, hip + h * 0.07, h * 0.015), (h * 0.026, h * 0.075, h * 0.026), 8, 5), sk)
-    g.add(cylinder((0, hip + h * 0.31, 0), h * 0.035, h * 0.05, 8), sk)
-    hy = hip + h * 0.41
-    if not head:
-        return hy
-    g.add(ellipsoid((0, hy, 0), (h * 0.065, h * 0.075, h * 0.07), 14, 9), sk)
-    g.add(ellipsoid((0, hy + h * 0.025, -h * 0.01), (h * 0.07, h * 0.06, h * 0.07), 14, 7), hr)
-    eye = "#1A1420"
-    for s in (-1, 1):
-        g.add(ellipsoid((s * h * 0.024, hy + h * 0.005, h * 0.066), (h * 0.008, h * 0.01, h * 0.004), 6, 4), eye)
-    g.add(ellipsoid((0, hy - h * 0.03, h * 0.064), (h * 0.02, h * 0.006, h * 0.004), 6, 3), "#B5523F")
-    if cap:
-        g.add(ellipsoid((0, hy + h * 0.05, 0), (h * 0.072, h * 0.035, h * 0.072), 14, 6), cap)
-        g.add(ellipsoid((0, hy + h * 0.045, h * 0.07), (h * 0.05, h * 0.008, h * 0.04), 10, 4), cap)
-    return hy
+        x0 = s * w * 0.86
+        r = w * 0.25
+        elbow = (s * w * 1.05, hip + (sh - hip) * 0.25, d * 0.05)
+        wrist = (s * w * 1.08, hip - (sh - hip) * 0.12, d * 0.28)
+        # rounded shoulder and sleeve, then the bare forearm and a round hand
+        g.add(ellipsoid((x0, sh - r * 0.45, 0), (r * 1.05, r * 1.0, r * 1.05), 14, 10), shirt)
+        g.add(loft([(x0, sh - r * 0.2, 0), (s * w * 1.03, (sh + elbow[1]) / 2, 0), (elbow[0], elbow[1] + r * 0.6, elbow[2])],
+                   [r * 1.05, r * 0.95, r * 0.9], [r * 1.05, r * 0.95, r * 0.9]), shirt)
+        g.add(loft([(elbow[0], elbow[1] + r * 0.9, elbow[2]), elbow, wrist], [r * 0.78, r * 0.78, r * 0.62], [r * 0.78, r * 0.78, r * 0.62]), skin)
+        g.add(ellipsoid((wrist[0], wrist[1] - r * 0.9, wrist[2]), (r * 0.7, r * 1.0, r * 0.8), 12, 8), skin)
+    # neck
+    g.add(loft([(0, sh, 0), (0, sh + h * 0.035, 0)], [f.hr * 0.36, f.hr * 0.34], [f.hr * 0.36, f.hr * 0.34], 12), skin)
+    if head_on:
+        head(g, f, (0, f.head_y, 0), skin, hair, cap, long_hair)
+    return f
 
 
 def clerk(t):
     """The shop's clerk behind the counter in the store's colours; the head is its own node (it looks around)."""
     g = Group("Clerk", smooth=True)
-    h = 170.0
-    hy = person(g, h, t["stripe"], "#2E3440", SKINS[1], "#2B1D14", with_legs=False, apron=t["counter"], head=False)
-    # the head is its own node, modelled about its centre (StoreRoom.kt CLERK_HEAD_Y = hy)
+    f = person(g, 170.0, t["stripe"], "#2E3440", SKINS[1], "#2B1D14", with_legs=False, apron=t["counter"], head_on=False)
+    # the head is its own node, modelled about its centre (StoreRoom.kt CLERK_HEAD_Y = f.head_y)
     hg = Group("ClerkHead", smooth=True)
-    sk = SKINS[1]
-    hg.add(ellipsoid((0, 0, 0), (h * 0.065, h * 0.075, h * 0.07), 14, 9), sk)
-    hg.add(ellipsoid((0, h * 0.025, -h * 0.01), (h * 0.07, h * 0.06, h * 0.07), 14, 7), "#2B1D14")
-    eye = "#1A1420"
-    for s in (-1, 1):
-        hg.add(ellipsoid((s * h * 0.024, h * 0.005, h * 0.066), (h * 0.008, h * 0.01, h * 0.004), 6, 4), eye)
-    hg.add(ellipsoid((0, -h * 0.03, h * 0.064), (h * 0.02, h * 0.006, h * 0.004), 6, 3), "#B5523F")
-    hg.add(ellipsoid((0, h * 0.05, 0), (h * 0.072, h * 0.035, h * 0.072), 14, 6), t["stripe"])
-    hg.add(ellipsoid((0, h * 0.045, h * 0.07), (h * 0.05, h * 0.008, h * 0.04), 10, 4), t["stripe"])
-    return g, hg, hy
+    head(hg, f, (0, 0, 0), SKINS[1], "#2B1D14", cap=t["stripe"])
+    return g, hg, f.head_y
 
 
 def shoppers():
@@ -558,13 +610,11 @@ def shoppers():
     a = Group("Shopper0", smooth=True)
     person(a, 172.0, "#5B8DEF", "#3B4252", SKINS[0], "#6B4A2B")
     b = Group("Shopper1", smooth=True)
-    person(b, 118.0, "#FF8FB1", "#4C566A", SKINS[3], "#E0B04A")
+    person(b, 118.0, "#FF8FB1", "#4C566A", SKINS[3], "#E0B04A", kid=True, long_hair=True)
     w = Group("Walker", smooth=True)
-    h = 165.0
-    person(w, h, "#7BC67E", "#2E3440", SKINS[2], "#1C1410", with_legs=False)
-    pa = "#2E3440"
-    shoe = "#2A2A30"
-    return [a, b, w, leg_node("WalkerLegL", h, pa, shoe, -1), leg_node("WalkerLegR", h, pa, shoe, 1)]
+    f = person(w, 165.0, "#7BC67E", "#2E3440", SKINS[2], "#1C1410", with_legs=False)
+    assert abs(f.hip - WALK_HIP) < 1.0, f.hip
+    return [a, b, w, leg_node("WalkerLegL", f, "#2E3440", "#2A2A30", -1), leg_node("WalkerLegR", f, "#2E3440", "#2A2A30", 1)]
 
 
 # ============================================================== store dressing (between the bays, by the back wall)
