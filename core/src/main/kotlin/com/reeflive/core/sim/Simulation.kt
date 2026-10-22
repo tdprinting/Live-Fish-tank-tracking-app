@@ -211,6 +211,7 @@ class Simulation private constructor(
     /** Keeps bodies out of solid rock except in holes that fit them (SIMULATION §4.11). */
     val rockGuard = RockGuard(rock, { x, z -> sand.surfaceY(x, z) }, holeClaims)
     /** Whole bodies (mesh profiles) inside the glass and on the sand (SIMULATION §24.3). */
+    val bodyContact = BodyContact()
     val bodyBounds = BodyBounds(sand, rock.lengthCm, rock.widthCm, rock.sdf)
 
     // ============================================================== dynamic rockscape
@@ -922,6 +923,7 @@ class Simulation private constructor(
         takeOutJumpers()
         sandWork.step(organisms)
         sandContact.step(organisms, dt, displace = true)
+        bodyContact.step(organisms)
         // the drawn bodies are seated on the sand as this tick left it (a goby's spoil landing on a resting hermit or
         // crab after its seat was solved buried the shell for a tick)
         for (o in organisms) {
