@@ -375,6 +375,8 @@ data class OrganismPose(
     val finFold: Float = 0f,
     /** Skin shade −1 pale .. +1 dark and mottled (a fish's own colour change, [Organism.skinTone]). */
     val tone: Float = 0f,
+    /** Life stage and sex of a fish (LifeStages.kt), for the renderer's stage textures and the fish card; null for the rest. */
+    val lifeForm: LifeForm? = null,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
@@ -464,8 +466,6 @@ data class SimSnapshot(
     val stats: List<OrganismStats> = emptyList(),
     val tick: Long = 0,
     val abstractMode: Boolean = false,
-    /** Life stage and sex per fish id (LifeStages.kt), for the renderer's stage textures and the fish card. */
-    val lifeForms: Map<String, LifeForm> = emptyMap(),
     /** Shed shrimp exoskeletons lying on the sand (24 h each). */
     val moltShells: List<Vec3> = emptyList(),
     /** Nori sheet remaining on the clip (0 = none). */

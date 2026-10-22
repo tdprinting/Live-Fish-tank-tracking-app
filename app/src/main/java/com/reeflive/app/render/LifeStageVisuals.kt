@@ -73,7 +73,7 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
     fun textures(modelPath: String): Collection<String> = manifest[lod0(modelPath)]?.let { it.forms.values + it.finForms.values } ?: emptyList()
 
     /**
-     * Fills [out] for a fish drawn with [modelPath]. [form] is the core's view (from `LifeFormChannel`); without one
+     * Fills [out] for a fish drawn with [modelPath]. [form] is the core's view (`OrganismPose.lifeForm`); without one
      * (demo snapshots) the stage blend is worked out here from the sheet and the drawn length [lengthCm].
      */
     fun resolve(speciesId: String, modelPath: String, lengthCm: Float, form: LifeForm?, out: Binding) {

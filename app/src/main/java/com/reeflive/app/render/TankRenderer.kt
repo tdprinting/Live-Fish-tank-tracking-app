@@ -1180,10 +1180,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
         if (m == null) { if (pass == 0) drawPlaceholder(r, progs); return }
         val w = white ?: return
-        // life stage: body texture forms A/B and their mix, body depth/width scale (core LifeForm via LifeFormChannel)
+        // life stage: body texture forms A/B and their mix, body depth/width scale (core LifeForm on the pose, via the rig)
         val sb = stageBinding
         if (path != null && CritterKind.of(r.speciesId) == null && BroodVisuals.modelFor(r.speciesId) == null) {
-            lifeStages.resolve(r.speciesId, path, r.scale, com.reeflive.core.sim.LifeFormChannel.of(interp.current)[r.id], sb)
+            lifeStages.resolve(r.speciesId, path, r.scale, r.lifeForm, sb)
         } else sb.clear()
         var uniformsSet: ShaderProgram? = null
         for (part in m.parts) {

@@ -43,10 +43,13 @@ class WaterSurface(
     var agitation = 1.0
 
     val heights: FloatArray get() = cur
+    /** Bumped whenever [heights] may have changed (a step or an impulse), so a copy of it can be reused until then. */
+    var version = 0; private set
 
     private fun id(i: Int, k: Int) = i + sx * k
 
     fun impulse(x: Double, z: Double, amp: Double, radiusCm: Double = 1.5) {
+        version++
         val ci = (x / dx).toInt(); val ck = (z / dz).toInt()
         val r = max(1, (radiusCm / dx).toInt() + 1)
         for (k in ck - r..ck + r) for (i in ci - r..ci + r) {
@@ -59,6 +62,7 @@ class WaterSurface(
     }
 
     fun step(dtIn: Double) {
+        version++
         val dt = min(dtIn, 0.1)
         val maxDt = 0.5 * min(dx, dz) / waveSpeed
         val subs = max(1, kotlin.math.ceil(dt / maxDt).toInt())

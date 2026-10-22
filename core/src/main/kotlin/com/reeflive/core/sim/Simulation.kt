@@ -683,10 +683,10 @@ class Simulation private constructor(
         net.stepWall(this, dtWall)
         val simDt = bags.effectiveSpeed(speed) * dtWall
         stepWater(dtWall)
-        if (simDt <= 0) { latest = snapshot(); return }
+        if (simDt <= 0) { latest = buildSnapshot(fresh = false); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
         advanceInternal(simDt, dtB)
-        latest = snapshot()
+        latest = buildSnapshot(fresh = false)
     }
 
     /**
@@ -2162,6 +2162,28 @@ class Simulation private constructor(
     val minutesSinceLightsOn: Double? get() = cachedSinceOn
 
     // ============================================================== snapshot
+    /** Stats published by the last [statsAll]; the 20 Hz publish path reuses them for [STATS_EVERY_PUBLISHES] snapshots. */
+    private var statsCache: List<OrganismStats> = emptyList()
+    private var statsAge = Int.MAX_VALUE
+
+    /**
+     * The stats for a snapshot. [fresh] (every direct [snapshot] call) always rebuilds them; the 20 Hz publish path
+     * rebuilds ~4× a second, or at once when an animal came, went or died (the card list must not lag behind the tank).
+     * The words and bars are UI only, the thoughts were already refreshed at that rate ([ThoughtBook]).
+     */
+    private fun statsFor(fresh: Boolean): List<OrganismStats> {
+        if (!fresh && statsAge < STATS_EVERY_PUBLISHES && statsStillMatch()) { statsAge++; return statsCache }
+        statsAge = 1
+        return statsAll().also { statsCache = it }
+    }
+
+    private fun statsStillMatch(): Boolean {
+        val c = statsCache
+        if (c.size != organisms.size) return false
+        for (i in c.indices) { val o = organisms[i]; val s = c[i]; if (s.id != o.id || s.alive != o.alive) return false }
+        return true
+    }
+
     private fun statsAll(): List<OrganismStats> {
         val byId = organisms.associateBy { it.id }
         val out = organisms.map { o ->
@@ -2185,33 +2207,26 @@ class Simulation private constructor(
     val minutesUntilLightsOff: Double? get() = cachedUntilOff
 
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
-    fun snapshot(): SimSnapshot =
-        buildSnapshot().copy(
-            lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
-            bareScape = bareScape,
-            shape = shape,
-            submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
-            rockPoses = rockPoses(),
-            rockVersion = rockPhysics?.version ?: 0L,
-            net = net.pose(),
-            netFlush = net.lastFlush,
-            brood = brood.view,
-            builtRocks = builtRocks(),
-            rockSdf = rock.dynamic?.takeIf { it.active },
-            coralPick = coralPicks.pose(this),
-        ).let { s ->
-            if (!bags.any) s
-            else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
-        }
+    fun snapshot(): SimSnapshot = buildSnapshot(fresh = true)
 
-    private fun buildSnapshot(): SimSnapshot {
+    /** Water-surface heights as of [WaterSurface.version], shared between the snapshots that see the same ripples. */
+    private var surfaceCopy = FloatArray(0)
+    private var surfaceCopyVersion = -1
+    private fun surfaceHeightsCopy(): FloatArray {
+        if (surfaceCopyVersion != surface.version) { surfaceCopy = surface.heights.copyOf(); surfaceCopyVersion = surface.version }
+        return surfaceCopy
+    }
+    private val surfaceDimsCopy = intArrayOf(surface.sx, surface.sz)
+
+    private fun buildSnapshot(fresh: Boolean): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
+        val bagsOn = bags.any
         return SimSnapshot(
             simTimeSec = simTimeSec,
             lights = FloatArray(LightSchedule.CHANNELS) { lightCh[it].toFloat() },
             water = water.s.copy(),
-            organisms = organisms.map { it.toPose() },
+            organisms = organisms.map { it.toPose() }.let { if (bagsOn) it + bags.riderPoses() else it },
             corals = corals.map { it.toPose(simTimeSec) },
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
@@ -2221,17 +2236,17 @@ class Simulation private constructor(
             worms = worms.poses(),
             bacteria = water.bacteria.snapshot(),
             events = evs,
-            speed = speed,
+            speed = if (bagsOn) bags.effectiveSpeed(speed) else speed,
             lightIntensity = lightIntensity.toFloat(),
             dayPhase = lights.phaseLabel(simTimeSec),
-            stats = statsAll(),
+            stats = statsFor(fresh),
             tick = tickCount,
             abstractMode = abstractMode,
             moltShells = moltShells.map { it.first },
             sandPiles = FloatArray(sandPiles.size * 4).also { a -> sandPiles.forEachIndexed { i, p -> a[i * 4] = p.pos.x.toFloat(); a[i * 4 + 1] = p.pos.z.toFloat(); a[i * 4 + 2] = p.radius.toFloat(); a[i * 4 + 3] = p.height.toFloat() } },
             flowStrength = flowStrength.toFloat(),
-            surfaceHeights = surface.heights.copyOf(),
-            surfaceDims = intArrayOf(surface.sx, surface.sz),
+            surfaceHeights = surfaceHeightsCopy(),
+            surfaceDims = surfaceDimsCopy,
             flowGrid = fluid?.let { f ->
                 if (simTimeSec - lastFlowGridAt > 0.25 * max(speed, 1.0) || flowGridCache == null) { lastFlowGridAt = simTimeSec; flowGridCache = f.snapshotGrid() }
                 flowGridCache
@@ -2255,6 +2270,19 @@ class Simulation private constructor(
             gusts = gustArray(),
             care = water.careState(),
             reefCareAt = reefCareAt,
+            bareScape = bareScape,
+            shape = shape,
+            submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
+            rockPoses = rockPoses(),
+            rockVersion = rockPhysics?.version ?: 0L,
+            net = net.pose(),
+            netFlush = net.lastFlush,
+            brood = brood.view,
+            builtRocks = builtRocks(),
+            rockSdf = rock.dynamic?.takeIf { it.active },
+            coralPick = coralPicks.pose(this),
+            bags = if (bagsOn) bags.poses(water.s.tempC, simTimeSec) else emptyList(),
+            bagHurry = bagsOn && bags.hurry,
         )
     }
 
@@ -2306,6 +2334,8 @@ class Simulation private constructor(
     companion object {
         /** Death cause of a fish that leapt over the rim of the open top ([JumpModel]). */
         const val JUMPED_OUT = "jumped out of the tank"
+        /** The 20 Hz publish path rebuilds [OrganismStats] this often (~4 Hz). */
+        const val STATS_EVERY_PUBLISHES = 5
         /** How far above the aimed spot a target-fed food is let go (cm): close enough to land on it, clear of the rock. */
         const val TARGET_LIFT_CM = 2.5
         /** Default drop point of a feed (back-centre surface beside the HOB return, video T97); anchor `HAND_FEED`. */
