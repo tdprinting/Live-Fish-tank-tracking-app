@@ -14,6 +14,8 @@ class BodyPenetrationReport(private val sim: Simulation) {
     val rock = HashMap<String, Worst>()
     val sand = HashMap<String, Worst>()
     val glass = HashMap<String, Worst>()
+    /** Two swimming bodies into each other, keyed by the pair of species. */
+    val pair = HashMap<String, Worst>()
     var checks = 0L; private set
 
     private fun note(m: HashMap<String, Worst>, key: String, cm: Double, where: () -> String) {
@@ -27,6 +29,7 @@ class BodyPenetrationReport(private val sim: Simulation) {
         val snap = sim.snapshot()
         val byId = sim.organisms.associateBy { it.id }
         val r = sim.rock
+        val swimmers = ArrayList<Triple<Organism, OrganismPose, BodyProfile>>()
         for (p in snap.organisms) {
             val o = byId[p.id] ?: continue
             if (!o.alive || !p.visible || o.leap != null || o.netted) continue
@@ -40,6 +43,7 @@ class BodyPenetrationReport(private val sim: Simulation) {
             val rockOk = o.atBurrow
             val l = p.scale.toDouble()
             val rigid = p.motionMode in RIGID_MODES
+            if (!seated && !rigid) swimmers += Triple(o, p, prof)
             val pts = ArrayList<Vec3>(64)
             val src = ArrayList<Int>(64)
             if (rigid && prof.hull.isNotEmpty()) {
@@ -70,13 +74,34 @@ class BodyPenetrationReport(private val sim: Simulation) {
                 note(glass, key, g) { "t=${"%.0f".format(sim.simTimeSec)} ${o.behaviorName}/p${p.posture} at $e st $si c $sc L $l" }
             }
         }
+        pairs(swimmers)
+    }
+
+    /** How far each two swimming bodies' sections reach into each other (the support of each along the line between). */
+    private fun pairs(bodies: List<Triple<Organism, OrganismPose, BodyProfile>>) {
+        for (a in bodies.indices) for (b in a + 1 until bodies.size) {
+            val (oa, pa, fa) = bodies[a]; val (ob, pb, fb) = bodies[b]
+            val la = pa.scale.toDouble(); val lb = pb.scale.toDouble()
+            if (vec(pa.spine, 0).distanceTo(vec(pb.spine, 0)) > la + lb + 2) continue
+            var best = 0.0; var where = ""
+            for (i in 0 until BodySpline.POINTS) for (j in 0 until BodySpline.POINTS) {
+                val dv = vec(pb.spine, j) - vec(pa.spine, i); val d = dv.length()
+                if (d > (fa.reach(i) * la + fb.reach(j) * lb) || d < 1e-6) continue
+                val v = dv * (1 / d)
+                val qa = quat(pa.frames, i); val qb = quat(pb.frames, j)
+                val ov = fa.support(i, qa.rotate(Vec3.Y) dot v, qa.rotate(Vec3.Z) dot v) * la +
+                    fb.support(j, -(qb.rotate(Vec3.Y) dot v), -(qb.rotate(Vec3.Z) dot v)) * lb - d
+                if (ov > best) { best = ov; where = "t=${"%.0f".format(sim.simTimeSec)} st $i/$j ${oa.behaviorName} | ${ob.behaviorName}" }
+            }
+            note(pair, listOf(oa.species.id, ob.species.id).sorted().joinToString("+"), best) { where }
+        }
     }
 
     /** Worst depth (cm) over the bodies that are not on a seat. */
     fun worst(m: HashMap<String, Worst>): Pair<String, Worst>? = m.entries.filter { !it.key.endsWith("[seat]") }.maxByOrNull { it.value.cm }?.let { it.key to it.value }
 
     fun summary(): String = buildString {
-        for ((name, m) in listOf("rock" to rock, "sand" to sand, "glass" to glass)) {
+        for ((name, m) in listOf("rock" to rock, "sand" to sand, "glass" to glass, "body" to pair)) {
             appendLine("== $name")
             for ((k, w) in m.entries.sortedByDescending { it.value.cm })
                 appendLine("  $k worst ${"%.2f".format(w.cm)} cm, ${w.count} points  (${w.where})")

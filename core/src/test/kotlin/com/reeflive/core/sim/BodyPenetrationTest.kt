@@ -4,9 +4,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * No body goes through the rock, the sand or the glass (SIMULATION §24.3): over full-stock runs by day, afternoon and
- * night, every point of every swimming or walking body (its model's sections on the drawn spine, [BodyProfile]) stays
- * out of them, within the 1 cm rock field's reading error. Crawlers on their seats are reported, not yet held to it.
+ * No body goes through the rock, the sand, the glass or another body (SIMULATION §24.3): over full-stock runs by day,
+ * afternoon and night, every point of every swimming or walking body (its model's sections on the drawn spine,
+ * [BodyProfile]) stays out of them, and two swimming bodies out of each other, within the 1 cm rock field's reading
+ * error. Crawlers on their seats are reported, not yet held to it.
  */
 class BodyPenetrationTest {
     @Test
@@ -18,12 +19,12 @@ class BodyPenetrationTest {
             var tick = 0
             sim.advance(System.getProperty("reeflive.probeSec")?.toDouble() ?: 600.0) { if (++tick % 10 == 0) rep.sample() }
             println("---- seed $seed hour $hour\n" + rep.summary())
-            for ((what, m, max) in listOf(Triple("rock", rep.rock, ROCK_CM), Triple("sand", rep.sand, SAND_CM), Triple("glass", rep.glass, GLASS_CM))) {
+            for ((what, m, max) in listOf(Triple("rock", rep.rock, ROCK_CM), Triple("sand", rep.sand, SAND_CM), Triple("glass", rep.glass, GLASS_CM), Triple("body", rep.pair, BODY_CM))) {
                 val w = rep.worst(m) ?: continue
                 if (w.second.cm > max) bad += "seed $seed $what: ${w.first} ${"%.2f".format(w.second.cm)} cm (${w.second.where})"
             }
         }
-        assertTrue("bodies through rock, sand or glass:\n" + bad.joinToString("\n"), bad.isEmpty())
+        assertTrue("bodies through rock, sand, glass or each other:\n" + bad.joinToString("\n"), bad.isEmpty())
     }
 
     companion object {
@@ -32,5 +33,7 @@ class BodyPenetrationTest {
         /** (a body wedged between rock and sand pushes the sand from under itself over a few ticks) */
         const val SAND_CM = 0.4
         const val GLASS_CM = 0.3
+        /** Two swimming bodies into each other (BodyContact reads touching at 0.15 cm). */
+        const val BODY_CM = 0.3
     }
 }
