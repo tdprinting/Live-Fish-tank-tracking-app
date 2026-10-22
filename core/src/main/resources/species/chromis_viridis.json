@@ -11,9 +11,9 @@
   "depthRatio": 0.46,
   "massCoeff": 0.022,
   "locomotion": {
-    "mode": "LABRIFORM",
+    "mode": "BODY_CAUDAL",
     "cruiseBL": 1.4,
-    "burstBL": 8,
+    "burstBL": 6,
     "tailHzCruise": 3.5,
     "turnRateDeg": 300,
     "waveLen": 0.9,
