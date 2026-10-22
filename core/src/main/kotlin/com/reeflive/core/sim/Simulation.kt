@@ -934,13 +934,18 @@ class Simulation private constructor(
             sandContact.preClamp(o)
             bodyBounds.apply(o)
             val relaid = rockGuard.bodyFixes
+            val headed = rockGuard.headFixes
             rockGuard.apply(o)
             // (a body the rock guard re-laid round the rock is kept inside the glass and on the sand)
             if (rockGuard.bodyFixes != relaid) bodyBounds.apply(o)
+            if (rockGuard.bodyFixes != relaid || rockGuard.headFixes != headed) bodyContact.pin(o)
             o.seat?.update(o, a.intent.crawl, crawlSurface, dt, if (a.intent.crawl) a.intent.surfaceOffset else -1.0)
             o.limbRig?.contact(o, limbSurface, organisms, dt)
             if (o.seat != null) rockGuard.keepClaims(o)
         }
+        // a body the rock guard pushed out into another holds there, and the other gives way (kept off the rock too)
+        bodyContact.settle(organisms)
+        for (o in bodyContact.moved) { bodyBounds.apply(o); rockGuard.apply(o) }
     }
 
     /** The mouth of the burrow [o] digs under the rock nearest it (the gobies), else null ([Organism.burrowMouth]). */
