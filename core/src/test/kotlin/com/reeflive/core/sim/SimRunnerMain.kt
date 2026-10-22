@@ -16,8 +16,59 @@ fun main(args: Array<String>) {
     Locale.setDefault(Locale.US)
     when (args.getOrNull(0) ?: "day") {
         "long" -> long(args.getOrNull(1)?.toInt() ?: 90, Presets.realityDefault)
+        "hash" -> hash()
+        "bench" -> bench(args.getOrNull(1)?.toInt() ?: 1200)
         "preset" -> long(args.getOrNull(2)?.toInt() ?: 14, Presets.byId(args.getOrNull(1) ?: "reality_default"))
         else -> day()
+    }
+}
+
+/** Fingerprint of 3000 published ticks (poses, water surface, life forms, final stats): must match before and after a snapshot-path change. */
+private fun hash() {
+    val sim = Presets.create(Presets.realityDefault, TestTank.catalog, TestTank.rock, startTimeSec = 9 * 3600.0)
+    var h = 17L
+    repeat(3000) {
+        sim.stepWall(0.05)
+        val s = sim.latest
+        for (o in s.organisms) h = h * 31 + o.id.hashCode() + java.util.Arrays.hashCode(o.spine) * 7 + java.util.Arrays.hashCode(o.frames) * 13 + java.util.Arrays.hashCode(o.limbs)
+        h = h * 31 + java.util.Arrays.hashCode(s.surfaceHeights)
+        h = h * 31 + s.worms.sumOf { java.util.Arrays.hashCode(it.spine).toLong() }
+    }
+    for (o in sim.organisms) if (o.isFish) h = h * 31 + LifeStages.form(o).toString().hashCode()
+    h = h * 31 + sim.snapshot().stats.map { it.copy(thought = Thought.NONE) }.toString().hashCode()
+    println("HASH $h")
+}
+
+/**
+ * Tick cost and garbage of the 20 Hz publish path: `--args="bench 1200"` steps the default tank [ticks] wall ticks
+ * (after a warm-up) and prints ms per `stepWall` and bytes allocated per tick (JVM only).
+ */
+private fun bench(ticks: Int) {
+    val sim = Presets.create(Presets.realityDefault, TestTank.catalog, TestTank.rock, startTimeSec = 9 * 3600.0)
+    val mx = java.lang.management.ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+    val tid = Thread.currentThread().id
+    println("== bench: ${sim.organisms.size} animals, ${sim.corals.size} corals")
+    repeat(600) { sim.stepWall(0.05) }
+    repeat(3) {
+        val a0 = mx.getThreadAllocatedBytes(tid); val t0 = System.nanoTime()
+        repeat(ticks) { sim.stepWall(0.05) }
+        val ns = System.nanoTime() - t0; val bytes = mx.getThreadAllocatedBytes(tid) - a0
+        println("stepWall: %.3f ms/tick, %.1f KB/tick".format(ns / 1e6 / ticks, bytes / 1024.0 / ticks))
+    }
+    // paused: stepWall only publishes (no sim step), which isolates the snapshot path the 20 Hz tick uses
+    val speed0 = sim.speed; sim.speed = 0.0
+    repeat(3) {
+        val a0 = mx.getThreadAllocatedBytes(tid); val t0 = System.nanoTime()
+        repeat(ticks) { sim.stepWall(0.05) }
+        val ns = System.nanoTime() - t0; val bytes = mx.getThreadAllocatedBytes(tid) - a0
+        println("publish only: %.3f ms/tick, %.1f KB/tick".format(ns / 1e6 / ticks, bytes / 1024.0 / ticks))
+    }
+    sim.speed = speed0
+    repeat(3) {
+        val a0 = mx.getThreadAllocatedBytes(tid); val t0 = System.nanoTime()
+        repeat(ticks) { sim.snapshot() }
+        val ns = System.nanoTime() - t0; val bytes = mx.getThreadAllocatedBytes(tid) - a0
+        println("snapshot only: %.3f ms/call, %.1f KB/call".format(ns / 1e6 / ticks, bytes / 1024.0 / ticks))
     }
 }
 

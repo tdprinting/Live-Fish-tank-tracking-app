@@ -904,8 +904,8 @@ class AcclimationBags {
     fun riderPoses(): List<OrganismPose> {
         if (bags.isEmpty() && fallers.isEmpty()) return emptyList()
         val out = ArrayList<OrganismPose>()
-        for (b in bags) for (rd in b.riders) if (rd.stage != RELEASED) out += rd.o.toPose().copy(bagged = true)
-        for (f in fallers) out += f.o.toPose().copy(bagged = true)
+        for (b in bags) for (rd in b.riders) if (rd.stage != RELEASED) out += rd.o.toPose().copy(bagged = true, lifeForm = null)
+        for (f in fallers) out += f.o.toPose().copy(bagged = true, lifeForm = null)
         return out
     }
 

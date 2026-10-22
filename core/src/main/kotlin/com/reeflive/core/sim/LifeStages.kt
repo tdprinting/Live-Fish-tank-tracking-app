@@ -265,7 +265,15 @@ object SexRoles {
     }
 }
 
-/** Each snapshot's [LifeForm]s by organism id ([SimSnapshot.lifeForms]); empty for snapshots the sim did not build. */
+/**
+ * Each snapshot's [LifeForm]s by organism id, read off the poses ([OrganismPose.lifeForm]); empty for snapshots the sim
+ * did not build. Builds a map, so it is for tests and cold paths (the renderer reads the pose's field).
+ */
 object LifeFormChannel {
-    fun of(s: SimSnapshot?): Map<String, LifeForm> = s?.lifeForms ?: emptyMap()
+    fun of(s: SimSnapshot?): Map<String, LifeForm> {
+        if (s == null) return emptyMap()
+        val out = HashMap<String, LifeForm>()
+        for (p in s.organisms) p.lifeForm?.let { out[p.id] = it }
+        return out
+    }
 }

@@ -30,6 +30,8 @@ class FishRig(val id: String) {
     var alive = true; var visible = true; var posture = 0
     /** Fairy wrasse: male flash display 0..1 (fins flared, colours up); mucus cocoon 0..1 around a sleeping fish. */
     var display = 0f; var cocoon = 0f
+    /** Life stage and sex of this fish (core [com.reeflive.core.sim.LifeForm], from the newer pose of the pair); null for the rest. */
+    var lifeForm: com.reeflive.core.sim.LifeForm? = null
     /** Still riding in an acclimation bag: drawn, but not pickable. */
     var bagged = false
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
@@ -51,6 +53,7 @@ class FishRig(val id: String) {
     /** Fills this rig with lerp(a, b, t); a may be null (new organism). */
     fun set(a: OrganismPose?, b: OrganismPose, t: Float) {
         speciesId = b.speciesId
+        lifeForm = b.lifeForm
         variant = variantOf(b)
         val pa = a ?: b
         val n = minOf(16, b.spine.size / 3, pa.spine.size / 3)

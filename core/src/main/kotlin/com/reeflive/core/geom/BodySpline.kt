@@ -418,35 +418,40 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
 
     /** Stations every [seg] cm along head → [poly][startIdx..], extended straight past its end. */
     private fun walk(poly: List<Vec3>, startIdx: Int, startHead: Vec3, seg: Double, out: Array<Vec3>, shift: Vec3? = null) {
+        // scalar arithmetic (same operations, same order as the Vec3 version): only the 16 stations are allocated
         out[0] = startHead
-        var prev = startHead
+        var cx = startHead.x; var cy = startHead.y; var cz = startHead.z
         var j = startIdx
-        var lastDir = heading * -1.0
+        var ldx = heading.x * -1.0; var ldy = heading.y * -1.0; var ldz = heading.z * -1.0
+        val sxs = shift?.x ?: 0.0; val sys = shift?.y ?: 0.0; val szs = shift?.z ?: 0.0
+        val n = poly.size
         for (i in 1 until POINTS) {
             var remaining = seg
-            var cur = prev
             while (true) {
-                if (j >= poly.size) {
-                    cur = cur + lastDir * remaining
-                    if (cur.x < boxMinX || cur.x > boxMaxX || cur.z < boxMinZ || cur.z > boxMaxZ || cur.y > boxMaxY)
-                        cur = Vec3(cur.x.coerceIn(boxMinX, boxMaxX), min(cur.y, boxMaxY), cur.z.coerceIn(boxMinZ, boxMaxZ))
+                if (j >= n) {
+                    cx += ldx * remaining; cy += ldy * remaining; cz += ldz * remaining
+                    if (cx < boxMinX || cx > boxMaxX || cz < boxMinZ || cz > boxMaxZ || cy > boxMaxY) {
+                        cx = cx.coerceIn(boxMinX, boxMaxX); cy = min(cy, boxMaxY); cz = cz.coerceIn(boxMinZ, boxMaxZ)
+                    }
                     break
                 }
-                val nxt = if (shift == null) poly[j] else poly[j] + shift
-                val d = cur.distanceTo(nxt)
+                val q = poly[j]
+                val nx = if (shift == null) q.x else q.x + sxs
+                val ny = if (shift == null) q.y else q.y + sys
+                val nz = if (shift == null) q.z else q.z + szs
+                val dx = cx - nx; val dy = cy - ny; val dz = cz - nz
+                val d = sqrt(dx * dx + dy * dy + dz * dz)
                 if (d >= remaining && d > 1e-9) {
-                    val dir = (nxt - cur) / d
-                    lastDir = dir
-                    cur = cur + dir * remaining
+                    ldx = (nx - cx) / d; ldy = (ny - cy) / d; ldz = (nz - cz) / d
+                    cx += ldx * remaining; cy += ldy * remaining; cz += ldz * remaining
                     break
                 }
-                if (d > 1e-9) lastDir = (nxt - cur) / d
+                if (d > 1e-9) { ldx = (nx - cx) / d; ldy = (ny - cy) / d; ldz = (nz - cz) / d }
                 remaining -= d
-                cur = nxt
+                cx = nx; cy = ny; cz = nz
                 j++
             }
-            out[i] = cur
-            prev = cur
+            out[i] = Vec3(cx, cy, cz)
         }
     }
 

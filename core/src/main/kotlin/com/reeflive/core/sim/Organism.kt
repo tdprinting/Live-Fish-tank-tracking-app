@@ -300,12 +300,24 @@ class Organism(
     /** Drawn rigid at its organism (no spine skinning: fish.vert's crawler, scallop, snail and urchin paths). */
     val drawnRigid: Boolean get() = when (motionMode) { 1, 3, 5, 6, 7, 8, 9 -> true; else -> false }
 
+    /** The inputs [LifeStages.form] was last computed from, so an unchanged fish reuses [lifeFormMemo] (same result, no garbage). */
+    private var lifeFormMemo: LifeForm? = null
+    private var lfLen = 0.0; private var lfSexChange = 0.0; private var lfNight = 0.0; private var lfFemale: Boolean? = null
+
+    /** [LifeStages.form], recomputed only when the length, sex change, night colour or resolved sex moved. */
+    fun lifeForm(): LifeForm {
+        val c = lifeFormMemo
+        if (c != null && lfLen == lengthCm && lfSexChange == sexChange && lfNight == nightColor && lfFemale == sexFemale) return c
+        val f = LifeStages.form(this)
+        lifeFormMemo = f; lfLen = lengthCm; lfSexChange = sexChange; lfNight = nightColor; lfFemale = sexFemale
+        return f
+    }
+
     fun toPose(): OrganismPose {
         val sp = FloatArray(BodySpline.POINTS * 3)
         val fr = FloatArray(BodySpline.POINTS * 4)
         if (!seatOn) spline.sampleInto(up, spinePos, sp, fr)   // allocation-free (most organisms)
         else {
-            spline.sample(up, spinePos, spineRot)
             // a rigid crawler body on its seat: straight back from the seat point, tangent to the seated surface
             val seg = spline.length / (BodySpline.POINTS - 1)
             // (the seat's own forward: the one its contact points were solved with)
@@ -313,17 +325,33 @@ class Organism(
             val q = Quat.fromForwardUp(f, seatUp)
             // (while the seat fades in or out the whole body blends from the sim's own spine, not just its head)
             val b = seat?.blend ?: 1.0
-            for (i in 0 until BodySpline.POINTS) {
-                val at = seatPos - f * (seg * i)
-                if (b >= 1.0) { spinePos[i] = at; spineRot[i] = q }
-                else { spinePos[i] = spinePos[i].lerp(at, b); spineRot[i] = spineRot[i].nlerp(q, b) }
-            }
-            for (i in 0 until BodySpline.POINTS) {
-                val p = spinePos[i]; val q = spineRot[i]
-                sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
-                fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
-            }
+            if (b >= 1.0) {
+                // fully seated: the sim's own spine is not blended in, so it is not sampled; the pose is written directly
+                for (i in 0 until BodySpline.POINTS) {
+                    val d = seg * i
+                    sp[i * 3] = (seatPos.x - f.x * d).toFloat(); sp[i * 3 + 1] = (seatPos.y - f.y * d).toFloat(); sp[i * 3 + 2] = (seatPos.z - f.z * d).toFloat()
+                    fr[i * 4] = q.x.toFloat(); fr[i * 4 + 1] = q.y.toFloat(); fr[i * 4 + 2] = q.z.toFloat(); fr[i * 4 + 3] = q.w.toFloat()
+                }
+            } else seatBlended(sp, fr, seg, f, q, b)
         }
+        return poseOf(sp, fr)
+    }
+
+    /** [toPose]'s seated body while the seat fades in or out: the sim's own spine blended toward the seated line. */
+    private fun seatBlended(sp: FloatArray, fr: FloatArray, seg: Double, f: Vec3, q: Quat, b: Double) {
+        spline.sample(up, spinePos, spineRot)
+        for (i in 0 until BodySpline.POINTS) {
+            val at = seatPos - f * (seg * i)
+            spinePos[i] = spinePos[i].lerp(at, b); spineRot[i] = spineRot[i].nlerp(q, b)
+        }
+        for (i in 0 until BodySpline.POINTS) {
+            val p = spinePos[i]; val r = spineRot[i]
+            sp[i * 3] = p.x.toFloat(); sp[i * 3 + 1] = p.y.toFloat(); sp[i * 3 + 2] = p.z.toFloat()
+            fr[i * 4] = r.x.toFloat(); fr[i * 4 + 1] = r.y.toFloat(); fr[i * 4 + 2] = r.z.toFloat(); fr[i * 4 + 3] = r.w.toFloat()
+        }
+    }
+
+    private fun poseOf(sp: FloatArray, fr: FloatArray): OrganismPose {
         return OrganismPose(
             id, species.id, sp, fr, swimPhase.toFloat(), amp.toFloat(), species.locomotion.waveLen.toFloat(),
             pectoral.toFloat(), finClamp.toFloat(), gill.toFloat(), gillRate.toFloat(), desat.toFloat(), ich.toFloat(),
@@ -337,6 +365,7 @@ class Organism(
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),
             tone = skinTone.toFloat(),
+            lifeForm = if (isFish) lifeForm() else null,
         )
     }
 
