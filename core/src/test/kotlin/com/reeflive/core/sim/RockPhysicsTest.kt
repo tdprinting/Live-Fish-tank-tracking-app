@@ -220,4 +220,58 @@ class RockPhysicsTest {
         assertTrue(DryRock.dryness(30.0) in 0.5..0.7)
         assertTrue(DryRock.dryness(180.0) < 0.06)
     }
+
+    @Test
+    fun aHardHitBudgesALooseRockButNotTheBigOnes() {
+        val s = sim(dynamic = true)
+        s.clearRocks()
+        s.placeRock(DryRockShape.RUBBLE, 60.0, 23.0, seed = 2)
+        s.placeRock(DryRockShape.SLAB, 90.0, 23.0, seed = 1)
+        s.advance(8.0, 0.05)
+        val rp = s.rockPhysics!!
+        val (rub, slab) = rp.added
+        assertFalse(rub.awake); assertFalse(slab.awake)
+        // a 60 g tang dashing into each at 40 cm/s, side on at the height of the centre of mass
+        fun hit(b: RockBody): Boolean {
+            var x = b.pos[0] - 30.0
+            while (s.rock.sdf.dist(com.reeflive.core.geom.Vec3(x, b.pos[1], b.pos[2])) > 0.0) x += 0.1
+            return rp.bump(x, b.pos[1], b.pos[2], 60.0 * 40.0, 0.0, 0.0)
+        }
+        val r0 = rub.pos.copyOf(); val s0 = slab.pos.copyOf()
+        assertTrue("the small rock takes the hit", hit(rub))
+        hit(slab)
+        s.advance(RockPhysics.MAX_AWAKE_S + 1.0, 0.05)
+        val moved = rub.pos[0] - r0[0]
+        println("[rock] rubble ${"%.0f".format(rub.mass)} g moved $moved cm; slab ${"%.0f".format(slab.mass)} g moved ${slab.pos[0] - s0[0]} cm")
+        // momentum, friction and the rock's wet weight: a 0.7 kg rock slides a fraction of a millimetre
+        assertTrue("the rubble budged along the hit ($moved cm)", moved > 0.005)
+        assertTrue("... a little, not flung ($moved cm)", moved < 3.0)
+        assertFalse("and settled again", rub.awake)
+        assertEquals("the heavy slab stays put", s0[0], slab.pos[0], 0.05)
+    }
+
+    @Test
+    fun aHeadRunningIntoRockPushesOnIt() {
+        val s = TestTank.sim(DefaultStock.all.filter { it.id == "tang" }, seed = 3L).also { it.setDynamicRocks(true) }
+        val o = s.organisms.first()
+        val hits = ArrayList<DoubleArray>()
+        s.rockGuard.onHit = { x, y, z, jx, jy, jz -> hits += doubleArrayOf(x, y, z, jx, jy, jz) }
+        // a head just inside the rock face, swimming into it at 40 cm/s
+        var p = com.reeflive.core.geom.Vec3(40.2, 10.0, 29.7)
+        val n = s.rock.sdf.gradient(p).normalized()
+        while (s.rock.sdf.dist(p) < -0.3) p = p + n * 0.1
+        while (s.rock.sdf.dist(p) > -0.3) p = p - n * 0.1
+        o.pos = p; o.heading = n * -1.0; o.vel = n * -40.0
+        o.spline.reset(o.pos, o.heading)
+        s.rockGuard.apply(o)
+        assertEquals("one hit", 1, hits.size)
+        val j = hits[0]
+        val push = j[3] * n.x + j[4] * n.y + j[5] * n.z
+        assertTrue("pushes into the rock with about its momentum ($push)", push < -0.5 * o.massG * 40.0)
+        // a graze along the face is no hit
+        hits.clear()
+        o.pos = p; o.vel = n.cross(com.reeflive.core.geom.Vec3.Y).normalized() * 40.0
+        s.rockGuard.apply(o)
+        assertTrue("a graze is no hit", hits.isEmpty())
+    }
 }

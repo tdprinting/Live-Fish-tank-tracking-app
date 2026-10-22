@@ -228,6 +228,8 @@ class Simulation private constructor(
         val rp = rockPhysics ?: return
         if (on) rp.build()
         dynamicRocks = on
+        // an animal that runs into a loose rock hard budges it (RockPhysics.bump)
+        rockGuard.onHit = if (on) { x, y, z, jx, jy, jz -> rp.bump(x, y, z, jx, jy, jz) } else null
     }
 
     private fun stepRocks(dt: Double) {

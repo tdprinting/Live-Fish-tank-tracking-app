@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.geom.BodySpline
 import com.reeflive.core.geom.Vec3
+import kotlin.math.sqrt
 
 /**
  * Hole-aware rock guard (SIMULATION §24), run after Steering every tick: no part of a body (head or any of the
@@ -31,6 +32,13 @@ class RockGuard(
 
     /** Heads moved out of rock / bodies re-laid since the start (diagnostics, tests). */
     var headFixes = 0L; private set
+    /**
+     * Told of each head that ran into the rock faster than [HIT_MIN_CM_S]: the point it hit and the impulse it gave
+     * the rock (g·cm/s). The simulation hands it to the rock physics while rocks can shift.
+     */
+    var onHit: ((Double, Double, Double, Double, Double, Double) -> Unit)? = null
+    /** This body already struck the rock this tick (one hit per body per tick). */
+    private var struck = false
     var bodyFixes = 0L; private set
 
     // the animal being guarded: its measured body (null: the spine line alone, as before profiles), length, and the
@@ -162,11 +170,23 @@ class RockGuard(
         }
         // the drawn frames the body sections are oriented by: sampled when a body first nears the rock
         framesOk = false
+        struck = false
         if (blocked(o.pos, br, 0)) {
             // out onto the rock face, never down into the sand bed
+            val p0 = o.pos
             val q = sdf.project(o.pos, need(0, o.pos) + MARGIN, iterations = 16)
             o.pos = q.withY(maxOf(q.y, minOf(o.pos.y, sandY(q.x, q.z) + MARGIN)))
             headFixes++
+            // run into the rock hard: the head stops against it and hands the rock its momentum (a loose rock budges)
+            val hit = onHit
+            if (hit != null && !struck) {
+                val nx = o.pos.x - p0.x; val ny = o.pos.y - p0.y; val nz = o.pos.z - p0.z
+                val nl = sqrt(nx * nx + ny * ny + nz * nz)
+                if (nl > 1e-6) {
+                    val vIn = -(o.vel.x * nx + o.vel.y * ny + o.vel.z * nz) / nl
+                    if (vIn > HIT_MIN_CM_S) { val j = o.massG * vIn / nl; hit(p0.x, p0.y, p0.z, -nx * j, -ny * j, -nz * j); struck = true }
+                }
+            }
         }
         if (o.spline.override == null && o.spline.holding) {
             // a correction is held for as long as the plain straight body would still cut the rock: a rigid body keeps
@@ -237,8 +257,31 @@ class RockGuard(
             out.add(c)
             prev = c
         }
+        reportHit(o, out)
         finish(o, out, br)
         return true
+    }
+
+    /**
+     * The station the re-lay moved furthest out of the rock, against the way the body was going: a body swimming into
+     * the rock that fast ([HIT_MIN_CM_S]) hands it the momentum of the part that struck ([onHit]).
+     */
+    private fun reportHit(o: Organism, out: List<Vec3>) {
+        val hit = onHit ?: return
+        if (struck) return
+        var best = -1; var bestV = HIT_MIN_CM_S; var bnx = 0.0; var bny = 0.0; var bnz = 0.0
+        for (i in out.indices) {
+            val dx = out[i].x - pos[i].x; val dy = out[i].y - pos[i].y; val dz = out[i].z - pos[i].z
+            val dl = sqrt(dx * dx + dy * dy + dz * dz)
+            if (dl < HIT_MIN_MOVE_CM) continue
+            val vIn = -(o.vel.x * dx + o.vel.y * dy + o.vel.z * dz) / dl
+            if (vIn > bestV) { bestV = vIn; best = i; bnx = dx / dl; bny = dy / dl; bnz = dz / dl }
+        }
+        if (best < 0) return
+        val j = o.massG * bestV * HIT_MASS_SHARE
+        val p = pos[best]
+        hit(p.x, p.y, p.z, -bnx * j, -bny * j, -bnz * j)
+        struck = true
     }
 
     private fun finish(o: Organism, out: List<Vec3>, br: Double) {
@@ -276,6 +319,12 @@ class RockGuard(
         const val FAR_SLACK_CM = 1.0
         /** How far past the mouth a head is put back out of a hole another animal holds (cm). */
         const val CLAIM_OUT_CM = 0.3
+        /** Speed into the rock (cm/s) a head must hit it at to push on it: a dash or a startle, not a graze. */
+        const val HIT_MIN_CM_S = 15.0
+        /** Least a re-laid station must have been moved out of the rock to count as striking it (cm). */
+        const val HIT_MIN_MOVE_CM = 0.2
+        /** Share of the body's mass behind a strike by part of the body (the head carries it all). [I] */
+        const val HIT_MASS_SHARE = 0.5
         private val AXES = listOf(Vec3.X, Vec3.X * -1.0, Vec3.Y, Vec3.Y * -1.0, Vec3.Z, Vec3.Z * -1.0,
             Vec3(1.0, 1.0, 0.0).normalized(), Vec3(-1.0, 1.0, 0.0).normalized(), Vec3(0.0, 1.0, 1.0).normalized(), Vec3(0.0, 1.0, -1.0).normalized())
         /**
