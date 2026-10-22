@@ -1,0 +1,130 @@
+{
+  "id": "sabellastarte_sp",
+  "kind": "INVERT",
+  "common": "Brown feather duster",
+  "scientific": "Sabellastarte sp. (S. indica type)",
+  "family": "Sabellidae",
+  "maxLengthCm": 25,
+  "typicalAdultCm": 15,
+  "lifespanYears": 4,
+  "depthRatio": 0.1,
+  "massCoeff": 0.004,
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.3,
+    "openWater": 0.0,
+    "coverAffinity": 0.5
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 0,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.0,
+    "skittishness": 0.8
+  },
+  "diet": [
+    "PLANKTON",
+    "PHYTOPLANKTON"
+  ],
+  "feedsPerDay": 0.5,
+  "tolerance": {
+    "temp": {
+      "optLo": 22,
+      "optHi": 28,
+      "tolLo": 21,
+      "tolHi": 29,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.024,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.02,
+      "lethalHi": 1.03
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.2,
+      "tolLo": 8.0,
+      "tolHi": 8.3,
+      "lethalLo": 7.9,
+      "lethalHi": 8.8
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    },
+    "ca": {
+      "optLo": 380,
+      "optHi": 440,
+      "tolLo": 370,
+      "tolHi": 460,
+      "lethalLo": 350,
+      "lethalHi": 520
+    },
+    "alk": {
+      "optLo": 6.5,
+      "optHi": 9.5,
+      "tolLo": 6.0,
+      "tolHi": 11.0,
+      "lethalLo": 5.0,
+      "lethalHi": 13.0
+    }
+  },
+  "hardiness": 0.55,
+  "starvationDays": 45,
+  "model": "models/feather_duster.glb",
+  "colors": {
+    "primary": "#8B3A24",
+    "secondary": "#F4F0E8"
+  },
+  "brain": "feather_duster",
+  "minTankGallons": 10,
+  "careLevel": "Moderate",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "coral": {
+    "lightLo": 0.0,
+    "lightHi": 1.0,
+    "flow": "MODERATE",
+    "growth": "Slow",
+    "aggression": "None",
+    "fluorescence": 0.0,
+    "photosynthetic": false
+  },
+  "dietSummary": "Filter feeder: target-feed plankton under the crown every other day.",
+  "temperamentSummary": "Sessile; crown snaps shut when disturbed or fed from above.",
+  "careNotes": [
+    "Source suggests alk near 2.5 meq/L (7 dKH); typical reef alk is tolerated.",
+    "A dropped crown regrows in 1–2 months."
+  ]
+}

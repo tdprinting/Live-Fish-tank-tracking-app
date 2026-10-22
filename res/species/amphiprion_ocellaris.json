@@ -1,0 +1,146 @@
+{
+  "id": "amphiprion_ocellaris",
+  "kind": "FISH",
+  "common": "Ocellaris clownfish",
+  "scientific": "Amphiprion ocellaris",
+  "family": "Pomacentridae",
+  "maxLengthCm": 11,
+  "typicalAdultCm": 8,
+  "growthCmPerYear": 2,
+  "lifespanYears": 8,
+  "depthRatio": 0.45,
+  "massCoeff": 0.022,
+  "locomotion": {
+    "mode": "LABRIFORM",
+    "cruiseBL": 0.9,
+    "burstBL": 6,
+    "tailHzCruise": 3.5,
+    "turnRateDeg": 300,
+    "waveLen": 1.0,
+    "ampCruise": 0.05,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.15,
+    "yMax": 0.6,
+    "openWater": 0.3,
+    "coverAffinity": 0.7
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 120,
+    "darkVision": 0.12,
+    "lateralBL": 1.5,
+    "chem": 0.6
+  },
+  "territorialRadius": 15,
+  "homeRadiusCm": 20,
+  "temperament": {
+    "aggression": 0.4,
+    "boldness": 0.6,
+    "curiosity": 0.8,
+    "skittishness": 0.3
+  },
+  "diet": [
+    "FLAKE",
+    "PELLET",
+    "MYSIS",
+    "BRINE",
+    "ALGAE"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.018,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.04
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 40,
+      "lethalHi": 60
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.5,
+    "VELVET": 0.5,
+    "BROOKLYNELLA": 0.6,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.8,
+  "starvationDays": 21,
+  "size": {
+    "lod0Tris": 4000
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile",
+        "depthScale": 1.04
+      },
+      {
+        "id": "adult",
+        "fromCm": 4.0,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 2.0,
+    "sexSystem": "PROTANDROUS",
+    "maturityCm": 4.5,
+    "sexChangeDays": 28
+  },
+  "model": "models/clown_orange.glb",
+  "variantModels": {"darwin_black": "models/clown_darwin.glb"},
+  "colors": {
+    "primary": "#FF7A1A",
+    "secondary": "#FFFFFF",
+    "accent": "#111111"
+  },
+  "iridescence": 0.12,
+  "brain": "clown",
+  "minTankGallons": 20,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Omnivore: pellets, flake, mysis, brine, a little algae.",
+  "temperamentSummary": "Peaceful pair; the female guards the host.",
+  "careNotes": [
+    "Female is the larger fish; males change sex at ~4.4 cm.",
+    "Will adopt the Kenya tree or GSP as a stand-in host."
+  ]
+}

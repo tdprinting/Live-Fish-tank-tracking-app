@@ -1,0 +1,109 @@
+{
+  "id": "percnon_gibbesi",
+  "kind": "INVERT",
+  "common": "Sally Lightfoot crab",
+  "scientific": "Percnon gibbesi",
+  "family": "Percnidae",
+  "maxLengthCm": 4,
+  "typicalAdultCm": 3,
+  "lifespanYears": 3,
+  "depthRatio": 0.25,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 1.0,
+    "burstBL": 6.0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 240,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.8,
+    "openWater": 0.0,
+    "coverAffinity": 0.8
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 40,
+  "temperament": {
+    "aggression": 0.25,
+    "boldness": 0.4,
+    "curiosity": 0.5,
+    "skittishness": 0.7
+  },
+  "diet": [
+    "ALGAE",
+    "DETRITUS",
+    "FLAKE",
+    "MEATY"
+  ],
+  "feedsPerDay": 2,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.8,
+  "starvationDays": 30,
+  "model": "models/sally_lightfoot.glb",
+  "colors": {
+    "primary": "#5A1220",
+    "secondary": "#B8D040",
+    "accent": "#E0B030"
+  },
+  "brain": "crab",
+  "minTankGallons": 30,
+  "careLevel": "Easy",
+  "reefSafe": "Mostly (opportunistic)",
+  "copperSensitive": true,
+  "dietSummary": "Algae grazer: hair and bubble algae, plus leftover food; offer nori if algae runs out.",
+  "temperamentSummary": "Fast, flat rock-dweller that darts into crevices; mostly peaceful.",
+  "careNotes": [
+    "Opportunistic: a hungry crab may pick at zoanthids, sleeping fish or a freshly molted shrimp — keep it fed.",
+    "Copper-sensitive like all inverts: never dose copper in the display."
+  ]
+}

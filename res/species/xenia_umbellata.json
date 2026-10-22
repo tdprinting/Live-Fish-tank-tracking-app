@@ -1,0 +1,104 @@
+{
+  "id": "xenia_umbellata",
+  "kind": "CORAL",
+  "common": "Pulsing xenia",
+  "scientific": "Xenia umbellata",
+  "family": "Xeniidae",
+  "maxLengthCm": 15,
+  "typicalAdultCm": 6,
+  "growthCmPerYear": 10,
+  "lifespanYears": 10,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.0,
+      "optHi": 27.5,
+      "tolLo": 22.5,
+      "tolHi": 29.0,
+      "lethalLo": 18.0,
+      "lethalHi": 32.0
+    },
+    "sg": {
+      "optLo": 1.025,
+      "optHi": 1.026,
+      "tolLo": 1.023,
+      "tolHi": 1.027,
+      "lethalLo": 1.019,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 8.0,
+      "optHi": 11.0,
+      "tolLo": 7.0,
+      "tolHi": 12.0,
+      "lethalLo": 5.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.06
+    },
+    "no3": {
+      "optHi": 10.0,
+      "tolHi": 30.0,
+      "lethalHi": 80.0
+    },
+    "po4": {
+      "optHi": 0.1,
+      "tolHi": 0.2,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/xenia.glb",
+  "colors": {
+    "primary": "#D8C8E8",
+    "secondary": "#A898C8",
+    "accent": "#E8D0FF"
+  },
+  "brain": "coral_polyp",
+  "coral": {
+    "lightLo": 0.2,
+    "lightHi": 0.9,
+    "flow": "MODERATE",
+    "growth": "Fast",
+    "stingCm": 0,
+    "ground": "ROCK",
+    "aggression": "No sting, but it spreads over the rock and can crowd out slower corals",
+    "fluorescence": 0.2
+  },
+  "careLevel": "Easy",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; pulses less without food in the water.",
+  "temperamentSummary": "Soft stalks topped with feathery polyps that open and close like hands, about once a second.",
+  "careNotes": [
+    "Moderate light and moderate indirect flow: a hard jet stops the pulsing.",
+    "Pulsing slows when alkalinity drops under about 7 dKH or the iodine is used up.",
+    "It spreads quickly over nearby rock; keep it on its own rock if you want to stop it."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.8,
+  "starvationDays": 9999
+}
