@@ -73,6 +73,12 @@ data class MotionProfile(
     /** Rolling "waddle" while rowing (clownfish): roll amplitude (rad) and frequency (Hz). */
     val wobbleRoll: Double = 0.0,
     val wobbleHz: Double = 1.3,
+    /**
+     * Tightest routine (unhurried) turn, as a radius in body lengths at the current speed: a cruising fish carves an
+     * arc instead of yawing on the spot (Webb 1983; Gerstner 1999, reef fish routine turns several times wider than
+     * their escape turns). Pectoral rowers still pivot when nearly still. Escapes and urgent moves are not limited.
+     */
+    val turnRadiusBL: Double = 0.5,
     /** Pitch bob while rowing (cleaner wrasse's bobbing travel): rad and Hz. */
     val bobPitch: Double = 0.0,
     val bobHz: Double = 2.0,
@@ -128,18 +134,19 @@ data class Stroke(val tailHz: Double, val amp: Double, val pecHz: Double, val pe
 /** The per-species table (the research/video files; SIMULATION §15 lists the sources per row). */
 object MotionProfiles {
     private val table: Map<BrainKind, MotionProfile> = mapOf(
-        // pectoral-dominant with a rolling waddle and nose-down tilt; pecs 4–6 Hz [L]; caudal bursts 6–8 BL/s
-        BrainKind.CLOWN to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 1.8, pecHzHover = 3.0, pecHzMax = 6.0, rowBodyAmp = 0.025,
-            wobbleRoll = 0.09, wobbleHz = 1.3, cStartDeg = 110.0),
-        // acanthuriform pectoral swimming, pecs 3–5 Hz, small tail; caudal only for bursts [L]
+        // pectoral-dominant with a rolling waddle and nose-down tilt; pecs 4–6 Hz [L]; caudal bursts 6–8 BL/s; the tail
+        // takes over at about 1 BL/s (Gibb 1994, research 30 [M]); tight turns, pivots on the pectorals (radius ~0.5 BL [L])
+        BrainKind.CLOWN to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 1.1, pecHzHover = 4.0, pecHzMax = 6.0, rowBodyAmp = 0.025,
+            wobbleRoll = 0.09, wobbleHz = 1.3, cStartDeg = 110.0, turnRadiusBL = 0.4),
+        // acanthuriform pectoral swimming, pecs 3–5 Hz, small tail; caudal only for bursts; wide sweeping turns (~1 BL) [L]
         BrainKind.TANG to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.2, pecHzHover = 2.5, pecHzMax = 5.0, rowBodyAmp = 0.015,
-            strouhal = 0.28, tailPP = 0.18, bankGain = 1.3, cStartDeg = 130.0),
-        // slow deep-bodied hoverer: fanning pectorals, gentle tail 1.5 Hz, glides between beats [M][L]
+            strouhal = 0.28, tailPP = 0.18, bankGain = 1.3, cStartDeg = 130.0, turnRadiusBL = 0.8),
+        // slow deep-bodied hoverer: fanning pectorals, gentle tail 1.5 Hz, glides between beats, smooth wide turns [M][L]
         BrainKind.CARDINAL to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.0, pecHzMax = 3.0, strouhal = 0.25, tailPP = 0.16, tailHzMin = 0.9,
-            glideS = 0.8, beatsPerBout = 2.0, bankGain = 0.7, cStartDeg = 100.0),
+            glideS = 0.8, beatsPerBout = 2.0, bankGain = 0.7, cStartDeg = 100.0, turnRadiusBL = 0.7),
         // labriform flapper, pecs ~5 Hz, rear body wiggles, bobbing travel [M][L]
         BrainKind.WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 3.0, pecHzHover = 3.5, pecHzMax = 6.5, rowBodyAmp = 0.035,
-            bobPitch = 0.05, bobHz = 2.0, bankGain = 1.2, cStartDeg = 140.0),
+            bobPitch = 0.05, bobHz = 2.0, bankGain = 1.2, cStartDeg = 140.0, turnRadiusBL = 0.35),
         BrainKind.EEL to MotionProfile(Gait.ANGUILLIFORM, strouhal = 0.35, tailPP = 0.12, tailHzMin = 0.5, bankGain = 0.3, cStartDeg = 60.0),
         // elongate juvenile, body wave ~3 Hz [L]
         BrainKind.ENGINEER_GOBY to MotionProfile(Gait.ANGUILLIFORM, strouhal = 0.35, tailPP = 0.14, tailHzMin = 1.2, bankGain = 0.4, cStartDeg = 90.0),
@@ -159,22 +166,22 @@ object MotionProfiles {
         // leopard wrasse: slow labriform rower (rowing-type labrid fin, Wainwright et al. 2002 [M]) that hovers and pivots
         // head-down among coral branches to pick; bobbing-and-weaving travel (LiveAquaria [M]); pecs 3–5.5 Hz [L]
         BrainKind.LEOPARD_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.0, pecHzHover = 3.0, pecHzMax = 5.5, rowBodyAmp = 0.02,
-            bobPitch = 0.06, bobHz = 1.6, bankGain = 1.0, cStartDeg = 120.0),
+            bobPitch = 0.06, bobHz = 1.6, bankGain = 1.0, cStartDeg = 120.0, turnRadiusBL = 0.35),
         // fairy wrasse: quick labriform hoverer in the current (pectoral rowing, research 42 §1 [L]); fast pecs, a
         // little bob while it picks, a sharp C-start into the rock when scared
         BrainKind.FAIRY_WRASSE to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.2, pecHzHover = 3.5, pecHzMax = 6.0, rowBodyAmp = 0.015,
-            bobPitch = 0.04, bobHz = 1.2, bankGain = 1.1, cStartDeg = 130.0),
+            bobPitch = 0.04, bobHz = 1.2, bankGain = 1.1, cStartDeg = 130.0, turnRadiusBL = 0.35),
         // body-caudal darter, tail 3–4 Hz, burst-and-coast between rock cover [L]
         BrainKind.DOTTYBACK to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.5, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.5,
-            glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0),
+            glideS = 0.5, beatsPerBout = 3.0, bankGain = 1.1, cStartDeg = 140.0, turnRadiusBL = 0.35),
         // firefish (research 41 §1.3): hovers nearly still on sculling pectorals with a slow body-caudal wave, bursts
         // with a fast C-start into its hole; slender body bends more than a cardinal's [L]
         BrainKind.FIREFISH to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 3.0, pecHzMax = 4.0, strouhal = 0.3, tailPP = 0.2, tailHzMin = 1.2,
             glideS = 0.3, beatsPerBout = 2.0, bankGain = 0.8, cStartDeg = 150.0),
-        // chromis: damselfish are classic labriform flappers (Drucker & Jensen 1996 used the surfperch; damselfish row the
-        // same way, Webb 1973 [M]); pecs 3.5–7 Hz, the tail joins only when it hurries [L]
-        BrainKind.CHROMIS to MotionProfile(Gait.LABRIFORM, gaitTransitionBL = 2.6, pecHzHover = 3.5, pecHzMax = 7.0, rowBodyAmp = 0.02,
-            strouhal = 0.28, tailPP = 0.18, bankGain = 1.2, cStartDeg = 120.0),
+        // chromis (research 41 §2): a caudal-fin-powered mid-water schooler hovering over the Acropora heads [Observed,
+        // Fishes of Australia]; the pectorals scull while it holds station, the tail drives it once it travels
+        BrainKind.CHROMIS to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 3.5, pecHzMax = 5.0, strouhal = 0.28, tailPP = 0.18, tailHzMin = 1.2,
+            glideS = 0.3, beatsPerBout = 3.0, bankGain = 1.2, cStartDeg = 120.0, turnRadiusBL = 0.4),
         // royal gramma (research 50 §1): hangs almost still at its cave on sculling pectorals, a slow body-caudal wave,
         // fast darts back into the cave [L]
         BrainKind.GRAMMA to MotionProfile(Gait.BODY_CAUDAL, pecHzHover = 2.8, pecHzMax = 4.0, strouhal = 0.28, tailPP = 0.18, tailHzMin = 1.2,
