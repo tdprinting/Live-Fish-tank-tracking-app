@@ -121,6 +121,14 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         for (i in 1 until poly.size) trail.add(poly[i])
     }
 
+    /** Moves the whole body by (dx, dy, dz) without changing its shape (a body pushed off another, BodyContact). */
+    fun translate(dx: Double, dy: Double, dz: Double) {
+        head = Vec3(head.x + dx, head.y + dy, head.z + dz)
+        for (k in trail.indices) { val p = trail[k]; trail[k] = Vec3(p.x + dx, p.y + dy, p.z + dz) }
+        // (a correction still easing out moves with it)
+        lastOverride = lastOverride?.map { Vec3(it.x + dx, it.y + dy, it.z + dz) }
+    }
+
     fun update(headPos: Vec3, headingDir: Vec3, dt: Double, relaxRate: Double) {
         if (!(headPos.x.isFinite() && headPos.y.isFinite() && headPos.z.isFinite())) return
         head = headPos
