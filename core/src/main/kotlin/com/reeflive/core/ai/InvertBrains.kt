@@ -161,12 +161,20 @@ class ShrimpForage(val b: SpeciesBrain, val nav: ShrimpNav, val radius: Double, 
     private var lastSeen = 0.0
     private fun reachable(c: Ctx, p: FoodParticle): Boolean =
         p.settled || c.rock.envDist(p.pos) < shrimpStance(c.o) + 2.0 || p.pos.distanceTo(c.o.pos) < swimRadius
+    /** Left for another behaviour: a while before it turns back (a bit of food just in or out of reach, or on and off a
+     *  fish's body, swung the shrimp between it and its station every few ticks: FishGlitch BEHAVIOUR_THRASH). */
+    private var retryAt = -1.0
     override fun score(c: Ctx): Double {
-        if (c.o.hunger < 0.12 || c.o.molting) return 0.0
+        if (c.o.hunger < 0.12 || c.o.molting || c.t < retryAt) return 0.0
         f = c.findFood(radius, los = false) { reachable(c, it) }
         return if (f != null) (0.55 + 0.35 * c.o.hunger) else 0.0
     }
     override fun enter(c: Ctx) { lastSeen = c.t; nav.reset() }
+    override fun exit(c: Ctx) { retryAt = c.t + RETRY_S }
+    companion object {
+        /** Seconds before a shrimp that left the food goes back to it. [I] */
+        const val RETRY_S = 6.0
+    }
     override fun update(c: Ctx, out: SteerIntent) {
         var ff = f
         if (ff == null || ff.eaten) { ff = c.findFood(radius, los = false) { reachable(c, it) }; f = ff }

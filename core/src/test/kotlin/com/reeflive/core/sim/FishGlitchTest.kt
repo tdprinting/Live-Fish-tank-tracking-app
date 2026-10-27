@@ -84,6 +84,9 @@ class FishGlitchTest {
             val t = sim.simTimeSec
             for (o in sim.organisms) {
                 if (!o.alive) { tracks.remove(o.id); continue }
+                // a fish leaping from a scare flies the jump's own ballistic path (JumpModel), out of the tank if it clears
+                // the rim: a modelled event, not a glitch
+                if (o.leap != null) { tracks.remove(o.id); continue }
                 ticks++
                 val tr = tracks.getOrPut(o.id) { Track(o) }
                 val pose = o.toPose()
@@ -166,7 +169,9 @@ class FishGlitchTest {
                         val d = rock.sdf.dist(p)
                         when {
                             d < -0.3 -> { hit(tr, Cause.PEN_ROCK, t, "station $i %.1f cm deep".format(-d)); break }
-                            p.y < rock.sandTopCm - 0.5 -> { hit(tr, Cause.PEN_SAND, t, "station $i %.1f cm under".format(rock.sandTopCm - p.y)); break }
+                            // (under the sand as it lies there: a goby in the hollow it dug is below the sand's level, and
+                            // a watchman backed into its burrow has its tail down the burrow, BodyBounds.POCKET_BL)
+                            p.y < sim.sand.surfaceY(p.x, p.z) - 0.5 && !inPocket(o, p) -> { hit(tr, Cause.PEN_SAND, t, "station $i %.1f cm under".format(sim.sand.surfaceY(p.x, p.z) - p.y)); break }
                             p.x < -0.2 || p.z < -0.2 || p.x > rock.lengthCm + 0.2 || p.z > rock.widthCm + 0.2 -> { hit(tr, Cause.PEN_GLASS, t, "station $i"); break }
                             p.y > rock.waterLevelCm + 0.2 -> { hit(tr, Cause.PEN_SURFACE, t, "station $i"); break }
                         }
@@ -183,6 +188,12 @@ class FishGlitchTest {
             left -= chunk
         }
         return Report(hits, ticks, seconds / 3600)
+    }
+
+    private fun inPocket(o: Organism, p: Vec3): Boolean {
+        val m = (if (o.atBurrow) o.burrowMouth else null) ?: return false
+        val r = BodyBounds.POCKET_BL * o.lengthCm
+        return (p.x - m.x) * (p.x - m.x) + (p.z - m.z) * (p.z - m.z) <= r * r
     }
 
     private fun run(seed: Long, hour: Double, hours: Double, dt: Double) =

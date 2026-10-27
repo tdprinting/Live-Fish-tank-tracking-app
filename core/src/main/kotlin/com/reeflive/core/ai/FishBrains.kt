@@ -2224,6 +2224,8 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         const val HOP_MAX_BL = 3.0
         /** Points along a hop arc checked for rock before it takes off ([RockGraze.hopClear]). */
         const val HOP_PROBES = 10
+        /** Least a grazing patch lies from a pane (body lengths): its body lies along the rock. [I] */
+        const val GLASS_GAP_BL = 0.6
         const val HEAD_UP = 0.26
         /**
          * Grazing comes in bite bouts with look-round pauses between them: 3,427 bites a day in the field, ~5 a minute
@@ -2323,7 +2325,11 @@ class LawnmowerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 else -> c.o.pos
             }
             val sp = c.rockSurfacePoint(centre, c.rng.range(5.0, 15.0), minNormalY = 0.0)
-            perch = sp?.let { perchOn(it.first, it.second) }
+            // not in the gap between the rock and a pane: lying along the rock there its tail was pressed between the
+            // glass and the rock and pushed into one of them
+            val gap = GLASS_GAP_BL * c.L
+            perch = sp?.takeIf { val q = it.first; q.x > gap && q.x < c.rock.lengthCm - gap && q.z > gap && q.z < c.rock.widthCm - gap }
+                ?.let { perchOn(it.first, it.second) }
             state = 1
             until = c.t + 8
             hopT = -1.0
