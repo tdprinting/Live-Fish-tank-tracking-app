@@ -55,7 +55,8 @@ class TankWatch(
     private val main = Handler(Looper.getMainLooper())
 
     // window MSAA off: the TV presets never use it, and it is the costliest thing on these GPUs
-    private val gl = TankGlView(context, RenderQuality.LOW)
+    // managed = false: this class sizes the buffer and steps presets itself (applyStep / adapt)
+    private val gl = TankGlView(context, RenderQuality.LOW, managed = false)
     private val label = TextView(context)
     private val caption = TextView(context)
     private val black = View(context).apply { setBackgroundColor(Color.BLACK); alpha = 1f }

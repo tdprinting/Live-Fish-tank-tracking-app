@@ -230,7 +230,9 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
                 + fixtureDirect(gRad1, gL1, albedo, N, V, rough, f0, wrap, specScale);
     // the surface heightfield's slope (4 taps) is read once for both the flicker and the caustics
     // plus the render-only swell (common.glsl), so the waves on the surface steer and brighten the net below
-    vec2 slope = p.y > uWaterLevel || (uQuality < 0.5 && uCausticStrength <= 0.0) ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
+    // Low (Performance, and auto quality's last relief step): the net drifts without the surface's refraction wobble,
+    // which saves four heightfield reads and three waves per lit pixel
+    vec2 slope = p.y > uWaterLevel || uQuality < 0.5 ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
     // the rippled surface gathers the beam into the caustic net, so the light between the lines is dimmer
     float gather = p.y < uWaterLevel ? 0.6 * uCausticStrength * max(N.y, 0.0) : 0.0;
     direct *= surfaceFlicker(p, slope) * (1.0 - gather);

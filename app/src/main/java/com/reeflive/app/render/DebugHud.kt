@@ -15,9 +15,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.StateFlow
 
-/** Developer overlay (ARCHITECTURE §8.2 `DebugHud`): fps, draw calls, triangles, GL errors, loading. */
+/**
+ * Frame-rate overlay (Settings → Live Tank → "Show frame rate"; ARCHITECTURE §8.2 `DebugHud`): frames per second, the
+ * GL thread's time per frame and the worst gap between frames in the last half second, the render scale, the effects
+ * auto quality has shed and the frame cap; then draw calls, triangles, GL errors and loading. [RenderStats] is published
+ * twice a second, so only this small box recomposes, at 2 Hz.
+ */
 @Composable
-fun DebugHud(stats: StateFlow<RenderStats>, modifier: Modifier = Modifier) {
+fun DebugHud(stats: StateFlow<RenderStats>, modifier: Modifier = Modifier, detail: Boolean = true) {
     val s by stats.collectAsState()
     Column(
         modifier
@@ -25,11 +30,18 @@ fun DebugHud(stats: StateFlow<RenderStats>, modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         val style = androidx.compose.ui.text.TextStyle(color = Color(0xFFB8F5E0), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-        Text("%.0f fps  %.1f ms  %s".format(s.fps, s.frameMs, s.quality.name), style = style)
-        Text("draws ${s.drawCalls}  tris ${"%,d".format(s.triangles)}", style = style)
-        Text("models ${s.modelsLoaded}/${s.modelsTotal}  organisms ${s.organisms}", style = style)
-        Text("light %.2f  follow %s".format(s.lightIntensity, s.following ?: "-"), style = style)
+        val slow = s.targetFps > 0 && s.fps < s.targetFps * 0.85f
+        Text(
+            "%.0f fps  gl %.1f ms  worst %.0f ms".format(s.fps, s.frameMs, s.worstMs),
+            style = if (slow) style.copy(color = Color(0xFFFFD27A)) else style,
+        )
+        val cap = if (s.targetFps > 0) "cap ${s.targetFps}" else "vsync"
+        Text("%s  %.2fx  shed %d  %s".format(s.quality.name.lowercase(), s.renderScale, s.relief, cap), style = style)
+        if (detail) {
+            Text("draws ${s.drawCalls}  tris ${"%,d".format(s.triangles)}", style = style)
+            Text("models ${s.modelsLoaded}/${s.modelsTotal}  organisms ${s.organisms}", style = style)
+        }
         if (s.glErrors > 0) Text("GL errors ${s.glErrors}", style = style.copy(color = Color(0xFFFF8A80)))
-        if (s.glInfo.isNotEmpty()) Text(s.glInfo, style = style.copy(fontSize = 9.sp))
+        if (detail && s.glInfo.isNotEmpty()) Text(s.glInfo, style = style.copy(fontSize = 9.sp))
     }
 }

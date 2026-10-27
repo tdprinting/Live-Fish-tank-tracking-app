@@ -75,6 +75,10 @@ fun TankView(
     room: RoomControl? = null,
     /** Screensaver mode over this view ([CinemaSession]); it drives the camera while active. */
     cinema: CinemaSession? = null,
+    /** Auto picture quality: lower the render resolution, then effects, while frames are slow ([TankGlView.autoQuality]). */
+    autoQuality: Boolean = true,
+    /** False while something covers the whole view: no frames are drawn ([TankGlView.shown]). */
+    shown: Boolean = true,
 ) {
     val latest = remember { AtomicReference<SimSnapshot?>(null) }
     LaunchedEffect(snapshots) { snapshots.collect { latest.set(it) } }
@@ -85,6 +89,7 @@ fun TankView(
         onFinger = onFinger, onFlick = onFlick, projection = projection,
         bursts = bursts, viewLight = viewLight, shelf = shelf, care = care, subFirstPerson = subFirstPerson, followCam = followCam,
         nurseryRequest = nurseryRequest, onSpot = onSpot, aim = aim, storeRoom = storeRoom, room = room, cinema = cinema,
+        autoQuality = autoQuality, shown = shown,
     )
 }
 
@@ -128,6 +133,8 @@ fun TankView(
     storeRoom: StoreRoomControl? = null,
     room: RoomControl? = null,
     cinema: CinemaSession? = null,
+    autoQuality: Boolean = true,
+    shown: Boolean = true,
 ) {
     val pick by rememberUpdatedState(onPick)
     val cine by rememberUpdatedState(cinema)
@@ -176,6 +183,8 @@ fun TankView(
             AndroidView(
                 factory = { ctx ->
                     TankGlView(ctx, quality).also { v ->
+                        v.autoQuality = autoQuality
+                        v.shown = shown
                         v.listener = listener
                         v.setSnapshotProvider { currentProvider() }
                         v.projection = projection
@@ -193,6 +202,8 @@ fun TankView(
                 },
                 update = { v ->
                     v.setQuality(quality)
+                    v.autoQuality = autoQuality
+                    v.shown = shown
                     // while the screensaver runs it owns the follow; the keeper's comes back with their view
                     if (cinema?.active != true) v.follow(followId)
                     cinema?.attach(v.renderer) { v.height.toFloat() }
@@ -215,7 +226,8 @@ fun TankView(
         }
         val v = view
         if (showHud && v != null) {
-            DebugHud(v.stats, Modifier.align(Alignment.TopStart).padding(8.dp))
+            // left edge, mid height: clear of the HUD's top row and the dock at the bottom
+            DebugHud(v.stats, Modifier.align(Alignment.CenterStart).padding(8.dp), detail = false)
         }
     }
 

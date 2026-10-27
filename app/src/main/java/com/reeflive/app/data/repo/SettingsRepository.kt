@@ -27,7 +27,12 @@ data class AppSettings(
     val reminderHour: Int = 8,
     val reduceMotion: Boolean = false,
     val haptics: Boolean = true,
+    /** Live tank picture: LOW "Performance", MEDIUM "Balanced" (the default), HIGH "Quality". */
     val liveQuality: LiveQuality = LiveQuality.MEDIUM,
+    /** Auto picture: render resolution, then effects, step down while the live tank misses frames (and back up). */
+    val liveAuto: Boolean = true,
+    /** A small frame-rate box over the live tank (fps, frame times, render scale), for reporting speed. */
+    val showFps: Boolean = false,
     val lastKitBrand: String? = null,
     val tileOrder: List<String> = emptyList(),
     val glassBlur: Boolean = true,
@@ -79,6 +84,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val reduceMotion = booleanPreferencesKey("reduceMotion")
         val haptics = booleanPreferencesKey("haptics")
         val liveQuality = stringPreferencesKey("liveQuality")
+        val liveAuto = booleanPreferencesKey("liveAuto")
+        val showFps = booleanPreferencesKey("showFps")
         val lastKitBrand = stringPreferencesKey("lastKitBrand")
         val tileOrder = stringPreferencesKey("tileOrderJson")
         val glassBlur = booleanPreferencesKey("glassBlur")
@@ -111,6 +118,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             reduceMotion = p[K.reduceMotion] ?: false,
             haptics = p[K.haptics] ?: true,
             liveQuality = LiveQuality.entries.firstOrNull { it.name == p[K.liveQuality] } ?: LiveQuality.MEDIUM,
+            liveAuto = p[K.liveAuto] ?: true,
+            showFps = p[K.showFps] ?: false,
             lastKitBrand = p[K.lastKitBrand],
             tileOrder = p[K.tileOrder]?.split(',')?.filter { it.isNotBlank() } ?: emptyList(),
             glassBlur = p[K.glassBlur] ?: true,
@@ -161,6 +170,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setReduceMotion(v: Boolean) = store.edit { it[K.reduceMotion] = v }
     suspend fun setHaptics(v: Boolean) = store.edit { it[K.haptics] = v }
     suspend fun setLiveQuality(v: LiveQuality) = store.edit { it[K.liveQuality] = v.name }
+    suspend fun setLiveAuto(v: Boolean) = store.edit { it[K.liveAuto] = v }
+    suspend fun setShowFps(v: Boolean) = store.edit { it[K.showFps] = v }
     suspend fun setLastKitBrand(v: String?) = store.edit { if (v.isNullOrBlank()) { it.remove(K.lastKitBrand) } else { it[K.lastKitBrand] = v } }
     suspend fun setTileOrder(ids: List<String>) = store.edit { it[K.tileOrder] = ids.joinToString(",") }
     suspend fun setGlassBlur(v: Boolean) = store.edit { it[K.glassBlur] = v }

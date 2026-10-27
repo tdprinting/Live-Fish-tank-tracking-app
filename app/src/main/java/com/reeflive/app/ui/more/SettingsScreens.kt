@@ -149,6 +149,8 @@ data class SettingsActions(
     val onHaptics: (Boolean) -> Unit = {},
     val onGlassBlur: (Boolean) -> Unit = {},
     val onLiveQuality: (LiveQuality) -> Unit = {},
+    val onLiveAuto: (Boolean) -> Unit = {},
+    val onShowFps: (Boolean) -> Unit = {},
     val onTankSounds: (Boolean) -> Unit = {},
     val onRadio: (Boolean) -> Unit = {},
     val onRadioVolume: (Float) -> Unit = {},
@@ -208,7 +210,9 @@ fun SettingsContent(s: AppSettings, permissionGranted: Boolean, actions: Setting
                 }
             }
             Group("Live Tank") {
-                PillsRow("Quality", listOf("Low", "Medium", "High"), s.liveQuality.ordinal) { actions.onLiveQuality(LiveQuality.entries[it]) }
+                PillsRow("Picture", listOf("Performance", "Balanced", "Quality"), s.liveQuality.ordinal) { actions.onLiveQuality(LiveQuality.entries[it]) }
+                SwitchRow("Auto picture", "Keeps the tank smooth: lowers sharpness, then effects, when your phone falls behind", s.liveAuto, actions.onLiveAuto)
+                SwitchRow("Show frame rate", "A small box over the tank with frames per second and frame times", s.showFps, actions.onShowFps)
                 SwitchRow("Tank sounds", "Water flow, pumps, feeding and alerts", s.tankSounds, actions.onTankSounds)
                 if (s.tankSounds) VolumeRow(s.tankVolume, actions.onTankVolume)
                 SwitchRow("Tank radio", "Quiet, calm songs from a little radio beside the tank", s.radioOn, actions.onRadio)
@@ -263,6 +267,8 @@ fun SettingsRoute(onBack: () -> Unit, onTargets: () -> Unit, onTank: () -> Unit,
             onHaptics = { go { g.settings.setHaptics(it) } },
             onGlassBlur = { go { g.settings.setGlassBlur(it) } },
             onLiveQuality = { go { g.settings.setLiveQuality(it) } },
+            onLiveAuto = { go { g.settings.setLiveAuto(it) } },
+            onShowFps = { go { g.settings.setShowFps(it) } },
             onTankSounds = { go { g.settings.setTankSounds(it) } },
             onRadio = { go { g.settings.setRadioOn(it) } },
             onRadioVolume = { go { g.settings.setRadioVolume(it) } },

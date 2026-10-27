@@ -21,7 +21,12 @@ const store = {
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } },
 };
 /** The Picture setting for the tank: a preset, or AUTO with the level the last visit settled on. */
-const pictureArg = () => (ui.quality === 'AUTO' ? `AUTO:${store.get('reeflive.autoLevel', 'HIGH')}` : ui.quality);
+// A first visit on a phone or tablet (touch screen) starts Auto on Medium: High's fill rate is what made phones slow,
+// and Auto still climbs to High when frames run fast at full resolution.
+const firstAutoLevel = () => {
+  try { return window.matchMedia('(pointer: coarse)').matches ? 'MEDIUM' : 'HIGH'; } catch { return 'HIGH'; }
+};
+const pictureArg = () => (ui.quality === 'AUTO' ? `AUTO:${store.get('reeflive.autoLevel', firstAutoLevel())}` : ui.quality);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let C = null;              // catalog (static tables)

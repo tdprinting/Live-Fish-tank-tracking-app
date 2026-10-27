@@ -34,13 +34,28 @@ class TouchController(context: Context, private val view: View, private val inpu
         input.fingerPx = cfg.scaledTouchSlop * 3f
     }
 
+    /**
+     * Render buffer pixels per view pixel ([TankGlView.renderScale]): touches are handed on in buffer pixels, the
+     * pixels the camera and the picker work in, and the slops and fingertip shrink with them. 1 on the web.
+     */
+    var scale = 1f
+        set(v) {
+            if (v == field || v <= 0f) return
+            field = v
+            tracker.touchSlop = cfg.scaledTouchSlop * v
+            tracker.doubleTapSlop = cfg.scaledDoubleTapSlop * v
+            input.fingerPx = cfg.scaledTouchSlop * 3f * v
+        }
+    private fun x(ev: MotionEvent, i: Int) = ev.getX(i) * scale
+    private fun y(ev: MotionEvent, i: Int) = ev.getY(i) * scale
+
     fun onTouchEvent(ev: MotionEvent): Boolean {
         if (input.cleaning) {
             if (tracker.count > 0) tracker.cancel()
             when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { view.parent?.requestDisallowInterceptTouchEvent(true); input.scrapeTouch(ev.getX(0), ev.getY(0), true) }
-                MotionEvent.ACTION_MOVE -> input.scrapeTouch(ev.getX(0), ev.getY(0), true)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> input.scrapeTouch(ev.getX(0), ev.getY(0), false)
+                MotionEvent.ACTION_DOWN -> { view.parent?.requestDisallowInterceptTouchEvent(true); input.scrapeTouch(x(ev, 0), y(ev, 0), true) }
+                MotionEvent.ACTION_MOVE -> input.scrapeTouch(x(ev, 0), y(ev, 0), true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> input.scrapeTouch(x(ev, 0), y(ev, 0), false)
             }
             return true
         }
@@ -49,21 +64,21 @@ class TouchController(context: Context, private val view: View, private val inpu
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 view.parent?.requestDisallowInterceptTouchEvent(true)
-                input.press(ev.getX(0), ev.getY(0))
-                tracker.down(ev.getPointerId(0), ev.getX(0), ev.getY(0), t, first = true)
+                input.press(x(ev, 0), y(ev, 0))
+                tracker.down(ev.getPointerId(0), x(ev, 0), y(ev, 0), t, first = true)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = ev.actionIndex
-                tracker.down(ev.getPointerId(i), ev.getX(i), ev.getY(i), t, first = false)
+                tracker.down(ev.getPointerId(i), x(ev, i), y(ev, i), t, first = false)
             }
             MotionEvent.ACTION_MOVE -> {
                 val n = minOf(ev.pointerCount, GestureTracker.MAX)
-                for (k in 0 until n) { pid[k] = ev.getPointerId(k); px[k] = ev.getX(k); py[k] = ev.getY(k) }
+                for (k in 0 until n) { pid[k] = ev.getPointerId(k); px[k] = x(ev, k); py[k] = y(ev, k) }
                 tracker.move(n, pid, px, py, t)
             }
             MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
                 val i = ev.actionIndex
-                tracker.up(ev.getPointerId(i), ev.getX(i), ev.getY(i), t)
+                tracker.up(ev.getPointerId(i), x(ev, i), y(ev, i), t)
             }
             MotionEvent.ACTION_CANCEL -> tracker.cancel()
         }

@@ -82,6 +82,34 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         }
     }
     @Volatile private var requestedQuality = initialQuality
+
+    // ---- frame budget (Android auto quality, AdaptiveQuality) ----
+    /**
+     * Effects shed at runtime without reloading anything (0 = the preset as is … [AdaptiveQuality.MAX_RELIEF]):
+     * 1 fish out of the shadow map (High), half the contact shadows and snow; 2 one shading level cheaper (rock relief
+     * octaves, rock life, sand ripples, light flicker) and no light shafts; 3 two levels cheaper, no shadow map, no
+     * contact shadows, a quarter of the snow and half the drifting particles. Any thread; set by [autoQuality] when on.
+     */
+    @Volatile var relief = 0
+    /** Auto quality fed every frame's interval on the GL thread; null = the preset stays as picked (the web adapts itself). */
+    @Volatile var autoQuality: AdaptiveQuality? = null
+    /** The frame cap the host paces at (0 = every vsync); auto quality judges frame intervals against it. */
+    @Volatile var targetFps = 0
+    /** Called on the main thread when auto quality moves to a rung with another render scale multiplier. */
+    @Volatile var onAutoScale: ((Float) -> Unit)? = null
+    /** Render buffer / view size, for the stats overlay ([TankGlView] renders to a smaller buffer the display scales up). */
+    @Volatile var renderScale = 1f
+    /**
+     * The view's own size in pixels when the GL buffer is smaller ([TankGlView.renderScale]); 0 = the buffer's size.
+     * Overlays ([projection]) and gear menus ([TankViewListener.onSpot]) get view pixels.
+     */
+    @Volatile var viewWidth = 0
+    @Volatile var viewHeight = 0
+    private val frustum = Frustum()
+    /** `_lod1.glb` path per model path, so no strings are built per animal per frame. */
+    private val lod1Paths = HashMap<String, String>()
+    private fun lod1Of(path: String): String = lod1Paths.getOrPut(path) { ModelRegistry.lod1(path) }
+    private var worstNs = 0L
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
     @Volatile private var resetRequested = false
@@ -273,8 +301,10 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     override fun onDrawFrame(gl: GL10?) {
         val now = System.nanoTime()
-        val dt = if (lastNs == 0L) 1f / 60f else ((now - lastNs) / 1e9f).coerceIn(0f, 0.25f)
+        val gapNs = if (lastNs == 0L) 0L else now - lastNs
+        val dt = if (lastNs == 0L) 1f / 60f else (gapNs / 1e9f).coerceIn(0f, 0.25f)
         lastNs = now
+        if (gapNs > worstNs) worstNs = gapNs
         val time = (((now - startNs) / 1e9) % 4096.0).toFloat()
         drawCalls = 0; triangles = 0
 
@@ -283,7 +313,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         storeScene.time = time
         storeScene.apply(storeRoom, camera) { store.model(it) }
         if (storeScene.takeTradeAsk()) storeRoom?.onTrade?.let { cb -> main.post { cb() } }
-        store.pump(2)
+        val uploaded = store.pump(2)
+        autoStep(dt, uploaded)
 
         // 1. snapshot + rigs
         val snap = snapshotProvider?.invoke() ?: if (demoWhenEmpty) DemoSnapshots.at(time.toDouble()) else null
@@ -312,7 +343,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         followCam.drain(camera)
         fillColliders(rigs, cur)
         camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
-        projection?.publish(camera.viewProj, camera.proj, width, height)
+        frustum.set(camera.viewProj)
+        val vw = viewWidth; val vh = viewHeight
+        projection?.publish(camera.viewProj, camera.proj, if (vw > 0) vw else width, if (vh > 0) vh else height)
         for (t in taps) handleTap(t, rigs)
         aim?.take()?.let { aimFrom(it[0], it[1], rigs) }
         handleHeld(now, cur)
@@ -334,13 +367,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         sandFx?.update(cur, now)
         val fu = frame ?: return
         val progs = programs ?: return
+        val rl = relief.coerceIn(0, AdaptiveQuality.MAX_RELIEF)
         fu.setEffects(quality)
-        fu.setCasters(rigs, quality.shadowCasters, camera.eye[0], camera.eye[1], camera.eye[2])
+        val casters = when { rl >= 3 -> 0; rl >= 1 -> quality.shadowCasters / 2; else -> quality.shadowCasters }
+        fu.setCasters(rigs, casters, camera.eye[0], camera.eye[1], camera.eye[2])
+        shadowMap?.let { it.lite = rl >= 1; it.off = rl >= 3 }
         shadowMap?.fill(fu.data, FrameUniforms.SHADOW_OFFSET)
-        fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY)
+        val shaderLevel = (quality.shaderLevel - (if (rl >= 3) 2 else if (rl >= 2) 1 else 0)).coerceAtLeast(0)
+        fu.fill(camera, time, light, quality, cur?.algaeBloom ?: 0f, cur?.flowStrength ?: 1f, surfaceTex != null, surfaceDims[0], surfaceDims[1], cur?.algae ?: AlgaeCover.EMPTY, shaderLevel)
         bindShared()
         shadowMap?.let { renderShadowMap(it, fu, progs, rigs, cur) }
-        particles.ambientCount = quality.particles
+        particles.ambientCount = if (rl >= 3) quality.particles / 2 else quality.particles
         bursts?.drain { particles.burst(it, cur) }
         particles.step(dt, time, cur, viewProjM = camera.viewProj)
 
@@ -404,13 +441,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         val waterFirst = camera.eye[1] < Camera.WATER_Y
         if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
-        if (quality.shafts && light.intensity > 0.03f) {
+        if (quality.shafts && rl < 2 && light.intensity > 0.03f) {
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             shafts?.let { it.draw(progs.shafts); drawCalls++; triangles += it.triangles }
         }
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         particlesGl?.let { drawCalls += it.draw(progs.particles, particles, height) }
-        snow?.let { drawCalls += it.draw(progs.snow, quality.snow, height) }
+        val snowCount = when (rl) { 0 -> quality.snow; 1 -> quality.snow / 2; 2 -> quality.snow * 3 / 8; else -> quality.snow / 4 }
+        snow?.let { drawCalls += it.draw(progs.snow, snowCount, height) }
         sandClouds?.let {
             // the scene is drawn between the two newest snapshots: carry the older one's grains along their velocity
             val prev = interp.previous
@@ -821,13 +859,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 part.mesh.draw(); drawCalls++
             }
         }
-        if (sm.dynamic) {
+        if (sm.withFish) {
             val pf = progs.shadowFish
             pf.use()
             for (r in rigs) {
                 if (!r.visible) continue
                 val path = CritterKind.of(r.speciesId)?.model ?: BroodVisuals.modelFor(r.speciesId) ?: registry.modelFor(r.speciesId, r.variant) ?: continue
-                val lod1 = ModelRegistry.lod1(path)
+                val lod1 = lod1Of(path)
                 val m = (if (store.exists(lod1)) store.model(lod1) else null) ?: (if (store.exists(path)) store.model(path) else null) ?: continue
                 fishUniforms(pf, r, m.rigid, m.limbPivots)
                 for (part in m.parts) {
@@ -1166,12 +1204,12 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** pass 0: opaque parts; pass 1: fins (blended). */
     private fun drawOrganism(r: FishRig, progs: Programs, pass: Int) {
         stageBinding.clear()
-        if (!r.visible) return
+        if (!r.visible || !inView(r)) return
         val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant)
-        val far = r.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) > RenderQuality.LOD1_DISTANCE_CM
+        val far = r.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) > quality.lod1DistanceCm
         var m: GpuModel? = null
         if (path != null && store.exists(path)) {
-            val lod1 = ModelRegistry.lod1(path)
+            val lod1 = lod1Of(path)
             m = if (far && store.exists(lod1)) store.model(lod1) ?: store.model(path) else store.model(path) ?: if (store.exists(lod1)) store.model(lod1) else null
             if (m == null) {
                 if (store.hasFailed(path) && pass == 0) drawPlaceholder(r, progs)
@@ -1307,8 +1345,19 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         if (t == null) p.set3f("uBleachTint", 0.89f, 0.89f, 0.89f) else p.set3f("uBleachTint", t[0], t[1], t[2])
     }
 
+    /**
+     * False when the animal is wholly off screen: a bounding sphere from its spine (head to tail) padded by its size
+     * for fins, legs, arms and tentacles. Its draws are skipped (the shadow pass, which sees the whole tank, keeps it).
+     */
+    private fun inView(r: FishRig): Boolean {
+        val s = r.spine
+        val dx = s[60] - s[0]; val dy = s[61] - s[1]; val dz = s[62] - s[2]
+        val half = 0.5f * sqrt(dx * dx + dy * dy + dz * dz)
+        return frustum.sphere((s[0] + s[60]) * 0.5f, (s[1] + s[61]) * 0.5f, (s[2] + s[62]) * 0.5f, half + r.scale + 3f)
+    }
+
     private fun rigidModel(r: FishRig, out: FloatArray) {
-        M.identity().copyInto(out)
+        IDENTITY.copyInto(out)
         out[12] = r.spine[0]; out[13] = r.spine[1]; out[14] = r.spine[2]
     }
 
@@ -1555,7 +1604,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                     // (not in clean-glass mode, where the finger is on the Flipper)
                     // a piece of gear (skimmer, filter, heater, pumps, lamps, top-off) in front of any rock: its pop-out menu
                     val spot = if (aim?.gearTaps != false) spotAt(o, dir) else null
-                    if (spot != null) { val x = t.x; val y = t.y; main.post { l?.onSpot(spot, x, y) }; return }
+                    if (spot != null) {
+                        // view pixels (the GL buffer may be smaller than the view, TankGlView.renderScale)
+                        val vw = viewWidth
+                        val k = if (vw > 0) vw.toFloat() / width else 1f
+                        val x = t.x * k; val y = t.y * k
+                        main.post { l?.onSpot(spot, x, y) }; return
+                    }
                     val hit = touchHit(o, dir)
                     // a coral: lean in for a closer look as its polyps pull in
                     if (hit != null && hit.second == TouchSurface.CORAL) camera.peekAt(hit.first.x.toFloat(), hit.first.y.toFloat(), hit.first.z.toFloat())
@@ -1872,6 +1927,17 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     // ------------------------------------------------------------------ stats
 
+    /** Auto quality: judge this frame (not while models upload: those frames hitch on any device). */
+    private fun autoStep(dt: Float, uploading: Boolean) {
+        val aq = autoQuality ?: return
+        if (uploading) aq.hold(1f)
+        if (!aq.onFrame(dt, targetFps)) return
+        relief = aq.relief
+        val cb = onAutoScale ?: return
+        val k = aq.scale
+        main.post { cb(k) }
+    }
+
     private fun publishStats(now: Long, organisms: Int, light: LightingState) {
         fpsFrames++
         lastFrameMs = ((System.nanoTime() - now) / 1e6f)
@@ -1884,7 +1950,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
                 fps = lastFps, frameMs = lastFrameMs, drawCalls = drawCalls, triangles = triangles, glErrors = Gl.errors.get(),
                 modelsLoaded = store.loadedCount, modelsTotal = store.requestedCount, quality = quality, following = camera.followId,
                 organisms = organisms, lightIntensity = light.intensity,
+                worstMs = worstNs / 1e6f, renderScale = renderScale, relief = relief, targetFps = targetFps,
             )
+            worstNs = 0L
         }
     }
 
