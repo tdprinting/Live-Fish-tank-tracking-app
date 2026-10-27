@@ -445,6 +445,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 if (o.brainKind == BrainKind.TANG) o.spineFlare = 1.0
                 // a male fairy wrasse facing another male flashes at him (research 42 §1)
                 if (r.actor == "FAIRY_WRASSE_M") o.display = 1.0
+                // a banded shrimp squaring up raises its big banded claws, spread toward the intruder (06 §5.3 CLAW_RAISE)
+                if (r.bout == "CLAW_RAISE") o.clawDisplay = 1.0
                 val displayS = if (r.displayOnly) 1.0 else a.latency
                 if (phaseT >= displayS) {
                     phase = if (r.displayOnly && !dart) 2 else 1; phaseT = 0.0; travelled = 0.0
@@ -456,6 +458,8 @@ class PairBouts(val b: SpeciesBrain, val rows: List<PairRow>) : Behavior("bout",
                 val speed = min(r.chaseSpeedBL * c.L, o.burstSpeed).coerceAtLeast(o.cruiseSpeed)
                 if (o.isFish) out.seek(t.pos, speed, arrive = 0.3 * c.L, urgency = 0.85)
                 else { out.crawl = true; out.seek(t.pos, speed, arrive = 0.5, urgency = 0.85) }
+                // the claws stay up through the shuffle forward (CLAW_RAISE)
+                if (r.bout == "CLAW_RAISE") o.clawDisplay = 1.0
                 val contact = o.pos.distanceTo(t.pos) < 0.3 * c.L + 0.5 * t.lengthCm + 0.5
                 if (contact && !r.displayOnly) { nip = true; if (r.bout == "LATERAL_TAIL_SLAP") o.spineFlare = 1.0 else o.mouth = 1.0 }
                 // a tail slap: alongside the rival it swings broadside and lashes the tail, spine out (research 42 §2-3)
@@ -621,3 +625,99 @@ class PoseForCleaner(val b: SpeciesBrain) : Behavior("pose", "Posing for the cle
 
 /** Sine helper for display wobble. */
 internal fun wobble(t: Double, hz: Double) = sin(2 * Math.PI * hz * t)
+
+/**
+ * Territory re-anchoring after a [com.reeflive.core.sim.Command.RearrangeRock] (06 §3.3, §5.6 #20). Moved rock resets
+ * every boundary, so each territorial fish re-marks its patch: it swims a loop of [POINTS] stations round its anchor
+ * (cave, hole, perch, host, station) at about [RING] of its trigger radius, pausing at each with the dorsal fin up and
+ * facing out, then settles back at the anchor ([Organism.territoryAnchoredAt]); the hot bout rate of the following
+ * hours ([PairMatrix.rearrangeMult]) does the rest. No utility noise and no random draws, so adding it leaves every
+ * random sequence as it was until rock is moved. A crawler (the banded shrimp on its ledge) re-anchors in place.
+ */
+class ReclaimTerritory(val b: SpeciesBrain, val anchor: String, val radius: Double) : Behavior("reclaim", "Re-marking its territory") {
+    override val noisy: Boolean get() = false
+    override val targetVerb: String? get() = null
+    private var points: Array<Vec3>? = null
+    private var idx = 0
+    private var legT = 0.0
+    private var dwell = 0.0
+
+    private fun due(c: Ctx) = c.sim.territoryResetAt > c.o.territoryAnchoredAt
+
+    override fun score(c: Ctx): Double {
+        val o = c.o
+        if (!due(c)) return 0.0
+        if (!o.isFish) { o.territoryAnchoredAt = c.t; return 0.0 }
+        // the silt settles first; it does it while awake (rock moved at night is re-marked in the morning)
+        if (c.t - c.sim.territoryResetAt < START_S || !o.visible || o.health < 0.35 || c.activity < 0.3) return 0.0
+        return SCORE
+    }
+
+    /** The reset the loop was laid out for, and when it began: a bout that breaks in resumes the same loop. */
+    private var builtFor = Double.NaN
+    private var startedAt = 0.0
+
+    override fun enter(c: Ctx) {
+        val o = c.o
+        dwell = 0.0; legT = 0.0
+        if (points != null && builtFor == c.sim.territoryResetAt) return
+        builtFor = c.sim.territoryResetAt; startedAt = c.t
+        val home = b.anchorPos(c, anchor) ?: o.homePos
+        val r = (RING * radius).coerceIn(RING_MIN_CM, RING_MAX_CM)
+        // the loop starts on the side the fish is on and runs round (its id picks the way), never through the rock
+        val start = kotlin.math.atan2(o.pos.z - home.z, o.pos.x - home.x)
+        val dir = if (o.id.hashCode() and 1 == 0) 1.0 else -1.0
+        points = Array(POINTS) { k ->
+            val a = start + dir * k * 2 * Math.PI / POINTS
+            c.safe(home + Vec3(kotlin.math.cos(a) * r, 2.0 + (k % 2) * 2.0, kotlin.math.sin(a) * r), 1.0)
+        }
+        idx = 0
+    }
+
+    override fun update(c: Ctx, out: SteerIntent) {
+        val o = c.o
+        val pts = points ?: run { finished = true; return }
+        val home = b.anchorPos(c, anchor) ?: o.homePos
+        legT += c.dt
+        // a loop that cannot be finished (blocked, chased about) still ends: the patch is held from where it is
+        if (c.t - startedAt > MAX_S) { o.territoryAnchoredAt = c.t; finished = true; return }
+        if (idx < pts.size) {
+            val p = pts[idx]
+            if (dwell > 0.0 || o.pos.distanceTo(p) < ARRIVE_CM || legT > LEG_S) {
+                // at a station: hover broadside, dorsal up, looking out over the new boundary
+                dwell += c.dt
+                out.hover = true; out.pectoral = 1.0
+                out.seek(p, o.cruiseSpeed * 0.3, arrive = 1.5)
+                out.faceDir = (p - home).let { Vec3(it.x, 0.0, it.z) }.normalized(o.heading)
+                o.dorsalRaise = 1.0
+                if (dwell >= DWELL_S) { idx++; dwell = 0.0; legT = 0.0; o.dorsalRaise = 0.0 }
+            } else {
+                out.seek(p, o.cruiseSpeed * 1.2, arrive = ARRIVE_CM)
+            }
+            return
+        }
+        // back to the anchor: the territory is re-formed round it
+        out.seek(c.safe(home + Vec3(0.0, 2.0, 0.0), 1.0), o.cruiseSpeed, arrive = 2.0)
+        if (o.pos.distanceTo(home) < HOME_CM + 0.5 * o.lengthCm || legT > LEG_S) {
+            o.territoryAnchoredAt = c.t
+            finished = true
+        }
+    }
+
+    override fun exit(c: Ctx) { c.o.dorsalRaise = 0.0 }
+
+    companion object {
+        const val SCORE = 0.8
+        const val START_S = 20.0
+        const val POINTS = 4
+        /** Loop radius as a share of the territory trigger radius, clamped (cm) [I]. */
+        const val RING = 0.6
+        const val RING_MIN_CM = 6.0
+        const val RING_MAX_CM = 18.0
+        const val ARRIVE_CM = 2.0
+        const val DWELL_S = 1.2
+        const val LEG_S = 10.0
+        const val HOME_CM = 4.0
+        const val MAX_S = 90.0
+    }
+}

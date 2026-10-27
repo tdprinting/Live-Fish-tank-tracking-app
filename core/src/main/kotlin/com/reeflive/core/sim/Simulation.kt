@@ -122,6 +122,8 @@ class Simulation private constructor(
     val shrimpBreeding = ShrimpBreeding(this)
     /** Sim time of the last [Command.RearrangeRock]; territorial bouts run hot for a day after it (06 §3.3). */
     var territoryResetAt = -1e12
+    /** Feeding displacement by rank (06 §3.2): a lower-ranked fish gives way at a contested particle. Off only in tests. */
+    var feedDisplacement = true
     /** Night-time zooplankton emerging from the rock (06 §1.3; the cardinal's natural food). Particles per hour. */
     var nightPlanktonPerHour = 60.0
     private var planktonAcc = 0.0
@@ -1189,6 +1191,7 @@ class Simulation private constructor(
     private fun coralGrowth(dtMin: Double) {
         if (corals.isEmpty()) return
         CoralGrowth.compete(corals, water.s, water.carbonEfficiency)
+        overgrowthEvents()
         val born = ArrayList<Coral>()
         val kenyas = corals.count { it.kind == CoralKind.KENYA && it.tissue > 0.05 }
         for (i in corals.indices) {
@@ -1208,6 +1211,18 @@ class Simulation private constructor(
             pendingEventsSink += SimEvent.CoralSpawned(f.id.substringBefore('~'), f.id, simTimeSec)
         }
         coralDeaths()
+    }
+
+    /** A colony half smothered by a GSP mat is reported once (03 D: GSP overgrows its neighbours). */
+    private fun overgrowthEvents() {
+        for (v in corals) {
+            if (v.overgrown < CoralGrowth.OVERGROWN_CLEAR) v.overgrownNoted = false
+            if (v.overgrownNoted || v.overgrown < CoralGrowth.OVERGROWN_NOTE || v.tissue <= CoralHealth.DEAD_TISSUE) continue
+            v.overgrownNoted = true
+            val by = corals.firstOrNull { it.kind == CoralKind.GSP && CoralGrowth.pressure(it, v, water.carbonEfficiency).second > 0.0 }
+            pendingEventsSink += SimEvent.CoralOvergrown(v.id, v.nickname.ifBlank { v.species.common },
+                by?.let { it.nickname.ifBlank { it.species.common } } ?: "green star polyps", simTimeSec)
+        }
     }
 
     /** A colony whose tissue is gone is reported once and cleared away [CoralHealth.CLEAR_DAYS] later (aiptasia stay for their own model). */

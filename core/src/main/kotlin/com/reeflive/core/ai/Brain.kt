@@ -26,6 +26,16 @@ data class Rest(val pos: Vec3, val heading: Vec3, val up: Vec3? = null, val post
  */
 /** Points kept of a fish's recent track, and their spacing (cm), for [SpeciesBrain.retrace]. */
 private const val CRUMBS = 16
+
+/** The blue tang, *Paracanthurus hepatus*: the one whose blue deepens in a display (06 §4.1.3, S:ADW-tang). */
+const val BLUE_TANG_ID = "paracanthurus_hepatus"
+/** [Organism.blueDeepen] per second of full spine flare (06 §5.4 "+0.3" a flare) [I]. */
+@com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "06 §5.4 SPINE_FLARE blueDeepen +0.3") const val BLUE_PER_FLARE = 0.3
+/** Fade time constant of the deepened blue, s [I]. */
+const val BLUE_FADE_S = 30.0
+/** Deepened blue per unit acute social stress, and its cap (06 §4.1.3) [I]. */
+const val BLUE_SOCIAL = 1.0
+const val BLUE_SOCIAL_MAX = 0.6
 private const val CRUMB_CM = 2.0
 
 abstract class SpeciesBrain(val c: Ctx) {
@@ -95,6 +105,8 @@ abstract class SpeciesBrain(val c: Ctx) {
             add(SubmarineReact(this@SpeciesBrain))
             // learned feeding times and the keeper as a food cue (Mind.kt); idle until learned, no rng
             if (Mind.anticipates(o.brainKind)) { add(AnticipateFeed(this@SpeciesBrain)); add(ComeToKeeper(this@SpeciesBrain)) }
+            // re-marking its territory after the rock is moved (06 §5.6 #20); idle and without noise until then
+            pairRows.firstOrNull { it.anchor != "body" }?.let { r -> add(ReclaimTerritory(this@SpeciesBrain, r.anchor, r.triggerRadius + r.triggerBL * o.lengthCm)) }
         }
         utility = UtilityBrain(behaviors.toList() + extra)
         o.brain = utility
@@ -126,8 +138,16 @@ abstract class SpeciesBrain(val c: Ctx) {
         o.sleeping = false
         o.clock = c.t
         o.mouth *= exp(-dt * 5)
+        // blue tang colour change (06 §4.1.3, §5.4): a spine flare deepens the blue (about +0.3 to +0.4 a flare of
+        // 0.5-1 s), acute social stress holds a floor under it; it fades over about half a minute
+        if (o.brainKind == BrainKind.TANG && o.species.id == BLUE_TANG_ID) {
+            val floor = (BLUE_SOCIAL * o.stressState.fast(com.reeflive.core.sim.StressModel.Ch.SOCIAL)).coerceIn(0.0, BLUE_SOCIAL_MAX)
+            o.blueDeepen = max(floor, min(1.0, o.blueDeepen * exp(-dt / BLUE_FADE_S) + BLUE_PER_FLARE * o.spineFlare * dt))
+        }
         o.spineFlare *= exp(-dt * 3)
         o.display *= exp(-dt * 1.5)
+        // a fish that stopped feeding is no longer going for a particle (a tankmate contesting it reads this)
+        if (o.feedingOn != null && utility.current !is Feed) o.feedingOn = null
         if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))

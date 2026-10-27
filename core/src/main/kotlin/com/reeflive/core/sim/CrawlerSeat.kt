@@ -708,7 +708,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             val reach = out[a + 1] * 0.4f + 0.1f * out[a + 2] + 0.05f
             out[14 * 4 + 1 + cI] = ease(out[14 * 4 + 1 + cI], min(cm.toFloat(), reach))
         }
-        out[14 * 4] = 0f
+        // (out[14 * 4] is the claw threat posture, HermitLegs.THREAT_SLOT, written by the rig)
         out[HermitLegs.PLANTED_FLAG] = if (legsOut) 1f else 0f
         // antennae, antennules and eyestalks bend away from anything they would reach into
         val front = rig.retract < 0.5

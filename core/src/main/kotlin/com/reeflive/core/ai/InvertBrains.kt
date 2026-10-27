@@ -801,11 +801,39 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
             }
         }
         val l = legs ?: return
+        // threat posture: a rival hermit or a claw-bearing tankmate close by gets the big claw raised and spread toward
+        // it (hermit agonistic "cheliped presentation"; 06 §2.18, research 17); not from inside the shell
+        l.threat = if (o.alive && o.extension > 0.5 && utility.current?.name != "retreat" && clawRival(c) != null) 1.0 else 0.0
         // claws work the surface while it stands picking; antennules flick nonstop while it follows a food scent
         when (utility.current?.name) {
             "pick" -> if (o.vel.length() < 0.5) l.pick = 1.0
             "scavenge" -> { l.searching = true; if (o.vel.length() < 0.5) l.pick = 0.8 }
         }
+    }
+
+    /** Sim time a banded shrimp last went for it: it stays in its shell longer (06 §2.14: 30-60 s). */
+    private var clawedAt = -1e9
+
+    override fun onAttacked(c: Ctx, from: Vec3, mag: Double, by: com.reeflive.core.sim.Organism?) {
+        if (by?.brainKind == BrainKind.BANDED_SHRIMP) clawedAt = c.t
+        super.onAttacked(c, from, mag, by)
+    }
+
+    /**
+     * The tankmate it raises its claw at, or null: another hermit within [THREAT_CM] (shell to shell), or a banded
+     * shrimp or crab within [THREAT_BIG_CM].
+     */
+    fun clawRival(c: Ctx): com.reeflive.core.sim.Organism? {
+        for (n in c.p.neighbors(o.pos, THREAT_BIG_CM + 6.0)) {
+            if (n === o || !n.alive || !n.visible) continue
+            val gap = n.pos.distanceTo(o.pos) - 0.5 * (n.lengthCm + o.lengthCm)
+            when (n.brainKind) {
+                BrainKind.HERMIT -> if (gap < THREAT_CM) return n
+                BrainKind.BANDED_SHRIMP, BrainKind.SALLY_CRAB, BrainKind.ARROW_CRAB, BrainKind.EMERALD_CRAB -> if (gap < THREAT_BIG_CM) return n
+                else -> {}
+            }
+        }
+        return null
     }
 
     override fun restSpot(c: Ctx, night: Boolean): Rest {
@@ -870,7 +898,8 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
         private var dur = 15.0
         override val committed: Boolean get() = elapsed < dur
         override fun score(c: Ctx) = if (threat != null || startledRecently && startleMag > 0.1) 0.95 else 0.0
-        override fun enter(c: Ctx) { dur = c.rng.range(10.0, 30.0); startleAt = -1e9 }
+        // (one draw either way, so the brain's random sequence is unchanged)
+        override fun enter(c: Ctx) { dur = if (c.t - clawedAt < 1.0) c.rng.range(30.0, 60.0) else c.rng.range(10.0, 30.0); startleAt = -1e9 }
         override fun update(c: Ctx, out: SteerIntent) {
             out.rest(Rest(c.o.pos, c.o.heading, c.o.up, 6), 1.0)
             c.o.extension = 0.0
@@ -882,6 +911,9 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** Seconds a hermit that was wedged walks on before it settles to pick again. */
         const val UNWEDGE_S = 20.0
+        /** Claw threat: another hermit this close shell to shell (cm), a banded shrimp or crab this close [I]. */
+        const val THREAT_CM = 1.5
+        const val THREAT_BIG_CM = 5.0
         /** A tight spot it backed out of stays off its list of places to walk to or pick at this long (s), this wide (cm). */
         const val AVOID_S = 120.0
         const val AVOID_CM = 5.0
