@@ -71,7 +71,7 @@ void main() {
         float fm = algaePatch(n1, film) * algaeDensity(film) * 0.7 + film * 0.3;
         float dm = algaePatch(n2, dia) * algaeDensity(dia) * 0.6 + dia * 0.2;
         float cm = algaePatch(1.0 - n1, uAlgaeGlass.z * sandLine * keep) * 0.8;
-        float km = algaePatch(n2, uAlgaeGlass.w * sandLine * keep) * 0.6;
+        float km = algaePatch(n2, uAlgaeGlass.w * sandLine * keep) * 0.6 * (1.0 - 0.8 * uDinoLift);   // lifts at night
         vec3 alb = vec3(0.10, 0.26, 0.035);                                // green film
         alb = mix(alb, vec3(0.26, 0.13, 0.03), dm / max(fm + dm, 1e-3));    // diatom brown
         float m = clamp(fm + dm, 0.0, 1.0);

@@ -245,6 +245,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         store.onContextLost(quality)
         rockDraw.onContextLost()
         gspMats.onContextLost()
+        bubbleAlgae.onContextLost()
         Texture.resetCaps()
         Gl.currentProgram = 0
         initGl()
@@ -278,6 +279,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun releaseGl() {
         programs?.release(); programs = null
         gspMats.release()
+        bubbleAlgae.release()
         frame?.release(); frame = null
         post?.release(); post = null
         particlesGl?.release(); particlesGl = null
@@ -299,6 +301,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         store.onContextLost(quality)
         rockDraw.onContextLost()
         gspMats.onContextLost()
+        bubbleAlgae.onContextLost()
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -406,7 +409,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         // opaque: back glass, sand, rock, equipment, static reef details (coralline layer, encrusting, mag cleaner)
         Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.NONE, cull = false)
         tank?.let { drawStatic(it, progs, light, opaque = true) }
-        rock?.let { drawStatic(it, progs, light, opaque = true); drawBuiltRocks(it, progs) }
+        rock?.let { drawStatic(it, progs, light, opaque = true); drawBuiltRocks(it, progs); drawBubbleAlgae(it, progs, cur, rl) }
         equipment?.let { drawStatic(it, progs, light, opaque = true) }
         val careModel = store.model(CareLayout.MODEL)
         if (careModel != null) white?.let { drawCalls += careScene.draw(careModel, progs.generic, it, blended = false) }
@@ -782,6 +785,15 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private val scapeTrimmed: Boolean get() = Camera.shape.lengthCm < TankDims.LENGTH_CM - 0.1 || Camera.shape.depthCm < TankDims.DEPTH_CM - 0.1
     /** Green star polyp mats built on the drawn rock (GspMatDraw). */
     private val gspMats = GspMatDraw()
+    /** Bubble algae spheres on the rock (research 09 A6), instanced; rock.frag's tint stands in on Low / relief 3. */
+    private val bubbleAlgae = BubbleAlgaeDraw()
+
+    private fun drawBubbleAlgae(m: GpuModel, progs: Programs, cur: SimSnapshot?, rl: Int) {
+        val algae = cur?.algae ?: return
+        val part = m.parts.firstOrNull { it.kind == MaterialKind.ROCK } ?: return
+        val t = bubbleAlgae.draw(progs.bubble, part, algae, rockDraw, cur.rockVersion, scapeTrimmed, bubbleAlgae.budget(quality, rl))
+        if (t > 0) { drawCalls++; triangles += t }
+    }
 
     /**
      * True when [c] is a green star polyp colony drawn as a mat on its rock ([gspMats]) instead of its GLB.

@@ -1619,6 +1619,7 @@ class Simulation private constructor(
             }
             is Command.TreatAiptasia -> AiptasiaModel.treat(this, c.treatment, c.polypId)
             is Command.RemoveAiptasia -> AiptasiaModel.remove(this, c.count, c.chemical)
+            is Command.RemoveBubbleAlgae -> water.algae.removeBubble(water.s, c.careful)
             is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
             is Command.StopTreatment -> treatments.active[c.kind]?.let { endTreatment(it) }
             is Command.Infect -> (organisms.firstOrNull { it.id == c.id } ?: organisms.filter { it.alive && it.isFish }.let { l -> if (l.isEmpty()) null else l[growthRng.nextInt(l.size)] })
