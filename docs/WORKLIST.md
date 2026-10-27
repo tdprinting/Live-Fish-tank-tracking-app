@@ -1,22 +1,14 @@
-# ReefLive work list (open items)
+# ReefLive work list (open owner-facing items, 2026-10-27)
 
-## Sim
-- Heat-death spasm animation missing (research 08; SIMULATION §10)
-- Extreme sandbox ranges for every parameter (research 09 part B)
-- NO3 79 / PO4 0.22 at sandbox start are not defaults (WaterState defaults are NO3 5.0, PO4 0.04). The sandbox forks the Reality sim's current water (`SimulationHolder.forkSandbox`), built from the latest logged values (`Reality.waterFrom`) but carrying simulated state across rebuilds. Check the logged rows on device; NO3 79 may be a NO3 vs NO3-N unit mix-up.
+Everything from the earlier list (heat spasm, fish snap, cleaner shrimp, invisible fish, tank size, sandbox redesign, PAR/turnover sliders) is fixed on main; see `HANDOFF.md` Status.
 
-## Behaviour / camera
-- Fish snap to fixed spots and don't react to time-speed changes (AI not ticking at higher speeds / during time-lapse?)
+## Bugs / checks
+- Fish-health visuals (gasping, lethargy, loss of equilibrium, spasms, dead sink-then-float, velvet, fin rot, HLLE, Brooklynella) are unverified in motion once merged.
+- Graphics performance thresholds (#206) are untested on a device: need `?stats` numbers from the owner's phone.
+- NO3 79 / PO4 0.22 at sandbox start once appeared; defaults are 5.0 / 0.04. Check logged rows on device (possible NO3 vs NO3-N unit mix).
+- High-speed time-lapse may look coarse (behaviour steps capped at 0.5 s).
 
-## Models / rendering
-- Cleaner shrimp animation broken
-- Fish nearly invisible: contrast/rim light, closer default camera
-
-## UI
-- Sandbox redesign: controls inline on the tank screen (no pop-up sheet). The tank stays visible above a docked, scrollable control strip grouped by category (Water / Nutrients / Light & Flow / Events). Each slider shows a value + unit and a safe-range band (green/amber/red zones), with tap-to-type exact values, step/ramp/schedule as a simple mode chip, one-tap presets (heater stuck, power outage, overfeed, ...), and reset per parameter and all. Must stay usable one-handed at phone width. Covers the realism sandbox controls + extreme ranges from research 09.
-- Tank uses about 1/3 of the screen; big empty gap. Fill it; pinch-zoom / landscape
-- Sandbox button redundant when the Sandbox toggle is active; crowds the nav bar
-
-## Leftovers
-- app/schemas/1.json: user to download from run 38224331252 artifact
-- 15 harmless .NNN mesh names in 8 GLBs
+## Features / tuning
+- PAR bleaching is faster than research (1-2 days at 800 PAR vs 3-7).
+- Fish behaviours: feeding displacement by rank, tang blueDeepen, coral-vs-coral warfare.
+- Tracker: cycle tracker, acclimation timer, pest/algae/disease log.
