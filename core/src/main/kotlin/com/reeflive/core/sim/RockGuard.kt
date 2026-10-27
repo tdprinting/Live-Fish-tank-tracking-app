@@ -158,7 +158,9 @@ class RockGuard(
         // a crawler on its seat is drawn where its seat rests it (CrawlerSeat): its spine line is guarded, not a body
         // (and so is a body on a behaviour's own path into a hole, den or burrow that fits it, and a goby at its burrow,
         // in the sand pocket it dug under the rock)
-        val pr = if (o.seatOn || o.atBurrow || o.spline.override != null) null else BodyProfile.spineOf(o)
+        // (a shrimp walking on the rock is held to its body too: its tail curled down 1.4 cm into the rock it stood on)
+        val pr = if (o.seatOn || o.atBurrow || o.spline.override != null) null
+            else BodyProfile.spineOf(o) ?: if (o.motionMode == 2) BodyProfile.of(o.species) else null
         cur = o; prof = pr; lenCm = o.lengthCm
         skin = if (o.isFish) SKIN_ROCK else HOLE_SLACK
         reach = if (pr == null) 0.0 else pr.maxReach * o.lengthCm
