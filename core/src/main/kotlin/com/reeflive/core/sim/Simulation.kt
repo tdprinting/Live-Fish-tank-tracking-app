@@ -676,7 +676,7 @@ class Simulation private constructor(
 
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
-        drainCommands()
+        val hadCommands = drainCommands()
         feedSubWatch()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
@@ -686,7 +686,9 @@ class Simulation private constructor(
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
         advanceInternal(simDt, dtB)
-        latest = snapshot()
+        // the HUD reads the per-animal stats at 4 Hz: the running tank rebuilds them every STATS_EVERY_TICKS wall ticks
+        // (and at once after a command or when an animal is added, dies or leaves); poses and the rest stay per tick
+        latest = snapshot(reuseStats = !hadCommands)
     }
 
     /**
@@ -1535,11 +1537,15 @@ class Simulation private constructor(
     }
 
     // ============================================================== commands
-    private fun drainCommands() {
+    /** Applies the queued commands; true when there were any. */
+    private fun drainCommands(): Boolean {
+        var any = false
         while (true) {
             val c = commands.poll() ?: break
             apply(c)
+            any = true
         }
+        return any
     }
 
     private fun apply(c: Command) {
@@ -2184,9 +2190,34 @@ class Simulation private constructor(
     /** Minutes until the lights go out (null while dark), from the last light update. */
     val minutesUntilLightsOff: Double? get() = cachedUntilOff
 
+    // ---- stats cache for the running tank ([stepWall]): the organisms and their alive flags it was built for
+    private var statsCache: List<OrganismStats>? = null
+    private var statsOrgs: Array<Organism?> = arrayOfNulls(0)
+    private var statsAlive = BooleanArray(0)
+    private var statsAge = 0
+
+    /** [statsAll], or the last one while it is under [STATS_EVERY_TICKS] old and the cast is the same. */
+    private fun statsLive(reuse: Boolean): List<OrganismStats> {
+        val cached = statsCache
+        val n = organisms.size
+        if (reuse && cached != null && statsAge < STATS_EVERY_TICKS && statsOrgs.size == n) {
+            var same = true
+            for (i in 0 until n) { val o = organisms[i]; if (statsOrgs[i] !== o || statsAlive[i] != o.alive) { same = false; break } }
+            if (same) { statsAge++; return cached }
+        }
+        val out = statsAll()
+        if (statsOrgs.size != n) { statsOrgs = arrayOfNulls(n); statsAlive = BooleanArray(n) }
+        for (i in 0 until n) { val o = organisms[i]; statsOrgs[i] = o; statsAlive[i] = o.alive }
+        statsCache = out
+        statsAge = 1
+        return out
+    }
+
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
-    fun snapshot(): SimSnapshot =
-        buildSnapshot().copy(
+    fun snapshot(): SimSnapshot = snapshot(reuseStats = false)
+
+    private fun snapshot(reuseStats: Boolean): SimSnapshot =
+        buildSnapshot(reuseStats).copy(
             lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
             bareScape = bareScape,
             shape = shape,
@@ -2204,7 +2235,7 @@ class Simulation private constructor(
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
         }
 
-    private fun buildSnapshot(): SimSnapshot {
+    private fun buildSnapshot(reuseStats: Boolean): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
         return SimSnapshot(
@@ -2224,7 +2255,7 @@ class Simulation private constructor(
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
             dayPhase = lights.phaseLabel(simTimeSec),
-            stats = statsAll(),
+            stats = statsLive(reuseStats),
             tick = tickCount,
             abstractMode = abstractMode,
             moltShells = moltShells.map { it.first },
@@ -2327,6 +2358,8 @@ class Simulation private constructor(
         const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
+        /** The running tank's snapshot rebuilds the per-animal stats (captions, thoughts, relations) every this many wall ticks. */
+        const val STATS_EVERY_TICKS = 5
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35
         const val ABSTRACT_SPEED = 240.0

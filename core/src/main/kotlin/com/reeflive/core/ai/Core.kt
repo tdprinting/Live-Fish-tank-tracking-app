@@ -196,7 +196,9 @@ class UtilityBrain(val behaviors: List<Behavior>) {
         var curScore = -1.0
         val k = c.dt / NOISE_TAU
         val amp = c.o.whim * kotlin.math.sqrt(2 * k)
-        for ((i, b) in behaviors.withIndex()) {
+        // (an index loop: withIndex() boxed an IndexedValue per behaviour per animal per tick)
+        for (i in behaviors.indices) {
+            val b = behaviors[i]
             if (b.noisy) noise[i] += -noise[i] * k + amp * c.rng.gaussian()
             val raw = b.score(c)
             // stochastic utility: only nudges ordinary scores; urgent ones (≥ 0.95) and zeros stay exact

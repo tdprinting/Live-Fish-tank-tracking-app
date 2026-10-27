@@ -156,18 +156,24 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
             var far = 0.0
             var s = head.distanceTo(trail[0])
             var prev = trail[0]
+            val hx = head.x; val hy = head.y; val hz = head.z
+            val gx = heading.x; val gy = heading.y; val gz = heading.z
             for (i in trail.indices) {
                 if (i > 0) { s += trail[i].distanceTo(prev); prev = trail[i] }
                 if (s > length) break
-                far = max(far, (head - heading * s).distanceTo(trail[i]))
+                // (head - heading * s).distanceTo(trail[i]) without the Vec3s
+                val t = trail[i]
+                val ex = hx - gx * s - t.x; val ey = hy - gy * s - t.y; val ez = hz - gz * s - t.z
+                far = max(far, sqrt(ex * ex + ey * ey + ez * ez))
             }
             if (far * k > MAX_RELAX_BL * length) k = MAX_RELAX_BL * length / far
             s = head.distanceTo(trail[0])
             prev = trail[0]
             for (i in trail.indices) {
                 if (i > 0) { s += trail[i].distanceTo(prev); prev = trail[i] }
-                val ideal = head - heading * s
-                trail[i] = trail[i] + (ideal - trail[i]) * k
+                // trail[i] + (ideal - trail[i]) * k with ideal = head - heading * s
+                val t = trail[i]
+                trail[i] = Vec3(t.x + (hx - gx * s - t.x) * k, t.y + (hy - gy * s - t.y) * k, t.z + (hz - gz * s - t.z) * k)
             }
         }
         // Trim beyond 1.25 BL.
@@ -418,35 +424,38 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
 
     /** Stations every [seg] cm along head → [poly][startIdx..], extended straight past its end. */
     private fun walk(poly: List<Vec3>, startIdx: Int, startHead: Vec3, seg: Double, out: Array<Vec3>, shift: Vec3? = null) {
+        // (in scalars, the same arithmetic as the Vec3 operators: this runs for every animal several times a tick)
         out[0] = startHead
-        var prev = startHead
+        var cx = startHead.x; var cy = startHead.y; var cz = startHead.z
         var j = startIdx
-        var lastDir = heading * -1.0
+        var lx = heading.x * -1.0; var ly = heading.y * -1.0; var lz = heading.z * -1.0
+        val sx = shift?.x ?: 0.0; val sy = shift?.y ?: 0.0; val sz = shift?.z ?: 0.0
         for (i in 1 until POINTS) {
             var remaining = seg
-            var cur = prev
             while (true) {
                 if (j >= poly.size) {
-                    cur = cur + lastDir * remaining
-                    if (cur.x < boxMinX || cur.x > boxMaxX || cur.z < boxMinZ || cur.z > boxMaxZ || cur.y > boxMaxY)
-                        cur = Vec3(cur.x.coerceIn(boxMinX, boxMaxX), min(cur.y, boxMaxY), cur.z.coerceIn(boxMinZ, boxMaxZ))
+                    cx += lx * remaining; cy += ly * remaining; cz += lz * remaining
+                    if (cx < boxMinX || cx > boxMaxX || cz < boxMinZ || cz > boxMaxZ || cy > boxMaxY) {
+                        cx = cx.coerceIn(boxMinX, boxMaxX); cy = min(cy, boxMaxY); cz = cz.coerceIn(boxMinZ, boxMaxZ)
+                    }
                     break
                 }
-                val nxt = if (shift == null) poly[j] else poly[j] + shift
-                val d = cur.distanceTo(nxt)
+                val q = poly[j]
+                val nx: Double; val ny: Double; val nz: Double
+                if (shift == null) { nx = q.x; ny = q.y; nz = q.z } else { nx = q.x + sx; ny = q.y + sy; nz = q.z + sz }
+                val ex = cx - nx; val ey = cy - ny; val ez = cz - nz
+                val d = sqrt(ex * ex + ey * ey + ez * ez)
                 if (d >= remaining && d > 1e-9) {
-                    val dir = (nxt - cur) / d
-                    lastDir = dir
-                    cur = cur + dir * remaining
+                    lx = (nx - cx) / d; ly = (ny - cy) / d; lz = (nz - cz) / d
+                    cx += lx * remaining; cy += ly * remaining; cz += lz * remaining
                     break
                 }
-                if (d > 1e-9) lastDir = (nxt - cur) / d
+                if (d > 1e-9) { lx = (nx - cx) / d; ly = (ny - cy) / d; lz = (nz - cz) / d }
                 remaining -= d
-                cur = nxt
+                cx = nx; cy = ny; cz = nz
                 j++
             }
-            out[i] = cur
-            prev = cur
+            out[i] = Vec3(cx, cy, cz)
         }
     }
 

@@ -63,12 +63,19 @@ class SurfacePatch private constructor(val cells: List<Vec3>, val dist: DoubleAr
         const val CELL = 1.5
         const val SAND_GAP = 5.0
         private val cache = WeakHashMap<RockData, HashMap<String, SurfacePatch?>>()
+        /** In front of [cache], by the exact inputs: a colony with no patch asks again every growth step, and the
+         *  formatted key cost more than the rest of the coral step together. Same inputs, same formatted key. */
+        private val exact = WeakHashMap<RockData, HashMap<ExactKey, SurfacePatch?>>()
+        private data class ExactKey(val x: Double, val y: Double, val z: Double, val r: Double)
 
         /** Cached per rockscape and anchor position (time-lapse forks and tests reuse it). */
         fun of(rock: RockData, from: Vec3, maxRadius: Double): SurfacePatch? = synchronized(cache) {
+            val ek = ExactKey(from.x, from.y, from.z, maxRadius)
+            val em = exact.getOrPut(rock) { HashMap() }
+            if (em.containsKey(ek)) return@synchronized em[ek]
             val key = "%.2f,%.2f,%.2f,%.1f".format(from.x, from.y, from.z, maxRadius)
             val m = cache.getOrPut(rock) { HashMap() }
-            if (m.containsKey(key)) m[key] else build(rock, from, maxRadius).also { m[key] = it }
+            (if (m.containsKey(key)) m[key] else build(rock, from, maxRadius).also { m[key] = it }).also { em[ek] = it }
         }
 
         fun build(rock: RockData, from: Vec3, maxRadius: Double): SurfacePatch? {

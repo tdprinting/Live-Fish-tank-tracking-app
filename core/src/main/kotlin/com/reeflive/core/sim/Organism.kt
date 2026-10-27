@@ -22,6 +22,8 @@ class Organism(
     val variant: String? = null,
 ) {
     val brainKind: BrainKind = species.brainKind
+    /** [HealthModel.tolerancesFor] of this animal's species, built once (it was a new map per animal per chemistry step). */
+    internal val tolerances: Map<String, ToleranceRange> by lazy(LazyThreadSafetyMode.NONE) { HealthModel.tolerancesFor(species) }
 
     /** The keeper's name for this animal (a [Command.Rename] changes it). */
     var nickname: String = nickname

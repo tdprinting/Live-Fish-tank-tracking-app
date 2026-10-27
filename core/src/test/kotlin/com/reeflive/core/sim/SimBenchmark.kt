@@ -14,8 +14,10 @@ import java.lang.management.ManagementFactory
  * [Simulation.advanceInternal] called) and (b) a subsystem (the innermost frame that belongs to a known one), so the
  * shares are statistical, not exact. Results are printed and written to `core/build/sim-benchmark.txt`.
  *
+ * [crowdedTankTickCost] does the same for the default stock plus ~50 more animals (scaling of the neighbour work).
+ *
  * Run: `./gradlew -PcoreOnly :core:test --offline --tests '*SimBenchmark*'`. Ticks per run can be raised with
- * `-Dreeflive.benchTicks=N` (default 400, run 3 times).
+ * `-PbenchTicks=N` (default 400, run 3 times); `-PbenchDetail=true` adds self / inclusive frame histograms.
  */
 class SimBenchmark {
 
@@ -24,19 +26,32 @@ class SimBenchmark {
 
     @Test
     fun liveTankTickCost() {
-        val out = StringBuilder()
-        fun log(s: String) { println(s); out.append(s).append('\n') }
-
         val sim = TestTank.sim(DefaultStock.all, seed = 1L, startHour = 12.0,
             water = WaterState(volumeL = TankConfig().systemLiters))
-        log("SimBenchmark: ${sim.organisms.size} organisms, ${sim.corals.size} corals, $ticks ticks per speed")
+        run("default tank", sim, listOf(1.0, 60.0, 1000.0), "build/sim-benchmark.txt")
+    }
+
+    /** The default stock plus about 50 more animals from the shop list: how the tick scales with a crowded tank. */
+    @Test
+    fun crowdedTankTickCost() {
+        val sim = Simulation(TankConfig(seed = 1L), SpeciesCatalog(), TestTank.rock, 1L, 12 * 3600.0, livestock = DefaultStock.all)
+        for (e in Stocking.inGroup(StockGroup.FISH).take(8)) sim.enqueue(Command.AddMany(e.speciesId, 4))
+        for (e in Stocking.inGroup(StockGroup.INVERTS).take(5)) sim.enqueue(Command.AddMany(e.speciesId, 4))
+        sim.stepWall(0.0)
+        run("crowded tank", sim, listOf(1.0, 60.0), "build/sim-benchmark-crowded.txt")
+    }
+
+    private fun run(name: String, sim: Simulation, speeds: List<Double>, file: String) {
+        val out = StringBuilder()
+        fun log(s: String) { println(s); out.append(s).append('\n') }
+        log("SimBenchmark ($name): ${sim.organisms.size} organisms, ${sim.corals.size} corals, $ticks ticks x $ROUNDS per speed")
         // JIT warm-up at 1x and 60x
         sim.speed = 1.0; repeat(600) { sim.stepWall(TICK) }
         sim.speed = 60.0; repeat(200) { sim.stepWall(TICK) }
 
         val totals = ArrayList<Double>()
         val summary = ArrayList<String>()
-        for (speed in listOf(1.0, 60.0, 1000.0)) {
+        for (speed in speeds) {
             sim.speed = speed
             repeat(60) { sim.stepWall(TICK) }
             val r = measure(sim, ticks)
@@ -62,10 +77,10 @@ class SimBenchmark {
             }
         }
         log("")
-        log("== summary")
+        log("== summary ($name)")
         summary.forEach(::log)
         File("build").mkdirs()
-        File("build/sim-benchmark.txt").writeText(out.toString())
+        File(file).writeText(out.toString())
         assertTrue("ticks ran", totals.all { it > 0 })
     }
 
