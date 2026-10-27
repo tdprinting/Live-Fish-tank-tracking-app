@@ -130,7 +130,8 @@ export function startLive(applyReadings) {
     // the page opens on My tank, the main tank (Watch is the real tank as logged, one tap away)
     setMode('mine');
     const firstVisit = !store.get('reeflive.tipsSeen', false);
-    if (firstVisit) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
+    // the tips wait for the tank picker, so they match the tank you land in (My tank, or Watch after "Not now")
+    if (firstVisit) { store.set('reeflive.tipsSeen', true); whenFree(showTips, 1200); }
     checkNews(firstVisit);
     if (pendingPreview) { runPreview(pendingPreview); pendingPreview = null; }
   }).catch(() => {});
@@ -256,7 +257,7 @@ async function checkNews(firstVisit) {
   if (firstVisit || (!seenList && oldLast)) return; // brand new (the tips come first), or saw the popup before this fix
   const seen = new Set(seenList || []);
   const fresh = seenList ? news.filter((e) => !seen.has(e.n)) : news.slice(0, 8);
-  if (fresh.length) { setTimeout(() => showNews(fresh, true), 1500); return; }
+  if (fresh.length) { whenFree(() => showNews(fresh, true), 1500); return; }
   showFact();
 }
 /** No new updates: a reef fact or reef-keeping tip instead, a new one every time the app opens (core ReefFacts). */
@@ -264,16 +265,23 @@ function showFact() {
   const n = store.get('reeflive.factN', Math.floor(Math.random() * 1000));
   store.set('reeflive.factN', n + 1);
   const f = JSON.parse(SB.fact(n));
-  const show = () => {
-    // the "While you were away" card (care.js) goes first: the fact waits until it is closed
-    const away = $('awayModal');
-    if (away && !away.classList.contains('hidden')) { setTimeout(show, 1000); return; }
+  whenFree(() => {
     $('newsTitle').textContent = `🐠 ${f.title}`;
     $('newsList').innerHTML = `<li>${esc(f.text)}</li>`;
     const d = $('news');
     if (!d.open) d.showModal();
-  };
-  setTimeout(show, 1500);
+  }, 1500);
+}
+/**
+ * Opening popups one at a time: [show] runs after [ms] once no other window is up (the tank picker, the tips, the
+ * "While you were away" card from care.js), so two never stack on top of each other.
+ */
+function whenFree(show, ms = 0) {
+  setTimeout(() => {
+    const away = $('awayModal');
+    if (document.querySelector('dialog[open]') || (away && !away.classList.contains('hidden'))) { whenFree(show, 800); return; }
+    show();
+  }, ms);
 }
 function showNews(list = news.slice(0, 15), since = false) {
   if (!list.length) { say('Nothing new yet.'); return; }
@@ -399,6 +407,8 @@ function renderRail() {
   const cats = editable() ? ['LOOK', 'SUPPLIES', 'HEALTH', 'LIFE', 'TANK'] : ['LOOK', 'SUPPLIES', 'HEALTH'];
   $('rail').innerHTML = cats.map((c) => `<button class="tool tone-${CATS[c].tone} ${ui.card === c || (c === 'SUPPLIES' && ui.shelf) ? 'active' : ''}" data-cat="${c}"><span class="ico">${icon(CATS[c].ico)}</span><span class="lbl">${CATS[c].label}</span></button>`).join('');
   $('setBtn').classList.toggle('on', ui.card === 'SETTINGS');
+  // with a menu up, Hermie and the toasts talk from the top so they never sit on the menu
+  $('live').classList.toggle('menuopen', !!ui.card || !!ui.shelf);
 }
 function openCat(c) {
   cue('TICK');
@@ -1125,8 +1135,9 @@ function saverBlocked() {
     !$('micro').classList.contains('hidden') || ($('storeUi') && !$('storeUi').classList.contains('hidden')) ||
     !$('live').classList.contains('active') || document.visibilityState !== 'visible';
 }
+// someone reading an open menu gets longer before the screensaver starts (and it puts the menu away)
 setInterval(() => {
-  if (!ui.saver && !saverBlocked() && performance.now() - lastInput > IDLE_MS) setSaver(true, false);
+  if (!ui.saver && !saverBlocked() && performance.now() - lastInput > (ui.card ? IDLE_MS * 4 : IDLE_MS)) { if (ui.card) closeCard(); setSaver(true, false); }
 }, 1000);
 function chromeLayers() { return [...document.querySelectorAll('#live > :not(#tank):not(#saver)'), document.querySelector('header.bar')].filter(Boolean); }
 function setSaver(on, full = true) {
