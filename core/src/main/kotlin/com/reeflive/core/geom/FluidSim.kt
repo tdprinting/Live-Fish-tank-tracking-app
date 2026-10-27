@@ -10,6 +10,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
+/** Fastest jet the solver forces on the grid (cm/s): a 100×/h sandbox blast reads 60-80 cm/s at the rock (research 09 Part B). */
+private const val MAX_JET_CMS = 160.0
+
 /** Fluid grid resolution (cells along the tank length; the other axes follow from a cubic cell). */
 enum class FluidQuality(val nx: Int, val iterations: Int) { LOW(32, 30), MEDIUM(48, 45), HIGH(64, 60) }
 
@@ -96,8 +99,9 @@ class FluidSim(
     val dose = FloatArray(n)
     val scent = FloatArray(n)
 
-    /** Global pump strength (sandbox 0..2) and master switch; the HOB runs unless [hobOn] is false. */
+    /** Global pump strength (sandbox 0..8, 1 = normal) and master switch; the HOB runs unless [hobOn] is false. */
     var strength = 1.0
+        set(v) { field = if (v.isNaN()) 1.0 else v.coerceIn(0.0, 8.0) }
     var powerheadsOn = true
     var hobOn = true
     var viscosity = 0.5          // eddy viscosity cm²/s (molecular 0.01 is far below grid scale)
@@ -150,7 +154,8 @@ class FluidSim(
             val s = if (isHob) 1.0 else strength
             // jet resolved on the grid with the same momentum flux ρ v² A: v_cell = v0 √(A_nozzle / h²), capped at 100 cm/s
             val aNoz = PI * pm.nozzleCm * pm.nozzleCm / 4
-            val vj = min(pm.exitSpeed * sqrt(aNoz / (h * h)), 100.0) * s
+            // a sandbox blast (strength up to 8×) is capped at MAX_JET_CMS so the explicit forcing stays well behaved
+            val vj = (min(pm.exitSpeed * sqrt(aNoz / (h * h)), 100.0) * s).coerceAtMost(MAX_JET_CMS)
             val c0 = pm.pos + pm.axis * (0.75 * h)
             val target = pm.axis * vj
             val rad = 1.1 * h

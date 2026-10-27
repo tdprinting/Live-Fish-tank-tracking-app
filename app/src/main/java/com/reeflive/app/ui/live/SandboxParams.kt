@@ -2,6 +2,10 @@ package com.reeflive.app.ui.live
 
 import com.reeflive.app.ui.components.ReefSliderSpec
 import com.reeflive.app.ui.components.SliderZones
+import com.reeflive.core.sim.AlgaeModel
+import com.reeflive.core.sim.AlgaeSurface
+import com.reeflive.core.sim.LightSchedule
+import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.WaterState
 import java.util.Locale
 
@@ -123,29 +127,34 @@ object SandboxParams {
         ),
 
         // ---------------------------------------------------------------- Light & flow
-        // Light is a multiplier on the schedule (sim intensity override 0..1.5); the live PAR is the caption.
-        // TODO(sim/realism): switch to an absolute PAR slider (0–1500 µmol/m²/s per research Part B) if the sim exposes one.
+        // Light as absolute PAR (µmol m⁻² s⁻¹) at the rock tops at the brightest point of the day (research 09 Part B:
+        // 0-1500). The photoperiod schedule keeps its shape and is scaled to this peak (sim SetParam "par"); corals,
+        // algae and photoinhibition run on the real PAR. Zones are for this soft-coral tank (05 §14: 200-400 typical;
+        // soft corals pale and starve below ~50-100; 500+ bleaches in weeks, 800+ photoinhibits in days). The caption is
+        // the live PAR reaching the sand bed and the rock tops right now (it follows the day's ramp and the water's clarity).
         SandboxParamDef(
-            "light", "Light intensity", "Light", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 150.0, step = 1.0, decimals = 0, scale = 100.0,
-            zones = SliderZones(dangerBelow = null, safeFrom = 50.0, safeTo = 110.0, dangerAbove = null),
-            read = { it.lightPct },
-            caption = { r -> "PAR now " + String.format(Locale.US, "%.0f", r.water.lightPar) },
+            "light", "Peak light", "PAR", "PAR", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = LightSchedule.MAX_PAR, step = 5.0, decimals = 0, curve = 1.6, simId = "par",
+            zones = SliderZones(dangerBelow = 50.0, safeFrom = 100.0, safeTo = 350.0, dangerAbove = 600.0),
+            read = { r -> r.peakPar ?: (r.lightPct / 100.0 * DEFAULT_PEAK_PAR) },
+            caption = { r -> parCaption(r.water.lightPar) },
         ),
-        // Flow strength 0..2 of the tank's normal pumps (sim SetParam "flow" → Simulation.setFlowStrength).
-        // TODO(sim/realism): research Part B wants 0–100x turnover; widen once the sim models more than 2x.
+        // Flow as tank turnover, volumes per hour (research 09 Part B: 0-100×, normal 20-40×). The sim splits it over the
+        // pumps that are on (sim SetParam "turnover"); Tee's two powerheads and HOB give ~27×. Past ~60× the jets blast
+        // soft-coral polyps shut, blow the sand about and send the fish into the rock; 0 means low oxygen and cyano.
         SandboxParamDef(
-            "flow", "Pump flow", "Flow", "%", SandboxCategory.LIGHT_FLOW,
-            min = 0.0, max = 200.0, step = 5.0, decimals = 0, scale = 100.0,
-            zones = SliderZones(dangerBelow = 15.0, safeFrom = 60.0, safeTo = 140.0, dangerAbove = null),
-            read = { it.flowPct },
+            "flow", "Turnover", "Flow", "×/h", SandboxCategory.LIGHT_FLOW,
+            min = 0.0, max = 100.0, step = 1.0, decimals = 0, simId = "turnover",
+            zones = SliderZones(dangerBelow = 5.0, safeFrom = 15.0, safeTo = 45.0, dangerAbove = 60.0),
+            read = { r -> r.turnover ?: (r.flowPct / 100.0 * Simulation.NOMINAL_TURNOVER) },
+            caption = { r -> flowCaption(r.turnover ?: (r.flowPct / 100.0 * Simulation.NOMINAL_TURNOVER)) },
         ),
         // Photoperiod: the programmed light day stretched about midday (sim clamps 4–16 h).
         SandboxParamDef(
             "photoperiod", "Photoperiod", "Photo", "h", SandboxCategory.LIGHT_FLOW,
             min = 4.0, max = 16.0, step = 0.5, decimals = 1,
             zones = SliderZones(dangerBelow = null, safeFrom = 8.0, safeTo = 12.0, dangerAbove = 14.0),
-            read = { it.photoperiodH }, fallback = 11.0,
+            read = { it.photoperiodH }, fallback = LightSchedule.DEFAULT_PHOTOPERIOD_H,
         ),
         // Individual pumps are on/off in the sim (0 = off, 1 = on); PH-B sits on the left wall, PH-A on the right.
         SandboxParamDef(
@@ -193,11 +202,28 @@ object SandboxParams {
         // Scenario switches (sim SetParam, 1 = on, default off); unproven behaviours kept behind a toggle.
         toggle("sc_asterina_coral", "Asterina eat organ pipe (unproven)", "Asterina", "asterina_coral"),
         toggle("sc_crab_predation", "Sally Lightfoot hunts fish (unproven)", "Crab", "crab_predation"),
+        // Routine upkeep: the sim's weekly 10 % water change is skipped, so nitrate and phosphate build up (and alk, Ca
+        // and Mg run down) at the tank's own pace; speed time up to watch it.
+        toggle("sc_skip_wc", "Skip routine water changes", "No WC", "skip_water_changes", category = SandboxCategory.NUTRIENTS),
     )
 
+    /** Rock-top PAR at the default schedule's peak (the old "100 %"; ~300). */
+    val DEFAULT_PEAK_PAR: Double = LightSchedule().programmedPeakPar
+
+    /** "now: sand 103 · rock top 300": live PAR at the substrate and on the rock tops (rock-top [par] → sand by the sim's ratio). */
+    fun parCaption(par: Double): String {
+        val sand = par * LightSchedule.SAND_PAR_PER_INTENSITY / LightSchedule.PAR_PER_INTENSITY
+        return "now: sand " + String.format(Locale.US, "%.0f", sand) + " · rock top " + String.format(Locale.US, "%.0f", par)
+    }
+
+    /** The current on the rock tops for a turnover (algae model's 15 cm/s at Tee's normal ~27×/h). */
+    fun flowCaption(turnover: Double): String =
+        if (turnover < 0.5) "pumps off" else "rock tops ~" + String.format(Locale.US, "%.0f", AlgaeModel.BASE_FLOW[AlgaeSurface.ROCK_TOP.ordinal] * turnover / Simulation.NOMINAL_TURNOVER) + " cm/s"
+
+
     /** An on/off sandbox row driven through `Command.SetParam(simId, 0 | 1)`; the state is kept in the view model's extras. */
-    private fun toggle(id: String, label: String, shortLabel: String, simId: String, on: Boolean = false) = SandboxParamDef(
-        id, label, shortLabel, "", SandboxCategory.PESTS,
+    private fun toggle(id: String, label: String, shortLabel: String, simId: String, on: Boolean = false, category: SandboxCategory = SandboxCategory.PESTS) = SandboxParamDef(
+        id, label, shortLabel, "", category,
         min = 0.0, max = 1.0, step = 1.0, decimals = 0, simId = simId,
         caption = { r -> if ((r.toggles[id] ?: (if (on) 1.0 else 0.0)) >= 0.5) "on" else "off" },
         read = { it.toggles[id] }, fallback = if (on) 1.0 else 0.0,
@@ -233,9 +259,14 @@ enum class SandboxControlMode(val label: String, val available: Boolean, val ram
 /** What the panel reads: the water plus light/flow, as shown on the sliders (display units). */
 data class TankReading(
     val water: WaterState,
+    /** Old relative light (% of the schedule) and pump strength (% of normal): the gauges; rows prefer [peakPar] / [turnover]. */
     val lightPct: Double,
     val flowPct: Double,
     val photoperiodH: Double? = null,
+    /** Peak rock-top PAR the sandbox is set to (sim snapshot `peakPar`). */
+    val peakPar: Double? = null,
+    /** Tank turnover now, volumes per hour (sim snapshot `turnover`). */
+    val turnover: Double? = null,
     /** Pump row id → 1 on / 0 off. */
     val pumps: Map<String, Double> = emptyMap(),
     /** Spectrum channel name → gain (1 = as programmed). */
@@ -280,7 +311,7 @@ enum class SandboxPreset(val label: String, val blurb: String, val focus: Sandbo
     HEATER_STUCK("Heater stuck on", "Heater runs nonstop and the water keeps warming.", SandboxCategory.WATER, "Watch Temperature and Oxygen; try 240x."),
     POWER_OUTAGE("Power outage", "Pumps, heater and lights off for 4 hours.", SandboxCategory.WATER, "Watch Oxygen and Temperature fall; try 60x."),
     OVERFEEDING("Overfeeding", "Six heavy feedings in half an hour.", SandboxCategory.NUTRIENTS, "Watch Ammonia, then Nitrate; try 240x."),
-    MISSED_WATER_CHANGES("Missed water changes", "About two months of build-up: nutrients up, alk, Ca and Mg down.", SandboxCategory.NUTRIENTS, "Nitrate and Phosphate jumped; algae follows at 1000x."),
+    MISSED_WATER_CHANGES("Skip water changes", "Routine water changes stop: waste builds up at the tank's own pace.", SandboxCategory.NUTRIENTS, "Try 1000x and watch Nitrate and Phosphate climb over the weeks."),
     SALINITY_CRASH("Salinity crash", "Top-off floods fresh water: SG falls to 1.012.", SandboxCategory.WATER, "Salinity is in the danger zone; watch the fish cards."),
     COPPER_OVERDOSE("Copper overdose", "Copper reaches 0.5 ppm: lethal to inverts and corals.", SandboxCategory.CHEMISTRY, "Copper is far past the danger line; try 60x."),
     ROCKSLIDE("Rockslide", "The sand is dug out from under one side of a rock, like a busy goby would.", SandboxCategory.EVENTS, "Watch the rock settle or topple; fish dart away."),

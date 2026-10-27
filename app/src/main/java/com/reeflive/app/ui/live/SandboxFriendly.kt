@@ -47,8 +47,8 @@ object SandboxFriendly {
         "po4" to FriendlyParam("Algae food", ReefGlyphs.seaweed, "Phosphate comes from fish food. Too much and algae grows fast."),
         "algae" to FriendlyParam("Green fuzz on the rocks", ReefGlyphs.fuzzyRock, "How much of the rock is covered in hair algae."),
         // Light & flow
-        "light" to FriendlyParam("Light brightness", ReefGlyphs.sun, "How bright the lamps are compared with their normal schedule.", ParamAnim.SUN_MOON),
-        "flow" to FriendlyParam("Water currents", ReefGlyphs.flow, "How hard the pumps push the water around.", ParamAnim.BUBBLES),
+        "light" to FriendlyParam("Light brightness", ReefGlyphs.sun, "How much light reaches the rock tops at midday (PAR). Soft corals like about 100–350; too much burns them, too little starves them.", ParamAnim.SUN_MOON),
+        "flow" to FriendlyParam("Water currents", ReefGlyphs.flow, "How many times an hour the pumps move the whole tank's water. About 20–40 is normal; a blast blows the sand and shuts the corals.", ParamAnim.BUBBLES),
         "photoperiod" to FriendlyParam("Hours of daylight", ReefGlyphs.clockSun, "How many hours the lights are on each day."),
         "pump_left" to FriendlyParam("Left wave pump", ReefGlyphs.powerhead, "The pump on the left wall that makes the current."),
         "pump_right" to FriendlyParam("Right wave pump", ReefGlyphs.powerhead.mirrored(), "The pump on the right wall that makes the current."),
@@ -63,6 +63,7 @@ object SandboxFriendly {
         "eq_refugium" to FriendlyParam("Algae garden (refugium)", ReefGlyphs.refugium, "A side tank where good algae grows and eats up leftover food."),
         "eq_uv" to FriendlyParam("Germ zapper (UV)", ReefGlyphs.uvLamp, "A UV lamp that kills floating germs and green water."),
         "sc_asterina_coral" to FriendlyParam("Tiny starfish eat corals", ReefGlyphs.starfish, "Test idea: Asterina starfish nibble organ pipe coral. Not proven."),
+        "sc_skip_wc" to FriendlyParam("Skip water changes", ReefGlyphs.calendarX, "Nobody changes the water: waste and algae food build up week by week."),
         "sc_crab_predation" to FriendlyParam("Crab hunts fish", ReefGlyphs.crab, "Test idea: the Sally Lightfoot crab catches small fish. Not proven."),
     )
 

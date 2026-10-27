@@ -333,19 +333,12 @@ object ReefSandbox {
     }
 
     private fun runPreset(p: SandboxPreset, s: Simulation) {
-        val w = s.water.s
         when (p) {
             SandboxPreset.HEATER_STUCK -> act("heater", "stuck", 0.0)
             SandboxPreset.POWER_OUTAGE -> act("scenario", Scenario.POWER_OUTAGE.name, 0.0)
             SandboxPreset.OVERFEEDING -> act("scenario", Scenario.OVERFEEDING.name, 0.0)
-            SandboxPreset.MISSED_WATER_CHANGES -> {
-                send(Command.SetParam("no3", w.no3 + 40.0))
-                send(Command.SetParam("po4", w.po4 + 0.3))
-                send(Command.SetParam("alk", (w.alk - 1.5).coerceAtLeast(0.0)))
-                send(Command.SetParam("ca", (w.ca - 40.0).coerceAtLeast(100.0)))
-                send(Command.SetParam("mg", (w.mg - 80.0).coerceAtLeast(600.0)))
-                send(Command.SetParam("algae", (w.algaeHair + 0.15).coerceAtMost(1.0)))
-            }
+            // routine water changes stop; nitrate and phosphate build up at the tank's own pace (speed time up to see it)
+            SandboxPreset.MISSED_WATER_CHANGES -> { send(Command.SetParam("skip_water_changes", 1.0)); extras["sc_skip_wc"] = 1.0 }
             SandboxPreset.SALINITY_CRASH -> { send(Command.RampParam("sal", 1.012, 30.0, hold = false)); burst(BurstKind.FRESH, DOSE_SPOT) }
             SandboxPreset.COPPER_OVERDOSE -> { send(Command.SetParam("copper", 0.5)); burst(BurstKind.DYE, DOSE_SPOT, floatArrayOf(0.85f, 0.47f, 0.23f)) }
             SandboxPreset.ROCKSLIDE -> act("scenario", Scenario.ROCKSLIDE.name, 0.0)
@@ -380,11 +373,12 @@ object ReefSandbox {
         val value = display / row.scale
         val current = (row.read(reading(s)) ?: row.fallback) / row.scale
         if (rowId in DEFAULT_EXTRAS) extras[rowId] = if (rowId.startsWith("pump_") || rowId in TOGGLE_DEFAULTS) (if (value >= 0.5) 1.0 else 0.0) else value
-        if (rowId == "light") lightPct = value * 100.0
+        // the light row is absolute PAR now; the old relative light (the water strip, sounds) follows it
+        if (rowId == "light") lightPct = value / s.lights.programmedPeakPar.coerceAtLeast(1.0) * 100.0
         if (rowId == "photoperiod") { send(Command.Photoperiod(value)); return true }
         val mode = runCatching { SandboxControlMode.valueOf(controlMode) }.getOrDefault(SandboxControlMode.SET)
-        // on/off rows and the light/flow multipliers act at once
-        val m = if (row.step == 1.0 && row.max == 1.0 || rowId == "light" || rowId == "flow" || rowId.startsWith("spectrum_")) SandboxControlMode.SET else mode
+        // on/off rows and the spectrum gains act at once; PAR and turnover ramp like any water value
+        val m = if (row.step == 1.0 && row.max == 1.0 || rowId.startsWith("spectrum_")) SandboxControlMode.SET else mode
         when (m) {
             SandboxControlMode.SET -> send(Command.SetParam(simId, value))
             SandboxControlMode.STEP -> send(Command.RampParam(simId, value, 0.0, hold = true))
@@ -546,6 +540,7 @@ object ReefSandbox {
         return TankReading(
             snap.water, lightPct = lightPct, flowPct = snap.flowStrength * 100.0,
             photoperiodH = extras["photoperiod"],
+            peakPar = snap.peakPar.toDouble(), turnover = snap.turnover.toDouble(),
             pumps = extras.filterKeys { it.startsWith("pump_") },
             gains = extras.filterKeys { it.startsWith("spectrum_") }.mapKeys { it.key.removePrefix("spectrum_") },
             toggles = extras.filterKeys { it.startsWith("eq_") || it.startsWith("sc_") },
@@ -557,7 +552,7 @@ object ReefSandbox {
         val s = sim ?: return "null"
         val r = reading(s)
         val snap = s.latest
-        val readouts = waterReadouts(snap.water, lightPct, snap.flowStrength.toDouble())
+        val readouts = waterReadouts(snap.water, lightPct, snap.flowStrength.toDouble(), snap.turnover.toDouble())
         return JSON.stringify(obj { o ->
             o.sandbox = sandbox; o.mine = mine; o.predation = predation; o.speed = s.latest.speed
             o.values = obj { v ->
@@ -785,7 +780,7 @@ object ReefSandbox {
     /** LiveTankViewModel.TOGGLE_DEFAULTS / DEFAULT_EXTRAS. */
     private val TOGGLE_DEFAULTS: Map<String, Double> = mapOf(
         "eq_skimmer" to 1.0, "eq_sock" to 0.0, "eq_carbon" to 0.0, "eq_refugium" to 0.0, "eq_uv" to 0.0,
-        "sc_asterina_coral" to 0.0, "sc_crab_predation" to 0.0,
+        "sc_asterina_coral" to 0.0, "sc_crab_predation" to 0.0, "sc_skip_wc" to 0.0,
     )
     private val DEFAULT_EXTRAS: Map<String, Double> get() = mapOf(
         "photoperiod" to LightSchedule.DEFAULT_PHOTOPERIOD_H,

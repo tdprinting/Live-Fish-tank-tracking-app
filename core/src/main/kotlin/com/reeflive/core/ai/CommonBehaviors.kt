@@ -609,3 +609,30 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
     }
     companion object { const val WORM_SNAP_G = 0.05; const val SKIP_S = 90.0 }
 }
+
+/**
+ * A current too strong to hold station in (sandbox turnover past ~60×/h, research 09 Part B): the fish gives up
+ * swimming in the open, tucks in low behind the rock out of the jets and stops feeding (HealthModel.flowAppetite).
+ * Installed on every fish; scores 0 and draws no rng while the flow is ordinary.
+ */
+class FlowShelter(val b: SpeciesBrain) : Behavior("flowShelter", "Hiding from the current") {
+    private var spot: Vec3? = null
+    private var nextPick = 0.0
+    override val noisy: Boolean get() = false
+    private fun flowStress(c: Ctx) = c.o.envStress["flow"] ?: 0.0
+    override fun score(c: Ctx): Double =
+        if (c.o.isFish && c.o.brainKind != BrainKind.EEL && flowStress(c) > com.reeflive.core.sim.HealthModel.FLOW_HIDE_STRESS) 0.9 else 0.0
+    override fun enter(c: Ctx) { spot = null; nextPick = 0.0 }
+    override fun update(c: Ctx, out: SteerIntent) {
+        val o = c.o
+        if (spot == null || c.t > nextPick) {
+            nextPick = c.t + 45.0
+            val cover = c.coverPoint(o.pos + Vec3.Y * 8.0, 25.0)
+            spot = c.safe(Vec3(cover.x, c.zoneY(0.12), cover.z))
+        }
+        out.seek(spot!!, o.burstSpeed * 0.6, arrive = 3.0, urgency = 0.5)
+        out.hover = true
+        out.pectoral = 0.6
+        if (flowStress(c) < com.reeflive.core.sim.HealthModel.FLOW_HIDE_STRESS - 0.1) finished = true
+    }
+}

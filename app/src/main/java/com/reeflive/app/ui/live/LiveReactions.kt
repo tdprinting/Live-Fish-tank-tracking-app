@@ -244,8 +244,8 @@ object LiveReactions {
             "temp" -> Reaction(TankFx(if (up) FxKind.THERMO_UP else FxKind.THERMO_DOWN, FxSpots.THERMO, key = key, caption = String.format(Locale.US, "%.1f °C", new)), if (up) "Warmer water. Not too hot!" else "Cooler water. Brrr.", if (new > 30) HermieMood.WORRIED else HermieMood.HAPPY)
             "sal" -> if (up) Reaction(TankFx(FxKind.SALT_UP, FxSpots.SURFACE, key = key, caption = String.format(Locale.US, "Salt %.3f", new)), "A scoop of salt.")
             else Reaction(TankFx(FxKind.SALT_DOWN, FxSpots.SURFACE, key = key, caption = String.format(Locale.US, "Salt %.3f", new)), "Fresh water makes it less salty.")
-            "light" -> lights(if (up) true else new > 0.5).let { Reaction(TankFx(if (up) FxKind.LIGHTS_ON else FxKind.LIGHTS_OFF, FxSpots.LIGHT, key = key, caption = "Light ${new.toInt()} %"), it.say, it.mood) }
-            "flow" -> Reaction(TankFx(if (up) FxKind.PUMP_ON else FxKind.PUMP_OFF, FxSpots.PUMP_RIGHT, key = key, caption = "Flow ${new.toInt()} %"), if (up) "More waves!" else "Calmer water.")
+            "light" -> lights(if (up) true else new > 0.5).let { Reaction(TankFx(if (up) FxKind.LIGHTS_ON else FxKind.LIGHTS_OFF, FxSpots.LIGHT, key = key, caption = "Light ${new.toInt()} PAR"), it.say, it.mood) }
+            "flow" -> Reaction(TankFx(if (up) FxKind.PUMP_ON else FxKind.PUMP_OFF, FxSpots.PUMP_RIGHT, key = key, caption = "Flow ${new.toInt()}× an hour"), if (up) "More waves!" else "Calmer water.")
             "pump_left", "pump_right" -> pump(rowId, new >= 0.5)
             "alk", "ca", "mg", "k", "sr", "copper", "no3", "po4" -> dose(rowId, SandboxParams.byId(rowId)?.let { SandboxFriendly.of(it).title } ?: rowId).let {
                 Reaction(TankFx(FxKind.DOSE, FxSpots.DOSE, tint = it.fx.tint, key = key, caption = it.fx.caption), it.say, it.mood)
@@ -267,8 +267,8 @@ object LiveReactions {
             Feedback("Way too much food", "Six big feedings in half an hour: leftovers rot into ammonia", listOf(Feedback.burst(BurstKind.SPLASH, FxSpots.FEED, amount = 3f)), watch = "nh3", durationMs = 3600),
         )
         SandboxPreset.MISSED_WATER_CHANGES -> Reaction(
-            TankFx(FxKind.ALERT, FxSpots.CENTRE, glyph = ReefGlyphs.calendarX, tint = Color(0xFF9C7A4A), caption = "Two months, no water change"), "Nobody changed the water for ages. Yuck.", HermieMood.WORRIED,
-            Feedback("Two months, no water change", "Nutrients pile up, minerals run low, algae spreads", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.CENTRE, waste), Feedback.burst(BurstKind.SILT, FxSpots.SAND, waste)), watch = "no3", durationMs = 3000),
+            TankFx(FxKind.ALERT, FxSpots.CENTRE, glyph = ReefGlyphs.calendarX, tint = Color(0xFF9C7A4A), caption = "No more water changes"), "Nobody is changing the water any more. Watch the waste build up.", HermieMood.WORRIED,
+            Feedback("No more water changes", "Nutrients pile up week by week, minerals run low, algae follows", listOf(Feedback.burst(BurstKind.HAZE, FxSpots.CENTRE, waste), Feedback.burst(BurstKind.SILT, FxSpots.SAND, waste)), watch = "no3", durationMs = 3000),
         )
         SandboxPreset.SALINITY_CRASH -> Reaction(TankFx(FxKind.SALT_DOWN, FxSpots.SURFACE, caption = "Salt crash"), "Too much fresh water! The salt is dropping fast.", HermieMood.SURPRISED).let {
             Reaction(it.fx, it.say, it.mood, it.feedback.plus(listOf(Feedback.burst(BurstKind.FRESH, FxSpots.SURFACE, amount = 1.5f))).withEffect("The top-off floods fresh water in for half an hour"))

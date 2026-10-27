@@ -43,9 +43,9 @@ class FlowField(
     var powerheadsOn: Boolean = true
         set(v) { field = v; gridValid = false }
 
-    /** Sandbox pump strength multiplier on the powerhead jets (0 = off … 2 = double), HOB unaffected. */
+    /** Sandbox pump strength multiplier on the powerhead jets (0 = off, 1 = normal, up to [MAX_STRENGTH]), HOB unaffected. */
     var strength: Double = 1.0
-        set(v) { field = v.coerceIn(0.0, 2.0); gridValid = false }
+        set(v) { field = if (v.isNaN()) 1.0 else v.coerceIn(0.0, MAX_STRENGTH); gridValid = false }
 
     /** When set (Live Tank), velocities come from the Navier–Stokes solver instead of the analytic jets (§9.7). */
     @Volatile var fluid: FluidSim? = null
@@ -167,6 +167,9 @@ class FlowField(
     companion object {
         /** Powerheads observed in Tee's tank photos (SIMULATION §5.3): equipment.glb PowerheadBack / PowerheadLeft and
          *  the ReturnNozzle `outflow` (back middle, piped from the HobFilter), matching the FLOW_* / HOB_OUTFLOW anchors. */
+        /** Highest jet multiplier (the sandbox's 100×/h turnover on one powerhead). */
+        const val MAX_STRENGTH = 8.0
+
         fun defaultJets(): List<Powerhead> = listOf(
             Powerhead("PH-A", Vec3(77.0, 32.0, 1.0), Vec3(-0.6, -0.35, 0.72)),
             Powerhead("PH-B", Vec3(1.0, 28.0, 13.0), Vec3(0.95, -0.2, 0.25)),

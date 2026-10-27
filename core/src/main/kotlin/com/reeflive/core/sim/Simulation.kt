@@ -8,6 +8,7 @@ import com.reeflive.core.ai.Tap
 import com.reeflive.core.geom.FlowField
 import com.reeflive.core.geom.Rng
 import com.reeflive.core.geom.Vec3
+import com.reeflive.core.geom.smoothstep
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 import kotlin.math.exp
@@ -625,7 +626,7 @@ class Simulation private constructor(
             for (p in food.particles) if (!p.eaten) f.addScent(p.pos, 0.02)
             f.step(dt, water.heaterOutputW, heaterPos)
         }
-        surface.agitation = if (water.s.flowOn) water.flowStrength else 0.0
+        surface.agitation = if (water.s.flowOn) min(water.flowStrength, MAX_SURFACE_AGITATION) else 0.0
         surface.step(dt)
     }
 
@@ -1010,7 +1011,8 @@ class Simulation private constructor(
         // slow biology on the game clock (lifePace); everything else in this tick stays on the sim clock
         val lifeDt = CHEM_DT * lifePace
         val lifeMin = dtMin * lifePace
-        val light = LightSchedule.intensity(lightCh)
+        // what the biology sees: the drawn lamps' intensity, or the real PAR when the sandbox set an absolute peak
+        val light = if (lights.peakPar == null) LightSchedule.intensity(lightCh) else lights.bioIntensity(simTimeSec)
         cachedSinceOn = lights.minutesSinceLightsOn(simTimeSec)
         cachedUntilOff = if (cachedSinceOn != null) lights.minutesUntilLightsOff(simTimeSec) else null
         // drivers
@@ -1058,7 +1060,7 @@ class Simulation private constructor(
             }
             val blennyExcess = Compatibility.isBlenny(o.brainKind) && w.s.volumeL < Compatibility.BLENNY_FREE_VOLUME_L &&
                 organisms.any { it !== o && it.alive && Compatibility.isBlenny(it.brainKind) && (it.arrivalTime < o.arrivalTime || (it.arrivalTime == o.arrivalTime && organisms.indexOf(it) < organisms.indexOf(o))) }
-            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, light, blennyExcess,
+            val ctx = HealthContext(simTimeSec, w.s.volumeL, ichOthers, fishCount > 1, rival, night, flowStrength, min(light, 1.5), blennyExcess,
                 infected, treatments.modsFor(o, w.s, simTimeSec), treatments.hypo && o.isFish, w.bacteria.pathogenPressure, healthGrace)
             HealthModel.step(o, if (fluid != null && o.alive) localWater(o.pos) else w.s, ctx, dtMin, pendingEventsSink)
             if (o.alive) LifeCycle.step(o, CHEM_DT, w.s.volumeL, simTimeSec, pendingEventsSink)
@@ -1492,6 +1494,7 @@ class Simulation private constructor(
 
     /** Routine water change at 10:00 every [TankConfig.waterChangeEveryDays] days. */
     private fun maintenance() {
+        if (skipWaterChanges) return
         val every = config.waterChangeEveryDays
         if (every <= 0 || config.waterChangeFraction <= 0) return
         if (dayIndex % every != every - 1 || lastWaterChangeDay == dayIndex) return
@@ -1526,6 +1529,7 @@ class Simulation private constructor(
      * settling from the column, and fines that stayed suspended reaching the filter sock or skimmer.
      */
     private fun sandTick(dtMin: Double) {
+        sandStorm(dtMin)
         // the bed's slow upkeep runs in batches: disturbed sand already pours in real time (SandBed.step)
         sandRelaxPendingMin += dtMin
         if (sandRelaxPendingMin >= SAND_RELAX_EVERY_MIN) { sand.relax(sandRelaxPendingMin, flowStrength, water.s.detritus); sandRelaxPendingMin = 0.0 }
@@ -1533,6 +1537,37 @@ class Simulation private constructor(
         if (up > 0) {
             water.captureResuspended((up * RESUSPEND_CAPTURE_PER_LOAD).coerceAtMost(RESUSPEND_CAPTURE_MAX_PER_MIN * dtMin))
             sand.resuspendedPending = 0.0
+        }
+    }
+
+    private var stormStep = 0L
+
+    /**
+     * A blasting current (sandbox turnover past ~60×/h, research 09 Part B: at 100× "sand blows into drifts and clouds
+     * the water in minutes"): where the jets sweep the bed faster than [SCOUR_CMS] they scour it and drop the sand
+     * downstream in drifts, throwing up clouds, and the water goes hazy ([WaterSim.sandHaze]). Probe spots are a fixed
+     * low-discrepancy walk, so no simulation random numbers are drawn; nothing runs at ordinary flow.
+     */
+    private fun sandStorm(dtMin: Double) {
+        val storm = smoothstep(STORM_FROM, STORM_FULL, flowStrength)
+        if (storm <= 0.0) return
+        water.sandHaze = min(water.sandHaze + storm * dtMin / STORM_HAZE_MIN, max(water.sandHaze, STORM_HAZE_MAX * storm))
+        stormStep++
+        val len = rock.lengthCm; val wid = rock.widthCm
+        for (k in 0 until STORM_PROBES) {
+            val fx = ((k * 0.6180339887 + stormStep * 0.1372) % 1.0)
+            val fz = ((k * 0.4142135624 + stormStep * 0.2935) % 1.0)
+            val x = 4.0 + fx * (len - 8.0); val z = 4.0 + fz * (wid - 8.0)
+            if (sand.underRock(x, z)) continue
+            val y = sand.surfaceY(x, z) + 1.0
+            val v = flow.velocityFast(Vec3(x, y, z))
+            val sp = kotlin.math.sqrt(v.x * v.x + v.z * v.z)
+            if (sp < SCOUR_CMS || !sp.isFinite()) continue
+            val cm3 = min(SCOUR_MAX_CM3, (sp - SCOUR_CMS) * SCOUR_CM3_PER_CMS * dtMin) * storm
+            val dx = v.x / sp; val dz = v.z / sp
+            sand.dig(x, z, cm3, 3.0)
+            sand.deposit((x + dx * DRIFT_CM).coerceIn(2.0, len - 2.0), (z + dz * DRIFT_CM).coerceIn(2.0, wid - 2.0), cm3, 4.0)
+            if (!abstractMode) sand.puff(x, y, z, 3, 3.0 + 0.05 * sp, dx * sp * 0.3, dz * sp * 0.3)
         }
     }
 
@@ -1718,7 +1753,10 @@ class Simulation private constructor(
     /** Current value of a rampable parameter. */
     fun paramValue(id: String): Double? = when (id.lowercase()) {
         "light" -> lights.intensityOverride ?: 1.0
+        "par" -> peakPar
         "flow" -> water.flowStrength
+        "turnover" -> turnoverPerHour
+        "skip_water_changes" -> if (skipWaterChanges) 1.0 else 0.0
         "photoperiod" -> lights.photoperiodHours ?: LightSchedule.DEFAULT_PHOTOPERIOD_H
         "roomtemp" -> config.roomC
         "crab_predation" -> if (crabLiveFishScenario) 1.0 else 0.0
@@ -1742,9 +1780,12 @@ class Simulation private constructor(
     private fun setParam(id: String, value: Double) {
         val k = id.lowercase()
         when {
-            k == "light" -> lights.intensityOverride = value.coerceIn(0.0, 1.5)
+            k == "light" -> { lights.intensityOverride = value.coerceIn(0.0, 1.5); lights.peakPar = null }
+            k == "par" -> lights.peakPar = value
             k == "roomtemp" -> { config = config.copy(roomC = value); water = rebuildWater() }
             k == "flow" -> setFlowStrength(value)
+            k == "turnover" -> setTurnover(value)
+            k == "skip_water_changes" -> skipWaterChanges = value > 0.5
             k == "speed" -> speed = value
             k == "photoperiod" -> lights.photoperiodHours = value.coerceIn(4.0, 16.0)
             k == "crab_predation" -> crabLiveFishScenario = value > 0.5
@@ -1791,15 +1832,40 @@ class Simulation private constructor(
         water.s.flowOn = on
     }
 
-    /** Sandbox pump strength 0..2 (0 = pumps off, 1 = Tee's setup). */
+    /** Sandbox pump strength 0..[MAX_FLOW_STRENGTH] (0 = pumps off, 1 = Tee's setup). */
     fun setFlowStrength(v: Double) {
-        val k = v.coerceIn(0.0, 2.0)
+        val k = (if (v.isNaN()) 1.0 else v).coerceIn(0.0, MAX_FLOW_STRENGTH)
         flow.strength = k.coerceAtLeast(0.05)
         water.flowStrength = k
         setFlow(k > 0.02)
         fluid?.let { it.strength = k; it.powerheadsOn = k > 0.02 }
     }
     val flowStrength: Double get() = if (water.s.flowOn) water.flowStrength else 0.0
+
+    /** Rated flow (L/h) of the pumps switched on: the powerheads and the HOB return ([Pump.defaults] ratings). */
+    private fun pumpsOnLph(): Double = flow.jets.filter { it.on }.sumOf { j -> PUMP_GPH[j.name.uppercase()] ?: DEFAULT_PUMP_GPH } * LITERS_PER_GAL
+
+    /**
+     * Tank turnover (volumes per hour, research 09 Part B: normal 20-40×): the switched-on pumps' rated flow × the
+     * sandbox strength over the system volume. Tee's two powerheads and HOB at strength 1 turn a 227 L tank ~27×/h.
+     */
+    val turnoverPerHour: Double get() = flowStrength * pumpsOnLph() / config.systemLiters.coerceAtLeast(1.0)
+
+    /** Turnover at strength 1 with the pumps that are on now. */
+    val normalTurnover: Double get() = pumpsOnLph() / config.systemLiters.coerceAtLeast(1.0)
+
+    /** Sets the pumps' strength so the tank turns over [perHour] times an hour (0..[MAX_TURNOVER]), split by the pumps on. */
+    fun setTurnover(perHour: Double) {
+        val t = (if (perHour.isNaN()) 0.0 else perHour).coerceIn(0.0, MAX_TURNOVER)
+        val unit = normalTurnover
+        setFlowStrength(if (unit > 1e-6) t / unit else t / NOMINAL_TURNOVER)
+    }
+
+    /** Sandbox peak light: rock-top PAR (µmol m⁻² s⁻¹) at the schedule's brightest point. */
+    val peakPar: Double get() = lights.peakPar ?: (lights.programmedPeakPar * (lights.intensityOverride ?: 1.0)).coerceAtMost(LightSchedule.MAX_PAR)
+
+    /** Sandbox: routine water changes are skipped, so nitrate and phosphate build up the way they would. */
+    var skipWaterChanges = false
 
     fun feed(kind: FoodKind, grams: Double, at: Vec3) {
         surface.impulse(at.x, at.z, 0.08, 2.5)
@@ -2071,7 +2137,7 @@ class Simulation private constructor(
         finger = null; flow.gusts.clear()
         submarine.reset(); subSense.clear(); bags.clear(); coralPicks.clear(); net.clear()
         pests.copyFrom(PestState()); treatments.active.clear(); ramps.clear(); scheduled.clear()
-        lights.forcedOn = null; lights.intensityOverride = null
+        lights.forcedOn = null; lights.intensityOverride = null; lights.peakPar = null
         predationEnabled = config.predationEnabled
         livestock.forEach { addFromSeed(it) }
         corals.forEach { it.established = true }
@@ -2282,6 +2348,9 @@ class Simulation private constructor(
             moltShells = moltShells.map { it.first },
             sandPiles = FloatArray(sandPiles.size * 4).also { a -> sandPiles.forEachIndexed { i, p -> a[i * 4] = p.pos.x.toFloat(); a[i * 4 + 1] = p.pos.z.toFloat(); a[i * 4 + 2] = p.radius.toFloat(); a[i * 4 + 3] = p.height.toFloat() } },
             flowStrength = flowStrength.toFloat(),
+            peakPar = peakPar.toFloat(),
+            turnover = turnoverPerHour.toFloat(),
+            skipWaterChanges = skipWaterChanges,
             surfaceHeights = surface.heights.copyOf(),
             surfaceDims = intArrayOf(surface.sx, surface.sz),
             flowGrid = fluid?.let { f ->
@@ -2356,6 +2425,33 @@ class Simulation private constructor(
     }
 
     companion object {
+        /** Highest sandbox pump strength (× Tee's setup): enough for 100×/h turnover with one powerhead left on. */
+        const val MAX_FLOW_STRENGTH = 8.0
+        /** Top of the sandbox turnover slider (research 09 Part B: 100×/h, local 60-80 cm/s). */
+        const val MAX_TURNOVER = 100.0
+        /** Turnover per unit strength when no pump is on to scale (Tee's tank: ~27×/h). */
+        const val NOMINAL_TURNOVER = 27.5
+        /** The wave field's pump agitation stops growing past this (a stronger pump only ruffles the surface more). */
+        const val MAX_SURFACE_AGITATION = 2.5
+        /** Pump strength where the sand starts to blow (~60×/h) and where the storm is full (~95×/h); 09 Part B. */
+        const val STORM_FROM = 2.2
+        const val STORM_FULL = 3.5
+        /** Haze a full storm settles at, and the minutes it takes to get there (clouds "in minutes"). */
+        const val STORM_HAZE_MAX = 0.8
+        const val STORM_HAZE_MIN = 10.0
+        /** Sand-bed spots checked each chemistry tick in a storm. */
+        const val STORM_PROBES = 10
+        /** Near-bed speed (cm/s) above which the current lifts sand (fine aragonite starts to move at ~10-15 cm/s; est.). */
+        const val SCOUR_CMS = 12.0
+        const val SCOUR_CM3_PER_CMS = 0.15
+        const val SCOUR_MAX_CM3 = 6.0
+        /** How far downstream scoured sand lands in a drift (cm). */
+        const val DRIFT_CM = 12.0
+        const val LITERS_PER_GAL = 3.78541
+        /** Rated pump flows (US gph) by pump name ([com.reeflive.core.geom.Pump.defaults], SIMULATION §9.7). */
+        val PUMP_GPH: Map<String, Double> = com.reeflive.core.geom.Pump.defaults().associate { it.name.uppercase() to it.gph }
+        /** A pump the table does not know (a custom powerhead): a mid-size wavemaker. */
+        const val DEFAULT_PUMP_GPH = 600.0
         /** Death cause of a fish that leapt over the rim of the open top ([JumpModel]). */
         const val JUMPED_OUT = "jumped out of the tank"
         /** How far above the aimed spot a target-fed food is let go (cm): close enough to land on it, clear of the rock. */
