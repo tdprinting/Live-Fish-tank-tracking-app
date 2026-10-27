@@ -27,6 +27,16 @@ class ShadowMap(quality: RenderQuality) {
     val enabled: Boolean get() = width > 0
     /** Re-render the fish into the map every frame (High). */
     val dynamic: Boolean = quality == RenderQuality.HIGH
+    /**
+     * Auto quality relief ([TankRenderer.relief]): [lite] leaves the fish out and refreshes like Medium (static casters
+     * and corals, on scene changes and every [STATIC_REFRESH_FRAMES] frames); [off] skips the pass and tells the shaders
+     * there is no map (no PCF taps per pixel). Both change at runtime, with nothing to reallocate.
+     */
+    var lite = false
+    var off = false
+        set(v) { if (field && !v) signature = Long.MIN_VALUE; field = v }
+    /** Fish go into the map this pass. */
+    val withFish: Boolean get() = dynamic && !lite
 
     /** World → shadow clip (column-major), orthographic; depth grows downward from the top of the glass. */
     val matrix = FloatArray(16)
@@ -98,9 +108,9 @@ class ShadowMap(quality: RenderQuality) {
      * is due. No pass on Low or when the FBO failed.
      */
     fun needsUpdate(sceneSignature: Long): Boolean {
-        if (!enabled || fbo == 0) return false
+        if (!enabled || fbo == 0 || off) return false
         framesSince++
-        if (dynamic || sceneSignature != signature || framesSince >= STATIC_REFRESH_FRAMES) {
+        if (withFish || sceneSignature != signature || framesSince >= STATIC_REFRESH_FRAMES) {
             signature = sceneSignature; framesSince = 0
             return true
         }
@@ -161,7 +171,7 @@ class ShadowMap(quality: RenderQuality) {
     /** `uShadowMat` / `uShadow` into the Frame data ([FrameUniforms.SHADOW_OFFSET]); call before [FrameUniforms.fill]. */
     fun fill(d: FloatArray, offset: Int) {
         matrix.copyInto(d, offset)
-        d[offset + 16] = if (valid) 1f else 0f
+        d[offset + 16] = if (valid && !off) 1f else 0f
         d[offset + 17] = cmPerTexel
         d[offset + 18] = STRENGTH
         d[offset + 19] = BIAS_CM

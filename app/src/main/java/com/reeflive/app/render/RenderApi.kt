@@ -90,9 +90,21 @@ enum class RenderQuality(
     val shadowMapSize: Int get() = when (this) { HIGH -> 2048; MEDIUM -> 1024; LOW -> 0 }
     /** Light-shaft strength multiplier (shafts are off on LOW). */
     val shaftStrength: Float get() = if (this == HIGH) 1.3f else 1f
+    /** Camera distance (cm) beyond which fish switch to their `_lod1.glb`: nearer on the cheaper presets. */
+    val lod1DistanceCm: Float get() = when (this) { HIGH -> LOD1_DISTANCE_CM; MEDIUM -> 45f; LOW -> 32f }
+
+    /**
+     * Android: the render buffer's size as a fraction of the view (the display scales it up for free, see
+     * [TankGlView.renderScale]) and the most pixels it may hold, whichever is smaller. Fill rate is what limits phones:
+     * the rock, sand and water shaders run once per pixel, so 0.75× is about 0.56× the work.
+     */
+    val renderScale: Float get() = when (this) { HIGH -> 1f; MEDIUM -> 0.75f; LOW -> 0.6f }
+    val maxRenderPixels: Int get() = when (this) { HIGH -> 2_400_000; MEDIUM -> 1_300_000; LOW -> 750_000 }
+    /** Android frame cap (Choreographer paced, [FramePacer]): Low, and any preset in battery saver, run at 30. */
+    val targetFps: Int get() = if (this == LOW) 30 else 60
 
     companion object {
-        /** Camera distance (cm) beyond which fish switch to their `_lod1.glb` (ARCHITECTURE §8.7). */
+        /** Camera distance (cm) beyond which fish switch to their `_lod1.glb` on High (ARCHITECTURE §8.7). */
         const val LOD1_DISTANCE_CM = 60f
     }
 }
@@ -175,4 +187,12 @@ data class RenderStats(
     val organisms: Int = 0,
     val lightIntensity: Float = 0f,
     val glInfo: String = "",
+    /** Worst gap between two frames in the last half second (ms): hitches show here, not in the mean. */
+    val worstMs: Float = 0f,
+    /** Render buffer size / view size (Android [TankGlView.renderScale]; 1 on the web). */
+    val renderScale: Float = 1f,
+    /** Effects shed by auto quality without a reload (0 none … [AdaptiveQuality.MAX_RELIEF]). */
+    val relief: Int = 0,
+    /** Frame cap the pacer runs at (0 = every vsync). */
+    val targetFps: Int = 0,
 )

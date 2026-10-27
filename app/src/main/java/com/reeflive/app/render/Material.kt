@@ -101,7 +101,9 @@ class FrameUniforms {
         GLES30.glBindBuffer(GLES30.GL_UNIFORM_BUFFER, 0); Gl.check("glBindBuffer(0)")
     }
 
-    fun fill(cam: Camera, timeSec: Float, light: LightingState, quality: RenderQuality, algaeBloom: Float, flow: Float, hasSurface: Boolean, surfaceW: Int, surfaceH: Int, algae: AlgaeCover = AlgaeCover.EMPTY) {
+    fun fill(cam: Camera, timeSec: Float, light: LightingState, quality: RenderQuality, algaeBloom: Float, flow: Float, hasSurface: Boolean, surfaceW: Int, surfaceH: Int, algae: AlgaeCover = AlgaeCover.EMPTY,
+             /** `uQuality` the shaders branch on: the preset's, or lower while auto quality sheds work ([TankRenderer.relief]). */
+             shaderLevel: Int = quality.shaderLevel) {
         val d = data
         cam.view.copyInto(d, 0); cam.proj.copyInto(d, 16); cam.viewProj.copyInto(d, 32)
         d[48] = cam.eye[0]; d[49] = cam.eye[1]; d[50] = cam.eye[2]; d[51] = timeSec
@@ -114,7 +116,7 @@ class FrameUniforms {
         }
         d[68] = light.ambient[0]; d[69] = light.ambient[1]; d[70] = light.ambient[2]; d[71] = light.blueFraction
         d[72] = light.fogColor[0]; d[73] = light.fogColor[1]; d[74] = light.fogColor[2]; d[75] = FOG_DENSITY
-        d[76] = WATER_LEVEL; d[77] = CAUSTIC_STRENGTH; d[78] = CAUSTIC_SCALE; d[79] = quality.shaderLevel.toFloat()
+        d[76] = WATER_LEVEL; d[77] = CAUSTIC_STRENGTH; d[78] = CAUSTIC_SCALE; d[79] = shaderLevel.toFloat()
         d[80] = if (light.night) 1f else 0f; d[81] = algaeBloom; d[82] = flow; d[83] = SAND_TOP
         d[84] = ABSORB[0]; d[85] = ABSORB[1]; d[86] = ABSORB[2]; d[87] = SCATTER
         d[88] = Camera.TANK[0]; d[89] = Camera.TANK[1]; d[90] = Camera.TANK[2]; d[91] = 0f
