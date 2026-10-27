@@ -234,9 +234,18 @@ object ReefLive {
     private var grace = START_GRACE
     // the slow-down being tried: mean frame time before it, where it started, and steps taken since
     private var tryBase = -1.0; private var tryStep = 0; private var tryQuality = RenderQuality.HIGH; private var trySteps = 0
-    /** Fewer pixels did not help (a 30 fps cap in Low Power Mode, or the CPU is the limit): stop trading sharpness. */
+    /**
+     * Fewer pixels did not help (a 30 fps cap in Low Power Mode, or the CPU is the limit): stop trading sharpness for
+     * [HOLD_SECONDS]. Only a while, and only at the picture it went back to: a close zoom or a busy moment can be slow
+     * for reasons pixels don't fix, and a hold that outlived it kept a sharper picture the device could not keep up
+     * with once the view changed back.
+     */
     private var frozen = false
+    private var heldFor = 0.0
     private var steppedDown = false
+    /** Seconds before Auto may climb back the preset it dropped; doubles on every drop so it cannot see-saw. */
+    private var climbWait = 0.0
+    private var climbCooldown = CLIMB_COOLDOWN
 
     /** "HIGH" / "MEDIUM" / "LOW" picked by hand, or "AUTO" / "AUTO:<level it settled on last time>". */
     private fun parseQuality(q: String): RenderQuality? {
@@ -260,12 +269,15 @@ object ReefLive {
      * up. Each frame counts at most 0.1 s, so one long hitch cannot step it down alone. On Auto, still slow at the
      * floor for [FLOOR_WINDOWS] windows drops one preset (HIGH → MEDIUM → LOW, shedding bloom, 4x MSAA, fish in the
      * shadow map...) at about the same pixel count; the page remembers it ("onQuality") for the next visit, and a
-     * visit that runs fast at full resolution climbs back a preset. Every two steps down are checked: if frames did
-     * not get at least 7% faster, pixels were not the limit, so the picture goes back to where it was and stays.
+     * visit that runs fast at full resolution climbs back a preset (within a visit, after [CLIMB_COOLDOWN]). Every two
+     * steps down are checked: if frames did not get at least 7% faster, pixels were not the limit, so the picture goes
+     * back to where it was and holds there for [HOLD_SECONDS], or until frames are fast enough to climb.
      */
     private fun adapt(dt: Double) {
         if (dt <= 0.0) return
         if (grace > 0.0) { grace -= dt; return }
+        if (frozen) { heldFor += dt; if (heldFor >= HOLD_SECONDS) frozen = false }
+        if (climbWait > 0.0) climbWait -= dt
         windowTime += min(dt, 0.1); windowFrames++
         if (windowFrames < ADAPT_FRAMES) return
         val mean = windowTime / windowFrames
@@ -275,7 +287,7 @@ object ReefLive {
             if (frozen) return
             if (tryBase < 0.0) { tryBase = mean; tryStep = scaleStep; tryQuality = current; trySteps = 0 }
             else if (trySteps >= 2) {
-                if (mean > tryBase * 0.93) { setPicture(tryQuality, tryStep); frozen = true; tryBase = -1.0; return }
+                if (mean > tryBase * 0.93) { setPicture(tryQuality, tryStep); frozen = true; heldFor = 0.0; tryBase = -1.0; return }
                 tryBase = mean; tryStep = scaleStep; tryQuality = current; trySteps = 0
             }
             if (scaleStep < floorStep()) { scaleStep++; trySteps++; floorWindows = 0 }
@@ -293,6 +305,7 @@ object ReefLive {
                     // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
                     setPicture(v, SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from + 1e-6 } ?: SCALES.size - 1)
                     steppedDown = true; trySteps++
+                    climbWait = climbCooldown; climbCooldown *= 2.0
                 }
             }
         } else {
@@ -300,11 +313,13 @@ object ReefLive {
             if (mean >= FAST_DT) { goodWindows = 0; return }
             if (++goodWindows < GOOD_WINDOWS) return
             goodWindows = 0
-            // effects come back before sharpness
-            renderer?.let { if (it.relief > 0) { it.relief--; return } }
-            if (scaleStep > 0) { scaleStep--; return }
-            // full resolution and still fast: a preset an earlier, slower visit settled on can come back up
-            if (auto && !steppedDown && current != RenderQuality.HIGH) setPicture(RenderQuality.entries[current.ordinal - 1], 0)
+            // effects come back before sharpness; climbing past the held picture means the view changed, so a slow
+            // window may step down again
+            renderer?.let { if (it.relief > 0) { it.relief--; frozen = false; return } }
+            if (scaleStep > 0) { scaleStep--; frozen = false; return }
+            // full resolution and still fast: a preset an earlier visit settled on, or that a slow moment dropped, comes
+            // back up (after a cooldown that grows with each drop this visit)
+            if (auto && current != RenderQuality.HIGH && (!steppedDown || climbWait <= 0.0)) setPicture(RenderQuality.entries[current.ordinal - 1], 0)
         }
     }
 
@@ -583,6 +598,7 @@ object ReefLive {
     fun setQuality(q: String) {
         val v = parseQuality(q) ?: return
         goodWindows = 0; floorWindows = 0; tryBase = -1.0; frozen = false; steppedDown = false
+        climbWait = 0.0; climbCooldown = CLIMB_COOLDOWN
         windowTime = 0.0; windowFrames = 0
         renderer?.relief = 0
         if (v != current) { current = v; renderer?.setQuality(v); grace = SWITCH_GRACE }
@@ -740,6 +756,10 @@ object ReefLive {
     private const val RELIEF_BEFORE_PRESET = 2
     private const val START_GRACE = 8.0
     private const val SWITCH_GRACE = 4.0
+    /** How long a "fewer pixels did not help" verdict holds before the picture may be traded again. */
+    private const val HOLD_SECONDS = 20.0
+    /** First wait before Auto climbs back a preset it dropped this visit (s); doubles on each drop. */
+    private const val CLIMB_COOLDOWN = 45.0
 }
 
 internal fun obj(fill: (dynamic) -> Unit): dynamic { val o: dynamic = js("({})"); fill(o); return o }
