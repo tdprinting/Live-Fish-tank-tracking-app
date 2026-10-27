@@ -132,9 +132,28 @@ export function startLive(applyReadings) {
     const firstVisit = !store.get('reeflive.tipsSeen', false);
     if (firstVisit) { store.set('reeflive.tipsSeen', true); setTimeout(showTips, 1200); }
     checkNews(firstVisit);
+    if (pendingPreview) { runPreview(pendingPreview); pendingPreview = null; }
   }).catch(() => {});
 }
 export function setLiveVisible(v) { live.setVisible(v); if (!v) stopLoops(); }
+
+/**
+ * The problem log's "See it in the sandbox" (tracker.js): plays [link] ({preset} | {infect} | {aip}) on Watch's pretend
+ * copy at 240x, so neither the real tank nor My tank is touched. Back to real time returns to the real tank.
+ */
+let pendingPreview = null;
+export function previewInSim(link) { if (C) runPreview(link); else pendingPreview = link; }
+function runPreview(link) {
+  if (ui.card) closeCard();
+  if (ui.mode !== 'watch') setMode('watch');
+  if (!ui.watchFast) { SB.setMode('sandbox'); ui.watchFast = true; }
+  if (link.preset) SB.act('preset', link.preset, 0);
+  else if (link.infect) SB.act('infect', link.infect, 0);
+  else if (link.aip) for (let i = 0; i < link.aip; i++) SB.act('aiptasia', null, 1);
+  cue('TICK');
+  setSpeed(240);
+  say(`${link.label}: playing on a pretend copy, 240x faster. Your tank is safe. Set the time back to real time to leave.`);
+}
 
 // keep the side rail and fish card below however many rows the top HUD wraps to
 try { const top = document.querySelector('#live .top'), chrome = $('chrome');
@@ -467,7 +486,7 @@ function healthCard() {
     <div class="options"><button class="opt wide" id="reefCare" data-reefcare><span class="ico">${icon('branch')}</span><span class="lbl"></span></button></div>
     <div class="hunger" id="coralRows"></div>
     <h4>Water &amp; gear</h4>${fixList()}
-    <div class="row-gap"><button class="btn tests" data-tab="params">${icon('flask')} Log a water test</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
+    <div class="row-gap"><button class="btn tests" data-tab="params" data-sub="tests">${icon('flask')} Log a water test</button><button class="btn ghost tests" data-tab="params" data-sub="log">${icon('microscope')} Pests &amp; disease log</button><button class="btn ghost" data-tip>${icon('crab')} Give me a tip</button></div>`;
 }
 /** Happy face, water and the hunger header: no buttons inside, so the tick can rebuild it under a finger. */
 function healthLive() {

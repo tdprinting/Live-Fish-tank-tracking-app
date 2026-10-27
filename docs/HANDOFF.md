@@ -48,6 +48,6 @@ Repo: https://github.com/tdprinting/Live-Fish-tank-tracking-app (public).
 5. **Algae follow-ups:** confirm `Simulation.rebuildWater()` carries algae state; fix the research 09 check 2 PO4 spec (assert PO4 reaches its floor and is reported as limiting, not a 0.3-0.4 ppm drop from 0.2).
 6. **NO3/PO4 sandbox start values** (79 / 0.22 seen once): defaults are 5.0 / 0.04; root cause (logged-value unit mix, NO3 vs NO3-N) not proven. Check logged rows on device.
 7. **High-speed time-lapse** behaviour runs at 0.5 s steps and can look coarse; check on a phone at max speed.
-8. **Tracker gaps** (cycle tracker, acclimation timer, pest/algae/disease log): see `coverage_gaps.md`.
+8. **Tracker gaps:** cycle tracker, acclimation timer and pest/algae/disease log are on branch `feat/tracker-gaps` (web Parameters page sub-tabs, `web/site/tracker.js`, core `tracker/`). Remaining: check background notifications on a real iPhone/Android (browsers pause backgrounded pages).
 9. **Android-only leftovers (low priority, `:app` is not built):** `:app` not compiled in CI; pose LOD (`PoseLod.kt` exists, `poseDetail` hook) not wired in the Android renderer path; Android `LiveTankViewModel` lacks the three new algae presets (dinos, cyano, bubble algae) and still carries a `TODO(sim/realism)` skip-water-changes preset.
 10. Housekeeping: 15 harmless `.NNN` mesh names in 8 GLBs.

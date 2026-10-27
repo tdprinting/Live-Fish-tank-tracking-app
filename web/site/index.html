@@ -120,14 +120,27 @@
 
   <section id="params" class="view">
     <div class="wrap">
-      <div class="row-between">
-        <h1>Water parameters</h1>
-        <button class="btn" id="logBtn">＋ Log a test</button>
+      <div class="pills subtabs" id="subtabs" role="tablist" aria-label="Tracker">
+        <button class="pillbtn on" data-sub="tests" role="tab">Water tests</button>
+        <button class="pillbtn" data-sub="cycle" role="tab">New tank cycle</button>
+        <button class="pillbtn" data-sub="accl" role="tab">Acclimation</button>
+        <button class="pillbtn" data-sub="log" role="tab">Pests &amp; disease</button>
       </div>
-      <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
-      <div id="paramGrid" class="grid"></div>
-      <h2>History</h2>
-      <div id="history" class="history"></div>
+      <div class="subview" id="sub-tests">
+        <div class="row-between">
+          <h1>Water parameters</h1>
+          <button class="btn" id="logBtn">＋ Log a test</button>
+        </div>
+        <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
+        <div id="paramGrid" class="grid"></div>
+        <h2>History</h2>
+        <div id="history" class="history"></div>
+      </div>
+      <div class="subview hidden" id="sub-cycle"></div>
+      <div class="subview hidden" id="sub-accl"></div>
+      <div class="subview hidden" id="sub-log"></div>
+      <h2>Backup</h2>
+      <p class="muted">One file with your tests, cycle, problem log and its photos.</p>
       <div class="row-gap">
         <button class="btn ghost" id="exportBtn">Export backup</button>
         <label class="btn ghost">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
@@ -147,6 +160,56 @@
     </div>
   </form>
 </dialog>
+
+<dialog id="cycleDialog" class="glass">
+  <form method="dialog" id="cycleForm">
+    <h2>Log a cycle test</h2>
+    <label class="field">When<input type="datetime-local" id="cyWhen" required></label>
+    <div class="fields">
+      <label class="field">Ammonia (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="nh3" placeholder="0–4"></label>
+      <label class="field">Nitrite (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="no2" placeholder="0–5"></label>
+      <label class="field">Nitrate (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="no3" placeholder="0–50"></label>
+    </div>
+    <p class="muted">Leave a box empty if you did not test it.</p>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="problemDialog" class="glass">
+  <form method="dialog" id="problemForm">
+    <h2 id="pbTitle">Log a problem</h2>
+    <div class="fields">
+      <label class="field span2">When<input type="datetime-local" id="pbWhen" required></label>
+      <label class="field">What kind<select id="pbKind"><option value="pest">Pest</option><option value="algae">Algae</option><option value="disease">Disease</option></select></label>
+      <label class="field">Which<select id="pbType"></select></label>
+      <label class="field">How bad<select id="pbSev"><option value="1">Mild</option><option value="2">Moderate</option><option value="3">Severe</option></select></label>
+    </div>
+    <label class="field hidden" id="pbOther">Name it<input type="text" id="pbName" maxlength="60"></label>
+    <p class="fixhint hidden" id="pbFix"></p>
+    <button type="button" class="btn ghost small hidden" id="pbSim">See it in the sandbox</button>
+    <label class="field">Where or who (optional)<input type="text" id="pbWhere" maxlength="60" placeholder="e.g. Left rock, the yellow tang"></label>
+    <label class="field">What you see<textarea id="pbNotes" rows="2" maxlength="600"></textarea></label>
+    <label class="field">Treatment<textarea id="pbTreat" rows="2" maxlength="600" placeholder="What you did, dose, start and stop dates"></textarea></label>
+    <label class="field">Outcome<select id="pbOut"><option value="ongoing">Ongoing</option><option value="improving">Improving</option><option value="worse">Getting worse</option><option value="resolved">Resolved</option><option value="lost">Animal lost</option></select></label>
+    <label class="field">Photo (optional, stays on this device)<input type="file" id="pbFile" accept="image/*"></label>
+    <div id="pbPhoto" class="pbphoto"></div>
+    <div class="row-gap end">
+      <button class="btn ghost hidden" value="delete" id="pbDel" formnovalidate>Delete</button>
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="photoView" class="glass photoview">
+  <form method="dialog"><img alt="Problem photo"><div class="row-gap end"><button class="btn">Close</button></div></form>
+</dialog>
+
+<button class="acclpill hidden" id="acclPill" aria-label="Acclimation timer: open it"></button>
+<div class="acclflash hidden" id="acclFlash" role="status" aria-live="assertive"></div>
 
 <div id="install" class="install glass hidden">
   <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>

@@ -1,6 +1,7 @@
 // ReefLive web: page UI around the shared Kotlin sim + renderer (kotlin/ReefLive-web.mjs).
 import { ReefLive } from './kotlin/ReefLive-web.mjs';
-import { startLive, setLiveVisible } from './live.js';
+import { startLive, setLiveVisible, previewInSim } from './live.js';
+import { initTracker } from './tracker.js';
 
 const live = ReefLive.getInstance();
 const $ = (id) => document.getElementById(id);
@@ -11,14 +12,14 @@ const store = {
 
 // ---------------------------------------------------------------- tabs
 let started = false;
-document.addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t && (t.classList.contains('tab') || t.classList.contains('tests') || t.classList.contains('back'))) showTab(t.dataset.tab); });
+document.addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t && (t.classList.contains('tab') || t.classList.contains('tests') || t.classList.contains('back'))) { if (t.dataset.sub) tracker.showSub(t.dataset.sub); showTab(t.dataset.tab); } });
 function showTab(name) {
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === name));
   document.body.classList.toggle('on-live', name === 'live');
   store.set('reeflive.tab', name);
   if (name === 'live') startLive(() => applyLatestReadings());
-  else renderParams();
+  else { renderParams(); tracker.render(); }
   setLiveVisible(name === 'live' && !document.hidden);
 }
 
@@ -95,9 +96,17 @@ function renderParams() {
 $('history').addEventListener('click', (e) => {
   const t = e.target.closest('[data-del]')?.dataset.del;
   if (!t || !confirm('Delete this test?')) return;
-  store.set('reeflive.readings', readings().filter((r) => String(r.t) !== t));
-  renderParams();
+  deleteReading(Number(t));
 });
+function deleteReading(t) {
+  store.set('reeflive.readings', readings().filter((r) => r.t !== t));
+  renderParams();
+}
+function addReading(r) {
+  store.set('reeflive.readings', readings().concat([r]));
+  renderParams();
+  applyLatestReadings();
+}
 
 $('logBtn').addEventListener('click', () => {
   const now = new Date();
@@ -115,13 +124,19 @@ $('logForm').addEventListener('submit', (e) => {
   const odd = Object.entries(values).map(([k, v]) => live.readingWarning(k, v)).filter(Boolean);
   if (odd.length && !confirm(`${odd.join('\n')}\n\nSave it anyway?`)) { e.preventDefault(); return; }
   const t = new Date($('logWhen').value).getTime() || Date.now();
-  store.set('reeflive.readings', readings().concat([{ t, values }]));
-  renderParams();
-  applyLatestReadings();
+  addReading({ t, values });
 });
 
-$('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ app: 'ReefLive', version: 1, readings: readings() }, null, 2)], { type: 'application/json' });
+// ---------------------------------------------------------------- cycle tracker, acclimation timer, problem log (tracker.js)
+const tracker = initTracker({
+  live, store, readings, addReading, deleteReading,
+  // "See it in the sandbox": the matching preset plays on a pretend copy of the tank
+  onPreview: (link) => { showTab('live'); previewInSim(link); },
+  openTracker: (sub) => { tracker.showSub(sub); showTab('params'); },
+});
+
+$('exportBtn').addEventListener('click', async () => {
+  const blob = new Blob([JSON.stringify({ app: 'ReefLive', version: 2, readings: readings(), tracker: await tracker.backup() }, null, 2)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `reeflive-backup-${new Date().toISOString().slice(0, 10)}.json` });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -134,6 +149,7 @@ $('importFile').addEventListener('change', async (e) => {
     const incoming = Array.isArray(data.readings) ? data.readings : [];
     const seen = new Set(readings().map((r) => r.t));
     store.set('reeflive.readings', readings().concat(incoming.filter((r) => r && r.t && r.values && !seen.has(r.t))));
+    if (data.tracker) await tracker.restore(data.tracker);
     renderParams();
     applyLatestReadings();
   } catch { alert('That file is not a ReefLive backup.'); }
@@ -146,4 +162,5 @@ if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone && !store.get('r
 $('installClose').addEventListener('click', () => { $('install').classList.add('hidden'); store.set('reeflive.installHint', true); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+tracker.showSub(tracker.sub());
 showTab(store.get('reeflive.tab', 'live'));
