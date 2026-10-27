@@ -7,6 +7,7 @@ import android.content.res.AssetManager
 import android.opengl.GLES30
 import android.view.MotionEvent
 import android.view.View
+import com.reeflive.app.render.AdaptiveQuality
 import com.reeflive.app.render.RenderQuality
 import com.reeflive.app.render.TankRenderer
 import com.reeflive.app.render.TankViewListener
@@ -269,18 +270,29 @@ object ReefLive {
                 tryBase = mean; tryStep = scaleStep; tryQuality = current; trySteps = 0
             }
             if (scaleStep < floorStep()) { scaleStep++; trySteps++; floorWindows = 0 }
-            else if (auto && current != RenderQuality.LOW && ++floorWindows >= FLOOR_WINDOWS) {
-                val from = cap(current) * SCALES[scaleStep]
-                val v = RenderQuality.entries[current.ordinal + 1]
-                // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
-                setPicture(v, SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from + 1e-6 } ?: SCALES.size - 1)
-                steppedDown = true; trySteps++
+            else if (auto && ++floorWindows >= FLOOR_WINDOWS) {
+                floorWindows = 0
+                val r = renderer
+                val relief = r?.relief ?: AdaptiveQuality.MAX_RELIEF
+                // at the floor: first shed effects at runtime (TankRenderer.relief: no reload, no hitch), then a preset
+                if (r != null && relief < (if (current == RenderQuality.LOW) AdaptiveQuality.MAX_RELIEF else RELIEF_BEFORE_PRESET)) {
+                    r.relief = relief + 1; grace = SWITCH_GRACE
+                } else if (current != RenderQuality.LOW) {
+                    val from = cap(current) * SCALES[scaleStep]
+                    val v = RenderQuality.entries[current.ordinal + 1]
+                    r?.relief = 0
+                    // keep about the pixel count the floor had, so the cheaper preset is not straight away slowed by more pixels
+                    setPicture(v, SCALES.indices.firstOrNull { cap(v) * SCALES[it] <= from + 1e-6 } ?: SCALES.size - 1)
+                    steppedDown = true; trySteps++
+                }
             }
         } else {
             tryBase = -1.0; floorWindows = 0
             if (mean >= FAST_DT) { goodWindows = 0; return }
             if (++goodWindows < GOOD_WINDOWS) return
             goodWindows = 0
+            // effects come back before sharpness
+            renderer?.let { if (it.relief > 0) { it.relief--; return } }
             if (scaleStep > 0) { scaleStep--; return }
             // full resolution and still fast: a preset an earlier, slower visit settled on can come back up
             if (auto && !steppedDown && current != RenderQuality.HIGH) setPicture(RenderQuality.entries[current.ordinal - 1], 0)
@@ -359,7 +371,8 @@ object ReefLive {
         fun f(v: Double) = ((v * 10).roundToInt() / 10.0).toString()
         emit("onStats", "${(stFrames / stTime).roundToInt()} fps · worst ${(stWorst * 1000).roundToInt()} ms\n" +
             "sim ${f(stSim / stFrames)} ms · draw ${f(stDraw / stFrames)} ms\n" +
-            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}${if (auto) " (auto)" else ""}${if (frozen) " · held" else ""}")
+            "${c?.width}×${c?.height} (scale ${SCALES[scaleStep]}) · ${current.name.lowercase()}${if (auto) " (auto)" else ""}${if (frozen) " · held" else ""}" +
+            "${renderer?.relief?.takeIf { it > 0 }?.let { " · shed $it" } ?: ""}")
         stFrames = 0; stTime = 0.0; stSim = 0.0; stDraw = 0.0; stWorst = 0.0
     }
 
@@ -560,6 +573,7 @@ object ReefLive {
         val v = parseQuality(q) ?: return
         goodWindows = 0; floorWindows = 0; tryBase = -1.0; frozen = false; steppedDown = false
         windowTime = 0.0; windowFrames = 0
+        renderer?.relief = 0
         if (v != current) { current = v; renderer?.setQuality(v); grace = SWITCH_GRACE }
         scaleStep = 0
         resize()
@@ -708,6 +722,8 @@ object ReefLive {
     private const val FAST_DT = 1.0 / 57
     private const val GOOD_WINDOWS = 4
     private const val FLOOR_WINDOWS = 3
+    /** Runtime relief steps (TankRenderer.relief) tried at the resolution floor before a preset is dropped (a reload). */
+    private const val RELIEF_BEFORE_PRESET = 2
     private const val START_GRACE = 8.0
     private const val SWITCH_GRACE = 4.0
 }

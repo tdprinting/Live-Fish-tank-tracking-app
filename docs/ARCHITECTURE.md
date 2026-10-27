@@ -402,7 +402,7 @@ Why not Filament: Filament ships on Maven Central (fine), but every custom look 
 
 | Class | Responsibility |
 |---|---|
-| `TankGlView : GLSurfaceView` | EGL config (RGBA8, depth 24, no stencil, MSAA 0 at Low, 2x at Medium, 4x at High), `setEGLContextClientVersion(3)`, `RENDERMODE_CONTINUOUSLY` while resumed, `TouchController` attached |
+| `TankGlView : GLSurfaceView` | EGL config (RGBA8, depth 24, no stencil, MSAA 0 at Low, 2x at Medium, 4x at High), `setEGLContextClientVersion(3)`, `RENDERMODE_WHEN_DIRTY` with frames requested by a Choreographer `FramePacer` (cap 60, Low 30, 30 in battery saver; none while paused, hidden or under the microscope), render buffer `renderScale` of the view via `SurfaceHolder.setFixedSize` (§8.7), `TouchController` attached (touches scaled to buffer px) |
 | `TankRenderer : GLSurfaceView.Renderer` | owns `Scene`, `FrameClock`, calls `Simulation.step` on the sim thread's snapshot; draw order §8.6 |
 | `GlbLoader` | parses GLB (JSON chunk via `org.json`, BIN chunk), supports: meshes with POSITION/NORMAL/TEXCOORD_0/COLOR_0, indexed uint16/uint32, materials (baseColorFactor, baseColorTexture, metallic/roughness factors, emissiveFactor, `extras` dictionary), node hierarchy with TRS, images embedded as PNG/WebP in bufferViews (decoded with `BitmapFactory`), node/mesh `extras` (we use `extras.part` = "body"/"fin"/"eye"/"polyp" and `extras.anchor`). No skins, no animations, no KHR extensions required (KHR_materials_emissive_strength optional). |
 | `Mesh` | VAO + VBO (interleaved pos3 nrm3 uv2 col4 + extra attribute `aSpine` float (0..1 along body, baked into COLOR_0.a by the Blender exporter) ), IBO, draw(range) |
@@ -508,6 +508,17 @@ Color management: all lighting in linear space; final `pow(1/2.2)` + ACES-ish to
 Target: ≤ 45 draw calls, ≤ 140k triangles on screen.
 
 ### 8.7 Performance budget (mid-range phone, 1080p, Medium)
+- **Frame budget (Android, `perf/render`).** Settings → Live Tank → Picture: Performance (LOW) / Balanced (MEDIUM,
+  default) / Quality (HIGH), Auto picture (on by default) and Show frame rate (`DebugHud`). Each preset renders to a
+  buffer the display scales up: Quality 1.0× of the view (≤ 2.4 MP), Balanced 0.75× (≤ 1.3 MP), Performance 0.6×
+  (≤ 0.75 MP), and caps frames at 60 (Performance 30; any preset 30 in battery saver). Auto (`AdaptiveQuality`, fed each
+  frame interval on the GL thread) steps down a ladder while frames miss the cap: render scale ×0.88, ×0.77, then
+  `TankRenderer.relief` 1 (fish out of the shadow map, half the contact shadows and snow), scale ×0.67, relief 2 (one
+  shading level cheaper via `uQuality`, no light shafts), relief 3 (two levels cheaper, no shadow map or contact
+  shadows, a quarter of the snow, half the particles), scale ×0.56; it climbs back when frames hold the cap. Nothing on
+  the ladder reloads models or shaders. The web's dynamic resolution (web/Main.kt) uses the same relief at its floor
+  before dropping a preset. Animals wholly off screen are culled (`Frustum`, a sphere from the spine), and fish switch
+  to LOD1 at 60 / 45 / 32 cm on High / Medium / Low.
 - Fish LOD0 ≤ 5k tris each (eel 6k), LOD1 (camera > 60 cm) 1.5k. Rock 40k, sand 2k, corals 25k total + polyps instanced (GSP 1200 instances × 24 tris = 29k; zoa 250 × 36; clove 300 × 30; Kenya tufts 600 × 12). Total ≈ 130k tris.
 - Textures: rock 2048² albedo + 1024² normal/roughness (ETC2/ASTC not required; PNG decoded to RGBA8, mipmapped), fish 1024² each (9 → ~36 MB VRAM uncompressed; acceptable; Low quality downsamples to 512²).
 - Frame target: 60 fps High-end, 30–45 fps mid-range at Medium; Low disables shafts, bloom, normal maps, halves particles, MSAA 0.
