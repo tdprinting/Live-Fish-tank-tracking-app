@@ -32,7 +32,9 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
         val o = c.o
         val k = o.brainKind
         return when (o.heat.stage) {
-            Stage.NORMAL, Stage.DEATH -> 0.0
+            Stage.NORMAL -> 0.0
+            // death throes: a fish spasms on its side where it lies (HeatModel.SPASM_SEC); inverts die at once
+            Stage.DEATH -> if (o.isFish) 1.0 else 0.0
             Stage.AGITATED -> when {
                 o.isFish -> if (HeatModel.hidesLow(k)) 0.0 else 0.85
                 HeatModel.climbsOut(k) || HeatModel.isSnail(k) -> 0.85
@@ -100,7 +102,8 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
                 o.finClamp = max(o.finClamp, 0.8)
                 o.mouth = max(o.mouth, 0.4 + 0.4 * sin(c.t * 9))
             }
-            else -> loe(c, out)
+            Stage.LOE -> loe(c, out)
+            else -> loe(c, out, throes = true)
         }
     }
 
@@ -110,11 +113,15 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
         return c.safe(Vec3(cover.x, c.rock.sandTopCm + 0.3 * c.L + 0.6, cover.z), 0.6 * c.o.collisionLength)
     }
 
-    /** On its side, carried by the flow; a 1–3 s burst every 30–90 s, kept low (08 §2 stage 4). */
-    private fun loe(c: Ctx, out: SteerIntent) {
+    /**
+     * Rolled 60–90° onto its side, carried by the flow, sinking; a 1–3 s burst every 30–90 s, kept low (08 §2
+     * stage 4). In the death throes ([throes], stage 5) there are no bursts: the body jerks in spasms where it lies
+     * (drawn by the renderer from [com.reeflive.core.sim.Organism.spasm]).
+     */
+    private fun loe(c: Ctx, out: SteerIntent, throes: Boolean = false) {
         val o = c.o
         val r = c.rock
-        if (c.t > nextBurst && burstUntil < c.t) {
+        if (!throes && c.t > nextBurst && burstUntil < c.t) {
             burstUntil = c.t + c.rng.range(1.0, 3.0)
             nextBurst = burstUntil + c.rng.range(30.0, 90.0)
             burstDir = Vec3.rotateAbout(horizontalHeading(o.heading), Vec3.Y, c.rng.signed() * 2.5)
@@ -135,9 +142,12 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
         val clear = 0.25 * o.collisionLength
         if (r.sdf.dist(next) < clear) next = r.sdf.project(next, clear)
         val h = horizontalHeading(o.heading)
-        out.place(next, h, (h cross Vec3.Y).normalized(Vec3.Z), 40.0)
+        // not lying flat: the roll rocks slowly between ~65° and ~85° as the flow carries it
+        val roll = LOE_ROLL + 0.17 * sin(c.t * 0.35 + o.appendagePhase)
+        out.place(next, h, Vec3.rotateAbout(Vec3.Y, h, roll), 40.0)
         out.ampMul = 0.1; out.tailMul = 0.2; out.pectoral = 0.0
-        o.mouth = max(o.mouth, 0.6)
+        // gaping in the death throes (08 §2 stage 5)
+        o.mouth = max(o.mouth, if (throes) 0.9 else 0.6)
         o.finClamp = max(o.finClamp, 0.5)
     }
 
@@ -200,6 +210,9 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
     }
 
     companion object {
+        /** Mean LOE roll onto the side (rad, ~75°; research 08 §2 stage 4: "rolls on side, cannot right"). */
+        const val LOE_ROLL = 1.31
+
         /**
          * Abstract mode: a fish at LETHARGIC or worse lies on the bottom below its rest spot, shrimp and
          * snails on the sand. Returns false when the normal rest pose applies.

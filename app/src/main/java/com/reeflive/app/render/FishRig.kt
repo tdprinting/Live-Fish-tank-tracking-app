@@ -26,6 +26,12 @@ class FishRig(val id: String) {
     var gill = 0f; var gillRate = 1f; var desat = 0f; var ich = 0f; var thin = 0f; var eyeCloud = 0f
     /** Skin shade −1 pale .. +1 dark (shader uTone). */
     var tone = 0f
+    /**
+     * Sickness (core OrganismPose, SIMULATION §3.5): heat gasping 0..1 and death-throe spasms 0..1 (fish.vert uSick),
+     * and the disease skin signs velvet, fin rot, HLLE and mucus 0..1 (fish.frag uSkin).
+     */
+    var gasp = 0f; var spasm = 0f
+    var velvet = 0f; var finRot = 0f; var hlle = 0f; var mucus = 0f
     var scale = 1f; var eyeYaw = 0f; var appendage = 0f; var extension = 1f; var mouth = 0f
     var alive = true; var visible = true; var posture = 0
     /** Fairy wrasse: male flash display 0..1 (fins flared, colours up); mucus cocoon 0..1 around a sleeping fish. */
@@ -81,6 +87,8 @@ class FishRig(val id: String) {
         pectoral = lerp(pa.pectoral, b.pectoral, t); finClamp = lerp(pa.finClamp, b.finClamp, t); finFold = lerp(pa.finFold, b.finFold, t)
         gill = lerp(pa.gill, b.gill, t); gillRate = lerp(pa.gillRate, b.gillRate, t)
         desat = lerp(pa.desat, b.desat, t); tone = lerp(pa.tone, b.tone, t); ich = lerp(pa.ich, b.ich, t); thin = lerp(pa.thin, b.thin, t)
+        gasp = lerp(if (pa.heatStage == GASPING_STAGE) 1f else 0f, if (b.heatStage == GASPING_STAGE) 1f else 0f, t); spasm = lerp(pa.spasm, b.spasm, t)
+        velvet = lerp(pa.velvet, b.velvet, t); finRot = lerp(pa.finRot, b.finRot, t); hlle = lerp(pa.hlle, b.hlle, t); mucus = lerp(pa.mucus, b.mucus, t)
         eyeCloud = lerp(pa.eyeCloud, b.eyeCloud, t); scale = lerp(pa.scale, b.scale, t).coerceAtLeast(0.1f)
         eyeYaw = lerp(pa.eyeYaw, b.eyeYaw, t); appendage = lerpPhase(pa.appendagePhase, b.appendagePhase, t, APPENDAGE_WRAP)
         extension = lerp(pa.extension, b.extension, t); mouth = lerp(pa.mouth, b.mouth, t)
@@ -122,6 +130,7 @@ class FishRig(val id: String) {
         }
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = 0f
         pectoral = 0.6f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; tone = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
+        gasp = 0f; spasm = 0f; velvet = 0f; finRot = 0f; hlle = 0f; mucus = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
         alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
@@ -139,6 +148,7 @@ class FishRig(val id: String) {
         }
         phase = p.swimPhase; amp = p.amp; waveLen = p.waveLen; appendage = p.appendage
         pectoral = 0f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; tone = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
+        gasp = 0f; spasm = 0f; velvet = 0f; finRot = 0f; hlle = 0f; mucus = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
         alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
         pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
@@ -195,6 +205,9 @@ class FishRig(val id: String) {
 
     companion object {
         fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
+
+        /** [OrganismPose.heatStage] of a fish gasping in the heat (core HeatModel.Stage.GASPING). */
+        private val GASPING_STAGE = com.reeflive.core.sim.HeatModel.Stage.GASPING.ordinal
 
         /** Phases are in cycles and may wrap (e.g. mod 1000); interpolate across the wrap. */
         fun lerpPhase(a: Float, b: Float, t: Float, period: Float = 1000f): Float {

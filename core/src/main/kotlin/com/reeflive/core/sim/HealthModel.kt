@@ -452,25 +452,50 @@ object HealthModel {
     private fun updateDeadVisuals(o: Organism) {
         o.symptoms.clear(); o.symptoms += Symptom.DEAD
         o.mood = Mood.DEAD
-        o.desat = 0.8; o.eyeCloud = 1.0; o.finClamp = 1.0; o.gill = 0.0; o.amp = 0.0
+        o.desat = 0.8; o.eyeCloud = 1.0; o.finClamp = 1.0; o.gill = 0.0; o.amp = 0.0; o.spasm = 0.0
     }
 
-    /** Visible heat-stage signs (research 08 §2, §7.2): erratic darting, bottom-sitting with clamped fins, LOE. */
+    /**
+     * Visible heat-stage signs (research 08 §2, §7.2): erratic darting; gasping (operculum pumping 2.5–3× baseline);
+     * bottom-sitting with clamped fins and a paler skin; LOE on the side; spasms in the death throes.
+     */
     private fun heatSigns(o: Organism, sym: MutableSet<Symptom>) {
+        o.spasm = 0.0
         val st = o.heat.stage
         if (st < HeatModel.Stage.AGITATED) return
         val k = o.brainKind
         when {
             HeatModel.isSnail(k) -> if (st >= HeatModel.Stage.LETHARGIC) sym += Symptom.DETACHED
             st == HeatModel.Stage.AGITATED -> if (o.isFish && !HeatModel.hidesLow(k)) sym += Symptom.ERRATIC
-            st == HeatModel.Stage.GASPING -> { sym += Symptom.RAPID_GILLS; o.gill = 1.0 }
+            st == HeatModel.Stage.GASPING -> { sym += Symptom.RAPID_GILLS; o.gill = 1.0; o.gillRate = max(o.gillRate, GASP_HZ) }
             st == HeatModel.Stage.LETHARGIC -> {
                 sym += Symptom.LETHARGY; sym += Symptom.RAPID_GILLS
-                if (o.isFish) { sym += Symptom.ON_BOTTOM; sym += Symptom.CLAMPED_FINS; o.finClamp = max(o.finClamp, 0.8); o.gill = 1.0 }
+                o.gillRate = max(o.gillRate, GASP_HZ * 0.8)
+                if (o.isFish) {
+                    sym += Symptom.ON_BOTTOM; sym += Symptom.CLAMPED_FINS; sym += Symptom.COLOR_FADE
+                    o.finClamp = max(o.finClamp, 0.8); o.gill = 1.0
+                }
             }
-            else -> { sym += Symptom.LOSS_OF_EQUILIBRIUM; sym += Symptom.LETHARGY; o.gill = max(o.gill, 0.8) }
+            else -> {
+                sym += Symptom.LOSS_OF_EQUILIBRIUM; sym += Symptom.LETHARGY; o.gill = max(o.gill, 0.8)
+                if (o.isFish) { sym += Symptom.CLAMPED_FINS; sym += Symptom.COLOR_FADE }
+                // death throes ([HeatModel.step] holds a fish at DEATH for [HeatModel.SPASM_SEC] before it dies)
+                if (st == HeatModel.Stage.DEATH && o.isFish) { sym += Symptom.SPASMS; o.spasm = 1.0 }
+            }
         }
     }
+
+    /** Pale skin of a fish lying on the bottom or on its side in the heat (research 08 §2 stage 3–4). */
+    private fun heatPallor(o: Organism): Double = if (!o.isFish) 0.0 else when {
+        o.heat.stage >= HeatModel.Stage.LOE -> 0.35
+        o.heat.stage == HeatModel.Stage.LETHARGIC -> 0.25
+        else -> 0.0
+    }
+
+    /** Opercular rate while gasping in the heat (Hz): 2.5–3× a resting reef fish's ~1 Hz (research 08 §2 stage 2). */
+    private const val GASP_HZ = 3.0
+    /** Gill rate of a fish with gill parasites or mucus-clogged gills (velvet, Brooklynella, flukes; 01 §4.3), Hz. */
+    private const val SICK_GILL_HZ = 2.4
 
     /** Symptom → render uniforms mapping (SIMULATION §3.5). */
     fun updateSymptoms(o: Organism, w: WaterState, ctx: HealthContext, events: MutableList<SimEvent>) {
@@ -503,31 +528,43 @@ object HealthModel {
         // prolonged ammonia clouds the eyes; clears slowly once water is good
         val sNh3 = o.envStress["nh3Free"] ?: 0.0
         o.eyeCloud = (o.eyeCloud + (if (sNh3 > 0.5) 0.0005 else -0.0002)).coerceIn(0.0, 0.7)
-        o.ich = 0.0
+        o.ich = 0.0; o.velvet = 0.0; o.finRot = 0.0; o.hllePits = 0.0; o.mucus = 0.0
+        // skin signs fade in from the visible threshold (renderer intensities, SIMULATION §3.5)
+        fun show(from: Double) = ((o.diseaseStage - from) / (1 - from) * 1.6 + 0.25).coerceIn(0.0, 1.0)
         when (o.disease) {
-            Disease.ICH, Disease.VELVET -> {
+            Disease.ICH -> {
                 if (o.diseaseStage > 0.15) { sym += Symptom.WHITE_SPOTS; sym += Symptom.FLASHING; o.ich = o.diseaseStage }
                 if (o.diseaseStage > 0.5) { sym += Symptom.LETHARGY; sym += Symptom.HIDING }
-                // velvet: gold dust, clamped fins, rapid breathing (01 §4.3)
-                if (o.disease == Disease.VELVET && o.diseaseStage > 0.15) { sym += Symptom.RAPID_GILLS; sym += Symptom.CLAMPED_FINS; o.finClamp = max(o.finClamp, 0.6) }
+            }
+            // velvet: fine gold dust, clamped fins, rapid breathing, flashing (01 §4.3)
+            Disease.VELVET -> if (o.diseaseStage > 0.15) {
+                sym += Symptom.GOLD_DUST; sym += Symptom.FLASHING; sym += Symptom.RAPID_GILLS; sym += Symptom.CLAMPED_FINS
+                o.velvet = show(0.15); o.finClamp = max(o.finClamp, 0.6); o.gillRate = max(o.gillRate, SICK_GILL_HZ); o.gill = max(o.gill, 0.8)
+                if (o.diseaseStage > 0.5) { sym += Symptom.LETHARGY; sym += Symptom.HIDING }
             }
             Disease.BROOKLYNELLA -> if (o.diseaseStage > 0.15) {
                 sym += Symptom.MUCUS; sym += Symptom.CLAMPED_FINS; sym += Symptom.RAPID_GILLS; o.finClamp = max(o.finClamp, 0.6); o.gill = 1.0
+                o.mucus = show(0.15); o.gillRate = max(o.gillRate, SICK_GILL_HZ)
                 if (o.diseaseStage > 0.5) sym += Symptom.GASPING
             }
             Disease.URONEMA -> if (o.diseaseStage > 0.15) {
                 sym += Symptom.ERRATIC; sym += Symptom.LESIONS
                 if (o.diseaseStage > 0.4) sym += Symptom.LETHARGY
             }
-            Disease.FLUKES -> if (o.diseaseStage > 0.15) { sym += Symptom.FLASHING; sym += Symptom.RAPID_GILLS }
-            Disease.HLLE -> if (o.diseaseStage > 0.2) sym += Symptom.LESIONS
-            Disease.BACTERIAL -> if (o.diseaseStage > 0.3) { sym += Symptom.LESIONS; sym += Symptom.LETHARGY }
+            Disease.FLUKES -> if (o.diseaseStage > 0.15) { sym += Symptom.FLASHING; sym += Symptom.RAPID_GILLS; o.gillRate = max(o.gillRate, SICK_GILL_HZ) }
+            Disease.HLLE -> if (o.diseaseStage > 0.2) { sym += Symptom.LESIONS; sym += Symptom.PITTED_SKIN; o.hllePits = show(0.2) }
+            // bacterial fin rot (Tenacibaculum, research 18 §5.4): fins fray from the edge, clamped; lesions later
+            Disease.BACTERIAL -> if (o.diseaseStage > 0.2) {
+                sym += Symptom.FRAYED_FINS; sym += Symptom.CLAMPED_FINS; o.finRot = show(0.2); o.finClamp = max(o.finClamp, 0.45)
+                if (o.diseaseStage > 0.3) { sym += Symptom.LESIONS; sym += Symptom.LETHARGY }
+            }
             null -> {}
         }
         o.thin = if (o.condition < 0.7) { sym += Symptom.THIN; ((0.7 - o.condition) / 0.3).coerceIn(0.0, 1.0) } else 0.0
         if (o.health < 0.3) { sym += Symptom.LETHARGY; desat += 0.3 }
         if (o.molting) sym += Symptom.MOLTING
         heatSigns(o, sym)
+        desat += heatPallor(o)
         // a bleaching giant clam pales to grey-white as its algae leave
         o.desat = max(desat, 0.9 * o.bleach).coerceIn(0.0, 1.0)
         o.mood = when {
