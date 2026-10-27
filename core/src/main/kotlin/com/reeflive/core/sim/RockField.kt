@@ -81,6 +81,7 @@ class DynamicRockSdf(
     private val widthCm: Double = TankDims.DEPTH_CM,
 ) : Sdf {
     private val all = ArrayList(basePieces)
+    private val basePiecesRef = basePieces
     /** The rockscape's rocks: those of the tank as built, then any added with the aquascape builder ([addPiece]). */
     val pieces: List<RockPieceDef> get() = all
     /** How many of [pieces] were baked into [base]. */
@@ -149,6 +150,14 @@ class DynamicRockSdf(
     /** Samples the base and labels the rock cells (≈ 0.1–0.3 s on a phone; only when dynamic rocks are on). */
     fun prepare() {
         if (prepared) return
+        val hit = prepCache.firstOrNull { it.base === base && it.pieces === basePiecesRef && it.length == lengthCm && it.height == heightCm && it.width == widthCm }
+        if (hit != null) {
+            nx = hit.nx; ny = hit.ny; nz = hit.nz; ox = hit.ox; oy = hit.oy; oz = hit.oz; cell = hit.cell
+            baseD = hit.d; label = hit.lab
+            pieceBox = if (all.size > baseCount) hit.box.copyOf(all.size) else hit.box.copyOf()
+            prepared = true
+            return
+        }
         val b = base
         if (b is SdfGrid) {
             ox = b.origin.x; oy = b.origin.y; oz = b.origin.z; cell = b.cell
@@ -178,6 +187,8 @@ class DynamicRockSdf(
             }
             if (i1 < 0) null else intArrayOf(i0, j0, k0, i1, j1, k1)
         }
+        prepCache.add(Prepared(base, basePiecesRef, lengthCm, heightCm, widthCm, nx, ny, nz, ox, oy, oz, cell, d, lab, pieceBox.copyOf()))
+        if (prepCache.size > PREP_KEEP) prepCache.removeAt(0)
         if (all.size > baseCount) pieceBox = pieceBox.copyOf(all.size)
         prepared = true
     }
@@ -430,7 +441,16 @@ class DynamicRockSdf(
         fun sample(x: Double, y: Double, z: Double) = trilinear(d, nx, ny, nz, ox, oy, oz, cell, x, y, z)
     }
 
+    /** What [prepare] makes of one base field: read-only afterwards, so every sim of the same tank shape shares it (a store's display tanks). */
+    private class Prepared(
+        val base: Sdf, val pieces: List<RockPieceDef>, val length: Double, val height: Double, val width: Double,
+        val nx: Int, val ny: Int, val nz: Int, val ox: Double, val oy: Double, val oz: Double, val cell: Double,
+        val d: FloatArray, val lab: ByteArray, val box: Array<IntArray?>,
+    )
+
     companion object {
+        private val prepCache = ArrayList<Prepared>()
+        private const val PREP_KEEP = 4
         /** Cells of margin around a piece's own grid and around the static rebuild. */
         const val PAD = 6
         private const val MAX_DIRTY_BOXES = 24

@@ -144,8 +144,9 @@ class DisplayBuild(private val tank: DisplayTank, private val species: SpeciesCa
         for (item in tank.items) species.ensure(item.listing.speciesId)
         yield(Unit)
         val setup = tank.setup
-        val sim = CustomTank.fresh(setup.kind.build, species, rock, 12 * 3600.0, seed)
-        yield(Unit)
+        var made: Simulation? = null
+        for (s in CustomTank.freshSteps(setup.kind.build, species, rock, 12 * 3600.0, seed)) { if (s != null) made = s; yield(Unit) }
+        val sim = made!!
         for (u in StoreDisplays.scapeSteps(sim, setup, seed.toInt())) yield(u)
         for (c in 0 until min(setup.light.gains.size, sim.lights.gains.size)) sim.lights.gains[c] = setup.light.gains[c]
         val plugs = if (setup.scape == DisplayScape.RACKS) BooleanArray(StoreDisplays.plugs.size) else null

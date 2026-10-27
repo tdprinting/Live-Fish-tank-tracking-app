@@ -8,14 +8,47 @@ const pic = (it) => it.pack ? '<span class="sp">🧴</span>' : `<img class="sp" 
 
 let my, say, cue, onLeave;
 let ui, data = null, at = 0, picked = null, bag = [], counterOpen = false, sellOpen = false, offer = null;
+// a visit set off but not at the door yet: the first display tank is still being built (ReefMyTank.visitReady)
+let pending = null;
 // the store's people talk in speech bubbles over their heads (render StorePeople; live.js styles .tbubble)
 const talk = { layer: null, els: [], raf: 0 };
+
+// ---- display tanks are built a few ms a frame (core DisplayBuild): their rockwork is a real physics settle, which in
+// one go froze the page for seconds. The street warms the first tank of the stores you may walk into; a store warms
+// the tanks beside the one you are at. Background slices skip frames that already run long.
+const LAST = 'reeflive.laststore';
+const warm = { raf: 0, last: 0 };
+function warmLoop(t) {
+  warm.raf = 0;
+  if (!my) return;
+  const waiting = pending != null;
+  const gap = t - warm.last;
+  warm.last = t;
+  let more = false;
+  try {
+    // someone waiting at the door gets most of the frame; background work only on frames that are not already slow
+    if (waiting) {
+      if (my.visitReady(9)) { const d = pending.d; pending = null; arrive(d); }
+      more = true;
+    } else if (gap < 24) more = my.buildStep(4); else more = my.building();
+  } catch (e) { console.error(e); more = false; if (waiting) abandon('The store is closed right now. Try again in a moment.'); }
+  if (more || pending) warm.raf = requestAnimationFrame(warmLoop);
+}
+function startWarm() { if (!warm.raf && my) warm.raf = requestAnimationFrame(warmLoop); }
 
 /** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
   let s = null;
   try { s = JSON.parse(my.stores()); } catch { s = null; }
   if (!s) return '';
+  try {
+    // the store you went to last first, then the others that are open
+    const open = s.stores.filter((f) => f.open).map((f) => f.id);
+    let last = null; try { last = localStorage.getItem(LAST); } catch { last = null; }
+    if (last && open.includes(last)) open.splice(open.indexOf(last), 1), open.unshift(last);
+    my.warmStores(open);
+    startWarm();
+  } catch (e) { console.error(e); }
   return `<p class="muted">Visit a fish store to buy new animals with your sand dollars.</p><div class="street">${s.stores.map((f) =>
     `<button class="front ${f.open ? '' : 'shut'}" data-store="${f.id}" ${f.open ? '' : 'aria-disabled="true"'}>
       <img src="stores/${f.id}.webp" alt="">
@@ -30,13 +63,24 @@ export function initStores(opts) {
   ui.className = 'hidden';
   (document.getElementById('live') || document.body).appendChild(ui);
   ui.addEventListener('click', onClick);
-  return { enter, active: () => data != null, pick, leave, walk: (i) => go(i), counter: () => openCounter(), trade: showTrade };
+  return { enter, active: () => data != null || pending != null, pick, leave, walk: (i) => go(i), counter: () => openCounter(), trade: showTrade };
 }
 
 function enter(id) {
+  if (data || pending) return;
   let d = null;
   try { d = JSON.parse(my.visit(id)); } catch { d = null; }
   if (!d) { say?.('That store is not open for you yet. Do your care jobs to level up!'); return; }
+  try { localStorage.setItem(LAST, id); } catch { /* private mode */ }
+  cue?.('TICK');
+  // the tank is built while My tank keeps running; when it is ready the walk in starts (arrive)
+  pending = { id, d };
+  say?.(`Heading to ${d.label}...`);
+  startWarm();
+}
+
+/** The store's first tank is ready and the 3D view is on the sidewalk: the shop UI comes up. */
+function arrive(d) {
   data = d; at = 0; picked = null; bag = []; counterOpen = false; sellOpen = false;
   document.body.classList.add('instore');
   ui.classList.remove('hidden');
@@ -47,6 +91,12 @@ function enter(id) {
   startTalk();
   // the bell on the door rings as the walk in from the sidewalk reaches it
   setTimeout(() => { if (data) cue?.('BELL'); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1500);
+}
+
+function abandon(msg) {
+  pending = null;
+  try { my.visitCancel(); } catch { /* nothing to cancel */ }
+  if (msg) say?.(msg);
 }
 
 function startTalk() {
@@ -123,6 +173,7 @@ function closeCounter() {
 }
 
 function leave(quiet) {
+  if (pending) { abandon(); if (!quiet) say?.('Back home. Come again soon!'); onLeave(); return; }
   if (!data) return;
   my.leaveStore();
   data = null; bag = []; picked = null; counterOpen = false; offer = null;
@@ -141,9 +192,17 @@ function go(i) {
   const n = data.tanks.length;
   at = (i + n) % n;
   picked = null;
-  my.showTank(at);
   cue?.('TICK');
   render();
+  // a tank that is not built yet (the row is built ahead as you walk along it) comes in a moment
+  const want = at;
+  const show = () => {
+    if (!data || want !== at) return;
+    let ok = false;
+    try { ok = my.showTank(want); } catch (e) { console.error(e); ok = true; }
+    if (!ok) { startWarm(); requestAnimationFrame(show); } else startWarm();
+  };
+  show();
 }
 
 /** An animal tapped in the display tank: its card. */

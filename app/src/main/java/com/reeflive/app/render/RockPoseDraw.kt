@@ -72,7 +72,7 @@ class RockPoseDraw(private val pieces: List<RockPieceDef> = DefaultScape.pieces)
 
     /** The mesh of a builder rock (made once per shape and seed). */
     fun builtMesh(r: BuiltRock): Mesh = builtMeshes.getOrPut(r.shape.ordinal.toLong() shl 32 or (r.seed.toLong() and 0xffffffffL)) {
-        val d = DryRockMesh.build(r.shape, r.seed)
+        val d = DryRockMesh.cached(r.shape, r.seed)
         Mesh.create(d.vertices, d.indices)
     }
 

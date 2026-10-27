@@ -17,6 +17,7 @@ import kotlin.math.sqrt
  */
 object DryRockMesh {
     private const val CELL = 0.5f
+    private const val MEMO_MAX = 96
     /** Deepest pit / erosion the noise cuts (cm). */
     private const val ERODE_CM = 0.9
     /** Box-projected uv: cm per texture tile. */
@@ -25,6 +26,21 @@ object DryRockMesh {
     class Data(val vertices: FloatArray, val indices: IntArray)
 
     fun build(shape: DryRockShape, seed: Int): Data = build(DryRock.def(shape, seed), seed)
+
+    private val memo = LinkedHashMap<Long, Data>()
+    private fun key(shape: DryRockShape, seed: Int) = shape.ordinal.toLong() shl 32 or (seed.toLong() and 0xffffffffL)
+
+    /** The shape's mesh data, made once per shape and seed (the last 96 are kept); a store's rocks are made ahead of the visit. */
+    fun cached(shape: DryRockShape, seed: Int): Data {
+        val k = key(shape, seed)
+        memo[k]?.let { return it }
+        val d = build(shape, seed)
+        memo[k] = d
+        if (memo.size > MEMO_MAX) { val it = memo.entries.iterator(); it.next(); it.remove() }
+        return d
+    }
+
+    fun isCached(shape: DryRockShape, seed: Int): Boolean = memo.containsKey(key(shape, seed))
 
     fun build(def: RockPieceDef, seed: Int): Data {
         val b = def.box

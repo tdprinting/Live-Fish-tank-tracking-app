@@ -10,6 +10,9 @@ import com.reeflive.core.custom.CustomTankSave
 import com.reeflive.core.sim.Stocking
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.BuyResult
+import com.reeflive.app.render.DryRockMesh
+import com.reeflive.core.custom.economy.DisplayBuild
+import com.reeflive.core.sim.BuiltRock
 import com.reeflive.core.custom.economy.DisplayTank
 import com.reeflive.core.custom.economy.Economy
 import com.reeflive.core.custom.economy.FishStore
@@ -333,9 +336,79 @@ object ReefMyTank {
     // ------------------------------------------------------------------ fish stores (docs/ECONOMY.md §5)
 
     private var visiting: FishStore? = null
+    /** The store being walked to: its first display tank is still being built ([visitReady]). */
+    private var plan: FishStore? = null
     private var tanks: List<DisplayTank> = emptyList()
     private var tankAt = -1
     private var display: Simulation? = null
+
+    // ---- display tank builds: a tank's rock settles over thousands of physics steps, so they are built a few ms per
+    // frame (DisplayBuild) while the keeper is on the street or in the aisle, and kept for the next visit.
+    /** A tank being built; once its sim is done its dry rocks' meshes are made (one a slice) so the first frame does not. */
+    private class Job(val key: String, val build: DisplayBuild) { var rocks: ArrayDeque<BuiltRock>? = null }
+    private val jobs = ArrayList<Job>()
+    private val built = LinkedHashMap<String, Simulation>()
+    /** Built display sims kept for the next visit (each is a small tank with its rock grids). */
+    private const val KEEP_BUILT = 6
+
+    private fun tankKey(store: FishStore, day: String, i: Int) = "${store.id}|$day|$i"
+    private fun seedFor(day: String, i: Int) = (day.hashCode() * 31 + i).toLong()
+
+    /** Queues display tank [i] of [list] (at [store]) to be built; [first] puts it ahead of the others. */
+    private fun want(store: FishStore, day: String, list: List<DisplayTank>, i: Int, first: Boolean) {
+        val tank = list.getOrNull(i) ?: return
+        val key = tankKey(store, day, i)
+        if (built.containsKey(key)) return
+        val queued = jobs.indexOfFirst { it.key == key }
+        if (queued >= 0) { if (first && queued > 0) jobs.add(0, jobs.removeAt(queued)); return }
+        val species = ReefLive.species ?: return
+        val rock = ReefLive.rock ?: return
+        val job = Job(key, DisplayBuild(tank, species, rock, seedFor(day, i)))
+        if (first) jobs.add(0, job) else jobs.add(job)
+    }
+
+    /**
+     * Builds queued display tanks for about [budgetMs] (the page calls it once a frame while [building]); true while more
+     * is queued. A finished sim waits in a small cache (the last few tanks, ahead of or after a visit).
+     */
+    fun buildStep(budgetMs: Double): Boolean {
+        val job = jobs.firstOrNull() ?: return false
+        val t0 = kotlin.time.TimeSource.Monotonic.markNow()
+        var ready = job.rocks != null
+        if (!ready) ready = job.build.step(budgetMs).also { done ->
+            if (done) job.rocks = ArrayDeque(job.build.sim!!.rockPhysics?.added?.mapNotNull { b ->
+                BuiltRock(b.pieces[0], b.shape ?: return@mapNotNull null, b.seed, 1f)
+            }.orEmpty())
+        }
+        val q = job.rocks
+        if (ready && q != null) {
+            while (q.isNotEmpty() && t0.elapsedNow().inWholeMicroseconds < budgetMs * 1000.0) { val r = q.removeFirst(); DryRockMesh.cached(r.shape, r.seed) }
+            if (q.isEmpty()) {
+                jobs.removeAt(0)
+                built[job.key] = job.build.sim!!
+                // oldest first out, but never the tank on screen
+                val old = built.entries.iterator()
+                while (built.size > KEEP_BUILT && old.hasNext()) { val e = old.next(); if (e.value !== display) old.remove() }
+            }
+        }
+        return jobs.isNotEmpty()
+    }
+
+    /** Display tanks are queued or being built. */
+    fun building(): Boolean = jobs.isNotEmpty()
+
+    /**
+     * The street is on screen: queues the first display tank of [storeIds] (the stores the keeper is likely to walk into,
+     * most likely first) to be built while the page is idle, so walking in does not wait.
+     */
+    fun warmStores(storeIds: Array<String>) {
+        val day = today()
+        for (id in storeIds) {
+            val store = FishStore.byId(id) ?: continue
+            if (economy?.canSee(store) != true) continue
+            want(store, day, StoreVisit.tanks(store, day), 0, first = false)
+        }
+    }
 
     /** The street: `{coins, level, stores:[{id, label, greeting, level, open}]}`. */
     fun stores(): String {
@@ -349,31 +422,51 @@ object ReefMyTank {
     }
 
     /**
-     * Walks into [storeId]: My tank pauses (it catches up on the way out) and the 3D view shows the first display tank.
-     * Returns the store's tanks `{store, label, greeting, tanks:[{title, animals, items:[...]}]}` ([visitItems]), or "null".
+     * Sets off for [storeId]: returns the store's tanks `{store, label, greeting, tanks:[{title, animals, items:[...]}]}`
+     * ([visitItems]), or "null". The first display tank is built a few ms per frame (the page calls [visitReady] each
+     * frame): My tank keeps running meanwhile, and the visit starts when it is done.
      */
     fun visit(storeId: String): String {
         val store = FishStore.byId(storeId) ?: return "null"
         val e = economy ?: return "null"
         val mine = sim ?: return "null"
         if (!e.canSee(store)) return "null"
+        val day = today()
+        plan = store
+        tanks = StoreVisit.tanks(store, day)
+        tankAt = -1
+        want(store, day, tanks, 0, first = true)
+        return visitJson(store, mine)
+    }
+
+    /**
+     * Builds the first display tank for [budgetMs]; when it is ready the keeper walks in: My tank pauses (it catches up on
+     * the way out) and the 3D view shows the tank. True once the visit has started.
+     */
+    fun visitReady(budgetMs: Double): Boolean {
+        val store = plan ?: return visiting != null
+        val mine = sim ?: return false
+        val e = economy ?: return false
+        buildStep(budgetMs)
+        if (!built.containsKey(tankKey(store, today(), 0))) return false
+        plan = null
         if (visiting == null) { save(); pausedAt = now() }
         visiting = store
-        tanks = StoreVisit.tanks(store, today())
-        tankAt = -1
         showTank(0)
         swap = StoreTrades.offer(store, mine, e, today())
         // walk in from the street, unless the page asks for less motion
         ReefLive.room.walkIn = !kotlinx.browser.window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup }, swap?.line)
-        return visitJson(mine)
+        return true
     }
 
-    /** The store's tanks with each animal's card: `{id, name, group, price, left, count, deal, wanted, level, locked, warning}`. */
-    fun visitItems(): String = sim?.let { visitJson(it) } ?: "null"
+    /** The keeper changed their mind before the door: forget the visit that was being set up. */
+    fun visitCancel() { plan = null; if (visiting == null) tanks = emptyList() }
 
-    private fun visitJson(mine: Simulation): String {
-        val store = visiting ?: return "null"
+    /** The store's tanks with each animal's card: `{id, name, group, price, left, count, deal, wanted, level, locked, warning}`. */
+    fun visitItems(): String = sim?.let { m -> (visiting ?: plan)?.let { visitJson(it, m) } } ?: "null"
+
+    private fun visitJson(store: FishStore, mine: Simulation): String {
         val e = economy ?: return "null"
         val day = today()
         return JSON.stringify(obj { o ->
@@ -398,16 +491,23 @@ object ReefMyTank {
         })
     }
 
-    /** Shows display tank [i] in the 3D view (one runs at a time). */
+    /**
+     * Shows display tank [i] in the 3D view (one runs at a time). False while it is still being built: it is queued first,
+     * and the page asks again next frame.
+     */
     fun showTank(i: Int): Boolean {
-        val t = tanks.getOrNull(i) ?: return false
+        val store = visiting ?: return false
+        if (tanks.getOrNull(i) == null) return false
         if (i == tankAt && display != null) return true
-        val species = ReefLive.species ?: return false
-        val rock = ReefLive.rock ?: return false
-        val d = StoreVisit.build(t, species, rock, (today().hashCode() * 31 + i).toLong())
+        val day = today()
+        val d = built[tankKey(store, day, i)]
+        if (d == null) { want(store, day, tanks, i, first = true); return false }
         display = d; tankAt = i
         if (ReefSandbox.isMine()) ReefLive.sim = d
         ReefLive.room.show(i)
+        // the neighbours next, so walking along the row does not wait
+        want(store, day, tanks, i + 1, first = false)
+        want(store, day, tanks, i - 1, first = false)
         return true
     }
 
@@ -492,8 +592,8 @@ object ReefMyTank {
 
     /** Walks out (the bag empties back onto the shelves): My tank catches up on the minutes spent shopping. */
     fun leaveStore() {
-        if (visiting == null) return
-        visiting = null; tanks = emptyList(); tankAt = -1; display = null; swap = null
+        if (visiting == null) { visitCancel(); return }
+        visiting = null; plan = null; tanks = emptyList(); tankAt = -1; display = null; swap = null
         ReefLive.room.leave()
         if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
     }
@@ -557,7 +657,7 @@ object ReefMyTank {
         previewKey = null
         ReefLive.homeRoom.look = RoomLook.DEFAULT
         // walking out of My tank from a store: the pause already started at the store's door
-        if (visiting != null) { visiting = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
+        if (visiting != null) { visiting = null; plan = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
         save(); pausedAt = now()
     }
 

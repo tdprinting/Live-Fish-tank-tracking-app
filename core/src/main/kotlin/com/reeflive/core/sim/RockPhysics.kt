@@ -132,8 +132,13 @@ class RockPhysics(
         member: (Int, Int, Int) -> Boolean, touch: (Int, Int, Int) -> Int,
     ) {
         val cv = cell * cell * cell
+        // membership of the box and one cell of margin, asked once per cell (the 26-neighbour probe below reads this)
+        val bi = box[0] - 1; val bj = box[1] - 1; val bk = box[2] - 1
+        val gx = box[3] - box[0] + 3; val gy = box[4] - box[1] + 3; val gz = box[5] - box[2] + 3
+        val mem = BooleanArray(gx * gy * gz)
+        for (k in 0 until gz) for (j in 0 until gy) for (i in 0 until gx) mem[(k * gy + j) * gx + i] = member(bi + i, bj + j, bk + k)
         var n = 0; var sx = 0.0; var sy = 0.0; var sz = 0.0
-        for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) if (member(i, j, k)) {
+        for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) if (mem[((k - bk) * gy + (j - bj)) * gx + (i - bi)]) {
             n++; sx += cx(i); sy += cy(j); sz += cz(k)
         }
         n = max(n, 1)
@@ -150,7 +155,8 @@ class RockPhysics(
         val qx = ArrayList<Double>(); val qy = ArrayList<Double>(); val qz = ArrayList<Double>()
         val rp = ArrayList<Int>()
         for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) {
-            if (!member(i, j, k)) continue
+            val at = ((k - bk) * gy + (j - bj)) * gx + (i - bi)
+            if (!mem[at]) continue
             val rx = cx(i) - b.comRest[0]; val ry = cy(j) - b.comRest[1]; val rz = cz(k) - b.comRest[2]
             ib[0] += mc * (ry * ry + rz * rz) + own; ib[4] += mc * (rx * rx + rz * rz) + own; ib[8] += mc * (rx * rx + ry * ry) + own
             ib[1] -= mc * rx * ry; ib[2] -= mc * rx * rz; ib[5] -= mc * ry * rz
@@ -159,7 +165,7 @@ class RockPhysics(
             var tch = -1
             for (dk in -1..1) for (dj in -1..1) for (di in -1..1) {
                 if (di == 0 && dj == 0 && dk == 0) continue
-                if (member(i + di, j + dj, k + dk)) continue
+                if (mem[at + (dk * gy + dj) * gx + di]) continue
                 val w = 1.0 / sqrt((di * di + dj * dj + dk * dk).toDouble())
                 ex += di * w; ey += dj * w; ez += dk * w
                 if (abs(di) + abs(dj) + abs(dk) == 1) face = true
