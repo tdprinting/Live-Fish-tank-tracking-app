@@ -32,6 +32,8 @@ class FishRig(val id: String) {
     var display = 0f; var cocoon = 0f
     /** Still riding in an acclimation bag: drawn, but not pickable. */
     var bagged = false
+    /** Blue tang colour change 0..1 (core Organism.blueDeepen; shader uBlueDeepen). */
+    var blueDeepen = 0f
     /** Locomotion (core MotionProfile): pectoral stroke phase (cycles) and sweep, C-start bend (−1..1), motion mode. */
     var pecPhase = 0f; var pecAmp = 0f; var bend = 0f; var motionMode = 0
     /**
@@ -89,7 +91,7 @@ class FishRig(val id: String) {
         alive = b.alive; visible = b.visible; posture = b.posture; bagged = b.bagged
         display = lerp(pa.display, b.display, t); cocoon = lerp(pa.cocoon, b.cocoon, t)
         pecPhase = lerpPhase(pa.pecPhase, b.pecPhase, t); pecAmp = lerp(pa.pecAmp, b.pecAmp, t)
-        bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode
+        bend = lerp(pa.bend, b.bend, t); motionMode = b.motionMode; blueDeepen = lerp(pa.blueDeepen, b.blueDeepen, t)
         lerpLimbs(if (pa.limbs.size == b.limbs.size) pa.limbs else b.limbs, b.limbs, t)
         limitBend(spine, frames, MAX_BEND_PER_SEGMENT, MAX_BEND_TOTAL, bendScratch)
         touched = true
@@ -126,7 +128,7 @@ class FishRig(val id: String) {
         pectoral = 0.6f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; tone = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
         alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
-        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
+        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0; blueDeepen = 0f
         limbCount = 0; fade = 0f
         envExp = 2f; envHead = 0.1f; envBrain = null
         touched = true
@@ -143,7 +145,7 @@ class FishRig(val id: String) {
         pectoral = 0f; finClamp = 0f; finFold = 0f; gill = 0f; gillRate = 1f; desat = 0f; tone = 0f; ich = 0f; thin = 0f; eyeCloud = 0f
         scale = p.scale; eyeYaw = 0f; extension = 1f; mouth = 0f
         alive = true; visible = true; posture = 0; bagged = false; display = 0f; cocoon = 0f
-        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0
+        pecPhase = 0f; pecAmp = 0f; bend = 0f; motionMode = 0; blueDeepen = 0f
         limbCount = 0
         envExp = 2f; envHead = 0.1f; envBrain = null
         touched = true

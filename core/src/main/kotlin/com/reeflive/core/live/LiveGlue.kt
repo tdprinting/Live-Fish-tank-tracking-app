@@ -131,6 +131,7 @@ data class LivePeek(
             is SimEvent.Molted -> "${e.id} molted"
             is SimEvent.CoralBleaching -> "${e.id} is bleaching"
             is SimEvent.CoralDied -> "${e.name} died: ${e.cause}"
+            is SimEvent.CoralOvergrown -> "${e.byName} are growing over ${e.name}"
             is SimEvent.AlgaeBloom -> "Algae bloom"
             is SimEvent.Gasping -> "${e.id} is gasping"
             is SimEvent.Eaten -> "${e.preyId} was eaten by ${e.predatorId}"

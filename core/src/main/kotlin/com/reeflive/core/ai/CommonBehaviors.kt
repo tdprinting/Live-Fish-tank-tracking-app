@@ -69,7 +69,18 @@ open class Wander(val b: SpeciesBrain, val weight: Double = 0.35, label: String 
  * Frenzy: on a fresh feed every diet-matching fish with hunger > 0.2 scores ≥ 0.6.
  */
 open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = "Feeding") : Behavior("feed", label) {
+    private val baseLabel = label
     protected var target: FoodParticle? = null
+    /** Displacement by rank (06 §3.2): the higher-ranked fish it gave way to, and until when it keeps clear of it. */
+    private var yieldTo: com.reeflive.core.sim.Organism? = null
+    private var yieldUntil = -1.0
+    /** Waiting at the edge of the dominant fish's feeding spot (no other food in reach). */
+    private var waiting = false
+    /** The particle a contest was last looked at for (the yield roll for a pair and particle is fixed: [contestRoll]). */
+    private var contested: FoodParticle? = null
+    private var contestAt = 0.0
+    override val label: String get() = if (waiting) "Waiting its turn at the food" else baseLabel
+    override val targetVerb: String? get() = if (waiting) "giving way to" else null
     private var retarget = 0.0
     private var lastFood = 0.0
     private var cachedScoreAt = -1.0
@@ -110,7 +121,9 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         return max(s * scoreMul(c, f) * app * b.mind.mood.feedFactor, night).coerceAtMost(0.93)
     }
 
-    override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null }
+    override fun enter(c: Ctx) { target = null; lastFood = c.t; retarget = 0.0; bestFor = null; waiting = false }
+
+    override fun exit(c: Ctx) { c.o.feedingOn = null; waiting = false }
 
     protected fun roused(c: Ctx): Boolean = rousedBy(c, b)
 
@@ -131,6 +144,61 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
 
         /** Multiplier on a night-rest score: it steps aside while a night feeding has a hungry fish up. */
         fun nightRestDamp(c: Ctx, b: SpeciesBrain): Double = if (c.o.hunger > 0.2 && rousedBy(c, b)) 0.6 else 1.0
+
+        /** Two fish go for the same particle when their targets are this close (06 §3.2: "within 2 cm"). */
+        @Ev(Evidence.DESIGN_ESTIMATE, "06 §3.2") const val CONTEST_CM = 2.0
+        /** The lower-ranked fish gives way this often (06 §3.2: 70 %) [I]. */
+        @Ev(Evidence.DESIGN_ESTIMATE, "06 §3.2") const val YIELD_P = 0.7
+        /** Ranks closer than this do not displace (two equals both go for it) [I]. */
+        const val RANK_MARGIN = 0.5
+        /** A rival counts only when it is this close to the particle (cm, plus 2 body lengths): it is at the food too [I]. */
+        const val CONTEST_REACH_CM = 10.0
+        /** A contest is looked at again this often (s): the rival may only now have gone for the same particle. */
+        const val CONTEST_EVERY_S = 0.5
+        /** Seconds a displaced fish keeps clear of the dominant one's spot before it tries again [I]. */
+        const val YIELD_S = 4.0
+        /** Radius of the dominant fish's spot: this (cm) plus 1.5 of its body lengths; the yielder waits at its edge [I]. */
+        const val SPOT_CM = 5.0
+
+        /** The spot a dominant [d] holds: food inside it is left to [d] while a yield lasts. */
+        fun spotRadius(d: com.reeflive.core.sim.Organism): Double = SPOT_CM + 1.5 * d.lengthCm
+
+        /** A holder at (or near) its own shelter keeps its nucleus rank; elsewhere it drops two places (06 §3.1). */
+        fun feedRank(o: com.reeflive.core.sim.Organism, sim: com.reeflive.core.sim.Simulation): Double =
+            PairMatrix.rankEff(o, sim, atNucleus = o.homePos == Vec3.ZERO || o.pos.distanceTo(o.homePos) < NUCLEUS_CM)
+        const val NUCLEUS_CM = 25.0
+
+        /**
+         * Deterministic 0..1 roll for the contest of [o] over particle [f] (a hash, not the brain's random stream: the
+         * contest must leave every existing random sequence as it was).
+         */
+        fun contestRoll(o: com.reeflive.core.sim.Organism, f: FoodParticle): Double {
+            var h = o.id.hashCode() * 0x9E3779B1.toInt() xor (f.id * 0x85EBCA6B.toInt())
+            h = h xor (h ushr 16); h *= 0x7FEB352D; h = h xor (h ushr 15); h *= 0x846CA68B.toInt(); h = h xor (h ushr 16)
+            return (h ushr 8) / 16777216.0
+        }
+    }
+
+    /**
+     * The higher-ranked fish [o] gives way to at particle [f] (06 §3.2), or null: a tankmate going for a particle within
+     * [CONTEST_CM] of [f], at the food itself, ranked at least [RANK_MARGIN] above [o]; [o] yields [YIELD_P] of the time.
+     */
+    private fun displacer(c: Ctx, f: FoodParticle): com.reeflive.core.sim.Organism? {
+        val o = c.o
+        if (!o.isFish) return null
+        var best: com.reeflive.core.sim.Organism? = null
+        var bestRank = 0.0
+        var myRank = Double.NaN
+        for (n in c.p.neighbors(f.pos, CONTEST_REACH_CM + 30.0)) {
+            if (n === o || !n.alive || !n.isFish) continue
+            val nf = n.feedingOn ?: continue
+            if (nf.eaten || nf.pos.distanceTo(f.pos) > CONTEST_CM) continue
+            if (n.pos.distanceTo(f.pos) > CONTEST_REACH_CM + 2 * n.lengthCm) continue
+            if (myRank.isNaN()) myRank = feedRank(o, c.sim)
+            val r = feedRank(n, c.sim)
+            if (r >= myRank + RANK_MARGIN && (best == null || r > bestRank)) { best = n; bestRank = r }
+        }
+        return best?.takeIf { contestRoll(o, f) < YIELD_P }
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
@@ -143,9 +211,36 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         if (f == null) {
             if (c.t - lastFood > 3) finished = true
             out.hover = true; out.wander = 0.2
+            o.feedingOn = null; waiting = false
             return
         }
         lastFood = c.t
+        // displacement by rank (06 §3.2): a fish going for a particle a higher-ranked tankmate is taking gives way, keeps
+        // clear of its spot for a few seconds and takes food elsewhere, or waits at the edge of the spot for its turn
+        if (c.sim.feedDisplacement && (f !== contested || c.t >= contestAt)) {
+            contested = f; contestAt = c.t + CONTEST_EVERY_S
+            val d = displacer(c, f)
+            if (d != null) {
+                if (yieldTo !== d || c.t >= yieldUntil) {
+                    o.counters.add(com.reeflive.core.sim.Counters.K.DISPLACED, c.t)
+                    d.counters.add(com.reeflive.core.sim.Counters.K.DISPLACE_GIVEN, c.t)
+                }
+                yieldTo = d; yieldUntil = c.t + YIELD_S
+            }
+        }
+        val y = yieldTo?.takeIf { c.t < yieldUntil && it.alive }
+        if (y == null) yieldTo = null
+        if (y != null && f.pos.distanceTo(y.pos) < spotRadius(y)) {
+            val r = roused(c)
+            val alt = c.findFood(radius, los = !r, roused = r) { accept(c, it) && it.pos.distanceTo(y.pos) >= spotRadius(y) }
+            if (alt != null) { f = alt; target = alt; contested = alt }
+            else {
+                waitAtEdge(c, out, y, f)
+                return
+            }
+        }
+        waiting = false
+        o.feedingOn = f
         val d = o.pos.distanceTo(f.pos)
         if (f !== bestFor) { bestFor = f; bestD = d; progressAt = c.t }
         else if (d < bestD - 1.0) { bestD = d; progressAt = c.t }
@@ -165,6 +260,22 @@ open class Feed(val b: SpeciesBrain, val radius: Double = 80.0, label: String = 
         out.faceDir = (f.pos - o.pos).normalized(o.heading)
         out.separation = 0.4
         if (d < 4) o.mouth = max(o.mouth, 0.5)
+    }
+
+    /** Hold station at the edge of [y]'s spot, on this fish's side, watching the food [f] (06 §3.2). */
+    private fun waitAtEdge(c: Ctx, out: SteerIntent, y: com.reeflive.core.sim.Organism, f: FoodParticle) {
+        val o = c.o
+        waiting = true
+        o.feedingOn = null
+        o.focusId = y.id
+        // waiting is not being stuck: the progress guard restarts when it goes for food again
+        bestFor = null; progressAt = c.t
+        val away = (o.pos - y.pos).let { v -> Vec3(v.x, 0.3 * v.y, v.z) }.normalized(o.heading * -1.0)
+        val edge = c.safe(y.pos + away * (spotRadius(y) + 1.0), 1.0)
+        out.seek(edge, o.cruiseSpeed, arrive = 2.0)
+        out.hover = true
+        out.faceDir = (f.pos - o.pos).normalized(o.heading)
+        out.separation = 0.4
     }
 }
 

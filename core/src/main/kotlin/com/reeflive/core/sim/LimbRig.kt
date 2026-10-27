@@ -286,6 +286,9 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
     var pick = 0.0
     /** Following a scent (antennules flick continuously). */
     var searching = false
+    /** Claw threat posture wanted 0..1 (a rival close by; set by the brain each tick), and its eased value (uLimb[14].x). */
+    var threat = 0.0
+    var threatS = 0.0; private set
 
     override fun step(o: Organism, dt: Double, speed: Double) {
         val L = max(o.lengthCm, 1.0)
@@ -331,7 +334,11 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
         flickAmt += (on - flickAmt) * min(1.0, dt * 8)
         flick = (flick + dt * FLICK_HZ) % 1000.0
         put(9, frac(flick), flickAmt * (1 - rFront), 0.0, rFront)
-        pick = 0.0; searching = false; travel = Vec3.ZERO
+        // threat posture: both chelae swing up and out toward the rival in about a third of a second, down again slowly;
+        // drawn by fish.vert from uLimb[14].x (the hermit's spare pose slot)
+        threatS += (threat * (1 - r) - threatS) * min(1.0, dt * (if (threat > threatS) 6.0 else 1.5))
+        out[THREAT_SLOT] = threatS.toFloat()
+        pick = 0.0; searching = false; threat = 0.0; travel = Vec3.ZERO
     }
 
     companion object {
@@ -350,6 +357,8 @@ class HermitLegs(seed: Long = 0L) : LimbRig(COUNT) {
         const val COUNT = 15
         /** Index in the pose of the legs-planted flag (0 or 1, set by [CrawlerSeat]). */
         const val PLANTED_FLAG = 14 * 4 + 3
+        /** Index in the pose of the claw threat posture 0..1 (see [threatS]). */
+        const val THREAT_SLOT = 14 * 4
     }
 }
 

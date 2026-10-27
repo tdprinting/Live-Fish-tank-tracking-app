@@ -224,8 +224,8 @@ void crabLimb(int k, inout vec3 local, inout vec3 n) {
 // Hermit crab (mode 5, core HermitLegs). Walking legs (k 0..3; uLimb = step phase, fore-aft stroke, foot lift,
 // withdrawal): forward walking in diagonal pairs, the foot swung forward lifted for the first 40 % of the cycle and
 // pushed back planted for the rest. Chelae (4 left, 5 right; pick phase, pick, walking support, withdrawal): dip to
-// the substrate and come back to the mouth, alternating. 6 = shell: rolls and bobs about its ground point with the
-// stride. 7 = shield and eyestalks (COLOR_0.g = 1: the stalks scan out of step). 8 antennae sweep, 9 antennules
+// the substrate and come back to the mouth, alternating; uLimb[14].x raises both in a threat posture. 6 = shell: rolls
+// and bobs about its ground point with the stride. 7 = shield and eyestalks (COLOR_0.g = 1: the stalks scan out of step). 8 antennae sweep, 9 antennules
 // flick. uLimb.w pulls every part but the shell toward uLimbPivot[7], just inside the aperture (the larger left
 // chela stays at the opening). Seated on a surface (core CrawlerSeat), uLimb[10..13] plant the walking legs on their
 // footholds, cap the chelae's dip at the surface and 6.w / 8.z / 9.z bend the eyestalks and feelers away from rock.
@@ -265,6 +265,10 @@ void hermitLimb(int k, inout vec3 local, inout vec3 n) {
         float down = A.y * (0.55 * w - 0.15) + 0.1 * A.z;
         // never below the surface under the claw (the sim's limit, uLimb[14].y left / .z right)
         if (planted) down = min(down, k == 4 ? uLimb[14].y : uLimb[14].z);
+        // threat posture (uLimb[14].x, core HermitLegs.threatS): both chelae swing up and out toward a rival
+        float threat = clamp(uLimb[14].x, 0.0, 1.0);
+        down = mix(down, -0.9, threat);
+        off.z += side * 0.12 * P.w * threat * t;
         off = rotAxis(off, vec3(0.0, 0.0, 1.0), -down);
         n = rotAxis(n, vec3(0.0, 0.0, 1.0), -down);
         off.x -= 0.25 * P.w * A.y * (1.0 - w) * t;

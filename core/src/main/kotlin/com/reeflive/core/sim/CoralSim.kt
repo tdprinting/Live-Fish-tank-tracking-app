@@ -75,6 +75,8 @@ class Coral(
     /** Chemical/sting pressure from neighbours (0..1) and the fraction smothered by an overgrowing mat. */
     var neighborStress = 0.0
     var overgrown = 0.0
+    /** [SimEvent.CoralOvergrown] was reported for the current smothering (re-armed once the mat is pushed back). */
+    var overgrownNoted = false
     /** Present when the tank was loaded (its neighbours' pressure then is its acclimated baseline). */
     var established = false
     var baseline: Pair<Double, Double>? = null

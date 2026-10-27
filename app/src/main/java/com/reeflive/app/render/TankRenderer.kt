@@ -1399,6 +1399,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uPick", r.mouth)
         p.set1f("uDesat", r.desat - DISPLAY_SATURATE * r.display)
         p.set1f("uTone", r.tone)
+        // blue tang colour change in a display or under acute social stress (06 §4.1.3): deeper blue, black marks fade
+        p.set1f("uBlueDeepen", r.blueDeepen)
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)
         p.set1f("uDead", if (r.alive) 0f else 1f)

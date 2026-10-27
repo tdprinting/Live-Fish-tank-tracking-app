@@ -23,6 +23,7 @@ uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
 uniform float uDead;
 uniform float uFade;         // microfauna: 0 full contrast .. 1 lost in the water (MicroCritterVisuals)
+uniform float uBlueDeepen;   // blue tang colour change 0..1 (core Organism.blueDeepen): deeper blue, black marks fade
 uniform vec4 uChroma;        // bobtail squid (core SquidRig): x chromatophore expansion, y passing-cloud strength, z light-organ glow, w 1 + cloud phase (0 = off)
 // Life stages (LifeStageVisuals.kt, additive): a second body texture painted on the same UV layout, mixed in by
 // uStageMix while a fish grows from one stage's pattern into the next (or changes sex). 0 = unchanged.
@@ -69,6 +70,15 @@ void main() {
         float k = clamp(uTone, -1.0, 1.0);
         if (k > 0.0) albedo *= 1.0 - k * (0.35 + 0.4 * blot);
         else albedo = mix(albedo, vec3(lum) * 0.5 + vec3(0.55, 0.52, 0.45) * 0.5, -k * 0.6);
+    }
+    if (uBlueDeepen > 0.001 && uPart < 1.5) {
+        // blue tang in a display or under acute social stress (research 06 §4.1.3, §5.4; S:ADW-tang): the blue skin
+        // deepens and saturates and the black marks fade toward navy. Blue = blue well above red and green; black = very dark.
+        float kb = clamp(uBlueDeepen, 0.0, 1.0);
+        float blueSkin = smoothstep(0.03, 0.15, albedo.b - max(albedo.r, albedo.g));
+        albedo = mix(albedo, albedo * vec3(0.35, 0.6, 1.3), kb * blueSkin);
+        float black = 1.0 - smoothstep(0.05, 0.16, max(albedo.r, max(albedo.g, albedo.b)));
+        albedo = mix(albedo, vec3(0.04, 0.09, 0.3), kb * black * 0.65);
     }
 #ifndef FIN
     // the mouth lining (fish.vert writes it to vColor.g for a model with a jaw): dark flesh, seen in shadow

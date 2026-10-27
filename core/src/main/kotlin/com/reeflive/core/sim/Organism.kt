@@ -116,6 +116,15 @@ class Organism(
     var spineFlare = 0.0
     var dorsalRaise = 0.0
     /**
+     * Blue tang colour change 0..1 (06 §4.1.3, §5.4 SPINE_FLARE; S:ADW-tang): the blue deepens and the black marks fade
+     * during a display or acute social stress. Set by [com.reeflive.core.ai.SpeciesBrain.preTick]; renderer `uBlueDeepen`.
+     */
+    var blueDeepen = 0.0
+    /** The food particle this fish is going for ([com.reeflive.core.ai.Feed]); tankmates read it to contest a particle (06 §3.2). */
+    var feedingOn: FoodParticle? = null
+    /** Sim time this animal last re-checked its territory after a rock rearrangement (06 §5.6 #20); −∞ never. */
+    var territoryAnchoredAt = -1e12
+    /**
      * Courtship / rivalry flash 0..1 (fairy wrasse males, research 42 §1): fins flared wide and colours at their
      * brightest. Set by the brain, eased off in [com.reeflive.core.ai.SpeciesBrain.preTick]; drawn by the renderer.
      */
@@ -362,6 +371,7 @@ class Organism(
             variant = variant, mouthbrooding = mouthbrooding,
             pecPhase = (pecPhase % 1000.0).toFloat(), pecAmp = pecAmp.toFloat(), bend = bend.toFloat(),
             motionMode = motionMode,
+            blueDeepen = blueDeepen.toFloat(),
             limbs = limbRig?.let { it.beforePose(this); it.out.copyOf() } ?: NO_LIMBS,
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),
@@ -419,7 +429,7 @@ class Organism(
  * kept as two half-hour buckets so the window is cheap to maintain. Totals are lifetime counts.
  */
 class Counters {
-    enum class K { CHASE_GIVEN, CHASE_RECEIVED, POSE, JOLT, FLASH, GASP, FEED, QUIVER, CLEAN_GIVEN, NEAR_MISS }
+    enum class K { CHASE_GIVEN, CHASE_RECEIVED, POSE, JOLT, FLASH, GASP, FEED, QUIVER, CLEAN_GIVEN, NEAR_MISS, DISPLACED, DISPLACE_GIVEN }
     private val cur = IntArray(K.entries.size)
     private val prev = IntArray(K.entries.size)
     val total = LongArray(K.entries.size)

@@ -307,12 +307,39 @@ object CoralGrowth {
                 val geo = aggressor.geoCache.getOrPut(victim.id) {
                     aggressor.patch?.distTo(victim.pos, 3.0 + extent(victim) * 0.5) ?: (aggressor.pos.distanceTo(victim.pos) - extent(victim))
                 }
-                val over = if (geo.isFinite()) ((aggressor.radiusCm - geo) / (2 * extent(victim)).coerceAtLeast(1.0)).coerceIn(0.0, 1.0) else 0.0
+                val reach = if (geo.isFinite()) ((aggressor.radiusCm - geo) / (2 * extent(victim)).coerceAtLeast(1.0)).coerceIn(0.0, 1.0) else 0.0
+                // a neighbour that fights back holds the mat's front off: stings and sweepers burn the edge back,
+                // terpenes stop it short (03 D; stony_corals.md §2)
+                val over = reach * (1 - holdBack(victim, aggressor, carbonEfficiency))
                 0.15 * over to over
             }
             else -> 0.0 to 0.0
         }
     }
+
+    /**
+     * How far [victim] holds the front of the GSP mat [gsp] off itself, 0 (none: mushrooms, SPS, clove and other
+     * soft corals are smothered) .. [HOLD_MAX]: zoas and palys sting back, Euphyllia and the LPS burn the edge with
+     * their sting (sweepers at full strength), aiptasia sting, Kenya trees and leathers poison it short (less with carbon).
+     */
+    fun holdBack(victim: Coral, gsp: Coral, carbonEfficiency: Double): Double {
+        if (victim.tissue < 0.05) return 0.0
+        val h = when (victim.kind) {
+            CoralKind.ZOA -> 0.7 * victim.tissue
+            CoralKind.EUPHYLLIA, CoralKind.LPS -> HOLD_STING * StonyCorals.pressure(victim, gsp, 0.0)
+            CoralKind.AIPTASIA -> 0.4 * victim.tissue
+            CoralKind.KENYA, CoralKind.LEATHER -> 0.35 * victim.tissue * (1 - 0.6 * carbonEfficiency)
+            else -> 0.0
+        }
+        return h.coerceIn(0.0, HOLD_MAX)
+    }
+
+    /** Sting pressure at contact to hold-back, and the most any neighbour holds a GSP front off (est.). */
+    @Ev(Evidence.DESIGN_ESTIMATE, "03 D; stony_corals.md §2") const val HOLD_STING = 2.5
+    const val HOLD_MAX = 0.95
+    /** Smothered share past which a colony counts as overgrown ([SimEvent.CoralOvergrown]); re-armed below [OVERGROWN_CLEAR]. */
+    const val OVERGROWN_NOTE = 0.5
+    const val OVERGROWN_CLEAR = 0.2
 
     /**
      * Sets [Coral.neighborStress] and [Coral.overgrown] for every colony, net of each established colony's baseline,

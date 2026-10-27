@@ -292,6 +292,8 @@ sealed class SimEvent {
     data class CoralSpawned(val parentId: String, val id: String, override val simTimeSec: Double) : SimEvent()
     /** A colony's tissue is gone ([CoralHealth]); [cause] is plain words for its main stress at the end. */
     data class CoralDied(val id: String, val name: String, val cause: String, override val simTimeSec: Double) : SimEvent()
+    /** A green star polyp mat [byName] has grown over half of colony [name] (CoralGrowth: GSP overgrowth, 03 D). */
+    data class CoralOvergrown(val id: String, val name: String, val byName: String, override val simTimeSec: Double) : SimEvent()
     /** The keeper dosed aiptasia [polypId] with [treatment]: [killed] false = it snapped shut into the rock in time. */
     data class AiptasiaTreated(val polypId: String, val treatment: AiptasiaTreatment, val killed: Boolean, override val simTimeSec: Double) : SimEvent()
     /** Breeding ([Brood], research 28): a clutch laid, larvae hatched (and whether the keeper is catching them), the nursery's larvae became fry, a baby moved to the display. */
@@ -373,6 +375,8 @@ data class OrganismPose(
     val limbs: FloatArray = NO_LIMBS,
     /** Still in an acclimation bag ([AcclimationBags]): drawn, but not pickable and not yet in the tank. */
     val bagged: Boolean = false,
+    /** Blue tang colour change 0..1 ([Organism.blueDeepen]): the blue deepens and the black marks fade (fish.frag). */
+    val blueDeepen: Float = 0f,
     /** Courtship flash 0..1 ([Organism.display]): fins flared and colours brightened. */
     val display: Float = 0f,
     /** Mucus cocoon 0..1 around a sleeping wrasse ([Organism.cocoon]). */
