@@ -2,6 +2,7 @@ package com.reeflive.core.sim
 
 import com.reeflive.core.model.LightPoint
 import com.reeflive.core.model.Livestock
+import com.reeflive.core.units.ParamUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,9 +37,8 @@ class RealityTest {
     @Test
     fun nutrientUnitFactorsRoundTrip() {
         val c = com.reeflive.core.units.UnitConverter
-        val u = com.reeflive.core.units.ParamUnit
-        assertEquals(79.2, c.convert(17.9, u.PPM_NO3_N, u.PPM), 0.2)
-        assertEquals(0.215, c.convert(0.07, u.PPM_PO4_P, u.PPM), 0.01)
+        assertEquals(79.2, c.convert(17.9, ParamUnit.PPM_NO3_N, ParamUnit.PPM), 0.2)
+        assertEquals(0.215, c.convert(0.07, ParamUnit.PPM_PO4_P, ParamUnit.PPM), 0.01)
     }
 
     @Test
