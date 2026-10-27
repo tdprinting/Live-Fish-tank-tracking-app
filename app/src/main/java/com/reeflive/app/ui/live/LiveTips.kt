@@ -23,7 +23,7 @@ object LiveTips {
         "Tap the cleaning magnet on the front glass, then rub the glass to clean it.",
         "Tank Health shows who is hungry and what the tank needs. One tap fixes it.",
         "Tap My tank at the top to build your very own tank. Your real tank stays safe.",
-        "Stuck? Press Back, or tap Hermie at the top for a tip.",
+        "Stuck? Tap the ⋯ button at the top, then What can I do?",
     )
 
     val sandbox = listOf(
