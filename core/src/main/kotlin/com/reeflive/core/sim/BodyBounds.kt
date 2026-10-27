@@ -87,14 +87,11 @@ class BodyBounds(
                     if (r != null) {
                         // (a station already at or in a buried rock foot stays where it is: lifting it would bring it up
                         // through the rock above the sand)
-                        // (nor its back up into a ledge just over it: a goby working the sand under an overhang)
                         val keep = SandContact.ROCK_KEEP
-                        val up = fr.reach(prof, i, l, 0.0, 1.0, 0.0)
-                        fun clear(m: Double) = r.distAt(x, y + m, z) >= keep && r.distAt(x, y + m + up, z) >= -TOP_TOL_CM
                         if (r.distAt(x, y, z) < keep) lift = 0.0
-                        else if (!clear(lift)) {
+                        else if (r.distAt(x, need, z) < keep) {
                             var lo = 0.0; var hi = lift
-                            repeat(5) { val m = 0.5 * (lo + hi); if (clear(m)) lo = m else hi = m }
+                            repeat(5) { val m = 0.5 * (lo + hi); if (r.distAt(x, y + m, z) >= keep) lo = m else hi = m }
                             lift = lo
                         }
                     }
@@ -149,7 +146,5 @@ class BodyBounds(
         const val MOUND_SLACK_CM = 6.0
         /** Across the burrow mouth (body lengths) a goby at its burrow may lie in the pocket it dug, below the sand. [I] */
         const val POCKET_BL = 0.4
-        /** How far a body's back may read into a ledge over it when lifted off the sand (cm; the 1 cm rock field). */
-        const val TOP_TOL_CM = 0.1
     }
 }

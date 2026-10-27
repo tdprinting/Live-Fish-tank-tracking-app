@@ -143,6 +143,6 @@ class BodyContact {
         /** Most a body is pushed per pair per pass (cm): a deep overlap clears over the passes instead of popping. */
         const val MAX_PUSH_CM = 1.0
         /** Passes over the pairs per tick (a body pushed into a third; a clown swinging its head 3 cm into its mate). */
-        const val PASSES = 4
+        const val PASSES = 8
     }
 }
