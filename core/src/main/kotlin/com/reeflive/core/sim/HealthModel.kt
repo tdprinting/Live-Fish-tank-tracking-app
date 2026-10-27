@@ -250,7 +250,7 @@ object HealthModel {
                 tr.lethalLo?.let { ll -> if (v <= ll) over = max(over, (ll - v) / max((tr.tolLo ?: tr.optLo ?: ll * 1.1) - ll, 1e-6)) }
             }
         }
-        for ((k, tr) in tolerancesFor(o.species)) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else if (k == "temp") acclimatedTemp(o, tr) else tr)
+        for ((k, tr) in o.tolerances) add(k, waterValue(k, w) ?: continue, if (hypo && o.isFish && k == "sg") Treatments.HYPO_FISH_SG else if (k == "temp") acclimatedTemp(o, tr) else tr)
         // hydrogen sulfide from stirred deep sand (research 18 §3.3)
         if (w.h2s > 0) add("h2s", w.h2s, if (o.isFish) H2S_FISH else H2S_INVERT)
         // sea cucumber saponins (research 45 §4): gill poison for fish, milder for inverts, the cucumber itself immune

@@ -21,9 +21,9 @@ interface Sdf {
 
     /** Outward unit normal (central differences). */
     fun gradient(p: Vec3, h: Double = 0.5): Vec3 {
-        val dx = dist(Vec3(p.x + h, p.y, p.z)) - dist(Vec3(p.x - h, p.y, p.z))
-        val dy = dist(Vec3(p.x, p.y + h, p.z)) - dist(Vec3(p.x, p.y - h, p.z))
-        val dz = dist(Vec3(p.x, p.y, p.z + h)) - dist(Vec3(p.x, p.y, p.z - h))
+        val dx = distAt(p.x + h, p.y, p.z) - distAt(p.x - h, p.y, p.z)
+        val dy = distAt(p.x, p.y + h, p.z) - distAt(p.x, p.y - h, p.z)
+        val dz = distAt(p.x, p.y, p.z + h) - distAt(p.x, p.y, p.z - h)
         return Vec3(dx, dy, dz).normalized(Vec3.Y)
     }
 
@@ -53,7 +53,7 @@ interface Sdf {
         val d = dir.normalized()
         var i = 0
         while (t < maxDist && i < 64) {
-            val s = dist(origin + d * t)
+            val s = distAt(origin.x + d.x * t, origin.y + d.y * t, origin.z + d.z * t)
             if (s < 0.05) return t
             t += max(s, 0.1)
             i++
@@ -175,10 +175,29 @@ class SdfGrid(
 
     override fun dist(p: Vec3): Double = distAt(p.x, p.y, p.z)
 
+    private val ox = origin.x
+    private val oy = origin.y
+    private val oz = origin.z
+
     override fun distAt(x: Double, y: Double, z: Double): Double {
-        val fx = (x - origin.x) / cell; val fy = (y - origin.y) / cell; val fz = (z - origin.z) / cell
+        val fx = (x - ox) / cell; val fy = (y - oy) / cell; val fz = (z - oz) / cell
         val x0 = floor(fx).toInt(); val y0 = floor(fy).toInt(); val z0 = floor(fz).toInt()
         val tx = fx - x0; val ty = fy - y0; val tz = fz - z0
+        if (x0 >= 0 && y0 >= 0 && z0 >= 0 && x0 < nx - 1 && y0 < ny - 1 && z0 < nz - 1) {
+            // all eight corners inside the grid (the common case): no clamping, the same arithmetic as below
+            val sy = nx; val sz = nx * ny
+            val a = (z0 * ny + y0) * nx + x0
+            val c00 = lerp(d[a].toDouble(), d[a + 1].toDouble(), tx)
+            val c10 = lerp(d[a + sy].toDouble(), d[a + sy + 1].toDouble(), tx)
+            val c01 = lerp(d[a + sz].toDouble(), d[a + sz + 1].toDouble(), tx)
+            val c11 = lerp(d[a + sz + sy].toDouble(), d[a + sz + sy + 1].toDouble(), tx)
+            var v = lerp(lerp(c00, c10, ty), lerp(c01, c11, ty), tz)
+            val ex = max(0.0, max(ox - x, x - (ox + (nx - 1) * cell)))
+            val ey = max(0.0, max(oy - y, y - (oy + (ny - 1) * cell)))
+            val ez = max(0.0, max(oz - z, z - (oz + (nz - 1) * cell)))
+            if (ex + ey + ez > 0) v += sqrt(ex * ex + ey * ey + ez * ez)
+            return v
+        }
         val c00 = lerp(at(x0, y0, z0).toDouble(), at(x0 + 1, y0, z0).toDouble(), tx)
         val c10 = lerp(at(x0, y0 + 1, z0).toDouble(), at(x0 + 1, y0 + 1, z0).toDouble(), tx)
         val c01 = lerp(at(x0, y0, z0 + 1).toDouble(), at(x0 + 1, y0, z0 + 1).toDouble(), tx)

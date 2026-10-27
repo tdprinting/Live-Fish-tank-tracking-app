@@ -183,27 +183,32 @@ class Steering(private val c: Ctx) {
             waddleVel = side * (sin(2 * PI * it.waddleHz * waddleT) * it.waddleAmp * L)
         }
         if (it.separation > 0) {
-            var sep = Vec3.ZERO
+            // (in scalars: sep += d / (dl * dl) * k, the same arithmetic without a Vec3 per neighbour)
+            var sx = 0.0; var sy = 0.0; var sz = 0.0
+            val px = o.pos.x; val py = o.pos.y; val pz = o.pos.z
             for (n in c.p.neighbors(o.pos, L * 2.5 + 6)) {
                 if (n === o) continue
                 if (!n.isFish) {
                     // a bubble-tip anemone's crown: fish steer around the stinging tentacles (its clowns nestle in)
                     if (n.brainKind == BrainKind.ANEMONE && o.isFish && n.alive && !c.sim.anemones.welcomes(n, o)) {
                         val r = 0.5 * n.lengthCm * n.extension.coerceAtLeast(0.45) + 0.5 * L
-                        val d = o.pos - n.pos
-                        val dl = d.length()
-                        if (dl in 1e-6..r) sep += d / (dl * dl) * (r * (1.5 - dl / r))
+                        val dx = px - n.pos.x; val dy = py - n.pos.y; val dz = pz - n.pos.z
+                        val dl = sqrt(dx * dx + dy * dy + dz * dz)
+                        if (dl in 1e-6..r) { val q = dl * dl; val k = r * (1.5 - dl / r); sx += dx / q * k; sy += dy / q * k; sz += dz / q * k }
                     }
                     continue
                 }
                 val r = 1.2 * (L + n.lengthCm) / 2
-                val d = o.pos - n.pos
-                val dl = d.length()
+                val dx = px - n.pos.x; val dy = py - n.pos.y; val dz = pz - n.pos.z
+                val dl = sqrt(dx * dx + dy * dy + dz * dz)
                 // full strength (r/dl) well inside, eased to zero across the edge (0.9 r → 1.1 r): the hard cut-off
                 // flicked two neighbours apart and back every tick as one crossed it
-                if (dl in 1e-6..(1 + SEP_EDGE) * r) sep += d / (dl * dl) * (r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r)))
+                if (dl in 1e-6..(1 + SEP_EDGE) * r) {
+                    val q = dl * dl; val k = r * min(1.0, ((1 + SEP_EDGE) * r - dl) / (2 * SEP_EDGE * r))
+                    sx += dx / q * k; sy += dy / q * k; sz += dz / q * k
+                }
             }
-            desired += sep * (cruise * 0.6 * it.separation)
+            desired += Vec3(sx, sy, sz) * (cruise * 0.6 * it.separation)
         }
         // Beat-and-glide (Videler & Weihs 1982): thrust surges during a bout of beats and the fish coasts in the glide.
         if (glideActive) desired *= 1.1 - 0.4 * glideMix
@@ -440,8 +445,8 @@ class Steering(private val c: Ctx) {
     private fun envNormal(p: Vec3): Vec3 {
         val r = c.rock
         val h = 0.4
-        fun f(q: Vec3) = r.envDist(q)
-        return Vec3(f(Vec3(p.x + h, p.y, p.z)) - f(Vec3(p.x - h, p.y, p.z)), f(Vec3(p.x, p.y + h, p.z)) - f(Vec3(p.x, p.y - h, p.z)), f(Vec3(p.x, p.y, p.z + h)) - f(Vec3(p.x, p.y, p.z - h))).normalized(Vec3.Y)
+        return Vec3(r.envDistAt(p.x + h, p.y, p.z) - r.envDistAt(p.x - h, p.y, p.z), r.envDistAt(p.x, p.y + h, p.z) - r.envDistAt(p.x, p.y - h, p.z),
+            r.envDistAt(p.x, p.y, p.z + h) - r.envDistAt(p.x, p.y, p.z - h)).normalized(Vec3.Y)
     }
 
     private fun crawl(o: Organism, it: SteerIntent, dt: Double) {

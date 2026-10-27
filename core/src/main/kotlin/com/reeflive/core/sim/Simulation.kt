@@ -207,7 +207,7 @@ class Simulation private constructor(
     /** Fish feces: guts, drifting and settled pellets, their fates (research 18_fish_waste; [WasteSystem]). */
     val waste = WasteSystem(rock, flow, sand, Rng(seed xor 0x1F3CE5L))   // own stream: forking [rng] would reshuffle every animal
     /** Single-occupant holes and who holds them (sim/RockHoles.kt): no two animals share a blenny hole or a small cave. */
-    val holeClaims = HoleClaims { it in organisms }
+    val holeClaims = HoleClaims { it.memberOf === this }
     /** Keeps bodies out of solid rock except in holes that fit them (SIMULATION §4.11). */
     val rockGuard = RockGuard(rock, { x, z -> sand.surfaceY(x, z) }, holeClaims)
     /** Whole bodies (mesh profiles) inside the glass and on the sand (SIMULATION §24.3). */
@@ -676,7 +676,7 @@ class Simulation private constructor(
 
     /** Called by the sim thread every wall tick (normally 1/20 s). */
     fun stepWall(dtWall: Double) {
-        drainCommands()
+        val hadCommands = drainCommands()
         feedSubWatch()
         submarine.step(dtWall, rock, sand)
         bags.stepWall(this, dtWall)
@@ -686,7 +686,9 @@ class Simulation private constructor(
         if (simDt <= 0) { latest = snapshot(); return }
         val dtB = min(simDt, MAX_BEHAVIOR_DT)
         advanceInternal(simDt, dtB)
-        latest = snapshot()
+        // the HUD reads the per-animal stats at 4 Hz: the running tank rebuilds them every STATS_EVERY_TICKS wall ticks
+        // (and at once after a command or when an animal is added, dies or leaves); poses and the rest stay per tick
+        latest = snapshot(reuseStats = !hadCommands)
     }
 
     /**
@@ -902,7 +904,7 @@ class Simulation private constructor(
         if (submarine.active) subSense.tick(this, dt, agentOf)
         // lights-on startle (SIMULATION §4.7)
         for (o in organisms.toList()) {
-            if (o !in organisms) continue   // eaten during this tick
+            if (o.memberOf !== this) continue   // eaten during this tick (Organism.memberOf: no list scan per animal)
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
@@ -910,7 +912,7 @@ class Simulation private constructor(
             // a leap at the surface flies the body; the brain waits until it is back in the water (JumpModel)
             if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
             val holder = o.heldBy
-            if (holder != null) { if (holder.alive && holder in organisms) continue else o.heldBy = null }
+            if (holder != null) { if (holder.alive && holder.memberOf === this) continue else o.heldBy = null }
             a.intent.reset()
             a.brain.preTick(a.ctx)
             if (o.leap != null) continue
@@ -1535,11 +1537,15 @@ class Simulation private constructor(
     }
 
     // ============================================================== commands
-    private fun drainCommands() {
+    /** Applies the queued commands; true when there were any. */
+    private fun drainCommands(): Boolean {
+        var any = false
         while (true) {
             val c = commands.poll() ?: break
             apply(c)
+            any = true
         }
+        return any
     }
 
     private fun apply(c: Command) {
@@ -2060,6 +2066,7 @@ class Simulation private constructor(
     private fun resetTo(w: WaterState, livestock: List<LivestockSeed>) {
         water = WaterSim(config.copy(), w.copy())
         setFlow(true)
+        for (o in organisms) o.memberOf = null
         organisms.clear(); agents.clear(); corals.clear(); food.clear(); moltShells.clear(); sandPiles.clear(); sand.reset(); invertEcology.reset(); shrimpBreeding.reset(); brood.reset(); touchMemory.clear()
         finger = null; flow.gusts.clear()
         submarine.reset(); subSense.clear(); bags.clear(); coralPicks.clear(); net.clear()
@@ -2098,6 +2105,7 @@ class Simulation private constructor(
         // research 51 §1 facts 24, 32-34: captive-bred mandarins (most sold now) often learn frozen food, wild ones seldom
         if (o.brainKind == BrainKind.MANDARIN) o.acceptsPrepared = rng.chance(0.5)
         organisms += o
+        o.memberOf = this
         val ctx = Ctx(this, o).also { it.p = perception }
         val brain = SpeciesBrains.create(ctx)
         agents[o] = Agent(ctx, brain)
@@ -2137,6 +2145,7 @@ class Simulation private constructor(
 
     fun removeOrganism(o: Organism) {
         organisms.remove(o)
+        if (o.memberOf === this && o !in organisms) o.memberOf = null
         agents.remove(o)
         perception.stations.removeAll { it.cleaner === o }
         perception.stations.forEach { if (it.client === o) it.release() }
@@ -2175,6 +2184,14 @@ class Simulation private constructor(
     }
 
     /**
+     * Pose level of detail from the renderer (organism id → N): an animal listed with N > 1 (off screen, or only a few
+     * pixels tall) has its [OrganismPose] rebuilt every N snapshots instead of every one; unlisted animals, and an empty
+     * map (the default), are posed every snapshot. Replace the whole map from any thread; the sim only reads it, and
+     * nothing in the simulation depends on it (poses are output only).
+     */
+    @Volatile var poseDetail: Map<String, Int> = emptyMap()
+
+    /**
      * The "what is it thinking" readout in [OrganismStats.thought] (ai/Thoughts.kt). Read-only: turning it off changes
      * nothing in the sim (ThoughtsTest), only the snapshot's words.
      */
@@ -2184,10 +2201,45 @@ class Simulation private constructor(
     /** Minutes until the lights go out (null while dark), from the last light update. */
     val minutesUntilLightsOff: Double? get() = cachedUntilOff
 
+    // ---- stats cache for the running tank ([stepWall]): the organisms and their alive flags it was built for
+    private var statsCache: List<OrganismStats>? = null
+    private var statsOrgs: Array<Organism?> = arrayOfNulls(0)
+    private var statsAlive = BooleanArray(0)
+    private var statsAge = 0
+    /** Whether the last [statsLive] rebuilt the stats (the life forms follow the same cadence). */
+    private var statsFresh = true
+    private var lifeFormsCache: Map<String, LifeForm>? = null
+
+    private fun lifeFormsLive(): Map<String, LifeForm> {
+        val c = lifeFormsCache
+        if (c != null && !statsFresh) return c
+        return organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) }.also { lifeFormsCache = it }
+    }
+
+    /** [statsAll], or the last one while it is under [STATS_EVERY_TICKS] old and the cast is the same. */
+    private fun statsLive(reuse: Boolean): List<OrganismStats> {
+        val cached = statsCache
+        val n = organisms.size
+        if (reuse && cached != null && statsAge < STATS_EVERY_TICKS && statsOrgs.size == n) {
+            var same = true
+            for (i in 0 until n) { val o = organisms[i]; if (statsOrgs[i] !== o || statsAlive[i] != o.alive) { same = false; break } }
+            if (same) { statsAge++; statsFresh = false; return cached }
+        }
+        statsFresh = true
+        val out = statsAll()
+        if (statsOrgs.size != n) { statsOrgs = arrayOfNulls(n); statsAlive = BooleanArray(n) }
+        for (i in 0 until n) { val o = organisms[i]; statsOrgs[i] = o; statsAlive[i] = o.alive }
+        statsCache = out
+        statsAge = 1
+        return out
+    }
+
     // life stage and sex per organism for the renderer / fish card (LifeStages.kt)
-    fun snapshot(): SimSnapshot =
-        buildSnapshot().copy(
-            lifeForms = organisms.filter { it.isFish }.associate { it.id to LifeStages.form(it) },
+    fun snapshot(): SimSnapshot = snapshot(reuseStats = false)
+
+    private fun snapshot(reuseStats: Boolean): SimSnapshot =
+        buildSnapshot(reuseStats).copy(
+            lifeForms = lifeFormsLive(),
             bareScape = bareScape,
             shape = shape,
             submarine = if (submarine.active) submarine.pose(subSense.reactions) else null,
@@ -2204,14 +2256,14 @@ class Simulation private constructor(
             else s.copy(organisms = s.organisms + bags.riderPoses(), bags = bags.poses(water.s.tempC, simTimeSec), bagHurry = bags.hurry, speed = bags.effectiveSpeed(speed))
         }
 
-    private fun buildSnapshot(): SimSnapshot {
+    private fun buildSnapshot(reuseStats: Boolean): SimSnapshot {
         val (xyz, kinds) = food.export()
         val evs = drainEvents()
         return SimSnapshot(
             simTimeSec = simTimeSec,
             lights = FloatArray(LightSchedule.CHANNELS) { lightCh[it].toFloat() },
             water = water.s.copy(),
-            organisms = organisms.map { it.toPose() },
+            organisms = poseDetail.let { lod -> if (lod.isEmpty()) organisms.map { it.toPose() } else organisms.map { it.snapshotPose(lod[it.id] ?: 1) } },
             corals = corals.map { it.toPose(simTimeSec) },
             food = xyz, foodKinds = kinds,
             algaeBloom = water.s.algaeHair.toFloat(),
@@ -2224,7 +2276,7 @@ class Simulation private constructor(
             speed = speed,
             lightIntensity = lightIntensity.toFloat(),
             dayPhase = lights.phaseLabel(simTimeSec),
-            stats = statsAll(),
+            stats = statsLive(reuseStats),
             tick = tickCount,
             abstractMode = abstractMode,
             moltShells = moltShells.map { it.first },
@@ -2327,6 +2379,8 @@ class Simulation private constructor(
         const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
+        /** The running tank's snapshot rebuilds the per-animal stats (captions, thoughts, relations) every this many wall ticks. */
+        const val STATS_EVERY_TICKS = 5
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35
         const val ABSTRACT_SPEED = 240.0

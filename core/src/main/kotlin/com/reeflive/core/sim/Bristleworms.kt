@@ -9,6 +9,7 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * The bristleworms you can see (research 42 §B, 17 §12): a handful of individuals drawn from the
@@ -396,6 +397,9 @@ class WormField(private val sim: Simulation, seed: Long) {
     private val st = arrayOfNulls<Vec3>(16)
     private val stN = arrayOfNulls<Vec3>(16)
     private val raw = arrayOfNulls<Vec3>(16)
+    private val smX = DoubleArray(16)
+    private val smY = DoubleArray(16)
+    private val smZ = DoubleArray(16)
 
     /**
      * The body laid along the head's trail, 16 stations head → tail, each with the surface normal it lies on and kept a
@@ -442,14 +446,22 @@ class WormField(private val sim: Simulation, seed: Long) {
             st[i] = p; stN[i] = n
         }
         // the up of each station: the surface normals along the body, smoothed over its neighbours
-        if (!caught) repeat(SMOOTH_PASSES) {
-            var a = stN[0]!!
-            for (i in 0 until 16) {
-                val b = stN[i]!!
-                val c = stN[min(15, i + 1)]!!
-                stN[i] = (a + b * 2.0 + c).normalized(b)
-                a = b
+        // ((a + b * 2 + c).normalized(b) per station, in scalars: twelve passes of Vec3s per worm per snapshot before)
+        if (!caught) {
+            val nx = smX; val ny = smY; val nz = smZ
+            for (i in 0 until 16) { val v = stN[i]!!; nx[i] = v.x; ny[i] = v.y; nz[i] = v.z }
+            repeat(SMOOTH_PASSES) {
+                var ax = nx[0]; var ay = ny[0]; var az = nz[0]
+                for (i in 0 until 16) {
+                    val bx = nx[i]; val by = ny[i]; val bz = nz[i]
+                    val k = min(15, i + 1)
+                    val x = ax + bx * 2.0 + nx[k]; val y = ay + by * 2.0 + ny[k]; val z = az + bz * 2.0 + nz[k]
+                    val l = sqrt(x * x + y * y + z * z)
+                    if (l >= 1e-9) { nx[i] = x / l; ny[i] = y / l; nz[i] = z / l }
+                    ax = bx; ay = by; az = bz
+                }
             }
+            for (i in 0 until 16) stN[i] = Vec3(nx[i], ny[i], nz[i])
         }
         for (i in 0 until 16) {
             val p = st[i]!!

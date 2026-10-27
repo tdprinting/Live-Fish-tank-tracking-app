@@ -55,14 +55,15 @@ data class SimSpecies(
      */
     val jumpRisk: Double = 0.0,
 ) {
-    val brainKind: BrainKind get() = BrainKind.resolve(this)
+    /** (cached: resolving it is string work and a scan of the enum, and it is read per animal per tick) */
+    val brainKind: BrainKind by lazy { BrainKind.resolve(this) }
     /** Sailfin tangs (*Zebrasoma*: yellow, purple): grazers that fight their own genus hardest (research 42 §2-4). */
     val zebrasoma: Boolean by lazy { id.startsWith("zebrasoma") }
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
     val sensesOrDefault: SensesSpec by lazy { senses ?: SensesSpec.defaultFor(this) }
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
-    val isCoral: Boolean get() = kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true)
-    val coralKind: CoralKind get() = CoralKind.resolve(id)
+    val isCoral: Boolean by lazy { kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true) }
+    val coralKind: CoralKind by lazy { CoralKind.resolve(id) }
     /** A colony whose model is a loose frag: placed on a free spot rather than on its kind's anchor (stony corals, a bounce mushroom). */
     val fragColony: Boolean get() = coralKind.stony || coralKind == CoralKind.XENIA || coral?.frag == true
 

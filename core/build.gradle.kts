@@ -30,6 +30,10 @@ tasks.test {
     testLogging { events("passed", "skipped", "failed") }
     // the long whole-tank runs are independent: one JVM per core (CI's single fork sat at ~48 of its 60 minutes)
     maxParallelForks = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+    // SimBenchmark knobs: -PbenchDetail=true (frame histograms), -PbenchTicks=N
+    listOf("benchDetail", "benchTicks").forEach { k -> providers.gradleProperty(k).orNull?.let { systemProperty("reeflive.$k", it) } }
+    // -PbenchJfr=<file.jfr>: record a Java Flight Recording of the test JVM (allocation / CPU profiles)
+    providers.gradleProperty("benchJfr").orNull?.let { jvmArgs("-XX:StartFlightRecording=filename=$it,settings=profile") }
 }
 
 // Track C: headless simulation runner for tuning (prints a 24 h scenario or a long health run).

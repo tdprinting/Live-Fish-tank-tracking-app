@@ -22,6 +22,17 @@ class Organism(
     val variant: String? = null,
 ) {
     val brainKind: BrainKind = species.brainKind
+    /** [HealthModel.tolerancesFor] of this animal's species, built once (it was a new map per animal per chemistry step). */
+    /**
+     * The simulation whose [Simulation.organisms] holds this animal (set on add, cleared on removal), so "is it still in
+     * the tank" is a field read instead of a scan of the list (the behaviour tick asked it for every animal).
+     */
+    internal var memberOf: Any? = null
+    internal val tolerances: Map<String, ToleranceRange> by lazy(LazyThreadSafetyMode.NONE) { HealthModel.tolerancesFor(species) }
+    /** [SimSpecies.activity] as a code, compared once instead of per call: 1 nocturnal, 2 crepuscular, 0 otherwise. */
+    internal val activityCode: Int = species.activity.let { a ->
+        if (a.equals("NOCTURNAL", ignoreCase = true)) 1 else if (a.equals("CREPUSCULAR", ignoreCase = true)) 2 else 0
+    }
 
     /** The keeper's name for this animal (a [Command.Rename] changes it). */
     var nickname: String = nickname
@@ -299,6 +310,24 @@ class Organism(
     val motionMode: Int get() = if (brainKind == BrainKind.ANEMONE) 6 else if (brainKind == BrainKind.FILE_CLAM || brainKind == BrainKind.GIANT_CLAM) 7 else if (brainKind == BrainKind.TROCHUS || brainKind == BrainKind.CONCH) 8 else if (brainKind == BrainKind.URCHIN) 9 else if (brainKind == BrainKind.SEA_CUCUMBER) 10 else when (motion.gait) { Gait.ARM_ROW -> 1; Gait.WALK -> if (brainKind.isShrimp || brainKind == BrainKind.MANTIS) 2 else if (brainKind.isCrab) 3 else if (brainKind == BrainKind.HERMIT) 5 else 0; Gait.FIN_JET -> 4; else -> 0 }
     /** Drawn rigid at its organism (no spine skinning: fish.vert's crawler, scallop, snail and urchin paths). */
     val drawnRigid: Boolean get() = when (motionMode) { 1, 3, 5, 6, 7, 8, 9 -> true; else -> false }
+
+    // ---- pose level of detail ([Simulation.poseDetail]): the last pose and how many snapshots it has been reused for
+    private var lodPose: OrganismPose? = null
+    private var lodAge = 0
+
+    /**
+     * [toPose] for a snapshot, rebuilt only every [every] snapshots (the renderer's level of detail for an animal off
+     * screen or a few pixels tall; 1 = every snapshot). A change of life, visibility or posture rebuilds it at once.
+     * Pure output: nothing in the sim reads the pose.
+     */
+    fun snapshotPose(every: Int): OrganismPose {
+        val c = lodPose
+        if (every > 1 && c != null && lodAge < every && c.alive == alive && c.visible == visible && c.posture == posture) {
+            lodAge++
+            return c
+        }
+        return toPose().also { if (every > 1) { lodPose = it; lodAge = 1 } else lodPose = null }
+    }
 
     fun toPose(): OrganismPose {
         val sp = FloatArray(BodySpline.POINTS * 3)

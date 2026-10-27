@@ -180,7 +180,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         out.place(r.pos, r.heading, r.up)
         out.posture = r.posture
         out.splineOverride = r.spline
-        o.sleeping = if (o.species.activity.equals("NOCTURNAL", true)) !night else night
+        o.sleeping = if (o.activityCode == 1) !night else night
     }
 
     open fun onFood(c: Ctx, kind: FoodKind, at: Vec3) {

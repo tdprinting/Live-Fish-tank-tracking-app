@@ -46,15 +46,18 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?, val smoothPores: Bool
         return v.toDouble()
     }
 
-    fun dist(p: Vec3): Double {
-        var d = rockDist(p.x, p.y, p.z)
-        val sy = sand?.surfaceY(p.x.coerceIn(0.0, rock.lengthCm), p.z.coerceIn(0.0, rock.widthCm)) ?: rock.sandTopCm
-        val s = p.y - sy
+    fun dist(p: Vec3): Double = distAt(p.x, p.y, p.z)
+
+    /** [dist] at (x, y, z) without a [Vec3] (the seat solves call it thousands of times a tick). */
+    fun distAt(x: Double, y: Double, z: Double): Double {
+        var d = rockDist(x, y, z)
+        val sy = sand?.surfaceY(x.coerceIn(0.0, rock.lengthCm), z.coerceIn(0.0, rock.widthCm)) ?: rock.sandTopCm
+        val s = y - sy
         if (s < d) d = s
-        if (p.x < d) d = p.x
-        if (rock.lengthCm - p.x < d) d = rock.lengthCm - p.x
-        if (p.z < d) d = p.z
-        if (rock.widthCm - p.z < d) d = rock.widthCm - p.z
+        if (x < d) d = x
+        if (rock.lengthCm - x < d) d = rock.lengthCm - x
+        if (z < d) d = z
+        if (rock.widthCm - z < d) d = rock.widthCm - z
         return d
     }
 
@@ -102,9 +105,9 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?, val smoothPores: Bool
 
     /** Outward surface normal at [p] (central differences, [h] cm). */
     fun normal(p: Vec3, h: Double = 0.2): Vec3 = Vec3(
-        dist(Vec3(p.x + h, p.y, p.z)) - dist(Vec3(p.x - h, p.y, p.z)),
-        dist(Vec3(p.x, p.y + h, p.z)) - dist(Vec3(p.x, p.y - h, p.z)),
-        dist(Vec3(p.x, p.y, p.z + h)) - dist(Vec3(p.x, p.y, p.z - h)),
+        distAt(p.x + h, p.y, p.z) - distAt(p.x - h, p.y, p.z),
+        distAt(p.x, p.y + h, p.z) - distAt(p.x, p.y - h, p.z),
+        distAt(p.x, p.y, p.z + h) - distAt(p.x, p.y, p.z - h),
     ).normalized(Vec3.Y)
 
     /**
@@ -114,7 +117,7 @@ class CrawlSurface(val rock: RockData, val sand: SandBed?, val smoothPores: Bool
     fun cast(from: Vec3, dir: Vec3, maxT: Double): Double {
         var t = 0.0
         for (i in 0 until 28) {
-            val d = dist(from + dir * t)
+            val d = distAt(from.x + dir.x * t, from.y + dir.y * t, from.z + dir.z * t)
             if (d < HIT_CM) return if (i == 0 && d < 0) 0.0 else t
             t += max(d, 0.02)
             if (t > maxT) return -1.0
@@ -245,6 +248,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double, simOffset: Double = -1.0) {
+        memoOk = false   // the surface may have changed since the last update (sand, rocks)
         val L = max(o.lengthCm, 0.3)
         val d0 = s.dist(o.pos)
         // (the Sally Lightfoot stands on long legs: its body may be over a dip, its feet on the rims round it)
@@ -496,12 +500,19 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             var rr = 0.0
             var pen = 0
             var minD = Double.MAX_VALUE
+            var lx = 0.0; var ly = 0.0; var lz = 0.0; var hit = false
+            val f = fwd; val u = up; val r0 = right
             var i = 0
             while (i < c.size) {
-                val w = p + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
-                val d = s.dist(w)
-                if (d < minD) { minD = d; lowest = w }
+                // w = p + (fwd * c0 + up * c1 + right * c2) * L, in scalars (same arithmetic, no Vec3 per contact)
+                val c0 = c[i]; val c1 = c[i + 1]; val c2 = c[i + 2]
+                val wx = p.x + (f.x * c0 + u.x * c1 + r0.x * c2) * L
+                val wy = p.y + (f.y * c0 + u.y * c1 + r0.y * c2) * L
+                val wz = p.z + (f.z * c0 + u.z * c1 + r0.z * c2) * L
+                val d = s.distAt(wx, wy, wz)
+                if (d < minD) { minD = d; lx = wx; ly = wy; lz = wz; hit = true }
                 if (d < REST_CM - PEN_TOL_CM) {
+                    val w = Vec3(wx, wy, wz)
                     val corr = s.normal(w) * (REST_CM - d)
                     dp += corr
                     val r = w - centre
@@ -511,6 +522,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
                 }
                 i += 3
             }
+            if (hit) lowest = Vec3(lx, ly, lz)
             if (pen == 0) {
                 val err = REST_CM - minD
                 if (kotlin.math.abs(err) < 2e-3) break
@@ -627,16 +639,43 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         return m
     }
 
+    // one-entry memo of [lowestContact] within an [update]: the solves re-check the seat they just settled on (the same
+    // origin and frame) several times running; the same inputs give the same answer, so it is returned as it was
+    private var memoOk = false
+    private var memoS: CrawlSurface? = null
+    private var memoP = Vec3.ZERO
+    private var memoF = Vec3.ZERO
+    private var memoU = Vec3.ZERO
+    private var memoR = Vec3.ZERO
+    private var memoL = 0.0
+    private var memoEnd = -1
+    private var memoD = 0.0
+    private var memoLowest = Vec3.ZERO
+    private var memoHit = false
+
     private fun lowestContact(s: CrawlSurface, p: Vec3, L: Double, end: Int = shape.contacts.size): Double {
+        if (memoOk && end == memoEnd && s === memoS && L == memoL && p == memoP && fwd == memoF && up == memoU && right == memoR) {
+            if (memoHit) lowest = memoLowest
+            return memoD
+        }
         val c = shape.contacts
         var minD = Double.MAX_VALUE
+        var lx = 0.0; var ly = 0.0; var lz = 0.0; var hit = false
+        val f = fwd; val u = up; val r0 = right
         var i = 0
         while (i < end) {
-            val w = p + (fwd * c[i] + up * c[i + 1] + right * c[i + 2]) * L
-            val d = s.dist(w)
-            if (d < minD) { minD = d; lowest = w }
+            // w = p + (fwd * c0 + up * c1 + right * c2) * L, in scalars (same arithmetic, no Vec3 per contact)
+            val c0 = c[i]; val c1 = c[i + 1]; val c2 = c[i + 2]
+            val wx = p.x + (f.x * c0 + u.x * c1 + r0.x * c2) * L
+            val wy = p.y + (f.y * c0 + u.y * c1 + r0.y * c2) * L
+            val wz = p.z + (f.z * c0 + u.z * c1 + r0.z * c2) * L
+            val d = s.distAt(wx, wy, wz)
+            if (d < minD) { minD = d; lx = wx; ly = wy; lz = wz; hit = true }
             i += 3
         }
+        if (hit) lowest = Vec3(lx, ly, lz)
+        memoOk = true; memoS = s; memoP = p; memoF = fwd; memoU = up; memoR = right; memoL = L; memoEnd = end
+        memoD = minD; memoHit = hit; if (hit) memoLowest = lowest
         return minD
     }
 
@@ -752,6 +791,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         val y = CrabModel.STANCE_Y + m.flatDrop * crabTuck
         var i = m.stanceFrom * 3
         while (i < c.size) { c[i + 1] = y; i += 3 }
+        memoOk = false   // the contact set changed
     }
 
     private fun poseCrab(o: Organism, rig: CrabLegs, m: CrabModel, s: CrawlSurface, L: Double) {
