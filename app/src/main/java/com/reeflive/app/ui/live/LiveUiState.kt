@@ -137,19 +137,26 @@ data class FollowState(
     val thought: Thought = Thought.NONE,
 )
 
-/** Water strip helper: temp, salinity, NO3, PO4 from [w] against the [SandboxParams] zones, plus live light % and flow. */
-fun waterReadouts(w: WaterState, lightPct: Double, flowStrength: Double): List<WaterReadout> {
+/**
+ * Water strip helper: temp, salinity, NO3, PO4 from [w] against the [SandboxParams] zones, plus the live rock-top PAR
+ * and the tank turnover ([turnover] volumes/hour; from the pump strength when the caller has no snapshot value).
+ * [lightPct] is kept for callers that still pass the old relative light.
+ */
+@Suppress("UNUSED_PARAMETER")
+fun waterReadouts(
+    w: WaterState, lightPct: Double, flowStrength: Double,
+    turnover: Double = flowStrength * com.reeflive.core.sim.Simulation.NOMINAL_TURNOVER,
+): List<WaterReadout> {
     fun f(v: Double, d: Int) = String.format(Locale.US, "%.${d}f", v)
     fun r(id: String, short: String, v: Double, text: String) =
         WaterReadout(id, short, text, SandboxParams.byId(id)?.zones?.status(v) ?: Status.UNKNOWN)
-    val flowPct = flowStrength * 100.0
     return listOf(
         r("temp", "Temp", w.tempC, f(w.tempC, 1) + "°"),
         r("sal", "Sal", w.sg, f(w.sg, 3)),
         r("no3", "NO3", w.no3, f(w.no3, 1)),
         r("po4", "PO4", w.po4, f(w.po4, 2)),
-        WaterReadout("light", "Light", f(lightPct, 0) + "%", if (lightPct > 0.5) Status.GOOD else Status.UNKNOWN),
-        r("flow", "Flow", flowPct, f(flowPct, 0) + "%"),
+        WaterReadout("light", "Light", f(w.lightPar, 0) + " PAR", if (w.lightPar > 5.0) Status.GOOD else Status.UNKNOWN),
+        r("flow", "Flow", turnover, f(turnover, 0) + "×"),
     )
 }
 

@@ -123,7 +123,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         viewModelScope.launch {
             holder.snapshots.sample(REAL_SAMPLE_MS).collect { snap ->
                 if (holder.mode.value == SimMode.REALITY && snap !== SimSnapshot.EMPTY) {
-                    _real.value = TankReading(snap.water, lightPct = 100.0, flowPct = snap.flowStrength * 100.0)
+                    _real.value = TankReading(snap.water, lightPct = 100.0, flowPct = snap.flowStrength * 100.0, peakPar = snap.peakPar.toDouble(), turnover = snap.turnover.toDouble())
                 }
             }
         }
@@ -285,7 +285,8 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
      */
     fun applyParam(rowId: String, simId: String, value: Double, current: Double, mode: SandboxControlMode) = sandbox {
         if (rowId in DEFAULT_EXTRAS) _extras.value = _extras.value + (rowId to (if (rowId.startsWith("pump_") || rowId in TOGGLE_DEFAULTS) (if (value >= 0.5) 1.0 else 0.0) else value))
-        if (rowId == "light") _lightPct.value = value * 100.0
+        // the light row is absolute peak PAR; the gauges' relative light % follows it
+        if (rowId == "light") _lightPct.value = value / SandboxParams.DEFAULT_PEAK_PAR * 100.0
         when (mode) {
             SandboxControlMode.SET -> holder.enqueue(Command.SetParam(simId, value))
             SandboxControlMode.STEP -> holder.enqueue(Command.RampParam(simId, value, 0.0, hold = true))
@@ -408,20 +409,15 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
      * the sim already supports.
      */
     fun runPreset(p: SandboxPreset) = sandbox {
-        val w = hud.value.water
         when (p) {
             SandboxPreset.HEATER_STUCK -> setHeater(working = true, stuckOn = true)
             SandboxPreset.POWER_OUTAGE -> runScenario(Scenario.POWER_OUTAGE)
             SandboxPreset.OVERFEEDING -> runScenario(Scenario.OVERFEEDING)
-            // TODO(sim/realism): replace with "skip routine water changes" once the sim exposes the water-change
-            //  schedule; for now jump straight to roughly two months of build-up.
+            // routine water changes stop (the sandbox's "Skip routine water changes" switch): nitrate and phosphate
+            // build up at the tank's own pace instead of jumping ahead
             SandboxPreset.MISSED_WATER_CHANGES -> {
-                setParam("no3", w.no3 + 40.0)
-                setParam("po4", w.po4 + 0.3)
-                setParam("alk", (w.alk - 1.5).coerceAtLeast(0.0))
-                setParam("ca", (w.ca - 40.0).coerceAtLeast(100.0))
-                setParam("mg", (w.mg - 80.0).coerceAtLeast(600.0))
-                setParam("algae", (w.algaeHair + 0.15).coerceAtMost(1.0))
+                _extras.value = _extras.value + ("sc_skip_wc" to 1.0)
+                setParam("skip_water_changes", 1.0)
             }
             // the top-off floods fresh water in over ~30 min, then the sim takes over again
             SandboxPreset.SALINITY_CRASH -> holder.enqueue(Command.RampParam("sal", 1.012, 30.0, hold = false))
@@ -458,7 +454,7 @@ class LiveTankViewModel(private val holder: SimulationHolder) : ViewModel() {
         /** On/off sandbox rows (equipment, unproven scenarios) → default; the skimmer is the only one that starts on. */
         val TOGGLE_DEFAULTS: Map<String, Double> = mapOf(
             "eq_skimmer" to 1.0, "eq_sock" to 0.0, "eq_carbon" to 0.0, "eq_refugium" to 0.0, "eq_uv" to 0.0,
-            "sc_asterina_coral" to 0.0, "sc_crab_predation" to 0.0,
+            "sc_asterina_coral" to 0.0, "sc_crab_predation" to 0.0, "sc_skip_wc" to 0.0,
         )
         val DEFAULT_EXTRAS: Map<String, Double> = mapOf(
             "photoperiod" to com.reeflive.core.sim.LightSchedule.DEFAULT_PHOTOPERIOD_H,

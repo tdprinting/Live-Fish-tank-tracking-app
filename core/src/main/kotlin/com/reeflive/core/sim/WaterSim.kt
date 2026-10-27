@@ -29,7 +29,7 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
      * computed by [algae] from the grazers present ([AlgaeModel.grazers]), so it is the same in every mode.
      */
     var grazingPerHour = 0.0
-    /** Sandbox pump strength (0..2, 1 = normal); only counts while `s.flowOn`. */
+    /** Sandbox pump strength (0..[Simulation.MAX_FLOW_STRENGTH], 1 = normal); only counts while `s.flowOn`. */
     var flowStrength = 1.0
     private val flowEff: Double get() = if (s.flowOn) flowStrength else 0.0
     /** O2 demand from decomposition + nitrification in the last step (mg/L per hour). */
@@ -99,7 +99,14 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     /** Allelochemical release by the soft corals this hour (index/h), set by Simulation from colony sizes (03 D). */
     var alleloSourcePerHour = 0.0
     /** Fraction of the light reaching the corals through DOC-yellowed water (1 = clear; carbon clears it). */
-    val clarity: Double get() = (1 - 0.2 * ((s.doc - 3.0) / 5.0).coerceIn(0.0, 1.0)) * (1 - 0.15 * bacteria.cloudiness)
+    val clarity: Double get() = (1 - 0.2 * ((s.doc - 3.0) / 5.0).coerceIn(0.0, 1.0)) * (1 - 0.15 * bacteria.cloudiness) * (1 - 0.4 * sandHaze)
+
+    /**
+     * Sand blown up by a blasting current (0..1, research 09 Part B: at ~100×/h "sand blows into drifts and clouds the
+     * water in minutes"); set by the simulation's sand storm, settles out over about an hour once the flow drops.
+     */
+    var sandHaze = 0.0
+        set(v) { field = if (v.isNaN()) 0.0 else v.coerceIn(0.0, 1.0) }
     /** Carbon adsorption efficiency: fresh 1, exhausted after ~3 weeks (01 §3.5 change every 2-4 weeks). */
     val carbonEfficiency: Double get() = if (carbon) exp(-carbonAgeH / (24 * 14.0)) else 0.0
     /** NO3 taken up by the display macro and the refugium in the last step, ppm/day. */
@@ -133,7 +140,9 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
         bacteria(h)
         gases(h)
         s.nh3Free = ChemFns.freeNh3(s.nh3Total, s.ph, s.tempC)
-        s.lightPar = lightIntensity
+        // rock-top PAR right now (the light that reaches the rock through this water)
+        s.lightPar = lightIntensity * LightSchedule.PAR_PER_INTENSITY * clarity
+        sandHaze *= kotlin.math.exp(-h / SAND_HAZE_CLEAR_H)
         clampAll()
     }
 
@@ -656,6 +665,8 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     val heaterIsHeating: Boolean get() = heaterPowered
 
     companion object {
+        /** Hours for blown-up sand to settle back out of the water (e-folding; est.). */
+        const val SAND_HAZE_CLEAR_H = 0.5
         // Stoichiometric N fractions (mass of N per mass of species)
         const val BOD_PER_TAN = 20.0
         const val N_TAN = 14.0 / 17.0

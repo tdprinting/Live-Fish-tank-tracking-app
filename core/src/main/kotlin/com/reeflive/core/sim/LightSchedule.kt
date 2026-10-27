@@ -1,5 +1,7 @@
 package com.reeflive.core.sim
 
+import kotlin.math.max
+
 /**
  * AI Prime HD style 8-channel schedule (SIMULATION §4.7, ARCHITECTURE §8.5).
  * Channel order: white, blue, royal, red, green, violet, uv, moon (0..1 each).
@@ -16,8 +18,16 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
 
     /** Manual override: null = follow schedule; false = all off; true = force on. */
     var forcedOn: Boolean? = null
-    /** Optional intensity multiplier override (sandbox slider). */
+    /** Optional intensity multiplier override (legacy relative light dial; [peakPar] wins when both are set). */
     var intensityOverride: Double? = null
+    /**
+     * Sandbox absolute light: the PAR (µmol m⁻² s⁻¹) the rock tops get at the schedule's brightest point, 0..[MAX_PAR]
+     * (research 09 Part B). The schedule keeps its shape (ramps, photoperiod) and is scaled so its peak gives this.
+     * Null = the programmed schedule. The drawn lamps saturate at full channels; the biology sees the real PAR
+     * ([bioIntensity]).
+     */
+    var peakPar: Double? = null
+        set(v) { field = v?.coerceIn(0.0, MAX_PAR) }
     /**
      * Sandbox photoperiod in hours (null = the programmed schedule). The schedule is stretched or
      * squeezed about its midday so ramps keep their shape (06 §4.2).
@@ -45,8 +55,43 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
         return if (prog < 0) prog + 1440 else prog
     }
 
+    /** Intensity of the schedule's brightest point as programmed (no sandbox gains or overrides). */
+    val programmedPeak: Double = this.points.maxOf { intensity(it.channels) }
+
+    /** Rock-top PAR at the programmed peak (the "100 %" of the old relative light slider). */
+    val programmedPeakPar: Double get() = programmedPeak * PAR_PER_INTENSITY
+
+    /** Multiplier the sandbox puts on the schedule: [peakPar] over [programmedPeakPar], else [intensityOverride], else 1. */
+    fun scale(): Double = peakPar?.let { it / max(programmedPeakPar, 1.0) } ?: intensityOverride ?: 1.0
+
+    private val bioScratch = DoubleArray(CHANNELS)
+
+    /**
+     * Light the biology sees, in intensity units (rock-top PAR = this × [PAR_PER_INTENSITY]). Equal to [intensity]
+     * unless an absolute [peakPar] is set: then it is the scaled schedule without the per-channel clamp the drawn lamps
+     * have, so 1500 PAR really is ~5× the programmed light.
+     */
+    fun bioIntensity(simTimeSec: Double): Double {
+        if (peakPar == null) return intensity(simTimeSec)
+        if (forcedOn == false) return 0.0
+        scheduled(simTimeSec, bioScratch)
+        // the moonlight LEDs are not part of the day's PAR: they stay as programmed
+        var s = 0.0
+        for (c in 0 until MOON) s += bioScratch[c] * gains[c] * WEIGHTS[c]
+        return s * scale() + bioScratch[MOON] * gains[MOON] * WEIGHTS[MOON]
+    }
+
     fun channels(simTimeSec: Double, out: DoubleArray = DoubleArray(CHANNELS)): DoubleArray {
         if (forcedOn == false) { out.fill(0.0); return out }
+        scheduled(simTimeSec, out)
+        if (peakPar != null) { val k = scale(); for (c in 0 until MOON) out[c] = (out[c] * k).coerceIn(0.0, 1.0) }
+        else intensityOverride?.let { k -> for (c in 0 until CHANNELS) out[c] = (out[c] * k).coerceIn(0.0, 1.0) }
+        for (c in 0 until CHANNELS) if (gains[c] != 1.0) out[c] = (out[c] * gains[c]).coerceIn(0.0, 1.0)
+        return out
+    }
+
+    /** The programmed channels at [simTimeSec] (photoperiod stretch and forced-on included; no gains or scaling). */
+    private fun scheduled(simTimeSec: Double, out: DoubleArray) {
         val m = minuteOf(simTimeSec)
         val pts = points
         val ia = pts.indexOfLast { it.minuteOfDay <= m }
@@ -65,9 +110,6 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
             val peak = pts.maxBy { intensity(it.channels) }
             for (c in 0 until CHANNELS) out[c] = maxOf(out[c], peak.channels[c])
         }
-        intensityOverride?.let { k -> for (c in 0 until CHANNELS) out[c] = (out[c] * k).coerceIn(0.0, 1.0) }
-        for (c in 0 until CHANNELS) if (gains[c] != 1.0) out[c] = (out[c] * gains[c]).coerceIn(0.0, 1.0)
-        return out
     }
 
     fun intensity(simTimeSec: Double): Double = intensity(channels(simTimeSec))
@@ -105,6 +147,17 @@ class LightSchedule(points: List<LightPoint> = DEFAULT_POINTS) {
     companion object {
         const val CHANNELS = 8
         const val LIGHTS_ON = 0.05
+        /** Index of the moonlight channel (kept out of the sandbox PAR scaling). */
+        const val MOON = 7
+        /**
+         * Rock-top PAR (µmol m⁻² s⁻¹) per unit of light intensity: the algae model's rock-top calibration
+         * ([AlgaeModel.PAR_AT_FULL]); the default schedule's peak (~0.79) gives ~300 PAR (05 §14: 200-400 typical).
+         */
+        const val PAR_PER_INTENSITY = 380.0
+        /** Sand-bed PAR per unit intensity ([AlgaeModel.PAR_AT_FULL] sand: 50-150 PAR under normal light). */
+        const val SAND_PAR_PER_INTENSITY = 130.0
+        /** Top of the sandbox PAR slider (research 09 Part B: 1500 = noon on a reef flat). */
+        const val MAX_PAR = 1500.0
         val CHANNEL_NAMES = listOf("white", "blue", "royal", "red", "green", "violet", "uv", "moon")
         /** Lights-on length of [DEFAULT_POINTS] (08:30–19:45 above [LIGHTS_ON] is ~11 h; ~10 h at full ramp). */
         const val DEFAULT_PHOTOPERIOD_H = 11.0
