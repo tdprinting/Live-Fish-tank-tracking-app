@@ -28,6 +28,10 @@ import com.reeflive.core.sim.Stocking
 import com.reeflive.core.sim.TankDims
 import com.reeflive.core.sim.TouchSurface
 import com.reeflive.core.sim.WaterState
+import com.reeflive.core.tracker.AcclimationMethod
+import com.reeflive.core.tracker.AcclimationPlan
+import com.reeflive.core.tracker.CycleReading
+import com.reeflive.core.tracker.CycleTracker
 import com.reeflive.app.render.GlassStroke
 import com.reeflive.app.render.SupplyShelfControl
 import java.util.concurrent.AssetPrefetch
@@ -607,6 +611,34 @@ object ReefLive {
             it.favorite = d.favorite; it.dangerLo = d.dangerLow; it.dangerHi = d.dangerHigh
         }
     }.toTypedArray())
+
+    /**
+     * New-tank cycle tracker (core CycleTracker): [json] is {start, now, boosted, readings: [{t, nh3, no2, no3}]}, epoch
+     * ms and ppm. Returns the stage, day of the cycle and the days-to-cycled estimate.
+     */
+    fun cycleStatus(json: String): String {
+        val o = JSON.parse<dynamic>(json)
+        val num = { v: dynamic -> if (v == null || v == undefined) null else (v as? Number)?.toDouble() }
+        val rs = (o.readings as? Array<dynamic>).orEmpty().mapNotNull { r ->
+            val t = num(r.t) ?: return@mapNotNull null
+            CycleReading(t, num(r.nh3), num(r.no2), num(r.no3))
+        }
+        val s = CycleTracker.assess(rs, num(o.start) ?: 0.0, num(o.now) ?: 0.0, o.boosted == true)
+        return JSON.stringify(obj {
+            it.stage = s.stage.name; it.label = s.stage.label; it.day = s.day
+            it.daysLeft = s.daysLeft; it.daysLeftLo = s.daysLeftLo; it.daysLeftHi = s.daysLeftHi; it.zeroDays = s.zeroDays
+            it.checkDays = CycleTracker.CHECK_DAYS; it.peakNh3 = s.peakNh3; it.peakNo2 = s.peakNo2
+            it.nh3 = s.nh3; it.no2 = s.no2; it.no3 = s.no3; it.advice = s.advice
+        })
+    }
+
+    /** Acclimation steps for a new arrival (core AcclimationPlan): [method] DRIP or FLOAT. */
+    fun acclimationPlan(method: String, sensitive: Boolean): String {
+        val m = runCatching { AcclimationMethod.valueOf(method) }.getOrDefault(AcclimationMethod.DRIP)
+        return JSON.stringify(AcclimationPlan.steps(m, sensitive).map { s ->
+            obj { it.title = s.title; it.detail = s.detail; it.seconds = s.seconds }
+        }.toTypedArray())
+    }
 
     /**
      * Tank x (cm) of the front glass under canvas pixel ([px], [py]) for dropping a shop bag there, or -1 when the
