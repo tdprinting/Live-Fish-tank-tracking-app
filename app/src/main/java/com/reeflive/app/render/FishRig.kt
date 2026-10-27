@@ -372,27 +372,34 @@ class SnapshotInterpolator {
     }
 
     /** Blend factor of the pair drawn at [nowNs] (0 = the older, 1 = the newer snapshot of [bracket]). */
-    fun alpha(nowNs: Long): Float = bracket(nowNs).second
+    fun alpha(nowNs: Long): Float { bracket(nowNs); return bracketT }
 
-    /** Index of the newer snapshot of the drawn pair and the blend factor toward it. */
-    private fun bracket(nowNs: Long): Pair<Int, Float> {
+    // [bracket]'s result (fields, not a Pair: it runs several times a frame)
+    private var bracketI = 0
+    private var bracketT = 1f
+
+    /** Sets [bracketI] (index of the newer snapshot of the drawn pair) and [bracketT] (the blend factor toward it). */
+    private fun bracket(nowNs: Long) {
         val n = buf.size
-        if (n < 2) return Pair(n - 1, 1f)
+        bracketI = n - 1; bracketT = 1f
+        if (n < 2) return
         val renderNs = nowNs - delayNs
         for (i in 1 until n) {
             val a = buf[i - 1].stampNs; val b = buf[i].stampNs
             if (renderNs < b || i == n - 1) {
                 val span = (b - a).coerceAtLeast(1L)
-                return Pair(i, ((renderNs - a).toFloat() / span).coerceIn(0f, 1f))
+                bracketI = i
+                bracketT = ((renderNs - a).toFloat() / span).coerceIn(0f, 1f)
+                return
             }
         }
-        return Pair(n - 1, 1f)
     }
 
     /** Updates [rigs] for this frame and returns them (insertion order = snapshot order). */
     fun update(nowNs: Long): Collection<FishRig> {
         if (buf.isEmpty()) { rigs.clear(); return rigs.values }
-        val (bi, t) = bracket(nowNs)
+        bracket(nowNs)
+        val bi = bracketI; val t = bracketT
         val newer = buf[bi]
         val older = if (bi > 0) buf[bi - 1] else null
         for (r in rigs.values) r.touched = false
