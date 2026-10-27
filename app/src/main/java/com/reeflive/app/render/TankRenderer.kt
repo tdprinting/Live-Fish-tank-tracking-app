@@ -1402,6 +1402,9 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uIchSpots", r.ich)
         p.set1f("uEyeCloud", r.eyeCloud)
         p.set1f("uDead", if (r.alive) 0f else 1f)
+        // sickness (SIMULATION §3.5): heat gasping and death-throe spasms (vertex), disease skin signs (fragment)
+        p.set2f("uSick", r.gasp, r.spasm)
+        p.set4f("uSkin", r.velvet, r.finRot, r.hlle, r.mucus)
         // life-stage body proportions (depth, width offsets from the GLB; 0 = as built), set for every fish draw
         p.set3f("uStageShape", stageBinding.depth, stageBinding.width, 0f)
         p.set1f("uRigid", if (rigid) 1f else 0f)

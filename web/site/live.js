@@ -619,8 +619,16 @@ function paramRow(p, sb) {
   const v = val(p.id) ?? p.min;
   const st = P?.values?.[p.id]?.status?.toLowerCase() ?? 'unknown';
   const cap = P?.values?.[p.id]?.caption;
-  return `<label class="slider zone-${st}"><span>${esc(p.label)}${cap ? ` <small class="muted">${esc(cap)}</small>` : ''}</span><output data-out="${p.id}">${fmt(p, v)}</output>
+  return `<label class="slider zone-${st}"><span>${esc(p.label)}${cap ? ` <small class="muted">${esc(cap)}</small>` : ''}</span>${startNote(p, sb)}<output data-out="${p.id}">${fmt(p, v)}</output>
     <input type="range" data-param="${p.id}" min="0" max="1000" step="1" value="${Math.round(toPos(p, v) * 1000)}" ${sb ? '' : 'disabled'}>${zoneBar(p)}</label>`;
+}
+/** Sandbox start: where NO3 / PO4 came from (your last test, or the simulated tank) and a units warning for odd logs. */
+function startNote(p, sb) {
+  if (!sb || ui.mode !== 'sandbox' || (p.id !== 'no3' && p.id !== 'po4')) return '';
+  const t = window.reeflastTest?.(p.id);
+  if (!t) return '<small class="muted">Started from the simulated tank (no test logged)</small>';
+  const w = live.readingWarning(p.id, t.v);
+  return `<small class="muted">Started from your last test on ${esc(new Date(t.t).toLocaleDateString([], { dateStyle: 'medium' }))} (${esc(String(t.v))} ppm); the sim has moved on since</small>${w ? `<small class="warn">${esc(w)}</small>` : ''}`;
 }
 function zoneBar(p) {
   const z = p.zones;

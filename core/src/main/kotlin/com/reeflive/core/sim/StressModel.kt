@@ -301,7 +301,7 @@ object StressModel {
     /** Breathing rate (Hz): Q10 2.5 around 26 °C × (1 + 1.5·DO + NH3 + 0.5·ich). */
     fun gillHz(o: Organism, tempC: Double): Double {
         val s = o.stressState
-        return 2.5.pow((tempC - 26) / 10) * (1 + 1.5 * s.fast(Ch.DO) + 1.0 * s.fast(Ch.NH3) + 0.5 * o.ich + 0.3 * s.fast(Ch.NO2))
+        return 2.5.pow((tempC - 26) / 10) * (1 + 1.5 * s.fast(Ch.DO) + 1.0 * s.fast(Ch.NH3) + 0.5 * max(o.ich, o.velvet) + 0.3 * s.fast(Ch.NO2))
     }
 
     /** Column swimmers surface to gasp; benthic fish hide instead (S:Yu23). */
@@ -316,7 +316,7 @@ object StressModel {
         val s = o.stressState
         val cold = if (tempC < s.setpoint[Ch.TEMP.ordinal].let { if (it.isNaN()) tempC else it }) s.fast(Ch.TEMP) else 0.0
         val card = if (o.brainKind == BrainKind.CARDINAL && brightExposed) 0.6 else 0.0
-        return (0.8 * max(s.slow(Ch.NH3), 0.5 * s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * o.ich + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
+        return (0.8 * max(s.slow(Ch.NH3), 0.5 * s.fast(Ch.NH3)) + 0.6 * cold + 0.5 * max(o.ich, o.velvet) + card + 0.4 * s.fast(Ch.NO2)).coerceIn(0.0, 1.0)
     }
 
     /** The channel contributing most right now (UI "why"); null when calm. */

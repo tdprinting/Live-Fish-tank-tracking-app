@@ -78,14 +78,15 @@ class SandboxExtremesTest {
     }
 
     /**
-     * 1500 PAR bleaches an unacclimated soft coral within ~1-3 days and melts tissue within ~2 weeks; 800 PAR is slower;
+     * 1500 PAR pales an unacclimated soft coral on day 1-2 and melts tissue within ~2 weeks; 800 PAR bleaches visibly in 3-7 days;
      * this tank's normal ~300 PAR leaves it healthy (09 Part B light row; 05 §14).
      */
     @Test
     fun highParBleachesAndBurnsSoftCorals() {
         val normal = coral("sarcophyton_sp", "normal").also { live(it, goodWater(), 14, 300.0) }
         val strong = coral("sarcophyton_sp", "strong")
-        live(strong, goodWater(), 7, 800.0)
+        var strongPaleDay = -1
+        live(strong, goodWater(), 9, 800.0) { d -> if (strongPaleDay < 0 && strong.bleach > 0.5) strongPaleDay = d }
         val blast = coral("sarcophyton_sp", "blast")
         var paleDay = -1
         var blastWeek = 0.0
@@ -93,13 +94,13 @@ class SandboxExtremesTest {
             if (paleDay < 0 && blast.bleach > 0.5) paleDay = d
             if (d == 7) blastWeek = blast.tissue
         }
-        println("PAR 300: bleach ${f(normal.bleach)} tissue ${f(normal.tissue)}; 800 for 7 d: bleach ${f(strong.bleach)}; " +
+        println("PAR 300: bleach ${f(normal.bleach)} tissue ${f(normal.tissue)}; 800: pale on day $strongPaleDay (bleach ${f(strong.bleach)} after 9 d); " +
             "1500: pale on day $paleDay, tissue ${f(blast.tissue)} after 14 d, need ${blast.need}")
         assertTrue("healthy at 300 PAR: ${normal.bleach}", normal.bleach < 0.05 && normal.tissue > 0.97)
-        assertTrue("1500 PAR pales it within 3 days (day $paleDay)", paleDay in 1..3)
+        assertTrue("1500 PAR pales it on day 1-2 (day $paleDay)", paleDay in 1..2)
         assertTrue("1500 PAR burns tissue within 2 weeks: ${blast.tissue}", blast.tissue < 0.5)
-        assertTrue("800 PAR burns slower than 1500: tissue after a week ${strong.tissue} vs $blastWeek", strong.tissue > blastWeek + 0.1)
-        assertTrue("800 PAR pales it within a week: ${strong.bleach}", strong.bleach > 0.3)
+        assertTrue("800 PAR bleaches visibly in 3-7 days (day $strongPaleDay)", strongPaleDay in 3..7)
+        assertTrue("800 PAR burns slower than 1500: tissue ${strong.tissue} vs $blastWeek", strong.tissue > blastWeek)
         assertEquals(CoralNeed.LIGHT_HIGH.ordinal, blast.need)
     }
 

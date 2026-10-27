@@ -48,6 +48,13 @@ function latestValues() {
   return out;
 }
 
+/** The newest logged test that has [id]: { v, t } or null (the sandbox start shows where its values came from). */
+function lastTest(id) {
+  const r = readings().filter((x) => x.values[id] != null).sort((a, b) => b.t - a.t)[0];
+  return r ? { v: r.values[id], t: r.t } : null;
+}
+window.reeflastTest = lastTest;
+
 /** Sends logged readings to the sim (only changed values; [resend] pushes all of them again). */
 function applyLatestReadings(resend) {
   const v = latestValues();
@@ -75,7 +82,8 @@ function renderParams() {
   $('paramGrid').innerHTML = shown.map((p) => {
     const v = latest[p.id];
     const st = statusOf(p.id, v);
-    return `<div class="card"><div class="name"><span>${p.name}</span><span class="status ${st}">${STATUS_TEXT[st]}</span></div>
+    const warn = v != null && live.readingWarning(p.id, v);
+    return `<div class="card"><div class="name"><span>${p.name}</span><span class="status ${st}">${STATUS_TEXT[st]}</span></div>${warn ? `<p class="warn">${warn}</p>` : ''}
       <div class="val">${v == null ? '—' : Number(v).toFixed(p.precision)} <small>${p.unit}</small></div>
       <div class="range">Ideal ${p.idealLo === p.idealHi ? p.idealLo : `${p.idealLo}–${p.idealHi}`} ${p.unit}</div>${spark(p.id)}</div>`;
   }).join('');
@@ -113,6 +121,8 @@ $('logForm').addEventListener('submit', (e) => {
   const values = {};
   $('logFields').querySelectorAll('input').forEach((i) => { if (i.value !== '') values[i.name] = Number(i.value); });
   if (!Object.keys(values).length) return;
+  const odd = Object.entries(values).map(([k, v]) => live.readingWarning(k, v)).filter(Boolean);
+  if (odd.length && !confirm(`${odd.join('\n')}\n\nSave it anyway?`)) { e.preventDefault(); return; }
   const t = new Date($('logWhen').value).getTime() || Date.now();
   addReading({ t, values });
 });
