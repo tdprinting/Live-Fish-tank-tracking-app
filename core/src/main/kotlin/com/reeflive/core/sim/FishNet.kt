@@ -209,10 +209,15 @@ class FishNet {
                 j.pos = j.liftFrom.withY(water + LIFT_CM + OUT_CM * e)
             }
         }
-        // keep the hoop itself off the rock and the glass while it is in the water
+        // keep the hoop itself off the rock, the glass and the sand while it is in the water (a sweep between two
+        // clear spots can cross a sand mound)
         if (j.pos.y < water + j.radius) {
-            if (rock.sdf.dist(j.pos) < j.radius) j.pos = rock.sdf.project(j.pos, j.radius)
-            j.pos = clampGlass(rock, j.pos, j.radius)
+            repeat(3) {
+                if (rock.sdf.dist(j.pos) < j.radius) j.pos = rock.sdf.project(j.pos, j.radius)
+                j.pos = clampGlass(rock, j.pos, j.radius)
+                val floor = sim.sand.surfaceY(j.pos.x, j.pos.z) + j.radius * 0.85 + 0.3
+                if (j.pos.y < floor) j.pos = j.pos.withY(floor)
+            }
         }
         if (j.carrying && o != null) carry(sim, j, o, dt)
         if (j.t >= 1.0) {
