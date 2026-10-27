@@ -184,6 +184,11 @@ data class TankConfig(
     val evapLitersPerDay: Double = 3.0,
     val atoEnabled: Boolean = false,
     val powerheads: List<Powerhead> = FlowField.defaultJets(),
+    /**
+     * The pumps' rated flow × this: a tank of another size comes with pumps sized to it (My tank builds use volume over
+     * Tee's 227 L), so a 20 gal nano turns over ~27×/h like Tee's tank instead of 83× on a 60 gal's powerheads.
+     */
+    val pumpScale: Double = 1.0,
     /** Automatic feeding schedule (empty = only manual Feed commands). */
     val autoFeed: List<FeedTime> = DEFAULT_FEEDING,
     /** Predation can kill livestock (SIMULATION §4.5 eel: ON in sandbox, OFF in reality). */

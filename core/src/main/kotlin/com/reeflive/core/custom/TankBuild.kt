@@ -49,7 +49,7 @@ data class TankBuild(
         val s = shape
         return TankConfig(
             lengthCm = s.lengthCm, widthCm = s.depthCm, heightCm = s.heightCm, waterLevelCm = s.waterLevelCm, sandTopCm = s.sandTopCm,
-            systemLiters = liters, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed, autoFeed = emptyList(),
+            systemLiters = liters, pumpScale = liters / TankDims.DISPLAY_LITERS, heaterWatts = heaterWatts, atoEnabled = ato, seed = seed, autoFeed = emptyList(),
             // the powerheads hang where they do on Tee's tank, moved with their glass (TankShape)
             powerheads = FlowField.defaultJets().map { it.copy(pos = s.map(it.pos)) },
         )

@@ -68,6 +68,19 @@ object DefaultStock {
     )
 
     val all: List<LivestockSeed> get() = fish + inverts + corals
+
+    /**
+     * Tee's own names for the animals (Tee, 2026-10-14; the black clown and Nemo assumed), keyed by seed id. The web's
+     * Watch tank (Tee's real tank) shows these; [all] keeps the short names the tests use.
+     */
+    val PET_NAMES = mapOf(
+        "clown_f" to "Nemo", "clown_m" to "Marlin", "tang" to "Dori", "cardinal" to "Derprick", "wrasse" to "Shakira",
+        "goby" to "Ricky Bobby Sanchez", "hawk" to "Hawk tuah", "lawnmower" to "Dallas", "tailspot" to "Dennis", "dottyback" to "Indy",
+        "diamond_goby" to "Sandy", "leopard_wrasse" to "Marina", "banded" to "Spike", "hermit3" to "Mr. Crabs",
+    )
+
+    /** [all] with Tee's pet names. */
+    val named: List<LivestockSeed> get() = all.map { s -> PET_NAMES[s.id]?.let { s.copy(nickname = it) } ?: s }
 }
 
 /** A scenario (SIMULATION §7 presets). [setup] runs on the fresh Simulation. */
