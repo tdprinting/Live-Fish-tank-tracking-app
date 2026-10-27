@@ -127,7 +127,7 @@ object ReefLive {
                 val config = TankConfig()
                 val s = Simulation(
                     config = config, species = species, rock = rock, startTimeSec = secOfDay,
-                    initialWater = WaterState(volumeL = config.systemLiters), livestock = DefaultStock.all,
+                    initialWater = WaterState(volumeL = config.systemLiters), livestock = DefaultStock.named,
                 )
                 s.speed = 1.0
                 s.stepWall(0.0)

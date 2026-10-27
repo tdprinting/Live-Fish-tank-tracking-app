@@ -1875,7 +1875,7 @@ class Simulation private constructor(
     val flowStrength: Double get() = if (water.s.flowOn) water.flowStrength else 0.0
 
     /** Rated flow (L/h) of the pumps switched on: the powerheads and the HOB return ([Pump.defaults] ratings). */
-    private fun pumpsOnLph(): Double = flow.jets.filter { it.on }.sumOf { j -> PUMP_GPH[j.name.uppercase()] ?: DEFAULT_PUMP_GPH } * LITERS_PER_GAL
+    private fun pumpsOnLph(): Double = flow.jets.filter { it.on }.sumOf { j -> PUMP_GPH[j.name.uppercase()] ?: DEFAULT_PUMP_GPH } * LITERS_PER_GAL * config.pumpScale
 
     /**
      * Tank turnover (volumes per hour, research 09 Part B: normal 20-40×): the switched-on pumps' rated flow × the

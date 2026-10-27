@@ -55,6 +55,14 @@ class TankSizeTest {
         assertTrue("Tee's size is his tank", TankBuilds.LONG_REEF.shape.isStock)
     }
 
+    @Test fun everyBuildsPumpsTurnItOverLikeTeesTank() {
+        // research 09 Part B: 20-40×/h is normal; a nano on a 60 gal's powerheads read 83× and "needs help" on day 1
+        for (b in TankBuilds.all) {
+            val sim = CustomTank.fresh(b, catalog(), TestTank.rock, 12 * 3600.0, seed = 3L)
+            assertTrue("${b.id}: ${sim.turnoverPerHour}×/h", sim.turnoverPerHour in 20.0..40.0)
+        }
+    }
+
     @Test fun smallTanksGetTeesRocksCutDownAndCentred() {
         val nano = CustomTank.fresh(TankBuilds.NANO, catalog(), TestTank.rock, 12 * 3600.0, seed = 3L)
         val rp = nano.rockPhysics ?: return

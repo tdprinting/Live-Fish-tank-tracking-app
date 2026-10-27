@@ -180,7 +180,8 @@ object CustomTank {
         val w = sim.water
         eq["heater_set_c"]?.let { w.heaterSetC = it }
         eq["heater_working"]?.let { w.heaterWorking = it > 0.5 }
-        eq["flow_strength"]?.let { w.flowStrength = it }
+        // through the setter, so the jets and the fluid run at the saved strength too, not only the chemistry
+        eq["flow_strength"]?.let { sim.setFlowStrength(it) }
         eq["flow_on"]?.let { w.s.flowOn = it > 0.5 }
         eq["skimmer"]?.let { w.skimmer = it > 0.5 }
         eq["filter_sock"]?.let { w.filterSock = it > 0.5 }
