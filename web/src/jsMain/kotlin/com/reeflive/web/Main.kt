@@ -599,6 +599,9 @@ object ReefLive {
         applied = latest
     }
 
+    /** A "check units" note for an implausible logged value (nitrate over 50 ppm, phosphate over 0.5 ppm), or "". */
+    fun readingWarning(id: String, value: Double): String = com.reeflive.core.live.ReadingSanity.warning(id, value) ?: ""
+
     /** Tracker parameter table (shared ParameterTable): id, name, unit, precision, ideal and acceptable ranges. */
     fun parameters(): String = JSON.stringify(ParameterTable.SOFT_CORAL.sortedBy { it.order }.map { d ->
         obj {

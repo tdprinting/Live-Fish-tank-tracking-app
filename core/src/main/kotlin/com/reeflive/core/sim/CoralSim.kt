@@ -203,8 +203,10 @@ object CoralSim {
     const val PHOTOINHIB_PAR = 450.0
     /** PAR where photoinhibition is total (1500: unacclimated corals bleach in 1-3 d, lose tissue in 1-2 weeks). */
     const val PHOTOINHIB_FULL_PAR = 1500.0
-    /** Extra bleaching per lit minute at full photoinhibition (with the light-high stress: pale in about a day at 1500). */
-    const val PHOTO_BLEACH_PER_MIN = 0.0006
+    /** Extra bleaching per lit minute at full photoinhibition (replaces the older too-much-light paling above [PHOTOINHIB_PAR], see [legacyLightScale]: pale on day 2 at 1500, ~3-7 d at 800). */
+    const val PHOTO_BLEACH_PER_MIN = 0.00075
+    /** The older too-much-light / light-shock paling fades out as the photoinhibition curve takes over (both together bleached 800 PAR in 1-2 d). */
+    private fun legacyLightScale(par: Double): Double = 1.0 - smoothstep(PHOTOINHIB_PAR, PHOTOINHIB_PAR + 150.0, par)
     /** Tissue burnt per lit minute at full photoinhibition (with bleached-tissue loss: melting in ~1-2 weeks at 1500). */
     const val PHOTO_BURN_PER_MIN = 0.0001
     /** Darkness beyond this is a blackout, not a night (a normal night is ~13 h). */
@@ -338,7 +340,7 @@ object CoralSim {
         val starving = 0.00002 * sHunger
         val heat = (0.0008 * max(0.0, sTemp - 0.5) * (if (acute) 0.0 else 1.0) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0)) * pr.heatBleach
         val recover = if (c.need >= 0) 0.0 else (if (c.stress < 0.15) 0.00001 else if (c.stress < 0.3) 0.000004 else 0.0) * pr.recovery
-        c.bleach += (heat + (0.0003 * (if (dark > 0) 0.0 else sLight) + 0.0004 * sLightShock) * pr.lightBleach + pr.darkFade * dark / DAYLIGHT_MIN + starving - recover +
+        c.bleach += (heat + (0.0003 * (if (dark > 0) 0.0 else sLight) + 0.0004 * sLightShock) * pr.lightBleach * legacyLightScale(par) + pr.darkFade * dark / DAYLIGHT_MIN + starving - recover +
             PHOTO_BLEACH_PER_MIN * photoInhib * pr.lightBleach + BLACKOUT_FADE_PER_DAY / 1440.0 * smoothstep(3.0, 5.0, blackDays)) * dtMin
         c.bleach = c.bleach.coerceIn(0.0, 1.0)
         if (c.bleach > 0.5 && !c.bleachingReported) { c.bleachingReported = true; events += SimEvent.CoralBleaching(c.id, simTimeSec) }
