@@ -996,9 +996,10 @@ class Simulation private constructor(
         val bloated = buoyant && simTimeSec - (o.deadSince ?: simTimeSec) >= BLOAT_SEC
         val floor = rock.sandTopCm + 0.6
         val targetY = if (bloated) rock.waterLevelCm - 0.8 else floor
-        // carried by the flow while it sinks through open water, nearly still once it lies on the sand
-        val drift = when { bloated -> 0.6; o.pos.y > floor + 2 -> 0.3; else -> 0.05 }
-        val f = flow.velocityFast(o.pos) * drift
+        // carried by the flow while it sinks through open water; still once it lies on the sand or the rock
+        val falling = o.pos.y > max(floor, sand.surfaceY(o.pos.x, o.pos.z)) + 2.5 && rock.sdf.dist(o.pos) > 1.2
+        val drift = when { bloated -> 0.6; falling -> 0.3; else -> 0.0 }
+        val f = if (drift > 0) flow.velocityFast(o.pos) * drift else Vec3.ZERO
         val vy = if (bloated) 1.2 else -2.0
         var p = o.pos + (f + Vec3(0.0, vy, 0.0)) * dt
         p = if (bloated) p.withY(min(p.y, targetY)) else p.withY(max(p.y, targetY))
