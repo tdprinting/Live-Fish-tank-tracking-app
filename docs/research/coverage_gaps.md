@@ -16,6 +16,6 @@ The original 56-row audit of research 01-05 and the tank spec is superseded; mos
 | Sandbox sliders for copper, K, Sr, I, silicate, CO2 (W-UI-3) | Unverified | check Sandbox.kt before relying on it |
 | Heat-death visuals | In flight | feat/fish-health-visuals |
 | Feeding displacement by rank, tang blueDeepen (06) | Open | no code |
-| Tracker: cycle tracker (T-1), acclimation timer (T-2), pest/algae log (T-4) | Open | no code verified |
+| Tracker: cycle tracker (T-1), acclimation timer (T-2), pest/algae log (T-4) | Done on web (feat/tracker-gaps) | `web/site/tracker.js`, core `tracker/CycleTracker.kt`, `AcclimationPlan.kt`; background notifications unverified on a phone |
 | Tracker: PDF export, multi-tank UI, sync (T-8, T-9, T-10) | Open, low value | web is the shipping product |
 | Merge of assets/tank-hq (R-1) | Unverified | check whether the branch was merged or superseded |

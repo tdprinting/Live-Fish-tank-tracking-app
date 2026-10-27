@@ -36,6 +36,9 @@ object Reality {
         w.tempC = w.tempC.coerceIn(10.0, 40.0)
         w.sg = w.sg.coerceIn(1.000, 1.040)
         w.ph = w.ph.coerceIn(6.5, 9.5)
+        // a unit slip (ppb as ppm, NO3-N as NO3) must not feed the sim a nonsense tank
+        w.no3 = w.no3.coerceIn(0.0, com.reeflive.core.live.ReadingSanity.NO3_MAX)
+        w.po4 = w.po4.coerceIn(0.0, com.reeflive.core.live.ReadingSanity.PO4_MAX)
         w.nh3Free = ChemFns.freeNh3(w.nh3Total, w.ph, w.tempC)
         return w
     }
