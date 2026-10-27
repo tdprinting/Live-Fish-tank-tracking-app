@@ -80,6 +80,11 @@ class AlgaeCover(
     val glassMask: FloatArray? = null,
     /** [GlassMask.version] of [glassMask], so the renderer re-uploads only when it changed. */
     val glassMaskVersion: Int = 0,
+    /**
+     * Share of the dinoflagellate film lifted off the rock and sand into the water (0 by day .. 1 at night; research
+     * 09 A6: "lifts off at night and reappears at lights-on"). The renderer thins the dino mats by it.
+     */
+    val dinoLift: Float = 0f,
 ) {
     fun cover(g: AlgaeGroup, s: AlgaeSurface): Float = cover[g.ordinal * SURFACES + s.ordinal]
 
@@ -155,6 +160,12 @@ class AlgaeModel(config: TankConfig) {
     var podGrazeGPerDay = 0.0
     /** Extra cyanobacteria die-back per day from [BacteriaModel] (an antibiotic in the water; research 18). */
     var cyanoExtraDeathPerDay = 0.0
+    /** UV steriliser running ([WaterSim.uv]): kills the share of the dinos that is in the water column (A5). */
+    var uv = false
+    /** Carbon dosing, 0..1 of the usual dose ([BacteriaModel.carbonDose]): dissolved organics that feed cyano (A2). */
+    var carbonDosing = 0.0
+    /** Probiotic / bottled bacteria in the water 0..1 ([BacteriaModel.probiotic]): competitors that hold dinos back (A2). */
+    var probiotic = 0.0
 
     // ---- outputs of the last step ----
     /** mg N taken from / returned to the water in the last step (WaterSim nitrogen accounting). */
@@ -173,6 +184,8 @@ class AlgaeModel(config: TankConfig) {
     val limiter = Array(ng) { Nutrient.NONE }
     var docIndex = 0.0; private set
     var uln = false; private set
+    /** Share of the dino film lifted into the water (0 by day .. 1 at night), see [AlgaeCover.dinoLift]. */
+    var dinoLift = 0.0; private set
 
     private var initialized = false
 
@@ -205,6 +218,7 @@ class AlgaeModel(config: TankConfig) {
             glassBase = if (mask == null) null else FloatArray(ng) { glassBaseCover(it).toFloat() },
             glassMask = mask,
             glassMaskVersion = glassMask.version,
+            dinoLift = dinoLift.toFloat(),
         )
     }
 
@@ -295,6 +309,35 @@ class AlgaeModel(config: TankConfig) {
         }
     }
 
+    /**
+     * The owner pulls the bubble algae off the rock (research 09 A2 "manual removal", A5): [BUBBLE_PICK] of the
+     * bubbles above the hidden seed come out and leave the tank. Lifted out whole ([careful]) that is all; squeezed or
+     * scraped, [BUBBLE_POP_SHARE] of the cells burst, their sap rots in the tank and each burst cell seeds
+     * [BUBBLE_POP_SEEDS] new cells nearby ("a popped cell seeds 3-8 new cells", hobby consensus). Returns g DW removed.
+     */
+    fun removeBubble(s: WaterState, careful: Boolean): Double {
+        syncFromState(s)
+        val gi = AlgaeGroup.BUBBLE.ordinal
+        var removed = 0.0
+        for (si in 0 until ns) {
+            val i = gi * ns + si
+            val m = max(0.0, biomass[i] - seedOf(gi, si)) * BUBBLE_PICK
+            biomass[i] -= m
+            removed += m
+        }
+        if (!careful && removed > 0) {
+            val popped = removed * BUBBLE_POP_SHARE
+            toDead(gi, popped * 0.5)
+            // swarmers settle on the rock around the burst cells, spread over the rock it grows on by area
+            val spawn = popped * BUBBLE_POP_SEEDS * BUBBLE_DAUGHTER_MASS
+            var a = 0.0
+            for (si in 0 until ns) if (P[gi].cmax[si] > 0) a += area[si]
+            for (si in 0 until ns) if (P[gi].cmax[si] > 0) biomass[gi * ns + si] += spawn * area[si] / a
+        }
+        writeBack(s)
+        return removed
+    }
+
     fun copyFrom(o: AlgaeModel) {
         o.biomass.copyInto(biomass); o.store.copyInto(store); o.written.copyInto(written)
         o.flowOverride.copyInto(flowOverride); o.active.copyInto(active)
@@ -302,6 +345,10 @@ class AlgaeModel(config: TankConfig) {
         deadN = o.deadN; deadP = o.deadP; deadDw = o.deadDw; darkH = o.darkH; docOverride = o.docOverride
         oldN = o.oldN; oldP = o.oldP; oldDw = o.oldDw
         cyanoExtraDeathPerDay = o.cyanoExtraDeathPerDay
+        uv = o.uv; carbonDosing = o.carbonDosing; probiotic = o.probiotic; podGrazeGPerDay = o.podGrazeGPerDay; grazers = o.grazers
+        // last step's outputs, so a snapshot taken before the next step (vigor, lift) reads as before the rebuild
+        o.fNut.copyInto(fNut); o.limiter.copyInto(limiter)
+        docIndex = o.docIndex; uln = o.uln; dinoLift = o.dinoLift; pReleasedMg = o.pReleasedMg
         initialized = o.initialized
     }
 
@@ -324,10 +371,16 @@ class AlgaeModel(config: TankConfig) {
         uln = nEq < 1.0 && p < 0.02
         // microbial diversity: rises over the first ~6 months, knocked back by copper (A2)
         s.microbes = (s.microbes + days / 180.0 - (if (s.copper > 0.1) 0.3 * days else 0.0)).coerceIn(0.0, 1.0)
-        docIndex = docOverride ?: ((s.detritus - 0.3) / 1.5 + deadDw / 40.0).coerceIn(0.0, 1.0)
+        // DOC proxy (A2): detritus and dying algae, dissolved organics above a clean tank's (overfeeding), carbon dosing
+        docIndex = docOverride ?: (max((s.detritus - 0.3) / 1.5 + deadDw / 40.0, (s.doc - DOC_CLEAN) / DOC_SPAN) +
+            CARBON_DOC * carbonDosing.coerceIn(0.0, 1.0)).coerceIn(0.0, 1.0)
         var compB = 0.0
         for (g in COMPETITORS) compB += biomass(g)
-        val ci = (0.5 * s.microbes + 0.5 * compB / (compB + COMP_HALF_G)).coerceIn(0.0, 1.0)
+        // bottled bacteria / probiotics stand in for the missing competitors while the community is young (A2 trigger off)
+        val ci = (0.5 * s.microbes + 0.5 * compB / (compB + COMP_HALF_G) + PROBIOTIC_CI * probiotic).coerceIn(0.0, 1.0)
+        // dinos lift off into the water after lights-out and settle again after lights-on (A1, A6)
+        val lifting = light < LightSchedule.LIGHTS_ON
+        dinoLift += ((if (lifting) 1.0 else 0.0) - dinoLift) * min(1.0, dtH / (if (lifting) DINO_LIFT_TAU_H else DINO_SETTLE_TAU_H))
         val nassarius = grazers.filter { it.type == GrazerType.NASSARIUS }.sumOf { it.units }
 
         // ---- per-group tank-level factors ----
@@ -359,6 +412,9 @@ class AlgaeModel(config: TankConfig) {
                 AlgaeGroup.CYANO -> m *= (1 + 0.5 * ((8 - np) / 8).coerceIn(0.0, 1.0)) * (CYANO_DOC_BASE + CYANO_DOC_GAIN * docIndex)
                 AlgaeGroup.DINOS -> m *= (1.3 - 0.8 * ci)
                 AlgaeGroup.CORALLINE -> m *= 1 - 0.8 * ((s.po4 - 0.1) / 0.9).coerceIn(0.0, 1.0)
+                // mature rock (A2 stage 5: month 3+) and a pH at or under 8.0 (hobby) favour bubble algae
+                AlgaeGroup.BUBBLE -> m *= (BUBBLE_YOUNG_ROCK + (1 - BUBBLE_YOUNG_ROCK) * s.microbes) *
+                    (1 + BUBBLE_LOW_PH_GAIN * ((8.1 - s.ph) / 0.2).coerceIn(0.0, 1.0))
                 else -> {}
             }
             mu[gi] = m
@@ -377,6 +433,8 @@ class AlgaeModel(config: TankConfig) {
             if (g == AlgaeGroup.CYANO) d += cyanoExtraDeathPerDay
             // nutrients back and competitors present: dinos lose (A5 0.3/d, raised so a mature tank holds them at the seed)
             if (g == AlgaeGroup.DINOS && !uln) d += DINO_RETURN_DEATH * ci
+            // UV only reaches the dinos in the water column: a few by day, most of the film once it lifts at night (A5)
+            if (g == AlgaeGroup.DINOS && uv) d += DINO_UV_DEATH * (DINO_WATER_DAY + (1 - DINO_WATER_DAY) * dinoLift)
             dBase[gi] = d
         }
 
@@ -608,6 +666,27 @@ class AlgaeModel(config: TankConfig) {
         const val COMP_HALF_G = 1.0
         const val CYANO_DOC_BASE = 0.4
         const val CYANO_DOC_GAIN = 1.2
+        /** Dissolved organic carbon (mg C/L) a clean tank stays under ([BacteriaModel.DOC_DIRTY]), and the rise to a full DOC index. */
+        const val DOC_CLEAN = 1.5
+        const val DOC_SPAN = 3.0
+        /** DOC index added by carbon dosing at the usual dose (est.; vodka/vinegar dosing is a classic cyano trigger). */
+        const val CARBON_DOC = 0.6
+        /** Competitor index a full probiotic dose adds (est.). */
+        const val PROBIOTIC_CI = 0.3
+        /** Hours for the dino film to lift into the water after lights-out, and to settle back after lights-on (est.). */
+        const val DINO_LIFT_TAU_H = 1.5
+        const val DINO_SETTLE_TAU_H = 1.0
+        /** UV die-back of the dinos in the water column (A5: 0.3 /d), and the share of the film in the water by day (est.). */
+        const val DINO_UV_DEATH = 0.3
+        const val DINO_WATER_DAY = 0.1
+        /** Bubble algae growth on young rock (microbes 0) relative to mature rock, and the extra at pH 7.9 (est.). */
+        const val BUBBLE_YOUNG_ROCK = 0.3
+        const val BUBBLE_LOW_PH_GAIN = 0.5
+        /** Manual removal: share of the bubbles taken, share that burst when squeezed, cells seeded per burst cell (3-8), mass of a new cell vs a grown one (est.). */
+        const val BUBBLE_PICK = 0.85
+        const val BUBBLE_POP_SHARE = 0.3
+        const val BUBBLE_POP_SEEDS = 5.0
+        const val BUBBLE_DAUGHTER_MASS = 0.15
         /** Film a Flipper pass leaves on the glass it slides over (felt pad: one pass takes ~90 %, est.). */
         const val SCRAPE_LEFT = 0.1
         /** Share of scraped film that settles as detritus; the rest is eaten by fish or caught by the filter (est.). */
@@ -632,8 +711,10 @@ class AlgaeModel(config: TankConfig) {
             // dinoflagellates: tiny Ks, mixotrophic, prefer v < 8 cm/s
             Params(1.0, 0.02, 0.005, 100.0, 600.0, 26.0, 5.0, 32.5, 7.0, 15.0, d(0.0, 8.0, 20.0), d(1.0, 1.0, 0.3),
                 0.05, 0.007, 1.0, 5.0, d(0.5, 1.0, 0.8, 0.8), 2.0, 0.05, 0.3, 0.4),
-            // bubble algae: slow, stagnant mature rock
-            Params(0.045, 0.6, 0.05, 150.0, 0.0, 26.0, 5.0, 31.0, 7.3, 15.0, d(0.0, 5.0, 15.0, 30.0), d(1.0, 1.0, 0.5, 0.2),
+            // bubble algae: slow, stagnant mature rock. A1's 0.03-0.06 /d is the net rate (doubling 12-25 d; clusters double
+            // every 3-4 weeks, A6); the gross rate is set so shaded rock at moderate nutrients (PO4 ~0.05) nets that
+            // (Ik 100 and Ks_P 0.03 ppm, the shade-dweller ends of A1's estimates)
+            Params(0.1, 0.6, 0.03, 100.0, 0.0, 26.0, 5.0, 31.0, 7.3, 15.0, d(0.0, 5.0, 15.0, 30.0), d(1.0, 1.0, 0.5, 0.2),
                 0.025, 0.0015, 1.0, 20.0, d(0.0, 0.0, 0.3, 0.3), 10.0, 0.005, 0.02, 0.05),
             // coralline: very slow, carbonate-dependent, hump flow 10-25 cm/s
             Params(0.015, 0.06, 0.01, 100.0, 0.0, 26.5, 5.0, 31.0, 0.0, 20.0, d(0.0, 10.0, 25.0, 60.0), d(0.4, 1.0, 1.0, 0.6),
@@ -653,8 +734,12 @@ class AlgaeModel(config: TankConfig) {
 
         /** Hidden seed cover per group (dinos keep 1 %, A5; cyano spots appear at ~1 % on day 1, A6). */
         val SEED_COVER = doubleArrayOf(0.002, 0.002, 0.002, 0.01, 0.01, 0.001, 0.002)
-        /** Cover in crevices that grazers cannot reach. */
-        val REFUGE_COVER = doubleArrayOf(0.01, 0.01, 0.03, 0.01, 0.01, 0.01, 0.0)
+        /**
+         * Biomass in crevices that grazers cannot reach, as a share of `area · b_half` (0.03 ≈ 3 % cover at Cmax 0.9).
+         * Bubble algae start on the shaded undersides and in the crevices of mature rock (A6): about 3 % cover at their
+         * Cmax of 0.3, so a crab that picks at them (A4) thins a patch but not the crevices.
+         */
+        val REFUGE_COVER = doubleArrayOf(0.01, 0.01, 0.03, 0.01, 0.01, 0.1, 0.0)
         val COMPETITORS = listOf(AlgaeGroup.DIATOMS, AlgaeGroup.FILM, AlgaeGroup.HAIR, AlgaeGroup.CYANO)
         /** Film groups the pods graze, and the most of that film they take per day. */
         val POD_FOOD = listOf(AlgaeGroup.DIATOMS, AlgaeGroup.FILM)

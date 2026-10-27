@@ -45,6 +45,8 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val polyp = p("polyp", "polyp.vert", "polyp.frag")
     /** Green star polyp stolon mat on a copy of the rock's triangles (GspMatDraw). */
     val gspMat = p("gsp_mat", "static.vert", "gsp_mat.frag", mapOf("GSPMAT" to "1"))
+    /** Bubble algae spheres instanced on the rock (BubbleAlgaeDraw). */
+    val bubble = p("bubble", "bubble.vert", "bubble.frag")
     val fish = p("fish", "fish.vert", "fish.frag")
     val fin = p("fin", "fish.vert", "fish.frag", mapOf("FIN" to "1"))
     val glass = p("glass", "static.vert", "glass.frag")
@@ -57,7 +59,7 @@ class Programs(private val source: (String) -> String, quality: RenderQuality) {
     val shadowCoral = p("shadow_coral", "static.vert", "shadow.frag", mapOf("SOFTCORAL" to "1"))
     val shadowFish = p("shadow_fish", "fish.vert", "shadow.frag")
 
-    fun all() = listOf(rock, sand, generic, shelf, store, room, softCoral, card, polyp, gspMat, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
+    fun all() = listOf(rock, sand, generic, shelf, store, room, softCoral, card, polyp, gspMat, bubble, fish, fin, glass, water, particles, shafts, snow, shadow, shadowCoral, shadowFish)
     fun release() = all().forEach { it.release() }
 }
 
@@ -119,7 +121,7 @@ class FrameUniforms {
         d[76] = WATER_LEVEL; d[77] = CAUSTIC_STRENGTH; d[78] = CAUSTIC_SCALE; d[79] = shaderLevel.toFloat()
         d[80] = if (light.night) 1f else 0f; d[81] = algaeBloom; d[82] = flow; d[83] = SAND_TOP
         d[84] = ABSORB[0]; d[85] = ABSORB[1]; d[86] = ABSORB[2]; d[87] = SCATTER
-        d[88] = Camera.TANK[0]; d[89] = Camera.TANK[1]; d[90] = Camera.TANK[2]; d[91] = 0f
+        d[88] = Camera.TANK[0]; d[89] = Camera.TANK[1]; d[90] = Camera.TANK[2]; d[91] = AlgaeVisuals.dinoLift(algae)   // uDinoLift
         d[92] = surfaceW.toFloat(); d[93] = surfaceH.toFloat(); d[94] = if (hasSurface) 1f else 0f; d[95] = 0f
         AlgaeVisuals.pack(algae, d, ALGAE_OFFSET) // uAlgaeGlass, uAlgaeSand, uAlgaeTop, uAlgaeShade (96..111)
         buffer.position(0); buffer.put(d); buffer.position(0)

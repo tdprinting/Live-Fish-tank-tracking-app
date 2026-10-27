@@ -461,6 +461,9 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
 
     /** Algae growth and uptake (research 09 Part A); its decay adds to the oxygen demand used by [gases]. */
     private fun algae(h: Double) {
+        algae.uv = uv
+        algae.carbonDosing = bacteria.carbonDose / BacteriaModel.CARBON_DOSE_DEFAULT
+        algae.probiotic = bacteria.probiotic
         algae.step(s, h, lightIntensity, flowEff)
         nExportMg += algae.nUptakeMg
         nInputMg += algae.nReleaseMg
@@ -612,6 +615,15 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "bubble" -> s.bubble = value.coerceIn(0.0, 1.0)
             "coralline" -> s.coralline = value.coerceIn(0.0, 1.0)
             "silicate", "si" -> s.silicate = max(0.0, value)
+            // microbial diversity 0..1 (young or knocked-back community: the dino gate, research 09 A2)
+            "microbes" -> s.microbes = value.coerceIn(0.0, 1.0)
+            // a dead spot: local flow (cm/s) over the sand bed and the shaded rock for the algae (research 09 A1 zones);
+            // negative = back to the flow the pumps give there. The tank's pump strength ("flow") is unchanged.
+            "deadspot" -> {
+                val v = if (value < 0) Double.NaN else value
+                algae.flowOverride[AlgaeSurface.SAND.ordinal] = v
+                algae.flowOverride[AlgaeSurface.ROCK_SHADE.ordinal] = v
+            }
             "glasswipe" -> if (value > 0) algae.wipeGlass(value.coerceIn(0.0, 1.0))
             "detritus" -> { nInputMg += (value - s.detritus) * N_TAN * v; s.detritus = value }
 "gfo" -> s.gfoActive = value > 0.5

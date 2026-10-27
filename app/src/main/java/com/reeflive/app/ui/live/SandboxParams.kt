@@ -121,6 +121,27 @@ object SandboxParams {
             zones = SliderZones(dangerBelow = null, safeFrom = 0.0, safeTo = 20.0, dangerAbove = 60.0),
             read = { it.water.algaeHair * 100.0 },
         ),
+        // Nuisance algae seeds (research 09 A2, A6): the cover the AlgaeModel grows (or loses) from; the outbreak presets
+        // in Events set up the conditions that drive each one. Cyano and dinos cover sand and rock; bubble algae only
+        // reach 30 % of the rock (A6 cover limit).
+        SandboxParamDef(
+            "cyano", "Red slime (cyano) cover", "Cyano", "%", SandboxCategory.NUTRIENTS,
+            min = 0.0, max = 90.0, step = 1.0, decimals = 0, scale = 100.0,
+            zones = SliderZones(dangerBelow = null, safeFrom = 0.0, safeTo = 5.0, dangerAbove = 30.0),
+            read = { it.water.cyano * 100.0 },
+        ),
+        SandboxParamDef(
+            "dinos", "Dinoflagellate cover", "Dinos", "%", SandboxCategory.NUTRIENTS,
+            min = 0.0, max = 90.0, step = 1.0, decimals = 0, scale = 100.0,
+            zones = SliderZones(dangerBelow = null, safeFrom = 0.0, safeTo = 5.0, dangerAbove = 30.0),
+            read = { it.water.dinos * 100.0 },
+        ),
+        SandboxParamDef(
+            "bubble", "Bubble algae cover", "Bubble", "%", SandboxCategory.NUTRIENTS,
+            min = 0.0, max = 30.0, step = 1.0, decimals = 0, scale = 100.0,
+            zones = SliderZones(dangerBelow = null, safeFrom = 0.0, safeTo = 3.0, dangerAbove = 15.0),
+            read = { it.water.bubble * 100.0 },
+        ),
 
         // ---------------------------------------------------------------- Light & flow
         // Light is a multiplier on the schedule (sim intensity override 0..1.5); the live PAR is the caption.
@@ -284,4 +305,8 @@ enum class SandboxPreset(val label: String, val blurb: String, val focus: Sandbo
     SALINITY_CRASH("Salinity crash", "Top-off floods fresh water: SG falls to 1.012.", SandboxCategory.WATER, "Salinity is in the danger zone; watch the fish cards."),
     COPPER_OVERDOSE("Copper overdose", "Copper reaches 0.5 ppm: lethal to inverts and corals.", SandboxCategory.CHEMISTRY, "Copper is far past the danger line; try 60x."),
     ROCKSLIDE("Rockslide", "The sand is dug out from under one side of a rock, like a busy goby would.", SandboxCategory.EVENTS, "Watch the rock settle or topple; fish dart away."),
+    // Algae outbreaks (research 09 A2; core AlgaeOutbreaks sets the conditions and the seed)
+    DINO_OUTBREAK("Dinoflagellate outbreak", "Nitrate and phosphate stripped to almost zero and held there, with few good microbes.", SandboxCategory.NUTRIENTS, "Brown snotty strands with bubbles by day, gone at night; try 1000x."),
+    CYANO_OUTBREAK("Red slime (cyano)", "A dead spot over the sand, rotting organics, phosphate and little nitrate.", SandboxCategory.NUTRIENTS, "Red-maroon slime sheets take the sand first, then shaded rock; try 1000x."),
+    BUBBLE_ALGAE("Bubble algae", "A patch of bubble algae on the shaded rock; phosphate moderate, pH 7.95.", SandboxCategory.NUTRIENTS, "Green bubbles spread slowly over weeks; pull them off under Make trouble. Try 1000x."),
 }

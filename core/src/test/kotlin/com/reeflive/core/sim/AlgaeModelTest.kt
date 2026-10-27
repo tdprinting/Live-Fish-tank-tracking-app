@@ -47,6 +47,12 @@ class AlgaeModelTest {
 
     private fun f(v: Double) = "%.3f".format(v)
 
+    /**
+     * The phosphate floor (ppm): P-limited growth draws PO4 down until uptake only balances what decaying tissue returns
+     * (about 0.01 ppm here), under the hobby's "zero" of research 09 A2 (PO4 < 0.02).
+     */
+    private val PO4_FLOOR = 0.02
+
     // ------------------------------------------------------------------ check 1
     /** New-tank diatom pulse: Si 2 ppm, no grazers; sand cover > 50 % between day 10 and 28, < 10 % by day 60 with Si < 0.05; +0.5 ppm Si restarts it. */
     @Test
@@ -73,25 +79,38 @@ class AlgaeModelTest {
 
     // ------------------------------------------------------------------ check 2
     /**
-     * Stoichiometric drawdown: 2 g DW hair, no grazers, no feeding; when the algae reach 20 g DW NO3 has fallen by
-     * 8.5-9.5 ppm and PO4 by 0.3-0.4 ppm, with P the limiter. Research 09 starts PO4 at 0.2 ppm, which cannot fall by
-     * 0.3-0.4; this test starts at 0.4 ppm so the stated drawdowns are reachable.
+     * Stoichiometric drawdown from research 09's start (NO3 10, PO4 0.2, 2 g DW hair, no grazers, no feeding). Growing
+     * to 20 g would need about 0.36 ppm PO4, more than the water holds, so (as the check itself says) the phosphate hits
+     * its floor first and growth turns P-limited: PO4 reaches the floor, f_nut reports P as the limiter, and the nitrate
+     * taken matches hair tissue N (2.5 % DW: 0.49 ppm NO3 per g DW grown in 227 L, A3).
      */
     @Test
     fun a2_drawdownIsStoichiometric() {
-        val b = Bench(clean(no3 = 10.0, po4 = 0.4))
+        val b = Bench(clean(no3 = 10.0, po4 = 0.2))
         AlgaeGroup.entries.filter { it != HAIR }.forEach { b.m.active[it.ordinal] = false }
         b.m.setBiomass(HAIR, 2.0)
         b.w.algaeHair = b.m.headline(HAIR)
+        val b0 = b.m.biomass(HAIR)
         var days = 0.0
-        while (b.m.biomass(HAIR) < 20.0 && days < 200) { b.run(0.25); days += 0.25 }
+        var floorDay = -1.0
+        while (days < 120) {
+            b.run(0.25); days += 0.25
+            if (floorDay < 0 && b.w.po4 < PO4_FLOOR) floorDay = days
+            if (floorDay >= 0 && days >= floorDay + 14) break
+        }
+        val grown = b.m.biomass(HAIR) - b0 + b.m.deadDw
         val dN = 10.0 - b.w.no3
-        val dP = 0.4 - b.w.po4
-        println("A7#2 20 g after ${f(days)} d: NO3 −${f(dN)} PO4 −${f(dP)} limiter ${b.m.limiter[HAIR.ordinal]} fNut ${f(b.m.fNut[HAIR.ordinal])}")
-        assertTrue("hair never reached 20 g", b.m.biomass(HAIR) >= 20.0)
-        assertTrue("NO3 fell $dN", dN in 8.5..9.5)
-        assertTrue("PO4 fell $dP", dP in 0.3..0.4)
+        val perG = dN / grown
+        println("A7#2 PO4 floor on day ${f(floorDay)}: PO4 ${f(b.w.po4)} NO3 −${f(dN)} for ${f(grown)} g grown (${f(perG)} ppm/g) limiter ${b.m.limiter[HAIR.ordinal]} fNut ${f(b.m.fNut[HAIR.ordinal])}")
+        assertTrue("PO4 never reached its floor: ${b.w.po4}", floorDay >= 0 && b.w.po4 < PO4_FLOOR)
+        // at the floor: another week barely moves it
+        val settled = b.w.po4
+        b.run(7.0)
+        assertEquals("PO4 still falling at the floor", settled, b.w.po4, 0.005)
         assertEquals(Nutrient.P, b.m.limiter[HAIR.ordinal])
+        assertTrue("hair still growing on P it does not have: fNut ${b.m.fNut[HAIR.ordinal]}", b.m.fNut[HAIR.ordinal] < 0.2)
+        assertTrue("hair did not grow on the phosphate there was: $grown g", grown > 5.0)
+        assertEquals("NO3 taken per g DW grown", 0.49, perG, 0.08)
     }
 
     // ------------------------------------------------------------------ check 3
@@ -268,6 +287,110 @@ class AlgaeModelTest {
         assertTrue("hair lost $hl", hl in 0.1..0.2)
         assertTrue("coralline lost $kl", kl < 0.05)
         assertTrue("film not visible within 4 d", visible in 0.0..4.0)
+    }
+
+    // ------------------------------------------------------------------ outbreak groups (A2 triggers, A5, A6)
+    /** Dinos lift into the water after lights-out and settle after lights-on; a UV steriliser kills the lifted share. */
+    @Test
+    fun dinosLiftAtNightAndUvTakesThem() {
+        fun uln(uv: Boolean) = Bench(clean(no3 = 0.2, po4 = 0.005).copy(dinos = 0.3, microbes = 0.3)).also {
+            it.hold = { w -> w.no3 = 0.2; w.po4 = 0.005; w.nh3Total = 0.0; w.no2 = 0.0 }
+            it.m.uv = uv
+        }
+        val b = uln(false)
+        var lo = 1.0; var hi = 0.0
+        b.run(2.0) {
+            if (b.lightNow > 0.5) lo = min(lo, b.m.dinoLift) else if (b.lightNow < LightSchedule.LIGHTS_ON) hi = max(hi, b.m.dinoLift)
+        }
+        println("dinos lift: midday ${f(lo)}, night ${f(hi)}")
+        assertTrue("dinos still lifted at midday: $lo", lo < 0.1)
+        assertTrue("dinos never lifted at night: $hi", hi > 0.9)
+        assertEquals(b.m.dinoLift.toFloat(), b.m.snapshot().dinoLift, 1e-6f)
+        val uvOn = uln(true)
+        b.run(14.0); uvOn.run(16.0)
+        println("dinos 16 d ULN: no UV ${f(b.m.biomass(DINOS))} g, UV ${f(uvOn.m.biomass(DINOS))} g")
+        assertTrue("UV did not hold the dinos back", uvOn.m.biomass(DINOS) < 0.7 * b.m.biomass(DINOS))
+    }
+
+    /** Low biodiversity (a young or knocked-back microbial community) lets dinos take a ULN tank faster (A2). */
+    @Test
+    fun lowBiodiversityBreedsDinosFaster() {
+        fun uln(microbes: Double) = Bench(clean(no3 = 0.2, po4 = 0.005).copy(microbes = microbes)).also {
+            it.hold = { w -> w.no3 = 0.2; w.po4 = 0.005; w.nh3Total = 0.0; w.no2 = 0.0 }
+        }
+        val young = uln(0.1); val mature = uln(1.0)
+        young.run(14.0); mature.run(14.0)
+        println("dinos 14 d ULN: young community ${f(young.w.dinos)}, mature ${f(mature.w.dinos)}")
+        assertTrue("young ${young.w.dinos} vs mature ${mature.w.dinos}", young.w.dinos > 1.5 * mature.w.dinos)
+        // a probiotic dose stands in for the missing competitors
+        val dosed = uln(0.1).also { it.m.probiotic = 1.0 }
+        dosed.run(14.0)
+        assertTrue("probiotic ${dosed.w.dinos} vs young ${young.w.dinos}", dosed.w.dinos < young.w.dinos)
+    }
+
+    /** Cyano on low-flow sand grows faster with dissolved organics (water DOC, carbon dosing) and at a low N:P (A2). */
+    @Test
+    fun cyanoFollowsDocAndNitrogenToPhosphate() {
+        fun sand(no3: Double, doc: Double = 0.2, carbon: Double = 0.0): Double {
+            val b = Bench(clean(no3 = no3, po4 = 0.1).copy(doc = doc))
+            b.hold = { it.no3 = no3; it.po4 = 0.1; it.doc = doc }
+            b.m.carbonDosing = carbon
+            b.m.flowOverride[SAND.ordinal] = 3.0
+            b.run(10.0)
+            return b.m.cover(CYANO, SAND)
+        }
+        val base = sand(10.0); val docky = sand(10.0, doc = 6.0); val dosed = sand(10.0, carbon = 1.0); val lowNp = sand(0.1)
+        println("cyano sand 10 d at 3 cm/s: base ${f(base)}, DOC 6 mg/L ${f(docky)}, carbon dosing ${f(dosed)}, NO3 0.1 ${f(lowNp)}")
+        assertTrue("DOC did not drive cyano", docky > 1.5 * base)
+        assertTrue("carbon dosing did not drive cyano", dosed > 1.3 * base)
+        assertTrue("low N:P did not favour cyano", lowNp > 1.2 * base)
+        // and it stays off the well-flushed sand
+        val b = Bench(clean(no3 = 10.0, po4 = 0.1).copy(doc = 6.0))
+        b.hold = { it.no3 = 10.0; it.po4 = 0.1; it.doc = 6.0 }
+        b.m.flowOverride[SAND.ordinal] = 15.0
+        b.run(10.0)
+        assertTrue("cyano on 15 cm/s sand: ${b.m.cover(CYANO, SAND)}", b.m.cover(CYANO, SAND) < 0.05)
+    }
+
+    /** Bubble algae spread slowly (cluster doubling in weeks, A6) and only on rock; young rock and high pH slow them. */
+    @Test
+    fun bubbleAlgaeSpreadSlowlyOnRock() {
+        fun run(microbes: Double = 1.0, ph: Double = 8.2): Bench = Bench(clean().copy(bubble = 0.03, microbes = microbes, ph = ph)).also {
+            it.hold = { w -> w.no3 = 5.0; w.po4 = 0.05; w.ph = ph }
+            it.run(28.0)
+        }
+        val b = run()
+        val growth = b.w.bubble / 0.03
+        println("bubble 28 d: ${f(b.w.bubble)} (x${f(growth)}), shade ${f(b.m.cover(AlgaeGroup.BUBBLE, ROCK_SHADE))}")
+        assertTrue("bubble algae grew x$growth in 4 weeks", growth in 1.3..4.0)
+        assertEquals(0.0, b.m.cover(AlgaeGroup.BUBBLE, SAND), 0.0)
+        assertEquals(0.0, b.m.cover(AlgaeGroup.BUBBLE, GLASS), 0.0)
+        val young = run(microbes = 0.0); val lowPh = run(ph = 7.9)
+        println("bubble 28 d: young rock ${f(young.w.bubble)}, pH 7.9 ${f(lowPh.w.bubble)}")
+        assertTrue("young rock ${young.w.bubble} vs mature ${b.w.bubble}", young.w.bubble < b.w.bubble)
+        assertTrue("pH 7.9 ${lowPh.w.bubble} vs 8.2 ${b.w.bubble}", lowPh.w.bubble > b.w.bubble)
+    }
+
+    /** Pulled off whole, bubble algae come back slowly; squeezed, burst cells seed new ones and they come back faster (A5). */
+    @Test
+    fun bubbleRemovalCarefulVersusSqueezed() {
+        fun pulled(careful: Boolean): Pair<Double, Bench> {
+            val b = Bench(clean().copy(bubble = 0.2))
+            b.hold = { it.no3 = 5.0; it.po4 = 0.05 }
+            b.run(0.1)
+            val before = b.w.bubble
+            val g = b.m.removeBubble(b.w, careful)
+            assertTrue("nothing removed", g > 0)
+            assertTrue("cover $before → ${b.w.bubble}", b.w.bubble < 0.5 * before)
+            return b.w.bubble to b
+        }
+        val (careNow, care) = pulled(true)
+        val (squeezeNow, squeeze) = pulled(false)
+        care.run(30.0); squeeze.run(30.0)
+        println("bubble removal: careful ${f(careNow)} → ${f(care.w.bubble)}, squeezed ${f(squeezeNow)} → ${f(squeeze.w.bubble)} after 30 d")
+        assertTrue("squeezing left $squeezeNow vs $careNow", squeezeNow > careNow)
+        assertTrue("squeezed ${squeeze.w.bubble} vs careful ${care.w.bubble} after 30 d", squeeze.w.bubble > care.w.bubble)
+        assertTrue("squeezing left no rotting sap", squeeze.m.deadDw > care.m.deadDw)
     }
 
     // ------------------------------------------------------------------ wiring
