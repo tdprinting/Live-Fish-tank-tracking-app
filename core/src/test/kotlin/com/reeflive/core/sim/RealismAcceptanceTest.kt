@@ -596,9 +596,12 @@ class RealismAcceptanceTest {
     /** 06 §5.6 #20: RearrangeRock → bouts in the next 6 h ≥ 2× the pre-command rate, ≤ 1.2× by 72 h. */
     @Test
     fun c20_rockRearrangement() {
-        // (four tanks: two-hour chase counts of ~25-30 swing by ±5 per tank, too much for the 20 % margin over two)
+        // (eight tanks: two-hour chase counts of ~25-30 swing by ±5 per tank. The model's own 72 h ratio sits near 1.15
+        // (main at #212: 107 → 122 over seeds 1-4; this branch 274 → 316 over seeds 1-10, later window higher on every
+        // seed), so four tanks left the 1.2 check one standard deviation from failing on any change to the random path
+        // after the reset (adding the ReclaimTerritory loop moved seeds 1-4 to 1.21). Same thresholds, more samples.)
         var pre = 0.0; var post = 0.0; var late = 0.0
-        val seeds = 1L..4L
+        val seeds = 1L..8L
         val n = (seeds.last - seeds.first + 1).toDouble()
         for (seed in seeds) {
             val sim = tank(seed = seed, hour = 10.0)

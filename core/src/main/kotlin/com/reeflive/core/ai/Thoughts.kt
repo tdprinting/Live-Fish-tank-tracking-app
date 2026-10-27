@@ -95,6 +95,7 @@ object Thoughts {
             n == "touch" -> touchLine(e)
             b is SubmarineReact -> subLine(b)
             n == "bout" -> boutLine(b, tgt)
+            n == "reclaim" -> Line("swimming round its patch with its fin up, marking out its territory again now the rocks have moved", "settle back at home", "This is still my spot!", Driver.TERRITORY, 3)
             n == "yield" -> Line("backing off to let ${tgt ?: "the boss"} go first", "give way to the boss", "OK, OK, you first!", Driver.TERRITORY, 2)
             n == "pose" -> Line("holding still so ${tgt ?: "the cleaner"} can clean it", "get cleaned", "Clean me, please!", Driver.GET_CLEANED, 2)
             n == "keepclear" -> Line("keeping its distance from ${tgt ?: e.waryName ?: "a bigger fish"}", "stay out of the way", "I'll stay over here.", Driver.FEAR, 2)
@@ -394,6 +395,8 @@ object Thoughts {
     }
 
     private fun feedLine(e: Env, label: String): Line {
+        // a lower-ranked fish giving way at the food (06 §3.2)
+        if (label == "Waiting its turn at the food") return Line("hanging back at the edge while ${e.target?.let { refer(e.o, it) } ?: "a bigger fish"} eats", "grab some food when it can", "After you…", Driver.HUNGER, 2)
         val food = e.foodWord
         val now = when {
             label == "Picking plankton" -> "picking tiny plankton out of the water"
