@@ -313,7 +313,8 @@ fun LiveTankScreen(
     val mode by vm.mode.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
     val lifePace by vm.lifePace.collectAsStateWithLifecycle()
-    val quality by vm.quality.collectAsStateWithLifecycle()
+    // the picture preset from Settings (Performance / Balanced / Quality); the view model's own copy was never set
+    val quality = LiveQuality.entries[settings.liveQuality.ordinal]
     val followId by vm.followId.collectAsStateWithLifecycle()
     val stats by vm.selectedStats.collectAsStateWithLifecycle()
     val real by vm.real.collectAsStateWithLifecycle()
@@ -1225,6 +1226,8 @@ fun LiveTankScreen(
             onSpot = onSpot,
             aim = aim,
             cinema = cinema,
+            autoQuality = settings.liveAuto,
+            showFps = settings.showFps,
         )
         // every control and card sits in this layer, faded out while the screensaver plays (their state is untouched)
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - cineChrome.floatValue }) {
@@ -1655,6 +1658,8 @@ private fun TankArea(
     onSpot: (TankSpot, Float, Float) -> Unit,
     aim: TankAimControl,
     cinema: CinemaSession,
+    autoQuality: Boolean = true,
+    showFps: Boolean = false,
 ) {
     Box(Modifier.fillMaxSize()) {
         val sub by vm.submarine.collectAsStateWithLifecycle()
@@ -1690,6 +1695,10 @@ private fun TankArea(
             storeRoom = vm.storeRoom,
             room = vm.roomControl,
             cinema = cinema,
+            autoQuality = autoQuality,
+            showHud = showFps,
+            // the microscope covers the whole tank: draw no frames under it
+            shown = !micro,
         )
         TorchOverlay(torch, torchOn && !micro)
         AnimatedVisibility(
