@@ -87,6 +87,8 @@ abstract class SpeciesBrain(val c: Ctx) {
             if (o.isFish) add(KeepClear(this@SpeciesBrain))
             add(Unwell(this@SpeciesBrain))
             add(HeatResponse(this@SpeciesBrain))
+            // a sandbox current too strong to swim in; scores 0 and draws no rng at ordinary flow
+            if (o.isFish) add(FlowShelter(this@SpeciesBrain))
             // a gentle tap on the tank (Command.TouchTank); scores 0 and draws no rng until a tap arrives
             add(TouchReact(this@SpeciesBrain))
             // the toy submarine (Submarine mode); scores 0 and draws no rng while the sub is away, hidden or off

@@ -432,10 +432,10 @@ private fun ToggleParam(def: SandboxParamDef, state: SandboxPanelState, actions:
     )
 }
 
-/** Value scale for the animated badges: light and flow are percentages of normal, so 100 % is "full". */
+/** Value scale for the animated badges: the default peak PAR and ~1.5× normal turnover read as "full". */
 private fun levelOf(def: SandboxParamDef, value: Double): Float = when (def.id) {
-    "light" -> (value / 100.0).toFloat()
-    "flow" -> (value / 150.0).toFloat()
+    "light" -> (value / SandboxParams.DEFAULT_PEAK_PAR).toFloat()
+    "flow" -> (value / (1.5 * com.reeflive.core.sim.Simulation.NOMINAL_TURNOVER)).toFloat()
     "do" -> (value / 10.0).toFloat()
     else -> def.spec.fraction(value)
 }

@@ -47,6 +47,8 @@ class Coral(
     var acclSg = Double.NaN
     var acclAlk = Double.NaN
     var acclLight = Double.NaN
+    /** Minutes in the dark without a break (light below [LightSchedule.LIGHTS_ON]); past a long night it is a blackout. */
+    var darkMin = 0.0
     /** Acute heat necrosis D_coral and the bare-skeleton fraction it has exposed (research 08 §5; irreversible). */
     var necrosis = 0.0
     var skeleton = 0.0
@@ -192,8 +194,29 @@ object CoralSim {
         CoralNeed.HEAT, CoralNeed.SALT, CoralNeed.SALT, CoralNeed.ALK, CoralNeed.ALK, CoralNeed.ALK, CoralNeed.POISON,
         CoralNeed.NUTRIENTS, CoralNeed.LIGHT_HIGH, CoralNeed.LIGHT_HIGH, CoralNeed.FLOW, CoralNeed.POISON, CoralNeed.SALT,
         CoralNeed.CA_MG, CoralNeed.CA_MG, CoralNeed.CA_MG, CoralNeed.NEIGHBOR, CoralNeed.POISON, CoralNeed.SICK,
-        CoralNeed.IODINE, CoralNeed.HUNGRY, CoralNeed.ALGAE,
+        CoralNeed.IODINE, CoralNeed.HUNGRY, CoralNeed.ALGAE, CoralNeed.LIGHT_LOW, CoralNeed.LIGHT_HIGH, CoralNeed.FLOW,
     )
+
+    // ---- sandbox extremes (research 09 Part B; 05 §14-16). The light passed to [step] is intensity: PAR = × PAR_PER_INTENSITY ----
+    /** Rock-top PAR above which the sandbox's photoinhibition starts (500 PAR bleaches high-light corals in weeks). */
+    @Ev(Evidence.DESIGN_ESTIMATE, "09 Part B light row")
+    const val PHOTOINHIB_PAR = 450.0
+    /** PAR where photoinhibition is total (1500: unacclimated corals bleach in 1-3 d, lose tissue in 1-2 weeks). */
+    const val PHOTOINHIB_FULL_PAR = 1500.0
+    /** Extra bleaching per lit minute at full photoinhibition (with the light-high stress: pale in about a day at 1500). */
+    const val PHOTO_BLEACH_PER_MIN = 0.0006
+    /** Tissue burnt per lit minute at full photoinhibition (with bleached-tissue loss: melting in ~1-2 weeks at 1500). */
+    const val PHOTO_BURN_PER_MIN = 0.0001
+    /** Darkness beyond this is a blackout, not a night (a normal night is ~13 h). */
+    const val BLACKOUT_GRACE_MIN = 36 * 60.0
+    /** Blackout (09 Part B): soft corals tolerate 3-5 d, shrink after ~10 d, die after 3-4 weeks (est.). */
+    const val BLACKOUT_FADE_PER_DAY = 0.06
+    const val BLACKOUT_LOSS_PER_MIN = 0.00004
+    /** Pump strength (× normal; 1 ≈ 27×/h) where a powerhead blast starts closing polyps (~60×/h) and where it is full (~95×/h). */
+    const val BLAST_FROM = 2.2
+    const val BLAST_FULL = 3.5
+    /** Tissue abraded per minute in a full blast (09 Part B: soft corals in a direct jet close, abrade and necrose over 1-2 weeks). */
+    const val BLAST_ABRASION_PER_MIN = 0.00005
 
     /** Bleaching threshold for the DHW accumulator (tank analogue of the local max monthly mean + 1 °C). */
     const val DHW_THRESHOLD_C = 29.0
@@ -218,6 +241,16 @@ object CoralSim {
         c.acclSg += (w.sg - c.acclSg) * (1 - exp(-dtMin / 2880.0))
         c.acclAlk += (w.alk - c.acclAlk) * (1 - exp(-dtMin / 1440.0))
         if (minutesSinceOn != null && lightIntensity > 0.05) c.acclLight += (lightIntensity - c.acclLight) * (1 - exp(-dtMin / 30240.0))
+        // sandbox extremes: absolute PAR, a blackout lasting days, a current that blasts the polyps shut
+        val par = lightIntensity * LightSchedule.PAR_PER_INTENSITY
+        c.darkMin = if (lightIntensity < LightSchedule.LIGHTS_ON) c.darkMin + dtMin else 0.0
+        val photosynthetic = p.lightLo > 0.0
+        val blackDays = if (photosynthetic) ((c.darkMin - BLACKOUT_GRACE_MIN) / 1440.0).coerceAtLeast(0.0) else 0.0
+        val photoInhib = if (minutesSinceOn == null || !photosynthetic) 0.0 else ((par - PHOTOINHIB_PAR) / (PHOTOINHIB_FULL_PAR - PHOTOINHIB_PAR)).coerceIn(0.0, 1.0)
+        val blast = if (c.kind == CoralKind.MACRO) 0.0 else smoothstep(BLAST_FROM, BLAST_FULL, flowStrength)
+        val sBlackout = if (blackDays > 0) 0.2 + 0.6 * smoothstep(2.0, 10.0, blackDays) else 0.0
+        val sPhoto = if (photoInhib > 0) 0.4 + 0.6 * photoInhib else 0.0
+        val sBlast = if (blast > 0) blast * (if (p.flowSensitive) 0.8 else 0.6) else 0.0
         val (sTemp, _) = HealthModel.stressOf(w.tempC, p.temp)
         val (sSg, _) = HealthModel.stressOf(w.sg, ToleranceRange(1.023, 1.027, 1.020, 1.029, 1.015, 1.033))
         val (sSgShock, sgLethal) = HealthModel.stressOf(abs(w.sg - c.acclSg) / SG_STEP, SG_SHOCK)
@@ -258,7 +291,7 @@ object CoralSim {
         var sFlow = 0.0
         if (p.flowSensitive && (c.flowSpeed > 25 || flowStrength > 1.5)) sFlow = 0.3
         if (p.needsFlow && flowStrength < 0.3) sFlow = 0.4
-        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * alkShockWeight, sPh, sNh3, sPo4 * (if (c.kind == CoralKind.SPS) 0.8 else 0.3), sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3)
+        val parts = doubleArrayOf(sTemp, sSg, sSgShock, sAlk, sAlkShock * alkShockWeight, sPh, sNh3, sPo4 * (if (c.kind == CoralKind.SPS) 0.8 else 0.3), sLight, sLightShock * 0.6, sFlow, sCu, sK * 0.5, sSr * 0.2, sCa * caMgWeight, sMg * caMgWeight, c.neighborStress, sH2s, sPath * 0.6, sI, sHunger * 0.5, if (c.kind == CoralKind.AIPTASIA) 0.0 else c.algaeCover * 0.3, sBlackout, sPhoto, sBlast)
         var prod = 1.0
         var top = 0.15; var worst = -1
         for (i in parts.indices) {
@@ -284,6 +317,8 @@ object CoralSim {
         target *= GspPolyps.settleFactor(c, simTimeSec)
         // leathers close up for a few days every few weeks while they shed a waxy film
         if (shedding(c, simTimeSec, flowStrength)) target *= SHED_EXTENSION
+        // a powerhead blast shuts the polyps; a blackout of days shrinks the colony down
+        target *= (1 - 0.9 * blast) * (1 - 0.7 * smoothstep(3.0, 10.0, blackDays))
         // acute heat (research 08 §5): heavy mucus and retraction from the first sign of necrosis
         if (c.necrosis > 0.02) target *= 0.2
         if (c.melting) target = 0.0
@@ -303,7 +338,8 @@ object CoralSim {
         val starving = 0.00002 * sHunger
         val heat = (0.0008 * max(0.0, sTemp - 0.5) * (if (acute) 0.0 else 1.0) + max(0.0, dhwTarget - c.bleach) / (3 * 1440.0)) * pr.heatBleach
         val recover = if (c.need >= 0) 0.0 else (if (c.stress < 0.15) 0.00001 else if (c.stress < 0.3) 0.000004 else 0.0) * pr.recovery
-        c.bleach += (heat + (0.0003 * (if (dark > 0) 0.0 else sLight) + 0.0004 * sLightShock) * pr.lightBleach + pr.darkFade * dark / DAYLIGHT_MIN + starving - recover) * dtMin
+        c.bleach += (heat + (0.0003 * (if (dark > 0) 0.0 else sLight) + 0.0004 * sLightShock) * pr.lightBleach + pr.darkFade * dark / DAYLIGHT_MIN + starving - recover +
+            PHOTO_BLEACH_PER_MIN * photoInhib * pr.lightBleach + BLACKOUT_FADE_PER_DAY / 1440.0 * smoothstep(3.0, 5.0, blackDays)) * dtMin
         c.bleach = c.bleach.coerceIn(0.0, 1.0)
         if (c.bleach > 0.5 && !c.bleachingReported) { c.bleachingReported = true; events += SimEvent.CoralBleaching(c.id, simTimeSec) }
         if (c.bleach < 0.2) c.bleachingReported = false
@@ -314,7 +350,8 @@ object CoralSim {
         val loss = 0.00004 * smoothstep(0.7, 1.0, c.bleach) * (0.15 + 0.85 * smoothstep(0.2, 0.6, c.stress)) + 0.00005 * smoothstep(8.0, 12.0, c.dhw) + 0.0002 * sNh3 +
             0.00003 * c.algaeCover + 0.0003 * sCu + (if (sgLethal) 0.002 else 0.0) + 0.0002 * max(0.0, sPh - 0.6) +
             0.00002 * c.neighborStress + 0.00003 * c.overgrown + PATHOGEN_TISSUE_LOSS * sPath + 0.0003 * sH2s +
-            (if (c.kind == CoralKind.AIPTASIA) 0.0 else RECEDE_PER_MIN * smoothstep(0.65, 0.95, c.stress)) + 0.00002 * sHunger * c.bleach
+            (if (c.kind == CoralKind.AIPTASIA) 0.0 else RECEDE_PER_MIN * smoothstep(0.65, 0.95, c.stress)) + 0.00002 * sHunger * c.bleach +
+            PHOTO_BURN_PER_MIN * photoInhib * photoInhib + BLACKOUT_LOSS_PER_MIN * smoothstep(8.0, 12.0, blackDays) + BLAST_ABRASION_PER_MIN * blast * blast
         c.tissue += (-loss * pr.recede + (if (c.stress < 0.1 && c.tissue < 1 && c.tissue > CoralHealth.DEAD_TISSUE) 0.00002 * pr.recovery else 0.0)) * dtMin
         // bare skeleton does not regrow tissue; more than half bare and the colony dies (08 §6, §7.2)
         if (c.skeleton > 0.5) c.tissue -= dtMin / 360.0
