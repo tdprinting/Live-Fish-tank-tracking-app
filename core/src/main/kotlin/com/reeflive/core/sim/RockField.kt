@@ -116,8 +116,8 @@ class DynamicRockSdf(
     var xf: Array<DoubleArray> = Array(baseCount) { identityXf() }; private set
     /** World-space grid box each moved piece last covered (cleared when it moves on). */
     private var lastBox = arrayOfNulls<IntArray>(baseCount)
-    private val dirty = IntArray(6)
-    private var anyDirty = false
+    /** Grid boxes whose composite cells are stale: kept apart (a union of two far-apart rocks would re-derive the water between them). */
+    private val dirtyBoxes = ArrayList<IntArray>()
     /** Bumped each time the field changes (a [refresh] that re-derived cells); caches over the field key on it. */
     var revision = 0; private set
 
@@ -197,7 +197,7 @@ class DynamicRockSdf(
         val fresh = ids.filter { !moved[it] && pieceBox[it] != null }
         if (fresh.isEmpty()) return
         if (stat == null) { stat = baseD.copyOf(); comp = baseD.copyOf() }
-        for (p in fresh) { moved[p] = true; pieceGrid[p] = buildPieceGrid(p) }
+        for (p in fresh) { moved[p] = true; pieceGrid[p] = buildPieceGrid(p); updateBounds(p) }
         // static rock around the lifted pieces: distance to the cells still in place
         val r = IntArray(6) { if (it < 3) Int.MAX_VALUE else -1 }
         for (p in fresh) { val bx = pieceBox[p]!!; for (c in 0 until 3) { r[c] = min(r[c], bx[c] - PAD); r[c + 3] = max(r[c + 3], bx[c + 3] + PAD) } }
@@ -212,6 +212,46 @@ class DynamicRockSdf(
     fun setTransform(i: Int, m: DoubleArray) {
         m.copyInto(xf[i])
         changed[i] = true
+        updateBounds(i)
+    }
+
+    /** Per piece: the world axis-aligned box (min xyz, max xyz) of its grid box at its current transform, for [pieceFar]. */
+    private var wbox = DoubleArray(baseCount * 6)
+
+    private fun updateBounds(i: Int) {
+        val g = pieceGrid[i] ?: return
+        if (wbox.size < all.size * 6) wbox = wbox.copyOf(all.size * 6)
+        val m = xf[i]
+        var x0 = Double.MAX_VALUE; var y0 = Double.MAX_VALUE; var z0 = Double.MAX_VALUE
+        var x1 = -Double.MAX_VALUE; var y1 = -Double.MAX_VALUE; var z1 = -Double.MAX_VALUE
+        for (c in 0 until 8) {
+            val lx = if (c and 1 == 0) g.ox else g.ox + (g.nx - 1) * g.cell
+            val ly = if (c and 2 == 0) g.oy else g.oy + (g.ny - 1) * g.cell
+            val lz = if (c and 4 == 0) g.oz else g.oz + (g.nz - 1) * g.cell
+            val wx = m[0] * lx + m[1] * ly + m[2] * lz + m[9]
+            val wy = m[3] * lx + m[4] * ly + m[5] * lz + m[10]
+            val wz = m[6] * lx + m[7] * ly + m[8] * lz + m[11]
+            x0 = min(x0, wx); y0 = min(y0, wy); z0 = min(z0, wz); x1 = max(x1, wx); y1 = max(y1, wy); z1 = max(z1, wz)
+        }
+        val o = i * 6
+        wbox[o] = x0; wbox[o + 1] = y0; wbox[o + 2] = z0; wbox[o + 3] = x1; wbox[o + 4] = y1; wbox[o + 5] = z1
+    }
+
+    /**
+     * True when piece [i] cannot be nearer to (x, y, z) than [d]: [pieceDist] is at least the distance to the piece's grid
+     * box (its edge values are positive and it adds the distance outside), which is at least the distance to that box's
+     * world bounds. Lets a caller taking a minimum skip the grid lookup for rocks far away.
+     */
+    fun pieceFar(i: Int, x: Double, y: Double, z: Double, d: Double): Boolean {
+        if (gone[i]) return true
+        if (pieceGrid[i] == null) return true
+        val o = i * 6
+        val ex = max(0.0, max(wbox[o] - x, x - wbox[o + 3]))
+        val ey = max(0.0, max(wbox[o + 1] - y, y - wbox[o + 4]))
+        val ez = max(0.0, max(wbox[o + 2] - z, z - wbox[o + 5]))
+        val out2 = ex * ex + ey * ey + ez * ez
+        // inside the bounds a rock's own field can be negative: only a point outside them is certainly farther than d <= 0
+        return if (d <= 0.0) out2 > 0.0 else out2 >= d * d
     }
     private var changed = BooleanArray(baseCount)
 
@@ -237,6 +277,7 @@ class DynamicRockSdf(
         for (k in 0 until gz) for (j in 0 until gy) for (i in 0 until gx)
             v[(k * gy + j) * gx + i] = def.dist((i0 + i) * cell, (j0 + j) * cell, (k0 + k) * cell).toFloat()
         pieceGrid[p] = LocalGrid(gx, gy, gz, i0 * cell, j0 * cell, k0 * cell, cell, v)
+        updateBounds(p)
         moved[p] = true
         active = true
         return p
@@ -262,19 +303,34 @@ class DynamicRockSdf(
             addDirty(now)
             lastBox[p] = now
         }
-        if (!anyDirty) return
+        if (dirtyBoxes.isEmpty()) return
         val st = stat!!; val c = comp!!
-        val boxes = pieces.indices.filter { moved[it] && !gone[it] }.map { it to lastBox[it]!! }
-        for (k in dirty[2]..dirty[5]) for (j in dirty[1]..dirty[4]) for (i in dirty[0]..dirty[3]) {
-            val a = idx(i, j, k)
-            var v = st[a].toDouble()
-            for ((p, bx) in boxes) {
-                if (i < bx[0] || i > bx[3] || j < bx[1] || j > bx[4] || k < bx[2] || k > bx[5]) continue
-                v = min(v, pieceDist(p, cx(i), cy(j), cz(k)))
+        var live = 0
+        for (q in pieces.indices) if (moved[q] && !gone[q]) live++
+        for (bi in dirtyBoxes.indices) {
+            val d = dirtyBoxes[bi]
+            // the rock that never moved, then every moved rock whose box reaches this one: the composite is their minimum
+            val rowLen = d[3] - d[0] + 1
+            for (k in d[2]..d[5]) for (j in d[1]..d[4]) st.copyInto(c, idx(d[0], j, k), idx(d[0], j, k), idx(d[0], j, k) + rowLen)
+            if (live == 0) continue
+            for (p in pieces.indices) {
+                if (!moved[p] || gone[p]) continue
+                val bx = lastBox[p]!!
+                val i0 = max(d[0], bx[0]); val i1 = min(d[3], bx[3])
+                val j0 = max(d[1], bx[1]); val j1 = min(d[4], bx[4])
+                val k0 = max(d[2], bx[2]); val k1 = min(d[5], bx[5])
+                if (i0 > i1 || j0 > j1 || k0 > k1) continue
+                for (k in k0..k1) for (j in j0..j1) {
+                    var a = idx(i0, j, k)
+                    for (i in i0..i1) {
+                        val v = pieceDist(p, cx(i), cy(j), cz(k)).toFloat()
+                        if (v < c[a]) c[a] = v
+                        a++
+                    }
+                }
             }
-            c[a] = v.toFloat()
         }
-        anyDirty = false
+        dirtyBoxes.clear()
         revision++
     }
 
@@ -302,8 +358,15 @@ class DynamicRockSdf(
     }
 
     private fun addDirty(b: IntArray) {
-        if (!anyDirty) { b.copyInto(dirty); anyDirty = true; return }
-        for (c in 0 until 3) { dirty[c] = min(dirty[c], b[c]); dirty[c + 3] = max(dirty[c + 3], b[c + 3]) }
+        for (e in dirtyBoxes) if (b[0] >= e[0] && b[1] >= e[1] && b[2] >= e[2] && b[3] <= e[3] && b[4] <= e[4] && b[5] <= e[5]) return
+        dirtyBoxes.removeAll { e -> e[0] >= b[0] && e[1] >= b[1] && e[2] >= b[2] && e[3] <= b[3] && e[4] <= b[4] && e[5] <= b[5] }
+        dirtyBoxes += b.copyOf()
+        if (dirtyBoxes.size > MAX_DIRTY_BOXES) {
+            // too many pieces at once: fall back to one box over all of them
+            val u = dirtyBoxes[0]
+            for (e in dirtyBoxes) for (c in 0 until 3) { u[c] = min(u[c], e[c]); u[c + 3] = max(u[c + 3], e[c + 3]) }
+            dirtyBoxes.clear(); dirtyBoxes += u
+        }
     }
 
     private fun clampBox(r: IntArray) {
@@ -370,6 +433,7 @@ class DynamicRockSdf(
     companion object {
         /** Cells of margin around a piece's own grid and around the static rebuild. */
         const val PAD = 6
+        private const val MAX_DIRTY_BOXES = 24
         /** Chamfer steps overestimate the true distance by up to ~8 %; scaled down to stay conservative. */
         private const val CHAMFER_SAFE = 0.93
 

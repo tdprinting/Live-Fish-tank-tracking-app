@@ -43,6 +43,13 @@ class RockPhysics(
     /** Something was taken out from under the rocks: check every rock's footing at the next step. */
     private var recheck = false
 
+    /**
+     * Off-screen builds (a store's display tank) skip the field's refresh every [REFRESH_S] while rocks fall: it is most of
+     * a step's cost, and nothing reads the composite field until a rock comes to rest ([sleep] refreshes) or the next rock
+     * is placed ([Simulation.placeRock] refreshes first).
+     */
+    var deferRefresh = false
+
     /** Rocks that came to rest since the last [drainSettled] (the sim refreshes sand, anchors and corals and reports). */
     private val settled = ArrayList<Settle>()
     class Settle(val body: RockBody, val moveCm: Double, val turnDeg: Double, val x: Double, val y: Double, val z: Double)
@@ -251,7 +258,7 @@ class RockPhysics(
         }
         if (subs >= MAX_SUBSTEPS) stepAcc = 0.0
         refreshAcc += dt
-        if (refreshAcc >= REFRESH_S || !anyAwake) { refreshAcc = 0.0; field.refresh() }
+        if ((refreshAcc >= REFRESH_S && !deferRefresh) || !anyAwake) { refreshAcc = 0.0; field.refresh() }
         version++
         return true
     }
@@ -464,12 +471,16 @@ class RockPhysics(
         for (p in b.pieces) field.setTransform(p, xfTmp)
     }
 
-    /** Distance from (x, y, z) to everything [b] can hit but the glass and sand: static rock and the other moved rocks. */
+    /**
+     * Distance from (x, y, z) to everything [b] can hit but the glass and sand: static rock and the other moved rocks,
+     * and at most [ENV_CAP]: [gather] only looks at probes within a probe's radius and at the slope there, and a cap lets
+     * [DynamicRockSdf.pieceFar] skip every rock that is not within reach.
+     */
     private fun env(b: RockBody, x: Double, y: Double, z: Double): Double {
-        var d = field.staticDist(x, y, z)
+        var d = min(field.staticDist(x, y, z), ENV_CAP)
         for (o in bodies) {
             if (o === b || !o.moved) continue
-            for (p in o.pieces) d = min(d, field.pieceDist(p, x, y, z))
+            for (p in o.pieces) if (!field.pieceFar(p, x, y, z, d)) d = min(d, field.pieceDist(p, x, y, z))
         }
         return d
     }
@@ -656,6 +667,7 @@ class RockPhysics(
         const val ITERATIONS = 10
         /** Probes sit on boundary cell centres, half a cell inside the surface. */
         const val PROBE_R = 0.5
+        const val ENV_CAP = 3.0
         const val BOTTOM_NY = 0.35
         const val ROCK_SUPPORT_NY = 0.5
         const val GLASS_TOL = 0.6
