@@ -52,8 +52,8 @@ object AlgaeOutbreaks {
     const val DINO_SEED = 0.04
     /** cm/s: under the 5 cm/s cyano prefers (A1), in the 0-3 cm/s dead-spot band of 05 §16. */
     const val DEAD_SPOT_CM_S = 2.0
-    /** mg C/L: well past a dirty tank ([BacteriaModel.DOC_DIRTY] 1.5), a full DOC index for the cyano. */
-    const val CYANO_DOC = 5.0
+    /** mg C/L: a full DOC index for the cyano ([AlgaeModel.DOC_CLEAN] + [AlgaeModel.DOC_SPAN]). */
+    const val CYANO_DOC = 6.0
     const val CYANO_NO3 = 2.0
     const val CYANO_PO4 = 0.12
     const val CYANO_SEED = 0.03

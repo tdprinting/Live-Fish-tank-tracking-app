@@ -664,8 +664,11 @@ class AlgaeModel(config: TankConfig) {
         const val COMP_HALF_G = 1.0
         const val CYANO_DOC_BASE = 0.4
         const val CYANO_DOC_GAIN = 1.2
-        /** Dissolved organic carbon (mg C/L) a clean tank stays under ([BacteriaModel.DOC_DIRTY]), and the rise to a full DOC index. */
-        const val DOC_CLEAN = 1.5
+        /**
+         * Dissolved organic carbon (mg C/L) a normally fed tank stays under (twice [BacteriaModel.DOC_DIRTY]; a new
+         * tank starts at 1.5 and a stocked one settles near 0.2), and the rise above it to a full DOC index.
+         */
+        const val DOC_CLEAN = 3.0
         const val DOC_SPAN = 3.0
         /** Competitor index a full probiotic dose adds (est.). */
         const val PROBIOTIC_CI = 0.3
