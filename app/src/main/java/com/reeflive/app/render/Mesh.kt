@@ -29,6 +29,19 @@ class Mesh private constructor(
         GLES30.glBindVertexArray(0); Gl.check("glBindVertexArray(0)")
     }
 
+    /**
+     * Replaces the per-instance buffer with the first [count] instances of [instances] ([INSTANCE_FLOATS] each). Only
+     * for a mesh created with instances; allocates a direct buffer, so call it on a change, not per frame.
+     */
+    fun updateInstances(instances: FloatArray, count: Int) {
+        if (instanceVbo == 0 || count <= 0) return
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, instanceVbo); Gl.check("glBindBuffer(instances)")
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, count * INSTANCE_FLOATS * 4, Gl.floats(instances, count * INSTANCE_FLOATS), GLES30.GL_DYNAMIC_DRAW)
+        Gl.check("glBufferData(instances)")
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0); Gl.check("glBindBuffer(0)")
+        instanceCount = count
+    }
+
     fun release() {
         Gl.deleteVertexArray(vao); Gl.deleteBuffer(vbo); Gl.deleteBuffer(ibo); Gl.deleteBuffer(instanceVbo)
         instanceVbo = 0

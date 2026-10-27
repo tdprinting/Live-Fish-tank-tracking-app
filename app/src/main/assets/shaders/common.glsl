@@ -15,7 +15,7 @@ layout(std140) uniform Frame {
     vec4 uParams;        // x water level, y caustic strength, z caustic scale, w quality (0 low, 1 medium, 2 high)
     vec4 uParams2;       // x night (0/1), y algae bloom, z flow strength, w sand top (cm)
     vec4 uAbsorb;        // rgb Beer-Lambert absorption (1/cm), w scattering (1/cm)
-    vec4 uTank;          // xyz interior size (cm), w unused
+    vec4 uTank;          // xyz interior size (cm), w dino film lifted into the water (0 day .. 1 night; AlgaeCover.dinoLift)
     vec4 uSurfaceDims;   // xy heightfield size, z 1 when heights are present, w unused
     // Algae cover 0..1 per surface (AlgaeCover, research 09 A6); packed by AlgaeVisuals.kt.
     vec4 uAlgaeGlass;    // x green film, y diatoms, z cyano, w dinos
@@ -43,6 +43,7 @@ layout(std140) uniform Frame {
 #define uShaftStrength uFx.y
 #define uCausticDispersion uFx.z
 #define uRipple uFx.w
+#define uDinoLift uTank.w
 
 const float PI = 3.14159265;
 

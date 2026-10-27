@@ -166,6 +166,11 @@ sealed class Command {
     data class TreatAiptasia(val treatment: AiptasiaTreatment, val polypId: String? = null) : Command()
     /** Remove up to [count] aiptasia, biggest first: injected ([chemical]) or scraped; both can leave fragments. */
     data class RemoveAiptasia(val count: Int = 1, val chemical: Boolean = true) : Command()
+    /**
+     * Pull the bubble algae off the rock (research 09 A2, A5): lifted out whole ([careful]) or squeezed off, when some
+     * cells burst and seed new ones nearby ([AlgaeModel.removeBubble]).
+     */
+    data class RemoveBubbleAlgae(val careful: Boolean = true) : Command()
     /** Add aiptasia controllers (peppermint shrimp, Berghia nudibranchs). */
     data class AddPestControl(val controller: PestController, val count: Int = 1) : Command()
 

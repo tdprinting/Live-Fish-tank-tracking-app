@@ -636,6 +636,11 @@ function troubleMore(sb) {
     ${tile('data-preset="COPPER_OVERDOSE"', 'copperBottle', 'Copper spill', false, !sb)}${tile('data-preset="OVERFEEDING"', 'plate', 'Too much food', false, !sb)}${tile('data-preset="ROCKSLIDE"', 'rocks', 'Rockslide', false, !sb)}
     ${tile('data-preset="MISSED_WATER_CHANGES"', 'calendarX', 'No water changes', false, !sb)}${tile('data-aip="1"', 'pestAnemone', 'Pest anemone', false, !sb)}
     ${tile('data-aip="-1"', 'zap', `Zap pest${P?.aiptasia ? ` (${P.aiptasia})` : ''}`, false, !sb)}${tile('data-sick', 'sickFish', 'A fish gets sick', false, !sb)}
+  </div>
+  <h4>Algae outbreaks</h4><div class="options">
+    ${tile('data-preset="DINO_OUTBREAK"', 'fuzzyRock', 'Dinoflagellates', false, !sb)}${tile('data-preset="CYANO_OUTBREAK"', 'seaweed', 'Red slime', false, !sb)}
+    ${tile('data-preset="BUBBLE_ALGAE"', 'bubbles', 'Bubble algae', false, !sb)}${tile('data-bubblepull="1"', 'scissors', 'Pick off bubble algae', false, !sb)}
+    ${tile('data-bubblepull="0"', 'zap', 'Squeeze bubble algae', false, !sb)}
   </div>`;
   if (ui.sickPick) h += `<h4>Which illness?</h4><div class="options">${C.diseases.map((d) => tile(`data-infect="${d.id}"`, 'sickFish', d.label, false, !sb)).join('')}</div>`;
   h += `<h4>What-if presets</h4><div class="presets">${C.presets.map((p) => `<button class="preset ${sb ? '' : 'lock'}" data-preset="${p.id}"><strong>${esc(p.label)}</strong><span>${esc(p.blurb)}</span><em>${esc(p.hint)}</em></button>`).join('')}</div>
@@ -730,6 +735,9 @@ $('card').addEventListener('click', (e) => {
   else if (d.micro) act('micro', d.micro, 0, `${C.micro.find((m) => m.id === d.micro).label}. Look closer to see them!`);
   else if (d.pest) act('pestControl', d.pest, 0, d.pest === 'BERGHIA' ? 'Berghia slugs only eat pest anemones.' : 'Peppermint shrimp eat pest anemones. Yum!');
   else if ('shells' in d) act('spareShells', null, 0, 'Spare shells for the hermit crabs to move into.');
+  else if (d.bubblepull) act('bubbleAlgae', null, Number(d.bubblepull), d.bubblepull === '1'
+    ? 'Bubble algae lifted off whole. A few hide in the cracks and come back slowly.'
+    : 'Squish! Some bubbles burst, and every burst one seeds new bubbles nearby.');
   else if (d.nudge) sbOnly(() => {
     const [id, delta] = d.nudge.split(':');
     const p = C.params.find((x) => x.id === id);

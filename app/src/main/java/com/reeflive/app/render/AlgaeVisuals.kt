@@ -45,4 +45,25 @@ object AlgaeVisuals {
             out[offset + i] = if (v.isNaN()) 0f else v.coerceIn(0f, 1f)
         }
     }
+
+    /** `uDinoLift` (uTank.w): share of the dino film lifted into the water at night, 0..1. */
+    fun dinoLift(cover: AlgaeCover): Float = cover.dinoLift.let { if (it.isNaN()) 0f else it.coerceIn(0f, 1f) }
+
+    /**
+     * Bubble algae spheres to draw ([BubbleAlgaeDraw]): the rock cover of bubble algae as a share of its cover limit
+     * (research 09 A6: 30 % of the rock), shade and top weighted by area as the sim weights its headline, times the
+     * [budget] of instance slots. Fractional: the last sphere grows in.
+     */
+    fun bubbleCount(cover: AlgaeCover, budget: Int): Float {
+        val shade = cover.cover(AlgaeGroup.BUBBLE, AlgaeSurface.ROCK_SHADE)
+        val top = cover.cover(AlgaeGroup.BUBBLE, AlgaeSurface.ROCK_TOP)
+        val c = (BUBBLE_SHADE_WEIGHT * shade + (1f - BUBBLE_SHADE_WEIGHT) * top) / BUBBLE_CMAX
+        if (c.isNaN() || c <= 0f || budget <= 0) return 0f
+        return c.coerceAtMost(1f) * budget
+    }
+
+    /** Bubble algae cover limit on rock (AlgaeModel: Cmax 0.3). */
+    const val BUBBLE_CMAX = 0.3f
+    /** Shaded rock's share of the rock area (AlgaeModel: shade 0.7, top 0.5 of the footprint). */
+    const val BUBBLE_SHADE_WEIGHT = 0.7f / 1.2f
 }
