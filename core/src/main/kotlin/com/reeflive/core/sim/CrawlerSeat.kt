@@ -248,6 +248,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
     }
 
     fun update(o: Organism, crawling: Boolean, s: CrawlSurface, dt: Double, simOffset: Double = -1.0) {
+        memoOk = false   // the surface may have changed since the last update (sand, rocks)
         val L = max(o.lengthCm, 0.3)
         val d0 = s.dist(o.pos)
         // (the Sally Lightfoot stands on long legs: its body may be over a dip, its feet on the rims round it)
@@ -638,7 +639,25 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         return m
     }
 
+    // one-entry memo of [lowestContact] within an [update]: the solves re-check the seat they just settled on (the same
+    // origin and frame) several times running; the same inputs give the same answer, so it is returned as it was
+    private var memoOk = false
+    private var memoS: CrawlSurface? = null
+    private var memoP = Vec3.ZERO
+    private var memoF = Vec3.ZERO
+    private var memoU = Vec3.ZERO
+    private var memoR = Vec3.ZERO
+    private var memoL = 0.0
+    private var memoEnd = -1
+    private var memoD = 0.0
+    private var memoLowest = Vec3.ZERO
+    private var memoHit = false
+
     private fun lowestContact(s: CrawlSurface, p: Vec3, L: Double, end: Int = shape.contacts.size): Double {
+        if (memoOk && end == memoEnd && s === memoS && L == memoL && p == memoP && fwd == memoF && up == memoU && right == memoR) {
+            if (memoHit) lowest = memoLowest
+            return memoD
+        }
         val c = shape.contacts
         var minD = Double.MAX_VALUE
         var lx = 0.0; var ly = 0.0; var lz = 0.0; var hit = false
@@ -655,6 +674,8 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
             i += 3
         }
         if (hit) lowest = Vec3(lx, ly, lz)
+        memoOk = true; memoS = s; memoP = p; memoF = fwd; memoU = up; memoR = right; memoL = L; memoEnd = end
+        memoD = minD; memoHit = hit; if (hit) memoLowest = lowest
         return minD
     }
 
@@ -770,6 +791,7 @@ class CrawlerSeat(val kind: BrainKind, val shape: SeatShape, val hermit: HermitM
         val y = CrabModel.STANCE_Y + m.flatDrop * crabTuck
         var i = m.stanceFrom * 3
         while (i < c.size) { c[i + 1] = y; i += 3 }
+        memoOk = false   // the contact set changed
     }
 
     private fun poseCrab(o: Organism, rig: CrabLegs, m: CrabModel, s: CrawlSurface, L: Double) {

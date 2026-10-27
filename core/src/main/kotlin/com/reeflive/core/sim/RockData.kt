@@ -111,9 +111,15 @@ class RockData(
         else RockData(sdf, restAnchors, shape.lengthCm, shape.depthCm, shape.sandTopCm, shape.waterLevelCm, pieces, restHoles, shape.heightCm)
 
     /** Distance to the nearest of rock, sand, glass and surface (for particle settling etc.). */
-    fun envDist(p: Vec3): Double = minOf(
-        sdf.dist(p), p.y - sandTopCm, waterLevelCm - p.y, p.x, lengthCm - p.x, p.z, widthCm - p.z,
-    )
+    fun envDist(p: Vec3): Double = envDistAt(p.x, p.y, p.z)
+
+    /** [envDist] without the Vec3 or the vararg array: the same pairwise minimum, in the same order. */
+    fun envDistAt(x: Double, y: Double, z: Double): Double {
+        var m = sdf.distAt(x, y, z)
+        m = minOf(m, y - sandTopCm); m = minOf(m, waterLevelCm - y); m = minOf(m, x); m = minOf(m, lengthCm - x)
+        m = minOf(m, z); m = minOf(m, widthCm - z)
+        return m
+    }
 
     fun inWater(p: Vec3, margin: Double = 0.0) =
         p.x in margin..(lengthCm - margin) && p.z in margin..(widthCm - margin) && p.y in (sandTopCm + margin)..(waterLevelCm - margin)

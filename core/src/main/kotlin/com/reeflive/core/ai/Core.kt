@@ -111,7 +111,7 @@ class Perception(val sim: Simulation) {
     fun rebuild() {
         hash.rebuild(sim.organisms.filter { it.alive && it.visible })
         taps.removeAll { t - it.time > 60 }
-        stations.removeAll { !it.cleaner.alive || it.cleaner !in sim.organisms }
+        stations.removeAll { !it.cleaner.alive || it.cleaner.memberOf !== sim }
     }
 
     fun neighbors(p: Vec3, r: Double): List<Organism> = hash.neighbors(p, r)
@@ -119,11 +119,10 @@ class Perception(val sim: Simulation) {
     /** Activity curve (SIMULATION §4.4). */
     fun activity(o: Organism): Double {
         val day = smoothstep(0.05, 0.3, light)
-        // (compared ignoring case in place: an uppercase() copy per call was a string per animal per tick)
-        val a = o.species.activity
-        return when {
-            a.equals("NOCTURNAL", ignoreCase = true) -> 1 - day * 0.85
-            a.equals("CREPUSCULAR", ignoreCase = true) -> {
+        // (the species' activity string compared once, at the organism: Organism.activityCode)
+        return when (o.activityCode) {
+            1 -> 1 - day * 0.85
+            2 -> {
                 val dim = if (light in 0.03..0.35) 1.0 else 0.0
                 if (dim > 0) 1.0 else if (night) 0.7 else 0.5
             }

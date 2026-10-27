@@ -73,7 +73,7 @@ class SimBenchmark {
                 log("-- top self frames")
                 r.selfs.entries.sortedByDescending { it.value }.take(40).forEach { (k, v) -> log("  %-60s %5.1f%%".format(k, 100.0 * v / r.samples)) }
                 log("-- top inclusive frames")
-                r.incl.entries.sortedByDescending { it.value }.take(80).forEach { (k, v) -> log("  %-60s %5.1f%%".format(k, 100.0 * v / r.samples)) }
+                r.incl.entries.sortedByDescending { it.value }.take(150).forEach { (k, v) -> log("  %-60s %5.1f%%".format(k, 100.0 * v / r.samples)) }
             }
         }
         log("")
