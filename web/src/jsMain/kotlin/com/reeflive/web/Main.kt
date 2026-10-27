@@ -56,6 +56,8 @@ object ReefLive {
     internal var sim: Simulation? = null
     /** The tank as logged (default stock + the tracker's readings); runs at 1x. */
     internal var reality: Simulation? = null
+    /** The sim the renderer's pose level of detail was last handed to. */
+    private var lodSim: Simulation? = null
     internal var species: SpeciesCatalog? = null
     internal var rock: RockData? = null
     internal var renderer: TankRenderer? = null
@@ -134,6 +136,13 @@ object ReefLive {
                 current = q
                 val r = TankRenderer(Context(AssetManager(files)), q)
                 r.snapshotProvider = { sim?.latest }
+                // pose level of detail (TankRenderer PoseLod → Simulation.poseDetail): off-screen and tiny animals are
+                // posed less often; a sim that stops being the shown one goes back to full detail
+                r.poseDetailSink = { m ->
+                    val s = sim
+                    if (s !== lodSim) { lodSim?.poseDetail = emptyMap(); lodSim = s }
+                    s?.poseDetail = m
+                }
                 r.projection = projection
                 r.demoWhenEmpty = false
                 // the canvas has no MSAA of its own (it doubled the work on 3x phones): PostFx anti-aliases
@@ -467,6 +476,8 @@ object ReefLive {
     /** Puts the tank's rocks where they lay at the last visit (the text `onRocks` handed the page). */
     fun restoreRocks(state: String) { reality?.restoreRocks(state) }
     fun follow(id: String?) { renderer?.follow(id) }
+    /** The animal whose card is open (null = none): the renderer keeps it at full pose detail. */
+    fun select(id: String?) { renderer?.selectedId = id?.takeIf { it.isNotEmpty() } }
     /** Follow camera buttons: [steps] > 0 zooms closer, < 0 further out (eases there, bounces at the limits). */
     fun followZoom(steps: Double) { renderer?.followCam?.zoom(steps.toFloat()) }
     /** Follow camera buttons: swing round the fish, [dir] +1 / −1 one 45° step. */
