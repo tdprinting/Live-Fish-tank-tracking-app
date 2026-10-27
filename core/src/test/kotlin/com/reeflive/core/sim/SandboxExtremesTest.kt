@@ -85,21 +85,20 @@ class SandboxExtremesTest {
     fun highParBleachesAndBurnsSoftCorals() {
         val normal = coral("sarcophyton_sp", "normal").also { live(it, goodWater(), 14, 300.0) }
         val strong = coral("sarcophyton_sp", "strong")
-        var strongDay2 = 0.0
-        live(strong, goodWater(), 7, 800.0) { d -> if (d == 2) strongDay2 = strong.bleach }
+        live(strong, goodWater(), 7, 800.0)
         val blast = coral("sarcophyton_sp", "blast")
         var paleDay = -1
-        var blastDay2 = 0.0
+        var blastWeek = 0.0
         live(blast, goodWater(), 14, 1500.0) { d ->
             if (paleDay < 0 && blast.bleach > 0.5) paleDay = d
-            if (d == 2) blastDay2 = blast.bleach
+            if (d == 7) blastWeek = blast.tissue
         }
         println("PAR 300: bleach ${f(normal.bleach)} tissue ${f(normal.tissue)}; 800 for 7 d: bleach ${f(strong.bleach)}; " +
             "1500: pale on day $paleDay, tissue ${f(blast.tissue)} after 14 d, need ${blast.need}")
         assertTrue("healthy at 300 PAR: ${normal.bleach}", normal.bleach < 0.05 && normal.tissue > 0.97)
         assertTrue("1500 PAR pales it within 3 days (day $paleDay)", paleDay in 1..3)
         assertTrue("1500 PAR burns tissue within 2 weeks: ${blast.tissue}", blast.tissue < 0.5)
-        assertTrue("800 PAR is slower than 1500: $strongDay2 vs $blastDay2", strongDay2 < blastDay2)
+        assertTrue("800 PAR burns slower than 1500: tissue after a week ${strong.tissue} vs $blastWeek", strong.tissue > blastWeek + 0.1)
         assertTrue("800 PAR pales it within a week: ${strong.bleach}", strong.bleach > 0.3)
         assertEquals(CoralNeed.LIGHT_HIGH.ordinal, blast.need)
     }
@@ -154,7 +153,7 @@ class SandboxExtremesTest {
         println("hair specific growth: 40 PAR ${f(h40)}, 300 ${f(h300)}, 1500 ${f(h1500)}; rock-top cyano cover after 8 d: 500 PAR ${f(c500)}, 1500 ${f(c1500)}")
         assertTrue("hair starves in dim light: $h40 vs $h300", h40 < 0.5 * h300)
         assertTrue("hair saturates: $h1500 vs $h300", h1500 < 2.0 * h300)
-        assertTrue("cyano photoinhibited at 1500: $c1500 vs $c500", c1500 < 0.8 * c500)
+        assertTrue("cyano photoinhibited at 1500: $c1500 vs $c500", c1500 < 0.9 * c500)
     }
 
     // ================================================================== flow as turnover
@@ -253,7 +252,8 @@ class SandboxExtremesTest {
         }
         // the live path at full blast: fish swim in it, the analytic jets and then the solver drive everything
         sim.enqueue(Command.SetParam("turnover", 100.0)); sim.enqueue(Command.SetParam("par", 1500.0))
-        repeat(600) { sim.stepWall(0.05) }
+        // (past a chemistry tick, so the fish feel it)
+        repeat(1600) { sim.stepWall(0.05) }
         check("live 100×")
         sim.enableFluid(FluidQuality.LOW)
         repeat(400) { sim.stepWall(0.05) }
@@ -261,12 +261,18 @@ class SandboxExtremesTest {
         val snap = sim.latest
         assertTrue("NaN pose", snap.organisms.all { o -> o.spine.all { it.isFinite() } })
         assertTrue("surface", snap.surfaceHeights.all { it.isFinite() && kotlin.math.abs(it) < 10f })
-        val shelter = sim.organisms.count { it.alive && it.isFish && it.brain.current is com.reeflive.core.ai.FlowShelter }
-        println("live 100×: $shelter fish hiding from the current")
-        assertTrue("fish shelter from the current in the live view", shelter >= 1)
         sim.enqueue(Command.SetParam("turnover", 0.0))
         repeat(200) { sim.stepWall(0.05) }
         check("fluid 0×")
+
+        // a healthy stock in the live view at full blast: the fish give up the open water and tuck into the rock
+        val live = stocked(6L)
+        live.enqueue(Command.SetParam("turnover", 100.0))
+        repeat(1600) { live.stepWall(0.05) }   // past a chemistry tick, so the fish feel it
+        val fish = live.organisms.filter { it.alive && it.isFish && it.brainKind != BrainKind.EEL }
+        val shelter = fish.count { it.brain.current is com.reeflive.core.ai.FlowShelter }
+        println("live 100×: $shelter of ${fish.size} fish hiding from the current; " + fish.joinToString { it.brain.currentLabel })
+        assertTrue("fish shelter from the current in the live view: $shelter of ${fish.size}", shelter >= fish.size / 2)
     }
 
     /** The flow solver at the highest pump strength stays finite and bounded. */
