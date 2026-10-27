@@ -19,6 +19,7 @@ uniform float uIridStrength;
 uniform float uDesat;
 uniform float uTone;         // own colour change, -1 pale .. +1 dark and mottled (lawnmower blenny, research 51)
 uniform float uIchSpots;     // 0..1 white spot coverage (ich)
+uniform vec4 uSkin;          // disease skin signs 0..1 (SIMULATION §3.5): x velvet gold dust, y fin rot, z HLLE pits, w mucus film
 uniform float uEyeCloud;
 uniform float uPart;         // 0 body, 1 fin, 2 eye, 3 leg/antenna
 uniform float uDead;
@@ -44,6 +45,13 @@ float ichMask(vec2 uv) {
     return on * (1.0 - smoothstep(r * 0.6, r, d));
 }
 
+// Smooth 2D value noise in texture space (disease skin signs: fin-rot edge, mucus sheets).
+float vnoise2(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 void main() {
     vec4 tex = uHasTexture > 0.5 ? texture(uAlbedo, vUv) : vec4(1.0);
     if (uStageMix > 0.001 && uHasTexture > 0.5) tex = mix(tex, texture(uAlbedoStage, vUv), clamp(uStageMix, 0.0, 1.0));
@@ -59,6 +67,28 @@ void main() {
 
     // symptoms
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
+    // Disease skin signs, each skipped at 0 (one uniform test): research 01 §4.3, 18 §5.4.
+    float velvetSheen = 0.0;
+    if (uSkin.x > 0.001 && uPart < 1.5) {
+        // velvet: a fine gold-yellow dust, denser with the infection; sub-pixel dust fades to its mean so it never sparkles
+        vec2 g = vUv * 260.0;
+        float dust = step(1.0 - 0.55 * uSkin.x, hash12(floor(g)));
+        dust = mix(dust, 0.55 * uSkin.x, smoothstep(0.4, 1.0, max(fwidth(g.x), fwidth(g.y))));
+        albedo = mix(albedo, vec3(0.80, 0.62, 0.22), uSkin.x * (0.18 + 0.5 * dust));
+        velvetSheen = uSkin.x;
+    }
+    if (uSkin.z > 0.001 && uPart < 0.5 && uChroma.w < 0.5) {
+        // HLLE: shallow pale-rimmed pits on the head and along the lateral line (site mask from fish.vert in vColor.r)
+        vec2 g = vUv * vec2(60.0, 34.0);
+        vec2 cell = floor(g);
+        float on = step(1.0 - uSkin.z * clamp(vColor.r, 0.0, 1.0), hash12(cell + 2.7));
+        float d = length(fract(g) - (vec2(hash12(cell + 5.1), hash12(cell + 9.3)) * 0.4 + 0.3));
+        float r = mix(0.22, 0.4, hash12(cell + 3.3));
+        float pit = on * (1.0 - smoothstep(r * 0.55, r, d));
+        float rim = on * smoothstep(r * 0.55, r, d) * (1.0 - smoothstep(r, r * 1.35, d));
+        albedo = mix(albedo, vec3(0.5, 0.45, 0.4) * dot(albedo, vec3(0.33)) + 0.03, pit * 0.8);
+        albedo = mix(albedo, vec3(0.8, 0.78, 0.72), rim * 0.45);
+    }
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     // negative = more saturated (a displaying male fairy wrasse)
     albedo = max(mix(albedo, vec3(lum), clamp(uDesat, -0.5, 1.0)), 0.0);
@@ -140,6 +170,15 @@ void main() {
         * 0.35 * gShadow;
     alpha *= 0.75 + 0.25 * ndv;
     if (uIchSpots > 0.001) col = mix(col, vec3(0.8) * lightIntensity(), ichMask(vUv * 0.5) * uIchSpots * 0.6);
+    if (uSkin.y > 0.001) {
+        // bacterial fin rot: the membrane is eaten back from the edge in ragged notches (hinge vColor.b: 0 base .. 1
+        // edge) with a whitish necrotic margin; a severe case loses about half the fin
+        float rag = 0.7 * vnoise2(vUv * vec2(30.0, 11.0) + 4.1) + 0.3 * vnoise2(vUv * vec2(120.0, 45.0));
+        float edge = 1.0 - uSkin.y * (0.18 + 0.4 * rag);
+        float h = clamp(vColor.b, 0.0, 1.0);
+        alpha *= 1.0 - step(edge, h);
+        col = mix(col, vec3(0.75, 0.72, 0.66) * lightIntensity(), uSkin.y * 0.7 * smoothstep(edge - 0.12, edge, h));
+    }
     if (alpha < 0.03) discard;
 #else
     vec3 col = shadeLit(albedo, N, V, vWorld, uRoughness, 1.0, 0.04, 0.15, specScale);
@@ -167,6 +206,13 @@ void main() {
     // counter-illumination: a faint blue-green glow from the ventral light organ, strongest seen from below
     col += vec3(0.35, 0.62, 0.95) * sqGlow * 0.06 * (0.3 + 0.7 * smoothstep(0.0, -0.7, N.y));
 #endif
+    if (uSkin.w > 0.001 && uPart < 1.5) {
+        // Brooklynella: a whitish mucus film in soft sheets, thickest where it catches the light at a glancing angle
+        float sheet = smoothstep(0.3, 0.75, vnoise2(vUv * vec2(9.0, 5.0)) * 0.6 + 0.4 * (1.0 - ndv));
+        col = mix(col, vec3(0.78, 0.8, 0.8) * (0.25 + 0.75 * lightIntensity()), uSkin.w * (0.12 + 0.28 * sheet));
+    }
+    // velvet's dusty sheen: the gold catches the light toward the silhouette
+    if (velvetSheen > 0.001) col += vec3(0.5, 0.36, 0.08) * velvetSheen * 0.22 * pow(1.0 - ndv, 1.5) * lightIntensity();
     col = applyWater(col, vWorld);
     // distant microfauna sink into the water colour, so specks melt away instead of popping out
     col = mix(col, uFog.rgb, uFade * 0.85);

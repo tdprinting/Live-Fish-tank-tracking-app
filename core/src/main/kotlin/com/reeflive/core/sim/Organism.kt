@@ -219,6 +219,13 @@ class Organism(
     /** Skin shade from the fish's own colour change, −1 pale .. +1 dark (lawnmower blenny, research 51); 0 for everyone else. */
     var skinTone = 0.0
     var ich = 0.0
+    /** Disease skin signs 0..1 for the renderer (SIMULATION §3.5): velvet gold dust, bacterial fin rot, HLLE pits, Brooklynella mucus. */
+    var velvet = 0.0
+    var finRot = 0.0
+    var hllePits = 0.0
+    var mucus = 0.0
+    /** Heat-death spasms 0..1 (research 08 §2 stage 5): the renderer jerks the body in short irregular bends. */
+    var spasm = 0.0
     var thin = 0.0
     var eyeCloud = 0.0
     var eyeYaw = 0.0
@@ -376,6 +383,8 @@ class Organism(
             display = display.toFloat(), cocoon = cocoon.toFloat(),
             finFold = finFold.toFloat(),
             tone = skinTone.toFloat(),
+            heatStage = heat.stage.ordinal,
+            spasm = spasm.toFloat(), velvet = velvet.toFloat(), finRot = finRot.toFloat(), hlle = hllePits.toFloat(), mucus = mucus.toFloat(),
         )
     }
 

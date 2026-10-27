@@ -312,7 +312,9 @@ object ReefSandbox {
                 val k = TreatmentKind.valueOf(arg ?: return false)
                 if (num > 0) { send(Command.StartTreatment(k)); burst(BurstKind.HAZE, DOSE_SPOT, floatArrayOf(0.37f, 0.84f, 1f)) } else send(Command.StopTreatment(k))
             }
-            "infect" -> send(Command.Infect(null, Disease.valueOf(arg ?: return false)))
+            // (starts past the visible threshold, so the signs show at once: at the sim's 0.05 a healthy fish usually
+            // clears it before anything shows)
+            "infect" -> send(Command.Infect(null, Disease.valueOf(arg ?: return false), if (num > 0) num else SANDBOX_INFECT_STAGE))
             "micro" -> {
                 val a = MicroAction.valueOf(arg ?: return false)
                 send(Command.Micro(a))
@@ -793,6 +795,9 @@ object ReefSandbox {
         "pump_left" to 1.0, "pump_right" to 1.0,
         "spectrum_royal" to 1.0, "spectrum_blue" to 1.0, "spectrum_white" to 1.0, "spectrum_violet" to 1.0,
     ) + TOGGLE_DEFAULTS
+
+    /** Disease stage a sandbox "make a fish sick" starts at: every disease's skin and behaviour signs are showing. */
+    private const val SANDBOX_INFECT_STAGE = 0.35
 
     private val DISEASE_LABELS = mapOf(
         Disease.ICH to "Ich (white spot)", Disease.VELVET to "Velvet", Disease.HLLE to "Head and lateral line erosion",

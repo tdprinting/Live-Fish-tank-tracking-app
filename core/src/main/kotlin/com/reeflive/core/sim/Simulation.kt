@@ -990,16 +990,25 @@ class Simulation private constructor(
         sandContact.step(organisms, dt, displace = false)
     }
 
+    /**
+     * A dead body (SIMULATION §3.5): it rolls onto its side and drifts down to the sand with the flow (a fresh
+     * carcass is denser than water); a buoyant species bloats and rises belly-up after [BLOAT_SEC]. Sinkers stay down.
+     */
     private fun deadPhysics(o: Organism, dt: Double) {
-        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH))
-        val targetY = if (buoyant) rock.waterLevelCm - 0.8 else rock.sandTopCm + 0.6
-        val f = flow.velocityFast(o.pos) * (if (buoyant) 0.6 else 0.05)
-        val vy = if (buoyant) 1.2 else -2.0
+        val buoyant = o.species.buoyantWhenDead ?: (o.brainKind in BUOYANT_DEAD)
+        val bloated = buoyant && simTimeSec - (o.deadSince ?: simTimeSec) >= BLOAT_SEC
+        val floor = rock.sandTopCm + 0.6
+        val targetY = if (bloated) rock.waterLevelCm - 0.8 else floor
+        // carried by the flow while it sinks through open water; still once it lies on the sand or the rock
+        val falling = o.pos.y > max(floor, sand.surfaceY(o.pos.x, o.pos.z)) + 2.5 && rock.sdf.dist(o.pos) > 1.2
+        val drift = when { bloated -> 0.6; falling -> 0.3; else -> 0.0 }
+        val f = if (drift > 0) flow.velocityFast(o.pos) * drift else Vec3.ZERO
+        val vy = if (bloated) 1.2 else -2.0
         var p = o.pos + (f + Vec3(0.0, vy, 0.0)) * dt
-        p = if (buoyant) p.withY(min(p.y, targetY)) else p.withY(max(p.y, targetY))
+        p = if (bloated) p.withY(min(p.y, targetY)) else p.withY(max(p.y, targetY))
         if (rock.sdf.dist(p) < 0.5) p = rock.sdf.project(p, 0.5)
         o.pos = rock.clampToWater(p, 1.0)
-        val belly = if (buoyant) Vec3.Y * -1.0 else Vec3.rotateAbout(Vec3.Y, o.heading, 1.4)
+        val belly = if (bloated) Vec3.Y * -1.0 else Vec3.rotateAbout(Vec3.Y, o.heading, 1.4)
         o.up = o.up.lerp(belly.rejectFrom(o.heading).normalized(belly), 0.02).normalized(Vec3.Y)
         o.vel = Vec3.ZERO; o.amp = 0.0; o.tailHz = 0.0
         o.spline.override = null
@@ -2491,6 +2500,10 @@ class Simulation private constructor(
         const val NAME_MAX = 24
         private val EMPTY_FLOATS = FloatArray(0)
         const val CHEM_DT = 60.0
+        /** Fish whose carcass floats once it bloats ([deadPhysics]); a species sheet's buoyantWhenDead overrides. */
+        private val BUOYANT_DEAD = setOf(BrainKind.CLOWN, BrainKind.TANG, BrainKind.CARDINAL, BrainKind.WRASSE, BrainKind.FAIRY_WRASSE, BrainKind.DOTTYBACK, BrainKind.GENERIC_FISH)
+        /** A carcass in warm reef water bloats and floats after about half a day (est.); until then it lies on the sand. */
+        const val BLOAT_SEC = 12 * 3600.0
         /** The running tank's snapshot rebuilds the per-animal stats (captions, thoughts, relations) every this many wall ticks. */
         const val STATS_EVERY_TICKS = 5
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */

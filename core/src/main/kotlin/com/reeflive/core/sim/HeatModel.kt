@@ -30,7 +30,8 @@ object HeatModel {
         GASPING("Breathing hard in the heat"),
         LETHARGIC("Lethargic on the bottom"),
         LOE("Loss of equilibrium"),
-        DEATH("Heat death"),
+        /** Death throes: a fish spasms for [SPASM_SEC] (08 §2 stage 5, §7.2), then dies; other animals die at once. */
+        DEATH("Spasms: dying of the heat"),
     }
 
     /**
@@ -147,6 +148,11 @@ object HeatModel {
     const val T_LOE_FLOOR_MIN = 1.0
     /** Detached snails that are not back on their foot in 12 h are dead (08 §6). */
     const val SNAIL_DETACH_SEC = 12 * 3600.0
+    /**
+     * Heat-death spasms before a fish dies (08 §7.2: "spasm animation 10–60 s, then dead"). The kill lands on the
+     * first chemistry tick at or after this, so at the 60 s chemistry step a fish spasms for one minute.
+     */
+    const val SPASM_SEC = 45.0
     /** Absolute DO at or below which any fish may surface (06 §5.6 #18 / fish lethal DO bound). */
     const val DO_ASR_MGL = 3.0
 
@@ -172,6 +178,8 @@ object HeatModel {
         var noFeedUntil = -1e18
         /** Scheduled delayed death (sim seconds), NaN when none. */
         var deathAt = Double.NaN
+        /** Heat-death spasms end (sim seconds) and the fish dies; NaN while not in its death throes. */
+        var spasmUntil = Double.NaN
         var rolled = false
         var detachedSince = Double.NaN
         /** Effective CTmax at the last tick (inspector) and that tick's sim time. */
@@ -268,7 +276,13 @@ object HeatModel {
         if (s.stage == Stage.NORMAL && s.d < D_AGITATED) { s.peak = Stage.NORMAL; s.dPeak = s.d; s.rolled = false }
 
         // ---- deaths ----
-        if (s.stage == Stage.DEATH) { HealthModel.kill(o, "heat", now, events); return true }
+        if (s.stage == Stage.DEATH) {
+            // a fish goes through its death throes first (spasms, 08 §2 stage 5); inverts die at once
+            if (o.isFish && s.spasmUntil.isNaN()) { s.spasmUntil = now + SPASM_SEC; return false }
+            if (o.isFish && now < s.spasmUntil) return false
+            HealthModel.kill(o, "heat", now, events); return true
+        }
+        s.spasmUntil = Double.NaN
         if (isSnail(o.brainKind)) {
             if (s.stage >= Stage.LETHARGIC) { if (s.detachedSince.isNaN()) s.detachedSince = now }
             else if (s.stage <= Stage.GASPING) s.detachedSince = Double.NaN

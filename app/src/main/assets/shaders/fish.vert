@@ -23,6 +23,9 @@ uniform vec4 uJaw;         // fish jaw (GLB extras.jaw): xy hinge (model space),
 uniform vec3 uEyePivot;    // eye centre in model space (extras.pivot)
 uniform float uRigid;      // 1: no skinning (sessile / cm-unit models); uModel places them
 uniform mat4 uModel;
+// Sickness (core OrganismPose, SIMULATION §3.5 / §10): x heat gasping 0..1 (operculum flared and pumping, mouth working
+// against it), y heat-death spasms 0..1 (short irregular body-bend jerks). 0 = healthy, skipped.
+uniform vec2 uSick;
 uniform vec3 uStageShape;   // life stage (LifeStageVisuals.kt, additive): x body depth − 1, y body width − 1; 0 = as built
 // Limb pose from the sim (SIMULATION §19, core LimbRig), uLimb[]: shrimp (mode 2) send 15 entries (core ShrimpLimbs), uLimb[0] = (x stride
 // phase (cycles), y stepping 0..1, z rock / claw-display signal, w antenna grooming), read by the per-class shrimp
@@ -575,13 +578,17 @@ void main() {
     } else if (part < 0.5) {
         // body: wrasse thinness and gill flare (opercular mask in G)
         local.yz *= 1.0 - 0.25 * uShape.x;
-        float flare = 0.03 * uFin.z * aColor.g * (0.5 + 0.5 * sin(time * uFin.w * 2.0 * PI));
+        // gasping (heat stage 2, research 08: opercular rate 2.5-3x, mouth open): the gill covers stand flared and
+        // pump wider, and the mouth works out of phase with them (buccal pump: mouth opens as the opercula close)
+        float gph = time * uFin.w * 2.0 * PI;
+        float flare = (0.03 * uFin.z + 0.04 * uSick.x) * aColor.g * (0.5 + 0.5 * sin(gph)) + 0.012 * uSick.x * aColor.g;
         local.z += sign(local.z) * flare;
         // opening jaw (models built with a mouth, uJaw.w = 1; uPick = the sim's mouth, 0 shut .. 1 wide): the lower jaw
         // (COLOR_0.b = 1) turns down about the hinge under the eye, the mouth lining's inner folds (0.5) half as far, and
         // the lining (COLOR_0.r) shades dark (vColor.g, read by fish.frag)
         if (uJaw.w > 0.5 && mode < 0.5) {
-            float a = -clamp(uPick, 0.0, 1.0) * uJaw.z * aColor.b;
+            float gape = max(clamp(uPick, 0.0, 1.0), uSick.x * (0.3 + 0.3 * sin(gph + PI)));
+            float a = -gape * uJaw.z * aColor.b;
             vec2 r = aPos.xy - uJaw.xy;
             float c = cos(a), sn = sin(a);
             local.xy += vec2(c * r.x - sn * r.y, sn * r.x + c * r.y) - r;
@@ -763,6 +770,15 @@ void main() {
     // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
     // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
     float bend = uMotion.z;
+    if (uSick.y > 0.001 && mode < 0.5) {
+        // heat-death spasms (research 08 §2 stage 5): ~3 slots a second, most of them a sharp jerk of random side and
+        // size that snaps out and relaxes, the rest still; seeded per fish by its length so neighbours are not in step
+        float ts = time * 3.1 + uScale * 7.31;
+        float k = floor(ts);
+        float on = step(0.3, hash12(vec2(k, 7.3)));
+        float side = hash12(vec2(k, 1.9)) * 2.0 - 1.0;
+        bend += uSick.y * on * side * 0.95 * sin(PI * min(fract(ts) * 2.5, 1.0));
+    }
     if (mode > 1.5 && mode < 3.5) {
         float ab = max(uw - 0.4, 0.0);
         local.y -= 0.9 * max(bend, 0.0) * ab * ab;
@@ -790,5 +806,12 @@ void main() {
     vUv = aUv;
     vColor = aColor;
     vColor.g = mouthDark;
+    // fish body: HLLE site mask for fish.frag (uSkin.z) in R: the head forward of the gill cover and a band along the
+    // lateral line, which arcs over the upper flank (model space: unit length, y up, spine at y = 0)
+    if (mode < 0.5 && part < 0.5) {
+        float head = (1.0 - smoothstep(0.18, 0.3, u)) * smoothstep(-0.06, 0.02, aPos.y);
+        float line = (1.0 - smoothstep(0.012, 0.03, abs(aPos.y - 0.035 - 0.03 * sin(PI * u)))) * smoothstep(0.2, 0.3, u) * (1.0 - smoothstep(0.75, 0.88, u));
+        vColor.r = max(head, line);
+    }
     gl_Position = uViewProj * vec4(world, 1.0);
 }

@@ -232,7 +232,12 @@ Cleaner wrasse special: `acceptsPrepared` (0.7 probability rolled at creation) �
 | disease ICH stage > 0.5 | LETHARGY, HIDING | amp × 0.6 | HIDE utility +0.4, feeding −50% |
 | condition < 0.7 (wrasse) | THIN | thin = (0.7−condition)/0.3 | — |
 | health < 0.3 | LETHARGY | amp × 0.5, desat +0.3 | rests near bottom / in cover |
-| dead | DEAD | desat 0.8, eyeCloud 1, finClamp 1 | FLOAT_DEAD (buoyant species: rises to surface, belly-up, drifts with flow) or SINK_DEAD |
+| disease VELVET stage > 0.15 | GOLD_DUST, FLASHING, RAPID_GILLS, CLAMPED_FINS | velvet (gold dust + sheen, `uSkin.x`), gillRate ≥ 2.4 Hz, finClamp ≥ 0.6 | as ich |
+| disease BACTERIAL stage > 0.2 | FRAYED_FINS, CLAMPED_FINS (+ LESIONS, LETHARGY > 0.3) | finRot (ragged fin edges eaten back, `uSkin.y`), finClamp ≥ 0.45 | — |
+| disease HLLE stage > 0.2 | PITTED_SKIN, LESIONS | hlle (pits on head and lateral line, `uSkin.z`) | — |
+| disease BROOKLYNELLA stage > 0.15 | MUCUS, CLAMPED_FINS, RAPID_GILLS | mucus (whitish film, `uSkin.w`), gillRate ≥ 2.4 Hz | — |
+| heat stage (§10) | ERRATIC / RAPID_GILLS / ON_BOTTOM / LOSS_OF_EQUILIBRIUM / SPASMS | `heatStage`; gasping: gillRate ≥ 3 Hz, opercula flared, mouth pumping (`uSick.x`); lethargic desat +0.25, LOE +0.35; spasms (`uSick.y`) | §10 |
+| dead | DEAD | desat 0.8, eyeCloud 1, finClamp 1 | rolls onto its side and sinks to the sand drifting with the flow; buoyant species bloat and rise belly-up after 12 h (`BLOAT_SEC`, est.) |
 | corals (CoralSim) | RETRACT / BLEACH / BROWN / MELT | extension, bleach, brown, (melt = scale 0.9, extension 0) | — |
 
 ### 3.6 Coral model (`CoralSim`) per colony
@@ -833,7 +838,7 @@ Profiles (CTmax, t_death anchor at 36 °C, slope; `T_ag = CTmax − 4`):
 | Engineer goby, blenny, hermit crab | 38.0–38.5 | 2160 | 0.9 |
 | Nerite/cerith snail | 39.0 | 7200 | 0.9 |
 
-Behaviour (`ai/HeatBehaviors.kt`, installed on every brain): agitated fish dart, gasping fish hold at the surface, lethargic fish sit on the bottom, LOE fish drift. Crabs (hermit, Sally) climb out when agitated. Blennies and gobies hide low instead of darting. Snails detach at CTmax, re-attach 50/50, and are dead if not back on their foot after 12 h. Acute coral sloughing is in `CoralSim`. Not yet built: the heat-death spasm animation.
+Behaviour (`ai/HeatBehaviors.kt`, installed on every brain): agitated fish dart, gasping fish hold at the surface, lethargic fish sit on the bottom, LOE fish drift. Crabs (hermit, Sally) climb out when agitated. Blennies and gobies hide low instead of darting. Snails detach at CTmax, re-attach 50/50, and are dead if not back on their foot after 12 h. Acute coral sloughing is in `CoralSim`. Death throes: a fish that reaches DEATH spasms for `SPASM_SEC` (45 s, so one 60 s chemistry tick; 08 §7.2 gives 10–60 s) on its side, gaping (`Symptom.SPASMS`, `OrganismPose.spasm`, irregular body-bend jerks in `fish.vert`), then dies; inverts die at once. LOE fish lie rolled ~65–85° (`HeatResponse.LOE_ROLL`). The pose carries the stage as `OrganismPose.heatStage`; `FishHealthVisualsTest` checks every stage and disease sign reaches the snapshot.
 
 Source: `core/.../sim/HeatModel.kt`, `core/.../ai/HeatBehaviors.kt`, `core/.../sim/CoralSim.kt`. Tests: `core/src/test/.../sim/HeatModelTest.kt`.
 

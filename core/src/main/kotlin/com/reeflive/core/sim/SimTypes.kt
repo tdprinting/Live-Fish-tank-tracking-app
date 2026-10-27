@@ -260,6 +260,14 @@ enum class Symptom(val label: String) {
     DEAD("Dead"),
     /** Brooklynella: heavy mucus coat (01 §4.3). */
     MUCUS("Heavy mucus"),
+    /** Heat death, research 08 §2 stage 5: short muscular spasms before ventilation stops. */
+    SPASMS("Spasms"),
+    /** Velvet (Amyloodinium): fine gold-yellow dust over the skin (01 §4.3). */
+    GOLD_DUST("Gold dust on the skin"),
+    /** Bacterial fin rot (Tenacibaculum, research 18 §5.4): ragged, shortened fin edges. */
+    FRAYED_FINS("Frayed fins"),
+    /** HLLE: pits on the head and along the lateral line (01 §4.3). */
+    PITTED_SKIN("Pits on the head and lateral line"),
 }
 
 enum class Mood(val label: String) { CALM("Calm"), ALERT("Alert"), HUNGRY("Hungry"), STRESSED("Stressed"), SICK("Sick"), SLEEPING("Sleeping"), DEAD("Dead") }
@@ -385,6 +393,15 @@ data class OrganismPose(
     val finFold: Float = 0f,
     /** Skin shade −1 pale .. +1 dark and mottled (a fish's own colour change, [Organism.skinTone]). */
     val tone: Float = 0f,
+    /** Heat stage ([HeatModel.Stage] ordinal: 0 normal, 1 agitated, 2 gasping, 3 lethargic, 4 LOE, 5 death throes). */
+    val heatStage: Int = 0,
+    /** Heat-death spasms 0..1 (renderer: irregular body-bend jerks). */
+    val spasm: Float = 0f,
+    /** Disease skin signs 0..1 (fish.frag): velvet gold dust, bacterial fin rot, HLLE pits, Brooklynella mucus film. */
+    val velvet: Float = 0f,
+    val finRot: Float = 0f,
+    val hlle: Float = 0f,
+    val mucus: Float = 0f,
 ) {
     fun headPos() = Vec3(spine[0].toDouble(), spine[1].toDouble(), spine[2].toDouble())
     fun spinePoint(i: Int) = Vec3(spine[i * 3].toDouble(), spine[i * 3 + 1].toDouble(), spine[i * 3 + 2].toDouble())
