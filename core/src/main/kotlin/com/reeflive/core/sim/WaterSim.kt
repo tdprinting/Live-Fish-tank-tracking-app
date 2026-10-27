@@ -462,7 +462,6 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
     /** Algae growth and uptake (research 09 Part A); its decay adds to the oxygen demand used by [gases]. */
     private fun algae(h: Double) {
         algae.uv = uv
-        algae.carbonDosing = bacteria.carbonDose / BacteriaModel.CARBON_DOSE_DEFAULT
         algae.probiotic = bacteria.probiotic
         algae.step(s, h, lightIntensity, flowEff)
         nExportMg += algae.nUptakeMg

@@ -328,21 +328,19 @@ class AlgaeModelTest {
         assertTrue("probiotic ${dosed.w.dinos} vs young ${young.w.dinos}", dosed.w.dinos < young.w.dinos)
     }
 
-    /** Cyano on low-flow sand grows faster with dissolved organics (water DOC, carbon dosing) and at a low N:P (A2). */
+    /** Cyano on low-flow sand grows faster with dissolved organics (water DOC) and at a low N:P (A2). */
     @Test
     fun cyanoFollowsDocAndNitrogenToPhosphate() {
-        fun sand(no3: Double, doc: Double = 0.2, carbon: Double = 0.0): Double {
+        fun sand(no3: Double, doc: Double = 0.2): Double {
             val b = Bench(clean(no3 = no3, po4 = 0.1).copy(doc = doc))
             b.hold = { it.no3 = no3; it.po4 = 0.1; it.doc = doc }
-            b.m.carbonDosing = carbon
             b.m.flowOverride[SAND.ordinal] = 3.0
             b.run(10.0)
             return b.m.cover(CYANO, SAND)
         }
-        val base = sand(10.0); val docky = sand(10.0, doc = 6.0); val dosed = sand(10.0, carbon = 1.0); val lowNp = sand(0.1)
-        println("cyano sand 10 d at 3 cm/s: base ${f(base)}, DOC 6 mg/L ${f(docky)}, carbon dosing ${f(dosed)}, NO3 0.1 ${f(lowNp)}")
+        val base = sand(10.0); val docky = sand(10.0, doc = 6.0); val lowNp = sand(0.1)
+        println("cyano sand 10 d at 3 cm/s: base ${f(base)}, DOC 6 mg/L ${f(docky)}, NO3 0.1 ${f(lowNp)}")
         assertTrue("DOC did not drive cyano", docky > 1.5 * base)
-        assertTrue("carbon dosing did not drive cyano", dosed > 1.3 * base)
         assertTrue("low N:P did not favour cyano", lowNp > 1.2 * base)
         // and it stays off the well-flushed sand
         val b = Bench(clean(no3 = 10.0, po4 = 0.1).copy(doc = 6.0))

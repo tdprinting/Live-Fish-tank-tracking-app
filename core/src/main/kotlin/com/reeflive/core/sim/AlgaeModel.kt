@@ -162,8 +162,6 @@ class AlgaeModel(config: TankConfig) {
     var cyanoExtraDeathPerDay = 0.0
     /** UV steriliser running ([WaterSim.uv]): kills the share of the dinos that is in the water column (A5). */
     var uv = false
-    /** Carbon dosing, 0..1 of the usual dose ([BacteriaModel.carbonDose]): dissolved organics that feed cyano (A2). */
-    var carbonDosing = 0.0
     /** Probiotic / bottled bacteria in the water 0..1 ([BacteriaModel.probiotic]): competitors that hold dinos back (A2). */
     var probiotic = 0.0
 
@@ -345,7 +343,7 @@ class AlgaeModel(config: TankConfig) {
         deadN = o.deadN; deadP = o.deadP; deadDw = o.deadDw; darkH = o.darkH; docOverride = o.docOverride
         oldN = o.oldN; oldP = o.oldP; oldDw = o.oldDw
         cyanoExtraDeathPerDay = o.cyanoExtraDeathPerDay
-        uv = o.uv; carbonDosing = o.carbonDosing; probiotic = o.probiotic; podGrazeGPerDay = o.podGrazeGPerDay; grazers = o.grazers
+        uv = o.uv; probiotic = o.probiotic; podGrazeGPerDay = o.podGrazeGPerDay; grazers = o.grazers
         // last step's outputs, so a snapshot taken before the next step (vigor, lift) reads as before the rebuild
         o.fNut.copyInto(fNut); o.limiter.copyInto(limiter)
         docIndex = o.docIndex; uln = o.uln; dinoLift = o.dinoLift; pReleasedMg = o.pReleasedMg
@@ -371,9 +369,9 @@ class AlgaeModel(config: TankConfig) {
         uln = nEq < 1.0 && p < 0.02
         // microbial diversity: rises over the first ~6 months, knocked back by copper (A2)
         s.microbes = (s.microbes + days / 180.0 - (if (s.copper > 0.1) 0.3 * days else 0.0)).coerceIn(0.0, 1.0)
-        // DOC proxy (A2): detritus and dying algae, dissolved organics above a clean tank's (overfeeding), carbon dosing
-        docIndex = docOverride ?: (max((s.detritus - 0.3) / 1.5 + deadDw / 40.0, (s.doc - DOC_CLEAN) / DOC_SPAN) +
-            CARBON_DOC * carbonDosing.coerceIn(0.0, 1.0)).coerceIn(0.0, 1.0)
+        // DOC proxy (A2): detritus and dying algae, or dissolved organics above a clean tank's (overfeeding). Dosed
+        // carbon is left to the heterotrophs ([BacteriaModel]), which take it up with the phosphate.
+        docIndex = docOverride ?: max((s.detritus - 0.3) / 1.5 + deadDw / 40.0, (s.doc - DOC_CLEAN) / DOC_SPAN).coerceIn(0.0, 1.0)
         var compB = 0.0
         for (g in COMPETITORS) compB += biomass(g)
         // bottled bacteria / probiotics stand in for the missing competitors while the community is young (A2 trigger off)
@@ -669,8 +667,6 @@ class AlgaeModel(config: TankConfig) {
         /** Dissolved organic carbon (mg C/L) a clean tank stays under ([BacteriaModel.DOC_DIRTY]), and the rise to a full DOC index. */
         const val DOC_CLEAN = 1.5
         const val DOC_SPAN = 3.0
-        /** DOC index added by carbon dosing at the usual dose (est.; vodka/vinegar dosing is a classic cyano trigger). */
-        const val CARBON_DOC = 0.6
         /** Competitor index a full probiotic dose adds (est.). */
         const val PROBIOTIC_CI = 0.3
         /** Hours for the dino film to lift into the water after lights-out, and to settle back after lights-on (est.). */
