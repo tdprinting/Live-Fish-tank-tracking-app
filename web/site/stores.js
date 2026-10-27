@@ -27,10 +27,11 @@ function warmLoop(t) {
   let more = false;
   try {
     // someone waiting at the door gets most of the frame; background work only on frames that are not already slow
+    // (40 ms: a device held at 30 fps still warms the next tank)
     if (waiting) {
       if (my.visitReady(9)) { const d = pending.d; pending = null; arrive(d); }
       more = true;
-    } else if (gap < 24) more = my.buildStep(4); else more = my.building();
+    } else if (gap < 40) more = my.buildStep(4); else more = my.building();
   } catch (e) { console.error(e); more = false; if (waiting) abandon('The store is closed right now. Try again in a moment.'); }
   if (more || pending) warm.raf = requestAnimationFrame(warmLoop);
 }
