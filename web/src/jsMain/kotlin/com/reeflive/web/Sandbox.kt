@@ -346,8 +346,8 @@ object ReefSandbox {
             SandboxPreset.COPPER_OVERDOSE -> { send(Command.SetParam("copper", 0.5)); burst(BurstKind.DYE, DOSE_SPOT, floatArrayOf(0.85f, 0.47f, 0.23f)) }
             SandboxPreset.ROCKSLIDE -> act("scenario", Scenario.ROCKSLIDE.name, 0.0)
             SandboxPreset.DINO_OUTBREAK -> AlgaeOutbreaks.dinos().forEach(::send)
-            SandboxPreset.CYANO_OUTBREAK -> { AlgaeOutbreaks.cyano(w).forEach(::send); burst(BurstKind.HAZE, FEED_SPOT, floatArrayOf(0.8f, 0.7f, 0.5f), 0.5f) }
-            SandboxPreset.BUBBLE_ALGAE -> AlgaeOutbreaks.bubble(w).forEach(::send)
+            SandboxPreset.CYANO_OUTBREAK -> { AlgaeOutbreaks.cyano(s.water.s).forEach(::send); burst(BurstKind.HAZE, FEED_SPOT, floatArrayOf(0.8f, 0.7f, 0.5f), 0.5f) }
+            SandboxPreset.BUBBLE_ALGAE -> AlgaeOutbreaks.bubble(s.water.s).forEach(::send)
         }
     }
 
