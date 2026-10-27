@@ -36,7 +36,12 @@ class BodyBounds(
 
     fun apply(o: Organism) {
         if (!o.alive || o.seatOn || o.leap != null || o.netted) return
-        val prof = BodyProfile.spineOf(o) ?: return
+        val spine = BodyProfile.spineOf(o)
+        // a crawling invert is kept inside the glass too (a snail gliding on the glass, its trail swinging out through
+        // the pane as it turns), and a straight one on the sand (a snail turning up the glass from the sand swung its
+        // shell 1.6 cm down into it); a bending crawler's trail is SandContact's to lift
+        val prof = spine ?: (if (o.attached && !o.isFish && !o.drawnRigid) BodyProfile.of(o.species) else null) ?: return
+        val crawlerSand = spine == null && o.spline.rigid && !SandContact.exempt(o)
         val l = o.lengthCm
         val reach = prof.maxReach * l + MARGIN
         val h = o.pos
@@ -45,7 +50,7 @@ class BodyBounds(
         // the sand (sliding back from its mouth it sank its tail 3 cm into the sand, then a rock fix flung it up); the
         // engineer goby digs its tunnels under the rock, where lifting it off the sand pushed it into the rock
         val pocketOnly = o.atBurrow && o.brainKind == BrainKind.WATCHMAN_GOBY
-        val sandOn = !SandContact.exempt(o) && o.spline.override == null && (!o.atBurrow || pocketOnly)
+        val sandOn = crawlerSand || spine != null && !SandContact.exempt(o) && o.spline.override == null && (!o.atBurrow || pocketOnly)
         val mouth = if (pocketOnly) o.burrowMouth else null
         val pocket = POCKET_BL * l
         val nearGlass = h.x < span || h.x > lengthCm - span || h.z < span || h.z > widthCm - span
