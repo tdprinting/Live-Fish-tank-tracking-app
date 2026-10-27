@@ -835,6 +835,7 @@ const FAMILY_SAYS = {
   FASTER: 'Nursery time sped up. Watch them grow!',
 };
 function renderFish() {
+  live.select(ui.picked || null); // the picked animal keeps full pose detail (TankRenderer.selectedId)
   // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
   let a = ui.picked && animals.find((x) => x.id === ui.picked);
   if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }

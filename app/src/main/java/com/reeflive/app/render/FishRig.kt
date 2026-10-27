@@ -49,6 +49,8 @@ class FishRig(val id: String) {
     var limbCount = 0
     /** Seen in the latest snapshot (rigs not seen are dropped). */
     var touched = false
+    /** The pose level of detail last handed to the sim for this animal ([PoseLod]; 1 = posed every snapshot). */
+    var poseEvery = 1
     /** Microfauna only: 0 fully visible .. 1 gone, as it shrinks toward a speck with distance (MicroCritterVisuals). */
     var fade = 0f
 

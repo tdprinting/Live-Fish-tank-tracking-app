@@ -96,7 +96,8 @@ sealed class Command {
     /**
      * Move [paramId] from its current value to [target] linearly over [overMin] sim minutes
      * (0 = a step), then keep it there against the chemistry ([hold]) until [ReleaseParam].
-     * Any [SetParam] id works; "light" and "flow" ramp the light override and pump strength.
+     * Any [SetParam] id works; "par" / "light" ramp the peak PAR or the old light multiplier, "turnover" / "flow" the
+     * pumps (volumes per hour or strength).
      */
     data class RampParam(val paramId: String, val target: Double, val overMin: Double = 0.0, val hold: Boolean = true) : Command()
     /** Stop ramping/holding [paramId]; the chemistry takes over again. */
@@ -489,8 +490,14 @@ data class SimSnapshot(
     val noriRemaining: Float = 0f,
     /** Goby sand piles: x, z, radius, height (cm) per pile. */
     val sandPiles: FloatArray = FloatArray(0),
-    /** Sandbox pump strength (0..2). */
+    /** Sandbox pump strength (0..[Simulation.MAX_FLOW_STRENGTH], 1 = Tee's setup). */
     val flowStrength: Float = 1f,
+    /** Sandbox peak light: rock-top PAR (µmol m⁻² s⁻¹) at the schedule's brightest point. */
+    val peakPar: Float = 300f,
+    /** Tank turnover now (volumes per hour). */
+    val turnover: Float = 27.5f,
+    /** Sandbox: routine water changes are being skipped. */
+    val skipWaterChanges: Boolean = false,
     /** A tank started from scratch (My tank, [Simulation.bareScape]): the renderer leaves out the owner's static colonies. */
     val bareScape: Boolean = false,
     /** The tank's box and look ([Simulation.shape]): the renderer draws the glass, equipment and camera to it. */

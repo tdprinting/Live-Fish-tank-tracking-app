@@ -91,6 +91,7 @@ object Thoughts {
             n == "rivalry" -> Line("chasing ${tgt ?: "a rival"} away", "chase off a rival", "Shoo! My spot!", Driver.TERRITORY, 2)
             n == "unwell" -> Line("resting quietly because it is not feeling well", "rest until it feels better", "Not feeling great…", Driver.HEALTH, 2)
             n == "heat" -> Line(heatNow(e, label), "find cooler water", "Too hot!", Driver.WATER, 3)
+            n == "flowShelter" -> Line("tucked into the rock because the current is far too strong to swim in", "wait for the current to calm down", "Too much current!", Driver.WATER, 3)
             n == "touch" -> touchLine(e)
             b is SubmarineReact -> subLine(b)
             n == "bout" -> boutLine(b, tgt)

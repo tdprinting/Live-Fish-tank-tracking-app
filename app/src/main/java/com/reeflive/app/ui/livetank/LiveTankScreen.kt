@@ -622,7 +622,7 @@ fun LiveTankScreen(
         speed = speed,
         simTimeSec = hud.simTimeSec,
         dayPhase = DayPhase.entries.firstOrNull { it.label == hud.dayPhase } ?: DayPhase.DAY,
-        readouts = waterReadouts(hud.water, hud.lightIntensity * 100.0, hud.flowStrength.toDouble()),
+        readouts = waterReadouts(hud.water, hud.lightIntensity * 100.0, hud.flowStrength.toDouble(), hud.turnover.toDouble()),
     )
     val happy = tankHappiness(hud.stats, hudState.readouts)
 
@@ -632,6 +632,7 @@ fun LiveTankScreen(
         now = TankReading(
             hud.water, lightPct = lightPct, flowPct = hud.flowStrength * 100.0,
             photoperiodH = extras["photoperiod"],
+            peakPar = hud.peakPar.toDouble(), turnover = hud.turnover.toDouble(),
             pumps = extras.filterKeys { it.startsWith("pump_") },
             gains = extras.filterKeys { it.startsWith("spectrum_") }.mapKeys { it.key.removePrefix("spectrum_") },
             toggles = extras.filterKeys { it.startsWith("eq_") || it.startsWith("sc_") },
@@ -1134,8 +1135,8 @@ fun LiveTankScreen(
     val gauges = GaugeReadings(
         tempC = hud.water.tempC,
         sg = hud.water.sg,
-        lightPct = hud.lightIntensity * 100.0,
-        flowPct = hud.flowStrength * 100.0,
+        lightPar = hud.water.lightPar,
+        turnover = hud.turnover.toDouble(),
         heaterSetC = heaterSet,
         heaterWorking = heaterWorking,
     )

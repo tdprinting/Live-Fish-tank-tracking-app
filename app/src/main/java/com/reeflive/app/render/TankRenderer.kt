@@ -106,6 +106,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     @Volatile var viewWidth = 0
     @Volatile var viewHeight = 0
     private val frustum = Frustum()
+    private val poseLod = PoseLod(frustum)
+    /**
+     * Where the pose level of detail goes, a few times a second ([PoseLod]): the host passes it to the sim, e.g.
+     * `{ sim.poseDetail = it }`. The map is reused (two in turn): hand it over as is, don't keep it. null = off.
+     */
+    @Volatile var poseDetailSink: ((Map<String, Int>) -> Unit)? = null
+    /** The animal whose card is open (the page's pick): always posed every snapshot. */
+    @Volatile var selectedId: String? = null
     /** `_lod1.glb` path per model path, so no strings are built per animal per frame. */
     private val lod1Paths = HashMap<String, String>()
     private fun lod1Of(path: String): String = lod1Paths.getOrPut(path) { ModelRegistry.lod1(path) }
@@ -345,6 +353,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         camera.update(dt, width, height, liveSdf, { id -> interp.rigs[id] }) { lost -> main.post { listener?.onFollowLost(lost) } }
         frustum.set(camera.viewProj)
         val vw = viewWidth; val vh = viewHeight
+        poseLod.update(now, rigs, camera.viewProj, camera.proj, if (vh > 0) vh else height, cur?.speed ?: 1.0,
+            camera.followId, selectedId, watchedId, poseDetailSink)
         projection?.publish(camera.viewProj, camera.proj, if (vw > 0) vw else width, if (vh > 0) vh else height)
         for (t in taps) handleTap(t, rigs)
         aim?.take()?.let { aimFrom(it[0], it[1], rigs) }

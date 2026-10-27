@@ -151,8 +151,18 @@ object HealthModel {
     fun appetite(o: Organism): Double {
         val st = ((o.stress - 0.55) / 0.35).coerceIn(0.0, 1.0)
         return (1 - 0.85 * st) * (if (o.health < 0.25) 0.2 else 1.0) * (if (o.disease != null && o.diseaseStage > 0.6) 0.4 else 1.0) *
-            StressModel.appetite(o, o.lastTempC) * HeatModel.appetiteMult(o)
+            StressModel.appetite(o, o.lastTempC) * HeatModel.appetiteMult(o) * flowAppetite(o)
     }
+
+    /** Fish fighting a blasting current stop feeding (09 Part B); ordinary strong flow (up to 2× normal) does not. */
+    fun flowAppetite(o: Organism): Double = 1 - 0.85 * (((o.envStress["flow"] ?: 0.0) - 0.5) / 0.4).coerceIn(0.0, 1.0)
+
+    /** Pump strength (× normal) where the flow becomes a blast for every fish (~60×/h) and where that is full (~95×/h). */
+    const val FLOW_BLAST_FROM = 2.2
+    const val FLOW_BLAST_FULL = 3.5
+    const val FLOW_BLAST_STRESS = 0.45
+    /** Flow stress above which a fish gives up holding station and hides in the rock ([com.reeflive.core.ai.FlowShelter]). */
+    const val FLOW_HIDE_STRESS = 0.6
 
     /** Tolerance curve (SIMULATION §3.3): returns s in 0..1 and whether the lethal bound is crossed. */
     fun stressOf(v: Double, t: ToleranceRange): Pair<Double, Boolean> {
@@ -264,7 +274,9 @@ object HealthModel {
         // Strong flow: weak swimmers (< 1.2 BL/s cruise) tire holding station; everyone above ~1.7×.
         if (o.isFish && o.brainKind != BrainKind.EEL) {
             val weak = o.species.locomotion.cruiseBL < 1.2
-            val sFlow = ((flowStrength - (if (weak) 1.25 else 1.7)) / 0.6).coerceIn(0.0, 1.0) * (if (weak) 0.5 else 0.3)
+            // past ~60×/h turnover it is a blast for everyone (09 Part B: fish hide and stop feeding at 100×)
+            val blast = ((flowStrength - FLOW_BLAST_FROM) / (FLOW_BLAST_FULL - FLOW_BLAST_FROM)).coerceIn(0.0, 1.0) * FLOW_BLAST_STRESS
+            val sFlow = ((flowStrength - (if (weak) 1.25 else 1.7)) / 0.6).coerceIn(0.0, 1.0) * (if (weak) 0.5 else 0.3) + blast
             if (sFlow > 0.001) { o.envStress["flow"] = sFlow; prod *= (1 - sFlow) }
         }
         o.lethalExposure = lethal
@@ -525,6 +537,8 @@ object HealthModel {
         // benthic fish in hypoxia or any animal under heavy load go to cover instead (S:Yu23)
         if (o.isFish && !column && doFast > 0.5 || ss.sEnv > 0.5) sym += Symptom.HIDING
         if (o.stress > 0.65) { sym += Symptom.HIDING; sym += Symptom.LETHARGY }
+        // a current too strong to hold station in: into the rock (09 Part B)
+        if (o.isFish && (o.envStress["flow"] ?: 0.0) > FLOW_HIDE_STRESS) sym += Symptom.HIDING
         // prolonged ammonia clouds the eyes; clears slowly once water is good
         val sNh3 = o.envStress["nh3Free"] ?: 0.0
         o.eyeCloud = (o.eyeCloud + (if (sNh3 > 0.5) 0.0005 else -0.0002)).coerceIn(0.0, 0.7)

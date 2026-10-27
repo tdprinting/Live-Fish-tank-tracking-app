@@ -18,7 +18,7 @@ object TimelapseFork {
             LivestockSeed(it.species.id, it.nickname, 0.0, null, it.anchor.ifBlank { null }, it.id, offset = it.offset.takeIf { o -> o != com.reeflive.core.geom.Vec3.ZERO })
         }
         val lights = LightSchedule(src.lights.points).also {
-            it.forcedOn = src.lights.forcedOn; it.intensityOverride = src.lights.intensityOverride
+            it.forcedOn = src.lights.forcedOn; it.intensityOverride = src.lights.intensityOverride; it.peakPar = src.lights.peakPar
             it.photoperiodHours = src.lights.photoperiodHours; src.lights.gains.copyInto(it.gains)
         }
         val dst = Simulation(
@@ -39,8 +39,10 @@ object TimelapseFork {
         dst.crabLiveFishScenario = src.crabLiveFishScenario
         dst.unsourcedPredation = src.unsourcedPredation
         dst.asterinaCorallivoryScenario = src.asterinaCorallivoryScenario
+        dst.skipWaterChanges = src.skipWaterChanges
         val w = src.water
-        dst.water.flowStrength = w.flowStrength; dst.water.heaterWorking = w.heaterWorking
+        dst.water.flowStrength = w.flowStrength; dst.flow.strength = src.flow.strength; dst.water.sandHaze = w.sandHaze
+        dst.water.heaterWorking = w.heaterWorking
         dst.water.heaterStuckOn = w.heaterStuckOn; dst.water.heaterSetC = w.heaterSetC; dst.water.ato = w.ato
         dst.water.algae.copyFrom(w.algae)
         dst.water.copyEquipmentFrom(w)
@@ -66,7 +68,7 @@ object TimelapseFork {
         for (c in dst.corals) {
             val s = srcCorals[c.id] ?: continue
             c.tissue = s.tissue; c.bleach = s.bleach; c.brown = s.brown; c.stress = s.stress; c.dhw = s.dhw
-            c.acclSg = s.acclSg; c.acclAlk = s.acclAlk; c.acclLight = s.acclLight; c.algaeCover = s.algaeCover
+            c.acclSg = s.acclSg; c.acclAlk = s.acclAlk; c.acclLight = s.acclLight; c.algaeCover = s.algaeCover; c.darkMin = s.darkMin
             c.size = s.size; c.cover = s.cover; c.radiusCm = s.radiusCm; c.established = s.established; c.baseline = s.baseline
         }
         dst.copyPestsFrom(src)

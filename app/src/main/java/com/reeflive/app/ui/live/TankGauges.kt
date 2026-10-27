@@ -79,8 +79,8 @@ import com.reeflive.core.sim.TankDims
 enum class TankGauge(val label: String, val paramId: String?, val glyph: ReefGlyph, val lo: Double, val hi: Double, val step: Double, val decimals: Int, val unit: String) {
     HEATER("Heater", null, ReefGlyphs.flame, 20.0, 32.0, 0.5, 1, "°C"),
     SALINITY("Salt", "sal", ReefGlyphs.salt, 1.015, 1.035, 0.001, 3, ""),
-    LIGHT("Lamp", "light", ReefGlyphs.sun, 0.0, 150.0, 5.0, 0, "%"),
-    FLOW("Pumps", "flow", ReefGlyphs.powerhead, 0.0, 200.0, 5.0, 0, "%"),
+    LIGHT("Lamp", "light", ReefGlyphs.sun, 0.0, 1500.0, 25.0, 0, " PAR"),
+    FLOW("Pumps", "flow", ReefGlyphs.powerhead, 0.0, 100.0, 1.0, 0, "×"),
     ;
 
     fun format(v: Double): String = String.format(Locale.US, "%.${decimals}f", v) + unit
@@ -90,8 +90,9 @@ enum class TankGauge(val label: String, val paramId: String?, val glyph: ReefGly
 class GaugeReadings(
     val tempC: Double,
     val sg: Double,
-    val lightPct: Double,
-    val flowPct: Double,
+    /** Live rock-top PAR (the lamp badge) and the tank turnover, volumes per hour (the pump badge). */
+    val lightPar: Double,
+    val turnover: Double,
     val heaterSetC: Double,
     val heaterWorking: Boolean,
 )
@@ -128,10 +129,10 @@ fun TankGaugeLayer(
                 Badge(TankGauge.SALINITY, String.format(Locale.US, "%.3f", r.sg), warn = r.sg < 1.021 || r.sg > 1.028, onClick = onDial)
             }
             Anchored(projection, { frame }, com.reeflive.app.render.Camera.TANK[0] / 2f, com.reeflive.app.render.Camera.TANK[1] + 2.4f, com.reeflive.app.render.Camera.TANK[2] / 2f + 1f, safe) {
-                Badge(TankGauge.LIGHT, TankGauge.LIGHT.format(r.lightPct), glow = if (r.lightPct > 1.0) Candy.yellow else null, onClick = onDial)
+                Badge(TankGauge.LIGHT, TankGauge.LIGHT.format(r.lightPar), glow = if (r.lightPar > 5.0) Candy.yellow else null, onClick = onDial)
             }
             Anchored(projection, { frame }, 96f, 31f, GAUGE_Z, safe) {
-                Badge(TankGauge.FLOW, TankGauge.FLOW.format(r.flowPct), spin = (r.flowPct / 100.0).toFloat(), warn = r.flowPct < 15.0, onClick = onDial)
+                Badge(TankGauge.FLOW, TankGauge.FLOW.format(r.turnover), spin = (r.turnover / com.reeflive.core.sim.Simulation.NOMINAL_TURNOVER).toFloat(), warn = r.turnover < 5.0, onClick = onDial)
             }
         }
     }

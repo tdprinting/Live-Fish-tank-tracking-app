@@ -67,7 +67,10 @@ class SandboxParamsTest {
     @Test fun readingsUseDisplayUnits() {
         val r = TankReading(WaterState(algaeHair = 0.25), lightPct = 80.0, flowPct = 100.0)
         assertEquals(25.0, SandboxParams.byId("algae")!!.valueIn(r), 1e-9)
-        assertEquals(80.0, SandboxParams.byId("light")!!.valueIn(r), 1e-9)
+        // light is absolute peak PAR: without a sim value it follows the old % of the default schedule's ~300
+        assertEquals(0.8 * SandboxParams.DEFAULT_PEAK_PAR, SandboxParams.byId("light")!!.valueIn(r), 1e-9)
+        assertEquals(500.0, SandboxParams.byId("light")!!.valueIn(r.copy(peakPar = 500.0)), 1e-9)
+        assertEquals(60.0, SandboxParams.byId("flow")!!.valueIn(r.copy(turnover = 60.0)), 1e-9)
         // photoperiod reads the sim's light schedule (default 11 h)
         assertEquals(11.0, SandboxParams.byId("photoperiod")!!.valueIn(r), 1e-9)
     }
