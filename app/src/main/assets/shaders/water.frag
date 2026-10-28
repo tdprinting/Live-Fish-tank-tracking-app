@@ -59,7 +59,7 @@ void main() {
         vec3 T = refract(I, Nd, ETA_WATER);
         vec3 R = reflect(I, Nd);
         // reflected underwater scene approximation: lit water colour + the fixtures' reflected glow
-        vec3 refl = uFog.rgb * 1.6 + (uLightColor[0].rgb + uLightColor[1].rgb) * 0.04;
+        vec3 refl = uFog.rgb * 1.1 + (uLightColor[0].rgb + uLightColor[1].rgb) * 0.04;
         refl += uAmbientB.rgb * 0.5;
         // the mirror shimmers like the real tank seen through the front glass: a crinkled net of bright ripple
         // facets catching the lamps, two chop-warped reads of the caustic tile drifting against each other
@@ -95,7 +95,7 @@ void main() {
         float cosI = clamp(dot(-I, N), 0.0, 1.0);
         float F = fresnelSchlick(cosI, 0.02);
         vec3 R = reflect(I, N);
-        vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.4 + ROOM;
+        vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.25 + ROOM;
         // glitter (the real tank from above): the chop tilts countless tiny facets to the lamps, so short white
         // streaks flicker all over the lit surface, stretched along the current. Two warped reads of the caustic
         // tile, kept only where both lines cross a threshold, under a broad lobe toward each fixture. The steep facets
@@ -113,9 +113,9 @@ void main() {
             sparkle += uLightColor[i].rgb * (0.25 + rl * rl) * glitter;
         }
         float sp = min(dot(sparkle, vec3(0.3)), 0.6);
-        alpha = clamp(F + 0.12 + dot(pool, vec3(0.3)) + sp, 0.0, 1.0);
+        alpha = clamp(F + 0.06 + dot(pool, vec3(0.3)) + sp, 0.0, 1.0);
         // the fixture glints reach the eye at their Fresnel weight once (straight alpha would scale them by F twice)
-        col = env * F + glint * (F / alpha) + uFog.rgb * 0.15 + pool * 0.6 + sparkle * (1.5 / alpha);
+        col = env * F + glint * (F / alpha) + uFog.rgb * 0.05 + pool * 0.6 + sparkle * (1.5 / alpha);
         col = mix(col, foamCol, foam);
         alpha = max(alpha, foam * 0.85);
     }

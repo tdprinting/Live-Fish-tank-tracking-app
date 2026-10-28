@@ -1,6 +1,7 @@
 #version 300 es
 #include "common.glsl"
 #include "lighting.glsl"
+const float ROOM_EXPOSURE = 0.4;
 // My tank's room (HomeRoom.kt, tools/blender/rooms.py) and the stand under the tank (tools/blender/stands.py). The
 // room has its own soft light, not the AI Prime fixtures: daylight from the room (uDay: 1 at noon, 0 at night) as a
 // warm key from the front left and a hemisphere fill, a floor lamp that glows in the evening, and the tank's own
@@ -430,6 +431,8 @@ void main() {
         col = mix(col, vec3(luma(col)), 0.12 + 0.15 * far) * (0.92 - 0.12 * far);
     }
     // tonemap() adapts the frame to the tank lights' colour; the room keeps its own white balance
-    col *= max(mix(vec3(1.0), lightTint(), 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity())), vec3(0.2));
+    col *= max(mix(vec3(1.0), lightTint(), 0.9 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity())), vec3(0.2));
+    // exposed for the tank, as in Tee's photos: the room sits darker than the lit reef (research 11 §10)
+    col *= ROOM_EXPOSURE;
     fragColor = vec4(tonemap(col), alpha);
 }
