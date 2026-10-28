@@ -866,7 +866,11 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
             // stay on the surface even on the frame it gives up (a hermit never floats free of the rock)
             out.crawl = true; out.surfaceOffset = surfaceOffset(c)
             val s = spot ?: run { finished = true; return }
-            if (c.o.pos.distanceTo(s.first) > 1.5) { out.target = s.first; out.speed = c.o.cruiseSpeed; return }
+            if (c.o.pos.distanceTo(s.first) > 1.5) {
+                // a spot it cannot walk onto (under a lip, round a corner) is given up rather than walked at for ever
+                if (moveElapsed > PICK_REACH_S) { finished = true; return }
+                out.target = s.first; out.speed = c.o.cruiseSpeed; return
+            }
             if (c.t > next) {
                 next = c.t + 2
                 c.o.hunger = max(0.0, c.o.hunger - 0.004 * c.events(2.0))
@@ -1003,6 +1007,8 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
         /** Foraging legs: straight-line length (cm), draws per leg, the top band (cm under the water line) it keeps out of [L]. */
         /** Sim s between rock picks (it forages on in between) [L]. */
         const val PICK_GAP_S = 120.0
+        /** Behaviour s it walks toward a pick spot before giving it up. */
+        const val PICK_REACH_S = 20.0
         const val LEG_MIN_CM = 15.0
         const val LEG_MAX_CM = 50.0
         const val LEG_TRIES = 8

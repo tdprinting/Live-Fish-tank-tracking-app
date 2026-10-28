@@ -376,7 +376,7 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
         peekAt = c.t + c.rng.range(8.0, 20.0)
         peekUntil = -1.0
         dock.reset(); leaving = false
-        if (pose == null) { finished = true; retryAt = c.t + 20 }
+        if (pose == null) { finished = true; retryAt = c.t + RETRY_S }
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
@@ -437,6 +437,8 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
         const val HIDE_MAX_S = 300.0
         /** Seconds without a new scare before it comes out. */
         const val QUIET_S = 30.0
+        /** No shelter fits from here: look again after this long (s). */
+        const val RETRY_S = 60.0
         /** Roll while hiding (rad, ~35°): half way to the night side-rest [L]. */
         const val HIDE_ROLL = 0.6
 
