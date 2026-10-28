@@ -34,3 +34,6 @@ __pycache__/
 # Blender autosaves
 *.blend1
 *.blend2
+
+# tools/qa output
+qa-out/

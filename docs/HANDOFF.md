@@ -26,6 +26,11 @@ Repo: https://github.com/tdprinting/Live-Fish-tank-tracking-app (public).
 - Known deviations kept on purpose: goby night patrol ~5 %; cross-species shrimp kills behind `crossSpeciesShrimpKills` (off); DO_crit floor at its 29 C value; crowding gain 8. No path-finding: fish can still get trapped in rock pockets in general steering.
 - Research 06 and 07 live only in Tee's compendium (06 now exists as `docs/research/06_interactions_analysis.md`; check for 07 before citing it).
 
+## QA tools
+`tools/qa/` (one-line usage per tool in `tools/qa/README.md`): Playwright flows/smoke/robustness drivers for the built site (`flows/`), a job-file browser driver (`driver/`), a trace/CPU profiler (`perf/`), a GitHub-Pages-like shaped server with cold/warm load and update tests (`load/`), `storewarm.mjs` (store walk-in time at a throttled frame rate), and the headless behaviour harness: Kotlin `BehaviourQa` (opt-in, `-Pbqa`, like `-Pbench`; writes a CSV) plus `tools/qa/bqa/*.py` to analyse it.
+- Chromium and Playwright are at `/opt/pw-browsers` and `/opt/node22/lib/node_modules`: never run `playwright install` (override with `QA_BROWSER` / `QA_NODE_MODULES`).
+- On a loaded machine, stub the GPU draws (`flows.mjs`/`storewarm.mjs` do by default, `STUB=1` for `smoke.mjs`/`prof.mjs`), or the frame rate measures the machine instead of the page. Ports, URLs and the output directory are env vars (`QA_PORT`, `QA_URL`, `QA_OUT`); kill any server or browser you start.
+
 ## Docs
 `docs/` DESIGN, ARCHITECTURE, SIMULATION (§10 heat, §11 algae, §12 time-lapse), ASSETS, PLAN, UI_STYLE, WORKLIST; `docs/research/` numbered notes plus `coverage_gaps.md`.
 

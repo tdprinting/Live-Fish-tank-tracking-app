@@ -30,10 +30,18 @@ dependencies {
 // (`./gradlew -PcoreOnly -Pbench :core:test --tests '*SimBenchmark'`, or the "Sim benchmark" workflow).
 val benchClasses = listOf("com.reeflive.core.sim.SimBenchmark")
 val runBench = providers.gradleProperty("bench").isPresent
+// Opt-in behaviour QA harness (tools/qa/README.md): writes a CSV of every animal's behaviour; `-Pbqa` runs it.
+val qaClasses = listOf("com.reeflive.core.sim.BehaviourQa")
+val runQa = providers.gradleProperty("bqa").isPresent
 
 tasks.withType<Test>().configureEach {
     testLogging { events("passed", "skipped", "failed") }
     if (!runBench) filter { benchClasses.forEach { excludeTestsMatching(it) } }
+    if (!runQa) filter { qaClasses.forEach { excludeTestsMatching(it) } }
+    // BehaviourQa knobs: -PbqaOut=<csv> -PbqaSpeed -PbqaMinutes -PbqaStartHour -PbqaEvery -PbqaSeed
+    listOf("out", "speed", "minutes", "startHour", "every", "seed").forEach { k ->
+        providers.gradleProperty("bqa${k.replaceFirstChar { it.uppercase() }}").orNull?.let { systemProperty("reeflive.bqa.$k", it) }
+    }
     // SimBenchmark knobs: -PbenchDetail=true (frame histograms), -PbenchTicks=N
     listOf("benchDetail", "benchTicks").forEach { k -> providers.gradleProperty(k).orNull?.let { systemProperty("reeflive.$k", it) } }
     // -PbenchJfr=<file.jfr>: record a Java Flight Recording of the test JVM (allocation / CPU profiles)
@@ -68,7 +76,7 @@ val testClasses: Map<String, String> = testSrc.walkTopDown().filter { it.isFile 
     val pkg = Regex("^package\\s+([\\w.]+)", RegexOption.MULTILINE).find(text)?.groupValues?.get(1)
     Regex("^(?:internal |open )?class\\s+(\\w+)", RegexOption.MULTILINE).findAll(text)
         .map { it.groupValues[1] to (if (pkg == null) it.groupValues[1] else "$pkg.${it.groupValues[1]}") }
-}.toMap().filterValues { it !in benchClasses }
+}.toMap().filterValues { it !in benchClasses && it !in qaClasses }
 
 fun fqn(pattern: String): String {
     val fq = testClasses[pattern.substringBefore('.')] ?: return "*.$pattern"
