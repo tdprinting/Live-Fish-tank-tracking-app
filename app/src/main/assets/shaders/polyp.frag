@@ -30,7 +30,16 @@ out vec4 fragColor;
 void main() {
     vec4 tex = uHasTexture > 0.5 ? texture(uAlbedo, vUv) : vec4(1.0);
     float alpha = tex.a * uBaseColor.a;
-    if (uAlphaCutoff > 0.0 && alpha < uAlphaCutoff) discard;
+    if (uAlphaCutoff > 0.0) {
+        // (duster feathers) mipmapping averages the fine barbs' alpha down, so as the crown shrinks on screen the
+        // alpha test ate them into a shimmering hatch / moire: scale alpha back up by the mip level being sampled
+        if (uHasTexture > 0.5) {
+            vec2 tc = vUv * vec2(textureSize(uAlbedo, 0));
+            vec2 d = max(abs(dFdx(tc)), abs(dFdy(tc)));
+            alpha *= 1.0 + 0.25 * max(0.0, log2(max(d.x, d.y)));
+        }
+        if (alpha < uAlphaCutoff) discard;
+    }
     vec3 albedo = toLinear(tex.rgb) * uBaseColor.rgb;
     albedo *= 0.85 + 0.3 * vVariant;
     // bubble-tip anemone: magenta tips on swollen bulbs (Tee's photos 2026-10-15)
