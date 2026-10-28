@@ -20,14 +20,14 @@ export function initRoom(opts) {
   nav.id = 'roomNav';
   nav.className = 'roomnav hidden';
   (document.getElementById('live') || document.body).appendChild(nav);
-  nav.addEventListener('click', (e) => {
+  nav.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-turn]');
     if (!b) return;
     cue?.('TICK');
-    if (my.turnStep(Number(b.dataset.turn))) {
+    if (await my.turnStep(Number(b.dataset.turn))) {
       live.showRoom();
       let r = null;
-      try { r = JSON.parse(my.roomTanks()); } catch { r = null; }
+      try { r = JSON.parse(await my.roomTanks()); } catch { r = null; }
       const t = r?.tanks.find((x) => x.active);
       if (t) say?.(`Here's your ${t.gallons} gallon tank${t.name && t.name !== 'My tank' ? `, ${t.name}` : ''}!`);
       navKey = '';
@@ -48,7 +48,7 @@ export function initRoom(opts) {
 export function roomNav(show) {
   if (!nav) return;
   let r = null;
-  if (show) { try { r = JSON.parse(my.roomTanks()); } catch { r = null; } }
+  if (show) { try { r = JSON.parse(my.peek.roomTanks()); } catch { r = null; } }
   const tanks = r?.tanks ?? [];
   const on = show && tanks.length > 1;
   const key = on ? JSON.stringify(r) : '';
@@ -107,7 +107,7 @@ const price = (t) => t.owned ? (t.inUse ? '<span class="tag on">In use</span>' :
 /** The room section of My tank's Shop card. */
 export function roomHtml() {
   let s = null;
-  try { s = JSON.parse(my.decorShop()); } catch { s = null; }
+  try { s = JSON.parse(my.peek.decorShop()); } catch { s = null; }
   if (!s) return '';
   const stands = s.tiles.filter((t) => t.kind === 'stand');
   const colors = s.tiles.filter((t) => t.kind === 'color');
@@ -136,9 +136,9 @@ export function roomHtml() {
 }
 
 /** A tap on a room tile ([key]); [closeCard] hides the card so the tank and stand show. Returns true when handled. */
-export function roomClick(key, closeCard) {
+export async function roomClick(key, closeCard) {
   let s = null;
-  try { s = JSON.parse(my.decorShop()); } catch { return false; }
+  try { s = JSON.parse(await my.decorShop()); } catch { return false; }
   const t = s?.tiles.find((x) => x.key === key);
   if (!t) return false;
   cue?.('TICK');
@@ -152,7 +152,7 @@ export function roomClick(key, closeCard) {
   }
   if (t.locked) {
     let full = false;
-    try { full = JSON.parse(my.roomTanks())?.tanks.length >= 4; } catch { full = false; }
+    try { full = JSON.parse(await my.roomTanks())?.tanks.length >= 4; } catch { full = false; }
     say?.(t.kind === 'tank' && full ? 'Every wall has a tank already!' : `That one opens at level ${t.level}. Keep doing your care jobs!`);
     return true;
   }
@@ -167,10 +167,11 @@ export function roomClick(key, closeCard) {
   return true;
 }
 
-function buy() {
+async function buy() {
   if (!trying) return;
   let r = null;
-  try { r = JSON.parse(my.decorBuy(trying.key)); } catch { r = null; }
+  try { r = JSON.parse(await my.decorBuy(trying.key)); } catch { r = null; }
+  if (!trying) return;
   if (r?.result === 'OK') {
     cue?.('FEED');
     say?.(trying.kind === 'stand' ? `Your new ${trying.label.toLowerCase()} is in!` : trying.kind === 'scene' ? `Welcome to your ${trying.label.toLowerCase()}!`

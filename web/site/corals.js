@@ -46,9 +46,9 @@ export function initCorals(opts) {
   setInterval(tickCorals, 100);
 }
 
-function place(rank) {
+async function place(rank) {
   const p = JSON.parse(live.coralPick() || 'null');
-  if (!p || !SB.act('placeCoral', null, rank)) return;
+  if (!p || !(await SB.act('placeCoral', null, rank))) return;
   hidden = false;
   cue('FEED');
   say(`Nice spot! Your ${p.name} will grow right there.`);

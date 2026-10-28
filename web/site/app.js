@@ -1,9 +1,8 @@
-// ReefLive web: page UI around the shared Kotlin sim + renderer (kotlin/ReefLive-web.mjs).
-import { ReefLive } from './kotlin/ReefLive-web.mjs';
+// ReefLive web: page UI around the shared Kotlin sim + renderer (kotlin/ReefLive-web.mjs), reached through SimHost.
+import { live } from './simhost.js';
 import { startLive, setLiveVisible, previewInSim } from './live.js';
 import { initTracker } from './tracker.js';
 
-const live = ReefLive.getInstance();
 const $ = (id) => document.getElementById(id);
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
