@@ -73,7 +73,11 @@
   const start = () => {
     if (started) return;
     started = true;
-    for (const p of list) if (typeof p === 'string' && !asked.includes(p)) pre.set(p, get(p, undefined, /^assets\/(models|textures)/.test(p) ? 'low' : 'high').catch(() => null));
+    const want = (p) => typeof p === 'string' && !asked.includes(p) && !pre.has(p);
+    const fetchAll = (ps, priority) => Promise.all(ps.filter(want).map((p) => { const q = get(p, undefined, priority).catch(() => null); pre.set(p, q); return q; }));
+    // what the overlay waits for (Main.kt start: boot pack, rock field) first, then what the first frames draw
+    const boot = list.filter((p) => !/^assets\/(models|textures)/.test(p));
+    fetchAll(boot, 'high').then(() => fetchAll(list, 'low'));
   };
   const isApp = (e) => new URL(e.name).pathname.endsWith('/app.js');
   try {
