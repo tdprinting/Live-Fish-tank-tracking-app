@@ -44,13 +44,17 @@ class LifeStageVisuals(private val assets: AssetManager?, private val loader: Cl
     private class ModelForms(val base: String?, val forms: Map<String, String>, val finBase: String?, val finForms: Map<String, String>)
 
     /** model path (LOD0 name) → its stage forms; `base` is the form the GLB's own body (fin) texture shows. */
-    private val manifest: Map<String, ModelForms> by lazy {
-        val text = runCatching { assets?.open(MANIFEST)?.bufferedReader()?.use { it.readText() } }.getOrNull() ?: return@lazy emptyMap()
-        val root = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return@lazy emptyMap()
-        val models = root["models"] as? JsonObject ?: return@lazy emptyMap()
+    // read per fish drawn: a plain memo, as a `by lazy` getter builds a property reference object per read on the web
+    private var manifestMemo: Map<String, ModelForms>? = null
+    private val manifest: Map<String, ModelForms> get() = manifestMemo ?: loadManifest().also { manifestMemo = it }
+
+    private fun loadManifest(): Map<String, ModelForms> {
+        val text = runCatching { assets?.open(MANIFEST)?.bufferedReader()?.use { it.readText() } }.getOrNull() ?: return emptyMap()
+        val root = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return emptyMap()
+        val models = root["models"] as? JsonObject ?: return emptyMap()
         fun str(o: JsonObject?, k: String) = (o?.get(k) as? JsonPrimitive)?.takeIf { it.isString }?.content
         fun map(o: JsonObject?) = o?.mapNotNull { (k, p) -> (p as? JsonPrimitive)?.content?.let { k to it } }?.toMap() ?: emptyMap()
-        models.mapValues { (_, v) ->
+        return models.mapValues { (_, v) ->
             val o = v as? JsonObject
             val fins = o?.get("fins") as? JsonObject
             ModelForms(str(o, "base"), map(o?.get("forms") as? JsonObject), str(fins, "base"), map(fins?.get("forms") as? JsonObject))

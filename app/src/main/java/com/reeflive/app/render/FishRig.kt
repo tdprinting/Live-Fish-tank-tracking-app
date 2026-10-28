@@ -15,6 +15,20 @@ import kotlin.math.sqrt
 class FishRig(val id: String) {
     var speciesId = ""
     var variant: String? = null
+
+    /**
+     * TankRenderer's memo of this rig's model lookups, which depend only on [speciesId] and [variant]: the model
+     * path, its LOD1 path, whether each ships, and whether life-stage textures apply. Drawing every animal every
+     * pass redid them as about eight String-keyed map lookups (on the web each one rehashes the string).
+     */
+    internal var modelMemoSpecies: String? = null
+    internal var modelMemoVariant: String? = null
+    internal var modelMemoDone = false
+    internal var modelPath: String? = null
+    internal var modelLod1: String? = null
+    internal var modelExists = false
+    internal var modelLod1Exists = false
+    internal var modelStaged = false
     /** uSpine: 16 × vec4 (xyz world cm, w = 0). */
     val spine = FloatArray(64)
     /** uFrame: 16 × vec4 quaternion xyzw mapping model X/Y/Z to world. */
