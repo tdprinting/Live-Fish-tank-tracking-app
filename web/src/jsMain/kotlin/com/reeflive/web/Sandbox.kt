@@ -6,18 +6,12 @@ import com.reeflive.core.radio.RadioStation
 import com.reeflive.app.audio.TankSoundMix
 import com.reeflive.app.render.BurstKind
 import com.reeflive.app.render.CareAct
-import com.reeflive.app.render.CareJob
-import com.reeflive.app.render.CareShowControl
-import com.reeflive.app.render.GlassStroke
-import com.reeflive.app.render.TankBurst
-import com.reeflive.app.render.TankBursts
 import com.reeflive.app.ui.live.LiveTips
 import com.reeflive.app.ui.live.SandboxCategory
 import com.reeflive.app.ui.live.SandboxControlMode
 import com.reeflive.app.ui.live.SandboxParams
 import com.reeflive.app.ui.live.SandboxPreset
 import com.reeflive.app.ui.live.TankReading
-import com.reeflive.app.ui.live.ThoughtBubblePicker
 import com.reeflive.app.ui.live.ThoughtHold
 import com.reeflive.app.ui.live.toFishCardState
 import com.reeflive.app.ui.live.waterReadouts
@@ -30,7 +24,6 @@ import com.reeflive.core.sim.CareFix
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.Disease
 import com.reeflive.core.sim.FoodKind
-import com.reeflive.core.sim.GlassPane
 import com.reeflive.core.sim.LightSchedule
 import com.reeflive.core.sim.LivestockSeed
 import com.reeflive.core.sim.MaintenanceTask
@@ -68,10 +61,11 @@ import kotlin.math.floor
  * mode shows the real tank (default stock + the tracker's readings) at 1x; Sandbox forks it into a pretend tank where
  * every lever works, and Reset tank restores the fork. Shared tables (SandboxParams, LiveTips, TankSoundMix,
  * LiveUiState) are the Android app's own files compiled into this build, so both apps offer the same sandbox.
+ * It runs on the sim's side ([ReefSim]); bursts and care shows go to the 3D view through [ReefSim.fx].
  */
 @JsExport
 object ReefSandbox {
-    private val live get() = ReefLive
+    private val live get() = ReefSim
     /** Every lever works: the pretend tank or My tank ([mine]). */
     private var sandbox = false
     /** My tank (ReefMyTank): the keeper's own saved tank. */
@@ -81,9 +75,7 @@ object ReefSandbox {
     private var lightPct = 100.0
     private var predation = true
     private val extras = HashMap<String, Double>()
-    internal val bursts = TankBursts()
-    /** "Fix tank": the 3D upkeep show (render CareScene) and the fixes still queued or playing in it. */
-    internal val care = CareShowControl()
+    /** "Fix tank": the fixes still queued or playing in the 3D upkeep show (render CareScene). */
     private val fixQueued = HashSet<TankDoctor.Kind>()
     private var fixList: List<CareFix> = emptyList()
 
@@ -199,14 +191,14 @@ object ReefSandbox {
     private fun treatAiptasia(t: AiptasiaTreatment): Boolean {
         val s = sim ?: return false
         val target = s.latest.corals.filter { CoralKind.resolve(it.speciesId) == CoralKind.AIPTASIA && it.tissue > 0.5f }.maxByOrNull { it.size }
-        if (target == null) { live.emit("onPestTreated", -1); return true }
+        if (target == null) { live.fx.emit("onPestTreated", -1); return true }
         val act = if (t == AiptasiaTreatment.LASER) CareAct.LASER else CareAct.INJECT
         val tint = when (t) { AiptasiaTreatment.KALK_PASTE -> 0xF4F4EE; AiptasiaTreatment.JOES_JUICE -> 0xE8F0FF; else -> 0xF2EEE2 }
         val at = floatArrayOf(target.restX, target.restY, target.restZ, target.restNx, target.restNy, target.restNz)
-        care.play(CareJob(act, tint, at = at, onImpact = { send(Command.TreatAiptasia(t, target.id)) }, onDone = {
+        live.careShow(act, tint, at = at, onImpact = { send(Command.TreatAiptasia(t, target.id)) }, onDone = {
             val c = sim?.corals?.firstOrNull { it.id == target.id }
-            live.emit("onPestTreated", if (c == null || c.treatment != null) 1 else 0)
-        }))
+            live.fx.emit("onPestTreated", if (c == null || c.treatment != null) 1 else 0)
+        })
         return true
     }
     private fun send(c: Command) { sim?.enqueue(c) }
@@ -231,7 +223,7 @@ object ReefSandbox {
             // in My tank the supplies cost [num] sand dollars (docs/ECONOMY.md)
             "reefCare" -> { if (mine && !ReefMyTank.spendCare(num.toInt())) return false; send(Command.ReefCare); return true }
             "knock" -> { val t = com.reeflive.app.render.Camera.TANK; send(Command.TapGlass(com.reeflive.core.geom.Vec3(t[0] / 2.0, 25.0, t[2].toDouble()))); burst(BurstKind.TAP, floatArrayOf(t[0] / 2f, 25f, t[2] - 1.7f)); return true }
-            "cleaning" -> { live.renderer?.setCleaning(num > 0); return true }
+            "cleaning" -> { live.fx.cleaning(num > 0); return true }
             // scoop a dead animal out with the fish net (core FishNet): the keeper does this in the real tank too
             "netOut" -> { send(Command.NetOut(arg ?: return false)); return true }
             // clownfish and blue tang breeding and the nursery (core Brood): "Spawn now" is the only sandbox-only one
@@ -414,23 +406,6 @@ object ReefSandbox {
         }
     }
 
-    /** A fingertip tap on the tank (as LiveTankScreen.onTouchTank): the sim's TouchTank plus a ripple or a sand puff. */
-    internal fun touch(p: com.reeflive.core.geom.Vec3, surface: com.reeflive.core.sim.TouchSurface) {
-        send(Command.TouchTank(p, surface))
-        val glass = surface == com.reeflive.core.sim.TouchSurface.GLASS
-        val kind = when (surface) {
-            com.reeflive.core.sim.TouchSurface.SAND -> BurstKind.SAND_PUFF
-            com.reeflive.core.sim.TouchSurface.SURFACE -> BurstKind.SURFACE_RIPPLE
-            else -> BurstKind.GLASS_RIPPLE
-        }
-        burst(kind, floatArrayOf(p.x.toFloat(), p.y.toFloat(), p.z.toFloat()), amount = if (glass) 1f else 0.7f)
-    }
-
-    internal fun scrape(s: GlassStroke) {
-        send(Command.ScrapeGlass(GlassPane.FRONT, s.x0.toDouble(), s.y0.toDouble(), s.x1.toDouble(), s.y1.toDouble(),
-            GlassStroke.FLIPPER_W.toDouble(), GlassStroke.FLIPPER_H.toDouble()))
-    }
-
     // ------------------------------------------------------------------ Fix tank (Android LiveTankScreen.playFix)
 
     /** What the tank check (core TankDoctor) says the tank needs now, minus fixes already playing: JSON for the card. */
@@ -473,7 +448,7 @@ object ReefSandbox {
             TankDoctor.Kind.RAISE_SALT -> 0xD6F2FF
             else -> 0xBFE6FF
         }
-        care.play(CareJob(act, tint, f.amount.toFloat(), onImpact = {
+        live.careShow(act, tint, f.amount.toFloat(), onImpact = {
             careCommands(f.commands)
             when (f.kind) {
                 TankDoctor.Kind.HEATER -> burst(BurstKind.HEAT, HEATER_SPOT)
@@ -481,11 +456,11 @@ object ReefSandbox {
                 TankDoctor.Kind.FEED_CORALS -> burst(BurstKind.SPLASH, FEED_SPOT)
                 else -> Unit
             }
-            live.emit("onFixed", f.kind.name)
+            live.fx.emit("onFixed", f.kind.name)
         }, onDone = {
             fixQueued.remove(f.kind)
-            if (fixQueued.isEmpty()) live.emit("onFixedAll", null)
-        }))
+            if (fixQueued.isEmpty()) live.fx.emit("onFixedAll", null)
+        })
     }
 
     // ------------------------------------------------------------------ touch controls (Android LiveTankScreen onSpot / onAim)
@@ -540,7 +515,7 @@ object ReefSandbox {
     }
 
     private fun burst(kind: BurstKind, at: FloatArray, tint: FloatArray = WHITE, amount: Float = 1f) =
-        bursts.emit(TankBurst(kind, at[0], at[1], at[2], tint[0], tint[1], tint[2], amount))
+        live.fx.burst(kind, at[0], at[1], at[2], tint[0], tint[1], tint[2], amount)
 
     // ------------------------------------------------------------------ readings for the page
 
@@ -646,31 +621,6 @@ object ReefSandbox {
     }
 
     private val holds = HashMap<String, ThoughtHold>()
-    private val bubblePicker = ThoughtBubblePicker()
-
-    /**
-     * More → "Thought bubbles" (as on Android, ThoughtBubbleLayer): at most three animals with a speech bubble, as
-     * JSON [{id, text, x, y, a}] with x, y in canvas pixels just above the animal. Call every animation frame while
-     * on; [on] false clears the picker.
-     */
-    fun bubbles(on: Boolean): String {
-        if (!on) { bubblePicker.clear(); return "[]" }
-        val s = sim ?: return "[]"
-        val r = live.renderer ?: return "[]"
-        val proj = r.projection ?: com.reeflive.app.render.TankProjection().also { r.projection = it }
-        val snap = s.latest
-        val canvas = kotlinx.browser.document.getElementById("tank") as? org.w3c.dom.HTMLCanvasElement ?: return "[]"
-        val w = canvas.width.toFloat()
-        val h = canvas.height.toFloat()
-        val anchor = FloatArray(3)
-        val pt = FloatArray(3)
-        val list = bubblePicker.update(snap.stats, now().toLong()) { id ->
-            if (ThoughtBubblePicker.anchorOf(snap, id, anchor) && proj.project(anchor[0], anchor[1], anchor[2], pt) &&
-                pt[0] in 0f..w && pt[1] in 0f..h
-            ) floatArrayOf(pt[0], pt[1], pt[2]) else null
-        }
-        return JSON.stringify(list.map { b -> obj { o -> o.id = b.id; o.text = b.text; o.x = b.x; o.y = b.y; o.a = b.alpha } }.toTypedArray())
-    }
 
     /** "Tank happy" 0..100 (Hermie.kt tankHappiness): health and calm of the animals minus water and death penalties. */
     private fun tankHappiness(stats: List<OrganismStats>, statuses: List<Status>): Int {
