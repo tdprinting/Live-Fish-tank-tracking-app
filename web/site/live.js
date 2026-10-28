@@ -702,7 +702,8 @@ function settingsCard(sb) {
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['AUTO', 'LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
     <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}${tile('data-camreset', 'eye', 'Reset view')}</div>
-    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}`;
+    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}
+    ${window.reefBuild && !window.reefBuild.startsWith('__') ? `<p class="buildline">ReefLive build ${esc(window.reefBuild)}</p>` : ''}`;
 }
 
 // ---- card clicks
