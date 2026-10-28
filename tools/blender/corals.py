@@ -21,7 +21,7 @@ material JSON after export (the textures are unchanged). Re-apply them after a r
   macro_red           macro_red                (0.62, 0.88, 0.95) organ_pipe organpipe_skeleton too
   leather_pink        leather_pink             (0.7, 1.0, 0.65)
   toadstool_leather   toadstool_cap, toadstool_polyp (0.62, 0.6, 1.0)
-  zoa                 zoa_polyp_orange, zoa_polyp_brown, paly_polyp_brown (0.62, 0.66, 1.0)
+  zoa                 zoa_polyp_orange, zoa_polyp_brown, paly_polyp_brown (0.5, 0.54, 1.0)
 (details.py: reef_details mushroom_red_small (0.4, 0.7, 0.85), encrust_yellow (0.38, 0.33, 1.0) and no glow,
  coralline_crust (0.85, 1.0, 0.8).)
 """
