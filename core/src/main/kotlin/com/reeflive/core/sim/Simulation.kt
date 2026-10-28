@@ -1049,7 +1049,15 @@ class Simulation private constructor(
         val belly = if (bloated) Vec3.Y * -1.0 else Vec3.rotateAbout(Vec3.Y, o.heading, 1.4)
         o.up = o.up.lerp(belly.rejectFrom(o.heading).normalized(belly), 0.02).normalized(Vec3.Y)
         o.vel = Vec3.ZERO; o.amp = 0.0; o.tailHz = 0.0
-        o.spline.override = null
+        // a body has no swimming path: it lies straight and whole (HeatResponse.laidBody), turning slowly to lie along
+        // the rock rather than into it
+        if (o.isFish) {
+            val h = com.reeflive.core.ai.horizontalHeading(o.heading)
+            val want = com.reeflive.core.ai.HeatResponse.clearHeading(o, rock, h)
+            if (want !== h) o.heading = Vec3.rotateToward(o.heading, want, DEAD_TURN_RAD_S * dt)
+            o.spline.override = com.reeflive.core.ai.HeatResponse.laidBody(o, sand, dt)
+        } else o.spline.override = null
+        o.spline.overrideSnap = o.isFish
         o.spline.update(o.pos, o.heading, dt, 2.0)
     }
 
@@ -1684,7 +1692,10 @@ class Simulation private constructor(
             is Command.RemoveBubbleAlgae -> water.algae.removeBubble(water.s, c.careful)
             is Command.StartTreatment -> startTreatment(c.kind, c.days ?: c.kind.defaultDays, c.fishIds?.toSet())
             is Command.StopTreatment -> treatments.active[c.kind]?.let { endTreatment(it) }
-            is Command.Infect -> (organisms.firstOrNull { it.id == c.id } ?: organisms.filter { it.alive && it.isFish }.let { l -> if (l.isEmpty()) null else l[growthRng.nextInt(l.size)] })
+            // no fish named: a random healthy one (a second "make a fish sick" adds a patient instead of replacing the
+            // disease of the first), any fish once all are sick
+            is Command.Infect -> (organisms.firstOrNull { it.id == c.id } ?: organisms.filter { it.alive && it.isFish }
+                .let { all -> all.filter { it.disease == null }.ifEmpty { all } }.let { l -> if (l.isEmpty()) null else l[growthRng.nextInt(l.size)] })
                 ?.takeIf { it.alive && it.isFish }?.let { o ->
                     o.disease = c.disease; o.diseaseStage = c.stage.coerceIn(0.01, 1.0)
                     emit(SimEvent.DiseaseOnset(o.id, c.disease, simTimeSec))
@@ -2547,6 +2558,8 @@ class Simulation private constructor(
         /** Acute stress input of a full-strength glass tap (cortisol envelope, S:Mathew23). */
         const val TAP_SOCIAL = 0.35
         const val ABSTRACT_SPEED = 240.0
+        /** How fast a dead fish's body turns to lie along the rock it rests against (rad/s). */
+        const val DEAD_TURN_RAD_S = 0.5
         /** Largest behavior/steering step in sim seconds (stepWall caps dtB here at high speed). */
         const val MAX_BEHAVIOR_DT = 0.5
         /** Sand grid refresh for the renderer while grains fly or slopes pour (s); 0.25 s when the bed is still. */

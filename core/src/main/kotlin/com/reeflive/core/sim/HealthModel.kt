@@ -74,6 +74,11 @@ object HealthModel {
     const val K_REGEN = 0.0003
     const val K_LETHAL = 0.0004
     const val K_STARVE = 0.003
+    /**
+     * Disease stage a sandbox "make a fish sick" ([Command.Infect]) starts at: past every disease's visible threshold,
+     * so its skin and behaviour signs show at once, and untreated they stay for days (FishHealthVisualsTest).
+     */
+    const val SANDBOX_INFECT_STAGE = 0.35
     /** Lowest health slow decline can bring an animal to during the away grace ([HealthContext.grace]). */
     const val GRACE_HEALTH = 0.05
     const val HUNGER_DIVISOR = 1440.0 * 1.4

@@ -5,6 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.acos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * Sick and dying fish must reach the renderer (SIMULATION §3.5, §10): every heat stage and every disease's visible
@@ -98,6 +102,138 @@ class FishHealthVisualsTest {
         // (abstract steps lift it slowly: give it a few hours to reach the surface)
         sim.advanceAbstract(Simulation.BLOAT_SEC - 10 * 3600.0 + 4 * 3600.0)
         assertTrue("a bloated clown floats: y=${o.pos.y}", o.pos.y > sim.rock.waterLevelCm - 5)
+    }
+
+    /** Model up (y) and forward (x) of pose frame [k], rotated into the world. */
+    private fun OrganismPose.axis(k: Int, x: Float, y: Float): FloatArray {
+        val o = k * 4
+        val qx = frames[o]; val qy = frames[o + 1]; val qz = frames[o + 2]; val qw = frames[o + 3]
+        val v = floatArrayOf(x, y, 0f)
+        val tx = 2 * (qy * v[2] - qz * v[1]); val ty = 2 * (qz * v[0] - qx * v[2]); val tz = 2 * (qx * v[1] - qy * v[0])
+        return floatArrayOf(v[0] + qw * tx + (qy * tz - qz * ty), v[1] + qw * ty + (qz * tx - qx * tz), v[2] + qw * tz + (qx * ty - qy * tx))
+    }
+
+    private fun deg(a: FloatArray, b: FloatArray): Double {
+        val la = sqrt((a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).toDouble()); val lb = sqrt((b[0] * b[0] + b[1] * b[1] + b[2] * b[2]).toDouble())
+        if (la < 1e-6 || lb < 1e-6) return 0.0
+        return Math.toDegrees(acos(((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (la * lb)).coerceIn(-1.0, 1.0)))
+    }
+
+    /** Largest turn between neighbouring spine segments and largest twist of the up axis between neighbouring frames. */
+    private fun OrganismPose.kinks(): Pair<Double, Double> {
+        var bend = 0.0; var twist = 0.0
+        for (k in 1 until 15) {
+            val a = FloatArray(3) { spine[k * 3 + it] - spine[k * 3 - 3 + it] }
+            val b = FloatArray(3) { spine[k * 3 + 3 + it] - spine[k * 3 + it] }
+            bend = max(bend, deg(a, b))
+        }
+        for (k in 0 until 15) twist = max(twist, deg(axis(k, 0f, 1f), axis(k + 1, 0f, 1f)))
+        return bend to twist
+    }
+
+    /**
+     * A clown lying on the bottom, on its side and in its death throes keeps one continuous body at any sim speed
+     * (QA: at 1000x the resting body broke into two or three kinked pieces), the death-throe spasm signal stays in
+     * 0..1, and on its side the drawn frames are rolled over (QA: never seen on its side).
+     */
+    @Test
+    fun heatStagesKeepTheBodyWholeAtAnySpeed() {
+        for (speed in listOf(1.0, 60.0, 1000.0)) for (stage in listOf(Stage.LETHARGIC, Stage.LOE, Stage.DEATH)) {
+            val sim = tank()
+            val o = sim.clown()
+            sim.speed = speed
+            // 2 min of sim time to settle into the pose (eased in from the swimming shape), then 2 more checked
+            val settle = (120.0 / (speed * 0.05)).toInt().coerceAtLeast(60)
+            var worstBend = 0.0; var worstTwist = 0.0; var minRoll = 180.0
+            for (i in 0 until 2 * settle) {
+                o.heat.stage = stage; o.heat.peak = stage; o.heat.stageSince = sim.simTimeSec
+                if (stage == Stage.DEATH) o.heat.spasmUntil = sim.simTimeSec + 1e6   // held in the throes
+                sim.stepWall(0.05)
+                if (i < settle) continue
+                val p = sim.latest.organisms.first { it.id == o.id }
+                assertTrue("$stage at ${speed}x: spasm ${p.spasm} in 0..1", p.spasm in 0f..1f)
+                val (b, t) = p.kinks()
+                worstBend = max(worstBend, b); worstTwist = max(worstTwist, t)
+                minRoll = min(minRoll, deg(p.axis(0, 0f, 1f), floatArrayOf(0f, 1f, 0f)))
+            }
+            assertTrue("$stage at ${speed}x: body folded $worstBend° between segments", worstBend < 50.0)
+            assertTrue("$stage at ${speed}x: frames twisted $worstTwist° between stations", worstTwist < 15.0)
+            if (stage >= Stage.LOE) assertTrue("$stage at ${speed}x: rolled onto its side (least roll $minRoll°)", minRoll > 55.0)
+            assertTrue("$stage at ${speed}x: still alive while held", o.alive)
+        }
+    }
+
+    /** A dead fish stays in the tank as a whole body lying on its side on the bottom, also at fast-forward. */
+    @Test
+    fun deadFishStaysWholeOnTheBottomAtFastForward() {
+        val sim = tank()
+        val o = sim.clown()
+        HealthModel.kill(o, "test", sim.simTimeSec, mutableListOf())
+        sim.speed = 1000.0
+        repeat(400) { sim.stepWall(0.05) }   // ~5.5 h
+        val p = sim.latest.organisms.firstOrNull { it.id == o.id }
+        assertTrue("the body is still in the tank", p != null && p.visible)
+        p!!
+        val (bend, twist) = p.kinks()
+        assertTrue("dead body whole: bend $bend°, twist $twist°", bend < 50.0 && twist < 15.0)
+        val low = sim.rock.sandTopCm + (sim.rock.waterLevelCm - sim.rock.sandTopCm) / 3
+        assertTrue("sunk to the bottom: y=${o.pos.y}", o.pos.y < low)
+        assertTrue("on its side", deg(p.axis(0, 0f, 1f), floatArrayOf(0f, 1f, 0f)) > 55.0)
+    }
+
+    /** The heat sequence never skips the loss of equilibrium: a fish is on its side for a while before the throes. */
+    @Test
+    fun aFishLosesEquilibriumBeforeItsDeathThroes() {
+        val sim = tank()
+        val o = sim.clown()
+        o.heat.stage = Stage.LETHARGIC; o.heat.peak = Stage.LETHARGIC; o.heat.stageSince = sim.simTimeSec
+        // far past CTmax: the temperature trigger alone says dying
+        sim.enqueue(Command.SetParam("temp", 40.0))
+        val seen = ArrayList<Stage>()
+        var guard = 0
+        while (o.alive && guard++ < 10) { sim.advanceAbstract(60.0); if (seen.lastOrNull() != o.heat.stage) seen += o.heat.stage }
+        assertTrue("stages $seen", seen.indexOf(Stage.LOE) in 0 until seen.indexOf(Stage.DEATH).let { if (it < 0) Int.MAX_VALUE else it })
+        assertFalse("still dies of the heat", o.alive)
+        assertEquals("heat", o.deathCause)
+    }
+
+    /**
+     * Sandbox "make a fish sick": the infection is still there with its signs showing after a full sim day at the
+     * fastest speed (QA: infections seemed to vanish within a minute of fast-forward), and a second one picks a fish
+     * that is not sick yet.
+     */
+    @Test
+    fun sandboxInfectionLastsDaysAtFastForward() {
+        data class Case(val d: Disease, val symptom: Symptom, val field: ((OrganismPose) -> Float)?)
+        val cases = listOf(
+            Case(Disease.ICH, Symptom.WHITE_SPOTS) { it.ich },
+            Case(Disease.VELVET, Symptom.GOLD_DUST) { it.velvet },
+            Case(Disease.BACTERIAL, Symptom.FRAYED_FINS) { it.finRot },
+            Case(Disease.HLLE, Symptom.PITTED_SKIN) { it.hlle },
+            Case(Disease.BROOKLYNELLA, Symptom.MUCUS) { it.mucus },
+            Case(Disease.URONEMA, Symptom.LESIONS, null),
+            Case(Disease.FLUKES, Symptom.FLASHING, null),
+        )
+        for (c in cases) {
+            val sim = tank()
+            sim.enqueue(Command.Infect(null, c.d, HealthModel.SANDBOX_INFECT_STAGE))
+            sim.stepWall(0.05)
+            val o = sim.organisms.single { it.disease == c.d }
+            sim.speed = 1000.0
+            val until = sim.simTimeSec + 86400.0
+            while (sim.simTimeSec < until) sim.stepWall(0.05)
+            val snap = sim.latest
+            assertEquals("${c.d}: still infected after a day (stage ${o.diseaseStage})", c.d, o.disease)
+            assertTrue("${c.d}: ${c.symptom} still showing, got ${snap.symptoms(o)}", c.symptom in snap.symptoms(o))
+            c.field?.let { f -> assertTrue("${c.d}: skin sign still drawn (${f(snap.pose(o))})", f(snap.pose(o)) > 0.2f) }
+        }
+        // a second "make a fish sick" adds a patient
+        val sim = tank()
+        sim.enqueue(Command.Infect(null, Disease.VELVET, HealthModel.SANDBOX_INFECT_STAGE))
+        sim.stepWall(0.05)
+        sim.enqueue(Command.Infect(null, Disease.HLLE, HealthModel.SANDBOX_INFECT_STAGE))
+        sim.stepWall(0.05)
+        assertEquals("two sick fish", setOf(Disease.VELVET, Disease.HLLE), sim.organisms.mapNotNull { it.disease }.toSet())
     }
 
     @Test

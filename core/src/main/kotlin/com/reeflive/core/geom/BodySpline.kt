@@ -35,6 +35,12 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
      * sliding into a hole or leaving it never pops the body shape or snaps the head to the path's end.
      */
     var override: List<Vec3>? = null
+    /**
+     * Show [override] at full weight at once instead of easing into it: for a path that eases itself out of the shape
+     * shown (HeatResponse.laidBody). The ease restarts whenever the rock guard corrects a body part way into a path,
+     * so a path that rests against the rock never came fully into effect.
+     */
+    var overrideSnap = false
     /** 0 = trail shape, 1 = override shape; eased in [update]. */
     private var overrideMix = 0.0
     /** The override being blended out after it was cleared. */
@@ -137,7 +143,8 @@ class BodySpline(length: Double, val rigid: Boolean = false) {
         override?.let { if (it.isNotEmpty()) lastOverride = it }
         val target = if (override != null) 1.0 else 0.0
         // (at most MAX_BLEND_STEP per update: a long fast-forward tick would otherwise swap the shape in one step)
-        overrideMix += ((target - overrideMix) * (1 - exp(-OVERRIDE_BLEND_RATE * dt.coerceAtLeast(0.0)))).coerceIn(-MAX_BLEND_STEP, MAX_BLEND_STEP)
+        if (overrideSnap && override != null) overrideMix = 1.0
+        else overrideMix += ((target - overrideMix) * (1 - exp(-OVERRIDE_BLEND_RATE * dt.coerceAtLeast(0.0)))).coerceIn(-MAX_BLEND_STEP, MAX_BLEND_STEP)
         if (kotlin.math.abs(target - overrideMix) < 1e-3) overrideMix = target
         if (overrideMix == 0.0) lastOverride = null
         if (rigid) return

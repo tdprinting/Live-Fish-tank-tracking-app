@@ -265,7 +265,11 @@ object HeatModel {
         s.dPeak = max(s.dPeak, s.d)
 
         // ---- stage: max of the T and D triggers; recovery rate-limited ----
-        val target = maxOf(tStage(t, p, ct), dStage(s.d))
+        var target = maxOf(tStage(t, p, ct), dStage(s.d))
+        // a fish always loses its equilibrium (rolls onto its side) for at least one tick before the death throes: the
+        // damage integrator could cross both thresholds in one minute, so a clown went from lethargic straight to dying
+        // and was never seen on its side
+        if (o.isFish && target == Stage.DEATH && s.stage < Stage.LOE) target = Stage.LOE
         if (target > s.stage) {
             s.stage = target; s.stageSince = now
             if (target > s.peak) s.peak = target
