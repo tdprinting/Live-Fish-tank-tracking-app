@@ -1934,12 +1934,8 @@ def paint_textures(sid, sp, prof, outdir):
     e = sp["eye"]
     eye = FL.paint_eye(os.path.join(outdir, f"{sid}_eye.png"), iris=e["iris"], ring=e["ring"], outer=e["outer"],
                        ring_w=e.get("ring_w", 0.18), pupil=e.get("pupil", 0.36))
-    extra = {}
-    if sid == "tang":  # adult variant without the yellow belly (runtime texture swap)
-        cv2 = P.Canvas(tw, th)
-        paint_tang(cv2, Flank(cv2, prof), juvenile=False)
-        extra["adult"] = cv2.save(os.path.join(C.TEXTURES, "tang_adult_albedo.png"))
-    return dict(body=body, body1=body1, fin=fin, fin1=fin1, eye=eye, **extra)
+    # (the tang's adult colours, no yellow belly, are a life-stage form: textures/stages, life_stages.py)
+    return dict(body=body, body1=body1, fin=fin, fin1=fin1, eye=eye)
 
 
 def build_fish(sid, lod1=True, verbose=True):
@@ -1956,8 +1952,6 @@ def build_fish(sid, lod1=True, verbose=True):
     root_extras = dict(species=sid, iridescence=sp["irid"], roughness=sp["rough"], lengthCm=sp["length_cm"],
                        lod=0, unit="body length 1.0 = snout..caudal tip, facing +X",
                        bodyScale=(lambda: round(fb.S, 5)))
-    if sid == "tang":
-        root_extras["altTextures"] = {"adult": "textures/tang_adult_albedo.png"}
     root, objs = fb.build(mats, root_extras)
     for nm, o in objs.items():
         if o["part"] in ("body", "eye", "jaw"):

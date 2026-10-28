@@ -16,7 +16,23 @@ import math
 
 import numpy as np
 
-from store_geo import Group, cylinder, ellipsoid
+from store_geo import Group, cylinder, ellipsoid as _ellipsoid
+
+# Ellipsoid resolution (2026-10 perf pass: the people of a store were 40-60k triangles, validate_glb.py
+# STORE_ROOM_BUDGET): the mid-size parts (eyes, ears, cheeks, nose, hands, sleeves, shoes: 10-16 segments) halved but
+# never under 8 segments x 5 rings. The skull and the hair / hat shells over it (18+ segments) fit a few millimetres
+# apart: they all drop to the same 0.7, so their facets stay alike and the skin does not poke through the hair. The
+# 6 x 4 highlights are untouched.
+DETAIL = 0.5
+DETAIL_SHELL = 0.7
+
+
+def ellipsoid(c, r, segs=12, rings=8):
+    if segs >= 18:
+        segs, rings = round(segs * DETAIL_SHELL), round(rings * DETAIL_SHELL)
+    elif segs >= 10:
+        segs, rings = max(8, round(segs * DETAIL)), max(min(rings, 5), round(rings * DETAIL))
+    return _ellipsoid(c, r, segs, rings)
 
 SKINS = ("#F6D2B5", "#E8B48C", "#C68E63", "#A56E46", "#7A4E33", "#F1C7A3")
 SHOE = "#2A2A30"

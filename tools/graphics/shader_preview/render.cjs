@@ -169,7 +169,7 @@ function frameData(view, light, quality, time, shadow) {
 
 // --- tiny static server over the repo (the page fetches GLBs, PNGs and shader sources) ----------------------------
 function serve(shaderDir) {
-  const types = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.glb': 'model/gltf-binary' };
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.glb': 'model/gltf-binary' };
   const srv = http.createServer((req, res) => {
     let u = decodeURIComponent(req.url.split('?')[0]);
     let file;
