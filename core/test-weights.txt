@@ -1,0 +1,89 @@
+# Seconds per test unit in CI (2 JVMs per runner; the larger of runs 40716499143 and 40719201336, since one unit's
+# time varies by up to ~1.8x between runners), for packing the "Core tests" shards (core/build.gradle.kts). Refresh
+# from the "build" job's "measured weights" log group (python3 .github/scripts/test_report.py <results> --weights).
+# "<seconds> <Class>" or "<seconds> <Class.method> [+ <Class.method> ...]": one unit always runs in one JVM.
+# Classes not listed count as 3 s. A split class must list every method (an unlisted one runs in testUnlisted).
+# c03 and c04 read the cached days of seeds 1-5, c12 and c13 the day of seed 1: each pair stays in one JVM.
+307 CoralGrowthTest
+205 EcseniusBlenniesTest
+160 HealthModelTest
+158 SandboxExtremesTest
+149 LifeCycleTest
+136 AlgaeOutbreaksTest
+115 WasteSystemTest
+111 HermitSeatTest
+110 BehaviourDetailTest
+88 EquipmentExportTest
+82 HoleOccupancyTest
+63 LawnmowerCamouflageTest
+57 AlgaeModelTest
+55 RareFishBatch1Test
+55 ThoughtsTest
+53 HeatModelTest
+52 MotionTest
+50 BacteriaModelTest
+48 RockPenetrationTest
+44 ParameterEffectsTest
+42 BristlewormTest
+38 SallySeatTest
+38 TreatmentTest
+35 BrittleMotionTest
+34 TimelapseTest
+32 LivelierFishTest
+30 FishHealthVisualsTest
+28 CritterAccuracyTest
+28 TangHideTest
+25 ReproductionTest
+21 BodyPenetrationTest
+21 NewFoodsTest
+20 ResearchGapsTest
+160 RealismAcceptanceTest.c03_cleanerServicesTang + RealismAcceptanceTest.c04_cleanerCooldown
+59 RealismAcceptanceTest.c12_tangNeverBullies + RealismAcceptanceTest.c13_cardinalDiel
+578 RealismAcceptanceTest.c20_rockRearrangement
+548 AiptasiaTest.spreadsByPedalLaceration
+282 RealismAcceptanceTest.c17_nightPredatorMap
+182 FishGlitchTest.ownersTankDoesNotGlitch
+177 AiptasiaTest.controllers
+176 AiTest.hungryCrabRarelyGrabsPrey
+146 RealismAcceptanceTest.c06_cleanerAsBuffer
+128 RealismAcceptanceTest.c18_waterQualityLethargy
+107 RealismAcceptanceTest.c02_hostDefenceSensitisation
+84 RealismAcceptanceTest.c08_dottybackStandoff
+68 RealismAcceptanceTest.c05_cheatingRespondsToHunger
+56 RealismAcceptanceTest.c09_blennyWar
+51 RealismAcceptanceTest.c07_dottybackNewcomerAttack
+49 FishGlitchTest.popularFishPackDoesNotGlitchOrClip
+47 AiTest.sallyCrabHidesByDayAndDarts
+44 RealismAcceptanceTest.c22_rampVersusStep
+37 AiTest.noRockPenetration
+32 FishGlitchTest.rareFishDoNotGlitchOrClip
+27 AiTest.allBrainsStayFiniteAndInWater
+26 AiTest.cleanersServeClients
+21 RealismAcceptanceTest.c11_hawkfishEconomy
+19 AiTest.clownsStayNearHost
+19 RealismAcceptanceTest.c27_recoveryOrdering
+18 AiTest.gobyDigsAndHides
+13 RealismAcceptanceTest.c01_clownPairHierarchy
+11 RealismAcceptanceTest.c15_shrimpPolitics
+10 AiTest.feedingReducesHunger
+9 RealismAcceptanceTest.c25_biphasicHeatAggression
+9 RealismAcceptanceTest.c26_lowPhBoldness
+8 RealismAcceptanceTest.c14_engineerGobyDiel
+6 AiTest.nightBehaviors
+6 RealismAcceptanceTest.c23_heatTimesOxygen
+5 RealismAcceptanceTest.c21_deterministicWithBouts
+3 AiTest.eelStrikesShrimpWhenHungry
+2 AiTest.noPredationInRealityMode
+2 RealismAcceptanceTest.c28_phoneBudget
+1 AiTest.victimsRememberAttackers
+1 AiptasiaTest.berghiaGrazeOnePolypAtATime
+1 AiptasiaTest.disturbanceSpreadsThem
+1 AiptasiaTest.hitchhikerSitsBesideItsFrag
+1 AiptasiaTest.pestsSurviveSave
+1 AiptasiaTest.treatedPolypShrivels
+1 AiptasiaTest.treatmentsKillOpenPolypsAndMissClosedOnes
+1 RealismAcceptanceTest.c00_wrasseConstants
+1 RealismAcceptanceTest.c10_wellFedBlennyIsCalmer
+1 RealismAcceptanceTest.c16_skunkCleanerSignalling
+1 RealismAcceptanceTest.c19_crowding
+1 RealismAcceptanceTest.c24_acuteStressEnvelope

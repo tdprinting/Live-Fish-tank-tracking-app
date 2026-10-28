@@ -72,9 +72,18 @@ class RealismAcceptanceTest {
     private class Day(val sim: Simulation, val events: List<SimEvent>, val hours: Double, val tangFlareOk: Int, val tangFlareBad: Int,
                       val maxGapMin: Map<String, Double>, val cardinalNear: Double)
 
-    private val day: Day by lazy { runDay() }
+    // JUnit makes a new instance per test method, so the shared days live in the companion: each seed's 5 h day is run
+    // once per JVM instead of once per check that reads it (c03, c04, c12, c13). A day is a fresh deterministic tank
+    // (c21), so the cached one is the run each check got before; the checks only read it.
+    private val day: Day get() = dayOf(1L)
     /** The same day on seeds 1–5, for the per-seed cleaner checks (c03, c04). */
-    private val days: Map<Long, Day> by lazy { (1L..5L).associateWith { if (it == 1L) day else runDay(it) } }
+    private val days: Map<Long, Day> get() = (1L..5L).associateWith { dayOf(it) }
+
+    private fun dayOf(seed: Long): Day = synchronized(dayCache) { dayCache.getOrPut(seed) { runDay(seed) } }
+
+    private companion object {
+        val dayCache = HashMap<Long, Day>()
+    }
 
     private fun runDay(seed: Long = 1L): Day {
         val sim = tank(seed = seed, hour = 9.5)
