@@ -2061,7 +2061,10 @@ open class InHole(val b: SpeciesBrain, var hole: RockHole?, var shelter: Vec3, l
         when (phase) {
             0 -> {
                 out.seek(c.viaOpenWater(stand), c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
-                if (c.o.pos.distanceTo(stand) < max(1.5, 0.2 * L) || c.t - phaseAt > 20) { phase = 1; phaseAt = c.t }
+                // (after 20 s it settles from close by; from across the tank it keeps swimming home: the turn-on-the-spot
+                // placement from far off dragged it along the surface and it flicked between this and backing in for minutes)
+                val dS = c.o.pos.distanceTo(stand)
+                if (dS < max(1.5, 0.2 * L) || c.t - phaseAt > 20 && dS < STAND_NEAR_CM) { phase = 1; phaseAt = c.t }
             }
             1 -> {
                 // U-turn on the spot to face out of the hole
@@ -2537,6 +2540,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             o.sleeping && hole == null -> "Asleep against the rock"
             o.sleeping && phaseNow == 3 -> "Asleep in its hole"
             phaseNow == 2 -> "Backing into its hole"
+            phaseNow == 0 && hole != null && o.pos.distanceTo(hole!!.mouth) > HOME_FAR_CM -> "Swimming home to its hole"
             hole == null -> "Sheltering against the rock"
             else -> "Peeking from its hole"
         }
@@ -2752,6 +2756,10 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** Keeper food it darts out for: drifting within this of its hole (cm), lying on the rock or sand within [FEED_SETTLED_CM] [L]. */
         const val FEED_RANGE_CM = 70.0
+        /** The bicolor's reach for keeper food from its hole (cm) [L]. */
+        const val BICOLOR_FEED_CM = 15.0
+        /** Further than this (cm) from its hole on the way back it is "swimming home", not "peeking". */
+        const val HOME_FAR_CM = 12.0
         const val FEED_SETTLED_CM = 35.0
         /** Hunger an unprompted plankton dart meets. */
         const val DART_YIELD = 0.01
@@ -2818,6 +2826,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Dart up into the water column to snap plankton or a drifting particle, then back. */
     inner class PlanktonDash : Behavior("dash", "Darting for plankton") {
+        /** A dart at keeper food drifting by reads as feeding on the card. */
+        override val label: String get() = if (f?.kind?.suspended == false) "Darting out for food" else "Darting for plankton"
         private var target = Vec3.ZERO
         private var f: FoodParticle? = null
         private var next = 0.0
@@ -2829,8 +2839,7 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         override val committed: Boolean get() = !finished && elapsed < 16
         override fun score(c: Ctx): Double {
             if (c.p.night) return 0.0
-            // live plankton (pods, phyto-fed plankton) only: keeper food is taken by [BlennyFeed]
-            f = c.findFood(style.dashSeeCm) { !it.settled && it.kind.suspended }
+            f = c.findFood(style.dashSeeCm) { !it.settled }
             if (f != null && c.o.hunger > 0.12) return 0.8
             return if (c.t > next && c.o.hunger > 0.2) 0.5 + 0.35 * c.o.hunger else 0.0
         }
@@ -2876,7 +2885,9 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             // (floating flake is out of its reach: it does not leave the rock for the surface)
             if (f.pos.y > c.rock.waterLevelCm - CardinalBrain.SURFACE_CM - 1.0) return false
             val d = f.pos.distanceTo(holePos)
-            return d < (if (f.settled) FEED_SETTLED_CM else FEED_RANGE_CM)
+            // (the bicolor, a benthic grazer that rarely leaves its rock, takes only what comes close: research 50 §1c-d)
+            val range = if (style === EcseniusStyle.BICOLOR) BICOLOR_FEED_CM else FEED_RANGE_CM
+            return d < (if (f.settled) min(FEED_SETTLED_CM, range) else range)
         }
         // out of a feeding (a few minutes after the keeper fed) only what drifts into its plankton-dart range
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
@@ -3154,3 +3165,6 @@ internal fun normalQuantile(p: Double): Double {
 /** A dottyback goes for fed food this near it (cm) for this long after a feed (s) [L]. */
 private const val DOTTY_FEED_CALL_S = 300.0
 private const val DOTTY_FEED_NEAR_CM = 30.0
+
+/** InHole: within this of its stand point (cm) a slow approach settles anyway after 20 s. */
+private const val STAND_NEAR_CM = 6.0
