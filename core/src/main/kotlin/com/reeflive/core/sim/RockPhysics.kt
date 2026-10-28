@@ -810,16 +810,20 @@ class Hull {
     private val idx = IntArray(1024)
     private val hx = DoubleArray(1024)
     private val hz = DoubleArray(1024)
+    // the points' order by (x, z): a stable merge sort over plain ints (a boxed List<Int> sorted with a two-lambda
+    // comparator was most of the 60x rock-check cost in the browser), same order as the stable sortedWith it replaced
+    private var ids = IntArray(0)
+    private var tmp = IntArray(0)
 
     /** Whether (px, pz) lies inside the convex hull of the first [n] points, at least [margin] from every edge. */
     fun containsWithMargin(xs: DoubleArray, zs: DoubleArray, n: Int, px: Double, pz: Double, margin: Double): Boolean {
         if (n < 3) return false
-        val ids = (0 until n).sortedWith(compareBy<Int>({ xs[it] }, { zs[it] }))
+        val ord = sortByXz(xs, zs, n)
         var k = 0
         fun cross(o: Int, a: Int, b: Int) = (xs[a] - xs[o]) * (zs[b] - zs[o]) - (zs[a] - zs[o]) * (xs[b] - xs[o])
-        for (i in ids) { while (k >= 2 && cross(idx[k - 2], idx[k - 1], i) <= 0) k--; idx[k++] = i }
+        for (t in 0 until n) { val i = ord[t]; while (k >= 2 && cross(idx[k - 2], idx[k - 1], i) <= 0) k--; idx[k++] = i }
         val lower = k + 1
-        for (t in ids.indices.reversed().drop(1)) { val i = ids[t]; while (k >= lower && cross(idx[k - 2], idx[k - 1], i) <= 0) k--; idx[k++] = i }
+        for (t in n - 2 downTo 0) { val i = ord[t]; while (k >= lower && cross(idx[k - 2], idx[k - 1], i) <= 0) k--; idx[k++] = i }
         val m = k - 1
         if (m < 3) return false
         for (t in 0 until m) { hx[t] = xs[idx[t]]; hz[t] = zs[idx[t]] }
@@ -833,5 +837,32 @@ class Hull {
             if (side < margin) return false
         }
         return true
+    }
+
+    /** 0 until [n] ordered by x, then z ([Double.compareTo], as `compareBy` did); equal points keep index order. */
+    private fun sortByXz(xs: DoubleArray, zs: DoubleArray, n: Int): IntArray {
+        if (ids.size < n) { ids = IntArray(n); tmp = IntArray(n) }
+        var a = ids; var b = tmp
+        for (i in 0 until n) a[i] = i
+        var w = 1
+        while (w < n) {
+            var lo = 0
+            while (lo < n) {
+                val mid = minOf(lo + w, n); val hi = minOf(lo + 2 * w, n)
+                var i = lo; var j = mid; var o = lo
+                while (i < mid && j < hi) {
+                    val p = a[i]; val q = a[j]
+                    var c = xs[p].compareTo(xs[q])
+                    if (c == 0) c = zs[p].compareTo(zs[q])
+                    if (c <= 0) { b[o++] = p; i++ } else { b[o++] = q; j++ }
+                }
+                while (i < mid) b[o++] = a[i++]
+                while (j < hi) b[o++] = a[j++]
+                lo = hi
+            }
+            val s = a; a = b; b = s
+            w *= 2
+        }
+        return a
     }
 }

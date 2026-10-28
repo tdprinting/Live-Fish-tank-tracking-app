@@ -126,7 +126,10 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
     private val failed = HashSet<String>()
     private val textureReady = ConcurrentLinkedQueue<Pair<String, Bitmap?>>()
     private val textures = HashMap<String, Texture>()
-    private val modelFiles: Set<String> by lazy { (assets.list("models") ?: emptyArray()).map { "models/$it" }.toSet() }
+    // read by [exists] for every animal drawn: a plain field, as a `by lazy` getter builds an object per read on the web
+    private var modelFilesMemo: Set<String>? = null
+    private val modelFiles: Set<String>
+        get() = modelFilesMemo ?: (assets.list("models") ?: emptyArray()).map { "models/$it" }.toSet().also { modelFilesMemo = it }
 
     val loadedCount: Int get() = models.size
     val requestedCount: Int get() = requested.size

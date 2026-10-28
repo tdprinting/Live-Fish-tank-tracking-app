@@ -11,6 +11,7 @@ import java.nio.Buffer
 object GLES30 {
     /** The WebGL2RenderingContext; set by the web host before the renderer's onSurfaceCreated. */
     var gl: dynamic = null
+        set(v) { field = v; resetBindings() }
 
     const val GL_NO_ERROR = 0
     const val GL_DEPTH_BUFFER_BIT = 0x00000100
@@ -169,43 +170,107 @@ object GLES30 {
     // ---- buffers / VAOs
     fun glGenBuffers(n: Int, out: IntArray, off: Int) = gen(n, out, off) { gl.createBuffer() }
     fun glDeleteBuffers(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteBuffer(it) }
-    fun glBindBuffer(t: Int, id: Int) = gl.bindBuffer(t, Names.get(id))
+    // the element buffer binding belongs to the bound VAO
+    fun glBindBuffer(t: Int, id: Int) { if (t == GL_ELEMENT_ARRAY_BUFFER) vaoState(); gl.bindBuffer(t, Names.get(id)) }
     fun glBindBufferBase(t: Int, index: Int, id: Int) = gl.bindBufferBase(t, index, Names.get(id))
     fun glBufferData(t: Int, size: Int, b: Buffer?, usage: Int) {
+        if (t == GL_ELEMENT_ARRAY_BUFFER) vaoState()
         if (b == null) gl.bufferData(t, size, usage) else gl.bufferData(t, data(b, size), usage)
     }
-    fun glBufferSubData(t: Int, offset: Int, size: Int, b: Buffer) = gl.bufferSubData(t, offset, data(b, size))
+    fun glBufferSubData(t: Int, offset: Int, size: Int, b: Buffer) { if (t == GL_ELEMENT_ARRAY_BUFFER) vaoState(); gl.bufferSubData(t, offset, data(b, size)) }
     fun glGenVertexArrays(n: Int, out: IntArray, off: Int) = gen(n, out, off) { gl.createVertexArray() }
-    fun glDeleteVertexArrays(n: Int, ids: IntArray, off: Int) { boundVao = -1; del(n, ids, off) { gl.deleteVertexArray(it) } }
-    // each draw binds its mesh's VAO; consecutive draws of one mesh (fins, shadow pass) skip the native call
+    fun glDeleteVertexArrays(n: Int, ids: IntArray, off: Int) { boundVao = -1; vaoZeroPending = false; del(n, ids, off) { gl.deleteVertexArray(it) } }
+    // Each draw binds its mesh's VAO and unbinds it (0) afterwards: two native calls per draw, the most frequent WebGL
+    // call of a frame. [boundVao] is the VAO the context really has; an unbind only marks [vaoZeroPending], made real
+    // by [vaoState] just before anything that uses or changes vertex-array state (a draw, the element buffer, attribute
+    // setup). Binding the same VAO again (the next draw of a mesh, fins, the shadow pass) cancels the pending unbind
+    // and skips both calls.
     private var boundVao = -1
-    fun glBindVertexArray(id: Int) { if (id != boundVao) { boundVao = id; gl.bindVertexArray(Names.get(id)) } }
-    fun glEnableVertexAttribArray(i: Int) = gl.enableVertexAttribArray(i)
-    fun glVertexAttribPointer(i: Int, size: Int, type: Int, norm: Boolean, stride: Int, offset: Int) = gl.vertexAttribPointer(i, size, type, norm, stride, offset)
-    fun glVertexAttribDivisor(i: Int, d: Int) = gl.vertexAttribDivisor(i, d)
+    private var vaoZeroPending = false
+    fun glBindVertexArray(id: Int) {
+        if (id == 0) { if (boundVao != 0) vaoZeroPending = true; return }
+        vaoZeroPending = false
+        if (id != boundVao) { boundVao = id; gl.bindVertexArray(Names.get(id)) }
+    }
+    private fun vaoState() { if (vaoZeroPending) { vaoZeroPending = false; boundVao = 0; gl.bindVertexArray(null) } }
+    fun glEnableVertexAttribArray(i: Int) { vaoState(); gl.enableVertexAttribArray(i) }
+    fun glVertexAttribPointer(i: Int, size: Int, type: Int, norm: Boolean, stride: Int, offset: Int) { vaoState(); gl.vertexAttribPointer(i, size, type, norm, stride, offset) }
+    fun glVertexAttribDivisor(i: Int, d: Int) { vaoState(); gl.vertexAttribDivisor(i, d) }
     fun glVertexAttrib4f(i: Int, x: Float, y: Float, z: Float, w: Float) = gl.vertexAttrib4f(i, x, y, z, w)
-    fun glDrawArrays(mode: Int, first: Int, count: Int) = gl.drawArrays(mode, first, count)
-    fun glDrawArraysInstanced(mode: Int, first: Int, count: Int, instances: Int) = gl.drawArraysInstanced(mode, first, count, instances)
-    fun glDisableVertexAttribArray(i: Int) = gl.disableVertexAttribArray(i)
-    fun glDrawElements(mode: Int, count: Int, type: Int, offset: Int) = gl.drawElements(mode, count, type, offset)
-    fun glDrawElementsInstanced(mode: Int, count: Int, type: Int, offset: Int, instances: Int) = gl.drawElementsInstanced(mode, count, type, offset, instances)
+    fun glDrawArrays(mode: Int, first: Int, count: Int) { vaoState(); gl.drawArrays(mode, first, count) }
+    fun glDrawArraysInstanced(mode: Int, first: Int, count: Int, instances: Int) { vaoState(); gl.drawArraysInstanced(mode, first, count, instances) }
+    fun glDisableVertexAttribArray(i: Int) { vaoState(); gl.disableVertexAttribArray(i) }
+    fun glDrawElements(mode: Int, count: Int, type: Int, offset: Int) { vaoState(); gl.drawElements(mode, count, type, offset) }
+    fun glDrawElementsInstanced(mode: Int, count: Int, type: Int, offset: Int, instances: Int) { vaoState(); gl.drawElementsInstanced(mode, count, type, offset, instances) }
 
     // ---- textures
     fun glGenTextures(n: Int, out: IntArray, off: Int) = gen(n, out, off) { gl.createTexture() }
-    fun glDeleteTextures(n: Int, ids: IntArray, off: Int) = del(n, ids, off) { gl.deleteTexture(it) }
-    fun glBindTexture(t: Int, id: Int) { boundTexture = id; gl.bindTexture(t, Names.get(id)) }
-    fun glActiveTexture(unit: Int) = gl.activeTexture(unit)
-    fun glTexParameteri(t: Int, p: Int, v: Int) = gl.texParameteri(t, p, v)
+    fun glDeleteTextures(n: Int, ids: IntArray, off: Int) {
+        // a deleted texture is unbound from every unit: forget it there, so the next bind is a real one
+        for (i in 0 until n) { val id = ids[off + i]; for (u in unitTex2D.indices) if (unitTex2D[u] == id) unitTex2D[u] = -1 }
+        del(n, ids, off) { gl.deleteTexture(it) }
+    }
+    // Materials bind every map they use on each draw (glActiveTexture + glBindTexture per map), mostly the texture
+    // already there: about 70% of the binds and a third of the unit switches were redundant. The 2D texture on each
+    // unit is remembered and an unchanged bind skips the native call; a unit switch is only recorded ([activeUnit])
+    // and made real ([unitState]) before a bind that goes through or anything else that acts on the active unit's
+    // texture. -1 = not known (start, a deleted texture).
+    private const val MAX_UNITS = 32
+    private val unitTex2D = IntArray(MAX_UNITS) { -1 }
+    /** The unit the renderer last selected, and the one the context really has. */
+    private var activeUnit = -1
+    private var realUnit = -1
+    private fun resetBindings() { unitTex2D.fill(-1); activeUnit = -1; realUnit = -1; boundVao = -1; vaoZeroPending = false }
+    private fun unitState() { val u = activeUnit; if (u != realUnit) { realUnit = u; gl.activeTexture(GL_TEXTURE0 + u) } }
+    fun glBindTexture(t: Int, id: Int) {
+        boundTexture = id
+        val u = activeUnit
+        if (t == GL_TEXTURE_2D && u in 0 until MAX_UNITS) { if (unitTex2D[u] == id) return; unitTex2D[u] = id }
+        unitState()
+        gl.bindTexture(t, Names.get(id))
+    }
+    fun glActiveTexture(unit: Int) { activeUnit = unit - GL_TEXTURE0 }
+    fun glTexParameteri(t: Int, p: Int, v: Int) {
+        if (t == GL_TEXTURE_2D && p == GL_TEXTURE_MIN_FILTER) minFilters[boundTexture] = v
+        unitState()
+        gl.texParameteri(t, p, v)
+    }
+    /** Min filter last set on each texture (by id): a late image upload knows whether to build mipmaps without
+     *  gl.getTexParameter, a synchronous round trip that waits for the GPU to finish everything queued. */
+    private val minFilters: dynamic = js("[]")
+    /** The texture's min filter as last set, or GL's default (NEAREST_MIPMAP_LINEAR, mipmapped) when never set. */
+    internal fun minFilter(id: Int): Int = (minFilters[id] as Int?) ?: 0x2702
+    /** Whether [id] still names [tex] (not deleted since; ids are never reused), without the synchronous gl.isTexture. */
+    internal fun alive(id: Int, tex: dynamic): Boolean = tex != null && Names.get(id) === tex
+    /**
+     * An upload outside the renderer's draw calls (a browser-decoded image): binds [id] on the active unit, runs
+     * [upload] and puts the unit's texture back, so the binding cache stays true.
+     */
+    internal fun withTexture2D(id: Int, upload: () -> Unit) {
+        unitState()
+        val u = realUnit
+        val prev = if (u in 0 until MAX_UNITS) unitTex2D[u] else -1
+        // the previous binding is known except before the renderer's first bind (then ask, once)
+        val prevObj: dynamic = if (prev >= 0) Names.get(prev) else gl.getParameter(0x8069) // TEXTURE_BINDING_2D
+        gl.bindTexture(GL_TEXTURE_2D, Names.get(id))
+        try { upload() } finally { gl.bindTexture(GL_TEXTURE_2D, prevObj) }
+    }
+    /** Makes the selected texture unit real before a raw `gl` call on the bound texture (GLUtils' first upload). */
+    internal fun syncTextureUnit() = unitState()
     fun glTexParameterf(t: Int, p: Int, v: Float) {
         if (p == 0x84FE && gl.getExtension("EXT_texture_filter_anisotropic") == null) return
+        unitState()
         gl.texParameterf(t, p, v)
     }
-    fun glGenerateMipmap(t: Int) = gl.generateMipmap(t)
+    fun glGenerateMipmap(t: Int) { unitState(); gl.generateMipmap(t) }
     fun glTexImage2D(t: Int, level: Int, internal: Int, w: Int, h: Int, border: Int, format: Int, type: Int, b: Buffer?) {
+        unitState()
         gl.texImage2D(t, level, internal, w, h, border, format, type, pixels(b, type))
     }
-    fun glTexSubImage2D(t: Int, level: Int, x: Int, y: Int, w: Int, h: Int, format: Int, type: Int, b: Buffer) =
+    fun glTexSubImage2D(t: Int, level: Int, x: Int, y: Int, w: Int, h: Int, format: Int, type: Int, b: Buffer) {
+        unitState()
         gl.texSubImage2D(t, level, x, y, w, h, format, type, pixels(b, type))
+    }
     /** Last texture bound with [glBindTexture] (GLUtils uploads decoded images into it later). */
     var boundTexture = 0; private set
     internal fun texture(id: Int): dynamic = Names.get(id)
