@@ -709,6 +709,7 @@ HERMIT_SHELLS = {   # helix_shell(steep, turns, r0, r1), nodules per whorl, nodu
     "blue": (8.5, 8.0, 0.02, 0.088, 9, 0.08),        # Cerithium: tall slender spire of ~8 whorls, beaded cords
     "scarlet": (4.6, 5.0, 0.016, 0.12, 7, 0.14),     # Vasum-like: heavier, knobbed shoulders
 }
+HERMIT_SHELL_RATIO = 0.45  # Shell decimation (2028 -> ~910 tris)
 
 
 def _hermit_colors(blue):
@@ -945,7 +946,10 @@ def build_hermit(kind="blue"):
                  roughness=0.5, gait="forward", limbRig="hermit_legs", limbPivots=pivots)
     for o in (shell_o, body_o):
         C.recalc_normals(o)
-    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 4000)
+    # the 80-station helix is ~2k triangles on a 2-3 cm animal: collapse it to about 1k so the hermit fits its 2600
+    # budget (validate_glb.py; three of them are in the default tank). One rigid limb id, so nothing to blend.
+    C.decimate(shell_o, HERMIT_SHELL_RATIO)
+    return finish(root, objs, os.path.join(C.MODELS, f"{sid}.glb"), 2600)
 
 
 def _normalize_unit(objs, along="x", sit=True):

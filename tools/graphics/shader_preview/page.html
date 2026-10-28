@@ -269,8 +269,8 @@ window.preview = {
     st.tex.flat = texture(new Uint8Array([128, 128, 255, 255]), false);
     st.tex.neutral = texture(new Uint8Array([217, 255, 0, 255]), false);
     st.tex.zero = texture(new Uint8Array([0, 0, 0, 0]), false);
-    for (const n of ['sand_normal', 'caustic_512', 'irid_lut', 'room_env', 'water_n1', 'water_n2']) {
-      st.tex[n] = await pngTexture(`/assets/textures/${n}.png`);
+    for (const n of ['sand_normal.jpg', 'caustic_512.png', 'irid_lut.png', 'room_env.png', 'water_n1.png', 'water_n2.png']) {
+      st.tex[n.replace(/\.\w+$/, '')] = await pngTexture(`/assets/textures/${n}`);
     }
     // depth texture for the shadow map; a 1x1 cleared one when there is no pass (sampler2DShadow stays valid)
     const smq = parseInt(quality, 10);

@@ -116,6 +116,14 @@ def write_png(path, arr):
     return path
 
 
+def to_jpeg(src_png, dst, quality=90):
+    """Re-encodes an RGB PNG as JPEG (4:4:4 chroma, so thin stripes keep their colour): the web app downloads every
+    texture it shows (docs/ASSETS.md §6, download size). Needs Pillow."""
+    from PIL import Image
+    Image.open(src_png).convert("RGB").save(dst, "JPEG", quality=quality, subsampling=0, optimize=True)
+    return dst
+
+
 def read_png(path):
     """Minimal PNG reader for 8-bit non-interlaced images written by write_png/Blender."""
     with open(path, "rb") as f:
@@ -342,6 +350,21 @@ def export_glb(path, objects=None):
         export_materials='EXPORT', export_image_format='AUTO', export_animations=False,
         export_skins=False, export_morph=False, export_extras=True, export_tangents=False,
         export_cameras=False, export_lights=False)
+    optimize(path)
+    return path
+
+
+def optimize(path):
+    """tools/optimize_glb.py on a fresh export (JPEG / WebP textures, quantized normals and UVs): what the web app
+    downloads. Skipped with a warning where Pillow is missing (run tools/optimize_glb.py afterwards)."""
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(REPO, "tools"))
+    try:
+        import optimize_glb
+    except ImportError as e:  # noqa: F841
+        print(f"[export] WARNING: {os.path.basename(path)} not optimized ({e}); run tools/optimize_glb.py")
+        return path
+    optimize_glb.optimize(path)
     return path
 
 

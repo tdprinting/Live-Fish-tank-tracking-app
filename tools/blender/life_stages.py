@@ -460,13 +460,15 @@ def build(models=None):
                 base = form          # the GLB's own embedded body texture: drawn as is, at full resolution
                 continue
             cv = paint(model, painter).downsample(DOWNSAMPLE)
-            path = os.path.join(OUT, f"{model}_{form}.png")
+            # body forms ship as JPEG (opaque; a third of the PNG): the web app downloads each one it shows
+            path = os.path.join(C.BUILD, f"stage_{model}_{form}.png")
             cv.save(path)
-            out[form] = f"textures/stages/{model}_{form}.png"
+            path = C.to_jpeg(path, os.path.join(OUT, f"{model}_{form}.jpg"))
+            out[form] = f"textures/stages/{model}_{form}.jpg"
             print(f"[stages] {model}/{form}: {os.path.getsize(path) // 1024} KB")
-        stale = os.path.join(OUT, f"{model}_{base}.png") if base else None
-        if stale and os.path.exists(stale):
-            os.remove(stale)
+        for stale in [os.path.join(OUT, f"{model}_{base}.{ext}") for ext in ("png", "jpg")] if base else []:
+            if os.path.exists(stale):
+                os.remove(stale)
         entry = {"species": sid, "base": base, "forms": out}
         if model in FIN_FORMS:
             fout, fbase = {}, None
@@ -551,7 +553,7 @@ def previews(outdir, models=None):
         shapes = stage_shapes(sid)
         cells = []
         for form in forms:
-            tex = os.path.join(OUT, f"{model}_{form}.png")
+            tex = os.path.join(OUT, f"{model}_{form}.jpg")
             fin = os.path.join(OUT, f"{model}_fin_{form}.png")
             px = render_form(model, form, tex if os.path.exists(tex) else None, shapes.get(form, (1.0, 1.0)),
                              fin_path=fin if os.path.exists(fin) else None)

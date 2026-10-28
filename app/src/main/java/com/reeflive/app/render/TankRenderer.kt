@@ -117,6 +117,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     /** `_lod1.glb` path per model path, so no strings are built per animal per frame. */
     private val lod1Paths = HashMap<String, String>()
     private fun lod1Of(path: String): String = lod1Paths.getOrPut(path) { ModelRegistry.lod1(path) }
+
+    /**
+     * The scene mesh drawn for [path] at the current preset: Medium and Low draw the shipped LOD1 of the rock and the
+     * Kenya tree (half the rock's triangles, a third of the Kenya's; tools/validate_glb.py MEDIUM_LOD1 counts on it).
+     * A preset change rebuilds the asset store, so the swap never mixes LODs within one frame.
+     */
+    private fun sceneModel(path: String): String = if (quality != RenderQuality.HIGH && path in SCENE_LOD1) lod1Of(path) else path
     private var worstNs = 0L
     @Volatile private var followRequest: String? = null
     @Volatile private var followDirty = false
@@ -274,7 +281,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         post = if (wantsPost()) createPost() else null
         snow = MarineSnow()
         // kick off the static scene and shared textures
-        SCENE_MODELS.forEach { store.model(it) }
+        SCENE_MODELS.forEach { store.model(sceneModel(it)) }
         SHARED_TEXTURES.forEach { store.texture(it) }
     }
 
@@ -404,7 +411,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         GLES30.glDepthMask(true) // the post path leaves the depth mask off, which would make glClear skip depth
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT); Gl.check("glClear")
 
-        val tank = fit.tank(store.model(TANK), Camera.shape); val rock = store.model(ROCK); val equipment = equipmentModel(); val algae = store.model(ALGAE)
+        val tank = fit.tank(store.model(TANK), Camera.shape); val rock = store.model(sceneModel(ROCK)); val equipment = equipmentModel(); val algae = store.model(ALGAE)
         val details = store.model(DETAILS)
         // My tank starts bare: none of Tee's static colonies, no algae tufts or glass film until its own algae grow
         val bare = cur?.bareScape == true
@@ -809,7 +816,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
      */
     private fun gspOnRock(m: GpuModel, c: CoralPose?): Boolean {
         if (c == null || !gspMats.isGsp(m)) return false
-        val rock = store.model(ROCK)?.parts?.firstOrNull { it.kind == MaterialKind.ROCK }
+        val rock = store.model(sceneModel(ROCK))?.parts?.firstOrNull { it.kind == MaterialKind.ROCK }
         return gspMats.ready(c, m, rock, sdf, rockDraw, quality.polypDensity)
     }
     private val rockModel = FloatArray(16)
@@ -943,7 +950,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val p = progs.shadow
         p.use()
         for (key in SHADOW_STATIC) {
-            val m = (if (key == EQUIPMENT) equipmentModel() else store.model(key)) ?: continue
+            val m = (if (key == EQUIPMENT) equipmentModel() else store.model(sceneModel(key))) ?: continue
             for (part in m.parts) {
                 if ((part.kind != MaterialKind.ROCK && part.kind != MaterialKind.GENERIC) || !castsShadow(part) || part.node.name == FLIPPER_NODE) continue
                 p.setMat4("uModel", part.node.world)
@@ -988,14 +995,14 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
     private fun buildCoralModels(s: SimSnapshot?): List<Pair<GpuModel, CoralPose?>> {
         val out = ArrayList<Pair<GpuModel, CoralPose?>>()
         if (s == null || s.organisms.firstOrNull()?.id?.startsWith("demo_") == true && s.corals.isEmpty()) {
-            for (path in DEMO_CORALS) store.model(path)?.let { out += it to null }
+            for (path in DEMO_CORALS) store.model(sceneModel(path))?.let { out += it to null }
             return out
         }
         val used = HashSet<String>()
         for (c in s.corals) {
             // pest anemones are drawn one polyp each by AiptasiaDraw
             if (aiptasia.isAiptasia(c.speciesId)) continue
-            val paths = registry.coralModels(c.speciesId)
+            val paths = registry.coralModels(c.speciesId).map(::sceneModel)
             if (paths.isNotEmpty() && paths.none { store.exists(it) }) {
                 // own GLB not shipped yet (hairy mushroom): borrow a stand-in model, moved to this colony's spot
                 val fb = paths.firstNotNullOfOrNull { ModelRegistry.FALLBACK_MODELS[it] }?.let { store.model(it) } ?: continue
@@ -2037,6 +2044,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val SCENE_MODELS = listOf(TANK, ROCK, EQUIPMENT, ALGAE, DETAILS)
         /** Models that sit on the rock and follow a loose rock that moved (dynamic rockscape). */
         val ROCK_ATTACHED = setOf(ROCK, DETAILS, ALGAE, "models/rockscape_lod1.glb")
+        /** Scene models with a `_lod1.glb` drawn on Medium and Low ([sceneModel]). */
+        val SCENE_LOD1 = setOf(ROCK, "models/kenya.glb")
         /** Static models whose rock / equipment parts cast into the shadow map (sand only receives). */
         val SHADOW_STATIC = listOf(ROCK, EQUIPMENT, DETAILS)
         val DEMO_CORALS = listOf(
@@ -2048,7 +2057,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         const val ROOM_ENV = "textures/room_env.png"
         const val WATER_N1 = "textures/water_n1.png"
         const val WATER_N2 = "textures/water_n2.png"
-        const val SAND_NORMAL = "textures/sand_normal.png"
+        const val SAND_NORMAL = "textures/sand_normal.jpg"
         val SHARED_TEXTURES = listOf(CAUSTIC, IRID, ROOM_ENV, WATER_N1, WATER_N2, SAND_NORMAL)
         val IDENTITY = M.identity()
         /** Parts of a coral model within this distance of its home anchor make up one colony (sandbox copies). */

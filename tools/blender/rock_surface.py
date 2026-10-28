@@ -14,7 +14,8 @@ untouched and rewrites only two attributes in place:
            of working them out per pixel: curvature was costly and broke along the triangle edges, and the blotch
            noise cost three noise octaves per pixel.
 
-Usage: python3 tools/blender/rock_surface.py [path.glb ...]   (default: models/rockscape.glb; needs sim/rock_sdf.bin)
+Usage: python3 tools/blender/rock_surface.py [path.glb ...]   (default: models/rockscape.glb and rockscape_lod1.glb;
+needs sim/rock_sdf.bin)
 Idempotent: everything is derived from the positions and the SDF.
 """
 import json
@@ -188,7 +189,8 @@ def process(path, sdf):
 
 def run(paths=None):
     sdf = load_sdf(os.path.join(ASSETS, "sim", "rock_sdf.bin"))
-    for p in paths or [os.path.join(ASSETS, "models", "rockscape.glb")]:
+    # the Medium / Low rock (TankRenderer.rockPath) gets the same pass: rock.frag reads these channels on every preset
+    for p in paths or [os.path.join(ASSETS, "models", n) for n in ("rockscape.glb", "rockscape_lod1.glb")]:
         process(p, sdf)
 
 

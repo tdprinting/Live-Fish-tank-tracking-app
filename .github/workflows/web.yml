@@ -23,6 +23,12 @@ jobs:
         with:
           fetch-depth: 200
 
+      # Asset contract (stdlib Python, < 1 s): parts, attributes, per-asset and on-screen triangle budgets, the 45 MB
+      # download cap (docs/ASSETS.md §6/§8). An asset regression fails here before the site is built.
+      # (tools/check_tank_spec.py is not run: its "right recess opening" photo check fails on main.)
+      - name: Validate models (tools/validate_glb.py)
+        run: python3 tools/validate_glb.py
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
