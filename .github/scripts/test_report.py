@@ -28,16 +28,19 @@ for f in sorted(glob.glob(os.path.join(root, '**', 'TEST-*.xml'), recursive=True
         methods.append((float(tc.get('time', 0)), tc.get('classname').rsplit('.', 1)[-1], tc.get('name')))
 
 if '--weights' in sys.argv:
-    split = {'RealismAcceptanceTest', 'AiptasiaTest', 'AiTest'}
-    group = ['c03_cleanerServicesTang', 'c04_cleanerCooldown', 'c12_tangNeverBullies', 'c13_cardinalDiel']
+    split = {'RealismAcceptanceTest', 'AiptasiaTest', 'AiTest', 'FishGlitchTest'}
+    # methods that read one cached fixture stay in one JVM
+    groups = [['c03_cleanerServicesTang', 'c04_cleanerCooldown'], ['c12_tangNeverBullies', 'c13_cardinalDiel']]
+    grouped = {m for g in groups for m in g}
     for t, name, _ in sorted(classes, reverse=True):
         simple = name.rsplit('.', 1)[-1]
         if simple not in split and t >= 20:
             print(round(t), simple)
-    g = sum(t for t, c, m in methods if c == 'RealismAcceptanceTest' and m in group)
-    print(round(g), ' + '.join('RealismAcceptanceTest.' + m for m in group))
+    for g in groups:
+        t = sum(t for t, c, m in methods if c == 'RealismAcceptanceTest' and m in g)
+        print(round(t), ' + '.join('RealismAcceptanceTest.' + m for m in g))
     for t, c, m in sorted(methods, reverse=True):
-        if c in split and not (c == 'RealismAcceptanceTest' and m in group):
+        if c in split and not (c == 'RealismAcceptanceTest' and m in grouped):
             print(max(1, round(t)), c + '.' + m)
     sys.exit(0)
 

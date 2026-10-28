@@ -2,7 +2,7 @@ name: Core tests
 
 # The Android app is no longer built or published; the browser app is the product. The :core sim test suite still
 # runs on every push and pull request. It runs as SHARDS parallel jobs ("shard"), each running its share of the tests
-# in 4 JVMs (core/build.gradle.kts packs the tests by the measured seconds in core/test-weights.txt). The "build" job
+# in FORKS JVMs (core/build.gradle.kts packs the tests by the measured seconds in core/test-weights.txt). The "build" job
 # (the name existing required checks match) waits for every shard, is green only if all of them passed, and prints the
 # test count and the slowest tests. SimBenchmark is not part of this run: see bench.yml.
 on:
@@ -19,7 +19,10 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
-  SHARDS: 3
+  # keep matrix.shard below at 0..SHARDS-1. FORKS: JVMs per shard; a runner's 4 vCPUs are 2 cores with
+  # hyper-threading, so 2 JVMs per runner run each test much faster than 4 (c20 took 12 min in a 4-JVM runner).
+  SHARDS: 6
+  FORKS: 2
 
 jobs:
   shard:
@@ -29,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +48,7 @@ jobs:
       # -PcoreOnly skips the Android SDK, so only :core (the sim, AI and chemistry) is compiled and tested.
       # --continue: a failing bin does not stop the other bins of the shard.
       - name: Core unit tests
-        run: ./gradlew -PcoreOnly -PtestShards=$SHARDS -PtestShard=${{ matrix.shard }} :core:testShard --continue --stacktrace
+        run: ./gradlew -PcoreOnly -PtestShards=$SHARDS -PtestForks=$FORKS -PtestShard=${{ matrix.shard }} :core:testShard --continue --stacktrace
 
       - name: Annotate unit test failures
         if: failure()
@@ -74,7 +77,11 @@ jobs:
           path: results
 
       - name: Test summary
-        run: python3 .github/scripts/test_report.py results
+        run: |
+          python3 .github/scripts/test_report.py results
+          echo "::group::measured weights (paste into core/test-weights.txt to refresh the shard packing)"
+          python3 .github/scripts/test_report.py results --weights
+          echo "::endgroup::"
 
       - name: All shards passed
         run: |

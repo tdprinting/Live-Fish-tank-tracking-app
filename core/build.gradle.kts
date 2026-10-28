@@ -50,7 +50,7 @@ tasks.test {
 // Gradle hands test classes to forks round-robin, so one fork drew the 20-minute RealismAcceptanceTest plus its share of
 // everything else. Here the work is packed instead: test-weights.txt lists the measured seconds of the slow classes and
 // of single methods of the slowest (one unit always runs in one JVM, so methods that share a cached fixture are listed
-// together); every other test class found under src/test counts as a few seconds. The units are packed
+// together); every other test class found under src/test counts as 10 s. The units are packed
 // longest-first into N x F bins (F = -PtestForks, default 4), each bin its own Test task with one JVM; the configuration
 // cache lets a shard's F bins run side by side. `testUnlisted` (shard 0) runs whatever the scan and the list missed, so
 // every test runs exactly once over the N shards. Without -PtestShards, `testShard` runs all bins (same tests as `test`).
@@ -82,7 +82,7 @@ val listedUnits = listedSimple.map { (sec, pats) -> TestUnit(sec, pats.map(::fqn
 val listedPatterns = listedUnits.flatMap { it.patterns }.toSet()
 // classes listed method by method: their unlisted methods fall to testUnlisted
 val splitClasses = listedSimple.flatMap { it.second }.filter { '.' in it }.map { fqn(it.substringBefore('.')) }.toSet()
-val defaultUnits = testClasses.values.filter { it !in listedPatterns && it !in splitClasses }.sorted().map { TestUnit(5.0, listOf(it)) }
+val defaultUnits = testClasses.values.filter { it !in listedPatterns && it !in splitClasses }.sorted().map { TestUnit(10.0, listOf(it)) }
 
 val binCount = shardCount * binsPerShard
 val binLoad = DoubleArray(binCount)
