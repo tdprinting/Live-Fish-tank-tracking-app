@@ -93,6 +93,19 @@ class Camera {
      * pumps in and out as the view passes a coral branch. A ratio, so zooming does not lag behind it.
      */
     private var losRatio = 1f
+    /**
+     * Clear-view search ([findClearView]): when rock, coral or kit hides the fish, the framing swings round it and / or
+     * looks down from higher up by these offsets (radians) instead of only pulling in. The goals jump between a few
+     * candidate angles; the springs make the swing itself smooth.
+     */
+    private var avoidYaw = 0f
+    private var avoidPitch = 0f
+    private val avoidYawS = Spring(AVOID_OMEGA)
+    private val avoidPitchS = Spring(AVOID_OMEGA)
+    private var avoidTimer = 0f
+    /** Extra pitch (radians) for a fish resting on or near the sand, smoothed: the view looks down onto it. */
+    private val bottomPitchS = Spring(AVOID_OMEGA)
+    private val cand = FloatArray(3)
 
     // ---- collision ----
     /** What the eye must not go into (rock, sand, corals, equipment, animals). The renderer fills it every frame. */
@@ -476,9 +489,19 @@ class Camera {
         hasPrevMid = false
         hasBody = false
         losRatio = 1f
+        avoidYaw = 0f; avoidPitch = 0f; avoidYawS.snap(0f); avoidPitchS.snap(0f); avoidTimer = 0f; bottomPitchS.snap(0f)
         fishVel.fill(0f)
         fZoomS.omega = OMEGA_TOUCH; fYawS.omega = OMEGA_TOUCH; fPitchS.omega = OMEGA_TOUCH
         if (initialized) { eyeS.snap(eye); aimS.snap(aim) }
+    }
+
+    /** Eye, aim and the sand under the eye (cm), for page-side checks (`reeflive.cam()`, visual QA). */
+    fun debugState(): String {
+        fun r(v: Float) = kotlin.math.round(v * 10f) / 10f
+        val sand = colliders.sandY(eye[0].coerceIn(0f, TANK[0]), eye[2].coerceIn(0f, TANK[2]))
+        return "{\"eye\":[${r(eye[0])},${r(eye[1])},${r(eye[2])}],\"aim\":[${r(aim[0])},${r(aim[1])},${r(aim[2])}]," +
+            "\"sandAtEye\":${r(sand)},\"follow\":${if (followId == null) "null" else "\"$followId\""}," +
+            "\"avoid\":[${r(avoidYawS.value)},${r(avoidPitchS.value)}],\"low\":${r(bottomPitchS.value)}}"
     }
 
     /** Double tap while following: toggle between the normal and a closer framing. */
@@ -694,7 +717,7 @@ class Camera {
             colliders.bodyClearance = max(0.4f, corner + 0.2f)
         } else {
             colliders.rockClearance = max(EYE_CLEARANCE, corner + 1f)
-            colliders.sandClearance = max(SAND_CLEARANCE, corner + 0.6f)
+            colliders.sandClearance = max(if (followId != null) EYE_SAND_MARGIN else SAND_CLEARANCE, corner + 0.6f)
             colliders.boxClearance = max(BOX_CLEARANCE, corner + 0.6f)
             colliders.bodyClearance = max(BODY_CLEARANCE, corner + 0.4f)
         }
@@ -707,6 +730,8 @@ class Camera {
             ballOn = false
         } else {
             collide(step)
+            // following with the eye out past the front glass (no sand shell there): never level with or under the sand
+            if (followId != null && !rideOn && eye[2] > TANK[2]) eye[1] = max(eye[1], minOf(sandFloor(eye[0], eye[2]), WATER_Y - 1f))
         }
         if (storeOn || storeShift.value != 0f) {
             val sx = storeShift.step(storeFocusX, step)
@@ -825,7 +850,7 @@ class Camera {
         if (!(e[0] > -m && e[0] < TANK[0] + m && e[2] > -m && e[2] < TANK[2] + m && e[1] < WATER_Y + m)) return false
         val x = e[0].coerceIn(m, TANK[0] - m)
         val z = e[2].coerceIn(m, TANK[2] - m)
-        val y = minOf(max(e[1], SAND_Y + 1.5f), WATER_Y - m)
+        val y = minOf(max(e[1], max(SAND_Y + 1.5f, colliders.sandY(x, z) + colliders.sandClearance)), WATER_Y - m)
         val moved = x != e[0] || y != e[1] || z != e[2]
         e[0] = x; e[1] = y; e[2] = z
         return moved
@@ -980,21 +1005,34 @@ class Camera {
         // Smooth the heading with a critically damped spring so turns swing the camera instead of stepping it.
         val heading = if (!followHeading.initialized) followHeading.snap(profile) else followHeading.step(profile, dt)
         // profile direction, then the user's swing (one-finger drag) and zoom (pinch)
-        val base = heading + fYawS.value
-        val pitch = fPitchS.value
         val d = (bl * 3.2f).coerceIn(MIN_FOLLOW, MAX_FOLLOW) * exp(fZoomS.value)
-        val cp = cos(pitch)
         // orbit about a point half way to the lead, plus the eye spring's lag, so the eye keeps pace too
         val eyeLag = LEAD_S * 0.5f + 2f / FOLLOW_OMEGA + 2f / BODY_OMEGA
         var ox = fishVel[0] * eyeLag; var oy = fishVel[1] * eyeLag * 0.5f; var oz = fishVel[2] * eyeLag
         val ol = sqrt(ox * ox + oy * oy + oz * oz)
         if (ol > maxLead) { val k = maxLead / ol; ox *= k; oy *= k; oz *= k }
         ox += mx; oy += my; oz += mz
-        var ex = ox + d * sin(base) * cp
-        var ey = oy + d * sin(pitch)
-        var ez = oz + d * cos(base) * cp
-        // stay inside the tank sides/sand/surface, but may sit outside the front glass
-        ex = ex.coerceIn(1f, TANK[0] - 1f); ey = ey.coerceIn(SAND_Y + 1f, WATER_Y - 1f); ez = ez.coerceIn(1f, TANK[2] + 60f)
+        colliders.sdf = sdf
+        // a fish resting on (or skimming) the sand is framed from above, not from sand level: the lower it is, the
+        // further the view tilts down, so the eye never ends up level with (or under) the bed
+        val overSand = my - colliders.sandY(mx.coerceIn(0f, TANK[0]), mz.coerceIn(0f, TANK[2]))
+        val lowGoal = BOTTOM_PITCH * (1f - smooth01((overSand - BOTTOM_NEAR_CM) / (BOTTOM_FAR_CM - BOTTOM_NEAR_CM)))
+        val bottomPitch = if (dt > 0f) bottomPitchS.step(lowGoal, dt) else { bottomPitchS.snap(lowGoal); lowGoal }
+        val userPitch = fPitchS.value
+        val askedPitch = max(userPitch, bottomPitch)
+        // swing to a clear angle when something hides the fish (smoothed offsets; see findClearView)
+        if (dt > 0f) {
+            avoidTimer -= dt
+            if (avoidTimer <= 0f && !touching) {
+                avoidTimer = AVOID_EVERY_S
+                findClearView(aimOut, ox, oy, oz, heading + fYawS.value, askedPitch, d)
+            }
+            avoidYawS.step(avoidYaw, dt); avoidPitchS.step(avoidPitch, dt)
+        }
+        val base = heading + fYawS.value + avoidYawS.value
+        val pitch = (askedPitch + avoidPitchS.value).coerceAtMost(max(AVOID_MAX_PITCH, askedPitch))
+        framingEye(ox, oy, oz, base, pitch, d, cand)
+        var ex = cand[0]; var ey = cand[1]; var ez = cand[2]
         // line of sight: cast from the aim point toward the eye; stop before anything in the way (not the fish itself)
         var dx = ex - aimOut[0]; var dy = ey - aimOut[1]; var dz = ez - aimOut[2]
         val len = sqrt(dx * dx + dy * dy + dz * dz)
@@ -1008,6 +1046,50 @@ class Camera {
             ex = aimOut[0] + dx * t; ey = aimOut[1] + dy * t; ez = aimOut[2] + dz * t
         }
         eyeOut[0] = ex; eyeOut[1] = ey; eyeOut[2] = ez
+    }
+
+    /**
+     * The follow eye for orbit centre (ox, oy, oz), heading [yaw], [pitch] and distance [d] into [out]: inside the tank
+     * sides and under the surface (it may sit outside the front glass), and never lower than [EYE_SAND_MARGIN] over the
+     * sand under it (for an eye out past the glass, the sand at the glass), so it cannot dip to or under the bed.
+     */
+    private fun framingEye(ox: Float, oy: Float, oz: Float, yaw: Float, pitch: Float, d: Float, out: FloatArray) {
+        val cp = cos(pitch)
+        val ex = (ox + d * sin(yaw) * cp).coerceIn(1f, TANK[0] - 1f)
+        val ez = (oz + d * cos(yaw) * cp).coerceIn(1f, TANK[2] + 60f)
+        val top = WATER_Y - 1f
+        out[0] = ex; out[1] = (oy + d * sin(pitch)).coerceIn(min(sandFloor(ex, ez), top), top); out[2] = ez
+    }
+
+    /** Lowest the follow eye may sit at (x, z): the sand there (or at the nearest glass, outside the tank) plus a margin. */
+    private fun sandFloor(x: Float, z: Float): Float =
+        colliders.sandY(x.coerceIn(0f, TANK[0]), z.coerceIn(0f, TANK[2])) + EYE_SAND_MARGIN
+
+    /**
+     * Clear-view search for the follow camera: casts from the fish ([aim]) toward the eye of the framing as asked and of a
+     * few swung (round the fish) and raised (looking down) alternatives, and sets [avoidYaw] / [avoidPitch] to the best.
+     * A view scores the share of the framing distance that is clear, less a cost for straying from the asked framing;
+     * the angle in use gets a bonus so the view does not hop between two near-equal ones. While the asked framing is
+     * clear it is the only cast. Throttled to [AVOID_EVERY_S].
+     */
+    private fun findClearView(aim: FloatArray, ox: Float, oy: Float, oz: Float, yaw: Float, pitch: Float, d: Float) {
+        var bestScore = -1e9f; var bestYaw = 0f; var bestPitch = 0f
+        for (i in 0 until AVOID_CANDIDATES) {
+            val cy = AVOID_YAWS[i]; val cpch = AVOID_PITCHES[i]
+            framingEye(ox, oy, oz, yaw + cy, (pitch + cpch).coerceAtMost(max(AVOID_MAX_PITCH, pitch)), d, cand)
+            var dx = cand[0] - aim[0]; var dy = cand[1] - aim[1]; var dz = cand[2] - aim[2]
+            val len = sqrt(dx * dx + dy * dy + dz * dz)
+            val clear = if (len < 1e-3f) 1f else {
+                dx /= len; dy /= len; dz /= len
+                (colliders.cast(aim[0], aim[1], aim[2], dx, dy, dz, len, followOwnerTag) / len).coerceIn(0f, 1f)
+            }
+            var score = clear - AVOID_YAW_COST * kotlin.math.abs(cy) - AVOID_PITCH_COST * cpch
+            if (kotlin.math.abs(cy - avoidYaw) < 1e-3f && kotlin.math.abs(cpch - avoidPitch) < 1e-3f) score += AVOID_KEEP_BONUS
+            if (score > bestScore) { bestScore = score; bestYaw = cy; bestPitch = cpch }
+            // the asked framing is clear: nothing to search for
+            if (i == 0 && clear >= AVOID_CLEAR && avoidYaw == 0f && avoidPitch == 0f) break
+        }
+        avoidYaw = bestYaw; avoidPitch = bestPitch
     }
 
     private fun releaseFollow() {
@@ -1197,6 +1279,26 @@ class Camera {
         const val SAND_CLEARANCE = 1.5f
         const val BOX_CLEARANCE = 1f
         const val BODY_CLEARANCE = 0.8f
+        /** Least height (cm) of the follow eye over the sand under it (or at the glass in front of it). */
+        const val EYE_SAND_MARGIN = 3f
+        /** A followed fish this close to the sand (cm, body centre) is framed [BOTTOM_PITCH] from above, easing off by [BOTTOM_FAR_CM]. */
+        const val BOTTOM_NEAR_CM = 3f
+        const val BOTTOM_FAR_CM = 9f
+        const val BOTTOM_PITCH = 0.5f
+        /** Clear-view search: how often (s), the swing / raise springs (rad/s), the most pitch it may reach (rad). */
+        const val AVOID_EVERY_S = 0.2f
+        const val AVOID_OMEGA = 2.6f
+        const val AVOID_MAX_PITCH = 1.25f
+        /** A view this clear (share of the framing distance) is good enough to keep without searching further. */
+        const val AVOID_CLEAR = 0.92f
+        /** Score costs per radian of swing / raise, and the bonus that keeps the angle in use (hysteresis). */
+        const val AVOID_YAW_COST = 0.1f
+        const val AVOID_PITCH_COST = 0.12f
+        const val AVOID_KEEP_BONUS = 0.04f
+        /** Candidate (swing, raise) offsets, the plain framing first. */
+        val AVOID_YAWS = floatArrayOf(0f, 0.55f, -0.55f, 0f, 0.55f, -0.55f, 1.1f, -1.1f, 0f, 1.1f, -1.1f, 1.7f, -1.7f)
+        val AVOID_PITCHES = floatArrayOf(0f, 0f, 0f, 0.45f, 0.35f, 0.35f, 0f, 0f, 0.85f, 0.4f, 0.4f, 0.2f, 0.2f)
+        val AVOID_CANDIDATES = AVOID_YAWS.size
         /** Capsule tag of the followed animal in [colliders]. */
         const val FOLLOW_OWNER = 1
         /** Blocked this far (cm, or 35 % of the view distance) short of the springs' eye for this long: cut there. */

@@ -129,6 +129,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     // ---- GL-thread state ----
     val camera = Camera()
+    /** Smooths the lamp on screen at fast-forward ([LampSmoother]). */
+    private val lamp = LampSmoother()
     private var quality = initialQuality
     private var programs: Programs? = null
     private var frame: FrameUniforms? = null
@@ -334,7 +336,8 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val cur = interp.current
         applyShape(cur?.shape ?: TankShape.STOCK)
         rockDraw.update(cur?.rockPoses, cur?.rockVersion ?: 0L, cur?.builtRocks)
-        val light = LightingState.from(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY)
+        // fast-forward: the lamp fades over a least wall time instead of strobing (display only; the sim's day is unchanged)
+        val light = LightingState.from(lamp.step(viewLight.channels ?: cur?.lights ?: DemoSnapshots.DAY, cur?.speed ?: 1.0, dt))
 
         // 2. camera (+ input); in Submarine mode the camera rides with the sub
         val fp = subFirstPerson
@@ -453,7 +456,13 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         drawHome(progs, cur, blended = true)
         Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ALPHA, cull = false)
         val waterFirst = camera.eye[1] < Camera.WATER_Y
-        if (waterFirst) tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
+        if (waterFirst) {
+            // seen from below the surface is opaque (alpha 1): it writes depth, so nothing above the water drawn after it
+            // (the clear jar and return pipe on the rim, particles, the panes over the water line) shows through it as
+            // if it hung in the water
+            Gl.state(depthTest = true, depthWrite = true, blend = Gl.Blend.ALPHA, cull = false)
+            tank?.let { drawStatic(it, progs, light, opaque = false, only = MaterialKind.WATER) }
+        }
         if (quality.shafts && rl < 2 && light.intensity > 0.03f) {
             Gl.state(depthTest = true, depthWrite = false, blend = Gl.Blend.ADD, cull = false)
             shafts?.let { it.draw(progs.shafts); drawCalls++; triangles += it.triangles }

@@ -511,6 +511,8 @@ object ReefLive {
     fun select(id: String?) { renderer?.selectedId = id?.takeIf { it.isNotEmpty() } }
     /** Follow camera buttons: [steps] > 0 zooms closer, < 0 further out (eases there, bounces at the limits). */
     fun followZoom(steps: Double) { renderer?.followCam?.zoom(steps.toFloat()) }
+    /** Camera eye / aim / sand under the eye as JSON (visual QA scripts). */
+    fun cam(): String = renderer?.camera?.debugState() ?: "null"
     /** Follow camera buttons: swing round the fish, [dir] +1 / −1 one 45° step. */
     fun followOrbit(dir: Double) { renderer?.followCam?.orbit(dir.toFloat() * com.reeflive.app.render.FollowCamControl.ORBIT_STEP) }
     /** Lamp looks (render only): REAL, DAY, DUSK, NIGHT, MOON, BLUE. */
