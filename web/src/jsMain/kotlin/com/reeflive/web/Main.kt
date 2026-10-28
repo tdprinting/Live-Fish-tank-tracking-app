@@ -398,7 +398,9 @@ object ReefLive {
     }
 
     // ------------------------------------------------------------------ stats overlay (?stats in the page URL)
-    private val statsOn by lazy { listener?.onStats != null }
+    // read twice a frame: a plain memo (a `by lazy` getter builds a property reference object per read)
+    private var statsOnMemo: Boolean? = null
+    private val statsOn: Boolean get() = statsOnMemo ?: (listener?.onStats != null).also { statsOnMemo = it }
     private fun now(): Double = js("performance.now()") as Double
     private var stFrames = 0; private var stTime = 0.0; private var stSim = 0.0; private var stDraw = 0.0; private var stWorst = 0.0
 

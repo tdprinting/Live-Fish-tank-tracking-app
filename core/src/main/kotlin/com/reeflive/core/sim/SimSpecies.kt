@@ -1,6 +1,7 @@
 package com.reeflive.core.sim
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlin.math.min
 import kotlin.math.pow
 import kotlinx.serialization.json.Json
@@ -55,15 +56,24 @@ data class SimSpecies(
      */
     val jumpRisk: Double = 0.0,
 ) {
+    // Derived values read per animal per tick, cached in plain fields: a `by lazy` getter on Kotlin/JS builds a
+    // property reference object on every read. (Not serialized; a race on the JVM only computes the same value twice.)
+    @Transient private var brainKindMemo: BrainKind? = null
+    @Transient private var zebrasomaMemo: Boolean? = null
+    @Transient private var sensesMemo: SensesSpec? = null
+    @Transient private var isCoralMemo: Boolean? = null
+    @Transient private var coralKindMemo: CoralKind? = null
+
     /** (cached: resolving it is string work and a scan of the enum, and it is read per animal per tick) */
-    val brainKind: BrainKind by lazy { BrainKind.resolve(this) }
+    val brainKind: BrainKind get() = brainKindMemo ?: BrainKind.resolve(this).also { brainKindMemo = it }
     /** Sailfin tangs (*Zebrasoma*: yellow, purple): grazers that fight their own genus hardest (research 42 §2-4). */
-    val zebrasoma: Boolean by lazy { id.startsWith("zebrasoma") }
+    val zebrasoma: Boolean get() = zebrasomaMemo ?: id.startsWith("zebrasoma").also { zebrasomaMemo = it }
     /** The sheet's senses, or the defaults for its body plan (cached: the sheet is immutable). */
-    val sensesOrDefault: SensesSpec by lazy { senses ?: SensesSpec.defaultFor(this) }
+    val sensesOrDefault: SensesSpec get() = sensesMemo ?: (senses ?: SensesSpec.defaultFor(this)).also { sensesMemo = it }
     /** Sessile colonies handled by CoralSim: corals and macroalgae (Track A sheets use kind "ALGAE" for Gracilaria). */
-    val isCoral: Boolean by lazy { kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) || kind.equals("MACROALGAE", ignoreCase = true) }
-    val coralKind: CoralKind by lazy { CoralKind.resolve(id) }
+    val isCoral: Boolean get() = isCoralMemo ?: (kind.equals("CORAL", ignoreCase = true) || kind.equals("ALGAE", ignoreCase = true) ||
+        kind.equals("MACROALGAE", ignoreCase = true)).also { isCoralMemo = it }
+    val coralKind: CoralKind get() = coralKindMemo ?: CoralKind.resolve(id).also { coralKindMemo = it }
     /** A colony whose model is a loose frag: placed on a free spot rather than on its kind's anchor (stony corals, a bounce mushroom). */
     val fragColony: Boolean get() = coralKind.stony || coralKind == CoralKind.XENIA || coral?.frag == true
 
