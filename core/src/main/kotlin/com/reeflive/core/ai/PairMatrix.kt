@@ -80,9 +80,11 @@ object PairMatrix {
 
     fun row(id: String): PairRow? = rows.firstOrNull { it.id == id }
 
-    private val rivalKinds: Set<Pair<BrainKind, BrainKind>> by lazy {
+    // read per pair of animals per tick: a plain memo (a `by lazy` getter builds an object per read on the web)
+    private var rivalKindsMemo: Set<Pair<BrainKind, BrainKind>>? = null
+    private val rivalKinds: Set<Pair<BrainKind, BrainKind>> get() = rivalKindsMemo ?: rivalKindsOf().also { rivalKindsMemo = it }
+    private fun rivalKindsOf(): Set<Pair<BrainKind, BrainKind>> =
         rows.flatMap { r -> BrainKind.values().filter { it.name == r.actor }.flatMap { a -> r.targets.mapNotNull { k -> BrainKind.values().firstOrNull { it.name == k }?.let { a to it } } } }.toSet()
-    }
 
     /** [t] has a row of its own against [o]'s kind (a dottyback's standoff with the clowns): a rival, not a bystander. */
     fun isRival(t: Organism, o: Organism): Boolean = (t.brainKind to o.brainKind) in rivalKinds

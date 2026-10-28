@@ -13,11 +13,40 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
     /** Per uniform: its location and the last scalar/vector value sent (uniform state lives in the program, so an
      *  unchanged value is skipped). One map, so each set costs a single lookup (string hashing is not cached in JS). */
     private class Slot(val name: String, val loc: Int) { val v = FloatArray(4); var valid = false; var next: Slot? = null }
-    private val slots = HashMap<String, Slot>()
     // Draws set the same uniforms in the same order every frame, so each lookup first tries the slot that followed
-    // the previous one last time (compared by reference: uniform names are literals); the hash map
-    // (String.hashCode is uncached on JS) is only the fallback, which relinks the sequence.
+    // the previous one last time (compared by reference: uniform names are literals); the table below is only the
+    // fallback, which relinks the sequence. It is open addressing on a hash of the length and three characters, not
+    // a HashMap<String, _>: String.hashCode walks the whole name on every call on JS, and the fallback runs often
+    // (draws of different animals and materials interleave their uniform sequences).
+    private var table = arrayOfNulls<Slot>(64)
+    private var tableCount = 0
     private var prev: Slot? = null
+
+    private fun quickHash(u: String): Int {
+        val n = u.length
+        if (n == 0) return 0
+        return n * 31 + u[n - 1].code * 131 + u[n shr 1].code * 17 + u[(n * 3) shr 2].code * 7
+    }
+
+    private fun lookup(u: String): Slot {
+        var mask = table.size - 1
+        var i = quickHash(u) and mask
+        while (true) {
+            val s = table[i] ?: break
+            if (s.name == u) return s
+            i = (i + 1) and mask
+        }
+        val s = Slot(u, GLES30.glGetUniformLocation(id, u).also { Gl.check("glGetUniformLocation") })
+        if ((tableCount + 1) * 2 > table.size) {
+            val old = table
+            table = arrayOfNulls(old.size * 2); mask = table.size - 1
+            for (o in old) if (o != null) { var j = quickHash(o.name) and mask; while (table[j] != null) j = (j + 1) and mask; table[j] = o }
+            i = quickHash(u) and mask
+            while (table[i] != null) i = (i + 1) and mask
+        }
+        table[i] = s; tableCount++
+        return s
+    }
 
     fun use() {
         if (Gl.currentProgram == id) return
@@ -29,7 +58,18 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
         val p = prev
         val c = p?.next
         if (c != null && c.name === u) { prev = c; return c }
-        val s = slots.getOrPut(u) { Slot(u, GLES30.glGetUniformLocation(id, u).also { Gl.check("glGetUniformLocation") }) }
+        // a draw that skips a uniform or two (a branch) lands a few slots further along the learned sequence: look
+        // there before hashing the name (on the web a String hash is recomputed on every lookup)
+        if (c != null) {
+            var q = c.next
+            var hops = 0
+            while (q != null && hops < SKIP_HOPS) {
+                // not relinked: the full sequence stays learned for the draws that do set the skipped uniforms
+                if (q.name === u) { prev = q; return q }
+                q = q.next; hops++
+            }
+        }
+        val s = lookup(u)
         p?.next = s
         prev = s
         return s
@@ -66,6 +106,7 @@ class ShaderProgram private constructor(val id: Int, val name: String) {
 
     companion object {
         const val FRAME_BINDING = 0
+        private const val SKIP_HOPS = 4
 
         /** Fixed sampler → texture unit assignment shared by every program. */
         val SAMPLER_UNITS = linkedMapOf(
