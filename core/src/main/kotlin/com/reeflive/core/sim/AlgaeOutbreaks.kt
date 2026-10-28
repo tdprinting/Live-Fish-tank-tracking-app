@@ -8,7 +8,8 @@ package com.reeflive.core.sim
 object AlgaeOutbreaks {
     /**
      * Dinoflagellates (A2 stage 4b): nutrients stripped to ultra-low and held there (NO3 < 1, PO4 < 0.02: the aggressive
-     * export that starts them), a young, low-diversity microbial community, and a light brown dusting to grow from.
+     * export that starts them), a young, low-diversity microbial community, and a brown film already spreading over the
+     * sand and rock (12 %), so the outbreak shows from the first minute, also at fast-forward.
      * Release the held nitrate and phosphate (or reset) to let the tank recover.
      */
     fun dinos(): List<Command> = listOf(
@@ -22,7 +23,8 @@ object AlgaeOutbreaks {
     /**
      * Cyanobacteria (A2 stage 4a): a dead spot over the sand and the shaded rock, dissolved organics held high (food and
      * waste rotting faster than the skimmer takes them), phosphate held present while nitrate is cut low (an N:P that
-     * favours the nitrogen fixers), and a first red spot. Release "doc" and "po4" (or reset) and switch the dead spot
+     * favours the nitrogen fixers), and the first red sheets (12 % of the sand and rock) so the outbreak shows at once.
+     * Release "doc" and "po4" (or reset) and switch the dead spot
      * off ("deadspot" -1) to let the sand clear.
      */
     fun cyano(w: WaterState): List<Command> = listOf(
@@ -49,14 +51,14 @@ object AlgaeOutbreaks {
     const val ULN_NO3 = 0.2
     const val ULN_PO4 = 0.005
     const val YOUNG_MICROBES = 0.15
-    const val DINO_SEED = 0.04
+    const val DINO_SEED = 0.12
     /** cm/s: under the 5 cm/s cyano prefers (A1), in the 0-3 cm/s dead-spot band of 05 §16. */
     const val DEAD_SPOT_CM_S = 2.0
     /** mg C/L: a full DOC index for the cyano ([AlgaeModel.DOC_CLEAN] + [AlgaeModel.DOC_SPAN]). */
     const val CYANO_DOC = 6.0
     const val CYANO_NO3 = 2.0
     const val CYANO_PO4 = 0.12
-    const val CYANO_SEED = 0.03
+    const val CYANO_SEED = 0.12
     const val BUBBLE_SEED = 0.08
     /** Moderate phosphate (A2 stage 5: "moderate nutrients"). */
     const val BUBBLE_PO4 = 0.06

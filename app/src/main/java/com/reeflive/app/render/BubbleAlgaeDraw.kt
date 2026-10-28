@@ -19,9 +19,10 @@ import kotlin.math.sqrt
  * rising cover grows the clusters out from where they started. The sim's bubble cover ([AlgaeVisuals.bubbleCount])
  * picks how many of the first spots show; the last one swells in (uCount).
  *
- * Budget (ARCHITECTURE §8.7): [MAX_SPHERES] × 64 triangles on High, half on Medium and at relief 2, none on Low or at
- * relief 3, where rock.frag's flat glossy tint stands in. The instance buffer is rebuilt only when a rock moves (each
- * sphere rides its rock's pose) or the tank is trimmed.
+ * Budget (ARCHITECTURE §8.7): [MAX_SPHERES] × 64 triangles on High, half on Medium and at relief 2, an eighth on Low
+ * and at relief 3 (≤ 3.2k triangles in one draw, only while there is an outbreak; rock.frag's glossy tint fills in round them), so an outbreak still
+ * reads as green spheres there. The instance buffer is rebuilt only when a rock moves (each sphere rides its rock's
+ * pose) or the tank is trimmed.
  */
 class BubbleAlgaeDraw {
     private var forPart: DrawPart? = null
@@ -38,7 +39,7 @@ class BubbleAlgaeDraw {
 
     /** Spheres this preset and relief level may draw (0 = tint only). */
     fun budget(quality: RenderQuality, relief: Int): Int = when {
-        quality == RenderQuality.LOW || relief >= 3 -> 0
+        quality == RenderQuality.LOW || relief >= 3 -> MAX_SPHERES / 8
         quality == RenderQuality.HIGH && relief < 2 -> MAX_SPHERES
         else -> MAX_SPHERES / 2
     }
@@ -121,11 +122,15 @@ class BubbleAlgaeDraw {
             val area2 = sqrt(cx * cx + cyy * cyy + cz * cz)
             if (area2 < 1e-6f) { key[t] = -1f; continue }
             val ny = cyy / area2
-            // COLOR_0 (rock_surface.py): r cavity, b open sky; bubbles want shade, crevices and undersides (A6)
+            // COLOR_0 (rock_surface.py): r cavity, b open sky; bubbles want shade, crevices and undersides (A6), but the
+            // shaded faces turned toward the front glass are favoured so a keeper sees the outbreak (rock faces looking
+            // at the back glass, and the undersides, stay out of sight from the room)
             val cavity = (v[i0 + 8] + v[i1 + 8] + v[i2 + 8]) / 3f
             val sky = (v[i0 + 10] + v[i1 + 10] + v[i2 + 10]) / 3f
-            val shade = 0.6f * (1f - sky) + 0.4f * cavity + (if (ny < 0.2f) 0.3f else 0f)
-            val wt = 0.5f * area2 * (0.15f + shade * shade)
+            val nz = cz / area2
+            val shade = 0.6f * (1f - sky) + 0.4f * cavity + (if (ny < 0.2f && ny > -0.6f) 0.2f else 0f)
+            val seen = 0.35f + 0.65f * nz.coerceIn(0f, 1f)
+            val wt = 0.5f * area2 * (0.15f + shade * shade) * seen
             // weighted reservoir key u^(1/w) (Efraimidis-Spirakis), deterministic per triangle
             key[t] = hash(t * 2 + 1).coerceIn(1e-6f, 1f).pow(1f / wt.coerceAtLeast(1e-6f))
         }
@@ -152,8 +157,9 @@ class BubbleAlgaeDraw {
             if (nx * wx + ny * wy + nz * wz < 0f) { nx = -nx; ny = -ny; nz = -nz }
             val l = sqrt(nx * nx + ny * ny + nz * nz).coerceAtLeast(1e-6f)
             raw[o + 3] = nx / l; raw[o + 4] = ny / l; raw[o + 5] = nz / l
-            // mostly small cells, a few big ones (2-30 mm across, A6; 1-4 cm for the largest Valonia cells, A1)
-            raw[o + 6] = 0.1f + 1.3f * hash(t * 17 + 11).pow(2.5f)
+            // mostly 0.6-1.5 cm cells, a few big ones (2-30 mm across, A6; 1-4 cm for the largest Valonia cells, A1): big
+            // enough to read as spheres from the default view (≈ 8 px per cm)
+            raw[o + 6] = 0.3f + 1.2f * hash(t * 17 + 11).pow(1.6f)
             raw[o + 7] = RockPieceDef.labelOf(DefaultScape.pieces, raw[o].toDouble(), raw[o + 1].toDouble(), raw[o + 2].toDouble(), RockPoseDraw.LABEL_MAX_CM).toFloat()
             raw[o + 8] = hash(t * 23 + 13)
         }

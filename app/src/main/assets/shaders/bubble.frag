@@ -17,7 +17,8 @@ void main() {
     vec3 V = normalize(uCamPos.xyz - vWorld);
     if (dot(N, V) < 0.0) N = -N;
     float v = vColor.x;
-    vec3 sap = mix(vec3(0.010, 0.050, 0.022), vec3(0.030, 0.060, 0.012), v);
+    // bottle green to olive, light enough to read as green (not black) through the water from the room
+    vec3 sap = mix(vec3(0.030, 0.150, 0.055), vec3(0.075, 0.150, 0.025), v);
     sap *= 0.8 + 0.5 * clamp(vColor.z * 0.5 + 0.5, 0.0, 1.0);
     vec3 col = shadeLit(sap, N, V, vWorld, 0.08, 1.0, 0.04, 0.3, 1.6);
     // the cell wall: mirror-like lobes and a fresnel rim of the lit water around it
