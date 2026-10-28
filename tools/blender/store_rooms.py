@@ -249,7 +249,7 @@ def stand(t, k, kind):
 
 
 def coral_blob(g, rng, c, r, col, name):
-    g.add(ellipsoid(c, (r, r * 0.8, r), 10, 6), col)
+    g.add(ellipsoid(c, (r, r * 0.8, r), 8, 5), col)  # 10 x 6 before the 2026-10 perf pass
 
 
 def coral_discs(g, rng, c, r, col, name, n=7):
@@ -342,7 +342,7 @@ def prop_tank(t, k, kind, seed):
     rock = mat("rock", "#9C8A78", 0.95)
     lumps = scape(kind, k)
     for c, r in lumps:
-        reef.add(ellipsoid(c, r, 12, 7), rock)
+        reef.add(ellipsoid(c, r, 10, 6), rock)  # 12 x 7 before the 2026-10 perf pass
     if kind["name"] == "frag":
         racks(g, True, rng, reef)
     else:
@@ -831,6 +831,12 @@ def build(sid):
     sign = text(t["name"], CX, 190, BACK, 17 if len(t["name"]) > 14 else 20, sign_mat(t), depth=1.6)
     sign.name = "Sign"
     sign.parent = root
+    # like every other node: extras.part and a COLOR_0 (white = what GlbLoader assumes without one; the sign's
+    # material kind does not read it)
+    C.set_extras(sign, part="store")
+    ca = sign.data.color_attributes.new("Col", 'FLOAT_COLOR', 'POINT')
+    ca.data.foreach_set("color", [1.0] * (4 * len(sign.data.vertices)))
+    sign.data.color_attributes.active_color = ca
     co = text("CHECKOUT", CX, 163, 67, 13, mat("sign_text", "#FFFFFF", 0.4, emit="#FFFFFF", strength=1.2), depth=0.8)
     by = {o.name: o for o in objs}
     sets = [[by.get(f"P{slot}_{p}") for p in ("Torso", "Head", "ArmL", "ArmR", "LegL", "LegR")] for slot in range(len(SP.CASTS[sid]))]

@@ -165,7 +165,9 @@ def build_all(verbose=True):
     out["sand_albedo.png"] = C.write_png(os.path.join(C.BUILD, "sand_albedo.png"), quantize(rgb, 3))
     # full 1024 (was 512): one texel = 0.3 mm, so single grains survive; strength 4 (was 2.5)
     n = height_to_normal(P.blur(hgt, 0.6), 4.0)
-    out["sand_normal.png"] = C.write_png(os.path.join(C.TEXTURES, "sand_normal.png"), quantize(n, 4))
+    # shipped as JPEG q 92 (1.1 MB as PNG, ~0.3 MB as JPEG; the grain survives at 4:4:4)
+    out["sand_normal.jpg"] = C.to_jpeg(C.write_png(os.path.join(C.BUILD, "sand_normal.png"), quantize(n, 4)),
+                                       os.path.join(C.TEXTURES, "sand_normal.jpg"), 92)
     if verbose:
         for k, v in out.items():
             print(f"[tex] {k}: {os.path.getsize(v)} bytes")

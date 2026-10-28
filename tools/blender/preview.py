@@ -131,10 +131,11 @@ def render_fish(sid, w=640, h=380, samples=48):
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     ctr = (lo + hi) / 2
     ext = hi - lo
-    top_view = sid in ("brittle_star", "serpent_star", "asterina")
-    if sid.startswith("brood_clown_eggs"):
+    base = sid[:-5] if sid.endswith("_lod1") else sid  # a LOD1 is framed like its LOD0
+    top_view = base in ("brittle_star", "serpent_star", "asterina")
+    if base.startswith("brood_clown_eggs"):
         top_view = True
-    elev = 0.55 if sid in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
+    elev = 0.55 if base in ("hermit_blue", "hermit_scarlet", "sally_lightfoot", "astrea", "nassarius", "feather_duster",
                             "shrimp", "skunk_shrimp", "peppermint_shrimp", "fire_shrimp", "sexy_shrimp", "harlequin_shrimp", "pistol_shrimp", "mantis_shrimp", "flame_scallop", "maxima_clam", "crocea_clam") else 0.16
     if top_view:
         elev = 1.6

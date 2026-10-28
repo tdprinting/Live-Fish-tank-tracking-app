@@ -18,6 +18,7 @@ import glob
 import json
 import math
 import os
+import re
 import struct
 import sys
 
@@ -27,7 +28,17 @@ SIM = os.path.join(ROOT, "app", "src", "main", "assets", "sim")
 ASSETS = os.path.join(ROOT, "app", "src", "main", "assets")
 
 PARTS = {"body", "fin", "eye", "jaw", "polyp", "antenna", "shell", "leg", "glass", "backglass", "water",
-         "sand", "rim", "rock", "equipment", "light", "emitter", "stand", "tube", "card"}
+         "sand", "rim", "rock", "equipment", "light", "emitter", "stand", "tube", "card",
+         # models drawn by their own scene class with its own program, outside the tank's material switch
+         # (GlbLoader keeps the tag, Material.forPart maps it to GENERIC; the scene picks the program):
+         "store",  # store_rooms.py / store_people.py / store_fronts.py -> StoreRoomScene (store.frag)
+         "room",   # rooms.py, stands.py, music_corner.py -> HomeRoomScene / MusicCornerScene (room.frag)
+         "care"}   # care_tools.py, pests.py (pest_tools) -> CareScene (generic program, posed per act)
+
+# required extensions GlbLoader handles: normalized integer NORMAL / TEXCOORD_0 / COLOR_0 (tools/optimize_glb.py)
+SUPPORTED_REQUIRED = {"KHR_mesh_quantization"}
+# embedded image types both decoders read (Android BitmapFactory; web android/graphics/Graphics.kt sniffs the bytes)
+IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 COMP = {5120: ("b", 1), 5121: ("B", 1), 5122: ("h", 2), 5123: ("H", 2), 5125: ("I", 4), 5126: ("f", 4)}
 NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
@@ -72,18 +83,48 @@ BUDGET = {
     "reef_details": 2000,
     # the supply shelf beside the tank (tools/blender/supplies.py; 28 labelled props + rack + sign; off the default view)
     "supply_shelf": 18000,
+    # props for the "Fix tank" upkeep shows (care_tools.py), drawn only while a care act runs (CareScene)
+    "care_tools": 5000,
+    # the record stand left of the tank at home (music_corner.py; MusicCornerScene)
+    "music_corner": 4000,
 }
+# the room at home round the tank (rooms.py, stands.py; HomeRoomScene): one room_* and ONE node of one stand_* (the
+# build nearest the tank's size; a stand file holds one node per build) are drawn at a time
+PREFIX_BUDGET = {"room_": 6000, "stand_": 2400}
+STAND_NODE_BUDGET = 700
+# fish-store visits (store_rooms.py): their own scene. A store room replaces the room at home round the live display
+# tank, so a visit draws one store room + the tank scene (STORE_MAX below), never the home room as well. Set in the
+# 2026-10 perf pass, when the four rooms went from 94-120k to 72-88k triangles (people and signs at lower
+# resolution); Big Blue, the biggest store, sits inside the usual +15 %.
+STORE_ROOM_BUDGET = 80000
 # LOD1 caps: fish default 1700; the engineer goby (anguilliform, 96 stations) 2100; scene assets with a Medium LOD
-LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500}
-# scene assets outside the default view: the supply shelf is drawn only in Supplies mode (SupplyShelf.kt)
-OFF_VIEW = {"supply_shelf", "pest_tools"}
-# on-screen triangle ceilings (docs/ASSETS.md §8): High = LOD0 scene + all polyp instances + fish at LOD1 (default
-# camera > 60 cm); Medium = *_lod1.glb wherever one exists, polyp instance tables halved, fish at LOD1
-# +2k each (2026-10): the owner's diamond goby and leopard wrasse joined the default tank (two more fish at LOD1)
+LOD1_BUDGET = {"engineer_goby": 2100, "rockscape": 31000, "kenya": 6500,
+               # crawlers of Tee's tank (tools/blender/lod1.py), drawn like the fish LOD1 beyond lod1DistanceCm
+               "hermit_blue": 1300, "hermit_scarlet": 1300, "shrimp": 1900, "skunk_shrimp": 1600,
+               "sally_lightfoot": 2300, "brittle_star": 1100, "nassarius": 500, "astrea": 500}
+# scene assets whose _lod1.glb the renderer draws on Medium and Low (TankRenderer.sceneModel)
+MEDIUM_LOD1 = {"rockscape", "kenya"}
+# on-screen triangle ceilings (docs/ASSETS.md §8) for the default view of Tee's tank (DEFAULT_* below): High = LOD0
+# scene + all polyp instances + fish at LOD1 (default camera > 60 cm) + the room at home; Medium = MEDIUM_LOD1 swapped
+# in, the other polyp instance tables halved (RenderQuality.polypDensity), fish at LOD1
 HIGH_MAX = 222000
 MEDIUM_MAX = 142000
-# how many of each mobile invertebrate / fish the default tank shows (for the rendered-triangle estimate)
-SCENE_COUNTS = {"nassarius": 3, "astrea": 2, "asterina": 6}
+# a fish-store visit at High: the tank scene (without the home room, ~206k) + the largest store room. The visit
+# frames the aisle, so the display tank fills less of the screen than at home; 300k keeps it within ~1.35x HIGH_MAX.
+STORE_MAX = 300000
+# Tee's tank, model -> count on screen: core sim/Presets.kt DefaultStock (fish, inverts) and TankRenderer
+# SCENE_MODELS / DEMO_CORALS + the leathers and hairy mushrooms of DefaultStock.corals. Sandbox / My tank / store
+# species are not in the default view; their own per-asset budgets cover them. check_default_stock() fails when
+# Presets.kt gains or loses a seed, so these lists cannot silently go stale.
+DEFAULT_FISH = {"clown_orange": 2, "tang": 1, "cardinal": 1, "wrasse": 1, "engineer_goby": 1, "hawkfish": 1,
+                "lawnmower_blenny": 1, "tailspot_blenny": 1, "dottyback": 1, "diamond_goby": 1, "leopard_wrasse": 1}
+DEFAULT_INVERTS = {"shrimp": 1, "skunk_shrimp": 1, "hermit_blue": 3, "brittle_star": 1, "feather_duster": 1,
+                   "nassarius": 3, "astrea": 3, "asterina": 2, "sally_lightfoot": 1}
+DEFAULT_CORALS = {"kenya": 1, "gsp_neon": 1, "zoa": 1, "clove": 1, "mushroom": 1, "mushroom_hairy": 1,
+                  "macro_red": 1, "organ_pipe": 1, "toadstool_leather": 1, "leather_pink": 1, "finger_leather": 1,
+                  "elephant_ear": 1, "mushroom_hairy_mound": 1}
+DEFAULT_SCENE = {"tank": 1, "rockscape": 1, "equipment": 1, "algae_tufts": 1, "reef_details": 1}
+PRESETS = os.path.join(ROOT, "core", "src", "main", "kotlin", "com", "reeflive", "core", "sim", "Presets.kt")
 # in-tank microfauna (MicroCritters): drawn nearest-first until this per-frame triangle budget is spent, so they add
 # at most this much on screen whatever the population (app render/MicroCritterVisuals.kt MICRO_TRIS_*)
 MICRO_TRIS_HIGH = 12000
@@ -91,10 +132,6 @@ MICRO_TRIS_MEDIUM = 2000
 BODY_BUDGET = {"engineer_goby": 5600}
 # body COLOR_0.a at its front end: the squid body starts at the arm crown (its arms, part "leg", are the snout)
 SNOUT_A = {"bobtail_squid": 0.3}
-# sandbox-only animals: never in the default tank, so left out of the on-screen triangle estimates
-SANDBOX_ONLY = {"bobtail_squid", "aiptasia", "berghia",
-                "gsp_mat", "hammer", "torch", "frogspawn", "duncan", "gold_torch", "scolymia", "bounce_mushroom",
-                "acan", "candy_cane", "open_brain", "bubble", "montipora_cap", "birdsnest", "acropora", "xenia"}  # 2026-10-15: the lower-right "GSP" is a hairy-mushroom mound; the mat is only for added GSP
 # docs/specs/tank_design.md §0: every tank / equipment / rock mesh is closed (WaterSurface is the two-sided quad)
 CLOSED = {"tank", "equipment", "rockscape"}
 OPEN_OK = {"WaterSurface"}
@@ -225,8 +262,12 @@ def check_glb(path, errors, warnings, report):
     for k in ("skins", "animations"):
         if j.get(k):
             errors.append(f"{name}: contains {k}")
-    if j.get("extensionsRequired"):
-        errors.append(f"{name}: extensionsRequired {j['extensionsRequired']}")
+    unsupported = [e for e in j.get("extensionsRequired", []) if e not in SUPPORTED_REQUIRED]
+    if unsupported:
+        errors.append(f"{name}: extensionsRequired {unsupported}")
+    for im in j.get("images", []):
+        if im.get("mimeType") not in IMAGE_TYPES:
+            errors.append(f"{name}: image mimeType {im.get('mimeType')!r} (GlbLoader / the web decode {sorted(IMAGE_TYPES)})")
     # GlbLoader reads rootExtras from the single scene root; generators name it `Root` (the rockscape's root is its
     # `Rock` mesh). A Blender duplicate suffix (`Root.001`) means a LOD1 export picked up the wrong name.
     scenes = j.get("scenes") or [{}]
@@ -267,6 +308,12 @@ def check_glb(path, errors, warnings, report):
             for req in ("POSITION", "NORMAL", "TEXCOORD_0", "COLOR_0"):
                 if req not in at:
                     errors.append(f"{name}: node '{n.get('name')}' missing {req}")
+            for k, ai in at.items():  # glTF: vertex attribute elements 4-byte aligned (int8 normals padded)
+                a = j["accessors"][ai]
+                fmt, size = COMP[a["componentType"]]
+                bv = j["bufferViews"][a["bufferView"]]
+                if bv.get("byteStride", size * NCOMP[a["type"]]) % 4:
+                    errors.append(f"{name}: node '{n.get('name')}' {k} stride not a multiple of 4")
             if "COLOR_0" in at and j["accessors"][at["COLOR_0"]]["type"] != "VEC4":
                 errors.append(f"{name}: COLOR_0 is not VEC4")
             if base in FISH and "COLOR_0" in at and part in ("body", "fin"):
@@ -313,6 +360,17 @@ def check_glb(path, errors, warnings, report):
         if abs((hi - lo) - 1.0) > 0.03 or hi < 0.45:
             errors.append(f"{name}: fish x extent {lo:.3f}..{hi:.3f} (expected unit length facing +X)")
     budget = BUDGET.get(base)
+    if budget is None and base.startswith("store_room_"):
+        budget = STORE_ROOM_BUDGET
+    for prefix, b in PREFIX_BUDGET.items():
+        if budget is None and base.startswith(prefix):
+            budget = b
+    if base.startswith("stand_"):
+        for ni, n in g.mesh_nodes():
+            t = g.tri_count(n["mesh"])
+            if t > STAND_NODE_BUDGET:
+                errors.append(f"{name}: stand node '{n.get('name')}' {t} tris > {STAND_NODE_BUDGET}")
+            report.setdefault("stand_nodes", []).append(t)
     if name.endswith("_lod1"):
         cap = LOD1_BUDGET.get(base, 1700)
         if (base in FISH or base in LOD1_BUDGET) and total > cap:
@@ -370,48 +428,67 @@ def check_sim(errors, report):
 
 
 def estimates(report):
-    """Triangles on screen in the default full-tank view.
-    High: every scene GLB at LOD0 once, mobile inverts times SCENE_COUNTS, every polyp instance table, fish at LOD1
-    (the default camera is > 60 cm from every fish, ARCHITECTURE §LOD). `fish_lod0` is the all-LOD0 worst case.
-    Medium: the same with <asset>_lod1.glb substituted wherever one exists (its own instance tables) and the other
-    polyp instance tables halved."""
-    files = {name: (tris, body) for name, size, tris, body in report.get("files", [])}
+    """Triangles on screen in the default full-tank view of Tee's tank (DEFAULT_*), and on a fish-store visit.
+    High: every DEFAULT_SCENE / DEFAULT_CORALS / DEFAULT_INVERTS model at LOD0 times its count (hidden nodes left
+    out), every polyp instance table in full, fish at LOD1 (the default camera is > 60 cm from every fish, ARCHITECTURE
+    §LOD; `worst` is the all-LOD0 case), the micro critters' draw budget and the room at home (the largest room, the
+    largest stand node and the music corner). Medium: the same with MEDIUM_LOD1 assets swapped for their _lod1.glb
+    (their own instance tables) and the other polyp instance tables halved. Store: High without the home room, plus the
+    largest store room."""
+    files = {name: tris for name, size, tris, body in report.get("files", [])}
     hidden = report.get("hidden", {})
     inst = {}
     for key, (cnt, tris, tot) in report.get("instances", {}).items():
         inst.setdefault(key.split("/")[0], []).append((cnt, tris))
+    rooms = max([t for n, t in files.items() if n.startswith("room_")] or [0])
+    stand = max(report.get("stand_nodes") or [0])
+    home = rooms + stand + files.get("music_corner", 0)
+    store = max([t for n, t in files.items() if n.startswith("store_room_")] or [0])
     out = {}
     for level in ("high", "medium"):
         meshes = instances = fish1 = fish0 = 0
-        for name, (tris, body) in files.items():
-            if name.replace("_lod1", "") in SANDBOX_ONLY:
-                continue  # not in the default tank (sandbox species)
-            if name.endswith("_lod1"):
-                if name[:-5] in FISH:
-                    fish1 += tris
-                continue
-            if name in FISH:
-                fish0 += tris
-                continue
-            if name.startswith("micro_"):
-                continue  # covered by the MICRO_TRIS_* draw budget below
-            if name.startswith("brood_"):
-                continue  # only after a spawn; pooled and capped per quality (core BroodField)
-            if name in OFF_VIEW:
-                continue  # drawn only while the camera looks away from the tank
-            use = name
-            if level == "medium" and name + "_lod1" in files:
-                use = name + "_lod1"
-            meshes += (files[use][0] - hidden.get(use, 0)) * SCENE_COUNTS.get(name, 1)
+        for name, count in {**DEFAULT_SCENE, **DEFAULT_CORALS}.items():
+            use = name + "_lod1" if level == "medium" and name in MEDIUM_LOD1 and name + "_lod1" in files else name
+            if use not in files:
+                continue  # reported by check_default_stock
+            meshes += (files[use] - hidden.get(use, 0)) * count
             # the prototype mesh is counted once in `meshes`; the table draws it `cnt` times
-            extra = sum((cnt - 1) * t for cnt, t in inst.get(use, []))
+            extra = sum((cnt - 1) * t for cnt, t in inst.get(use, [])) * count
             if level == "medium" and use == name:
                 extra //= 2
             instances += extra
+        # fish and the mobile inverts: LOD1 where shipped (drawOrganism switches beyond lod1DistanceCm)
+        for name, count in {**DEFAULT_FISH, **DEFAULT_INVERTS}.items():
+            fish0 += files.get(name, 0) * count
+            fish1 += files.get(name + "_lod1", files.get(name, 0)) * count
         meshes += MICRO_TRIS_HIGH if level == "high" else MICRO_TRIS_MEDIUM
-        out[level] = {"meshes": meshes, "instances": instances, "fish": fish1, "fish_lod0": fish0,
-                      "total": meshes + instances + fish1, "worst": meshes + instances + fish0}
+        tank = meshes + instances + fish1
+        out[level] = {"meshes": meshes, "instances": instances, "fish": fish1, "fish_lod0": fish0, "home": home,
+                      "total": tank + home, "worst": meshes + instances + fish0 + home, "store": tank + store,
+                      "store_room": store}
     return out
+
+
+def check_default_stock(errors):
+    """DEFAULT_FISH / DEFAULT_INVERTS / DEFAULT_CORALS hold as many animals as Presets.kt DefaultStock seeds, and every
+    default model exists."""
+    for group in (DEFAULT_SCENE, DEFAULT_FISH, DEFAULT_INVERTS, DEFAULT_CORALS):
+        for name in group:
+            if not os.path.exists(os.path.join(MODELS, name + ".glb")):
+                errors.append(f"default tank model {name}.glb missing")
+    try:
+        src = open(PRESETS, encoding="utf-8").read()
+    except OSError:
+        return
+    for key, group in (("fish", DEFAULT_FISH), ("inverts", DEFAULT_INVERTS), ("corals", DEFAULT_CORALS)):
+        m = re.search(r"val %s = listOf\((.*?)\n    \)" % key, src, re.S)
+        if not m:
+            errors.append(f"Presets.kt: DefaultStock.{key} not found")
+            continue
+        seeds = len(re.findall(r"^\s*LivestockSeed\(", m.group(1), re.M))
+        if seeds != sum(group.values()):
+            errors.append(f"Presets.kt DefaultStock.{key} has {seeds} seeds, DEFAULT_{key.upper()} counts "
+                          f"{sum(group.values())}: update the default-view lists in validate_glb.py")
 
 
 def main(argv):
@@ -434,14 +511,20 @@ def main(argv):
         print("rock_sdf.bin: %dx%dx%d cell %.2f cm, %d bytes" % report["sdf"])
     print(f"GLB total: {tot_bytes / 1e6:.2f} MB in {len(report.get('files', []))} files")
     if not argv:
+        check_default_stock(errors)
         ests = estimates(report)
         for level, cap in (("high", HIGH_MAX), ("medium", MEDIUM_MAX)):
             est = ests[level]
             print(f"rendered-triangle estimate at {level.capitalize()}, default view: {est['total']} "
-                  f"(meshes {est['meshes']}, polyp instances {est['instances']}, fish LOD1 {est['fish']}); "
-                  f"all fish at LOD0: {est['worst']}")
+                  f"(meshes {est['meshes']}, polyp instances {est['instances']}, fish + inverts LOD1 {est['fish']}, "
+                  f"room at home {est['home']}); all animals at LOD0: {est['worst']}")
             if est["total"] > cap:
                 errors.append(f"{level.capitalize()} triangle estimate {est['total']} > {cap}")
+        est = ests["high"]
+        print(f"rendered-triangle estimate on a fish-store visit at High: {est['store']} "
+              f"(tank scene {est['store'] - est['store_room']} + largest store room {est['store_room']})")
+        if est["store"] > STORE_MAX:
+            errors.append(f"store visit triangle estimate {est['store']} > {STORE_MAX}")
         size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(ASSETS) for f in fs)
         print(f"app/src/main/assets total: {size / 1e6:.2f} MB")
         if size > 45e6:
