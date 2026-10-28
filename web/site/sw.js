@@ -14,7 +14,8 @@ self.addEventListener('install', (e) => {
   // An update fetches the new build's shell now. A first install does not: the page is still downloading those
   // files itself, and hands them over from the browser's cache once the tank is in (app.js, 'cache-used').
   if (self.registration.active) e.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.filter((p) => FILES[p]).map((p) => cacheFile(c, p)))).catch(() => {}));
-  self.skipWaiting();
+  // A first install takes over at once. An update waits until the page asks (message 'skip-waiting', the "New version ready" tap), so a running acclimation timer or sandbox is never cut off.
+  if (!self.registration.active) self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -99,6 +100,8 @@ async function hashOf(buf) {
 // The page's first visit ran before this worker: it lists what it downloaded so the next visit finds it all here.
 self.addEventListener('message', (e) => {
   const m = e.data || {};
+  if (m.type === 'skip-waiting') { self.skipWaiting(); return; }
+  if (m.type === 'build?') { e.source?.postMessage({ type: 'build', build: BUILD }); return; }
   if (m.type !== 'cache-used') return;
   e.waitUntil(caches.open(CACHE).then(async (c) => {
     for (const p of new Set(m.paths || [])) if (FILES[p] && !(await c.match(keyOf(p)))) await cacheFile(c, p);
