@@ -16,6 +16,7 @@ Repo: https://github.com/tdprinting/Live-Fish-tank-tracking-app (public).
 
 ## Environment gotchas (cloud container)
 - CI: `android.yml` (named "Core tests", runs `core` tests) and `web.yml` (web build). Dispatch with the GitHub MCP `actions_run_trigger` on a ref; inspect with `actions_get`, `actions_list`, `get_job_logs`. `gh` is not authenticated.
+- "Core tests" runs 5 shard jobs of 2 JVMs each (~11 min) packed by `core/test-weights.txt`; its `build` job is green only if every shard passed, and logs the test count, the slowest tests and refreshed weights (`get_job_logs` on `build`). After adding a long test, paste those weights into `core/test-weights.txt`. `SimBenchmark` runs only with `-Pbench` or the manual `bench.yml` workflow.
 - Each workflow has per-ref concurrency with cancel-in-progress: one run per branch at a time.
 - No Android SDK, so `:app` cannot be compiled here or in CI. Gradle downloads are often blocked (403/429); `./gradlew -PcoreOnly :core:test` may only work `--offline` once a cache exists.
 - CI artifact downloads (blob storage) are blocked by the proxy.

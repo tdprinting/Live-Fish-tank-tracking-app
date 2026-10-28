@@ -20,8 +20,8 @@ concurrency:
 
 env:
   # keep matrix.shard below at 0..SHARDS-1. FORKS: JVMs per shard; a runner's 4 vCPUs are 2 cores with
-  # hyper-threading, so 2 JVMs per runner run each test much faster than 4 (c20 took 12 min in a 4-JVM runner).
-  SHARDS: 6
+  # hyper-threading: 2 JVMs per runner did the suite in 93 min of test time, 4 JVMs in 170 (c20: 10 vs 12 min).
+  SHARDS: 5
   FORKS: 2
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5]
+        shard: [0, 1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
