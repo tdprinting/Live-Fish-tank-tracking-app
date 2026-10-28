@@ -116,6 +116,9 @@ def text(body, x, y, z, size, m, depth=1.2):
     o.data.extrude = depth / 2
     o.data.align_x = 'CENTER'
     o.data.align_y = 'CENTER'
+    # 5 steps per glyph curve segment (Blender's default is 12): signs read the same at shop distances for about
+    # half the triangles (2026-10 perf pass; the store signs were 2-4k triangles each)
+    o.data.resolution_u = 5
     o.data.materials.append(m)
     bpy.ops.object.convert(target='MESH')
     o = bpy.context.active_object
