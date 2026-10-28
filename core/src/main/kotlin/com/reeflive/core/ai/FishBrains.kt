@@ -1234,7 +1234,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val cl = client ?: run { finished = true; return }
             if (!cl.alive || !cl.visible || cl.sleeping) { done(c, cl, false); return }
             o.focusId = cl.id
-            phaseT += c.dt
+            // (the approach is motion, the dance and the inspection last their sim seconds at any speed)
+            phaseT += if (phase == 0) c.dt else c.simDt
             val toC = (cl.pos - o.pos).normalized(o.heading)
             out.separation = 0.0
             when (phase) {
@@ -1297,7 +1298,7 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     // honest gleaning feeds in proportion to what is there (a tank has few parasites)
                     o.hunger = max(0.0, o.hunger - c.simDt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
                     // cheating: 0.02/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.19/s when hungry (13–21 per 100 s, S:Pinto11)
-                    cheatAcc += c.dt
+                    cheatAcc += c.simDt
                     while (cheatAcc >= 1.0) {
                         cheatAcc -= 1.0
                         if (c.rng.chance(cheatRate(o))) { jolt(c, cl); return }

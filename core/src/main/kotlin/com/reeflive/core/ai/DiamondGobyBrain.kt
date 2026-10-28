@@ -541,7 +541,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
                     }
                     if (timer >= 0.1 + EXPEL_GAP_S * EXPEL_PULSES + 0.1) {
                         o.gillRate = 1.0
-                        left--
+                        left -= max(1, c.warp.toInt())   // (a mouthful in fast-forward stands for c.warp of them)
                         val p = o.pos
                         val next = Vec3(p.x + fwd.x * 2.0, hoverY(p.x + fwd.x * 2.0, p.z + fwd.z * 2.0), p.z + fwd.z * 2.0)
                         // the shuffle would run it into the rock foot, or it is not where it winnows (held off by the
