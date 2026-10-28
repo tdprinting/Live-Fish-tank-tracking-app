@@ -22,21 +22,21 @@ class Bitmap internal constructor(internal val bytes: ByteArray, val width: Int,
 
     internal fun uploadInto(texId: Int) {
         val gl = GLES30.gl
+        GLES30.syncTextureUnit()
         gl.texImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, 1, 1, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, gray())
         val tex = GLES30.texture(texId)
         val type = ImageSize.mime(bytes)
         val blob = Blob(arrayOf(bytes), BlobPropertyBag(type))
         val opts: dynamic = js("({premultiplyAlpha: 'none', colorSpaceConversion: 'none', resizeQuality: 'high'})")
         opts.resizeWidth = width; opts.resizeHeight = height
+        // no gl.isTexture / getTexParameter / getParameter: each is a synchronous round trip that stalls the page until
+        // the GPU has finished everything queued (they were the top main-thread cost while textures streamed in)
         window.asDynamic().createImageBitmap(blob, opts).then { img: dynamic ->
-            if (gl.isTexture(tex) as Boolean) {
-                val prev = gl.getParameter(0x8069) // TEXTURE_BINDING_2D
-                gl.bindTexture(GLES30.GL_TEXTURE_2D, tex)
+            if (gl === GLES30.gl && GLES30.alive(texId, tex)) GLES30.withTexture2D(texId) {
                 gl.pixelStorei(0x9241, 0) // UNPACK_PREMULTIPLY_ALPHA_WEBGL off
                 gl.texImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, img)
-                val minF = gl.getTexParameter(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER) as Int
+                val minF = GLES30.minFilter(texId)
                 if (minF != GLES30.GL_LINEAR && minF != GLES30.GL_NEAREST) gl.generateMipmap(GLES30.GL_TEXTURE_2D)
-                gl.bindTexture(GLES30.GL_TEXTURE_2D, prev)
             }
             img.close()
         }
