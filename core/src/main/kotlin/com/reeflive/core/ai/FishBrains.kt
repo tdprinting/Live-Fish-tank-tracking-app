@@ -208,7 +208,7 @@ class ClownBrain(c: Ctx) : SpeciesBrain(c) {
                 // a snap at a passing particle: mouth open and a quick lunge a few cm toward it
                 nextSnap = c.t + c.rng.range(SNAP_MIN_S, SNAP_MAX_S)
                 c.o.mouth = 1.0
-                c.o.hunger = max(0.0, c.o.hunger - SNAP_YIELD)
+                c.o.hunger = max(0.0, c.o.hunger - SNAP_YIELD * c.events(0.5 * (SNAP_MIN_S + SNAP_MAX_S)))
                 snaps++
                 spot = c.safe(spot + c.rng.unitVector() * (0.4 * L), 1.2)
             }
@@ -616,7 +616,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
         private var spot = Vec3.ZERO
         private var nextSnap = 0.0
         override fun score(c: Ctx) = if (c.o.hunger < 0.1) 0.0 else (0.35 + 0.4 * c.o.hunger) * c.activity
-        override fun enter(c: Ctx) { spot = c.safe(Vec3(c.rng.range(25.0, 95.0), c.zoneY(c.rng.range(0.45, 0.8)), c.rng.range(14.0, 26.0))) }
+        override fun enter(c: Ctx) { spot = c.safe(Vec3(c.rng.range(20.0, c.rock.lengthCm - 20.0), c.zoneY(c.rng.range(0.45, 0.8)), c.rng.range(14.0, 26.0))) }
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             val fl = c.sim.flow.velocityFast(o.pos)
@@ -626,7 +626,7 @@ class TangBrain(c: Ctx) : SpeciesBrain(c) {
             if (c.t >= nextSnap) {
                 nextSnap = c.t + c.rng.range(3.0, 8.0)
                 o.mouth = 1.0
-                o.hunger = max(0.0, o.hunger - SNAP_YIELD)
+                o.hunger = max(0.0, o.hunger - SNAP_YIELD * c.events(5.5))
                 columnSnaps++
             }
             if (elapsed > 90) finished = true
@@ -1040,12 +1040,19 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
     }
 
     /** By day faster tankmates leave it little (×0.4 unless the food drifts within 10 cm); dusk/night ×1.5 (06 §3.2). */
-    inner class CardinalFeed : Feed(this@CardinalBrain, 60.0) {
+    inner class CardinalFeed : Feed(this@CardinalBrain, FEED_REACH_CM) {
         override fun bonus(c: Ctx, f: FoodParticle) = if (f.kind == FoodKind.MYSIS || f.kind == FoodKind.PODS) 0.1 else 0.0
-        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && !f.onSurface && openWaterFood(c, f)
+        // (not at the surface: a hoverer of the lower water column picks food as it sinks past)
+        override fun accept(c: Ctx, f: FoodParticle) = !c.o.mouthbrooding && !f.settled && f.pos.y < c.rock.waterLevelCm - SURFACE_CM &&
+            openWaterFood(c, f) && (f.pos.distanceTo(c.o.pos) <= DAY_REACH_CM || c.p.light < FORAGE_LIGHT || c.t - foodAlertAt < FEED_CALL_S)
         override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
             c.p.light < FORAGE_LIGHT -> 1.5
             f.pos.distanceTo(c.o.pos) <= 10.0 -> 1.0
+            // at feeding time it leaves its pocket for mysis and flake drifting past within a short swim (aquarium
+            // cardinals come out to the food; it never ate a fed particle that did not drift within 10 cm of it)
+            // at feeding time it leaves its pocket for mysis and flake sinking anywhere in the tank (aquarium cardinals
+            // come out to the food; the return carries a feed to the far end, where it never got a bite)
+            c.t - foodAlertAt < FEED_CALL_S -> 1.0
             else -> 0.4
         }
     }
@@ -1062,6 +1069,12 @@ class CardinalBrain(c: Ctx) : SpeciesBrain(c) {
 
     companion object {
         const val BASE_RADIUS = 12.0
+        /** After a keeper feed, for this long (s), it goes for fed food up to [FEED_REACH_CM] from its pocket [L]. */
+        const val FEED_CALL_S = 180.0
+        const val FEED_REACH_CM = 100.0
+        /** By day, out of a feeding, only food this close (cm) [L]; food this near the surface (cm) is left alone. */
+        const val DAY_REACH_CM = 60.0
+        const val SURFACE_CM = 1.5
         /** Banggai young below this length (cm) keep down among the anemone's tentacles [L]. */
         const val BANGGAI_YOUNG_CM = 3.0
         /** Largest |heading.y| while hovering (~10°), DESIGN ESTIMATE from Tee's clip (level hover) and photos. */
@@ -1172,6 +1185,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val searchCm = SEARCH_CM * (if (com.reeflive.core.sim.LifeStages.isJuvenile(o)) JUVENILE_SEARCH else 1.0)
             for (f in c.sim.organisms) {
                 if (f === o || !f.alive || !f.isFish || !f.visible || f.sleeping || f.brainKind == BrainKind.WRASSE || f.brainKind == BrainKind.EEL) continue
+                // a fish lying on the bottom from heat is not inspected (its laid body was pushed into a fold)
+                if (f.heat.stage >= com.reeflive.core.sim.HeatModel.Stage.LETHARGIC) continue
                 if (c.t - f.lastCleanerContactAt < CLIENT_COOLDOWN_S) continue
                 if ((unreachableUntil[f.id] ?: -1.0) > c.t) continue
                 val d = f.pos.distanceTo(o.pos)
@@ -1219,7 +1234,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val cl = client ?: run { finished = true; return }
             if (!cl.alive || !cl.visible || cl.sleeping) { done(c, cl, false); return }
             o.focusId = cl.id
-            phaseT += c.dt
+            // (the approach is motion, the dance and the inspection last their sim seconds at any speed)
+            phaseT += if (phase == 0) c.dt else c.simDt
             val toC = (cl.pos - o.pos).normalized(o.heading)
             out.separation = 0.0
             when (phase) {
@@ -1280,9 +1296,9 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
                     cl.poseUntil = max(cl.poseUntil, c.t + 0.5)
                     val ich = cl.disease == Disease.ICH
                     // honest gleaning feeds in proportion to what is there (a tank has few parasites)
-                    o.hunger = max(0.0, o.hunger - c.dt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
+                    o.hunger = max(0.0, o.hunger - c.simDt * (HONEST_YIELD_PER_S * cl.parasiteLoad.coerceIn(0.0, 1.0) + if (ich) 0.015 * max(0.2, cl.diseaseStage) else 0.0))
                     // cheating: 0.02/s baseline (S:Pinto11: 2–6 jolts per 100 s) → 0.19/s when hungry (13–21 per 100 s, S:Pinto11)
-                    cheatAcc += c.dt
+                    cheatAcc += c.simDt
                     while (cheatAcc >= 1.0) {
                         cheatAcc -= 1.0
                         if (c.rng.chance(cheatRate(o))) { jolt(c, cl); return }
@@ -1909,6 +1925,9 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Pounce : Behavior("pounce", "Pouncing") {
         private var f: FoodParticle? = null
         private var prey: Organism? = null
+        /** A dart from the perch at food sinking past (or lying) near it reads as feeding on the card. */
+        override val label: String get() = if (f != null) "Pouncing on food" else "Pouncing"
+
         override fun enter(c: Ctx) { if (f == null && prey != null) events.preyApproaches++ }
         override fun score(c: Ctx): Double {
             val o = c.o
@@ -1937,7 +1956,7 @@ class HawkBrain(c: Ctx) : SpeciesBrain(c) {
                     finished = true
                 }
             }
-            if (elapsed > 4) finished = true
+            if (moveElapsed > 4) finished = true
         }
     }
 
@@ -2042,7 +2061,10 @@ open class InHole(val b: SpeciesBrain, var hole: RockHole?, var shelter: Vec3, l
         when (phase) {
             0 -> {
                 out.seek(c.viaOpenWater(stand), c.o.burstSpeed * 0.5, arrive = 1.5, urgency = 0.6)
-                if (c.o.pos.distanceTo(stand) < max(1.5, 0.2 * L) || c.t - phaseAt > 20) { phase = 1; phaseAt = c.t }
+                // (after 20 s it settles from close by; from across the tank it keeps swimming home: the turn-on-the-spot
+                // placement from far off dragged it along the surface and it flicked between this and backing in for minutes)
+                val dS = c.o.pos.distanceTo(stand)
+                if (dS < max(1.5, 0.2 * L) || c.t - phaseAt > 20 && dS < STAND_NEAR_CM) { phase = 1; phaseAt = c.t }
             }
             1 -> {
                 // U-turn on the spot to face out of the hole
@@ -2502,17 +2524,32 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     private val holeOut: Vec3 get() = hole?.axis ?: c.rock.sdf.gradient(shelterAt)
     private var peekDur = 40.0
     private var nextHoleCheck = 0.0
-    val inHole = InHole(this, hole, holePos, "Peeking from its hole",
+    val inHole = PeekerHole(hole, holePos)
+
+    /**
+     * Its hole: head out peeking by day, head in asleep at night (research 10 §7; it was labelled "peeking" all night).
+     * Without a hole of its own it shelters on the rock face, tucked against it asleep at night.
+     */
+    inner class PeekerHole(h: RockHole?, at: Vec3) : InHole(this@PeekerBlennyBrain, h, at, "Peeking from its hole",
         // by day it spends about half its time head-out in the hole and the rest perched round it or darting out
         // (research 30: Ecsenius perch on rock by their holes; DESIGN ESTIMATE share); it was in the hole 95 % of the day
         { c -> if (c.p.night) 0.9 else (if (c.o.timidUntil > c.t) 0.75 else style.inHoleDay) + (if (c.o.health < 0.5) 0.3 else 0.0) },
         // head-out inspection by day; a full retreat (head in) while threatened, freshly startled or timid (research 10 §7)
-        { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) })
+        { c -> if (c.p.night || threat != null || c.o.timidUntil > c.t || c.t - startleAt < 20) -0.5 else 1.0 + 0.6 * sin(c.t * 0.2) }) {
+        override val label: String get() = when {
+            o.sleeping && hole == null -> "Asleep against the rock"
+            o.sleeping && phaseNow == 3 -> "Asleep in its hole"
+            phaseNow == 2 -> "Backing into its hole"
+            phaseNow == 0 && hole != null && o.pos.distanceTo(hole!!.mouth) > HOME_FAR_CM -> "Swimming home to its hole"
+            hole == null -> "Sheltering against the rock"
+            else -> "Peeking from its hole"
+        }
+    }
 
     init {
         install(*listOfNotNull(
             inHole,
-            PlanktonDash(), PerchNearHole(), Graze(this, style.graze), Prospect(), GlassCurious(this),
+            PlanktonDash(), BlennyFeed(), PerchNearHole(), Graze(this, style.graze), Prospect(), GlassCurious(this),
             Flee(this, { c, _ -> c.safe(holePos + holeOut * (c.clearance + 1.0)) }, "Darting home"), SurfaceGasp(this),
             if (style.midwater > 0) MidwaterForage() else null,
             if (style.nori) NibbleNori(this, 0.6, quiet = true) else null, HoleFight()).toTypedArray())
@@ -2717,6 +2754,17 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
     var returns = 0; private set
 
     companion object {
+        /** Keeper food it darts out for: drifting within this of its hole (cm), lying on the rock or sand within [FEED_SETTLED_CM] [L]. */
+        const val FEED_RANGE_CM = 70.0
+        /** The bicolor's reach for keeper food from its hole (cm) [L]. */
+        const val BICOLOR_FEED_CM = 15.0
+        /** Further than this (cm) from its hole on the way back it is "swimming home", not "peeking". */
+        const val HOME_FAR_CM = 12.0
+        const val FEED_SETTLED_CM = 35.0
+        /** Hunger an unprompted plankton dart meets. */
+        const val DART_YIELD = 0.01
+        /** A keeper feed keeps it looking out for food this long (s) [L]. */
+        const val FEED_CALL_S = 300.0
         /** DESIGN ESTIMATE (research 10 §7: "does not establish that the tailspot must move exactly 50 cm away"). */
         @com.reeflive.core.sim.Ev(com.reeflive.core.sim.Evidence.DESIGN_ESTIMATE, "10 §7") const val MOVE_AWAY_CM = 50.0
         /** A newly added tailspot prospects holes and grazing patches tank-wide for its first day [I]. */
@@ -2778,6 +2826,8 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
 
     /** Dart up into the water column to snap plankton or a drifting particle, then back. */
     inner class PlanktonDash : Behavior("dash", "Darting for plankton") {
+        /** A dart at keeper food drifting by reads as feeding on the card. */
+        override val label: String get() = if (f?.kind?.suspended == false) "Darting out for food" else "Darting for plankton"
         private var target = Vec3.ZERO
         private var f: FoodParticle? = null
         private var next = 0.0
@@ -2793,8 +2843,11 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
             if (f != null && c.o.hunger > 0.12) return 0.8
             return if (c.t > next && c.o.hunger > 0.2) 0.5 + 0.35 * c.o.hunger else 0.0
         }
+        /** Fast-forward: the unseen plankton of this dart, taken at once (the dart itself is cut to the sim time it lasts). */
+        private var credited = false
         override fun enter(c: Ctx) {
             back = false
+            credited = false
             excursions++
             next = c.t + c.rng.range(style.dashMinS, style.dashMaxS)
             target = f?.pos ?: c.safe(holePos + holeOut * 6.0 + Vec3(c.rng.signed() * 5, c.rng.range(style.dashRiseLo, style.dashRiseHi), 0.0))
@@ -2802,11 +2855,12 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
         override fun update(c: Ctx, out: SteerIntent) {
             val o = c.o
             val ff = f
+            if (c.warp > 1.0 && !credited && ff == null) { credited = true; o.hunger = max(0.0, o.hunger - DART_YIELD); o.mouth = 1.0 }
             if (!back) {
                 val tp = if (ff != null && !ff.eaten) ff.pos else target
                 out.seek(tp, o.burstSpeed * 0.7, arrive = 0.8, urgency = 0.8)
                 if (o.pos.distanceTo(tp) < 1.2 + 0.1 * o.lengthCm) {
-                    if (ff != null && !ff.eaten) c.bite(ff) else { o.hunger = max(0.0, o.hunger - 0.01); o.mouth = 1.0 }
+                    if (ff != null && !ff.eaten) c.bite(ff) else if (!credited) { o.hunger = max(0.0, o.hunger - DART_YIELD); o.mouth = 1.0 }
                     back = true
                 }
                 if (elapsed > 4) back = true
@@ -2817,6 +2871,29 @@ class PeekerBlennyBrain(c: Ctx) : SpeciesBrain(c) {
                 if (o.pos.distanceTo(mouth) < 2.5) { returns++; finished = true }
                 else if (elapsed > 12) finished = true
             }
+        }
+    }
+
+    /**
+     * Keeper food (flake, pellets) drifting or lying within a short dart of its hole: it shoots out, grabs a piece and
+     * goes home, the way tailspot and lawnmower blennies feed in a tank. Food on the rock or sand only close to the hole;
+     * nothing far from home. (Before this only food drifting into its plankton-dart range was taken, which at the
+     * feeding spot across the tank was never: its hunger stayed flat through every feed.)
+     */
+    inner class BlennyFeed : Feed(this@PeekerBlennyBrain, FEED_RANGE_CM + 20.0, "Darting out for food") {
+        override fun accept(c: Ctx, f: FoodParticle): Boolean {
+            // (floating flake is out of its reach: it does not leave the rock for the surface)
+            if (f.pos.y > c.rock.waterLevelCm - CardinalBrain.SURFACE_CM - 1.0) return false
+            val d = f.pos.distanceTo(holePos)
+            // (the bicolor, a benthic grazer that rarely leaves its rock, takes only what comes close: research 50 §1c-d)
+            val range = if (style === EcseniusStyle.BICOLOR) BICOLOR_FEED_CM else FEED_RANGE_CM
+            return d < (if (f.settled) min(FEED_SETTLED_CM, range) else range)
+        }
+        // out of a feeding (a few minutes after the keeper fed) only what drifts into its plankton-dart range
+        override fun scoreMul(c: Ctx, f: FoodParticle): Double = when {
+            c.p.night || threat != null -> 0.0
+            c.t - foodAlertAt < FEED_CALL_S || f.pos.distanceTo(c.o.pos) < style.dashSeeCm -> 1.0
+            else -> 0.0
         }
     }
 
@@ -2983,7 +3060,10 @@ class DottybackBrain(c: Ctx) : SpeciesBrain(c) {
     override fun shelterSpot(c: Ctx): Vec3? = if (home != null) caveSafe else null
 
     inner class DottyFeed : Feed(this@DottybackBrain, 50.0) {
-        override fun bonus(c: Ctx, f: FoodParticle) = 0.1
+        // at feeding time food that has drifted down near it is worth leaving the cave patrol for (it went on patrolling
+        // 12-25 cm from a bed of fallen flake, hungry)
+        override fun bonus(c: Ctx, f: FoodParticle) =
+            if (c.t - foodAlertAt < DOTTY_FEED_CALL_S && f.pos.distanceTo(c.o.pos) < DOTTY_FEED_NEAR_CM) 0.25 else 0.1
     }
 
     /** Short rock-hugging darts between crevices near the cave, pausing in cover. */
@@ -3081,3 +3161,10 @@ internal fun normalQuantile(p: Double): Double {
         }
     }
 }
+
+/** A dottyback goes for fed food this near it (cm) for this long after a feed (s) [L]. */
+private const val DOTTY_FEED_CALL_S = 300.0
+private const val DOTTY_FEED_NEAR_CM = 30.0
+
+/** InHole: within this of its stand point (cm) a slow approach settles anyway after 20 s. */
+private const val STAND_NEAR_CM = 6.0

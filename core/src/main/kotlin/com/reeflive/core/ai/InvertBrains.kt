@@ -732,9 +732,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     private val start = c.rock.anchors.ofType("GRAZE").let { g -> if (g.isEmpty()) Vec3(60.0, 4.0, 38.0) else g[o.rng.nextInt(g.size)].pos }
 
     init {
-        install(object : CrawlWander(this, { it.o.homePos }, 25.0, { 0.35 }, "Wandering") {
-            override fun accept(c: Ctx, p: Vec3) = !nearTight(c, p)
-        }, Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this), BackOut())
+        install(Forage(), Pick(), Scavenge(this, 35.0), Retreat(), ShellSwapBehavior(this), BackOut())
     }
 
     /** Last spot with room over its back (see [roomy]), and how long it has been without it. */
@@ -853,7 +851,10 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Pick : Behavior("pick", "Picking at rock") {
         private var spot: Pair<Vec3, Vec3>? = null
         private var next = 0.0
-        override fun score(c: Ctx) = if (c.t < unwedgeUntil) 0.0 else 0.3 + 0.3 * c.o.hunger
+        /** After a pick it walks on for a while ([Forage]): a hungry hermit used to pick the same spot all day. */
+        private var restUntil = -1e9
+        override fun score(c: Ctx) = if (c.t < unwedgeUntil || c.t < restUntil) 0.0 else 0.3 + 0.3 * c.o.hunger
+        override fun exit(c: Ctx) { restUntil = c.t + PICK_GAP_S }
         override fun enter(c: Ctx) {
             spot = null
             for (i in 0 until 4) {
@@ -865,16 +866,102 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
             // stay on the surface even on the frame it gives up (a hermit never floats free of the rock)
             out.crawl = true; out.surfaceOffset = surfaceOffset(c)
             val s = spot ?: run { finished = true; return }
-            if (c.o.pos.distanceTo(s.first) > 1.5) { out.target = s.first; out.speed = c.o.cruiseSpeed; return }
+            if (c.o.pos.distanceTo(s.first) > 1.5) {
+                // a spot it cannot walk onto (under a lip, round a corner) is given up rather than walked at for ever
+                if (moveElapsed > PICK_REACH_S) { finished = true; return }
+                out.target = s.first; out.speed = c.o.cruiseSpeed; return
+            }
             if (c.t > next) {
                 next = c.t + 2
-                c.o.hunger = max(0.0, c.o.hunger - 0.004)
-                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
+                c.o.hunger = max(0.0, c.o.hunger - 0.004 * c.events(2.0))
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15 * c.events(2.0))
                 c.o.mouth = 1.0
             }
             c.o.appendagePhase += c.dt * 5
             if (elapsed > c.rng.range(20.0, 60.0)) finished = true
         }
+    }
+
+    /**
+     * Foraging trips over the rock and sand (Clibanarius: active grazers and scavengers that range over the whole
+     * rockwork in a tank): it walks to a spot 12-30 cm away in stop-go steps, picks there a few seconds, walks on, and
+     * after a few legs sits a while with its legs drawn in. It used to "wander" to points round a fixed home that it
+     * mostly could not walk to, standing on the spot or pacing a 5-15 cm patch for days (one just under the water line).
+     */
+    inner class Forage : Behavior("crawl", "Foraging") {
+        private var wp = Vec3.ZERO
+        private var bestD = Double.MAX_VALUE
+        private var progressAt = 0.0
+        /** 0 walking a leg, 1 picking at the end of it, 2 resting. */
+        private var phase = 0
+        private var phaseUntil = 0.0
+        private var legs = 0
+        override val label: String get() = if (phase == 2) "Resting" else "Foraging"
+        override fun score(c: Ctx) = 0.35
+        override fun enter(c: Ctx) { phase = 0; legs = 0; newLeg(c) }
+        private fun newLeg(c: Ctx) {
+            phase = 0
+            wp = legTarget(c)
+            bestD = c.o.pos.distanceTo(wp); progressAt = moveElapsed
+        }
+        /** A rock or sand spot [LEG_MIN_CM]..[LEG_MAX_CM] off in a random direction, well under the water line. */
+        private fun legTarget(c: Ctx): Vec3 {
+            val o = c.o
+            var fallback: Vec3? = null
+            for (i in 0 until LEG_TRIES) {
+                val a = c.rng.range(0.0, 2 * kotlin.math.PI)
+                val d = c.rng.range(LEG_MIN_CM, LEG_MAX_CM)
+                val x = (o.pos.x + kotlin.math.cos(a) * d).coerceIn(4.0, c.rock.lengthCm - 4.0)
+                val z = (o.pos.z + kotlin.math.sin(a) * d * 0.6).coerceIn(4.0, c.rock.widthCm - 4.0)
+                // a rock spot near there at any height up to the top band, else the open sand at its foot
+                val probe = Vec3(x, c.rng.range(c.rock.sandTopCm, c.rock.waterLevelCm - TOP_BAND_CM), z)
+                val p = c.rockSurfacePoint(probe, 8.0, minNormalY = LEG_MIN_NORMAL_Y)?.first
+                    ?: Vec3(x, c.sim.sand.surfaceY(x, z), z).takeIf { c.rock.sdf.dist(it.withY(it.y + 3.0)) >= 2.4 }
+                    ?: continue
+                if (p.y > c.rock.waterLevelCm - TOP_BAND_CM || nearTight(c, p)) continue
+                // (off the glass: the rock-glass corners are where the shell hops its seat, CrawlerSeat)
+                if (p.z < GLASS_GAP_CM || p.z > c.rock.widthCm - GLASS_GAP_CM || p.x < GLASS_GAP_CM || p.x > c.rock.lengthCm - GLASS_GAP_CM) continue
+                if (p.distanceTo(o.pos) >= LEG_MIN_CM) return c.rock.clampToWater(p, 1.0)
+                if (fallback == null) fallback = p
+            }
+            return c.rock.clampToWater(fallback ?: o.pos, 1.0)
+        }
+        override fun update(c: Ctx, out: SteerIntent) {
+            val o = c.o
+            out.crawl = true; out.surfaceOffset = surfaceOffset(c)
+            when (phase) {
+                0 -> {
+                    val d = o.pos.distanceTo(wp)
+                    if (d < bestD - 1.0) { bestD = d; progressAt = moveElapsed }
+                    when {
+                        d < ARRIVE_CM -> {
+                            legs++
+                            // a rest after a few legs (sim time, so it lasts as long at any speed), else a short pick
+                            if (legs >= 2 && c.rng.chance(REST_P)) { phase = 2; phaseUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S); legs = 0 }
+                            else { phase = 1; phaseUntil = c.t + c.rng.range(PICK_MIN_S, PICK_MAX_S) }
+                        }
+                        // no closer for a while (a ledge in the way): another spot
+                        moveElapsed - progressAt > STALL_S -> newLeg(c)
+                        else -> { out.target = wp; out.speed = o.cruiseSpeed; out.arriveRadius = 1.0 }
+                    }
+                }
+                1 -> {
+                    if (c.t > nextBite) {
+                        nextBite = c.t + 2
+                        o.hunger = max(0.0, o.hunger - 0.004 * c.events(2.0))
+                        c.sim.addGrazing(c.sim.grazeRemovalPerMin(o) / 15 * c.events(2.0))
+                        o.mouth = 1.0
+                    }
+                    o.appendagePhase += c.dt * 5
+                    if (c.t >= phaseUntil) newLeg(c)
+                }
+                else -> {
+                    out.rest(Rest(o.pos, o.heading, o.up, 0), 1.0)
+                    if (c.t >= phaseUntil) newLeg(c)
+                }
+            }
+        }
+        private var nextBite = 0.0
     }
 
     /** Walks back out of a gap too low for its shell to the last spot with room over its back. */
@@ -919,6 +1006,28 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     companion object {
         /** Seconds a hermit that was wedged walks on before it settles to pick again. */
         const val UNWEDGE_S = 20.0
+        /** Foraging legs: straight-line length (cm), draws per leg, the top band (cm under the water line) it keeps out of [L]. */
+        /** Sim s between rock picks (it forages on in between) [L]. */
+        const val PICK_GAP_S = 120.0
+        /** Behaviour s it walks toward a pick spot before giving it up. */
+        const val PICK_REACH_S = 20.0
+        const val LEG_MIN_CM = 12.0
+        const val LEG_MAX_CM = 30.0
+        const val LEG_TRIES = 12
+        /** Leg ends at least this far off the glass (cm). */
+        const val GLASS_GAP_CM = 7.0
+        /** Leg ends on rock that faces up at least this much (tops and gentle slopes, not walls and undersides) [L]. */
+        const val LEG_MIN_NORMAL_Y = 0.4
+        const val TOP_BAND_CM = 8.0
+        /** Arrival (cm); a leg is given up after this long (behaviour s) without getting 1 cm closer. */
+        const val ARRIVE_CM = 2.5
+        const val STALL_S = 12.0
+        /** Pick at the end of a leg (s), and the rest that follows some trips: chance and length (s, sim time) [L]. */
+        const val PICK_MIN_S = 10.0
+        const val PICK_MAX_S = 30.0
+        const val REST_P = 0.8
+        const val REST_MIN_S = 120.0
+        const val REST_MAX_S = 360.0
         /** Claw threat: another hermit this close shell to shell (cm), a banded shrimp or crab this close [I]. */
         const val THREAT_CM = 1.5
         const val THREAT_BIG_CM = 5.0
@@ -1276,7 +1385,7 @@ class FeatherDusterBrain(c: Ctx) : SpeciesBrain(c) {
                 next = c.t + 1.0
                 val f = c.food.nearest(crown + Vec3(0.0, 1.0, 0.0), 8.0) { !it.settled }
                 if (f != null && c.o.hunger > 0.05) c.bite(f)
-                c.o.hunger = max(0.0, c.o.hunger - 0.8 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) / 60 * (c.sim.water.s.detritus / 0.2).coerceIn(0.3, 1.2))
+                c.o.hunger = max(0.0, c.o.hunger - 0.8 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) / 60 * (c.sim.water.s.detritus / 0.2).coerceIn(0.3, 1.2) * c.events(1.0))
             }
         }
     }
@@ -1480,7 +1589,7 @@ class AstreaBrain(c: Ctx) : SpeciesBrain(c) {
             if (flipped) return 0.99
             // fell from the glass onto the sand: small chance per hour to land upside down
             val onSand = c.o.pos.y < c.rock.sandTopCm + 1.5
-            if (onSand && c.rng.chance(c.dt / 3600 * 0.3)) { flip(c); return 0.99 }
+            if (onSand && c.rng.chance(c.simDt / 3600 * 0.3)) { flip(c); return 0.99 }
             return 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {
@@ -1519,8 +1628,8 @@ class GlassGraze(val b: SpeciesBrain) : Behavior("glassgraze", "Grazing") {
             } else c.rockSurfacePoint(o.pos, 15.0)?.first ?: o.pos
         }
         out.crawl = true; out.target = wp; out.speed = c.o.cruiseSpeed; out.surfaceOffset = surfaceOffset(c)
-        c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) * c.dt / 60)
-        c.o.hunger = max(0.0, c.o.hunger - 1.6 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * c.dt / 60)
+        c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) * c.simDt / 60)
+        c.o.hunger = max(0.0, c.o.hunger - 1.6 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * c.simDt / 60)
         c.o.nutritionGreens = 1.0
     }
 }
@@ -1576,8 +1685,8 @@ class AsterinaBrain(c: Ctx) : SpeciesBrain(c) {
             val step = o.vel.length() * c.dt
             pathCm += step; timeS += c.dt
             if (nearFood) { pathNearFoodCm += step; timeNearFoodS += c.dt }
-            c.sim.addGrazing(c.sim.grazeRemovalPerMin(o) * c.dt / 60)
-            o.hunger = max(0.0, o.hunger - 1.6 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * c.dt / 60)
+            c.sim.addGrazing(c.sim.grazeRemovalPerMin(o) * c.simDt / 60)
+            o.hunger = max(0.0, o.hunger - 1.6 * com.reeflive.core.sim.HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * c.simDt / 60)
             o.nutritionGreens = 1.0
         }
     }
@@ -1915,8 +2024,8 @@ class SallyCrabBrain(c: Ctx) : SpeciesBrain(c) {
             out.crawl = true; out.sideways = true; out.surfaceOffset = surfaceOffset(c); out.allowGlass = true
             if (c.t > next) {
                 next = c.t + 2
-                c.o.hunger = max(0.0, c.o.hunger - 0.004)
-                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15)
+                c.o.hunger = max(0.0, c.o.hunger - 0.004 * c.events(2.0))
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 15 * c.events(2.0))
                 c.o.mouth = 1.0
                 // shuffles a step or two sideways along the patch between bites
                 val shuffle = s.first + (c.o.heading cross c.o.up).normalized(Vec3.Z) * (c.rng.signed() * 1.2)

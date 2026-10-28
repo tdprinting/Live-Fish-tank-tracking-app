@@ -282,6 +282,17 @@ class Organism(
         else -> ""
     }
 
+    /**
+     * What the card and the follow caption show: [behaviorName] with a minimum dwell ([com.reeflive.core.ai.UtilityBrain.shownLabel]),
+     * so a sub-second phase or a quick back-and-forth between two behaviours does not flicker on screen.
+     */
+    val displayLabel: String get() = when {
+        !alive -> "Dead"
+        heat.stage >= HeatModel.Stage.LETHARGIC -> HeatModel.label(this)
+        ::brain.isInitialized -> brain.shownLabel.ifEmpty { brain.currentLabel }
+        else -> ""
+    }
+
     val massG: Double get() = ChemFns.massGrams(lengthCm, species.massCoeff)
     val isFish: Boolean get() = brainKind.isFish
     /**
@@ -389,14 +400,14 @@ class Organism(
     }
 
     fun stats(
-        caption: String = behaviorName,
-        intent: String = behaviorName.replaceFirstChar { it.lowercase() },
+        caption: String = displayLabel,
+        intent: String = displayLabel.replaceFirstChar { it.lowercase() },
         intentTargetId: String? = focusId,
         relations: List<RelationInfo> = emptyList(),
         thought: Thought = Thought.NONE,
     ): OrganismStats = OrganismStats(
         id, nickname, species.id, species.common, health.toFloat(), hunger.toFloat(), stress.toFloat(), mood,
-        behaviorName, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
+        displayLabel, symptoms.toList(), disease, diseaseStage.toFloat(), alive, lengthCm.toFloat(), temperamentTags(),
         caption = caption, focusId = focusId, envStress = envStress.toMap(), cause = deathCause,
         intent = intent, intentTargetId = intentTargetId, relations = relations, waryOfId = wary?.id,
         sex = sexLabel(), mouthbrooding = mouthbrooding,

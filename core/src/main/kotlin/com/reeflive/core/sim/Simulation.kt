@@ -782,6 +782,8 @@ class Simulation private constructor(
         // Gate on the behavior step, not the sim step: stepWall at 60x/240x advances 3-12 sim s per wall tick with a
         // 0.5 s behavior step (SIMULATION §1.2). Gating on simDt parked every animal at its home spot above 20x.
         val useBehavior = behaviorEnabled && dtB <= MAX_BEHAVIOR_DT + 1e-9
+        // (one behaviour step stands for all of simDt in fast-forward: Ctx.simDt, behaviorWarp)
+        behaviorWarp = if (dtB > 0) max(1.0, simDt / dtB) else 1.0
         if (useBehavior) behaviorTick(dtB) else abstractPlacement(min(dtB, MAX_BEHAVIOR_DT))
         bags.keepClear(this)
         net.keepClear(this)
@@ -932,6 +934,14 @@ class Simulation private constructor(
         p.night = i < LightSchedule.LIGHTS_ON
     }
 
+    /**
+     * Sim seconds one behaviour step stands for, over the step itself (1 up to 10x; 6 at 60x, 24 at 240x: stepWall caps
+     * the behaviour step at [MAX_BEHAVIOR_DT]). Behaviour durations run on sim time ([Ctx.simDt]) and foraging counts
+     * for the sim time a step stands for ([Ctx.forage]), so hunger and time budgets come out the same at every speed;
+     * keeper food is eaten as expected intake ([abstractFeed]) meanwhile, its particles only drawn ([feed]).
+     */
+    var behaviorWarp = 1.0; private set
+
     private fun behaviorTick(dt: Double) {
         perception.rebuild()
         if (abstractMode) { worms.clear(); abstractPlacement(dt); return }
@@ -943,6 +953,7 @@ class Simulation private constructor(
             val a = agents[o] ?: continue
             a.ctx.p = perception
             a.ctx.dt = dt
+            a.ctx.simDt = dt * behaviorWarp
             if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
             // a leap at the surface flies the body; the brain waits until it is back in the water (JumpModel)
             if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
@@ -1002,7 +1013,7 @@ class Simulation private constructor(
         perception.rebuild()
         for (o in organisms) {
             val a = agents[o] ?: continue
-            a.ctx.p = perception; a.ctx.dt = dt
+            a.ctx.p = perception; a.ctx.dt = dt; a.ctx.simDt = dt
             if (!o.alive) { o.limbRig?.unseat(o); if (!o.netted) deadPhysics(o, dt); continue }
             if (o.leap != null) { if (JumpModel.step(this, o, dt)) jumpedOut(o); continue }
             a.intent.reset()
@@ -1948,15 +1959,26 @@ class Simulation private constructor(
         // every animal that eats this food learns the time, the place and the keeper (ai/Mind.kt, realism_gaps X3)
         for (a in agents.values) a.brain.mind.onKeeperFeed(simTimeSec, at, a.ctx.o.species.dietMatch(kind) > 0 || kind == FoodKind.NORI && a.ctx.o.species.grazer)
         if (!behaviorEnabled || abstractMode) { abstractFeed(kind, grams, at); return }
-        food.spawn(kind, grams, at, simTimeSec)
+        // fast-forward (one behaviour step for several sim s): the animals cannot get through a feed in the sim time
+        // its particles last, so it is eaten as expected intake and the particles are only drawn and chased. Nori
+        // stays a sheet: its bites count for the sim time a step stands for (NibbleNori).
+        val warped = behaviorWarp > 1.0 && kind != FoodKind.NORI
+        if (warped) abstractFeed(kind, grams, at, warped = true)
+        food.spawn(kind, grams, at, simTimeSec, nutritive = !warped)
         for (a in agents.values) a.brain.onFood(a.ctx, kind, at)
     }
 
-    /** Feeding without particles (abstract mode): diet-matched animals eat in priority order. */
-    private fun abstractFeed(kind: FoodKind, grams: Double, at: Vec3) {
+    /**
+     * Feeding without particles (abstract mode): diet-matched animals eat in priority order. [warped] (fast-forward with
+     * the behaviour layer on): only the animals that get to a feed in the water at normal speed, the fish, the cleaner
+     * shrimp and a duster (snails, hermits, stars, crabs and the ledge-bound banded shrimp rarely do at normal speed); the
+     * leftover goes to detritus.
+     */
+    private fun abstractFeed(kind: FoodKind, grams: Double, at: Vec3, warped: Boolean = false) {
         var left = if (kind == FoodKind.NORI) 1.0 else grams
         val eaters = organisms.filter { o ->
             o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
+                (!warped || o.isFish || o.brainKind == BrainKind.CLEANER_SHRIMP || o.brainKind == BrainKind.FEATHER_DUSTER) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
                 !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
         }.map { it to (it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind))) }
@@ -1972,7 +1994,7 @@ class Simulation private constructor(
         }
         if (left > 0 && kind != FoodKind.NORI) {
             // scavengers clean up most leftovers; the rest becomes detritus
-            val scav = organisms.filter { it.alive && it.brainKind in SCAVENGERS }
+            val scav = organisms.filter { it.alive && it.brainKind in SCAVENGERS && !warped }
             for (s in scav) { val g = min(left * 0.5, s.mealGrams); s.eat(g); left -= g }
             leftoverAcc += left
             // the bristleworms come out for what reaches the rock and sand (research 42)

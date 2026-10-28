@@ -336,8 +336,12 @@ class Dock {
 
 /**
  * Nervous or scared (after a startle, a threat, high fear or stress): tucks under the nearest overhang away from the
- * scare, rolled ~35° with its back to the rock and a little pale, and stays put for 1-4 min, now and then easing its
- * head out to look before tucking back in. It comes out once its fear has eased.
+ * scare, rolled ~35° with its back to the rock and a little pale, and stays put for about half a minute to a few
+ * minutes (longer the more stressed and skittish it is), now and then easing its head out to look before tucking back
+ * in. It comes out once that time is up and nothing has scared it for half a minute: fear itself fades over tens of
+ * minutes (Mood), and waiting for it kept the tang under the rock for ~10 min after one territorial charge. After a
+ * hide it does not go back in on that same old fear; only a new scare or real stress sends it in again. At lights-out
+ * it comes out to go to its bed (TangSleep).
  */
 class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock") {
     private var pose: TangShelters.Pose? = null
@@ -355,12 +359,11 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
     override fun score(c: Ctx): Double {
         val o = c.o
         if (c.p.night || c.t < retryAt) return 0.0
-        val n0 = nervous(c)
-        // came out after this scare and has calmed down: stays out until something new scares it
-        if (doneAfter >= b.scaredAt && n0 < NERVOUS) return 0.0
+        val n = nervous(c)
         val sinceScare = c.t - b.scaredAt
-        val n = n0
         val scared = sinceScare < SCARE_WINDOW_S * (0.5 + o.skittishness)
+        // came out after this scare: back in only for a new scare, or for real stress once a while has passed
+        if (doneAfter >= b.scaredAt && !(o.stress >= STRESSED && c.t - doneAfter > REHIDE_S)) return 0.0
         if (!scared && n < NERVOUS) return 0.0
         return (0.62 + 0.3 * max(n, if (scared) 0.5 else 0.0)).coerceAtMost(0.9)
     }
@@ -368,11 +371,12 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
     override fun enter(c: Ctx) {
         val o = c.o
         pose = b.shelters.pick(o.pos, b.scareFrom.takeIf { c.t - b.scaredAt < 60 }, o.lengthCm, HIDE_ROLL)
-        hold = c.rng.range(60.0, 240.0) * (0.5 + o.skittishness)
+        // (one draw, as before: the brain's random sequence is unchanged)
+        hold = holdFor(c.rng.range(0.0, 1.0), o.skittishness, nervous(c))
         peekAt = c.t + c.rng.range(8.0, 20.0)
         peekUntil = -1.0
         dock.reset(); leaving = false
-        if (pose == null) { finished = true; retryAt = c.t + 20 }
+        if (pose == null) { finished = true; retryAt = c.t + RETRY_S }
     }
 
     override fun update(c: Ctx, out: SteerIntent) {
@@ -384,7 +388,9 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
             return
         }
         if (!dock.drive(c, out, p, o.burstSpeed * 0.5)) {
-            if (elapsed > 60 && !dock.home) finished = true
+            if (moveElapsed > 60 && !dock.home) finished = true
+            // lights out before it got in: it goes to bed instead
+            if (c.p.night && !dock.inside) { finished = true; doneAfter = c.t }
             return
         }
         // a peek: the head eases out from under the rock along the cleared path, then back in
@@ -396,7 +402,10 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
         }
         out.place(at, p.heading, p.up, 2.0)
         out.pectoral = 0.5; out.ampMul = 0.3
-        if (elapsed > hold && nervous(c) < CALM && c.t - b.scaredAt > 30) leaving = true
+        // out once the hold is up and nothing new has scared it for a while (a predator still close keeps it in), at
+        // lights-out (to its bed), or after the longest hide whatever its mood
+        val quiet = c.t - b.scaredAt > QUIET_S && b.threat == null
+        if (elapsed > hold && quiet || c.p.night || elapsed > HIDE_MAX_S && b.threat == null) leaving = true
     }
 
     /** Keeps the glide out from being cut short by whatever it wants to do next. */
@@ -407,6 +416,9 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
 
     /** Where it is hiding (tests), null when not. */
     val hidePose: TangShelters.Pose? get() = pose
+
+    /** The hold of the current or last hide (sim s; tests). */
+    val holdS: Double get() = hold
     override fun exit(c: Ctx) {
         pose = null
     }
@@ -414,11 +426,25 @@ class TangHide(val b: TangBrain) : Behavior("tanghide", "Hiding under the rock")
     companion object {
         /** Seconds after a scare that it wants to hide (scaled by skittishness 0.5-1.5×) [L]. */
         const val SCARE_WINDOW_S = 150.0
-        /** Fear or stress at which it hides without a fresh scare, and below which it comes out [L]. */
+        /** Fear or stress at which it hides without a fresh scare [L]. */
         const val NERVOUS = 0.35
-        const val CALM = 0.25
+        /** Stress (not fear) that sends it back under the rock after a hide, at most every [REHIDE_S] [L]. */
+        const val STRESSED = 0.5
+        const val REHIDE_S = 600.0
+        /** Hold under the rock: [HOLD_MIN_S]..[HOLD_MAX_S] × (0.5 + skittishness) × (0.6 + nervousness), at most [HIDE_MAX_S] (sim s) [L]. */
+        const val HOLD_MIN_S = 30.0
+        const val HOLD_MAX_S = 120.0
+        const val HIDE_MAX_S = 300.0
+        /** Seconds without a new scare before it comes out. */
+        const val QUIET_S = 30.0
+        /** No shelter fits from here: look again after this long (s). */
+        const val RETRY_S = 60.0
         /** Roll while hiding (rad, ~35°): half way to the night side-rest [L]. */
         const val HIDE_ROLL = 0.6
+
+        /** The hold for a uniform draw [u], the tang's [skittish]ness and [nervous]ness (fear or stress, 0..1). */
+        fun holdFor(u: Double, skittish: Double, nervous: Double): Double =
+            ((HOLD_MIN_S + (HOLD_MAX_S - HOLD_MIN_S) * u) * (0.5 + skittish) * (0.6 + nervous.coerceIn(0.0, 1.0))).coerceAtMost(HIDE_MAX_S)
     }
 }
 
@@ -440,7 +466,8 @@ class TangRub(val b: TangBrain) : Behavior("tangrub", "Rubbing on the rock") {
 
     override fun score(c: Ctx): Double {
         val o = c.o
-        if (b.utility.current === this) return 0.75
+        // (once the rub is over it waits for the next one: a finished rub scored on and was entered again at once)
+        if (b.utility.current === this) return if (finished) 0.0 else 0.75
         if (nextAt < 0) nextAt = c.t + c.rng.range(RUB_MIN_S, RUB_MAX_S)
         if (c.t < nextAt || c.activity < 0.6) return 0.0
         if (o.disease != null || o.health < 0.7 || b.mind.mood.fear > 0.2 || o.stress > 0.3 || o.hunger > 0.6) return 0.0
@@ -473,7 +500,7 @@ class TangRub(val b: TangBrain) : Behavior("tangrub", "Rubbing on the rock") {
         val e = end ?: run { finished = true; return }
         if (slideAt < 0) {
             if (dockIn.drive(c, out, a, o.burstSpeed * 0.6, rate = 8.0)) slideAt = c.t
-            else if (elapsed > 15 && !dockIn.inside) finished = true
+            else if (moveElapsed > 15 && !dockIn.inside) finished = true
             return
         }
         val since = c.t - slideAt
@@ -502,18 +529,25 @@ class TangRub(val b: TangBrain) : Behavior("tangrub", "Rubbing on the rock") {
 }
 
 /**
- * Play: a sudden dash at near burst speed across the length of the tank along the open front lane, sometimes straight
- * back again (Tee: "race across the tank really fast"). Calm, healthy tangs only, by day, every ~6-20 min [L].
+ * Play: a sudden dash at near burst speed across the length of the tank along the open front lane, sometimes back
+ * again after a wide turn (Tee: "race across the tank really fast"). Calm, healthy tangs only, by day, every ~6-20 min
+ * [L]. One dash is one run (or one there-and-back): once it is over the score is 0 until the next is due, so the brain
+ * never re-enters it (it used to: the dash started again at once from the far wall and the tang shuttled wall to wall
+ * for minutes, stopping dead and snapping round at each end).
  */
 class TangZoom(val b: TangBrain) : Behavior("tangzoom", "Racing across the tank") {
     /** Sim time of the next dash (tests may bring it forward). */
     internal var nextAt = -1.0
     private var wp = Vec3.ZERO
     private var legs = 1
+    private var twoLegs = false
+    /** Swinging round in a wide arc between the two legs (a there-and-back dash), not a stop and a snap turn. */
+    private var turning = false
+    private var turnAt = Vec3.ZERO
 
     override fun score(c: Ctx): Double {
         val o = c.o
-        if (b.utility.current === this) return 0.75
+        if (b.utility.current === this) return if (finished) 0.0 else 0.75
         if (nextAt < 0) nextAt = c.t + c.rng.range(ZOOM_MIN_S, ZOOM_MAX_S)
         if (c.t < nextAt || c.activity < 0.6) return 0.0
         if (o.disease != null || o.health < 0.7 || b.mind.mood.fear > 0.3 || o.hunger > 0.7) return 0.0
@@ -523,6 +557,8 @@ class TangZoom(val b: TangBrain) : Behavior("tangzoom", "Racing across the tank"
     override fun enter(c: Ctx) {
         nextAt = c.t + c.rng.range(ZOOM_MIN_S, ZOOM_MAX_S)
         legs = if (c.rng.chance(0.3)) 2 else 1
+        twoLegs = legs > 1
+        turning = false
         pick(c)
     }
 
@@ -535,12 +571,23 @@ class TangZoom(val b: TangBrain) : Behavior("tangzoom", "Racing across the tank"
 
     override fun update(c: Ctx, out: SteerIntent) {
         val o = c.o
-        out.seek(c.viaOpenWater(wp), o.burstSpeed * 0.9, arrive = 3.0, urgency = 0.9)
-        out.tailMul = 1.5
-        if (o.pos.distanceTo(wp) < 2 * c.L) {
-            if (--legs > 0) pick(c) else { finished = true; zooms++ }
+        if (turning) {
+            // the U-turn: a cruise-speed swing toward the back and in toward the middle, then the dash back
+            out.seek(c.viaOpenWater(turnAt), o.cruiseSpeed * 1.2, arrive = 3.0, urgency = 0.4)
+            if (o.pos.distanceTo(turnAt) < 1.5 * c.L || moveElapsed > TURN_GIVE_UP_S) { turning = false; pick(c) }
+        } else {
+            out.seek(c.viaOpenWater(wp), o.burstSpeed * 0.9, arrive = 3.0, urgency = 0.9)
+            out.tailMul = 1.5
+            if (o.pos.distanceTo(wp) < 2 * c.L) {
+                if (--legs > 0) {
+                    val r = c.rock
+                    val inward = if (o.pos.x < r.lengthCm / 2) 1.0 else -1.0
+                    turning = true
+                    turnAt = c.safe(Vec3(o.pos.x + inward * TURN_IN_CM, o.pos.y, r.widthCm * c.rng.range(0.3, 0.42)))
+                } else { finished = true; zooms++ }
+            }
         }
-        if (elapsed > 8) finished = true
+        if (elapsed > (if (twoLegs) 2 * DASH_S else DASH_S)) finished = true
     }
 
     /** Dashes so far (tests). */
@@ -549,5 +596,10 @@ class TangZoom(val b: TangBrain) : Behavior("tangzoom", "Racing across the tank"
     companion object {
         const val ZOOM_MIN_S = 360.0
         const val ZOOM_MAX_S = 1200.0
+        /** Longest dash (s, sim time), one leg. */
+        const val DASH_S = 8.0
+        /** The swing between the legs: this far back in from the far wall (cm); given up after this many s. */
+        const val TURN_IN_CM = 18.0
+        const val TURN_GIVE_UP_S = 5.0
     }
 }

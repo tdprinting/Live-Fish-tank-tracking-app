@@ -363,15 +363,18 @@ class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0, private val quie
                 // comb-toothed rasping: 4–8 quick small bites, then a look round (research 10 §6 rasping bites)
                 if (boutLeft <= 0) boutLeft = 4 + c.rng.nextInt(5)
                 boutLeft--
-                n.bite(o.pos, at, share * 0.45, Vec3.ZERO, down)
+                // (fast-forward: the bites of the sim time one step stands for, c.events)
+                val k = c.events(RASP_MEAN_S)
+                n.bite(o.pos, at, share * 0.45 * k, Vec3.ZERO, down)
                 nextBite = c.t + if (boutLeft > 0) 0.35 else c.rng.range(1.8, 3.5)
-                o.hunger = max(0.0, o.hunger - 0.012)
+                o.hunger = max(0.0, o.hunger - 0.012 * k)
             } else {
                 // a mouthful, then the head shake that tears it off: the bitten edge is pulled downstream
-                n.bite(o.pos, at, share, down * (6.0 + 0.6 * c.L), down)
+                val k = c.events(1.5)
+                n.bite(o.pos, at, share * k, down * (6.0 + 0.6 * c.L), down)
                 tugUntil = c.t + 0.35
                 nextBite = c.t + c.rng.range(1.1, 1.9)
-                o.hunger = max(0.0, o.hunger - 0.025)
+                o.hunger = max(0.0, o.hunger - 0.025 * k)
             }
             o.nutritionGreens = 1.0
             o.mouth = 1.0
@@ -383,6 +386,8 @@ class NibbleNori(val b: SpeciesBrain, val weight: Double = 1.0, private val quie
     companion object {
         /** Share of a whole sheet one bite of an 8 cm fish takes (scales with length). */
         const val NORI_BITE = 0.004
+        /** Mean gap between rasping bites over a bout and its pause (s). */
+        const val RASP_MEAN_S = 0.8
         /** Seconds without getting closer before it gives up for a while, and how long that while is. */
         const val STUCK_S = 8.0
         const val GIVE_UP_S = 60.0
@@ -418,14 +423,15 @@ open class Graze(val b: SpeciesBrain, val weight: Double = 1.0, label: String = 
         if (c.o.pos.distanceTo(stand) < 2.5) {
             if (c.t > nextRasp) {
                 nextRasp = c.t + 1.5
-                c.o.hunger = max(0.0, c.o.hunger - 0.01)
+                val k = c.events(1.5)
+                c.o.hunger = max(0.0, c.o.hunger - 0.01 * k)
                 c.o.nutritionGreens = 1.0
-                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 20)
+                c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) / 20 * k)
                 c.o.mouth = 1.0
             }
             out.pitchBias = 0.17 * sin(2 * PI * (c.t - nextRasp) / 1.5)
         }
-        if (elapsed > dur) finished = true
+        if (over(dur)) finished = true
     }
 }
 
@@ -713,10 +719,11 @@ class WormSnap(val b: SpeciesBrain, val radius: Double, val chance: Double, val 
         val at = ww.head + ww.normal * (0.25 * c.L)
         out.seek(at, c.o.burstSpeed * 0.8, arrive = 0.4, urgency = 0.8)
         if (c.o.pos.distanceTo(at) < 1.0 + 0.15 * c.L) {
-            if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G); c.o.mouth = 1.0 }
+            // (worms come and go on the behaviour step: in fast-forward one catch stands for c.warp of them)
+            if (c.rng.chance(chance) && c.sim.worms.catch(ww, c.o)) { caught++; c.o.eat(WORM_SNAP_G * c.warp); c.o.mouth = 1.0 }
             w = null; finished = true
         }
-        if (elapsed > 5) { skip = ww.key; skipUntil = c.t + SKIP_S; w = null; finished = true }
+        if (moveElapsed > 5) { skip = ww.key; skipUntil = c.t + SKIP_S; w = null; finished = true }
     }
     companion object { const val WORM_SNAP_G = 0.05; const val SKIP_S = 90.0 }
 }

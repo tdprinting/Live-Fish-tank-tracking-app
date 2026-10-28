@@ -225,7 +225,7 @@ class SexyShrimpBrain(c: Ctx) : SpeciesBrain(c) {
             c.o.mouth = 0.5 + 0.4 * sin(2 * PI * 2.0 * c.t)
             wag(c, false)
             // the host's mucus and the plankton caught on it: about a third of its needs while it picks [E]
-            c.o.hunger = max(0.0, c.o.hunger - HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * 20.0 * c.dt / 60.0)
+            c.o.hunger = max(0.0, c.o.hunger - HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * 20.0 * c.simDt / 60.0)
             if (elapsed > c.rng.range(8.0, 20.0)) { mucusPicks++; next = c.t + c.rng.range(120.0, 600.0); finished = true }
         }
     }

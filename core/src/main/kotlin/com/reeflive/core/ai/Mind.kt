@@ -234,7 +234,7 @@ class Mind(val o: Organism) {
 
     /** Called from [SpeciesBrain.preTick]: mood decay every tick, clock and memory upkeep once a minute. */
     fun tick(c: Ctx) {
-        mood.decay(c.dt)
+        mood.decay(c.simDt)   // (sim time: fear fades as fast at 240x as at 1x)
         // a tactile session with a cleaner (the dance sets aggressionDampUntil) calms the client (SOA11, Ctenochaetus analogy)
         if (o.aggressionDampUntil > lastDamp + 1.0) {
             mood.fear *= TACTILE_CALM; mood.arousal *= TACTILE_CALM

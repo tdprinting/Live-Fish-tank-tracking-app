@@ -26,8 +26,10 @@ object Caption {
     fun describe(o: Organism, sim: Simulation): Described {
         val name = o.species.common.ifBlank { o.nickname }
         if (!o.alive) return Described("$name (dead)", "dead", null)
-        val b = runCatching { o.brain.current }.getOrNull()
-        val label = b?.label ?: o.behaviorName
+        // the label on screen (held for a minimum dwell, Organism.displayLabel): the caption says the same thing as the
+        // card, and names a target only while that label is the live behaviour's own
+        val label = o.displayLabel
+        val b = runCatching { o.brain.current }.getOrNull()?.takeIf { it.label == label }
         val lower = label.replaceFirstChar { it.lowercase() }
         val verb = b?.targetVerb ?: VERBS[b?.name]
         if (verb != null) {
