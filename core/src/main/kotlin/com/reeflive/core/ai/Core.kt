@@ -53,6 +53,8 @@ class SteerIntent {
     var armGait = 0
     /** Spline override polyline (den / hole). */
     var splineOverride: List<Vec3>? = null
+    /** Show [splineOverride] at once (it eases itself out of the shape shown: BodySpline.overrideSnap). */
+    var splineSnap = false
     var posture = 0
     var ignoreRock = false
     /**
@@ -65,7 +67,7 @@ class SteerIntent {
         target = null; speed = 0.0; arriveRadius = 2.0; urgency = 0.0; faceDir = null; hover = false; wander = 0.0
         fleeFrom = null; allowGlass = false; separation = 1.0; waddleAmp = 0.0; waddleHz = 1.3; pitchBias = 0.0
         rollExtra = 0.0; ampMul = 1.0; pectoral = null; tailMul = 1.0; kinematic = false; kinPos = null; kinHeading = null
-        kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; armGait = 0; splineOverride = null
+        kinUp = null; kinRate = 6.0; upOverride = null; crawl = false; surfaceOffset = 0.5; sideways = false; armGait = 0; splineOverride = null; splineSnap = false
         posture = 0; ignoreRock = false; maxPitch = null
     }
 

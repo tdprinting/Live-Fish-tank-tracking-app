@@ -68,26 +68,59 @@ void main() {
     // symptoms
     if (uIchSpots > 0.001 && uPart < 1.5) albedo = mix(albedo, vec3(0.92), ichMask(vUv) * min(uIchSpots * 3.0, 1.0));
     // Disease skin signs, each skipped at 0 (one uniform test): research 01 §4.3, 18 §5.4.
-    float velvetSheen = 0.0;
+    // Each sign is drawn at a scale that reads at a normal viewing distance (a fish ~150-300 px long) and keeps a mean
+    // that stays visible once its detail is smaller than a pixel (fwidth fade), so it neither vanishes nor sparkles.
+    float velvetDust = 0.0;
     if (uSkin.x > 0.001 && uPart < 1.5) {
-        // velvet: a fine gold-yellow dust, denser with the infection; sub-pixel dust fades to its mean so it never sparkles
-        vec2 g = vUv * 260.0;
-        float dust = step(1.0 - 0.55 * uSkin.x, hash12(floor(g)));
-        dust = mix(dust, 0.55 * uSkin.x, smoothstep(0.4, 1.0, max(fwidth(g.x), fwidth(g.y))));
-        albedo = mix(albedo, vec3(0.80, 0.62, 0.22), uSkin.x * (0.18 + 0.5 * dust));
-        velvetSheen = uSkin.x;
+        // velvet (Amyloodinium): the fish looks dusted with fine gold-yellow powder, densest on the upper body, and its
+        // own colours go dull under it. Round specks in a ~110-cell grid, more of them as the infection grows.
+        float v = clamp(uSkin.x, 0.0, 1.0);
+        vec2 g = vUv * vec2(110.0, 62.0);
+        vec2 cell = floor(g);
+        float cover = 0.3 + 0.45 * v;
+        float on = step(1.0 - cover, hash12(cell + 1.7));
+        float d = length(fract(g) - (vec2(hash12(cell + 6.1), hash12(cell + 2.9)) * 0.5 + 0.25));
+        float speck = on * (1.0 - smoothstep(0.16, 0.3, d));
+        // sub-pixel specks fade to their mean coverage (a gold veil) instead of shimmering
+        speck = mix(speck, cover * 0.2, smoothstep(0.35, 0.9, max(fwidth(g.x), fwidth(g.y))));
+        float lumA = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        // a dull, dusty film: colour drains toward a pale khaki, then the gold specks sit on top
+        albedo = mix(albedo, vec3(lumA) * 0.55 + vec3(0.52, 0.46, 0.3) * 0.45, v * 0.38);
+        albedo = mix(albedo, vec3(0.98, 0.82, 0.38), clamp(speck * (0.55 + 0.45 * v), 0.0, 1.0));
+        velvetDust = v * (0.35 + speck);
     }
     if (uSkin.z > 0.001 && uPart < 0.5 && uChroma.w < 0.5) {
-        // HLLE: shallow pale-rimmed pits on the head and along the lateral line (site mask from fish.vert in vColor.r)
-        vec2 g = vUv * vec2(60.0, 34.0);
+        // HLLE: pale eroded skin on the head and along the lateral line (site mask from fish.vert in vColor.r), pocked
+        // with dark-centred pits that run together into lesions as the erosion advances
+        float z = clamp(uSkin.z, 0.0, 1.0);
+        float site = clamp(vColor.r, 0.0, 1.0);
+        float erode = site * smoothstep(0.62 - 0.45 * z, 0.9 - 0.3 * z, vnoise2(vUv * vec2(26.0, 14.0) + 3.3));
+        vec2 g = vUv * vec2(36.0, 20.0);
         vec2 cell = floor(g);
-        float on = step(1.0 - uSkin.z * clamp(vColor.r, 0.0, 1.0), hash12(cell + 2.7));
+        float on = step(1.0 - (0.35 + 0.55 * z) * site, hash12(cell + 2.7));
         float d = length(fract(g) - (vec2(hash12(cell + 5.1), hash12(cell + 9.3)) * 0.4 + 0.3));
-        float r = mix(0.22, 0.4, hash12(cell + 3.3));
-        float pit = on * (1.0 - smoothstep(r * 0.55, r, d));
-        float rim = on * smoothstep(r * 0.55, r, d) * (1.0 - smoothstep(r, r * 1.35, d));
-        albedo = mix(albedo, vec3(0.5, 0.45, 0.4) * dot(albedo, vec3(0.33)) + 0.03, pit * 0.8);
-        albedo = mix(albedo, vec3(0.8, 0.78, 0.72), rim * 0.45);
+        float r = mix(0.24, 0.42, hash12(cell + 3.3)) * (0.8 + 0.3 * z);
+        float pit = on * (1.0 - smoothstep(r * 0.5, r, d));
+        float rim = on * smoothstep(r * 0.5, r, d) * (1.0 - smoothstep(r, r * 1.4, d));
+        // pits smaller than a pixel melt into their mean darkening
+        float far = smoothstep(0.35, 0.9, max(fwidth(g.x), fwidth(g.y)));
+        pit = mix(pit, on * 0.35 * r, far); rim = mix(rim, on * 0.3 * r, far);
+        vec3 raw = vec3(0.74, 0.7, 0.62);   // exposed, pigment-less tissue
+        albedo = mix(albedo, raw, clamp(erode * (0.45 + 0.4 * z) + rim * 0.7, 0.0, 0.9));
+        albedo = mix(albedo, vec3(0.16, 0.12, 0.1), pit * (0.6 + 0.3 * z));
+    }
+    float mucusSheet = 0.0;
+    if (uSkin.w > 0.001 && uPart < 1.5) {
+        // Brooklynella: thick greyish-white mucus that sloughs off in sheets and strands; the skin under it greys out
+        float m = clamp(uSkin.w, 0.0, 1.0);
+        float blot = vnoise2(vUv * vec2(7.0, 4.0) + 1.3) * 0.65 + vnoise2(vUv * vec2(24.0, 9.0) + 7.7) * 0.35;
+        // strands peeling back along the body (stretched noise), faded once finer than a pixel
+        float strand = vnoise2(vUv * vec2(5.0, 40.0) + 2.1);
+        strand = mix(strand, 0.5, smoothstep(0.4, 1.0, fwidth(vUv.y * 40.0)));
+        mucusSheet = clamp(smoothstep(0.62 - 0.35 * m, 0.85 - 0.2 * m, blot) + 0.35 * smoothstep(0.6, 0.85, strand) * m, 0.0, 1.0);
+        float lumM = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        albedo = mix(albedo, vec3(lumM) * 0.7 + vec3(0.25), m * 0.35);
+        albedo = mix(albedo, vec3(0.86, 0.88, 0.87), mucusSheet * (0.35 + 0.4 * m));
     }
     float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     // negative = more saturated (a displaying male fairy wrasse)
@@ -173,11 +206,16 @@ void main() {
     if (uSkin.y > 0.001) {
         // bacterial fin rot: the membrane is eaten back from the edge in ragged notches (hinge vColor.b: 0 base .. 1
         // edge) with a whitish necrotic margin; a severe case loses about half the fin
-        float rag = 0.7 * vnoise2(vUv * vec2(30.0, 11.0) + 4.1) + 0.3 * vnoise2(vUv * vec2(120.0, 45.0));
+        // (the fine octave fades out once it is finer than a pixel, and the cut is antialiased over one pixel of the
+        // hinge coordinate: a hard step on the ragged edge read as a hatch / moiré up close and as crawling far off)
+        vec2 gf = vUv * vec2(120.0, 45.0);
+        float fine = mix(vnoise2(gf), 0.5, smoothstep(0.3, 0.8, max(fwidth(gf.x), fwidth(gf.y))));
+        float rag = 0.7 * vnoise2(vUv * vec2(30.0, 11.0) + 4.1) + 0.3 * fine;
         float edge = 1.0 - uSkin.y * (0.18 + 0.4 * rag);
         float h = clamp(vColor.b, 0.0, 1.0);
-        alpha *= 1.0 - step(edge, h);
-        col = mix(col, vec3(0.75, 0.72, 0.66) * lightIntensity(), uSkin.y * 0.7 * smoothstep(edge - 0.12, edge, h));
+        float aa = max(fwidth(h - edge), 1e-4);
+        alpha *= 1.0 - smoothstep(edge - aa, edge + aa, h);
+        col = mix(col, vec3(0.75, 0.72, 0.66) * lightIntensity(), uSkin.y * 0.7 * smoothstep(edge - 0.12 - aa, edge, h));
     }
     if (alpha < 0.03) discard;
 #else
@@ -207,12 +245,14 @@ void main() {
     col += vec3(0.35, 0.62, 0.95) * sqGlow * 0.06 * (0.3 + 0.7 * smoothstep(0.0, -0.7, N.y));
 #endif
     if (uSkin.w > 0.001 && uPart < 1.5) {
-        // Brooklynella: a whitish mucus film in soft sheets, thickest where it catches the light at a glancing angle
-        float sheet = smoothstep(0.3, 0.75, vnoise2(vUv * vec2(9.0, 5.0)) * 0.6 + 0.4 * (1.0 - ndv));
-        col = mix(col, vec3(0.78, 0.8, 0.8) * (0.25 + 0.75 * lightIntensity()), uSkin.w * (0.12 + 0.28 * sheet));
+        // Brooklynella: the mucus is a translucent milky film over the lit skin, thickest in the sloughing sheets and
+        // where it is seen at a glancing angle; it scatters light, so it stays visible in the shade
+        float m = clamp(uSkin.w, 0.0, 1.0);
+        float film = m * (0.18 + 0.35 * mucusSheet + 0.25 * pow(1.0 - ndv, 2.0));
+        col = mix(col, vec3(0.8, 0.83, 0.83) * (0.3 + 0.7 * lightIntensity()), clamp(film, 0.0, 0.7));
     }
-    // velvet's dusty sheen: the gold catches the light toward the silhouette
-    if (velvetSheen > 0.001) col += vec3(0.5, 0.36, 0.08) * velvetSheen * 0.22 * pow(1.0 - ndv, 1.5) * lightIntensity();
+    // velvet's dusty sheen: the gold dust catches the light, most toward the silhouette
+    if (velvetDust > 0.001) col += vec3(0.55, 0.42, 0.12) * velvetDust * (0.12 + 0.35 * pow(1.0 - ndv, 1.5)) * lightIntensity();
     col = applyWater(col, vWorld);
     // distant microfauna sink into the water colour, so specks melt away instead of popping out
     col = mix(col, uFog.rgb, uFade * 0.85);

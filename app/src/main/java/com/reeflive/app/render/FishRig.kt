@@ -19,7 +19,7 @@ class FishRig(val id: String) {
     val spine = FloatArray(64)
     /** uFrame: 16 × vec4 quaternion xyzw mapping model X/Y/Z to world. */
     val frames = FloatArray(64)
-    /** Body-wave envelope (shader uEnv): amplitude(u) = envHead + (1 - envHead) u^envExp, set from the body type. */
+    /** Body-wave envelope (shader uBodyEnv): amplitude(u) = envHead + (1 - envHead) u^envExp, set from the body type. */
     var envExp = 2f; var envHead = 0.1f
     private var envBrain: String? = null
     var phase = 0f; var amp = 0f; var waveLen = 1f; var pectoral = 0f; var finClamp = 0f; var finFold = 0f

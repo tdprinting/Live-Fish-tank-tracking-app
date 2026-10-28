@@ -126,6 +126,7 @@ class Steering(private val c: Ctx) {
         if (!intent.crawl) crawlDirS = null
         if (o.brainKind == BrainKind.EEL && !intent.kinematic && abs(o.heading.y) > 0.87) o.heading = clampPitch(o.heading, 0.87)
         o.spline.override = intent.splineOverride
+        o.spline.overrideSnap = intent.splineSnap
         val sp = o.vel.length()
         // the whole-body turn is a swimming shape: kinematic poses (sifting, burrow watch, hole entries) and a fish
         // hovering, backing or sculling sideways (whose trail folds back on itself) keep the trail

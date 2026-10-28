@@ -15,7 +15,7 @@ uniform float uScale;      // body length (cm)
 uniform vec4 uSwim;        // x phase (cycles), y amp (BL), z waveLen, w appendage phase
 uniform vec4 uFin;         // x pectoral (0 folded..1 spread), y clamp, z gill, w gill rate (Hz)
 uniform vec4 uShape;       // x thin, y part (0 body, 1 fin, 2 eye, 3 leg/antenna), z eye yaw, w fin kind (0 median, 1 pectoral, 2 caudal, 3 pelvic)
-uniform vec2 uEnv;         // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
+uniform vec2 uBodyEnv;     // body-wave envelope: x exponent (stiff front half = high), y head amplitude share (0..1)
 uniform vec4 uMotion;      // x pectoral stroke phase (cycles), y stroke sweep (0 = legacy flutter), z C-start bend (+ = toward +Z), w mode (0 fish, 1 brittle-star arm rowing, 2 shrimp, 3 crab legs, 4 bobtail squid, 5 hermit crab, 7 flame scallop / maxima clam, 8 snail, 9 urchin, 10 sea cucumber)
 uniform float uPick;       // shrimp: picking / feeding (mouth) 0..1; fish with a jaw: mouth opening 0..1
 uniform float uFold;       // first dorsal folded flat 0..1 (firefish flick, OrganismPose.finFold)
@@ -41,6 +41,10 @@ const vec3 CUKE_MOUTH = vec3(0.006, 0.0137, 0.0);
 
 // Anti-clipping limits (the renderer also caps the spine bend per segment, FishRig.limitBend).
 const float MAX_WAVE_AMP = 0.12;   // lateral swim wave at the tail, body lengths
+// Heat-death spasm (uSick.y) peak bend, and the most bend a fish body takes with a C-start on top (uMotion.z units:
+// the tail swings ~0.55 × bend × 0.38 body lengths sideways, so 0.6 → ~0.13 BL, 0.9 → ~0.19 BL)
+const float SPASM_BEND = 0.6;
+const float MAX_FISH_BEND = 0.9;
 
 out vec3 vWorld;
 out vec3 vNormal;
@@ -755,29 +759,33 @@ void main() {
         n = normalize(vec3(n.x, n.y / k.x, n.z / k.y));
     }
 
-    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (h + (1 - h) u^k), h and k per body type (uEnv). The amplitude is
+    // Lateral body wave: z += A(u) sin(2 pi (u waveLen - phase)), A(u) = amp (h + (1 - h) u^k), h and k per body type (uBodyEnv). The amplitude is
     // capped and faded while the body is strongly curved (head vs tail heading) so the wave cannot fold the tail
     // back into the body on a tight turn.
     vec3 fwdHead = qrot(uFrame[0], vec3(1.0, 0.0, 0.0));
     vec3 fwdTail = qrot(uFrame[15], vec3(1.0, 0.0, 0.0));
     float bendFade = mix(0.35, 1.0, smoothstep(-0.2, 0.85, dot(fwdHead, fwdTail)));
     float amp = min(uSwim.y, MAX_WAVE_AMP) * bendFade;
-    float A = amp * (uEnv.y + (1.0 - uEnv.y) * pow(uw, uEnv.x));
+    float A = amp * (uBodyEnv.y + (1.0 - uBodyEnv.y) * pow(uw, uBodyEnv.x));
     float arg = 2.0 * PI * (uw * uSwim.z - uSwim.x);
     local.z += A * sin(arg);
     // slope dz/du tilts the normal (cheap analytic correction instead of a finite difference)
-    float dzdu = amp * (1.0 - uEnv.y) * uEnv.x * pow(uw, uEnv.x - 1.0) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
+    float dzdu = amp * (1.0 - uBodyEnv.y) * uBodyEnv.x * pow(uw, uBodyEnv.x - 1.0) * sin(arg) + A * cos(arg) * 2.0 * PI * uSwim.z;
     // Escape C-start (Domenici & Blake 1997): head and tail curl to the same side, the middle the other way.
     // Shrimp (mode 2) flex the abdomen ventrally instead (caridoid tail-flip).
     float bend = uMotion.z;
     if (uSick.y > 0.001 && mode < 0.5) {
         // heat-death spasms (research 08 §2 stage 5): ~3 slots a second, most of them a sharp jerk of random side and
-        // size that snaps out and relaxes, the rest still; seeded per fish by its length so neighbours are not in step
+        // size that snaps out and relaxes, the rest still; seeded per fish by its length so neighbours are not in step.
+        // Driven by the render clock (wall time), so the jerks keep their pace at any sim speed, and each one starts
+        // and ends at zero, so the body never jumps between slots.
         float ts = time * 3.1 + uScale * 7.31;
         float k = floor(ts);
         float on = step(0.3, hash12(vec2(k, 7.3)));
         float side = hash12(vec2(k, 1.9)) * 2.0 - 1.0;
-        bend += uSick.y * on * side * 0.95 * sin(PI * min(fract(ts) * 2.5, 1.0));
+        bend += clamp(uSick.y, 0.0, 1.0) * on * side * SPASM_BEND * sin(PI * min(fract(ts) * 2.5, 1.0));
+        // one smooth C-curve at most: a spasm on top of a C-start bend must not shear the body into kinks
+        bend = clamp(bend, -MAX_FISH_BEND, MAX_FISH_BEND);
     }
     if (mode > 1.5 && mode < 3.5) {
         float ab = max(uw - 0.4, 0.0);
@@ -809,8 +817,10 @@ void main() {
     // fish body: HLLE site mask for fish.frag (uSkin.z) in R: the head forward of the gill cover and a band along the
     // lateral line, which arcs over the upper flank (model space: unit length, y up, spine at y = 0)
     if (mode < 0.5 && part < 0.5) {
-        float head = (1.0 - smoothstep(0.18, 0.3, u)) * smoothstep(-0.06, 0.02, aPos.y);
-        float line = (1.0 - smoothstep(0.012, 0.03, abs(aPos.y - 0.035 - 0.03 * sin(PI * u)))) * smoothstep(0.2, 0.3, u) * (1.0 - smoothstep(0.75, 0.88, u));
+        // (wide enough to read at a normal viewing distance: the whole face above the mouth, a band ~8 % of the
+        // length deep along the line)
+        float head = (1.0 - smoothstep(0.24, 0.34, u)) * smoothstep(-0.08, 0.0, aPos.y);
+        float line = (1.0 - smoothstep(0.025, 0.05, abs(aPos.y - 0.035 - 0.03 * sin(PI * u)))) * smoothstep(0.2, 0.32, u) * (1.0 - smoothstep(0.72, 0.86, u));
         vColor.r = max(head, line);
     }
     gl_Position = uViewProj * vec4(world, 1.0);

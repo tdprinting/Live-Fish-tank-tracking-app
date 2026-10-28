@@ -1,9 +1,11 @@
 package com.reeflive.core.ai
 
+import com.reeflive.core.geom.BodySpline
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.BrainKind
 import com.reeflive.core.sim.HeatModel
 import com.reeflive.core.sim.HeatModel.Stage
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -94,6 +96,9 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
                 // settles on the bottom or wedges into rock: clamped fins, tail drooping, occasional righting (stage 3)
                 if (wp == null || c.rng.chance(c.dt / 120)) wp = bottomSpot(c)
                 out.seek(wp!!, o.cruiseSpeed * 0.2, arrive = 2.0)
+                // it creeps to its spot and lies there along its heading: the sand lifts the head as it settles and
+                // the head's small settling moves are not a swimming path (laid as a trail, the front segment stood up)
+                out.splineOverride = laidBody(o, c.sim.sand, c.dt); out.splineSnap = true
                 out.hover = true
                 out.ampMul = 0.3; out.pectoral = 0.2; out.tailMul = 0.5
                 out.pitchBias = -0.15
@@ -126,13 +131,20 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
             nextBurst = burstUntil + c.rng.range(30.0, 90.0)
             burstDir = Vec3.rotateAbout(horizontalHeading(o.heading), Vec3.Y, c.rng.signed() * 2.5)
         }
+        // no burst against the rock: the turning body swept its tail into it, and the rock guard folded the tail back
+        // on itself (the draws above are kept, so the fish's random stream is the same)
+        if (c.t < burstUntil && r.sdf.dist(o.pos) < BURST_ROOM_BL * c.L) burstUntil = c.t
         if (c.t < burstUntil) {
-            // circling, body bending: a burst never climbs more than a few cm and never reaches the top
+            // circling: a burst never climbs more than a few cm and never reaches the top
             val p = o.pos + burstDir * 15.0
             val y = min(o.pos.y + 2.0, c.zoneY(0.5))
             out.seek(c.safe(Vec3(p.x, y, p.z)), o.burstSpeed * 0.6, arrive = 1.0, urgency = 0.8)
-            out.rollExtra = 1.2
+            // still on its side: a roll added to the swimming bank and pitch let the burst right it to 10-40°
+            out.upOverride = Vec3.rotateAbout(Vec3.Y, horizontalHeading(o.heading), LOE_ROLL)
             out.separation = 0.0
+            // straight along the heading too, following it closely: a burst along the sand bobs the head up and down
+            // each tick, and its trail zigzagged
+            out.splineOverride = laidBody(o, c.sim.sand, c.dt, o.heading.normalized(Vec3.X), BURST_LAY_RATE); out.splineSnap = true
             return
         }
         val flow = c.sim.flow.velocityFast(o.pos)
@@ -141,10 +153,13 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
         next = r.clampToWater(next, 1.0).let { if (it.y < floor) it.withY(floor) else it }
         val clear = 0.25 * o.collisionLength
         if (r.sdf.dist(next) < clear) next = r.sdf.project(next, clear)
-        val h = horizontalHeading(o.heading)
+        // (turned to lie along the rock rather than into it)
+        val h = clearHeading(o, r, horizontalHeading(o.heading))
         // not lying flat: the roll rocks slowly between ~65° and ~85° as the flow carries it
         val roll = LOE_ROLL + 0.17 * sin(c.t * 0.35 + o.appendagePhase)
         out.place(next, h, Vec3.rotateAbout(Vec3.Y, h, roll), 40.0)
+        // the body lies straight along its heading, whole (the death-throe spasms are the renderer's, fish.vert)
+        out.splineOverride = laidBody(o, c.sim.sand, c.dt, h); out.splineSnap = true
         out.ampMul = 0.1; out.tailMul = 0.2; out.pectoral = 0.0
         // gaping in the death throes (08 §2 stage 5)
         o.mouth = max(o.mouth, if (throes) 0.9 else 0.6)
@@ -214,6 +229,71 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
         const val LOE_ROLL = 1.31
 
         /**
+         * The body of a fish lying on the bottom or on its side, or of a dead one (a [SteerIntent.splineOverride] shown
+         * at once, [SteerIntent.splineSnap]): its head is moved by sinking, the flow and the sand, not by swimming, and
+         * laid as a trail that track folded the body back on itself (at fast-forward one tick moves it centimetres; the
+         * sand lifting the head left the front segment standing up), so stations pointed along the up vector and the
+         * drawn body broke into twisted pieces. Each tick the shape shown eases toward a straight line back from the
+         * head along the level heading [h], riding on the live [sand] surface at the head's clearance (a level line ran
+         * into mounds and the sloping bed), so it never pops; where the rock guard re-lays it round the rock, it eases
+         * on from the re-laid shape.
+         */
+        fun laidBody(o: com.reeflive.core.sim.Organism, sand: com.reeflive.core.sim.SandBed?, dt: Double, h: Vec3 = horizontalHeading(o.heading), rate: Double = LAY_RATE): List<Vec3> {
+            val n = BodySpline.POINTS
+            val cur = Array(n) { Vec3.ZERO }
+            o.spline.sampleStations(cur)
+            val seg = o.spline.length / (n - 1)
+            val k = 1 - exp(-rate * dt.coerceAtLeast(0.0))
+            val shift = o.pos - cur[0]
+            val clear = if (sand != null) com.reeflive.core.sim.SandContact.clearance(o) else 0.0
+            return List(n) { i ->
+                if (i == 0) o.pos else {
+                    var s = o.pos - h * (seg * i)
+                    if (sand != null) s = s.withY(max(s.y, sand.surfaceY(s.x, s.z) + clear))
+                    val c = cur[i] + shift
+                    c + (s - c) * k
+                }
+            }
+        }
+
+        /** How fast a [laidBody] eases straight (1/s): about a second from a swimming curve. */
+        private const val LAY_RATE = 3.0
+        /** A burst's [laidBody] follows the turning heading closely (1/s): lagging, its forward swung onto the up axis. */
+        private const val BURST_LAY_RATE = 40.0
+        /** Room to the rock (body lengths) an LOE burst needs, to start and to go on. */
+        private const val BURST_ROOM_BL = 1.2
+
+        /**
+         * The level heading nearest [h] along which a [laidBody] keeps clear of the rock: a body laid straight into the
+         * rock was pushed out of it station by station each tick and lay folded round a notch. Lying against the rock
+         * it turns to lie along it instead.
+         */
+        fun clearHeading(o: com.reeflive.core.sim.Organism, rock: com.reeflive.core.sim.RockData, h: Vec3): Vec3 {
+            val need = com.reeflive.core.sim.RockHole.bodyRadius(o) + ROCK_ROOM_CM
+            val seg = o.spline.length / (BodySpline.POINTS - 1)
+            fun room(d: Vec3): Double {
+                var m = Double.MAX_VALUE
+                for (i in 1 until BodySpline.POINTS) m = min(m, rock.sdf.dist(o.pos - d * (seg * i)))
+                return m
+            }
+            var best = h
+            var bestRoom = room(h)
+            if (bestRoom >= need) return h
+            for (a in LAY_TURNS) {
+                val d = Vec3.rotateAbout(h, Vec3.Y, a)
+                val r = room(d)
+                if (r >= need) return d
+                if (r > bestRoom) { best = d; bestRoom = r }
+            }
+            return best
+        }
+
+        /** Clearance (cm) beyond the body's radius a laid body keeps from the rock. */
+        private const val ROCK_ROOM_CM = 0.3
+        /** Turns (rad) tried from the heading, nearest first. */
+        private val LAY_TURNS = doubleArrayOf(0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.75, -1.75, 2.1, -2.1, 2.45, -2.45, 2.8, -2.8, kotlin.math.PI)
+
+        /**
          * Abstract mode: a fish at LETHARGIC or worse lies on the bottom below its rest spot, shrimp and
          * snails on the sand. Returns false when the normal rest pose applies.
          */
@@ -223,7 +303,7 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
             if (st < Stage.LETHARGIC || o.brainKind == BrainKind.ENGINEER_GOBY && st < Stage.LOE) return false
             if (!o.isFish && !(HeatModel.isShrimp(o.brainKind) || HeatModel.isSnail(o.brainKind) || HeatModel.climbsOut(o.brainKind))) return false
             val r = c.rock
-            val h = horizontalHeading(o.heading)
+            val h = if (o.isFish) clearHeading(o, r, horizontalHeading(o.heading)) else horizontalHeading(o.heading)
             val base = Vec3(o.pos.x, r.sandTopCm + 0.3 * c.L + 0.6, o.pos.z)
             val p = if (r.sdf.dist(base) < 0.5) r.sdf.project(base, 0.5) else base
             val up = when {
@@ -233,6 +313,8 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
             }
             out.place(r.clampToWater(p, 1.0), h, up)
             out.posture = if (o.isFish) 0 else 7
+            // laid straight and whole ([laidBody])
+            if (o.isFish) { out.splineOverride = laidBody(o, c.sim.sand, c.dt, h); out.splineSnap = true }
             return true
         }
     }

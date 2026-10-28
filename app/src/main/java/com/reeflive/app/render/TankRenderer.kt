@@ -1405,7 +1405,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         p.set1f("uScale", r.scale)
         p.set1f("uFade", r.fade)
         p.set4f("uSwim", r.phase, r.amp, r.waveLen, r.appendage)
-        p.set2f("uEnv", r.envExp, r.envHead)
+        p.set2f("uBodyEnv", r.envExp, r.envHead)
         // a flashing male fairy wrasse spreads every fin past rest (negative clamp) and his colours deepen (negative desat)
         p.set4f("uFin", r.pectoral, r.finClamp - DISPLAY_FLARE * r.display, r.gill, r.gillRate)
         p.set1f("uFold", r.finFold)
