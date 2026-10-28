@@ -64,6 +64,10 @@ async function serve(p, req) {
   const c = await caches.open(CACHE);
   const hit = await c.match(keyOf(p));
   if (hit) return hit;
+  // a model kept from an earlier build as the plain file: the page takes it as is (index.html reefFetch checks for
+  // the gzip header), instead of downloading the .gz
+  const plain = p.endsWith('.gz') && FILES[p.slice(0, -3)] ? await c.match(keyOf(p.slice(0, -3))) : null;
+  if (plain) return plain;
   return (await cacheFile(c, p)) || fetch(req);
 }
 
