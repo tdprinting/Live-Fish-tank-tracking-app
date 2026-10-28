@@ -1239,16 +1239,31 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
 
     private val tmpModel = FloatArray(16)
 
+    /** [FishRig]'s model memo: what [drawOrganism] used to look up on every draw (fixed per species and variant). */
+    private fun resolveModel(r: FishRig) {
+        val critter = CritterKind.of(r.speciesId)
+        val path = critter?.model ?: registry.modelFor(r.speciesId, r.variant)
+        r.modelPath = path
+        r.modelExists = path != null && store.exists(path)
+        val lod1 = if (path != null) lod1Of(path) else null
+        r.modelLod1 = lod1
+        r.modelLod1Exists = lod1 != null && store.exists(lod1)
+        r.modelStaged = critter == null && BroodVisuals.modelFor(r.speciesId) == null
+        r.modelMemoSpecies = r.speciesId; r.modelMemoVariant = r.variant; r.modelMemoDone = true
+    }
+
     /** pass 0: opaque parts; pass 1: fins (blended). */
     private fun drawOrganism(r: FishRig, progs: Programs, pass: Int) {
         stageBinding.clear()
         if (!r.visible || !inView(r)) return
-        val path = CritterKind.of(r.speciesId)?.model ?: registry.modelFor(r.speciesId, r.variant)
+        if (!r.modelMemoDone || r.modelMemoSpecies != r.speciesId || r.modelMemoVariant != r.variant) resolveModel(r)
+        val path = r.modelPath
         val far = r.distanceTo(camera.eye[0], camera.eye[1], camera.eye[2]) > quality.lod1DistanceCm
         var m: GpuModel? = null
-        if (path != null && store.exists(path)) {
-            val lod1 = lod1Of(path)
-            m = if (far && store.exists(lod1)) store.model(lod1) ?: store.model(path) else store.model(path) ?: if (store.exists(lod1)) store.model(lod1) else null
+        if (path != null && r.modelExists) {
+            val lod1 = r.modelLod1 ?: path
+            val lod1Ships = r.modelLod1Exists
+            m = if (far && lod1Ships) store.model(lod1) ?: store.model(path) else store.model(path) ?: if (lod1Ships) store.model(lod1) else null
             if (m == null) {
                 if (store.hasFailed(path) && pass == 0) drawPlaceholder(r, progs)
                 return // still loading
@@ -1258,7 +1273,7 @@ class TankRenderer(context: Context, initialQuality: RenderQuality) : GLSurfaceV
         val w = white ?: return
         // life stage: body texture forms A/B and their mix, body depth/width scale (core LifeForm via LifeFormChannel)
         val sb = stageBinding
-        if (path != null && CritterKind.of(r.speciesId) == null && BroodVisuals.modelFor(r.speciesId) == null) {
+        if (path != null && r.modelStaged) {
             lifeStages.resolve(r.speciesId, path, r.scale, com.reeflive.core.sim.LifeFormChannel.of(interp.current)[r.id], sb)
         } else sb.clear()
         var uniformsSet: ShaderProgram? = null
