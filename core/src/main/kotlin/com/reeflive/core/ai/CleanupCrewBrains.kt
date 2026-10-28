@@ -21,8 +21,8 @@ import kotlin.math.sin
 
 /** Grazing on the move: algae removal for the abstract hair index and hunger relief, per tick (as [GlassGraze]). */
 internal fun grazeTick(c: Ctx, share: Double = 1.0) {
-    c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) * share * c.dt / 60)
-    c.o.hunger = max(0.0, c.o.hunger - 1.6 * share * HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * c.dt / 60)
+    c.sim.addGrazing(c.sim.grazeRemovalPerMin(c.o) * share * c.simDt / 60)
+    c.o.hunger = max(0.0, c.o.hunger - 1.6 * share * HealthModel.hungerRatePerMin(c.o, c.sim.water.s.tempC) * c.simDt / 60)
     c.o.nutritionGreens = 1.0
 }
 
@@ -132,7 +132,7 @@ class TrochusBrain(c: Ctx) : SpeciesBrain(c) {
         override fun score(c: Ctx): Double {
             if (flipped) return 0.99
             val onSand = c.o.pos.y < c.sim.sand.surfaceY(c.o.pos.x, c.o.pos.z) + 1.5
-            if (onSand && c.rng.chance(c.dt / 3600 * 0.15)) { flip(c); return 0.99 }
+            if (onSand && c.rng.chance(c.simDt / 3600 * 0.15)) { flip(c); return 0.99 }
             return 0.0
         }
         override fun update(c: Ctx, out: SteerIntent) {

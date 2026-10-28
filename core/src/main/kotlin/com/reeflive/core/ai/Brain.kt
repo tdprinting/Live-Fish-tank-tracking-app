@@ -148,7 +148,7 @@ abstract class SpeciesBrain(val c: Ctx) {
         o.display *= exp(-dt * 1.5)
         // a fish that stopped feeding is no longer going for a particle (a tankmate contesting it reads this)
         if (o.feedingOn != null && utility.current !is Feed) o.feedingOn = null
-        if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(dt, c.t)
+        if (o.isFish && (o.posture == 3 || o.posture == 4 || o.posture == 6 || Symptom.HIDING in o.symptoms)) o.counters.cover(c.simDt, c.t)
         o.extraRoll = 0.0
         if (o.isFish) o.parasiteLoad = min(1.0, o.parasiteLoad + dt / (3600.0 * 10))
         // the way it came (a crumb every 2 cm it moves): [Ctx.viaOpenWater] backs out of a crawl space along it

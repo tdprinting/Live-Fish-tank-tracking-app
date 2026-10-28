@@ -110,6 +110,10 @@ class Steering(private val c: Ctx) {
                 // leg stride clock for the renderer: one stride ≈ a quarter body length (research 17, INFERENCE),
                 // stepping eases in and out so a stop-go pause plants the feet. Counted after the projection, so a
                 // step that was undone takes no stride.
+                // walking is the motion along the surface: the re-attach and rock push-outs move it along the surface
+                // normal by a millimetre or two each tick, which read as ~3 cm/s of walking (legs churning, a hermit
+                // "walking" at 3 BL/s while it stood picking)
+                o.vel = o.vel.rejectFrom(o.up.normalized(Vec3.Y))
                 val walkSpeed = o.vel.length()
                 o.walkPhase = (o.walkPhase + dt * walkSpeed / max(0.25 * o.lengthCm, 0.5)) % 1000.0
                 o.walkAmt += (smoothstep(0.05, 0.4, walkSpeed / max(o.cruiseSpeed, 0.1)) - o.walkAmt) * min(1.0, dt * 6)

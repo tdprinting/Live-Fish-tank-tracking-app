@@ -247,7 +247,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
     /** Sand fauna eaten in one mouthful: hunger relief scales with the prey index. */
     private fun eatMouthful(c: Ctx) {
         val prey = preyIndex(c.sim)
-        val y = HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * SIFT_YIELD_MIN * prey
+        // (a mouthful cycle runs on the behaviour step: in fast-forward one stands for c.warp of them)
+        val y = HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * SIFT_YIELD_MIN * prey * c.warp
         lastYield = y
         if (y > 0) {
             o.hunger = max(0.0, o.hunger - y)
@@ -345,7 +346,9 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         private var pitch0 = 0.0
         private val body = ArrayList<Vec3>(BODY_POINTS)
         override val committed: Boolean get() = phase in 1..3
-        override val label: String get() = when (phase) { 0 -> "Moving to a new patch of sand"; 1 -> "Taking a mouthful of sand"; 2 -> "Sifting sand through its gills"; else -> "Blowing sand out of its gills" }
+        // one label for the whole mouthful cycle (take, winnow, blow out: ~4 s): naming each phase flipped the card
+        // every second or two
+        override val label: String get() = if (phase == 0) "Moving to a new patch of sand" else "Sifting sand through its gills"
         override fun score(c: Ctx): Double {
             if (c.p.night || o.waryLevel > WARY_SIFT - band(this)) return 0.0
             return (0.55 + 0.3 * o.hunger) * max(c.activity, 0.3)

@@ -70,7 +70,11 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
     /** Uneaten grams expiring this tick; the Simulation turns them into detritus (SIMULATION §5.5). */
     var expiredGrams = 0.0
 
-    fun spawn(kind: FoodKind, grams: Double, at: Vec3, simTime: Double): Int {
+    /**
+     * [nutritive] false: the particles are drawn and chased but carry no food (fast-forward eats a feed as expected intake,
+     * Simulation.abstractFeed; they leave no detritus either).
+     */
+    fun spawn(kind: FoodKind, grams: Double, at: Vec3, simTime: Double, nutritive: Boolean = true): Int {
         val fid = nextFeed++
         lastFeedTime = simTime; lastFeedPos = at; lastFeedKind = kind
         if (kind == FoodKind.NORI) {
@@ -88,7 +92,8 @@ class FoodSystem(private val rock: RockData, private val flow: FlowField, privat
             val vy = if (surface && kind.floats) 0.0 else -kind.sinkCmS
             // a loose pinch is caught by the current it lands in at once (video T97: the return sweeps it away)
             val w = if (kind.floats && surface) Vec3.ZERO else flow.velocityFast(p)
-            particles += FoodParticle(nextId++, kind, p, Vec3(w.x, vy + w.y, w.z), simTime + rng.nextDouble() * 10, fid, spawnedAt = simTime)
+            particles += FoodParticle(nextId++, kind, p, Vec3(w.x, vy + w.y, w.z), simTime + rng.nextDouble() * 10, fid, spawnedAt = simTime,
+                grams = if (nutritive) kind.gramsPerParticle else 0.0)
         }
         if (count > 0) feeds += FeedRecord(fid, count, count, simTime)
         return fid

@@ -236,7 +236,7 @@ class LeopardWrasseBrain(c: Ctx) : SpeciesBrain(c) {
 
     private fun eatPick(c: Ctx) {
         val prey = preyIndex(c.sim)
-        val y = HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * PICK_YIELD_MIN * prey
+        val y = HealthModel.hungerRatePerMin(o, c.sim.water.s.tempC) * PICK_YIELD_MIN * prey * c.events(0.5 * (PICK_MIN_S + PICK_MAX_S))
         lastYield = y
         if (y > 0) {
             o.hunger = max(0.0, o.hunger - y)

@@ -354,7 +354,7 @@ class GobyBrain(c: Ctx) : SpeciesBrain(c) {
                 if (c.t > nextPlankton) {
                     nextPlankton = c.t + c.rng.range(2.0, 5.0)
                     o.mouth = 1.0
-                    o.hunger = max(0.0, o.hunger - PLANKTON_YIELD)
+                    o.hunger = max(0.0, o.hunger - PLANKTON_YIELD * c.events(3.5))
                 }
                 return
             }

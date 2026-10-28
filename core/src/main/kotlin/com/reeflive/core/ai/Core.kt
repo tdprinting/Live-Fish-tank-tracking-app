@@ -143,7 +143,22 @@ class Perception(val sim: Simulation) {
 /** Per-organism behavior context, reused every tick. */
 class Ctx(val sim: Simulation, val o: Organism) {
     lateinit var p: Perception
+    /** Behaviour/steering step this tick (sim s; at most [Simulation.MAX_BEHAVIOR_DT]). */
     var dt = 0.05
+    /**
+     * Sim seconds this tick stands for: [dt] at up to 10x, more in fast-forward, where one capped behaviour step covers
+     * several sim seconds (stepWall at 60x/240x: 3/12 s). Durations, dwell times and cooldowns that must hold in sim
+     * time at every speed advance by this (Behavior.elapsed); motion and animation keep to [dt].
+     */
+    var simDt = 0.05
+    /** [simDt] / [dt] (1 at up to 10x). */
+    val warp: Double get() = if (dt > 0) simDt / dt else 1.0
+    /**
+     * Foraging events a tick stands for when the animal takes one every [meanIntervalS] sim s on average (a pick, a snap,
+     * a bite gated on [t]): 1 at normal speed (it fires when due), simDt / interval in fast-forward, where the gate can
+     * open only once per step. Multiply the event's food by it.
+     */
+    fun events(meanIntervalS: Double): Double = kotlin.math.max(1.0, simDt / meanIntervalS)
     val t: Double get() = p.t
     val rng: Rng get() = o.rng
     val rock: RockData get() = sim.rock
@@ -156,13 +171,22 @@ class Ctx(val sim: Simulation, val o: Organism) {
  * Utility behavior (SIMULATION §4.1 layer 2): [score] 0..1, small state machine via
  * [enter]/[update]/[exit]. [finished] lets the brain switch even without the hysteresis margin.
  */
+/** Behaviour-step seconds an approach gets before a timed dwell may end ([Behavior.over]). */
+const val MIN_MOVE_S = 3.0
+
 abstract class Behavior(val name: String, label: String) {
     /** UI label; open so a behavior can describe its current phase (heat stages). */
     open val label: String = label
     /** Verb phrase used in captions when the behavior has a focus organism ("chasing", "cleaning"…). */
     open val targetVerb: String? get() = null
     var finished = false
+    /**
+     * Sim seconds since [enter] (advanced by [Ctx.simDt]): a hold, dwell or bout length lasts as long in sim time at
+     * every speed. A give-up timer for getting somewhere uses [moveElapsed] instead.
+     */
     var elapsed = 0.0
+    /** Behaviour-step seconds since [enter] (advanced by [Ctx.dt]): how long it has been moving (approach give-ups). */
+    var moveElapsed = 0.0
     var enteredAt = 0.0
     /** While true the brain will not preempt this behavior except for score ≥ 0.95 (flee, dead). */
     open val committed: Boolean get() = false
@@ -171,6 +195,12 @@ abstract class Behavior(val name: String, label: String) {
      * draws no rng and leaves every other random sequence exactly as it was.
      */
     open val noisy: Boolean get() = true
+
+    /**
+     * Past a dwell of [d] sim s ([elapsed]) after at least min([d], [move]) s of moving ([moveElapsed]): in fast-forward
+     * an approach to the spot still gets its few steps. Same as `elapsed > d` at up to 10x.
+     */
+    fun over(d: Double, move: Double = MIN_MOVE_S): Boolean = elapsed > d && moveElapsed > kotlin.math.min(d, move)
 
     abstract fun score(c: Ctx): Double
     open fun enter(c: Ctx) {}
@@ -221,19 +251,48 @@ class UtilityBrain(val behaviors: List<Behavior>) {
             c.o.focusId = null
             best.finished = false
             best.elapsed = 0.0
+            best.moveElapsed = 0.0
             best.enteredAt = c.t
             current = best
             best.enter(c)
         }
-        current?.let { it.elapsed += c.dt; it.update(c, intent) }
+        current?.let { it.elapsed += c.simDt; it.moveElapsed += c.dt; it.update(c, intent) }
+        updateShown(c)
+    }
+
+    // ---- display label with a minimum dwell (what the card and caption show; [current]'s label is the live one)
+    /** The label the card and the caption show: [currentLabel] held for a minimum dwell (see [updateShown]). */
+    var shownLabel: String = ""; private set
+    private var shownFor = 0.0
+    private var pending: String? = null
+    private var pendingFor = 0.0
+
+    /**
+     * A label change is shown once the new one has lasted [LABEL_CONFIRM_S] and the old one has been up for
+     * [LABEL_DWELL_S] (behaviour time): a sub-second phase or a quick A-B-A flip never reaches the screen. An urgent
+     * behaviour (a flight, score ≥ 0.95) is shown at once.
+     */
+    private fun updateShown(c: Ctx) {
+        val raw = current?.label ?: ""
+        shownFor += c.dt
+        if (raw == shownLabel || shownLabel.isEmpty()) { shownLabel = raw; pending = null; return }
+        if (raw == pending) pendingFor += c.dt else { pending = raw; pendingFor = 0.0 }
+        val i = current?.let { behaviors.indexOf(it) } ?: -1
+        val urgent = i >= 0 && lastScores[i] >= 0.95
+        if (urgent || shownFor >= LABEL_DWELL_S && pendingFor >= LABEL_CONFIRM_S) { shownLabel = raw; shownFor = 0.0; pending = null }
     }
 
     fun force(c: Ctx, b: Behavior) {
         current?.exit(c)
-        b.finished = false; b.elapsed = 0.0; b.enteredAt = c.t
+        b.finished = false; b.elapsed = 0.0; b.moveElapsed = 0.0; b.enteredAt = c.t
         current = b
         b.enter(c)
     }
 
-    companion object { const val NOISE_TAU = 20.0 }
+    companion object {
+        const val NOISE_TAU = 20.0
+        /** Display-label dwell (s): the shown label stays at least this long, a new one must last [LABEL_CONFIRM_S] [L]. */
+        const val LABEL_DWELL_S = 6.0
+        const val LABEL_CONFIRM_S = 2.0
+    }
 }
