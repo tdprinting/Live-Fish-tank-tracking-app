@@ -884,7 +884,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
 
     /**
      * Foraging trips over the rock and sand (Clibanarius: active grazers and scavengers that range over the whole
-     * rockwork in a tank): it walks to a spot 15-50 cm away in stop-go steps, picks there a few seconds, walks on, and
+     * rockwork in a tank): it walks to a spot 12-30 cm away in stop-go steps, picks there a few seconds, walks on, and
      * after a few legs sits a while with its legs drawn in. It used to "wander" to points round a fixed home that it
      * mostly could not walk to, standing on the spot or pacing a 5-15 cm patch for days (one just under the water line).
      */
@@ -915,10 +915,12 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
                 val z = (o.pos.z + kotlin.math.sin(a) * d * 0.6).coerceIn(4.0, c.rock.widthCm - 4.0)
                 // a rock spot near there at any height up to the top band, else the open sand at its foot
                 val probe = Vec3(x, c.rng.range(c.rock.sandTopCm, c.rock.waterLevelCm - TOP_BAND_CM), z)
-                val p = c.rockSurfacePoint(probe, 8.0)?.first
+                val p = c.rockSurfacePoint(probe, 8.0, minNormalY = LEG_MIN_NORMAL_Y)?.first
                     ?: Vec3(x, c.sim.sand.surfaceY(x, z), z).takeIf { c.rock.sdf.dist(it.withY(it.y + 3.0)) >= 2.4 }
                     ?: continue
                 if (p.y > c.rock.waterLevelCm - TOP_BAND_CM || nearTight(c, p)) continue
+                // (off the glass: the rock-glass corners are where the shell hops its seat, CrawlerSeat)
+                if (p.z < GLASS_GAP_CM || p.z > c.rock.widthCm - GLASS_GAP_CM || p.x < GLASS_GAP_CM || p.x > c.rock.lengthCm - GLASS_GAP_CM) continue
                 if (p.distanceTo(o.pos) >= LEG_MIN_CM) return c.rock.clampToWater(p, 1.0)
                 if (fallback == null) fallback = p
             }
@@ -935,7 +937,7 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
                         d < ARRIVE_CM -> {
                             legs++
                             // a rest after a few legs (sim time, so it lasts as long at any speed), else a short pick
-                            if (legs >= 3 && c.rng.chance(REST_P)) { phase = 2; phaseUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S); legs = 0 }
+                            if (legs >= 2 && c.rng.chance(REST_P)) { phase = 2; phaseUntil = c.t + c.rng.range(REST_MIN_S, REST_MAX_S); legs = 0 }
                             else { phase = 1; phaseUntil = c.t + c.rng.range(PICK_MIN_S, PICK_MAX_S) }
                         }
                         // no closer for a while (a ledge in the way): another spot
@@ -1009,19 +1011,23 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
         const val PICK_GAP_S = 120.0
         /** Behaviour s it walks toward a pick spot before giving it up. */
         const val PICK_REACH_S = 20.0
-        const val LEG_MIN_CM = 15.0
-        const val LEG_MAX_CM = 50.0
-        const val LEG_TRIES = 8
+        const val LEG_MIN_CM = 12.0
+        const val LEG_MAX_CM = 30.0
+        const val LEG_TRIES = 12
+        /** Leg ends at least this far off the glass (cm). */
+        const val GLASS_GAP_CM = 7.0
+        /** Leg ends on rock that faces up at least this much (tops and gentle slopes, not walls and undersides) [L]. */
+        const val LEG_MIN_NORMAL_Y = 0.4
         const val TOP_BAND_CM = 8.0
         /** Arrival (cm); a leg is given up after this long (behaviour s) without getting 1 cm closer. */
         const val ARRIVE_CM = 2.5
         const val STALL_S = 12.0
         /** Pick at the end of a leg (s), and the rest that follows some trips: chance and length (s, sim time) [L]. */
-        const val PICK_MIN_S = 4.0
-        const val PICK_MAX_S = 15.0
-        const val REST_P = 0.5
-        const val REST_MIN_S = 60.0
-        const val REST_MAX_S = 300.0
+        const val PICK_MIN_S = 10.0
+        const val PICK_MAX_S = 30.0
+        const val REST_P = 0.8
+        const val REST_MIN_S = 120.0
+        const val REST_MAX_S = 360.0
         /** Claw threat: another hermit this close shell to shell (cm), a banded shrimp or crab this close [I]. */
         const val THREAT_CM = 1.5
         const val THREAT_BIG_CM = 5.0
