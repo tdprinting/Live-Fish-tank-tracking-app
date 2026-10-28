@@ -17,28 +17,79 @@ const talk = { layer: null, els: [], raf: 0 };
 // one go froze the page for seconds. The street warms the first tank of the stores you may walk into; a store warms
 // the tanks beside the one you are at. Background slices skip frames that already run long.
 const LAST = 'reeflive.laststore';
-const warm = { raf: 0, last: 0 };
+const warm = { raf: 0, last: 0, gap: 0, seen: 0, run: false };
+// Someone waiting at the door is not tied to the frame rate: slices run back to back (a MessageChannel hop between
+// them, so input and paint still get in) and the slice grows when frames are slow, up to SLICE_MAX ms. A 9 ms slice a
+// frame took minutes at a few fps; a frame that long already costs more than the bigger slice does.
+const SLICE_MIN = 9, SLICE_MAX = 50;
+const hop = (() => {
+  const ch = typeof MessageChannel === 'function' ? new MessageChannel() : null;
+  const q = [];
+  if (ch) ch.port1.onmessage = () => { const f = q.shift(); if (f) f(); };
+  return () => new Promise((ok) => { if (ch) { q.push(ok); ch.port2.postMessage(0); } else setTimeout(ok, 0); });
+})();
+/** The slice: the slower the frames lately (or the longer since the last one), the bigger it is. */
+function sliceMs() {
+  const gap = Math.max(warm.gap, performance.now() - warm.seen);
+  return Math.min(SLICE_MAX, Math.max(SLICE_MIN, gap * 0.75));
+}
+/** Background tanks (nobody waiting): a small slice on frames that are not already slow. */
 async function warmLoop(t) {
   warm.raf = -1;   // running (the sim answers asynchronously): startWarm leaves it be
+  warm.gap = t - warm.last; warm.last = t; warm.seen = performance.now();
   if (!my) { warm.raf = 0; return; }
-  const waiting = pending;
-  const gap = t - warm.last;
-  warm.last = t;
   let more = false;
   try {
-    // someone waiting at the door gets most of the frame; background work only on frames that are not already slow
-    // (40 ms: a device held at 30 fps still warms the next tank)
-    if (waiting) {
-      if (await my.visitReady(9)) {
+    // 40 ms: a device held at 30 fps still warms the next tank
+    if (pending) more = true; else if (warm.gap < 40) more = await my.buildStep(4); else more = await my.building();
+  } catch (e) { console.error(e); more = false; }
+  warm.raf = more || pending ? requestAnimationFrame(warmLoop) : 0;
+  if (pending) waitLoop();
+}
+/** The walk in: back-to-back slices until the first tank is built, whatever the frame rate. */
+async function waitLoop() {
+  if (warm.run) return;
+  warm.run = true;
+  const waiting = pending;
+  try {
+    while (my && pending && pending === waiting) {
+      if (await my.visitReady(sliceMs())) {
         // walked in; unless the keeper turned back meanwhile
         if (pending === waiting) { pending = null; arrive(waiting.d); } else my.leaveStore();
+        break;
       }
-      more = true;
-    } else if (gap < 40) more = await my.buildStep(4); else more = await my.building();
-  } catch (e) { console.error(e); more = false; if (waiting && pending === waiting) abandon('The store is closed right now. Try again in a moment.'); }
-  warm.raf = more || pending ? requestAnimationFrame(warmLoop) : 0;
+      await hop();
+    }
+  } catch (e) {
+    console.error(e);
+    if (pending === waiting) abandon('The store is closed right now. Try again in a moment.');
+  } finally { warm.run = false; progress(false); }
+  if (pending && pending !== waiting) waitLoop();   // the keeper turned back and set off again meanwhile
 }
 function startWarm() { if (!warm.raf && my) warm.raf = requestAnimationFrame(warmLoop); }
+
+/** "Heading to ..." with a bar while the tank is built: it creeps toward the end so the wait never looks stuck. */
+function progress(on, label) {
+  let el = ui?.querySelector('.stwalk');
+  if (!on) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'stwalk';
+    el.setAttribute('role', 'progressbar');
+    el.innerHTML = '<span class="stwl"></span><i><b></b></i>';
+    ui.appendChild(el);
+    ui.classList.remove('hidden');
+    el.dataset.t0 = String(performance.now());
+    const tick = () => {
+      if (!el.isConnected) return;
+      const s = (performance.now() - Number(el.dataset.t0)) / 1000;
+      el.querySelector('b').style.width = `${Math.round(95 * (1 - Math.exp(-s / 2.5)))}%`;
+      setTimeout(tick, 120);
+    };
+    tick();
+  }
+  el.querySelector('.stwl').textContent = label;
+}
 
 /** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
@@ -82,7 +133,9 @@ async function enter(id) {
   // the tank is built while My tank keeps running; when it is ready the walk in starts (arrive)
   pending = { id, d };
   say?.(`Heading to ${d.label}...`);
+  progress(true, `Heading to ${d.label}...`);
   startWarm();
+  waitLoop();
 }
 
 /** The store's first tank is ready and the 3D view is on the sidewalk: the shop UI comes up. */
@@ -101,6 +154,8 @@ function arrive(d) {
 
 function abandon(msg) {
   pending = null;
+  ui.querySelector('.stwalk')?.remove();
+  if (!data) ui.classList.add('hidden');
   try { my.visitCancel(); } catch { /* nothing to cancel */ }
   if (msg) say?.(msg);
 }

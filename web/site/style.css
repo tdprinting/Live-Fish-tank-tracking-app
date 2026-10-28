@@ -795,3 +795,7 @@ body.on-live .acclpill { bottom: auto; top: calc(var(--topH, 64px) + 8px); }
 .update .btn { min-height: 44px; }
 .update .icon-btn { min-width: 44px; min-height: 44px; }
 .buildline { font-size: 11px; color: var(--kelp); margin: 10px 0 0; text-align: center; }
+/* the walk to a store while its first display tank is built (stores.js progress) */
+#storeUi .stwalk { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 112px); min-width: 200px; max-width: calc(100% - 32px); padding: 9px 16px 11px; border-radius: 18px; text-align: center; font: 600 15px/1.2 var(--display); background: var(--pillFill); color: var(--navy); border: 2.5px solid var(--navy); }
+#storeUi .stwalk i { display: block; height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(0,0,0,.14); overflow: hidden; }
+#storeUi .stwalk b { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--navy); transition: width .15s linear; }
