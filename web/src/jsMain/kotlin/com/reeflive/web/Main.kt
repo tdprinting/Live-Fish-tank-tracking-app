@@ -102,6 +102,8 @@ object ReefLive {
         MainScope().launch {
             try {
                 status("Loading the tank…")
+                // the asset index, shaders, sim tables and species sheets in one file (web/build.gradle.kts bootPack)
+                Net.loadPack("boot.json")
                 val index = Net.fetchJson("assets/index.json")
                 val files = HashMap<String, List<String>>()
                 for (k in js("Object").keys(index).unsafeCast<Array<String>>()) files[k] = index[k].unsafeCast<Array<String>>().toList()

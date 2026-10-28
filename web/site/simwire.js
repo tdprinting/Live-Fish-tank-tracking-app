@@ -23,7 +23,8 @@ const KINDS = [Float32Array, Float64Array, Int32Array, Int16Array, Int8Array, Ui
  */
 export function classPrint(ctors, n = ctors.length) {
   let h = 2166136261;
-  for (const c of ctors.slice(0, n)) { const n = `${c.name}/${c.$metadata$?.simpleName ?? ''};`; for (let i = 0; i < n.length; i++) h = Math.imul(h ^ n.charCodeAt(i), 16777619); }
+  // simpleName, not the function's name: a minified bundle (esbuild) renames functions, differently per bundle
+  for (const c of ctors.slice(0, n)) { const n = `${c.$metadata$?.simpleName ?? ''}/${c.$metadata$?.kind ?? ''};`; for (let i = 0; i < n.length; i++) h = Math.imul(h ^ n.charCodeAt(i), 16777619); }
   return `${n}:${(h >>> 0).toString(36)}`;
 }
 
@@ -127,7 +128,7 @@ export class Encoder {
     if (shape < 0) {
       shape = this.nextShape++;
       list.push({ keys, id: shape });
-      this.newShapes.push([shape, ci, keys, ctor.name]);
+      this.newShapes.push([shape, ci, keys, ctor.$metadata$?.simpleName]);
     }
     const out = [shape];
     for (let i = 0; i < keys.length; i++) out.push(this.enc(x[keys[i]]));
@@ -168,7 +169,7 @@ export class Decoder {
     for (const [id, ci, keys, name] of msg.shapes) {
       // the class tables match at boot; a class defined later on one side only would be found by name
       let ctor = this.ctors[ci];
-      if (ctor?.name !== name) ctor = this.ctors.find((c) => c.name === name) ?? ctor;
+      if (ctor?.$metadata$?.simpleName !== name) ctor = this.ctors.find((c) => c.$metadata$?.simpleName === name) ?? ctor;
       if (!ctor) throw new Error(`simwire: no class ${name}`);
       this.shapes[id] = { proto: ctor.prototype, keys };
     }

@@ -255,6 +255,8 @@ function qa(o, f) {
     },
   });
 }
+// the Promise facade itself, for QA scripts (the page is one bundle: importing simhost.js again would load a second copy)
+window.reefhost = { live, sb, my, where, snapshot };
 window.reeflive = qa('live', live);
 window.reefsandbox = qa('sb', sb);
 window.reefmytank = qa('my', my);

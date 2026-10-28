@@ -57,6 +57,8 @@ object ReefSim {
     /** Loads the species sheets and the rock and builds the real tank. [baseUrl] is where `assets/` and `res/` are. */
     fun boot(baseUrl: String): Promise<Unit> = GlobalScope.promise {
         Net.base = baseUrl.trimEnd('/') + "/"
+        // the sim tables and species sheets in one file (web/build.gradle.kts bootPack; on the page already loaded)
+        if (!kotlin.Resources.has("species/index.json")) Net.loadPack("boot.json")
         val have = Net.fetchJson("res/species/index.json")
         // Every species with a sheet: the default stock plus everything Add life can release in the sandbox.
         val known = (have.species.unsafeCast<Array<String>?>() ?: emptyArray()).toSet()
