@@ -131,6 +131,9 @@ export const my = facade('my');
 
 /** Where the sim runs: 'worker' or 'page'. */
 export const where = () => transport.name;
+let lastSnap = null;
+/** The newest snapshot the view draws (QA: compare the worker's copy with the page's own sim). */
+export const snapshot = () => (transport === inThread ? K.sim.latest() : lastSnap);
 
 const STORE_KEYS = ['reeflive.mytank', 'reeflive.mytank.bak'];
 const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
@@ -203,7 +206,7 @@ function startWorker(base) {
       }
       case 'snap': {
         const t0 = performance.now();
-        K.view.mirror(dec.decode(d.m));
+        K.view.mirror(lastSnap = dec.decode(d.m));
         unpack += performance.now() - t0;
         break;
       }
@@ -246,6 +249,7 @@ function qa(o, f) {
     get(_, m) {
       if (typeof m !== 'string') return undefined;
       if (m === 'where') return where;
+      if (m === 'snapshot') return snapshot;
       if (f.peek[m]) return (...a) => (transport === inThread ? K[SIDE[o]][m](...a) : f.peek[m](...a));
       return f[m];
     },
