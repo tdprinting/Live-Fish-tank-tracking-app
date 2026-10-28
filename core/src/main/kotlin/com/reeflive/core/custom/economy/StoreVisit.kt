@@ -1,5 +1,6 @@
 package com.reeflive.core.custom.economy
 
+import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.Simulation
 import com.reeflive.core.sim.SpeciesCatalog
@@ -7,6 +8,7 @@ import com.reeflive.core.sim.StockGroup
 import com.reeflive.core.sim.StockSize
 import com.reeflive.core.sim.Stocking
 import kotlin.math.min
+import kotlin.time.TimeSource
 
 /**
  * One display tank in a store (ECONOMY §5 "Visiting a store"): a section's sign, what swims in it today and how the
@@ -102,27 +104,11 @@ object StoreVisit {
     fun shown(item: StockItem): Int = min(item.count, MAX_SHOWN)
 
     /**
-     * The sim for one display tank: its setup's tank, rock and light ([StoreDisplays.build]; noon, so the lights are
-     * on whatever the keeper's clock says) with today's animals in it at shop size. The host runs it like any tank
-     * while it is on screen.
+     * The sim for one display tank: its setup's tank, rock and light ([DisplayBuild]; noon, so the lights are on whatever
+     * the keeper's clock says) with today's animals in it at shop size. The host runs it like any tank while it is on
+     * screen. Built all at once: the pages use [DisplayBuild] to spread the work over frames.
      */
-    fun build(tank: DisplayTank, species: SpeciesCatalog, rock: RockData, seed: Long): Simulation {
-        tank.items.forEach { species.ensure(it.listing.speciesId) }
-        val sim = StoreDisplays.build(tank, species, rock, seed) { s, plugs ->
-            // the store keeps its display tanks fed; frags sit on the racks' plugs
-            val rng = s.rng.fork(57)
-            for (it in tank.items) {
-                val id = it.listing.speciesId
-                when {
-                    !species[id].isCoral -> Stocking.addMany(s, id, shown(it), size = StockSize.JUVENILE)
-                    plugs != null -> StoreDisplays.onPlugs(s, id, shown(it), plugs, rng)
-                    else -> StoreDisplays.onRock(s, id, shown(it))
-                }
-            }
-        }
-        sim.stepWall(0.0)
-        return sim
-    }
+    fun build(tank: DisplayTank, species: SpeciesCatalog, rock: RockData, seed: Long): Simulation = DisplayBuild(tank, species, rock, seed).run()
 
     /** The cards of [tank] for this keeper ([mine] is their tank, for the warnings). */
     fun cards(e: Economy, store: FishStore, tank: DisplayTank, mine: Simulation, day: String): List<ShelfCard> {
@@ -141,4 +127,66 @@ object StoreVisit {
         val same = tank.items.filter { it.listing.species == speciesId }
         return same.firstOrNull { Stocking.roleOf(it.listing.speciesId).equals(role, true) } ?: same.firstOrNull()
     }
+}
+
+/**
+ * A display tank's sim, built a little at a time. Its rockwork is a real rock-physics settle (several seconds of sim
+ * time per pass) and takes far longer than a frame, so the host calls [step] with a few milliseconds of budget on each
+ * animation frame (while the keeper is still on the street, or in the aisle for the next tank) and takes [sim] when
+ * [step] returns true. [run] does it all in one go (tests, other hosts); the result is the same sim either way.
+ *
+ * The tank is [tank]'s kind's glass, its rockwork ([StoreDisplays.scapeSteps]), its light, the store's animals at shop
+ * size, then the decor corals (after the stock, so the stock gets the best spots).
+ */
+class DisplayBuild(private val tank: DisplayTank, private val species: SpeciesCatalog, private val rock: RockData, private val seed: Long) {
+    private var built: Simulation? = null
+    private val work: Iterator<Unit> = iterator {
+        for (item in tank.items) species.ensure(item.listing.speciesId)
+        yield(Unit)
+        val setup = tank.setup
+        var made: Simulation? = null
+        for (s in CustomTank.freshSteps(setup.kind.build, species, rock, 12 * 3600.0, seed)) { if (s != null) made = s; yield(Unit) }
+        val sim = made!!
+        for (u in StoreDisplays.scapeSteps(sim, setup, seed.toInt())) yield(u)
+        for (c in 0 until min(setup.light.gains.size, sim.lights.gains.size)) sim.lights.gains[c] = setup.light.gains[c]
+        val plugs = if (setup.scape == DisplayScape.RACKS) BooleanArray(StoreDisplays.plugs.size) else null
+        // the store keeps its display tanks fed; frags sit on the racks' plugs
+        val rng = sim.rng.fork(57)
+        for (item in tank.items) {
+            val id = item.listing.speciesId
+            when {
+                !species[id].isCoral -> Stocking.addMany(sim, id, StoreVisit.shown(item), size = StockSize.JUVENILE)
+                plugs != null -> StoreDisplays.onPlugs(sim, id, StoreVisit.shown(item), plugs, rng)
+                else -> StoreDisplays.onRock(sim, id, StoreVisit.shown(item))
+            }
+            yield(Unit)
+        }
+        val forSale = tank.items.map { it.listing.speciesId }.toSet()
+        val decorRng = sim.rng.fork(91)
+        for (id in setup.decor) {
+            if (id in forSale) continue
+            if (plugs != null) StoreDisplays.onPlugs(sim, id, 2, plugs, decorRng) else StoreDisplays.onRock(sim, id, 1)
+            yield(Unit)
+        }
+        sim.stepWall(0.0)
+        built = sim
+    }
+
+    /** The finished sim, or null while [step] has more to do. */
+    val sim: Simulation? get() = built
+
+    /** Works for about [budgetMs] (at least one unit, which can take a few tens of ms). True when the sim is done. */
+    fun step(budgetMs: Double): Boolean {
+        if (built != null) return true
+        val t0 = TimeSource.Monotonic.markNow()
+        while (work.hasNext()) {
+            work.next()
+            if (built != null) return true
+            if (t0.elapsedNow().inWholeMicroseconds >= budgetMs * 1000.0) return false
+        }
+        return built != null
+    }
+
+    /** All of it now. */
+    fun run(): Simulation { while (!step(Double.MAX_VALUE)) Unit; return built!! }
 }
