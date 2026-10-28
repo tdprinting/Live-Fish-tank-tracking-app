@@ -47,7 +47,8 @@ function statsBox() {
   if (!statsEl) {
     statsEl = document.createElement('pre');
     statsEl.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top) + 8px);z-index:9999;margin:0;' +
-      'padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ef;font:11px/1.35 ui-monospace,monospace;pointer-events:none';
+      'padding:6px 8px;border-radius:8px;background:rgba(6,19,39,.62);border:1px solid var(--glassBorder);color:#E9F3FF;' +
+      'font:11px/1.35 ui-monospace,monospace;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none';
     document.body.appendChild(statsEl);
   }
   return statsEl;
@@ -729,7 +730,8 @@ function settingsCard(sb) {
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['AUTO', 'LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
     <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}${tile('data-camreset', 'eye', 'Reset view')}</div>
-    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}`;
+    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}
+    ${window.reefBuild && !window.reefBuild.startsWith('__') ? `<p class="buildline">ReefLive build ${esc(window.reefBuild)}</p>` : ''}`;
 }
 
 // ---- card clicks

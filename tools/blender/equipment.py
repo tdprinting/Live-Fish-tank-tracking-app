@@ -112,12 +112,12 @@ def flipper_label(path):
                     if FONT[ch][r][c] == "1":
                         x = x0 + k * 6 * sc + c * sc
                         y = y0 + r * sc
-                        img[y:y + sc, x:x + sc] = 0.95
+                        img[y:y + sc, x:x + sc] = 0.36   # grey print: no brighter than the reef (research 11 §9)
     text("FLIPPER", 14, 4, 3)
     text("FLOAT", 46, 31, 2)
     img = np.rot90(img, k=-1)  # clockwise: reads top-to-bottom on the upright cleaner
     for r0 in (4, 150):  # blue brand stripes at both ends
-        img[r0:r0 + 4, 6:42] = (0.12, 0.39, 0.84)
+        img[r0:r0 + 4, 6:42] = (0.02, 0.13, 0.31)
     C.write_png(path, (np.clip(img, 0, 1) * 255).astype(np.uint8))
     return path
 
@@ -218,7 +218,7 @@ def build():
     C.reset_scene()
     root = C.empty("Root")
     C.set_extras(root, units="cm", spec="docs/specs/tank_design.md §3.2")
-    black = C.material("black_plastic", "#111214", rough=0.5)
+    black = C.material("black_plastic", "#111214", rough=0.4)   # a plastic sheen, not a hole (research 11 §9)
     grille = C.material("grille", "#2A2C2F", rough=0.6)
     grey = C.material("bracket_grey", "#9CA59A", rough=0.6)
     tube_grey = C.material("tube_grey", "#8A8F94", rough=0.4)

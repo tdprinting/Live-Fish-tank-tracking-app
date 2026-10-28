@@ -77,7 +77,7 @@ void main() {
     float ndv = max(dot(Ng, V), 0.0);
     col += pow(1.0 - ndv, 2.5) * 0.35 * (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5 * albedo;
     // fluorescence: emissive scaled by blue light and extension (bleached tissue loses it)
-    col += uEmissive * uBlueFraction * lightIntensity() * mix(0.4, 1.0, uExtension) * (1.0 - uBleach) * (1.0 - bare) * 1.5;
+    col += uEmissive * uBlueFraction * lightIntensity() * mix(0.4, 1.0, uExtension) * (1.0 - uBleach) * (1.0 - bare) * 0.8;
     col = applyWater(col, vWorld);
     fragColor = vec4(tonemap(col), 1.0);
 }

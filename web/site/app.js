@@ -163,7 +163,26 @@ if ('serviceWorker' in navigator) {
   // a first visit loads before the service worker runs: once the tank is in, it hands over what it downloaded (from
   // the browser's cache, no second download) so the next visit starts from the worker's cache (sw.js)
   const firstVisit = !navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // a new build is fully cached once its worker is installed (waiting): offer it, and switch only on the tap
+    const offer = () => { if (navigator.serviceWorker.controller && reg.waiting) $('update').classList.remove('hidden'); };
+    offer();
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w?.addEventListener('statechange', () => { if (w.state === 'installed') offer(); });
+    });
+    // an installed app can stay open for days: look for a new build when it comes back to the front
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    $('updateGo').addEventListener('click', () => {
+      if (!reg.waiting) { location.reload(); return; }
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+      reg.waiting.postMessage({ type: 'skip-waiting' });
+    });
+    $('updateClose').addEventListener('click', () => $('update').classList.add('hidden'));
+  }).catch(() => {});
+  // the build the page runs on (shown in Settings)
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.type === 'build') window.reefBuild = e.data.build; });
+  navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: 'build?' })).catch(() => {});
   const handOver = () => navigator.serviceWorker.ready.then((reg) => {
     const base = new URL('.', location.href).href;
     const paths = performance.getEntriesByType('resource').map((r) => r.name).filter((n) => n.startsWith(base)).map((n) => n.slice(base.length).split('?')[0]);

@@ -1542,7 +1542,7 @@ SPECIES = {
         pectoral=dict(u=0.24, length=0.14, width=0.09, zf=-0.1, shape="round"),
         pelvic=dict(u=0.28, length=0.10),
         eye=dict(u=0.08, zf=0.3, r=0.045, iris="#20204A", ring="#5B63C8", outer="#202060", ring_w=0.12),
-        paint=paint_dottyback, fins=fins_dottyback, irid=0.3, rough=0.32, length_cm=6.5,
+        paint=paint_dottyback, fins=fins_dottyback, irid=0.15, rough=0.55, length_cm=6.5,  # matte indigo, not glossy plastic (research 11 §7)
     ),
     "diamond_goby": dict(
         # Valenciennea puellaris (research 16): elongate sleeper goby, depth ~0.2 L, slightly compressed, blunt

@@ -244,7 +244,7 @@ def encrusting(rock):
     for lx, ly, am, s in lumps[:6]:
         cv.blend(P.disc_px(cv, 0.5 + 0.42 * lx, 0.5 + 0.42 * ly, 0.012, 1.0), "#6E5A1A", 0.85)
     m = C.material("encrust_yellow", rough=0.75, image=tex("encrust_yellow", cv), emissive="#F2DA3A",
-                   emissive_strength=0.05)
+                   emissive_strength=0.0)   # no glow: the lump was the most saturated thing in the tank (research 11 §6)
     return V, F, np.array(UV), col, m, hit
 
 
@@ -307,7 +307,7 @@ def mushrooms(sand):
     stalk = (~left).astype(np.float32)
     cv.blend(stalk, "#B0583C", 1.0)
     cv.blend(stalk * P.fbm(64, 128, 8, 2, 324), "#8E4028", 0.4)
-    m = C.material("mushroom_red_small", rough=0.7, image=tex("mushroom_red_small", cv), emissive="#C04A2A",
+    m = C.material("mushroom_red_small", rough=0.7, image=tex("mushroom_red_small", cv), emissive="#6A2A1C",
                    emissive_strength=0.04)
     return np.array(V), F, np.array(UV), np.array(COL), m, sites
 

@@ -195,16 +195,17 @@ class FrameUniforms {
         /** `uShadowMat` then `uShadow` ([ShadowMap.fill]). */
         const val SHADOW_OFFSET = CASTER_OFFSET + MAX_CASTERS * 4
         const val FLOATS = SHADOW_OFFSET + 20
-        const val FOG_DENSITY = 0.005f
+        const val FOG_DENSITY = 0.0085f
         val WATER_LEVEL: Float get() = Camera.WATER_Y
         const val SAND_TOP = Camera.SAND_Y
-        const val CAUSTIC_STRENGTH = 0.85f
-        const val CAUSTIC_SCALE = 0.03f
+        const val CAUSTIC_STRENGTH = 0.35f
+        const val CAUSTIC_SCALE = 0.055f
         /**
-         * Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7). Somewhat above pure seawater so
-         * the blue-green fall-off reads across a 122 cm tank (a side view keeps ~40 % of red).
+         * Beer-Lambert absorption per cm (R, G, B) and scattering (SIMULATION §9.7), about pure seawater: red fades
+         * across the 122 cm side view (~80 % kept) but the front view stays warm, as Tee's photos show (research 11 §2;
+         * stronger red loss turned the tan rock green). Fog (FOG_DENSITY) carries the haze.
          */
-        val ABSORB = floatArrayOf(0.0072f, 0.0016f, 0.0010f)
-        const val SCATTER = 0.0004f
+        val ABSORB = floatArrayOf(0.0022f, 0.0015f, 0.0015f)
+        const val SCATTER = 0.0008f
     }
 }
