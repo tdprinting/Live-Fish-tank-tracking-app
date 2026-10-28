@@ -99,6 +99,8 @@ class TangHideTest {
             sim.advance(20.0, behaviorDt = 0.1)
             rub.nextAt = 0.0
             sim.advance(60.0, behaviorDt = 0.1) {
+                // (each rub is one run now; the next is brought forward again, as the first was)
+                if (b.utility.current !== rub) rub.nextAt = 0.0
                 if (b.utility.current === rub) {
                     val d = sim.bodyDepth(tang)
                     minDepth = minOf(minDepth, d)
@@ -124,6 +126,8 @@ class TangHideTest {
             z.nextAt = 0.0
             var x0 = Double.NaN
             sim.advance(30.0, behaviorDt = 0.1) {
+                // (each dash is one run now; the next is brought forward again, as the first was)
+                if (b.utility.current !== z) z.nextAt = 0.0
                 if (b.utility.current === z) {
                     if (x0.isNaN()) x0 = tang.pos.x
                     top = maxOf(top, tang.vel.length() / tang.burstSpeed)

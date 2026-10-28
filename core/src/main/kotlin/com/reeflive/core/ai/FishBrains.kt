@@ -1185,6 +1185,8 @@ class WrasseBrain(c: Ctx) : SpeciesBrain(c) {
             val searchCm = SEARCH_CM * (if (com.reeflive.core.sim.LifeStages.isJuvenile(o)) JUVENILE_SEARCH else 1.0)
             for (f in c.sim.organisms) {
                 if (f === o || !f.alive || !f.isFish || !f.visible || f.sleeping || f.brainKind == BrainKind.WRASSE || f.brainKind == BrainKind.EEL) continue
+                // a fish lying on the bottom from heat is not inspected (its laid body was pushed into a fold)
+                if (f.heat.stage >= com.reeflive.core.sim.HeatModel.Stage.LETHARGIC) continue
                 if (c.t - f.lastCleanerContactAt < CLIENT_COOLDOWN_S) continue
                 if ((unreachableUntil[f.id] ?: -1.0) > c.t) continue
                 val d = f.pos.distanceTo(o.pos)

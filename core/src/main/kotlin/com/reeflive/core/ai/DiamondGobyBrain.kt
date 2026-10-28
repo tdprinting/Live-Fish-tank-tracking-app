@@ -329,6 +329,8 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
      */
     inner class Sift : Behavior("sift", "Sifting sand") {
         private var phase = 0
+        /** Gliding to the next patch (phase 0; tests). */
+        val travelling: Boolean get() = phase == 0
         private var timer = 0.0
         private var left = 0
         private var chew = 2.0
@@ -348,7 +350,7 @@ class DiamondGobyBrain(c: Ctx) : SpeciesBrain(c) {
         override val committed: Boolean get() = phase in 1..3
         // one label for the whole mouthful cycle (take, winnow, blow out: ~4 s): naming each phase flipped the card
         // every second or two
-        override val label: String get() = if (phase == 0) "Moving to a new patch of sand" else "Sifting sand through its gills"
+        override val label: String get() = "Sifting sand"
         override fun score(c: Ctx): Double {
             if (c.p.night || o.waryLevel > WARY_SIFT - band(this)) return 0.0
             return (0.55 + 0.3 * o.hunger) * max(c.activity, 0.3)

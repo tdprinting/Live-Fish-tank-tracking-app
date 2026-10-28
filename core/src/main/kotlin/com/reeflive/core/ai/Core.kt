@@ -292,7 +292,7 @@ class UtilityBrain(val behaviors: List<Behavior>) {
     companion object {
         const val NOISE_TAU = 20.0
         /** Display-label dwell (s): the shown label stays at least this long, a new one must last [LABEL_CONFIRM_S] [L]. */
-        const val LABEL_DWELL_S = 6.0
-        const val LABEL_CONFIRM_S = 2.0
+        const val LABEL_DWELL_S = 10.0
+        const val LABEL_CONFIRM_S = 4.5
     }
 }

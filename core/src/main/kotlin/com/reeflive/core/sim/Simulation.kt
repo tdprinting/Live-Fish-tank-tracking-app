@@ -1970,15 +1970,15 @@ class Simulation private constructor(
 
     /**
      * Feeding without particles (abstract mode): diet-matched animals eat in priority order. [warped] (fast-forward with
-     * the behaviour layer on): only the animals that get to a feed in the water at normal speed, the fish and shrimp
-     * (the snails, hermits, stars and crabs mostly find what is left long after; at normal speed they rarely do); the
+     * the behaviour layer on): only the animals that get to a feed in the water at normal speed, the fish, the cleaner
+     * shrimp and a duster (snails, hermits, stars, crabs and the ledge-bound banded shrimp rarely do at normal speed); the
      * leftover goes to detritus.
      */
     private fun abstractFeed(kind: FoodKind, grams: Double, at: Vec3, warped: Boolean = false) {
         var left = if (kind == FoodKind.NORI) 1.0 else grams
         val eaters = organisms.filter { o ->
             o.alive && o.species.dietMatch(kind) > 0 && o.hunger > 0.1 && (o.acceptsPrepared || kind.suspended) &&
-                (!warped || o.isFish || o.brainKind.isShrimp || o.brainKind == BrainKind.FEATHER_DUSTER) &&
+                (!warped || o.isFish || o.brainKind == BrainKind.CLEANER_SHRIMP || o.brainKind == BrainKind.FEATHER_DUSTER) &&
                 !(o.brainKind == BrainKind.EEL && at.distanceTo(rock.anchors.pos("CAVE_EEL", at)) > 20) &&
                 !(o.brainKind == BrainKind.FEATHER_DUSTER && (!kind.suspended || invertEcology.crownOf(o) < 0.7))
         }.map { it to (it.aggression + it.boldness + (if (it.role == "FEMALE") 0.3 else 0.0) + it.hunger + rng.nextDouble() * 0.3 + (it.species.foodPreference(kind) - it.species.dietMatch(kind))) }

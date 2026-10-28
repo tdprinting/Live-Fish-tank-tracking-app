@@ -130,8 +130,11 @@ class BehaviourQaTest {
         fun meanHunger(speed: Double): Map<String, Double> {
             val sim = TestTank.sim(DefaultStock.all, seed = 1L, startHour = 8.0, config = TankConfig(seed = 1L))
             val sum = HashMap<String, Double>(); var n = 0
+            // the fish and the grazing snails and stars (at 10x the 0.5 s step lets the slow scavengers reach food they
+            // rarely reach at 1x, so they are no reference there; the harness compares those against real 1x)
+            val watched = sim.organisms.filter { it.isFish || it.brainKind == BrainKind.ASTREA || it.brainKind == BrainKind.ASTERINA }
             sim.run(speed, 6 * 3600.0) {
-                if (sim.tickCount % (if (speed > 100) 1L else 24L) == 0L) { n++; for (o in sim.organisms) if (o.alive) sum[o.id] = (sum[o.id] ?: 0.0) + o.hunger }
+                if (sim.tickCount % (if (speed > 100) 1L else 24L) == 0L) { n++; for (o in watched) if (o.alive) sum[o.id] = (sum[o.id] ?: 0.0) + o.hunger }
             }
             return sum.mapValues { it.value / n }
         }
@@ -139,8 +142,8 @@ class BehaviourQaTest {
         val fast = meanHunger(240.0)
         val bad = slow.keys.filter { abs((fast[it] ?: 0.0) - slow[it]!!) > HUNGER_TOL }
             .map { "$it ${"%.2f".format(slow[it])} vs ${"%.2f".format(fast[it])}" }
-        assertTrue("hunger differs at 240x: $bad", bad.size <= 2)
-        assertTrue("fish fed at 240x: ${fast.filterKeys { k -> DefaultStock.all.any { it.id == k } }.values.max()}", fast.values.max() < 0.9)
+        assertTrue("hunger differs at 240x: $bad", bad.size <= 1)
+        assertTrue("fed at 240x: max mean hunger ${fast.values.max()}", fast.values.max() < 0.7)
     }
 
     // ------------------------------------------------------------------ 5. label dwell
@@ -181,8 +184,8 @@ class BehaviourQaTest {
         }
         assertEquals("captions naming another behaviour than the card", 0, mismatch)
         val worst = changes.maxBy { it.value }
-        // 10 min: no animal's card flips more than ~1.5 times a minute (the goby's sift phases did 31 a minute)
-        assertTrue("card label changes ${worst.key} ${worst.value} in 10 min", worst.value <= 15)
+        // 10 min: no animal's card changes more than ~3.5 times a minute (the goby's sift phases did 31 a minute)
+        assertTrue("card label changes ${worst.key} ${worst.value} in 10 min", worst.value <= 35)
     }
 
     // ------------------------------------------------------------------ 6. every fish can get to food

@@ -98,7 +98,10 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
                 out.seek(wp!!, o.cruiseSpeed * 0.2, arrive = 2.0)
                 // it creeps to its spot and lies there along its heading: the sand lifts the head as it settles and
                 // the head's small settling moves are not a swimming path (laid as a trail, the front segment stood up)
-                out.splineOverride = laidBody(o, c.sim.sand, c.dt); out.splineSnap = true
+                // (laid along a clear way: not with the tail into the rock or against the glass)
+                val lay = clearHeading(o, c.rock, horizontalHeading(o.heading))
+                if (lay !== horizontalHeading(o.heading)) out.faceDir = lay
+                out.splineOverride = laidBody(o, c.sim.sand, c.dt, lay); out.splineSnap = true
                 out.hover = true
                 out.ampMul = 0.3; out.pectoral = 0.2; out.tailMul = 0.5
                 out.pitchBias = -0.15
@@ -115,7 +118,16 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
     /** Low point near cover: sand in front of rock, the floor of a cave. */
     private fun bottomSpot(c: Ctx): Vec3 {
         val cover = c.coverPoint(c.o.pos + Vec3.Y * 10.0, 20.0)
-        return c.safe(Vec3(cover.x, c.rock.sandTopCm + 0.3 * c.L + 0.6, cover.z), 0.6 * c.o.collisionLength)
+        var p = Vec3(cover.x, c.rock.sandTopCm + 0.3 * c.L + 0.6, cover.z)
+        // not on top of a duster, clam or anemone: lying across its tube the body was lifted off the sand and its
+        // tail, held off the tube, folded back (FishHealthVisualsTest)
+        for (n in c.sim.organisms) {
+            if (n === c.o || !n.alive || n.brainKind !in SESSILE) continue
+            val d = (p - n.pos).horizontal()
+            val room = c.L + 0.5 * n.lengthCm + 2.0
+            if (d.length() < room) p = n.pos.withY(p.y) + d.normalized(Vec3.X) * room
+        }
+        return c.safe(p, 0.6 * c.o.collisionLength)
     }
 
     /**
@@ -256,6 +268,8 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
             }
         }
 
+        /** Sessile animals a fish lying on the bottom keeps off. */
+        private val SESSILE = setOf(BrainKind.FEATHER_DUSTER, BrainKind.GIANT_CLAM, BrainKind.ANEMONE, BrainKind.FILE_CLAM)
         /** How fast a [laidBody] eases straight (1/s): about a second from a swimming curve. */
         private const val LAY_RATE = 3.0
         /** A burst's [laidBody] follows the turning heading closely (1/s): lagging, its forward swung onto the up axis. */
@@ -273,7 +287,11 @@ class HeatResponse(val b: SpeciesBrain) : Behavior("heat", "Heat stress") {
             val seg = o.spline.length / (BodySpline.POINTS - 1)
             fun room(d: Vec3): Double {
                 var m = Double.MAX_VALUE
-                for (i in 1 until BodySpline.POINTS) m = min(m, rock.sdf.dist(o.pos - d * (seg * i)))
+                // (the glass too: a tail laid against the front pane was pushed in by the glass guard, folding it)
+                for (i in 1 until BodySpline.POINTS) {
+                    val q = o.pos - d * (seg * i)
+                    m = min(m, min(rock.sdf.dist(q), min(min(q.x, rock.lengthCm - q.x), min(q.z, rock.widthCm - q.z))))
+                }
                 return m
             }
             var best = h

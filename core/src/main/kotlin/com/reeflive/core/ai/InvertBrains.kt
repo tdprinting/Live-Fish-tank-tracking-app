@@ -851,7 +851,10 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
     inner class Pick : Behavior("pick", "Picking at rock") {
         private var spot: Pair<Vec3, Vec3>? = null
         private var next = 0.0
-        override fun score(c: Ctx) = if (c.t < unwedgeUntil) 0.0 else 0.3 + 0.3 * c.o.hunger
+        /** After a pick it walks on for a while ([Forage]): a hungry hermit used to pick the same spot all day. */
+        private var restUntil = -1e9
+        override fun score(c: Ctx) = if (c.t < unwedgeUntil || c.t < restUntil) 0.0 else 0.3 + 0.3 * c.o.hunger
+        override fun exit(c: Ctx) { restUntil = c.t + PICK_GAP_S }
         override fun enter(c: Ctx) {
             spot = null
             for (i in 0 until 4) {
@@ -998,6 +1001,8 @@ class HermitBrain(c: Ctx) : SpeciesBrain(c) {
         /** Seconds a hermit that was wedged walks on before it settles to pick again. */
         const val UNWEDGE_S = 20.0
         /** Foraging legs: straight-line length (cm), draws per leg, the top band (cm under the water line) it keeps out of [L]. */
+        /** Sim s between rock picks (it forages on in between) [L]. */
+        const val PICK_GAP_S = 120.0
         const val LEG_MIN_CM = 15.0
         const val LEG_MAX_CM = 50.0
         const val LEG_TRIES = 8

@@ -46,7 +46,7 @@ class SandSiftMotionTest {
             // (from 5 s in: the first ticks place the new fish)
             if (sifting && have >= 100) {
                 siftTicks++
-                val travel = b.utility.currentLabel == "Moving to a new patch of sand"
+                val travel = (b.utility.current as? DiamondGobyBrain.Sift)?.travelling == true
                 val m = if (travel) tr else fd
                 for (i in 2 until BodySpline.POINTS) {
                     m.jump = max(m.jump, pts[i].distanceTo(prev[i]))
