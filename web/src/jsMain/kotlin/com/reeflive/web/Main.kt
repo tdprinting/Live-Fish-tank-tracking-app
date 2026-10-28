@@ -102,6 +102,8 @@ object ReefLive {
         MainScope().launch {
             try {
                 status("Loading the tank…")
+                // the asset index, shaders, sim tables and species sheets in one file (web/build.gradle.kts bootPack)
+                loadPack("boot.json")
                 val index = fetchJson("assets/index.json")
                 val files = HashMap<String, List<String>>()
                 for (k in js("Object").keys(index).unsafeCast<Array<String>>()) files[k] = index[k].unsafeCast<Array<String>>().toList()
@@ -746,23 +748,46 @@ object ReefLive {
     // ------------------------------------------------------------------ loading
 
     private suspend fun fetchJson(path: String): dynamic {
+        kotlin.Resources.get(resKey(path))?.let { return JSON.parse<dynamic>(it.decodeToString()) }
         val r = window.fetch(base + path).await()
         if (!r.ok) throw IllegalStateException("Missing $path (${r.status})")
         return r.json().await()
     }
 
+    /**
+     * [path]'s bytes, or null when it is missing. The page's loader (index.html `reefFetch`) may already be
+     * downloading it, and takes a model or the rock field gzipped where the browser can unpack it.
+     */
+    private suspend fun download(path: String, signal: dynamic = null): ArrayBuffer? {
+        val pageFetch = window.asDynamic().reefFetch
+        if (pageFetch != null && base == js("new URL('.', location.href).href")) {
+            return (pageFetch(path, signal) as Promise<ArrayBuffer?>).await()
+        }
+        val init: dynamic = js("({})")
+        if (signal != null) init.signal = signal
+        val r = window.fetch(base + path, init.unsafeCast<org.w3c.fetch.RequestInit>()).await()
+        return if (r.ok) r.arrayBuffer().await().unsafeCast<ArrayBuffer>() else null
+    }
+
+    /** A pack of small text files, `{ resource key: text }`, put into [kotlin.Resources] (missing pack: no-op). */
+    private suspend fun loadPack(path: String) {
+        runCatching {
+            val buf = download(path) ?: return
+            val pack: dynamic = JSON.parse<dynamic>(js("new TextDecoder()").decode(buf).unsafeCast<String>())
+            val enc: dynamic = js("new TextEncoder()")
+            for (k in js("Object").keys(pack).unsafeCast<Array<String>>()) {
+                val u8: dynamic = enc.encode(pack[k])
+                kotlin.Resources.put(k, Int8Array(u8.buffer.unsafeCast<ArrayBuffer>(), u8.byteOffset.unsafeCast<Int>(), u8.byteLength.unsafeCast<Int>()).unsafeCast<ByteArray>())
+            }
+        }.onFailure { console.warn("[ReefLive] no $path: loading the files one by one") }
+    }
+
     private suspend fun fetchFile(path: String, timeoutMs: Int = 0) {
         if (kotlin.Resources.has(resKey(path))) return
-        val init: dynamic = js("({})")
-        val timer = if (timeoutMs > 0) {
-            val ctl: dynamic = js("new AbortController()")
-            init.signal = ctl.signal
-            window.setTimeout({ ctl.abort() }, timeoutMs)
-        } else null
+        val ctl: dynamic = if (timeoutMs > 0) js("new AbortController()") else null
+        val timer = if (ctl != null) window.setTimeout({ ctl.abort() }, timeoutMs) else null
         try {
-            val r = window.fetch(base + path, init.unsafeCast<org.w3c.fetch.RequestInit>()).await()
-            if (!r.ok) return
-            val ab = r.arrayBuffer().await().unsafeCast<ArrayBuffer>()
+            val ab = download(path, ctl?.signal) ?: return
             kotlin.Resources.put(resKey(path), Int8Array(ab).unsafeCast<ByteArray>())
         } finally {
             timer?.let { window.clearTimeout(it) }

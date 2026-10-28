@@ -160,7 +160,18 @@ $('importFile').addEventListener('change', async (e) => {
 const standalone = window.navigator.standalone || matchMedia('(display-mode: standalone)').matches;
 if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !standalone && !store.get('reeflive.installHint', false)) $('install').classList.remove('hidden');
 $('installClose').addEventListener('click', () => { $('install').classList.add('hidden'); store.set('reeflive.installHint', true); });
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  // a first visit loads before the service worker runs: once the tank is in, it hands over what it downloaded (from
+  // the browser's cache, no second download) so the next visit starts from the worker's cache (sw.js)
+  const firstVisit = !navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const handOver = () => navigator.serviceWorker.ready.then((reg) => {
+    const base = new URL('.', location.href).href;
+    const paths = performance.getEntriesByType('resource').map((r) => r.name).filter((n) => n.startsWith(base)).map((n) => n.slice(base.length).split('?')[0]);
+    reg.active?.postMessage({ type: 'cache-used', paths: ['index.html', ...paths] });
+  }).catch(() => {});
+  if (firstVisit) { setTimeout(handOver, 30000); setTimeout(handOver, 90000); }
+}
 
 tracker.showSub(tracker.sub());
 showTab(store.get('reeflive.tab', 'live'));

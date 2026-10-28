@@ -137,9 +137,20 @@ class AssetStore(private val assets: AssetManager, private var quality: RenderQu
     fun model(path: String): GpuModel? {
         models[path]?.let { return it }
         if (path in failed || !exists(path)) return null
+        val standIn = standIn(path)
+        // the stand-in is asked for first, so it arrives first (and before the add below: the web build's executor
+        // downloads the path the last add named, AssetPrefetch)
+        if (standIn != null && path !in requested) model(standIn)
         if (requested.add(path)) executor.execute { ready.add(parse(path)) }
-        return null
+        return standIn?.let { models[it] }
     }
+
+    /**
+     * On High the rock (and the Kenya tree) is drawn from its `_lod1.glb`, less than half the download, until the
+     * full model is in: the first frame shows the reef sooner, and the full detail replaces it when it lands.
+     */
+    private fun standIn(path: String): String? =
+        if (quality == RenderQuality.HIGH && path in TankRenderer.SCENE_LOD1) ModelRegistry.lod1(path).takeIf { exists(it) } else null
 
     /** Shared texture by asset path (e.g. "textures/caustic_512.png"). */
     fun texture(path: String, maxEdge: Int = quality.maxTexture): Texture? {
