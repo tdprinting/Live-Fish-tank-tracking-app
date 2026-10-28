@@ -1186,7 +1186,11 @@ class Camera {
             DEFAULT_DISTANCE = (TANK[2] - DEFAULT_TARGET[2]) + (150f - TankDims.DEPTH_F / 2f) * k
             TARGET_HI[0] = TANK[0] + 4f; TARGET_HI[1] = WATER_Y + 2f; TARGET_HI[2] = TANK[2] + 6f
         }
-        const val DEFAULT_PITCH = 0.08f
+        /**
+         * Eye a little under the water line, looking slightly down onto the bed as in Tee's photos: the surface reads as a
+         * thin band, not a bright sheet, and the sand bar is the bright floor of the picture (research 11 §10).
+         */
+        const val DEFAULT_PITCH = 0.14f
         /** Closest orbit (user units; ≈ 10 cm from the target in portrait): right up to the rockwork. */
         const val MIN_DISTANCE = 12f
         const val MAX_DISTANCE = 320f

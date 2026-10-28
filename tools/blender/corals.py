@@ -13,6 +13,17 @@ COLOR_0 for coral meshes (data, linear):
          b = sway weight (0 at the attachment .. 1 at the free tips), a = 1
   polyp: r = 0, g = 0, b = tentacle hinge (0 at the polyp base .. 1 at the tentacle tips), a = 1
   card : b = sway weight (0 root .. 1 tip)
+
+Look pass (docs/research/11_look_review.md §6): the committed GLBs carry baseColorFactor tints, patched into the
+material JSON after export (the textures are unchanged). Re-apply them after a regen, or bake them into the canvases:
+  kenya / kenya_lod1  kenya_body, kenya_polyp  (1.0, 0.8, 0.86)   pink-mauve, not bleached lavender
+  gsp_mat             gsp_mat_polyp            (1.0, 1.0, 0.7)    olive, not blue-grey
+  macro_red           macro_red                (0.62, 0.88, 0.95) organ_pipe organpipe_skeleton too
+  leather_pink        leather_pink             (0.7, 1.0, 0.65)
+  toadstool_leather   toadstool_cap, toadstool_polyp (0.62, 0.6, 1.0)
+  zoa                 zoa_polyp_orange, zoa_polyp_brown, paly_polyp_brown (0.62, 0.66, 1.0)
+(details.py: reef_details mushroom_red_small (0.4, 0.7, 0.85), encrust_yellow (0.38, 0.33, 1.0) and no glow,
+ coralline_crust (0.85, 1.0, 0.8).)
 """
 import json
 import math
@@ -703,7 +714,7 @@ def gsp_long_materials(name, base_hex="#4A2E36"):
     pc.rgb = np.where(st[..., None], stalk, tent).astype(np.float32)
     # the lime fluoresces under the blue-heavy light ([P p12]: tentacles glow against the dark rock)
     pol_m = C.material(name + "_polyp", rough=0.45, image=tex(name + "_polyp", pc), emissive="#B4FF3C",
-                       emissive_strength=0.3, double=True)
+                       emissive_strength=0.06, double=True)   # 0.3 read fluorescent lime; Tee's GSP is olive (research 11 §6)
     return mat_m, pol_m
 
 
@@ -1908,7 +1919,7 @@ def mushroom_hairy(rock, A):
               + hex2rgb("#A6DC78")[None, None] * S(0.75, 0.97, tt)[..., None])  # olive velvet, fluorescent tips
     pc.multiply(0.92 + 0.16 * P.fbm(64, 64, 6, 2, 100))
     pol_m = C.material("mushroom_hairy_polyp", rough=0.55, image=tex("mushroom_hairy_polyp", pc), emissive="#8CF060",
-                       emissive_strength=0.1, double=True)
+                       emissive_strength=0.04, double=True)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_shroom_hairy", species="rhodactis_sp", fluorescent=0.6,
                  hostFor="clown_orange,clown_darwin", discs=HAIRY_DISCS)
@@ -1998,8 +2009,8 @@ def mushroom_mound(rock, A):
     pc.rgb = (hex2rgb("#4A6E26")[None, None] * (1 - S(0.0, 0.5, tt))[..., None]
               + hex2rgb("#8CC83C")[None, None] * (S(0.0, 0.5, tt) * (1 - S(0.75, 0.97, tt)))[..., None]
               + hex2rgb("#CFF07A")[None, None] * S(0.75, 0.97, tt)[..., None]).astype(np.float32)
-    pol_m = C.material("mushroom_mound_polyp", rough=0.55, image=tex("mushroom_mound_polyp", pc), emissive="#A8F060",
-                       emissive_strength=0.15, double=True)
+    pol_m = C.material("mushroom_mound_polyp", rough=0.55, image=tex("mushroom_mound_polyp", pc), emissive="#6A9A40",
+                       emissive_strength=0.15, double=True)   # lime but matte (research 11 §6)
     root = C.empty("Root")
     C.set_extras(root, anchor="coral_gsp_lower_right", species="rhodactis_sp", fluorescent=0.7, discs=nd,
                  form="hairy_mound")

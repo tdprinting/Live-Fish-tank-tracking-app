@@ -33,7 +33,7 @@ void main() {
     // float-glass waviness: a very slight low-frequency wobble in the reflected room and fixture highlights
     vec3 Nr = uQuality >= 0.5 ? normalize(N + (vec3(vnoise(vWorld * 0.07), 0.0, vnoise(vWorld * 0.07 + 9.0)) - 0.5) * 0.012) : N;
     vec3 R = reflect(-V, Nr);
-    vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.6;
+    vec3 env = toLinear(texture(uEnv, equirect(R)).rgb) * 0.36;   // the room is exposed down (research 11 §10)
     // A pane seen from inside the tank (the side, back and bottom panes looked at through the water while the
     // camera is out front) mirrors the lit water by total internal reflection, not the room: without this the
     // grazing side panes picked up the pale room walls at Fresnel ~1 and read as beige/pink panels.

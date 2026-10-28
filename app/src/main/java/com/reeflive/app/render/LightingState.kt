@@ -28,9 +28,10 @@ class LightingState private constructor(
         val CHANNEL_RGB: Array<FloatArray> = arrayOf(
             floatArrayOf(0.85f, 0.93f, 1.0f),  // white
             // blue / royal carry less red than the UI swatches (core LightSchedule): with 0.23 / 0.18 red the blue-heavy
-            // schedules lit the sand and water periwinkle-violet instead of the photos' clean blue
-            floatArrayOf(0.12f, 0.60f, 1.0f),  // blue
-            floatArrayOf(0.14f, 0.34f, 1.0f),  // royal
+            // schedules lit the sand and water periwinkle-violet instead of the photos' clean blue. Little green either
+            // (a 460 nm diode is not cyan): with 0.60 / 0.34 green the whole tank read cyan (research 11 §3)
+            floatArrayOf(0.08f, 0.40f, 1.0f),  // blue
+            floatArrayOf(0.10f, 0.20f, 1.0f),  // royal
             floatArrayOf(1.0f, 0.3f, 0.3f),    // red
             floatArrayOf(0.3f, 1.0f, 0.54f),   // green
             floatArrayOf(0.42f, 0.24f, 1.0f),  // violet
@@ -43,8 +44,11 @@ class LightingState private constructor(
         /** Fixture lens centres (cm) and cone (ARCHITECTURE §8.5); must equal equipment.glb `AiPrimeL/R_Lens` `lightPos`. */
         val LIGHT_POS: Array<FloatArray> = arrayOf(floatArrayOf(32f, 69.6f, 20f), floatArrayOf(88f, 69.6f, 20f))
         const val CONE_DEG = 120f
-        private val FOG_TINT = floatArrayOf(0x0E / 255f, 0x3B / 255f, 0x5A / 255f)
-        private val FOG_FLOOR = floatArrayOf(0x02 / 255f, 0x06 / 255f, 0x0C / 255f)
+        /** Smoky slate, not saturated blue: the photos' water column is dark and nearly neutral (research 11 §2). */
+        private val FOG_TINT = floatArrayOf(0.07f, 0.066f, 0.1f)
+        private val FOG_FLOOR = floatArrayOf(0x04 / 255f, 0x07 / 255f, 0x0A / 255f)
+        /** Ambient = key x this, half of it desaturated to the key's grey so shadows stop going cyan. */
+        const val AMBIENT = 0.18f
         const val NIGHT_THRESHOLD = 0.03f
 
         fun from(channels: FloatArray): LightingState {
@@ -57,7 +61,8 @@ class LightingState private constructor(
             val key = FloatArray(3)
             for (i in 0 until 8) for (k in 0 until 3) key[k] += use[i] * CHANNEL_RGB[i][k] * WEIGHTS[i]
             val intensity = if (night) maxOf(rawIntensity, c[7] * WEIGHTS[7]) else rawIntensity
-            val ambient = FloatArray(3) { key[it] * 0.18f }
+            val grey = key[0] * 0.2126f + key[1] * 0.7152f + key[2] * 0.0722f
+            val ambient = FloatArray(3) { (key[it] + grey) * 0.5f * AMBIENT }
             // Normalize the hue so fog tracks the light colour, not its weight sum, then scale by intensity.
             val kmax = maxOf(key[0], key[1], key[2], 1e-4f)
             val fog = FloatArray(3) { key[it] / kmax * FOG_TINT[it] * intensity + FOG_FLOOR[it] }
