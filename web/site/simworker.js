@@ -68,7 +68,25 @@ function run(d) {
   return K[d.o][d.m](...d.a);
 }
 
+/**
+ * Calls and commands that change My tank: after one, the worker saves the tank soon (the page's copy of the storage is
+ * then current within a moment, whatever happens to the page or the worker), not only on the page's 30 s timer.
+ */
+const WRITES = new Set(`my.startOver my.setPace my.rename my.testedWater my.dismissAway my.decorUse my.answerTrade my.leaveStore
+  my.visitCancel my.start my.useSupply my.useFishFood my.buyRecord my.collectHappy my.decorBuy my.trade my.turnStep my.checkout my.sell
+  my.away my.buildStep sb.setMode sb.act sb.applyParam sb.fix sb.feedAt sb.spotAct`.split(/\s+/));
+const SAVE_DELAY_MS = 400;
+let saveTimer = 0;
+function saveSoon() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = 0;
+    try { if (K.sb.isMine() && !K.my.inStore()) K.my.save(); } catch (err) { console.error(err); }
+  }, SAVE_DELAY_MS);
+}
+
 async function boot(d) {
+  if (d.testFail) throw new Error('test: boot failure');
   if (LOADED !== d.loaded || classPrint(ctors, LOADED) !== d.print) throw new Error(`class tables differ (${classPrint(ctors, LOADED)} vs ${d.print})`);
   K.sim.useRemoteStore(d.store, (key, value) => post({ t: 'store', key, value }));
   K.sim.useRemoteFx(fx);
@@ -81,6 +99,9 @@ async function boot(d) {
 let booted = null;
 self.onmessage = async (e) => {
   const d = e.data;
+  // answered at once, even while the sim is still booting: the page's heartbeat
+  if (d.t === 'ping') { post({ t: 'pong', n: d.n }); return; }
+  if (d.t === 'test') { if (d.hang) for (;;) { /* QA: an unresponsive worker */ } return; }
   if (d.t === 'boot') {
     booted = boot(d);
     try { await booted; post({ t: 'ready' }); } catch (err) { console.error(err); post({ t: 'failed', why: String(err?.message || err) }); }
@@ -98,6 +119,7 @@ self.onmessage = async (e) => {
     default:
       return;
   }
+  if (WRITES.has(`${d.o}.${d.m}`)) saveSoon();
   // a command can change the tank on screen without a step (a mode switch, My tank set up): show it at once
   if (enc) try { sendSnapshot(); } catch (err) { console.error(err); }
 };
