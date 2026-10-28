@@ -29,7 +29,13 @@
     if (gz && /\.(glb|bin)$/.test(p)) {
       try {
         const r = await fetch(`${p}.gz`, { signal, priority });
-        if (r.ok) return await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        if (r.ok) {
+          const b = await r.arrayBuffer();
+          const h = new Uint8Array(b, 0, Math.min(2, b.byteLength));
+          // a server that marks .gz as Content-Encoding hands it over unpacked already
+          if (h[0] !== 0x1f || h[1] !== 0x8b) return b;
+          return await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        }
       } catch (e) { if (signal && signal.aborted) throw e; }
     }
     const r = await fetch(p, { signal, priority });
@@ -61,7 +67,19 @@
     t('water_n2.png'), t('sand_normal.jpg'), m('supply_shelf'), m('room_living'), m('stand_classic'), m('care_tools'),
     // High draws the LOD1 rock until the full one is in (AssetStore standIn)
     ...(q === 'HIGH' ? [m('rockscape')] : [])];
-  for (const p of list) if (typeof p === 'string') pre.set(p, get(p, undefined, /^assets\/(models|textures)/.test(p) ? 'low' : 'high').catch(() => null));
+  // They start once app.js is in: the code comes first (it has seconds of starting up to do, which the downloads
+  // then overlap), whatever the server makes of request priorities.
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    for (const p of list) if (typeof p === 'string' && !asked.includes(p)) pre.set(p, get(p, undefined, /^assets\/(models|textures)/.test(p) ? 'low' : 'high').catch(() => null));
+  };
+  const isApp = (e) => new URL(e.name).pathname.endsWith('/app.js');
+  try {
+    new PerformanceObserver((l, o) => { if (l.getEntries().some(isApp)) { o.disconnect(); start(); } }).observe({ type: 'resource', buffered: true });
+  } catch { start(); }
+  setTimeout(start, 6000);
   // what this visit asked for in its first seconds is the next visit's list
   setTimeout(() => { if (asked.length > 3) try { localStorage.setItem(key, JSON.stringify(asked)); } catch { /* private mode */ } }, 20000);
 })();

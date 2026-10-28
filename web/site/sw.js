@@ -11,7 +11,9 @@ const scope = () => self.registration.scope;
 const keyOf = (p) => new URL(`${p}?v=${FILES[p]}`, scope()).href;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.filter((p) => FILES[p]).map((p) => cacheFile(c, p)))).catch(() => {}));
+  // An update fetches the new build's shell now. A first install does not: the page is still downloading those
+  // files itself, and hands them over from the browser's cache once the tank is in (app.js, 'cache-used').
+  if (self.registration.active) e.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.filter((p) => FILES[p]).map((p) => cacheFile(c, p)))).catch(() => {}));
   self.skipWaiting();
 });
 
