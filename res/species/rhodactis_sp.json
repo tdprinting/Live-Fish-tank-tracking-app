@@ -1,0 +1,103 @@
+{
+  "id": "rhodactis_sp",
+  "kind": "CORAL",
+  "common": "Hairy green mushroom",
+  "scientific": "Rhodactis sp.",
+  "family": "Discosomatidae",
+  "maxLengthCm": 10,
+  "typicalAdultCm": 6,
+  "growthCmPerYear": 2,
+  "lifespanYears": 20,
+  "tolerance": {
+    "temp": {
+      "optLo": 24.5,
+      "optHi": 27,
+      "tolLo": 23,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 31
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.027,
+      "tolLo": 1.021,
+      "tolHi": 1.028,
+      "lethalLo": 1.018,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 7.0,
+      "optHi": 11.0,
+      "tolLo": 6.0,
+      "tolHi": 12.0,
+      "lethalLo": 4.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.08
+    },
+    "no3": {
+      "optHi": 25.0,
+      "tolHi": 50.0,
+      "lethalHi": 100.0
+    },
+    "po4": {
+      "optHi": 0.15,
+      "tolHi": 0.25,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/mushroom_hairy.glb",
+  "variantModels": {"mound": "models/mushroom_hairy_mound.glb"},
+  "colors": {
+    "primary": "#5FBF4A",
+    "secondary": "#2F7A3A",
+    "accent": "#B8E07A"
+  },
+  "brain": "coral_soft",
+  "coral": {
+    "ground": "ANY",
+    "lightLo": 0.2,
+    "lightHi": 0.55,
+    "flow": "LOW",
+    "growth": "Moderate",
+    "aggression": "Moderate",
+    "fluorescence": 0.6
+  },
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Photosynthetic; also traps small particles and mysis on the disc.",
+  "temperamentSummary": "Flat green discs covered in short branched tentacles; stays open after lights-out. Hosts the clownfish in this tank.",
+  "careNotes": [
+    "Low to moderate light and gentle flow; discs shrink and detach under strong light or flow.",
+    "Can sting or engulf neighbours that touch the disc; give it a few cm of space.",
+    "Captive clownfish often adopt hairy mushrooms as a substitute host; the pair rubs and nestles low over the discs."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.8,
+  "starvationDays": 9999
+}

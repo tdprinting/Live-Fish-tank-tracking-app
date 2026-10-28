@@ -1,0 +1,144 @@
+{
+  "kind": "FISH",
+  "id": "gobiodon_okinawae",
+  "common": "Yellow clown goby",
+  "scientific": "Gobiodon okinawae",
+  "family": "Gobiidae",
+  "maxLengthCm": 3.5,
+  "typicalAdultCm": 3.0,
+  "growthCmPerYear": 1.5,
+  "lifespanYears": 4,
+  "depthRatio": 0.42,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "PERCHING",
+    "cruiseBL": 0.6,
+    "burstBL": 5,
+    "tailHzCruise": 3.0,
+    "turnRateDeg": 300,
+    "waveLen": 0.9,
+    "ampCruise": 0.04,
+    "ampBurst": 0.1
+  },
+  "zone": {
+    "yMin": 0.15,
+    "yMax": 0.7,
+    "openWater": 0.05,
+    "coverAffinity": 0.9
+  },
+  "activity": "DIURNAL",
+  "senses": {
+    "visionCm": 60,
+    "darkVision": 0.1,
+    "lateralBL": 1.5,
+    "chem": 0.5
+  },
+  "territorialRadius": 8,
+  "homeRadiusCm": 10,
+  "temperament": {
+    "aggression": 0.2,
+    "boldness": 0.4,
+    "curiosity": 0.4,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "CYCLOPS",
+    "BRINE",
+    "MYSIS",
+    "PODS",
+    "ZOOPLANKTON"
+  ],
+  "feedsPerDay": 2,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "do": {
+      "optLo": 6.0,
+      "tolLo": 5.0,
+      "lethalLo": 3.0
+    }
+  },
+  "diseaseSusceptibility": {
+    "ICH": 0.2,
+    "VELVET": 0.3,
+    "BACTERIAL": 0.3
+  },
+  "hardiness": 0.75,
+  "starvationDays": 14,
+  "size": {
+    "lod0Tris": 3200
+  },
+  "lifeStages": {
+    "stages": [
+      {
+        "id": "juvenile",
+        "fromCm": 0,
+        "label": "Juvenile"
+      },
+      {
+        "id": "adult",
+        "fromCm": 1.5,
+        "label": "Adult"
+      }
+    ],
+    "blendCm": 0.8,
+    "sexSystem": "PROTOGYNOUS",
+    "maturityCm": 2.2
+  },
+  "model": "models/clown_goby.glb",
+  "colors": {
+    "primary": "#F8E020",
+    "secondary": "#F0C810",
+    "accent": "#202020"
+  },
+  "iridescence": 0.1,
+  "brain": "clown_goby",
+  "minTankGallons": 10,
+  "careLevel": "Easy",
+  "reefSafe": "Mostly (may nip the coral it lives in)",
+  "dietSummary": "Snaps tiny plankton (copepods, baby brine, cyclops) drifting past its coral perch.",
+  "temperamentSummary": "Tiny and peaceful; perches in coral branches. Two squabble, then pair (either can change sex). Its slime tastes bad to predators.",
+  "careNotes": [
+    "Likes branching coral or rock tips to perch on.",
+    "May nip a coral it perches on a lot.",
+    "Two will squabble, then often pair.",
+    "Feed tiny frozen food: cyclops or baby brine."
+  ]
+}

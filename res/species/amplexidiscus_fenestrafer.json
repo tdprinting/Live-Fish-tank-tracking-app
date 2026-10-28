@@ -1,0 +1,102 @@
+{
+  "id": "amplexidiscus_fenestrafer",
+  "kind": "CORAL",
+  "common": "Elephant ear mushroom",
+  "scientific": "Amplexidiscus fenestrafer (tentative; or a large Rhodactis)",
+  "family": "Discosomatidae",
+  "maxLengthCm": 30,
+  "typicalAdultCm": 13,
+  "growthCmPerYear": 3,
+  "lifespanYears": 20,
+  "tolerance": {
+    "temp": {
+      "optLo": 25,
+      "optHi": 27,
+      "tolLo": 24,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30.5
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.027,
+      "tolLo": 1.021,
+      "tolHi": 1.028,
+      "lethalLo": 1.018,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 7.0,
+      "optHi": 11.0,
+      "tolLo": 6.0,
+      "tolHi": 12.0,
+      "lethalLo": 4.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.08
+    },
+    "no3": {
+      "optHi": 25.0,
+      "tolHi": 50.0,
+      "lethalHi": 100.0
+    },
+    "po4": {
+      "optHi": 0.15,
+      "tolHi": 0.25,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/elephant_ear.glb",
+  "colors": {
+    "primary": "#3C2830",
+    "secondary": "#8E9CB6",
+    "accent": "#C9D640"
+  },
+  "brain": "coral_soft",
+  "coral": {
+    "ground": "ANY",
+    "lightLo": 0.15,
+    "lightHi": 0.6,
+    "flow": "LOW",
+    "growth": "Slow",
+    "aggression": "Can fold and swallow small fish and shrimp",
+    "fluorescence": 0.3
+  },
+  "careLevel": "Moderate",
+  "reefSafe": "With caution",
+  "dietSummary": "Photosynthetic; also traps fish, shrimp and meaty food by folding the disc shut.",
+  "temperamentSummary": "Large folded disc with bead-like tentacles and a blue-grey rim; can close around prey in seconds.",
+  "careNotes": [
+    "ID from one photo: a big corallimorph (distinct rim band, single raised mouth); a carpet anemone is the main alternative.",
+    "Medium light and gentle flow.",
+    "Can catch and eat small fish (clownfish-sized) and shrimp; keep an eye on small tankmates."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.75,
+  "starvationDays": 9999
+}

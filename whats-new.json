@@ -1,0 +1,712 @@
+[
+    {
+        "n": 235,
+        "date": "2026-10-28",
+        "text": "Store walk-in ~3.5 s instead of minutes; QA tools committed to tools/qa"
+    },
+    {
+        "n": 234,
+        "date": "2026-10-28",
+        "text": "Behaviour fixes: tang dash/hide end properly, behaviours and hunger hold at high speed, steadier labels, every fish eats, blennies sleep, hermits forage"
+    },
+    {
+        "n": 233,
+        "date": "2026-10-28",
+        "text": "web: reliable save on close, restart or fall back when the sim worker dies"
+    },
+    {
+        "n": 232,
+        "date": "2026-10-28",
+        "text": "Simulation runs in a Web Worker: main thread ~3x lighter, no long tasks; fixes double frame loop"
+    },
+    {
+        "n": 231,
+        "date": "2026-10-28",
+        "text": "Web: offer 'New version ready - Reload' when an update is cached"
+    },
+    {
+        "n": 230,
+        "date": "2026-10-28",
+        "text": "Tank looks like the real one: warm rock, bright sand, neutral water, calmer caustics and coral paint"
+    },
+    {
+        "n": 229,
+        "date": "2026-10-28",
+        "text": "Faster loading: one minified bundle, a boot pack, gzipped models, a cache-first service worker (repeat visits download nothing)"
+    },
+    {
+        "n": 228,
+        "date": "2026-10-28",
+        "text": "CI: Core tests in about 13 min instead of about 34\u201362 (6 weighted shards, same 851 tests)"
+    },
+    {
+        "n": 227,
+        "date": "2026-10-28",
+        "text": "Web runtime: fewer GL calls, no GPU stalls on texture upload, faster lookups and rock physics"
+    },
+    {
+        "n": 226,
+        "date": "2026-10-27",
+        "text": "Disease signs now readable, dying fish stay whole and roll over, no close-up shimmer, no GL warnings"
+    },
+    {
+        "n": 225,
+        "date": "2026-10-27",
+        "text": "Follow camera keeps the fish in view and above the sand; no day/night strobe at high speed; algae outbreaks visible"
+    },
+    {
+        "n": 224,
+        "date": "2026-10-27",
+        "text": "Asset budget: validator for the new conventions, crawler LODs, Medium scene LODs, 74.6 -> 42.2 MB"
+    },
+    {
+        "n": 223,
+        "date": "2026-10-27",
+        "text": "Walking into a fish store no longer freezes the game"
+    },
+    {
+        "n": 221,
+        "date": "2026-10-27",
+        "text": "Snails stay inside the glass and out of the sand; shrimp tails stay out of the rock"
+    },
+    {
+        "n": 220,
+        "date": "2026-10-27",
+        "text": "Watch calls your fish by their real names, and small or big My tanks no longer say the flow is too strong"
+    },
+    {
+        "n": 217,
+        "date": "2026-10-27",
+        "text": "Menus: popups one at a time, \u22ef button fits the top row on phones, Hermie talks above open menus"
+    },
+    {
+        "n": 204,
+        "date": "2026-10-27",
+        "text": "Fish bodies no longer pass through each other"
+    },
+    {
+        "n": 219,
+        "date": "2026-10-27",
+        "text": "chore: strip Blender .NNN suffixes from GLB mesh names"
+    },
+    {
+        "n": 218,
+        "date": "2026-10-27",
+        "text": "No more sudden reloads: the game stops rebuilding every model and texture mid-play"
+    },
+    {
+        "n": 215,
+        "date": "2026-10-27",
+        "text": "Zooming in no longer leaves the tank laggy after zooming back out"
+    },
+    {
+        "n": 216,
+        "date": "2026-10-27",
+        "text": "Pecking order at feeding, tang blue deepens in standoffs, claw displays, territories re-marked after rock moves, GSP overgrowth fights"
+    },
+    {
+        "n": 214,
+        "date": "2026-10-27",
+        "text": "Tracker: new-tank cycle tracker, acclimation timer, pest/algae/disease log"
+    },
+    {
+        "n": 213,
+        "date": "2026-10-27",
+        "text": "Coral bleaching at high light matches research; tracker warns about unit slips in nitrate/phosphate"
+    },
+    {
+        "n": 212,
+        "date": "2026-10-27",
+        "text": "Sick and dying fish look it: gasping, lethargy, rolling over, spasms, sinking; velvet, fin rot, HLLE, Brooklynella"
+    },
+    {
+        "n": 211,
+        "date": "2026-10-27",
+        "text": "Refresh handoff, worklist and coverage docs to main past #210"
+    },
+    {
+        "n": 210,
+        "date": "2026-10-27",
+        "text": "Algae outbreaks you can see: brown dino strands, red slime cyano, green bubble algae"
+    },
+    {
+        "n": 209,
+        "date": "2026-10-27",
+        "text": "Sandbox in real units: light as PAR (0\u20131500), flow as turnover (0\u2013100\u00d7/h), and a Skip water changes switch"
+    },
+    {
+        "n": 208,
+        "date": "2026-10-27",
+        "text": "Pose level of detail from the view: off-screen and tiny animals posed less often"
+    },
+    {
+        "n": 207,
+        "date": "2026-10-27",
+        "text": "Simulation runs lighter: ~15\u201330% less CPU and ~40% less garbage per tick, same behaviour"
+    },
+    {
+        "n": 206,
+        "date": "2026-10-27",
+        "text": "Runs much smoother: lower render resolution, frame pacing, Auto picture quality, off-screen culling"
+    },
+    {
+        "n": 189,
+        "date": "2026-10-22",
+        "text": "Fish turn in smooth arcs like real fish (tangs sweep wide, clowns pivot on their fins), clowns row with their fins, chromis swim with their tail"
+    },
+    {
+        "n": 203,
+        "date": "2026-10-22",
+        "text": "Fish that slam into a loose rock now push it a little"
+    },
+    {
+        "n": 188,
+        "date": "2026-10-21",
+        "text": "Fish bodies no longer poke through the glass, sand or rock: collisions now use each animal's real shape"
+    },
+    {
+        "n": 201,
+        "date": "2026-10-21",
+        "text": "Corals that need bright light: Montipora cap, birdsnest and Acropora, plus pulsing xenia that beats like a heart"
+    },
+    {
+        "n": 202,
+        "date": "2026-10-21",
+        "text": "Smoother tank on High: same look, about a fifth less drawing work"
+    },
+    {
+        "n": 200,
+        "date": "2026-10-21",
+        "text": "Peacock mantis shrimp: digs a burrow in the sand and smashes snails and hermits with its clubs"
+    },
+    {
+        "n": 192,
+        "date": "2026-10-21",
+        "text": "Fish stores come alive: walk in through the front door, each store has its own look, size and staff, people chat in speech bubbles and offer trades, and softer lighting"
+    },
+    {
+        "n": 175,
+        "date": "2026-10-21",
+        "text": "New fish: a mandarin that hunts tiny pods, a six line wrasse that sleeps in a slime bubble, and a yellow clown goby that lives in coral"
+    },
+    {
+        "n": 199,
+        "date": "2026-10-21",
+        "text": "My tank: buy more tanks for the other walls of the room and turn round to visit each one"
+    },
+    {
+        "n": 191,
+        "date": "2026-10-21",
+        "text": "More stony corals: acan, candy cane, open brain on the sand, and bubble coral whose bubbles shrink at night"
+    },
+    {
+        "n": 197,
+        "date": "2026-10-21",
+        "text": "Faster fish stores and quicker loading"
+    },
+    {
+        "n": 198,
+        "date": "2026-10-21",
+        "text": "Ultra crocea clam: a gold boring clam that grinds into bright rock"
+    },
+    {
+        "n": 196,
+        "date": "2026-10-21",
+        "text": "Music corner: a 3D record stand with every record and a radio with a volume knob you turn"
+    },
+    {
+        "n": 195,
+        "date": "2026-10-21",
+        "text": "CI: stop building the Android APK, keep the core test suite"
+    },
+    {
+        "n": 184,
+        "date": "2026-10-21",
+        "text": "My tank supplies cost sand dollars: you start with fish flakes and buy food, salt and tools at the fish store counter"
+    },
+    {
+        "n": 190,
+        "date": "2026-10-21",
+        "text": "Rare corals: gold torch, bounce mushroom and scolymia"
+    },
+    {
+        "n": 194,
+        "date": "2026-10-21",
+        "text": "My tank: six new room scenes with views out of the windows, plus wallpapers and floors in the Shop"
+    },
+    {
+        "n": 182,
+        "date": "2026-10-21",
+        "text": "Finer sand that sorts itself by grain size when Sandy sifts, Ricky Bobby digs and Marina buries herself"
+    },
+    {
+        "n": 193,
+        "date": "2026-10-21",
+        "text": "Web picture stays sharp: Auto setting, gentler resolution drop, undo steps that don't help"
+    },
+    {
+        "n": 178,
+        "date": "2026-10-21",
+        "text": "Your tank gets a stand and a cozy room: buy new stands, colours, a glow strip and gold handles in the Shop"
+    },
+    {
+        "n": 185,
+        "date": "2026-10-21",
+        "text": "New inverts: a maxima clam that lives on light, a green serpent star that hunts at night, a porcelain crab that fans from its anemone, and a tiger tail sea cucumber that cleans the sand"
+    },
+    {
+        "n": 171,
+        "date": "2026-10-21",
+        "text": "Bristleworms crawl smoothly along the rock without clipping, and are smaller and calmer"
+    },
+    {
+        "n": 186,
+        "date": "2026-10-21",
+        "text": "Record shop: 10 new radio songs to buy with sand dollars, vinyl sleeves and a record shelf"
+    },
+    {
+        "n": 181,
+        "date": "2026-10-21",
+        "text": "Two rare fish at Deep Reef Imports: the gem tang ($1,000) and the wrought iron butterflyfish ($2,500)"
+    },
+    {
+        "n": 187,
+        "date": "2026-10-21",
+        "text": "Medium and Low pictures: cheaper light shimmer and rays"
+    },
+    {
+        "n": 168,
+        "date": "2026-10-21",
+        "text": "Walk around 3D fish stores: each one has its own tanks (nano cubes, frag racks, big showpieces), corals, shoppers and a clerk; Add life is now Shop and prices are higher"
+    },
+    {
+        "n": 183,
+        "date": "2026-10-21",
+        "text": "Idle screensaver: 30 s without a touch fades into screensaver mode, one tap returns"
+    },
+    {
+        "n": 180,
+        "date": "2026-10-21",
+        "text": "Web: a device that stays slow at the lowest resolution steps its Picture down"
+    },
+    {
+        "n": 179,
+        "date": "2026-10-21",
+        "text": "Rock microfauna: real anatomy for pods, ostracods and red forams; pods hide from fish"
+    },
+    {
+        "n": 177,
+        "date": "2026-10-21",
+        "text": "Reef moments: a surprise card with a real reef fact when something special happens in My tank, a reef journal to collect them, and fish birthdays"
+    },
+    {
+        "n": 170,
+        "date": "2026-10-21",
+        "text": "Fish turn with their whole body in one smooth curve, instead of only bending the front half"
+    },
+    {
+        "n": 174,
+        "date": "2026-10-21",
+        "text": "Waves roll across the water, the light shimmer on sand and rocks is easy to see, and the lamps glow with light beams"
+    },
+    {
+        "n": 173,
+        "date": "2026-10-20",
+        "text": "Shrimp come alive at rest: the peppermint picks, shifts its feet and waves its antennae while hiding"
+    },
+    {
+        "n": 167,
+        "date": "2026-10-21",
+        "text": "Caustics: a bold, wriggling light net on sand, rock and everything under the busy surface"
+    },
+    {
+        "n": 166,
+        "date": "2026-10-21",
+        "text": "Lawnmower blenny hides in caves and changes colour: darker on rock and in caves, paler on sand and when scared"
+    },
+    {
+        "n": 165,
+        "date": "2026-10-21",
+        "text": "Sell your animals to the fish stores, including babies you raised once they're big enough"
+    },
+    {
+        "n": 164,
+        "date": "2026-10-21",
+        "text": "New fish: a royal gramma that hangs upside down, Banggai cardinals whose dads raise babies in their mouths, and a watchman goby that guards its burrow"
+    },
+    {
+        "n": 163,
+        "date": "2026-10-21",
+        "text": "New cleanup crew: trochus snail, leaping fighting conch and tuxedo urchin that wears shells"
+    },
+    {
+        "n": 154,
+        "date": "2026-10-21",
+        "text": "New arrow crab that hunts bristleworms, and bristleworms that sneak into your tank and breed"
+    },
+    {
+        "n": 152,
+        "date": "2026-10-21",
+        "text": "New fish: firefish goby and blue-green chromis, plus a tank lid (firefish can jump out!)"
+    },
+    {
+        "n": 150,
+        "date": "2026-10-21",
+        "text": "New fish: red fairy wrasse (male and female), yellow tang and purple tang"
+    },
+    {
+        "n": 149,
+        "date": "2026-10-21",
+        "text": "New in the stores: peppermint shrimp that eat aiptasia, and a flame scallop that needs phytoplankton"
+    },
+    {
+        "n": 161,
+        "date": "2026-10-21",
+        "text": "New corals let you pick where they go: the best spots for their light and flow glow on the rock"
+    },
+    {
+        "n": 162,
+        "date": "2026-10-21",
+        "text": "New stony corals: hammer, torch, frogspawn and duncan, with sweeper tentacles that sting at night"
+    },
+    {
+        "n": 144,
+        "date": "2026-10-21",
+        "text": "Blue hippo tangs can now have babies: they court at dusk, spawn at the surface, and you can raise the babies in the nursery"
+    },
+    {
+        "n": 143,
+        "date": "2026-10-21",
+        "text": "My tank sizes are real: the nano, 40 and 120 each get their own glass, stand, rocks and camera"
+    },
+    {
+        "n": 158,
+        "date": "2026-10-21",
+        "text": "My tank grows faster: corals spread, fish grow and babies arrive in days instead of weeks (pick Real, Fast or Faster)"
+    },
+    {
+        "n": 155,
+        "date": "2026-10-21",
+        "text": "Corals now slowly bleach and die if they are not cared for, grow baby colonies when happy, and Tank Health has a one-tap coral and invert care button"
+    },
+    {
+        "n": 140,
+        "date": "2026-10-20",
+        "text": "Simpler menus, a Tank Health card that feeds every hungry fish in one tap, and the app opens on My tank"
+    },
+    {
+        "n": 160,
+        "date": "2026-10-20",
+        "text": "My tank keeps living while you're away: fish get hungry, water drifts, and a welcome-back card shows what happened"
+    },
+    {
+        "n": 159,
+        "date": "2026-10-20",
+        "text": "Android: your tank sends a nudge when your fish are hungry or it needs a job"
+    },
+    {
+        "n": 156,
+        "date": "2026-10-20",
+        "text": "Animals leave the cut bag up its neck, one lane each, and tip into the net nose-down then level"
+    },
+    {
+        "n": 157,
+        "date": "2026-10-20",
+        "text": "Fish stores in My tank: walk the display tanks, fill your shop bag and pay with sand dollars"
+    },
+    {
+        "n": 151,
+        "date": "2026-10-20",
+        "text": "Pest anemones look real, Berghia sea slugs eat them, and new tools to zap them"
+    },
+    {
+        "n": 141,
+        "date": "2026-10-20",
+        "text": "My tank pays you sand dollars for daily care jobs, with levels and goals"
+    },
+    {
+        "n": 146,
+        "date": "2026-10-20",
+        "text": "Water surface shimmers and sparkles like a real tank, plus a Blue light look where corals glow"
+    },
+    {
+        "n": 148,
+        "date": "2026-10-20",
+        "text": "Lit surfaces read the water ripple slope once per pixel"
+    },
+    {
+        "n": 145,
+        "date": "2026-10-20",
+        "text": "Bubble tip anemone tentacles move smoothly around the clowns, and happy hosted anemones grow real bubble tips"
+    },
+    {
+        "n": 147,
+        "date": "2026-10-20",
+        "text": "Green star polyps grow right on the rock, and close up just where something touches them"
+    },
+    {
+        "n": 134,
+        "date": "2026-10-20",
+        "text": "Fish swim with a stiffer body and a smoother tail, less like jelly"
+    },
+    {
+        "n": 142,
+        "date": "2026-10-20",
+        "text": "Fish AI: 32-bit random numbers and loop-based relationship summaries"
+    },
+    {
+        "n": 138,
+        "date": "2026-10-20",
+        "text": "Tap the tank to drop food right where you want it, tap the skimmer or other gear for a quick menu, and food is easier to see"
+    },
+    {
+        "n": 135,
+        "date": "2026-10-20",
+        "text": "Brittle stars lie flat in the bag and trail their arms when they fall; deep-bodied fish get room in the bag"
+    },
+    {
+        "n": 137,
+        "date": "2026-10-20",
+        "text": "Dori sleeps wedged into a real crevice, and finds a new one when My tank's rocks change"
+    },
+    {
+        "n": 133,
+        "date": "2026-10-20",
+        "text": "Fish AI neighbour lookups index a dense grid instead of 64-bit hashed keys"
+    },
+    {
+        "n": 136,
+        "date": "2026-10-20",
+        "text": "Remove the water-surface ring, route the powerhead hose properly, and rebuild the Flipper scraper with a lean animation"
+    },
+    {
+        "n": 132,
+        "date": "2026-10-20",
+        "text": "Web tank draws less than half the pixels on iPhones and iPads"
+    },
+    {
+        "n": 129,
+        "date": "2026-10-15",
+        "text": "Rocks have real holes and caves; each blenny gets its own hole, and animals only go where they fit"
+    },
+    {
+        "n": 131,
+        "date": "2026-10-15",
+        "text": "The squid digs itself into the sand instead of sinking through it, and no longer dips into the sand while swimming"
+    },
+    {
+        "n": 130,
+        "date": "2026-10-15",
+        "text": "New animals stay inside their bag, and the bag is cut open and poured into a net so no bag water gets in the tank"
+    },
+    {
+        "n": 111,
+        "date": "2026-10-15",
+        "text": "Sally the Lightfoot crab gets Tee's new model, is smaller, and stands on the rocks with every leg planted"
+    },
+    {
+        "n": 118,
+        "date": "2026-10-15",
+        "text": "Clownfish can now lay eggs and have babies you raise in a nursery tank"
+    },
+    {
+        "n": 128,
+        "date": "2026-10-15",
+        "text": "The browser tank loads again"
+    },
+    {
+        "n": 127,
+        "date": "2026-10-15",
+        "text": "Ricky Bobby swims up for plankton, Sandy rests between sifts, Indy darts out, a full Shakira cleans less"
+    },
+    {
+        "n": 126,
+        "date": "2026-10-15",
+        "text": "Clowns swim up to catch plankton, Dori patrols along the rocks, the cardinal watches passing fish"
+    },
+    {
+        "n": 76,
+        "date": "2026-10-15",
+        "text": "Fish waste: poop that drifts, gets filtered, eaten, or turns into mulm"
+    },
+    {
+        "n": 109,
+        "date": "2026-10-15",
+        "text": "Real moving sand: Marina buries herself under flying grains, Sandy spits sand out of his gills"
+    },
+    {
+        "n": 125,
+        "date": "2026-10-15",
+        "text": "Brittle star arms drape over rock edges instead of hanging in the water, and never sink into rock or sand"
+    },
+    {
+        "n": 124,
+        "date": "2026-10-15",
+        "text": "Hawkfish hops between perches, blennies graze in bites, leopard wrasse forages along the rock"
+    },
+    {
+        "n": 123,
+        "date": "2026-10-15",
+        "text": "Snails wear grazing trails into the glass film"
+    },
+    {
+        "n": 104,
+        "date": "2026-10-15",
+        "text": "New Fix tank button: it checks what your tank needs and fixes it with animations"
+    },
+    {
+        "n": 115,
+        "date": "2026-10-15",
+        "text": "Spike the coral banded shrimp digs into rock crevices with his big claws and sometimes grabs at fish"
+    },
+    {
+        "n": 121,
+        "date": "2026-10-15",
+        "text": "Submarine: built around watching fish (app + web)"
+    },
+    {
+        "n": 120,
+        "date": "2026-10-15",
+        "text": "Rainbow bubble tip anemone you can add to your tank, with clownfish hosting"
+    },
+    {
+        "n": 112,
+        "date": "2026-10-15",
+        "text": "Brittle star arms bend, grip and pull it along; it hides under its rock by day and comes out at night"
+    },
+    {
+        "n": 119,
+        "date": "2026-10-15",
+        "text": "Camera: eye never clips rock, sand, corals, equipment or fish; smoother follow cam; big follow controls"
+    },
+    {
+        "n": 117,
+        "date": "2026-10-15",
+        "text": "Dori hides under the rock when scared or sleeping, rubs on rocks and races across the tank"
+    },
+    {
+        "n": 116,
+        "date": "2026-10-15",
+        "text": "Easier to tap animals, press and hold a fish to follow it, and a ring shows what you touched"
+    },
+    {
+        "n": 114,
+        "date": "2026-10-15",
+        "text": "Add a ?stats speed readout to the web tank"
+    },
+    {
+        "n": 108,
+        "date": "2026-10-15",
+        "text": "Cleaner shrimp walks on its feet, picks at fish with its front claws, and no longer spins"
+    },
+    {
+        "n": 110,
+        "date": "2026-10-15",
+        "text": "Cut per-draw shader uniform overhead on the web build"
+    },
+    {
+        "n": 100,
+        "date": "2026-10-15",
+        "text": "Dead fish can be scooped out with a net and flushed away"
+    },
+    {
+        "n": 107,
+        "date": "2026-10-15",
+        "text": "My tank: set up your own empty tank, add any animals, and they stay saved as they grow"
+    },
+    {
+        "n": 106,
+        "date": "2026-10-15",
+        "text": "Stop re-parsing species JSON every frame for invertebrates"
+    },
+    {
+        "n": 103,
+        "date": "2026-10-14",
+        "text": "Rocks show more detail the closer you zoom, with tiny pods and red forams crawling on them"
+    },
+    {
+        "n": 99,
+        "date": "2026-10-14",
+        "text": "Remade corals: a real lobed pink leather, a hairy mushroom mound front-right, and more detailed mushrooms, zoas and leathers"
+    },
+    {
+        "n": 102,
+        "date": "2026-10-14",
+        "text": "Tank sounds like Tee's real tank: steady water, HOB waterfall, soft pump hum"
+    },
+    {
+        "n": 101,
+        "date": "2026-10-14",
+        "text": "A simpler, nicer iPhone look with drawn icons for every button"
+    },
+    {
+        "n": 97,
+        "date": "2026-10-14",
+        "text": "Feeding at night wakes up Dori, the clowns, Shakira and the gobies"
+    },
+    {
+        "n": 98,
+        "date": "2026-10-14",
+        "text": "Brittle star, Nassarius and Astrea use their real models instead of the purple placeholder blob"
+    },
+    {
+        "n": 96,
+        "date": "2026-10-14",
+        "text": "Engineer goby digs real burrows, sand moves, leopard wrasse buries itself at night"
+    },
+    {
+        "n": 95,
+        "date": "2026-10-14",
+        "text": "Fish are lit correctly as they swim, light glints show on the glass, and shadows stay dark"
+    },
+    {
+        "n": 94,
+        "date": "2026-10-14",
+        "text": "The browser version stays smooth: sharpness eases down a notch only while the tank runs slow"
+    },
+    {
+        "n": 93,
+        "date": "2026-10-14",
+        "text": "Add life: new animals arrive in a floating bag you drop into the tank"
+    },
+    {
+        "n": 89,
+        "date": "2026-10-14",
+        "text": "Smoother fish motion with fewer memory hiccups"
+    },
+    {
+        "n": 92,
+        "date": "2026-10-14",
+        "text": "Give the tank animals Tee's names, and turn main green after the tank resize"
+    },
+    {
+        "n": 91,
+        "date": "2026-10-14",
+        "text": "Tank resized to Tee's real 48 x 18 x 16 in, laid out from the photos"
+    },
+    {
+        "n": 86,
+        "date": "2026-10-14",
+        "text": "Seat hermit crabs flush on rock, sand and glass with planted feet"
+    },
+    {
+        "n": 90,
+        "date": "2026-10-14",
+        "text": "A cleaner, calmer look for the iPhone version: more tank, bigger buttons"
+    },
+    {
+        "n": 88,
+        "date": "2026-10-14",
+        "text": "Web: What's new popup lists the updates since your last visit"
+    },
+    {
+        "n": 85,
+        "date": "2026-10-14",
+        "text": "Shadows are cheaper to draw, so the tank runs smoother on High"
+    },
+    {
+        "n": 84,
+        "date": "2026-10-14",
+        "text": "Nassarius snails crawl at their real slow speed, and the banded shrimp roams more"
+    }
+]

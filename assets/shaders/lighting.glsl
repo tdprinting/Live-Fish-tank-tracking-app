@@ -1,0 +1,278 @@
+// Fragment-side lighting shared by the opaque shaders (ARCHITECTURE §8.4, SIMULATION §9.7 optics).
+uniform sampler2D uCaustic;
+// Shadow depth map (ShadowMap.kt, unit 14), compared in hardware (bilinear PCF per tap).
+uniform highp sampler2DShadow uShadowMap;
+
+// neutral-warm sky / bounce: a blue hemisphere filled every shadow with cyan (research 11 §0)
+const vec3 HEMI_TOP = vec3(0.026, 0.033, 0.056);
+const vec3 HEMI_BOTTOM = vec3(0.004, 0.005, 0.007);
+const vec3 NIGHT_FLOOR = vec3(0.0025, 0.0045, 0.0095);
+
+// Radiance from AI Prime i at p (point light, cosine cone pointing down), attenuated through the water
+// column above p (Beer-Lambert). L returns the unit direction toward the fixture.
+vec3 fixtureLight(int i, vec3 p, out vec3 L) {
+    vec3 d = uLightPos[i].xyz - p;
+    float dist = max(length(d), 1.0);
+    L = d / dist;
+    float c = uLightPos[i].w;
+    float cone = smoothstep(c - 0.2, c + 0.25, L.y) * max(L.y, 0.0);
+    float fall = 4500.0 / (dist * dist + 1500.0);
+    float depth = max(uWaterLevel - p.y, 0.0) / max(L.y, 0.25);
+    vec3 T = exp(-(uAbsorb.rgb + uAbsorb.w) * depth);
+    return uLightColor[i].rgb * (cone * fall) * T;
+}
+
+float lightIntensity() { return max(uLightColor[0].w, uLightColor[1].w); }
+
+vec3 hemiAmbient(vec3 n) {
+    float h = n.y * 0.5 + 0.5;
+    return uAmbientB.rgb + mix(HEMI_BOTTOM, HEMI_TOP, h) * (0.6 + 2.0 * lightIntensity()) + NIGHT_FLOOR;
+}
+
+// GGX specular term (D * G / (4 NdotV NdotL)), Schlick-GGX geometry; [H] is normalize(V + L).
+float ggxSpecH(vec3 N, vec3 V, vec3 L, vec3 H, float rough) {
+    float a = max(rough * rough, 0.02);
+    float a2 = a * a;
+    float ndh = max(dot(N, H), 0.0);
+    float dd = ndh * ndh * (a2 - 1.0) + 1.0;
+    float D = a2 / (PI * dd * dd);
+    float ndl = max(dot(N, L), 1e-3);
+    float ndv = max(dot(N, V), 1e-3);
+    float k = a * 0.5;
+    float G = (ndl / (ndl * (1.0 - k) + k)) * (ndv / (ndv * (1.0 - k) + k));
+    return D * G / (4.0 * ndv * ndl);
+}
+float ggxSpec(vec3 N, vec3 V, vec3 L, float rough) { return ggxSpecH(N, V, L, normalize(V + L), rough); }
+
+// Schlick's (1 - cos)^5, as two squarings and a multiply.
+float fresnelSchlick(float cosT, float f0) {
+    float m = 1.0 - clamp(cosT, 0.0, 1.0);
+    float m2 = m * m;
+    return f0 + (1.0 - f0) * (m2 * m2 * m);
+}
+
+// Hue of the live fixture light, normalised so its brightest channel is 1 (follows the AI Prime schedule).
+vec3 lightTint() {
+    vec3 s = uLightColor[0].rgb + uLightColor[1].rgb;
+    return s / max(max(s.r, max(s.g, s.b)), 1e-3);
+}
+
+// Caustics on everything under water (sand, rock, corals, fish, glass), tinted by the live light: the busy, rippled
+// surface focuses the lamps into a bright, wriggling net of lines (Tee's tank video 2026-10-20). Two drifting reads of
+// the shared tile, refracted by the surface slope and warped by the chop (cheap ALU, faster with more flow), are added
+// and squared: bright lines with brighter knots where the two nets cross. Deeper surfaces see a softer net (mip bias).
+// High takes the second read's three channels apart (dispersion: thin colour fringes on the bright lines; the tile's G
+// and B are itself shifted either way, so no extra reads). Faces that look sideways still catch part of the pattern.
+// [slope]: surfaceSlope(p.xz), shared with surfaceFlicker.
+vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
+    if (uCausticStrength <= 0.0 || p.y > uWaterLevel) return vec3(0.0);
+    float depth = max(uWaterLevel - p.y, 0.0);
+    vec2 refr = slope * depth * 0.6;
+    // walls see the pattern projected down their face: shift by height along the normal so it varies (stretched)
+    // vertically instead of smearing into stripes
+    vec2 uv = (p.xz + refr + n.xz * (p.y * 0.55)) * uCausticScale;
+    float t = uTime;
+    float busy = 0.6 + 0.6 * uFlowStrength;
+    // Medium / Low (the cheaper presets slow devices step down to): no per-read mip bias, which some GPUs pay for with a
+    // derivative per read, so the net is a little crisper; Low also skips the chop warp and the second drifting read
+    if (uQuality >= 0.5) uv += vec2(sin(uv.y * 9.0 + t * 1.9), cos(uv.x * 8.0 - t * 1.6)) * (0.02 * busy);
+    vec2 uvA = uv + t * vec2(0.031, 0.019) * busy;
+    vec2 uvB = uv * 1.37 - t * vec2(0.024, -0.033) * busy;
+    float a;
+    vec3 b;
+    if (uQuality >= 1.5) {
+        float blur = 1.0 + depth * 0.02;
+        a = texture(uCaustic, uvA, blur).r;
+        if (uCausticDispersion > 0.5) {
+            // the tile's G and B are itself, read at uv + and - the fringe shift (tools/blender/textures.py caustic_rgb),
+            // so one read gives all three colours of a fringe
+            vec3 net = texture(uCaustic, uvB, blur).rgb;
+            b = net.grb;
+        } else {
+            b = vec3(texture(uCaustic, uvB, blur).r);
+        }
+    } else {
+        a = texture(uCaustic, uvA).r;
+        b = vec3(uQuality >= 0.5 ? texture(uCaustic, uvB).r : a);
+    }
+    vec3 sum = a + b;
+    // where the passing waves are steepest the surface focuses harder: the net brightens in travelling bands
+    float chop = clamp(length(slope) * 5.0, 0.0, 1.5);
+    // linear + squared: the squared term makes crisp bright lines up close, the linear term keeps the shimmer's energy
+    // when the lines shrink below a pixel (far sand, small phone screens), where squaring a mip-blurred read fades out
+    vec3 c = min(sum * 8.0 + sum * sum * 10.0, vec3(4.0)) * (0.7 + 0.5 * chop);
+    // Medium/High: side faces keep ~20% of the shimmer (light arrives steeply but not only from straight above; the
+    // photos show next to none on rock faces)
+    float side = uQuality >= 0.5 ? 0.22 : 0.2;
+    float facing = clamp(n.y * (1.0 - side) + side, 0.0, 1.0);
+    return c * lightTint() * (facing * lightIntensity() * exp(-0.010 * depth));
+}
+
+// Soft contact shadows under the nearest fish (uCasters): a blob below each body that widens and fades with height.
+// Static receivers only (fish.frag defines NO_CONTACT_SHADOW so a fish does not shadow itself).
+float contactShadow(vec3 p) {
+    float occ = 0.0;
+    int n = int(uCasterCount + 0.5);
+    for (int i = 0; i < 12; i++) {
+        if (i >= n) break;
+        vec4 c = uCasters[i];
+        float h = c.y - p.y;
+        if (h < -0.5 || h > 32.0) continue;
+        vec2 d = p.xz - c.xz;
+        float r = max(c.w * 0.3, 0.8) + max(h, 0.0) * 0.12;
+        float d2 = dot(d, d) / (r * r);
+        if (d2 > 4.0) continue;
+        float blob = exp(-d2 * 1.4);
+        float fade = smoothstep(-0.5, 0.6, h) * (1.0 - smoothstep(3.0, 32.0, h));
+        occ = max(occ, blob * fade);
+    }
+    return 1.0 - 0.6 * occ;
+}
+
+// Shadow from the fixtures (uShadowMap): 1 lit .. 0 fully shadowed (scaled by uShadow.z). Normal offset and a world
+// bias toward the light avoid acne; High takes 8 rotated taps (~1.6 cm penumbra), Medium 4, Low has no map.
+float shadowAt(vec3 p, vec3 n) {
+    if (uShadow.x < 0.5) return 1.0;
+    vec3 q = p + n * (0.25 + 0.5 * (1.0 - abs(n.y))) + vec3(0.0, uShadow.w, 0.0);
+    vec3 c = (uShadowMat * vec4(q, 1.0)).xyz * 0.5 + 0.5;
+    if (c.x <= 0.0 || c.x >= 1.0 || c.y <= 0.0 || c.y >= 1.0 || c.z >= 1.0) return 1.0;
+    // the kernel is in cm (uShadow.y = cm per texel along u), rotated per pixel (interleaved gradient noise)
+    float ang = 6.2831 * fract(52.9829 * fract(dot(gl_FragCoord.xy, vec2(0.06711, 0.00584))));
+    vec2 cs = vec2(cos(ang), sin(ang));
+    mat2 rot = mat2(cs.x, cs.y, -cs.y, cs.x);
+    vec2 texel = vec2(1.0) / vec2(textureSize(uShadowMap, 0));
+    float lit;
+    if (uQuality >= 1.5) {
+        vec2 k = texel * (0.8 / max(uShadow.y, 1e-3));
+        lit = 0.0;
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.94, -0.40) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.95, -0.77) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.09, -0.93) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.34, 0.29) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.82, 0.54) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.54, 0.89) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.97, 0.23) * k, c.z), 0.0);
+        lit += textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.32, 0.12) * k, c.z), 0.0);
+        lit *= 0.125;
+    } else {
+        vec2 k = texel * (0.6 / max(uShadow.y, 1e-3));
+        lit = 0.25 * (textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.7, -0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.7, -0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(-0.7, 0.7) * k, c.z), 0.0)
+                    + textureLod(uShadowMap, vec3(c.xy + rot * vec2(0.7, 0.7) * k, c.z), 0.0));
+    }
+    return mix(1.0, lit, uShadow.z);
+}
+
+// Slow light flicker of the direct beam as the rippled surface focuses and spreads it (a heavily blurred, scrolling
+// read of the caustic tile, ~1 around its mean). Medium and High.
+float surfaceFlicker(vec3 p, vec2 slope) {
+    if (uQuality < 0.5 || p.y > uWaterLevel) return 1.0;
+    vec2 uv = (p.xz + slope * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
+    float f = texture(uCaustic, uv + uTime * vec2(0.017, -0.012), 3.5).r;
+    return 0.85 + 0.15 * clamp(f * 28.0, 0.0, 2.2);
+}
+
+// Bump from a scalar height h (cm) via screen-space derivatives (surface gradient, no tangents). Callers keep it in
+// uniform control flow (derivatives).
+vec3 bumpH(vec3 N, vec3 p, float h) {
+    vec3 sx = dFdx(p), sy = dFdy(p);
+    vec3 r1 = cross(sy, N), r2 = cross(N, sx);
+    float det = dot(sx, r1);
+    vec3 g = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+    vec3 r = abs(det) * N - g;
+    float l = dot(r, r);
+    return l > 1e-20 ? r * inversesqrt(l) : N;   // degenerate (edge-on / sub-pixel) triangles: no NaN speckles
+}
+
+// What the two fixtures deliver at the pixel (radiance through the water, unit direction to the lamp), worked out once by
+// shadeLit: the extra lobes added after it (wet coat, back-light, glints, iridescence) read them back instead of
+// repeating the distance, cone and Beer-Lambert maths. They belong to the last shadeLit call, at its point.
+vec3 gRad0, gRad1, gL0, gL1;
+vec3 fixtureAt(int i, out vec3 L) {
+    if (i == 0) { L = gL0; return gRad0; }
+    L = gL1;
+    return gRad1;
+}
+
+// Wet clear-coat lobe (mucus / water film): a tight GGX highlight from both fixtures on top of the base response.
+// Follows a shadeLit call at the same point.
+vec3 wetCoat(vec3 N, vec3 V, vec3 p, float rough, float strength) {
+    vec3 s = vec3(0.0);
+    for (int i = 0; i < 2; i++) {
+        vec3 L;
+        vec3 rad = fixtureAt(i, L);
+        vec3 H = normalize(V + L);
+        float ndl = max(dot(N, L), 0.0);
+        s += rad * ggxSpecH(N, V, L, H, rough) * fresnelSchlick(max(dot(H, V), 0.0), 0.02) * ndl;
+    }
+    return s * strength;
+}
+
+// Shadow-map visibility from the last shadeLit call: extra light lobes added after it (glints, sheen, back-light)
+// reuse it instead of sampling the PCF kernel again.
+float gShadow = 1.0;
+
+// One fixture's share of the direct light: Lambert (optionally wrapped) + GGX, sharing one half vector.
+vec3 fixtureDirect(vec3 rad, vec3 L, vec3 albedo, vec3 N, vec3 V, float rough, float f0, float wrap, float specScale) {
+    float ndl = dot(N, L);
+    float diff = max((ndl + wrap) / (1.0 + wrap), 0.0);
+    vec3 H = normalize(V + L);
+    float spec = ggxSpecH(N, V, L, H, rough) * fresnelSchlick(max(dot(H, V), 0.0), f0) * max(ndl, 0.0);
+    return rad * (albedo * diff + vec3(spec * specScale));
+}
+
+// Lambert (optionally wrapped) + GGX from both fixtures, hemispherical ambient and caustics; direct light and
+// caustics are dimmed under nearby fish (contact shadows).
+vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float f0, float wrap, float specScale) {
+    vec3 col = hemiAmbient(N) * albedo * ao;
+    gRad0 = fixtureLight(0, p, gL0);
+    gRad1 = fixtureLight(1, p, gL1);
+    vec3 direct = fixtureDirect(gRad0, gL0, albedo, N, V, rough, f0, wrap, specScale)
+                + fixtureDirect(gRad1, gL1, albedo, N, V, rough, f0, wrap, specScale);
+    // the surface heightfield's slope (4 taps) is read once for both the flicker and the caustics
+    // plus the render-only swell (common.glsl), so the waves on the surface steer and brighten the net below
+    // Low (Performance, and auto quality's last relief step): the net drifts without the surface's refraction wobble,
+    // which saves four heightfield reads and three waves per lit pixel
+    vec2 slope = p.y > uWaterLevel || uQuality < 0.5 ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
+    // the rippled surface gathers the beam into the caustic net, so the light between the lines is dimmer
+    float gather = p.y < uWaterLevel ? 0.4 * uCausticStrength * max(N.y, 0.0) : 0.0;
+    direct *= surfaceFlicker(p, slope) * (1.0 - gather);
+    direct += albedo * causticColor(p, N, slope) * uCausticStrength;
+#ifndef NO_CONTACT_SHADOW
+    if (uCasterCount > 0.5) direct *= contactShadow(p);
+#endif
+    gShadow = shadowAt(p, N);
+    direct *= gShadow;
+    return col + direct;
+}
+
+// Beer-Lambert spectral attenuation along the in-water part of the view path + depth fog toward the
+// (light-tinted) fog colour: fog = 1 - exp(-density x dist).
+vec3 applyWater(vec3 col, vec3 p) {
+    float d = waterPath(uCamPos.xyz, p);
+    vec3 T = exp(-(uAbsorb.rgb + uAbsorb.w) * d);
+    float f = 1.0 - exp(-uFog.w * d);
+    return mix(col * T, uFog.rgb, f);
+}
+
+// Filmic curve (Hejl-style x/(x+0.155)*1.019); it already includes the display gamma, so no extra pow.
+// Shared grade, so every shader lands in one look: partial white balance toward the fixture colour (the eye / a
+// camera adapts to the AI Prime mix, so cream rock reads cream under a blue-heavy daylight, while dusk keeps more blue
+// and moonlight stays blue), then a gentle S-curve; no global saturation boost (colour comes from the materials, research
+// 11 §6). The balance is near full (0.9), as a phone camera's is in Tee's photos. Actinic-only light (blue fraction near 1,
+// the Blue light look and blue-only ramps) is barely balanced: the real tank reads deep blue under it, with the
+// fluorescent corals glowing out of it, and more saturated.
+vec3 tonemap(vec3 x) {
+    x = max(x, vec3(0.0));
+    float actinic = (1.0 - uNight) * smoothstep(0.86, 0.98, uBlueFraction);
+    float wb = 0.9 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()) * (1.0 - 0.8 * actinic);
+    vec3 adapt = mix(vec3(1.0), lightTint(), wb);
+    x /= max(adapt, vec3(0.2));
+    vec3 c = x / (x + 0.155) * 1.019;
+    c = clamp(c, 0.0, 1.0);
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    // actinic: the camera / eye sees royal blue as a deep, saturated indigo (Tee's video), not a pale sky blue
+    return clamp(mix(vec3(l), c, 1.0 + 0.5 * actinic), 0.0, 1.0);
+}

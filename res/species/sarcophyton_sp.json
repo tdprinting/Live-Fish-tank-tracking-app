@@ -1,0 +1,101 @@
+{
+  "id": "sarcophyton_sp",
+  "kind": "CORAL",
+  "common": "Toadstool leather",
+  "scientific": "Sarcophyton sp.",
+  "family": "Alcyoniidae",
+  "maxLengthCm": 40,
+  "typicalAdultCm": 12,
+  "growthCmPerYear": 10,
+  "lifespanYears": 20,
+  "tolerance": {
+    "temp": {
+      "optLo": 25,
+      "optHi": 27,
+      "tolLo": 24,
+      "tolHi": 29,
+      "lethalLo": 20,
+      "lethalHi": 30.5
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.027,
+      "tolLo": 1.021,
+      "tolHi": 1.028,
+      "lethalLo": 1.018,
+      "lethalHi": 1.031
+    },
+    "ph": {
+      "optLo": 8.0,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.5,
+      "lethalLo": 7.7,
+      "lethalHi": 8.9
+    },
+    "alk": {
+      "optLo": 7.0,
+      "optHi": 11.0,
+      "tolLo": 6.0,
+      "tolHi": 12.0,
+      "lethalLo": 4.0,
+      "lethalHi": 14.0
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.02,
+      "lethalHi": 0.08
+    },
+    "no3": {
+      "optHi": 25.0,
+      "tolHi": 50.0,
+      "lethalHi": 100.0
+    },
+    "po4": {
+      "optHi": 0.15,
+      "tolHi": 0.25,
+      "lethalHi": 0.5
+    }
+  },
+  "model": "models/toadstool_leather.glb",
+  "colors": {
+    "primary": "#B8952F",
+    "secondary": "#CFC5BA",
+    "accent": "#E2C860"
+  },
+  "brain": "coral_soft",
+  "coral": {
+    "lightLo": 0.25,
+    "lightHi": 0.75,
+    "flow": "MODERATE",
+    "growth": "Fast",
+    "aggression": "Terpene allelopathy; keep ~15 cm clear",
+    "fluorescence": 0.1
+  },
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "dietSummary": "Photosynthetic; polyps also take fine particles (phytoplankton, marine snow).",
+  "temperamentSummary": "Pale stalk with a golden-tan polyped cap. Closes at night and every few weeks for a few days while it sheds a waxy film.",
+  "careNotes": [
+    "Moderate light (PAR ~100-200) and moderate, indirect, varied flow; a direct jet makes the cap fold.",
+    "Sheds a waxy skin every couple of weeks to a month; good flow clears it; more than a week closed: check flow and alkalinity.",
+    "Releases terpenes that irritate nearby corals; run carbon and keep space around it."
+  ],
+  "activity": "DIURNAL",
+  "locomotion": {
+    "mode": "SESSILE",
+    "cruiseBL": 0,
+    "burstBL": 0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 0,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "diet": [
+    "LIGHT"
+  ],
+  "feedsPerDay": 0,
+  "hardiness": 0.8,
+  "starvationDays": 9999
+}

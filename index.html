@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>ReefLive</title>
+<meta name="description" content="Track your reef tank and watch a live simulation of it.">
+<meta name="theme-color" content="#061327">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ReefLive">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- the font's stylesheet must not hold up the app (scripts wait for blocking stylesheets); display=swap as before -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="style.css">
+
+<script>
+// Starts the first view's downloads while the app's code downloads and starts up (Main.kt fetchFile takes them from
+// here). Models and the rock field also ship gzipped (.gz, web/build.gradle.kts): GitHub Pages sends .glb as is,
+// and they shrink about 2x.
+(() => {
+  const gz = typeof DecompressionStream === 'function';
+  async function get(p, signal, priority) {
+    if (gz && /\.(glb|bin)$/.test(p)) {
+      try {
+        const r = await fetch(`${p}.gz`, { signal, priority });
+        if (r.ok) {
+          const b = await r.arrayBuffer();
+          const h = new Uint8Array(b, 0, Math.min(2, b.byteLength));
+          // a server that marks .gz as Content-Encoding hands it over unpacked already
+          if (h[0] !== 0x1f || h[1] !== 0x8b) return b;
+          return await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        }
+      } catch (e) { if (signal && signal.aborted) throw e; }
+    }
+    const r = await fetch(p, { signal, priority });
+    return r.ok ? r.arrayBuffer() : null;
+  }
+  const pre = new Map();
+  const asked = [];
+  // the file's bytes (an ArrayBuffer), or null when it is missing
+  window.reefFetch = (p, signal) => {
+    if (asked.length < 60 && !asked.includes(p)) asked.push(p);
+    const q = pre.get(p);
+    if (!q) return get(p, signal);
+    pre.delete(p);
+    const got = q.then((b) => b || get(p, signal));
+    // a stalled download is cut off by the caller's timeout (Main.kt fetchWithRetry) and retried afresh
+    return signal ? Promise.race([got, new Promise((_, no) => signal.addEventListener('abort', () => no(new Error('timed out'))))]) : got;
+  };
+  const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+  // the preset the tank starts on (live.js pictureArg) picks the rock's level of detail
+  let q = read('reeflive.picture', 'AUTO');
+  if (q === 'AUTO') q = read('reeflive.autoLevel', null) || (matchMedia('(pointer: coarse)').matches ? 'MEDIUM' : 'HIGH');
+  const key = `reeflive.firstView.${q}`;
+  const m = (n) => `assets/models/${n}.glb`;
+  const t = (n) => `assets/textures/${n}`;
+  // what the tank asked for first on the last visit, else what a first visit asks for (Main.kt boot files,
+  // TankRenderer SCENE_MODELS and SHARED_TEXTURES, the room, the stand and the shelf)
+  const list = read(key, null) || ['boot.json', 'assets/sim/rock_sdf.bin', m('tank'), m('rockscape_lod1'),
+    m('equipment'), m('algae_tufts'), m('reef_details'), t('caustic_512.png'), t('irid_lut.png'), t('room_env.png'), t('water_n1.png'),
+    t('water_n2.png'), t('sand_normal.jpg'), m('supply_shelf'), m('room_living'), m('stand_classic'), m('care_tools'),
+    // High draws the LOD1 rock until the full one is in (AssetStore standIn)
+    ...(q === 'HIGH' ? [m('rockscape')] : [])];
+  // They start once app.js is in: the code comes first (it has seconds of starting up to do, which the downloads
+  // then overlap), whatever the server makes of request priorities.
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    const want = (p) => typeof p === 'string' && !asked.includes(p) && !pre.has(p);
+    const fetchAll = (ps, priority) => Promise.all(ps.filter(want).map((p) => { const q = get(p, undefined, priority).catch(() => null); pre.set(p, q); return q; }));
+    // what the overlay waits for (Main.kt start: boot pack, rock field) first, then what the first frames draw
+    const boot = list.filter((p) => !/^assets\/(models|textures)/.test(p));
+    fetchAll(boot, 'high').then(() => fetchAll(list, 'low'));
+  };
+  const isApp = (e) => new URL(e.name).pathname.endsWith('/app.js');
+  try {
+    new PerformanceObserver((l, o) => { if (l.getEntries().some(isApp)) { o.disconnect(); start(); } }).observe({ type: 'resource', buffered: true });
+  } catch { start(); }
+  setTimeout(start, 6000);
+  // what this visit asked for in its first seconds is the next visit's list
+  setTimeout(() => { if (asked.length > 3) try { localStorage.setItem(key, JSON.stringify(asked)); } catch { /* private mode */ } }, 20000);
+})();
+</script>
+</head>
+<body>
+<header class="bar">
+  <button class="back" data-tab="live" aria-label="Back to the tank">‹ Tank</button>
+  <div class="brand"><span class="dot"></span>ReefLive</div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="live" role="tab">Live tank</button>
+    <button class="tab" data-tab="params" role="tab">Parameters</button>
+  </nav>
+</header>
+
+<main>
+  <section id="live" class="view active">
+    <canvas id="tank" aria-label="Live 3D view of the reef tank"></canvas>
+    <div id="torch" class="torch hidden"></div>
+    <div id="loading" class="loading"><div class="spinner"></div><p id="loadText">Loading the tank…</p></div>
+
+    <div class="chrome" id="chrome">
+      <div class="top">
+        <div class="seg" role="tablist" aria-label="Mode">
+          <button data-mode="mine" data-ico="fish">My tank</button><button data-mode="watch" class="on" data-ico="eye">Watch</button>
+        </div>
+        <span class="topright">
+          <button class="status" id="statusBtn" aria-label="Tank Health: how is the tank doing?">
+            <span id="happyFace">😊</span><span id="clock">--:--</span><i class="warn hidden" id="waterDot"></i>
+          </button>
+          <button class="status gearbtn" id="setBtn" aria-label="Settings and help"></button>
+        </span>
+      </div>
+      <button class="hermie" id="hermie" aria-label="Hermie, tap for a tip"><span class="crab">🦀</span><span id="hermieText"></span></button>
+
+      <div class="sheet glass hidden" id="card"></div>
+      <div class="fish glass hidden" id="fish"></div>
+      <div class="follow hidden" id="follow"></div>
+      <div class="fcam hidden" id="followCam" aria-label="Camera">
+        <button class="fcbtn closer" data-zoom="1" aria-label="Closer"><b>＋</b><span>Closer</span></button>
+        <button class="fcbtn further" data-zoom="-1" aria-label="Further"><b>－</b><span>Further</span></button>
+        <button class="fcbtn turn" data-orbit="1" aria-label="Turn around the fish"><b>↻</b><span>Turn</span></button>
+      </div>
+      <div class="shelfbar glass hidden tone-orange" id="shelfbar"></div>
+      <div class="shelfbar musicbar glass hidden tone-purple" id="musicbar"></div>
+      <nav class="rail glass" id="rail"></nav>
+    </div>
+    <button class="pill glass showchrome hidden" id="showChrome">👁 Show buttons</button>
+    <div class="saver hidden" id="saver" aria-label="Screensaver: tap to exit"><div class="saver-black" id="saverBlack"></div><div class="saver-caption" id="saverCaption"></div><div class="saver-hint" id="saverHint">Tap to exit</div></div>
+    <div class="cleanhint glass hidden" id="cleanHint">Drag the Flipper across the glass <button class="btn small" id="cleanDone">Done</button></div>
+    <div class="subui hidden" id="subui">
+      <div class="subtop">
+        <div class="subinfo glass" id="subInfo">🟡 Tap a fish to watch it</div>
+        <button class="subexit" id="subDone">✕ Leave sub</button>
+      </div>
+      <div class="subopts">
+        <button class="subopt" id="subGhost" aria-pressed="false">👻 <span>Invisible</span></button>
+        <button class="subopt" id="subCam" aria-pressed="false">🎥 <span>Inside</span></button>
+        <button class="subopt" id="subLight" aria-pressed="true">💡 <span>Light</span></button>
+      </div>
+      <div class="subwatch glass idle" id="subWatch">
+        <div class="swhead"><button class="swnav" id="subPrev" aria-label="Previous fish">◀</button><strong id="subWatchName"></strong><button class="swnav" id="subNext" aria-label="Next fish">▶</button></div>
+        <div class="swmodes">
+          <button class="swmode" data-mode="HOVER">🫧 Hover</button><button class="swmode" data-mode="CIRCLE">🔄 Circle</button><button class="swmode" data-mode="ALONGSIDE">🐟 Swim along</button>
+        </div>
+        <button class="swletgo" id="subLetGo">Let go</button>
+      </div>
+      <div class="subjoywrap"><div class="subjoy glass" id="subJoy" aria-label="Steer the submarine"><div class="knob" id="subKnob"></div></div><span class="sublabel" id="subJoyLabel">Drift &amp; steer</span></div>
+      <div class="subud"><button class="subbig" id="subUp" aria-label="Go up">▲<span>Up</span></button><button class="subbig" id="subDown" aria-label="Go down">▼<span>Down</span></button></div>
+    </div>
+    <div class="toast glass hidden" id="toast"></div>
+
+    <div class="overlay hidden" id="micro">
+      <div class="ov-head"><strong>🔬 Look closer</strong><button class="btn small ghost" id="microClose">Back to tank</button></div>
+      <div class="pills" id="microScenes"></div>
+      <div class="pills" id="microZooms"></div>
+      <canvas id="microCanvas"></canvas>
+      <div class="micro-info" id="microInfo"></div>
+    </div>
+
+    <div class="overlay hidden" id="lapse">
+      <div class="ov-head"><strong>⏱ Time-lapse</strong><button class="btn small ghost" id="lapseClose">Close</button></div>
+      <div id="lapseBody"></div>
+    </div>
+
+    <dialog id="news" class="glass">
+      <h2 id="newsTitle">What's new</h2>
+      <ul id="newsList" class="tips news"></ul>
+      <form method="dialog" class="row-gap end"><button class="btn">Cool!</button></form>
+    </dialog>
+
+    <dialog id="mytank" class="glass">
+      <h2>Set up your own tank</h2>
+      <p class="muted">Pick a tank. It starts clean and empty, then buy animals at the fish stores from the Shop button. Everything is saved in this browser: names, personalities, how much they grow.</p>
+      <div id="mytankList" class="builds"></div>
+      <div class="row-gap end"><button class="btn ghost" id="mytankClose">Not now</button></div>
+    </dialog>
+
+    <dialog id="tips" class="glass">
+      <h2 id="tipsTitle"></h2>
+      <ol id="tipsList" class="tips"></ol>
+      <form method="dialog" class="row-gap end"><button class="btn">Got it</button></form>
+    </dialog>
+  </section>
+
+  <section id="params" class="view">
+    <div class="wrap">
+      <div class="pills subtabs" id="subtabs" role="tablist" aria-label="Tracker">
+        <button class="pillbtn on" data-sub="tests" role="tab">Water tests</button>
+        <button class="pillbtn" data-sub="cycle" role="tab">New tank cycle</button>
+        <button class="pillbtn" data-sub="accl" role="tab">Acclimation</button>
+        <button class="pillbtn" data-sub="log" role="tab">Pests &amp; disease</button>
+      </div>
+      <div class="subview" id="sub-tests">
+        <div class="row-between">
+          <h1>Water parameters</h1>
+          <button class="btn" id="logBtn">＋ Log a test</button>
+        </div>
+        <p class="muted">Readings stay on this device. New readings also update the live tank.</p>
+        <div id="paramGrid" class="grid"></div>
+        <h2>History</h2>
+        <div id="history" class="history"></div>
+      </div>
+      <div class="subview hidden" id="sub-cycle"></div>
+      <div class="subview hidden" id="sub-accl"></div>
+      <div class="subview hidden" id="sub-log"></div>
+      <h2>Backup</h2>
+      <p class="muted">One file with your tests, cycle, problem log and its photos.</p>
+      <div class="row-gap">
+        <button class="btn ghost" id="exportBtn">Export backup</button>
+        <label class="btn ghost">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="logDialog" class="glass">
+  <form method="dialog" id="logForm">
+    <h2>Log a test</h2>
+    <label class="field">When<input type="datetime-local" id="logWhen" required></label>
+    <div id="logFields" class="fields"></div>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save" id="logSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="cycleDialog" class="glass">
+  <form method="dialog" id="cycleForm">
+    <h2>Log a cycle test</h2>
+    <label class="field">When<input type="datetime-local" id="cyWhen" required></label>
+    <div class="fields">
+      <label class="field">Ammonia (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="nh3" placeholder="0–4"></label>
+      <label class="field">Nitrite (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="no2" placeholder="0–5"></label>
+      <label class="field">Nitrate (ppm)<input type="number" inputmode="decimal" step="any" min="0" name="no3" placeholder="0–50"></label>
+    </div>
+    <p class="muted">Leave a box empty if you did not test it.</p>
+    <div class="row-gap end">
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="problemDialog" class="glass">
+  <form method="dialog" id="problemForm">
+    <h2 id="pbTitle">Log a problem</h2>
+    <div class="fields">
+      <label class="field span2">When<input type="datetime-local" id="pbWhen" required></label>
+      <label class="field">What kind<select id="pbKind"><option value="pest">Pest</option><option value="algae">Algae</option><option value="disease">Disease</option></select></label>
+      <label class="field">Which<select id="pbType"></select></label>
+      <label class="field">How bad<select id="pbSev"><option value="1">Mild</option><option value="2">Moderate</option><option value="3">Severe</option></select></label>
+    </div>
+    <label class="field hidden" id="pbOther">Name it<input type="text" id="pbName" maxlength="60"></label>
+    <p class="fixhint hidden" id="pbFix"></p>
+    <button type="button" class="btn ghost small hidden" id="pbSim">See it in the sandbox</button>
+    <label class="field">Where or who (optional)<input type="text" id="pbWhere" maxlength="60" placeholder="e.g. Left rock, the yellow tang"></label>
+    <label class="field">What you see<textarea id="pbNotes" rows="2" maxlength="600"></textarea></label>
+    <label class="field">Treatment<textarea id="pbTreat" rows="2" maxlength="600" placeholder="What you did, dose, start and stop dates"></textarea></label>
+    <label class="field">Outcome<select id="pbOut"><option value="ongoing">Ongoing</option><option value="improving">Improving</option><option value="worse">Getting worse</option><option value="resolved">Resolved</option><option value="lost">Animal lost</option></select></label>
+    <label class="field">Photo (optional, stays on this device)<input type="file" id="pbFile" accept="image/*"></label>
+    <div id="pbPhoto" class="pbphoto"></div>
+    <div class="row-gap end">
+      <button class="btn ghost hidden" value="delete" id="pbDel" formnovalidate>Delete</button>
+      <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="photoView" class="glass photoview">
+  <form method="dialog"><img alt="Problem photo"><div class="row-gap end"><button class="btn">Close</button></div></form>
+</dialog>
+
+<button class="acclpill hidden" id="acclPill" aria-label="Acclimation timer: open it"></button>
+<div class="acclflash hidden" id="acclFlash" role="status" aria-live="assertive"></div>
+
+<div id="install" class="install glass hidden">
+  <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>
+  <button class="icon-btn" id="installClose" aria-label="Dismiss">✕</button>
+</div>
+
+<div id="update" class="update glass hidden" role="status">
+  <span>New version ready</span>
+  <button class="btn small" id="updateGo">Reload</button>
+  <button class="icon-btn" id="updateClose" aria-label="Later">✕</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

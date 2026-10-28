@@ -1,0 +1,107 @@
+{
+  "id": "paguristes_cadenati",
+  "kind": "INVERT",
+  "common": "Scarlet hermit crab",
+  "scientific": "Paguristes cadenati",
+  "family": "Diogenidae",
+  "maxLengthCm": 3.5,
+  "typicalAdultCm": 3,
+  "lifespanYears": 3,
+  "depthRatio": 0.6,
+  "massCoeff": 0.02,
+  "locomotion": {
+    "mode": "WALKING",
+    "cruiseBL": 0.15,
+    "burstBL": 0.6,
+    "tailHzCruise": 0,
+    "turnRateDeg": 120,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.5,
+    "openWater": 0.0,
+    "coverAffinity": 0.7
+  },
+  "activity": "DIURNAL",
+  "homeRadiusCm": 35,
+  "temperament": {
+    "aggression": 0.15,
+    "boldness": 0.5,
+    "curiosity": 0.5,
+    "skittishness": 0.5
+  },
+  "diet": [
+    "ALGAE",
+    "DETRITUS",
+    "FLAKE",
+    "MEATY"
+  ],
+  "feedsPerDay": 2,
+  "grazer": true,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 40,
+  "model": "models/hermit_scarlet.glb",
+  "colors": {
+    "primary": "#D32F2F",
+    "secondary": "#F2C230"
+  },
+  "brain": "hermit",
+  "minTankGallons": 5,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Eats almost anything; known for hair and slime algae.",
+  "temperamentSummary": "Hardy maintenance crab; mild about taking shells.",
+  "careNotes": [
+    "Provide larger spare shells as it grows."
+  ]
+}

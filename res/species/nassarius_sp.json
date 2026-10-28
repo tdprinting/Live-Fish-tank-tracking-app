@@ -1,0 +1,107 @@
+{
+  "id": "nassarius_sp",
+  "kind": "INVERT",
+  "common": "Nassarius snail",
+  "scientific": "Nassarius vibex / N. distortus",
+  "family": "Nassariidae",
+  "maxLengthCm": 2,
+  "typicalAdultCm": 1.5,
+  "lifespanYears": 1.5,
+  "depthRatio": 0.6,
+  "massCoeff": 0.03,
+  "locomotion": {
+    "mode": "CRAWLING",
+    "cruiseBL": 0.05,
+    "burstBL": 1.0,
+    "tailHzCruise": 0,
+    "turnRateDeg": 90,
+    "waveLen": 1,
+    "ampCruise": 0,
+    "ampBurst": 0
+  },
+  "zone": {
+    "yMin": 0.0,
+    "yMax": 0.05,
+    "openWater": 0.0,
+    "coverAffinity": 0.5
+  },
+  "activity": "NOCTURNAL",
+  "homeRadiusCm": 60,
+  "temperament": {
+    "aggression": 0.0,
+    "boldness": 0.3,
+    "curiosity": 0.6,
+    "skittishness": 0.4
+  },
+  "diet": [
+    "DETRITUS",
+    "MEATY",
+    "PRAWN",
+    "FLAKE"
+  ],
+  "feedsPerDay": 1,
+  "tolerance": {
+    "temp": {
+      "optLo": 24,
+      "optHi": 27,
+      "tolLo": 22,
+      "tolHi": 28,
+      "lethalLo": 18,
+      "lethalHi": 30
+    },
+    "sg": {
+      "optLo": 1.023,
+      "optHi": 1.025,
+      "tolLo": 1.021,
+      "tolHi": 1.026,
+      "lethalLo": 1.02,
+      "lethalHi": 1.028
+    },
+    "ph": {
+      "optLo": 8.1,
+      "optHi": 8.4,
+      "tolLo": 7.9,
+      "tolHi": 8.4,
+      "lethalLo": 7.8,
+      "lethalHi": 8.9
+    },
+    "nh3Free": {
+      "optHi": 0.0,
+      "tolHi": 0.008,
+      "lethalHi": 0.02
+    },
+    "no2": {
+      "optHi": 0.0,
+      "tolHi": 0.1,
+      "lethalHi": 0.25
+    },
+    "no3": {
+      "optHi": 20,
+      "tolHi": 30,
+      "lethalHi": 50
+    },
+    "copper": {
+      "optHi": 0.0,
+      "tolHi": 0.0,
+      "lethalHi": 0.1
+    }
+  },
+  "hardiness": 0.85,
+  "starvationDays": 21,
+  "model": "models/nassarius.glb",
+  "colors": {
+    "primary": "#C9B79A",
+    "secondary": "#3D2F22"
+  },
+  "brain": "nassarius",
+  "minTankGallons": 5,
+  "careLevel": "Easy",
+  "reefSafe": "Yes",
+  "copperSensitive": true,
+  "dietSummary": "Carnivorous scavenger: leftovers and carrion; does not eat algae.",
+  "temperamentSummary": "Lives buried with only the siphon showing; erupts when food lands.",
+  "careNotes": [
+    "Needs 2–3 cm of sand.",
+    "Hermits may prey on small ones."
+  ]
+}
